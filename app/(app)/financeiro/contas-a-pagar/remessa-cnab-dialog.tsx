@@ -25,10 +25,10 @@ import {
 import {
   Dialog,
   DialogTrigger,
+  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DrawerContent,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -212,26 +212,31 @@ export function ExportarRemessaCnabDialog({
     });
   }
 
+  const semTitulos = titulos.length === 0;
+  const habilitado = podeAbrir && !semTitulos;
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <button
           type="button"
-          disabled={!podeAbrir}
+          disabled={!habilitado}
           title={
             !canGerar
               ? "Sem permissão"
               : contasSantander.length === 0
                 ? "Nenhuma conta Santander configurada"
-                : "Exportar remessa Santander"
+                : semTitulos
+                  ? "Nenhum título a pagar disponível"
+                  : "Exportar remessa Santander"
           }
-          className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-california-red bg-white px-4 py-2 text-sm font-semibold text-california-red transition-colors hover:bg-california-red hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-california-red"
         >
           <Landmark className="h-4 w-4" />
           Exportar remessa Santander
         </button>
       </DialogTrigger>
-      <DrawerContent>
+      <DialogContent className="max-w-5xl p-0 gap-0">
         <DialogHeader className="border-b border-border p-6">
           <DialogTitle className="flex items-center gap-2">
             <Landmark className="h-4 w-4 text-california-red" />
@@ -244,9 +249,9 @@ export function ExportarRemessaCnabDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex flex-col">
           {sucesso ? (
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div className="p-6 space-y-5">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="text-sm font-semibold text-emerald-800">
                   Arquivo gerado com sucesso.
@@ -295,7 +300,7 @@ export function ExportarRemessaCnabDialog({
               )}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div className="p-6 space-y-5">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="conta_bancaria">Conta de débito</Label>
@@ -487,7 +492,7 @@ export function ExportarRemessaCnabDialog({
             )}
           </div>
         </div>
-      </DrawerContent>
+      </DialogContent>
     </Dialog>
   );
 }
