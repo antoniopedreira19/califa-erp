@@ -4250,3 +4250,20 @@ trazê-la de volta basta recolocar o valor no array; a coluna já comporta os
 seis decimais. Conferido na tela: o seletor da linha de parâmetros do
 `TES-0001/26-01` v3 abre só com "19,53%".
 
+## ⚠️ Nota de 2026-09-21 — o card de Totais do internacional segue o design (decisão 072)
+
+| Arquivo | O quê |
+|---|---|
+| `_planilha/cadeia-internacional.tsx` | a cadeia numa caixa azul com globo e o Valor do job numa caixa própria (com "Save gerado" só com save); a nota sob a cadeia saiu. Novas exportações: `NotaDaConversao` e `TextoSaveInternacional`, para a legenda |
+| `_planilha/blocos.ts` | `CADEIA_INTERNACIONAL`: as cores da caixa, a partir do azul do ORÇADO |
+| `components/legenda-fechamento.tsx` | prop `nota`, a frase que fecha o primeiro tópico (a conversão para a moeda estrangeira) |
+| `versoes/[versaoId]/totais-card.tsx` | sub-totais do internacional com o realce do design; "(retidas no exterior)" apagado; legenda com a nota e, com save, o tópico da mesma cadeia |
+| `jobs/[jobId]/realizado/job-totais-card.tsx` | a mesma nota e o mesmo tópico de save na legenda do job internacional |
+
+Conferido no navegador no `TES-0001/26-03` (internacional, compra 5,50):
+sem save, o card sai com a caixa azul, o Valor do job de R$ 8.488,80 e a
+conversão no fim da legenda; marcando a única linha como save (e
+desmarcando depois), aparecem o "Save gerado" de R$ 5.000,00, o botão Save
+e o tópico da mesma cadeia. A planilha do job internacional não foi aberta
+no navegador — não há job internacional no projeto de teste hoje.
+

@@ -18,6 +18,7 @@ export function LegendaFechamento({
   custo = "custo planejado",
   internacional = false,
   extra,
+  nota,
 }: {
   custo?: string;
   /** A versão fecha pela cadeia internacional (decisão 072).
@@ -36,6 +37,11 @@ export function LegendaFechamento({
    *  do fechamento, onde competia com os valores em vez de explicá-los
    *  (31/08/2026). Ausente ⇒ a legenda é exatamente a de sempre. */
   extra?: React.ReactNode;
+  /** Frase que fecha o PRIMEIRO tópico — hoje, a conversão para a moeda
+   *  estrangeira do internacional (ou o aviso de que falta a taxa de
+   *  compra). Vem de fora porque depende do câmbio da versão, que a
+   *  legenda não conhece. Ausente ⇒ o texto é o de sempre. */
+  nota?: React.ReactNode;
 }) {
   return (
     <>
@@ -64,6 +70,7 @@ export function LegendaFechamento({
           {custo}, o que sobra sendo fee + rentabilidade ·{" "}
           <strong className="text-foreground">Resultado geral</strong> =
           resultado operacional ÷ valor do job.
+          {nota && <> {nota}</>}
         </p>
       ) : (
       <p>
@@ -80,6 +87,7 @@ export function LegendaFechamento({
         valor do job − impostos − {custo} ·{" "}
         <strong className="text-foreground">Resultado geral</strong> = resultado
         operacional ÷ valor do job.
+        {nota && <> {nota}</>}
       </p>
       )}
     </div>
