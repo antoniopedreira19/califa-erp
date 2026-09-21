@@ -43,6 +43,7 @@ import {
   gerarRemessaCnab,
   type CnabOrigemTipo,
   type CnabItemRejeitado,
+  type CnabFormaEscolhida,
 } from "./actions-cnab";
 
 // ---------------------------------------------------------------------
@@ -130,6 +131,11 @@ export function ExportarRemessaCnabDialog({
   const [contaId, setContaId] = React.useState<string>("");
   const [dataPagamento, setDataPagamento] = React.useState<string>(hoje());
   const [selecionados, setSelecionados] = React.useState<Set<string>>(new Set());
+  /** Forma escolhida por título (chave = "origemTipo:origemId"). Vazio =
+   *  usa a preferência automática do gerador (PIX se cadastrado, senão banco). */
+  const [formaPorTitulo, setFormaPorTitulo] = React.useState<
+    Map<string, CnabFormaEscolhida>
+  >(new Map());
 
   const podeAbrir = canGerar && contasSantander.length > 0;
 
@@ -140,6 +146,7 @@ export function ExportarRemessaCnabDialog({
     setContaId(contasSantander[0]?.id ?? "");
     setDataPagamento(hoje());
     setSelecionados(new Set());
+    setFormaPorTitulo(new Map());
   }
 
   function handleOpenChange(next: boolean) {
@@ -185,7 +192,14 @@ export function ExportarRemessaCnabDialog({
 
     const itens = titulos
       .filter((t) => selecionados.has(`${t.origemTipo}:${t.origemId}`))
-      .map((t) => ({ origemTipo: t.origemTipo, origemId: t.origemId }));
+      .map((t) => {
+        const chave = `${t.origemTipo}:${t.origemId}`;
+        return {
+          origemTipo: t.origemTipo,
+          origemId: t.origemId,
+          formaEscolhida: formaPorTitulo.get(chave),
+        };
+      });
 
     startTransition(async () => {
       const res = await gerarRemessaCnab({
@@ -370,7 +384,7 @@ export function ExportarRemessaCnabDialog({
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">
                             Descrição
                           </th>
-                          <th className="w-24 px-3 py-2 text-left font-medium text-muted-foreground">
+                          <th className="w-40 px-3 py-2 text-left font-medium text-muted-foreground">
                             Forma
                           </th>
                           <th className="w-32 px-3 py-2 text-right font-medium text-muted-foreground">
@@ -415,14 +429,33 @@ export function ExportarRemessaCnabDialog({
                               <td className="px-3 py-2 text-muted-foreground">
                                 {t.descricao}
                               </td>
-                              <td className="px-3 py-2 text-xs">
-                                {t.temPix ? (
+                              <td
+                                className="px-3 py-2 text-xs"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {t.temPix && t.temBanco ? (
+                                  <select
+                                    value={formaPorTitulo.get(chave) ?? "pix"}
+                                    onChange={(e) => {
+                                      const novaForma = e.target.value as CnabFormaEscolhida;
+                                      setFormaPorTitulo((prev) => {
+                                        const m = new Map(prev);
+                                        m.set(chave, novaForma);
+                                        return m;
+                                      });
+                                    }}
+                                    className="rounded border border-border bg-white px-2 py-1 text-xs focus:border-california-red focus:outline-none"
+                                  >
+                                    <option value="pix">PIX</option>
+                                    <option value="banco">TED/Crédito</option>
+                                  </select>
+                                ) : t.temPix ? (
                                   <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
                                     PIX
                                   </span>
                                 ) : t.temBanco ? (
                                   <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
-                                    Banco
+                                    TED/Crédito
                                   </span>
                                 ) : (
                                   <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
