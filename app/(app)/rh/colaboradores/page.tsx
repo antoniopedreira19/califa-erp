@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Users, Plus, GraduationCap, UserPlus } from "lucide-react";
+import { Users, Plus, UserPlus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -8,6 +8,21 @@ import { EmptyState } from "@/components/empty-state";
 import { ColaboradoresList, type ColaboradorRow } from "./colaboradores-list";
 
 export const dynamic = "force-dynamic";
+
+const NOMES_MES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
 
 export default async function ColaboradoresPage() {
   const session = await requireSession();
@@ -17,8 +32,24 @@ export default async function ColaboradoresPage() {
 
   const supabase = createClient();
 
-  // Colaboradores + join com nível (para mostrar o código na coluna).
-  const [colaboradoresRes, niveisRes] = await Promise.all([
+  // Datas da competência atual — usadas nos cards de admissão/demissão do mês
+  // e no filtro da folha atual.
+  const agora = new Date();
+  const anoAtual = agora.getFullYear();
+  const mesAtual = agora.getMonth() + 1; // 1..12
+  const primeiroDia = `${anoAtual}-${String(mesAtual).padStart(2, "0")}-01`;
+  const ultimoDiaNum = new Date(anoAtual, mesAtual, 0).getDate();
+  const ultimoDia = `${anoAtual}-${String(mesAtual).padStart(2, "0")}-${String(ultimoDiaNum).padStart(2, "0")}`;
+
+  // Colaboradores + níveis + cards agregados em paralelo (docs/PERFORMANCE.md §B).
+  const [
+    colaboradoresRes,
+    niveisRes,
+    ativosCountRes,
+    admissoesMesRes,
+    demissoesMesRes,
+    folhaAtualRes,
+  ] = await Promise.all([
     supabase
       .from("colaboradores")
       .select(
@@ -31,6 +62,30 @@ export default async function ColaboradoresPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    supabase
+      .from("colaboradores")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo"),
+    supabase
+      .from("colaboradores")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .gte("data_admissao", primeiroDia)
+      .lte("data_admissao", ultimoDia),
+    supabase
+      .from("colaboradores")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .gte("data_encerramento", primeiroDia)
+      .lte("data_encerramento", ultimoDia),
+    // Folha da competência atual: só o valor. Payload mínimo (docs/PERFORMANCE.md §C).
+    supabase
+      .from("folhas_pagamento")
+      .select("salario_base")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("competencia_ano", anoAtual)
+      .eq("competencia_mes", mesAtual),
   ]);
 
   if (colaboradoresRes.error) {
@@ -52,6 +107,24 @@ export default async function ColaboradoresPage() {
 
   const niveisAtivosCount = niveisRes.count ?? 0;
 
+  const ativosCount = ativosCountRes.count ?? 0;
+  const admissoesMes = admissoesMesRes.count ?? 0;
+  const demissoesMes = demissoesMesRes.count ?? 0;
+  const folhaAtualLinhas =
+    (folhaAtualRes.data ?? []) as { salario_base: string | number }[];
+  const folhaAtualGerada = folhaAtualLinhas.length > 0;
+  const folhaAtualValor = folhaAtualLinhas.reduce(
+    (acc, l) => acc + Number(l.salario_base),
+    0,
+  );
+
+  const brl = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  const nomeMesAtual = `${NOMES_MES[mesAtual - 1]}/${anoAtual}`;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -60,6 +133,29 @@ export default async function ColaboradoresPage() {
         description="Cadastro do quadro atual e inativos. Nível de cargo, alocação por empresa e regional, histórico salarial."
         icon={Users}
       />
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <CardColaborador
+          titulo="Colaboradores ativos"
+          valor={String(ativosCount)}
+        />
+        <CardColaborador
+          titulo={`Folha de ${nomeMesAtual}`}
+          valor={folhaAtualGerada ? brl.format(folhaAtualValor) : "—"}
+          hint={folhaAtualGerada ? undefined : "Folha não gerada"}
+          destaque={folhaAtualGerada}
+        />
+        <CardColaborador
+          titulo="Admissões no mês"
+          valor={String(admissoesMes)}
+          tom={admissoesMes > 0 ? "verde" : undefined}
+        />
+        <CardColaborador
+          titulo="Demissões no mês"
+          valor={String(demissoesMes)}
+          tom={demissoesMes > 0 ? "vermelho" : undefined}
+        />
+      </div>
 
       {linhas.length === 0 ? (
         <EmptyState
@@ -82,6 +178,44 @@ export default async function ColaboradoresPage() {
           colaboradores={linhas}
           niveisAtivosCount={niveisAtivosCount}
         />
+      )}
+    </div>
+  );
+}
+
+function CardColaborador({
+  titulo,
+  valor,
+  hint,
+  destaque,
+  tom,
+}: {
+  titulo: string;
+  valor: string;
+  hint?: string;
+  destaque?: boolean;
+  tom?: "verde" | "vermelho";
+}) {
+  const corValor =
+    tom === "verde"
+      ? "text-emerald-700"
+      : tom === "vermelho"
+        ? "text-california-red"
+        : "text-foreground";
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {titulo}
+      </p>
+      <p
+        className={`mt-2 font-bold tabular-nums ${
+          destaque ? "text-3xl" : "text-2xl"
+        } ${corValor}`}
+      >
+        {valor}
+      </p>
+      {hint && (
+        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
       )}
     </div>
   );
