@@ -1,14 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { MoreHorizontal, Landmark, CheckCircle2 } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { formatarCNPJ } from "@/lib/utils/formato-fiscal";
 import { inativarEmpresaContabil, reativarEmpresaContabil } from "./actions";
 import { EmpresaContabilDrawer } from "./empresa-contabil-drawer";
-import { ConfigCnabDrawer } from "./config-cnab-drawer";
 import type { EmpresaContabilRow } from "./types";
 
 interface Props {
@@ -19,10 +18,7 @@ export function EmpresaContabilCard({ empresa }: Props) {
   const [menu, setMenu] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [editarOpen, setEditarOpen] = React.useState(false);
-  const [cnabOpen, setCnabOpen] = React.useState(false);
   const [confirmar, setConfirmar] = React.useState<"inativar" | "reativar" | null>(null);
-
-  const cnabConfigurado = empresa.convenio_cnab_santander !== null;
 
   const nomeExibicao = empresa.nome_fantasia ?? empresa.razao_social;
 
@@ -78,13 +74,6 @@ export function EmpresaContabilCard({ empresa }: Props) {
           <p className="text-xs font-mono text-muted-foreground mt-0.5">
             {formatarCNPJ(empresa.cnpj)}
           </p>
-
-          {cnabConfigurado && (
-            <p className="mt-2 flex items-center gap-1 text-xs text-emerald-700">
-              <CheckCircle2 className="h-3 w-3" />
-              CNAB Santander configurado
-            </p>
-          )}
         </div>
 
         {/* Menu de ações */}
@@ -110,19 +99,6 @@ export function EmpresaContabilCard({ empresa }: Props) {
                 }}
               >
                 Editar
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  setMenu(false);
-                  setCnabOpen(true);
-                }}
-              >
-                <span className="flex items-center gap-2">
-                  <Landmark className="h-3.5 w-3.5" />
-                  {cnabConfigurado
-                    ? "Editar CNAB Santander"
-                    : "Configurar CNAB Santander"}
-                </span>
               </MenuItem>
               {empresa.ativo ? (
                 <MenuItem
@@ -157,14 +133,6 @@ export function EmpresaContabilCard({ empresa }: Props) {
           empresa={empresa}
           openInitially
           onClose={() => setEditarOpen(false)}
-        />
-      )}
-
-      {cnabOpen && (
-        <ConfigCnabDrawer
-          empresa={empresa}
-          open={cnabOpen}
-          onClose={() => setCnabOpen(false)}
         />
       )}
 

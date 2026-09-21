@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Search, Power, PowerOff } from "lucide-react";
+import { Search, Power, PowerOff, Landmark } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -16,6 +16,7 @@ import type { ContaBancaria } from "@/lib/types";
 import { tipoContaBancariaLabel } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { ContaBancariaDrawer } from "./conta-bancaria-drawer";
+import { ConfigCnabDrawer } from "./config-cnab-drawer";
 import { inativarContaBancaria, reativarContaBancaria } from "./actions";
 import type { EmpresaContabilSumario } from "./types";
 
@@ -41,6 +42,7 @@ export function ContasBancariasList({
   const [status, setStatus] = React.useState<StatusFiltro>("ativas");
   const [pending, startTransition] = React.useTransition();
   const [editando, setEditando] = React.useState<ContaBancaria | null>(null);
+  const [configCnab, setConfigCnab] = React.useState<ContaBancaria | null>(null);
   const [confirmando, setConfirmando] = React.useState<{
     conta: ContaBancaria;
     acao: "inativar" | "reativar";
@@ -178,19 +180,39 @@ export function ContasBancariasList({
                   </td>
                   <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setConfirmando({
-                            conta: c,
-                            acao: c.ativo ? "inativar" : "reativar",
-                          })
-                        }
-                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                        title={c.ativo ? "Inativar" : "Reativar"}
-                      >
-                        {c.ativo ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        {c.banco.toLowerCase().includes("santander") && (
+                          <button
+                            type="button"
+                            onClick={() => setConfigCnab(c)}
+                            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
+                              c.convenio_cnab_santander
+                                ? "text-emerald-700 hover:bg-emerald-50"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            }`}
+                            title={
+                              c.convenio_cnab_santander
+                                ? "CNAB Santander configurado"
+                                : "Configurar CNAB Santander"
+                            }
+                          >
+                            <Landmark className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmando({
+                              conta: c,
+                              acao: c.ativo ? "inativar" : "reativar",
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          title={c.ativo ? "Inativar" : "Reativar"}
+                        >
+                          {c.ativo ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -209,6 +231,14 @@ export function ContasBancariasList({
             if (!next) setEditando(null);
           }}
           empresasContabeis={empresasContabeis}
+        />
+      )}
+
+      {configCnab && (
+        <ConfigCnabDrawer
+          conta={configCnab}
+          open={!!configCnab}
+          onClose={() => setConfigCnab(null)}
         />
       )}
 

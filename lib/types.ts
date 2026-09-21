@@ -2267,19 +2267,9 @@ export interface EmpresaContabil {
   nome_fantasia: string | null;
   cnpj: string; // sempre 14 dígitos, sem máscara
   ativo: boolean;
-  /** Config CNAB Santander — adicionada em 21/09/2026 pelo módulo
-   *  pgto-remessa (fase 4.2). Todos nullable: só empresas com convênio
-   *  contratado + homologado vão preencher. Gerador rejeita remessa
-   *  se algum campo obrigatório estiver null. */
-  convenio_cnab_santander: string | null;
-  agencia_debito: string | null;
-  agencia_debito_dv: string | null;
-  conta_debito: string | null;
-  conta_debito_dv: string | null;
-  /** Próximo sequencial a usar. Começa em 11 (banco trata 1-10 como
-   *  teste, Nota G010 do manual). Incrementado atomicamente pelo
-   *  gerador. */
-  sequencial_arquivo: number | null;
+  /** Endereço fiscal do CNPJ — vai no header do arquivo CNAB como
+   *  identificação do titular do débito. Adicionado em 21/09/2026 pelo
+   *  módulo pgto-remessa. */
   endereco_logradouro: string | null;
   endereco_cidade: string | null;
   endereco_cep: string | null;
@@ -2324,12 +2314,24 @@ export interface ContaBancaria {
   nome: string;
   banco: string;
   agencia: string | null;
+  /** DV da agência (adicionado em 21/09/2026 pelo módulo pgto-remessa). */
+  agencia_dv: string | null;
   numero_conta: string | null;
+  /** DV da conta corrente (adicionado em 21/09/2026). */
+  numero_conta_dv: string | null;
   tipo: TipoContaBancaria;
   saldo_inicial: string; // numeric vem como string do Supabase — parse com Number(...)
   saldo_inicial_data: string; // YYYY-MM-DD
   ativo: boolean;
   ordem: number;
+  /** Convênio Santander "Pagamento a Fornecedores" contratado pra
+   *  esta conta (20 pos alfanumérico). Adicionado em 21/09/2026 pelo
+   *  módulo pgto-remessa (ADR 004). Nulo bloqueia geração de remessa
+   *  a partir desta conta. */
+  convenio_cnab_santander: string | null;
+  /** Próximo sequencial de arquivo a usar. Começa em 11. Incrementado
+   *  atomicamente pelo gerador. Cada conta tem série independente. */
+  sequencial_arquivo: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -3096,8 +3098,10 @@ export type CnabRemessaStatus =
 export interface CnabRemessa {
   id: string;
   tenant_id: string;
-  empresa_contabil_id: string;
-  /** Sequencial único por empresa contábil. Começa em 11. */
+  /** Conta bancária que sofre o débito consolidado. O convênio e o
+   *  sequencial usados no arquivo saem desta conta (ADR 004). */
+  conta_bancaria_id: string;
+  /** Sequencial único por conta bancária. Começa em 11. */
   sequencial_arquivo: number;
   data_geracao: string;
   /** SHA256 hex do conteúdo do arquivo (240 bytes × N linhas). */
