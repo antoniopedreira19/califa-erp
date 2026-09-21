@@ -14,6 +14,7 @@ import type {
 import { CardDados } from "./card-dados";
 import { CardAlocacoes } from "./card-alocacoes";
 import { CardSalarios } from "./card-salarios";
+import { CardDadosBancarios } from "./card-dados-bancarios";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +157,8 @@ export default async function ColaboradorDetalhePage({
           regionais={regionais}
           niveis={niveis}
         />
+
+        <CardDadosBancarios colaborador={colab} />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <CardAlocacoes
