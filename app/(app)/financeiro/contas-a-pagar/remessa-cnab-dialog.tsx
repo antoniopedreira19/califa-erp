@@ -8,7 +8,7 @@
  *   2. Escolhe a data de pagamento (aplica pra todos os itens do arquivo).
  *   3. Marca os títulos que quer incluir (multi-select).
  *   4. Confirma → server action monta o arquivo, grava rastreio.
- *   5. Browser baixa o `.REM` automaticamente.
+ *   5. Browser baixa o `.TXT` automaticamente.
  *
  * Itens rejeitados (destinatário sem PIX/banco, valor zero, etc) aparecem
  * numa lista separada depois da geração.
@@ -258,7 +258,7 @@ export function ExportarRemessaCnabDialog({
           </DialogTitle>
           <DialogDescription>
             Selecione a conta de débito, a data de pagamento e os títulos que
-            devem entrar no arquivo. O `.REM` é baixado no navegador e o
+            devem entrar no arquivo. O `.TXT` é baixado no navegador e o
             registro fica gravado no histórico de remessas.
           </DialogDescription>
         </DialogHeader>

@@ -80,9 +80,13 @@ export type GerarRemessaCnabResult =
       ok: true;
       remessaId: string;
       sequencial: number;
-      /** Nome sugerido do arquivo: PE + sequencial em 6 dígitos + .REM */
+      /** Nome sugerido do arquivo: PE + sequencial em 6 dígitos + .TXT.
+       *  Extensão .TXT casa com o padrão do ERP antigo da California
+       *  (arquivo PE000013.TXT foi aceito pelo Santander em 2026-08-18)
+       *  e abre no Notepad pra conferência manual. Santander lê o
+       *  conteúdo, não a extensão. */
       nomeArquivo: string;
-      /** Conteúdo do .REM codificado em Base64 pra download no browser. */
+      /** Conteúdo do arquivo codificado em Base64 pra download no browser. */
       conteudoBase64: string;
       qtdItens: number;
       valorTotal: number;
@@ -395,7 +399,7 @@ export async function gerarRemessaCnab(
     ok: true,
     remessaId: remessaRow.id,
     sequencial,
-    nomeArquivo: `PE${String(sequencial).padStart(6, "0")}.REM`,
+    nomeArquivo: `PE${String(sequencial).padStart(6, "0")}.TXT`,
     conteudoBase64: Buffer.from(conteudo, "ascii").toString("base64"),
     qtdItens: elegiveis.length,
     valorTotal,
