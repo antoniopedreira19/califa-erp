@@ -80,8 +80,11 @@ interface Props {
  *
  * Desde 16/09/2026 (decisão 087) a barra do job já aberto tem DUAS TRILHAS:
  * "Faturamento" e "Encerramento". As duas frentes correm separadas — o job
- * pode ser faturado sem estar encerrado e encerrado sem estar faturado — e
- * fica FINALIZADO quando as duas terminam. Cada trilha diz onde está a sua
+ * pode ser enviado para faturamento sem estar encerrado e encerrado sem ter
+ * sido enviado — e fica FINALIZADO quando as duas ações foram feitas (desde
+ * 20/09/2026, decisão 094, o que conta é o envio, não a nota; enquanto só
+ * uma foi feita o selo é "Em faturamento" ou "Encerrado"). Cada trilha diz
+ * onde está a sua
  * frente, mostra o "Ver envio" dela e carrega a própria ação.
  *
  * Antes da abertura (aguardando ou devolvido) a barra continua com uma

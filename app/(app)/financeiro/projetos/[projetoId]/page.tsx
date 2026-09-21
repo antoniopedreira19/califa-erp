@@ -11,8 +11,12 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import {
   jobStatusLabel,
+  jobStatusExibido,
   nomeDoJobNoFinanceiro,
-  type JobStatus, jobStatusBadgeClasses } from "@/lib/types";
+  type JobStatus,
+  type JobStatusExibido,
+  jobStatusBadgeClasses,
+} from "@/lib/types";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
@@ -79,7 +83,7 @@ export default async function ProjetoNoFinanceiroPage({
       .maybeSingle(),
     supabase
       .from("jobs")
-      .select("id, codigo, nome, nome_financeiro, status")
+      .select("id, codigo, nome, nome_financeiro, status, faturamento_enviado_em")
       .eq("tenant_id", tenantId)
       .eq("projeto_financeiro_id", params.projetoId)
       .in("status", STATUS_NA_LISTA as unknown as string[])
@@ -100,7 +104,12 @@ export default async function ProjetoNoFinanceiroPage({
     id: j.id as string,
     codigo: j.codigo as string,
     nome: nomeDoJobNoFinanceiro(j),
-    status: j.status as JobStatus,
+    // Só vira selo e contagem: "Em faturamento" é o aberto com o envio
+    // completo (decisão 094).
+    status: jobStatusExibido(
+      j.status as JobStatus,
+      (j.faturamento_enviado_em as string | null) ?? null,
+    ),
   }));
   const jobIds = jobsDoProjeto.map((j) => j.id);
 
@@ -258,7 +267,7 @@ export default async function ProjetoNoFinanceiroPage({
             {Object.entries(statusMix)
               .map(
                 ([s, n]) =>
-                  `${n} ${jobStatusLabel(s as JobStatus).toLowerCase()}`,
+                  `${n} ${jobStatusLabel(s as JobStatusExibido).toLowerCase()}`,
               )
               .join(" · ") || "—"}
           </p>

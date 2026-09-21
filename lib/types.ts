@@ -864,10 +864,16 @@ export interface Job {
   encerrado_em: string | null;
   /** Quem enviou o job para encerramento (decisão 087). */
   encerrado_por: string | null;
-  /** Quando o job ficou faturado E encerrado — e virou `finalizado`
-   *  (decisão 087). Quem marca é o banco: no encerramento, se o job já
-   *  estiver faturado, ou na emissão da nota que zera o saldo. */
+  /** Quando o job ficou encerrado E com todo o faturamento enviado — e
+   *  virou `finalizado`. Quem marca é o banco: no encerramento, se o envio
+   *  já estiver completo, ou no envio que completa um job encerrado
+   *  (decisão 094, que tirou a nota desta conta — era a 087). */
   finalizado_em: string | null;
+  /** Quando todo o faturamento previsto do job ficou enviado para
+   *  faturamento — no mensal, o último mês. Carimbo do banco; nulo enquanto
+   *  falta enviar, e sempre nulo no job sem faturamento. É o que vira o selo
+   *  "Em faturamento" (`jobStatusExibido`, decisão 094). */
+  faturamento_enviado_em: string | null;
   motivo_rejeicao: string | null;
   /**
    * Nome do job NO FINANCEIRO. Quando nulo, vale `nome` (o da produção).
@@ -1245,7 +1251,9 @@ export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
  *
  * ⚠️ Desde 16/09/2026 (decisão 087) o encerramento NÃO espera o
  * faturamento: nem o envio, nem a nota. `finalizado` é quem marca o fim das
- * duas coisas, e quem o grava é o banco.
+ * duas coisas, e quem o grava é o banco. Desde 20/09/2026 (decisão 094) as
+ * "duas coisas" são o encerramento e o ENVIO para faturamento completo — a
+ * nota saiu da conta.
  */
 export const ENCERRAMENTO_INDISPONIVEL =
   "Encerre pelo resumo de fechamento, na barra de ações do rodapé";
@@ -1272,8 +1280,8 @@ export const BV_SITUACAO_EM_ABERTO: BvSituacao[] = [
 /**
  * Job encerrado é histórico: não aceita edição, PP nova, BV novo nem
  * lançamento de realizado. A regra mora aqui para as telas e as actions
- * lerem do mesmo lugar. O finalizado é encerrado e faturado — congelado do
- * mesmo jeito (decisão 087).
+ * lerem do mesmo lugar. O finalizado é encerrado e enviado para faturamento
+ * — congelado do mesmo jeito (decisões 087 e 094).
  *
  * O ENVIO PARA FATURAMENTO não é edição: continua aceito no job encerrado,
  * que pode ter sido fechado antes de ser faturado (`jobAceitaEnvioParaFaturamento`).
@@ -1288,7 +1296,7 @@ export function jobEstaCongelado(status: JobStatus): boolean {
  * Onde o job ainda pode ser enviado para faturamento (inteiro, ou um mês
  * no modelo mensal). Desde 16/09/2026 (decisão 087) faturamento e
  * encerramento correm separados: o job encerrado ainda não faturado
- * continua enviando. O finalizado já foi todo enviado e faturado.
+ * continua enviando. O finalizado já foi todo enviado (decisão 094).
  */
 export function jobAceitaEnvioParaFaturamento(status: JobStatus): boolean {
   return status === "aberto" || status === "encerrado";
@@ -1297,7 +1305,8 @@ export function jobAceitaEnvioParaFaturamento(status: JobStatus): boolean {
 /**
  * Onde o job está na fila de faturamento do financeiro — o mesmo filtro da
  * `vw_faturamento_pendente` (migration 20260916170003). O finalizado entra
- * porque uma nota dele pode ser cancelada e reemitida.
+ * porque, desde a decisão 094, ele é o job encerrado e ENVIADO: as notas
+ * dele ainda podem estar por emitir (ou ser canceladas e reemitidas).
  */
 export const JOB_STATUS_NA_FILA_DE_FATURAMENTO: JobStatus[] = [
   "aberto",
@@ -1372,8 +1381,33 @@ export function jobAceitaEnvioDePP(status: JobStatus): boolean {
   return status === "aberto" || status === "em_producao";
 }
 
-export function jobStatusLabel(s: JobStatus): string {
+/**
+ * O status que a TELA mostra (decisão 094, 20/09/2026). "Em faturamento" não
+ * existe no banco: é o job `aberto` cujo faturamento já foi todo enviado ao
+ * financeiro (`jobs.faturamento_enviado_em`, carimbado por gatilho — no
+ * mensal, só no último mês enviado). O status gravado continua `aberto`
+ * porque a produção continua: PP, realizado e BV seguem liberados, e nenhuma
+ * trava de `aberto` precisa conhecer o selo.
+ *
+ * O par dele é o `encerrado` (encerrado sem o envio completo). Com as duas
+ * ações feitas o banco grava `finalizado`. O módulo Jobs não olha a nota:
+ * se o job foi faturado é controle do financeiro.
+ */
+export type JobStatusExibido = JobStatus | "em_faturamento";
+
+export function jobStatusExibido(
+  status: JobStatus,
+  faturamentoEnviadoEm: string | null,
+): JobStatusExibido {
+  return status === "aberto" && faturamentoEnviadoEm !== null
+    ? "em_faturamento"
+    : status;
+}
+
+export function jobStatusLabel(s: JobStatusExibido): string {
   switch (s) {
+    case "em_faturamento":
+      return "Em faturamento";
     case "aguardando_abertura":
       return "Aguardando abertura";
     case "rejeitado_financeiro":
@@ -1398,10 +1432,14 @@ export function jobStatusLabel(s: JobStatus): string {
  * job faturado E encerrado; o encerrado que ainda espera nota é violeta,
  * como já era a marca de status na lista de jobs do financeiro.
  */
-export function jobStatusBadgeClasses(status: JobStatus): string {
+export function jobStatusBadgeClasses(status: JobStatusExibido): string {
   switch (status) {
     case "aberto":
       return "border-blue-200 bg-blue-50 text-blue-700";
+    // Laranja: a única cor da paleta de selos ainda livre que não se confunde
+    // com o azul do aberto nem com o violeta do encerrado (decisão 094).
+    case "em_faturamento":
+      return "border-orange-200 bg-orange-50 text-orange-700";
     case "em_producao":
       return "border-amber-200 bg-amber-50 text-amber-700";
     case "encerrado":

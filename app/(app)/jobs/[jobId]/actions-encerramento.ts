@@ -140,9 +140,10 @@ async function levantarImpedimentos(
  * continua aceito — o job pode ser encerrado antes de ser faturado
  * (decisão 087).
  *
- * Se todo o faturamento já saiu em nota, o banco grava `finalizado` no
- * lugar de `encerrado` (gatilho `trg_jobs_finaliza_ao_encerrar`); a action
- * devolve o status que ficou.
+ * Se todo o faturamento já foi ENVIADO ao financeiro — ou o job não tem o
+ * que faturar —, o banco grava `finalizado` no lugar de `encerrado` (gatilho
+ * `trg_jobs_finaliza_ao_encerrar`); a action devolve o status que ficou.
+ * Desde 20/09/2026 (decisão 094) a nota não entra nesta conta.
  *
  * Os impedimentos são refeitos aqui dentro — a tela pode ter sido
  * carregada antes de alguém emitir uma PP.
@@ -283,7 +284,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     metadata: {
       faturamento: Number(job.faturamento_previsto ?? 0),
       // O gatilho do banco troca `encerrado` por `finalizado` quando todo o
-      // faturamento já saiu em nota — e registra `job.finalizado`.
+      // faturamento já foi enviado (decisão 094) — e registra `job.finalizado`.
       finalizado: gravado.status === "finalizado",
     },
   });

@@ -10,6 +10,7 @@ import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import type { Job, JobStatus, Regional } from "@/lib/types";
 import {
   jobStatusLabel,
+  jobStatusExibido,
   JOB_STATUS_TRANSICOES,
   AREA_PRODUCAO,
   jobEstaCongelado,
@@ -140,6 +141,10 @@ export default async function JobDetailPage({
           };
 
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
+  // O selo do cabeçalho: "Em faturamento" é o aberto com o envio completo
+  // (decisão 094). As travas continuam lendo `job.status`.
+  const statusExibido = jobStatusExibido(job.status, job.faturamento_enviado_em);
+
   return (
     <div className="space-y-6">
       <div>
@@ -158,8 +163,8 @@ export default async function JobDetailPage({
             <p className="font-mono text-xs font-semibold text-muted-foreground">{job.codigo}</p>
             <div className="mt-1 flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-bold tracking-tight">{job.nome}</h1>
-              <Badge className={cn("border", statusBadgeClasses(job.status))}>
-                {jobStatusLabel(job.status)}
+              <Badge className={cn("border", statusBadgeClasses(statusExibido))}>
+                {jobStatusLabel(statusExibido)}
               </Badge>
               {/* Encerrado e cancelado sao historico: sem edicao. Papeis
                   sem `jobs.editar_metadata` (Financeiro, Freelancer) tambem

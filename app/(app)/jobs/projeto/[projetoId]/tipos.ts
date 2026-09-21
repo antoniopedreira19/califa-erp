@@ -3,7 +3,7 @@ import type { CategoriaModeloPlanilha } from "@/lib/types";
 // pros cards. Os valores já vêm calculados: nem o card do job nem o card de
 // Totais refazem conta, só formatam.
 
-import type { JobStatus, TipoCusto } from "@/lib/types";
+import type { JobStatusExibido, TipoCusto } from "@/lib/types";
 import type { ValoresDoBloco } from "@/lib/calculos/bv-planilha";
 import type { QuebraSave } from "@/lib/calculos/versao-totais";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
@@ -56,7 +56,8 @@ export interface JobPlanilhaProjeto {
   id: string;
   codigo: string;
   nome: string;
-  status: JobStatus;
+  /** Status do SELO do card — inclui o "Em faturamento" calculado (094). */
+  status: JobStatusExibido;
   /** Modelo de planilha do orçamento que originou o job (decisão 072).
    *  Decide, pelo modelo e não pelo valor, a cadeia do card do projeto. */
   modeloPlanilha: CategoriaModeloPlanilha;
