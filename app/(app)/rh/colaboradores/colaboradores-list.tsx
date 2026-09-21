@@ -120,13 +120,13 @@ export function ColaboradoresList({
       </div>
 
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border py-16 text-center">
+        <div className="rounded-2xl border border-dashed border-border py-16 text-center">
           <p className="text-sm text-muted-foreground">
             Nenhum colaborador corresponde aos filtros.
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/40">
               <tr>
