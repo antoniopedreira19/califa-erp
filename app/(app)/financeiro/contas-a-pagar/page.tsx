@@ -1588,13 +1588,6 @@ export default async function PedidosCompraFinanceiroPage({
         showEmpresaFilter
         empresas={session.empresasVisiveis}
         activeEmpresas={activeEmpresasEfetivas}
-        actions={
-          <ExportarRemessaCnabDialog
-            contasSantander={contasSantander}
-            titulos={titulosCnab}
-            canGerar={canGerarRemessa}
-          />
-        }
       />
 
       <ChatPPsProvider
@@ -1627,6 +1620,13 @@ export default async function PedidosCompraFinanceiroPage({
               clientes={clientesList}
               regionais={regionaisList}
               cartoes={cartoesList}
+              exportarRemessaBotao={
+                <ExportarRemessaCnabDialog
+                  contasSantander={contasSantander}
+                  titulos={titulosCnab}
+                  canGerar={canGerarRemessa}
+                />
+              }
             />
           }
           titulosAPagarCount={titulosAPagarCount}

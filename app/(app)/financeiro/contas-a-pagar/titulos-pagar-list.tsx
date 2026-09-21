@@ -275,6 +275,10 @@ interface Props {
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /** Cartões de crédito ativos — repassados ao drawer de conta avulsa. */
   cartoes?: CartaoOption[];
+  /** Botão "Exportar remessa Santander" já montado no server component,
+   *  renderizado ao lado do "+ Lançamento Avulso" na toolbar. Módulo
+   *  pgto-remessa. */
+  exportarRemessaBotao?: React.ReactNode;
 }
 
 export function TitulosPagarList({
@@ -288,6 +292,7 @@ export function TitulosPagarList({
   clientes,
   regionais,
   cartoes = [],
+  exportarRemessaBotao,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -586,31 +591,34 @@ export function TitulosPagarList({
         </div>
 
         {statusFiltro !== "pago" && (
-          <ContaAvulsaDrawer
-            mode="criar"
-            tenantId={tenantId}
-            empresas={empresas}
-            tipos={tipos}
-            subtipos={subtipos}
-            fornecedores={fornecedores}
-            clientes={clientes}
-            regionais={regionais}
-            cartoes={cartoes}
-            onCriadaParaBaixa={(id) => {
-              setFiltroOrigem("todas");
-              setBusca("");
-              setBaixarAposCriar(id);
-            }}
-            trigger={
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-california-red-hover"
-              >
-                <Plus className="h-4 w-4" />
-                Lançamento Avulso
-              </button>
-            }
-          />
+          <div className="flex items-center gap-2">
+            {exportarRemessaBotao}
+            <ContaAvulsaDrawer
+              mode="criar"
+              tenantId={tenantId}
+              empresas={empresas}
+              tipos={tipos}
+              subtipos={subtipos}
+              fornecedores={fornecedores}
+              clientes={clientes}
+              regionais={regionais}
+              cartoes={cartoes}
+              onCriadaParaBaixa={(id) => {
+                setFiltroOrigem("todas");
+                setBusca("");
+                setBaixarAposCriar(id);
+              }}
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-california-red-hover"
+                >
+                  <Plus className="h-4 w-4" />
+                  Lançamento Avulso
+                </button>
+              }
+            />
+          </div>
         )}
       </div>
 
