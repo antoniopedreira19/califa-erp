@@ -198,6 +198,23 @@ export default async function FolhaCompetenciaPage({
   const podeEditar = pode(session.activeRole, "rh.folhas.editar_rh");
 
   const totalGeral = linhas.reduce((acc, l) => acc + Number(l.salario_base), 0);
+  const contagem = {
+    enviada: 0,
+    aprovada: 0,
+    pendente_correcao: 0,
+    paga: 0,
+  };
+  for (const l of linhas) {
+    if (l.status === "enviada") contagem.enviada += 1;
+    else if (l.status === "aprovada") contagem.aprovada += 1;
+    else if (l.status === "pendente_correcao") contagem.pendente_correcao += 1;
+    else if (l.status === "paga") contagem.paga += 1;
+  }
+
+  const brl = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -218,17 +235,39 @@ export default async function FolhaCompetenciaPage({
               Folha de {NOMES_MES[mes - 1]}/{ano}
             </h1>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {linhas.length} linha{linhas.length === 1 ? "" : "s"} · Total{" "}
-            <span className="font-semibold text-foreground tabular-nums">
-              {new Intl.NumberFormat("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              }).format(totalGeral)}
-            </span>
-          </p>
         </header>
       </div>
+
+      {linhas.length > 0 && (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
+          <CardResumo
+            titulo="Total da folha"
+            valor={brl.format(totalGeral)}
+            className="col-span-2 md:col-span-2"
+            destaque
+          />
+          <CardResumo
+            titulo="Colaboradores"
+            valor={String(linhas.length)}
+          />
+          <CardResumo titulo="Enviadas" valor={String(contagem.enviada)} />
+          <CardResumo
+            titulo="Pendências"
+            valor={String(contagem.pendente_correcao)}
+            tom={contagem.pendente_correcao > 0 ? "vermelho" : undefined}
+          />
+          <CardResumo
+            titulo="Aprovadas"
+            valor={String(contagem.aprovada)}
+          />
+          <CardResumo
+            titulo="Pagas"
+            valor={String(contagem.paga)}
+            tom={contagem.paga > 0 ? "verde" : undefined}
+            className="col-span-2 md:col-span-1"
+          />
+        </div>
+      )}
 
       <FolhaCompetenciaView
         linhas={linhas}
@@ -236,6 +275,44 @@ export default async function FolhaCompetenciaPage({
         regionais={regionais}
         podeEditar={podeEditar}
       />
+    </div>
+  );
+}
+
+function CardResumo({
+  titulo,
+  valor,
+  destaque,
+  tom,
+  className,
+}: {
+  titulo: string;
+  valor: string;
+  destaque?: boolean;
+  tom?: "vermelho" | "verde";
+  className?: string;
+}) {
+  const corValor = destaque
+    ? "text-foreground"
+    : tom === "vermelho"
+      ? "text-california-red"
+      : tom === "verde"
+        ? "text-emerald-700"
+        : "text-foreground";
+  return (
+    <div
+      className={`rounded-xl border border-border bg-background p-4 ${className ?? ""}`}
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {titulo}
+      </p>
+      <p
+        className={`mt-2 font-bold tabular-nums ${
+          destaque ? "text-3xl" : "text-2xl"
+        } ${corValor}`}
+      >
+        {valor}
+      </p>
     </div>
   );
 }
