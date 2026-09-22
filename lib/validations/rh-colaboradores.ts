@@ -107,42 +107,55 @@ export const alocacaoInicialSchema = z.object({
 });
 
 /**
- * Schema da alocação com percentual — usado na página de detalhe
- * quando o RH adiciona/edita rateio. Também na revisão do financeiro
- * sobre a folha (fase futura, na Camada 2).
+ * Schema da alocação vigente do colaborador (Camada 1). Novo modelo
+ * (2026-09-23): 1 vigente por vez, com toggle "todas as regionais".
+ *
+ * Regras:
+ *   - Se `usa_rateio_empresa = true` → `regional_id` deve ser null (o
+ *     custo é expandido pelo rateio da empresa no snapshot da folha).
+ *   - Se `usa_rateio_empresa = false` → `regional_id` obrigatório
+ *     (100% do custo naquela regional).
+ *
+ * O toggle só é oferecido na UI quando a empresa tem rateio configurado
+ * pra o ano corrente (empresas_rateios_regionais).
  */
-export const alocacaoSchema = z.object({
-  empresa_id: z.string().trim().min(1, "Selecione uma empresa."),
-  regional_id: z.string().trim().min(1, "Selecione uma regional."),
-  percentual: z
-    .string()
-    .trim()
-    .min(1, "Informe o percentual.")
-    .transform((v, ctx) => {
-      // Aceita "50", "50,5", "50.5"
-      const norm = v.replace(",", ".");
-      const n = Number(norm);
-      if (!Number.isFinite(n) || n <= 0 || n > 100) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Percentual deve ser maior que 0 e no máximo 100.",
-        });
-        return z.NEVER;
-      }
-      // Arredonda a 2 decimais e retorna string para insert bater com numeric(5,2)
-      return (Math.round(n * 100) / 100).toFixed(2);
-    }),
-  data_inicio: z
-    .string()
-    .trim()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
-  motivo: z
-    .string()
-    .trim()
-    .max(500, "Máximo 500 caracteres.")
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
-});
+export const alocacaoSchema = z
+  .object({
+    empresa_id: z.string().trim().min(1, "Selecione uma empresa."),
+    usa_rateio_empresa: z.boolean().default(false),
+    regional_id: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
+    data_inicio: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
+    motivo: z
+      .string()
+      .trim()
+      .max(500, "Máximo 500 caracteres.")
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
+  })
+  .superRefine((v, ctx) => {
+    if (v.usa_rateio_empresa && v.regional_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["regional_id"],
+        message:
+          'Não escolha regional quando "Todas as regionais" está ligado.',
+      });
+    }
+    if (!v.usa_rateio_empresa && !v.regional_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["regional_id"],
+        message: "Selecione uma regional.",
+      });
+    }
+  });
 
 export type AlocacaoInput = z.infer<typeof alocacaoSchema>;
 

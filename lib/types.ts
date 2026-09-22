@@ -2995,22 +2995,46 @@ export interface Colaborador {
   updated_at: string;
 }
 
-/** Camada 1 — alocação vigente do colaborador em par (empresa, regional).
- *  N linhas simultâneas por colaborador, somando percentual=100 quando
- *  data_fim IS NULL (constraint trigger deferrable initially deferred). */
+/** Camada 1 — alocação vigente do colaborador. Novo modelo (2026-09-23):
+ *  UMA linha vigente por colaborador (unique parcial em data_fim IS NULL).
+ *
+ *  Se `usa_rateio_empresa = false` → `regional_id` é obrigatório, 100% do
+ *  custo cai naquela regional específica.
+ *
+ *  Se `usa_rateio_empresa = true` → `regional_id` é NULL, e o custo é
+ *  expandido pela tabela `empresas_rateios_regionais` no snapshot da folha
+ *  (uma linha em folhas_pagamento_alocacoes por regional do rateio).
+ *
+ *  Empresa sem rateio configurado no ano da competência: gerarFolha bloqueia
+ *  a linha e pede configurar o rateio. */
 export interface ColaboradorAlocacao {
   id: string;
   tenant_id: string;
   colaborador_id: string;
   empresa_id: string;
-  regional_id: string;
-  /** numeric(5,2) — chega como string do Supabase-js. Converter com Number. */
-  percentual: string;
+  regional_id: string | null;
+  usa_rateio_empresa: boolean;
   data_inicio: string;
   data_fim: string | null;
   motivo: string | null;
   created_by: string | null;
   created_at: string;
+}
+
+/** Rateio anual das regionais de uma empresa. Editado 1×/ano pelo RH/admin.
+ *  Regionais com 0% não têm linha. Soma de `percentual` por (empresa, ano)
+ *  deve ser 100 — trigger deferrable garante. */
+export interface EmpresaRateioRegional {
+  id: string;
+  tenant_id: string;
+  empresa_id: string;
+  ano_vigencia: number;
+  regional_id: string;
+  /** numeric(5,2) — chega como string do Supabase-js. Converter com Number. */
+  percentual: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
 }
 
 /** Histórico salarial. Cada linha é uma mudança. Salário vigente =
