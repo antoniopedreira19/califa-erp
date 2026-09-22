@@ -24,24 +24,23 @@ function ultimoDiaDoMes(ano: number, mes: number): string {
 }
 
 /**
- * Gera a folha de uma competência. Idempotente: se um colaborador já
- * tem linha nesta competência, é pulado (independentemente do status).
- * Isso permite regerar sem sobrescrever edições do RH ou aprovações do
- * financeiro; útil quando um colaborador foi admitido depois da 1ª
- * geração e o RH quer inclui-lo agora.
+ * Gera a folha de uma competência. Idempotente por colaborador.
  *
- * Regra de inclusão (D1): entra todo colaborador que esteve ativo em
- * qualquer dia da competência. Traduzindo:
- *   data_admissao <= último dia do mês
- *   AND (status = 'ativo' OR data_encerramento >= primeiro dia do mês)
+ * Novo modelo de alocação (2026-09-23):
+ *   • Camada 1 tem 1 alocação vigente por colaborador — ou regional
+ *     específica (100% ali) ou "toda a empresa" (regional_id=null,
+ *     usa_rateio_empresa=true).
+ *   • Snapshot da folha (`folhas_pagamento_alocacoes`) continua sendo
+ *     N linhas com % somando 100 — o motor EXPANDE aqui:
+ *       - regional específica → 1 linha 100%
+ *       - toda a empresa → N linhas conforme rateio da empresa+ano da
+ *         competência (empresas_rateios_regionais)
+ *   • Se toggle=ON e a empresa não tem rateio configurado pra o ano da
+ *     competência, colaborador é pulado com aviso.
  *
- * Para cada colaborador incluído:
- *   1. Cria folhas_pagamento com salario_base = último salário vigente
- *      da Camada 1 (o RH edita depois se quiser).
- *   2. Copia alocações vigentes da Camada 1 para
- *      folhas_pagamento_alocacoes (via linhas com data_fim IS NULL).
- *   3. Se colaborador não tem salário vigente OU não tem alocação
- *      vigente somando 100, é pulado (com aviso no retorno).
+ * Regra de inclusão: entra todo colaborador que esteve ativo em qualquer
+ * dia da competência (data_admissao <= último dia AND
+ * (status=ativo OR data_encerramento >= primeiro dia)).
  */
 export async function gerarFolha(input: {
   ano: number;
@@ -52,6 +51,7 @@ export async function gerarFolha(input: {
     ja_existiam: number;
     pulados_sem_salario: string[];
     pulados_sem_alocacao: string[];
+    pulados_sem_rateio: string[];
   }>
 > {
   const session = await requireSession();
@@ -96,6 +96,7 @@ export async function gerarFolha(input: {
       ja_existiam: 0,
       pulados_sem_salario: [],
       pulados_sem_alocacao: [],
+      pulados_sem_rateio: [],
     };
   }
 
@@ -123,12 +124,13 @@ export async function gerarFolha(input: {
       ja_existiam: jaExistiam,
       pulados_sem_salario: [],
       pulados_sem_alocacao: [],
+      pulados_sem_rateio: [],
     };
   }
 
-  // Passo 3: salário e alocações vigentes de cada faltante
+  // Passo 3: salário vigente + alocação vigente (1 por colaborador) + rateios do ano
   const faltantesIds = faltantes.map((c) => c.id);
-  const [salariosRes, alocRes] = await Promise.all([
+  const [salariosRes, alocRes, rateiosRes] = await Promise.all([
     supabase
       .from("colaboradores_salarios")
       .select("colaborador_id, valor")
@@ -137,10 +139,15 @@ export async function gerarFolha(input: {
       .is("data_fim", null),
     supabase
       .from("colaboradores_alocacoes")
-      .select("colaborador_id, empresa_id, regional_id, percentual")
+      .select("colaborador_id, empresa_id, regional_id, usa_rateio_empresa")
       .in("colaborador_id", faltantesIds)
       .eq("tenant_id", tenantId)
       .is("data_fim", null),
+    supabase
+      .from("empresas_rateios_regionais")
+      .select("empresa_id, regional_id, percentual")
+      .eq("tenant_id", tenantId)
+      .eq("ano_vigencia", ano),
   ]);
 
   const salarioPor = new Map<string, string>();
@@ -150,32 +157,51 @@ export async function gerarFolha(input: {
   }[]) {
     salarioPor.set(s.colaborador_id, String(s.valor));
   }
+
+  // Uma alocação vigente por colaborador (unique parcial garante isso).
   const alocPor = new Map<
     string,
     {
       empresa_id: string;
-      regional_id: string;
-      percentual: string;
-    }[]
+      regional_id: string | null;
+      usa_rateio_empresa: boolean;
+    }
   >();
   for (const a of (alocRes.data ?? []) as {
     colaborador_id: string;
     empresa_id: string;
+    regional_id: string | null;
+    usa_rateio_empresa: boolean;
+  }[]) {
+    alocPor.set(a.colaborador_id, {
+      empresa_id: a.empresa_id,
+      regional_id: a.regional_id,
+      usa_rateio_empresa: a.usa_rateio_empresa,
+    });
+  }
+
+  // Rateio por empresa: apenas as regionais com % > 0 no ano.
+  const rateioPor = new Map<
+    string,
+    { regional_id: string; percentual: string }[]
+  >();
+  for (const r of (rateiosRes.data ?? []) as {
+    empresa_id: string;
     regional_id: string;
     percentual: string | number;
   }[]) {
-    const lista = alocPor.get(a.colaborador_id) ?? [];
+    const lista = rateioPor.get(r.empresa_id) ?? [];
     lista.push({
-      empresa_id: a.empresa_id,
-      regional_id: a.regional_id,
-      percentual: String(a.percentual),
+      regional_id: r.regional_id,
+      percentual: String(r.percentual),
     });
-    alocPor.set(a.colaborador_id, lista);
+    rateioPor.set(r.empresa_id, lista);
   }
 
-  // Passo 4: separa quem pode entrar (tem salário e alocações somando 100)
+  // Passo 4: separa quem pode entrar
   const pulados_sem_salario: string[] = [];
   const pulados_sem_alocacao: string[] = [];
+  const pulados_sem_rateio: string[] = [];
   const paraCriar: {
     colab: { id: string; nome: string };
     salario: string;
@@ -192,13 +218,43 @@ export async function gerarFolha(input: {
       pulados_sem_salario.push(c.nome);
       continue;
     }
-    const alocs = alocPor.get(c.id) ?? [];
-    const soma = alocs.reduce((acc, a) => acc + Number(a.percentual), 0);
-    if (alocs.length === 0 || Math.abs(soma - 100) >= 0.01) {
+    const aloc = alocPor.get(c.id);
+    if (!aloc) {
       pulados_sem_alocacao.push(c.nome);
       continue;
     }
-    paraCriar.push({ colab: c, salario, alocacoes: alocs });
+
+    // Expande no snapshot conforme o modo da Camada 1
+    let alocSnapshot: {
+      empresa_id: string;
+      regional_id: string;
+      percentual: string;
+    }[];
+    if (aloc.usa_rateio_empresa) {
+      const rateio = rateioPor.get(aloc.empresa_id);
+      if (!rateio || rateio.length === 0) {
+        pulados_sem_rateio.push(c.nome);
+        continue;
+      }
+      alocSnapshot = rateio.map((r) => ({
+        empresa_id: aloc.empresa_id,
+        regional_id: r.regional_id,
+        percentual: r.percentual,
+      }));
+    } else {
+      if (!aloc.regional_id) {
+        pulados_sem_alocacao.push(c.nome);
+        continue;
+      }
+      alocSnapshot = [
+        {
+          empresa_id: aloc.empresa_id,
+          regional_id: aloc.regional_id,
+          percentual: "100.00",
+        },
+      ];
+    }
+    paraCriar.push({ colab: c, salario, alocacoes: alocSnapshot });
   }
 
   if (paraCriar.length === 0) {
@@ -208,6 +264,7 @@ export async function gerarFolha(input: {
       ja_existiam: jaExistiam,
       pulados_sem_salario,
       pulados_sem_alocacao,
+      pulados_sem_rateio,
     };
   }
 
@@ -292,6 +349,7 @@ export async function gerarFolha(input: {
       ja_existiam: jaExistiam,
       pulados_sem_salario,
       pulados_sem_alocacao,
+      pulados_sem_rateio,
     },
   });
 
@@ -307,6 +365,7 @@ export async function gerarFolha(input: {
     ja_existiam: jaExistiam,
     pulados_sem_salario,
     pulados_sem_alocacao,
+    pulados_sem_rateio,
   };
 }
 
