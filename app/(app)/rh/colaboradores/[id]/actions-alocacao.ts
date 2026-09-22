@@ -21,7 +21,7 @@ function mapAlocacaoDbError(msg: string): string {
     return "Este colaborador já tem uma alocação vigente.";
   }
   if (msg.includes("chk_alocacoes_periodo_valido")) {
-    return "Data de fim precisa ser posterior à data de início.";
+    return "Data da mudança precisa ser posterior à data em que a alocação vigente começou.";
   }
   return "Não foi possível gravar a alocação.";
 }
@@ -108,19 +108,48 @@ export async function alterarAlocacao(
     }
   }
 
-  const dataFim = diaAnterior(input.data_mudanca);
-
-  // 1) Fecha vigente atual (se houver)
-  const { error: upError } = await supabase
+  // 1) Fecha vigente atual (se houver). Duas trilhas:
+  //
+  //    a) data_mudanca > data_inicio da vigente → fechamento normal em
+  //       data_mudanca - 1 dia (mudança real de estado do colaborador).
+  //
+  //    b) data_mudanca <= data_inicio da vigente → tratamos como
+  //       CORREÇÃO: a vigente atual nunca foi realmente "válida" e vai
+  //       ser substituída. DELETE em vez de UPDATE (fechar em dia
+  //       anterior violaria chk_alocacoes_periodo_valido: data_fim <
+  //       data_inicio).
+  //
+  // Isso permite ao operador fixar erros de alocação recém-criados sem
+  // esperar 1 dia pra editar.
+  const { data: vigente } = await supabase
     .from("colaboradores_alocacoes")
-    .update({ data_fim: dataFim })
+    .select("id, data_inicio")
     .eq("colaborador_id", colaboradorId)
     .eq("tenant_id", session.activeTenant.id)
-    .is("data_fim", null);
+    .is("data_fim", null)
+    .maybeSingle();
 
-  if (upError) {
-    console.error("[rh.alocacao.fechar]", upError.message);
-    return { ok: false, message: mapAlocacaoDbError(upError.message) };
+  if (vigente) {
+    if (input.data_mudanca <= vigente.data_inicio) {
+      const { error: delError } = await supabase
+        .from("colaboradores_alocacoes")
+        .delete()
+        .eq("id", vigente.id);
+      if (delError) {
+        console.error("[rh.alocacao.deletar_corrigindo]", delError.message);
+        return { ok: false, message: mapAlocacaoDbError(delError.message) };
+      }
+    } else {
+      const dataFim = diaAnterior(input.data_mudanca);
+      const { error: upError } = await supabase
+        .from("colaboradores_alocacoes")
+        .update({ data_fim: dataFim })
+        .eq("id", vigente.id);
+      if (upError) {
+        console.error("[rh.alocacao.fechar]", upError.message);
+        return { ok: false, message: mapAlocacaoDbError(upError.message) };
+      }
+    }
   }
 
   // 2) Abre nova vigente
