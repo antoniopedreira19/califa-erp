@@ -7,6 +7,7 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowLeft,
   Minus,
   UserCheck,
 } from "lucide-react";
@@ -183,6 +184,15 @@ export default async function ColaboradoresPage() {
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/rh"
+        prefetch={false}
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-3 w-3" />
+        Voltar para RH
+      </Link>
+
       <PageHeader
         eyebrow="RH"
         title="Colaboradores"
