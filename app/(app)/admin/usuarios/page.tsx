@@ -22,6 +22,30 @@ export default async function AdminUsuariosPage() {
   const service = createServiceClient();
   const tenantId = session.activeTenant.id;
 
+  // GoTrue admin.listUsers estoura HTTP 500 com perPage >= 100 (dependência
+  // interna de decodificação em batch). Fatiamos em páginas de 50 e agregamos.
+  async function listarAuthUsersPaginado() {
+    type AuthUserLite = { id: string; email_confirmed_at: string | null };
+    const acc: AuthUserLite[] = [];
+    const perPage = 50;
+    for (let page = 1; page <= 20; page++) {
+      const { data, error } = await service.auth.admin.listUsers({
+        page,
+        perPage,
+      });
+      if (error) return { data: null, error };
+      const batch = data?.users ?? [];
+      for (const u of batch) {
+        acc.push({
+          id: u.id,
+          email_confirmed_at: u.email_confirmed_at ?? null,
+        });
+      }
+      if (batch.length < perPage) break;
+    }
+    return { data: acc, error: null as null };
+  }
+
   const [
     membersRes,
     empresasRes,
@@ -45,7 +69,7 @@ export default async function AdminUsuariosPage() {
       .eq("tenant_id", tenantId)
       .eq("ativo", true)
       .order("nome"),
-    service.auth.admin.listUsers({ page: 1, perPage: 200 }),
+    listarAuthUsersPaginado(),
   ]);
 
   if (membersRes.error) {
@@ -76,13 +100,14 @@ export default async function AdminUsuariosPage() {
   const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
 
   const emailConfirmadoById = new Map<string, boolean>();
+  const authFalhou = !!authListingRes.error;
   if (authListingRes.error) {
     console.error(
       "[admin.usuarios.list.auth-users]",
       authListingRes.error.message,
     );
   } else {
-    for (const u of authListingRes.data?.users ?? []) {
+    for (const u of authListingRes.data ?? []) {
       emailConfirmadoById.set(u.id, Boolean(u.email_confirmed_at));
     }
   }
@@ -91,9 +116,15 @@ export default async function AdminUsuariosPage() {
     const profile = byId.get(m.user_id) ?? null;
     const perfilAtivo = profile?.ativo ?? true;
     const vinculoAtivo = m.status === "ativo";
-    // Se listUsers falhou, assume confirmado para não travar UI com botão
-    // fantasma; o admin pode tentar reenviar mesmo assim se necessário.
-    const emailConfirmado = emailConfirmadoById.get(m.user_id) ?? true;
+    // Se o listUsers falhou completamente, preserva o comportamento anterior
+    // (assume confirmado) pra não marcar todo mundo como pendente à toa. Se o
+    // listUsers respondeu mas o user_id não veio, aí SIM assume pendente — é
+    // um estado real de "usuário existe em tenant_members mas não em auth", ou
+    // acabou de ser convidado e paginação ainda não pegou. Melhor errar pra
+    // pendente do que dizer "ativo" e esconder o botão de reenviar convite.
+    const emailConfirmado = authFalhou
+      ? true
+      : (emailConfirmadoById.get(m.user_id) ?? false);
 
     let acesso: "ativo" | "pendente" | "inativo";
     if (!perfilAtivo || !vinculoAtivo) acesso = "inativo";
