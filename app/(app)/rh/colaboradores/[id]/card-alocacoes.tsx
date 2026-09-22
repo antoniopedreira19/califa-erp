@@ -73,7 +73,18 @@ export function CardAlocacoes({
     return m;
   }, [rateiosDoAno]);
 
-  const empresaTemRateio = empresaId ? rateioPorEmpresa.has(empresaId) : false;
+  // Toggle "Todas as regionais" só faz sentido quando (a) a empresa tem
+  // 2+ regionais — ratear entre 1 regional é degenerado — e (b) tem rateio
+  // configurado no ano corrente. Se qualquer uma das duas condições falhar,
+  // o operador escolhe regional específica direto.
+  const regionaisDaEmpresaCount = empresaId
+    ? regionais.filter((r) => r.empresa_id === empresaId).length
+    : 0;
+  const empresaTemRateio: boolean = Boolean(
+    empresaId &&
+      regionaisDaEmpresaCount >= 2 &&
+      rateioPorEmpresa.has(empresaId),
+  );
 
   // Ao abrir, pré-preenche com a vigente atual (ou vazio se não tiver).
   React.useEffect(() => {

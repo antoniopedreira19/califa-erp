@@ -89,10 +89,26 @@ export async function alterarAlocacao(
     return { ok: false, message: "Colaborador não encontrado." };
   }
 
-  // Se usa rateio, empresa tem que ter rateio configurado no ano da
-  // data de mudança. Sem isso, gerarFolha vai bloquear na hora — melhor
-  // pegar aqui.
+  // Se usa rateio, duas condições precisam bater:
+  //   1) empresa tem 2+ regionais (ratear em 1 é degenerado — a UI oculta
+  //      o toggle, mas se alguém burlar (curl, DevTools), servidor bloqueia)
+  //   2) empresa tem rateio configurado no ano da data de mudança —
+  //      sem isso, gerarFolha vai pular na hora; melhor pegar aqui.
   if (input.usa_rateio_empresa) {
+    const { count: qtdRegionais } = await supabase
+      .from("regionais")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("empresa_id", input.empresa_id)
+      .eq("ativo", true);
+    if (!qtdRegionais || qtdRegionais < 2) {
+      return {
+        ok: false,
+        message:
+          'Esta empresa tem só uma regional; escolha a regional específica em vez de "Todas as regionais".',
+      };
+    }
+
     const anoMudanca = Number(input.data_mudanca.slice(0, 4));
     const { count: temRateio } = await supabase
       .from("empresas_rateios_regionais")
@@ -103,7 +119,7 @@ export async function alterarAlocacao(
     if (!temRateio || temRateio === 0) {
       return {
         ok: false,
-        message: `Esta empresa não tem rateio configurado para ${anoMudanca}. Configure em Cadastros → Empresas → Rateio antes de alocar.`,
+        message: `Esta empresa não tem rateio configurado para ${anoMudanca}. Configure em Administração → Rateios regionais antes de alocar.`,
       };
     }
   }
