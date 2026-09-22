@@ -4,6 +4,7 @@ import { HomeFinanceiro } from "./home-financeiro";
 import { HomeFreelancer } from "./home-freelancer";
 import { HomeGerenteProducao } from "./home-gerente-producao";
 import { HomeProdutor } from "./home-produtor";
+import { HomeRh } from "./home-rh";
 
 export const dynamic = "force-dynamic";
 
@@ -21,5 +22,7 @@ export default async function HomePage() {
       return <HomeGerenteProducao session={session} />;
     case "produtor":
       return <HomeProdutor session={session} />;
+    case "rh":
+      return <HomeRh session={session} />;
   }
 }
