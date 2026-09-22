@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Users, ArrowRight, Receipt, type LucideIcon } from "lucide-react";
+import { Users, ArrowRight, Receipt, Percent, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -19,22 +19,33 @@ export default async function CentralRHPage() {
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth() + 1;
 
-  const [colaboradoresAtivosRes, pendenciasRes] = await Promise.all([
-    supabase
-      .from("colaboradores")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo"),
-    supabase
-      .from("folhas_pagamento")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("competencia_ano", anoAtual)
-      .eq("competencia_mes", mesAtual)
-      .eq("status", "pendente_correcao"),
-  ]);
+  const [colaboradoresAtivosRes, pendenciasRes, rateiosDoAnoRes] =
+    await Promise.all([
+      supabase
+        .from("colaboradores")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "ativo"),
+      supabase
+        .from("folhas_pagamento")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("competencia_ano", anoAtual)
+        .eq("competencia_mes", mesAtual)
+        .eq("status", "pendente_correcao"),
+      supabase
+        .from("empresas_rateios_regionais")
+        .select("empresa_id")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("ano_vigencia", anoAtual),
+    ]);
   const colaboradoresAtivos = colaboradoresAtivosRes.count ?? 0;
   const pendenciasNoMes = pendenciasRes.count ?? 0;
+  const empresasComRateioNoAno = new Set(
+    ((rateiosDoAnoRes.data ?? []) as { empresa_id: string }[]).map(
+      (r) => r.empresa_id,
+    ),
+  ).size;
 
   return (
     <div className="space-y-8">
@@ -64,6 +75,18 @@ export default async function CentralRHPage() {
             pendenciasNoMes === 1
               ? "pendência no mês atual"
               : "pendências no mês atual"
+          }
+        />
+        <RhCard
+          href="/rh/rateios"
+          icon={Percent}
+          title="Rateios anuais por regional"
+          description="Percentuais que distribuem o custo dos colaboradores em 'Todas as regionais' entre as regionais de cada empresa. Editado 1×/ano, alimenta o snapshot da folha."
+          count={empresasComRateioNoAno}
+          countLabel={
+            empresasComRateioNoAno === 1
+              ? `empresa com rateio em ${anoAtual}`
+              : `empresas com rateio em ${anoAtual}`
           }
         />
         {/* Próximos cards: Benefícios, Férias, Turnover */}
