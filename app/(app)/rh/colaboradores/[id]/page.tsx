@@ -30,48 +30,61 @@ export default async function ColaboradorDetalhePage({
 
   const supabase = createClient();
 
-  const [colabRes, alocacoesRes, salariosRes, empresasRes, regionaisRes, niveisRes] =
-    await Promise.all([
-      supabase
-        .from("colaboradores")
-        .select("*, nivel:niveis(id, codigo, descricao)")
-        .eq("id", params.id)
-        .eq("tenant_id", session.activeTenant.id)
-        .maybeSingle(),
-      supabase
-        .from("colaboradores_alocacoes")
-        .select(
-          "*, empresa:empresas(id, nome_fantasia), regional:regionais(id, nome)",
-        )
-        .eq("colaborador_id", params.id)
-        .eq("tenant_id", session.activeTenant.id)
-        .order("data_inicio", { ascending: false })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("colaboradores_salarios")
-        .select("*")
-        .eq("colaborador_id", params.id)
-        .eq("tenant_id", session.activeTenant.id)
-        .order("data_inicio", { ascending: false })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("empresas")
-        .select("id, nome_fantasia")
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("ativo", true)
-        .order("nome_fantasia"),
-      supabase
-        .from("regionais")
-        .select("id, nome, empresa_id")
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("ativo", true)
-        .order("nome"),
-      supabase
-        .from("niveis")
-        .select("id, codigo, descricao")
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("ativo", true),
-    ]);
+  const anoRateio = new Date().getFullYear();
+  const [
+    colabRes,
+    alocacoesRes,
+    salariosRes,
+    empresasRes,
+    regionaisRes,
+    niveisRes,
+    rateiosRes,
+  ] = await Promise.all([
+    supabase
+      .from("colaboradores")
+      .select("*, nivel:niveis(id, codigo, descricao)")
+      .eq("id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("colaboradores_alocacoes")
+      .select(
+        "*, empresa:empresas(id, nome_fantasia), regional:regionais(id, nome)",
+      )
+      .eq("colaborador_id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("data_inicio", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("colaboradores_salarios")
+      .select("*")
+      .eq("colaborador_id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("data_inicio", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("empresas")
+      .select("id, nome_fantasia")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome_fantasia"),
+    supabase
+      .from("regionais")
+      .select("id, nome, empresa_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("nome"),
+    supabase
+      .from("niveis")
+      .select("id, codigo, descricao")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true),
+    supabase
+      .from("empresas_rateios_regionais")
+      .select("empresa_id, percentual, regional:regionais(id, nome)")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ano_vigencia", anoRateio),
+  ]);
 
   if (!colabRes.data) {
     notFound();
@@ -83,8 +96,33 @@ export default async function ColaboradorDetalhePage({
 
   const alocacoes = (alocacoesRes.data ?? []) as (ColaboradorAlocacao & {
     empresa: Pick<Empresa, "id" | "nome_fantasia">;
-    regional: { id: string; nome: string };
+    regional: { id: string; nome: string } | null;
   })[];
+
+  // Agrega rateios por empresa pra passar ao card de alocação. Só entram as
+  // regionais com % > 0 no ano corrente (tabela não guarda 0%).
+  const rateiosDoAno = (() => {
+    const mapa = new Map<
+      string,
+      { regional_id: string; regional_nome: string; percentual: number }[]
+    >();
+    for (const r of ((rateiosRes.data ?? []) as any[])) {
+      if (!r.regional) continue;
+      const lista = mapa.get(r.empresa_id) ?? [];
+      lista.push({
+        regional_id: r.regional.id,
+        regional_nome: r.regional.nome,
+        percentual: Number(r.percentual),
+      });
+      mapa.set(r.empresa_id, lista);
+    }
+    return Array.from(mapa.entries()).map(([empresa_id, regionais]) => ({
+      empresa_id,
+      regionais: regionais.sort((a, b) =>
+        a.regional_nome.localeCompare(b.regional_nome, "pt-BR"),
+      ),
+    }));
+  })();
 
   const salarios = (salariosRes.data ?? []) as ColaboradorSalario[];
 
@@ -166,6 +204,8 @@ export default async function ColaboradorDetalhePage({
             alocacoes={alocacoes}
             empresas={empresas}
             regionais={regionais}
+            rateiosDoAno={rateiosDoAno}
+            anoRateio={anoRateio}
           />
           <CardSalarios
             colaboradorId={colab.id}

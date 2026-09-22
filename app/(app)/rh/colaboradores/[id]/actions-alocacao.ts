@@ -5,18 +5,20 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { createClient } from "@/lib/supabase/server";
-import { alocacaoSchema } from "@/lib/validations/rh-colaboradores";
 
 type ActionResult<T = Record<string, unknown>> =
   | ({ ok: true } & T)
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
 function mapAlocacaoDbError(msg: string): string {
-  if (msg.includes("Rateio de alocacoes")) {
-    return "A soma dos percentuais das alocações vigentes precisa dar 100.";
+  if (msg.includes("chk_alocacao_regional_xor_rateio")) {
+    return 'Alocação inconsistente: escolha regional específica OU ligue "Todas as regionais", não os dois.';
   }
-  if (msg.includes("chk_alocacoes_percentual_valido")) {
-    return "Percentual deve ser maior que 0 e no máximo 100.";
+  if (msg.includes("fk_alocacao_regional_pertence_empresa")) {
+    return "A regional selecionada não pertence à empresa escolhida.";
+  }
+  if (msg.includes("uniq_colaborador_alocacao_vigente")) {
+    return "Este colaborador já tem uma alocação vigente.";
   }
   if (msg.includes("chk_alocacoes_periodo_valido")) {
     return "Data de fim precisa ser posterior à data de início.";
@@ -25,47 +27,53 @@ function mapAlocacaoDbError(msg: string): string {
 }
 
 /**
- * Substitui as alocações vigentes do colaborador atomicamente — fecha
- * todas as linhas com data_fim IS NULL na data indicada e abre as novas
- * linhas. O trigger `trg_alocacoes_soma_100` é DEFERRABLE INITIALLY
- * DEFERRED, então valida no COMMIT: sum das vigentes finais precisa dar
- * 100.
- *
- * A rota REST do Supabase-js não expõe BEGIN/COMMIT explícitos, mas cada
- * chamada individual é atômica em si. Para o swap, mandamos as inserções
- * em bulk (uma única chamada) — todas passam ou nenhuma passa. As
- * atualizações de fechamento vêm antes: se a inserção falhar, o trigger
- * pega o estado final (sem as novas), viola sum=100 e derruba a
- * transação inteira via CONSTRAINT TRIGGER.
- *
- * ATENÇÃO: Se a UPDATE de fechamento for aplicada e o INSERT em bulk
- * falhar por outra razão (constraint na linha nova), o Postgres reverte
- * TUDO — o UPDATE também. Confirmado pelo teste em migração 000006
- * (cenário swap).
+ * Sub-1 dia de uma data ISO (YYYY-MM-DD). Usado pra fechar a alocação
+ * vigente no dia anterior ao início da nova.
  */
-export async function substituirAlocacoes(
+function diaAnterior(iso: string): string {
+  const [ano, mes, dia] = iso.split("-").map(Number);
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Novo modelo (2026-09-23): 1 alocação vigente por colaborador. Sem
+ * rateio em %. Ou é regional específica (usa_rateio_empresa=false +
+ * regional_id) ou é "toda a empresa" (usa_rateio_empresa=true +
+ * regional_id=null), e no momento da geração da folha o rateio da
+ * empresa+ano expande em N linhas do snapshot.
+ *
+ * `alterarAlocacao` fecha a vigente atual em `data_mudanca - 1 dia` e
+ * abre a nova em `data_mudanca`. Índice UNIQUE parcial em
+ * `(colaborador_id) where data_fim is null` garante que só há 1
+ * vigente por vez.
+ */
+export async function alterarAlocacao(
   colaboradorId: string,
-  novasAlocacoes: {
+  input: {
     empresa_id: string;
-    regional_id: string;
-    percentual: string;
+    usa_rateio_empresa: boolean;
+    regional_id: string | null;
+    data_mudanca: string;
     motivo?: string | null;
-  }[],
-  dataFechamento: string,
-): Promise<ActionResult<{ id: string; inseridas: number }>> {
+  },
+): Promise<ActionResult<{ id: string }>> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "rh.colaboradores.editar");
   if (!gate.ok) return gate;
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataFechamento)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.data_mudanca)) {
     return { ok: false, message: "Data de mudança inválida." };
   }
-
-  if (novasAlocacoes.length === 0) {
+  if (input.usa_rateio_empresa && input.regional_id) {
     return {
       ok: false,
-      message: "Informe ao menos uma alocação nova (somando 100%).",
+      message: 'Regional não pode ser preenchida quando "Todas as regionais" está ligado.',
     };
+  }
+  if (!input.usa_rateio_empresa && !input.regional_id) {
+    return { ok: false, message: "Selecione uma regional." };
   }
 
   const supabase = createClient();
@@ -81,10 +89,31 @@ export async function substituirAlocacoes(
     return { ok: false, message: "Colaborador não encontrado." };
   }
 
-  // 1) Fecha as vigentes
+  // Se usa rateio, empresa tem que ter rateio configurado no ano da
+  // data de mudança. Sem isso, gerarFolha vai bloquear na hora — melhor
+  // pegar aqui.
+  if (input.usa_rateio_empresa) {
+    const anoMudanca = Number(input.data_mudanca.slice(0, 4));
+    const { count: temRateio } = await supabase
+      .from("empresas_rateios_regionais")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("empresa_id", input.empresa_id)
+      .eq("ano_vigencia", anoMudanca);
+    if (!temRateio || temRateio === 0) {
+      return {
+        ok: false,
+        message: `Esta empresa não tem rateio configurado para ${anoMudanca}. Configure em Cadastros → Empresas → Rateio antes de alocar.`,
+      };
+    }
+  }
+
+  const dataFim = diaAnterior(input.data_mudanca);
+
+  // 1) Fecha vigente atual (se houver)
   const { error: upError } = await supabase
     .from("colaboradores_alocacoes")
-    .update({ data_fim: dataFechamento })
+    .update({ data_fim: dataFim })
     .eq("colaborador_id", colaboradorId)
     .eq("tenant_id", session.activeTenant.id)
     .is("data_fim", null);
@@ -94,21 +123,19 @@ export async function substituirAlocacoes(
     return { ok: false, message: mapAlocacaoDbError(upError.message) };
   }
 
-  // 2) Insere as novas
-  const rows = novasAlocacoes.map((a) => ({
-    tenant_id: session.activeTenant.id,
-    colaborador_id: colaboradorId,
-    empresa_id: a.empresa_id,
-    regional_id: a.regional_id,
-    percentual: a.percentual,
-    data_inicio: dataFechamento,
-    motivo: a.motivo ?? null,
-    created_by: session.profile.id,
-  }));
-
+  // 2) Abre nova vigente
   const { error: insError } = await supabase
     .from("colaboradores_alocacoes")
-    .insert(rows);
+    .insert({
+      tenant_id: session.activeTenant.id,
+      colaborador_id: colaboradorId,
+      empresa_id: input.empresa_id,
+      regional_id: input.regional_id,
+      usa_rateio_empresa: input.usa_rateio_empresa,
+      data_inicio: input.data_mudanca,
+      motivo: input.motivo ?? null,
+      created_by: session.profile.id,
+    });
 
   if (insError) {
     console.error("[rh.alocacao.abrir]", insError.message);
@@ -121,15 +148,13 @@ export async function substituirAlocacoes(
     entidadeTipo: "colaborador",
     entidadeId: colaboradorId,
     metadata: {
-      data_fechamento: dataFechamento,
-      novas: rows.map((r) => ({
-        empresa_id: r.empresa_id,
-        regional_id: r.regional_id,
-        percentual: r.percentual,
-      })),
+      data_mudanca: input.data_mudanca,
+      empresa_id: input.empresa_id,
+      usa_rateio_empresa: input.usa_rateio_empresa,
+      regional_id: input.regional_id,
     },
   });
 
   revalidatePath(`/rh/colaboradores/${colaboradorId}`);
-  return { ok: true, id: colaboradorId, inseridas: rows.length };
+  return { ok: true, id: colaboradorId };
 }
