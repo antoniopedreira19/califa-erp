@@ -119,7 +119,7 @@ export function FolhaCompetenciaView({
       <div
         role="tablist"
         aria-label="Filtrar por status"
-        className="flex items-center gap-1 border-b border-border overflow-x-auto"
+        className="flex items-center gap-1 border-b border-border"
       >
         {TABS.map((t) => (
           <TabButton
