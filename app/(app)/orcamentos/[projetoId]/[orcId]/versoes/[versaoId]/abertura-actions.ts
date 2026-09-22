@@ -85,6 +85,8 @@ export async function enviarJobParaAbertura(
   formData: FormData,
 ): Promise<AberturaResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.enviar_abertura", { versaoId });
+  if (!gate.ok) return { ok: false, message: gate.message };
   const parsed = aberturaJobSchema.safeParse(extractInput(formData));
 
   if (!parsed.success) {

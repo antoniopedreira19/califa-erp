@@ -263,6 +263,11 @@ test("So Administrador e Gerente de Producao enviam pra faturamento e encerram j
   assert.deepEqual(new Set(encerrar), esperado);
 });
 
+test("Só Administrador e GP enviam o job para abertura (Tiago, 22/09/2026)", () => {
+  const envia = new Set(getRolesFor("jobs.enviar_abertura"));
+  assert.deepEqual(envia, new Set<AppRole>(["administrador", "gerente_producao"]));
+});
+
 test("Produtor faz TUDO em job/orcamento menos aprovar/enviar_faturamento/encerrar", () => {
   assert.equal(pode("produtor", "orcamentos.criar"), true);
   assert.equal(pode("produtor", "orcamentos.duplicar"), true);

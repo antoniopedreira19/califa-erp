@@ -3966,3 +3966,30 @@ Revê a nota de 16/09 (decisão 087) num ponto só: **quem decide o `finalizado`
   recalculado pelo gatilho `trg_jobs_carimba_faturamento_enviado`.
 - O job **finalizado pode ter nota por emitir**. Ele continua na
   `vw_faturamento_pendente` — não o tire de lá.
+
+---
+
+## ⚠️ Nota de 2026-09-22 — Só o GP envia o job para abertura
+
+> ⚠️ **Mudou em 22/09/2026.** Até aqui `enviarJobParaAbertura` não tinha
+> gate de papel e a RLS de `jobs` só olha tenant, empresa e regional: o
+> produtor via o botão e o envio passava. Em 22/09 dois produtores enviaram
+> jobs (JOB-0037 e JOB-0038), e o JOB-0031 (04/09) também saiu de um
+> usuário hoje produtor.
+
+- Recurso novo `jobs.enviar_abertura` = Administrador + GP (Tiago, 22/09/2026).
+  Vale para o envio e para o reenvio do job devolvido pelo financeiro, que
+  são a mesma action.
+- A trava está no servidor (`checarPermissao` no topo de
+  `enviarJobParaAbertura`, com `acao_negada` na auditoria). Na tela, o botão
+  "Enviar Job para Abertura" da barra do orçamento e o "Revisar abertura" da
+  página do job devolvido somem para quem não tem o recurso; a barra diz que
+  o próximo passo é do GP.
+- **Não mudou:** "Cancelar envio à abertura" segue em `jobs.editar_metadata`
+  (o produtor ainda cancela). Os jobs já enviados por produtor ficaram como
+  estão.
+- **Verificado em 22/09/2026** num worktree com o papel forçado para produtor
+  só no código local (o banco não foi tocado): botão ausente, aviso do GP na
+  barra, e a action chamada pelo console voltou "Você não tem permissão para
+  essa ação." com `acao_negada` na auditoria. Como administrador, o botão
+  aparece e a action passa da trava.
