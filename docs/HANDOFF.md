@@ -72,9 +72,10 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260921220001  rpc_alocar_sequencial_cnab
 20260921230001  origem_folha_em_vw_a_pagar
 20260923100001  rh_alocacao_com_rateio_regional
+20260923120001  rateio_regional_write_admin_only
 ```
 
-Última: `20260923100001`.
+Última: `20260923120001`.
 
 Migration removida do repo em 2026-09-23 (regionais GERAL aposentadas): `20260916000004_rh_regional_geral.sql`.
 

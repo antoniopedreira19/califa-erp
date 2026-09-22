@@ -70,7 +70,8 @@ Apagada do repo em commit anterior (mesma sessão): `20260916000004_rh_regional_
 - `8459108` — chore(rh): remove migration da regional GERAL
 - `b49dafc` — feat(rh): nova alocação (empresa + toggle + tabela de rateio) — migration principal + Camada 1 + UI do card
 - `1c22dd3` — feat(rh): motor de folha expande rateio da empresa no snapshot
-- `dce8227` — feat(rh): CRUD de rateio anual por empresa em /rh/rateios
+- `dce8227` — feat(rh): CRUD de rateio anual por empresa em /rh/rateios (substituído por `bd05f2b`)
+- `bd05f2b` — refactor(admin): rateios saem de `/rh/rateios` e viram `/admin/rateios-regionais` em formato tabela, com filtro de ano (default: ano atual). Migration corretiva `20260923120001` fecha INSERT/UPDATE/DELETE pra `is_tenant_admin`; SELECT continua admin+rh pra o card de alocação do colaborador continuar oferecendo o toggle.
 
 ## Pontos de atenção pra próxima sessão
 
