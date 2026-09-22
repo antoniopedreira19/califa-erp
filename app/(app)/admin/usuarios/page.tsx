@@ -25,7 +25,7 @@ export default async function AdminUsuariosPage() {
   // GoTrue admin.listUsers estoura HTTP 500 com perPage >= 100 (dependência
   // interna de decodificação em batch). Fatiamos em páginas de 50 e agregamos.
   async function listarAuthUsersPaginado() {
-    type AuthUserLite = { id: string; email_confirmed_at: string | null };
+    type AuthUserLite = { id: string; last_sign_in_at: string | null };
     const acc: AuthUserLite[] = [];
     const perPage = 50;
     for (let page = 1; page <= 20; page++) {
@@ -38,7 +38,7 @@ export default async function AdminUsuariosPage() {
       for (const u of batch) {
         acc.push({
           id: u.id,
-          email_confirmed_at: u.email_confirmed_at ?? null,
+          last_sign_in_at: u.last_sign_in_at ?? null,
         });
       }
       if (batch.length < perPage) break;
@@ -99,7 +99,13 @@ export default async function AdminUsuariosPage() {
 
   const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  const emailConfirmadoById = new Map<string, boolean>();
+  // "Ativou a conta" = já logou pelo menos uma vez. Usar last_sign_in_at em
+  // vez de email_confirmed_at pega o caso "clicou no link do convite, sessão
+  // temporária criada, mas nunca terminou de definir senha" — nesse estado
+  // email_confirmed_at fica preenchido mas last_sign_in_at continua null.
+  // Sem essa distinção, o usuário ficava "ativo" na UI e o admin não conseguia
+  // reenviar o convite pra ele completar.
+  const contaAtivadaById = new Map<string, boolean>();
   const authFalhou = !!authListingRes.error;
   if (authListingRes.error) {
     console.error(
@@ -108,7 +114,7 @@ export default async function AdminUsuariosPage() {
     );
   } else {
     for (const u of authListingRes.data ?? []) {
-      emailConfirmadoById.set(u.id, Boolean(u.email_confirmed_at));
+      contaAtivadaById.set(u.id, Boolean(u.last_sign_in_at));
     }
   }
 
@@ -116,19 +122,19 @@ export default async function AdminUsuariosPage() {
     const profile = byId.get(m.user_id) ?? null;
     const perfilAtivo = profile?.ativo ?? true;
     const vinculoAtivo = m.status === "ativo";
-    // Se o listUsers falhou completamente, preserva o comportamento anterior
-    // (assume confirmado) pra não marcar todo mundo como pendente à toa. Se o
-    // listUsers respondeu mas o user_id não veio, aí SIM assume pendente — é
-    // um estado real de "usuário existe em tenant_members mas não em auth", ou
-    // acabou de ser convidado e paginação ainda não pegou. Melhor errar pra
-    // pendente do que dizer "ativo" e esconder o botão de reenviar convite.
-    const emailConfirmado = authFalhou
+    // Se o listUsers falhou por inteiro, assume ativado pra não marcar todo
+    // mundo como pendente à toa. Caso normal: se o user_id não veio no batch
+    // ou veio sem last_sign_in_at, é pendente. Melhor errar pra "pendente"
+    // (admin clica reenviar, Supabase reporta "já ativou" se for o caso, sem
+    // estrago) do que pra "ativo" (esconde o botão de reenviar e o usuário
+    // fica preso sem conseguir entrar).
+    const contaAtivada = authFalhou
       ? true
-      : (emailConfirmadoById.get(m.user_id) ?? false);
+      : (contaAtivadaById.get(m.user_id) ?? false);
 
     let acesso: "ativo" | "pendente" | "inativo";
     if (!perfilAtivo || !vinculoAtivo) acesso = "inativo";
-    else if (!emailConfirmado) acesso = "pendente";
+    else if (!contaAtivada) acesso = "pendente";
     else acesso = "ativo";
 
     return {

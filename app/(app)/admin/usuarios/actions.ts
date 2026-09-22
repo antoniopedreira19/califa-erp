@@ -393,7 +393,12 @@ export async function reenviarConvite(userId: string): Promise<ActionResult> {
   }
 
   const authUser = userInfo.user;
-  if (authUser.email_confirmed_at) {
+  // Bloqueia reenvio só se o usuário JÁ logou pelo menos uma vez. Não basta
+  // ter email_confirmed_at preenchido: se ele clicou no link mas nunca terminou
+  // de definir senha, `email_confirmed_at` é setado pelo callback mas
+  // `last_sign_in_at` fica null — nesse estado ele NÃO consegue entrar e
+  // precisa de convite novo.
+  if (authUser.last_sign_in_at) {
     return {
       ok: false,
       message:
