@@ -93,7 +93,7 @@ Textos aprovados, estados do pop-up e o contrato completo:
 - `save_marcado_por`, `save_marcado_em` e `planejado_antes_save` nas linhas:
   quem marcou e o planejado que o save zerou, devolvido quando o save sai.
 
-## 4. Decisões tomadas na implementação (a confirmar com o Tiago)
+## 4. Decisões tomadas na implementação (confirmadas pelo Tiago em 22/09/2026)
 
 - **Consumo de rascunho** não conta como uso para a trava de retirada
   (segue a 028: rascunho reserva e avisa, não impede). A aprovação da
