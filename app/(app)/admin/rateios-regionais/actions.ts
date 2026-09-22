@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSession } from "@/lib/auth/session";
+import { requireAdmin } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,28 +11,19 @@ type ActionResult<T = Record<string, unknown>> =
 
 type LinhaRateio = { regional_id: string; percentual: number };
 
-function podeEditarRateio(role: string): boolean {
-  return role === "administrador" || role === "rh";
-}
-
 /**
  * Salva o rateio de uma empresa em um ano. Substituição atômica: apaga as
- * linhas existentes e insere as novas. Só grava regionais com % > 0 (o
- * modelo trata regionais ausentes como 0%, ver docs da migration).
+ * linhas existentes e insere as novas. Só grava regionais com % > 0.
  *
- * Trigger de banco garante soma=100 no commit — mas checamos antes pra
- * dar mensagem de erro clara.
+ * Trigger de banco garante soma=100 no commit — checamos antes pra dar
+ * mensagem de erro clara.
  */
 export async function salvarRateioAno(input: {
   empresa_id: string;
   ano: number;
   linhas: LinhaRateio[];
 }): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!podeEditarRateio(session.activeRole)) {
-    return { ok: false, message: "Sem permissão." };
-  }
-
+  const session = await requireAdmin();
   const { empresa_id, ano, linhas } = input;
 
   if (!Number.isInteger(ano) || ano < 2020 || ano > 2099) {
@@ -63,7 +54,6 @@ export async function salvarRateioAno(input: {
       message: `A soma dos percentuais precisa dar 100 (atual: ${soma.toFixed(2)}).`,
     };
   }
-  // Duplicidade de regional
   const set = new Set<string>();
   for (const l of linhasLimpas) {
     if (set.has(l.regional_id)) {
@@ -78,7 +68,6 @@ export async function salvarRateioAno(input: {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
-  // Bloqueia edição de anos anteriores ao vigente (proteção do histórico).
   const anoAtual = new Date().getFullYear();
   if (ano < anoAtual) {
     return {
@@ -87,7 +76,6 @@ export async function salvarRateioAno(input: {
     };
   }
 
-  // Verifica que a empresa pertence ao tenant
   const { data: empresa } = await supabase
     .from("empresas")
     .select("id, nome_fantasia")
@@ -98,10 +86,6 @@ export async function salvarRateioAno(input: {
     return { ok: false, message: "Empresa não encontrada." };
   }
 
-  // Swap atômico via trigger deferred:
-  //   1) apaga o existente
-  //   2) insere o novo
-  // trg_rateios_soma_100 é DEFERRABLE INITIALLY DEFERRED — checa no commit.
   const { error: delError } = await supabase
     .from("empresas_rateios_regionais")
     .delete()
@@ -109,7 +93,7 @@ export async function salvarRateioAno(input: {
     .eq("empresa_id", empresa_id)
     .eq("ano_vigencia", ano);
   if (delError) {
-    console.error("[rh.rateios.del]", delError.message);
+    console.error("[admin.rateios.del]", delError.message);
     return { ok: false, message: "Falha ao substituir rateio." };
   }
 
@@ -125,12 +109,11 @@ export async function salvarRateioAno(input: {
     .from("empresas_rateios_regionais")
     .insert(rows);
   if (insError) {
-    console.error("[rh.rateios.ins]", insError.message);
+    console.error("[admin.rateios.ins]", insError.message);
     if (insError.message.includes("Soma dos percentuais do rateio")) {
       return {
         ok: false,
-        message:
-          "Soma dos percentuais precisa dar 100 (bloqueio do banco).",
+        message: "Soma dos percentuais precisa dar 100 (bloqueio do banco).",
       };
     }
     if (insError.message.includes("fk_rateio_regional_pertence_empresa")) {
@@ -154,7 +137,7 @@ export async function salvarRateioAno(input: {
     },
   });
 
-  revalidatePath("/rh/rateios");
+  revalidatePath("/admin/rateios-regionais");
   return { ok: true };
 }
 
@@ -167,11 +150,7 @@ export async function copiarRateioParaAno(input: {
   ano_origem: number;
   ano_destino: number;
 }): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!podeEditarRateio(session.activeRole)) {
-    return { ok: false, message: "Sem permissão." };
-  }
-
+  const session = await requireAdmin();
   const { empresa_id, ano_origem, ano_destino } = input;
 
   if (ano_destino <= ano_origem) {
@@ -197,7 +176,7 @@ export async function copiarRateioParaAno(input: {
     .eq("empresa_id", empresa_id)
     .eq("ano_vigencia", ano_origem);
   if (errOrigem) {
-    console.error("[rh.rateios.copiar.origem]", errOrigem.message);
+    console.error("[admin.rateios.copiar.origem]", errOrigem.message);
     return { ok: false, message: "Falha ao ler rateio de origem." };
   }
   if (!linhasOrigem || linhasOrigem.length === 0) {
@@ -207,7 +186,6 @@ export async function copiarRateioParaAno(input: {
     };
   }
 
-  // Se já existe destino, aborta pra evitar sobrescrita acidental.
   const { count: temDestino } = await supabase
     .from("empresas_rateios_regionais")
     .select("id", { count: "exact", head: true })
@@ -234,7 +212,7 @@ export async function copiarRateioParaAno(input: {
     .from("empresas_rateios_regionais")
     .insert(rows);
   if (insError) {
-    console.error("[rh.rateios.copiar.ins]", insError.message);
+    console.error("[admin.rateios.copiar.ins]", insError.message);
     return { ok: false, message: "Falha ao criar rateio do novo ano." };
   }
 
@@ -246,6 +224,6 @@ export async function copiarRateioParaAno(input: {
     metadata: { ano_origem, ano_destino, linhas: rows.length },
   });
 
-  revalidatePath("/rh/rateios");
+  revalidatePath("/admin/rateios-regionais");
   return { ok: true };
 }
