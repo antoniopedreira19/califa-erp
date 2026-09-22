@@ -253,7 +253,28 @@ export const SAVE = {
   textoApagado: "text-[#5f5d57]",
   /** Cor do ícone de direção. */
   icone: "text-[#5f5d57]",
+  /** A linha do pedido que o financeiro está aprovando (decisão 099,
+   *  22/09/2026): a planilha do job no financeiro, aberta a partir da
+   *  aprovação, destaca a linha em âmbar — um véu sobre as células, que
+   *  deixa a cor de cada bloco aparecer por baixo, e um filete na
+   *  primeira. Vai no `<tr>`. Do protótipo `prototipo-save-v2`
+   *  (`linhaDestaque`). */
+  linhaEmAprovacao:
+    "[&>td]:shadow-[inset_0_0_0_9999px_rgba(245,158,11,0.14)] [&>td:first-child]:shadow-[inset_3px_0_0_#d97706,inset_0_0_0_9999px_rgba(245,158,11,0.14)]",
+  /** O quadradinho da faixa "Em aprovação na Abertura de Job", na cor do
+   *  filete da linha destacada. */
+  marcaEmAprovacao: "bg-[#d97706]",
 } as const;
+
+/** Cor do delta de valor nos pop-ups de errata e de save: o que sobe
+ *  vem na cor de texto do REALIZADO, o que desce na do PLANEJADO, e zero
+ *  fica neutro — a mesma leitura da barra e do diálogo da errata. Uma
+ *  função só, para os pop-ups não escreverem o hex do bloco (decisão 099). */
+export function corDoDelta(delta: number): string {
+  if (delta > 0) return REALIZADO.texto;
+  if (delta < 0) return PLANEJADO.texto;
+  return "text-muted-foreground";
+}
 
 /** ERRATA — o modo de edição do Orçado na planilha do job.
  *

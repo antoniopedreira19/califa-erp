@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { FilaAbertura, type FilaLinha } from "./fila-list";
+import { FilaAbertura, type FilaLinha, type SaveFilaLinha } from "./fila-list";
 import { JobsAbertosList } from "./jobs-abertos-list";
 import { CalendarioJobs } from "./calendario-jobs";
 import type { JobAberto } from "./dados-abertos";
@@ -26,11 +26,15 @@ export type Aba = "aguardando" | "abertos" | "calendario";
  */
 export function AberturaTabs({
   fila,
+  saves,
   abertos,
   hoje,
   abaInicial,
 }: {
   fila: FilaLinha[];
+  /** A faixa Saves da fila (decisão 099): pedidos que aguardam o
+   *  financeiro. Contam na aba junto dos jobs. */
+  saves: SaveFilaLinha[];
   abertos: JobAberto[];
   /** "hoje" em `YYYY-MM-DD`, no fuso de Brasília, vindo do servidor. */
   hoje: string;
@@ -47,7 +51,7 @@ export function AberturaTabs({
       // Sem `?aba=` na URL, a fila vazia é o estado normal do dia a dia:
       // abrir direto em "Visualizar Jobs" poupa um clique e evita receber
       // um empty state na cara.
-      (fila.length > 0 ? "aguardando" : "abertos"),
+      (fila.length + saves.length > 0 ? "aguardando" : "abertos"),
   );
 
   /**
@@ -66,7 +70,13 @@ export function AberturaTabs({
   }
 
   const abas: { key: Aba; rotulo: string; contagem: number | null }[] = [
-    { key: "aguardando", rotulo: "Jobs aguardando abertura", contagem: fila.length },
+    // Jobs e saves a aprovar: é tudo o que a fila pede do financeiro. O
+    // job que está só na faixa Saves já não conta como job (a página tira).
+    {
+      key: "aguardando",
+      rotulo: "Jobs aguardando abertura",
+      contagem: fila.length + saves.length,
+    },
     // "Visualizar Jobs", e não "Jobs abertos": esta aba é a porta de
     // entrada do job já aberto no financeiro — dela se chega ao registro
     // da abertura, à planilha, ao fluxo de caixa e à comunicação
@@ -120,7 +130,7 @@ export function AberturaTabs({
       </div>
 
       <div role="tabpanel" className={cn(aba === "aguardando" ? "" : "hidden")}>
-        <FilaAbertura linhas={fila} />
+        <FilaAbertura linhas={fila} saves={saves} />
       </div>
       <div role="tabpanel" className={cn(aba === "abertos" ? "" : "hidden")}>
         <JobsAbertosList linhas={abertos} />

@@ -52,7 +52,11 @@ export default async function PlanilhaDaAberturaPage({
       // internacional (decisão 072): é a categoria do orçamento, e não a do
       // job, que decide como este fechamento soma.
       "versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
-        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+        // O nome do cliente é do pop-up de save: os textos dele falam do
+        // crédito "de {cliente}", e sem o nome diziam "do cliente"
+        // (decisão 099, revisão de 22/09/2026).
+        "projeto:projetos(cliente:clientes(nome_fantasia))",
     )
     .eq("id", params.jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -62,9 +66,17 @@ export default async function PlanilhaDaAberturaPage({
   if (!raw) notFound();
 
   // Job que já saiu da fila tem a planilha na página dele — esta rota
-  // existe só como passo do fluxo de abertura.
-  if ((raw as any).status !== "aguardando_abertura") {
-    redirect(`/jobs/${params.jobId}?from=financeiro&aba=planilha`);
+  // existe só como passo do fluxo de abertura. A página dele é a do
+  // FINANCEIRO (decisão 099, item 20): até 22/09/2026 o desvio ia para
+  // `/jobs`, e tirava quem conferia do módulo. Devolvido e cancelado não
+  // têm página no financeiro: voltam para a fila.
+  const statusDoJob = (raw as any).status as string;
+  if (statusDoJob !== "aguardando_abertura") {
+    redirect(
+      statusDoJob === "rejeitado_financeiro" || statusDoJob === "cancelado"
+        ? "/financeiro/abertura-de-job?aba=aguardando"
+        : `/financeiro/jobs/${params.jobId}?aba=planilha`,
+    );
   }
 
   const versao = (raw as any).versao;
@@ -270,6 +282,7 @@ export default async function PlanilhaDaAberturaPage({
         categoriasMap={categoriasMap}
         bvsPorItem={bvsPorItem}
         savePorItem={savePorItem}
+        clienteNome={(raw as any).projeto?.cliente?.nome_fantasia ?? null}
         versaoLabel={`v${versao?.numero_versao ?? 1}`}
         moeda={versao?.moeda ?? "BRL"}
         percentualHonorarios={Number(versao?.percentual_honorarios ?? 0)}

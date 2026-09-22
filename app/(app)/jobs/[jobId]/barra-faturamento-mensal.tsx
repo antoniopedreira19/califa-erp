@@ -69,8 +69,9 @@ interface Props {
   meses: MesDeFaturamento[];
   /** Permissão de enviar para faturamento, com o job aberto ou encerrado. */
   podeEnviar: boolean;
-  /** Motivo que fecha o envio de todos os meses agora (abertura em
-   *  revisão depois de errata). Nulo quando não há. */
+  /** Motivo que fecha o envio de todos os meses agora: consumo de save
+   *  aguardando o financeiro ou revisão da abertura pendente (decisão 099).
+   *  Nulo quando não há. */
   bloqueio: string | null;
   portais: PortalOption[];
   moeda: string;
@@ -229,7 +230,9 @@ export function BarraFaturamentoMensal({
         }
         descricao={
           envioAberto?.envio
-            ? `Enviado para faturamento em ${dataDoEnvio(envioAberto.envio.enviado_em)}. O envio é definitivo: não há errata nem save neste mês.`
+            ? // Gerar save segue valendo depois do envio, até o encerramento
+              // (decisão 099 §14): o que o envio fecha é a errata e o consumo.
+              `Enviado para faturamento em ${dataDoEnvio(envioAberto.envio.enviado_em)}. O envio é definitivo: não há mais errata nem consumo de save neste mês.`
             : ""
         }
         envio={envioAberto?.envio ?? null}

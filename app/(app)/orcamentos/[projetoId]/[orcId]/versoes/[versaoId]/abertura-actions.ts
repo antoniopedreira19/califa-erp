@@ -11,6 +11,13 @@ import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { gerarCodigoJob } from "@/lib/codigos/jobs";
 import type { VersaoOrcamentoItem } from "@/lib/types";
+import {
+  espelhosDe,
+  lerBaseDosEspelhos,
+  totaisDoFinanceiro,
+  type EspelhosDoJob,
+} from "@/lib/data/espelhos-do-job";
+import { formatCurrency } from "@/lib/utils";
 
 export type AberturaResult =
   | { ok: true; jobId: string; codigo: string }
@@ -66,6 +73,76 @@ function mapDbError(msg: string): string {
     return "As datas não podem ser gravadas no orçamento: fim anterior ao início.";
   }
   return "Não foi possível enviar o job para abertura.";
+}
+
+/**
+ * O consumo de save deste job cabe no saldo APROVADO de cada origem?
+ * (decisão 099, 22/09/2026)
+ *
+ * Desde a aprovação de save o saldo que um job oferece aos outros é só o
+ * save que o financeiro aprovou. A versão revalidou o consumo quando foi
+ * aprovada, mas o saldo pode ter mudado depois — outro job consumiu, um
+ * save foi recusado ou retirado. Na criação do job o banco recusaria no
+ * passo 6b-bis, quando o consumo muda de ponta para a cópia, e o job já
+ * estaria criado sem ele. A conferência vem antes de gravar qualquer
+ * coisa, com o job de origem e o disponível na mensagem.
+ *
+ * O consumo da versão aprovada e o da cópia do job devolvido já seguram
+ * saldo: estão dentro do `usado` de `vw_saves_por_job`. Por isso o que
+ * cabe para ESTE job é `disponivel + o que ele consome`, e a conta fecha
+ * quando `disponivel` não fica negativo. Origem fora da view não tem save
+ * aprovado nenhum.
+ *
+ * Não exportada: todo export async de arquivo "use server" vira Server
+ * Action.
+ */
+async function barrarConsumoSemSaldoAprovado(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  consumos: { job_origem_id: string; valor: number | string }[],
+  quem: "Esta versão" | "Este job",
+): Promise<string | null> {
+  const porOrigem = new Map<string, number>();
+  for (const c of consumos) {
+    porOrigem.set(c.job_origem_id, (porOrigem.get(c.job_origem_id) ?? 0) + Number(c.valor ?? 0));
+  }
+  const origens = [...porOrigem.keys()];
+  if (origens.length === 0) return null;
+
+  const [saldosRes, jobsRes] = await Promise.all([
+    supabase
+      .from("vw_saves_por_job")
+      .select("job_id, disponivel")
+      .eq("tenant_id", tenantId)
+      .in("job_id", origens),
+    supabase.from("jobs").select("id, codigo").eq("tenant_id", tenantId).in("id", origens),
+  ]);
+  if (saldosRes.error) {
+    console.error("[abertura.saldo_save]", saldosRes.error.message);
+    return "Não foi possível conferir o saldo de save aprovado. Tente de novo.";
+  }
+  const disponivel = new Map<string, number>(
+    ((saldosRes.data ?? []) as { job_id: string; disponivel: number | string | null }[]).map(
+      (r) => [r.job_id, Number(r.disponivel ?? 0)],
+    ),
+  );
+  const codigo = new Map<string, string>(
+    ((jobsRes.data ?? []) as { id: string; codigo: string }[]).map((j) => [j.id, j.codigo]),
+  );
+
+  for (const [origem, consome] of porOrigem) {
+    if (consome <= 0.004) continue;
+    const disp = disponivel.get(origem) ?? -consome;
+    if (disp >= -0.005) continue;
+    const cabe = Math.max(0, disp + consome);
+    const cod = codigo.get(origem) ?? "job de origem";
+    return (
+      `${quem} consome ${formatCurrency(consome)} do saldo de save do ${cod}, ` +
+      `mas só ${formatCurrency(cabe)} dele estão aprovados e disponíveis para este job. ` +
+      `Ajuste o consumo, ou espere o financeiro aprovar o save do ${cod}.`
+    );
+  }
+  return null;
 }
 
 /**
@@ -293,7 +370,7 @@ export async function enviarJobParaAbertura(
   //    tela, mas não é o que dimensiona o job no financeiro.
   const { data: itensBrutos, error: itensErr } = await supabase
     .from("versoes_orcamento_itens")
-    .select("tipo_custo, total_orcado, em_save, save_consumido")
+    .select("id, tipo_custo, total_orcado, em_save, save_consumido")
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
 
@@ -314,6 +391,52 @@ export async function enviarJobParaAbertura(
     Number(versao.percentual_imposto ?? 0),
     configDaPlanilha(orc.categoria?.modelo_planilha, versao).internacional,
   );
+
+  // 4b. Reenvio do job devolvido (decisão 099, §11): os números saem da
+  //     CÓPIA do job, e não da versão. Com o job devolvido a produção
+  //     edita o save direto na cópia (sem pedido), então a versão aprovada
+  //     deixou de ser a foto dos números — e o financeiro vai conferir a
+  //     abertura de novo sobre eles. Lido antes de gravar qualquer coisa.
+  let espelhosDoReenvio: EspelhosDoJob | null = null;
+  let linhasDoJobDevolvido: string[] = [];
+  if (jobDevolvido) {
+    const lida = await lerBaseDosEspelhos(supabase, session.activeTenant.id, jobDevolvido.id);
+    if (!lida.ok) return { ok: false, message: lida.message };
+    espelhosDoReenvio = espelhosDe(totaisDoFinanceiro(lida.base.itens, lida.base));
+    linhasDoJobDevolvido = lida.base.itens.map((i) => i.id);
+  }
+
+  // 4c. O consumo de save cabe no saldo APROVADO (decisão 099)? Na criação,
+  //     o consumo ainda aponta para a versão; no reenvio, para a cópia.
+  const idsDaVersaoConsumo = ((itensBrutos ?? []) as { id: string }[]).map((i) => i.id);
+  const consumosRes = jobDevolvido
+    ? linhasDoJobDevolvido.length > 0
+      ? await supabase
+          .from("saves_consumos")
+          .select("job_origem_id, valor")
+          .eq("tenant_id", session.activeTenant.id)
+          .in("job_item_orcado_id", linhasDoJobDevolvido)
+      : { data: [], error: null }
+    : idsDaVersaoConsumo.length > 0
+      ? await supabase
+          .from("saves_consumos")
+          .select("job_origem_id, valor")
+          .eq("tenant_id", session.activeTenant.id)
+          .in("item_versao_id", idsDaVersaoConsumo)
+          .is("job_item_orcado_id", null)
+          .is("substituido_em", null)
+      : { data: [], error: null };
+  if (consumosRes.error) {
+    console.error("[abertura.consumos_save]", consumosRes.error.message);
+    return { ok: false, message: "Não foi possível conferir o consumo de save da versão." };
+  }
+  const semSaldo = await barrarConsumoSemSaldoAprovado(
+    supabase,
+    session.activeTenant.id,
+    (consumosRes.data ?? []) as { job_origem_id: string; valor: number }[],
+    jobDevolvido ? "Este job" : "Esta versão",
+  );
+  if (semSaldo) return { ok: false, message: semSaldo };
 
   let codigo: string;
   try {
@@ -342,11 +465,20 @@ export async function enviarJobParaAbertura(
   }
 
   // 5b. Reenvio do job devolvido (decisão 057): atualiza o que o
-  //     formulário decide e devolve o job à fila. Valor, cópia da
-  //     planilha, saves, BVs, PPs e realizado ficam como estão — a versão
-  //     aprovada não mudou (errata só existe depois da abertura), e o que
-  //     a produção já registrou na pré-abertura é dela.
+  //     formulário decide e devolve o job à fila. Cópia da planilha,
+  //     saves, BVs, PPs e realizado ficam como estão — a versão aprovada
+  //     não mudou (errata só existe depois da abertura), e o que a
+  //     produção já registrou na pré-abertura é dela.
+  //
+  //     ⚠️ Desde 22/09/2026 (decisão 099) o VALOR não fica: os espelhos e
+  //     os `*_abertura` são refeitos pela cópia (passo 4b), porque o save
+  //     do job devolvido se edita direto nela.
   if (jobDevolvido) {
+    // Sempre preenchido no passo 4b; a guarda é para o tipo.
+    if (!espelhosDoReenvio) {
+      return { ok: false, message: "Não foi possível recalcular os números do job." };
+    }
+
     // Contatos de cobrança PRIMEIRO: o formulário é a fonte inteira —
     // apaga os do envio anterior e grava o que está na tela. Se isso
     // falhar, o job continua devolvido e o usuário refaz; a ordem inversa
@@ -404,6 +536,12 @@ export async function enviarJobParaAbertura(
         produtor_id: orc.produtor_id,
         status: "aguardando_abertura",
         motivo_rejeicao: null,
+        // Os números do financeiro pela cópia (decisão 099, §11), e a base
+        // de comparação do card de Erratas junto: o job ainda não foi
+        // aberto, então a abertura que vale é esta.
+        ...espelhosDoReenvio,
+        valor_job_abertura: espelhosDoReenvio.valor_total,
+        faturamento_previsto_abertura: espelhosDoReenvio.faturamento_previsto,
       })
       .eq("id", jobDevolvido.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -428,6 +566,9 @@ export async function enviarJobParaAbertura(
         data_evento: parsed.data.data_evento,
         data_prevista_faturamento: parsed.data.data_prevista_faturamento,
         qtd_contatos_cobranca: parsed.data.contatos_cobranca.length,
+        valor_total: espelhosDoReenvio.valor_total,
+        faturamento_previsto: espelhosDoReenvio.faturamento_previsto,
+        faturamento_save_previsto: espelhosDoReenvio.faturamento_save_previsto,
       },
     });
 
@@ -500,7 +641,7 @@ export async function enviarJobParaAbertura(
   const { data: itensDaVersao, error: errItensCopia } = await supabase
     .from("versoes_orcamento_itens")
     .select(
-      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, bv_liquido_planejado, em_save, save_consumido",
+      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, bv_liquido_planejado, em_save, save_consumido, save_marcado_por, save_marcado_em, planejado_antes_save",
     )
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
@@ -540,6 +681,13 @@ export async function enviarJobParaAbertura(
         // discordaria da versão aprovada logo na abertura (decisão 028).
         em_save: i.em_save === true,
         save_consumido: Number(i.save_consumido ?? 0),
+        // Quem marcou o save e o planejado que ele zerou (decisão 099). O
+        // trigger `save_marca_autor_e_planejado` já herda da versão como
+        // reserva; aqui vai explícito, para a cópia não depender dele. Na
+        // linha sem save o trigger zera os três.
+        save_marcado_por: i.save_marcado_por ?? null,
+        save_marcado_em: i.save_marcado_em ?? null,
+        planejado_antes_save: i.planejado_antes_save ?? null,
       })),
     ).select("id, item_versao_id");
 

@@ -525,6 +525,8 @@ export async function carregarHomeGerenteProducao(
     mensagensNaoLidas,
     meusJobsAndamento,
     meusOrcamentosAbertos,
+    meusPedidosDeSave,
+    minhasLinhasComSave,
   ] = await Promise.all([
     // ESTRITO: versoes aguardando revisao ou enviadas ao cliente, onde eu sou o GP
     // "enviada_cliente" EXISTE no enum — incluido agora
@@ -606,7 +608,30 @@ export async function carregarHomeGerenteProducao(
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
           .in("status", ["rascunho", "em_revisao", "enviado_cliente"]),
+    // ESTRITO: pedidos de save dos meus jobs (decisão 099), para os cards
+    // "prontos pra faturar" e "prontos pra encerrar". Poucas linhas: um
+    // pedido ativo por linha de save.
+    // Aguardando e aprovado dizem que o lado da linha foi enviado; o
+    // recusado não conta como envio (revisão de 22/09/2026).
+    supabase
+      .from("saves_aprovacoes")
+      .select("job_id, job_item_orcado_id, tipo, situacao, jobs!inner(responsavel_id)")
+      .eq("tenant_id", tenantId)
+      .eq("jobs.responsavel_id", userId)
+      .in("situacao", ["aguardando", "aprovado"]),
+    // ESTRITO: as linhas com save ou consumo dos meus jobs na esteira
+    // (abertos e encerrados, o mesmo recorte de `meusJobsNaEsteira`) —
+    // contra os pedidos acima, dão o save "não enviado".
+    supabase
+      .from("jobs_itens_orcado")
+      .select("id, job_id, em_save, save_consumido, jobs!inner(responsavel_id, status)")
+      .eq("tenant_id", tenantId)
+      .eq("jobs.responsavel_id", userId)
+      .in("jobs.status", ["aberto", "encerrado"])
+      .or("em_save.eq.true,save_consumido.gt.0"),
   ]);
+
+  const saveDosMeusJobs = saveNaEsteiraDoGp(meusPedidosDeSave, minhasLinhasComSave);
 
   const pendencias: CardPendencia[] = [
     {
@@ -618,14 +643,14 @@ export async function carregarHomeGerenteProducao(
     },
     {
       titulo: "Jobs prontos pra enviar pra faturamento",
-      contagem: contarProntosPraFaturar(meusJobsNaEsteira),
+      contagem: contarProntosPraFaturar(meusJobsNaEsteira, saveDosMeusJobs),
       subtitulo: "Seus jobs abertos ou encerrados com previsão positiva, ainda não enviados",
       href: "/jobs?filtro=faturamento_pronto&meus=1",
       icone: Mail,
     },
     {
       titulo: "Jobs prontos pra encerrar",
-      contagem: contarProntosPraEncerrar(meusJobsNaEsteira),
+      contagem: contarProntosPraEncerrar(meusJobsNaEsteira, saveDosMeusJobs),
       subtitulo: "Seus jobs com faturamento emitido",
       href: "/jobs?filtro=encerrar_pronto&meus=1",
       icone: Receipt,
@@ -799,6 +824,7 @@ export async function carregarHomeProdutor(
 // Cards de faturamento da home do GP (decisão 078)
 
 interface JobNaEsteiraDoGp {
+  id: string;
   status: string;
   faturamento_previsto: number | string | null;
   abertura_em_revisao: boolean | null;
@@ -821,11 +847,81 @@ function jobsNaEsteira(res: { data: unknown; error?: { message: string } | null 
   });
 }
 
+/** O save dos jobs do GP que segura os dois cards (decisão 099,
+ *  22/09/2026): quem tem consumo aguardando o financeiro ou nunca enviado
+ *  para aprovação (o envio para faturamento recusa os dois), e quem tem
+ *  save ou consumo aguardando ou nunca enviado (o encerramento recusa).
+ *  Leitura que falhou segura todo mundo: o card conta a menos, nunca a
+ *  mais. */
+interface SaveNaEsteiraDoGp {
+  falhou: boolean;
+  /** Consumo aguardando o financeiro ou nunca enviado: segura o envio
+   *  para faturamento. */
+  comConsumoPendente: Set<string>;
+  comSavePendente: Set<string>;
+}
+
+function saveNaEsteiraDoGp(
+  pedidosRes: { data: unknown; error?: { message: string } | null },
+  linhasRes: { data: unknown; error?: { message: string } | null },
+): SaveNaEsteiraDoGp {
+  if (pedidosRes.error) console.error("[home.gp.save_pedidos]", pedidosRes.error.message);
+  if (linhasRes.error) console.error("[home.gp.save_linhas]", linhasRes.error.message);
+  const pedidos = (pedidosRes.data ?? []) as {
+    job_id: string;
+    job_item_orcado_id: string | null;
+    tipo: string;
+    situacao: string;
+  }[];
+  const comConsumoPendente = new Set<string>();
+  const comSavePendente = new Set<string>();
+  // O lado da linha que já foi enviado: pedido aguardando ou aprovado.
+  const geraEnviado = new Set<string>();
+  const consomeEnviado = new Set<string>();
+  for (const p of pedidos) {
+    if (p.job_item_orcado_id) {
+      (p.tipo === "gera" ? geraEnviado : consomeEnviado).add(p.job_item_orcado_id);
+    }
+    if (p.situacao !== "aguardando") continue;
+    comSavePendente.add(p.job_id);
+    if (p.tipo === "consome") comConsumoPendente.add(p.job_id);
+  }
+  // Não enviado, por lado da linha: save gerado sem pedido de gera
+  // aguardando ou aprovado, ou consumo sem pedido de consumo aguardando ou
+  // aprovado — o mesmo recorte do encerramento (`actions-encerramento.ts`).
+  // O recusado não conta como envio: depois de uma edição de consumo
+  // recusada a linha volta ao consumo de antes, que pode nunca ter sido
+  // aprovado.
+  for (const l of (linhasRes.data ?? []) as {
+    id: string;
+    job_id: string;
+    em_save: boolean | null;
+    save_consumido: number | string | null;
+  }[]) {
+    const geraNaoEnviado = l.em_save === true && !geraEnviado.has(l.id);
+    const consomeNaoEnviado =
+      Number(l.save_consumido ?? 0) > 0 && !consomeEnviado.has(l.id);
+    if (geraNaoEnviado || consomeNaoEnviado) comSavePendente.add(l.job_id);
+    if (consomeNaoEnviado) comConsumoPendente.add(l.job_id);
+  }
+  return {
+    falhou: Boolean(pedidosRes.error || linhasRes.error),
+    comConsumoPendente,
+    comSavePendente,
+  };
+}
+
 /** Com faturamento previsto, sem errata pendente e com o que enviar: o job
- *  sem envio, ou o mensal com mês ainda sem envio. */
-function contarProntosPraFaturar(res: { data: unknown; error?: { message: string } | null }): number {
+ *  sem envio, ou o mensal com mês ainda sem envio. Desde a decisão 099
+ *  (22/09/2026), sem consumo de save aguardando o financeiro ou nunca
+ *  enviado para aprovação — o envio fica travado até ele decidir. */
+function contarProntosPraFaturar(
+  res: { data: unknown; error?: { message: string } | null },
+  save: SaveNaEsteiraDoGp,
+): number {
   return jobsNaEsteira(res).filter((j) => {
     if (j.abertura_em_revisao === true) return false;
+    if (save.falhou || save.comConsumoPendente.has(j.id)) return false;
     if (!(Number(j.faturamento_previsto ?? 0) > 0)) return false;
     return j.meses > 0 ? j.mensaisEnviados < j.meses : j.envios.length === 0;
   }).length;
@@ -837,10 +933,20 @@ function contarProntosPraFaturar(res: { data: unknown; error?: { message: string
  *  encerramento não espera o envio, e "pronto pra encerrar" deveria ser o
  *  job aberto sem PP, BV, verba ou item pendente. Ficou restrito ao job
  *  aberto até o Tiago definir o card — o filtro da lista também não existe
- *  (`app/(app)/jobs/page.tsx`, TODO `encerrar_pronto`). */
-function contarProntosPraEncerrar(res: { data: unknown; error?: { message: string } | null }): number {
+ *  (`app/(app)/jobs/page.tsx`, TODO `encerrar_pronto`).
+ *
+ *  Desde a decisão 099 (22/09/2026), sem save ou consumo aguardando o
+ *  financeiro ou nunca enviado para aprovação, e sem revisão da abertura
+ *  pendente: o encerramento recusa os três. */
+function contarProntosPraEncerrar(
+  res: { data: unknown; error?: { message: string } | null },
+  save: SaveNaEsteiraDoGp,
+): number {
   return jobsNaEsteira(res).filter((j) =>
-    j.status !== "aberto"
+    j.status !== "aberto" ||
+    j.abertura_em_revisao === true ||
+    save.falhou ||
+    save.comSavePendente.has(j.id)
       ? false
       : j.meses > 0
         ? j.mensaisEnviados >= j.meses

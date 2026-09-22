@@ -80,6 +80,10 @@ export function comoItemDaVersao(
     // de `calcularTotaisVersao` coincidem.
     em_save: item.em_save === true,
     save_consumido: Number(item.save_consumido ?? 0),
+    // Só o banco sabe (trigger de marca, decisão 099); a grade não lê.
+    save_marcado_por: null,
+    save_marcado_em: null,
+    planejado_antes_save: null,
     categoria_id: item.categoria_id,
     valor_unitario_planejado: item.valor_unitario_planejado,
     quantidade_planejada: item.quantidade_planejada,

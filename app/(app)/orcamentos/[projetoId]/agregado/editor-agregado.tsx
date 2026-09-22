@@ -1128,6 +1128,7 @@ export function EditorAgregado({
       />
 
       <SaveDialog
+        contexto="orcamento"
         open={linhaSave !== null}
         onOpenChange={(aberto) => !aberto && setLinhaSave(null)}
         linha={

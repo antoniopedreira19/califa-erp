@@ -6,6 +6,11 @@
  * meses da versão aprovada, e fecha cada mês por `faturamentoPorMes`. É o
  * número que o servidor usa no envio do mês e na previsão de recebimento —
  * nunca o que o navegador mandou.
+ *
+ * É leitura do FINANCEIRO (o envio do mês e a revisão da abertura): as
+ * linhas passam por `itensParaOFinanceiro` (decisão 099), e um save que
+ * ainda aguarda aprovação não entra na parte de save do mês. `contar` são
+ * os pedidos que valem como aprovados — o que a revisão está aprovando.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -14,6 +19,8 @@ import {
   type FaturamentoDoMes,
 } from "@/lib/calculos/faturamento-por-mes";
 import { mesesDaVersaoQuery } from "./meses-versao";
+import { pedidosParaFinanceiroDoJob } from "./saves";
+import { itensParaOFinanceiro } from "@/lib/calculos/save-financeiro";
 
 export async function lerFaturamentoPorMesDoJob(
   supabase: SupabaseClient,
@@ -23,15 +30,18 @@ export async function lerFaturamentoPorMesDoJob(
     versaoAprovadaId,
     percentualHonorarios,
     percentualImposto,
+    contar,
   }: {
     tenantId: string;
     jobId: string;
     versaoAprovadaId: string;
     percentualHonorarios: number;
     percentualImposto: number;
+    /** Pedidos de save que contam como aprovados (a revisão que aprova). */
+    contar: string[];
   },
 ): Promise<FaturamentoDoMes[] | null> {
-  const [mesesRes, gruposRes, itensRes] = await Promise.all([
+  const [mesesRes, gruposRes, itensRes, pedidos] = await Promise.all([
     mesesDaVersaoQuery(supabase, tenantId, versaoAprovadaId),
     supabase
       .from("versoes_orcamento_grupos")
@@ -41,19 +51,34 @@ export async function lerFaturamentoPorMesDoJob(
       .returns<{ id: string; mes_id: string | null }[]>(),
     supabase
       .from("jobs_itens_orcado")
-      .select("grupo_id, tipo_custo, total_orcado, em_save, save_consumido")
+      .select("id, grupo_id, tipo_custo, total_orcado, em_save, save_consumido")
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
+    pedidosParaFinanceiroDoJob(supabase, tenantId, jobId).catch((e: Error) => {
+      console.error(e.message);
+      return null;
+    }),
   ]);
   const erro = mesesRes.error ?? gruposRes.error ?? itensRes.error;
   if (erro) {
     console.error("[faturamento-mensal.ler]", erro.message);
     return null;
   }
+  // Sem os pedidos a parte de save do mês sairia errada em silêncio.
+  if (pedidos === null) return null;
+  const itens = itensParaOFinanceiro(
+    ((itensRes.data ?? []) as any[]).map((i) => ({
+      ...i,
+      em_save: i.em_save === true,
+      save_consumido: Number(i.save_consumido ?? 0),
+    })),
+    pedidos,
+    contar,
+  );
   return faturamentoPorMes(
     mesesRes.data ?? [],
     gruposRes.data ?? [],
-    (itensRes.data ?? []) as Parameters<typeof faturamentoPorMes>[2],
+    itens as Parameters<typeof faturamentoPorMes>[2],
     percentualHonorarios,
     percentualImposto,
   );
@@ -69,6 +94,8 @@ export async function lerFaturamentoMensalPeloJob(
   supabase: SupabaseClient,
   tenantId: string,
   jobId: string,
+  /** Pedidos de save que contam como aprovados (a revisão que aprova). */
+  contar: string[],
 ): Promise<{ mensal: boolean; meses: FaturamentoDoMes[] | null } | null> {
   const { data: job, error } = await supabase
     .from("jobs")
@@ -105,6 +132,7 @@ export async function lerFaturamentoMensalPeloJob(
     versaoAprovadaId: job.versao_orcamento_aprovada_id,
     percentualHonorarios: Number(job.versao.percentual_honorarios ?? 0),
     percentualImposto: Number(job.versao.percentual_imposto ?? 0),
+    contar,
   });
   return { mensal: true, meses };
 }

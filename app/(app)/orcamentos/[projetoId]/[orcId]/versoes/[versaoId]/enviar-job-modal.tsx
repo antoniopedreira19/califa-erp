@@ -607,8 +607,12 @@ export function EnviarJobModal({
                   <span className="text-sm font-semibold">
                     Total gerado em save
                   </span>
+                  {/* Desde a decisão 099 (22/09/2026) o crédito só entra no
+                      saldo do cliente depois que o financeiro aprova o
+                      save — o envio para abertura leva o pedido junto. */}
                   <span className="text-xs text-muted-foreground">
-                    Crédito gerado pelos itens desta versão.
+                    Crédito gerado pelos itens desta versão. Fica disponível
+                    para outros jobs depois que o financeiro aprovar.
                   </span>
                 </span>
                 {/* Grafite do SAVE, de `blocos.ts` — a mesma cor da linha

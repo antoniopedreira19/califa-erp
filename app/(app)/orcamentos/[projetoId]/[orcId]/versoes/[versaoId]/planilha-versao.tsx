@@ -231,6 +231,7 @@ export function PlanilhaVersao({
       )}
 
       <SaveDialog
+        contexto="orcamento"
         open={linhaAberta !== null}
         onOpenChange={(aberto) => !aberto && setLinhaAberta(null)}
         linha={linhaDoDialog}

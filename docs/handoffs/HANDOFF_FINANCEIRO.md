@@ -5666,3 +5666,60 @@ fuso de São Paulo; `cartao` e `competencia` ficam na URL ao trocar de aba;
 e o filtro por "forma prevista" em Títulos a Pagar foi **descartado**
 (093 §6) — a pergunta que ele responderia é do Fluxo de caixa. Testado com
 a PP-00078 do Projeto Teste, que entrou na FC-00006.
+
+## ⚠️ Nota de 2026-09-22 — faixa Saves e aprovação de save pela revisão da abertura (decisão 099)
+
+Regra completa em `docs/decisions/099-aprovacao-de-save.md`.
+
+### O que mudou
+
+- **Fila da Abertura de Job:** faixa "Saves · N" com os pedidos que aguardam
+  (gera ou consome), botão "Aprovar save"/"Aprovar consumo". O job cuja
+  revisão pendente é SÓ de save aparece só nessa faixa; com errata de valores
+  também, aparece nas duas. O resumo ganha " · N saves a aprovar".
+- **Aprovar = registrar a revisão:** o pop-up leva a
+  `/financeiro/jobs/[jobId]?aba=abertura&aprovarSave=<id>`. A revisão mostra a
+  faixa "Aprovação de save · revisão da abertura" e o botão "Aprovar save e
+  registrar revisão". Os números do formulário já são os de depois da
+  aprovação. `editarRegistroDaAbertura(…, aprovarSaveId)` aprova primeiro
+  (RPC `decidir_pedido_save`) e só então registra.
+- **Recusa** (`save-actions.ts`): justificativa de 10+ caracteres; pedido
+  feito no job aberto não mexe nos espelhos e fecha a revisão sozinho quando
+  era a única pendência; pedido que o financeiro já contava é **errata de
+  save** — a RPC recebe `p_errata` (migration 20260922140007), grava a
+  errata e põe o job em revisão, com os espelhos recalculados.
+- **Modo destaque:** o pop-up de aprovação leva à planilha do job com
+  `?aba=planilha&aprovarSave=<id>`; a linha do pedido aparece realçada, com
+  a faixa "Em aprovação na Abertura de Job: {grupo · item} — linha destacada
+  abaixo." e o botão "Voltar para a aprovação". O `aprovarSave` viaja com o
+  link: sem ele, registrar a revisão não aprovaria nada.
+- **Custo previsto da revisão** sai de `custoPrevistoDoFinanceiro`: linha com
+  pedido de save do job aberto que ainda aguarda entra com o
+  `planejado_antes_save`; o pedido que está sendo aprovado fica de fora.
+- **Abertura:** `abrirJobNoFinanceiro` enfileira os saves e consumos do job
+  (`save_enviar_pendentes`, momento `abertura` ou `reenvio`) depois de abrir.
+- **Conferência:** bloco "Saves deste job · N".
+- **Fluxo de caixa:** `vw_fluxo_caixa` lê a linha como o financeiro vê
+  (`vw_itens_orcado_financeiro`, `vw_saves_consumos_financeiro`): um pedido de
+  job aberto que aguarda não move dinheiro de save.
+- **Previsão por mês (Fee e Always On):** `lerFaturamentoPorMesDoJob` recebe
+  `contar` — a parte de save do mês não conta save que aguarda, e na revisão
+  que aprova conta o aprovado.
+- **Links:** a abertura e a planilha da abertura não redirecionam mais para
+  `/jobs`: job aberto vai para `/financeiro/jobs/[id]`, devolvido ou
+  cancelado volta para a fila.
+
+### Armadilhas
+
+- **Permissão de aprovar e recusar** é `jobs.abrir_financeiro` (a mesma de
+  registrar a abertura). Não existe chave própria.
+- **Saldo só de save aprovado** (`vw_saves_por_job`, `disponivel` já sem as
+  reservas). O MCP consultando como `postgres` não vê as reservas.
+- **Nota já emitida (regra 21 da 099)** — redividir job × save nos títulos em
+  aberto depois da aprovação ou retirada — **não está implementada**.
+- O "reenvio" é detectado pela auditoria; se não achar, o pedido nasce como
+  `abertura` (só muda o rótulo do histórico).
+- No modelo mensal a régua abre no mês corrente: se a linha destacada for de
+  outro mês, é preciso trocar de mês para vê-la (o `aprovarSave` sobrevive).
+- O dossiê da PP (`contas-a-pagar/pp-dossie.tsx`) linkava para `/jobs`;
+  passou a apontar para a página do job no financeiro.

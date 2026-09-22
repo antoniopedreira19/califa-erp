@@ -30,7 +30,7 @@ import { ppChegouAoFinanceiro } from "@/lib/types";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
-import { ERRATA } from "@/app/(app)/_planilha/blocos";
+import { ERRATA, SAVE } from "@/app/(app)/_planilha/blocos";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
   parseNumero,
@@ -84,6 +84,7 @@ import {
   CelulaSave,
   SAVE_VAZIO,
   classesDaLinhaComSave,
+  linhaTocaSave,
   type EstadoSaveDaLinha,
 } from "@/app/(app)/_planilha/save-coluna";
 import { AlcaDaColunaSave } from "@/app/(app)/_planilha/exibir-colunas";
@@ -189,6 +190,16 @@ interface Props {
   onAlternarSave?: () => void;
   savePorItem?: Record<string, EstadoSaveDaLinha>;
   onAbrirSave?: (item: ItemPlanilhaJob) => void;
+  /** Telas de LEITURA do save (decisão 099 §18 — pré-abertura, job
+   *  encerrado, financeiro, conferência): o pop-up só abre nas linhas que
+   *  têm save, consumo ou pedido; a linha sem save não tem o que mostrar.
+   *  `false` onde o save se edita: abre em todas. */
+  abrirSaveSoComSave: boolean;
+  /** Ids das linhas (`jobs_itens_orcado.id`) em destaque — a linha do
+   *  pedido de save que o financeiro está aprovando, quando a planilha do
+   *  job no financeiro abre a partir da aprovação (decisão 099,
+   *  22/09/2026). Obrigatória de propósito: quem não destaca manda `[]`. */
+  destacarItens: string[];
   /** O rascunho do modo errata. Ausente = planilha só de leitura, que é
    *  como as outras telas que reusam esta tabela a consomem. */
   errata?: RascunhoErrata;
@@ -239,6 +250,69 @@ const ALTURA_LINHA = "h-[34px]";
  *  action recusa. */
 const MOTIVO_TRAVA_PP =
   "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
+
+/** Por que a linha com save não entra na errata (decisão 099 §15): save
+ *  gerado, consumo, pedido aguardando ou recusa ainda não retirada. O mesmo
+ *  cadeado do PP, com o motivo no `title`. Mudar o save é pelo pop-up da
+ *  coluna, que é a errata de save. */
+function motivoDaTravaDeSave(
+  item: ItemPlanilhaJob,
+  estado: EstadoSaveDaLinha | undefined,
+): string | null {
+  if (estado?.pedidos?.aguardando) {
+    return "Linha com pedido de save aguardando o financeiro não entra em errata. Para mudar esta linha, cancele o pedido antes, pelo pop-up da coluna Save.";
+  }
+  if (estado?.pedidos?.recusado) {
+    return "Linha com save recusado pelo financeiro não entra em errata. Para mudar esta linha, retire a recusa antes, pelo pop-up da coluna Save.";
+  }
+  if (item.em_save === true || estado?.emSave) {
+    return "Linha com save não entra em errata. Para mudar esta linha, retire o save antes, pelo pop-up da coluna Save.";
+  }
+  if (Number(item.save_consumido ?? 0) > 0 || (estado?.origens.length ?? 0) > 0) {
+    return "Linha paga com saldo de save de outro job não entra em errata. Para mudar esta linha, desfaça o consumo antes, pelo pop-up da coluna Save.";
+  }
+  return null;
+}
+
+/** O mesmo recorte, no "Remover" da calha da errata — com o texto curto
+ *  que o botão já usava. */
+function motivoDeNaoRemover(
+  item: ItemPlanilhaJob,
+  estado: EstadoSaveDaLinha | undefined,
+): string | null {
+  if (estado?.pedidos?.aguardando) {
+    return "Linha com pedido de save aguardando o financeiro: cancele o pedido antes de remover.";
+  }
+  if (estado?.pedidos?.recusado) {
+    return "Linha com save recusado pelo financeiro: retire a recusa antes de remover.";
+  }
+  if (item.em_save === true || estado?.emSave) {
+    return "Linha marcada como save: tire a marca antes de remover.";
+  }
+  if (Number(item.save_consumido ?? 0) > 0 || (estado?.origens.length ?? 0) > 0) {
+    return "Linha paga com saldo de save de outro job: desfaça o consumo antes de remover.";
+  }
+  return null;
+}
+
+/** Por que a linha que GERA save não recebe PP nem BV (decisão 028 §9 e
+ *  099 §9): o serviço não acontece neste job — e a recusa trava a linha até
+ *  ser retirada. A calha não oferece os dois nessas linhas; o motivo fica
+ *  aqui para quem precisar dizê-lo. A linha que CONSOME segue aceitando PP
+ *  e BV. */
+function motivoSemPPeBV(
+  item: ItemPlanilhaJob,
+  estado: EstadoSaveDaLinha | undefined,
+): string | null {
+  if (estado?.pedidos?.recusado?.tipo === "gera") {
+    return "O financeiro recusou o save desta linha. Ela fica travada para PP e BV até a recusa ser retirada, pelo pop-up da coluna Save.";
+  }
+  if (!(item.em_save === true || estado?.emSave)) return null;
+  if (estado?.pedidos?.aguardando?.tipo === "gera") {
+    return "Linha com save aguardando o financeiro não recebe PP nem BV: o serviço não acontece neste job. Para usar a linha, cancele o pedido pelo pop-up da coluna Save.";
+  }
+  return "Linha em save não recebe PP nem BV: o serviço não acontece neste job. Para usar a linha, retire o save pelo pop-up da coluna Save.";
+}
 
 const GRADE_NEUTRA = "border-r border-r-[#f1f1f1]";
 
@@ -417,7 +491,7 @@ function CelulaOrcadoErrata({
   errata,
   moeda,
   className,
-  travada = false,
+  motivoDaTrava,
   aberta,
   semente,
   nav,
@@ -431,9 +505,10 @@ function CelulaOrcadoErrata({
   errata?: RascunhoErrata;
   moeda: string;
   className: string;
-  /** Linha com PP já no financeiro não entra em errata (decisão 040): a
-   *  célula fica de leitura mesmo com o modo ligado. */
-  travada?: boolean;
+  /** Linha com PP já no financeiro (decisão 040) ou com save (decisão 099
+   *  §15) não entra em errata: a célula fica de leitura mesmo com o modo
+   *  ligado, e o motivo vai no `title`. `null` = célula livre. */
+  motivoDaTrava: string | null;
   aberta: boolean;
   semente?: string;
   nav: NavDaCelula;
@@ -443,6 +518,7 @@ function CelulaOrcadoErrata({
 }) {
   const doPlanejado = campo.startsWith("plan");
   const unitario = campo === "unitario" || campo === "planUnitario";
+  const travada = motivoDaTrava !== null;
 
   // A linha vermelha nasce sem orçado nem planejado e nunca ganha um:
   // mostrar travessão é mais honesto do que mostrar zeros que ninguém
@@ -522,7 +598,9 @@ function CelulaOrcadoErrata({
       nav={nav}
       moldura={moldura}
       title={
-        editando && travada ? MOTIVO_TRAVA_PP : (motivoPlanejado ?? undefined)
+        editando && travada
+          ? (motivoDaTrava ?? undefined)
+          : (motivoPlanejado ?? undefined)
       }
       className={cn(
         "text-right whitespace-nowrap",
@@ -570,6 +648,8 @@ export function JobItemRealizadoTable({
   onAlternarSave,
   savePorItem,
   onAbrirSave,
+  abrirSaveSoComSave,
+  destacarItens,
   errata,
   podeEditarLinhas = true,
   orcadoVisivel = true,
@@ -762,6 +842,17 @@ export function JobItemRealizadoTable({
     return travadas;
   }, [todosOsItens, realizadosMap, ppsPorItemId]);
 
+  /** Linhas que a errata não toca por causa do save (decisão 099 §15),
+   *  com o motivo de cada uma. O servidor tem a mesma trava. */
+  const travadasPorSave = React.useMemo(() => {
+    const travadas = new Map<string, string>();
+    for (const it of todosOsItens) {
+      const motivo = motivoDaTravaDeSave(it, savePorItem?.[it.id]);
+      if (motivo) travadas.set(it.id, motivo);
+    }
+    return travadas;
+  }, [todosOsItens, savePorItem]);
+
   const fmt = (v: number) => formatCurrency(v, moeda);
 
   // ---- SELEÇÃO E TECLADO (decisão 046) --------------------------------
@@ -817,7 +908,9 @@ export function JobItemRealizadoTable({
     (rowId: string, coluna: string): TipoEditor | null => {
       if (!editando || !errata) return null;
       const item = itemPorId.get(rowId);
-      if (!item || travadasPorPP.has(rowId)) return null;
+      if (!item || travadasPorPP.has(rowId) || travadasPorSave.has(rowId)) {
+        return null;
+      }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
       if (coluna === "tipo_custo") return "lista";
       if (
@@ -838,7 +931,7 @@ export function JobItemRealizadoTable({
       }
       return null;
     },
-    [editando, errata, itemPorId, travadasPorPP],
+    [editando, errata, itemPorId, travadasPorPP, travadasPorSave],
   );
 
   /** Cria a linha nova e já abre a descrição dela — é o que o input
@@ -1204,7 +1297,12 @@ export function JobItemRealizadoTable({
                     const categoria = item.categoria_id
                       ? categoriasMap.get(item.categoria_id)
                       : null;
-                    const travada = travadasPorPP.has(item.id);
+                    // PP no financeiro fala primeiro: é a trava mais antiga
+                    // e a que o servidor confere antes.
+                    const motivoDaTrava = travadasPorPP.has(item.id)
+                      ? MOTIVO_TRAVA_PP
+                      : (travadasPorSave.get(item.id) ?? null);
+                    const travada = motivoDaTrava !== null;
                     const abertaAqui = (campo: string) =>
                       aberta?.rowId === item.id && aberta.campo === campo;
                     const sementeDe = (campo: string) =>
@@ -1226,7 +1324,7 @@ export function JobItemRealizadoTable({
                         errata={errata}
                         moeda={moeda}
                         className={classe}
-                        travada={travada}
+                        motivoDaTrava={motivoDaTrava}
                         aberta={abertaAqui(coluna)}
                         semente={sementeDe(coluna)}
                         nav={nav(coluna)}
@@ -1251,6 +1349,8 @@ export function JobItemRealizadoTable({
                             classesDaLinhaComSave(
                               savePorItem?.[item.id] ?? SAVE_VAZIO,
                             ),
+                          destacarItens.includes(item.id) &&
+                            SAVE.linhaEmAprovacao,
                         )}
                       >
                         {saveVisivel && (
@@ -1258,7 +1358,13 @@ export function JobItemRealizadoTable({
                             estado={savePorItem?.[item.id] ?? SAVE_VAZIO}
                             moeda={moeda}
                             totalOrcado={Number(item.total_orcado ?? 0)}
-                            onAbrir={onAbrirSave ? () => onAbrirSave(item) : undefined}
+                            onAbrir={
+                              onAbrirSave &&
+                              (!abrirSaveSoComSave ||
+                                linhaTocaSave(savePorItem?.[item.id] ?? SAVE_VAZIO))
+                                ? () => onAbrirSave(item)
+                                : undefined
+                            }
                           />
                         )}
 
@@ -1285,12 +1391,12 @@ export function JobItemRealizadoTable({
                             className={cn("pl-[30px]", classeNeutra)}
                           >
                             <div className="flex min-w-0 items-center gap-1.5">
-                              {editando && travada && (
+                              {editando && motivoDaTrava && (
                                 <Lock
                                   className="h-3 w-3 flex-none text-muted-foreground"
-                                  aria-label={MOTIVO_TRAVA_PP}
+                                  aria-label={motivoDaTrava}
                                 >
-                                  <title>{MOTIVO_TRAVA_PP}</title>
+                                  <title>{motivoDaTrava}</title>
                                 </Lock>
                               )}
                               {item.item ? (
@@ -1732,9 +1838,14 @@ export function JobItemRealizadoTable({
                     // escrever a descrição e só então tomar o erro — com
                     // a linha já sumida da tabela e sem desfazer
                     // (31/08/2026). O gate é o mesmo dos dois lados.
-                    const travadaPorSave =
-                      item.em_save === true ||
-                      Number(item.save_consumido ?? 0) > 0;
+                    //
+                    // Desde a decisão 099 o pedido aguardando e a recusa
+                    // ainda não retirada também travam.
+                    const motivoSave = motivoDeNaoRemover(
+                      item,
+                      savePorItem?.[item.id],
+                    );
+                    const travadaPorSave = motivoSave !== null;
                     // PP no financeiro trava a linha inteira (decisão
                     // 040) — remover inclusive. O servidor já recusava
                     // qualquer PP no histórico (`barrarRemocao`); a
@@ -1742,9 +1853,7 @@ export function JobItemRealizadoTable({
                     const travadaPorPP = travadasPorPP.has(item.id);
                     const motivoDaTrava = travadaPorPP
                       ? MOTIVO_TRAVA_PP
-                      : item.em_save
-                        ? "Linha marcada como save: tire a marca antes de remover."
-                        : "Linha paga com saldo de save de outro job: desfaça o consumo antes de remover.";
+                      : motivoSave;
                     return (
                       <LinhaDaCalha
                         key={item.id}
@@ -1762,7 +1871,7 @@ export function JobItemRealizadoTable({
                             disabled={travadaPorSave || travadaPorPP}
                             title={
                               travadaPorSave || travadaPorPP
-                                ? motivoDaTrava
+                                ? (motivoDaTrava ?? undefined)
                                 : undefined
                             }
                             className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-muted-foreground"
@@ -1782,7 +1891,8 @@ export function JobItemRealizadoTable({
                   // Linha em save não tem fornecedor neste job: sem BV a
                   // negociar e sem PP a emitir (decisão 028 §9). Os dois
                   // lados já são recusados no banco — aqui a calha nem
-                  // oferece.
+                  // oferece (e, desde a decisão 099, nem na linha com save
+                  // aguardando ou recusado: ver mais abaixo).
                   const emSave = item.em_save === true;
                   // Linha nascida de errata não tem item na versão
                   // aprovada — e, desde a decisão 073, isso deixou de
@@ -1804,6 +1914,13 @@ export function JobItemRealizadoTable({
                   const realizado = realizadosMap.get(item.id);
                   const realizadoId = realizado?.id ?? "";
                   const ppsDoItem = ppsPorItemId.get(realizadoId) ?? [];
+
+                  // Linha que GERA save — inclusive a que aguarda o
+                  // financeiro e a recusada ainda não retirada (decisão
+                  // 099): sem BV e sem PP na calha, como a linha em save
+                  // sempre foi (e como o protótipo aprovado mostra). O banco
+                  // recusa os dois de qualquer jeito.
+                  if (motivoSemPPeBV(item, savePorItem?.[item.id])) return null;
 
                   return (
                     <LinhaDaCalha

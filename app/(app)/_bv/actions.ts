@@ -278,6 +278,25 @@ async function contextoPelaCopiaDoJob(
     };
   }
 
+  // Save recusado pelo financeiro e ainda não retirado: a linha fica
+  // travada até o GP retirar a recusa no pop-up de save (decisão 099). O
+  // trigger também recusa, mas com a mensagem de linha em save.
+  const { data: recusado } = await supabase
+    .from("saves_aprovacoes")
+    .select("id")
+    .eq("job_item_orcado_id", data.id)
+    .eq("tenant_id", tenantId)
+    .eq("tipo", "gera")
+    .in("situacao", ["aguardando", "recusado"])
+    .limit(1)
+    .maybeSingle();
+  if (recusado) {
+    return {
+      error:
+        "O save desta linha aguarda aprovação ou foi recusado: ela só aceita BV depois que o save sair, pelo pop-up da coluna Save.",
+    };
+  }
+
   if (!aceitaBV(data.tipo_custo)) {
     return { error: ERRO_TIPO_SEM_BV };
   }

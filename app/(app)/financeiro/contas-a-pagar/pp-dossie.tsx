@@ -159,8 +159,10 @@ export function PPDossie({
           </Grupo>
 
           <Grupo rotulo="Origem no job">
+            {/* O job na página do FINANCEIRO, não na da produção: o
+                financeiro não sai do módulo (decisão 099, item 20). */}
             <Link
-              href={`/jobs/${pp.job_id}`}
+              href={`/financeiro/jobs/${pp.job_id}`}
               prefetch={false}
               className="inline-flex items-center gap-1 text-[13px] font-semibold leading-snug text-california-red hover:underline"
             >

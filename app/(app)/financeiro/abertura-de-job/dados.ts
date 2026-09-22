@@ -1,6 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
-import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
-import type { CategoriaModeloPlanilha, TipoCusto } from "@/lib/types";
+import {
+  calcularTotaisVersao,
+  tipoGeraDesembolso,
+} from "@/lib/calculos/versao-totais";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import type {
+  CategoriaModeloPlanilha,
+  OrigemDeSave,
+  SaveAprovacaoMomento,
+  SaveAprovacaoTipo,
+  TipoCusto,
+} from "@/lib/types";
 import {
   contatosDeCobrancaPorJob,
   type ContatoCobranca,
@@ -89,6 +99,92 @@ export interface JobNaFila {
   contatos: ContatoCobranca[];
   /** Preenchido só quando o job está no mural por causa de uma errata. */
   revisao: RevisaoDeErrata | null;
+  /**
+   * As linhas com save (gerado ou consumido) da planilha — o bloco "Saves
+   * deste job" da conferência (decisão 099). Só vem preenchido para o job
+   * que aguarda abertura; nos outros é `[]`, que é o valor neutro: a
+   * conferência só existe antes de abrir.
+   */
+  saves: SaveDaConferencia[];
+}
+
+/**
+ * Uma linha do job com save, como a conferência mostra (decisão 099).
+ * Não é pedido: na pré-abertura o save ainda não foi enviado — ele entra
+ * na faixa Saves quando o financeiro registra a abertura.
+ */
+export interface SaveDaConferencia {
+  /** `jobs_itens_orcado.id`. */
+  id: string;
+  tipo: SaveAprovacaoTipo;
+  grupoNome: string | null;
+  item: string;
+  /** Gera: o orçado da linha (o crédito). Consome: o consumido. */
+  valor: number;
+  /** Consome: de qual job vem o saldo, maior primeiro. Gera: `[]`. */
+  origens: { jobId: string; codigo: string; valor: number }[];
+}
+
+/**
+ * Um pedido de save que aguarda o financeiro — uma linha da faixa Saves
+ * da fila (decisão 099, 22/09/2026). Traz o que o pop-up "Aprovar save" e
+ * a recusa mostram, para nenhum dos dois precisar de query própria.
+ */
+export interface SaveNaFila {
+  /** `saves_aprovacoes.id`. */
+  id: string;
+  jobId: string;
+  jobCodigo: string;
+  /** Nome do job, o mesmo que a fila mostra nas outras faixas. */
+  jobNome: string;
+  projetoCodigo: string | null;
+  projetoNome: string | null;
+  clienteNome: string | null;
+  produto: string | null;
+  responsavelNome: string | null;
+  produtorNome: string | null;
+  tipo: SaveAprovacaoTipo;
+  momento: SaveAprovacaoMomento;
+  itemDescricao: string;
+  grupoNome: string | null;
+  /** Tipo de custo da linha. `null` quando a linha foi removida. */
+  tipoCusto: TipoCusto | null;
+  /** Gera: o crédito pedido. Consome: a soma das origens. */
+  valor: number;
+  /**
+   * Gera: o FATURAMENTO desta linha — o que a nota cobra por causa dela
+   * (orçado + honorários + impostos, pela cadeia do job). É o segundo
+   * número do save: o crédito é `valor`, e este é o que o cliente paga
+   * agora. `null` no consumo e na linha removida (sem tipo de custo não
+   * há como fechar).
+   */
+  faturamentoDaLinha: number | null;
+  /**
+   * Saldo de save APROVADO que o cliente deste job já tem, somando os
+   * jobs dele (`vw_saves_por_job.disponivel`, que já desconta o que está
+   * reservado por pedido). No `gera`, aprovar soma `valor` a ele.
+   */
+  saldoDoCliente: number;
+  /** Consome: as origens pedidas, com o código e o nome do job, e o saldo
+   *  livre de cada uma (com este consumo já reservado). */
+  origens: {
+    jobId: string;
+    codigo: string;
+    nome: string;
+    valor: number;
+    /** `vw_saves_por_job.disponivel` da origem: o que ainda cabe consumir
+     *  dela. A reserva deste pedido já saiu daqui. */
+    disponivel: number;
+  }[];
+  enviadoEm: string;
+  enviadoPorNome: string | null;
+  /** A errata de save que o pedido gerou (só `job_aberto`). */
+  errataId: string | null;
+  /** Os números antes → depois gravados no pedido. Só exibição. */
+  valorJobAntes: number | null;
+  valorJobDepois: number | null;
+  faturamentoPrevistoAntes: number | null;
+  faturamentoPrevistoDepois: number | null;
 }
 
 /**
@@ -113,6 +209,9 @@ export interface ErrataDaRevisao {
   linhasAlteradas: number;
   linhasNovas: number;
   linhasRemovidas: number;
+  /** A errata nasceu de um pedido de save (`saves_aprovacoes.errata_id`,
+   *  decisão 099) — a "errata de save" do job aberto. */
+  deSave: boolean;
 }
 
 /**
@@ -130,6 +229,14 @@ export interface ErrataDaRevisao {
  */
 export interface RevisaoDeErrata {
   erratas: ErrataDaRevisao[];
+  /**
+   * A revisão existe SÓ por pedidos de save (decisão 099): toda errata
+   * pendente nasceu de um pedido, e algum deles ainda aguarda. O job então
+   * aparece só na faixa Saves da fila — aprovar o save É registrar a
+   * revisão. Mesma regra de `revisaoPendenteDoJob` (`lib/data/saves.ts`),
+   * em lote.
+   */
+  soDeSave: boolean;
   faturamentoAntes: number | null;
   faturamentoDepois: number | null;
   valorJobAntes: number | null;
@@ -227,9 +334,13 @@ export async function totaisDasPlanilhas(
 
 function montarJobNaFila(
   j: any,
-  totais?: TotaisPlanilhaJob,
-  contatos?: ContatoCobranca[],
-  revisao?: RevisaoDeErrata | null,
+  totais: TotaisPlanilhaJob | undefined,
+  contatos: ContatoCobranca[] | undefined,
+  revisao: RevisaoDeErrata | null,
+  /** As linhas com save da conferência. Obrigatório, e `[]` onde a tela
+   *  não mostra o bloco: opcional, ele já tinha sumido de uma chamada sem
+   *  ninguém notar (decisão 099, revisão de 22/09/2026). */
+  saves: SaveDaConferencia[],
 ): JobNaFila {
   return {
     id: j.id,
@@ -280,7 +391,8 @@ function montarJobNaFila(
     planilha_planejado: totais?.planejado ?? 0,
     planilha_desembolso: totais?.desembolso ?? 0,
     contatos: contatos ?? [],
-    revisao: revisao ?? null,
+    revisao,
+    saves,
   };
 }
 
@@ -337,7 +449,10 @@ export async function carregarJobParaAbertura(
   }
 
   return {
-    job: montarJobNaFila(data, totais.get(jobId), contatos.get(jobId)),
+    // Sem revisão e sem o bloco "Saves deste job": os dois são da FILA —
+    // a revisão pendente a página do job lê por conta própria, e o bloco
+    // de saves mora no pop-up de conferência (decisão 099).
+    job: montarJobNaFila(data, totais.get(jobId), contatos.get(jobId), null, []),
     status: (data as any).status,
     enviadoPorNome: autorRes.data?.nome ?? null,
   };
@@ -367,7 +482,13 @@ export async function listarFilaDeAbertura(
 
   const linhas = (data ?? []) as any[];
   const ids = linhas.map((j) => j.id as string);
-  const [totais, contatos, revisoes] = await Promise.all([
+  // O bloco "Saves deste job" da conferência (decisão 099) só existe para
+  // quem ainda aguarda abertura: no job em revisão o save já é pedido, e
+  // aparece na faixa Saves.
+  const idsAguardando = linhas
+    .filter((j) => j.status === "aguardando_abertura")
+    .map((j) => j.id as string);
+  const [totais, contatos, revisoes, saves] = await Promise.all([
     totaisDasPlanilhas(ids),
     contatosDeCobrancaPorJob(ids, tenantId),
     revisoesPendentes(
@@ -380,6 +501,7 @@ export async function listarFilaDeAbertura(
         })),
       tenantId,
     ),
+    savesDaConferencia(idsAguardando, tenantId),
   ]);
 
   return linhas.map((j) =>
@@ -391,8 +513,9 @@ export async function listarFilaDeAbertura(
       // erratas falhe — cair em "Aberturas novas" mandaria abrir de novo
       // um job que já está aberto.
       j.abertura_em_revisao === true
-        ? (revisoes.get(j.id) ?? resumirRevisao([]))
+        ? (revisoes.get(j.id) ?? resumirRevisao([], false))
         : null,
+      saves.get(j.id) ?? [],
     ),
   );
 }
@@ -408,10 +531,13 @@ export async function revisaoPendenteDoJob(
     [{ id: jobId, data_abertura_financeiro: dataAberturaFinanceiro }],
     tenantId,
   );
-  return mapa.get(jobId) ?? resumirRevisao([]);
+  return mapa.get(jobId) ?? resumirRevisao([], false);
 }
 
-function resumirRevisao(erratas: ErrataDaRevisao[]): RevisaoDeErrata {
+function resumirRevisao(
+  erratas: ErrataDaRevisao[],
+  soDeSave: boolean,
+): RevisaoDeErrata {
   const primeira = erratas[0];
   const ultima = erratas[erratas.length - 1];
   const soma = (
@@ -419,6 +545,7 @@ function resumirRevisao(erratas: ErrataDaRevisao[]): RevisaoDeErrata {
   ) => erratas.reduce((t, e) => t + e[campo], 0);
   return {
     erratas,
+    soDeSave,
     faturamentoAntes: primeira?.faturamentoAntes ?? null,
     faturamentoDepois: ultima?.faturamentoDepois ?? null,
     valorJobAntes: primeira ? primeira.valorJobAntes : null,
@@ -450,7 +577,7 @@ async function revisoesPendentes(
   const supabase = createClient();
   const ids = jobs.map((j) => j.id);
 
-  const [fotosRes, erratasRes] = await Promise.all([
+  const [fotosRes, erratasRes, pedidosRes] = await Promise.all([
     supabase
       .from("jobs_aberturas")
       .select("job_id, registrado_em")
@@ -466,7 +593,31 @@ async function revisoesPendentes(
       .eq("tenant_id", tenantId)
       .in("job_id", ids)
       .order("created_at", { ascending: true }),
+    // Os pedidos de save que nasceram com uma errata (decisão 099): é por
+    // eles que a fila separa a revisão causada só por save. Pelos jobs, e
+    // não pelas erratas, para rodar junto das outras duas.
+    supabase
+      .from("saves_aprovacoes")
+      .select("id, job_id, errata_id, situacao")
+      .eq("tenant_id", tenantId)
+      .in("job_id", ids)
+      .not("errata_id", "is", null),
   ]);
+
+  if (pedidosRes.error) {
+    // Sem os pedidos, toda errata conta como errata de valores: o job fica
+    // na faixa Erratas, que é o caminho que sempre funcionou.
+    console.error("[abertura-job.revisoes.pedidos]", pedidosRes.error.message);
+  }
+  const pedidosPorErrata = new Map<string, string[]>();
+  for (const p of (pedidosRes.data ?? []) as Array<{
+    errata_id: string;
+    situacao: string;
+  }>) {
+    const lista = pedidosPorErrata.get(p.errata_id) ?? [];
+    lista.push(p.situacao);
+    pedidosPorErrata.set(p.errata_id, lista);
+  }
 
   if (fotosRes.error) {
     console.error("[abertura-job.revisoes.fotos]", fotosRes.error.message);
@@ -518,12 +669,363 @@ async function revisoesPendentes(
       linhasAlteradas: conta("alterada"),
       linhasNovas: conta("nova"),
       linhasRemovidas: conta("removida"),
+      deSave: pedidosPorErrata.has(e.id),
     });
     porJob.set(e.job_id, lista);
   }
 
   for (const j of jobs) {
-    mapa.set(j.id, resumirRevisao(porJob.get(j.id) ?? []));
+    const erratas = porJob.get(j.id) ?? [];
+    // Só de save: toda errata pendente nasceu de um pedido, e algum pedido
+    // dessas erratas ainda aguarda. Sem nada aguardando a revisão não se
+    // resolve pela faixa Saves — fica em Erratas, para poder ser fechada.
+    const soDeSave =
+      erratas.length > 0 &&
+      erratas.every((e) => e.deSave) &&
+      erratas.some((e) =>
+        (pedidosPorErrata.get(e.errataId) ?? []).includes("aguardando"),
+      );
+    mapa.set(j.id, resumirRevisao(erratas, soDeSave));
   }
   return mapa;
+}
+
+/**
+ * As linhas com save de vários jobs que aguardam abertura — o bloco
+ * "Saves deste job" da conferência (decisão 099). Duas queries em lote:
+ * as linhas, e depois as origens dos consumos com o código do job.
+ */
+async function savesDaConferencia(
+  jobIds: string[],
+  tenantId: string,
+): Promise<Map<string, SaveDaConferencia[]>> {
+  const mapa = new Map<string, SaveDaConferencia[]>();
+  if (jobIds.length === 0) return mapa;
+
+  const supabase = createClient();
+  // ⚠️ Dica de FK obrigatória: `jobs_erratas_itens` tem FK para as duas
+  // tabelas (linha do job e agrupamento) e o PostgREST a enxerga como
+  // tabela de junção — sem a dica o embed fica ambíguo (HTTP 300) e o
+  // dado some calado.
+  const { data, error } = await supabase
+    .from("jobs_itens_orcado")
+    .select(
+      "id, job_id, item, total_orcado, em_save, save_consumido, ordem, grupo:versoes_orcamento_grupos!jobs_itens_orcado_grupo_id_fkey(nome, ordem)",
+    )
+    .eq("tenant_id", tenantId)
+    .in("job_id", jobIds)
+    .or("em_save.eq.true,save_consumido.gt.0");
+  if (error) {
+    console.error("[abertura-job.saves-conferencia]", error.message);
+    return mapa;
+  }
+  const linhas = (data ?? []) as any[];
+  if (linhas.length === 0) return mapa;
+
+  const consumidoras = linhas.filter((l) => l.em_save !== true).map((l) => l.id as string);
+  const origensPorLinha = new Map<string, { jobId: string; valor: number }[]>();
+  const codigos = new Map<string, string>();
+  if (consumidoras.length > 0) {
+    const { data: consumos, error: consumosErr } = await supabase
+      .from("saves_consumos")
+      .select("job_item_orcado_id, job_origem_id, valor")
+      .eq("tenant_id", tenantId)
+      .in("job_item_orcado_id", consumidoras);
+    if (consumosErr) {
+      console.error("[abertura-job.saves-conferencia.consumos]", consumosErr.message);
+    }
+    for (const c of (consumos ?? []) as any[]) {
+      const lista = origensPorLinha.get(c.job_item_orcado_id) ?? [];
+      const ja = lista.find((o) => o.jobId === c.job_origem_id);
+      if (ja) ja.valor += Number(c.valor ?? 0);
+      else lista.push({ jobId: c.job_origem_id, valor: Number(c.valor ?? 0) });
+      origensPorLinha.set(c.job_item_orcado_id, lista);
+    }
+    const idsOrigem = [
+      ...new Set([...origensPorLinha.values()].flat().map((o) => o.jobId)),
+    ];
+    if (idsOrigem.length > 0) {
+      const { data: jobsOrigem } = await supabase
+        .from("jobs")
+        .select("id, codigo")
+        .in("id", idsOrigem);
+      for (const j of (jobsOrigem ?? []) as any[]) codigos.set(j.id, j.codigo);
+    }
+  }
+
+  // Na ordem da planilha: agrupamento, depois item.
+  linhas.sort(
+    (a, b) =>
+      Number(a.grupo?.ordem ?? 0) - Number(b.grupo?.ordem ?? 0) ||
+      Number(a.ordem ?? 0) - Number(b.ordem ?? 0),
+  );
+  for (const l of linhas) {
+    const gera = l.em_save === true;
+    const lista = mapa.get(l.job_id) ?? [];
+    lista.push({
+      id: l.id,
+      tipo: gera ? "gera" : "consome",
+      grupoNome: l.grupo?.nome ?? null,
+      item: l.item,
+      valor: gera ? Number(l.total_orcado ?? 0) : Number(l.save_consumido ?? 0),
+      origens: gera
+        ? []
+        : (origensPorLinha.get(l.id) ?? [])
+            .map((o) => ({ ...o, codigo: codigos.get(o.jobId) ?? "—" }))
+            .sort((a, b) => b.valor - a.valor),
+    });
+    mapa.set(l.job_id, lista);
+  }
+  return mapa;
+}
+
+/**
+ * O FATURAMENTO de uma linha em save: o que a nota cobra por causa dela
+ * (decisão 028 §4 — o crédito é o orçado; isto é orçado + honorários +
+ * impostos). É o mesmo fechamento do job, rodado sobre a base do save
+ * sozinha — a mesma conta de `save.receita`, e não uma fórmula nova.
+ *
+ * `null` sem tipo de custo (linha removida depois do pedido): sem ele não
+ * há alavanca para fechar, e um número inventado seria pior que nenhum.
+ */
+function faturamentoDaLinhaEmSave(
+  valor: number,
+  tipoCusto: TipoCusto | null,
+  versao: {
+    percentual_honorarios: number | string | null;
+    percentual_imposto: number | string | null;
+    percentual_int_taxes: number | string | null;
+    int_transaction_costs: number | string | null;
+    moeda_estrangeira: string | null;
+    cambio_compra: number | string | null;
+  } | null,
+  modelo: CategoriaModeloPlanilha | null,
+): number | null {
+  if (!tipoCusto || !versao) return null;
+  const planilha = configDaPlanilha(modelo, {
+    percentual_int_taxes: Number(versao.percentual_int_taxes ?? 0),
+    int_transaction_costs: Number(versao.int_transaction_costs ?? 0),
+    moeda_estrangeira: versao.moeda_estrangeira ?? null,
+    cambio_compra:
+      versao.cambio_compra === null || versao.cambio_compra === undefined
+        ? null
+        : Number(versao.cambio_compra),
+  });
+  const totais = calcularTotaisVersao(
+    [{ tipo_custo: tipoCusto, total_orcado: valor, em_save: true }],
+    Number(versao.percentual_honorarios ?? 0),
+    Number(versao.percentual_imposto ?? 0),
+    planilha.internacional,
+  );
+  return Math.round(totais.save.receita * 100) / 100;
+}
+
+/**
+ * A faixa Saves da fila: todo pedido de save que aguarda o financeiro,
+ * mais antigos primeiro (decisão 099, 22/09/2026).
+ *
+ * `saves_aprovacoes` tem quatro FKs para `profiles`: nada de embed a
+ * partir dela. Os nomes, os jobs e as linhas saem em consultas próprias,
+ * em paralelo. A policy de SELECT do pedido já exige que quem consulta
+ * enxergue o job — a faixa não mostra save de job fora do escopo.
+ */
+export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("saves_aprovacoes")
+    .select(
+      "id, job_id, job_item_orcado_id, item_descricao, grupo_nome, tipo, momento, valor, origens, enviado_por, enviado_em, errata_id, valor_job_antes, valor_job_depois, faturamento_previsto_antes, faturamento_previsto_depois",
+    )
+    .eq("tenant_id", tenantId)
+    .eq("situacao", "aguardando")
+    .order("enviado_em", { ascending: true });
+  if (error) {
+    console.error("[abertura-job.saves-fila]", error.message);
+    return [];
+  }
+  const pedidos = (data ?? []) as any[];
+  if (pedidos.length === 0) return [];
+
+  const idsJobs = [...new Set(pedidos.map((p) => p.job_id as string))];
+  const idsOrigem = [
+    ...new Set(
+      pedidos.flatMap((p) =>
+        ((p.origens ?? []) as OrigemDeSave[]).map((o) => o.job_origem_id),
+      ),
+    ),
+  ];
+  const idsPessoas = [
+    ...new Set(pedidos.map((p) => p.enviado_por as string | null).filter(Boolean)),
+  ] as string[];
+  const idsLinhas = [
+    ...new Set(
+      pedidos.map((p) => p.job_item_orcado_id as string | null).filter(Boolean),
+    ),
+  ] as string[];
+
+  const [jobsRes, origensRes, pessoasRes, linhasRes] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select(
+        "id, codigo, nome, produto, " +
+          "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+          "responsavel:profiles!responsavel_id(nome), " +
+          "produtor:profiles!produtor_id(nome), " +
+          // A cadeia do fechamento, para o "Faturamento desta linha" do
+          // pop-up de aprovação. ⚠️ Dicas de FK obrigatórias: há duas FKs
+          // entre `jobs` e `versoes_orcamento`, e o modelo de planilha vem
+          // da categoria do ORÇAMENTO, nunca da do job (decisão 072).
+          "versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
+          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+      )
+      .eq("tenant_id", tenantId)
+      .in("id", idsJobs),
+    idsOrigem.length
+      ? supabase.from("jobs").select("id, codigo, nome").in("id", idsOrigem)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    idsPessoas.length
+      ? supabase.from("profiles").select("id, nome").in("id", idsPessoas)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    idsLinhas.length
+      ? supabase
+          .from("jobs_itens_orcado")
+          .select("id, tipo_custo")
+          .eq("tenant_id", tenantId)
+          .in("id", idsLinhas)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  for (const [rotulo, r] of [
+    ["jobs", jobsRes],
+    ["origens", origensRes],
+    ["pessoas", pessoasRes],
+    ["linhas", linhasRes],
+  ] as const) {
+    if (r.error) console.error(`[abertura-job.saves-fila.${rotulo}]`, r.error.message);
+  }
+
+  const jobs = new Map<string, any>(
+    ((jobsRes.data ?? []) as any[]).map((j) => [j.id, j]),
+  );
+  const origens = new Map<string, { codigo: string; nome: string }>(
+    ((origensRes.data ?? []) as any[]).map((j) => [
+      j.id,
+      { codigo: j.codigo ?? "—", nome: j.nome ?? "" },
+    ]),
+  );
+  const pessoas = new Map<string, string | null>(
+    ((pessoasRes.data ?? []) as any[]).map((p) => [p.id, p.nome ?? null]),
+  );
+  const tipos = new Map<string, TipoCusto>(
+    ((linhasRes.data ?? []) as any[]).map((l) => [l.id, l.tipo_custo as TipoCusto]),
+  );
+  const numOuNulo = (v: unknown) =>
+    v === null || v === undefined ? null : Number(v);
+
+  // ---- Saldo de save aprovado (decisão 099) ----
+  // O pop-up de aprovação mostra o saldo do CLIENTE antes → depois no
+  // `gera`, e o saldo livre de cada origem no `consome`. Os dois saem da
+  // mesma view (`disponivel` já desconta o que está reservado por pedido
+  // aguardando, este inclusive). Depende dos jobs lidos acima — daí a
+  // consulta ficar fora do `Promise.all`; é uma só, e os filtros usam os
+  // ids que já estão em mãos.
+  const clientesDosPedidos = [
+    ...new Set(
+      [...jobs.values()]
+        .map((j) => j.projeto?.cliente_id as string | null)
+        .filter(Boolean),
+    ),
+  ] as string[];
+  const disponivelPorJob = new Map<string, number>();
+  const disponivelPorCliente = new Map<string, number>();
+  if (clientesDosPedidos.length > 0 || idsOrigem.length > 0) {
+    let saldos = supabase
+      .from("vw_saves_por_job")
+      .select("job_id, cliente_id, disponivel")
+      .eq("tenant_id", tenantId);
+    // As origens são jobs do mesmo cliente (o crédito é dele), mas o
+    // filtro leva as duas listas: dado antigo não precisa obedecer à
+    // regra de hoje para o número aparecer certo.
+    const filtros = [
+      clientesDosPedidos.length > 0
+        ? `cliente_id.in.(${clientesDosPedidos.join(",")})`
+        : null,
+      idsOrigem.length > 0 ? `job_id.in.(${idsOrigem.join(",")})` : null,
+    ].filter(Boolean);
+    saldos = saldos.or(filtros.join(","));
+    const { data: saldosData, error: saldosErr } = await saldos;
+    if (saldosErr) {
+      console.error("[abertura-job.saves-fila.saldos]", saldosErr.message);
+    }
+    for (const linha of (saldosData ?? []) as any[]) {
+      const valor = Number(linha.disponivel ?? 0);
+      disponivelPorJob.set(linha.job_id, valor);
+      if (linha.cliente_id) {
+        disponivelPorCliente.set(
+          linha.cliente_id,
+          (disponivelPorCliente.get(linha.cliente_id) ?? 0) + valor,
+        );
+      }
+    }
+  }
+
+  const saida: SaveNaFila[] = [];
+  for (const p of pedidos) {
+    const j = jobs.get(p.job_id);
+    // Sem o job (fora do escopo de quem consulta), a linha não teria o que
+    // mostrar — e a policy do pedido já o esconderia.
+    if (!j) continue;
+    saida.push({
+      id: p.id,
+      jobId: p.job_id,
+      jobCodigo: j.codigo,
+      jobNome: j.nome,
+      projetoCodigo: j.projeto?.codigo ?? null,
+      projetoNome: j.projeto?.nome ?? null,
+      clienteNome: j.projeto?.cliente?.nome_fantasia ?? null,
+      produto: j.produto ?? null,
+      responsavelNome: j.responsavel?.nome ?? null,
+      produtorNome: j.produtor?.nome ?? null,
+      tipo: p.tipo as SaveAprovacaoTipo,
+      momento: p.momento as SaveAprovacaoMomento,
+      itemDescricao: p.item_descricao,
+      grupoNome: p.grupo_nome ?? null,
+      tipoCusto: p.job_item_orcado_id
+        ? (tipos.get(p.job_item_orcado_id) ?? null)
+        : null,
+      valor: Number(p.valor ?? 0),
+      faturamentoDaLinha:
+        p.tipo === "gera"
+          ? faturamentoDaLinhaEmSave(
+              Number(p.valor ?? 0),
+              p.job_item_orcado_id
+                ? (tipos.get(p.job_item_orcado_id) ?? null)
+                : null,
+              j.versao ?? null,
+              (j.orcamento?.categoria?.modelo_planilha as
+                | CategoriaModeloPlanilha
+                | undefined) ?? null,
+            )
+          : null,
+      saldoDoCliente: j.projeto?.cliente_id
+        ? (disponivelPorCliente.get(j.projeto.cliente_id) ?? 0)
+        : 0,
+      origens: ((p.origens ?? []) as OrigemDeSave[])
+        .map((o) => ({
+          jobId: o.job_origem_id,
+          codigo: origens.get(o.job_origem_id)?.codigo ?? "—",
+          nome: origens.get(o.job_origem_id)?.nome ?? "",
+          valor: Number(o.valor ?? 0),
+          disponivel: disponivelPorJob.get(o.job_origem_id) ?? 0,
+        }))
+        .sort((a, b) => b.valor - a.valor),
+      enviadoEm: p.enviado_em,
+      enviadoPorNome: p.enviado_por ? (pessoas.get(p.enviado_por) ?? null) : null,
+      errataId: p.errata_id ?? null,
+      valorJobAntes: numOuNulo(p.valor_job_antes),
+      valorJobDepois: numOuNulo(p.valor_job_depois),
+      faturamentoPrevistoAntes: numOuNulo(p.faturamento_previsto_antes),
+      faturamentoPrevistoDepois: numOuNulo(p.faturamento_previsto_depois),
+    });
+  }
+  return saida;
 }

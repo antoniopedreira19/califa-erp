@@ -34,7 +34,14 @@ import {
   type GrupoDoJob,
 } from "@/app/(app)/jobs/[jobId]/realizado/job-item-realizado-table";
 import { JobTotaisCard } from "@/app/(app)/jobs/[jobId]/realizado/job-totais-card";
-import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
+import {
+  SAVE_VAZIO,
+  type EstadoSaveDaLinha,
+} from "@/app/(app)/_planilha/save-coluna";
+import {
+  SaveDialog,
+  type LinhaDoSave,
+} from "@/app/(app)/_planilha/save-dialog";
 
 interface Props {
   jobId: string;
@@ -50,6 +57,10 @@ interface Props {
    *  faturamento previsto e o valor do job vieram diferentes. Vazio em
    *  job sem save, e aí a coluna nem aparece. */
   savePorItem: Record<string, EstadoSaveDaLinha>;
+  /** Nome do cliente do job — os textos do pop-up de save falam do
+   *  crédito "de {cliente}". `null` só se o projeto estiver sem cliente,
+   *  e aí o pop-up volta a dizer "do cliente". */
+  clienteNome: string | null;
   versaoLabel: string;
   moeda: string;
   percentualHonorarios: number;
@@ -73,6 +84,7 @@ export function PlanilhaConferencia({
   categoriasMap,
   bvsPorItem,
   savePorItem,
+  clienteNome,
   versaoLabel,
   moeda,
   percentualHonorarios,
@@ -85,6 +97,22 @@ export function PlanilhaConferencia({
   const temSave = Object.keys(savePorItem).length > 0;
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
+  // O pop-up de save abre em LEITURA nas linhas com save (decisão 099 §18):
+  // aqui o financeiro vê a situação de cada save antes de abrir o job, mas
+  // não aprova nem edita — a aprovação nasce na faixa Saves, depois da
+  // abertura.
+  const [linhaSave, setLinhaSave] = React.useState<ItemPlanilhaJob | null>(
+    null,
+  );
+  const linhaDoDialog: LinhaDoSave | null = linhaSave
+    ? {
+        id: linhaSave.orcado_id,
+        nome: linhaSave.item,
+        grupoNome: grupos.find((g) => g.id === linhaSave.grupo_id)?.nome ?? "—",
+        tipoCusto: linhaSave.tipo_custo,
+        totalOrcado: Number(linhaSave.total_orcado ?? 0),
+      }
+    : null;
 
   // A planilha inteira numa tabela só desde 24/08/2026 — a mesma
   // composição da tela do job, que é a mesma planilha.
@@ -137,8 +165,8 @@ export function PlanilhaConferencia({
           podeAcoes={false}
           podeConfirmarBv={false}
           // Esta rota só existe enquanto o job aguarda abertura (já
-          // aberto, ela redireciona para /jobs/[jobId]) — e nela a
-          // calha lateral não aparece de jeito nenhum.
+          // aberto, ela redireciona para /financeiro/jobs/[jobId]) — e
+          // nela a calha lateral não aparece de jeito nenhum.
           preAbertura
           // Job aguardando abertura não tem PP: ela só existe depois de
           // aberto. O BV, sim — ele nasce no orçamento e chega aqui.
@@ -152,8 +180,33 @@ export function PlanilhaConferencia({
           versaoLabel={versaoLabel}
           saveVisivel={temSave}
           savePorItem={savePorItem}
+          onAbrirSave={setLinhaSave}
+          abrirSaveSoComSave
+          // Na pré-abertura não há pedido de save a aprovar: nada em
+          // destaque (decisão 099).
+          destacarItens={[]}
         />
       </div>
+
+      <SaveDialog
+        contexto="job"
+        // Esta rota só existe com o job aguardando abertura: leitura, e o
+        // "ainda não enviado" diz que o pedido nasce na abertura.
+        job={{ status: "aguardando_abertura", acoes: null }}
+        open={linhaSave !== null}
+        onOpenChange={(aberto) => !aberto && setLinhaSave(null)}
+        linha={linhaDoDialog}
+        estado={
+          linhaSave ? (savePorItem[linhaSave.id] ?? SAVE_VAZIO) : SAVE_VAZIO
+        }
+        // Em leitura não há origem a escolher.
+        saldos={[]}
+        moeda={moeda}
+        percentualHonorarios={percentualHonorarios}
+        percentualImposto={percentualImposto}
+        internacional={internacional}
+        clienteNome={clienteNome}
+      />
 
       <JobTotaisCard
         itens={itens}

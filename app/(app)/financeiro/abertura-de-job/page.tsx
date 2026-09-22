@@ -2,10 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Landmark } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
-import { listarFilaDeAbertura } from "./dados";
+import { listarFilaDeAbertura, listarSavesNaFila } from "./dados";
 import { listarJobsDoFinanceiro } from "./dados-abertos";
 import { formatEnviadoEm } from "./formatos";
-import { type FilaLinha } from "./fila-list";
+import { type FilaLinha, type SaveFilaLinha } from "./fila-list";
 import { AberturaTabs, type Aba } from "./abertura-tabs";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -24,20 +24,32 @@ export default async function AberturaDeJobPage({
     redirect("/home?reason=sem_permissao_financeira");
   }
 
-  // Duas queries independentes — em paralelo, nunca em série
-  // (`docs/PERFORMANCE.md`).
-  const [fila, abertos] = await Promise.all([
+  // Três leituras independentes — em paralelo, nunca em série
+  // (`docs/PERFORMANCE.md`). A terceira é a faixa Saves (decisão 099).
+  const [fila, abertos, pedidosDeSave] = await Promise.all([
     listarFilaDeAbertura(session.activeTenant.id),
     listarJobsDoFinanceiro(session.activeTenant.id),
+    listarSavesNaFila(session.activeTenant.id),
   ]);
 
   // "há 2 horas" é calculado aqui, no servidor, e desce como texto pronto:
   // calcular no client component causaria divergência de hidratação.
   const agora = new Date();
-  const linhas: FilaLinha[] = fila.map((j) => ({
-    ...j,
-    enviado_em_label: formatEnviadoEm(j.created_at, agora),
+  const saves: SaveFilaLinha[] = pedidosDeSave.map((s) => ({
+    ...s,
+    enviado_em_label: formatEnviadoEm(s.enviadoEm, agora),
   }));
+  // O job cuja revisão da abertura existe SÓ por pedidos de save aparece
+  // só na faixa Saves (decisão 099): aprovar o save é registrar a revisão.
+  // Só sai da faixa Erratas se o pedido estiver mesmo na faixa Saves — sem
+  // isso, uma leitura que falhasse sumiria com o job das duas.
+  const comSaveNaFila = new Set(saves.map((s) => s.jobId));
+  const linhas: FilaLinha[] = fila
+    .filter((j) => !(j.revisao?.soDeSave && comSaveNaFila.has(j.id)))
+    .map((j) => ({
+      ...j,
+      enviado_em_label: formatEnviadoEm(j.created_at, agora),
+    }));
 
   // O "hoje" do calendário sai daqui, no fuso de Brasília, pelo mesmo
   // motivo do rótulo acima: calculado dentro do client component, o
@@ -72,6 +84,7 @@ export default async function AberturaDeJobPage({
 
       <AberturaTabs
         fila={linhas}
+        saves={saves}
         abertos={abertos}
         hoje={hoje}
         abaInicial={

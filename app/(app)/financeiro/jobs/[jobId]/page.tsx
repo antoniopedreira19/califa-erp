@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, FilePenLine, Lock } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FilePenLine, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
@@ -13,6 +13,7 @@ import {
   type JobStatus,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SAVE } from "@/app/(app)/_planilha/blocos";
 import { Badge } from "@/components/ui/badge";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import {
@@ -33,6 +34,10 @@ import {
   revisaoPendenteDoJob,
 } from "../../abertura-de-job/dados";
 import { fotosDaAbertura } from "../../abertura-de-job/fotos";
+import {
+  carregarAprovacaoDeSave,
+  custoPrevistoDoFinanceiro,
+} from "../../abertura-de-job/aprovacao-save";
 import {
   competenciasGravadas,
   previsoesGravadas,
@@ -76,8 +81,13 @@ export default async function JobNoFinanceiroPage({
    * Quem usa: o Calendário de Jobs, que manda `?aba=info` — lá a pessoa
    * está procurando QUE job é aquele na agenda, não o registro da
    * abertura (decisão do Tiago, 07/09/2026).
+   *
+   * `?aprovarSave=<id>` (decisão 099): o pop-up "Aprovar save" da fila traz
+   * para cá. A aba da abertura abre no formulário da revisão, com a faixa
+   * "Aprovação de save · revisão da abertura" e os números de depois da
+   * aprovação; registrar a revisão é o que aprova.
    */
-  searchParams?: { aba?: string; mes?: string };
+  searchParams?: { aba?: string; mes?: string; aprovarSave?: string };
 }) {
   const session = await requireSession();
   if (
@@ -106,6 +116,8 @@ export default async function JobNoFinanceiroPage({
     competencias,
     fotos,
     faturamentoMensalDoJob,
+    aprovacaoLida,
+    custoLido,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -132,7 +144,33 @@ export default async function JobNoFinanceiroPage({
     // As fotos do registro: a abertura e cada revisão (decisão 059).
     fotosDaAbertura(supabase, tenantId, params.jobId),
     // Fee e Always On (decisão 078): a previsão de recebimento é por mês.
-    lerFaturamentoMensalPeloJob(supabase, tenantId, params.jobId),
+    // Na aprovação de save, a parte de save do mês já conta o pedido que a
+    // revisão aprova (decisão 099).
+    lerFaturamentoMensalPeloJob(
+      supabase,
+      tenantId,
+      params.jobId,
+      searchParams?.aprovarSave ? [searchParams.aprovarSave] : [],
+    ),
+    // O pedido de save que esta visita aprova (decisão 099). `null` sem
+    // `?aprovarSave=` — aí nada é lido.
+    carregarAprovacaoDeSave(
+      supabase,
+      tenantId,
+      params.jobId,
+      searchParams?.aprovarSave,
+    ),
+    // O custo previsto que o formulário mostra e a revisão valida, na
+    // conta do financeiro (decisão 099): o pedido de save que ele ainda
+    // não conta volta com o planejado de antes do save. O pedido que esta
+    // visita aprova fica de fora — ele já conta como save. Id que não é de
+    // pedido aguardando deste job não muda nada.
+    custoPrevistoDoFinanceiro(
+      supabase,
+      tenantId,
+      params.jobId,
+      searchParams?.aprovarSave ?? null,
+    ),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
@@ -158,7 +196,28 @@ export default async function JobNoFinanceiroPage({
     redirect(`/financeiro/abertura-de-job/${job.id}`);
   }
 
-  const jobNaFila = carregadoParaAbertura.job;
+  // Só aprova quem abre job no financeiro (a página já barrou os outros
+  // papéis; a action e a RPC conferem de novo). Pedido que não aguarda
+  // mais — link velho, ou decidido por outra pessoa — não abre a
+  // aprovação: a página fica no modo de sempre, com um aviso.
+  const aprovacaoSave =
+    aprovacaoLida?.ok && pode(session.activeRole, "jobs.abrir_financeiro")
+      ? aprovacaoLida.aprovacao
+      : null;
+  const aprovacaoIndisponivel = aprovacaoLida !== null && aprovacaoSave === null;
+  // A linha que a planilha destaca na aprovação (decisão 099). Sem linha
+  // (removida depois do pedido) não há o que destacar nem faixa.
+  const linhaEmAprovacao = aprovacaoSave?.linhaId ?? null;
+
+  // Na aprovação, o formulário mostra e valida os números de DEPOIS dela
+  // (os espelhos com o pedido contado) — é isso que a revisão confere.
+  const jobNaFila = aprovacaoSave
+    ? {
+        ...carregadoParaAbertura.job,
+        valor_total: aprovacaoSave.depois.valor_total,
+        faturamento_previsto: aprovacaoSave.depois.faturamento_previsto,
+      }
+    : carregadoParaAbertura.job;
 
   const [projetos, irmaosRes] = await Promise.all([
     listarProjetosFinanceiro(tenantId, jobNaFila.cliente_id),
@@ -201,13 +260,20 @@ export default async function JobNoFinanceiroPage({
   // servidor lia a planilha, e a revisão não tinha como incluir o
   // desembolso novo (decisão 059). `planilha_desembolso` é a mesma conta
   // da fila e da action: planejado dos tipos que geram PP.
-  const custoPrevisto =
-    Math.round((jobNaFila.planilha_desembolso ?? 0) * 100) / 100;
+  // Falha de leitura cai no agregado da planilha, que é o número de antes
+  // da decisão 099 — melhor um custo sem a correção do save do que uma
+  // tela sem custo.
+  const custoPrevisto = custoLido.ok
+    ? custoLido.custo
+    : Math.round((jobNaFila.planilha_desembolso ?? 0) * 100) / 100;
 
   // As erratas que devolveram o job ao mural — TODAS as que ainda não
   // foram revisadas (decisão do Tiago, 14/09/2026): o formulário abre em
   // revisão, editável, e mostra as erratas e a abertura anterior no topo.
   const emRevisao = job.abertura_em_revisao === true;
+  // A aprovação de save É uma revisão da abertura — com o job em revisão
+  // (errata de save) ou não (save que veio do orçamento).
+  const formularioEmRevisao = emRevisao || aprovacaoSave !== null;
   const revisao = emRevisao
     ? await revisaoPendenteDoJob(
         params.jobId,
@@ -216,7 +282,7 @@ export default async function JobNoFinanceiroPage({
       )
     : null;
   const faturamentoPrevisto =
-    Math.round(Number(job.faturamento_previsto ?? 0) * 100) / 100;
+    Math.round(Number(jobNaFila.faturamento_previsto ?? 0) * 100) / 100;
 
   const baseCompetencia = job.data_inicio_prevista ?? hoje;
   const anoAtual = Number(hoje.slice(0, 4));
@@ -279,7 +345,7 @@ export default async function JobNoFinanceiroPage({
               )}
               {/* Em revisão a aba de abertura está EDITÁVEL — dizer
                   "somente leitura" no cabeçalho seria mentira (decisão 059). */}
-              {emRevisao ? (
+              {formularioEmRevisao ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-california-red/30 bg-california-red/[0.06] px-3 py-1 text-[11px] font-semibold text-california-red">
                   <FilePenLine className="h-3 w-3" />
                   Revisão da abertura pendente
@@ -313,15 +379,33 @@ export default async function JobNoFinanceiroPage({
         </div>
       </div>
 
+      {aprovacaoIndisponivel && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Este pedido de save não está mais aguardando aprovação: ele já foi
+            decidido ou cancelado. Confira a faixa Saves da fila.
+          </span>
+        </div>
+      )}
+
       <JobFinanceiroTabs
-        abaInicial={abaDaUrl(searchParams?.aba)}
+        // Sem `?aba=` a página abre na aba da abertura — inclusive na
+        // aprovação de save, que acontece lá. Com `?aba=` explícito, a aba
+        // pedida manda também na aprovação: é assim que o "Visualizar
+        // planilha interna" da revisão abre a planilha em destaque sem
+        // perder o `aprovarSave` (achado da revisão de 22/09/2026 — até
+        // ali a aprovação forçava a aba da abertura, e o link da planilha
+        // saía sem o pedido).
+        abaInicial={abaDaUrl(searchParams?.aba) ?? "abertura"}
         chatCount={detalhe.naoLidas}
         abertura={
           <AberturaForm
             job={jobNaFila}
-            modo={emRevisao ? "revisao" : "leitura"}
+            modo={formularioEmRevisao ? "revisao" : "leitura"}
             fotos={fotos}
             revisao={revisao}
+            aprovacaoSave={aprovacaoSave}
             categorias={categoriasRes.data ?? []}
             servicos={servicosRes.data ?? []}
             projetos={projetos}
@@ -430,62 +514,105 @@ export default async function JobNoFinanceiroPage({
              O save entra por inteiro na visualização — coluna, estados e
              rastro —, e `podeAcoes={false}` fecha a porta da edição, aqui
              como no resto da planilha. `saldosDeSave` vem vazio porque,
-             sem edição, não há de onde escolher origem. */
-          <JobRealizadoSection
-            savePorItem={detalhe.savePorItem}
-            saldosDeSave={[]}
-            clienteNome={detalhe.clienteNome}
-            job={{
-              id: job.id,
-              codigo: job.codigo,
-              nome: job.nome,
-              status: job.status,
-              projeto_id: job.projeto_id,
-              orcamento_id: job.orcamento_id,
-              versao_orcamento_aprovada_id: job.versao_orcamento_aprovada_id,
-              empresa_id: job.empresa_id,
-              responsavel_id: job.responsavel_id,
-            }}
-            nomeJob={jobNaFila.nome}
-            versao={{
-              id: versaoAprovada.id,
-              numero_versao: versaoAprovada.numero_versao,
-              moeda: versaoAprovada.moeda,
-              percentual_honorarios: Number(
-                versaoAprovada.percentual_honorarios,
-              ),
-              percentual_imposto: Number(versaoAprovada.percentual_imposto),
-              percentual_int_taxes: Number(versaoAprovada.percentual_int_taxes ?? 0),
-              int_transaction_costs: Number(
-                versaoAprovada.int_transaction_costs ?? 0,
-              ),
-              moeda_estrangeira: versaoAprovada.moeda_estrangeira ?? null,
-              cambio_compra:
-                versaoAprovada.cambio_compra === null ||
-                versaoAprovada.cambio_compra === undefined
-                  ? null
-                  : Number(versaoAprovada.cambio_compra),
-            }}
-            modeloPlanilha={detalhe.modeloPlanilha}
-            // Modelo mensal (decisão 078): a mesma régua de meses da tela do
-            // GP, trocando de mês pela URL sem sair da aba da planilha.
-            meses={detalhe.meses}
-            faturamentoMensal={detalhe.faturamentoMensal}
-            mesPedido={searchParams?.mes}
-            hrefPlanilha={`/financeiro/jobs/${job.id}?aba=planilha`}
-            grupos={detalhe.grupos}
-            itens={detalhe.itens}
-            realizadosMap={detalhe.realizadosMap}
-            categoriasMap={detalhe.categoriasMap}
-            podeAcoes={false}
-            podeExportarInterna={podeExportarInterna}
-            podeConfirmarBv={false}
-            ppsPorItemId={detalhe.ppsPorItemId}
-            fornecedores={detalhe.fornecedores}
-            empresas={detalhe.empresas}
-            responsaveis={detalhe.responsaveis}
-            bvsPorItem={detalhe.bvsPorItem}
-          />
+             sem edição, não há de onde escolher origem.
+
+             Na aprovação de save (decisão 099) a planilha abre em modo
+             destaque: a faixa âmbar diz qual linha está em aprovação e
+             leva de volta à revisão com o mesmo pedido, e a linha do
+             pedido vem destacada. Do protótipo `prototipo-save-v2`
+             (`SecaoPlanilha`, `destaque`). */
+          <div className="space-y-4">
+            {linhaEmAprovacao && aprovacaoSave && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+                <span className="flex items-start gap-2">
+                  <span
+                    className={cn(
+                      "mt-[3px] h-2 w-2 flex-none rounded-sm",
+                      SAVE.marcaEmAprovacao,
+                    )}
+                  />
+                  <span>
+                    Em aprovação na Abertura de Job:{" "}
+                    <strong className="font-semibold">
+                      {[aprovacaoSave.grupoNome, aprovacaoSave.itemDescricao]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </strong>{" "}
+                    — linha destacada abaixo.
+                  </span>
+                </span>
+                <Link
+                  href={`/financeiro/jobs/${job.id}?aba=abertura&aprovarSave=${aprovacaoSave.pedidoId}`}
+                  prefetch={false}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Voltar para a aprovação
+                </Link>
+              </div>
+            )}
+            <JobRealizadoSection
+              savePorItem={detalhe.savePorItem}
+              saldosDeSave={[]}
+              clienteNome={detalhe.clienteNome}
+              destacarItens={linhaEmAprovacao ? [linhaEmAprovacao] : []}
+              job={{
+                id: job.id,
+                codigo: job.codigo,
+                nome: job.nome,
+                status: job.status,
+                projeto_id: job.projeto_id,
+                orcamento_id: job.orcamento_id,
+                versao_orcamento_aprovada_id: job.versao_orcamento_aprovada_id,
+                empresa_id: job.empresa_id,
+                responsavel_id: job.responsavel_id,
+              }}
+              nomeJob={jobNaFila.nome}
+              versao={{
+                id: versaoAprovada.id,
+                numero_versao: versaoAprovada.numero_versao,
+                moeda: versaoAprovada.moeda,
+                percentual_honorarios: Number(
+                  versaoAprovada.percentual_honorarios,
+                ),
+                percentual_imposto: Number(versaoAprovada.percentual_imposto),
+                percentual_int_taxes: Number(versaoAprovada.percentual_int_taxes ?? 0),
+                int_transaction_costs: Number(
+                  versaoAprovada.int_transaction_costs ?? 0,
+                ),
+                moeda_estrangeira: versaoAprovada.moeda_estrangeira ?? null,
+                cambio_compra:
+                  versaoAprovada.cambio_compra === null ||
+                  versaoAprovada.cambio_compra === undefined
+                    ? null
+                    : Number(versaoAprovada.cambio_compra),
+              }}
+              modeloPlanilha={detalhe.modeloPlanilha}
+              // Modelo mensal (decisão 078): a mesma régua de meses da tela do
+              // GP, trocando de mês pela URL sem sair da aba da planilha.
+              meses={detalhe.meses}
+              faturamentoMensal={detalhe.faturamentoMensal}
+              mesPedido={searchParams?.mes}
+              // Na aprovação, trocar de mês não tira a página da aprovação.
+              hrefPlanilha={
+                aprovacaoSave
+                  ? `/financeiro/jobs/${job.id}?aba=planilha&aprovarSave=${aprovacaoSave.pedidoId}`
+                  : `/financeiro/jobs/${job.id}?aba=planilha`
+              }
+              grupos={detalhe.grupos}
+              itens={detalhe.itens}
+              realizadosMap={detalhe.realizadosMap}
+              categoriasMap={detalhe.categoriasMap}
+              podeAcoes={false}
+              podeExportarInterna={podeExportarInterna}
+              podeConfirmarBv={false}
+              ppsPorItemId={detalhe.ppsPorItemId}
+              fornecedores={detalhe.fornecedores}
+              empresas={detalhe.empresas}
+              responsaveis={detalhe.responsaveis}
+              bvsPorItem={detalhe.bvsPorItem}
+            />
+          </div>
         }
         fluxo={
           <FluxoCaixaJobs

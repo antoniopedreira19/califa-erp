@@ -457,6 +457,14 @@ O item destrutivo (`chk_fat_item_origem`) foi aprovado e aplicado.
 
 ---
 
+## ⚠️ Nota de 2026-09-22 — o gatilho passa a ser a aprovação do financeiro
+
+A [099](099-aprovacao-de-save.md) substitui a nota de 01/09 abaixo: o saldo
+de um job deixa de nascer no envio para faturamento e passa a nascer na
+**aprovação** do financeiro, linha a linha. O consumo também é aprovado. A
+produção continua vendo o save desde a marcação; o financeiro, só na
+aprovação.
+
 ## ⚠️ Nota de 2026-09-01 — o gatilho passou a ser o envio para faturamento
 
 Decisão do Tiago (01/09/2026): **só o save de um job já enviado para

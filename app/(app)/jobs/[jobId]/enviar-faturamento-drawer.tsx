@@ -736,13 +736,16 @@ export function EnviarFaturamentoDrawer({
               {dataFaturamento.split("-").reverse().join("/")}
             </strong>
             .{" "}
+            {/* Gerar save segue valendo depois do envio, até o encerramento;
+                o que o envio fecha é a errata e o consumo de save (decisão
+                099 §14, 22/09/2026). */}
             {mes
               ? jobEncerrado
                 ? `O envio é definitivo. O job já está encerrado: nenhum mês aceita errata nem save.`
-                : `O envio é definitivo: errata e save de ${mes.nome} ficam travados, e os outros meses seguem editáveis.`
+                : `O envio é definitivo: errata e consumo de save de ${mes.nome} ficam travados, e os outros meses seguem editáveis.`
               : // O envio não libera mais o encerramento (decisão 087): as
                 // duas frentes correm separadas.
-                "O envio é definitivo: depois dele não há errata nem save neste job."}
+                "O envio é definitivo: depois dele não há mais errata nem consumo de save neste job."}
           </>
         }
         confirmLabel="Sim, enviar"

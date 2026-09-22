@@ -28,7 +28,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { FilaLinha } from "./fila-list";
+import type { FilaLinha, SaveFilaLinha } from "./fila-list";
+import { IconeSave, rotuloDoSave } from "./icone-save";
 
 function dataHora(iso: string): string {
   const d = new Date(iso);
@@ -116,9 +117,16 @@ function Delta({
 
 export function ResumoErrataDialog({
   job,
+  saves,
   onOpenChange,
 }: {
   job: FilaLinha | null;
+  /**
+   * Os pedidos de save deste job que aguardam o financeiro (decisão 099).
+   * O job com errata de valores E pedido de save aparece nas duas faixas
+   * da fila, e o resumo da revisão lista as duas coisas. `[]` sem pedido.
+   */
+  saves: SaveFilaLinha[];
   onOpenChange: (aberto: boolean) => void;
 }) {
   const r = job?.revisao ?? null;
@@ -222,6 +230,50 @@ export function ResumoErrataDialog({
                       </li>
                     ))}
                   </ol>
+                </div>
+              )}
+
+              {/* Os saves que aguardam aprovação neste job (decisão 099).
+                  Não se aprovam por esta revisão: cada um tem a própria
+                  linha na faixa Saves, e aprová-lo é registrar de novo a
+                  revisão, com os números dele. */}
+              {saves.length > 0 && (
+                <div className="rounded-xl border border-border">
+                  <p className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    {saves.length === 1
+                      ? "Save aguardando aprovação"
+                      : `Saves aguardando aprovação · ${saves.length}`}
+                  </p>
+                  <ul className="divide-y divide-border">
+                    {saves.map((sv) => (
+                      <li
+                        key={sv.id}
+                        className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="inline-flex items-center gap-1.5 text-[12.5px] text-foreground">
+                            <IconeSave
+                              tipo={sv.tipo}
+                              origens={sv.origens.map((o) => o.codigo)}
+                            />
+                            {rotuloDoSave(sv.tipo, sv.grupoNome, sv.itemDescricao)}
+                          </p>
+                          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                            {[sv.enviadoPorNome, sv.enviado_em_label]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-mono text-[12.5px] font-semibold">
+                          {formatCurrency(sv.valor)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="border-t border-border px-3.5 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                    Cada save se aprova pela faixa Saves da fila. Registrar esta
+                    revisão não aprova nenhum deles.
+                  </p>
                 </div>
               )}
 

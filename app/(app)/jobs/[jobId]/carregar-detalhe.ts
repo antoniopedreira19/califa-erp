@@ -3,7 +3,11 @@ import { nomeVersao } from "@/lib/nome-versao";
 import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
-import { montarThreadChat } from "@/lib/data/job-chat";
+import {
+  lerRecusasDeSaveDoJob,
+  montarThreadChat,
+  recusasDeSaveNaoLidas,
+} from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
 import {
   SELECT_PRESTACAO_DA_VERBA,
@@ -147,6 +151,8 @@ export async function carregarDetalheDoJob(
     abertoPorRes,
     competenciasRes,
     mesesRes,
+    recusasDeSave,
+    consumosComPedidoRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -318,6 +324,17 @@ export async function carregarDetalheDoJob(
     // Meses da versão aprovada (decisão 078). Só o modelo mensal tem; nos
     // outros a lista vem vazia, e a planilha é a de sempre.
     mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoAprovadaId),
+    // As recusas de save viram card na Comunicação (decisão 099).
+    lerRecusasDeSaveDoJob(supabase, session.activeTenant.id, raw.id),
+    // Situação dos pedidos de CONSUMO das linhas do job: "pago só por save"
+    // só vale com o consumo aprovado (decisão 099).
+    supabase
+      .from("saves_aprovacoes")
+      .select("job_item_orcado_id, situacao")
+      .eq("job_id", raw.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("tipo", "consome")
+      .in("situacao", ["aprovado", "aguardando"]),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -696,6 +713,7 @@ export async function carregarDetalheDoJob(
     erratas,
     mensagens,
     versaoAprovada.moeda,
+    recusasDeSave,
   );
 
   // Não lidas = o que chegou de outra pessoa depois da última leitura.
@@ -709,7 +727,8 @@ export async function carregarDetalheDoJob(
     ).length +
     erratas.filter(
       (e) => e.created_by !== session.profile.id && (!lidaAte || e.created_at > lidaAte),
-    ).length;
+    ).length +
+    recusasDeSaveNaoLidas(recusasDeSave, session.profile.id, lidaAte);
 
   // ---- Chat de PPs: thread e contador de não lidas ----
   if (mensagensPPsRes.error)
@@ -777,8 +796,31 @@ export async function carregarDetalheDoJob(
     (soma, it) => soma + Number(it.save_consumido ?? 0),
     0,
   );
+  // E só com o consumo APROVADO (decisão 099): consumo que aguarda o
+  // financeiro pode ser recusado, e aí o faturamento volta a existir. Mesma
+  // régua de `lib/data/faturamento-por-job.ts`.
+  if (consumosComPedidoRes.error)
+    console.error("[job.consumos_pedido]", consumosComPedidoRes.error.message);
+  const pedidosDeConsumo = (consumosComPedidoRes.data ?? []) as {
+    job_item_orcado_id: string | null;
+    situacao: string;
+  }[];
+  const consumoTodoAprovado = itens
+    .filter((it) => Number(it.save_consumido ?? 0) > 0)
+    .every(
+      (it) =>
+        pedidosDeConsumo.some(
+          (p) => p.job_item_orcado_id === it.orcado_id && p.situacao === "aprovado",
+        ) &&
+        !pedidosDeConsumo.some(
+          (p) => p.job_item_orcado_id === it.orcado_id && p.situacao === "aguardando",
+        ),
+    );
   const pagoSoPorSave =
-    totaisJob.faturamentoPrevisto <= 0.004 && saveConsumidoNoJob > 0;
+    totaisJob.faturamentoPrevisto <= 0.004 &&
+    saveConsumidoNoJob > 0 &&
+    !consumosComPedidoRes.error &&
+    consumoTodoAprovado;
 
   if (jobsIrmaosRes.error)
     console.error("[job.irmaos]", jobsIrmaosRes.error.message);

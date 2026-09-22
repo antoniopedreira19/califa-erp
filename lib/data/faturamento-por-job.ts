@@ -185,10 +185,19 @@ export async function faturamentoPorJob(
   // faturamento previsto zero, dão o job que pula a etapa.
   let saveOnlyQuery = supabase
     .from("jobs_itens_orcado")
-    .select("job_id, jobs!inner(faturamento_previsto)")
+    .select("id, job_id, jobs!inner(faturamento_previsto)")
     .eq("tenant_id", tenantId)
     .gt("save_consumido", 0)
     .lte("jobs.faturamento_previsto", 0.004);
+  // Os pedidos de CONSUMO que decidem se aquele consumo já vale (decisão
+  // 099): só o aprovado conta; o que aguarda ainda pode voltar ao
+  // faturamento. Poucas linhas — um pedido por linha consumidora.
+  let consumosDecididosQuery = supabase
+    .from("saves_aprovacoes")
+    .select("job_id, job_item_orcado_id, situacao")
+    .eq("tenant_id", tenantId)
+    .eq("tipo", "consome")
+    .in("situacao", ["aprovado", "aguardando"]);
   // Os meses que o job mensal fatura (decisão 078): uma linha por mês com
   // faturamento na previsão de recebimento. É contra eles que se sabe se
   // falta mês a enviar.
@@ -203,14 +212,16 @@ export async function faturamentoPorJob(
     enviosQuery = enviosQuery.in("job_id", jobIds);
     saveOnlyQuery = saveOnlyQuery.in("job_id", jobIds);
     mesesQuery = mesesQuery.in("job_id", jobIds);
+    consumosDecididosQuery = consumosDecididosQuery.in("job_id", jobIds);
   }
 
-  const [enviosRes, notasPorJob, saveOnlyRes, mesesPrevistosRes] =
+  const [enviosRes, notasPorJob, saveOnlyRes, mesesPrevistosRes, consumosDecididosRes] =
     await Promise.all([
       enviosQuery,
       notasEmitidasDosJobs(tenantId, jobIds),
       saveOnlyQuery,
       mesesQuery,
+      consumosDecididosQuery,
     ]);
 
   if (enviosRes.error) {
@@ -245,10 +256,36 @@ export async function faturamentoPorJob(
   // registrado. Ele pula a etapa de faturamento e entra na esteira como
   // já faturado — a nota dele saiu no job que gerou o crédito (decisão
   // 028 §11). Sem isto ficaria eternamente em "aguardando envio".
+  //
+  // Desde 22/09/2026 (decisão 099) só conta consumo APROVADO: toda linha
+  // que consome precisa ter o pedido aprovado e nenhum aguardando (a
+  // edição de um consumo aprovado também espera). Consumo aguardando ou
+  // nunca enviado ainda pode voltar ao faturamento, e o job teria de ser
+  // faturado. Leitura dos pedidos que falhou: ninguém é "só save".
+  if (consumosDecididosRes.error) {
+    console.error("[faturamento-por-job.consumos]", consumosDecididosRes.error.message);
+  }
+  const aprovadas = new Set<string>();
+  const aguardando = new Set<string>();
+  for (const p of (consumosDecididosRes.data ?? []) as any[]) {
+    if (!p.job_item_orcado_id) continue;
+    (p.situacao === "aprovado" ? aprovadas : aguardando).add(p.job_item_orcado_id);
+  }
+  const linhasPorJob = new Map<string, string[]>();
+  for (const o of (saveOnlyRes.data ?? []) as any[]) {
+    if (!o.job_id) continue;
+    const lista = linhasPorJob.get(o.job_id) ?? [];
+    lista.push(o.id as string);
+    linhasPorJob.set(o.job_id, lista);
+  }
   const saveOnly = new Set<string>(
-    ((saveOnlyRes.data ?? []) as any[])
-      .map((o) => o.job_id as string)
-      .filter(Boolean),
+    consumosDecididosRes.error
+      ? []
+      : [...linhasPorJob]
+          .filter(([, linhas]) =>
+            linhas.every((id) => aprovadas.has(id) && !aguardando.has(id)),
+          )
+          .map(([jobId]) => jobId),
   );
 
   // Todo job que apareceu em qualquer uma das leituras entra no mapa. Job
