@@ -29,6 +29,14 @@ import { gerarCodigoProjetoFinanceiro } from "@/lib/codigos/projetos-financeiro"
 import { consumoDasPrevisoes } from "./consumo";
 import { registrarFotoDaAbertura } from "./fotos";
 import { ehJanelaDePagamento, emCentavos, somaCurva } from "./curva";
+import {
+  custoPrevistoDoFinanceiro,
+  enfileirarSavesDoJob,
+  espelhosDaAprovacao,
+  jobJaFoiDevolvido,
+} from "./aprovacao-save";
+import type { SaveAprovacaoMomento, SaveAprovacaoTipo } from "@/lib/types";
+import type { EspelhosDoJob } from "@/lib/data/espelhos-do-job";
 
 export type ActionResult =
   | {
@@ -185,8 +193,15 @@ async function conferirRecebimentoPorMes(
   tenantId: string,
   jobId: string,
   linhas: PrevisaoRecebimentoLinhaInput[],
+  /** Pedidos de save que contam como aprovados: o que a revisão aprova. */
+  contarPedidos: string[],
 ): Promise<{ erro: string } | { mensal: boolean; linhas: LinhaDeRecebimento[] }> {
-  const leitura = await lerFaturamentoMensalPeloJob(supabase, tenantId, jobId);
+  const leitura = await lerFaturamentoMensalPeloJob(
+    supabase,
+    tenantId,
+    jobId,
+    contarPedidos,
+  );
   if (!leitura) {
     return { erro: "Não foi possível ler o modelo de planilha do job." };
   }
@@ -433,6 +448,7 @@ export async function abrirJobNoFinanceiro(
     session.activeTenant.id,
     jobId,
     parsed.data.recebimento,
+    [],
   );
   if ("erro" in recebimentoConferido) {
     return { ok: false, message: recebimentoConferido.erro };
@@ -488,6 +504,35 @@ export async function abrirJobNoFinanceiro(
   if (updateErro) {
     console.error("[abertura-job.update]", updateErro.message);
     return { ok: false, message: "Não foi possível abrir o job." };
+  }
+
+  // Os saves e consumos que vieram do orçamento entram na faixa Saves
+  // agora (decisão 099): o financeiro acabou de conferir estes números, e
+  // a linha já conta para ele. A RPC só aceita job `aberto` — por isso
+  // roda depois do update acima, e antes do resto, que pode sair mais
+  // cedo com erro. Falha aqui não desfaz a abertura: fica guardada e vira
+  // a mensagem do fim, se nada mais falhar.
+  const momentoDosSaves = (await jobJaFoiDevolvido(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+  ))
+    ? "reenvio"
+    : "abertura";
+  const saves = await enfileirarSavesDoJob(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    momentoDosSaves,
+  );
+  if (saves.ok && saves.quantidade > 0) {
+    await logAuditEvent({
+      acao: "save.pedido.enviado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: { momento: momentoDosSaves, quantidade: saves.quantidade },
+    });
   }
 
   // O rateio de competência, logo depois do registro — o job já está
@@ -662,6 +707,20 @@ export async function abrirJobNoFinanceiro(
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
+
+  if (!saves.ok) {
+    await logAuditEvent({
+      acao: "job.aberto_no_financeiro",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: { saves_falharam: true, momento: momentoDosSaves, erro: saves.message },
+    });
+    return {
+      ok: false,
+      message: `O job foi aberto, mas os saves dele não entraram na faixa Saves (${saves.message}). A produção pode enviá-los pelo botão “Enviar saves para aprovação”, acima da planilha do job.`,
+    };
+  }
 
   return { ok: true, id: jobId };
 }
@@ -917,6 +976,13 @@ export async function criarProjetoFinanceiro(
 export async function editarRegistroDaAbertura(
   jobId: string,
   input: EdicaoRegistroAberturaInput,
+  /**
+   * Aprovação de save (decisão 099): o pedido que este registro aprova.
+   * Aprovar É registrar a revisão da abertura — o formulário mostra e
+   * valida os números de depois da aprovação, e só este registro aprova.
+   * `null` na edição e na revisão de sempre.
+   */
+  aprovarSaveId: string | null,
 ): Promise<ActionResult> {
   const session = await requireSession();
 
@@ -973,11 +1039,82 @@ export async function editarRegistroDaAbertura(
     };
   }
 
+  // ---- Aprovação de save (decisão 099) ----
+  // O pedido precisa ser deste job e ainda aguardar. Os espelhos de
+  // depois da aprovação são calculados agora, antes de qualquer gravação:
+  // a previsão de recebimento é validada contra eles, e só com tudo
+  // conferido a RPC aprova.
+  let aprovacao: {
+    id: string;
+    tipo: SaveAprovacaoTipo;
+    momento: SaveAprovacaoMomento;
+    errataId: string | null;
+    itemDescricao: string;
+    grupoNome: string | null;
+    valor: number;
+    /** Os espelhos que a RPC grava. `null` fora do `job_aberto`: o
+     *  financeiro já contava a linha, e não há o que regravar. */
+    totais: EspelhosDoJob | null;
+  } | null = null;
+  if (aprovarSaveId) {
+    const { data: pedido, error: pedidoErr } = await supabase
+      .from("saves_aprovacoes")
+      .select("id, job_id, situacao, tipo, momento, errata_id, item_descricao, grupo_nome, valor")
+      .eq("id", aprovarSaveId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("job_id", jobId)
+      .maybeSingle<{
+        id: string;
+        job_id: string;
+        situacao: string;
+        tipo: SaveAprovacaoTipo;
+        momento: SaveAprovacaoMomento;
+        errata_id: string | null;
+        item_descricao: string;
+        grupo_nome: string | null;
+        valor: number | string;
+      }>();
+    if (pedidoErr) console.error("[abertura-job.aprovar-save.pedido]", pedidoErr.message);
+    if (!pedido) {
+      return { ok: false, message: "Pedido de save não encontrado neste job." };
+    }
+    if (pedido.situacao !== "aguardando") {
+      return {
+        ok: false,
+        message:
+          "Este pedido de save já foi decidido — outra pessoa pode ter aprovado ou recusado enquanto você revisava.",
+      };
+    }
+    const totais = await espelhosDaAprovacao(
+      supabase,
+      session.activeTenant.id,
+      jobId,
+      pedido.id,
+      pedido.momento,
+    );
+    if (!totais.ok) return { ok: false, message: totais.message };
+    aprovacao = {
+      id: pedido.id,
+      tipo: pedido.tipo,
+      momento: pedido.momento,
+      errataId: pedido.errata_id ?? null,
+      itemDescricao: pedido.item_descricao,
+      grupoNome: pedido.grupo_nome ?? null,
+      valor: Number(pedido.valor ?? 0),
+      totais: totais.totais,
+    };
+  }
+
   // Lido ANTES do update, que apaga a marca: é o que distingue "Registrar
-  // revisão de abertura" de "Editar registro" na foto e na auditoria.
-  const eraRevisao = job.abertura_em_revisao === true;
+  // revisão de abertura" de "Editar registro" na foto e na auditoria. A
+  // aprovação de save é sempre revisão, com o job em revisão ou não (o
+  // pedido que veio da abertura não pôs o job em revisão, e a aprovação
+  // passa pelo mesmo formulário).
+  const eraRevisao = job.abertura_em_revisao === true || aprovacao !== null;
   const errataDaRevisao = eraRevisao
-    ? ((job.abertura_revisao_errata_id as string | null) ?? null)
+    ? (aprovacao?.errataId ??
+      (job.abertura_revisao_errata_id as string | null) ??
+      null)
     : null;
 
   // Todas as erratas que esta revisão trata (decisão do Tiago, 14/09/2026):
@@ -1037,30 +1174,32 @@ export async function editarRegistroDaAbertura(
 
   // Os dois totais são relidos do banco, como na abertura: o navegador
   // não é fonte confiável para dinheiro.
-  const { data: itens, error: itensErro } = await supabase
-    .from("jobs_itens_orcado")
-    .select("tipo_custo, total_planejado")
-    .eq("job_id", jobId)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (itensErro) {
-    console.error("[abertura-job.editar-planejado]", itensErro.message);
-    return { ok: false, message: "Não foi possível ler a planilha do job." };
-  }
-
-  const custoPrevisto = emCentavos(
-    (itens ?? []).reduce(
-      (
-        s,
-        i: { tipo_custo: TipoCusto; total_planejado: number | string | null },
-      ) =>
-        tipoGeraDesembolso(i.tipo_custo)
-          ? s + Number(i.total_planejado ?? 0)
-          : s,
-      0,
-    ),
+  //
+  // O custo sai da conta do FINANCEIRO (decisão 099): a linha com pedido
+  // de save que ele ainda não conta entra com o planejado de antes do
+  // save. Até 22/09/2026 vinha do `total_planejado` cru, e um save
+  // aguardando sumia do custo gravado — se depois fosse recusado, a curva
+  // de desembolso ficava menor que o custo real, sem aviso.
+  const custoLido = await custoPrevistoDoFinanceiro(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    aprovacao?.id ?? null,
   );
-  const faturamentoPrevisto = emCentavos(Number(job.faturamento_previsto ?? 0));
+  if (!custoLido.ok) return { ok: false, message: custoLido.message };
+  const custoPrevisto = emCentavos(custoLido.custo);
+  // Na aprovação de um pedido `job_aberto` o faturamento previsto que vale
+  // é o de DEPOIS da aprovação — é ele que a RPC grava logo abaixo.
+  const faturamentoPrevisto = emCentavos(
+    aprovacao?.totais
+      ? aprovacao.totais.faturamento_previsto
+      : Number(job.faturamento_previsto ?? 0),
+  );
+  const valorJobDaFoto = aprovacao?.totais
+    ? aprovacao.totais.valor_total
+    : job.valor_total === null
+      ? null
+      : Number(job.valor_total);
 
   const [consumo, curvaAtualRes, recebAtualRes, rateioAtualRes] = await Promise.all([
     consumoDasPrevisoes(supabase, session.activeTenant.id, jobId),
@@ -1155,6 +1294,7 @@ export async function editarRegistroDaAbertura(
     session.activeTenant.id,
     jobId,
     parsed.data.recebimento,
+    aprovarSaveId ? [aprovarSaveId] : [],
   );
   if ("erro" in recebimentoConferido) {
     return { ok: false, message: recebimentoConferido.erro };
@@ -1179,6 +1319,54 @@ export async function editarRegistroDaAbertura(
       };
     }
   }
+
+  // Tudo conferido: agora a aprovação. A RPC confere de novo que a linha
+  // continua como o pedido descreve, grava os espelhos (pedido
+  // `job_aberto`) e muda a situação — numa transação só. Se ela recusar,
+  // nada deste registro foi gravado ainda.
+  if (aprovacao) {
+    const { error: rpcErr } = await supabase.rpc("decidir_pedido_save", {
+      p_id: aprovacao.id,
+      p_decisao: "aprovar",
+      p_justificativa: null,
+      p_totais: aprovacao.totais,
+      // O registro logo abaixo é que encerra a revisão.
+      p_revisao: "manter",
+    });
+    if (rpcErr) {
+      console.error("[abertura-job.aprovar-save.rpc]", rpcErr.message);
+      return { ok: false, message: rpcErr.message };
+    }
+    await logAuditEvent({
+      acao: "save.pedido.aprovado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        pedido_id: aprovacao.id,
+        tipo: aprovacao.tipo,
+        momento: aprovacao.momento,
+        item: aprovacao.itemDescricao,
+        grupo: aprovacao.grupoNome,
+        valor: aprovacao.valor,
+        errata_id: aprovacao.errataId,
+        totais: aprovacao.totais,
+      },
+    });
+  }
+  // A partir daqui, se algo falhar com a aprovação feita, a mensagem diz.
+  // Duas frases, e não um "mas" atrás do outro: o que deu certo vem
+  // junto ("o save foi aprovado E o registro foi salvo"), e o "mas" fica
+  // só para o que faltou (achado da revisão de 22/09/2026).
+  const aprovado = aprovacao
+    ? `${aprovacao.tipo === "gera" ? "O save" : "O consumo"} foi aprovado`
+    : "";
+  /** "O save foi aprovado e os dados do registro foram salvos, mas …" —
+   *  sem a aprovação, só a segunda metade. */
+  const salvoMas = (oQueFaltou: string) =>
+    aprovacao
+      ? `${aprovado} e os dados do registro foram salvos, mas ${oQueFaltou}`
+      : `Os dados do registro foram salvos, mas ${oQueFaltou}`;
 
   const { error: updateErro } = await supabase
     .from("jobs")
@@ -1208,7 +1396,12 @@ export async function editarRegistroDaAbertura(
 
   if (updateErro) {
     console.error("[abertura-job.editar-update]", updateErro.message);
-    return { ok: false, message: "Não foi possível salvar as alterações." };
+    return {
+      ok: false,
+      message: aprovacao
+        ? `${aprovado}, mas a revisão da abertura não foi registrada. Registre a revisão de novo na aba Abertura do Job.`
+        : "Não foi possível salvar as alterações.",
+    };
   }
 
   const rateioErro = await gravarRateio(
@@ -1228,8 +1421,9 @@ export async function editarRegistroDaAbertura(
     });
     return {
       ok: false,
-      message:
-        "Os dados do registro foram salvos, mas o rateio de competência não foi regravado. Confira a competência na aba Abertura do Job.",
+      message: salvoMas(
+        "o rateio de competência não foi regravado. Confira a competência na aba Abertura do Job.",
+      ),
     };
   }
 
@@ -1308,8 +1502,9 @@ export async function editarRegistroDaAbertura(
     });
     return {
       ok: false,
-      message:
-        "Os dados do registro foram salvos, mas a previsão não foi regravada. Confira as datas na aba Abertura do Job.",
+      message: salvoMas(
+        "a previsão não foi regravada. Confira as datas na aba Abertura do Job.",
+      ),
     };
   }
 
@@ -1324,6 +1519,7 @@ export async function editarRegistroDaAbertura(
     metadata: {
       errata_id: errataDaRevisao,
       erratas_ids: erratasDaRevisao,
+      aprovou_save: aprovacao?.id ?? null,
       de: {
         nome_financeiro: job.nome_financeiro,
         projeto_financeiro_id: job.projeto_financeiro_id,
@@ -1370,7 +1566,7 @@ export async function editarRegistroDaAbertura(
       competencias: rateio,
       curva: parsed.data.curva,
       recebimento: parsed.data.recebimento,
-      valorJob: job.valor_total === null ? null : Number(job.valor_total),
+      valorJob: valorJobDaFoto,
       faturamentoPrevisto,
       custoPrevisto,
     },
@@ -1380,6 +1576,7 @@ export async function editarRegistroDaAbertura(
   revalidatePath("/financeiro/abertura-de-job");
   revalidatePath(`/financeiro/jobs/${jobId}`);
   revalidatePath(`/jobs/${jobId}`);
+  if (aprovacao) revalidatePath("/jobs");
 
   return { ok: true, id: jobId, revisao: eraRevisao };
 }

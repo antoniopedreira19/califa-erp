@@ -515,6 +515,59 @@ async function barrarARComOrcadoEmAberto(
 }
 
 /**
+ * Linha com SAVE não gera PP (decisão 099, 22/09/2026).
+ *
+ * A linha que GERA save é faturada neste job e o serviço acontece em
+ * outro: não há fornecedor a pagar aqui. Vale para a linha em save
+ * (inclusive a que aguarda aprovação — a marca já está nela) e para a
+ * recusada que o GP ainda não retirou: a recusa devolve a linha ao job,
+ * mas ela fica travada para PP, BV e errata até alguém arquivar a recusa
+ * no pop-up de save. O banco recusa o mesmo (`pp_recusa_linha_com_save`);
+ * aqui a recusa chega antes, com o nome do item.
+ *
+ * A linha que CONSOME save continua aceitando PP e BV: o serviço dela
+ * acontece neste job, só é pago com crédito de outro.
+ *
+ * Devolve a recusa, ou `null` quando a PP pode seguir.
+ */
+async function barrarPPEmLinhaComSave(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  item: { job_item_orcado_id: string; em_save: boolean; item_nome: string },
+): Promise<Err | null> {
+  if (item.em_save) {
+    return {
+      ok: false,
+      message: `"${item.item_nome}" é save: o serviço não acontece neste job, então a linha não gera Pedido de Produção.`,
+    };
+  }
+  const { data, error } = await supabase
+    .from("saves_aprovacoes")
+    .select("situacao")
+    .eq("job_item_orcado_id", item.job_item_orcado_id)
+    .eq("tenant_id", tenantId)
+    .eq("tipo", "gera")
+    .in("situacao", ["aguardando", "recusado"])
+    .limit(1);
+  if (error) {
+    // Sem saber, não emite: é o lado seguro, e o banco recusaria de todo
+    // jeito se a linha tivesse save.
+    console.error("[pp.save_da_linha]", error.message);
+    return {
+      ok: false,
+      message: "Não foi possível conferir o save desta linha. Tente de novo.",
+    };
+  }
+  if ((data ?? []).length > 0) {
+    return {
+      ok: false,
+      message: `"${item.item_nome}" teve o save recusado pelo financeiro, e a recusa ainda não foi retirada. A linha só volta a gerar Pedido de Produção depois de o GP retirar o save recusado, pelo pop-up da coluna Save.`,
+    };
+  }
+  return null;
+}
+
+/**
  * O envio pediu confirmação: o item passaria do planejado.
  *
  * Não é erro de validação — é a regra de 02/09/2026: acima do planejado,
@@ -772,9 +825,14 @@ async function reservarPedidoCompraImpl(
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
 
-  const { job, session } = gate;
+  const { job, session, item, supabase } = gate;
 
-  // Nada barra a reserva desde 02/09/2026: o item aceita quantas PPs
+  // Linha com save não gera PP (decisão 099). Barrar já na reserva evita o
+  // upload de anexos de uma PP que não vai existir.
+  const comSave = await barrarPPEmLinhaComSave(supabase, session.activeTenant.id, item);
+  if (comSave) return comSave;
+
+  // Fora o save, nada barra a reserva desde 02/09/2026: o item aceita quantas PPs
   // forem necessárias, sem teto por PP. Passar do planejado não impede
   // gerar — muda quem pode ENVIAR, e isso se decide no envio. A linha
   // vermelha, que nasce zerada, finalmente ganha caminho para PP.
@@ -834,6 +892,11 @@ async function finalizarPedidoCompraImpl(
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
   const { session, item, job, supabase } = gate;
+
+  // Linha com save não gera PP (decisão 099) — de novo aqui, porque a
+  // linha pode ter virado save entre a reserva e a gravação.
+  const comSave = await barrarPPEmLinhaComSave(supabase, session.activeTenant.id, item);
+  if (comSave) return comSave;
 
   // Valida dados
   const dadosParsed = dadosSchema.safeParse(dados);

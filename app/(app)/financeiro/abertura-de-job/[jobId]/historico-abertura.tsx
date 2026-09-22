@@ -12,7 +12,9 @@
  *   * `ResumoDaAberturaAnterior` — a faixa do topo durante a REVISÃO:
  *     a errata que pediu a revisão e a abertura anterior em uma linha,
  *     com o botão que abre a foto inteira. É o que a pessoa olha enquanto
- *     reconfere previsão, curva e competência sobre os números novos.
+ *     reconfere previsão, curva e competência sobre os números novos. Na
+ *     aprovação de save (decisão 099) a mesma faixa vira "Aprovação de
+ *     save · revisão da abertura", com a linha do save no topo.
  *   * `FotoDaAberturaDialog` — a foto inteira, em leitura: registro,
  *     rateio, parcelas de recebimento e cronograma de desembolsos.
  *
@@ -46,6 +48,8 @@ import {
 } from "@/lib/types";
 import type { RevisaoDeErrata } from "../dados";
 import { formatDataBr, formatDataHoraBr } from "../formatos";
+import type { AprovacaoDeSave } from "../aprovacao-save";
+import { IconeSave } from "../icone-save";
 
 /** "08/09/2026 · 03:30 · Tiago Mendonça" */
 function quandoEQuem(foto: FotoDaAbertura): string {
@@ -193,22 +197,75 @@ function linhasAfetadas(l: {
   );
 }
 
+/** Antes → depois de um número da linha do save, no formato da faixa. */
+function AntesDepois({
+  rotulo,
+  antes,
+  depois,
+}: {
+  rotulo: string;
+  antes: number | null;
+  depois: number | null;
+}) {
+  if (antes === null || depois === null) {
+    return (
+      <span className="text-[12px] text-muted-foreground">
+        {rotulo} não registrado
+      </span>
+    );
+  }
+  return (
+    <span className="text-[12px] text-muted-foreground">
+      {rotulo}{" "}
+      <span className="font-mono line-through">{formatCurrency(antes)}</span>{" "}
+      <span className="font-mono font-semibold text-foreground">
+        {formatCurrency(depois)}
+      </span>
+    </span>
+  );
+}
+
 export function ResumoDaAberturaAnterior({
   foto,
   revisao,
+  aprovacaoSave,
 }: {
   /** A última foto — o registro que a revisão vai substituir. */
   foto: FotoDaAbertura | null;
   revisao: RevisaoDeErrata | null;
+  /** O pedido de save que esta revisão aprova (decisão 099), ou `null`. */
+  aprovacaoSave: AprovacaoDeSave | null;
 }) {
   const [aberta, setAberta] = React.useState(false);
+
+  // Na aprovação a errata do próprio pedido não se repete na lista: a
+  // linha do save, logo abaixo do título, já é ela. As outras erratas
+  // pendentes continuam — o registro desta revisão também as trata.
+  const erratas = (revisao?.erratas ?? []).filter(
+    (e) => !aprovacaoSave?.errataId || e.errataId !== aprovacaoSave.errataId,
+  );
+  const outras: RevisaoDeErrata | null =
+    revisao && aprovacaoSave
+      ? {
+          ...revisao,
+          erratas,
+          faturamentoAntes: erratas[0]?.faturamentoAntes ?? null,
+          faturamentoDepois: erratas[erratas.length - 1]?.faturamentoDepois ?? null,
+          linhasAlteradas: erratas.reduce((t, e) => t + e.linhasAlteradas, 0),
+          linhasNovas: erratas.reduce((t, e) => t + e.linhasNovas, 0),
+          linhasRemovidas: erratas.reduce((t, e) => t + e.linhasRemovidas, 0),
+        }
+      : revisao;
+  const gera = aprovacaoSave?.tipo === "gera";
 
   return (
     <div className="rounded-2xl border border-california-red/30 bg-california-red/[0.04] px-[18px] py-3">
       <div className="flex flex-wrap items-center gap-2.5">
         <FilePenLine className="h-3.5 w-3.5 text-california-red" />
         <span className="text-[12.5px] font-semibold">
-          Revisão da abertura após errata
+          {aprovacaoSave
+            ? "Aprovação de save · revisão da abertura"
+            : "Revisão da abertura após errata"}
         </span>
         <span className="text-[12.5px] text-muted-foreground">
           reconfira previsão de recebimento, curva de desembolso e
@@ -217,36 +274,87 @@ export function ResumoDaAberturaAnterior({
         </span>
       </div>
 
+      {/* A linha do save que esta revisão aprova: item, crédito ou
+          consumo, quem enviou e quando, e o número que ele move — o valor
+          do job no save, o faturamento previsto no consumo (os números
+          gravados no pedido). */}
+      {aprovacaoSave && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-white px-3.5 py-2.5">
+          <IconeSave
+            tipo={aprovacaoSave.tipo}
+            origens={aprovacaoSave.origens.map((o) => o.codigo)}
+          />
+          <span className="text-[12.5px] font-semibold">
+            {[aprovacaoSave.grupoNome, aprovacaoSave.itemDescricao]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="text-[12px] text-muted-foreground">
+            {gera ? "crédito" : "consumo"}{" "}
+            <span className="font-mono font-semibold text-foreground">
+              {formatCurrency(aprovacaoSave.valor)}
+            </span>
+            {!gera && aprovacaoSave.origens.length > 0 && (
+              <>
+                {" "}
+                · saldo de{" "}
+                <span className="font-mono">
+                  {aprovacaoSave.origens.map((o) => o.codigo).join(", ")}
+                </span>
+              </>
+            )}
+          </span>
+          <span className="font-mono text-[11.5px] text-muted-foreground">
+            {[aprovacaoSave.enviadoPorNome, aprovacaoSave.enviadoEmLabel]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          {gera ? (
+            <AntesDepois
+              rotulo="valor do job"
+              antes={aprovacaoSave.valorJobAntes}
+              depois={aprovacaoSave.valorJobDepois}
+            />
+          ) : (
+            <AntesDepois
+              rotulo="faturamento previsto"
+              antes={aprovacaoSave.faturamentoPrevistoAntes}
+              depois={aprovacaoSave.faturamentoPrevistoDepois}
+            />
+          )}
+        </div>
+      )}
+
       {/* TODAS as erratas desde a última foto (decisão do Tiago,
           14/09/2026): a revisão trata todas, e o financeiro precisa saber
           exatamente o que mudou desde a abertura que ele conferiu. */}
-      {revisao && revisao.erratas.length > 1 && (
+      {outras && outras.erratas.length > 1 && (
         <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
           <span className="font-semibold text-foreground">
-            {revisao.erratas.length} erratas
+            {outras.erratas.length} erratas
           </span>{" "}
           desde a abertura anterior · faturamento previsto{" "}
           <span className="font-mono line-through">
-            {formatCurrency(revisao.faturamentoAntes ?? 0)}
+            {formatCurrency(outras.faturamentoAntes ?? 0)}
           </span>{" "}
           <span className="font-mono font-semibold text-foreground">
-            {formatCurrency(revisao.faturamentoDepois ?? 0)}
+            {formatCurrency(outras.faturamentoDepois ?? 0)}
           </span>{" "}
-          · {linhasAfetadas(revisao)}
+          · {linhasAfetadas(outras)}
         </p>
       )}
-      {revisao && revisao.erratas.length > 0 && (
+      {outras && outras.erratas.length > 0 && (
         <ol
           className={
-            revisao.erratas.length > 1 ? "mt-1 space-y-0.5 pl-1" : "mt-1.5"
+            outras.erratas.length > 1 ? "mt-1 space-y-0.5 pl-1" : "mt-1.5"
           }
         >
-          {revisao.erratas.map((e, i) => (
+          {outras.erratas.map((e, i) => (
             <li
               key={e.errataId}
               className="text-[12px] leading-relaxed text-muted-foreground"
             >
-              {revisao.erratas.length > 1 ? (
+              {outras.erratas.length > 1 ? (
                 <span className="font-mono text-[11px] font-bold">{i + 1}. </span>
               ) : (
                 "Errata "

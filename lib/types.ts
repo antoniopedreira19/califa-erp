@@ -473,6 +473,13 @@ export interface VersaoOrcamentoItem {
    *  do FATURAMENTO — já foi faturado lá — e fica na do VALOR DO JOB.
    *  Mantida por trigger a partir de `saves_consumos`; não escrever à mão. */
   save_consumido: number;
+  /** Quem marcou a linha como save, e quando (decisão 099). Preenchidos por
+   *  trigger; `null` na linha sem save e no save marcado antes de 22/09/2026. */
+  save_marcado_por: string | null;
+  save_marcado_em: string | null;
+  /** O planejado que o save zerou, para devolver quando o save sai da linha
+   *  (recusa, cancelamento ou retirada). Preenchido por trigger. */
+  planejado_antes_save: PlanejadoAntesDoSave | null;
   /** Legado do modelo antes de haver tabela de fornecedores por item.
    *  Mantido nullable no banco; não é mais usado nas telas. */
   fornecedor_id: string | null;
@@ -1720,6 +1727,76 @@ export interface ItemPlanilhaJob {
   save_consumido: number;
 }
 
+/** O planejado da linha antes de ela virar save (decisão 099). */
+export interface PlanejadoAntesDoSave {
+  valor_unitario: number;
+  quantidade: number;
+  dias_meses: number;
+}
+
+/** Aprovação de save (decisão 099): cada linha do job que gera ou consome
+ *  save vira um pedido que o administrador ou o financeiro decide. Espelha
+ *  os enums `save_aprovacao_tipo` e `save_aprovacao_situacao`. */
+export type SaveAprovacaoTipo = "gera" | "consome";
+export type SaveAprovacaoSituacao =
+  | "aguardando"
+  | "aprovado"
+  | "recusado"
+  | "retirado"
+  | "substituido";
+/** De onde o pedido veio. `job_aberto` é a errata de save, que o financeiro
+ *  só passa a contar na aprovação; os demais ele já contava desde a abertura. */
+export type SaveAprovacaoMomento =
+  | "abertura"
+  | "job_aberto"
+  | "legado_botao"
+  | "legado_migracao"
+  | "reenvio";
+
+/** Uma origem de consumo, como o banco guarda nos pedidos. */
+export interface OrigemDeSave {
+  job_origem_id: string;
+  valor: number;
+}
+
+/** Linha de `saves_aprovacoes`. O cliente só lê: tudo nasce e muda pelas
+ *  RPCs `save_pedir`, `save_enviar_pendentes`, `decidir_pedido_save`,
+ *  `cancelar_pedido_save` e `save_retirar`. */
+export interface SaveAprovacao {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  /** `null` quando a linha foi removida: o pedido é histórico. */
+  job_item_orcado_id: string | null;
+  item_descricao: string;
+  grupo_nome: string | null;
+  tipo: SaveAprovacaoTipo;
+  situacao: SaveAprovacaoSituacao;
+  momento: SaveAprovacaoMomento;
+  /** Gera: o orçado da linha (o crédito). Consome: a soma das origens. */
+  valor: number;
+  origens: OrigemDeSave[];
+  /** Consumo da linha logo antes do pedido; a recusa volta a ele. */
+  origens_antes: OrigemDeSave[];
+  valor_job_antes: number | null;
+  valor_job_depois: number | null;
+  faturamento_previsto_antes: number | null;
+  faturamento_previsto_depois: number | null;
+  /** Edição de consumo aprovado: o pedido aprovado que esta substitui. */
+  substitui_id: string | null;
+  /** Errata de save que o pedido gerou (só `job_aberto`). */
+  errata_id: string | null;
+  enviado_por: string | null;
+  enviado_em: string;
+  decidido_por: string | null;
+  decidido_em: string | null;
+  justificativa: string | null;
+  retirado_por: string | null;
+  retirado_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface JobErrata {
   id: string;
   tenant_id: string;
@@ -1875,7 +1952,10 @@ export type ItemChat =
       /** Texto que a pessoa escreveu — hoje só a descrição da errata. Vem
        *  em bloco próprio, entre aspas, porque é a única parte do card que
        *  não foi derivada de número (27/08/2026). */
-      descricao?: { texto: string; autor: string | null } | null;
+      /** O texto que uma pessoa escreveu no card, com o rótulo da caixa:
+       *  "Descrição da errata", ou "Justificativa do financeiro" na recusa
+       *  de save (decisão 099). */
+      descricao?: { rotulo: string; texto: string; autor: string | null } | null;
       /**
        * O que o card descreve por extenso — na PP, o serviço. Fica FORA do
        * `resumo` e só aparece quando o card é expandido: um serviço de duas

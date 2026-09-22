@@ -32,6 +32,24 @@ export interface ImpedimentosEncerramento {
    *  (decisão 052). Só as linhas de calha PP — A e D não geram PP e não
    *  têm o que marcar. */
   itensSemMarcacao: { item: string }[];
+  /** Aprovação de save (decisão 099, 22/09/2026): o job não encerra com
+   *  pedido de save que o financeiro ainda não decidiu — nem o que gera
+   *  crédito, nem o que consome —, com linha de save que nunca foi enviada
+   *  para aprovação (o legado, que tem o botão "Enviar saves para
+   *  aprovação"), nem com a revisão da abertura pendente. */
+  savesAguardando: { item: string }[];
+  consumosAguardando: { item: string }[];
+  /** `comRecusa`: a linha tem pedido recusado ainda não arquivado, e o
+   *  botão "Enviar saves para aprovação" não a envia até o GP retirar a
+   *  recusa. */
+  savesNaoEnviados: { item: string; comRecusa: boolean }[];
+  revisaoDaAberturaPendente: boolean;
+}
+
+/** "Item 1, Item 2" — os itens de um impedimento de save, entre parênteses
+ *  na mensagem. */
+function listaDeItens(itens: { item: string }[]): string {
+  return itens.map((i) => i.item).join(", ");
 }
 
 /**
@@ -50,7 +68,11 @@ export interface ImpedimentosEncerramento {
  * (a rejeitada conta desde a decisão 083).
  *
  * E não encerra com item de custo em aberto (04/09/2026, decisão 052), nem
- * com verba de produção não concluída (decisão 081 §7).
+ * com verba de produção não concluída (decisão 081 §7), nem — desde
+ * 22/09/2026 (decisão 099) — com save ou consumo de save aguardando o
+ * financeiro ou nunca enviado para aprovação, nem com a revisão da abertura
+ * pendente: depois do encerramento o save não muda mais, e o crédito
+ * ficaria sem decisão para sempre.
  *
  * ⚠️ O FATURAMENTO SAIU DAQUI em 16/09/2026 (decisão 087). Até então o job
  * só encerrava enviado para faturamento (decisão 008 §1) e sem saldo a
@@ -62,10 +84,19 @@ export interface ImpedimentosEncerramento {
 async function levantarImpedimentos(
   tenantId: string,
   jobId: string,
+  /** Lido por `encerrarJob` na mesma consulta do status. */
+  aberturaEmRevisao: boolean,
 ): Promise<ImpedimentosEncerramento> {
   const supabase = createClient();
 
-  const [ppsRes, verbasRes, bvsRes, semMarcacaoRes] = await Promise.all([
+  const [
+    ppsRes,
+    verbasRes,
+    bvsRes,
+    semMarcacaoRes,
+    pedidosSaveRes,
+    linhasComSaveRes,
+  ] = await Promise.all([
     supabase
       .from("pedidos_compra")
       .select("codigo, status")
@@ -99,7 +130,58 @@ async function levantarImpedimentos(
     // Mesma consulta que o botão "Concluir PPs" da barra usa para saber
     // quem ele vai marcar — o recorte mora num lugar só (decisão 052).
     itensSemConclusaoDoJob(supabase, tenantId, jobId),
+    // Pedidos de save ativos do job (decisão 099): os que aguardam travam;
+    // aguardando e aprovado dizem que o lado da linha já foi enviado; o
+    // recusado não arquivado só diz que a linha tem recusa a retirar.
+    supabase
+      .from("saves_aprovacoes")
+      .select("job_item_orcado_id, item_descricao, tipo, situacao")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .in("situacao", ["aguardando", "aprovado", "recusado"]),
+    // As linhas que geram ou consomem save hoje.
+    supabase
+      .from("jobs_itens_orcado")
+      .select("id, item, em_save, save_consumido")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .or("em_save.eq.true,save_consumido.gt.0"),
   ]);
+
+  const pedidosSave = (pedidosSaveRes.data ?? []) as {
+    job_item_orcado_id: string | null;
+    item_descricao: string;
+    tipo: "gera" | "consome";
+    situacao: "aguardando" | "aprovado" | "recusado";
+  }[];
+  // "Não enviado" é por LADO da linha (decisão 099, revisão de 22/09/2026):
+  // save gerado sem pedido de gera aguardando ou aprovado, ou consumo sem
+  // pedido de consumo aguardando ou aprovado. O recusado não conta como
+  // envio — depois de uma edição de consumo recusada a linha volta ao
+  // consumo de antes, que pode nunca ter sido aprovado, e escapava daqui.
+  const enviado = (tipo: "gera" | "consome") =>
+    new Set(
+      pedidosSave
+        .filter(
+          (p) =>
+            p.tipo === tipo &&
+            (p.situacao === "aguardando" || p.situacao === "aprovado"),
+        )
+        .map((p) => p.job_item_orcado_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+  const geraEnviado = enviado("gera");
+  const consomeEnviado = enviado("consome");
+  const comRecusa = new Set(
+    pedidosSave
+      .filter((p) => p.situacao === "recusado")
+      .map((p) => p.job_item_orcado_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const aguardando = (tipo: "gera" | "consome") =>
+    pedidosSave
+      .filter((p) => p.situacao === "aguardando" && p.tipo === tipo)
+      .map((p) => ({ item: p.item_descricao }));
 
   return {
     // Leitura que falhou trava a mais, nunca a menos.
@@ -129,6 +211,28 @@ async function levantarImpedimentos(
           situacao: b.situacao,
         })),
     itensSemMarcacao: semMarcacaoRes.map((i) => ({ item: i.nome })),
+    savesAguardando: pedidosSaveRes.error
+      ? [{ item: "pedidos de save" }]
+      : aguardando("gera"),
+    consumosAguardando: pedidosSaveRes.error ? [] : aguardando("consome"),
+    savesNaoEnviados:
+      pedidosSaveRes.error || linhasComSaveRes.error
+        ? [{ item: "linhas com save", comRecusa: false }]
+        : (
+            (linhasComSaveRes.data ?? []) as {
+              id: string;
+              item: string;
+              em_save: boolean | null;
+              save_consumido: number | string | null;
+            }[]
+          )
+            .filter(
+              (l) =>
+                (l.em_save === true && !geraEnviado.has(l.id)) ||
+                (Number(l.save_consumido ?? 0) > 0 && !consomeEnviado.has(l.id)),
+            )
+            .map((l) => ({ item: l.item, comRecusa: comRecusa.has(l.id) })),
+    revisaoDaAberturaPendente: aberturaEmRevisao,
   };
 }
 
@@ -160,7 +264,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
 
   const { data: job } = await supabase
     .from("jobs")
-    .select("id, status, projeto_id, orcamento_id, faturamento_previsto")
+    .select("id, status, projeto_id, orcamento_id, faturamento_previsto, abertura_em_revisao")
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -169,6 +273,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       projeto_id: string;
       orcamento_id: string;
       faturamento_previsto: number | string | null;
+      abertura_em_revisao: boolean | null;
     }>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
@@ -180,13 +285,21 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     };
   }
 
-  const imp = await levantarImpedimentos(session.activeTenant.id, jobId);
+  const imp = await levantarImpedimentos(
+    session.activeTenant.id,
+    jobId,
+    job.abertura_em_revisao === true,
+  );
 
   if (
     imp.ppsEmAberto.length > 0 ||
     imp.verbasEmAberto.length > 0 ||
     imp.bvsEmAberto.length > 0 ||
-    imp.itensSemMarcacao.length > 0
+    imp.itensSemMarcacao.length > 0 ||
+    imp.savesAguardando.length > 0 ||
+    imp.consumosAguardando.length > 0 ||
+    imp.savesNaoEnviados.length > 0 ||
+    imp.revisaoDaAberturaPendente
   ) {
     const partes: string[] = [];
     if (imp.ppsEmAberto.length > 0) {
@@ -217,6 +330,28 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         }`,
       );
     }
+    // Os textos da trilha "Encerramento" (decisão 099, §3 da especificação).
+    if (imp.savesAguardando.length > 0) {
+      const n = imp.savesAguardando.length;
+      partes.push(
+        `${n} ${n === 1 ? "save aguardando" : "saves aguardando"} aprovação do financeiro (${listaDeItens(imp.savesAguardando)})`,
+      );
+    }
+    if (imp.consumosAguardando.length > 0) {
+      const n = imp.consumosAguardando.length;
+      partes.push(
+        `${n} ${n === 1 ? "consumo de save aguardando" : "consumos de save aguardando"} aprovação do financeiro (${listaDeItens(imp.consumosAguardando)})`,
+      );
+    }
+    if (imp.savesNaoEnviados.length > 0) {
+      const n = imp.savesNaoEnviados.length;
+      partes.push(
+        `${n} ${n === 1 ? "save ainda não enviado" : "saves ainda não enviados"} para aprovação (${listaDeItens(imp.savesNaoEnviados)})`,
+      );
+    }
+    if (imp.revisaoDaAberturaPendente) {
+      partes.push("revisão da abertura pendente no financeiro");
+    }
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -228,6 +363,10 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         verbas_em_aberto: imp.verbasEmAberto.map((v) => v.codigo),
         bvs_em_aberto: imp.bvsEmAberto.length,
         itens_sem_marcacao: imp.itensSemMarcacao.length,
+        saves_aguardando: imp.savesAguardando.length,
+        consumos_aguardando: imp.consumosAguardando.length,
+        saves_nao_enviados: imp.savesNaoEnviados.length,
+        revisao_da_abertura_pendente: imp.revisaoDaAberturaPendente,
       },
     });
     const comoResolver: string[] = [];
@@ -243,6 +382,25 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       comoResolver.push(
         "Marque nos itens que faltam, pelo painel do item na Planilha Interna, que todas as PPs deles já foram geradas.",
       );
+    }
+    const naoEnviadosComRecusa = imp.savesNaoEnviados.filter((s) => s.comRecusa);
+    if (naoEnviadosComRecusa.length < imp.savesNaoEnviados.length) {
+      comoResolver.push(
+        "Envie os saves pelo botão “Enviar saves para aprovação”, acima da planilha.",
+      );
+    }
+    // O botão não envia linha com recusa ainda não arquivada (decisão 099).
+    if (naoEnviadosComRecusa.length > 0) {
+      comoResolver.push(
+        `Em ${naoEnviadosComRecusa.map((s) => `“${s.item}”`).join(", ")}, retire antes a recusa no pop-up de save da linha: o botão “Enviar saves para aprovação” não envia linha com recusa.`,
+      );
+    }
+    if (
+      imp.savesAguardando.length > 0 ||
+      imp.consumosAguardando.length > 0 ||
+      imp.revisaoDaAberturaPendente
+    ) {
+      comoResolver.push("O envio para encerramento volta quando o financeiro decidir.");
     }
     return {
       ok: false,

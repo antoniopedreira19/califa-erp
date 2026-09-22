@@ -88,6 +88,7 @@ import {
   ResumoDaAberturaAnterior,
 } from "./historico-abertura";
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
+import type { AprovacaoDeSave } from "../aprovacao-save";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
 
 interface CategoriaOption {
@@ -234,6 +235,13 @@ interface Props {
   fotos?: FotoDaAbertura[];
   /** A errata que devolveu o job ao mural — só no modo `revisao`. */
   revisao?: RevisaoDeErrata | null;
+  /**
+   * Aprovação de save (decisão 099): o pedido que esta revisão aprova.
+   * Vem com o modo `revisao`; a faixa do topo vira "Aprovação de save ·
+   * revisão da abertura" e o botão final aprova e registra. `null` em todo
+   * o resto — a fila, a leitura, a edição e a revisão de errata.
+   */
+  aprovacaoSave: AprovacaoDeSave | null;
 }
 
 function parseMoeda(texto: string): number {
@@ -335,6 +343,7 @@ export function AberturaForm({
   abertoPorNome,
   fotos = [],
   revisao = null,
+  aprovacaoSave,
 }: Props) {
   const router = useRouter();
 
@@ -348,6 +357,13 @@ export function AberturaForm({
   const ehEdicao =
     modo === "edicao" || ehRevisao || (modo === "leitura" && editando);
   const ultimaFoto = fotos.length > 0 ? fotos[fotos.length - 1] : null;
+  // O botão que fecha a revisão. Na aprovação de save é ele que aprova
+  // (decisão 099): só este registro aprova, e o texto diz isso.
+  const rotuloDoRegistro = aprovacaoSave
+    ? aprovacaoSave.tipo === "gera"
+      ? "Aprovar save e registrar revisão"
+      : "Aprovar consumo e registrar revisão"
+    : "Registrar revisão de abertura";
 
   // Na abertura o nome vem do job da produção; num job já aberto vem do
   // nome que o financeiro gravou (`dados-abertos` já resolve o fallback).
@@ -833,7 +849,7 @@ export function AberturaForm({
   function salvarEdicao() {
     setErro(null);
     startTransition(async () => {
-      const res = await editarRegistroDaAbertura(job.id, montarPayload());
+      const res = await editarRegistroDaAbertura(job.id, montarPayload(), null);
 
       if (!res.ok) {
         setErro(res.message);
@@ -853,11 +869,21 @@ export function AberturaForm({
   function confirmarRevisao() {
     setErro(null);
     startTransition(async () => {
-      const res = await editarRegistroDaAbertura(job.id, montarPayload());
+      // Na aprovação de save (decisão 099) o mesmo registro leva o id do
+      // pedido: a action aprova e registra a revisão, nessa ordem.
+      const res = await editarRegistroDaAbertura(
+        job.id,
+        montarPayload(),
+        aprovacaoSave?.pedidoId ?? null,
+      );
 
       if (!res.ok) {
         setErro(res.message);
         setConfirmarAberto(false);
+        // A aprovação pode ter entrado e o registro, não (a mensagem diz).
+        // Reler a página tira a faixa de um pedido que já não aguarda — sem
+        // isso, tentar de novo daria "já foi decidido".
+        if (aprovacaoSave) router.refresh();
         return;
       }
 
@@ -955,7 +981,11 @@ export function AberturaForm({
           no topo, com a foto inteira a um clique — é olhando para ela que
           se reconfere o resto (decisão 059). */}
       {ehRevisao && (
-        <ResumoDaAberturaAnterior foto={ultimaFoto} revisao={revisao} />
+        <ResumoDaAberturaAnterior
+          foto={ultimaFoto}
+          revisao={revisao}
+          aprovacaoSave={aprovacaoSave}
+        />
       )}
 
       {/* Editando um job já aberto: o aviso do que está em jogo. O que
@@ -2214,9 +2244,25 @@ export function AberturaForm({
               </span>
             </div>
             {/* Item 03 do protótipo: a planilha interna do job em leitura,
-                dentro do próprio fluxo de abertura. */}
+                dentro do próprio fluxo de abertura. No job já aberto a
+                planilha é a aba da página do job no financeiro: o link ia
+                para a rota da conferência e dependia do redirect dela para
+                `/jobs`, que tirava o financeiro do módulo (decisão 099,
+                item 20).
+
+                Na aprovação de save o link leva o `aprovarSave` junto: a
+                planilha abre com a linha do pedido em destaque, e voltar
+                para a aba da abertura continua na aprovação. Sem ele, a
+                revisão registrada na volta não aprovaria nada (achado da
+                revisão de 22/09/2026). */}
             <Link
-              href={`/financeiro/abertura-de-job/${job.id}/planilha`}
+              href={
+                modo === "abertura"
+                  ? `/financeiro/abertura-de-job/${job.id}/planilha`
+                  : aprovacaoSave
+                    ? `/financeiro/jobs/${job.id}?aba=planilha&aprovarSave=${aprovacaoSave.pedidoId}`
+                    : `/financeiro/jobs/${job.id}?aba=planilha`
+              }
               prefetch={false}
               className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3 text-left transition-colors hover:border-california-red/50 hover:bg-california-red/5"
             >
@@ -2396,7 +2442,7 @@ export function AberturaForm({
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Check className="h-4 w-4" />
-                  Registrar revisão de abertura
+                  {rotuloDoRegistro}
                 </button>
               </>
             ) : ehEdicao ? (
@@ -2457,7 +2503,9 @@ export function AberturaForm({
                 : `Abrir ${job.codigo} no financeiro?`}
             </DialogTitle>
             <DialogDescription className="text-[13.5px] leading-relaxed">
-              {ehRevisao
+              {aprovacaoSave
+                ? `${aprovacaoSave.tipo === "gera" ? "O save" : "O consumo"} fica aprovado, as previsões de recebimento e de custo passam a valer como estão aqui e a revisão da abertura fecha. A data e o usuário da abertura não mudam.`
+                : ehRevisao
                 ? "As previsões de recebimento e de custo passam a valer como estão aqui, a revisão da errata fecha, e o envio de PPs e o faturamento voltam. A data e o usuário da abertura não mudam."
                 : "O job passa a existir no financeiro, aceita lançamentos e entra na lista de jobs abertos. A data de abertura é registrada agora."}
             </DialogDescription>
@@ -2538,9 +2586,11 @@ export function AberturaForm({
                 ? ehRevisao
                   ? "Registrando..."
                   : "Abrindo..."
-                : ehRevisao
-                  ? "Sim, registrar revisão"
-                  : "Sim, abrir job"}
+                : aprovacaoSave
+                  ? rotuloDoRegistro
+                  : ehRevisao
+                    ? "Sim, registrar revisão"
+                    : "Sim, abrir job"}
             </button>
           </div>
         </DialogContent>

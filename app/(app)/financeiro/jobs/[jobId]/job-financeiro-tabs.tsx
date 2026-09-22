@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-import type { TabKey } from "./abas";
+import { abaDaUrl, type TabKey } from "./abas";
 
 interface Props {
   abertura: React.ReactNode;
@@ -46,6 +47,38 @@ export function JobFinanceiroTabs({
 }: Props) {
   const [tab, setTab] = React.useState<TabKey>(abaInicial);
 
+  // Um link para a MESMA página com outro `?aba=` (o "Visualizar planilha
+  // interna" do formulário da abertura e o "Voltar para a aprovação" da
+  // planilha em destaque — decisão 099) é navegação suave: o componente
+  // não remonta e o `useState` guardaria a aba velha. A aba pedida pela
+  // URL, quando muda, manda.
+  //
+  // A chave é a URL do navegador, e não a prop que o servidor calcula: o
+  // clique numa aba grava o `?aba=` (abaixo) sem passar pelo servidor, e a
+  // prop ficaria parada na aba da última renderização. Com a prop, um link
+  // de volta para essa mesma aba não mudaria nada, e a tela ficaria na aba
+  // clicada (achado da revisão de 22/09/2026).
+  const abaNaUrl = abaDaUrl(useSearchParams().get("aba") ?? undefined);
+  React.useEffect(() => {
+    setTab(abaNaUrl ?? abaInicial);
+  }, [abaNaUrl, abaInicial]);
+
+  /**
+   * Troca de aba e grava a escolha no `?aba=`, sem passar pelo router — a
+   * página é `force-dynamic`, e um `router.replace` refaria todas as
+   * consultas só para trocar de aba. O mesmo de `abertura-tabs.tsx`: o
+   * link continua copiável, e os outros parâmetros (`aprovarSave`, `mes`)
+   * ficam como estão.
+   */
+  function irPara(nova: TabKey) {
+    setTab(nova);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("aba", nova);
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div
@@ -53,19 +86,19 @@ export function JobFinanceiroTabs({
         aria-label="Seções do job no financeiro"
         className="flex items-center gap-1 overflow-x-auto border-b border-border"
       >
-        <TabButton active={tab === "abertura"} onClick={() => setTab("abertura")}>
+        <TabButton active={tab === "abertura"} onClick={() => irPara("abertura")}>
           Abertura do Job
         </TabButton>
-        <TabButton active={tab === "info"} onClick={() => setTab("info")}>
+        <TabButton active={tab === "info"} onClick={() => irPara("info")}>
           Informações do Job
         </TabButton>
-        <TabButton active={tab === "planilha"} onClick={() => setTab("planilha")}>
+        <TabButton active={tab === "planilha"} onClick={() => irPara("planilha")}>
           Planilha Interna
         </TabButton>
-        <TabButton active={tab === "fluxo"} onClick={() => setTab("fluxo")}>
+        <TabButton active={tab === "fluxo"} onClick={() => irPara("fluxo")}>
           Fluxo de Caixa do Job
         </TabButton>
-        <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
+        <TabButton active={tab === "chat"} onClick={() => irPara("chat")}>
           Comunicação
           {chatCount > 0 && (
             <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">

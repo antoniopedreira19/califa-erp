@@ -35,6 +35,7 @@ import type {
   VersaoOrcamentoItem,
 } from "@/lib/types";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
+import { formatCurrency } from "@/lib/utils";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -567,6 +568,13 @@ export async function duplicarVersao(
       "ordem, grupo_id, categoria_id, planilha_origem, item, tipo_custo, " +
       "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
       "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, " +
+      // O planejado que o save zerou atravessa junto (decisão 099): a
+      // linha que nasce em save na cópia guarda o dela para devolvê-lo
+      // quando o save sair. ⚠️ A duplicação NÃO copia `em_save` (nunca
+      // copiou), então hoje a cópia nasce sem save e o trigger descarta
+      // esta coluna — ela só vale se a versão nova nascer em save
+      // (`save_por_padrao`) ou se um dia a marca passar a ser copiada.
+      "planejado_antes_save, " +
       "fornecedor_id, observacoes",
     )
     .eq("versao_orcamento_id", versaoId)
@@ -1393,6 +1401,64 @@ export async function removerItem(itemId: string): Promise<ActionResult> {
 // APROVAÇÃO
 // ============================================================
 
+/**
+ * O consumo de save da versão cabe no saldo APROVADO de cada origem?
+ * (decisão 099, 22/09/2026). Devolve a recusa, ou `null`.
+ *
+ * Só para a aprovação: o consumo da versão em rascunho ainda não segura
+ * saldo, então o que cabe é o `disponivel` de `vw_saves_por_job` inteiro
+ * (a view já desconta o que outros jobs usam e o que está reservado por
+ * pedido aguardando). Origem fora da view não tem save aprovado nenhum.
+ *
+ * Não exportada: todo export async de arquivo "use server" vira Server
+ * Action.
+ */
+async function barrarConsumoSemSaldoAprovado(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  consumos: { job_origem_id: string; valor: number | string }[],
+): Promise<string | null> {
+  const porOrigem = new Map<string, number>();
+  for (const c of consumos) {
+    porOrigem.set(c.job_origem_id, (porOrigem.get(c.job_origem_id) ?? 0) + Number(c.valor ?? 0));
+  }
+  const origens = [...porOrigem.keys()];
+  if (origens.length === 0) return null;
+
+  const [saldosRes, jobsRes] = await Promise.all([
+    supabase
+      .from("vw_saves_por_job")
+      .select("job_id, disponivel")
+      .eq("tenant_id", tenantId)
+      .in("job_id", origens),
+    supabase.from("jobs").select("id, codigo").eq("tenant_id", tenantId).in("id", origens),
+  ]);
+  if (saldosRes.error) {
+    console.error("[versao.aprovar.saldo_save]", saldosRes.error.message);
+    return "Não foi possível conferir o saldo de save aprovado. Tente de novo.";
+  }
+  const disponivel = new Map<string, number>(
+    ((saldosRes.data ?? []) as { job_id: string; disponivel: number | string | null }[]).map(
+      (r) => [r.job_id, Number(r.disponivel ?? 0)],
+    ),
+  );
+  const codigo = new Map<string, string>(
+    ((jobsRes.data ?? []) as { id: string; codigo: string }[]).map((j) => [j.id, j.codigo]),
+  );
+
+  for (const [origem, consome] of porOrigem) {
+    const disp = Math.max(0, disponivel.get(origem) ?? 0);
+    if (consome <= disp + 0.005) continue;
+    const cod = codigo.get(origem) ?? "job de origem";
+    return (
+      `A versão consome ${formatCurrency(consome)} do saldo de save do ${cod}, ` +
+      `e o saldo aprovado disponível dele é de ${formatCurrency(disp)}. ` +
+      `Ajuste o consumo nesta versão, ou espere o financeiro aprovar o save do ${cod}.`
+    );
+  }
+  return null;
+}
+
 export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.aprovar");
@@ -1460,7 +1526,12 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   //    Linha criada e não preenchida tem total_orcado 0 (coluna gerada:
   //    unitário × quantidade × dias). Aprovar assim travaria a versão e
   //    abriria job com orçado zerado.
-  const [{ count: itensCount }, { count: comValorCount }, { count: orcadoZeradoCount }] =
+  const [
+    { count: itensCount },
+    { count: comValorCount },
+    { count: orcadoZeradoCount },
+    consumosRes,
+  ] =
     await Promise.all([
       supabase
         .from("versoes_orcamento_itens")
@@ -1481,6 +1552,15 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
         .eq("versao_orcamento_id", versaoId)
         .eq("tenant_id", session.activeTenant.id)
         .eq("valor_unitario_orcado", 0),
+      // O consumo de save da versão (decisão 099): a aprovação passa a
+      // segurar saldo, e só save APROVADO conta. O `!inner` é filtro, não
+      // embed: uma FK só entre as duas tabelas.
+      supabase
+        .from("saves_consumos")
+        .select("job_origem_id, valor, item:versoes_orcamento_itens!inner(versao_orcamento_id)")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("item.versao_orcamento_id", versaoId)
+        .is("substituido_em", null),
     ]);
 
   // Modelo mensal (decisão 078): todo mês da versão precisa ter item. Lido
@@ -1521,6 +1601,24 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     return { ok: false, message: bloqueio };
   }
 
+  // 3a. O consumo de save da versão cabe no saldo APROVADO de cada origem
+  //     (decisão 099, 22/09/2026)? No rascunho ele só avisa (decisão 028);
+  //     a aprovação o firma, e o banco revalida no UPDATE abaixo
+  //     (`save_valida_versao_aprovada`) — mas com a mensagem crua do
+  //     trigger. Aqui a recusa chega antes, com o job de origem e o
+  //     disponível. O consumo desta versão ainda não está no `usado` da
+  //     view (rascunho não segura saldo), então a conta é direta.
+  if (consumosRes.error) {
+    console.error("[versao.aprovar.consumos]", consumosRes.error.message);
+    return { ok: false, message: "Não foi possível conferir o consumo de save da versão." };
+  }
+  const semSaldo = await barrarConsumoSemSaldoAprovado(
+    supabase,
+    session.activeTenant.id,
+    (consumosRes.data ?? []) as { job_origem_id: string; valor: number | string }[],
+  );
+  if (semSaldo) return { ok: false, message: semSaldo };
+
   const agora = new Date().toISOString();
 
   // 3b. ⚠️ O CONGELAMENTO DO BV NO PLANEJADO SAIU EM 08/09/2026.
@@ -1552,7 +1650,16 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
 
   if (errUpdVer) {
     console.error("[versao.aprovar]", errUpdVer.message);
-    return { ok: false, message: "Não foi possível aprovar a versão." };
+    // A revalidação do saldo de save no banco (decisão 099) recusa com uma
+    // frase em pt-BR que nomeia o job e os valores — melhor do que a
+    // genérica. É o caso de outro job ter consumido o saldo entre a
+    // conferência acima e este UPDATE.
+    return {
+      ok: false,
+      message: /save/i.test(errUpdVer.message)
+        ? errUpdVer.message
+        : "Não foi possível aprovar a versão.",
+    };
   }
 
   // 5. Update orçamento

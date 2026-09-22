@@ -7,9 +7,25 @@
  *
  *  Tudo aqui lê `vw_saves_por_job` e `vw_saves_linhas`, que já nascem com
  *  `security_invoker` — a RLS das tabelas de baixo vale normalmente.
+ *
+ *  Desde a decisão 099 (22/09/2026) o saldo é só de save APROVADO pelo
+ *  financeiro, e as linhas do job carregam os pedidos de aprovação
+ *  (`saves_aprovacoes`), que o pop-up de save mostra.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PontaDeSave, EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
+import type {
+  PontaDeSave,
+  EstadoSaveDaLinha,
+  PedidoDeSave,
+  PedidosDaLinha,
+} from "@/app/(app)/_planilha/save-coluna";
+import type {
+  OrigemDeSave,
+  SaveAprovacaoMomento,
+  SaveAprovacaoSituacao,
+  SaveAprovacaoTipo,
+} from "@/lib/types";
+import type { PedidoParaFinanceiro } from "@/lib/calculos/save-financeiro";
 
 /** Um job com saldo de save a oferecer. */
 export interface SaldoDeSave {
@@ -23,7 +39,10 @@ export interface SaldoDeSave {
   /** Segurado por rascunhos ainda não aprovados. Informativo: rascunho não
    *  segura saldo (decisão 028, nota de 26/08/2026). */
   reservado: number;
-  /** gerado − consumido. É o que cabe consumir. */
+  /** Parte do saldo presa em pedidos de consumo que ainda aguardam o
+   *  financeiro (decisão 099). Já sai do `disponivel`. */
+  reservadoAprovacao: number;
+  /** Aprovado − (consumido + reservado por pedido). É o que cabe consumir. */
   disponivel: number;
   /** As taxas da ORIGEM: quem calcula a receita que migra é o TypeScript,
    *  com a mesma `REGRAS_TIPO_CUSTO`. */
@@ -50,7 +69,7 @@ export async function saldosDeSaveDoCliente(
     supabase
       .from("vw_saves_por_job")
       .select(
-        "job_id, job_codigo, job_nome, saldo_gerado, consumido, reservado, disponivel, percentual_honorarios, percentual_imposto",
+        "job_id, job_codigo, job_nome, saldo_gerado, consumido, reservado, reservado_aprovacao, disponivel, percentual_honorarios, percentual_imposto",
       )
       .eq("tenant_id", tenantId)
       .eq("cliente_id", clienteId)
@@ -89,6 +108,7 @@ export async function saldosDeSaveDoCliente(
       gerado: Number(s.saldo_gerado ?? 0),
       consumido: Number(s.consumido ?? 0),
       reservado: Number(s.reservado ?? 0),
+      reservadoAprovacao: Number(s.reservado_aprovacao ?? 0),
       disponivel: Number(s.disponivel ?? 0),
       percentualHonorarios: Number(s.percentual_honorarios ?? 0),
       percentualImposto: Number(s.percentual_imposto ?? 0),
@@ -269,6 +289,10 @@ export async function saveDaVersao(
       saveConsumido: Number(it.save_consumido ?? 0),
       origens,
       destinos,
+      // O orçamento não passa por aprovação de save (decisão 099).
+      pedidos: null,
+      marcadoPor: null,
+      marcadoEm: null,
     };
   }
   return saida;
@@ -295,7 +319,7 @@ export async function saveDoJob(
   const orcadoIds = itens.map((i) => i.orcado_id).filter(Boolean);
   if (orcadoIds.length === 0) return {};
 
-  const [origensRes, destinosRes] = await Promise.all([
+  const [origensRes, destinosRes, aprovacao] = await Promise.all([
     // De onde vem o dinheiro que paga estas linhas.
     supabase
       .from("saves_consumos")
@@ -309,6 +333,8 @@ export async function saveDoJob(
       .select("valor, job_item_orcado_id, item_versao_id")
       .eq("tenant_id", tenantId)
       .eq("job_origem_id", jobId),
+    // Pedidos de aprovação e quem marcou (decisão 099).
+    pedidosEMarcasDasLinhas(supabase, tenantId, orcadoIds),
   ]);
 
   const origensPorOrcado = new Map<string, PontaDeSave[]>();
@@ -352,12 +378,19 @@ export async function saveDoJob(
   const saida: Record<string, EstadoSaveDaLinha> = {};
   for (const it of itens) {
     const origens = origensPorOrcado.get(it.orcado_id) ?? [];
-    if (!it.em_save && origens.length === 0) continue;
+    const pedidos = aprovacao.pedidos.get(it.orcado_id) ?? PEDIDOS_VAZIOS;
+    // A linha recusada já voltou a ser comum, mas continua na coluna Save
+    // até o GP arquivar a recusa (decisão 099).
+    if (!it.em_save && origens.length === 0 && !pedidos.recusado) continue;
+    const marca = aprovacao.marcas.get(it.orcado_id);
     saida[it.id] = {
       emSave: it.em_save,
       saveConsumido: Number(it.save_consumido ?? 0),
       origens,
       destinos: it.em_save ? destinos : [],
+      pedidos,
+      marcadoPor: marca?.por ?? null,
+      marcadoEm: marca?.em ?? null,
     };
   }
   return saida;
@@ -396,7 +429,7 @@ export async function saveDosJobs(
   const jobIds = [...new Set(itens.map((i) => i.jobId).filter(Boolean))];
   if (orcadoIds.length === 0 || jobIds.length === 0) return {};
 
-  const [origensRes, destinosRes] = await Promise.all([
+  const [origensRes, destinosRes, aprovacao] = await Promise.all([
     // De onde vem o dinheiro que paga estas linhas.
     supabase
       .from("saves_consumos")
@@ -409,6 +442,8 @@ export async function saveDosJobs(
       .select("valor, job_item_orcado_id, job_origem_id")
       .eq("tenant_id", tenantId)
       .in("job_origem_id", jobIds),
+    // Pedidos de aprovação e quem marcou (decisão 099).
+    pedidosEMarcasDasLinhas(supabase, tenantId, orcadoIds),
   ]);
 
   const origensPorOrcado = new Map<string, PontaDeSave[]>();
@@ -456,13 +491,286 @@ export async function saveDosJobs(
   const saida: Record<string, EstadoSaveDaLinha> = {};
   for (const it of itens) {
     const origens = origensPorOrcado.get(it.orcado_id) ?? [];
-    if (!it.em_save && origens.length === 0) continue;
+    const pedidos = aprovacao.pedidos.get(it.orcado_id) ?? PEDIDOS_VAZIOS;
+    if (!it.em_save && origens.length === 0 && !pedidos.recusado) continue;
+    const marca = aprovacao.marcas.get(it.orcado_id);
     saida[it.id] = {
       emSave: it.em_save,
       saveConsumido: Number(it.save_consumido ?? 0),
       origens,
       destinos: it.em_save ? (destinosPorJobOrigem.get(it.jobId) ?? []) : [],
+      pedidos,
+      marcadoPor: marca?.por ?? null,
+      marcadoEm: marca?.em ?? null,
     };
   }
   return saida;
+}
+
+// ---------------------------------------------------------------------------
+// Aprovação de save (decisão 099)
+// ---------------------------------------------------------------------------
+
+const PEDIDOS_VAZIOS: PedidosDaLinha = {
+  aguardando: null,
+  aprovado: null,
+  recusado: null,
+  historico: [],
+};
+
+const COLUNAS_PEDIDO =
+  "id, job_id, job_item_orcado_id, tipo, situacao, momento, valor, origens, origens_antes, substitui_id, enviado_por, enviado_em, decidido_por, decidido_em, justificativa, retirado_por, retirado_em, valor_job_antes, valor_job_depois, faturamento_previsto_antes, faturamento_previsto_depois";
+
+/**
+ * Pedidos de aprovação de save e a marca (quem marcou, quando) de cada
+ * linha do job, chaveados por `jobs_itens_orcado.id`.
+ *
+ * Os nomes e os códigos dos jobs de origem saem em consultas separadas, em
+ * paralelo: `saves_aprovacoes` tem quatro FKs para `profiles`, e o embed
+ * sem dica é ambíguo (HTTP 300 — o dado some calado).
+ */
+export async function pedidosEMarcasDasLinhas(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orcadoIds: string[],
+): Promise<{
+  pedidos: Map<string, PedidosDaLinha>;
+  marcas: Map<string, { por: string | null; em: string | null }>;
+}> {
+  const pedidos = new Map<string, PedidosDaLinha>();
+  const marcas = new Map<string, { por: string | null; em: string | null }>();
+  if (orcadoIds.length === 0) return { pedidos, marcas };
+
+  const [pedidosRes, marcasRes] = await Promise.all([
+    supabase
+      .from("saves_aprovacoes")
+      .select(COLUNAS_PEDIDO)
+      .eq("tenant_id", tenantId)
+      .in("job_item_orcado_id", orcadoIds)
+      .order("enviado_em", { ascending: true }),
+    supabase
+      .from("jobs_itens_orcado")
+      .select("id, save_marcado_por, save_marcado_em")
+      .eq("tenant_id", tenantId)
+      .in("id", orcadoIds)
+      .not("save_marcado_por", "is", null),
+  ]);
+  if (pedidosRes.error) {
+    console.error("[saves.pedidos]", pedidosRes.error.message);
+  }
+  if (marcasRes.error) {
+    console.error("[saves.marcas]", marcasRes.error.message);
+  }
+
+  const linhas = (pedidosRes.data ?? []) as any[];
+  const linhasMarca = (marcasRes.data ?? []) as any[];
+
+  const idsPessoas = new Set<string>();
+  const idsJobs = new Set<string>();
+  for (const p of linhas) {
+    for (const k of ["enviado_por", "decidido_por", "retirado_por"]) {
+      if (p[k]) idsPessoas.add(p[k]);
+    }
+    for (const o of [...(p.origens ?? []), ...(p.origens_antes ?? [])] as OrigemDeSave[]) {
+      if (o?.job_origem_id) idsJobs.add(o.job_origem_id);
+    }
+  }
+  for (const m of linhasMarca) if (m.save_marcado_por) idsPessoas.add(m.save_marcado_por);
+
+  const [pessoasRes, jobsRes] = await Promise.all([
+    idsPessoas.size
+      ? supabase.from("profiles").select("id, nome").in("id", [...idsPessoas])
+      : Promise.resolve({ data: [] as any[], error: null }),
+    idsJobs.size
+      ? supabase.from("jobs").select("id, codigo").in("id", [...idsJobs])
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  const nome = new Map<string, string>(
+    ((pessoasRes.data ?? []) as any[]).map((r) => [r.id, r.nome ?? ""]),
+  );
+  const codigo = new Map<string, string>(
+    ((jobsRes.data ?? []) as any[]).map((r) => [r.id, r.codigo ?? "—"]),
+  );
+  const pontas = (lista: OrigemDeSave[] | null): PontaDeSave[] =>
+    (lista ?? []).map((o) => ({
+      jobId: o.job_origem_id,
+      codigo: codigo.get(o.job_origem_id) ?? "—",
+      valor: Number(o.valor ?? 0),
+    }));
+  const numOuNulo = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+
+  for (const p of linhas) {
+    const pedido: PedidoDeSave = {
+      id: p.id,
+      tipo: p.tipo as SaveAprovacaoTipo,
+      situacao: p.situacao as SaveAprovacaoSituacao,
+      momento: p.momento as SaveAprovacaoMomento,
+      valor: Number(p.valor ?? 0),
+      origens: pontas(p.origens),
+      origensAntes: pontas(p.origens_antes),
+      substituiId: p.substitui_id ?? null,
+      enviadoEm: p.enviado_em,
+      enviadoPor: p.enviado_por ? (nome.get(p.enviado_por) ?? null) : null,
+      decididoEm: p.decidido_em ?? null,
+      decididoPor: p.decidido_por ? (nome.get(p.decidido_por) ?? null) : null,
+      justificativa: p.justificativa ?? null,
+      retiradoEm: p.retirado_em ?? null,
+      retiradoPor: p.retirado_por ? (nome.get(p.retirado_por) ?? null) : null,
+      valorJobAntes: numOuNulo(p.valor_job_antes),
+      valorJobDepois: numOuNulo(p.valor_job_depois),
+      faturamentoPrevistoAntes: numOuNulo(p.faturamento_previsto_antes),
+      faturamentoPrevistoDepois: numOuNulo(p.faturamento_previsto_depois),
+    };
+    const atual = pedidos.get(p.job_item_orcado_id) ?? {
+      aguardando: null,
+      aprovado: null,
+      recusado: null,
+      historico: [],
+    };
+    atual.historico.push(pedido);
+    if (pedido.situacao === "aguardando") atual.aguardando = pedido;
+    else if (pedido.situacao === "aprovado") atual.aprovado = pedido;
+    else if (pedido.situacao === "recusado") atual.recusado = pedido;
+    pedidos.set(p.job_item_orcado_id, atual);
+  }
+
+  for (const m of linhasMarca) {
+    marcas.set(m.id, {
+      por: nome.get(m.save_marcado_por) ?? null,
+      em: m.save_marcado_em ?? null,
+    });
+  }
+
+  return { pedidos, marcas };
+}
+
+/**
+ * Os pedidos de um job na forma que `itensParaOFinanceiro` usa para calcular
+ * os números do financeiro (espelhos do job). Todo escritor de
+ * `jobs.valor_total`, `faturamento_previsto` e `faturamento_save_previsto`
+ * passa por aqui: sem isso, uma errata comum gravaria nos espelhos um save
+ * que o financeiro ainda não aprovou.
+ */
+export async function pedidosParaFinanceiroDoJob(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<PedidoParaFinanceiro[]> {
+  const { data, error } = await supabase
+    .from("saves_aprovacoes")
+    .select("id, job_item_orcado_id, tipo, situacao, momento, origens_antes")
+    .eq("tenant_id", tenantId)
+    .eq("job_id", jobId)
+    .eq("situacao", "aguardando");
+  if (error) {
+    // Sem os pedidos a conta sairia errada em silêncio: melhor parar.
+    throw new Error(`[saves.pedidos_financeiro] ${error.message}`);
+  }
+  return ((data ?? []) as any[]).map((p) => ({
+    id: p.id,
+    jobItemOrcadoId: p.job_item_orcado_id ?? null,
+    tipo: p.tipo as SaveAprovacaoTipo,
+    situacao: p.situacao as SaveAprovacaoSituacao,
+    momento: p.momento as SaveAprovacaoMomento,
+    origensAntes: ((p.origens_antes ?? []) as OrigemDeSave[]).map((o) => ({
+      job_origem_id: o.job_origem_id,
+      valor: Number(o.valor ?? 0),
+    })),
+  }));
+}
+
+/**
+ * A revisão da abertura que o job tem pendente foi causada SÓ por pedidos
+ * de save (decisão 099)?
+ *
+ * Pendente é toda errata registrada depois do último registro de abertura
+ * ou revisão (`jobs_aberturas.registrado_em`). A errata de save que nasce
+ * com um pedido (`saves_aprovacoes.errata_id`) é "de save"; qualquer outra
+ * (errata comum, retirada de save aprovado, cancelamento de pedido que o
+ * financeiro já contava) é errata de verdade e pede a revisão normal.
+ *
+ * Quem pergunta:
+ *  - a fila: o job cuja revisão é só de save aparece SÓ na faixa Saves;
+ *  - a recusa e o cancelamento: se o pedido era a única pendência, a
+ *    revisão se encerra sozinha (`p_revisao = 'fechar'`).
+ *
+ * `ignorar` é o pedido que está sendo decidido ou cancelado agora: conta
+ * como já resolvido.
+ */
+export async function revisaoPendenteDoJob(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+  ignorar: string | null = null,
+): Promise<{
+  emRevisao: boolean;
+  /** Toda errata pendente nasceu de um pedido de save. */
+  soDeSave: boolean;
+  /** Pedidos de save que seguram a revisão (aguardando), fora `ignorar`. */
+  pedidosAguardando: number;
+  /** A revisão pode se encerrar sozinha: só de save e nada mais aguardando. */
+  podeFechar: boolean;
+}> {
+  const [jobRes, aberturaRes] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select("abertura_em_revisao")
+      .eq("id", jobId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ abertura_em_revisao: boolean }>(),
+    supabase
+      .from("jobs_aberturas")
+      .select("registrado_em")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .order("registrado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ registrado_em: string }>(),
+  ]);
+  const emRevisao = jobRes.data?.abertura_em_revisao === true;
+  if (!emRevisao) {
+    return { emRevisao, soDeSave: false, pedidosAguardando: 0, podeFechar: false };
+  }
+
+  let erratasQ = supabase
+    .from("jobs_erratas")
+    .select("id")
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId);
+  if (aberturaRes.data?.registrado_em) {
+    erratasQ = erratasQ.gt("created_at", aberturaRes.data.registrado_em);
+  }
+  const { data: erratas, error: erratasErr } = await erratasQ;
+  if (erratasErr) {
+    console.error("[saves.revisao.erratas]", erratasErr.message);
+    // Sem saber, trata como revisão normal: nunca fecha sozinha.
+    return { emRevisao, soDeSave: false, pedidosAguardando: 0, podeFechar: false };
+  }
+  const idsErratas = ((erratas ?? []) as { id: string }[]).map((e) => e.id);
+  if (idsErratas.length === 0) {
+    return { emRevisao, soDeSave: false, pedidosAguardando: 0, podeFechar: false };
+  }
+
+  const { data: pedidos, error: pedidosErr } = await supabase
+    .from("saves_aprovacoes")
+    .select("id, errata_id, situacao")
+    .eq("tenant_id", tenantId)
+    .eq("job_id", jobId)
+    .in("errata_id", idsErratas);
+  if (pedidosErr) {
+    console.error("[saves.revisao.pedidos]", pedidosErr.message);
+    return { emRevisao, soDeSave: false, pedidosAguardando: 0, podeFechar: false };
+  }
+  const lista = (pedidos ?? []) as { id: string; errata_id: string; situacao: string }[];
+  const erratasDeSave = new Set(lista.map((p) => p.errata_id));
+  const soDeSave = idsErratas.every((id) => erratasDeSave.has(id));
+  const pedidosAguardando = lista.filter(
+    (p) => p.situacao === "aguardando" && p.id !== ignorar,
+  ).length;
+  return {
+    emRevisao,
+    soDeSave,
+    pedidosAguardando,
+    podeFechar: soDeSave && pedidosAguardando === 0,
+  };
 }

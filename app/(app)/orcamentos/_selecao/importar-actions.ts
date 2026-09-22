@@ -24,6 +24,7 @@ import type {
   ImportacaoWarning,
   JobStatus,
   OrcamentoStatus,
+  PlanejadoAntesDoSave,
   TipoCusto,
 } from "@/lib/types";
 import { cancelarAprovacaoVersao } from "../[projetoId]/[orcId]/versoes/actions";
@@ -162,6 +163,9 @@ async function analisar(
       arquivo: { buffer: Buffer; nome: string; tamanho: number };
       leitura: LeituraProjeto;
       analises: Analise[];
+      /** O planejado que o save zerou, por id de item das vigentes — só as
+       *  linhas que têm o dado (decisão 099). */
+      planejadoAntesSave: Map<string, PlanejadoAntesDoSave>;
     }
   | { ok: false; message: string }
 > {
@@ -284,7 +288,8 @@ async function analisar(
           .select(
             "id, versao_orcamento_id, grupo_id, ordem, item, tipo_custo, categoria_id, planilha_origem, " +
               "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
-              "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, em_save",
+              "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, em_save, " +
+              "planejado_antes_save",
           )
           .eq("tenant_id", tenantId)
           .in("versao_orcamento_id", versaoIds)
@@ -322,7 +327,9 @@ async function analisar(
     gruposPorVersao.set(g.versao_orcamento_id, atuais);
   }
   const itensPorVersao = new Map<string, ItemAtual[]>();
+  const planejadoAntesSave = new Map<string, PlanejadoAntesDoSave>();
   for (const it of ((itensRes.data ?? []) as any[])) {
+    if (it.planejado_antes_save) planejadoAntesSave.set(it.id, it.planejado_antes_save);
     const atuais = itensPorVersao.get(it.versao_orcamento_id) ?? [];
     atuais.push({
       id: it.id,
@@ -461,7 +468,7 @@ async function analisar(
     return { secao, orcamento, vigente, ultimoNumero, plano, mesesDaVigente, resumo };
   });
 
-  return { ok: true, arquivo: arq, leitura, analises };
+  return { ok: true, arquivo: arq, leitura, analises, planejadoAntesSave };
 }
 
 /** Lê e compara, sem gravar. */
@@ -677,6 +684,12 @@ export async function confirmarImportacaoProjeto(
             ? origem.planilha_origem
             : `linha ${it.linha_xlsx}`,
           em_save: origem ? origem.em_save : vigente.save_por_padrao === true,
+          // A linha casada que continua em save leva o planejado que o save
+          // zerou (decisão 099): sem ele, o que ela herda é o planejado
+          // zerado e o trigger não teria o que devolver quando o save sair.
+          ...(origem && origem.em_save && res.planejadoAntesSave.has(origem.id)
+            ? { planejado_antes_save: res.planejadoAntesSave.get(origem.id) }
+            : {}),
         });
       }
     });

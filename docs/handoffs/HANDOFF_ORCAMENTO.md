@@ -4332,3 +4332,19 @@ formulário (`TES-0001/26-06`): nasceu com 0 grupos, abriu com o campo focado,
 e nomear criou o agrupamento com a linha "Novo item" e o "Recolher todos" de
 volta. tsc e lint limpos.
 
+
+## ⚠️ Nota de 2026-09-22 — o save do orçamento segue para aprovação na abertura (decisão 099)
+
+Regra completa em `docs/decisions/099-aprovacao-de-save.md`. A tela do
+orçamento não muda, exceto:
+
+- o texto do estado vazio da aba Consumir ("Este cliente ainda não tem saldo
+  de save aprovado…") e o apoio do "Total gerado em save" no envio para
+  abertura;
+- a lista de saldos só tem save **aprovado** pelo financeiro;
+- **aprovar a versão** confere o saldo aprovado dos consumos dela (e o banco
+  revalida: a versão aprovada passa a segurar saldo);
+- **enviar para abertura** confere o saldo antes de criar o job e copia
+  `save_marcado_por`, `save_marcado_em` e `planejado_antes_save` para a cópia;
+- rotas que copiam linha em save (duplicar versão, importação) levam
+  `planejado_antes_save`. Obs.: `duplicarVersao` nunca copiou a marca de save.

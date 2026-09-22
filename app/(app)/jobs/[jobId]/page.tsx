@@ -127,18 +127,17 @@ export default async function JobDetailPage({
   } = detalhe;
 
 
+  // Sem "Voltar para aprovações" desde a decisão 099 (22/09/2026): a
+  // produção não tem link para o financeiro — os módulos são isolados. Quem
+  // chega com `?from=financeiro` volta para o orçamento, como quem chega
+  // sem origem. O link para o orçamento fica.
   const backLink =
     fromParam === "jobs"
       ? { href: "/jobs", label: "Voltar para jobs" }
-      : fromParam === "financeiro"
-        ? {
-            href: "/financeiro/abertura-de-job",
-            label: "Voltar para aprovações",
-          }
-        : {
-            href: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`,
-            label: `Voltar para orçamento ${raw.orcamento?.codigo}`,
-          };
+      : {
+          href: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`,
+          label: `Voltar para orçamento ${raw.orcamento?.codigo}`,
+        };
 
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   // O selo do cabeçalho: "Em faturamento" é o aberto com o envio completo
@@ -316,6 +315,9 @@ export default async function JobDetailPage({
             savePorItem={detalhe.savePorItem}
             saldosDeSave={detalhe.saldosDeSave}
             clienteNome={detalhe.clienteNome}
+            // O destaque é da planilha do financeiro, na aprovação de save
+            // (decisão 099): a produção não destaca linha nenhuma.
+            destacarItens={[]}
             job={{
               id: job.id,
               codigo: job.codigo,
@@ -434,6 +436,9 @@ export default async function JobDetailPage({
         faturamentoEnvioUnico={detalhe.faturamentoEnvioUnico}
         fechamento={detalhe.fechamento}
         podeEncerrar={detalhe.podeEncerrar}
+        // Os pedidos de save que seguram faturamento e encerramento
+        // (decisão 099) saem do mesmo save da Planilha Interna.
+        savePorItem={detalhe.savePorItem}
         // O card de Totais do fechamento (decisão 087) usa os mesmos dados
         // da Planilha Interna — nenhuma consulta nova.
         totais={{

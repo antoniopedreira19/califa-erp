@@ -15,11 +15,16 @@ import {
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
-  calcularTotaisVersao,
   calcularEfeitoDaMudanca,
   TIPOS_CUSTO,
   aceitaBV,
 } from "@/lib/calculos/versao-totais";
+import {
+  espelhosDe,
+  lerBaseDosEspelhos,
+  totaisDoFinanceiro,
+  type LinhaDoEspelho,
+} from "@/lib/data/espelhos-do-job";
 import type {
   TipoCusto,
   JobStatus,
@@ -191,6 +196,59 @@ async function barrarTrocaDeTipo(
   return null;
 }
 
+/** Pedido de save que ainda prende a linha: aguardando o financeiro, ou
+ *  recusado e ainda não retirado pelo GP (decisão 099). */
+type PedidoQuePrende = "aguardando" | "recusado";
+
+/**
+ * Barra errata de valores (orçado, planejado ou tipo) e remoção de linha
+ * com SAVE — gerado, consumido, com pedido aguardando ou recusado ainda
+ * não retirado (decisão 099, §15, 22/09/2026).
+ *
+ * A linha em save tem o planejado zerado e o crédito preso ao valor que o
+ * financeiro aprovou; a que consome tem o faturamento amarrado à origem.
+ * Corrigir por baixo disso mudaria um número que o financeiro aprovou (ou
+ * está aprovando) sem ele saber. O caminho é tirar o save antes, pelo
+ * pop-up da coluna Save. O banco recusa o mesmo depois do deploy
+ * (`save_trava_linha_job`), mas a recusa tem de vir ANTES de a errata ser
+ * gravada: lá embaixo ela seria errata fantasma no histórico.
+ *
+ * Por item, com o nome dele na mensagem, como as outras travas daqui.
+ * Retorna a mensagem de bloqueio, ou null quando a errata pode seguir.
+ */
+function barrarLinhaComSave(
+  ids: string[],
+  porId: Map<string, any>,
+  pedidos: Map<string, PedidoQuePrende>,
+  acao: "errata" | "remocao",
+): string | null {
+  for (const id of ids) {
+    const linha = porId.get(id);
+    if (!linha) continue;
+    const pedido = pedidos.get(id);
+    let motivo: string | null = null;
+    let saida = "";
+    if (pedido === "aguardando") {
+      motivo = "tem pedido de save aguardando aprovação do financeiro";
+      saida = "cancele o pedido pelo pop-up da coluna Save";
+    } else if (pedido === "recusado") {
+      motivo = "teve o save recusado pelo financeiro, e a recusa ainda não foi retirada";
+      saida = "retire o save recusado pelo pop-up da coluna Save";
+    } else if (linha.em_save === true) {
+      motivo = "está marcada como save";
+      saida = "retire o save pelo pop-up da coluna Save";
+    } else if (Number(linha.save_consumido ?? 0) > 0) {
+      motivo = "é paga com saldo de save de outro job";
+      saida = "retire o consumo de save pelo pop-up da coluna Save";
+    }
+    if (!motivo) continue;
+    return acao === "errata"
+      ? `"${linha.item}" ${motivo}. Linha com save não entra em errata — para corrigi-la, ${saida} antes.`
+      : `"${linha.item}" ${motivo}. Linha com save não pode ser removida — ${saida} antes.`;
+  }
+  return null;
+}
+
 /** O PLANEJADO da linha, opcional nos dois schemas: a errata passou a
  *  corrigi-lo em 07/09/2026 (decisão 054), e um payload sem ele continua
  *  válido — a linha fica com o planejado que já tinha. */
@@ -345,6 +403,12 @@ function planejadoQueFica(
  *   não previu e que alguém precisa pedir mesmo assim.
  * - **remove** linha, desde que ela ainda não tenha documento nem save.
  *
+ * Desde 22/09/2026 (decisão 099) linha com save — gerado, consumido, com
+ * pedido aguardando ou recusado ainda não retirado — não entra em errata
+ * nem é removida (`barrarLinhaComSave`), e os números gravados (espelhos
+ * do job e antes → depois da errata) são os do FINANCEIRO: pedido de save
+ * que ainda aguarda fica de fora (`totaisDoFinanceiro`).
+ *
  * E devolve o job ao mural de abertura: os números que o financeiro usou
  * para montar previsão de recebimento, curva de desembolso e competência
  * acabaram de mudar. O status do job NÃO muda — ele segue aberto e a
@@ -460,19 +524,51 @@ export async function registrarErrata(
   }
 
   // ---- Estado atual do orçado do job ----
-  const { data: itensAtuais, error: itensErr } = await supabase
-    .from("jobs_itens_orcado")
-    .select(
-      "id, item_versao_id, item, grupo_id, ordem, tipo_custo, linha_vermelha, " +
-        "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
-        "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
-        "em_save, save_consumido",
-    )
-    .eq("job_id", jobId)
-    .eq("tenant_id", session.activeTenant.id);
+  // Três leituras independentes: as linhas com tudo que a errata mexe, a
+  // base dos espelhos (os números do financeiro, decisão 099) e os pedidos
+  // de save que prendem linha — aguardando, ou recusado não retirado.
+  const [itensRes, baseRes, pedidosRes] = await Promise.all([
+    supabase
+      .from("jobs_itens_orcado")
+      .select(
+        "id, item_versao_id, item, grupo_id, ordem, tipo_custo, linha_vermelha, " +
+          "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
+          "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
+          "em_save, save_consumido",
+      )
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id),
+    lerBaseDosEspelhos(supabase, session.activeTenant.id, jobId),
+    supabase
+      .from("saves_aprovacoes")
+      .select("job_item_orcado_id, situacao")
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("situacao", ["aguardando", "recusado"]),
+  ]);
+  const { data: itensAtuais, error: itensErr } = itensRes;
 
   if (itensErr || !itensAtuais) {
     return { ok: false, message: "Não foi possível ler o orçado do job." };
+  }
+  if (!baseRes.ok) return { ok: false, message: baseRes.message };
+  const base = baseRes.base;
+  if (pedidosRes.error) {
+    // Sem saber quais linhas têm pedido, a trava de save não teria como
+    // valer: melhor parar do que deixar passar.
+    console.error("[errata.pedidos_save]", pedidosRes.error.message);
+    return { ok: false, message: "Não foi possível ler os pedidos de save do job." };
+  }
+  const pedidoQuePrende = new Map<string, PedidoQuePrende>();
+  for (const p of (pedidosRes.data ?? []) as {
+    job_item_orcado_id: string | null;
+    situacao: PedidoQuePrende;
+  }[]) {
+    if (!p.job_item_orcado_id) continue;
+    // O aguardando fala primeiro: é ele que a produção resolve cancelando.
+    if (pedidoQuePrende.get(p.job_item_orcado_id) !== "aguardando") {
+      pedidoQuePrende.set(p.job_item_orcado_id, p.situacao);
+    }
   }
 
   const porId = new Map(itensAtuais.map((i: any) => [i.id as string, i]));
@@ -648,6 +744,7 @@ export async function registrarErrata(
       session.activeTenant.id,
       remocoesUnicas,
       porId,
+      pedidoQuePrende,
     );
     if (bloqueio) return { ok: false, message: bloqueio };
 
@@ -757,11 +854,23 @@ export async function registrarErrata(
     return { ok: false, message: "Nenhum valor foi alterado." };
   }
 
+  // ---- Trava de linha com save (decisão 099, §15) ----
+  // Antes de qualquer gravação: a errata é o primeiro insert lá embaixo.
+  const alteradas = mudancas.filter((m) => m.acao === "alterada");
+  if (alteradas.length > 0) {
+    const bloqueioSave = barrarLinhaComSave(
+      alteradas.map((m) => m.copiaId ?? ""),
+      porId,
+      pedidoQuePrende,
+      "errata",
+    );
+    if (bloqueioSave) return { ok: false, message: bloqueioSave };
+  }
+
   // ---- Trava de linha com PP no financeiro (decisão 040) ----
   // Qualquer correção — valor, QT, D/M ou tipo — em linha que já tem PP
   // emitida é recusada. O realizado dela já existe, e reescrever o orçado
   // por cima seria mudar a régua depois da medida.
-  const alteradas = mudancas.filter((m) => m.acao === "alterada");
   if (alteradas.length > 0) {
     const bloqueio = await barrarLinhaComPPNoFinanceiro(
       jobId,
@@ -805,18 +914,14 @@ export async function registrarErrata(
     if (bloqueio) return { ok: false, message: bloqueio };
   }
 
-  // ---- Totais antes e depois, pela mesma função do card de Totais ----
-  const antes = calcularTotaisVersao(
-    itensAtuais.map((i: any) => ({
-      tipo_custo: i.tipo_custo as TipoCusto,
-      total_orcado: Number(i.total_orcado ?? 0),
-      em_save: i.em_save === true,
-      save_consumido: Number(i.save_consumido ?? 0),
-    })),
-    pctHonorarios,
-    pctImposto,
-    planilha.internacional,
-  );
+  // ---- Totais antes e depois, como o FINANCEIRO vê (decisão 099) ----
+  // Os mesmos números que vão para os espelhos do job (`jobs.valor_total`,
+  // `faturamento_previsto`, `faturamento_save_previsto`) e para o
+  // antes → depois da errata, que o financeiro lê na revisão da abertura.
+  // Pedido de save que ainda aguarda fica de fora dos dois lados: ele só
+  // entra nos números do financeiro na aprovação. Uma conta só para todo
+  // escritor dos espelhos (`lib/data/espelhos-do-job.ts`).
+  const antes = totaisDoFinanceiro(base.itens, base);
 
   const alteradasPorId = new Map(
     mudancas.filter((m) => m.acao === "alterada").map((m) => [m.copiaId, m]),
@@ -825,35 +930,39 @@ export async function registrarErrata(
     mudancas.filter((m) => m.acao === "removida").map((m) => m.copiaId),
   );
 
-  const depois = calcularTotaisVersao(
-    [
-      ...itensAtuais
-        .filter((i: any) => !removidasIds.has(i.id))
-        .map((i: any) => {
-          const m = alteradasPorId.get(i.id);
-          return {
-            tipo_custo: (m ? m.tipoPara : i.tipo_custo) as TipoCusto,
-            total_orcado: m ? m.totalPara : Number(i.total_orcado ?? 0),
-            em_save: i.em_save === true,
-            save_consumido: Number(i.save_consumido ?? 0),
-          };
-        }),
-      // A linha nova entra na conta do "depois" sem existir ainda no banco:
-      // é ela que faz o pop-up mostrar o mesmo número que a planilha vai
-      // mostrar depois de confirmar.
-      ...mudancas
-        .filter((m) => m.acao === "nova")
-        .map((m) => ({
-          tipo_custo: m.tipoPara,
-          total_orcado: m.totalPara,
-          em_save: false,
-          save_consumido: 0,
-        })),
-    ],
-    pctHonorarios,
-    pctImposto,
-    planilha.internacional,
-  );
+  const depoisItens: LinhaDoEspelho[] = [
+    ...base.itens
+      .filter((i) => !removidasIds.has(i.id))
+      .map((i) => {
+        const m = alteradasPorId.get(i.id);
+        return m
+          ? {
+              ...i,
+              tipo_custo: m.tipoPara,
+              total_orcado: m.totalPara,
+              valor_unitario_orcado: m.unitarioPara,
+            }
+          : i;
+      }),
+    // A linha nova entra na conta do "depois" sem existir ainda no banco:
+    // é ela que faz o pop-up mostrar o mesmo número que a planilha vai
+    // mostrar depois de confirmar. O id provisório não casa com pedido
+    // nenhum.
+    ...mudancas
+      .filter((m) => m.acao === "nova")
+      .map((m, k) => ({
+        id: `nova-${k}`,
+        item: m.itemNome,
+        grupo_id: m.grupoId,
+        tipo_custo: m.tipoPara,
+        total_orcado: m.totalPara,
+        valor_unitario_orcado: m.unitarioPara,
+        em_save: false,
+        save_consumido: 0,
+      })),
+  ];
+  const depois = totaisDoFinanceiro(depoisItens, base);
+  const espelhos = espelhosDe(depois);
 
   // ---- Grava a errata ----
   const { data: errata, error: errataErr } = await supabase
@@ -1123,9 +1232,7 @@ export async function registrarErrata(
   await supabase
     .from("jobs")
     .update({
-      valor_total: dinheiro(depois.valorJob),
-      faturamento_previsto: dinheiro(depois.faturamentoPrevisto),
-      faturamento_save_previsto: dinheiro(depois.save.receita),
+      ...espelhos,
       ...(devolveAoMural
         ? {
             abertura_em_revisao: true,
@@ -1189,21 +1296,17 @@ async function barrarRemocao(
   tenantId: string,
   copiaIds: string[],
   porId: Map<string, any>,
+  pedidosDeSave: Map<string, PedidoQuePrende>,
 ): Promise<string | null> {
   const supabase = createClient();
   const nome = (id: string) => porId.get(id)?.item ?? "a linha";
 
   // 1. Save: é dinheiro do cliente, e o cascade o devolveria sem aviso.
-  for (const id of copiaIds) {
-    const linha = porId.get(id);
-    if (!linha) continue;
-    if (linha.em_save === true) {
-      return `"${linha.item}" está marcada como save. Tire a marca de save antes de remover a linha.`;
-    }
-    if (Number(linha.save_consumido ?? 0) > 0) {
-      return `"${linha.item}" é paga com saldo de save de outro job. Desfaça o consumo de save antes de remover a linha.`;
-    }
-  }
+  //    Desde a decisão 099 (22/09/2026) o pedido aguardando e o recusado
+  //    ainda não retirado também prendem a linha: o pedido é histórico e
+  //    ficaria apontando para uma linha que sumiu.
+  const bloqueioSave = barrarLinhaComSave(copiaIds, porId, pedidosDeSave, "remocao");
+  if (bloqueioSave) return bloqueioSave;
 
   const { data: realizados } = await supabase
     .from("jobs_itens_realizado")

@@ -24,6 +24,36 @@ function comMaiuscula(texto: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+/** O envio para faturamento travado por consumo de save nunca enviado
+ *  para aprovação (decisão 099, 22/09/2026). Sem link para o financeiro:
+ *  quem resolve é a produção, pelo botão da planilha — e a linha com
+ *  recusa ainda não retirada o botão não envia. A barra do job
+ *  (`barra-acoes-job.tsx`) monta o mesmo texto. */
+function mensagemConsumosNaoEnviados(
+  consumos: { item: string; comRecusa: boolean }[],
+): string {
+  const n = consumos.length;
+  const itens = consumos.map((c) => c.item).join(", ");
+  const comRecusa = consumos.filter((c) => c.comRecusa).map((c) => `“${c.item}”`);
+  const partes = [
+    n === 1
+      ? `1 consumo de save ainda não foi enviado para aprovação do financeiro (${itens}).`
+      : `${n} consumos de save ainda não foram enviados para aprovação do financeiro (${itens}).`,
+  ];
+  if (comRecusa.length < n) {
+    partes.push("Envie pelo botão “Enviar saves para aprovação”, acima da planilha.");
+  }
+  if (comRecusa.length > 0) {
+    partes.push(
+      `Em ${comRecusa.join(", ")}, retire antes a recusa no pop-up de save da linha: o botão “Enviar saves para aprovação” não envia linha com recusa.`,
+    );
+  }
+  partes.push(
+    "O envio para faturamento volta quando o financeiro decidir: o consumo muda o faturamento previsto.",
+  );
+  return partes.join(" ");
+}
+
 export type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
@@ -176,28 +206,47 @@ export async function enviarJobParaFaturamento(
 
   const supabase = createClient();
 
-  const { data: job } = await supabase
-    .from("jobs")
-    .select(
-      "id, status, faturamento_previsto, abertura_em_revisao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, projeto:projetos(cliente_id), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto)",
-    )
-    .eq("id", jobId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{
-      id: string;
-      status: JobStatus;
-      faturamento_previsto: number | string | null;
-      abertura_em_revisao: boolean | null;
-      projeto_id: string;
-      orcamento_id: string;
-      projeto: { cliente_id: string } | null;
-      versao_orcamento_aprovada_id: string;
-      orcamento: { categoria: { modelo_planilha: string } | null } | null;
-      versao: {
-        percentual_honorarios: number | string;
-        percentual_imposto: number | string;
-      } | null;
-    }>();
+  // O job, os pedidos de save e as linhas que consomem save (decisão 099):
+  // leituras independentes, em paralelo.
+  const [{ data: job }, pedidosSaveRes, linhasConsumoRes] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select(
+        "id, status, faturamento_previsto, abertura_em_revisao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, projeto:projetos(cliente_id), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto)",
+      )
+      .eq("id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        id: string;
+        status: JobStatus;
+        faturamento_previsto: number | string | null;
+        abertura_em_revisao: boolean | null;
+        projeto_id: string;
+        orcamento_id: string;
+        projeto: { cliente_id: string } | null;
+        versao_orcamento_aprovada_id: string;
+        orcamento: { categoria: { modelo_planilha: string } | null } | null;
+        versao: {
+          percentual_honorarios: number | string;
+          percentual_imposto: number | string;
+        } | null;
+      }>(),
+    // Os pedidos que ainda contam: aguardando e aprovado dizem que a linha
+    // foi enviada; o recusado não arquivado segura o botão "Enviar saves
+    // para aprovação", que não envia linha com recusa.
+    supabase
+      .from("saves_aprovacoes")
+      .select("job_item_orcado_id, item_descricao, tipo, situacao")
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("situacao", ["aguardando", "aprovado", "recusado"]),
+    supabase
+      .from("jobs_itens_orcado")
+      .select("id, item")
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .gt("save_consumido", 0),
+  ]);
 
   if (!job) return { ok: false, message: "Job não encontrado." };
 
@@ -233,10 +282,110 @@ export async function enviarJobParaFaturamento(
     };
   }
 
+  // Consumo de save que aguarda o financeiro (decisão 099, 22/09/2026): o
+  // consumo muda o faturamento previsto, e a nota sairia por um número que
+  // o financeiro ainda não aprovou — ou que volta se ele recusar. Vale para
+  // o job inteiro também no modelo mensal: é o lado conservador, e a
+  // decisão do financeiro destrava o envio. Leitura que falhou trava.
+  const leituraDoSaveFalhou = Boolean(pedidosSaveRes.error || linhasConsumoRes.error);
+  if (pedidosSaveRes.error) {
+    console.error("[job.enviarFaturamento.pedidos_save]", pedidosSaveRes.error.message);
+  }
+  if (linhasConsumoRes.error) {
+    console.error("[job.enviarFaturamento.linhas_consumo]", linhasConsumoRes.error.message);
+  }
+  const pedidosSave = (pedidosSaveRes.data ?? []) as {
+    job_item_orcado_id: string | null;
+    item_descricao: string;
+    tipo: "gera" | "consome";
+    situacao: "aguardando" | "aprovado" | "recusado";
+  }[];
+  const consumosAguardando = pedidosSave.filter(
+    (p) => p.tipo === "consome" && p.situacao === "aguardando",
+  );
+  if (leituraDoSaveFalhou || consumosAguardando.length > 0) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        acao_tentada: "job.enviado_faturamento",
+        motivo: "consumo_de_save_aguardando",
+        consumos_aguardando: consumosAguardando.length,
+      },
+    });
+    if (leituraDoSaveFalhou) {
+      return {
+        ok: false,
+        message:
+          "Não foi possível conferir os consumos de save do job. Tente de novo.",
+      };
+    }
+    const n = consumosAguardando.length;
+    const itens = consumosAguardando.map((c) => c.item_descricao).join(", ");
+    return {
+      ok: false,
+      message:
+        n === 1
+          ? `1 consumo de save aguarda aprovação do financeiro (${itens}). O envio para faturamento volta quando ele for decidido: o consumo muda o faturamento previsto.`
+          : `${n} consumos de save aguardam aprovação do financeiro (${itens}). O envio para faturamento volta quando eles forem decididos: o consumo muda o faturamento previsto.`,
+    };
+  }
+
+  // Consumo de save NUNCA ENVIADO para aprovação (decisão 099, 22/09/2026):
+  // o mesmo recorte do encerramento (`actions-encerramento.ts`) — linha
+  // com consumo e sem pedido de consumo aguardando ou aprovado. O pedido
+  // recusado não conta como envio: depois de uma edição recusada a linha
+  // volta ao consumo de antes, que pode nunca ter sido aprovado. O envio
+  // desse consumo ao financeiro mudaria o faturamento previsto depois da
+  // nota. No mensal vale para o job inteiro, como o consumo aguardando.
+  const consumoComPedido = new Set(
+    pedidosSave
+      .filter(
+        (p) =>
+          p.tipo === "consome" &&
+          (p.situacao === "aguardando" || p.situacao === "aprovado"),
+      )
+      .map((p) => p.job_item_orcado_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const linhasComRecusa = new Set(
+    pedidosSave
+      .filter((p) => p.situacao === "recusado")
+      .map((p) => p.job_item_orcado_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const consumosNaoEnviados = (
+    (linhasConsumoRes.data ?? []) as { id: string; item: string }[]
+  )
+    .filter((l) => !consumoComPedido.has(l.id))
+    .map((l) => ({ item: l.item, comRecusa: linhasComRecusa.has(l.id) }));
+  if (consumosNaoEnviados.length > 0) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        acao_tentada: "job.enviado_faturamento",
+        motivo: "consumo_de_save_nao_enviado",
+        consumos_nao_enviados: consumosNaoEnviados.length,
+        com_recusa: consumosNaoEnviados.filter((c) => c.comRecusa).length,
+      },
+    });
+    return {
+      ok: false,
+      message: mensagemConsumosNaoEnviados(consumosNaoEnviados),
+    };
+  }
+
   // Errata depois da abertura reabre a conferência do financeiro. Enviar
   // agora emitiria a nota sobre uma previsão de recebimento e uma curva de
   // desembolso montadas com números que a errata já mudou. A barra esconde
-  // o botão; a regra mora aqui (27/08/2026).
+  // o botão; a regra mora aqui (27/08/2026). Desde a decisão 099
+  // (22/09/2026) o pedido de save feito com o job aberto também põe o job
+  // em revisão, e o texto fala dos dois — sem link para o financeiro.
   if (job.abertura_em_revisao === true) {
     await logAuditEvent({
       acao: "acao_negada",
@@ -251,9 +400,9 @@ export async function enviarJobParaFaturamento(
     return {
       ok: false,
       message:
-        "Uma errata mexeu no orçado depois da abertura e o financeiro ainda " +
-        "não reconferiu o job. O envio para faturamento volta quando a " +
-        "revisão de recebimento e custos for salva na Abertura de Job.",
+        "Uma errata ou um pedido de save mexeu no job depois da abertura, e " +
+        "o financeiro ainda não reconferiu a abertura. O envio para " +
+        "faturamento volta quando a revisão for salva.",
     };
   }
 
@@ -269,6 +418,9 @@ export async function enviarJobParaFaturamento(
       versaoAprovadaId: job.versao_orcamento_aprovada_id,
       percentualHonorarios: Number(job.versao?.percentual_honorarios ?? 0),
       percentualImposto: Number(job.versao?.percentual_imposto ?? 0),
+      // O envio é do financeiro: save que aguarda aprovação não entra na
+      // parte de save do mês (decisão 099).
+      contar: [],
     });
     if (!porMes) {
       return {

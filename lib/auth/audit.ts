@@ -61,6 +61,14 @@ export type AuditAction =
   | "save.consumo.definido"
   | "save.orcamento.ligado"
   | "save.orcamento.desligado"
+  // Aprovação de save (decisão 099): cada linha que gera ou consome save
+  // vira um pedido que o financeiro decide.
+  | "save.pedido.enviado"
+  | "save.pedido.aprovado"
+  | "save.pedido.recusado"
+  | "save.pedido.cancelado"
+  | "save.pedido.arquivado"
+  | "save.retirado"
   | "item_bv.lancado"
   | "item_bv.editado"
   | "item_bv.confirmado"

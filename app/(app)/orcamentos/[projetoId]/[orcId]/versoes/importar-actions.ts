@@ -20,7 +20,7 @@ import {
   linhasParaGravar,
   type OrigemDoPlanejado,
 } from "@/lib/importacao/planejado-anterior";
-import type { CategoriaModeloPlanilha } from "@/lib/types";
+import type { CategoriaModeloPlanilha, PlanejadoAntesDoSave } from "@/lib/types";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 import { casarBlocosComMeses } from "@/lib/importacao/meses-da-planilha";
 import {
@@ -110,6 +110,9 @@ async function versaoAnterior(
   itens: ItemAtual[];
   /** Meses da versão (modelo mensal, decisão 078); vazio nos outros. */
   meses: { id: string; mes: string }[];
+  /** O planejado que o save zerou, por id de item da versão — só as linhas
+   *  que têm o dado (decisão 099). */
+  planejadoAntesSave: Map<string, PlanejadoAntesDoSave>;
 } | null> {
   const supabase = createClient();
   const [{ data: orc }, { data: versoes }] = await Promise.all([
@@ -144,18 +147,24 @@ async function versaoAnterior(
       .select(
         "id, grupo_id, ordem, item, tipo_custo, categoria_id, planilha_origem, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
-          "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, em_save",
+          "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, em_save, " +
+          "planejado_antes_save",
       )
       .eq("versao_orcamento_id", alvo.id)
       .eq("tenant_id", tenantId),
     mesesDaVersaoQuery(supabase, tenantId, alvo.id),
   ]);
   const mesPorId = new Map((meses ?? []).map((m) => [m.id, m.mes]));
+  const planejadoAntesSave = new Map<string, PlanejadoAntesDoSave>();
+  for (const it of (itens ?? []) as any[]) {
+    if (it.planejado_antes_save) planejadoAntesSave.set(it.id, it.planejado_antes_save);
+  }
 
   return {
     id: alvo.id,
     numero_versao: alvo.numero_versao,
     meses: (meses ?? []).map((m) => ({ id: m.id, mes: m.mes })),
+    planejadoAntesSave,
     grupos: ((grupos ?? []) as any[]).map((g) => ({
       id: g.id,
       nome: g.nome,
@@ -179,6 +188,24 @@ async function versaoAnterior(
       em_save: it.em_save === true,
     })),
   };
+}
+
+/**
+ * O planejado que o save zerou, levado da linha de origem para a linha
+ * nova que HERDA a marca de save (decisão 099, 22/09/2026). Sem ele a
+ * linha nasce em save com o planejado zerado — é o que a origem guarda —
+ * e o trigger não teria o que devolver quando o save sair. Linha que não
+ * herda (planejado da planilha, ou linha sem par) fica como antes: o
+ * trigger guarda o planejado que ela trouxer.
+ */
+function planejadoAntesDaOrigem(
+  emSave: boolean | null,
+  origem: ItemAtual | null,
+  mapa: Map<string, PlanejadoAntesDoSave> | undefined,
+): { planejado_antes_save?: PlanejadoAntesDoSave } {
+  if (emSave !== true || !origem) return {};
+  const antes = mapa?.get(origem.id);
+  return antes ? { planejado_antes_save: antes } : {};
 }
 
 async function verificarOrcamento(
@@ -458,11 +485,12 @@ export async function confirmarImportacao(
   const origemPlanejado: OrigemDoPlanejado = anteriorConfirmar
     ? origemDoPlanejado(formData)
     : "planilha";
+  const origensConfirmar = anteriorConfirmar
+    ? casarComAnterior(parsed.grupos, anteriorConfirmar.grupos, anteriorConfirmar.itens).origens
+    : null;
   const linhas = linhasParaGravar(
     parsed.grupos,
-    anteriorConfirmar
-      ? casarComAnterior(parsed.grupos, anteriorConfirmar.grupos, anteriorConfirmar.itens).origens
-      : null,
+    origensConfirmar,
     origemPlanejado,
     check.modelo === "internacional",
   );
@@ -611,7 +639,7 @@ export async function confirmarImportacao(
   parsed.grupos.forEach((grupo, gi) => {
     const grupoId = grupoIdPorNome.get(`${grupo.nome}#${grupo.ordem}`);
     if (!grupoId) return;
-    for (const it of linhas[gi]) {
+    linhas[gi].forEach((it, ii) => {
       ordemGlobal++;
       itensParaInserir.push({
         tenant_id: tenantId,
@@ -630,8 +658,13 @@ export async function confirmarImportacao(
         dias_meses_planejado: it.dias_meses_planejado,
         // Só a linha que herdou traz a marca; a nova fica no default.
         ...(it.em_save !== null ? { em_save: it.em_save } : {}),
+        ...planejadoAntesDaOrigem(
+          it.em_save,
+          origensConfirmar?.[gi]?.[ii] ?? null,
+          anteriorConfirmar?.planejadoAntesSave,
+        ),
       });
-    }
+    });
   });
 
   const { error: itensErr } = await service
@@ -835,11 +868,12 @@ export async function sobrescreverVersaoComPlanilha(
   const origemPlanejado: OrigemDoPlanejado = anteriorSobrescrever
     ? origemDoPlanejado(formData)
     : "planilha";
+  const origensSobrescrever = anteriorSobrescrever
+    ? casarComAnterior(parsed.grupos, anteriorSobrescrever.grupos, anteriorSobrescrever.itens).origens
+    : null;
   const linhas = linhasParaGravar(
     parsed.grupos,
-    anteriorSobrescrever
-      ? casarComAnterior(parsed.grupos, anteriorSobrescrever.grupos, anteriorSobrescrever.itens).origens
-      : null,
+    origensSobrescrever,
     origemPlanejado,
     check.modelo === "internacional",
   );
@@ -922,7 +956,7 @@ export async function sobrescreverVersaoComPlanilha(
   parsed.grupos.forEach((grupo, gi) => {
     const grupoId = grupoIdPorNome.get(`${grupo.nome}#${grupo.ordem}`);
     if (!grupoId) return;
-    for (const it of linhas[gi]) {
+    linhas[gi].forEach((it, ii) => {
       ordemGlobal++;
       itensParaInserir.push({
         tenant_id: tenantId,
@@ -941,8 +975,14 @@ export async function sobrescreverVersaoComPlanilha(
         dias_meses_planejado: it.dias_meses_planejado,
         // Só a linha que herdou traz a marca; a nova fica no default.
         ...(it.em_save !== null ? { em_save: it.em_save } : {}),
+        // Lido antes de apagar os itens antigos (`versaoAnterior`).
+        ...planejadoAntesDaOrigem(
+          it.em_save,
+          origensSobrescrever?.[gi]?.[ii] ?? null,
+          anteriorSobrescrever?.planejadoAntesSave,
+        ),
       });
-    }
+    });
   });
 
   const { error: itensErr } = await service

@@ -3966,3 +3966,72 @@ Revê a nota de 16/09 (decisão 087) num ponto só: **quem decide o `finalizado`
   recalculado pelo gatilho `trg_jobs_carimba_faturamento_enviado`.
 - O job **finalizado pode ter nota por emitir**. Ele continua na
   `vw_faturamento_pendente` — não o tire de lá.
+
+## ⚠️ Nota de 2026-09-22 — o save passa pela aprovação do financeiro (decisão 099)
+
+Regra completa em `docs/decisions/099-aprovacao-de-save.md`. Revê a nota de
+01/09 da 028: o saldo de save deixa de nascer no envio para faturamento e
+passa a nascer na **aprovação** do financeiro, linha a linha.
+
+### O que mudou
+
+- **Pop-up de save** (`_planilha/save-dialog.tsx`) ganhou a prop obrigatória
+  `contexto: "orcamento" | "job"`. No orçamento só mudou o texto do estado
+  vazio da aba Consumir. No job: bloco "Situação do save/consumo" (chip, texto,
+  justificativa da recusa, histórico), rótulo do crédito ("a ser gerado" /
+  "gerado" só quando aprovado / "não gerado"), segundo passo "Prosseguir com
+  envio" no job aberto, "Cancelar pedido" no consumo que aguarda, e o passo de
+  retirada com aviso. O formulário de consumo continua o de antes.
+- **Errata de save vira pedido** (`save-errata-actions.ts`): no job aberto,
+  marcar save ou consumir chama a RPC `save_pedir`, que muda a linha, grava a
+  errata, põe o job em revisão e cria o pedido numa transação só. Os números
+  do financeiro (`jobs.valor_total`, `faturamento_previsto`,
+  `faturamento_save_previsto`) **não mudam** no pedido — só na aprovação. A
+  planilha, o cabeçalho e os Totais mudam na hora.
+- **Retirar** (`retirarSave`): aprovado é errata de save com os números na
+  hora; recusado só arquiva; linha nunca enviada usa
+  `save_retirar_nao_enviado`. **Cancelar pedido** (`cancelarPedidoDeSave`)
+  volta a linha ao estado de antes do pedido e fecha a revisão sozinho quando
+  ele era a única pendência.
+- **Botão "Enviar N saves para aprovação"** acima da planilha: job aberto
+  antes do fluxo, com linhas com save/consumo e sem pedido.
+- **Job devolvido** (rejeitado_financeiro): o pop-up grava direto na cópia,
+  sem pedido; os espelhos são recalculados no reenvio.
+- **Travas:** errata e remoção travadas nas linhas com save, consumo, pedido
+  aguardando ou recusa não arquivada (cadeado com o motivo); PP e BV somem na
+  linha que gera save, inclusive aguardando e recusada; encerramento travado
+  com save/consumo aguardando ou não enviado e com revisão pendente; envio
+  para faturamento travado com consumo aguardando **ou nunca enviado**.
+  Depois do envio ao faturamento, gerar save continua possível e consumir
+  não (mensal: por mês) — cancelar um pedido de consumo também passa por
+  essa porta.
+- **Links:** saíram os da produção para o financeiro (barra de ações e o
+  "Voltar para aprovações"). Os do orçamento ficaram.
+- **Comunicação:** a recusa vira card ("Save recusado" / "Consumo de save
+  recusado") com a justificativa do financeiro, e conta como não lida.
+- **"Pago só por save"** só com consumo aprovado (`carregar-detalhe.ts` e
+  `lib/data/faturamento-por-job.ts`).
+
+### Armadilhas
+
+- **Os números do financeiro têm uma conta só:** `lib/data/espelhos-do-job.ts`
+  (`lerBaseDosEspelhos` + `totaisDoFinanceiro` + `espelhosDe`), que passa as
+  linhas por `itensParaOFinanceiro` (`lib/calculos/save-financeiro.ts`). Quem
+  gravar espelho por fora dela grava o save que ainda aguarda.
+- **`saves_aprovacoes` é só leitura** para o cliente: tudo muda pelas RPCs. E
+  tem quatro FKs para `profiles` — nunca embutir profiles a partir dela.
+- **Travas de escrita direta** em job aberto (marca de save, consumo, errata e
+  remoção de linha com save pela API) ligam só com a migration
+  `20260922140003`, aplicada junto do deploy. Até lá o banco aceita a escrita
+  direta; o código novo já não a usa.
+- **Linha recusada** não tem `em_save` nem consumo, mas continua no mapa do
+  save (`pedidos.recusado`): quem filtra "linha com save" por `em_save` perde
+  ela.
+- **Consultar saldo como `postgres`** (MCP) mostra o saldo sem as reservas:
+  `save_uso_do_job` filtra pelo tenant de quem está logado. Para conferir,
+  simule como `authenticated`.
+- **Origem do consumo** é conferida no servidor: só saldo de job do mesmo
+  cliente e tenant (a tela já só oferecia esses).
+- Testado no navegador em 22/09/2026 no JOB-0034 (TES-0001/26): gerar save,
+  aprovar pela revisão, consumir do JOB-0032, cancelar, pedir de novo,
+  recusar, arquivar a recusa e retirar o save aprovado.

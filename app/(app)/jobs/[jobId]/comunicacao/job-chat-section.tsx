@@ -249,7 +249,7 @@ function CardSistema({
           {item.descricao && item.descricao.texto.trim() !== "" && (
             <div className="mt-0.5 rounded-lg border border-border bg-card px-3 py-2.5">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                Descrição da errata
+                {item.descricao.rotulo}
               </p>
               <p className="mt-1 text-[12px] italic leading-relaxed text-foreground">
                 “{item.descricao.texto}”

@@ -12,7 +12,24 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Clock, ClipboardList, Lock } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Check,
+  Clock,
+  ClipboardList,
+  Lock,
+  Send,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { SAVE } from "@/app/(app)/_planilha/blocos";
 import { cn, formatCurrency } from "@/lib/utils";
 import { nomeVersao } from "@/lib/nome-versao";
 import type {
@@ -35,14 +52,24 @@ import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
 import { DicasDeTeclado } from "@/app/(app)/_planilha/selecao";
 import {
   SAVE_VAZIO,
+  situacaoDoSave,
   type EstadoSaveDaLinha,
 } from "@/app/(app)/_planilha/save-coluna";
 import {
   SaveDialog,
+  type AcoesDoSaveNoJob,
   type LinhaDoSave,
+  type MudancaNaLinha,
+  type PortaDoConsumo,
 } from "@/app/(app)/_planilha/save-dialog";
 import type { SaldoDeSave } from "@/lib/data/saves";
-import { registrarErrataDeSave } from "./save-errata-actions";
+import {
+  cancelarPedidoDeSave,
+  enviarSavesParaAprovacao,
+  registrarErrataDeSave,
+  retirarSave,
+  type ActionResult as ResultadoDaAcaoDeSave,
+} from "./save-errata-actions";
 import {
   BotaoRecolherTodos,
   useGruposRecolhiveis,
@@ -190,6 +217,11 @@ interface Props {
   saldosDeSave: SaldoDeSave[];
   /** Nome do cliente — aparece no texto do formulário de save. */
   clienteNome: string;
+  /** Linhas (`jobs_itens_orcado.id`) em destaque na planilha: a do pedido
+   *  de save que o financeiro está aprovando, quando a planilha do job no
+   *  financeiro abre a partir da aprovação (decisão 099, 22/09/2026).
+   *  Obrigatória: quem não destaca manda `[]`. */
+  destacarItens: string[];
   /** Exportar a planilha interna do job (decisão 088). Quem vê a tela
    *  exporta; o freelancer, que só tem a visão restrita, não. */
   podeExportarInterna?: boolean;
@@ -219,6 +251,7 @@ export function JobRealizadoSection({
   savePorItem,
   saldosDeSave,
   clienteNome,
+  destacarItens,
   modeloPlanilha,
   meses = SEM_MESES,
   mesPedido,
@@ -358,14 +391,18 @@ export function JobRealizadoSection({
   const [orcadoVisivel, setOrcadoVisivel] = React.useState(true);
   const [rentabPlanejada, setRentabPlanejada] = React.useState(false);
   const [rentabRealizada, setRentabRealizada] = React.useState(false);
-  // No job, mexer no save é ERRATA — e errata exige job aberto, a mesma
-  // porta de `AlterarOrcadoButton`. O financeiro chega aqui com
-  // `podeAcoes` falso e lê sem editar. Depois do envio para faturamento
-  // as duas portas fecham juntas, pelo mesmo motivo.
+  // A errata exige job aberto, a porta de `AlterarOrcadoButton`, e fecha
+  // com o envio para faturamento. O financeiro chega aqui com `podeAcoes`
+  // falso e lê sem editar.
   //
   // Modelo mensal (decisão 078): a porta fecha por MÊS. Só as tabelas dos
-  // meses já enviados perdem errata e save; o botão da errata só trava
-  // quando todos os meses foram enviados.
+  // meses já enviados perdem a errata; o botão da errata só trava quando
+  // todos os meses foram enviados.
+  //
+  // O SAVE deixou de seguir a porta da errata na decisão 099 (22/09/2026):
+  // gerar save vale até o envio para ENCERRAMENTO, e só consumir e retirar
+  // consumo fecham com o envio para faturamento (no mensal, pelo mês da
+  // linha). Ver `modoDoSave` e `portaDoConsumo`, logo abaixo.
   const mesesEnviados = React.useMemo(
     () => new Set(faturamentoMensal.filter((m) => m.envio !== null).map((m) => m.mesId)),
     [faturamentoMensal],
@@ -373,7 +410,21 @@ export function JobRealizadoSection({
   const todosOsMesesEnviados =
     faturamentoMensal.length > 0 && mesesEnviados.size === faturamentoMensal.length;
   const podeErrata = podeAcoes && !jaEnviadoParaFaturamento && !todosOsMesesEnviados;
-  const podeMexerNoSave = podeErrata;
+
+  // SAVE NO JOB (decisão 099). Três modos:
+  //  - `pedido`: job aberto — cada mudança é errata de save, vira pedido ao
+  //    financeiro e passa pelo "Prosseguir com envio" do pop-up;
+  //  - `direto`: job devolvido pelo financeiro — o save volta a editar
+  //    direto na cópia, sem pedido (§11). Quem pode é quem pode mexer no
+  //    job; fora do job aberto `podeAcoes` é falso, e quem carrega essa
+  //    permissão na pré-abertura é `podeGerarPP` (admin ou GP responsável);
+  //  - leitura (`null`): pré-abertura, job encerrado, a planilha do
+  //    financeiro — o pop-up só abre nas linhas com save (§18).
+  const modoDoSave: "pedido" | "direto" | null = podeAcoes
+    ? "pedido"
+    : job.status === "rejeitado_financeiro" && podeGerarPP
+      ? "direto"
+      : null;
   const motivoErrataTravada = jaEnviadoParaFaturamento
     ? "Job já enviado para faturamento: o valor da nota está congelado e não há mais errata. Fale com o financeiro antes da emissão da nota."
     : todosOsMesesEnviados
@@ -402,6 +453,128 @@ export function JobRealizadoSection({
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [errata]);
+
+  // ---- save: as portas e os números de cada linha (decisão 099) ----------
+  const mesDoGrupo = React.useMemo(
+    () => new Map(grupos.map((g) => [g.id, g.mes_id ?? null])),
+    [grupos],
+  );
+
+  /** O consumo desta linha já não muda: o job foi enviado para faturamento
+   *  ou, no modelo mensal, o mês dela foi (§14). */
+  function portaDoConsumo(item: ItemPlanilhaJob): PortaDoConsumo | null {
+    if (jaEnviadoParaFaturamento) return { motivo: "faturamento" };
+    const mesId = mesDoGrupo.get(item.grupo_id) ?? null;
+    if (mesId && mesesEnviados.has(mesId)) {
+      const mes = meses.find((m) => m.id === mesId);
+      return { motivo: "mes", mes: mes ? nomeDoMes(mes.mes) : "este mês" };
+    }
+    return null;
+  }
+
+  /** Gerar save exige a linha sem PP e sem BV ativos (§16) — o banco
+   *  recusa; o pop-up avisa antes. As duas listas já vêm sem os cancelados. */
+  function gerarTravadoPor(item: ItemPlanilhaJob): string | null {
+    const realizadoId = realizadosMap.get(item.id)?.id;
+    const temPP = realizadoId
+      ? (ppsPorItemId.get(realizadoId)?.length ?? 0) > 0
+      : false;
+    const temBv = (bvsPorItem[item.id]?.length ?? 0) > 0;
+    return temPP || temBv
+      ? "O save só poderá ser gerado depois de PPs e BV serem cancelados."
+      : null;
+  }
+
+  /** Os números do job antes e depois de uma mudança na linha, como a
+   *  PRODUÇÃO vê — pela mesma conta do card de Totais (§5). */
+  function simularSave(item: ItemPlanilhaJob, m: MudancaNaLinha) {
+    const depois = paraTotais(
+      itens.map((i) =>
+        i.id !== item.id
+          ? i
+          : {
+              ...i,
+              em_save: m.tipo === "marcar" ? m.emSave : i.em_save,
+              save_consumido:
+                m.tipo === "consumo"
+                  ? m.totalConsumido
+                  : m.emSave
+                    ? 0
+                    : i.save_consumido,
+            },
+      ),
+    );
+    return {
+      antes: {
+        valorJob: totaisAntes.valorJob,
+        faturamentoPrevisto: totaisAntes.faturamentoPrevisto,
+      },
+      depois: {
+        valorJob: depois.valorJob,
+        faturamentoPrevisto: depois.faturamentoPrevisto,
+      },
+    };
+  }
+
+  const depoisDaAcao = (r: ResultadoDaAcaoDeSave) => {
+    if (r.ok) router.refresh();
+    return r;
+  };
+
+  const acoesDoSave: AcoesDoSaveNoJob | null =
+    linhaSave && modoDoSave
+      ? {
+          modo: modoDoSave,
+          gerarTravadoPor: gerarTravadoPor(linhaSave),
+          portaDoConsumo: portaDoConsumo(linhaSave),
+          simular: (m) => simularSave(linhaSave, m),
+          onMarcarSave: async (marcar) =>
+            depoisDaAcao(
+              await registrarErrataDeSave(job.id, linhaSave.orcado_id, {
+                tipo: "marcar",
+                emSave: marcar,
+              }),
+            ),
+          onSalvarConsumo: async (origens) =>
+            depoisDaAcao(
+              await registrarErrataDeSave(job.id, linhaSave.orcado_id, {
+                tipo: "consumo",
+                origens,
+              }),
+            ),
+          onCancelarPedido: async (pedidoId) =>
+            depoisDaAcao(await cancelarPedidoDeSave(job.id, pedidoId)),
+          onRetirar: async (alvo) => depoisDaAcao(await retirarSave(job.id, alvo)),
+        }
+      : null;
+
+  // Job aberto antes do fluxo: linhas com save ou consumo que nunca foram
+  // ao financeiro. Elas saem pelo botão "Enviar N saves para aprovação"
+  // (§3, `momento = 'legado_botao'`).
+  const linhasNaoEnviadas = React.useMemo(
+    () =>
+      itens.flatMap((it) => {
+        const e = savePorItem[it.id];
+        if (!e) return [];
+        const gera = situacaoDoSave(e, "gera") === "nao_enviado";
+        const consome = situacaoDoSave(e, "consome") === "nao_enviado";
+        if (!gera && !consome) return [];
+        return [
+          {
+            id: it.id,
+            item: it.item,
+            grupo: grupos.find((g) => g.id === it.grupo_id)?.nome ?? "—",
+            tipo: gera ? ("gera" as const) : ("consome" as const),
+            codigo: e.origens[0]?.codigo ?? "",
+            valor: gera
+              ? Number(it.total_orcado ?? 0)
+              : Number(it.save_consumido ?? 0),
+          },
+        ];
+      }),
+    [itens, savePorItem, grupos],
+  );
+  const [enviandoLegado, setEnviandoLegado] = React.useState(false);
 
   const linhaDoDialog: LinhaDoSave | null = linhaSave
     ? {
@@ -488,6 +661,8 @@ export function JobRealizadoSection({
   ).length;
   // "Julho e agosto já foram enviados para faturamento: errata e save ficam
   // travados nesses meses. Setembro continua editável." (design aprovado).
+  // Desde a decisão 099 (§14) gerar save segue valendo no mês enviado, até
+  // o encerramento: o que trava é a errata e o CONSUMO de save.
   const avisoDosMesesEnviados = (() => {
     if (!mensal || mesesEnviados.size === 0) return null;
     const enviados = dadosDosMeses.filter((d) => mesesEnviados.has(d.mes.id));
@@ -496,8 +671,8 @@ export function JobRealizadoSection({
     const inicio = nomesEnviados.charAt(0).toUpperCase() + nomesEnviados.slice(1);
     const parte1 =
       enviados.length === 1
-        ? `${inicio} já foi enviado para faturamento: errata e save ficam travados nesse mês.`
-        : `${inicio} já foram enviados para faturamento: errata e save ficam travados nesses meses.`;
+        ? `${inicio} já foi enviado para faturamento: errata e consumo de save ficam travados nesse mês.`
+        : `${inicio} já foram enviados para faturamento: errata e consumo de save ficam travados nesses meses.`;
     if (livres.length === 0) return parte1;
     const nomesLivres = listaDeMeses(livres.map((d) => nomeDoMes(d.mes.mes)));
     const livresInicio = nomesLivres.charAt(0).toUpperCase() + nomesLivres.slice(1);
@@ -569,11 +744,12 @@ export function JobRealizadoSection({
           saveVisivel={temSave}
           onAlternarSave={() => setSaveLigado((v) => !v)}
           savePorItem={savePorItem}
-          onAbrirSave={
-            podeMexerNoSave && !errata.ativo && !mesEnviado
-                  ? setLinhaSave
-                  : undefined
-          }
+          // O pop-up de save abre em toda tela do job — em leitura onde não
+          // se edita (decisão 099 §18). A errata ligada fecha a coluna: as
+          // duas mexem na mesma linha.
+          onAbrirSave={!errata.ativo ? setLinhaSave : undefined}
+          abrirSaveSoComSave={modoDoSave === null}
+          destacarItens={destacarItens}
           errata={podeErrata && !mesEnviado ? errata : undefined}
           orcadoVisivel={orcadoVisivel}
           rentabPlanejadaVisivel={rentabPlanejada}
@@ -713,6 +889,21 @@ export function JobRealizadoSection({
               qtdItens={itens.length}
             />
           )}
+          {/* Só no job aberto antes da aprovação de save existir: as linhas
+              que nunca foram ao financeiro saem daqui (decisão 099). */}
+          {modoDoSave === "pedido" &&
+            linhasNaoEnviadas.length > 0 &&
+            !errata.ativo && (
+              <button
+                type="button"
+                onClick={() => setEnviandoLegado(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06]"
+              >
+                <Send className="h-3.5 w-3.5 text-california-red" />
+                Enviar {linhasNaoEnviadas.length}{" "}
+                {linhasNaoEnviadas.length === 1 ? "save" : "saves"} para aprovação
+              </button>
+            )}
           {podeAcoes && (
             <AlterarOrcadoButton
               ativo={errata.ativo}
@@ -849,6 +1040,8 @@ export function JobRealizadoSection({
         </>
       )}
       <SaveDialog
+        contexto="job"
+        job={{ status: job.status, acoes: acoesDoSave }}
         open={linhaSave !== null}
         onOpenChange={(aberto) => !aberto && setLinhaSave(null)}
         linha={linhaDoDialog}
@@ -861,32 +1054,16 @@ export function JobRealizadoSection({
         percentualImposto={versao.percentual_imposto}
         internacional={planilha.internacional}
         clienteNome={clienteNome}
-        onMarcarSave={
-          linhaSave && podeMexerNoSave
-            ? async (marcar) => {
-                const r = await registrarErrataDeSave(
-                  job.id,
-                  linhaSave.orcado_id,
-                  { tipo: "marcar", emSave: marcar },
-                );
-                if (r.ok) router.refresh();
-                return r;
-              }
-            : undefined
-        }
-        onSalvarConsumo={
-          linhaSave && podeMexerNoSave
-            ? async (origens) => {
-                const r = await registrarErrataDeSave(
-                  job.id,
-                  linhaSave.orcado_id,
-                  { tipo: "consumo", origens },
-                );
-                if (r.ok) router.refresh();
-                return r;
-              }
-            : undefined
-        }
+      />
+
+      <EnviarSavesDialog
+        open={enviandoLegado}
+        onOpenChange={setEnviandoLegado}
+        jobId={job.id}
+        jobCodigo={job.codigo}
+        linhas={linhasNaoEnviadas}
+        moeda={versao.moeda}
+        onEnviado={() => router.refresh()}
       />
 
       {errata.ativo && (
@@ -940,5 +1117,124 @@ export function JobRealizadoSection({
         onConfirmar={confirmarErrata}
       />
     </div>
+  );
+}
+
+/** "Enviar N saves para aprovação?" — o job aberto antes da aprovação de
+ *  save existir manda ao financeiro as linhas que nunca foram (decisão 099,
+ *  `momento = 'legado_botao'`). Do protótipo aprovado, com o texto da spec. */
+function EnviarSavesDialog({
+  open,
+  onOpenChange,
+  jobId,
+  jobCodigo,
+  linhas,
+  moeda,
+  onEnviado,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  jobId: string;
+  jobCodigo: string;
+  linhas: {
+    id: string;
+    item: string;
+    grupo: string;
+    tipo: "gera" | "consome";
+    /** Código do job de origem do consumo; vazio na linha que gera. */
+    codigo: string;
+    valor: number;
+  }[];
+  moeda: string;
+  onEnviado: () => void;
+}) {
+  const [enviando, setEnviando] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (open) setErro(null);
+  }, [open]);
+
+  async function enviar() {
+    setEnviando(true);
+    setErro(null);
+    const r = await enviarSavesParaAprovacao(jobId);
+    setEnviando(false);
+    if (!r.ok) {
+      setErro(r.message);
+      return;
+    }
+    onOpenChange(false);
+    onEnviado();
+  }
+
+  const n = linhas.length;
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(aberto) => {
+        if (!enviando) onOpenChange(aberto);
+      }}
+    >
+      <DialogContent className="max-w-[500px]">
+        <DialogHeader>
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-california-red/10 text-california-red">
+            <Send className="h-[21px] w-[21px]" />
+          </div>
+          <DialogTitle className="pt-4 text-xl leading-snug">
+            Enviar {n} {n === 1 ? "save" : "saves"} para aprovação?
+          </DialogTitle>
+          <DialogDescription className="pt-1 leading-relaxed">
+            O {jobCodigo} foi aberto antes de existir a aprovação de save, e
+            estas linhas nunca foram enviadas ao financeiro. Os números do job
+            já contam estas linhas como save; o crédito só fica disponível
+            depois da aprovação.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2 rounded-xl border border-border px-4 py-3.5">
+          {linhas.map((l) => (
+            <div key={l.id} className="flex items-baseline justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
+                {l.tipo === "gera" ? (
+                  <span className={SAVE.botaoGera}>
+                    <ArrowUpRight className="h-[11px] w-[11px]" />
+                  </span>
+                ) : (
+                  <span className={SAVE.botaoCodigo}>
+                    <ArrowDownLeft
+                      className={cn("h-[9px] w-[9px] flex-none", SAVE.icone)}
+                    />
+                    {l.codigo}
+                  </span>
+                )}
+                {l.grupo} · {l.item}
+              </span>
+              <span className="font-mono text-[13px] font-semibold">
+                {formatCurrency(l.valor, moeda)}
+              </span>
+            </div>
+          ))}
+        </div>
+        {erro && (
+          <p className="rounded-lg border border-california-red/30 bg-california-red/5 px-3 py-2 text-xs text-california-red">
+            {erro}
+          </p>
+        )}
+        <div className="flex items-center justify-end gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={enviando}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={() => void enviar()} disabled={enviando}>
+            <Check className="h-4 w-4" />
+            {enviando ? "Enviando…" : "Sim, enviar"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

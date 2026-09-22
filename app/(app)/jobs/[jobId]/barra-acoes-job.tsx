@@ -7,7 +7,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { FileText, Send } from "lucide-react";
-import type { JobStatus } from "@/lib/types";
+import type { ItemPlanilhaJob, JobStatus } from "@/lib/types";
 import { jobStatusLabel } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -34,6 +34,10 @@ import {
   type FechamentoDoJob,
   type TotaisDoFechamento,
 } from "./enviar-encerramento-dialog";
+import {
+  situacaoDoSave,
+  type EstadoSaveDaLinha,
+} from "@/app/(app)/_planilha/save-coluna";
 
 interface Props {
   jobId: string;
@@ -71,7 +75,120 @@ interface Props {
   totais: TotaisDoFechamento;
   /** Papel com `jobs.encerrar`. O servidor confere de novo. */
   podeEncerrar: boolean;
+  /** O save de cada linha, o mesmo da Planilha Interna (decisão 099). É
+   *  dele que saem os pedidos que ainda seguram o envio para faturamento e
+   *  o encerramento — a barra só explica; `enviarParaFaturamento` e
+   *  `encerrarJob` refazem a conta no servidor. */
+  savePorItem: Record<string, EstadoSaveDaLinha>;
 }
+
+/** Uma linha com save ou consumo nunca enviado para aprovação. `comRecusa`:
+ *  ela tem pedido recusado ainda não arquivado, e o botão "Enviar saves
+ *  para aprovação" não a envia até o GP retirar a recusa. */
+interface LinhaNaoEnviada {
+  item: string;
+  comRecusa: boolean;
+}
+
+/** Os saves que ainda seguram o job (decisão 099 §17), pelo nome do item. */
+interface PendenciasDeSave {
+  savesAguardando: string[];
+  consumosAguardando: string[];
+  /** Save gerado ou consumo nunca enviado: segura o encerramento. */
+  naoEnviados: LinhaNaoEnviada[];
+  /** Só o consumo nunca enviado: segura também o envio para faturamento. */
+  consumosNaoEnviados: LinhaNaoEnviada[];
+}
+
+function pendenciasDeSave(
+  itens: ItemPlanilhaJob[],
+  savePorItem: Record<string, EstadoSaveDaLinha>,
+): PendenciasDeSave {
+  const p: PendenciasDeSave = {
+    savesAguardando: [],
+    consumosAguardando: [],
+    naoEnviados: [],
+    consumosNaoEnviados: [],
+  };
+  for (const it of itens) {
+    const e = savePorItem[it.id];
+    if (!e) continue;
+    const gera = situacaoDoSave(e, "gera");
+    const consome = situacaoDoSave(e, "consome");
+    if (gera === "aguardando") p.savesAguardando.push(it.item);
+    if (consome === "aguardando") p.consumosAguardando.push(it.item);
+
+    // "Não enviado" por lado da linha, o mesmo recorte do servidor
+    // (`encerrarJob`, `enviarJobParaFaturamento`; revisão de 22/09/2026):
+    // save gerado sem pedido de gera aguardando ou aprovado, ou consumo sem
+    // pedido de consumo aguardando ou aprovado. Não sai de `situacaoDoSave`,
+    // que põe a recusa na frente: depois de uma edição de consumo recusada
+    // a linha volta ao consumo de antes — que pode nunca ter sido aprovado
+    // — e escapava da trava.
+    const pedidos = e.pedidos;
+    const enviado = (tipo: "gera" | "consome") =>
+      pedidos?.aguardando?.tipo === tipo || pedidos?.aprovado?.tipo === tipo;
+    const geraNaoEnviado = e.emSave && !enviado("gera");
+    const consomeNaoEnviado = e.origens.length > 0 && !enviado("consome");
+    const linha: LinhaNaoEnviada = {
+      item: it.item,
+      comRecusa: pedidos?.recusado != null,
+    };
+    if (geraNaoEnviado || consomeNaoEnviado) p.naoEnviados.push(linha);
+    if (consomeNaoEnviado) p.consumosNaoEnviados.push(linha);
+  }
+  return p;
+}
+
+/** "; em “Item”, retire antes a recusa…" — o complemento das pendências
+ *  de save nunca enviado quando alguma linha tem recusa a retirar. */
+function complementoDaRecusa(linhas: LinhaNaoEnviada[]): string {
+  const comRecusa = linhas.filter((l) => l.comRecusa).map((l) => `“${l.item}”`);
+  return comRecusa.length > 0
+    ? `; em ${comRecusa.join(", ")}, retire antes a recusa no pop-up de save da linha`
+    : "";
+}
+
+/** Trilha Faturamento com consumo de save nunca enviado para aprovação —
+ *  o mesmo texto de `enviarJobParaFaturamento`, sem link para o
+ *  financeiro (decisão 099). */
+function textoConsumosNaoEnviados(linhas: LinhaNaoEnviada[]): string {
+  const n = linhas.length;
+  const lista = linhas.map((l) => l.item).join(", ");
+  const comRecusa = linhas.filter((l) => l.comRecusa).map((l) => `“${l.item}”`);
+  const partes = [
+    n === 1
+      ? `1 consumo de save ainda não foi enviado para aprovação do financeiro (${lista}).`
+      : `${n} consumos de save ainda não foram enviados para aprovação do financeiro (${lista}).`,
+  ];
+  if (comRecusa.length < n) {
+    partes.push("Envie pelo botão “Enviar saves para aprovação”, acima da planilha.");
+  }
+  if (comRecusa.length > 0) {
+    partes.push(
+      `Em ${comRecusa.join(", ")}, retire antes a recusa no pop-up de save da linha: o botão “Enviar saves para aprovação” não envia linha com recusa.`,
+    );
+  }
+  partes.push(
+    "O envio para faturamento volta quando o financeiro decidir: o consumo muda o faturamento previsto.",
+  );
+  return partes.join(" ");
+}
+
+/** Trilha Faturamento com consumo de save aguardando (texto da spec da
+ *  decisão 099, §3). */
+function textoConsumosAguardando(itens: string[]): string {
+  const n = itens.length;
+  const lista = itens.join(", ");
+  return n === 1
+    ? `1 consumo de save aguarda aprovação do financeiro (${lista}). O envio para faturamento volta quando ele for decidido: o consumo muda o faturamento previsto.`
+    : `${n} consumos de save aguardam aprovação do financeiro (${lista}). O envio para faturamento volta quando eles forem decididos: o consumo muda o faturamento previsto.`;
+}
+
+/** Trilha Faturamento com a revisão da abertura pendente — sem link: a
+ *  produção não navega para o financeiro (decisão 099 §20). */
+const TEXTO_REVISAO_PENDENTE =
+  "Uma errata ou um pedido de save mexeu no job depois da abertura, e o financeiro ainda não reconferiu a abertura. O envio para faturamento volta quando a revisão for salva.";
 
 /**
  * Barra fixa de ações do job — handoff "Job · Informações — Barra de ações"
@@ -112,6 +229,7 @@ export function BarraAcoesJob({
   fechamento,
   totais,
   podeEncerrar,
+  savePorItem,
 }: Props) {
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
   // design tem UMA barra com três estados, não duas empilhadas.
@@ -139,6 +257,8 @@ export function BarraAcoesJob({
     );
   }
 
+  const saves = pendenciasDeSave(totais.itens, savePorItem);
+
   const trilhaEncerramento = (
     <TrilhaEncerramento
       jobId={jobId}
@@ -147,23 +267,25 @@ export function BarraAcoesJob({
       fechamento={fechamento}
       totais={totais}
       podeEncerrar={podeEncerrar}
+      saves={saves}
+      aberturaEmRevisao={aberturaEmRevisao}
     />
   );
 
-  const bloqueioRevisao = aberturaEmRevisao ? (
-    <>
-      Uma errata mexeu no orçado depois da abertura e o financeiro ainda não
-      reconferiu o job, em{" "}
-      <Link
-        href="/financeiro/abertura-de-job"
-        prefetch={false}
-        className="font-medium text-california-red hover:underline"
-      >
-        Abertura de Job
-      </Link>
-      . O envio para faturamento volta quando a revisão for salva.
-    </>
-  ) : null;
+  // O que fecha o envio para faturamento agora. O consumo aguardando fala
+  // primeiro, como no servidor: é o motivo mais específico, e a decisão do
+  // financeiro (que registra a revisão) destrava os dois (decisão 099 §17).
+  // No mensal ele fecha todos os meses — o lado conservador, o mesmo de
+  // `enviarParaFaturamento`. Depois dele, o consumo nunca enviado para
+  // aprovação, na mesma ordem do servidor.
+  const bloqueioFaturamento: string | null =
+    saves.consumosAguardando.length > 0
+      ? textoConsumosAguardando(saves.consumosAguardando)
+      : saves.consumosNaoEnviados.length > 0
+        ? textoConsumosNaoEnviados(saves.consumosNaoEnviados)
+        : aberturaEmRevisao
+          ? TEXTO_REVISAO_PENDENTE
+          : null;
 
   // Modelo mensal: a barra de faturamento por mês (design aprovado em
   // 14/09/2026) é a trilha de faturamento, com a de encerramento abaixo.
@@ -174,11 +296,7 @@ export function BarraAcoesJob({
         jobCodigo={jobCodigo}
         meses={faturamentoMensal}
         podeEnviar={podeEnviarFaturamentoMensal}
-        bloqueio={
-          aberturaEmRevisao
-            ? "Uma errata mexeu no orçado depois da abertura e o financeiro ainda não reconferiu o job. O envio dos meses volta quando a revisão for salva na Abertura de Job."
-            : null
-        }
+        bloqueio={bloqueioFaturamento}
         portais={portais}
         moeda={moeda}
         trilhaEncerramento={trilhaEncerramento}
@@ -193,8 +311,8 @@ export function BarraAcoesJob({
         jobId={jobId}
         jobCodigo={jobCodigo}
         faturamento={faturamentoEnvioUnico}
-        podeEnviarFaturamento={podeEnviarFaturamento && !aberturaEmRevisao}
-        bloqueioRevisao={bloqueioRevisao}
+        podeEnviarFaturamento={podeEnviarFaturamento && bloqueioFaturamento === null}
+        bloqueio={bloqueioFaturamento}
         faturamentoPrevisto={faturamentoPrevisto}
         faturamentoSavePrevisto={faturamentoSavePrevisto}
         pagoSoPorSave={pagoSoPorSave}
@@ -229,7 +347,7 @@ function TrilhaFaturamentoUnico({
   jobCodigo,
   faturamento,
   podeEnviarFaturamento,
-  bloqueioRevisao,
+  bloqueio,
   faturamentoPrevisto,
   faturamentoSavePrevisto,
   pagoSoPorSave,
@@ -241,7 +359,8 @@ function TrilhaFaturamentoUnico({
   jobCodigo: string;
   faturamento: FaturamentoDoEnvioUnico | null;
   podeEnviarFaturamento: boolean;
-  bloqueioRevisao: React.ReactNode;
+  /** Consumo de save aguardando ou revisão da abertura pendente. */
+  bloqueio: string | null;
   faturamentoPrevisto: number;
   faturamentoSavePrevisto: number;
   pagoSoPorSave: boolean;
@@ -261,8 +380,8 @@ function TrilhaFaturamentoUnico({
       texto = pagoSoPorSave
         ? "Pago com saldo em save de outro job: a nota já saiu lá, e não há o que enviar."
         : "Este job não tem faturamento previsto: não há nota a emitir.";
-    } else if (bloqueioRevisao) {
-      texto = bloqueioRevisao;
+    } else if (bloqueio) {
+      texto = bloqueio;
     } else {
       texto = (
         <>
@@ -357,7 +476,7 @@ function TrilhaFaturamentoUnico({
         titulo={`Envio para faturamento · ${jobCodigo}`}
         descricao={
           envio
-            ? `Enviado para faturamento em ${dataDoEnvio(envio.enviado_em)}. O envio é definitivo: não há errata nem save neste job.`
+            ? `Enviado para faturamento em ${dataDoEnvio(envio.enviado_em)}. O envio é definitivo: não há mais errata nem consumo de save neste job.`
             : ""
         }
         envio={envio}
@@ -367,6 +486,12 @@ function TrilhaFaturamentoUnico({
       />
     </>
   );
+}
+
+/** Só a frase abre com maiúscula: "revisão da abertura pendente…" pode ser
+ *  a primeira pendência. */
+function maiuscula(texto: string): string {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 /** Até 3 códigos por extenso; o resto vira "e mais N". */
@@ -383,6 +508,8 @@ function TrilhaEncerramento({
   fechamento,
   totais,
   podeEncerrar,
+  saves,
+  aberturaEmRevisao,
 }: {
   jobId: string;
   jobCodigo: string;
@@ -390,6 +517,10 @@ function TrilhaEncerramento({
   fechamento: FechamentoDoJob;
   totais: TotaisDoFechamento;
   podeEncerrar: boolean;
+  /** Pedidos de save que o financeiro ainda não decidiu e linhas nunca
+   *  enviadas (decisão 099 §17). */
+  saves: PendenciasDeSave;
+  aberturaEmRevisao: boolean;
 }) {
   const [aberto, setAberto] = React.useState(false);
   const encerrado = status === "encerrado" || status === "finalizado";
@@ -457,6 +588,30 @@ function TrilhaEncerramento({
         : `${itensSemMarcacao.length} itens de custo ainda não disseram se sai mais PP`,
     );
   }
+  // Decisão 099 §17: depois do encerramento o save não muda mais, e um
+  // pedido sem decisão ficaria assim para sempre. Textos da spec, sem link
+  // para o financeiro.
+  if (saves.savesAguardando.length > 0) {
+    const n = saves.savesAguardando.length;
+    partes.push(
+      `${n === 1 ? "1 save aguardando" : `${n} saves aguardando`} aprovação do financeiro (${codigos(saves.savesAguardando)})`,
+    );
+  }
+  if (saves.consumosAguardando.length > 0) {
+    const n = saves.consumosAguardando.length;
+    partes.push(
+      `${n === 1 ? "1 consumo de save aguardando" : `${n} consumos de save aguardando`} aprovação do financeiro (${codigos(saves.consumosAguardando)})`,
+    );
+  }
+  if (saves.naoEnviados.length > 0) {
+    const n = saves.naoEnviados.length;
+    partes.push(
+      `${n === 1 ? "1 save ainda não enviado" : `${n} saves ainda não enviados`} para aprovação (${codigos(saves.naoEnviados.map((l) => l.item))})${complementoDaRecusa(saves.naoEnviados)}`,
+    );
+  }
+  if (aberturaEmRevisao) {
+    partes.push("revisão da abertura pendente no financeiro");
+  }
   const liberado = partes.length === 0;
 
   const botao = (
@@ -503,7 +658,7 @@ function TrilhaEncerramento({
         <TextoTrilha>
           {liberado
             ? "Nenhuma PP em aberto, nenhum BV a receber, todos os itens marcados."
-            : `${partes.join(" · ")}.`}
+            : `${maiuscula(partes.join(" · "))}.`}
         </TextoTrilha>
       </TrilhaBarra>
       {liberado && (
@@ -530,14 +685,10 @@ function linhasAntesDaAbertura(
     return [
       "Aguardando abertura pelo financeiro.",
       <>
+        {/* Sem link: a produção não navega para o financeiro (decisão 099
+            §20). O link para o orçamento fica. */}
         A conferência e a abertura acontecem na Central Financeira, em{" "}
-        <Link
-          href="/financeiro/abertura-de-job"
-          prefetch={false}
-          className="font-medium text-california-red hover:underline"
-        >
-          Abertura de Job
-        </Link>
+        <strong className="font-medium text-foreground">Abertura de Job</strong>
         . Para cancelar o envio, use o{" "}
         <Link
           href={orcamentoHref}

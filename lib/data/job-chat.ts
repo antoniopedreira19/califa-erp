@@ -1,18 +1,112 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   tipoCustoLabel,
   type ChatLinha,
   type ItemChat,
   type JobErrataComItens,
   type JobMensagem,
+  type SaveAprovacaoTipo,
 } from "@/lib/types";
 
 /**
  * Monta a thread de Comunicação do job.
  *
  * Só as mensagens de pessoas vêm do banco. Os cards automáticos são
- * derivados de dados que já existem — a abertura do job e as erratas —
- * então nunca divergem da fonte e aparecem retroativamente, sem backfill.
+ * derivados de dados que já existem — a abertura do job, as erratas e,
+ * desde a decisão 099 (22/09/2026), as recusas de save — então nunca
+ * divergem da fonte e aparecem retroativamente, sem backfill.
  */
+
+/**
+ * Uma recusa de save do financeiro, para o card da Comunicação (decisão
+ * 099). Vem de `saves_aprovacoes`: o pedido recusado guarda a
+ * justificativa, e continua guardando depois que o GP arquiva a recusa
+ * ("Retirar") — o card fica na thread como a errata fica.
+ */
+export interface RecusaDeSaveNoChat {
+  id: string;
+  tipo: SaveAprovacaoTipo;
+  itemDescricao: string;
+  grupoNome: string | null;
+  valor: number;
+  /** Edição de um consumo aprovado: o pedido aprovado que ela substituiria.
+   *  Recusada, a linha volta àquele consumo — e não ao faturamento. */
+  substituiId: string | null;
+  justificativa: string;
+  decididoEm: string;
+  /** `profiles.id` de quem recusou — para a conta de não lidas. */
+  decididoPorId: string | null;
+  decididoPorNome: string | null;
+}
+
+/**
+ * As recusas de save de um job, da mais antiga à mais recente.
+ *
+ * Recusa = pedido decidido com justificativa: o banco apaga a
+ * justificativa na aprovação (`saves_aprovacoes_guarda`), e o cancelamento
+ * não tem decisão. `saves_aprovacoes` tem quatro FKs para `profiles`: o
+ * nome de quem recusou sai numa consulta própria, nunca por embed.
+ */
+export async function lerRecusasDeSaveDoJob(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<RecusaDeSaveNoChat[]> {
+  const { data, error } = await supabase
+    .from("saves_aprovacoes")
+    .select(
+      "id, tipo, item_descricao, grupo_nome, valor, substitui_id, justificativa, decidido_em, decidido_por",
+    )
+    .eq("tenant_id", tenantId)
+    .eq("job_id", jobId)
+    .not("justificativa", "is", null)
+    .not("decidido_em", "is", null)
+    .order("decidido_em", { ascending: true });
+  if (error) {
+    console.error("[job-chat.recusas-save]", error.message);
+    return [];
+  }
+  const linhas = (data ?? []) as any[];
+  const idsPessoas = [
+    ...new Set(linhas.map((l) => l.decidido_por as string | null).filter(Boolean)),
+  ] as string[];
+  const nomes = new Map<string, string | null>();
+  if (idsPessoas.length > 0) {
+    const { data: pessoas, error: pessoasErr } = await supabase
+      .from("profiles")
+      .select("id, nome")
+      .in("id", idsPessoas);
+    if (pessoasErr) console.error("[job-chat.recusas-save.nomes]", pessoasErr.message);
+    for (const p of (pessoas ?? []) as any[]) nomes.set(p.id, p.nome ?? null);
+  }
+  return linhas.map((l) => ({
+    id: l.id,
+    tipo: l.tipo as SaveAprovacaoTipo,
+    itemDescricao: l.item_descricao,
+    grupoNome: l.grupo_nome ?? null,
+    valor: Number(l.valor ?? 0),
+    substituiId: l.substitui_id ?? null,
+    justificativa: l.justificativa,
+    decididoEm: l.decidido_em,
+    decididoPorId: l.decidido_por ?? null,
+    decididoPorNome: l.decidido_por ? (nomes.get(l.decidido_por) ?? null) : null,
+  }));
+}
+
+/**
+ * Quantas recusas de save contam como não lidas para quem está logado: as
+ * de outra pessoa depois da última leitura — a mesma regra da errata, que
+ * é o evento que o outro time mais precisa ver.
+ */
+export function recusasDeSaveNaoLidas(
+  recusas: RecusaDeSaveNoChat[],
+  profileId: string,
+  lidaAte: string | null,
+): number {
+  return recusas.filter(
+    (r) => r.decididoPorId !== profileId && (!lidaAte || r.decididoEm > lidaAte),
+  ).length;
+}
 
 function dataHora(iso: string): string {
   const d = new Date(iso);
@@ -79,6 +173,14 @@ export function montarThreadChat(
   erratas: JobErrataComItens[],
   mensagens: Array<JobMensagem & { autor_nome: string | null }>,
   moedaCode: string,
+  /**
+   * As recusas de save do job (`lerRecusasDeSaveDoJob`, decisão 099).
+   * Obrigatório de propósito: sem elas a thread não mostra o card da
+   * recusa, e um padrão `[]` deixaria esquecer em silêncio. Quem monta a
+   * thread (`carregar-detalhe.ts`) soma também `recusasDeSaveNaoLidas` no
+   * contador de não lidas.
+   */
+  recusasDeSave: RecusaDeSaveNoChat[],
 ): ItemChat[] {
   const itens: ItemChat[] = [];
 
@@ -215,13 +317,54 @@ export function montarThreadChat(
       valor: comSinal(delta, moedaCode),
       valorTom: delta >= 0 ? "positivo" : "negativo",
       linhas,
-      descricao: { texto: e.titulo, autor: e.autor_nome },
+      descricao: { rotulo: "Descrição da errata", texto: e.titulo, autor: e.autor_nome },
       nota:
         abertura.aberturaFinanceiroEm &&
         e.created_at > abertura.aberturaFinanceiroEm
           ? "Job devolvido ao mural de abertura para revisão de recebimento e custos."
           : null,
       em: e.created_at,
+    });
+  }
+
+  // ---- Um card por recusa de save (decisão 099) ----
+  // O financeiro recusou o pedido: a linha já voltou ao que era antes
+  // dele, e a produção precisa ver por quê. A justificativa vai no bloco
+  // de descrição, com o nome de quem recusou — como a da errata.
+  for (const r of recusasDeSave) {
+    const gera = r.tipo === "gera";
+    itens.push({
+      tipo: "sistema",
+      id: `save-recusado-${r.id}`,
+      icone: "x-circle",
+      cor: "vermelho",
+      titulo: `${gera ? "Save recusado" : "Consumo de save recusado"} · ${dataCurta(r.decididoEm)}`,
+      quando: dataHora(r.decididoEm),
+      resumo: `${[r.grupoNome, r.itemDescricao].filter(Boolean).join(" · ")}.`,
+      valor: moeda(r.valor, moedaCode),
+      valorTom: "neutro",
+      linhas: [
+        {
+          texto: gera ? "Crédito pedido" : "Consumo pedido",
+          valor: moeda(r.valor, moedaCode),
+          tom: "neutro",
+        },
+      ],
+      descricao: {
+        rotulo: "Justificativa do financeiro",
+        texto: r.justificativa,
+        autor: r.decididoPorNome,
+      },
+      // Os textos da situação "recusado" do pop-up de save (especificação
+      // da decisão 099, seção 3), sem o "por {nome} em {data}" — o card
+      // já diz quem e quando. A edição de um consumo aprovado
+      // (`substitui_id`) recusada volta ao consumo aprovado anterior.
+      nota: gera
+        ? "A linha voltou ao valor do job, sem crédito. Para pedir de novo, retire o save e marque a linha outra vez."
+        : r.substituiId
+          ? "A linha voltou ao consumo aprovado anterior."
+          : "A linha voltou ao faturamento e a reserva foi liberada.",
+      em: r.decididoEm,
     });
   }
 

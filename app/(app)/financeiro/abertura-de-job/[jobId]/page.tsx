@@ -53,9 +53,18 @@ export default async function AbrirJobNoFinanceiroPage({
   if (!carregado) notFound();
 
   // Quem chegou por link antigo (ou por outra aba que já resolveu o job)
-  // vai para a página do job, e não para um formulário que não grava.
+  // vai para onde o job está agora, e não para um formulário que não
+  // grava. Sem sair do financeiro (decisão 099, item 20): até 22/09/2026 o
+  // desvio ia para `/jobs`, a página da produção. O job aberto tem página
+  // própria no financeiro; o devolvido e o cancelado não têm registro, e o
+  // lugar de quem os procurava é a fila.
   if (carregado.status !== "aguardando_abertura") {
-    redirect(`/jobs/${params.jobId}?from=financeiro`);
+    redirect(
+      carregado.status === "rejeitado_financeiro" ||
+        carregado.status === "cancelado"
+        ? "/financeiro/abertura-de-job?aba=aguardando"
+        : `/financeiro/jobs/${params.jobId}`,
+    );
   }
 
   if (categoriasRes.error) {
@@ -85,7 +94,7 @@ export default async function AbrirJobNoFinanceiroPage({
   const [projetos, faturamentoMensal] = await Promise.all([
     listarProjetosFinanceiro(session.activeTenant.id, job.cliente_id),
     job.modelo_planilha_orcamento === "mensal"
-      ? lerFaturamentoMensalPeloJob(supabase, session.activeTenant.id, job.id)
+      ? lerFaturamentoMensalPeloJob(supabase, session.activeTenant.id, job.id, [])
       : Promise.resolve(null),
   ]);
 
@@ -157,6 +166,8 @@ export default async function AbrirJobNoFinanceiroPage({
       anos={anos}
       hojeIso={hojeIso}
       agoraLabel={formatDataHoraBr(agora)}
+      // A aprovação de save é da página do job aberto (decisão 099).
+      aprovacaoSave={null}
     />
   );
 }
