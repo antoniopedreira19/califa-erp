@@ -180,11 +180,6 @@ export function EditarUsuarioDrawer(props: EditarUsuarioDrawerProps) {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-[11px] text-muted-foreground">
-              <b>Administrador</b> gerencia usuários e regras.{" "}
-              <b>Gerente de Projeto</b> opera orçamentos e jobs.{" "}
-              <b>Financeiro</b> acompanha resultados.
-            </p>
             {isSelf && userRole === "administrador" && role !== "administrador" && (
               <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800">
                 <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />

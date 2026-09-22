@@ -164,11 +164,6 @@ export function ConvidarUsuarioDrawer({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
-                <b>Administrador</b> gerencia usuários e regras.{" "}
-                <b>Gestão de Projetos</b> opera orçamentos e jobs.{" "}
-                <b>Financeiro</b> acompanha resultados.
-              </p>
             </Field>
 
             <div className="pt-1 border-t border-border">
