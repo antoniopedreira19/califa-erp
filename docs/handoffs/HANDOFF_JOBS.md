@@ -4021,9 +4021,14 @@ passa a nascer na **aprovação** do financeiro, linha a linha.
 - **`saves_aprovacoes` é só leitura** para o cliente: tudo muda pelas RPCs. E
   tem quatro FKs para `profiles` — nunca embutir profiles a partir dela.
 - **Travas de escrita direta** em job aberto (marca de save, consumo, errata e
-  remoção de linha com save pela API) ligam só com a migration
-  `20260922140003`, aplicada junto do deploy. Até lá o banco aceita a escrita
-  direta; o código novo já não a usa.
+  remoção de linha com save pela API) ligadas pela migration
+  `20260922140003`, aplicada junto do deploy em 23/09/2026. Para desligar
+  numa emergência, `save_aprovacao_em_vigor()` volta a `select false` — é a
+  chave de todas elas.
+- **O planejado da linha em save não muda nem por UPDATE direto:**
+  `trg_planejado_espelha_orcado_job` roda antes da trava e zera o planejado
+  de toda linha com `em_save`. Um teste de trava que tente mudar esse
+  planejado "passa" sem mudar nada; teste com o orçado.
 - **Linha recusada** não tem `em_save` nem consumo, mas continua no mapa do
   save (`pedidos.recusado`): quem filtra "linha com save" por `em_save` perde
   ela.
