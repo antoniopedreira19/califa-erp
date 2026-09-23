@@ -4062,3 +4062,50 @@ passa a nascer na **aprovação** do financeiro, linha a linha.
   barra, e a action chamada pelo console voltou "Você não tem permissão para
   essa ação." com `acao_negada` na auditoria. Como administrador, o botão
   aparece e a action passa da trava.
+
+---
+
+## ⚠️ Nota de 2026-09-22 — o `em_producao` legado encerra, fatura e passa pela revisão
+
+> ⚠️ **Mudou em 22/09/2026.** Achado na revisão da 087 (16/09). Para um job
+> em `em_producao`, a barra mostrava "Enviar job para encerramento", mas o
+> servidor recusava com "Só job aberto…". O envio para faturamento e o
+> salvamento da revisão da abertura também recusavam. Um job nesse status
+> ficaria sem saída pela tela.
+
+- `em_producao` é legado: todas as outras travas já o tratavam como `aberto`
+  (ver o comentário de `JobStatus` em `lib/types.ts`). Hoje nenhum job está
+  nesse status.
+- Novo em `lib/types.ts`: `JOB_STATUS_ABERTO` (`aberto`, `em_producao`) e
+  `jobEstaAberto(status)`. `jobAceitaEnvioParaFaturamento` usa a função.
+- `encerrarJob` (`jobs/[jobId]/actions-encerramento.ts`) e
+  `editarRegistroDaAbertura` (`financeiro/abertura-de-job/actions.ts`)
+  aceitam os dois status, na checagem e na trava de corrida do update
+  (`.in("status", JOB_STATUS_ABERTO)`).
+- **Conferido:**
+  - `tsc`, lint e build limpos;
+  - nos testes, só as 2 falhas antigas do RH em `permissoes.test.ts`;
+  - no banco, numa transação desfeita, o mesmo update do encerramento
+    passou num job posto em `em_producao` (JOB-0034, que ficou como estava).
+- **No navegador, em 22/09/2026 (dev server do worktree na 3014, TES-0001/26),
+  só leitura:** nenhuma regressão no job aberto.
+  - JOB-0032: selo "Em faturamento", trilha de faturamento "Na fila do
+    financeiro" e encerramento com as 3 pendências.
+  - JOB-0034 (Always On): "Enviar faturamento de outubro" disponível e
+    encerramento com a pendência de marcação.
+  - A rota `/financeiro/abertura-de-job` compilou e respondeu sem erro.
+- **Não conferido pela tela:**
+  - o job em `em_producao`: nenhum fluxo produz esse status, e o dado de
+    teste não se cria por SQL;
+  - a chamada da action pelo console: o ambiente bloqueou, porque ela pode
+    gravar no banco de produção.
+
+**Os outros dois achados da mesma revisão:**
+
+- **Job encerrado com revisão da abertura pendente fica preso:** o
+  impedimento `revisaoDaAberturaPendente` já está no encerramento da
+  branch `feature/aprovacao-save` (decisão 099), com o texto nas duas
+  trilhas da barra. Entra no main com ela.
+- **Corrida entre encerramento e última nota:** fechada pela decisão 094
+  (20/09). A nota deixou de finalizar o job, e o gatilho do envio trava a
+  linha do job com `for update`.

@@ -12,6 +12,8 @@ import {
   situacaoVerbaLabel,
   verbaPendenteNoEncerramento,
   jobStatusLabel,
+  jobEstaAberto,
+  JOB_STATUS_ABERTO,
   type JobStatus,
   type SituacaoVerba,
 } from "@/lib/types";
@@ -278,7 +280,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
 
   if (!job) return { ok: false, message: "Job não encontrado." };
 
-  if (job.status !== "aberto") {
+  if (!jobEstaAberto(job.status)) {
     return {
       ok: false,
       message: `Só job aberto pode ser enviado para encerramento. Este está ${jobStatusLabel(job.status).toLowerCase()}.`,
@@ -419,7 +421,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     .eq("tenant_id", session.activeTenant.id)
     // Trava de corrida: se o job saiu de `aberto` entre a leitura e o
     // update, nada é gravado.
-    .eq("status", "aberto")
+    .in("status", JOB_STATUS_ABERTO)
     .select("status")
     .maybeSingle<{ status: JobStatus }>();
 

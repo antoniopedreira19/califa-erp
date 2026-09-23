@@ -357,6 +357,7 @@ export function ImportarPlanilhaDrawer({
               <AvisoDeSubstituicao
                 atual={conteudoAtual}
                 itensNovos={preview.linhas_importadas}
+                internacional={internacional}
                 planejadoDaVersao={
                   preview.planejado.versao_anterior !== null &&
                   origemPlanejado === "anterior"
@@ -443,10 +444,15 @@ export function ImportarPlanilhaDrawer({
 function AvisoDeSubstituicao({
   atual,
   itensNovos,
+  internacional,
   planejadoDaVersao,
 }: {
   atual?: { grupos: number; itens: number; bvs: number };
   itensNovos: number;
+  /** Só o internacional tem moeda e câmbio como parâmetro da versão; no
+   *  nacional a frase não os cita (decisão 095). Obrigatório: quem monta
+   *  o aviso tem que dizer de qual modelo é a versão. */
+  internacional: boolean;
   /** A escolha foi manter o planejado desta versão nas linhas casadas. */
   planejadoDaVersao: boolean;
 }) {
@@ -492,7 +498,10 @@ function AvisoDeSubstituicao({
       <p className="text-[13px] text-muted-foreground">
         No lugar entram{" "}
         <strong className="text-foreground">{itensNovos} itens</strong> da
-        planilha. Alíquota, honorários, moeda e câmbio da versão{" "}
+        planilha.{" "}
+        {internacional
+          ? "Alíquotas, fee, moeda e câmbio da versão"
+          : "Alíquota e honorários da versão"}{" "}
         <strong className="text-foreground">não mudam</strong>.
       </p>
       <p className="text-[13px] text-muted-foreground">
