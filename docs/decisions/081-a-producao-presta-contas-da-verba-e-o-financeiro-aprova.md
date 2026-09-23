@@ -123,9 +123,9 @@ presta, e volta inteira.
   > - O mesmo vale para o "estornar a baixa" da PP e da devolução: são
   >   correções do financeiro e não devolvem nada à produção.
   >
-  > **Atenção:** entre a aprovação e a baixa, o dinheiro pode ainda estar com
-  > o produtor. A baixa é a confirmação de que ele voltou, e cobrar essa
-  > devolução passa a ser só do financeiro.
+  > **Por que o dinheiro não fica com a produção:** a verba é gasta num
+  > cartão controlado pela empresa (Tiago, 23/09/2026). O saldo não fica
+  > com o produtor, e a baixa do estorno é conferência do financeiro.
   >
   > **Código:** `verbaPendenteNoEncerramento` em `lib/types.ts`, com os
   > testes em `lib/travas-do-encerramento.test.ts`.

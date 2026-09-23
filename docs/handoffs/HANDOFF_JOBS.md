@@ -4070,6 +4070,10 @@ Revê a nota de 16/09 (decisão 087) num ponto só: **quem decide o `finalizado`
   - `lib/travas-do-encerramento.test.ts` (5 testes);
   - `tsc`;
   - mesclagem de teste com a branch da 099, sem conflito.
+- **Confirmado pelo Tiago em 23/09/2026:** a verba é gasta num cartão
+  controlado pela empresa, então o saldo não fica com o produtor.
+- **No navegador (só leitura, 3014):** a trilha de encerramento do JOB-0032
+  continua com as mesmas 3 pendências.
 - **Não conferido pela tela:** não existe verba em "devolução pendente" no
   banco. Montar uma exige o fluxo inteiro, com o login do financeiro.
 
