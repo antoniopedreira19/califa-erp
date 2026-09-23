@@ -213,10 +213,10 @@ export function montarSegmentoA(
     /* 018-020 */ camara +
     /* 021-023 */ padNumeric(p.bancoFavorecido, 3) +
     /* 024-028 */ padNumeric(p.agenciaFavorecida, 5) +
-    /* 029     */ (p.agenciaFavorecidaDv ? p.agenciaFavorecidaDv[0] : " ") +
+    /* 029     */ " " + // DV da agência: "Branco" no layout (pág. 10 e 15)
     /* 030-041 */ padNumeric(p.contaFavorecida, 12) +
-    /* 042     */ p.contaFavorecidaDv[0] +
-    /* 043     */ p.contaFavorecidaDv[0] + // DV agência/conta — Santander usa igual
+    /* 042     */ dvDaContaFavorecida(p.contaFavorecidaDv) +
+    /* 043     */ " " + // DV agência/conta: em branco, como no PE000013 aprovado
     /* 044-073 */ padAlpha(p.nomeFavorecido, 30) +
     /* 074-093 */ padAlpha(p.seuNumero, 20) +
     /* 094-101 */ formatDate(p.dataPagamento) +
@@ -235,6 +235,24 @@ export function montarSegmentoA(
     /* 231-240 */ brancos(10);
 
   return assert240(linha, "segmento A");
+}
+
+/** DV da conta favorecida (posição 042). Nota G003: conta favorecida (PIX
+ *  ou TED) com letra — o "X" de alguns bancos — vai como "0". */
+function dvDaContaFavorecida(dv: string): string {
+  const c = (dv ?? "").trim().toUpperCase()[0] ?? "";
+  if (!c) throw new Error("Conta favorecida sem dígito verificador.");
+  return /[0-9]/.test(c) ? c : "0";
+}
+
+/** Tipo de inscrição (Nota G023) pelo tamanho do documento: 11 dígitos é
+ *  CPF, 14 é CNPJ. Qualquer outro tamanho é cadastro quebrado — o arquivo
+ *  não sai com ele. */
+function inscricaoDoDocumento(documento: string): { tipo: "1" | "2"; numero: string } {
+  const numero = (documento ?? "").replace(/\D/g, "");
+  if (numero.length === 11) return { tipo: "1", numero };
+  if (numero.length === 14) return { tipo: "2", numero };
+  throw new Error(`Documento do favorecido inválido: "${documento}".`);
 }
 
 /** Segmento A do PIX chave. A diferença do A normal é que os campos
@@ -298,8 +316,8 @@ export function montarSegmentoB(
     /* 009-013 */ padNumeric(sequencialNoLote, 5) +
     /* 014     */ "B" +
     /* 015-017 */ brancos(3) +
-    /* 018     */ (p.favorecidoEhCnpj ? "2" : "1") +
-    /* 019-032 */ padNumeric(p.documentoFavorecido, 14) +
+    /* 018     */ inscricaoDoDocumento(p.documentoFavorecido).tipo +
+    /* 019-032 */ padNumeric(inscricaoDoDocumento(p.documentoFavorecido).numero, 14) +
     /* 033-062 */ padAlpha(p.favorecidoLogradouro ?? "", 30) +
     /* 063-067 */ padNumeric(p.favorecidoNumero ?? "0", 5) +
     /* 068-082 */ brancos(15) + // complemento
@@ -325,13 +343,28 @@ export function montarSegmentoB(
 }
 
 /** Segmento B para PIX por chave. Layout diferente do B normal —
- *  campos 15-16 identificam a forma de iniciação (01-04). */
+ *  campos 15-16 identificam a forma de iniciação (01-04).
+ *
+ *  Posições 019-032 (Notas G035 e G042), o que o Santander cobrou em
+ *  07/08 e 10/09/2026:
+ *   • chave CPF/CNPJ (forma "03"): o número é a PRÓPRIA chave. Os dois
+ *     campos têm de ser iguais, mesmo quando a chave não é do documento
+ *     do cadastro (a chave pode ser de outra pessoa — decisão do Tiago em
+ *     23/09/2026);
+ *   • demais chaves: o CPF/CNPJ do favorecido do cadastro.
+ *  Sempre 14 posições, à direita, com zeros à esquerda — CPF com brancos
+ *  à direita foi o que derrubou o PIX da Publi em 01/09/2026. */
 export function montarSegmentoBPixChave(
   loteNum: number,
   sequencialNoLote: number,
   pagamento: PagamentoPixChave,
 ): string {
   const formaIniciacao = mapearTipoChave(pagamento.tipoChave);
+  const chaveEhDocumento =
+    pagamento.tipoChave === "cpf" || pagamento.tipoChave === "cnpj";
+  const inscricao = inscricaoDoDocumento(
+    chaveEhDocumento ? pagamento.chave : pagamento.documentoFavorecido,
+  );
   const linha =
     /* 001-003 */ BANCO_SANTANDER +
     /* 004-007 */ padNumeric(loteNum, 4) +
@@ -340,15 +373,29 @@ export function montarSegmentoBPixChave(
     /* 014     */ "B" +
     /* 015-016 */ formaIniciacao +
     /* 017     */ " " +
-    /* 018     */ (pagamento.favorecidoEhCnpj ? "2" : "1") +
-    /* 019-032 */ padNumeric(pagamento.documentoFavorecido, 14) +
+    /* 018     */ inscricao.tipo +
+    /* 019-032 */ padNumeric(inscricao.numero, 14) +
     /* 033-067 */ padAlpha("", 35) + // informação 10 (TXID — só QR Code)
     /* 068-127 */ padAlpha("", 60) + // informação 11 (livre)
-    /* 128-226 */ padAlpha(pagamento.chave, 99) + // informação 12 = chave
+    /* 128-226 */ padAlpha(chaveNaInformacao12(pagamento), 99) + // informação 12 = chave
     /* 227-232 */ brancos(6) +
     /* 233-240 */ brancos(8); // ISPB
 
   return assert240(linha, "segmento B PIX chave");
+}
+
+/** A chave como vai na Informação 12 (Nota G035): CPF/CNPJ só com os
+ *  dígitos; telefone, e-mail e aleatória como o cadastro já grava
+ *  (+55…, minúsculas, EVP com hífens — ver lib/pix.ts). Chave que não
+ *  cabe nas 99 posições é erro de cadastro, não se corta. */
+function chaveNaInformacao12(pagamento: PagamentoPixChave): string {
+  const chave =
+    pagamento.tipoChave === "cpf" || pagamento.tipoChave === "cnpj"
+      ? pagamento.chave.replace(/\D/g, "")
+      : pagamento.chave.trim();
+  if (!chave) throw new Error("Pagamento PIX sem chave.");
+  if (chave.length > 99) throw new Error(`Chave PIX maior que 99 posições: "${chave}".`);
+  return chave;
 }
 
 /** Mapeia tipo de chave PIX pra código de forma de iniciação (Nota G032). */

@@ -55,25 +55,54 @@ export function zeros(len: number): string {
   return "0".repeat(len);
 }
 
+/** Data e hora de um instante no relógio de Brasília. O servidor roda em
+ *  UTC: sem isto, um arquivo gerado depois das 21h sairia com a data do
+ *  dia seguinte no header (e a hora 3h adiantada). */
+function partesEmBrasilia(d: Date): Record<"dia" | "mes" | "ano" | "h" | "m" | "s", string> {
+  const partes = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const v = (t: Intl.DateTimeFormatPartTypes) =>
+    partes.find((p) => p.type === t)?.value ?? "00";
+  return {
+    dia: v("day"),
+    mes: v("month"),
+    ano: v("year"),
+    h: v("hour"),
+    m: v("minute"),
+    s: v("second"),
+  };
+}
+
 /** Data DDMMAAAA a partir de string ISO YYYY-MM-DD ou Date.
- *  Null/undefined vira zeros — o manual aceita 0 em datas opcionais. */
+ *  String é data de calendário e passa como está; Date é um instante e
+ *  vira a data de Brasília. Null/undefined vira zeros — o manual aceita 0
+ *  em datas opcionais. */
 export function formatDate(
   input: string | Date | null | undefined,
 ): string {
   if (!input) return "00000000";
-  const iso = typeof input === "string" ? input : input.toISOString().slice(0, 10);
-  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) throw new Error(`formatDate: entrada inválida "${iso}"`);
+  if (input instanceof Date) {
+    const p = partesEmBrasilia(input);
+    return `${p.dia}${p.mes}${p.ano}`;
+  }
+  const match = input.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) throw new Error(`formatDate: entrada inválida "${input}"`);
   const [, yyyy, mm, dd] = match;
   return `${dd}${mm}${yyyy}`;
 }
 
-/** Hora HHMMSS a partir de Date. */
+/** Hora HHMMSS de um instante, no relógio de Brasília. */
 export function formatTime(d: Date): string {
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${h}${m}${s}`;
+  const p = partesEmBrasilia(d);
+  return `${p.h}${p.m}${p.s}`;
 }
 
 /** Valor monetário em formato V2 (2 casas decimais implícitas, sem separador).

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { problemaDaChavePix } from "@/lib/pix";
+import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 
 /**
  * Schemas do módulo RH — colaborador, alocação, salário.
@@ -197,8 +199,9 @@ export type SalarioInput = z.infer<typeof salarioSchema>;
 
 /**
  * Dados bancários do colaborador para pagamento por remessa CNAB.
- * Todos os campos são opcionais no cadastro — o gate de completude é
- * a hora de gerar remessa, não o cadastro. Módulo pgto-remessa.
+ * Conta e PIX são opcionais, cada um; mas o que for preenchido tem de
+ * estar completo e no formato do arquivo de remessa (23/09/2026 — ver o
+ * superRefine). Módulo pgto-remessa.
  */
 export const TIPOS_CONTA_BANCARIA = ["corrente", "poupanca", "pagamento"] as const;
 export const TIPOS_CHAVE_PIX = [
@@ -278,24 +281,55 @@ export const dadosBancariosColaboradorSchema = z
       .transform((v) => (v && v.length > 0 ? v : null)),
   })
   .superRefine((val, ctx) => {
-    // Se preencheu conta, agência é obrigatória (e vice-versa)
+    // Os dados daqui saem no arquivo de remessa CNAB. Desde 23/09/2026 a
+    // régua é a mesma do cadastro de fornecedor: bloco bancário começado
+    // tem de estar completo, e a chave PIX tem de estar no formato que o
+    // Santander aceita — o que não sair certo no arquivo não se grava.
     const bancoParcial =
-      (val.banco_codigo || val.agencia || val.conta) &&
-      !(val.banco_codigo && val.agencia && val.conta);
-    if (bancoParcial) {
+      val.banco_codigo || val.agencia || val.agencia_dv || val.conta || val.conta_dv || val.tipo_conta;
+    const bancoCompleto =
+      val.banco_codigo && val.agencia && val.conta && val.conta_dv && val.tipo_conta;
+    if (bancoParcial && !bancoCompleto) {
+      const faltam: Array<[keyof typeof val, string]> = [
+        ["banco_codigo", "Informe o banco."],
+        ["agencia", "Agência obrigatória."],
+        ["conta", "Conta obrigatória."],
+        ["conta_dv", "Dígito da conta obrigatório."],
+        ["tipo_conta", "Tipo de conta obrigatório."],
+      ];
+      for (const [campo, message] of faltam) {
+        if (!val[campo])
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: [campo] });
+      }
+    }
+    if (val.banco_codigo && !getBancoByCodigo(val.banco_codigo)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          "Se for cadastrar conta bancária, preencha banco, agência e conta.",
+        message: "Banco inválido.",
         path: ["banco_codigo"],
       });
     }
-    // Se preencheu chave PIX, tipo é obrigatório (e vice-versa)
-    if ((val.pix_tipo && !val.pix_chave) || (val.pix_chave && !val.pix_tipo)) {
+    if (val.agencia_dv && !/^[0-9X]$/.test(val.agencia_dv)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Preencha tipo e chave PIX juntos.",
-        path: ["pix_chave"],
+        message: "Dígito da agência inválido.",
+        path: ["agencia_dv"],
+      });
+    }
+    if (val.conta_dv && !/^[0-9X]$/.test(val.conta_dv)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Dígito da conta inválido.",
+        path: ["conta_dv"],
+      });
+    }
+
+    const problemaPix = problemaDaChavePix(val.pix_tipo, val.pix_chave);
+    if (problemaPix) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: problemaPix,
+        path: [val.pix_tipo ? "pix_chave" : "pix_tipo"],
       });
     }
   });
