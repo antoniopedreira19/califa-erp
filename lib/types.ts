@@ -1300,13 +1300,28 @@ export function jobEstaCongelado(status: JobStatus): boolean {
 }
 
 /**
+ * O job aberto pelo financeiro e ainda não encerrado. O `em_producao` legado
+ * conta como aberto, como em todas as outras travas (ver `JobStatus`).
+ *
+ * Até 22/09/2026 o encerramento, o envio para faturamento e a revisão da
+ * abertura aceitavam só `aberto`: um job que ainda estivesse em
+ * `em_producao` via o botão "Enviar job para encerramento" e o servidor
+ * recusava, sem nenhuma saída pela tela. Nenhum job está nesse status hoje.
+ */
+export const JOB_STATUS_ABERTO: JobStatus[] = ["aberto", "em_producao"];
+
+export function jobEstaAberto(status: JobStatus): boolean {
+  return JOB_STATUS_ABERTO.includes(status);
+}
+
+/**
  * Onde o job ainda pode ser enviado para faturamento (inteiro, ou um mês
  * no modelo mensal). Desde 16/09/2026 (decisão 087) faturamento e
  * encerramento correm separados: o job encerrado ainda não faturado
  * continua enviando. O finalizado já foi todo enviado (decisão 094).
  */
 export function jobAceitaEnvioParaFaturamento(status: JobStatus): boolean {
-  return status === "aberto" || status === "encerrado";
+  return jobEstaAberto(status) || status === "encerrado";
 }
 
 /**

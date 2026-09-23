@@ -130,27 +130,11 @@ export function NovaVersaoDrawer({
         >
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Moeda" name="moeda" errors={fieldErrors}>
-                <Input
-                  name="moeda"
-                  defaultValue="BRL"
-                  maxLength={3}
-                  className="uppercase"
-                />
-              </Field>
-              <Field
-                label="Taxa de câmbio"
-                name="taxa_cambio"
-                errors={fieldErrors}
-              >
-                <Input
-                  name="taxa_cambio"
-                  type="number"
-                  step="0.0001"
-                  min="0.0001"
-                  className="no-spinner"
-                />
-              </Field>
+              {/* Moeda e Taxa de câmbio saíram daqui em 21/09/2026 (decisão
+                  095): os valores da planilha são sempre em reais — no
+                  internacional também, onde o que varia é a moeda de fora,
+                  editada na linha de parâmetros da versão. Sem os campos, a
+                  `criarVersao` grava o padrão de sempre: BRL e câmbio 1. */}
               <Field
                 label="Honorários (%)"
                 name="percentual_honorarios"

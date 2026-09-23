@@ -18,6 +18,8 @@ import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { formatCurrency } from "@/lib/utils";
 import {
+  jobEstaAberto,
+  JOB_STATUS_ABERTO,
   ordenarCompetencias,
   rateioLabel,
   type JobCompetencia,
@@ -1031,7 +1033,7 @@ export async function editarRegistroDaAbertura(
     .maybeSingle<any>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
-  if (job.status !== "aberto") {
+  if (!jobEstaAberto(job.status)) {
     return {
       ok: false,
       message:
@@ -1392,7 +1394,7 @@ export async function editarRegistroDaAbertura(
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     // Trava de corrida: job encerrado em outra aba enquanto esta editava.
-    .eq("status", "aberto");
+    .in("status", JOB_STATUS_ABERTO);
 
   if (updateErro) {
     console.error("[abertura-job.editar-update]", updateErro.message);

@@ -4348,3 +4348,26 @@ orçamento não muda, exceto:
   `save_marcado_por`, `save_marcado_em` e `planejado_antes_save` para a cópia;
 - rotas que copiam linha em save (duplicar versão, importação) levam
   `planejado_antes_save`. Obs.: `duplicarVersao` nunca copiou a marca de save.
+
+---
+
+## ⚠️ Nota de 2026-09-21 (5) — Moeda e Taxa de câmbio saem de "Nova versão" e de "Parâmetros das versões" (decisão 095 §6)
+
+Completa a nota da 095: os dois campos ainda apareciam no drawer **"Nova
+versão do orçamento"** (`nova-versao-drawer.tsx`) e no modal **"Parâmetros das
+versões"** (`_rascunho/parametros-modal.tsx`, aberto pelo ícone de % do card na
+visão agregada). Saíram dos dois, em todos os modelos: ali eles descrevem os
+valores da planilha, sempre em reais. A `criarVersao` grava BRL / 1 quando os
+campos não vêm; no modal os valores seguem no objeto pelo spread. Junto: o
+`title` do ícone virou "Honorários e imposto deste orçamento", e a confirmação
+do importador só cita "moeda e câmbio" no internacional.
+
+`versao-editor-drawer.tsx` tem os mesmos campos, mas nenhuma tela o renderiza —
+código morto, não mexido.
+
+**Conferido na tela** (`TES-0001/26-06`): o drawer abre só com Honorários e
+Impostos; a v3 criada por ele foi gravada com `BRL` / `1,0000` / 12% / 19,53%
+(e abriu com o campo "Nomeie o agrupamento", que é o caminho "versão nova" da
+098). O modal da visão agregada abre só com Honorários e Impostos. tsc e lint
+limpos.
+

@@ -76,3 +76,27 @@ Conferido no JOB-0025: 8,6% + 71,1% = 79,7% (Resultado geral realizado).
   há mais campo de tela para o nacional. Tirar as colunas é mudança
   destrutiva e não foi pedida.
 - A exportação em planilha não mudou.
+
+## 6. Complemento (21/09/2026, à tarde) — os outros lugares onde Moeda e Câmbio ainda apareciam
+
+A §2.3 tirou os dois campos da linha de parâmetros da versão. Eles continuavam
+em dois formulários, que o Tiago apontou no mesmo dia:
+
+- **"Nova versão do orçamento"** (drawer do "+" → "Criar do zero");
+- **"Parâmetros das versões"** (modal do ícone de % na visão agregada).
+
+Saíram dos dois, **em todos os modelos** — não só no nacional. Nesses
+formulários `moeda` e `taxa_cambio` descrevem os VALORES da planilha, que são
+em reais também no internacional; o que varia lá é a moeda de fora e o câmbio
+de compra, editados na linha de parâmetros da versão (decisão 072). Sem os
+campos, a gravação segue no padrão de sempre — BRL e câmbio 1 —, e no modal os
+dois valores atravessam o salvar pelo spread, sem que ninguém os edite.
+
+A frase de confirmação do "Importar planilha nesta versão" também deixou de
+citar "moeda e câmbio" no nacional (no internacional continua citando, porque
+lá eles existem como parâmetro).
+
+`versao-editor-drawer.tsx` ainda tem os dois campos, mas não é renderizado por
+nenhuma tela desde que as versões viraram abas (decisão 023): é código morto e
+ficou como estava.
+
