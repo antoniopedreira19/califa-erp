@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isValidCnpj, isValidCpf, onlyDigits } from "@/lib/utils";
-import { telefonePixSemDdi, evpValido } from "@/lib/pix";
+import { problemaDaChavePix } from "@/lib/pix";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 
 /**
@@ -87,12 +87,20 @@ export const fornecedorSchema = z
       (v) => (typeof v === "string" ? onlyDigits(v) : v),
       z.string().nullable().optional().transform((v) => (v ? v : null)),
     ),
-    agencia_dv: z.preprocess(nullIfEmpty, z.string().max(1).nullable().optional()),
+    // Os dois dígitos vão em maiúscula ("x" vira "X"): é o que a CHECK do
+    // banco aceita e o que o gerador da remessa espera.
+    agencia_dv: z.preprocess(
+      nullIfEmpty,
+      z.string().trim().max(1).toUpperCase().nullable().optional(),
+    ),
     conta: z.preprocess(
       (v) => (typeof v === "string" ? onlyDigits(v) : v),
       z.string().nullable().optional().transform((v) => (v ? v : null)),
     ),
-    conta_dv: z.preprocess(nullIfEmpty, z.string().max(1).nullable().optional()),
+    conta_dv: z.preprocess(
+      nullIfEmpty,
+      z.string().trim().max(1).toUpperCase().nullable().optional(),
+    ),
     // `nullIfEmpty` nos dois enums (04/09/2026): o <select> vazio manda "",
     // e o enum recusava com "Invalid enum value" — o bloco não preenchido
     // (banco sem PIX, ou PIX sem banco) nunca passava pela validação.
@@ -124,7 +132,7 @@ export const fornecedorSchema = z
 
     // --- Banco tradicional: se qualquer campo, todos os obrigatórios ---
     const bancoParcial =
-      data.banco_codigo || data.agencia || data.conta || data.conta_dv || data.tipo_conta;
+      data.banco_codigo || data.agencia || data.agencia_dv || data.conta || data.conta_dv || data.tipo_conta;
     const bancoCompleto =
       data.banco_codigo && data.agencia && data.conta && data.conta_dv && data.tipo_conta;
 
@@ -141,13 +149,13 @@ export const fornecedorSchema = z
     if (data.agencia && !/^[0-9]{3,5}$/.test(data.agencia)) {
       ctx.addIssue({ code: "custom", path: ["agencia"], message: "Agência deve ter 3 a 5 dígitos." });
     }
-    if (data.agencia_dv && !/^[0-9Xx]$/.test(data.agencia_dv)) {
+    if (data.agencia_dv && !/^[0-9X]$/.test(data.agencia_dv)) {
       ctx.addIssue({ code: "custom", path: ["agencia_dv"], message: "Dígito da agência inválido." });
     }
     if (data.conta && !/^[0-9]{4,12}$/.test(data.conta)) {
       ctx.addIssue({ code: "custom", path: ["conta"], message: "Conta deve ter 4 a 12 dígitos." });
     }
-    if (data.conta_dv && !/^[0-9Xx]$/.test(data.conta_dv)) {
+    if (data.conta_dv && !/^[0-9X]$/.test(data.conta_dv)) {
       ctx.addIssue({ code: "custom", path: ["conta_dv"], message: "Dígito da conta inválido." });
     }
 
@@ -160,47 +168,13 @@ export const fornecedorSchema = z
       if (!data.pix_chave) ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "Chave PIX obrigatória." });
     }
 
+    // A chave tem de sair no arquivo de remessa do jeito que o banco
+    // aceita — a régua é a mesma do cadastro de colaborador e da geração
+    // da remessa (`problemaDaChavePix`, 23/09/2026).
     if (data.pix_tipo && data.pix_chave) {
-      const chave = data.pix_chave;
-      switch (data.pix_tipo) {
-        case "cpf": {
-          const d = onlyDigits(chave);
-          if (d.length !== 11 || !isValidCpf(d))
-            ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "CPF inválido." });
-          break;
-        }
-        case "cnpj": {
-          const d = onlyDigits(chave);
-          if (d.length !== 14 || !isValidCnpj(d))
-            ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "CNPJ inválido." });
-          break;
-        }
-        case "email":
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(chave))
-            ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "E-mail inválido." });
-          break;
-        case "telefone": {
-          // O `+55` pode já vir (valor gravado) ou não (recém-digitado):
-          // o que conta são os 10/11 dígitos do número.
-          const d = telefonePixSemDdi(chave);
-          if (d.length !== 10 && d.length !== 11)
-            ctx.addIssue({ code: "custom", path: ["pix_chave"], message: "Telefone deve ter 10 ou 11 dígitos." });
-          break;
-        }
-        case "aleatoria": {
-          // A aleatória do PIX é um EVP: 32 hexadecimais, com ou sem os
-          // hífens. Aceitar "qualquer coisa de 32 a 36 caracteres" deixava
-          // passar chave que o banco recusa no arquivo de pagamento
-          // (18/09/2026).
-          if (!evpValido(chave))
-            ctx.addIssue({
-              code: "custom",
-              path: ["pix_chave"],
-              message: "Chave aleatória inválida — são 32 caracteres de 0-9 e a-f.",
-            });
-          break;
-        }
-      }
+      const problema = problemaDaChavePix(data.pix_tipo, data.pix_chave);
+      if (problema)
+        ctx.addIssue({ code: "custom", path: ["pix_chave"], message: problema });
     }
 
     // --- Regra final: pelo menos um bloco de pagamento completo ---

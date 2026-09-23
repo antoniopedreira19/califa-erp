@@ -20,10 +20,12 @@ import {
   zeros,
 } from "./campos";
 import {
+  gerarArquivo,
   montarHeaderArquivo,
   montarHeaderLote,
   montarSegmentoA,
   montarSegmentoB,
+  montarSegmentoBPixChave,
   montarTrailerArquivo,
   montarTrailerLote,
 } from "./gerador";
@@ -32,7 +34,14 @@ import type {
   EmpresaPagadora,
   MetadadosArquivo,
   PagamentoCreditoContaOuTED,
+  PagamentoPixChave,
 } from "./tipos";
+import {
+  normalizarChavePix,
+  PIX_FORMATO,
+  problemaDaChavePix,
+  type PixTipo,
+} from "../../pix";
 
 // ---------------------------------------------------------------------
 // Helpers de fixture
@@ -59,7 +68,9 @@ const CONTA_SANTANDER: ContaDebito = {
 /** 18/08/2026 17:08:08 — data e hora do arquivo original. */
 const META_ARQUIVO: MetadadosArquivo = {
   sequencialArquivo: 12,
-  dataGeracao: new Date(2026, 7, 18, 17, 8, 8), // agosto=7 (0-indexed)
+  // O instante com fuso explícito: o header sai no relógio de Brasília,
+  // qualquer que seja o fuso da máquina que roda o teste.
+  dataGeracao: new Date("2026-08-18T17:08:08-03:00"),
 };
 
 // ---------------------------------------------------------------------
@@ -89,7 +100,9 @@ test("padNumeric alinha à direita com zeros e rejeita overflow", () => {
 
 test("formatDate produz DDMMAAAA", () => {
   assert.equal(formatDate("2026-08-18"), "18082026");
-  assert.equal(formatDate(new Date(2026, 7, 18)), "18082026");
+  assert.equal(formatDate(new Date("2026-08-18T12:00:00-03:00")), "18082026");
+  // 22h em Brasília já é o dia seguinte em UTC — o header fica no dia de cá.
+  assert.equal(formatDate(new Date("2026-09-23T22:30:00-03:00")), "23092026");
   assert.equal(formatDate(null), "00000000");
 });
 
@@ -186,7 +199,6 @@ test("Segmento A (TED) monta linha de 240 bytes com dados corretos", () => {
     valor: 0.04, // 4 centavos, valor do arquivo real
     nomeFavorecido: "CLARA MELO DE JESUS TAVARES SI",
     documentoFavorecido: "00000000000",
-    favorecidoEhCnpj: false,
     finalidadeTED: "00005",
   };
 
@@ -208,6 +220,30 @@ test("Segmento A (TED) monta linha de 240 bytes com dados corretos", () => {
   assert.equal(linha.slice(101, 104), "BRL", "moeda");
   assert.equal(linha.slice(119, 134), "000000000000004", "valor R$ 0,04");
   assert.equal(linha.slice(219, 224), "00005", "finalidade TED");
+  // 029 e 043 em branco, como no PE000013 aprovado e no layout (pág. 10).
+  assert.equal(linha.slice(28, 29), " ", "DV agência em branco");
+  assert.equal(linha.slice(42, 43), " ", "DV agência/conta em branco");
+});
+
+test("Segmento A: DV da conta com letra vai como 0 (Nota G003)", () => {
+  const linha = montarSegmentoA(1, 1, {
+    tipo: "ted",
+    bancoFavorecido: "001",
+    agenciaFavorecida: "1234",
+    agenciaFavorecidaDv: "X",
+    contaFavorecida: "56789",
+    contaFavorecidaDv: "X",
+    tipoContaFavorecida: "corrente",
+    finalidadeTED: "00005",
+    seuNumero: "X1",
+    dataPagamento: "2026-09-23",
+    valor: 1,
+    nomeFavorecido: "FULANO",
+    documentoFavorecido: "86191099525",
+  });
+  assert.equal(linha.slice(28, 29), " ", "DV agência em branco mesmo com X");
+  assert.equal(linha.slice(41, 42), "0", "DV X vira 0");
+  assert.equal(linha.slice(42, 43), " ");
 });
 
 // ---------------------------------------------------------------------
@@ -228,7 +264,6 @@ test("Segmento B (endereço favorecido) monta 240 bytes", () => {
     valor: 0.04,
     nomeFavorecido: "CLARA MELO DE JESUS TAVARES SI",
     documentoFavorecido: "86191099525",
-    favorecidoEhCnpj: false,
     favorecidoLogradouro: "R MINISTRO ANTONIO CARLOS MAGA",
     favorecidoNumero: "0",
     favorecidoBairro: "BURAQUINHO",
@@ -267,4 +302,140 @@ test("Trailer de Arquivo tem lote 9999", () => {
   assert.equal(linha.slice(7, 8), "9");
   assert.equal(linha.slice(17, 23), "000001", "qtd lotes");
   assert.equal(linha.slice(23, 29), "000006", "qtd registros total");
+});
+
+// ---------------------------------------------------------------------
+// PIX por chave (forma 45) — o que o Santander cobrou nos e-mails
+// ---------------------------------------------------------------------
+
+function pix(
+  tipoChave: PagamentoPixChave["tipoChave"],
+  chave: string,
+  documentoFavorecido: string,
+): PagamentoPixChave {
+  return {
+    tipo: "pix_chave",
+    tipoChave,
+    chave,
+    seuNumero: "TESTE",
+    dataPagamento: "2026-09-23",
+    valor: 0.05,
+    nomeFavorecido: "Antonio",
+    documentoFavorecido,
+  };
+}
+
+test("B PIX, chave CPF do próprio favorecido: 14 posições com zeros e a chave na Informação 12", () => {
+  const linha = montarSegmentoBPixChave(1, 2, pix("cpf", "86098531528", "86098531528"));
+  assert.equal(linha.length, 240);
+  assert.equal(linha.slice(13, 14), "B");
+  assert.equal(linha.slice(14, 16), "03", "forma de iniciação CPF/CNPJ");
+  assert.equal(linha.slice(16, 17), " ");
+  assert.equal(linha.slice(17, 18), "1", "CPF");
+  assert.equal(linha.slice(18, 32), "00086098531528", "à direita, zeros à esquerda (G042)");
+  assert.equal(linha.slice(127, 226).trimEnd(), "86098531528", "Informação 12 = chave");
+  assert.equal(linha.slice(226, 240), " ".repeat(14));
+});
+
+test("B PIX, chave CPF de outra pessoa num fornecedor CNPJ: 019-032 é a chave (G035)", () => {
+  // O caso de 10/09/2026: CNPJ 48.208.075/0001-99 com chave CPF — o banco
+  // recusou porque os dois campos divergiam.
+  const linha = montarSegmentoBPixChave(1, 2, pix("cpf", "86048486570", "48208075000199"));
+  assert.equal(linha.slice(17, 18), "1", "inscrição da chave, não do cadastro");
+  assert.equal(linha.slice(18, 32), "00086048486570");
+  assert.equal(linha.slice(127, 226).trimEnd(), "86048486570");
+});
+
+test("B PIX, chave CNPJ: tipo 2 e o CNPJ da chave", () => {
+  const linha = montarSegmentoBPixChave(1, 2, pix("cnpj", "48208075000199", "86048486570"));
+  assert.equal(linha.slice(14, 16), "03");
+  assert.equal(linha.slice(17, 18), "2");
+  assert.equal(linha.slice(18, 32), "48208075000199");
+  assert.equal(linha.slice(127, 226).trimEnd(), "48208075000199");
+});
+
+test("B PIX, chaves telefone, e-mail e aleatória: 019-032 é o documento do favorecido", () => {
+  const casos: Array<[PagamentoPixChave["tipoChave"], string, string]> = [
+    ["telefone", "+5571999998888", "01"],
+    ["email", "financeiro@fornecedor.com.br", "02"],
+    ["aleatoria", "123e4567-e89b-12d3-a456-426614174000", "04"],
+  ];
+  for (const [tipo, chave, forma] of casos) {
+    const linha = montarSegmentoBPixChave(1, 2, pix(tipo, chave, "48208075000199"));
+    assert.equal(linha.length, 240, tipo);
+    assert.equal(linha.slice(14, 16), forma, `forma de iniciação ${tipo}`);
+    assert.equal(linha.slice(17, 18), "2", tipo);
+    assert.equal(linha.slice(18, 32), "48208075000199", tipo);
+    assert.equal(linha.slice(127, 226).trimEnd(), chave, `Informação 12 ${tipo}`);
+  }
+});
+
+test("B PIX recusa documento que não é CPF nem CNPJ", () => {
+  assert.throws(() => montarSegmentoBPixChave(1, 2, pix("email", "a@b.com", "123")));
+});
+
+test("Arquivo PIX completo: estrutura do PE000014 corrigida", () => {
+  const conteudo = gerarArquivo(EMPRESA_CALIFORNIA, CONTA_SANTANDER, {
+    sequencialArquivo: 16,
+    dataGeracao: new Date("2026-09-23T15:00:00-03:00"),
+  }, [
+    { formaLancamento: "45", tipoServico: "20", pagamentos: [pix("cpf", "86098531528", "86098531528")] },
+  ]);
+  assert.ok(conteudo.endsWith("\r\n"));
+  const linhas = conteudo.split("\r\n").slice(0, -1);
+  assert.equal(linhas.length, 6);
+  for (const l of linhas) assert.equal(l.length, 240);
+  const [h0, h1, a, b, t5, t9] = linhas;
+  assert.equal(h0.slice(143, 151), "23092026");
+  assert.equal(h0.slice(151, 157), "150000");
+  assert.equal(h0.slice(157, 163), "000016");
+  assert.equal(h1.slice(8, 16), "C2045031", "crédito, fornecedor, PIX, versão 031");
+  assert.equal(a.slice(13, 20), "A000009", "segmento A, inclusão, câmara PIX");
+  assert.equal(a.slice(20, 43), "00000000 000000000000  ", "banco/agência/conta zerados");
+  assert.equal(a.slice(93, 104), "23092026BRL");
+  assert.equal(a.slice(119, 134), "000000000000005", "R$ 0,05");
+  assert.equal(b.slice(13, 32), "B03 100086098531528");
+  assert.equal(t5.slice(17, 41), "000004000000000000000005");
+  assert.equal(t9.slice(17, 29), "000001000006");
+});
+
+// ---------------------------------------------------------------------
+// A régua da chave PIX (lib/pix.ts) — o que o cadastro deixa gravar
+// ---------------------------------------------------------------------
+
+test("problemaDaChavePix aceita as chaves no formato do banco", () => {
+  assert.equal(problemaDaChavePix("cpf", "860.985.315-28"), null);
+  assert.equal(problemaDaChavePix("cnpj", "48.208.075/0001-99"), null);
+  assert.equal(problemaDaChavePix("telefone", "(71) 99999-8888"), null);
+  assert.equal(problemaDaChavePix("telefone", "+55 71 99999-8888"), null);
+  assert.equal(problemaDaChavePix("email", "Financeiro@Fornecedor.com.br"), null);
+  assert.equal(problemaDaChavePix("aleatoria", "123E4567E89B12D3A456426614174000"), null);
+  assert.equal(problemaDaChavePix(null, null), null, "sem PIX é permitido");
+});
+
+test("problemaDaChavePix recusa o que o banco não aceita", () => {
+  assert.notEqual(problemaDaChavePix("cpf", "86098531529"), null, "DV errado");
+  assert.notEqual(problemaDaChavePix("cnpj", "48208075000190"), null, "DV errado");
+  assert.notEqual(problemaDaChavePix("telefone", "(71) 3333-4444"), null, "fixo não é chave");
+  assert.notEqual(problemaDaChavePix("telefone", "(71) 89999-8888"), null, "celular começa com 9");
+  assert.notEqual(problemaDaChavePix("email", "fulano@"), null);
+  assert.notEqual(problemaDaChavePix("email", "fulano de tal@x.com"), null);
+  assert.notEqual(problemaDaChavePix("email", `${"a".repeat(70)}@exemplo.com`), null, "mais de 77");
+  assert.notEqual(problemaDaChavePix("aleatoria", "123e4567-e89b-12d3-a456"), null);
+  assert.notEqual(problemaDaChavePix("cpf", null), null, "tipo sem chave");
+  assert.notEqual(problemaDaChavePix(null, "86098531528"), null, "chave sem tipo");
+});
+
+test("normalizarChavePix + PIX_FORMATO: o canônico bate com a CHECK do banco", () => {
+  const casos: Array<[PixTipo, string]> = [
+    ["cpf", "860.985.315-28"],
+    ["cnpj", "48.208.075/0001-99"],
+    ["telefone", "71999998888"],
+    ["email", " Fulano@Exemplo.COM "],
+    ["aleatoria", "123E4567E89B12D3A456426614174000"],
+  ];
+  for (const [tipo, bruto] of casos) {
+    const canonica = normalizarChavePix(tipo, bruto)!;
+    assert.ok(PIX_FORMATO[tipo].test(canonica), `${tipo}: ${canonica}`);
+  }
 });

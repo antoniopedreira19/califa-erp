@@ -16,6 +16,8 @@ Atualizado a cada fechamento de rodada. Prioridade decrescente dentro de cada bl
 
 ### Primeiro teste real E2E
 
+> ⚠️ **23/09/2026:** gerado o `PE000016.TXT` pelo fluxo real: folha 09/2026 do Antonio (teste), R$ 0,05, chave CPF, sequencial 16 (produção). O segmento B do PIX já segue as três críticas do Santander (decisão 101). As remessas 13–15 de 21/09 ficaram órfãs: os títulos delas não existem mais. Falta transmitir no internet banking e avisar a Karen (proposta 4557231). Depois, testar as outras chaves (e-mail, telefone, aleatória) e uma TED.
+
 - [ ] **Gerar o primeiro `.REM`** pelo botão da tela, com a folha do "Teste" (R$ 1). Terreno já está pronto no banco: 2 `contas_avulsas` aprovadas materializadas em 21/09/2026.
 - [ ] **Importar no site do Santander** e confirmar aceitação. Se rejeitar, o `.RET` traz o código de ocorrência (seção 5 do manual, pág. 61) — mapear qual campo desalinhou.
 - [ ] **Se PIX for aceito**: R$ 1,00 desce na chave PIX (CPF 86098531528) → E2E validado.

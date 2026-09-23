@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { normalizarChavePix } from "@/lib/pix";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import {
   colaboradorSchema,
@@ -335,7 +336,11 @@ export async function salvarDadosBancariosColaborador(
       conta_dv: parsed.data.conta_dv,
       tipo_conta: parsed.data.tipo_conta,
       pix_tipo: parsed.data.pix_tipo,
-      pix_chave: parsed.data.pix_chave,
+      // A chave grava no formato do banco (decisão 090), como no
+      // fornecedor: é assim que ela sai no arquivo de remessa.
+      pix_chave:
+        normalizarChavePix(parsed.data.pix_tipo, parsed.data.pix_chave) ??
+        null,
     })
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id);

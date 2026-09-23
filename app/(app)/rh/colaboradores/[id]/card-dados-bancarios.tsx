@@ -102,6 +102,27 @@ export function CardDadosBancarios({ colaborador }: Props) {
   );
 }
 
+/** As mensagens da validação do servidor embaixo do campo a que se referem. */
+function ErrosDoCampo({
+  erros,
+  campos,
+}: {
+  erros: Record<string, string[]>;
+  campos: string[];
+}) {
+  const mensagens = campos.flatMap((c) => erros[c] ?? []);
+  if (mensagens.length === 0) return null;
+  return (
+    <>
+      {mensagens.map((msg, i) => (
+        <p key={i} className="text-xs text-california-red">
+          {msg}
+        </p>
+      ))}
+    </>
+  );
+}
+
 function tipoChaveLabel(tipo: string | null): string {
   switch (tipo) {
     case "cpf":
@@ -247,6 +268,7 @@ function EditarDadosBancariosDrawer({ colaborador }: Props) {
                       className="w-14 text-center"
                     />
                   </div>
+                  <ErrosDoCampo erros={fieldErrors} campos={["agencia", "agencia_dv"]} />
                 </div>
                 <div className="space-y-2">
                   <Label>Conta</Label>
@@ -268,6 +290,7 @@ function EditarDadosBancariosDrawer({ colaborador }: Props) {
                       className="w-14 text-center"
                     />
                   </div>
+                  <ErrosDoCampo erros={fieldErrors} campos={["conta", "conta_dv"]} />
                 </div>
               </div>
 
@@ -284,6 +307,7 @@ function EditarDadosBancariosDrawer({ colaborador }: Props) {
                     <SelectItem value="pagamento">Conta de pagamento</SelectItem>
                   </SelectContent>
                 </Select>
+                <ErrosDoCampo erros={fieldErrors} campos={["tipo_conta"]} />
               </div>
             </section>
 
@@ -310,6 +334,7 @@ function EditarDadosBancariosDrawer({ colaborador }: Props) {
                       <SelectItem value="aleatoria">Aleatória</SelectItem>
                     </SelectContent>
                   </Select>
+                  <ErrosDoCampo erros={fieldErrors} campos={["pix_tipo"]} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="pix_chave">Chave</Label>

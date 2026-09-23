@@ -281,6 +281,16 @@ Propagação em toda a stack:
 
 ---
 
-## ADR 006 — [reservado]
+## ADR 006 — Dados de pagamento no formato da remessa (homologação PIX)
+
+**Data:** 2026-09-23
+**Status:** Aplicado
+**Decisão do projeto:** [101](../../decisions/101-dados-de-pagamento-no-formato-da-remessa.md) (regra completa, tabela das chaves e o histórico da homologação)
+
+Resumo: chave PIX e conta bancária de fornecedor e colaborador só se gravam no formato do arquivo, com a régua `problemaDaChavePix` (lib/pix.ts), os schemas Zod e 4 CHECKs no banco. O gerador passou a levar a própria chave em 019–032 quando a chave é CPF/CNPJ (G035, a crítica do Santander de 10/09), a deixar 029 e 043 do segmento A em branco e a datar o header em Brasília. A aprovação da folha passou a criar o título pela RPC `criar_conta_avulsa`: sem rateio, o banco recusava.
+
+---
+
+## ADR 007 — [reservado]
 
 *Próxima decisão será a fase 6 (persistência do arquivo em Storage) ou a fase 2 do módulo (parse do `.RET`).*

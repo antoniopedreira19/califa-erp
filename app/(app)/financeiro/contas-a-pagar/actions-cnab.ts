@@ -26,6 +26,7 @@ import { requireSession } from "@/lib/auth/session";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
+import { normalizarChavePix, problemaDaChavePix } from "@/lib/pix";
 import {
   gerarArquivo,
   type FormaLancamento,
@@ -116,7 +117,6 @@ interface OrigemResolvida {
 interface DadosBancariosDestinatario {
   nome: string;
   documento: string; // dígitos apenas
-  ehCnpj: boolean;
   bancoCodigo: string | null;
   agencia: string | null;
   agenciaDv: string | null;
@@ -557,7 +557,7 @@ async function buscarDadosDestinatario(
     const { data, error } = await supabase
       .from("fornecedores")
       .select(
-        "nome, cpf_cnpj, tipo_pessoa, banco_codigo, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave, logradouro, cidade, cep, uf",
+        "nome, cpf_cnpj, banco_codigo, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave, logradouro, cidade, cep, uf",
       )
       .eq("id", id)
       .eq("tenant_id", tenantId)
@@ -569,7 +569,6 @@ async function buscarDadosDestinatario(
       data: {
         nome: data.nome,
         documento: data.cpf_cnpj,
-        ehCnpj: data.tipo_pessoa === "juridica",
         bancoCodigo: data.banco_codigo,
         agencia: data.agencia,
         agenciaDv: data.agencia_dv,
@@ -591,23 +590,18 @@ async function buscarDadosDestinatario(
     const { data, error } = await supabase
       .from("colaboradores")
       .select(
-        "nome, cpf_cnpj, tipo_contratacao, banco_codigo, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave",
+        "nome, cpf_cnpj, banco_codigo, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave",
       )
       .eq("id", id)
       .eq("tenant_id", tenantId)
       .maybeSingle();
     if (error || !data) return { ok: false, message: "Colaborador não encontrado." };
     if (!data.cpf_cnpj) return { ok: false, message: "Colaborador sem CPF/CNPJ." };
-    const ehCnpj =
-      data.tipo_contratacao === "pj" ||
-      data.tipo_contratacao === "mei" ||
-      data.tipo_contratacao === "clt_recibo";
     return {
       ok: true,
       data: {
         nome: data.nome,
         documento: data.cpf_cnpj,
-        ehCnpj,
         bancoCodigo: data.banco_codigo,
         agencia: data.agencia,
         agenciaDv: data.agencia_dv,
@@ -664,18 +658,27 @@ function montarPagamento(
         message: "Forma PIX escolhida, mas destinatário não tem chave PIX cadastrada.",
       };
     }
+    // O cadastro já recusa chave fora do formato (e a CHECK do banco
+    // também); conferir de novo aqui garante que nenhuma linha sai torta
+    // para o Santander, venha o dado de onde vier.
+    const problemaChave = problemaDaChavePix(dados.pixTipo, dados.pixChave);
+    if (problemaChave) {
+      return {
+        ok: false,
+        message: `Chave PIX de ${dados.nome} fora do formato do banco: ${problemaChave} Corrija o cadastro.`,
+      };
+    }
     return {
       ok: true,
       data: {
         tipo: "pix_chave",
         tipoChave: dados.pixTipo!,
-        chave: dados.pixChave!,
+        chave: normalizarChavePix(dados.pixTipo, dados.pixChave)!,
         seuNumero,
         dataPagamento,
         valor: origem.valor,
         nomeFavorecido: dados.nome,
         documentoFavorecido: dados.documento,
-        favorecidoEhCnpj: dados.ehCnpj,
       },
     };
   }
@@ -707,7 +710,6 @@ function montarPagamento(
       valor: origem.valor,
       nomeFavorecido: dados.nome,
       documentoFavorecido: dados.documento,
-      favorecidoEhCnpj: dados.ehCnpj,
       favorecidoLogradouro: dados.endereco?.logradouro,
       favorecidoCidade: dados.endereco?.cidade,
       favorecidoCep: dados.endereco?.cep,

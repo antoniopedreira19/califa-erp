@@ -363,34 +363,44 @@ export async function aprovarLinhaFolha(
     }
 
     const competenciaLabel = `${String(folha.competencia_mes).padStart(2, "0")}/${folha.competencia_ano}`;
-    const { data: contaCriada, error: insContaError } = await supabase
-      .from("contas_avulsas")
-      .insert({
-        tenant_id: tenantId,
-        empresa_id: aloc.empresa_id,
-        regional_id: aloc.regional_id,
-        codigo,
-        descricao: `Folha ${competenciaLabel} · ${colab.nome} · ${subtipoRow.nome}${
-          alocacoesFinal.length > 1 ? ` · ${pct.toFixed(2)}%` : ""
-        }`,
-        valor,
-        natureza: "saida",
-        status: "aprovada",
-        data_prevista_pagamento: dataPrevistaPagamento,
-        data_pagamento: dataPrevistaPagamento,
-        data_pagamento_primeira: dataPrevistaPagamento,
-        plano_conta_tipo_id: tipoRow.id,
-        plano_conta_subtipo_id: subtipoRow.id,
-        colaborador_id: colab.id,
-        folha_id: folhaId,
-        parcela_numero: 1,
-        parcela_total: 1,
-        aprovada_em: new Date().toISOString(),
-        aprovada_por: session.profile.id,
-        criado_por: session.profile.id,
-      })
-      .select("id")
-      .single();
+    // A conta e o rateio nascem juntos, pela mesma RPC do lançamento
+    // avulso (decisão 069): o banco recusa conta avulsa sem rateio de
+    // regional, e só aceita se os dois chegarem na mesma transação. O
+    // insert direto que estava aqui falhava sempre desde 15/09/2026
+    // ("Toda conta avulsa precisa de rateio de regional") — achado em
+    // 23/09/2026 ao aprovar a folha de teste da remessa PIX. Cada título
+    // é de uma alocação, então o rateio é 100% na regional dela.
+    const { data: contaCriadaId, error: insContaError } = await supabase.rpc(
+      "criar_conta_avulsa",
+      {
+        p_dados: {
+          tenant_id: tenantId,
+          empresa_id: aloc.empresa_id,
+          regional_id: aloc.regional_id,
+          codigo,
+          descricao: `Folha ${competenciaLabel} · ${colab.nome} · ${subtipoRow.nome}${
+            alocacoesFinal.length > 1 ? ` · ${pct.toFixed(2)}%` : ""
+          }`,
+          valor,
+          natureza: "saida",
+          status: "aprovada",
+          data_prevista_pagamento: dataPrevistaPagamento,
+          data_pagamento: dataPrevistaPagamento,
+          data_pagamento_primeira: dataPrevistaPagamento,
+          plano_conta_tipo_id: tipoRow.id,
+          plano_conta_subtipo_id: subtipoRow.id,
+          colaborador_id: colab.id,
+          folha_id: folhaId,
+          parcela_numero: 1,
+          parcela_total: 1,
+          aprovada_em: new Date().toISOString(),
+          aprovada_por: session.profile.id,
+          criado_por: session.profile.id,
+        },
+        p_rateio: [{ regional_id: aloc.regional_id, percentual: 100 }],
+      },
+    );
+    const contaCriada = contaCriadaId ? { id: contaCriadaId as string } : null;
     if (insContaError || !contaCriada) {
       console.error(
         "[folha.aprovar.ins_conta]",

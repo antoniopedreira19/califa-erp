@@ -55,10 +55,10 @@ interface PagamentoBase {
   valor: number | string;
   /** Nome do favorecido — 30 chars, sanitizado. */
   nomeFavorecido: string;
-  /** CPF (11 dígitos) ou CNPJ (14 dígitos) do favorecido. */
+  /** CPF (11 dígitos) ou CNPJ (14 dígitos) do favorecido. O tipo de
+   *  inscrição (1 = CPF, 2 = CNPJ) sai do tamanho — não há como os dois
+   *  divergirem. */
   documentoFavorecido: string;
-  /** true = CNPJ, false = CPF. */
-  favorecidoEhCnpj: boolean;
   /** Endereço do favorecido (opcional na maioria dos casos). */
   favorecidoLogradouro?: string | null;
   favorecidoNumero?: string | null;
