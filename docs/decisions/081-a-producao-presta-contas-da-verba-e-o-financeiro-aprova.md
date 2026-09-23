@@ -108,6 +108,27 @@ presta, e volta inteira.
   > ⚠️ **16/09/2026 ([decisão 087](087-faturamento-e-encerramento-correm-separados.md)).**
   > A trava da verba continua. O saldo a faturar saiu da caixa vermelha e
   > virou aviso, e o resumo de fechamento virou o card de Totais.
+
+  > ⚠️ **22/09/2026 — o estorno do saldo por baixar deixou de travar.**
+  > A regra do Tiago agora é que o encerramento espera as pendências da
+  > PRODUÇÃO; a única que pode ficar para depois é o envio para
+  > faturamento. A trava da verba vale enquanto a prestação não foi
+  > aprovada: por enviar, em avaliação ou reprovada. "Devolução pendente"
+  > não trava mais, pelos motivos abaixo.
+  >
+  > - Depois da aprovação, a verba não volta para a produção: o banco só
+  >   reprova prestação em avaliação.
+  > - A baixa do estorno é do financeiro, e `dar_baixa_devolucao_verba` não
+  >   olha o status do job. Ela continua possível com o job encerrado.
+  > - O mesmo vale para o "estornar a baixa" da PP e da devolução: são
+  >   correções do financeiro e não devolvem nada à produção.
+  >
+  > **Atenção:** entre a aprovação e a baixa, o dinheiro pode ainda estar com
+  > o produtor. A baixa é a confirmação de que ele voltou, e cobrar essa
+  > devolução passa a ser só do financeiro.
+  >
+  > **Código:** `verbaPendenteNoEncerramento` em `lib/types.ts`, com os
+  > testes em `lib/travas-do-encerramento.test.ts`.
 - O servidor refaz a conta em `encerrarJob`; se a leitura das verbas falhar,
   o job não encerra.
 - Sem mudança de banco: a situação é a mesma `situacaoDaVerba` das telas.
