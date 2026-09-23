@@ -47,13 +47,13 @@ export interface ItemSemConclusao {
 
 /**
  * As linhas do job que ainda não responderam — a consulta que o
- * encerramento e o botão da barra compartilham.
+ * encerramento e o botão da barra compartilham. `null` = a leitura falhou.
  */
-export async function itensSemConclusaoDoJob(
+export async function lerItensSemConclusao(
   supabase: SupabaseClient,
   tenantId: string,
   jobId: string,
-): Promise<ItemSemConclusao[]> {
+): Promise<ItemSemConclusao[] | null> {
   const { data, error } = await supabase
     .from("jobs_itens_realizado")
     .select(
@@ -67,7 +67,7 @@ export async function itensSemConclusaoDoJob(
 
   if (error) {
     console.error("[item.conclusao.pendentes]", error.message);
-    return [];
+    return null;
   }
 
   return ((data ?? []) as any[]).map((linha) => {
@@ -80,6 +80,34 @@ export async function itensSemConclusaoDoJob(
       totalOrcado: Number(copia?.total_orcado ?? 0),
     };
   });
+}
+
+/**
+ * A mesma lista, para o ENCERRAMENTO: leitura que falhou trava a mais,
+ * nunca a menos — como as outras consultas de `levantarImpedimentos`.
+ *
+ * Até 22/09/2026 a falha devolvia lista vazia, e o encerramento lia
+ * "nenhum item em aberto" e passava. Agora volta um item só, que não existe
+ * no banco e só serve para a trava aparecer. Por isso o "Concluir PPs", que
+ * grava em cima da lista, lê por `lerItensSemConclusao` e trata a falha.
+ */
+export async function itensSemConclusaoDoJob(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<ItemSemConclusao[]> {
+  const itens = await lerItensSemConclusao(supabase, tenantId, jobId);
+  return (
+    itens ?? [
+      {
+        itemRealizadoId: "",
+        nome: "Itens de custo (não foi possível conferir; tente de novo)",
+        tipoCusto: "B",
+        emSave: false,
+        totalOrcado: 0,
+      },
+    ]
+  );
 }
 
 /**

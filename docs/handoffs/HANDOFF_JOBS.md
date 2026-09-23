@@ -4158,3 +4158,40 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
 - **Corrida entre encerramento e última nota:** fechada pela decisão 094
   (20/09). A nota deixou de finalizar o job, e o gatilho do envio trava a
   linha do job com `for update`.
+
+---
+
+## ⚠️ Nota de 2026-09-22 — encerramento: leitura que falha trava, e o estorno de verba por baixar não trava mais
+
+> ⚠️ **Mudou em 22/09/2026**, com a regra do Tiago: o encerramento espera as
+> pendências da produção, e a única que pode ficar para depois é o envio
+> para faturamento.
+
+- **Falha de leitura:** `itensSemConclusaoDoJob` devolvia lista vazia quando
+  a consulta falhava, e o encerramento lia "nenhum item em aberto" e
+  passava. Em `realizado/conclusao-item.ts` a leitura virou
+  `lerItensSemConclusao`, que devolve `null` na falha.
+  - Para o encerramento, `itensSemConclusaoDoJob` troca a falha por um item
+    de trava ("Itens de custo (não foi possível conferir; tente de novo)"),
+    como as outras três consultas de `levantarImpedimentos` já faziam.
+  - O "Concluir PPs" (`actions-conclusao.ts`) usa `lerItensSemConclusao` e
+    avisa "Não foi possível ler os itens do job" em vez de dizer que não
+    havia nada a marcar.
+  - `levantarImpedimentos` ficou intocada de propósito: a branch da
+    aprovação de save (099) a reescreve.
+- **Verba:** `verbaPendenteNoEncerramento` trava só a prestação por enviar,
+  em avaliação ou reprovada. A "devolução pendente" (estorno do saldo por
+  baixar) é do financeiro e não trava mais. A regra está em
+  [081 §7](../decisions/081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md).
+  Os textos do diálogo e da recusa do servidor foram trocados.
+- **Conferido:**
+  - `lib/travas-do-encerramento.test.ts` (5 testes);
+  - `tsc`;
+  - mesclagem de teste com a branch da 099, sem conflito.
+- **Confirmado pelo Tiago em 23/09/2026:** a verba é gasta num cartão
+  controlado pela empresa, então o saldo não fica com o produtor.
+- **No navegador (só leitura, 3014):** a trilha de encerramento do JOB-0032
+  continua com as mesmas 3 pendências.
+- **Não conferido pela tela:** não existe verba em "devolução pendente" no
+  banco. Montar uma exige o fluxo inteiro, com o login do financeiro.
+

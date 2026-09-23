@@ -255,8 +255,9 @@ export function EnviarEncerramentoDialog({
                 )}
                 {verbasEmAberto.length > 0 && (
                   <p className="text-muted-foreground">
-                    A produção presta contas da verba na aba de PPs; o financeiro
-                    aprova e dá baixa no estorno do que não foi gasto.
+                    A produção presta contas da verba na aba de PPs, e o
+                    financeiro aprova a prestação. A baixa do estorno do que não
+                    foi gasto fica com o financeiro e não trava o encerramento.
                   </p>
                 )}
                 {itensSemMarcacao.length > 0 && (

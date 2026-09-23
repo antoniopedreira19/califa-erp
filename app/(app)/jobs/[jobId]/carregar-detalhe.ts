@@ -922,9 +922,10 @@ export async function carregarDetalheDoJob(
   const ppsEmAberto = ppsDoJob
     .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
     .map((pp) => ({ codigo: pp.codigo, status: pp.status }));
-  // Verba paga que não fechou — prestação por enviar, em avaliação ou
-  // reprovada, ou estorno do saldo por baixar — também trava (decisão 081,
-  // pergunta 10a). A verba ainda sem baixa já está em `ppsEmAberto`.
+  // Verba paga sem prestação aprovada — por enviar, em avaliação ou
+  // reprovada — também trava (decisão 081, pergunta 10a; o estorno por
+  // baixar deixou de travar em 22/09/2026). A verba ainda sem baixa já está
+  // em `ppsEmAberto`.
   const verbasEmAberto = ppsDoJob.flatMap((pp) => {
     const situacao = situacaoDaVerba(pp);
     return verbaPendenteNoEncerramento(situacao) ? [{ codigo: pp.codigo, situacao }] : [];

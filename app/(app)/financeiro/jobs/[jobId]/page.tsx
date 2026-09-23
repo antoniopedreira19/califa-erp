@@ -50,6 +50,7 @@ import { carregarLinhasDeFluxo, carregarPrazosDosJobs } from "./fluxo-do-job";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { JobFinanceiroTabs } from "./job-financeiro-tabs";
 import { abaDaUrl } from "./abas";
+import { impostoDoJob } from "../../abertura-de-job/imposto-previsto";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,7 @@ export default async function JobNoFinanceiroPage({
     faturamentoMensalDoJob,
     aprovacaoLida,
     custoLido,
+    impostoLido,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -170,6 +172,14 @@ export default async function JobNoFinanceiroPage({
       tenantId,
       params.jobId,
       searchParams?.aprovarSave ?? null,
+    ),
+    // O imposto previsto (decisão 100) na mesma conta do financeiro
+    // (decisão 099): a action relê este mesmo número ao salvar.
+    impostoDoJob(
+      supabase,
+      tenantId,
+      params.jobId,
+      searchParams?.aprovarSave ? [searchParams.aprovarSave] : [],
     ),
   ]);
 
@@ -412,9 +422,35 @@ export default async function JobNoFinanceiroPage({
             contas={contas}
             custoPrevisto={custoPrevisto}
             faturamentoPrevisto={faturamentoPrevisto}
+            impostoPrevisto={
+              impostoLido
+                ? impostoLido.impostoPrevisto
+                : Math.round(
+                    (totaisJob.faturamento.imposto +
+                      totaisJob.faturamento.intTaxes) *
+                      100,
+                  ) / 100
+            }
+            aliquotaImposto={Number(versaoAprovada.percentual_imposto)}
+            aliquotaIntTaxes={
+              detalhe.internacional
+                ? detalhe.internacional.percentualIntTaxes
+                : null
+            }
+            resultadoPlanilha={
+              custoPlanejadoJob > 0
+                ? Math.round(
+                    (totaisJob.valorJob -
+                      totaisJob.deducoesDoResultado -
+                      custoPlanejadoJob) *
+                      100,
+                  ) / 100
+                : null
+            }
             enviadoPorNome={carregadoParaAbertura.enviadoPorNome}
             curvaInicial={previsoes.curva}
             recebimentoInicial={previsoes.recebimento}
+            impostosIniciais={previsoes.impostos}
             faturamentoPorMes={
               faturamentoMensalDoJob?.mensal ? faturamentoMensalDoJob.meses : null
             }

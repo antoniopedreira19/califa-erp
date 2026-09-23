@@ -35,7 +35,8 @@ R$ 24 mil seria prever dinheiro que a agência nunca recebe.
 
 Pelo mesmo motivo, a **margem prevista** do resumo é
 `faturamento previsto − custo previsto`: os dois lados do caixa da
-California.
+California. ⚠️ Desde 23/09/2026 ela se chama **Rentabilidade** e desconta
+também os impostos previstos — ver a nota no fim.
 
 ## "Previsto" é previsão — o número definitivo vem depois
 
@@ -74,3 +75,12 @@ com os dois lados para ligar.
   é título — o título nasce do faturamento, com tabela própria.
 - **Editar a previsão depois da abertura** não tem tela ainda. A action
   já regrava tudo (apaga e reinsere), como faz com a curva.
+
+## ⚠️ Nota de 2026-09-23 — a margem vira Rentabilidade e desconta os impostos (decisão 100)
+
+A abertura ganhou uma terceira previsão, o cronograma de recolhimento de
+impostos, e a "margem prevista" passou a se chamar **Rentabilidade**:
+`faturamento previsto − custo previsto − impostos previstos`. Sem os
+impostos, a abertura mostrava um número acima do resultado operacional da
+planilha interna (JOB-0036: R$ 69.000,12 contra R$ 40.681,60). Detalhes
+na [100](100-previsao-de-impostos-na-abertura.md).

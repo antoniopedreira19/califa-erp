@@ -9,6 +9,7 @@ import { formatDataHoraBr } from "../formatos";
 import { sugerirCurva, sugerirRecebimento, trimestreDe } from "../curva";
 import { AberturaForm } from "./abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
+import { impostoDoJob } from "../imposto-previsto";
 
 export const dynamic = "force-dynamic";
 
@@ -118,11 +119,17 @@ export default async function AbrirJobNoFinanceiroPage({
   // Quanto deste job é pago com crédito de outro (decisão 028). Quando o
   // faturamento previsto é zero, é isto que distingue "o cliente paga o
   // fornecedor direto" de "o cliente já pagou, num job anterior".
-  const { data: consumoRes } = await supabase
-    .from("jobs_itens_orcado")
-    .select("save_consumido")
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("job_id", job.id);
+  //
+  // O imposto previsto (decisão 100) vem do mesmo fechamento da planilha
+  // interna — em paralelo com a leitura do save.
+  const [{ data: consumoRes }, imposto] = await Promise.all([
+    supabase
+      .from("jobs_itens_orcado")
+      .select("save_consumido")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("job_id", job.id),
+    impostoDoJob(supabase, session.activeTenant.id, job.id),
+  ]);
   const saveConsumido =
     Math.round(
       ((consumoRes ?? []) as any[]).reduce(
@@ -130,6 +137,18 @@ export default async function AbrirJobNoFinanceiroPage({
         0,
       ) * 100,
     ) / 100;
+
+  const impostoPrevisto = imposto?.impostoPrevisto ?? 0;
+  // Resultado operacional planejado — a mesma conta do card de Totais.
+  const resultadoPlanilha =
+    imposto && job.planilha_planejado > 0
+      ? Math.round(
+          (imposto.valorJob -
+            imposto.deducoesDoResultado -
+            job.planilha_planejado) *
+            100,
+        ) / 100
+      : null;
 
   const baseCompetencia = job.data_inicio_prevista ?? hojeIso;
   const anoSugerido = Number(baseCompetencia.slice(0, 4));
@@ -147,6 +166,10 @@ export default async function AbrirJobNoFinanceiroPage({
       contas={contas}
       custoPrevisto={custoPrevisto}
       faturamentoPrevisto={faturamentoPrevisto}
+      impostoPrevisto={impostoPrevisto}
+      aliquotaImposto={imposto?.aliquotaImposto ?? 0}
+      aliquotaIntTaxes={imposto?.aliquotaIntTaxes ?? null}
+      resultadoPlanilha={resultadoPlanilha}
       saveConsumido={saveConsumido}
       enviadoPorNome={enviadoPorNome}
       curvaInicial={sugerirCurva(
@@ -155,6 +178,7 @@ export default async function AbrirJobNoFinanceiroPage({
         job.data_fim_prevista,
         hojeIso,
       )}
+      impostosIniciais={[]}
       recebimentoInicial={sugerirRecebimento(
         faturamentoPrevisto,
         job.data_prevista_faturamento,

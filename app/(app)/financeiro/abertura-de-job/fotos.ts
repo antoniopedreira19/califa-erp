@@ -31,14 +31,18 @@ export interface RegistrarFotoArgs {
     projeto_financeiro_id: string | null;
     conta_recebimento_id: string | null;
     conta_pagamento_id: string | null;
+    conta_impostos_id: string | null;
     categoria_id: string | null;
     servico_id: string | null;
     competencias: JobCompetencia[];
     curva: LinhaPrevisaoFoto[];
     recebimento: LinhaPrevisaoFoto[];
+    /** Cronograma de recolhimento de impostos (decisão 100). */
+    impostos: LinhaPrevisaoFoto[];
     valorJob: number | null;
     faturamentoPrevisto: number | null;
     custoPrevisto: number | null;
+    impostoPrevisto: number | null;
   };
 }
 
@@ -78,14 +82,17 @@ export async function registrarFotoDaAbertura(
     projeto_financeiro_id: r.projeto_financeiro_id,
     conta_recebimento_id: r.conta_recebimento_id,
     conta_pagamento_id: r.conta_pagamento_id,
+    conta_impostos_id: r.conta_impostos_id,
     categoria_id: r.categoria_id,
     servico_id: r.servico_id,
     competencias: ordenarCompetencias(r.competencias),
     curva: r.curva,
     recebimento: r.recebimento,
+    impostos: r.impostos,
     valor_job: r.valorJob,
     faturamento_previsto: r.faturamentoPrevisto,
     custo_previsto: r.custoPrevisto,
+    imposto_previsto: r.impostoPrevisto,
   });
 
   if (error) {
@@ -146,7 +153,11 @@ export async function fotosDaAbertura(
 
   const projetoIds = ids("projeto_financeiro_id");
   const contaIds = Array.from(
-    new Set([...ids("conta_recebimento_id"), ...ids("conta_pagamento_id")]),
+    new Set([
+      ...ids("conta_recebimento_id"),
+      ...ids("conta_pagamento_id"),
+      ...ids("conta_impostos_id"),
+    ]),
   );
   const dominioIds = Array.from(
     new Set([...ids("categoria_id"), ...ids("servico_id")]),
@@ -260,6 +271,9 @@ export async function fotosDaAbertura(
     contaPagamentoLabel: l.conta_pagamento_id
       ? (contas.get(l.conta_pagamento_id) ?? null)
       : null,
+    contaImpostosLabel: l.conta_impostos_id
+      ? (contas.get(l.conta_impostos_id) ?? null)
+      : null,
     categoriaNome: l.categoria_id ? (dominio.get(l.categoria_id) ?? null) : null,
     servicoNome: l.servico_id ? (dominio.get(l.servico_id) ?? null) : null,
     competencias: Array.isArray(l.competencias)
@@ -273,9 +287,15 @@ export async function fotosDaAbertura(
       : [],
     curva: previsao(l.curva),
     recebimento: previsao(l.recebimento),
+    // Nulo = foto anterior à previsão de impostos (decisão 100, 23/09/2026).
+    impostos: l.impostos === null ? null : previsao(l.impostos),
     valorJob: l.valor_job === null ? null : Number(l.valor_job),
     faturamentoPrevisto:
       l.faturamento_previsto === null ? null : Number(l.faturamento_previsto),
     custoPrevisto: l.custo_previsto === null ? null : Number(l.custo_previsto),
+    impostoPrevisto:
+      l.imposto_previsto === null || l.imposto_previsto === undefined
+        ? null
+        : Number(l.imposto_previsto),
   }));
 }
