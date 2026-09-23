@@ -116,6 +116,11 @@ Textos aprovados, estados do pop-up e o contrato completo:
   um mês for enviado entre a leitura da tela e a gravação, o banco recusa
   ("Um mês deste job acabou de ser enviado para faturamento. Tente de
   novo.") em vez de deixar o `valor_save` dele velho.
+- **Imposto previsto da abertura ([decisão 100](100-previsao-de-impostos-na-abertura.md)):**
+  `impostoDoJob` segue a mesma conta "como o financeiro vê" do faturamento
+  — pedido `job_aberto` aguardando desfeito, o pedido que a revisão aprova
+  contado —, na página da revisão e na action que a registra (ajuste feito
+  no merge das duas decisões, 23/09/2026).
 
 ## 4. Decisões tomadas na implementação (confirmadas pelo Tiago em 22/09/2026)
 

@@ -319,7 +319,11 @@ projeto cada linha nomeia o orçamento ("0-0001/26-09 · Outubro de 2026").
 
 ## O que ainda não existe
 
-- Filtro de trimestres na visão agregada.
+- Filtro de trimestres na visão agregada: **deixado de lado** (Tiago,
+  23/09/2026). Ele não sabe se vai incluir; se incluir, será depois. O
+  formato nunca foi definido — em 14/09 ficou só "um modo de filtrar o que
+  queremos ver dentro da visão agregada", com a tela mostrando tudo por
+  padrão. Hoje o "Exibir" já filtra orçamento por orçamento.
 
 ## Migrations
 

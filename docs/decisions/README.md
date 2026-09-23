@@ -119,6 +119,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 097 | [Folha mensal em duas camadas, valor manual e propagação pela aprovação](097-folha-mensal-em-duas-camadas.md) | 2026-09-18 |
 | 098 | [O agrupamento só nasce com nome, e a planilha vazia já abre pedindo o primeiro](098-o-agrupamento-so-nasce-com-nome.md) | 2026-09-21 |
 | 099 | [O save passa pela aprovação do financeiro, linha a linha](099-aprovacao-de-save.md) | 2026-09-22 |
+| 100 | [A abertura do job prevê os impostos, e a margem vira Rentabilidade](100-previsao-de-impostos-na-abertura.md) | 2026-09-23 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -131,4 +132,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 100.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 101.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

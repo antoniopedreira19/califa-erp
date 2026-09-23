@@ -56,6 +56,8 @@ export interface JobNaFila {
   conta_recebimento_id: string | null;
   /** Conta de onde os custos deste job saem. Uma para o job todo. */
   conta_pagamento_id: string | null;
+  /** Conta de onde sai o recolhimento dos impostos (decisão 100). */
+  conta_impostos_id: string | null;
   regional_nome: string | null;
   responsavel_nome: string | null;
   produtor_nome: string | null;
@@ -257,7 +259,7 @@ export interface TotaisPlanilhaJob {
 const SELECT_JOB_FILA =
   "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
-  "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, " +
+  "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, conta_impostos_id, " +
   // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
   // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
   "servico_id, servico:categorias_dominio!servico_id(nome), " +
@@ -368,6 +370,7 @@ function montarJobNaFila(
     projeto_financeiro_nome: j.projeto_financeiro?.nome ?? null,
     conta_recebimento_id: j.conta_recebimento_id ?? null,
     conta_pagamento_id: j.conta_pagamento_id ?? null,
+    conta_impostos_id: j.conta_impostos_id ?? null,
     regional_nome: j.regional?.nome ?? null,
     responsavel_nome: j.responsavel?.nome ?? null,
     produtor_nome: j.produtor?.nome ?? null,

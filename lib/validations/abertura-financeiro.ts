@@ -62,6 +62,24 @@ export const previsaoRecebimentoSchema = z
   .max(60, "Máximo de 60 parcelas de recebimento.");
 
 /**
+ * Cronograma de recolhimento dos impostos (decisão 100): em que datas o
+ * imposto embutido no faturamento previsto sai do caixa. A data é livre —
+ * não segue as janelas de pagamento. Pode ser vazio: job sem faturamento
+ * pela California não tem nota, nem imposto a recolher. Quando há imposto,
+ * a action exige que as linhas existam e fechem com ele.
+ */
+export const previsaoImpostosSchema = z
+  .array(
+    z.object({
+      data_prevista: z.string().regex(dateRegex, "Informe a data do recolhimento."),
+      valor: z
+        .number({ invalid_type_error: "Informe o valor do recolhimento." })
+        .positive("Cada recolhimento de impostos precisa de um valor maior que zero."),
+    }),
+  )
+  .max(60, "Máximo de 60 datas de recolhimento.");
+
+/**
  * Tolerância da soma do rateio de competência. Existe pelo centésimo de
  * arredondamento ao dividir 100 por 3 (33,33 + 33,33 + 33,33 = 99,99) —
  * a tela "Igualar" devolve 33,34 numa das linhas, mas quem digita à mão
@@ -134,13 +152,19 @@ export const aberturaFinanceiraSchema = z.object({
    */
   projeto_financeiro_id: z.string().uuid("Selecione o projeto do job."),
   /**
-   * Contas bancárias do job: uma para a entrada, uma para a saída.
-   * Opcionais de propósito — o protótipo não marca nenhuma das duas com
-   * asterisco, e job sem faturamento previsto (cliente paga direto ao
-   * fornecedor) não tem por que ter conta de recebimento.
+   * Contas bancárias do job: a da entrada, a dos custos e a dos impostos.
+   * Nulas no schema porque a obrigação depende do dinheiro, que só a action
+   * conhece: cada conta é obrigatória quando a previsão dela existe —
+   * recebimento com faturamento previsto, pagamento com custo previsto,
+   * impostos com imposto previsto (Tiago, 23/09/2026, decisão 100). Job sem
+   * faturamento não tem por que ter conta de recebimento.
+   *
+   * ⚠️ Até 23/09/2026 as contas de recebimento e de pagamento eram
+   * opcionais sempre — o protótipo original não as marcava com asterisco.
    */
   conta_recebimento_id: z.string().uuid().nullable(),
   conta_pagamento_id: z.string().uuid().nullable(),
+  conta_impostos_id: z.string().uuid().nullable(),
   categoria_id: z.string().uuid("Selecione a categoria do job."),
   /**
    * Serviço do job (categorias_dominio, escopo 'projeto'). Obrigatório
@@ -151,6 +175,7 @@ export const aberturaFinanceiraSchema = z.object({
   competencias: rateioCompetenciasSchema,
   curva: curvaDesembolsoSchema,
   recebimento: previsaoRecebimentoSchema,
+  impostos: previsaoImpostosSchema,
 });
 
 export type CurvaDesembolsoLinhaInput = z.infer<
@@ -158,6 +183,9 @@ export type CurvaDesembolsoLinhaInput = z.infer<
 >[number];
 export type PrevisaoRecebimentoLinhaInput = z.infer<
   typeof previsaoRecebimentoSchema
+>[number];
+export type PrevisaoImpostosLinhaInput = z.infer<
+  typeof previsaoImpostosSchema
 >[number];
 export type AberturaFinanceiraInput = z.infer<typeof aberturaFinanceiraSchema>;
 
