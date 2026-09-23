@@ -5,7 +5,8 @@
 protótipo clicável aprovado)
 **Migrations:** `20260922140001_aprovacao_de_save.sql`,
 `20260922140002_financeiro_ve_save_na_aprovacao.sql`,
-`20260922140003_aprovacao_de_save_em_vigor.sql` (aplicada junto do deploy),
+`20260922140003_aprovacao_de_save_em_vigor.sql` (aplicada junto do deploy, em
+23/09/2026),
 `20260922140004_saldo_de_save_em_reais.sql`,
 `20260922140005_rentabilidade_volta_ao_original.sql`,
 `20260922140006_retirar_save_nao_enviado.sql`,
@@ -158,7 +159,12 @@ achou oito defeitos desta própria entrega, todos corrigidos e retestados:
 
 As travas da `140003` foram provadas numa simulação com rollback (22
 tentativas diretas pela API, com a chave ligada só dentro da transação),
-antes de ligá-las em produção.
+antes de ligá-las em produção. Ligadas em 23/09/2026, depois do deploy do
+merge (`cbb9321`, Vercel verde), e conferidas de novo com elas valendo:
+escrita direta recusada (marcar save, cache do consumo, consumo, linha
+nova em save, orçado da linha em save, planejado da linha que consome,
+remoção), planejado da linha sem save aceito; pela tela, errata comum,
+pedido de save e cancelamento do pedido gravaram normalmente.
 
 Uma revisão adversarial dessas correções, antes do merge, achou mais seis
 pontos menores, corrigidos na `20260922140009` e no código: autor do pedido
