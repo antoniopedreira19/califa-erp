@@ -67,6 +67,7 @@ type Resultado = {
   ja_existiam: number;
   pulados_sem_salario: string[];
   pulados_sem_alocacao: string[];
+  pulados_sem_rateio: string[];
 };
 
 export function NovaFolhaModal() {
@@ -108,6 +109,7 @@ export function NovaFolhaModal() {
         ja_existiam: res.ja_existiam,
         pulados_sem_salario: res.pulados_sem_salario,
         pulados_sem_alocacao: res.pulados_sem_alocacao,
+        pulados_sem_rateio: res.pulados_sem_rateio,
       });
       // Sem router.refresh() aqui: se o user for pra "Abrir folha", a
       // navegação já traz dados novos. Se ele fechar, o refresh acontece
@@ -160,7 +162,8 @@ export function NovaFolhaModal() {
             </div>
 
             {(resultado.pulados_sem_salario.length > 0 ||
-              resultado.pulados_sem_alocacao.length > 0) && (
+              resultado.pulados_sem_alocacao.length > 0 ||
+              resultado.pulados_sem_rateio.length > 0) && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                 <p className="font-semibold mb-1">
                   Alguns colaboradores ficaram de fora:
@@ -173,13 +176,23 @@ export function NovaFolhaModal() {
                 )}
                 {resultado.pulados_sem_alocacao.length > 0 && (
                   <p>
-                    <strong>Sem alocação vigente somando 100%:</strong>{" "}
+                    <strong>Sem alocação vigente:</strong>{" "}
                     {resultado.pulados_sem_alocacao.join(", ")}
                   </p>
                 )}
+                {resultado.pulados_sem_rateio.length > 0 && (
+                  <p>
+                    <strong>
+                      Alocação em &quot;Todas as regionais&quot; mas empresa
+                      sem rateio configurado para {selecionada.ano}:
+                    </strong>{" "}
+                    {resultado.pulados_sem_rateio.join(", ")}
+                  </p>
+                )}
                 <p className="mt-1 opacity-70">
-                  Complete os dados no cadastro do colaborador e gere a folha
-                  de novo — quem já entrou não é duplicado.
+                  Complete os dados no cadastro do colaborador (ou configure
+                  o rateio anual da empresa) e gere a folha de novo — quem
+                  já entrou não é duplicado.
                 </p>
               </div>
             )}

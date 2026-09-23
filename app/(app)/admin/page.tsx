@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Building2,
+  Percent,
   ShieldCheck,
   Users,
   type LucideIcon,
@@ -17,7 +18,8 @@ export default async function AdminPage() {
   const service = createServiceClient();
   const tenantId = session.activeTenant.id;
 
-  const [membersRes, empresasRes] = await Promise.all([
+  const anoAtual = new Date().getFullYear();
+  const [membersRes, empresasRes, rateiosDoAnoRes] = await Promise.all([
     service
       .from("tenant_members")
       .select("*", { count: "exact", head: true })
@@ -28,10 +30,20 @@ export default async function AdminPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("ativo", true),
+    service
+      .from("empresas_rateios_regionais")
+      .select("empresa_id")
+      .eq("tenant_id", tenantId)
+      .eq("ano_vigencia", anoAtual),
   ]);
 
   const ativosCount = membersRes.count ?? 0;
   const empresasCount = empresasRes.count ?? 0;
+  const empresasComRateio = new Set(
+    ((rateiosDoAnoRes.data ?? []) as { empresa_id: string }[]).map(
+      (r) => r.empresa_id,
+    ),
+  ).size;
 
   return (
     <div className="space-y-8">
@@ -58,6 +70,18 @@ export default async function AdminPage() {
           description="Cadastre as pessoas jurídicas do grupo California."
           count={empresasCount}
           countLabel={empresasCount === 1 ? "ativa" : "ativas"}
+        />
+        <AdminCard
+          href="/admin/rateios-regionais"
+          icon={Percent}
+          title="Rateios regionais"
+          description="Percentuais anuais que distribuem o custo de colaboradores em 'Todas as regionais' entre as regionais de cada empresa."
+          count={empresasComRateio}
+          countLabel={
+            empresasComRateio === 1
+              ? `empresa com rateio em ${anoAtual}`
+              : `empresas com rateio em ${anoAtual}`
+          }
         />
       </div>
     </div>

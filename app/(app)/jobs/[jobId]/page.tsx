@@ -214,7 +214,7 @@ export default async function JobDetailPage({
             A abertura é revisada e reenviada pelo orçamento: o formulário
             abre preenchido com o que foi enviado desta vez.
           </p>
-          {pode(session.activeRole, "jobs.editar_metadata") && (
+          {pode(session.activeRole, "jobs.enviar_abertura") && (
             <div className="mt-4">
               <Link
                 href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}?v=${job.versao_orcamento_aprovada_id}&abertura=revisar`}

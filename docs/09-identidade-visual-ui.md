@@ -484,6 +484,16 @@ sintoma engana: parece botão sem handler, e o handler estava certo.
   ANTES da tela cheia que o abriu e apareceu atrás do `<iframe>` do
   documento: botão visível, e inalcançável. A pilha do Radix resolve
   `pointer-events` e ESC; empilhamento visual é `z-index`, e só;
+- **o gatilho do popover pega o foco no clique** (22/09/2026). O
+  `PopoverTrigger` de `components/ui/popover.tsx` faz isso sozinho; não o
+  troque pelo `PopoverPrimitive.Trigger` cru. No Safari (e no Firefox do
+  Mac), clicar num botão não dá foco a ele. Dentro de diálogo ou drawer, o
+  `initialFocus` do calendário move o foco, a trava de foco do diálogo o
+  devolve ao `DialogContent`, e o popover fecha por "foco fora" no mesmo
+  instante. Por isso **nenhum `DatePicker` em diálogo ou drawer abria no
+  Safari** (achado no "Enviar job para abertura"). No Chrome o foco voltava
+  ao gatilho, que o popover ignora. O navegador do app e o Chrome MCP são
+  Chromium e não reproduzem isso: teste com o Playwright WebKit;
 - não registre `keydown` próprio para o ESC: o Radix já fecha só o layer do
   topo. Handler próprio soma com o dele e fecha **dois** de uma vez;
 - camada em tela cheia **não leva animação de saída**. O Radix só desmonta
