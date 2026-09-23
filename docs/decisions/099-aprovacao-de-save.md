@@ -9,7 +9,9 @@ protótipo clicável aprovado)
 `20260922140004_saldo_de_save_em_reais.sql`,
 `20260922140005_rentabilidade_volta_ao_original.sql`,
 `20260922140006_retirar_save_nao_enviado.sql`,
-`20260922140007_recusa_de_save_com_errata.sql`.
+`20260922140007_recusa_de_save_com_errata.sql`,
+`20260922140008_save_quem_pede_e_mes_enviado.sql` e
+`20260922140009_save_revisao_das_correcoes.sql` (correções de 23/09).
 
 Revê a [028](028-save-entre-jobs.md) na nota de 01/09/2026 (o saldo de save
 só era oferecido depois do envio do job ao faturamento). O resto da 028 —
@@ -92,6 +94,28 @@ Textos aprovados, estados do pop-up e o contrato completo:
   banco aceita.
 - `save_marcado_por`, `save_marcado_em` e `planejado_antes_save` nas linhas:
   quem marcou e o planejado que o save zerou, devolvido quando o save sai.
+- **Quem pede, retira ou envia o legado** é conferido no banco
+  (`save_pode_mexer_no_job`, desde a `20260922140008`): administrador, ou
+  GP/produtor **responsável** pelo job — a mesma regra de `quemPodeMexer` da
+  tela. As actions conferem o mesmo antes (`acao_negada` na auditoria).
+  Cancelar pedido segue aberto a quem enxerga o job, como a especificação
+  pede. Sem isso, pela API, o financeiro pedia save num job aberto e
+  aprovava o próprio pedido. ⚠️ A trava do banco é das RPCs de job
+  **aberto**: na cópia do job em pré-abertura ou devolvido a escrita segue
+  direta, por desenho, e ali a conferência do responsável é só da action
+  (ver §6).
+- O cache `jobs_itens_orcado.save_consumido` também só muda pelo fluxo de
+  save em job aberto, no UPDATE e no INSERT (`trg_save_consumido_trava`, só
+  com a `140003` ligada): a trava de errata da linha que consome lê esse
+  cache.
+- **Mensal:** o envio do mês guarda a parte de save dele
+  (`jobs_envio_faturamento.valor_save`), que a fila do contas a receber e o
+  fluxo de caixa leem. Toda RPC que muda os números do financeiro regrava
+  também o `valor_save` dos meses já enviados (`saves_por_mes` no
+  `p_totais`, calculado por `totaisParaRpc` com a mesma conta do envio). Se
+  um mês for enviado entre a leitura da tela e a gravação, o banco recusa
+  ("Um mês deste job acabou de ser enviado para faturamento. Tente de
+  novo.") em vez de deixar o `valor_save` dele velho.
 
 ## 4. Decisões tomadas na implementação (confirmadas pelo Tiago em 22/09/2026)
 
@@ -103,7 +127,51 @@ Textos aprovados, estados do pop-up e o contrato completo:
 - **Permissão de aprovar:** a mesma de registrar a abertura
   (`jobs.abrir_financeiro`), porque aprovar é registrar a revisão.
 
-## 5. Fora desta entrega
+## 5. Correções da conferência final (23/09/2026)
+
+A conferência no navegador antes do merge — como administrador, como
+financeiro (o usuário de teste com o papel trocado e devolvido) e como GP —
+achou oito defeitos desta própria entrega, todos corrigidos e retestados:
+
+1. O bloco **"Saves deste job"** da conferência da abertura nunca aparecia:
+   a fila não lia `status` (linha `any`, nenhum verificador acusava).
+2. **Mensal:** aprovar ou retirar save num mês já enviado não mudava a parte
+   de save do envio daquele mês — o financeiro via o mês inteiro como
+   receita própria (ver §3).
+3. As actions de save da produção não conferiam o **responsável** do job.
+4. As RPCs de pedir, retirar e enviar legado não conferiam **papel**.
+5. O cache `save_consumido` não tinha trava (brecha da errata com a `140003`
+   ligada).
+6. No **reenvio** do job devolvido, o formulário e a confirmação mostravam o
+   fechamento da versão, e o reenvio grava o da cópia do job. Agora mostram
+   "Fechamento do job devolvido", com os números que serão gravados.
+7. O pedido que nasce na abertura/reenvio gravava como **autor** o
+   financeiro que registrou a abertura; agora é quem marcou a linha ou gravou
+   o consumo.
+8. O "livre" do pop-up no orçamento em rascunho somava de volta um consumo
+   que o saldo nunca descontou (rascunho não conta como uso, §4).
+
+As travas da `140003` foram provadas numa simulação com rollback (22
+tentativas diretas pela API, com a chave ligada só dentro da transação),
+antes de ligá-las em produção.
+
+Uma revisão adversarial dessas correções, antes do merge, achou mais seis
+pontos menores, corrigidos na `20260922140009` e no código: autor do pedido
+só vale se o perfil existe (senão o INSERT quebrava a abertura); trava do
+cache também no INSERT; corrida entre o envio de um mês e a gravação;
+"Ver dados do job" depois do envio mostra os números gravados (a cópia
+enquanto aguarda abertura; os `*_abertura` depois); a frase "itens do job"
+no reenvio; e a página do orçamento não lê mais os meses do mensal só para
+o fechamento.
+
+## 6. Fora desta entrega
+
+- **Cópia do job em pré-abertura ou devolvido:** a marca de save e o
+  consumo seguem graváveis direto por qualquer membro que edita o job (a
+  RLS de `jobs_itens_orcado` e `saves_consumos`), e o autor gravado
+  (`save_marcado_por`, `created_by` do consumo) vem do cliente. A trava do
+  responsável ali é só da action. Fechar no banco muda o que a cópia aceita
+  nesses estados: é decisão do Tiago.
 
 - **Regra 21 — nota já emitida:** a aprovação ou retirada de save depois da
   nota deveria redividir job × save nos títulos EM ABERTO dela. Não

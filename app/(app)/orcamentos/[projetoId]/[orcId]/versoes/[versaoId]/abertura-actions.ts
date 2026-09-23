@@ -402,7 +402,9 @@ export async function enviarJobParaAbertura(
   let espelhosDoReenvio: EspelhosDoJob | null = null;
   let linhasDoJobDevolvido: string[] = [];
   if (jobDevolvido) {
-    const lida = await lerBaseDosEspelhos(supabase, session.activeTenant.id, jobDevolvido.id);
+    const lida = await lerBaseDosEspelhos(supabase, session.activeTenant.id, jobDevolvido.id, {
+      comMeses: false,
+    });
     if (!lida.ok) return { ok: false, message: lida.message };
     espelhosDoReenvio = espelhosDe(totaisDoFinanceiro(lida.base.itens, lida.base));
     linhasDoJobDevolvido = lida.base.itens.map((i) => i.id);

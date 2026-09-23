@@ -20,6 +20,12 @@ import {
   type PedidoParaFinanceiro,
 } from "@/lib/calculos/save-financeiro";
 import { pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
+import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import {
+  faturamentoPorMes,
+  type GrupoComMes,
+  type MesDoJob,
+} from "@/lib/calculos/faturamento-por-mes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import type { CategoriaModeloPlanilha, TipoCusto } from "@/lib/types";
 
@@ -35,6 +41,15 @@ export interface LinhaDoEspelho {
   save_consumido: number;
 }
 
+/** Modelo mensal (decisão 078): os meses da versão aprovada, o mês de cada
+ *  agrupamento e os meses que já foram enviados para faturamento. */
+export interface MesesDoEspelho {
+  meses: MesDoJob[];
+  grupos: GrupoComMes[];
+  /** `YYYY-MM-01` de cada mês com envio para faturamento. */
+  enviados: string[];
+}
+
 export interface BaseDosEspelhos {
   itens: LinhaDoEspelho[];
   /** Pedidos de save que aguardam decisão. */
@@ -43,6 +58,8 @@ export interface BaseDosEspelhos {
   percentualImposto: number;
   internacional: ParametrosInternacionais | null;
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Só no modelo mensal; nulo nos outros. */
+  mensal: MesesDoEspelho | null;
 }
 
 /** Os três espelhos, em reais com duas casas, prontos para o `p_totais` das
@@ -53,12 +70,28 @@ export interface EspelhosDoJob {
   faturamento_save_previsto: number;
 }
 
+/** A parte de save de um mês já enviado para faturamento (modelo mensal). */
+export interface SaveDoMesEnviado {
+  mes: string;
+  valor_save: number;
+}
+
+/** O `p_totais` das RPCs de save: os três espelhos e, no modelo mensal com
+ *  mês já enviado, a parte de save de cada um desses meses — que o envio
+ *  gravou em `jobs_envio_faturamento.valor_save` e que a fila e o fluxo de
+ *  caixa leem. A chave só existe quando há mês enviado: o banco recusa
+ *  `saves_por_mes` que não seja lista. */
+export type TotaisParaRpc = EspelhosDoJob & { saves_por_mes?: SaveDoMesEnviado[] };
+
 const dinheiro = (n: number) => Number(n.toFixed(2));
 
 export async function lerBaseDosEspelhos(
   supabase: SupabaseClient,
   tenantId: string,
   jobId: string,
+  /** `comMeses: false` pula a leitura dos meses do mensal — para quem só
+   *  quer os espelhos (`totaisDoFinanceiro`) e não manda `saves_por_mes`. */
+  opcoes: { comMeses?: boolean } = {},
 ): Promise<{ ok: true; base: BaseDosEspelhos } | { ok: false; message: string }> {
   // As três leituras são independentes: vão juntas (docs/PERFORMANCE.md).
   const [jobRes, itensRes, pedidosRes] = await Promise.all([
@@ -67,12 +100,13 @@ export async function lerBaseDosEspelhos(
       .select(
         // ⚠️ Dicas de FK obrigatórias: há duas FKs entre jobs e
         // versoes_orcamento, e duas entre versoes_orcamento e orcamentos.
-        "id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+        "id, versao_orcamento_aprovada_id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
       )
       .eq("id", jobId)
       .eq("tenant_id", tenantId)
       .maybeSingle<{
         id: string;
+        versao_orcamento_aprovada_id: string | null;
         versao: {
           percentual_honorarios: number;
           percentual_imposto: number;
@@ -120,6 +154,44 @@ export async function lerBaseDosEspelhos(
     },
   );
 
+  // Modelo mensal: os meses, o mês de cada agrupamento e os meses já
+  // enviados — só para a parte de save dos meses enviados (`totaisParaRpc`).
+  let mensal: MesesDoEspelho | null = null;
+  if (
+    opcoes.comMeses !== false &&
+    planilha.modeloPlanilha === "mensal" &&
+    job.versao_orcamento_aprovada_id
+  ) {
+    const versaoId = job.versao_orcamento_aprovada_id;
+    const [mesesRes, gruposRes, enviosRes] = await Promise.all([
+      mesesDaVersaoQuery(supabase, tenantId, versaoId),
+      supabase
+        .from("versoes_orcamento_grupos")
+        .select("id, mes_id")
+        .eq("versao_orcamento_id", versaoId)
+        .eq("tenant_id", tenantId)
+        .returns<GrupoComMes[]>(),
+      supabase
+        .from("jobs_envio_faturamento")
+        .select("mes")
+        .eq("job_id", jobId)
+        .eq("tenant_id", tenantId)
+        .not("mes", "is", null)
+        .returns<{ mes: string }[]>(),
+    ]);
+    const erro = mesesRes.error ?? gruposRes.error ?? enviosRes.error;
+    if (erro) {
+      // Sem os meses a parte de save do mês enviado sairia errada em silêncio.
+      console.error("[espelhos.meses]", erro.message);
+      return { ok: false, message: "Não foi possível ler os meses do job." };
+    }
+    mensal = {
+      meses: (mesesRes.data ?? []).map((m) => ({ id: m.id, mes: m.mes })),
+      grupos: gruposRes.data ?? [],
+      enviados: (enviosRes.data ?? []).map((e) => e.mes),
+    };
+  }
+
   return {
     ok: true,
     base: {
@@ -138,6 +210,7 @@ export async function lerBaseDosEspelhos(
       percentualImposto: Number(job.versao?.percentual_imposto ?? 0),
       internacional: planilha.internacional,
       modeloPlanilha: planilha.modeloPlanilha,
+      mensal,
     },
   };
 }
@@ -175,4 +248,48 @@ export function espelhosDe(totais: VersaoTotais): EspelhosDoJob {
     faturamento_previsto: dinheiro(totais.faturamentoPrevisto),
     faturamento_save_previsto: dinheiro(totais.save.receita),
   };
+}
+
+/**
+ * A parte de save de cada mês JÁ enviado para faturamento, com as linhas no
+ * estado que interessa — a mesma conta do envio do mês
+ * (`lerFaturamentoPorMesDoJob` → `faturamentoPorMes`), para o número do
+ * envio seguir o save aprovado ou retirado depois dele (decisão 099). Nulo
+ * fora do mensal ou sem mês enviado.
+ */
+export function savesDosMesesEnviados(
+  itens: LinhaDoEspelho[],
+  base: BaseDosEspelhos,
+  contar: string[] = [],
+): SaveDoMesEnviado[] | null {
+  const mensal = base.mensal;
+  if (!mensal || mensal.enviados.length === 0) return null;
+  const vistos = itensParaOFinanceiro(itens, base.pedidos, contar);
+  const porMes = faturamentoPorMes(
+    mensal.meses,
+    mensal.grupos,
+    vistos.map((i) => ({
+      grupo_id: i.grupo_id ?? "",
+      tipo_custo: i.tipo_custo,
+      total_orcado: i.total_orcado,
+      em_save: i.em_save,
+      save_consumido: i.save_consumido,
+    })),
+    base.percentualHonorarios,
+    base.percentualImposto,
+  );
+  return porMes
+    .filter((m) => mensal.enviados.includes(m.mes))
+    .map((m) => ({ mes: m.mes, valor_save: m.save }));
+}
+
+/** O `p_totais` das RPCs de save que mexem nos números do financeiro. */
+export function totaisParaRpc(
+  itens: LinhaDoEspelho[],
+  base: BaseDosEspelhos,
+  contar: string[] = [],
+): TotaisParaRpc {
+  const espelhos = espelhosDe(totaisDoFinanceiro(itens, base, contar));
+  const porMes = savesDosMesesEnviados(itens, base, contar);
+  return porMes ? { ...espelhos, saves_por_mes: porMes } : espelhos;
 }

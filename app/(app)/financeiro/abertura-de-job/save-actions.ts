@@ -22,10 +22,10 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { revisaoPendenteDoJob } from "@/lib/data/saves";
 import {
-  espelhosDe,
   lerBaseDosEspelhos,
   totaisDoFinanceiro,
-  type EspelhosDoJob,
+  totaisParaRpc,
+  type TotaisParaRpc,
 } from "@/lib/data/espelhos-do-job";
 import type {
   OrigemDeSave,
@@ -132,7 +132,7 @@ export async function recusarPedidoDeSave(
   // decisão era a única pendência e fechava a revisão sobre os números de
   // antes desta recusa. A errata que a RPC grava já põe o job em revisão
   // — por isso `p_revisao = 'manter'`.
-  let totais: EspelhosDoJob | null = null;
+  let totais: TotaisParaRpc | null = null;
   let errata: ErrataDaRecusa | null = null;
   let revisao: "manter" | "fechar" | "abrir";
   if (pedido.momento === "job_aberto") {
@@ -156,17 +156,16 @@ export async function recusarPedidoDeSave(
       (s, o) => s + Number(o.valor ?? 0),
       0,
     );
-    const antes = totaisDoFinanceiro(lida.base.itens, lida.base);
-    const depois = totaisDoFinanceiro(
-      linhaSemOSave(
-        lida.base.itens,
-        pedido.job_item_orcado_id,
-        pedido.tipo,
-        consumoAntes,
-      ),
-      lida.base,
+    const depoisItens = linhaSemOSave(
+      lida.base.itens,
+      pedido.job_item_orcado_id,
+      pedido.tipo,
+      consumoAntes,
     );
-    totais = espelhosDe(depois);
+    const antes = totaisDoFinanceiro(lida.base.itens, lida.base);
+    const depois = totaisDoFinanceiro(depoisItens, lida.base);
+    // No mensal leva junto a parte de save dos meses já enviados.
+    totais = totaisParaRpc(depoisItens, lida.base);
     errata = {
       titulo:
         pedido.tipo === "gera"

@@ -530,8 +530,15 @@ export function SaveDialog(props: Props) {
       (jaGravadoPorOrigem.get(o.jobId) ?? 0) + Number(o.valor ?? 0),
     );
   }
+  // Desde a decisão 099 o consumo de versão NÃO aprovada não entra no
+  // `usado` do saldo (`save_uso_linhas`): no orçamento em edição o
+  // `disponivel` ainda não descontou esta linha, e devolvê-la mostraria um
+  // "livre" maior que o saldo. Devolve no job e na versão aprovada, que é
+  // quando o pop-up do orçamento abre em leitura.
+  const gravadoJaDescontado = props.contexto === "job" || !editavel;
   const livreDe = (jobId: string) =>
-    (saldoDe(jobId)?.disponivel ?? 0) + (jaGravadoPorOrigem.get(jobId) ?? 0);
+    (saldoDe(jobId)?.disponivel ?? 0) +
+    (gravadoJaDescontado ? (jaGravadoPorOrigem.get(jobId) ?? 0) : 0);
   const naoEscolhidos = saldos.filter(
     (s) => !origens.some((o) => o.jobOrigemId === s.jobId) && s.disponivel > 0,
   );

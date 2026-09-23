@@ -3642,7 +3642,7 @@ Regras e modelo em [078](../decisions/078-orcamento-mensal-fee-e-always-on.md), 
 
 - **Barra de faturamento por mês no rodapé** (`barra-faturamento-mensal.tsx`), no lugar da barra de sempre quando o job mensal está aberto. Recolhida, mostra a situação de cada mês e o botão do mês mais antigo a enviar. Expandida, mostra uma linha por mês com "Enviar faturamento" ou "Ver envio". O encerramento aparece nela quando todos os meses com faturamento foram enviados.
 - **`EnviarFaturamentoDrawer` em modo mês** (prop `mes`): título, textos e valor do mês; o vencimento nasce vazio. `enviarJobParaFaturamento` exige `mes` no mensal e o recusa nos outros jobs. O valor é relido no servidor (`lerFaturamentoPorMesDoJob`).
-- **Travas por mês:**
+- **Travas por mês:** (⚠️ revisto pela 099 em 22/09/2026: no mês enviado travam a errata e o CONSUMO de save; gerar e retirar o save gerado seguem liberados, e o `valor_save` do envio acompanha a aprovação — ver a nota de 23/09/2026 mais abaixo)
   - errata e save travam só nas tabelas dos meses enviados, com aviso na régua;
   - no servidor, `registrarErrata` e `salvarSaveDaErrata` recusam mês enviado (`mesesEnviadosDoJob`);
   - `jobJaEnviadoParaFaturamento` passou a olhar só o envio sem mês.
@@ -4037,6 +4037,55 @@ passa a nascer na **aprovação** do financeiro, linha a linha.
   recusar, arquivar a recusa e retirar o save aprovado.
 
 ---
+
+## ⚠️ Nota de 2026-09-23 — aprovação de save: correções da conferência final (decisão 099 §5)
+
+Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
+
+- **Quem mexe no save do job:** `registrarErrataDeSave`, `retirarSave` e
+  `enviarSavesParaAprovacao` recusam quem não é administrador nem o
+  responsável do job ("Apenas o responsável do job ou admin pode mudar o
+  save deste job.", com `acao_negada` na auditoria). `cancelarPedidoDeSave`
+  segue só com o papel: a especificação deixa qualquer membro que enxerga o
+  job cancelar. O banco confere o mesmo nas RPCs de job aberto
+  (`save_pode_mexer_no_job`); na cópia do job em pré-abertura ou devolvido
+  a escrita é direta, e a conferência ali é só da action.
+- **Mensal:** o `p_totais` das RPCs de save leva `saves_por_mes` quando há
+  mês enviado (`totaisParaRpc`, em `lib/data/espelhos-do-job.ts`), e a
+  parte de save do envio (`jobs_envio_faturamento.valor_save`) acompanha a
+  aprovação e a retirada. `espelhosDe` continua só com os três espelhos:
+  a errata comum grava o resultado dele direto em `jobs`.
+- **Cache `save_consumido`** travado em job aberto fora do fluxo de save,
+  no UPDATE e no INSERT (`trg_save_consumido_trava`, só com a `140003`
+  ligada; o INSERT entrou na `20260922140009`).
+- **Corrida com o envio do mês:** se um mês for enviado entre a leitura da
+  tela e a RPC de save, `save_gravar_totais` recusa ("Um mês deste job
+  acabou de ser enviado para faturamento. Tente de novo.").
+- **Reenvio do job devolvido:** a página do orçamento lê o fechamento da
+  cópia (`fechamentoDoReenvio`, mesma conta da action) e o formulário e a
+  confirmação mostram "Fechamento do job devolvido" — os números que o
+  reenvio grava — e a frase do save passa a "itens do job". Depois do
+  envio, o "Ver dados do job" mostra o que foi gravado: a cópia enquanto
+  aguarda abertura (lida com `comMeses: false`), e depois dela os
+  `valor_job_abertura`/`faturamento_previsto_abertura` (o save continua o
+  da versão: não há número congelado para ele).
+- **Testado em 23/09/2026** no TES-0001/26, como administrador, como
+  financeiro (GP Teste Claude com o papel trocado pela tela e devolvido) e
+  como GP: JOB-0040 (conferência com "Saves deste job", devolução, consumo
+  mudado no job devolvido, reenvio, pedidos `reenvio` com o autor certo,
+  aprovação de save e de consumo, "Voltar para a fila" sem aprovar, edição
+  de consumo aprovado → `substituido`); JOB-0034 (legado criado pelo código
+  de produção, botão "Enviar 2 saves para aprovação", aprovação dos dois;
+  outubro enviado, consumo travado em outubro e liberado em novembro,
+  retirada e nova aprovação do save de outubro com o `valor_save` do envio,
+  a fila e o fluxo de caixa acompanhando); GP não responsável barrado na
+  tela e na action chamada pelo console. Depois da revisão adversarial,
+  no `TES-0001/26-11` (JOB-0041): "Ver dados do job" aguardando abertura
+  (cópia) e depois do reenvio (`*_abertura`), "itens do job" no reenvio,
+  e o envio cancelado no fim (orçamento de volta a Aprovado).
+- ⚠️ **Dado de teste que ficou:** a parcela de outubro do JOB-0034
+  (R$ 144.749,60, descrição "TESTE 099 — NÃO EMITIR NOTA") está na fila do
+  contas a receber — o envio de mês não tem volta.
 
 ## ⚠️ Nota de 2026-09-22 — Só o GP envia o job para abertura
 

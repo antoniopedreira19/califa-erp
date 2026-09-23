@@ -176,7 +176,12 @@ interface Props {
   projetoCodigo: string;
   clienteNome: string;
   codigoJob: string;
-  versaoLabel: string;
+  /** "Fechamento da versão vN", ou "Fechamento do job devolvido" no
+   *  reenvio, quando os números saem da cópia do job (decisão 099). */
+  rotuloFechamento: string;
+  /** De onde vêm os números: da versão, ou da cópia do job (reenvio). Muda
+   *  a frase de apoio do "Total gerado em save". */
+  origemFechamento: "versao" | "job";
   /** Valor do Job — o que vai para `jobs.valor_total`. */
   valorTotal: number;
   /** O que a California emite nota nesta versão. */
@@ -211,7 +216,8 @@ export function EnviarJobModal({
   projetoCodigo,
   clienteNome,
   codigoJob,
-  versaoLabel,
+  rotuloFechamento,
+  origemFechamento,
   valorTotal,
   faturamentoPrevisto,
   totalGeradoEmSave,
@@ -585,7 +591,7 @@ export function EnviarJobModal({
 
           <div className="rounded-xl border border-border bg-muted/40 px-4 py-2.5 md:col-span-3">
             <p className="text-xs text-muted-foreground">
-              Fechamento da versão {versaoLabel}
+              {rotuloFechamento}
             </p>
             <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-3">
               <p className="text-sm font-semibold">Faturamento previsto</p>
@@ -611,8 +617,11 @@ export function EnviarJobModal({
                       saldo do cliente depois que o financeiro aprova o
                       save — o envio para abertura leva o pedido junto. */}
                   <span className="text-xs text-muted-foreground">
-                    Crédito gerado pelos itens desta versão. Fica disponível
-                    para outros jobs depois que o financeiro aprovar.
+                    {origemFechamento === "job"
+                      ? "Crédito gerado pelos itens do job."
+                      : "Crédito gerado pelos itens desta versão."}{" "}
+                    Fica disponível para outros jobs depois que o financeiro
+                    aprovar.
                   </span>
                 </span>
                 {/* Grafite do SAVE, de `blocos.ts` — a mesma cor da linha

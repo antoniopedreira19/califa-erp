@@ -5723,3 +5723,28 @@ Regra completa em `docs/decisions/099-aprovacao-de-save.md`.
   outro mês, é preciso trocar de mês para vê-la (o `aprovarSave` sobrevive).
 - O dossiê da PP (`contas-a-pagar/pp-dossie.tsx`) linkava para `/jobs`;
   passou a apontar para a página do job no financeiro.
+
+## ⚠️ Nota de 2026-09-23 — aprovação de save: correções da conferência final (decisão 099 §5)
+
+- **Conferência da abertura:** o bloco "Saves deste job" passou a aparecer
+  (`listarFilaDeAbertura` não lia `status`, e o filtro de quem aguarda
+  abertura nunca casava).
+- **Autor do pedido que nasce no registro da abertura** (`abertura` e
+  `reenvio`): quem marcou a linha ou gravou o consumo, não o financeiro que
+  registrou. O pop-up "Aprovar save" e a faixa da revisão mostram esse nome.
+- **Mensal:** aprovar, recusar (pedido já contado), cancelar (idem) ou
+  retirar save regrava a parte de save dos meses já enviados
+  (`jobs_envio_faturamento.valor_save`). É o número de que
+  `vw_faturamento_pendente` e `vw_fluxo_caixa` tiram a divisão próprio ×
+  save da parcela do mês.
+- O financeiro não pede save nem envia legado pela API num job aberto
+  (`save_pode_mexer_no_job`). ⚠️ Na cópia do job devolvido a escrita segue
+  direta por desenho (099 §6): quem marcou o save ali é o que a abertura
+  registra como autor.
+- O autor do pedido só vale se o perfil existe; senão cai para o próximo
+  candidato e, no fim, para quem registra a abertura (`20260922140009`).
+- **Testado como financeiro de verdade** em 23/09/2026 (o GP Teste Claude
+  com o papel trocado pela tela de usuários e devolvido no fim, autorizado
+  pelo Tiago): fila, conferência, reprovação, registro, aprovação de save e
+  de consumo, recusa de pedido já contado com errata, e o registro da
+  revisão que a recusa abre.
