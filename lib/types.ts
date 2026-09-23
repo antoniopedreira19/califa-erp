@@ -2090,12 +2090,22 @@ export function verbaAguardaProducao(s: SituacaoVerba | null): boolean {
   return s === "aguardando_prestacao" || s === "prestacao_reprovada";
 }
 
-/** Verba paga que ainda não fechou — prestação por enviar, em avaliação ou
- *  reprovada, ou estorno do saldo por baixar. Trava o encerramento do job
- *  (decisão 081, pergunta 10a). A verba ainda sem baixa não passa por aqui:
- *  ela já trava como PP em aberto. */
+/** Verba paga cuja prestação de contas ainda não foi aprovada — por enviar,
+ *  em avaliação ou reprovada. Trava o encerramento do job (decisão 081,
+ *  pergunta 10a). A verba ainda sem baixa não passa por aqui: ela já trava
+ *  como PP em aberto.
+ *
+ *  ⚠️ Desde 22/09/2026 o **estorno do saldo por baixar**
+ *  (`devolucao_pendente`) não trava mais. Regra do Tiago: o encerramento
+ *  espera as pendências da PRODUÇÃO, e depois da aprovação a verba não volta
+ *  para ela (o banco só reprova prestação em avaliação). A baixa do estorno é
+ *  do financeiro, e `dar_baixa_devolucao_verba` não olha o status do job. */
 export function verbaPendenteNoEncerramento(s: SituacaoVerba | null): s is Exclude<SituacaoVerba, "concluida"> {
-  return s !== null && s !== "concluida";
+  return (
+    s === "aguardando_prestacao" ||
+    s === "prestacao_em_avaliacao" ||
+    s === "prestacao_reprovada"
+  );
 }
 
 export interface PedidoCompraAnexo {

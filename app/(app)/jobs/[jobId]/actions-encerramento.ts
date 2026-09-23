@@ -74,8 +74,8 @@ async function levantarImpedimentos(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .in("status", PP_STATUS_EM_ABERTO),
-    // Verba paga que não fechou (decisão 081, pergunta 10a): sem prestação
-    // aprovada, ou com o estorno do saldo ainda por baixar. As dicas de FK
+    // Verba paga sem prestação aprovada (decisão 081, pergunta 10a; o estorno
+    // por baixar deixou de travar em 22/09/2026). As dicas de FK
     // são as de `SELECT_PRESTACAO_DA_VERBA` — sem elas o embed é ambíguo.
     supabase
       .from("pedidos_compra")
@@ -238,7 +238,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     }
     if (imp.verbasEmAberto.length > 0) {
       comoResolver.push(
-        "A produção presta contas da verba na aba de PPs; o financeiro aprova e dá baixa no estorno do que não foi gasto.",
+        "A produção presta contas da verba na aba de PPs, e o financeiro aprova a prestação.",
       );
     }
     if (imp.itensSemMarcacao.length > 0) {

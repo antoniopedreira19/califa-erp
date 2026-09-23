@@ -23,7 +23,7 @@ import { jobAceitaGerarPP, type JobStatus } from "@/lib/types";
 import {
   aplicarConclusaoDoItem,
   faltaDosARsSemFechar,
-  itensSemConclusaoDoJob,
+  lerItensSemConclusao,
 } from "./conclusao-item";
 
 type Result = { ok: true } | { ok: false; message: string };
@@ -189,8 +189,9 @@ export interface ItemPuladoNoLote {
  * "Concluir PPs" — o marco aplicado à planilha inteira, de uma vez.
  *
  * A lista de quem será marcado é refeita AQUI, com
- * `itensSemConclusaoDoJob`: a tela pode estar velha, e o que ela mostra
- * no aviso é explicação, não a regra. Item já marcado não é tocado.
+ * `lerItensSemConclusao`: a tela pode estar velha, e o que ela mostra
+ * no aviso é explicação, não a regra. Item já marcado não é tocado. Se a
+ * leitura falha, o lote avisa em vez de dizer que não havia nada a marcar.
  *
  * Item `A · Repasse` cujas PPs ainda não cobrem o orçado **fica de fora**
  * e volta em `pulados`, com quanto falta (decisão 062; opção do Tiago em
@@ -211,11 +212,17 @@ export async function concluirPPsDoJob(
   const g = await gateDoJob(jobId);
   if (!g.ok) return g;
 
-  const pendentes = await itensSemConclusaoDoJob(
+  const pendentes = await lerItensSemConclusao(
     g.supabase,
     g.session.activeTenant.id,
     jobId,
   );
+  if (pendentes === null) {
+    return {
+      ok: false,
+      message: "Não foi possível ler os itens do job. Tente de novo.",
+    };
+  }
 
   const faltas = await faltaDosARsSemFechar(
     g.supabase,
