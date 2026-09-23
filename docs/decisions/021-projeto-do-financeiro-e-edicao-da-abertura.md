@@ -64,7 +64,9 @@ linha da tabela — então a conta é do job inteiro, e as colunas ficam em
 
 Ambas **opcionais**: o protótipo não marca nenhuma das duas com
 asterisco, e job sem faturamento previsto (cliente paga direto ao
-fornecedor) não tem por que ter conta de recebimento.
+fornecedor) não tem por que ter conta de recebimento. ⚠️ Revisto em
+23/09/2026: as contas passaram a ser obrigatórias quando a previsão delas
+existe — ver a nota no fim.
 
 O saldo mostrado em cada opção vem de `fc_saldos_por_conta` (migration
 `20260817000006`), a mesma função do Fluxo de Caixa — nunca de uma conta
@@ -256,3 +258,13 @@ A regra de 20/08 ("só será congelado o que for consumido") **não vale
 mais**. As duas previsões se redistribuem inteiras na edição do registro
 e na revisão de errata; o total continua fechando com o custo e o
 faturamento previstos. Ver [061](061-as-previsoes-se-redistribuem-inteiras.md).
+
+## ⚠️ Nota de 2026-09-23 — três contas, obrigatórias quando a previsão existe (decisão 100)
+
+Entrou a terceira conta, "Impostos em" (`jobs.conta_impostos_id`), e as
+três passaram a ser **obrigatórias quando a previsão delas existe**:
+recebimento com faturamento previsto, pagamento com custo previsto,
+impostos com imposto previsto. Continua valendo o motivo original para o
+job sem faturamento: ele não precisa de conta de recebimento. Quem confere
+é a Server Action, na abertura e na edição do registro. Ver a
+[100](100-previsao-de-impostos-na-abertura.md) §3.

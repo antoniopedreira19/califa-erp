@@ -12,6 +12,7 @@ import {
   type AberturaFinanceiraInput,
   type CriarProjetoFinanceiroInput,
   type EdicaoRegistroAberturaInput,
+  type PrevisaoImpostosLinhaInput,
   type PrevisaoRecebimentoLinhaInput,
 } from "@/lib/validations/abertura-financeiro";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
@@ -30,6 +31,7 @@ import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import { gerarCodigoProjetoFinanceiro } from "@/lib/codigos/projetos-financeiro";
 import { consumoDasPrevisoes } from "./consumo";
 import { registrarFotoDaAbertura } from "./fotos";
+import { impostoDoJob } from "./imposto-previsto";
 import { ehJanelaDePagamento, emCentavos, somaCurva } from "./curva";
 
 export type ActionResult =
@@ -460,6 +462,30 @@ export async function abrirJobNoFinanceiro(
     }
   }
 
+  // ---------- Impostos previstos: relidos do banco (decisão 100) ----------
+  const imposto = await impostoDoJob(supabase, session.activeTenant.id, jobId);
+  if (!imposto) {
+    return {
+      ok: false,
+      message: "Não foi possível calcular os impostos previstos do job.",
+    };
+  }
+  const impostoPrevisto = imposto.impostoPrevisto;
+  const semImposto = impostoPrevisto <= 0;
+  const impostosErro = conferirImpostos(
+    parsed.data.impostos,
+    impostoPrevisto,
+    "abrir",
+  );
+  if (impostosErro) return { ok: false, message: impostosErro };
+
+  const contasErro = conferirContasObrigatorias(parsed.data, {
+    recebimento: semRecebimento,
+    desembolso: semDesembolso,
+    imposto: semImposto,
+  });
+  if (contasErro) return { ok: false, message: contasErro };
+
   const agora = new Date().toISOString();
 
   const { error: updateErro } = await supabase
@@ -473,6 +499,7 @@ export async function abrirJobNoFinanceiro(
       projeto_financeiro_id: parsed.data.projeto_financeiro_id,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
+      conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
       competencia_trimestre: primeiraCompetencia.trimestre,
@@ -520,7 +547,7 @@ export async function abrirJobNoFinanceiro(
   // As duas previsões são regravadas inteiras: apaga o que houver e
   // insere de novo. Na abertura não há nada para apagar, mas a edição
   // futura usa o mesmo caminho.
-  const [deleteCurva, deleteReceb] = await Promise.all([
+  const [deleteCurva, deleteReceb, deleteImp] = await Promise.all([
     supabase
       .from("jobs_previsao_custo")
       .delete()
@@ -531,7 +558,15 @@ export async function abrirJobNoFinanceiro(
       .delete()
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("jobs_previsao_impostos")
+      .delete()
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
+  if (deleteImp.error) {
+    console.error("[abertura-job.impostos-delete]", deleteImp.error.message);
+  }
 
   if (deleteCurva.error) {
     console.error("[abertura-job.curva-delete]", deleteCurva.error.message);
@@ -555,7 +590,7 @@ export async function abrirJobNoFinanceiro(
     created_by: session.profile.id,
   });
 
-  const [curvaRes, recebRes] = await Promise.all([
+  const [curvaRes, recebRes, impRes] = await Promise.all([
     semDesembolso
       ? Promise.resolve({ error: null })
       : supabase
@@ -572,12 +607,18 @@ export async function abrirJobNoFinanceiro(
               valor_save: l.valor_save,
             })),
           ),
+    semImposto
+      ? Promise.resolve({ error: null })
+      : supabase
+          .from("jobs_previsao_impostos")
+          .insert(parsed.data.impostos.map(linhaPrevisao)),
   ]);
 
   const curvaErro = curvaRes.error;
   const recebErro = recebRes.error;
+  const impErro = impRes.error;
 
-  if (curvaErro || recebErro) {
+  if (curvaErro || recebErro || impErro) {
     // O job já está aberto e o registro contábil gravado. Voltar o status
     // aqui seria pior: o financeiro veria o job sumir da fila e reaparecer.
     // Melhor abrir sem a previsão e deixar o alerta explícito.
@@ -587,6 +628,9 @@ export async function abrirJobNoFinanceiro(
     if (recebErro) {
       console.error("[abertura-job.recebimento-insert]", recebErro.message);
     }
+    if (impErro) {
+      console.error("[abertura-job.impostos-insert]", impErro.message);
+    }
     await logAuditEvent({
       acao: "job.aberto_no_financeiro",
       tenantId: session.activeTenant.id,
@@ -595,15 +639,19 @@ export async function abrirJobNoFinanceiro(
       metadata: {
         curva_falhou: Boolean(curvaErro),
         recebimento_falhou: Boolean(recebErro),
-        erro: (curvaErro ?? recebErro)?.message,
+        impostos_falhou: Boolean(impErro),
+        erro: (curvaErro ?? recebErro ?? impErro)?.message,
       },
     });
+    const falhas = [
+      curvaErro && "o cronograma de desembolsos",
+      recebErro && "a previsão de recebimento",
+      impErro && "o cronograma de impostos",
+    ].filter(Boolean) as string[];
     const oQueFalhou =
-      curvaErro && recebErro
-        ? "o cronograma de desembolsos e a previsão de recebimento não foram gravados"
-        : curvaErro
-          ? "o cronograma de desembolsos não foi gravado"
-          : "a previsão de recebimento não foi gravada";
+      falhas.length === 1
+        ? `${falhas[0]} não foi gravado`
+        : `${falhas.slice(0, -1).join(", ")} e ${falhas[falhas.length - 1]} não foram gravados`;
     return {
       ok: false,
       message: `O job foi aberto, mas ${oQueFalhou}. Registre as datas na página do job.`,
@@ -630,6 +678,9 @@ export async function abrirJobNoFinanceiro(
       faturamento_previsto: faturamentoPrevisto,
       parcelas_de_recebimento: parsed.data.recebimento.length,
       sem_recebimento: semRecebimento,
+      conta_impostos_id: parsed.data.conta_impostos_id,
+      imposto_previsto: impostoPrevisto,
+      datas_de_imposto: parsed.data.impostos.length,
     },
   });
 
@@ -647,14 +698,17 @@ export async function abrirJobNoFinanceiro(
       projeto_financeiro_id: parsed.data.projeto_financeiro_id,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
+      conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
       competencias: rateio,
       curva: parsed.data.curva,
       recebimento: parsed.data.recebimento,
+      impostos: parsed.data.impostos,
       valorJob: job.valor_total === null ? null : Number(job.valor_total),
       faturamentoPrevisto,
       custoPrevisto,
+      impostoPrevisto,
     },
   });
 
@@ -669,8 +723,60 @@ export async function abrirJobNoFinanceiro(
 }
 
 /**
+ * As três contas do job são obrigatórias quando a previsão delas existe
+ * (decisão 100, 23/09/2026): recebimento com faturamento previsto,
+ * pagamento com custo previsto, impostos com imposto previsto. Job sem
+ * faturamento não tem por que ter conta de recebimento — e o mesmo vale
+ * para as outras duas.
+ */
+function conferirContasObrigatorias(
+  input: {
+    conta_recebimento_id: string | null;
+    conta_pagamento_id: string | null;
+    conta_impostos_id: string | null;
+  },
+  sem: { recebimento: boolean; desembolso: boolean; imposto: boolean },
+): string | null {
+  if (!sem.recebimento && !input.conta_recebimento_id) {
+    return "Selecione a conta de recebimento.";
+  }
+  if (!sem.desembolso && !input.conta_pagamento_id) {
+    return "Selecione a conta de pagamento.";
+  }
+  if (!sem.imposto && !input.conta_impostos_id) {
+    return "Selecione a conta dos impostos.";
+  }
+  return null;
+}
+
+/**
+ * O cronograma de recolhimento fecha com o imposto previsto, relido do
+ * banco (decisão 100). A data é livre — sem a regra de janela da curva de
+ * custo. Sem imposto, o cronograma tem que vir vazio.
+ */
+function conferirImpostos(
+  impostos: PrevisaoImpostosLinhaInput[],
+  impostoPrevisto: number,
+  acao: "abrir" | "salvar",
+): string | null {
+  if (impostoPrevisto <= 0) {
+    return impostos.length > 0
+      ? "Este job não tem imposto previsto pela California — o cronograma de impostos precisa ficar vazio."
+      : null;
+  }
+  if (impostos.length === 0) {
+    return "O cronograma de recolhimento de impostos precisa de pelo menos uma data.";
+  }
+  const soma = somaCurva(impostos);
+  if (Math.abs(soma - impostoPrevisto) >= TOLERANCIA_CURVA) {
+    return `O recolhimento de impostos soma ${soma.toFixed(2)} e os impostos previstos são ${impostoPrevisto.toFixed(2)}. Ajuste os valores antes de ${acao}.`;
+  }
+  return null;
+}
+
+/**
  * Confere as referências que o formulário manda por id: o projeto do
- * financeiro e as duas contas bancárias.
+ * financeiro e as três contas bancárias.
  *
  * Id vindo do navegador é palpite até o servidor confirmar — sem esta
  * checagem, um id de projeto de outro tenant passaria pela FK (a FK só
@@ -687,6 +793,7 @@ async function conferirProjetoEContas(
     projeto_financeiro_id: string;
     conta_recebimento_id: string | null;
     conta_pagamento_id: string | null;
+    conta_impostos_id: string | null;
   },
 ): Promise<string | null> {
   // Sem `Set` aqui a conferência quebra no caso mais comum da casa:
@@ -697,7 +804,11 @@ async function conferirProjetoEContas(
   // e ativa (31/08/2026).
   const contasPedidas = Array.from(
     new Set(
-      [input.conta_recebimento_id, input.conta_pagamento_id].filter(
+      [
+        input.conta_recebimento_id,
+        input.conta_pagamento_id,
+        input.conta_impostos_id,
+      ].filter(
         (c): c is string => Boolean(c),
       ),
     ),
@@ -958,7 +1069,7 @@ export async function editarRegistroDaAbertura(
     .select(
       "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, " +
         "nome_financeiro, projeto_financeiro_id, conta_recebimento_id, " +
-        "conta_pagamento_id, categoria_id, servico_id, competencia_trimestre, " +
+        "conta_pagamento_id, conta_impostos_id, categoria_id, servico_id, competencia_trimestre, " +
         "competencia_ano, abertura_em_revisao, abertura_revisao_errata_id, " +
         "projeto:projetos(cliente_id)",
     )
@@ -1064,7 +1175,7 @@ export async function editarRegistroDaAbertura(
   );
   const faturamentoPrevisto = emCentavos(Number(job.faturamento_previsto ?? 0));
 
-  const [consumo, curvaAtualRes, recebAtualRes, rateioAtualRes] = await Promise.all([
+  const [consumo, curvaAtualRes, recebAtualRes, rateioAtualRes, impAtualRes] = await Promise.all([
     consumoDasPrevisoes(supabase, session.activeTenant.id, jobId),
     supabase
       .from("jobs_previsao_custo")
@@ -1084,6 +1195,12 @@ export async function editarRegistroDaAbertura(
       .select("trimestre, ano, percentual")
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("jobs_previsao_impostos")
+      .select("data_prevista, valor")
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("ordem", { ascending: true }),
   ]);
 
   const rateioGuardado: JobCompetencia[] = (
@@ -1099,6 +1216,10 @@ export async function editarRegistroDaAbertura(
     valor: Number(l.valor ?? 0),
   }));
   const recebGuardado = ((recebAtualRes.data ?? []) as any[]).map((l) => ({
+    data_prevista: l.data_prevista as string,
+    valor: Number(l.valor ?? 0),
+  }));
+  const impostosGuardados = ((impAtualRes.data ?? []) as any[]).map((l) => ({
     data_prevista: l.data_prevista as string,
     valor: Number(l.valor ?? 0),
   }));
@@ -1182,6 +1303,30 @@ export async function editarRegistroDaAbertura(
     }
   }
 
+  // ---------- Impostos previstos: relidos do banco (decisão 100) ----------
+  const imposto = await impostoDoJob(supabase, session.activeTenant.id, jobId);
+  if (!imposto) {
+    return {
+      ok: false,
+      message: "Não foi possível calcular os impostos previstos do job.",
+    };
+  }
+  const impostoPrevisto = imposto.impostoPrevisto;
+  const semImposto = impostoPrevisto <= 0;
+  const impostosErro = conferirImpostos(
+    parsed.data.impostos,
+    impostoPrevisto,
+    "salvar",
+  );
+  if (impostosErro) return { ok: false, message: impostosErro };
+
+  const contasErro = conferirContasObrigatorias(parsed.data, {
+    recebimento: semRecebimento,
+    desembolso: semDesembolso,
+    imposto: semImposto,
+  });
+  if (contasErro) return { ok: false, message: contasErro };
+
   const { error: updateErro } = await supabase
     .from("jobs")
     .update({
@@ -1189,6 +1334,7 @@ export async function editarRegistroDaAbertura(
       projeto_financeiro_id: parsed.data.projeto_financeiro_id,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
+      conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
       competencia_trimestre: primeiraCompetencia.trimestre,
@@ -1236,7 +1382,7 @@ export async function editarRegistroDaAbertura(
   }
 
   // As previsões são regravadas inteiras — mesmo caminho da abertura.
-  const [deleteCurva, deleteReceb] = await Promise.all([
+  const [deleteCurva, deleteReceb, deleteImp] = await Promise.all([
     supabase
       .from("jobs_previsao_custo")
       .delete()
@@ -1247,7 +1393,15 @@ export async function editarRegistroDaAbertura(
       .delete()
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("jobs_previsao_impostos")
+      .delete()
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
+  if (deleteImp.error) {
+    console.error("[abertura-job.impostos-delete]", deleteImp.error.message);
+  }
 
   if (deleteCurva.error) {
     console.error("[abertura-job.editar-curva-delete]", deleteCurva.error.message);
@@ -1271,7 +1425,7 @@ export async function editarRegistroDaAbertura(
     created_by: session.profile.id,
   });
 
-  const [curvaRes, recebRes] = await Promise.all([
+  const [curvaRes, recebRes, impRes] = await Promise.all([
     semDesembolso
       ? Promise.resolve({ error: null })
       : supabase
@@ -1288,9 +1442,17 @@ export async function editarRegistroDaAbertura(
               valor_save: l.valor_save,
             })),
           ),
+    semImposto
+      ? Promise.resolve({ error: null })
+      : supabase
+          .from("jobs_previsao_impostos")
+          .insert(parsed.data.impostos.map(linhaPrevisao)),
   ]);
 
-  if (curvaRes.error || recebRes.error) {
+  if (curvaRes.error || recebRes.error || impRes.error) {
+    if (impRes.error) {
+      console.error("[abertura-job.editar-impostos-insert]", impRes.error.message);
+    }
     if (curvaRes.error) {
       console.error("[abertura-job.editar-curva-insert]", curvaRes.error.message);
     }
@@ -1305,7 +1467,8 @@ export async function editarRegistroDaAbertura(
       metadata: {
         curva_falhou: Boolean(curvaRes.error),
         recebimento_falhou: Boolean(recebRes.error),
-        erro: (curvaRes.error ?? recebRes.error)?.message,
+        impostos_falhou: Boolean(impRes.error),
+        erro: (curvaRes.error ?? recebRes.error ?? impRes.error)?.message,
       },
     });
     return {
@@ -1337,6 +1500,8 @@ export async function editarRegistroDaAbertura(
         competencias: ordenarCompetencias(rateioGuardado),
         curva: curvaGuardada,
         recebimento: recebGuardado,
+        conta_impostos_id: job.conta_impostos_id ?? null,
+        impostos: impostosGuardados,
       },
       para: {
         nome_financeiro: parsed.data.nome_financeiro,
@@ -1349,7 +1514,10 @@ export async function editarRegistroDaAbertura(
         competencias: rateio,
         curva: parsed.data.curva,
         recebimento: parsed.data.recebimento,
+        conta_impostos_id: parsed.data.conta_impostos_id,
+        impostos: parsed.data.impostos,
       },
+      imposto_previsto: impostoPrevisto,
       consumido_na_edicao: consumo,
     },
   });
@@ -1367,14 +1535,17 @@ export async function editarRegistroDaAbertura(
       projeto_financeiro_id: parsed.data.projeto_financeiro_id,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
+      conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
       competencias: rateio,
       curva: parsed.data.curva,
       recebimento: parsed.data.recebimento,
+      impostos: parsed.data.impostos,
       valorJob: job.valor_total === null ? null : Number(job.valor_total),
       faturamentoPrevisto,
       custoPrevisto,
+      impostoPrevisto,
     },
   });
 

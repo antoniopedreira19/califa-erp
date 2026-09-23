@@ -1159,14 +1159,21 @@ export interface FotoDaAbertura {
   projetoLabel: string | null;
   contaRecebimentoLabel: string | null;
   contaPagamentoLabel: string | null;
+  /** Conta dos impostos (decisão 100). Nula também nas fotos anteriores a
+   *  23/09/2026 — `impostos` nulo é o que distingue as duas. */
+  contaImpostosLabel: string | null;
   categoriaNome: string | null;
   servicoNome: string | null;
   competencias: JobCompetencia[];
   curva: LinhaPrevisaoFoto[];
   recebimento: LinhaPrevisaoFoto[];
+  /** Cronograma de impostos. Nulo = foto anterior à previsão de impostos
+   *  (decisão 100, 23/09/2026); vazio = job sem imposto a recolher. */
+  impostos: LinhaPrevisaoFoto[] | null;
   valorJob: number | null;
   faturamentoPrevisto: number | null;
   custoPrevisto: number | null;
+  impostoPrevisto: number | null;
 }
 
 /** "Abertura", "Revisão 1 · errata", "Revisão 2 · edição do registro". */

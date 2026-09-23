@@ -40,7 +40,9 @@ coluna de valor do recebimento e a do custo caem no mesmo eixo, e a
 comparação passa a ser visual.
 
 O rodapé da tabela fecha a conta que antes só existia na lateral:
-margem prevista, e a contagem das linhas dos dois blocos.
+margem prevista, e a contagem das linhas dos dois blocos. ⚠️ Desde
+23/09/2026 são três blocos e o rodapé mostra a Rentabilidade — ver a nota
+no fim.
 
 ## 2. O que foi decidido contra o design
 
@@ -80,3 +82,12 @@ Num componente só, `AberturaForm`, usado em três lugares:
 - a aba "Abertura" de `/financeiro/jobs/[jobId]`, modo `leitura`;
 - a mesma aba destravada, modo `edicao`, que é o caminho da revisão de
   errata.
+
+## ⚠️ Nota de 2026-09-23 — o terceiro bloco: impostos (decisão 100)
+
+A tabela ganhou um terceiro bloco, **Impostos · cronograma de
+recolhimento** (violeta), abaixo do de custos, na mesma grade. Os cards do
+topo passaram de três para quatro ("Impostos previstos"). O rodapé troca
+"Margem prevista" por **Rentabilidade**, que desconta os impostos, mostra
+a conta por extenso e compara o resultado com o da planilha interna. Ver
+a [100](100-previsao-de-impostos-na-abertura.md).
