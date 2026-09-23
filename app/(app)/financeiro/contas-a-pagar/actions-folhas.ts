@@ -107,12 +107,18 @@ export async function reprovarLinhaFolha(
 
 /**
  * Aprova uma linha de folha. Se `edicoes` for informado, aplica antes
- * de aprovar (financeiro pode ajustar valor e alocação). Ao aprovar:
+ * de aprovar (financeiro pode ajustar valor e alocação NO SNAPSHOT).
+ * Ao aprovar:
  *
- *   1. Aplica edições (valor + alocações via swap com constraint trigger)
- *   2. Cria N contas_avulsas rateadas por percentual da alocação
- *   3. Propaga edições pra Camada 1 se houve alteração
+ *   1. Aplica edições (valor + alocações no snapshot da folha)
+ *   2. Cria N contas_avulsas rateadas pelo % de cada alocação do snapshot
+ *   3. Propaga só o SALÁRIO pra Camada 1 (histórico salarial), se mudou
  *   4. Muda status para 'aprovada'
+ *
+ * Novo modelo (2026-09-23): alocação NÃO propaga mais pra Camada 1 —
+ * ela agora é regional específica ou toggle "todas as regionais", não
+ * mais rateio %. Ajuste de rateio no financeiro fica só no snapshot,
+ * que é imutável. Ver tasks/active/006-alocacao-com-rateio-regional-na-folha.md.
  *
  * Ver docs/decisions/097-folha-mensal-em-duas-camadas.md.
  */
@@ -403,9 +409,15 @@ export async function aprovarLinhaFolha(
     contasCriadas.push(contaCriada.id);
   }
 
-  // 8) Propaga edição pra Camada 1 (D5), se houve edição
+  // 8) Propaga edição pra Camada 1 — apenas SALÁRIO (D5, decisão 097).
+  //
+  // Alocação NÃO propaga mais no novo modelo (2026-09-23): a Camada 1
+  // guarda só regional específica OU rateio da empresa (toggle), sem %
+  // por colaborador. Se o financeiro ajustou o rateio no snapshot da
+  // folha, esse ajuste fica só na folha (que é imutável) e não volta
+  // pra Camada 1. Se a alocação vigente do colaborador estiver errada,
+  // o RH ajusta direto no cadastro.
   if (houveEdicao) {
-    // Fecha salário vigente + abre novo com valor aprovado
     const hoje = new Date().toISOString().slice(0, 10);
     const dataInicioNovo = new Date();
     dataInicioNovo.setDate(dataInicioNovo.getDate() + 1);
@@ -413,47 +425,35 @@ export async function aprovarLinhaFolha(
 
     const { data: salVigente } = await supabase
       .from("colaboradores_salarios")
-      .select("id")
+      .select("id, valor")
       .eq("colaborador_id", colab.id)
       .is("data_fim", null)
       .maybeSingle();
 
-    if (salVigente) {
-      await supabase
-        .from("colaboradores_salarios")
-        .update({ data_fim: hoje })
-        .eq("id", salVigente.id);
+    // Só reabre o histórico salarial se o valor mudou de verdade.
+    const salarioMudou = salVigente
+      ? String(salVigente.valor) !== salarioFinal
+      : true;
+
+    if (salarioMudou) {
+      if (salVigente) {
+        await supabase
+          .from("colaboradores_salarios")
+          .update({ data_fim: hoje })
+          .eq("id", salVigente.id);
+      }
+
+      const competenciaLabel = `${String(folha.competencia_mes).padStart(2, "0")}/${folha.competencia_ano}`;
+      await supabase.from("colaboradores_salarios").insert({
+        tenant_id: tenantId,
+        colaborador_id: colab.id,
+        valor: salarioFinal,
+        data_inicio: dataInicioNovoISO,
+        motivo: `Ajuste em folha ${competenciaLabel}`,
+        aprovado_por: session.profile.id,
+        created_by: session.profile.id,
+      });
     }
-
-    const competenciaLabel = `${String(folha.competencia_mes).padStart(2, "0")}/${folha.competencia_ano}`;
-    await supabase.from("colaboradores_salarios").insert({
-      tenant_id: tenantId,
-      colaborador_id: colab.id,
-      valor: salarioFinal,
-      data_inicio: dataInicioNovoISO,
-      motivo: `Ajuste em folha ${competenciaLabel}`,
-      aprovado_por: session.profile.id,
-      created_by: session.profile.id,
-    });
-
-    // Swap das alocações vigentes
-    await supabase
-      .from("colaboradores_alocacoes")
-      .update({ data_fim: hoje })
-      .eq("colaborador_id", colab.id)
-      .is("data_fim", null);
-
-    const novasAlocs = alocacoesFinal.map((a) => ({
-      tenant_id: tenantId,
-      colaborador_id: colab.id,
-      empresa_id: a.empresa_id,
-      regional_id: a.regional_id,
-      percentual: a.percentual,
-      data_inicio: dataInicioNovoISO,
-      motivo: `Ajuste em folha ${competenciaLabel}`,
-      created_by: session.profile.id,
-    }));
-    await supabase.from("colaboradores_alocacoes").insert(novasAlocs);
   }
 
   // 9) Marca folha como aprovada

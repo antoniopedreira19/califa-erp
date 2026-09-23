@@ -122,6 +122,10 @@ export const permissoes = {
   "jobs.criar_errata":            ["administrador", "gerente_producao", "produtor"],
   "jobs.emitir_pp":               ["administrador", "gerente_producao", "produtor"],
   "jobs.cancelar_pp":             ["administrador", "gerente_producao", "produtor"],
+  /** Enviar (e reenviar, se devolvido) o job para abertura no financeiro.
+   *  Só o GP (Tiago, 22/09/2026): até aqui a action não tinha gate e o
+   *  produtor enviava. */
+  "jobs.enviar_abertura":         ["administrador", "gerente_producao"],
   "jobs.enviar_faturamento":      ["administrador", "gerente_producao"],
   /** Confirmar o BV e mandá-lo ao contas a receber (decisão 080). Lançar e
    *  negociar o BV continua em `jobs.editar`; confirmar é do GP. */

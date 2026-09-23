@@ -260,6 +260,9 @@ export type AuditAction =
   | "folha.linha.aprovada"
   | "folha.linha.reprovada"
   | "folha.linha.paga"
+  // Rateio anual por regional (2026-09-23)
+  | "rateio.regional.salvo"
+  | "rateio.regional.copiado"
   | "acao_negada";
 
 export interface AuditPayload {

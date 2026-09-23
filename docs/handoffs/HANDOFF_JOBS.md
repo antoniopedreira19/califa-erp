@@ -4035,3 +4035,30 @@ passa a nascer na **aprovação** do financeiro, linha a linha.
 - Testado no navegador em 22/09/2026 no JOB-0034 (TES-0001/26): gerar save,
   aprovar pela revisão, consumir do JOB-0032, cancelar, pedir de novo,
   recusar, arquivar a recusa e retirar o save aprovado.
+
+---
+
+## ⚠️ Nota de 2026-09-22 — Só o GP envia o job para abertura
+
+> ⚠️ **Mudou em 22/09/2026.** Até aqui `enviarJobParaAbertura` não tinha
+> gate de papel e a RLS de `jobs` só olha tenant, empresa e regional: o
+> produtor via o botão e o envio passava. Em 22/09 dois produtores enviaram
+> jobs (JOB-0037 e JOB-0038), e o JOB-0031 (04/09) também saiu de um
+> usuário hoje produtor.
+
+- Recurso novo `jobs.enviar_abertura` = Administrador + GP (Tiago, 22/09/2026).
+  Vale para o envio e para o reenvio do job devolvido pelo financeiro, que
+  são a mesma action.
+- A trava está no servidor (`checarPermissao` no topo de
+  `enviarJobParaAbertura`, com `acao_negada` na auditoria). Na tela, o botão
+  "Enviar Job para Abertura" da barra do orçamento e o "Revisar abertura" da
+  página do job devolvido somem para quem não tem o recurso; a barra diz que
+  o próximo passo é do GP.
+- **Não mudou:** "Cancelar envio à abertura" segue em `jobs.editar_metadata`
+  (o produtor ainda cancela). Os jobs já enviados por produtor ficaram como
+  estão.
+- **Verificado em 22/09/2026** num worktree com o papel forçado para produtor
+  só no código local (o banco não foi tocado): botão ausente, aviso do GP na
+  barra, e a action chamada pelo console voltou "Você não tem permissão para
+  essa ação." com `acao_negada` na auditoria. Como administrador, o botão
+  aparece e a action passa da trava.

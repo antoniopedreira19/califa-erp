@@ -15,6 +15,7 @@ const APP_ROLES = [
   "financeiro",
   "produtor",
   "freelancer",
+  "rh",
 ] as const;
 
 const roleSchema = z.enum(APP_ROLES, {

@@ -1136,6 +1136,7 @@ function VersaoSelecionada({
         cidadesIniciais={cidadesIniciais}
         inicial={inicialModal}
         job={job}
+        podeEnviarAbertura={pode(session.activeRole, "jobs.enviar_abertura")}
         abrirRevisao={abrirRevisao}
       />
     </>

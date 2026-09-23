@@ -105,6 +105,9 @@ interface Props {
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
   inicial: DadosJob;
   job: JobExistente | null;
+  /** `jobs.enviar_abertura`: só o GP envia e reenvia (Tiago, 22/09/2026).
+   *  Sem ela a barra mostra a etapa, mas não o botão. */
+  podeEnviarAbertura: boolean;
   /** Veio do "Revisar abertura" da página do job devolvido: abre o
    *  formulário já preenchido assim que a tela monta. */
   abrirRevisao?: boolean;
@@ -138,6 +141,7 @@ export function FluxoAbertura({
   cidadesIniciais,
   inicial,
   job,
+  podeEnviarAbertura,
   abrirRevisao = false,
 }: Props) {
   const router = useRouter();
@@ -186,11 +190,11 @@ export function FluxoAbertura({
   React.useEffect(() => {
     if (!abrirRevisao || revisaoJaAberta.current) return;
     revisaoJaAberta.current = true;
-    if (etapa === "devolvida") setModal("form");
+    if (etapa === "devolvida" && podeEnviarAbertura) setModal("form");
     const url = new URL(window.location.href);
     url.searchParams.delete("abertura");
     router.replace(`${url.pathname}${url.search}`, { scroll: false });
-  }, [abrirRevisao, etapa, router]);
+  }, [abrirRevisao, etapa, podeEnviarAbertura, router]);
 
   // Estados fora do fluxo (reprovada, substituída, cancelada) não têm barra.
   if (!podeAprovar && !aprovada) return null;
@@ -375,7 +379,9 @@ export function FluxoAbertura({
                 · valores travados para edição
               </span>
               <span className="text-xs text-muted-foreground">
-                Próximo passo: abrir o job para o financeiro
+                {podeEnviarAbertura
+                  ? "Próximo passo: abrir o job para o financeiro"
+                  : "Próximo passo: o GP envia o job para abertura no financeiro"}
               </span>
             </>
           )}
@@ -407,7 +413,9 @@ export function FluxoAbertura({
                 </strong>
               </span>
               <span className="text-xs text-muted-foreground">
-                Revise a abertura com o motivo acima e reenvie
+                {podeEnviarAbertura
+                  ? "Revise a abertura com o motivo acima e reenvie"
+                  : "O GP revisa a abertura com o motivo acima e reenvia"}
               </span>
             </>
           )}
@@ -459,7 +467,7 @@ export function FluxoAbertura({
               Ver dados do job
             </button>
           )}
-          {(etapa === "aprovada" || etapa === "devolvida") && (
+          {(etapa === "aprovada" || etapa === "devolvida") && podeEnviarAbertura && (
             <button
               type="button"
               onClick={abrirFormulario}

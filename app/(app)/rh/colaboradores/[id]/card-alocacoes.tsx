@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Briefcase, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Briefcase, PenLine, AlertCircle } from "lucide-react";
 import {
   Dialog,
   DialogTrigger,
@@ -11,7 +11,6 @@ import {
   DialogDescription,
   DialogContent,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -22,18 +21,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ColaboradorAlocacao, Empresa } from "@/lib/types";
-import { substituirAlocacoes } from "./actions-alocacao";
+import { alterarAlocacao } from "./actions-alocacao";
 
-type AlocacaoRow = ColaboradorAlocacao & {
+export type AlocacaoRow = ColaboradorAlocacao & {
   empresa: Pick<Empresa, "id" | "nome_fantasia">;
-  regional: { id: string; nome: string };
+  regional: { id: string; nome: string } | null;
 };
 
-type LinhaEdit = {
-  key: string;
+/**
+ * Rateio da empresa+ano vigente, apenas as regionais com % > 0.
+ * A page passa isso já filtrado pelo ano corrente pra economizar payload.
+ */
+export type RateioEmpresa = {
   empresa_id: string;
-  regional_id: string;
-  percentual: string;
+  regionais: Array<{ regional_id: string; regional_nome: string; percentual: number }>;
 };
 
 export function CardAlocacoes({
@@ -41,114 +42,102 @@ export function CardAlocacoes({
   alocacoes,
   empresas,
   regionais,
+  rateiosDoAno,
+  anoRateio,
 }: {
   colaboradorId: string;
   alocacoes: AlocacaoRow[];
   empresas: Pick<Empresa, "id" | "nome_fantasia">[];
   regionais: { id: string; nome: string; empresa_id: string }[];
+  rateiosDoAno: RateioEmpresa[];
+  anoRateio: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
+
   const [dataMudanca, setDataMudanca] = React.useState<string>(
     new Date().toISOString().slice(0, 10),
   );
+  const [empresaId, setEmpresaId] = React.useState<string>("");
+  const [usaRateio, setUsaRateio] = React.useState<boolean>(false);
+  const [regionalId, setRegionalId] = React.useState<string>("");
 
-  const vigentes = alocacoes.filter((a) => a.data_fim === null);
+  const vigente = alocacoes.find((a) => a.data_fim === null) ?? null;
   const historico = alocacoes.filter((a) => a.data_fim !== null);
 
-  const [linhas, setLinhas] = React.useState<LinhaEdit[]>([]);
+  const rateioPorEmpresa = React.useMemo(() => {
+    const m = new Map<string, RateioEmpresa["regionais"]>();
+    for (const r of rateiosDoAno) m.set(r.empresa_id, r.regionais);
+    return m;
+  }, [rateiosDoAno]);
 
-  // Ao abrir o modal, pré-preenche com as vigentes atuais
+  // Toggle "Todas as regionais" só faz sentido quando (a) a empresa tem
+  // 2+ regionais — ratear entre 1 regional é degenerado — e (b) tem rateio
+  // configurado no ano corrente. Se qualquer uma das duas condições falhar,
+  // o operador escolhe regional específica direto.
+  const regionaisDaEmpresaCount = empresaId
+    ? regionais.filter((r) => r.empresa_id === empresaId).length
+    : 0;
+  const empresaTemRateio: boolean = Boolean(
+    empresaId &&
+      regionaisDaEmpresaCount >= 2 &&
+      rateioPorEmpresa.has(empresaId),
+  );
+
+  // Ao abrir, pré-preenche com a vigente atual (ou vazio se não tiver).
   React.useEffect(() => {
     if (!open) return;
-    if (vigentes.length > 0) {
-      setLinhas(
-        vigentes.map((v, i) => ({
-          key: `${v.id}-${i}`,
-          empresa_id: v.empresa_id,
-          regional_id: v.regional_id,
-          // Supabase-js pode devolver numeric como number OU string dependendo
-          // do driver. Normalizamos para string aqui, para que o Input e o
-          // .replace() do parse funcionem em qualquer caso.
-          percentual: String(v.percentual),
-        })),
-      );
+    if (vigente) {
+      setEmpresaId(vigente.empresa_id);
+      setUsaRateio(vigente.usa_rateio_empresa);
+      setRegionalId(vigente.regional_id ?? "");
     } else {
-      setLinhas([
-        {
-          key: "new-1",
-          empresa_id: "",
-          regional_id: "",
-          percentual: "100.00",
-        },
-      ]);
+      setEmpresaId("");
+      setUsaRateio(false);
+      setRegionalId("");
     }
     setError(null);
     setDataMudanca(new Date().toISOString().slice(0, 10));
-    // vigentes é lido só na abertura pra montar o estado inicial —
-    // reabrir com vigentes atualizadas cai aqui de novo. eslint-disable-next-line
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  const somaAtual = linhas.reduce(
-    (acc, l) =>
-      acc + (Number(String(l.percentual).replace(",", ".")) || 0),
-    0,
-  );
-  const somaOk = Math.abs(somaAtual - 100) < 0.01;
+  // Se empresa perde rateio quando muda a seleção, força toggle off.
+  React.useEffect(() => {
+    if (!empresaTemRateio && usaRateio) setUsaRateio(false);
+    if (usaRateio) setRegionalId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId, empresaTemRateio]);
 
-  function atualizarLinha(index: number, patch: Partial<LinhaEdit>) {
-    setLinhas((prev) =>
-      prev.map((l, i) => (i === index ? { ...l, ...patch } : l)),
-    );
-  }
-
-  function adicionarLinha() {
-    setLinhas((prev) => [
-      ...prev,
-      {
-        key: `new-${Date.now()}`,
-        empresa_id: "",
-        regional_id: "",
-        percentual: "",
-      },
-    ]);
-  }
-
-  function removerLinha(index: number) {
-    setLinhas((prev) => prev.filter((_, i) => i !== index));
-  }
+  const regionaisDaEmpresa = regionais
+    .filter((r) => r.empresa_id === empresaId)
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!somaOk) {
-      setError(
-        `A soma dos percentuais precisa dar 100 (atual: ${somaAtual.toFixed(2)}).`,
-      );
+    if (!empresaId) {
+      setError("Selecione uma empresa.");
       return;
     }
-    if (linhas.some((l) => !l.empresa_id || !l.regional_id)) {
-      setError("Toda linha precisa ter empresa e regional selecionadas.");
+    if (!usaRateio && !regionalId) {
+      setError("Selecione uma regional.");
+      return;
+    }
+    if (!dataMudanca) {
+      setError("Informe a data de mudança.");
       return;
     }
 
     startTransition(async () => {
-      const res = await substituirAlocacoes(
-        colaboradorId,
-        linhas.map((l) => ({
-          empresa_id: l.empresa_id,
-          regional_id: l.regional_id,
-          percentual: (
-            Math.round(
-              Number(String(l.percentual).replace(",", ".")) * 100,
-            ) / 100
-          ).toFixed(2),
-        })),
-        dataMudanca,
-      );
+      const res = await alterarAlocacao(colaboradorId, {
+        empresa_id: empresaId,
+        usa_rateio_empresa: usaRateio,
+        regional_id: usaRateio ? null : regionalId,
+        data_mudanca: dataMudanca,
+      });
       if (!res.ok) {
         setError(res.message);
         return;
@@ -166,9 +155,10 @@ export function CardAlocacoes({
             <Briefcase className="h-4 w-4 text-california-red" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">Alocações</h2>
+            <h2 className="text-lg font-semibold">Alocação</h2>
             <p className="text-xs text-muted-foreground">
-              Vigente somando 100% em par (empresa, regional).
+              Vigente por vez. Regional específica ou todas as regionais da
+              empresa via rateio anual.
             </p>
           </div>
         </div>
@@ -178,16 +168,16 @@ export function CardAlocacoes({
               type="button"
               className="inline-flex items-center gap-1.5 rounded-md bg-california-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-california-red/90 transition-colors"
             >
-              <Plus className="h-3.5 w-3.5" />
-              Alterar alocação
+              <PenLine className="h-3.5 w-3.5" />
+              Alterar
             </button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Alterar alocação</DialogTitle>
               <DialogDescription>
-                Fecha as vigentes na data de mudança e abre estas novas. A soma
-                precisa dar 100%.
+                Fecha a vigente no dia anterior à data de mudança e abre esta
+                nova.
               </DialogDescription>
             </DialogHeader>
 
@@ -198,109 +188,91 @@ export function CardAlocacoes({
                   name="data_mudanca_visual"
                   defaultValue={dataMudanca}
                   onDateChange={(d) =>
-                    setDataMudanca(
-                      d ? d.toISOString().slice(0, 10) : "",
-                    )
+                    setDataMudanca(d ? d.toISOString().slice(0, 10) : "")
                   }
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Alocações vigentes a partir da data</Label>
-                <div className="space-y-2">
-                  {linhas.map((l, i) => {
-                    const regionaisDaEmpresa = regionais
-                      .filter((r) => r.empresa_id === l.empresa_id)
-                      .sort((a, b) =>
-                        a.nome.localeCompare(b.nome, "pt-BR"),
-                      );
-                    return (
-                      <div
-                        key={l.key}
-                        className="grid gap-2 rounded-lg border border-border p-3 md:grid-cols-[1fr_1fr_120px_auto]"
-                      >
-                        <Select
-                          value={l.empresa_id}
-                          onValueChange={(v) =>
-                            atualizarLinha(i, {
-                              empresa_id: v,
-                              regional_id: "",
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Empresa" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {empresas.map((e) => (
-                              <SelectItem key={e.id} value={e.id}>
-                                {e.nome_fantasia}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={l.regional_id}
-                          onValueChange={(v) =>
-                            atualizarLinha(i, { regional_id: v })
-                          }
-                          disabled={!l.empresa_id}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Regional" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {regionaisDaEmpresa.map((r) => (
-                              <SelectItem key={r.id} value={r.id}>
-                                {r.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="relative">
-                          <Input
-                            value={l.percentual}
-                            onChange={(e) =>
-                              atualizarLinha(i, { percentual: e.target.value })
-                            }
-                            placeholder="0,00"
-                            className="pr-7"
-                            inputMode="decimal"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                            %
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removerLinha(i)}
-                          disabled={linhas.length === 1}
-                          className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-california-red transition-colors disabled:opacity-30"
-                          title="Remover"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center justify-between pt-1">
+                <Label>Empresa</Label>
+                <Select value={empresaId} onValueChange={setEmpresaId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nome_fantasia}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {empresaTemRateio && (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Todas as regionais</p>
+                    <p className="text-xs text-muted-foreground">
+                      Usa o rateio anual configurado para {anoRateio}.
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={adicionarLinha}
-                    className="text-xs font-medium text-california-red hover:underline"
-                  >
-                    + Adicionar alocação
-                  </button>
-                  <p
-                    className={`text-xs font-medium ${
-                      somaOk ? "text-emerald-600" : "text-california-red"
+                    role="switch"
+                    aria-checked={usaRateio}
+                    onClick={() => setUsaRateio((v) => !v)}
+                    className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+                      usaRateio ? "bg-california-red" : "bg-muted-foreground/30"
                     }`}
                   >
-                    Soma: {somaAtual.toFixed(2)}%
-                  </p>
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transform transition-transform ${
+                        usaRateio ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
                 </div>
-              </div>
+              )}
+
+              {!usaRateio && empresaId && (
+                <div className="space-y-2">
+                  <Label>Regional</Label>
+                  <Select value={regionalId} onValueChange={setRegionalId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a regional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regionaisDaEmpresa.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {usaRateio && empresaTemRateio && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                    Preview do rateio {anoRateio}
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs text-emerald-900">
+                    {rateioPorEmpresa.get(empresaId)!.map((r) => (
+                      <li
+                        key={r.regional_id}
+                        className="flex items-center justify-between"
+                      >
+                        <span>{r.regional_nome}</span>
+                        <span className="tabular-nums font-semibold">
+                          {r.percentual.toFixed(2).replace(".", ",")}%
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {error && (
                 <div className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
@@ -319,7 +291,7 @@ export function CardAlocacoes({
                 </button>
                 <button
                   type="submit"
-                  disabled={pending || !somaOk}
+                  disabled={pending}
                   className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
                 >
                   {pending ? "Salvando..." : "Confirmar mudança"}
@@ -330,7 +302,7 @@ export function CardAlocacoes({
         </Dialog>
       </div>
 
-      {/* Timeline unificada: vigentes em destaque + histórico agrupado por período */}
+      {/* Vigente em destaque + histórico simples */}
       <div className="mt-5">
         {alocacoes.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -338,8 +310,7 @@ export function CardAlocacoes({
           </p>
         ) : (
           <ol className="space-y-2">
-            {/* Bloco vigente (destaque) */}
-            {vigentes.length > 0 && (
+            {vigente && (
               <li className="rounded-xl border-2 border-california-red/40 bg-california-red/5 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-california-red px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
@@ -347,65 +318,51 @@ export function CardAlocacoes({
                     Vigente
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    desde{" "}
-                    {formatarData(
-                      vigentes
-                        .map((v) => v.data_inicio)
-                        .sort()
-                        .reverse()[0]!,
-                    )}
+                    desde {formatarData(vigente.data_inicio)}
                   </span>
                 </div>
-                <ul className="mt-2 space-y-1">
-                  {vigentes.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between rounded-lg bg-white/60 px-3 py-1.5 text-sm"
-                    >
-                      <span>
-                        <span className="font-medium">
-                          {a.empresa.nome_fantasia}
-                        </span>{" "}
-                        <span className="text-muted-foreground">
-                          · {a.regional.nome}
-                        </span>
-                      </span>
-                      <span className="font-semibold tabular-nums text-california-red">
-                        {Number(a.percentual).toFixed(2).replace(".", ",")}%
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-2 rounded-lg bg-white/60 px-3 py-2 text-sm">
+                  <span className="font-medium">
+                    {vigente.empresa.nome_fantasia}
+                  </span>
+                  {vigente.usa_rateio_empresa ? (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                      Todas as regionais (rateio {anoRateio})
+                    </span>
+                  ) : (
+                    <span className="ml-2 text-muted-foreground">
+                      · {vigente.regional?.nome ?? "—"}
+                    </span>
+                  )}
+                </div>
               </li>
             )}
 
-            {/* Grupos históricos: agrupa linhas por (data_inicio, data_fim) */}
-            {agruparHistorico(historico).map((grupo) => (
-              <li
-                key={grupo.chave}
-                className="rounded-lg border border-border bg-muted/20 px-4 py-2.5"
-              >
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  {formatarData(grupo.data_inicio)} →{" "}
-                  {grupo.data_fim ? formatarData(grupo.data_fim) : "vigente"}
-                </p>
-                <ul className="mt-1 space-y-0.5">
-                  {grupo.linhas.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between text-xs text-muted-foreground"
-                    >
-                      <span>
-                        {a.empresa.nome_fantasia} · {a.regional.nome}
-                      </span>
-                      <span className="tabular-nums font-medium">
-                        {Number(a.percentual).toFixed(2).replace(".", ",")}%
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
+            {historico
+              .sort((a, b) => {
+                const p = (b.data_inicio ?? "").localeCompare(a.data_inicio ?? "");
+                if (p !== 0) return p;
+                return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+              })
+              .map((a) => (
+                <li
+                  key={a.id}
+                  className="rounded-lg border border-border bg-muted/20 px-4 py-2.5"
+                >
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    {formatarData(a.data_inicio)} →{" "}
+                    {a.data_fim ? formatarData(a.data_fim) : "vigente"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {a.empresa.nome_fantasia}
+                    {a.usa_rateio_empresa
+                      ? " · Todas as regionais (rateio)"
+                      : a.regional
+                        ? ` · ${a.regional.nome}`
+                        : ""}
+                  </p>
+                </li>
+              ))}
           </ol>
         )}
       </div>
@@ -417,58 +374,4 @@ function formatarData(iso: string): string {
   const [ano, mes, dia] = iso.split("-");
   if (!ano || !mes || !dia) return iso;
   return `${dia}/${mes}/${ano}`;
-}
-
-/**
- * Agrupa linhas históricas de alocação por (data_inicio, data_fim). Cada
- * swap atômico gera N linhas com o mesmo par de datas — juntas elas
- * formam o "estado" da alocação naquele período. Se alguém tiver inserido
- * linhas isoladas (sem swap), elas caem em grupos próprios.
- *
- * Retorna ordenado por data_inicio DESC (mais recente no topo).
- */
-function agruparHistorico(
-  linhas: AlocacaoRow[],
-): {
-  chave: string;
-  data_inicio: string;
-  data_fim: string | null;
-  ultimo_created_at: string;
-  linhas: AlocacaoRow[];
-}[] {
-  const mapa = new Map<
-    string,
-    {
-      chave: string;
-      data_inicio: string;
-      data_fim: string | null;
-      ultimo_created_at: string;
-      linhas: AlocacaoRow[];
-    }
-  >();
-  for (const l of linhas) {
-    const chave = `${l.data_inicio}__${l.data_fim ?? "vigente"}`;
-    const atual = mapa.get(chave);
-    if (!atual) {
-      mapa.set(chave, {
-        chave,
-        data_inicio: l.data_inicio,
-        data_fim: l.data_fim,
-        ultimo_created_at: l.created_at,
-        linhas: [l],
-      });
-    } else {
-      atual.linhas.push(l);
-      if (l.created_at > atual.ultimo_created_at) {
-        atual.ultimo_created_at = l.created_at;
-      }
-    }
-  }
-  // Ordena por data_inicio DESC; empate resolve por created_at DESC (mais
-  // recente primeiro). Necessário quando dois swaps caem no mesmo dia.
-  return Array.from(mapa.values()).sort((a, b) => {
-    const porData = b.data_inicio.localeCompare(a.data_inicio);
-    if (porData !== 0) return porData;
-    return b.ultimo_created_at.localeCompare(a.ultimo_created_at);
-  });
 }
