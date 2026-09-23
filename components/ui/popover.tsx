@@ -5,8 +5,38 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@/lib/utils";
 
 const Popover = PopoverPrimitive.Root;
-const PopoverTrigger = PopoverPrimitive.Trigger;
 const PopoverAnchor = PopoverPrimitive.Anchor;
+
+/**
+ * O gatilho pega o foco no clique (22/09/2026). No Safari (e no Firefox
+ * do Mac), clicar num botão NÃO dá foco a ele; o foco fica no ancestral
+ * focável, que num diálogo é o próprio `DialogContent`. Aí, ao abrir o
+ * popover, a trava de foco do diálogo devolve o foco para esse contêiner.
+ * O popover lê isso como "o foco saiu para fora" e fecha no mesmo instante.
+ * No Chrome o foco devolvido cai no gatilho, que o popover reconhece e
+ * ignora. Resultado no Safari: nenhum DatePicker/Combobox dentro de
+ * diálogo ou drawer abria (visto no "Enviar job para abertura").
+ *
+ * O foco vai no `click`, não no `pointerdown`: o `mousedown` do Safari
+ * move o foco para o ancestral DEPOIS do pointerdown e o roubaria de
+ * volta. O handler de quem usa roda depois, e o toggle do Radix por último.
+ */
+const PopoverTrigger = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>
+>(({ onClick, ...props }, ref) => (
+  <PopoverPrimitive.Trigger
+    ref={ref}
+    onClick={(event) => {
+      if (document.activeElement !== event.currentTarget) {
+        event.currentTarget.focus({ preventScroll: true });
+      }
+      onClick?.(event);
+    }}
+    {...props}
+  />
+));
+PopoverTrigger.displayName = PopoverPrimitive.Trigger.displayName;
 
 const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
