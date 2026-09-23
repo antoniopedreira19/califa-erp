@@ -51,9 +51,11 @@ import { AprovacaoActions } from "./versoes/[versaoId]/aprovacao-actions";
 import {
   BannersEstado,
   FluxoAbertura,
+  type FechamentoDaCopia,
   type JobExistente,
 } from "./versoes/[versaoId]/fluxo-abertura";
 import { proximoCodigoDeJob } from "@/lib/codigos/jobs";
+import { lerBaseDosEspelhos, totaisDoFinanceiro } from "@/lib/data/espelhos-do-job";
 
 export const dynamic = "force-dynamic";
 
@@ -227,7 +229,9 @@ export default async function OrcamentoDetailPage({
       .select(
         // `status` e `motivo_rejeicao` desde 08/09/2026 (decisão 057): é
         // por eles que a tela sabe que o financeiro devolveu o job.
-        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao",
+        // `*_abertura`: os números congelados no envio/reenvio — o "Ver
+        // dados do job" mostra o que foi gravado (decisão 099).
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao, valor_job_abertura, faturamento_previsto_abertura",
       )
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
@@ -366,7 +370,7 @@ export default async function OrcamentoDetailPage({
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
   // submenu "copiar uma versão existente" mostra para cada aba.
   const versaoIds = versoesTodas.map((v) => v.id);
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes] = await Promise.all([
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -422,7 +426,27 @@ export default async function OrcamentoDetailPage({
     versaoAtiva
       ? mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoAtiva.id)
       : Promise.resolve({ data: [] as VersaoOrcamentoMes[], error: null }),
+    // Job devolvido: o reenvio grava os números da CÓPIA do job, onde a
+    // produção pode ter mexido no save (decisão 099, §11). O formulário e a
+    // confirmação do reenvio mostram esses mesmos números — a mesma conta
+    // da action (`lerBaseDosEspelhos` → `totaisDoFinanceiro`). Aguardando
+    // abertura, a cópia é o que acabou de ser enviado ("Ver dados do job").
+    job?.status === "rejeitado_financeiro" || job?.status === "aguardando_abertura"
+      ? lerBaseDosEspelhos(supabase, session.activeTenant.id, job.id, { comMeses: false })
+      : Promise.resolve(null),
   ]);
+
+  let fechamentoDaCopia: FechamentoDaCopia | null = null;
+  if (reenvioRes && reenvioRes.ok) {
+    const t = totaisDoFinanceiro(reenvioRes.base.itens, reenvioRes.base);
+    fechamentoDaCopia = {
+      faturamentoPrevisto: t.faturamentoPrevisto,
+      valorJob: t.valorJob,
+      totalGeradoEmSave: t.save.totalSaveGerado,
+    };
+  } else if (reenvioRes) {
+    console.error("[versao.reenvio]", reenvioRes.message);
+  }
 
   if (gruposRes.error) console.error("[versao.grupos]", gruposRes.error.message);
   if (itensRes.error) console.error("[versao.itens]", itensRes.error.message);
@@ -673,6 +697,7 @@ export default async function OrcamentoDetailPage({
           motivoBloqueio={motivoBloqueio}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
           mesPedido={mesPedido}
+          fechamentoDaCopia={fechamentoDaCopia}
         />
       ) : (
         <SemVersoes
@@ -726,6 +751,7 @@ function VersaoSelecionada({
   motivoBloqueio,
   meses,
   mesPedido,
+  fechamentoDaCopia,
 }: {
   params: { projetoId: string; orcId: string };
   session: Awaited<ReturnType<typeof requireSession>>;
@@ -759,6 +785,8 @@ function VersaoSelecionada({
   meses: VersaoOrcamentoMes[];
   /** `?mes=` da URL. */
   mesPedido: string | undefined;
+  /** Job devolvido ou aguardando abertura: o fechamento da cópia do job. */
+  fechamentoDaCopia: FechamentoDaCopia | null;
 }) {
   const itens: VersaoOrcamentoItem[] = itensBrutos.map((it: any) => ({
     ...it,
@@ -1124,6 +1152,7 @@ function VersaoSelecionada({
         faturamentoPrevisto={totais.faturamentoPrevisto}
         totalGeradoEmSave={totais.save.totalSaveGerado}
         valorJob={totais.valorJob}
+        fechamentoDaCopia={fechamentoDaCopia}
         moeda={versao.moeda}
         clienteNome={clienteNome}
         proximoCodigoJob={proximoCodigoJob}

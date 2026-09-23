@@ -470,7 +470,10 @@ export async function listarFilaDeAbertura(
   // parcial próprio (`idx_jobs_abertura_em_revisao`).
   const { data, error } = await supabase
     .from("jobs")
-    .select(`${SELECT_JOB_FILA}, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, data_abertura_financeiro`)
+    // `status` separa quem aguarda abertura (e ganha o bloco "Saves deste
+    // job") de quem está em revisão. Sem ele o filtro abaixo nunca casava e
+    // o bloco não aparecia — a linha é `any`, e nada acusava.
+    .select(`${SELECT_JOB_FILA}, status, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, data_abertura_financeiro`)
     .eq("tenant_id", tenantId)
     .or("status.eq.aguardando_abertura,abertura_em_revisao.is.true")
     .order("created_at", { ascending: true });

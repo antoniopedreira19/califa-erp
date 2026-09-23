@@ -18,9 +18,11 @@ import {
   espelhosDe,
   lerBaseDosEspelhos,
   totaisDoFinanceiro,
+  totaisParaRpc,
   type BaseDosEspelhos,
   type EspelhosDoJob,
   type LinhaDoEspelho,
+  type TotaisParaRpc,
 } from "@/lib/data/espelhos-do-job";
 import { pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
@@ -287,14 +289,12 @@ export async function espelhosDaAprovacao(
   jobId: string,
   pedidoId: string,
   momento: SaveAprovacaoMomento,
-): Promise<{ ok: true; totais: EspelhosDoJob | null } | { ok: false; message: string }> {
+): Promise<{ ok: true; totais: TotaisParaRpc | null } | { ok: false; message: string }> {
   if (momento !== "job_aberto") return { ok: true, totais: null };
   const lida = await lerBaseDosEspelhos(supabase, tenantId, jobId);
   if (!lida.ok) return { ok: false, message: lida.message };
-  return {
-    ok: true,
-    totais: espelhosDe(totaisDoFinanceiro(lida.base.itens, lida.base, [pedidoId])),
-  };
+  // No mensal leva junto a parte de save dos meses já enviados.
+  return { ok: true, totais: totaisParaRpc(lida.base.itens, lida.base, [pedidoId]) };
 }
 
 /**

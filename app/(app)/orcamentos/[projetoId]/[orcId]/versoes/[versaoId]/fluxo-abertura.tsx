@@ -52,6 +52,10 @@ export interface JobExistente {
   data_evento: string | null;
   observacoes: string | null;
   nome: string;
+  /** O que o envio (ou o reenvio) gravou — `numeric` chega como texto. É o
+   *  que o "Ver dados do job" mostra depois do envio (decisão 099). */
+  valor_job_abertura: number | string | null;
+  faturamento_previsto_abertura: number | string | null;
 }
 
 interface Props {
@@ -87,6 +91,11 @@ interface Props {
   totalGeradoEmSave: number;
   /** Compromisso total do cliente — é o que vai para `jobs.valor_total`. */
   valorJob: number;
+  /** Job devolvido ou aguardando abertura: o fechamento da cópia do job,
+   *  que é o que o reenvio grava (e o que acabou de ser enviado). No
+   *  formulário e na confirmação ele toma o lugar do fechamento da versão.
+   *  `null` nos outros estados. */
+  fechamentoDaCopia: FechamentoDaCopia | null;
   moeda: string;
 
   clienteNome: string;
@@ -113,6 +122,15 @@ interface Props {
   abrirRevisao?: boolean;
 }
 
+/** O fechamento da CÓPIA do job: é o que o reenvio do job devolvido grava,
+ *  e a produção pode ter mexido no save depois da devolução (decisão 099,
+ *  §11). */
+export interface FechamentoDaCopia {
+  faturamentoPrevisto: number;
+  valorJob: number;
+  totalGeradoEmSave: number;
+}
+
 export function FluxoAbertura({
   versaoId,
   versaoLabel,
@@ -131,6 +149,7 @@ export function FluxoAbertura({
   faturamentoPrevisto,
   totalGeradoEmSave,
   valorJob,
+  fechamentoDaCopia,
   moeda,
   clienteNome,
   proximoCodigoJob,
@@ -177,6 +196,38 @@ export function FluxoAbertura({
     : aprovada
       ? "aprovada"
       : "rascunho";
+  // O que o formulário e a confirmação mostram (decisão 099, §11):
+  // - reenvio do job devolvido: o fechamento da cópia, que é o que será
+  //   gravado;
+  // - job já enviado ("Ver dados do job"): o que o envio gravou — a cópia
+  //   enquanto aguarda abertura; depois dela, os números congelados no envio
+  //   (`*_abertura`) e o save da versão, que não tem número congelado;
+  // - antes do envio: o fechamento da versão.
+  const rotuloVersao = `Fechamento da versão ${versaoLabel}`;
+  const numero = (v: number | string | null | undefined) =>
+    v === null || v === undefined || v === "" ? null : Number(v);
+  const valorGravado = numero(job?.valor_job_abertura);
+  const faturamentoGravado = numero(job?.faturamento_previsto_abertura);
+  const fechamento: FechamentoDaCopia & { rotulo: string; origem: "versao" | "job" } =
+    etapa === "devolvida" && fechamentoDaCopia
+      ? { ...fechamentoDaCopia, rotulo: "Fechamento do job devolvido", origem: "job" }
+      : etapa === "enviada" && fechamentoDaCopia
+        ? { ...fechamentoDaCopia, rotulo: rotuloVersao, origem: "job" }
+        : etapa === "enviada" && valorGravado !== null && faturamentoGravado !== null
+          ? {
+              faturamentoPrevisto: faturamentoGravado,
+              valorJob: valorGravado,
+              totalGeradoEmSave,
+              rotulo: rotuloVersao,
+              origem: "versao",
+            }
+          : {
+              faturamentoPrevisto,
+              valorJob,
+              totalGeradoEmSave,
+              rotulo: rotuloVersao,
+              origem: "versao",
+            };
 
   // "Revisar abertura" da página do job: chega com `?abertura=revisar`,
   // abre o formulário preenchido e tira o parâmetro da URL, para um
@@ -560,10 +611,11 @@ export function FluxoAbertura({
         projetoCodigo={projetoCodigo}
         clienteNome={clienteNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
-        versaoLabel={versaoLabel}
-        valorTotal={valorJob}
-        faturamentoPrevisto={faturamentoPrevisto}
-        totalGeradoEmSave={totalGeradoEmSave}
+        rotuloFechamento={fechamento.rotulo}
+        origemFechamento={fechamento.origem}
+        valorTotal={fechamento.valorJob}
+        faturamentoPrevisto={fechamento.faturamentoPrevisto}
+        totalGeradoEmSave={fechamento.totalGeradoEmSave}
         moeda={moeda}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
@@ -588,9 +640,9 @@ export function FluxoAbertura({
         reenvio={etapa === "devolvida"}
         orcamentoCodigo={orcamentoCodigo}
         linhas={resumoEnvio}
-        valorTotal={valorJob}
-        faturamentoPrevisto={faturamentoPrevisto}
-        totalGeradoEmSave={totalGeradoEmSave}
+        valorTotal={fechamento.valorJob}
+        faturamentoPrevisto={fechamento.faturamentoPrevisto}
+        totalGeradoEmSave={fechamento.totalGeradoEmSave}
         moeda={moeda}
         contatos={dados.contatos}
         observacoes={dados.observacoes}

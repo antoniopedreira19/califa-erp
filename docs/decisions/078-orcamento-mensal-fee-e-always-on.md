@@ -174,6 +174,13 @@ O que mudou:
   errata e sem save, com aviso na régua) e no servidor
   (`registrarErrata`, `salvarSaveDaErrata`). O botão da errata só some
   quando todos os meses foram enviados.
+
+  > ⚠️ **Revisto em 22/09/2026 ([decisão 099](099-aprovacao-de-save.md)).**
+  > No mês enviado travam a **errata** e o **consumo** de save; **gerar**
+  > save e retirar o save gerado seguem liberados até o envio para
+  > encerramento. E o `valor_save` do envio do mês acompanha a aprovação ou
+  > a retirada do save daquele mês (correção de 23/09/2026, migration
+  > `20260922140008`).
 - **Encerramento:** o job mensal só encerra com todos os meses com
   faturamento enviados (`mesesSemEnvio`) e o saldo a faturar zerado.
 

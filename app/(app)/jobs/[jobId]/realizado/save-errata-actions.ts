@@ -46,7 +46,8 @@ import {
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import type { VersaoTotais } from "@/lib/calculos/versao-totais";
 import {
-  espelhosDe,
+  totaisParaRpc,
+  type TotaisParaRpc,
   lerBaseDosEspelhos,
   totaisDoFinanceiro,
   type BaseDosEspelhos,
@@ -148,19 +149,60 @@ const MENSAGEM_TIRAR_SAVE =
 const MENSAGEM_TIRAR_CONSUMO =
   "Para tirar o consumo de save desta linha, use “Retirar” no pop-up de save — ou “Cancelar pedido”, se ele ainda aguarda a aprovação do financeiro.";
 
+interface JobLido {
+  id: string;
+  status: JobStatus;
+  responsavel_id: string | null;
+}
+
 async function lerStatusDoJob(
   supabase: Supabase,
   tenantId: string,
   jobId: string,
-): Promise<{ id: string; status: JobStatus } | null> {
+): Promise<JobLido | null> {
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, status")
+    .select("id, status, responsavel_id")
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string; status: JobStatus }>();
+    .maybeSingle<JobLido>();
   if (error) console.error("[save.job]", error.message);
   return data ?? null;
+}
+
+/**
+ * Quem pede, retira ou envia o save da linha: o administrador, ou o GP (ou
+ * produtor) responsável pelo job — a mesma regra de `quemPodeMexer`, que a
+ * tela usa para mostrar o pop-up com ações. Nas RPCs de job aberto o banco
+ * confere de novo (`save_pode_mexer_no_job`); na cópia do job devolvido a
+ * escrita é direta e esta é a única conferência. Cancelar pedido fica de
+ * fora: a especificação deixa qualquer membro que enxerga o job cancelar.
+ */
+async function recusaQuemNaoResponde(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  job: JobLido,
+  acaoTentada: string,
+): Promise<{ ok: false; message: string } | null> {
+  if (
+    session.activeRole === "administrador" ||
+    (job.responsavel_id !== null && job.responsavel_id === session.profile.id)
+  ) {
+    return null;
+  }
+  await logAuditEvent({
+    acao: "acao_negada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: job.id,
+    metadata: {
+      acao_tentada: acaoTentada,
+      motivo: "usuario_nao_e_responsavel_nem_admin",
+    },
+  });
+  return {
+    ok: false,
+    message: "Apenas o responsável do job ou admin pode mudar o save deste job.",
+  };
 }
 
 /** Um pedido de save, com o mínimo que as actions daqui precisam. */
@@ -375,6 +417,8 @@ export async function registrarErrataDeSave(
     conferirOrigensDoCliente(supabase, tenantId, jobId, origens),
   ]);
   if (!job) return { ok: false, message: "Job não encontrado." };
+  const naoResponde = await recusaQuemNaoResponde(session, job, "save.pedido");
+  if (naoResponde) return naoResponde;
   if (job.status !== "rejeitado_financeiro" && !jobAceitaSave(job.status)) {
     return { ok: false, message: mensagemJobNaoMudaSave(job.status) };
   }
@@ -694,7 +738,7 @@ export async function cancelarPedidoDeSave(
     return { ok: false, message: "Só um pedido que aguarda aprovação pode ser cancelado." };
   }
 
-  let pTotais: ReturnType<typeof espelhosDe> | null = null;
+  let pTotais: TotaisParaRpc | null = null;
   let pErrata: ErrataDeSave | null = null;
   let pRevisao: "manter" | "fechar" = "manter";
 
@@ -742,7 +786,8 @@ export async function cancelarPedidoDeSave(
       : base.itens;
     const antes = totaisDoFinanceiro(base.itens, base);
     const depois = totaisDoFinanceiro(depoisItens, base);
-    pTotais = espelhosDe(depois);
+    // No mensal leva junto a parte de save dos meses já enviados.
+    pTotais = totaisParaRpc(depoisItens, base);
     pErrata = errataDe(
       pedido.tipo === "gera"
         ? tituloDeixaDeGerar(pedido.item_descricao)
@@ -820,6 +865,8 @@ export async function retirarSave(
       : Promise.resolve(null),
   ]);
   if (!job) return { ok: false, message: "Job não encontrado." };
+  const naoResponde = await recusaQuemNaoResponde(session, job, "save.retirado");
+  if (naoResponde) return naoResponde;
   if (!jobAceitaSave(job.status)) {
     return { ok: false, message: mensagemJobNaoMudaSave(job.status) };
   }
@@ -907,8 +954,10 @@ export async function retirarSave(
 
   // A RPC tira o consumo INTEIRO da linha, e desmarca o save gerado.
   const antes = totaisDoFinanceiro(base.itens, base);
-  const depois = totaisDoFinanceiro(semOSave(base.itens, linha.id, tipo, 0), base);
-  const pTotais = espelhosDe(depois);
+  const depoisItens = semOSave(base.itens, linha.id, tipo, 0);
+  const depois = totaisDoFinanceiro(depoisItens, base);
+  // No mensal leva junto a parte de save dos meses já enviados.
+  const pTotais = totaisParaRpc(depoisItens, base);
   const pErrata = errataDe(
     tipo === "gera" ? tituloDeixaDeGerar(linha.item) : tituloDeixaDeConsumir(linha.item),
     antes,
@@ -975,6 +1024,8 @@ export async function enviarSavesParaAprovacao(
 
   const job = await lerStatusDoJob(supabase, tenantId, jobId);
   if (!job) return { ok: false, message: "Job não encontrado." };
+  const naoResponde = await recusaQuemNaoResponde(session, job, "save.enviado_legado");
+  if (naoResponde) return naoResponde;
   if (!jobAceitaSave(job.status)) {
     return { ok: false, message: mensagemJobNaoMudaSave(job.status) };
   }

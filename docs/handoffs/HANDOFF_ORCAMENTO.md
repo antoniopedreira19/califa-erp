@@ -4351,6 +4351,18 @@ orçamento não muda, exceto:
 
 ---
 
+## ⚠️ Nota de 2026-09-23 — reenvio mostra o fechamento da cópia (decisão 099 §5)
+
+- **Reenvio do job devolvido:** o formulário ("Fechamento do job
+  devolvido") e a confirmação mostram o faturamento, o valor do job e o
+  save da CÓPIA do job, que é o que o reenvio grava. Antes mostravam os da
+  versão aprovada, e divergiam quando a produção mexia no save com o job
+  devolvido. A página lê a cópia só nesse estado, dentro da onda 2.
+- **Pop-up de save no orçamento em edição:** o "livre" não soma mais de
+  volta o consumo da própria linha — consumo de versão não aprovada não
+  entra no uso do saldo, então nunca foi descontado. No job e na versão
+  aprovada (pop-up em leitura) a devolução continua.
+
 ## ⚠️ Nota de 2026-09-21 (5) — Moeda e Taxa de câmbio saem de "Nova versão" e de "Parâmetros das versões" (decisão 095 §6)
 
 Completa a nota da 095: os dois campos ainda apareciam no drawer **"Nova
