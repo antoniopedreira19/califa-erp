@@ -97,3 +97,12 @@ da alocação do título.
 `PE000016.TXT`, sequencial 16, 23/09/2026: folha 09/2026 do colaborador
 de teste Antonio, R$ 0,05, chave CPF. Sequencial ≥ 11 é produção:
 transmitido, paga de verdade.
+
+Conferido na geração: a estrutura bate campo a campo com as críticas do
+banco, e o SHA-256 do arquivo baixado é igual ao `hash_arquivo`
+gravado na remessa. As remessas de teste 13–15, de 21/09, tinham ficado
+sem os títulos e foram apagadas no mesmo dia (autorização do Tiago).
+Assim, a única remessa registrada é a 16, e o próximo sequencial é 17.
+
+Falta: a transmissão pelo internet banking e o retorno da Karen; depois,
+um teste de cada chave restante (e-mail, telefone, aleatória) e uma TED.
