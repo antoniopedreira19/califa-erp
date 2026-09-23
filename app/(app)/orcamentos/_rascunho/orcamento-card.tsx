@@ -289,7 +289,7 @@ export function JobRascunhoCard({
             <button
               type="button"
               onClick={onEditarParametros}
-              title="Moeda, honorários e imposto deste orçamento"
+              title="Honorários e imposto deste orçamento"
               className="rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-california-red"
             >
               <Percent className="h-4 w-4" />
