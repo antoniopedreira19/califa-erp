@@ -240,3 +240,44 @@ export function foraDoRateio(
     foraDaCompetencia(dataIso, c.trimestre, c.ano),
   );
 }
+
+// ---------- Recolhimento de impostos ----------
+//
+// Decisão 100 (Tiago, 23/09/2026): um recolhimento por parcela de
+// recebimento, com o imposto repartido na proporção das parcelas; a DATA
+// nasce vazia e é escolhida à mão — a ideia é o mês seguinte ao
+// faturamento, mas a data de recebimento nem sempre é a do faturamento
+// (muitas vezes fatura-se antes), então não há sugestão.
+
+/** Linha do cronograma de impostos. `origem` diz de qual parcela de
+ *  recebimento ela nasceu ("R01", "Out") — só para a tela. */
+export interface ImpostoLinha extends CurvaLinha {
+  origem: string | null;
+}
+
+/**
+ * O cronograma sugerido: uma linha por parcela de recebimento, com o
+ * imposto na proporção da parcela e a sobra de centavos na última. A data
+ * fica vazia.
+ */
+export function sugerirImpostos(
+  parcelas: { valor: number; origem: string }[],
+  impostoTotal: number,
+): ImpostoLinha[] {
+  if (impostoTotal <= 0 || parcelas.length === 0) return [];
+  const base = parcelas.reduce((s, p) => s + (p.valor > 0 ? p.valor : 0), 0);
+  const valores =
+    base > 0
+      ? parcelas.map((p) => emCentavos((Math.max(p.valor, 0) / base) * impostoTotal))
+      : dividirEmParcelas(impostoTotal, parcelas.length);
+  const somaMenosUltima = valores
+    .slice(0, -1)
+    .reduce((s, v) => s + v, 0);
+  valores[valores.length - 1] = emCentavos(impostoTotal - somaMenosUltima);
+  return parcelas.map((p, i) => ({
+    id: `imposto-${i + 1}`,
+    data: "",
+    valor: valores[i],
+    origem: p.origem,
+  }));
+}

@@ -285,6 +285,14 @@ export function ResumoDaAberturaAnterior({
               <span className="font-mono text-foreground">
                 {formatCurrency(foto.custoPrevisto ?? 0)}
               </span>{" "}
+              {foto.impostoPrevisto !== null && (
+                <>
+                  · impostos previstos{" "}
+                  <span className="font-mono text-foreground">
+                    {formatCurrency(foto.impostoPrevisto)}
+                  </span>{" "}
+                </>
+              )}
               · competência{" "}
               <span className="font-mono text-foreground">
                 {rateioLabel(foto.competencias)}
@@ -455,11 +463,12 @@ export function FotoDaAberturaDialog({
             </DialogHeader>
 
             <div className="space-y-4 pt-1">
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                 {[
                   { rotulo: "Valor do job", valor: foto.valorJob },
                   { rotulo: "Faturamento previsto", valor: foto.faturamentoPrevisto },
                   { rotulo: "Custo previsto", valor: foto.custoPrevisto },
+                  { rotulo: "Impostos previstos", valor: foto.impostoPrevisto },
                 ].map((c) => (
                   <div
                     key={c.rotulo}
@@ -493,6 +502,14 @@ export function FotoDaAberturaDialog({
                   rotulo="Conta de pagamento"
                   valor={foto.contaPagamentoLabel ?? "Não definida"}
                 />
+                <Linha
+                  rotulo="Conta dos impostos"
+                  valor={
+                    foto.impostos === null
+                      ? "—"
+                      : (foto.contaImpostosLabel ?? "Não definida")
+                  }
+                />
               </div>
 
               <TabelaPrevisao
@@ -506,6 +523,16 @@ export function FotoDaAberturaDialog({
                 linhas={foto.curva}
                 total={foto.custoPrevisto ?? 0}
                 vazio="Sem desembolso previsto pela California — nenhuma data."
+              />
+              <TabelaPrevisao
+                titulo="Recolhimento de impostos"
+                linhas={foto.impostos ?? []}
+                total={foto.impostoPrevisto ?? 0}
+                vazio={
+                  foto.impostos === null
+                    ? "Registro anterior à previsão de impostos (23/09/2026)."
+                    : "Sem imposto a recolher pela California — nenhuma data."
+                }
               />
             </div>
           </>

@@ -328,9 +328,33 @@ export default async function JobNoFinanceiroPage({
             contas={contas}
             custoPrevisto={custoPrevisto}
             faturamentoPrevisto={faturamentoPrevisto}
+            impostoPrevisto={
+              Math.round(
+                (totaisJob.faturamento.imposto +
+                  totaisJob.faturamento.intTaxes) *
+                  100,
+              ) / 100
+            }
+            aliquotaImposto={Number(versaoAprovada.percentual_imposto)}
+            aliquotaIntTaxes={
+              detalhe.internacional
+                ? detalhe.internacional.percentualIntTaxes
+                : null
+            }
+            resultadoPlanilha={
+              custoPlanejadoJob > 0
+                ? Math.round(
+                    (totaisJob.valorJob -
+                      totaisJob.deducoesDoResultado -
+                      custoPlanejadoJob) *
+                      100,
+                  ) / 100
+                : null
+            }
             enviadoPorNome={carregadoParaAbertura.enviadoPorNome}
             curvaInicial={previsoes.curva}
             recebimentoInicial={previsoes.recebimento}
+            impostosIniciais={previsoes.impostos}
             faturamentoPorMes={
               faturamentoMensalDoJob?.mensal ? faturamentoMensalDoJob.meses : null
             }

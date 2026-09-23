@@ -5666,3 +5666,56 @@ fuso de São Paulo; `cartao` e `competencia` ficam na URL ao trocar de aba;
 e o filtro por "forma prevista" em Títulos a Pagar foi **descartado**
 (093 §6) — a pergunta que ele responderia é do Fluxo de caixa. Testado com
 a PP-00078 do Projeto Teste, que entrou na FC-00006.
+
+## ⚠️ Nota de 2026-09-23 — a abertura prevê os impostos, e a margem vira Rentabilidade (decisão 100)
+
+O registro da abertura e a planilha interna mostravam números diferentes,
+porque a abertura não descontava os impostos (JOB-0036: margem de
+R$ 69.000,12 contra resultado operacional de R$ 40.681,60, e a diferença
+era o imposto de R$ 28.318,52). Regra completa na
+[100](../decisions/100-previsao-de-impostos-na-abertura.md).
+
+### O que mudou
+
+- **Terceiro bloco nas Previsões:** "Impostos · cronograma de
+  recolhimento". Nasce com uma linha por parcela de recebimento, no valor
+  proporcional e **sem data**. A soma fecha com o imposto da versão
+  aprovada (internacional: imposto brasileiro + int. taxes, sem os custos
+  de transação).
+- **Quarto card:** "Impostos previstos". **Terceira conta:** "Impostos
+  em".
+- **As três contas são obrigatórias quando a previsão delas existe**, na
+  abertura e na edição do registro. Até aqui, recebimento e pagamento eram
+  opcionais.
+- **"Margem prevista" virou "Rentabilidade"** = faturamento − custos −
+  impostos, com a conta por extenso e um selo que compara com o resultado
+  operacional planejado da planilha interna.
+- **A foto do registro** (059) guarda conta, cronograma e total de
+  impostos, e o "Visualizar" mostra os três.
+- **Banco:** `jobs.conta_impostos_id`, tabela `jobs_previsao_impostos` e
+  três colunas em `jobs_aberturas` (migration `20260923160001`).
+- **Código:** o total sai de `impostoDoJob`
+  (`abertura-de-job/imposto-previsto.ts`), lido pela página e pela action;
+  `sugerirImpostos` fica em `curva.ts`; `conferirImpostos` e
+  `conferirContasObrigatorias` ficam em `actions.ts`.
+
+### O que ficou de fora
+
+- **Fluxo de Caixa e abatimento.** A previsão de impostos não entra na
+  `vw_fluxo_caixa` e nada a consome. Isso chega com o módulo fiscal, que
+  vai transformar o tributo calculado pelo contas a receber e pelo contas
+  a pagar em título, com baixa.
+- **Custos de transação do internacional:** decisão adiada.
+
+### Armadilhas
+
+- **Job aberto antes de 23/09/2026 não tem cronograma nem conta de
+  impostos.** Ao editar o registro dele, a barra vai pedir data e conta
+  antes de salvar, e também as contas de recebimento e de pagamento, se
+  estiverem vazias (JOB-0039 e JOB-0040 do TES-0001/26 estão assim).
+- **Rentabilidade diferente da planilha não é erro** quando o job tem
+  itens pagos direto pelo cliente: a abertura olha o caixa, a planilha
+  olha o valor do job (JOB-0032: R$ 40.800,00 contra R$ 39.600,00).
+- **A action de abrir não foi exercitada na tela:** não havia job de teste
+  aguardando abertura. Ela usa as mesmas conferências e a mesma gravação
+  da edição, e a edição foi testada gravando no JOB-0032.

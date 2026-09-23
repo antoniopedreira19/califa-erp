@@ -78,8 +78,12 @@ export async function previsoesGravadas(
   supabase: SupabaseClient,
   tenantId: string,
   jobId: string,
-): Promise<{ curva: CurvaLinha[]; recebimento: RecebimentoLinha[] }> {
-  const [curvaRes, recebRes] = await Promise.all([
+): Promise<{
+  curva: CurvaLinha[];
+  recebimento: RecebimentoLinha[];
+  impostos: CurvaLinha[];
+}> {
+  const [curvaRes, recebRes, impRes] = await Promise.all([
     supabase
       .from("jobs_previsao_custo")
       .select("id, data_prevista, valor")
@@ -92,7 +96,18 @@ export async function previsoesGravadas(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .order("data_prevista", { ascending: true }),
+    // Cronograma de impostos (decisão 100): na ordem em que foi gravado —
+    // é a ordem I01, I02… da tela.
+    supabase
+      .from("jobs_previsao_impostos")
+      .select("id, data_prevista, valor")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .order("ordem", { ascending: true }),
   ]);
+  if (impRes.error) {
+    console.error("[abertura-job.previsao-impostos]", impRes.error.message);
+  }
 
   if (curvaRes.error) {
     console.error("[abertura-job.previsao-custo]", curvaRes.error.message);
@@ -110,6 +125,7 @@ export async function previsoesGravadas(
 
   return {
     curva: paraLinhas(curvaRes.data ?? []),
+    impostos: paraLinhas(impRes.data ?? []),
     // O mês de referência (job mensal, decisão 078) segue junto: é por ele
     // que o formulário casa cada linha com o mês.
     recebimento: ((recebRes.data ?? []) as any[]).map((l) => ({

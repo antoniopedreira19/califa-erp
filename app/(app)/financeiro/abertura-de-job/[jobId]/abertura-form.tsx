@@ -23,6 +23,8 @@ import {
   Lock,
   Pencil,
   Plus,
+  Receipt,
+  RotateCcw,
   Split,
   Table2,
   Trash2,
@@ -74,6 +76,7 @@ import {
   proximaDataRecebimento,
   proximaDataSugerida,
   somaCurva,
+  sugerirImpostos,
   type CurvaLinha,
   type RecebimentoLinha,
 } from "../curva";
@@ -166,6 +169,12 @@ interface LinhaPrevisaoForm {
   mes: string | null;
 }
 
+/** Linha do cronograma de impostos: a parcela de recebimento de onde ela
+ *  nasceu vai junto, para a tela dizer "Nota da parcela R01". */
+interface LinhaImpostoForm extends LinhaPrevisaoForm {
+  origem: string | null;
+}
+
 /**
  * A mesma tela serve quatro momentos, como no protótipo:
  *
@@ -194,6 +203,24 @@ interface Props {
   custoPrevisto: number;
   /** Base das parcelas de recebimento — o que a California prevê receber. */
   faturamentoPrevisto: number;
+  /**
+   * Imposto embutido no faturamento previsto — o fechamento da versão
+   * aprovada sobre o que a California emite nota. É contra ele que o
+   * cronograma de recolhimento fecha (decisão 100).
+   */
+  impostoPrevisto: number;
+  /** A alíquota da versão aprovada, só para o rótulo do card. */
+  aliquotaImposto: number;
+  /** Int. taxes da versão, em % — só no internacional, onde elas entram
+   *  nos impostos previstos junto com o imposto brasileiro (os custos de
+   *  transação ficam de fora, Tiago 23/09/2026). Nulo no nacional. */
+  aliquotaIntTaxes: number | null;
+  /**
+   * Resultado operacional planejado da planilha interna (valor do job −
+   * deduções − planejado). A rentabilidade se compara com ele no rodapé
+   * das Previsões. Nulo quando a planilha ainda não tem planejado.
+   */
+  resultadoPlanilha: number | null;
   /** Quanto do orçado deste job é pago com crédito de outro job (save).
    *  Só serve para EXPLICAR um faturamento previsto zerado: sem save, ele
    *  significa "o cliente paga o fornecedor direto"; com save, significa
@@ -203,6 +230,10 @@ interface Props {
   enviadoPorNome: string | null;
   curvaInicial: CurvaLinha[];
   recebimentoInicial: RecebimentoLinha[];
+  /** O cronograma de impostos gravado (decisão 100). Vazio na abertura e
+   *  nos jobs abertos antes de 23/09/2026 — aí o cronograma nasce seguindo
+   *  as parcelas de recebimento. */
+  impostosIniciais: CurvaLinha[];
   /**
    * Fee e Always On (decisão 078): o faturamento de cada mês. Quando vem,
    * a previsão de recebimento é uma linha por mês com faturamento, no
@@ -319,10 +350,15 @@ export function AberturaForm({
   contas,
   custoPrevisto,
   faturamentoPrevisto,
+  impostoPrevisto,
+  aliquotaImposto,
+  aliquotaIntTaxes,
+  resultadoPlanilha,
   saveConsumido = 0,
   enviadoPorNome,
   curvaInicial,
   recebimentoInicial,
+  impostosIniciais,
   faturamentoPorMes,
   trimestreSugerido,
   anoSugerido,
@@ -384,8 +420,13 @@ export function AberturaForm({
   const [contaPagId, setContaPagId] = React.useState<string | null>(
     () => job.conta_pagamento_id,
   );
+  // Nasce vazia na abertura, como as outras duas, e é obrigatória quando há
+  // imposto a recolher (decisão 100).
+  const [contaImpId, setContaImpId] = React.useState<string | null>(
+    () => job.conta_impostos_id,
+  );
   const [dropConta, setDropConta] = React.useState<
-    "recebimento" | "pagamento" | null
+    "recebimento" | "pagamento" | "impostos" | null
   >(null);
   // Serviço: chega com o do job (gravado na abertura) ou o do orçamento
   // de origem — `dados.ts` já resolve o fallback. Trocar aqui não altera
@@ -473,6 +514,62 @@ export function AberturaForm({
     semRecebimento ||
     (recebimento.length > 0 && recebDatasOk && recebValoresOk && recebBate);
 
+  // ---------- Previsão de impostos (cronograma de recolhimento) ----------
+  // Enquanto ninguém mexe nos VALORES das linhas de imposto, elas SEGUEM
+  // as parcelas de recebimento: uma por parcela, na proporção dela. A data
+  // nasce vazia e é escolhida à mão — escolher a data não solta o
+  // cronograma. Mexer em valor, incluir, tirar ou distribuir solta; "Seguir
+  // as parcelas" prende de novo.
+  const semImposto = impostoPrevisto <= 0;
+  const [datasImposto, setDatasImposto] = React.useState<
+    Record<string, string>
+  >({});
+  const impostosSugeridos: LinhaImpostoForm[] = sugerirImpostos(
+    recebimento.map((l, i) => ({
+      valor: parseMoeda(l.valorTexto),
+      origem: l.mes ? mesCurto(l.mes) : `R${String(i + 1).padStart(2, "0")}`,
+    })),
+    impostoPrevisto,
+  ).map((l) => ({
+    id: l.id,
+    data: datasImposto[l.id] ?? "",
+    valorTexto: formatMoedaTexto(l.valor),
+    mes: null,
+    origem: l.origem,
+  }));
+  // Job já aberto com cronograma gravado: ele chega SOLTO — é o que foi
+  // registrado, e não uma sugestão. "Seguir as parcelas" refaz a partir do
+  // recebimento.
+  const impostosDoServidor = (): LinhaImpostoForm[] | null =>
+    impostosIniciais.length > 0
+      ? paraForm(impostosIniciais).map((l) => ({ ...l, origem: null }))
+      : null;
+  const [impostosSoltos, setImpostosSoltos] = React.useState<
+    LinhaImpostoForm[] | null
+  >(impostosDoServidor);
+  const impostos = impostosSoltos ?? impostosSugeridos;
+  const impostosSeguem = impostosSoltos === null;
+  const linhasImp = impostos.map((l) => ({
+    data: l.data,
+    valor: parseMoeda(l.valorTexto),
+  }));
+  const somaDosImpostos = somaCurva(linhasImp);
+  const impostosBate = curvaFecha(linhasImp, impostoPrevisto);
+  const difImpostos = emCentavos(somaDosImpostos - impostoPrevisto);
+  const impDatasOk = impostos.every((l) => l.data.length === 10);
+  const impValoresOk = linhasImp.every((l) => l.valor > 0);
+  // As três contas são obrigatórias quando a previsão delas existe
+  // (decisão 100) — até 23/09/2026 as de recebimento e pagamento eram
+  // opcionais.
+  const contaImpOk = semImposto || contaImpId !== null;
+  const impostosOk =
+    semImposto ||
+    (impostos.length > 0 &&
+      impDatasOk &&
+      impValoresOk &&
+      impostosBate &&
+      contaImpOk);
+
   // ---------- Rateio de competência ----------
   const compsOrdenadas = ordenarCompetencias(comps);
   const compsNumericas: JobCompetencia[] = compsOrdenadas.map((c) => ({
@@ -499,7 +596,10 @@ export function AberturaForm({
     servicoOk &&
     rateioOk &&
     curvaOk &&
-    recebOk;
+    recebOk &&
+    impostosOk &&
+    (semRecebimento || contaRecebId !== null) &&
+    (semDesembolso || contaPagId !== null);
 
   const categoriaNome =
     categorias.find((c) => c.id === categoriaId)?.nome ?? "— não informada";
@@ -537,12 +637,18 @@ export function AberturaForm({
   // ---------- Contas bancárias ----------
   const contaReceb = contas.find((c) => c.id === contaRecebId) ?? null;
   const contaPag = contas.find((c) => c.id === contaPagId) ?? null;
+  const contaImp = contas.find((c) => c.id === contaImpId) ?? null;
 
 
-  // Margem prevista: o que a California recebe menos o que ela
-  // desembolsa. Não entra o que o cliente paga direto ao fornecedor —
-  // esse dinheiro nunca passa pelo caixa da agência.
-  const margem = emCentavos(faturamentoPrevisto - custoPrevisto);
+  // Rentabilidade (era "Margem prevista" até 23/09/2026): o que a
+  // California recebe menos o que ela desembolsa — custos E impostos. Não entra o que o cliente paga direto
+  // ao fornecedor — esse dinheiro nunca passa pelo caixa da agência.
+  const margem = emCentavos(
+    faturamentoPrevisto - custoPrevisto - impostoPrevisto,
+  );
+  const margemBateComPlanilha =
+    resultadoPlanilha !== null &&
+    Math.abs(emCentavos(resultadoPlanilha) - margem) < 0.011;
   const margemPct =
     faturamentoPrevisto > 0 ? (margem / faturamentoPrevisto) * 100 : 0;
 
@@ -558,6 +664,11 @@ export function AberturaForm({
     : curva.length === 1
       ? "1 data"
       : `${curva.length} datas`;
+  const qtdDatasImpostoLabel = semImposto
+    ? "Sem imposto"
+    : impostos.length === 1
+      ? "1 data"
+      : `${impostos.length} datas`;
 
   const textoValidacao = !nomeOk
     ? "Informe o nome do job."
@@ -579,17 +690,29 @@ export function AberturaForm({
           ? "Cada parcela de recebimento precisa de um valor maior que zero."
           : !semRecebimento && !recebBate
             ? "As parcelas de recebimento precisam somar o faturamento previsto."
-            : semDesembolso
-              ? "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva."
-              : !curvaDatasOk
-                ? "Preencha a data de todas as linhas da curva."
-                : !curvaValoresOk
-                  ? "Cada data da curva precisa de um valor maior que zero."
-                  : !curvaBate
-                    ? "A curva precisa somar o custo previsto."
-                    : temRateio
-                      ? `Tudo pronto: nome, categoria, serviço, competência rateada em ${comps.length} trimestres, recebimento e custos preenchidos.`
-                      : "Tudo pronto: nome, categoria, serviço, competência, recebimento e custos preenchidos.";
+            : !semDesembolso && !curvaDatasOk
+              ? "Preencha a data de todas as linhas da curva."
+              : !semDesembolso && !curvaValoresOk
+                ? "Cada data da curva precisa de um valor maior que zero."
+                : !semDesembolso && !curvaBate
+                  ? "A curva precisa somar o custo previsto."
+                  : !semImposto && !impDatasOk
+                    ? "Preencha a data de todos os recolhimentos de impostos."
+                    : !semImposto && !impValoresOk
+                      ? "Cada recolhimento de impostos precisa de um valor maior que zero."
+                      : !semImposto && !impostosBate
+                        ? "O recolhimento de impostos precisa somar os impostos previstos."
+                        : !semRecebimento && !contaRecebId
+                          ? "Selecione a conta de recebimento."
+                        : !semDesembolso && !contaPagId
+                          ? "Selecione a conta de pagamento."
+                        : !contaImpOk
+                          ? "Selecione a conta dos impostos."
+                        : semDesembolso
+                          ? "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva."
+                          : temRateio
+                            ? `Tudo pronto: nome, categoria, serviço, competência rateada em ${comps.length} trimestres, recebimento, custos e impostos preenchidos.`
+                            : "Tudo pronto: nome, categoria, serviço, competência, recebimento, custos e impostos preenchidos.";
 
   function atualizarCurva(id: string, patch: Partial<LinhaPrevisaoForm>) {
     setCurva((atual) =>
@@ -694,6 +817,54 @@ export function AberturaForm({
     setRecebimento((atual) => atual.filter((l) => l.id !== id));
   }
 
+  // ---------- Impostos ----------
+  // Toda mexida numa linha de imposto parte do que está na tela (a
+  // sugestão, enquanto o cronograma segue as parcelas) e o solta.
+  function mexerNosImpostos(
+    f: (atual: LinhaImpostoForm[]) => LinhaImpostoForm[],
+  ) {
+    setImpostosSoltos(f(impostos));
+  }
+
+  function atualizarImposto(id: string, patch: Partial<LinhaImpostoForm>) {
+    // Só a data, com o cronograma seguindo as parcelas: guarda a data e
+    // continua seguindo.
+    if (impostosSeguem && Object.keys(patch).every((k) => k === "data")) {
+      setDatasImposto((atual) => ({ ...atual, [id]: patch.data ?? "" }));
+      return;
+    }
+    mexerNosImpostos((atual) =>
+      atual.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+    );
+  }
+
+  function distribuirImpostos() {
+    mexerNosImpostos((atual) =>
+      distribuirEntreLinhas(atual, impostoPrevisto).map((l, i) => ({
+        ...l,
+        origem: atual[i].origem,
+      })),
+    );
+  }
+
+  function adicionarDataImposto() {
+    mexerNosImpostos((atual) => [
+      ...atual,
+      {
+        id: `imposto-novo-${Date.now()}`,
+        data: "",
+        valorTexto: "0,00",
+        mes: null,
+        origem: null,
+      },
+    ]);
+  }
+
+  function removerDoImposto(id: string) {
+    if (!podeRemover(impostos, id)) return;
+    mexerNosImpostos((atual) => atual.filter((l) => l.id !== id));
+  }
+
   /**
    * Cria o projeto do financeiro e já vincula no formulário ("Criar
    * projeto para este job"). O código e o cliente são do servidor — aqui
@@ -784,6 +955,7 @@ export function AberturaForm({
       projeto_financeiro_id: projetoId,
       conta_recebimento_id: contaRecebId,
       conta_pagamento_id: contaPagId,
+      conta_impostos_id: contaImpId,
       categoria_id: categoriaId,
       servico_id: servicoId,
       competencias: compsNumericas,
@@ -799,6 +971,12 @@ export function AberturaForm({
             data_prevista: l.data,
             valor: l.valor,
             mes: l.mes,
+          })),
+      impostos: semImposto
+        ? []
+        : linhasImp.map((l) => ({
+            data_prevista: l.data,
+            valor: l.valor,
           })),
     };
   }
@@ -874,6 +1052,9 @@ export function AberturaForm({
     setProjetoId(job.projeto_financeiro_id ?? "");
     setContaRecebId(job.conta_recebimento_id);
     setContaPagId(job.conta_pagamento_id);
+    setContaImpId(job.conta_impostos_id);
+    setImpostosSoltos(impostosDoServidor());
+    setDatasImposto({});
     setCategoriaId(
       job.categoria_id && categorias.some((c) => c.id === job.categoria_id)
         ? job.categoria_id
@@ -1551,7 +1732,8 @@ export function AberturaForm({
               <TrendingDown className="h-4 w-4 text-california-red" />
               <h2 className="text-[15px] font-semibold">Previsões</h2>
               <span className="text-xs text-muted-foreground">
-                Faturamento do orçamento + custo planejado da planilha
+                Faturamento do orçamento + custo planejado da planilha +
+                impostos da versão aprovada
               </span>
               {/* As duas contas moram no mesmo cabeçalho: a que recebe e
                   a que paga. */}
@@ -1580,11 +1762,23 @@ export function AberturaForm({
                     setDropConta(null);
                   }}
                 />
+                <ContaSeletor
+                  rotulo="Impostos em"
+                  contas={contas}
+                  selecionada={contaImp}
+                  travado={travado}
+                  aberto={dropConta === "impostos"}
+                  onAbrir={(o) => setDropConta(o ? "impostos" : null)}
+                  onEscolher={(id) => {
+                    setContaImpId(id);
+                    setDropConta(null);
+                  }}
+                />
               </div>
             </header>
 
             <div className="flex flex-col gap-[18px] p-5">
-              <div className="grid gap-3.5 sm:grid-cols-3">
+              <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border border-border px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
                     Valor total do job
@@ -1630,6 +1824,27 @@ export function AberturaForm({
                     {semDesembolso
                       ? "Nenhum item de calha PP — a California não desembolsa neste job."
                       : "Planejado dos itens que a California paga (tipos que geram PP)"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-violet-700">
+                    Impostos previstos
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <p className="whitespace-nowrap font-mono text-base font-bold">
+                      {formatCurrency(impostoPrevisto)}
+                    </p>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      <Lock className="h-2.5 w-2.5" />
+                      Do orçamento
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {semImposto
+                      ? "Sem faturamento pela California — não há nota, nem imposto a recolher."
+                      : aliquotaIntTaxes !== null
+                        ? `Imposto de ${formatPercentual(aliquotaImposto)} + taxas internacionais de ${formatPercentual(aliquotaIntTaxes)} da versão aprovada`
+                        : `Alíquota de ${formatPercentual(aliquotaImposto)} da versão aprovada, sobre o que a California fatura`}
                   </p>
                 </div>
               </div>
@@ -2123,6 +2338,227 @@ export function AberturaForm({
                         </tr>
                       </>
                     )}
+
+                    {/* ---------- Bloco de impostos ---------- */}
+                    {/* A segunda saída do caixa: o imposto da nota. Nasce das
+                        parcelas de recebimento — cada nota gera o seu
+                        recolhimento — e fecha com o imposto da versão
+                        aprovada (decisão 100). */}
+                    <tr>
+                      <td colSpan={5} className="p-0">
+                        <div className="flex flex-wrap items-center gap-2.5 border-y border-border bg-violet-50/70 px-4 py-2.5">
+                          <Receipt className="h-3.5 w-3.5 text-violet-700" />
+                          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-violet-700">
+                            Impostos · cronograma de recolhimento
+                          </p>
+                          <span className="text-[11.5px] text-muted-foreground">
+                            {impostosSeguem
+                              ? "Um por parcela de recebimento · informe a data de cada um"
+                              : "Cronograma ajustado à mão — não segue mais as parcelas de recebimento"}
+                          </span>
+                          {!semImposto && (
+                            <span className="ml-auto inline-flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold",
+                                  impostosBate
+                                    ? "border-emerald-200 bg-white text-emerald-700"
+                                    : "border-amber-200 bg-amber-50 text-amber-700",
+                                )}
+                              >
+                                {impostosBate ? (
+                                  <Check className="h-3 w-3" />
+                                ) : (
+                                  <AlertTriangle className="h-3 w-3" />
+                                )}
+                                {impostosBate
+                                  ? "Recolhimento fecha com os impostos"
+                                  : difImpostos > 0
+                                    ? `Sobra de ${formatCurrency(Math.abs(difImpostos))}`
+                                    : `Falta ${formatCurrency(Math.abs(difImpostos))}`}
+                              </span>
+                              {!travado && !impostosSeguem && (
+                                <button
+                                  type="button"
+                                  onClick={() => setImpostosSoltos(null)}
+                                  title="Refaz o cronograma a partir das parcelas de recebimento"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  Seguir as parcelas
+                                </button>
+                              )}
+                              {!travado && (
+                                <button
+                                  type="button"
+                                  onClick={distribuirImpostos}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
+                                >
+                                  <Split className="h-3 w-3" />
+                                  Distribuir
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+
+                    {semImposto ? (
+                      <tr>
+                        <td colSpan={5} className="bg-amber-50/60 px-4 py-3.5">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                            <div>
+                              <p className="text-[13px] font-semibold text-amber-800">
+                                Nenhum imposto a recolher pela California
+                              </p>
+                              <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
+                                Sem faturamento previsto não há nota emitida
+                                pela California neste job — e, sem nota, não há
+                                imposto a recolher. O job abre sem cronograma de
+                                impostos.
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <>
+                        {impostos.map((linha, i) => {
+                          const valor = parseMoeda(linha.valorTexto);
+                          const pct =
+                            impostoPrevisto > 0
+                              ? (valor / impostoPrevisto) * 100
+                              : 0;
+
+                          return (
+                            <tr
+                              key={linha.id}
+                              className="border-b border-b-[#f4f2f2]"
+                            >
+                              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                                {`I${String(i + 1).padStart(2, "0")}`}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <div className="w-[190px]">
+                                  {travado ? (
+                                    <LinhaTravada texto={formatDataBr(linha.data)} />
+                                  ) : (
+                                    /* Soltar ou prender o cronograma troca a
+                                       origem das datas: a key remonta o
+                                       seletor, que não é controlado. */
+                                    <DatePicker
+                                      key={`${linha.id}-${impostosSeguem ? "segue" : "solto"}`}
+                                      name={`imposto-data-${linha.id}`}
+                                      defaultValue={linha.data}
+                                      className="h-9 text-[13px]"
+                                      onDateChange={(d) =>
+                                        atualizarImposto(linha.id, {
+                                          data: d
+                                            ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+                                            : "",
+                                        })
+                                      }
+                                    />
+                                  )}
+                                  {linha.origem && (
+                                    <span className="mt-1 block text-[10.5px] font-medium text-muted-foreground">
+                                      {`Referente à parcela ${linha.origem}`}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {travado ? (
+                                  <p className="text-right font-mono text-[13px] font-semibold">
+                                    {formatCurrency(valor)}
+                                  </p>
+                                ) : (
+                                  <div className="ml-auto flex h-9 w-[180px] items-center gap-1.5 rounded-lg border border-border px-3">
+                                    <span className="text-xs font-semibold text-muted-foreground">
+                                      R$
+                                    </span>
+                                    <input
+                                      aria-label={`Valor do recolhimento ${i + 1}`}
+                                      value={linha.valorTexto}
+                                      onChange={(e) =>
+                                        atualizarImposto(linha.id, {
+                                          valorTexto: e.target.value,
+                                        })
+                                      }
+                                      onBlur={() =>
+                                        atualizarImposto(linha.id, {
+                                          valorTexto: formatMoedaTexto(
+                                            parseMoeda(linha.valorTexto),
+                                          ),
+                                        })
+                                      }
+                                      inputMode="decimal"
+                                      className="w-full min-w-0 border-0 bg-transparent text-right font-mono text-[13px] font-semibold outline-none"
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">
+                                {impostoPrevisto > 0
+                                  ? formatPercentual(pct)
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {travado ? null : (
+                                  <button
+                                    type="button"
+                                    onClick={() => removerDoImposto(linha.id)}
+                                    disabled={!podeRemover(impostos, linha.id)}
+                                    aria-label={`Remover o recolhimento ${i + 1}`}
+                                    title={
+                                      !podeRemover(impostos, linha.id)
+                                        ? "O cronograma precisa de pelo menos uma data"
+                                        : "Remover data"
+                                    }
+                                    className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:bg-california-red/5 disabled:cursor-not-allowed disabled:text-[#d7d7d7] disabled:hover:bg-white"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-muted/40">
+                          <td className="px-4 py-2.5" />
+                          <td className="px-4 py-2.5">
+                            {!travado && (
+                              <button
+                                type="button"
+                                onClick={adicionarDataImposto}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#d7d7d7] bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Adicionar data
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className="text-[11.5px] text-muted-foreground">
+                              Soma{" "}
+                            </span>
+                            <strong className="font-mono text-[13px]">
+                              {formatCurrency(somaDosImpostos)}
+                            </strong>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                            {impostoPrevisto > 0
+                              ? formatPercentual(
+                                  (somaDosImpostos / impostoPrevisto) * 100,
+                                )
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-2.5" />
+                        </tr>
+                      </>
+                    )}
                   </tbody>
                 </table>
 
@@ -2130,7 +2566,7 @@ export function AberturaForm({
                     contagem das linhas dos dois blocos. */}
                 <div className="flex flex-wrap items-center gap-5 border-t border-border bg-muted/60 px-4 py-3">
                   <span className="text-xs text-muted-foreground">
-                    Margem prevista{" "}
+                    Rentabilidade{" "}
                     <strong
                       className={cn(
                         "font-mono text-sm",
@@ -2145,11 +2581,37 @@ export function AberturaForm({
                         : ""}
                     </strong>
                   </span>
+                  <span className="font-mono text-[11.5px] text-muted-foreground">
+                    {formatMoedaTexto(faturamentoPrevisto)} −{" "}
+                    {formatMoedaTexto(custoPrevisto)} −{" "}
+                    {formatMoedaTexto(impostoPrevisto)}
+                  </span>
+                  {resultadoPlanilha !== null &&
+                    (margemBateComPlanilha ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        <Check className="h-3 w-3" />
+                        Bate com o resultado operacional planejado da planilha
+                        interna
+                      </span>
+                    ) : (
+                      <span
+                        title="A margem olha o dinheiro que passa pelo caixa da California; a planilha olha o valor do job inteiro, inclusive o que o cliente paga direto ao fornecedor."
+                        className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700"
+                      >
+                        <Info className="h-3 w-3" />
+                        Planilha interna: resultado operacional planejado de{" "}
+                        {formatCurrency(resultadoPlanilha)}
+                      </span>
+                    ))}
                   <span className="ml-auto text-xs text-muted-foreground">
                     {qtdRecebimentosLabel} ·{" "}
                     {semDesembolso
                       ? qtdDatasCustoLabel
-                      : `${qtdDatasCustoLabel} de custo`}
+                      : `${qtdDatasCustoLabel} de custo`}{" "}
+                    ·{" "}
+                    {semImposto
+                      ? qtdDatasImpostoLabel
+                      : `${qtdDatasImpostoLabel} de imposto`}
                   </span>
                 </div>
               </div>
@@ -2157,15 +2619,20 @@ export function AberturaForm({
               <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  As duas previsões alimentam o fluxo de caixa do financeiro: o
-                  bloco de cima é a entrada, o de baixo é a saída. A primeira
-                  parcela de recebimento vem da data de faturamento do
-                  orçamento e a soma tem que fechar com o faturamento previsto;
-                  as datas de custo seguem as janelas de pagamento (dias 08 e
-                  20, ou o dia útil seguinte) e fecham com o custo previsto.
-                  Nada disso trava o realizado — a nota emitida abate a
-                  previsão de recebimento, e cada PP emitida abate a de custos.
-                  Datas fora da competência escolhida ficam sinalizadas.
+                  As três previsões alimentam o fluxo de caixa do financeiro: o
+                  bloco de cima é a entrada; os de custos e de impostos são a
+                  saída. A primeira parcela de recebimento vem da data de
+                  faturamento do orçamento e a soma tem que fechar com o
+                  faturamento previsto; as datas de custo seguem as janelas de
+                  pagamento (dias 08 e 20, ou o dia útil seguinte) e fecham com
+                  o custo previsto; o recolhimento de impostos nasce de cada
+                  parcela de recebimento e fecha com os impostos da versão
+                  aprovada, com a data escolhida à mão. Nada disso trava o
+                  realizado — a nota emitida abate a previsão de recebimento,
+                  e cada PP emitida abate a de custos. A de impostos ainda não
+                  é abatida por nada: isso chega com o módulo fiscal. Datas de
+                  recebimento e de custo fora da competência escolhida ficam
+                  sinalizadas.
                 </p>
               </div>
             </div>
@@ -2341,9 +2808,25 @@ export function AberturaForm({
                 {qtdDatasCustoLabel}
               </span>
             </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">
+                Impostos previstos
+              </span>
+              <span className="font-mono text-[12.5px] font-semibold text-violet-700">
+                {formatCurrency(impostoPrevisto)}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">
+                Recolhimentos
+              </span>
+              <span className="text-[12.5px] font-semibold">
+                {qtdDatasImpostoLabel}
+              </span>
+            </div>
             <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
               <span className="text-[12.5px] text-muted-foreground">
-                Margem prevista
+                Rentabilidade
               </span>
               <span
                 className={cn(
@@ -2499,6 +2982,23 @@ export function AberturaForm({
                   : `${curva.length}× · ${formatDataBr(curva[0]?.data)}${
                       curva.length > 1
                         ? ` → ${formatDataBr(curva[curva.length - 1]?.data)}`
+                        : ""
+                    }`
+              }
+            />
+            <ResumoLinha
+              rotulo="Impostos previstos"
+              valor={formatCurrency(impostoPrevisto)}
+              mono
+            />
+            <ResumoLinha
+              rotulo="Recolhimento"
+              valor={
+                semImposto
+                  ? "Sem imposto a recolher"
+                  : `${impostos.length}× · ${formatDataBr(impostos[0]?.data)}${
+                      impostos.length > 1
+                        ? ` → ${formatDataBr(impostos[impostos.length - 1]?.data)}`
                         : ""
                     }`
               }
