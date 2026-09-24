@@ -67,6 +67,7 @@ import {
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
 import { salvarAlteracoesDoProjeto } from "./actions";
+import { moverNaLista } from "@/lib/calculos/ordem-itens";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 import {
   estagioFunilBadgeClasses,
@@ -506,6 +507,30 @@ export function EditorAgregado({
               itens: grupo.itens.filter((it) => it.id !== itemId),
             })),
           })),
+        );
+        return { ok: true, id: itemId };
+      },
+
+      // Decisão 104: a ordem nova fica no rascunho, como qualquer outra
+      // edição daqui, e vai ao banco no "Salvar alterações". O item só se
+      // move entre os grupos do MESMO orçamento — cada card tem a sua
+      // planilha, e a tabela só enxerga os grupos dela.
+      mover: async (itemId, grupoId, indice) => {
+        // Pela ref, como o `acharItem`: o adaptador não se refaz a cada edição.
+        const dono = orcamentosRef.current.find(
+          (o) =>
+            o.grupos.some((g) => g.itens.some((it) => it.id === itemId)) &&
+            o.grupos.some((g) => g.id === grupoId),
+        );
+        if (!dono) {
+          return { ok: false, message: "O item só muda de lugar dentro do próprio orçamento." };
+        }
+        setOrcamentos((atuais) =>
+          atuais.map((orc) => {
+            if (orc.id !== dono.id) return orc;
+            const grupos = moverNaLista(orc.grupos, itemId, grupoId, indice);
+            return grupos ? { ...orc, grupos } : orc;
+          }),
         );
         return { ok: true, id: itemId };
       },
