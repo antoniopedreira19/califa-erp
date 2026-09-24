@@ -10,6 +10,7 @@ import {
   agregarBases,
   agruparEComputar,
   classificarRentBadge,
+  faturamentoComSave,
   THRESHOLD_RENT_VERDE,
 } from "../lib/relatorios/rentabilidade";
 import {
@@ -35,6 +36,8 @@ const linha = (over: Partial<LinhaJobRentabilidade>): LinhaJobRentabilidade => (
   faturamento_previsto: 0, imposto_previsto: 0,
   faturamento_realizado: 0, imposto_realizado: 0,
   custo_realizado: 0, bv_realizado: 0,
+  save_a_consumir_previsto: 0, save_a_consumir_realizado: 0,
+  faturamento_previsto_bruto: 0, faturamento_realizado_bruto: 0,
   ...over,
 });
 
@@ -177,6 +180,27 @@ console.log("\n=== 10. filtrosParaQueryString roundtrip ===");
   assert("roundtrip trimestres", parsed.trimestres.join(",") === original.trimestres.join(","));
   assert("roundtrip modo", parsed.modo === original.modo);
   assert("roundtrip visao", parsed.visao === original.visao);
+}
+
+console.log("\n=== 11. save a consumir (decisão 103) ===");
+{
+  // Job A gerou save: 20.000 de faturamento dos jobs, 8.000 de save que
+  // ninguém consumiu. Job B sem save.
+  const linhas = [
+    linha({ job_id: "a", faturamento_previsto: 20000, imposto_previsto: 4000, custo_realizado: 10000, save_a_consumir_previsto: 8000 }),
+    linha({ job_id: "b", faturamento_previsto: 30000, imposto_previsto: 6000, custo_realizado: 15000 }),
+  ];
+  const r = agregarBases(linhas, "previsto");
+  assert("save soma à parte", Math.abs(r.saveAConsumir - 8000) < 0.01);
+  assert("faturamento dos jobs não leva o save", Math.abs(r.faturamento - 50000) < 0.01);
+  assert("faturamento da tela leva o save", Math.abs(faturamentoComSave(r) - 58000) < 0.01);
+  // Result.Op = 50000 - 10000 - 25000 = 15000 → 30% sobre os jobs, não sobre 58000
+  assert("resultOp só dos jobs", Math.abs((r.resultadoOperacional ?? 0) - 15000) < 0.01);
+  assert("rent % só sobre os jobs", Math.abs((r.resultadoGeral ?? 0) - 30) < 0.01);
+  const realizado = agregarBases(linhas, "realizado");
+  assert("realizado lê a coluna realizada", realizado.saveAConsumir === 0);
+  const grupos = agruparEComputar(linhas, "cliente", "previsto", (c) => c);
+  assert("representatividade sobre o faturado", Math.abs(grupos[0].representatividadePct - 100) < 0.01);
 }
 
 console.log(`\n${falhas === 0 ? "OK" : "FALHOU"}: ${falhas} erro(s)`);

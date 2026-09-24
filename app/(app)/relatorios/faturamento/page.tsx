@@ -49,8 +49,11 @@ export default async function FaturamentoPage({ searchParams }: Props) {
   // Converte linhas da view em linhas prontas pra tabela: computa saldo e
   // status, e mantém só os campos que a UI usa (payload menor pro client).
   const linhasBase: LinhaFaturamento[] = linhasVw.map((l) => {
-    const valorJob = l.faturamento_previsto;
-    const valorFat = l.faturamento_realizado;
+    // Os valores CHEIOS, com o save: o save é cobrado na nota. Os
+    // `faturamento_previsto`/`_realizado` da view são os de rentabilidade,
+    // sem o save, desde a decisão 103 (24/09/2026).
+    const valorJob = l.faturamento_previsto_bruto;
+    const valorFat = l.faturamento_realizado_bruto;
     const saldo = valorJob - valorFat;
     return {
       job_id: l.job_id,

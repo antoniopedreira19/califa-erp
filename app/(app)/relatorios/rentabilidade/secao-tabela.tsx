@@ -13,6 +13,9 @@ type TotalBases = {
   imposto: number;
   custo: number;
   bv: number;
+  /** Save a consumir somado (decisão 103) — entra no faturamento da
+   *  linha de total, não no Result. Op. */
+  saveAConsumir: number;
 };
 
 interface Props {

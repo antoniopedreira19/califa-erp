@@ -5,6 +5,7 @@ import { formatCurrency, cn } from "@/lib/utils";
 import {
   classificarRentBadge,
   computarResultado,
+  faturamentoComSave,
   type GrupoRentabilidade,
   type VisaoRentabilidade,
 } from "@/lib/relatorios/rentabilidade";
@@ -29,7 +30,7 @@ export function TabelaComparativo({ visao, gruposA, gruposB, anoA, anoB }: Props
   const grupoZero = (rotulo: string): GrupoRentabilidade => ({
     chave: "",
     rotulo,
-    bases: { faturamento: 0, imposto: 0, custo: 0, bv: 0, resultadoOperacional: null, resultadoGeral: null },
+    bases: { faturamento: 0, imposto: 0, custo: 0, bv: 0, saveAConsumir: 0, resultadoOperacional: null, resultadoGeral: null },
     jobs: [],
     representatividadePct: 0,
   });
@@ -45,7 +46,9 @@ export function TabelaComparativo({ visao, gruposA, gruposB, anoA, anoB }: Props
     return { chave, rotulo, a, b };
   });
 
-  linhas.sort((x, y) => y.a.bases.faturamento - x.a.bases.faturamento);
+  linhas.sort(
+    (x, y) => faturamentoComSave(y.a.bases) - faturamentoComSave(x.a.bases),
+  );
 
   const totalA = somaTotal(gruposA);
   const totalB = somaTotal(gruposB);
@@ -103,13 +106,22 @@ function somaTotal(grupos: GrupoRentabilidade[]) {
   const imposto = grupos.reduce((s, g) => s + g.bases.imposto, 0);
   const custo = grupos.reduce((s, g) => s + g.bases.custo, 0);
   const bv = grupos.reduce((s, g) => s + g.bases.bv, 0);
+  const saveAConsumir = grupos.reduce((s, g) => s + g.bases.saveAConsumir, 0);
   const { resultadoOperacional, resultadoGeral } = computarResultado({
     faturamento,
     imposto,
     custo,
     bv,
   });
-  return { faturamento, imposto, custo, bv, resultadoOperacional, resultadoGeral };
+  return {
+    faturamento,
+    imposto,
+    custo,
+    bv,
+    saveAConsumir,
+    resultadoOperacional,
+    resultadoGeral,
+  };
 }
 
 function ColunasBloco({
@@ -121,6 +133,7 @@ function ColunasBloco({
     imposto: number;
     custo: number;
     bv: number;
+    saveAConsumir: number;
     resultadoOperacional: number | null;
     resultadoGeral: number | null;
   };
@@ -129,8 +142,10 @@ function ColunasBloco({
   const border = borderLeft ? "border-l border-border" : "";
   return (
     <>
+      {/* Com o save a consumir, como a tabela principal (decisão 103);
+          Result. Op e Rent % seguem só sobre os jobs. */}
       <td className={cn("px-4 py-3 text-right font-mono", border)}>
-        {formatCurrency(bases.faturamento, "BRL")}
+        {formatCurrency(faturamentoComSave(bases), "BRL")}
       </td>
       <td className="px-4 py-3 text-right font-mono">
         {bases.resultadoOperacional === null || bases.faturamento === 0

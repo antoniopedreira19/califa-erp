@@ -304,7 +304,13 @@ export function FluxoCaixaView({
       );
       if (coluna < 0) continue;
       const campo = campoDe(i);
-      const chave = `${campo}|${i.origem_tipo}|${i.origem_id}|${i.data_evento}`;
+      // A descrição entra na chave (24/09/2026): o rateio por regional
+      // repete a descrição do documento e continua virando uma linha só,
+      // mas o save consumido por dois jobs sai do MESMO título na mesma
+      // data com descrições diferentes ("… consumido por JOB-0040" e
+      // "… por JOB-0034") — sem ela, as duas viravam uma linha com o total
+      // e o nome do primeiro job.
+      const chave = `${campo}|${i.origem_tipo}|${i.origem_id}|${i.data_evento}|${i.descricao}`;
       const existente = porChave.get(chave);
       if (existente) {
         existente.valor += i.valor;

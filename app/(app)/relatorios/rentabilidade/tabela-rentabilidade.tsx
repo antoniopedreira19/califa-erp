@@ -6,6 +6,8 @@ import { formatCurrency, cn } from "@/lib/utils";
 import {
   classificarRentBadge,
   computarResultado,
+  faturamentoComSave,
+  saveAConsumirDaLinha,
   type GrupoRentabilidade,
   type ModoRentabilidade,
   type VisaoRentabilidade,
@@ -21,6 +23,8 @@ interface Props {
     imposto: number;
     custo: number;
     bv: number;
+    /** Save a consumir somado (decisão 103). */
+    saveAConsumir: number;
   };
 }
 
@@ -50,6 +54,15 @@ export function TabelaRentabilidade({
   const rotuloVisao =
     visao === "cliente" ? "Clientes" : visao === "marca" ? "Marcas" : "Jobs";
 
+  // O faturamento que a tabela mostra inclui o save a consumir (decisão 103,
+  // 24/09/2026): fecha com o que foi faturado. Result. Op e Rent % seguem
+  // só sobre os jobs — o save não é receita de job nenhum até ser consumido.
+  const faturamentoTotal = faturamentoComSave(totalBases);
+  const pctDoTotal = (valor: number) =>
+    faturamentoTotal > 0
+      ? `${((valor / faturamentoTotal) * 100).toFixed(1).replace(".", ",")}%`
+      : "—";
+
   if (grupos.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-card p-10 text-center">
@@ -77,7 +90,7 @@ export function TabelaRentabilidade({
           <tr className="bg-muted/20 font-bold">
             <td className="px-4 py-3">{rotuloVisao}</td>
             <td className="px-4 py-3 text-right font-mono">
-              {formatCurrency(totalBases.faturamento, "BRL")}
+              {formatCurrency(faturamentoTotal, "BRL")}
             </td>
             <td className="px-4 py-3 text-right font-mono">
               {resultOpTotal === null ? "—" : formatCurrency(resultOpTotal, "BRL")}
@@ -119,7 +132,7 @@ export function TabelaRentabilidade({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-mono">
-                    {formatCurrency(g.bases.faturamento, "BRL")}
+                    {formatCurrency(faturamentoComSave(g.bases), "BRL")}
                   </td>
                   <td className="px-4 py-3 text-right font-mono">
                     {g.bases.resultadoOperacional === null
@@ -153,20 +166,55 @@ export function TabelaRentabilidade({
                           <BadgeRent pct={rentDaLinha(j, modo)} />
                         </td>
                         <td className="px-4 py-2 text-center text-xs text-muted-foreground">
-                          {totalBases.faturamento > 0
-                            ? `${((fatJ / totalBases.faturamento) * 100)
-                                .toFixed(1)
-                                .replace(".", ",")}%`
-                            : "—"}
+                          {pctDoTotal(fatJ)}
                         </td>
                       </tr>
                     );
                   })}
+
+                {/* Save a consumir: uma linha por job que gerou save que
+                    ninguém consumiu ainda, depois dos jobs do grupo. Entra
+                    no faturamento; não tem Result. Op nem Rent %. */}
+                {expandido &&
+                  g.jobs
+                    .filter((j) => saveAConsumirDaLinha(j, modo) > 0.004)
+                    .map((j) => {
+                      const saveJ = saveAConsumirDaLinha(j, modo);
+                      return (
+                        <tr key={`save-${j.job_id}`} className="bg-muted/10">
+                          <td className="px-4 py-2 pl-12 text-muted-foreground">
+                            Save a consumir · {j.job_codigo} · {j.job_nome}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-muted-foreground">
+                            {formatCurrency(saveJ, "BRL")}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-muted-foreground">
+                            —
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <span className="text-muted-foreground">—</span>
+                          </td>
+                          <td className="px-4 py-2 text-center text-xs text-muted-foreground">
+                            {pctDoTotal(saveJ)}
+                          </td>
+                        </tr>
+                      );
+                    })}
               </React.Fragment>
             );
           })}
         </tbody>
       </table>
+      {totalBases.saveAConsumir > 0.004 && (
+        <p className="border-t border-border px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">Save a consumir</span>{" "}
+          é o crédito de save que o cliente ainda não usou em outro job. Ele
+          entra no faturamento, porque foi cobrado na nota, mas não no
+          Result. Op nem no Rent %: esses são calculados só sobre os jobs.
+          Quando outro job consome o crédito, o valor sai desta linha e vai
+          para o faturamento dele.
+        </p>
+      )}
     </div>
   );
 }

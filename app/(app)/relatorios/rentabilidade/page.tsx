@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { createClient } from "@/lib/supabase/server";
 import {
   agruparEComputar,
+  faturamentoComSave,
   type GrupoRentabilidade,
 } from "@/lib/relatorios/rentabilidade";
 import type { LinhaJobRentabilidade } from "@/lib/types";
@@ -31,7 +32,11 @@ function computarPorModo(
   resolveRotulo: (chave: string) => string,
 ) {
   const gruposPrevisto = agruparEComputar(linhas, visao, "previsto", resolveRotulo);
-  const linhasComFat = linhas.filter((l) => l.faturamento_realizado > 0);
+  // Job cujo realizado é só save (ainda não consumido) também entra: é a
+  // linha "Save a consumir" dele (decisão 103).
+  const linhasComFat = linhas.filter(
+    (l) => l.faturamento_realizado > 0 || l.save_a_consumir_realizado > 0,
+  );
   const gruposRealizado = agruparEComputar(
     linhasComFat,
     visao,
@@ -44,6 +49,7 @@ function computarPorModo(
     imposto: grupos.reduce((s, g) => s + g.bases.imposto, 0),
     custo: grupos.reduce((s, g) => s + g.bases.custo, 0),
     bv: grupos.reduce((s, g) => s + g.bases.bv, 0),
+    saveAConsumir: grupos.reduce((s, g) => s + g.bases.saveAConsumir, 0),
   });
 
   return {
@@ -69,10 +75,10 @@ function filtrarPorFaturamentoMinimo(
   if (minimo === null) return gruposPorModo;
   return {
     previsto: gruposPorModo.previsto.filter(
-      (g) => g.bases.faturamento >= minimo,
+      (g) => faturamentoComSave(g.bases) >= minimo,
     ),
     realizado: gruposPorModo.realizado.filter(
-      (g) => g.bases.faturamento >= minimo,
+      (g) => faturamentoComSave(g.bases) >= minimo,
     ),
   };
 }
@@ -90,7 +96,9 @@ function filtrarComparativo(
 
   const passaEm = (grupos: GrupoRentabilidade[]) =>
     new Set(
-      grupos.filter((g) => g.bases.faturamento >= minimo).map((g) => g.chave),
+      grupos
+        .filter((g) => faturamentoComSave(g.bases) >= minimo)
+        .map((g) => g.chave),
     );
 
   const chavesPrevisto = new Set<string>([
@@ -186,6 +194,7 @@ export default async function RentabilidadePage({ searchParams }: Props) {
     imposto: grupos.reduce((s, g) => s + g.bases.imposto, 0),
     custo: grupos.reduce((s, g) => s + g.bases.custo, 0),
     bv: grupos.reduce((s, g) => s + g.bases.bv, 0),
+    saveAConsumir: grupos.reduce((s, g) => s + g.bases.saveAConsumir, 0),
   });
   const totalBasesA = {
     previsto: somarBases(gruposFiltrados.gruposA.previsto),

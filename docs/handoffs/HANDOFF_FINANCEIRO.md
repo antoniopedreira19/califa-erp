@@ -5856,3 +5856,26 @@ era o imposto de R$ 28.318,52). Regra completa na
 - O envio de outubro do JOB-0034 ("TESTE 099 — NÃO EMITIR NOTA") foi
   removido. Não havia nota sobre ele, e ele saiu da fila do contas a
   receber.
+
+## ⚠️ Nota de 2026-09-24 (2) — save a consumir no relatório, Relatório de Faturamento e fluxo de caixa
+
+- **Relatório de rentabilidade** ([decisão 103](../decisions/103-rentabilidade-separa-o-save.md) §4):
+  linhas "Save a consumir · JOB-XXXX" por job de origem, dentro do
+  cliente/marca. Entram no Faturamento (o total volta a bater com o
+  faturado) e não no Result. Op nem no Rent %. `vw_job_rentabilidade`
+  ganhou `save_a_consumir_previsto`/`_realizado`
+  (`20260924100007`); `BasesAgregadas.saveAConsumir` e
+  `faturamentoComSave` em `lib/relatorios/rentabilidade.ts`. Teste no
+  `scripts/testar-rentabilidade.ts` (seção 11).
+- **Relatório de Faturamento:** a decisão 103 tinha mudado os números dele
+  sem querer — ele lê a mesma view. Voltou aos valores cheios pelas
+  colunas `faturamento_previsto_bruto`/`_realizado_bruto`. Quem ler
+  `vw_job_rentabilidade` para faturamento (e não para rentabilidade) deve
+  usar as `_bruto`.
+- **Fluxo de caixa:** no detalhe das linhas, o save de um mesmo título
+  consumido por dois jobs virava uma linha só, com o total e o nome do
+  primeiro job ("consumido por JOB-0040 · R$ 2.784", quando eram R$ 1.392
+  para o JOB-0040 e R$ 1.392 para o JOB-0034). A chave que junta o rateio
+  por regional numa linha por documento passou a levar a descrição
+  (`fluxo-caixa-view.tsx`). O rateio continua juntando: ele repete a
+  descrição do documento.

@@ -951,6 +951,17 @@ export interface LinhaJobRentabilidade {
   imposto_realizado: number;
   custo_realizado: number;
   bv_realizado: number;
+
+  /** Save que este job gerou e nenhum job consumiu ainda — a linha "Save a
+   *  consumir" do relatório (decisão 103, 24/09/2026). Não é receita de
+   *  job nenhum até ser consumido. */
+  save_a_consumir_previsto: number;
+  save_a_consumir_realizado: number;
+  /** O que a nota cobra, save incluído. É o que o Relatório de Faturamento
+   *  lê: `faturamento_previsto`/`_realizado` acima são os de rentabilidade,
+   *  sem o save (decisão 103). */
+  faturamento_previsto_bruto: number;
+  faturamento_realizado_bruto: number;
 }
 
 /**

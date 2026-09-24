@@ -14,12 +14,36 @@ export type VisaoRentabilidade = "cliente" | "marca" | "job";
  * não roda (custo <= 0 ou faturamento = 0) — a UI mostra travessão.
  */
 export interface BasesAgregadas {
+  /** Faturamento dos jobs — a base do Result. Op e do Rent %. */
   faturamento: number;
   imposto: number;
   custo: number;
   bv: number;
+  /** Save a consumir dos jobs do grupo (decisão 103, 24/09/2026): entra no
+   *  faturamento que a tela mostra, mas não no Result. Op nem no Rent % —
+   *  não é receita de job nenhum até alguém consumir. */
+  saveAConsumir: number;
   resultadoOperacional: number | null;
   resultadoGeral: number | null;
+}
+
+/** O faturamento que a tela mostra: o dos jobs mais o save a consumir.
+ *  É o que fecha com o que foi faturado ao cliente. */
+export function faturamentoComSave(bases: {
+  faturamento: number;
+  saveAConsumir: number;
+}): number {
+  return bases.faturamento + bases.saveAConsumir;
+}
+
+/** O save a consumir de um job, no modo da tela. */
+export function saveAConsumirDaLinha(
+  l: LinhaJobRentabilidade,
+  modo: ModoRentabilidade,
+): number {
+  return modo === "previsto"
+    ? l.save_a_consumir_previsto
+    : l.save_a_consumir_realizado;
 }
 
 /** Um grupo da tabela (cliente, marca ou o próprio job na visão flat). */
@@ -84,6 +108,10 @@ export function agregarBases(
   );
   const custo = linhas.reduce((s, l) => s + l.custo_realizado, 0);
   const bv = linhas.reduce((s, l) => s + l.bv_realizado, 0);
+  const saveAConsumir = linhas.reduce(
+    (s, l) => s + saveAConsumirDaLinha(l, modo),
+    0,
+  );
 
   const { resultadoOperacional, resultadoGeral } = computarResultado({
     faturamento,
@@ -91,7 +119,15 @@ export function agregarBases(
     custo,
     bv,
   });
-  return { faturamento, imposto, custo, bv, resultadoOperacional, resultadoGeral };
+  return {
+    faturamento,
+    imposto,
+    custo,
+    bv,
+    saveAConsumir,
+    resultadoOperacional,
+    resultadoGeral,
+  };
 }
 
 /**
@@ -122,8 +158,12 @@ export function agruparEComputar(
     porChave.set(c, lista);
   }
 
+  // Com o save a consumir: a representatividade é sobre o faturado.
   const totalFaturamento = linhas.reduce(
-    (s, l) => s + (modo === "previsto" ? l.faturamento_previsto : l.faturamento_realizado),
+    (s, l) =>
+      s +
+      (modo === "previsto" ? l.faturamento_previsto : l.faturamento_realizado) +
+      saveAConsumirDaLinha(l, modo),
     0,
   );
 
@@ -131,7 +171,9 @@ export function agruparEComputar(
   for (const [chave, jobs] of porChave) {
     const bases = agregarBases(jobs, modo);
     const representatividadePct =
-      totalFaturamento > 0 ? (bases.faturamento / totalFaturamento) * 100 : 0;
+      totalFaturamento > 0
+        ? (faturamentoComSave(bases) / totalFaturamento) * 100
+        : 0;
     grupos.push({
       chave,
       rotulo: resolveRotulo(chave),
@@ -142,7 +184,9 @@ export function agruparEComputar(
   }
 
   // Ordena por faturamento desc (padrão da tabela).
-  grupos.sort((a, b) => b.bases.faturamento - a.bases.faturamento);
+  grupos.sort(
+    (a, b) => faturamentoComSave(b.bases) - faturamentoComSave(a.bases),
+  );
   return grupos;
 }
 
