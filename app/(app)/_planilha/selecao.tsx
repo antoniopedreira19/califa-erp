@@ -348,7 +348,15 @@ export function Miolo({
  *  célula: a moldura já diz qual está selecionada (Tiago, 03/09/2026).
  *  Numa planilha só de leitura as dicas de Enter e digitação somem —
  *  elas mentiriam. */
-export function DicasDeTeclado({ editavel }: { editavel: boolean }) {
+export function DicasDeTeclado({
+  editavel,
+  moverLinha = false,
+}: {
+  editavel: boolean;
+  /** A planilha deixa mudar o item de lugar com Alt + ↑ ↓ (decisão 104).
+   *  Só a da versão do orçamento, por enquanto; as do job não. */
+  moverLinha?: boolean;
+}) {
   return (
     <p className={SELECAO.dicas}>
       <span>
@@ -360,6 +368,12 @@ export function DicasDeTeclado({ editavel }: { editavel: boolean }) {
           <span>· digitar já substitui</span>
           <span>· <span className={SELECAO.tecla}>Enter</span> no campo desce</span>
         </>
+      )}
+      {editavel && moverLinha && (
+        <span>
+          · <span className={SELECAO.tecla}>⌥ Alt</span> +{" "}
+          <span className={SELECAO.tecla}>↑ ↓</span> muda o item de lugar
+        </span>
       )}
       <span>
         · <span className={SELECAO.tecla}>Home</span> /{" "}

@@ -4395,3 +4395,35 @@ limpos.
   outros jobs depois que o financeiro aprovar, na abertura do job.
 - Na matriz de permissões, as linhas passaram a se chamar "Gerar e
   consumir Save no orçamento" e "Gerar e consumir Save no job".
+
+
+## ⚠️ Nota de 2026-09-24 (2) — o item muda de lugar pela alça (decisão 104)
+
+- **Planilha da versão e visão agregada:** alça (⋮⋮) no recuo do item, no
+  hover da linha; arrastar leva o item para outra posição ou para outro
+  agrupamento, com linha vermelha de destino e fantasma. Sobre grupo
+  recolhido, o item vai para o fim dele. **⌥ Alt + ↑ ↓** faz o mesmo pelo
+  teclado, na célula selecionada, e entrou na linha de dicas. Aviso com
+  **Desfazer** (8 s).
+- **Trava:** a mesma da edição de célula — some em versão aprovada ou
+  cancelada e sem `orcamentos.editar`; `moverItem` confere de novo no
+  servidor.
+- **Gravação:** na versão, ao soltar (`moverItem` → RPC
+  `aplicar_ordem_itens_versao`, migration `20260924200001`); na agregada, no
+  "Salvar alterações", que agora lê a ordem atual e grava a ordem só do
+  orçamento cuja sequência de itens mudou. Antes, mudar só a ordem ali não
+  chegava ao banco.
+- Arquivos: `app/(app)/_planilha/arrastar-linha.tsx` (gesto, alça, linha de
+  inserção), `lib/calculos/ordem-itens.ts` (regra + testes), `itens-table.tsx`
+  (`AdaptadorItens.mover`, obrigatório), `versoes/actions.ts`,
+  `agregado/editor-agregado.tsx`, `agregado/actions.ts`,
+  `_planilha/selecao.tsx` (dica).
+- **Conferido na tela** (porta 3024, worktree): `TES-0001/26-07` (mensal:
+  arrastar, Alt + ↓ / ↑, Desfazer); `TES-0001/26-01 v4` (troca de
+  agrupamento com subtotais recalculados, grupo recolhido recebendo no fim,
+  realce do grupo); `TES-0001/26-02` aprovada sem alça e com a action
+  recusando pelo console (versão aprovada, posição inválida, item
+  inexistente, grupo de outra versão); visão agregada (arrastar no rascunho,
+  salvar grava só o `TES-0001/26-03`, Esc cancela sem sujar). Todas as
+  ordens de teste foram devolvidas ao estado original. tsc, lint e 11 testes
+  de `ordem-itens.test.ts` limpos.

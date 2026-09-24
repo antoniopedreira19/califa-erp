@@ -25,6 +25,7 @@ import {
 import {
   adicionarItem,
   atualizarCampoItem,
+  moverItem,
   removerItem,
   type ActionResult,
 } from "../actions";
@@ -99,6 +100,13 @@ import {
   type VisaoBv,
 } from "@/lib/calculos/bv-planilha";
 import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
+import {
+  AlcaDaLinha,
+  LinhaDeInsercao,
+  REALCE_ALVO_DO_ARRASTO,
+  useArrastoDeLinhas,
+} from "@/app/(app)/_planilha/arrastar-linha";
+import { destinoPorTecla, moverNaLista } from "@/lib/calculos/ordem-itens";
 
 /** Onde a grade grava.
  *
@@ -114,6 +122,10 @@ export interface AdaptadorItens {
   ) => Promise<ActionResult>;
   adicionar: (grupoId: string, formData: FormData) => Promise<ActionResult>;
   remover: (itemId: string) => Promise<ActionResult>;
+  /** Muda o item de lugar (decisão 104): para `grupoId`, na posição
+   *  `indice` entre os itens do grupo SEM o item que se move. Obrigatório:
+   *  toda tela que desenha a planilha editável diz onde a ordem grava. */
+  mover: (itemId: string, grupoId: string, indice: number) => Promise<ActionResult>;
   /** Recarrega a origem dos dados depois de cada escrita. No rascunho é
    *  no-op: o estado do React já é a fonte. */
   aposEscrita: () => void;
@@ -303,6 +315,26 @@ interface Provisorio {
   erro?: string;
 }
 
+/** Um item mudado de lugar que as props ainda não trazem (decisão 104).
+ *  A tela mostra o resultado na hora; o movimento sai daqui quando as
+ *  props chegam com ele — ou quando o servidor confirma e as props mudam
+ *  depois disso, para a ordem do banco ter a última palavra. */
+interface MovimentoPendente {
+  token: number;
+  itemId: string;
+  grupoId: string;
+  indice: number;
+  /** As props no instante da confirmação; `null` enquanto grava. */
+  confirmadoEm: GrupoDaPlanilha[] | null;
+}
+
+/** O aviso do canto depois de mudar um item de lugar, com Desfazer. */
+interface AvisoDeOrdem {
+  texto: string;
+  detalhe: string | null;
+  desfazer: () => void;
+}
+
 type Overrides = Record<string, Partial<Record<Campo, ValorCampo>>>;
 
 /** Radix Select não aceita value="" — sentinela para "sem categoria". */
@@ -486,6 +518,7 @@ export function ItensTable({
         atualizarCampo: atualizarCampoItem,
         adicionar: adicionarItem,
         remover: removerItem,
+        mover: moverItem,
         aposEscrita: () => router.refresh(),
       },
     [adaptador, router],
@@ -510,21 +543,54 @@ export function ItensTable({
 
   const editavel = !readOnly;
 
-  /** Os grupos COMO A TELA OS MOSTRA: os itens do banco mais as linhas
-   *  provisórias de cada grupo. Tudo abaixo — navegação, subtotais,
-   *  calha — lê daqui, para a linha nova contar em tudo desde o
-   *  primeiro instante. A provisória some sozinha quando o item real
-   *  chega pelas props. */
+  /** Itens mudados de lugar que ainda não voltaram pelas props. */
+  const [movimentos, setMovimentos] = React.useState<MovimentoPendente[]>([]);
+  const seqMovimento = React.useRef(0);
+  const gruposRef = React.useRef(grupos);
+  gruposRef.current = grupos;
+  const [avisoOrdem, setAvisoOrdem] = React.useState<AvisoDeOrdem | null>(null);
+  /** A linha que acabou de mudar de lugar pisca uma vez. */
+  const [recemMovido, setRecemMovido] = React.useState<string | null>(null);
+
+  /** As props com os movimentos pendentes já aplicados. */
+  const gruposOrdenados = React.useMemo<GrupoDaPlanilha[]>(
+    () =>
+      movimentos.reduce(
+        (gs, m) => moverNaLista(gs, m.itemId, m.grupoId, m.indice) ?? gs,
+        grupos,
+      ),
+    [grupos, movimentos],
+  );
+
+  // As props chegaram com o movimento (ou o servidor já confirmou e elas
+  // mudaram depois disso): o pendente cumpriu o papel.
+  React.useEffect(() => {
+    setMovimentos((prev) => {
+      if (prev.length === 0) return prev;
+      const restantes = prev.filter(
+        (m) =>
+          !(m.confirmadoEm !== null && m.confirmadoEm !== grupos) &&
+          moverNaLista(grupos, m.itemId, m.grupoId, m.indice) !== null,
+      );
+      return restantes.length === prev.length ? prev : restantes;
+    });
+  }, [grupos]);
+
+  /** Os grupos COMO A TELA OS MOSTRA: os itens do banco, na ordem que a
+   *  tela acabou de dar a eles, mais as linhas provisórias de cada grupo.
+   *  Tudo abaixo — navegação, subtotais, calha — lê daqui, para a linha
+   *  nova contar em tudo desde o primeiro instante. A provisória some
+   *  sozinha quando o item real chega pelas props. */
   const gruposDaTela = React.useMemo<GrupoDaPlanilha[]>(() => {
-    if (provisorios.length === 0) return grupos;
-    return grupos.map((g) => {
+    if (provisorios.length === 0) return gruposOrdenados;
+    return gruposOrdenados.map((g) => {
       const reais = new Set(g.itens.map((i) => i.id));
       const extras = provisorios
         .filter((p) => p.grupoId === g.id && !reais.has(p.id))
         .map((p) => p.item);
       return extras.length === 0 ? g : { ...g, itens: [...g.itens, ...extras] };
     });
-  }, [grupos, provisorios]);
+  }, [gruposOrdenados, provisorios]);
 
   // O item real chegou (refresh depois do `adicionar`): a provisória
   // cumpriu o papel. Sem isso ela duplicaria a linha para sempre.
@@ -818,6 +884,120 @@ export function ItensTable({
     }
     ativaAnterior.current = ativa;
   }, [ativa, selecao]);
+
+  // ---------- Ordem dos itens (decisão 104) ----------
+
+  /** Os itens que existem na origem dos dados — só eles mudam de lugar.
+   *  A linha provisória ainda não tem id que o servidor conheça. */
+  const idsReais = React.useMemo(
+    () => new Set(grupos.flatMap((g) => g.itens.map((i) => i.id))),
+    [grupos],
+  );
+
+  /** Muda o item de lugar: a tela mostra na hora, a escrita vai pelo
+   *  adaptador, e o aviso do canto traz o Desfazer. Mesma trava da edição
+   *  de célula — `editavel` aqui, permissão e status da versão no
+   *  servidor. */
+  function moverItemPara(itemId: string, grupoId: string, indice: number) {
+    if (!editavel || !idsReais.has(itemId)) return;
+    const origem = gruposOrdenados.find((g) => g.itens.some((i) => i.id === itemId));
+    const destino = gruposOrdenados.find((g) => g.id === grupoId);
+    if (!origem || !destino) return;
+    const posAntes = origem.itens.findIndex((i) => i.id === itemId);
+    const previsto = moverNaLista(gruposOrdenados, itemId, grupoId, indice);
+    if (!previsto) return;
+    const posNova =
+      previsto.find((g) => g.id === grupoId)?.itens.findIndex((i) => i.id === itemId) ?? 0;
+    const nome = String(valorAtual(origem.itens[posAntes], "item") ?? "") || "Item";
+
+    const token = ++seqMovimento.current;
+    setMovimentos((m) => [
+      ...m,
+      { token, itemId, grupoId, indice: posNova, confirmadoEm: null },
+    ]);
+    setErro(null);
+    setAvisoOrdem(null);
+    setRecemMovido(itemId);
+
+    const desfazerMovimento = (mensagem: string) => {
+      setMovimentos((m) => m.filter((x) => x.token !== token));
+      setErro(mensagem);
+    };
+    acoes
+      .mover(itemId, grupoId, posNova)
+      .then((res) => {
+        if (!res.ok) {
+          desfazerMovimento(res.message);
+          return;
+        }
+        setMovimentos((m) =>
+          m.map((x) => (x.token === token ? { ...x, confirmadoEm: gruposRef.current } : x)),
+        );
+        acoes.aposEscrita();
+        setAvisoOrdem({
+          texto: `“${nome}” agora é o ${posNova + 1}º de ${destino.nome}`,
+          detalhe: origem.id !== grupoId ? `Saiu de ${origem.nome}.` : null,
+          // Pela ref: quando o Desfazer for clicado, esta closure já é de
+          // um render antigo e a ordem dela está velha.
+          desfazer: () => moverItemParaRef.current(itemId, origem.id, posAntes),
+        });
+      })
+      .catch(() => desfazerMovimento("Não foi possível mudar o item de lugar."));
+  }
+  const moverItemParaRef = React.useRef(moverItemPara);
+  moverItemParaRef.current = moverItemPara;
+
+  const arrasto = useArrastoDeLinhas({
+    container: wrapperRef,
+    onSoltar: (itemId, alvo) => moverItemPara(itemId, alvo.grupoId, alvo.indice),
+    // Clique na alça, sem arrastar: seleciona o item — de onde o Alt + ↑ ↓
+    // já anda.
+    onClicar: (itemId) => {
+      selecao.selecionar({ linhaId: itemId, coluna: "item" });
+      selecao.focar();
+    },
+  });
+
+  /** As teclas do card: Alt + ↑ ↓ muda o item selecionado de lugar; o
+   *  resto é da seleção. Na ponta do grupo ele passa para o vizinho, que
+   *  abre se estiver recolhido — senão a linha sumiria da vista. */
+  function aoTeclar(e: React.KeyboardEvent) {
+    const vertical = e.key === "ArrowUp" || e.key === "ArrowDown";
+    const emCampo =
+      e.target instanceof Element &&
+      e.target.closest("input, textarea, select, [contenteditable]") !== null;
+    if (editavel && vertical && e.altKey && !e.ctrlKey && !e.metaKey && !emCampo && ativa === null) {
+      const cel = selecao.celula;
+      if (cel && idsReais.has(cel.linhaId)) {
+        e.preventDefault();
+        const alvo = destinoPorTecla(
+          gruposOrdenados,
+          cel.linhaId,
+          e.key === "ArrowUp" ? -1 : 1,
+        );
+        if (alvo) {
+          if (!estaAberto(alvo.grupoId)) onAlternarGrupo(alvo.grupoId);
+          moverItemPara(cel.linhaId, alvo.grupoId, alvo.indice);
+        }
+        return;
+      }
+    }
+    selecao.onKeyDown(e);
+  }
+
+  React.useEffect(() => {
+    if (!recemMovido) return;
+    const t = setTimeout(() => setRecemMovido(null), 1600);
+    return () => clearTimeout(t);
+  }, [recemMovido]);
+
+  React.useEffect(() => {
+    if (!avisoOrdem) return;
+    // Mais que os 3,5 s dos avisos comuns: este tem Desfazer, e precisa
+    // dar tempo de a pessoa ler, ver a linha no lugar novo e decidir.
+    const t = setTimeout(() => setAvisoOrdem(null), 8000);
+    return () => clearTimeout(t);
+  }, [avisoOrdem]);
 
   /** Fecha a célula aberta e anda a seleção. */
   function fecharEMover(de: CelulaSelecionada, destino?: Direcao) {
@@ -1141,9 +1321,12 @@ export function ItensTable({
         // O card é quem recebe as teclas da seleção: `tabIndex` para
         // poder ter foco, sem anel — a moldura da célula é o foco visível.
         tabIndex={0}
-        onKeyDown={selecao.onKeyDown}
+        onKeyDown={aoTeclar}
         className="relative rounded-2xl border border-border bg-card shadow-soft outline-none"
       >
+        {/* Onde o item arrastado vai cair (decisão 104). O gesto a
+            posiciona direto no DOM; aqui ela só existe, escondida. */}
+        <LinhaDeInsercao ref={arrasto.linhaRef} />
         {/* A alça da coluna Save, colada na borda ESQUERDA e fora do
             frame — o lado oposto ao da calha de BV e PP. É o caminho de
             um clique para trazer a coluna de volta; o menu "Exibir" faz o
@@ -1354,7 +1537,15 @@ export function ItensTable({
                     {/* A LINHA DO GRUPO: nome à esquerda e o subtotal já
                         alinhado às colunas Total de cada bloco. Era o
                         `tfoot` de um card inteiro; agora é uma linha. */}
-                    <tr data-calha={`g:${grupo.id}`} className="h-10">
+                    <tr
+                      data-calha={`g:${grupo.id}`}
+                      // Área de soltura do arrasto: da linha deste grupo até
+                      // a do próximo. Recolhido, o item vai para o fim dele.
+                      data-arrasto-cab={grupo.id}
+                      data-arrasto-qtd={grupo.itens.length}
+                      data-arrasto-nome={grupo.nome}
+                      className={cn("h-10", REALCE_ALVO_DO_ARRASTO)}
+                    >
                       <td
                         colSpan={colunasDoRotulo(colunas)}
                         className={LINHA_GRUPO_NOME}
@@ -1507,11 +1698,17 @@ export function ItensTable({
                         const sementeDe = (campo: Campo) =>
                           ativaAqui(campo) ? ativa?.semente : undefined;
                         const provisorio = provisorioPorId.get(item.id);
+                        // Muda de lugar quem já existe na origem dos dados
+                        // e não está gravando (decisão 104).
+                        const movel = editavel && !provisorio && idsReais.has(item.id);
+                        const nomeDoItem = String(valorAtual(item, "item") ?? "");
 
                         return (
                           <tr
                             key={item.id}
                             data-calha={`i:${item.id}`}
+                            data-arrasto-item={movel ? item.id : undefined}
+                            data-arrasto-grupo={movel ? grupo.id : undefined}
                             // Gravando: a linha já está na grade, mais
                             // clara, e as células selecionam mas não
                             // abrem. Recusada: fica marcada, e o clique
@@ -1524,8 +1721,12 @@ export function ItensTable({
                             }
                             className={cn(
                               ALTURA_LINHA,
-                              "border-b border-border transition-colors",
+                              "group/linha border-b border-border transition-colors",
+                              "[&>td]:transition-shadow [&>td]:duration-700",
                               editavel && "hover:bg-accent/40",
+                              arrasto.arrastando === item.id && "opacity-40",
+                              recemMovido === item.id &&
+                                "[&>td]:shadow-[inset_0_0_0_999px_rgba(231,75,86,0.14)]",
                               saveVisivel && classesDaLinhaComSave(save),
                               provisorio?.estado === "gravando" && "opacity-60",
                               provisorio?.estado === "erro" &&
@@ -1546,11 +1747,27 @@ export function ItensTable({
                               />
                             )}
                             <CelulaTexto
-                              valor={String(valorAtual(item, "item") ?? "")}
+                              valor={nomeDoItem}
                               editando={ativaAqui("item")}
                               semente={sementeDe("item")}
                               nav={selecao.celulaProps(item.id, "item")}
                               moldura={selecao.moldura(item.id, "item")}
+                              alca={
+                                movel ? (
+                                  <AlcaDaLinha
+                                    rotulo={nomeDoItem || "o item"}
+                                    onPointerDown={(e) =>
+                                      arrasto.iniciar(e, {
+                                        id: item.id,
+                                        grupoId: grupo.id,
+                                        rotulo: nomeDoItem || "Item sem nome",
+                                        tipo: String(valorAtual(item, "tipo_custo")),
+                                        detalhe: formatCurrency(totais.orcado, moeda),
+                                      })
+                                    }
+                                  />
+                                ) : null
+                              }
                               onConfirmar={(v, d) =>
                                 confirmarCampo(item, "item", v.trim(), d)
                               }
@@ -2073,7 +2290,44 @@ export function ItensTable({
 
       {/* A dica de teclado vive FORA do card (pedido do Tiago, 25/08 e
           03/09/2026): dentro do frame ela lia como mais uma linha. */}
-      {temDica && <DicasDeTeclado editavel={editavel} />}
+      {temDica && <DicasDeTeclado editavel={editavel} moverLinha />}
+
+      {avisoOrdem && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 flex max-w-[min(480px,calc(100vw-48px))] items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated"
+        >
+          <span className="min-w-0 text-sm">
+            <span className="block font-semibold text-emerald-900">
+              {avisoOrdem.texto}
+            </span>
+            {avisoOrdem.detalhe && (
+              <span className="block text-xs text-emerald-800">
+                {avisoOrdem.detalhe}
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const desfazer = avisoOrdem.desfazer;
+              setAvisoOrdem(null);
+              desfazer();
+            }}
+            className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+          >
+            Desfazer
+          </button>
+          <button
+            type="button"
+            onClick={() => setAvisoOrdem(null)}
+            aria-label="Fechar aviso"
+            className="shrink-0 text-emerald-700 hover:text-emerald-900"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {bvAberto && (
         <BvDialog
@@ -2186,6 +2440,7 @@ function CelulaTexto({
   nav,
   moldura,
   semente,
+  alca,
   onConfirmar,
   onCancelar,
   tdClassName,
@@ -2195,6 +2450,9 @@ function CelulaTexto({
   nav: NavDaCelula;
   moldura: string;
   semente?: string;
+  /** A alça de arrastar (decisão 104), no recuo à esquerda do nome.
+   *  `null` onde a linha não muda de lugar. Some durante a edição. */
+  alca?: React.ReactNode;
   onConfirmar: (valor: string, destino?: Direcao) => void;
   onCancelar: () => void;
   tdClassName?: string;
@@ -2244,7 +2502,13 @@ function CelulaTexto({
 
   const { className: navClasse, ...handlers } = nav;
   return (
-    <td className={cn(TD_BASE, "px-3", tdClassName, navClasse)} {...handlers}>
+    <td
+      className={cn(TD_BASE, "px-3", alca && "relative", tdClassName, navClasse)}
+      // A linha de inserção do arrasto começa aqui, no recuo do item.
+      data-arrasto-inicio={alca ? "" : undefined}
+      {...handlers}
+    >
+      {alca}
       <Miolo moldura={moldura}>
         <TruncateTooltip text={valor} />
       </Miolo>
