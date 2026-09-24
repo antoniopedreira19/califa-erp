@@ -73,9 +73,11 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260921230001  origem_folha_em_vw_a_pagar
 20260923100001  rh_alocacao_com_rateio_regional
 20260923120001  rateio_regional_write_admin_only
+20260923140001  rh_socio_e_campos_pessoais
+20260923150001  rh_cpf_cnpj_flexivel
 ```
 
-Última: `20260923120001`.
+Última: `20260923150001`.
 
 Migration removida do repo em 2026-09-23 (regionais GERAL aposentadas): `20260916000004_rh_regional_geral.sql`.
 
@@ -85,6 +87,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-09-24 | RH · Import dos 193 colaboradores do quadro real da Kika (socio no enum, CPF em PJ) | [2026-09-24-rh-import-colaboradores.md](handoffs/2026-09-24-rh-import-colaboradores.md) |
 | 2026-09-23 | RH · Alocação por empresa + toggle "todas as regionais" + rateio anual (task 006) | [2026-09-23-rh-alocacao-com-rateio-regional.md](handoffs/2026-09-23-rh-alocacao-com-rateio-regional.md) |
 | 2026-09-23 | pgto-remessa aberto (CNAB Santander) + impactos no RH documentados | [2026-09-23-pgto-remessa-e-impactos-no-rh.md](handoffs/2026-09-23-pgto-remessa-e-impactos-no-rh.md) |
 | 2026-09-22 | RH · Design & UX da folha e da lista de colaboradores (D1/D2/D3) + Rodada 2 (visual polish) | [2026-09-22-rh-design-ux-folha-e-colaboradores.md](handoffs/2026-09-22-rh-design-ux-folha-e-colaboradores.md) |
@@ -117,7 +120,7 @@ Detalhado em [`docs/modulos/rh/30-proximos-passos.md`](modulos/rh/30-proximos-pa
 - **Detalhe `/rh/folhas/[competencia]`** ganha cards de resumo no topo (total, contagem, enviadas, pendências, aprovadas, pagas). Tabela por linha mantém badge granular.
 - **Cards de estado atual** na `/rh/colaboradores`: colaboradores ativos, valor da folha atual, admissões no mês, demissões no mês.
 
-Ordem seguinte no módulo (P1): import da planilha atual, estorno de folha aprovada, benefícios. Depois P2 (férias, turnover, holerite PDF, autoserviço).
+Ordem seguinte no módulo (P1): ~~import da planilha atual~~ (feito em 2026-09-24, 193 colaboradores no ar), UI de pendências (20 sem CPF), estorno de folha aprovada, benefícios. Depois P2 (férias, turnover, holerite PDF, autoserviço).
 
 ### 🔴 Prioridade 2 — Task 006 (Administração) — completar
 
