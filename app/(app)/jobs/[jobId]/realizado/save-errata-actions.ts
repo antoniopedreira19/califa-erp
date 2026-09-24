@@ -170,41 +170,6 @@ async function lerStatusDoJob(
   return data ?? null;
 }
 
-/**
- * Quem pede, retira ou envia o save da linha: o administrador, ou o GP (ou
- * produtor) responsável pelo job — a mesma regra de `quemPodeMexer`, que a
- * tela usa para mostrar o pop-up com ações. Nas RPCs de job aberto o banco
- * confere de novo (`save_pode_mexer_no_job`); na cópia do job devolvido a
- * escrita é direta e esta é a única conferência. Cancelar pedido fica de
- * fora: a especificação deixa qualquer membro que enxerga o job cancelar.
- */
-async function recusaQuemNaoResponde(
-  session: Awaited<ReturnType<typeof requireSession>>,
-  job: JobLido,
-  acaoTentada: string,
-): Promise<{ ok: false; message: string } | null> {
-  if (
-    session.activeRole === "administrador" ||
-    (job.responsavel_id !== null && job.responsavel_id === session.profile.id)
-  ) {
-    return null;
-  }
-  await logAuditEvent({
-    acao: "acao_negada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "job",
-    entidadeId: job.id,
-    metadata: {
-      acao_tentada: acaoTentada,
-      motivo: "usuario_nao_e_responsavel_nem_admin",
-    },
-  });
-  return {
-    ok: false,
-    message: "Apenas o responsável do job ou admin pode mudar o save deste job.",
-  };
-}
-
 /** Um pedido de save, com o mínimo que as actions daqui precisam. */
 interface PedidoLido {
   id: string;
@@ -417,8 +382,6 @@ export async function registrarErrataDeSave(
     conferirOrigensDoCliente(supabase, tenantId, jobId, origens),
   ]);
   if (!job) return { ok: false, message: "Job não encontrado." };
-  const naoResponde = await recusaQuemNaoResponde(session, job, "save.pedido");
-  if (naoResponde) return naoResponde;
   if (job.status !== "rejeitado_financeiro" && !jobAceitaSave(job.status)) {
     return { ok: false, message: mensagemJobNaoMudaSave(job.status) };
   }
@@ -865,8 +828,6 @@ export async function retirarSave(
       : Promise.resolve(null),
   ]);
   if (!job) return { ok: false, message: "Job não encontrado." };
-  const naoResponde = await recusaQuemNaoResponde(session, job, "save.retirado");
-  if (naoResponde) return naoResponde;
   if (!jobAceitaSave(job.status)) {
     return { ok: false, message: mensagemJobNaoMudaSave(job.status) };
   }
@@ -1024,8 +985,6 @@ export async function enviarSavesParaAprovacao(
 
   const job = await lerStatusDoJob(supabase, tenantId, jobId);
   if (!job) return { ok: false, message: "Job não encontrado." };
-  const naoResponde = await recusaQuemNaoResponde(session, job, "save.enviado_legado");
-  if (naoResponde) return naoResponde;
   if (!jobAceitaSave(job.status)) {
     return { ok: false, message: mensagemJobNaoMudaSave(job.status) };
   }

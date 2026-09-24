@@ -1022,6 +1022,7 @@ function VersaoSelecionada({
           mesPedido={mesPedido}
           inicioPrevisto={orcamento.data_inicio_prevista}
           readOnly={readOnly}
+          podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
           categorias={categorias}
           bvsPorItem={bvsPorItem}
           fornecedores={fornecedores}
@@ -1102,6 +1103,7 @@ function VersaoSelecionada({
           }))}
           moeda={versao.moeda}
           readOnly={readOnly}
+          podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
           categorias={categorias}
           bvsPorItem={bvsPorItem}
           fornecedores={fornecedores}

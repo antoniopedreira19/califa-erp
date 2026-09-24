@@ -135,7 +135,7 @@ const LINHAS: readonly Linha[] = [
   { modulo: "Orçamentos", item: "Aprovar versão",
     permissoes: { editar: "orcamentos.aprovar" },
   },
-  { modulo: "Orçamentos", item: "Marcar linha em Save",
+  { modulo: "Orçamentos", item: "Gerar e consumir Save no orçamento",
     permissoes: { editar: "orcamentos.marcar_em_save" },
   },
 
@@ -152,7 +152,7 @@ const LINHAS: readonly Linha[] = [
   { modulo: "Jobs", item: "Editar planilha realizada",
     permissoes: { editar: "jobs.editar_realizado" },
   },
-  { modulo: "Jobs", item: "Consumir Save (crédito entre jobs)",
+  { modulo: "Jobs", item: "Gerar e consumir Save no job",
     permissoes: { criar: "jobs.consumir_save" },
   },
   { modulo: "Jobs", item: "Criar errata",

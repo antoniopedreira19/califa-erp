@@ -100,6 +100,7 @@ import {
   calcularTotaisVersao,
 } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { jobAceitaAcoesPlanilha } from "@/lib/types";
 import { definirModoErrata } from "../modo-errata";
 import {
   nomeDoMes,
@@ -183,6 +184,11 @@ interface Props {
   categoriasMap: Map<string, string>;
   /** Errata, BV e Pedido de Produção — só com o job aberto. */
   podeAcoes: boolean;
+  /** Save do job (decisão 099, revista em 24/09/2026): administrador ou
+   *  qualquer GP (`jobs.consumir_save`), responsável pelo job ou não. O
+   *  status do job decide o modo (pedido ou direto); telas de leitura
+   *  mandam `false`. */
+  podeMexerNoSave: boolean;
   /** GERAR, editar e cancelar PP. Separado de `podeAcoes` desde
    *  08/09/2026 (decisão 056): a PP passou a nascer na pré-abertura,
    *  enquanto errata e BV continuam esperando a abertura. O envio ao
@@ -236,6 +242,7 @@ export function JobRealizadoSection({
   realizadosMap,
   categoriasMap,
   podeAcoes,
+  podeMexerNoSave,
   podeExportarInterna = false,
   podeGerarPP = false,
   podeCadastrarFornecedor = false,
@@ -415,16 +422,19 @@ export function JobRealizadoSection({
   //  - `pedido`: job aberto — cada mudança é errata de save, vira pedido ao
   //    financeiro e passa pelo "Prosseguir com envio" do pop-up;
   //  - `direto`: job devolvido pelo financeiro — o save volta a editar
-  //    direto na cópia, sem pedido (§11). Quem pode é quem pode mexer no
-  //    job; fora do job aberto `podeAcoes` é falso, e quem carrega essa
-  //    permissão na pré-abertura é `podeGerarPP` (admin ou GP responsável);
+  //    direto na cópia, sem pedido (§11);
   //  - leitura (`null`): pré-abertura, job encerrado, a planilha do
   //    financeiro — o pop-up só abre nas linhas com save (§18).
-  const modoDoSave: "pedido" | "direto" | null = podeAcoes
-    ? "pedido"
-    : job.status === "rejeitado_financeiro" && podeGerarPP
-      ? "direto"
-      : null;
+  // Quem age nos dois primeiros é o administrador ou qualquer GP
+  // (`podeMexerNoSave`, 24/09/2026) — não a regra "admin ou responsável"
+  // de errata e PP.
+  const modoDoSave: "pedido" | "direto" | null = !podeMexerNoSave
+    ? null
+    : jobAceitaAcoesPlanilha(job.status)
+      ? "pedido"
+      : job.status === "rejeitado_financeiro"
+        ? "direto"
+        : null;
   const motivoErrataTravada = jaEnviadoParaFaturamento
     ? "Job já enviado para faturamento: o valor da nota está congelado e não há mais errata. Fale com o financeiro antes da emissão da nota."
     : todosOsMesesEnviados

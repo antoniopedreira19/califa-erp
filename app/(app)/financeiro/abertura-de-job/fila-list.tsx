@@ -292,12 +292,24 @@ export function FilaAbertura({
         </div>
         {!vazio && (
           <span className="ml-auto text-[12.5px] text-muted-foreground">
-            {visiveis.length === 1 ? "1 job na fila" : `${visiveis.length} jobs na fila`}
-            {erratas.length > 0 &&
-              ` · ${erratas.length} ${erratas.length === 1 ? "revisão de errata" : "revisões de errata"}`}
-            {savesVisiveis.length > 0 &&
-              ` · ${savesVisiveis.length} ${savesVisiveis.length === 1 ? "save a aprovar" : "saves a aprovar"}`}{" "}
-            · {formatCurrency(total)}
+            {/* Só o que existe: com a fila só de saves, "0 jobs na fila ·
+                R$ 0,00" não dizia nada (24/09/2026). O valor é dos jobs. */}
+            {[
+              visiveis.length > 0
+                ? visiveis.length === 1
+                  ? "1 job na fila"
+                  : `${visiveis.length} jobs na fila`
+                : null,
+              erratas.length > 0
+                ? `${erratas.length} ${erratas.length === 1 ? "revisão de errata" : "revisões de errata"}`
+                : null,
+              savesVisiveis.length > 0
+                ? `${savesVisiveis.length} ${savesVisiveis.length === 1 ? "save a aprovar" : "saves a aprovar"}`
+                : null,
+              visiveis.length > 0 ? formatCurrency(total) : null,
+            ]
+              .filter((parte): parte is string => parte !== null)
+              .join(" · ")}
           </span>
         )}
       </div>

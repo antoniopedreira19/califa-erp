@@ -4383,3 +4383,15 @@ Impostos; a v3 criada por ele foi gravada com `BRL` / `1,0000` / 12% / 19,53%
 098). O modal da visão agregada abre só com Honorários e Impostos. tsc e lint
 limpos.
 
+
+## ⚠️ Nota de 2026-09-24 — save no orçamento é de administrador e GP (decisão 099 §7)
+
+- `orcamentos.marcar_em_save` (administrador e GP) existia na matriz, mas
+  nada a conferia: o produtor marcava save e consumo pelo pop-up. Agora
+  `marcarSaveDaLinha` e `salvarConsumoDeSave` conferem a permissão, e a
+  planilha da versão, a mensal e a visão agregada recebem `podeMarcarSave`
+  (obrigatória). Sem ela, o pop-up abre só para ver.
+- O pop-up diz também no orçamento que o crédito só fica disponível para
+  outros jobs depois que o financeiro aprovar, na abertura do job.
+- Na matriz de permissões, as linhas passaram a se chamar "Gerar e
+  consumir Save no orçamento" e "Gerar e consumir Save no job".

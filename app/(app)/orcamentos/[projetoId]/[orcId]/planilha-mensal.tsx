@@ -62,6 +62,8 @@ interface Props {
    *  ainda não tem mês. */
   inicioPrevisto: string | null;
   readOnly: boolean;
+  /** `orcamentos.marcar_em_save` — repassado à planilha de cada mês. */
+  podeMarcarSave: boolean;
   categorias: Categoria[];
   bvsPorItem: Record<string, ItemBv[]>;
   fornecedores: FornecedorOpcao[];
@@ -85,6 +87,7 @@ export function PlanilhaMensal({
   mesPedido,
   inicioPrevisto,
   readOnly,
+  podeMarcarSave,
   categorias,
   bvsPorItem,
   fornecedores,
@@ -200,6 +203,7 @@ export function PlanilhaMensal({
         }))}
         moeda={moeda}
         readOnly={readOnly}
+        podeMarcarSave={podeMarcarSave}
         categorias={categorias}
         bvsPorItem={bvsPorItem}
         fornecedores={fornecedores}
