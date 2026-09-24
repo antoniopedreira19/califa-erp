@@ -129,7 +129,7 @@ export function ColaboradoresList({
           <SelectTrigger className="w-36">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent side="bottom" avoidCollisions={false}>
             <SelectItem value="ativos">Ativos</SelectItem>
             <SelectItem value="inativos">Inativos</SelectItem>
             <SelectItem value="todos">Todos</SelectItem>
@@ -139,7 +139,7 @@ export function ColaboradoresList({
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Tipo de contratação" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent side="bottom" avoidCollisions={false}>
             <SelectItem value="todos">Todos os tipos</SelectItem>
             <SelectItem value="pj">PJ</SelectItem>
             <SelectItem value="mei">MEI</SelectItem>
@@ -156,7 +156,7 @@ export function ColaboradoresList({
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Empresa" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent side="bottom" avoidCollisions={false}>
             <SelectItem value={TODAS}>Todas as empresas</SelectItem>
             {empresasOpcoes.map((e) => (
               <SelectItem key={e.id} value={e.id}>
@@ -172,9 +172,9 @@ export function ColaboradoresList({
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Regional" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent side="bottom" avoidCollisions={false}>
             <SelectItem value={TODAS}>Todas as regionais</SelectItem>
-            <SelectItem value={HUB}>Somente Hub</SelectItem>
+            <SelectItem value={HUB}>Hub</SelectItem>
             {regionaisFiltradas.map((r) => (
               <SelectItem key={r.id} value={r.id}>
                 {r.nome}
