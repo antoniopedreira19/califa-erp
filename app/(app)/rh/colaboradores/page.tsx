@@ -15,7 +15,12 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { ColaboradoresList, type ColaboradorRow } from "./colaboradores-list";
+import {
+  ColaboradoresList,
+  type ColaboradorRow,
+  type EmpresaOpcao,
+  type RegionalOpcao,
+} from "./colaboradores-list";
 
 export const dynamic = "force-dynamic";
 
@@ -62,17 +67,20 @@ export default async function ColaboradoresPage() {
   const jAtual = janelaDoMes(anoAtual, mesAtual);
   const jPrev = janelaDoMes(prev.ano, prev.mes);
 
-  // Colaboradores + níveis + cards agregados (agora com o mês anterior)
-  // em paralelo — docs/PERFORMANCE.md §B.
+  // Colaboradores + salários vigentes + alocações vigentes + agregados em
+  // paralelo — docs/PERFORMANCE.md §B. Salário e alocação vigentes vêm
+  // separadamente pra não gerar embed pesado e pra permitir filtrar
+  // `data_fim is null` cirurgicamente.
   const [
     colaboradoresRes,
+    salariosVigentesRes,
+    alocacoesVigentesRes,
     niveisRes,
     ativosCountRes,
     admissoesMesRes,
     admissoesPrevMesRes,
     demissoesMesRes,
     demissoesPrevMesRes,
-    folhaAtualRes,
     folhaPrevRes,
   ] = await Promise.all([
     supabase
@@ -82,6 +90,18 @@ export default async function ColaboradoresPage() {
       )
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true }),
+    supabase
+      .from("colaboradores_salarios")
+      .select("colaborador_id, salario_base")
+      .eq("tenant_id", session.activeTenant.id)
+      .is("data_fim", null),
+    supabase
+      .from("colaboradores_alocacoes")
+      .select(
+        "colaborador_id, usa_rateio_empresa, empresa_id, regional_id, empresa:empresas(id, nome_fantasia), regional:regionais(id, nome)",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .is("data_fim", null),
     supabase
       .from("niveis")
       .select("id", { count: "exact", head: true })
@@ -120,12 +140,6 @@ export default async function ColaboradoresPage() {
       .from("folhas_pagamento")
       .select("salario_base")
       .eq("tenant_id", session.activeTenant.id)
-      .eq("competencia_ano", anoAtual)
-      .eq("competencia_mes", mesAtual),
-    supabase
-      .from("folhas_pagamento")
-      .select("salario_base")
-      .eq("tenant_id", session.activeTenant.id)
       .eq("competencia_ano", prev.ano)
       .eq("competencia_mes", prev.mes),
   ]);
@@ -134,18 +148,99 @@ export default async function ColaboradoresPage() {
     console.error("[rh.colaboradores.page]", colaboradoresRes.error.message);
   }
 
+  // Mapa colaborador → salário vigente (BRL number).
+  const salarioPorColaborador = new Map<string, number>();
+  for (const s of (salariosVigentesRes.data ?? []) as {
+    colaborador_id: string;
+    salario_base: string | number;
+  }[]) {
+    salarioPorColaborador.set(s.colaborador_id, Number(s.salario_base));
+  }
+
+  // Mapa colaborador → alocação vigente com empresa/regional já resolvidas.
+  type AlocacaoVigenteEmb = {
+    colaborador_id: string;
+    usa_rateio_empresa: boolean;
+    empresa_id: string;
+    regional_id: string | null;
+    empresa: { id: string; nome_fantasia: string } | null;
+    regional: { id: string; nome: string } | null;
+  };
+  const alocacaoPorColaborador = new Map<
+    string,
+    {
+      empresa_id: string;
+      empresa_nome: string;
+      regional_id: string | null;
+      regional_nome: string | null;
+      usa_rateio_empresa: boolean;
+    }
+  >();
+  const empresasMap = new Map<string, string>(); // id → nome
+  const regionaisPorEmpresa = new Map<string, Map<string, string>>(); // empresa_id → (regional_id → nome)
+  for (const a of (alocacoesVigentesRes.data ?? []) as unknown as AlocacaoVigenteEmb[]) {
+    if (!a.empresa) continue;
+    empresasMap.set(a.empresa.id, a.empresa.nome_fantasia);
+    if (a.regional) {
+      const bucket =
+        regionaisPorEmpresa.get(a.empresa.id) ??
+        new Map<string, string>();
+      bucket.set(a.regional.id, a.regional.nome);
+      regionaisPorEmpresa.set(a.empresa.id, bucket);
+    }
+    alocacaoPorColaborador.set(a.colaborador_id, {
+      empresa_id: a.empresa.id,
+      empresa_nome: a.empresa.nome_fantasia,
+      regional_id: a.regional?.id ?? null,
+      regional_nome: a.regional?.nome ?? null,
+      usa_rateio_empresa: a.usa_rateio_empresa,
+    });
+  }
+
   const linhas: ColaboradorRow[] = ((colaboradoresRes.data ?? []) as any[]).map(
-    (c) => ({
-      id: c.id,
-      nome: c.nome,
-      tipo_contratacao: c.tipo_contratacao,
-      funcao: c.funcao,
-      status: c.status,
-      data_admissao: c.data_admissao,
-      data_encerramento: c.data_encerramento,
-      nivel_codigo: c.nivel?.codigo ?? null,
-    }),
+    (c) => {
+      const aloc = alocacaoPorColaborador.get(c.id);
+      return {
+        id: c.id,
+        nome: c.nome,
+        tipo_contratacao: c.tipo_contratacao,
+        funcao: c.funcao,
+        status: c.status,
+        data_admissao: c.data_admissao,
+        data_encerramento: c.data_encerramento,
+        nivel_codigo: c.nivel?.codigo ?? null,
+        salario_vigente: salarioPorColaborador.get(c.id) ?? null,
+        empresa_id: aloc?.empresa_id ?? null,
+        empresa_nome: aloc?.empresa_nome ?? null,
+        regional_id: aloc?.regional_id ?? null,
+        regional_nome: aloc?.regional_nome ?? null,
+        usa_rateio_empresa: aloc?.usa_rateio_empresa ?? false,
+      };
+    },
   );
+
+  // Opções pros filtros de empresa e regional. Empresas vêm da tabela real
+  // pra cobrir também as que não têm ninguém alocado (raro, mas correto).
+  const empresasRes = await supabase
+    .from("empresas")
+    .select("id, nome_fantasia")
+    .eq("tenant_id", session.activeTenant.id)
+    .order("nome_fantasia", { ascending: true });
+  const empresasOpcoes: EmpresaOpcao[] = ((empresasRes.data ?? []) as {
+    id: string;
+    nome_fantasia: string;
+  }[]).map((e) => ({ id: e.id, nome: e.nome_fantasia }));
+
+  const regionaisRes = await supabase
+    .from("regionais")
+    .select("id, nome, empresa_id")
+    .eq("tenant_id", session.activeTenant.id)
+    .order("nome", { ascending: true });
+  const regionaisOpcoes: RegionalOpcao[] = ((regionaisRes.data ?? []) as {
+    id: string;
+    nome: string;
+    empresa_id: string;
+  }[]).map((r) => ({ id: r.id, nome: r.nome, empresa_id: r.empresa_id }));
 
   const niveisAtivosCount = niveisRes.count ?? 0;
 
@@ -155,19 +250,24 @@ export default async function ColaboradoresPage() {
   const demissoesMes = demissoesMesRes.count ?? 0;
   const demissoesPrev = demissoesPrevMesRes.count ?? 0;
 
-  const folhaAtualLinhas =
-    (folhaAtualRes.data ?? []) as { salario_base: string | number }[];
+  // Valor da folha atual = soma dos salários vigentes de colaboradores
+  // ATIVOS. Reflete o custo do quadro no minuto atual, independente de
+  // a folha da competência ter sido gerada.
+  const idsAtivos = new Set(
+    linhas.filter((l) => l.status === "ativo").map((l) => l.id),
+  );
+  let folhaAtualValor = 0;
+  for (const [colaboradorId, salario] of salarioPorColaborador) {
+    if (idsAtivos.has(colaboradorId)) folhaAtualValor += salario;
+  }
+
   const folhaPrevLinhas =
     (folhaPrevRes.data ?? []) as { salario_base: string | number }[];
-  const folhaAtualGerada = folhaAtualLinhas.length > 0;
-  const folhaAtualValor = folhaAtualLinhas.reduce(
-    (acc, l) => acc + Number(l.salario_base),
-    0,
-  );
   const folhaPrevValor = folhaPrevLinhas.reduce(
     (acc, l) => acc + Number(l.salario_base),
     0,
   );
+  const temFolhaPrev = folhaPrevLinhas.length > 0;
 
   const brl = new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -196,7 +296,7 @@ export default async function ColaboradoresPage() {
       <PageHeader
         eyebrow="RH"
         title="Colaboradores"
-        description="Cadastro do quadro atual e inativos. Nível de cargo, alocação por empresa e regional, histórico salarial."
+        description="Quadro atual da agência, valor total da folha e alocação por empresa e regional. Clique em um colaborador para ver o detalhe."
         icon={Users}
       />
 
@@ -215,12 +315,10 @@ export default async function ColaboradoresPage() {
         />
         <KpiCard
           icone={<Wallet className="h-4 w-4" />}
-          rotulo={`Folha de ${nomeMesAtual}`}
-          valorPrincipal={
-            folhaAtualGerada ? brl.format(folhaAtualValor) : "—"
-          }
+          rotulo={`Valor da folha (${nomeMesAtual})`}
+          valorPrincipal={brl.format(folhaAtualValor)}
           rodape={
-            folhaAtualGerada ? (
+            temFolhaPrev ? (
               <DeltaPercentual
                 atual={folhaAtualValor}
                 anterior={folhaPrevValor}
@@ -228,11 +326,11 @@ export default async function ColaboradoresPage() {
               />
             ) : (
               <span className="text-xs text-muted-foreground">
-                Folha não gerada
+                Soma dos {ativosCount} salários vigentes
               </span>
             )
           }
-          destaque={folhaAtualGerada}
+          destaque
         />
         <KpiCard
           icone={<ArrowUpRight className="h-4 w-4" />}
@@ -284,6 +382,8 @@ export default async function ColaboradoresPage() {
         <ColaboradoresList
           colaboradores={linhas}
           niveisAtivosCount={niveisAtivosCount}
+          empresasOpcoes={empresasOpcoes}
+          regionaisOpcoes={regionaisOpcoes}
         />
       )}
     </div>

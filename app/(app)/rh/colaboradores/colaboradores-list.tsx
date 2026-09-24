@@ -24,22 +24,62 @@ export type ColaboradorRow = {
   data_admissao: string;
   data_encerramento: string | null;
   nivel_codigo: string | null;
+  salario_vigente: number | null;
+  empresa_id: string | null;
+  empresa_nome: string | null;
+  regional_id: string | null;
+  regional_nome: string | null;
+  usa_rateio_empresa: boolean;
 };
+
+export type EmpresaOpcao = { id: string; nome: string };
+export type RegionalOpcao = { id: string; nome: string; empresa_id: string };
 
 type StatusFiltro = "ativos" | "inativos" | "todos";
 type TipoFiltro = "todos" | TipoContratacao;
 
+// Sentinel para "todas" (Radix Select não aceita value="").
+const TODAS = "__todas__";
+// Sentinel para "somente Hub" no filtro de regional (colaboradores com toggle
+// usa_rateio_empresa=true).
+const HUB = "__hub__";
+
+const brl = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
 export function ColaboradoresList({
   colaboradores,
   niveisAtivosCount,
+  empresasOpcoes,
+  regionaisOpcoes,
 }: {
   colaboradores: ColaboradorRow[];
   niveisAtivosCount: number;
+  empresasOpcoes: EmpresaOpcao[];
+  regionaisOpcoes: RegionalOpcao[];
 }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [status, setStatus] = React.useState<StatusFiltro>("ativos");
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
+  const [empresaFiltro, setEmpresaFiltro] = React.useState<string>(TODAS);
+  const [regionalFiltro, setRegionalFiltro] = React.useState<string>(TODAS);
+
+  // Regionais disponíveis no dropdown: quando uma empresa está selecionada,
+  // só as regionais dela; senão, todas do tenant. Hub aparece sempre.
+  const regionaisFiltradas = React.useMemo(() => {
+    if (empresaFiltro === TODAS) return regionaisOpcoes;
+    return regionaisOpcoes.filter((r) => r.empresa_id === empresaFiltro);
+  }, [regionaisOpcoes, empresaFiltro]);
+
+  // Se a regional selecionada não pertence à empresa nova, zera pra "Todas".
+  React.useEffect(() => {
+    if (regionalFiltro === TODAS || regionalFiltro === HUB) return;
+    const ainda = regionaisFiltradas.some((r) => r.id === regionalFiltro);
+    if (!ainda) setRegionalFiltro(TODAS);
+  }, [regionaisFiltradas, regionalFiltro]);
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -47,14 +87,28 @@ export function ColaboradoresList({
       if (status === "ativos" && c.status !== "ativo") return false;
       if (status === "inativos" && c.status !== "inativo") return false;
       if (tipo !== "todos" && c.tipo_contratacao !== tipo) return false;
+      if (empresaFiltro !== TODAS && c.empresa_id !== empresaFiltro) return false;
+      if (regionalFiltro === HUB) {
+        if (!c.usa_rateio_empresa) return false;
+      } else if (regionalFiltro !== TODAS) {
+        if (c.regional_id !== regionalFiltro) return false;
+      }
       if (!q) return true;
       return (
         c.nome.toLowerCase().includes(q) ||
         c.funcao.toLowerCase().includes(q) ||
-        (c.nivel_codigo ?? "").toLowerCase().includes(q)
+        (c.empresa_nome ?? "").toLowerCase().includes(q) ||
+        (c.regional_nome ?? "").toLowerCase().includes(q)
       );
     });
-  }, [colaboradores, busca, status, tipo]);
+  }, [colaboradores, busca, status, tipo, empresaFiltro, regionalFiltro]);
+
+  // Rodapé do card: total do que está filtrado. Ajuda a perceber quanto
+  // "vale" o recorte da tela quando o usuário filtra por empresa/regional.
+  const totalFiltrado = React.useMemo(
+    () => filtered.reduce((acc, c) => acc + (c.salario_vigente ?? 0), 0),
+    [filtered],
+  );
 
   return (
     <div className="space-y-4">
@@ -62,7 +116,7 @@ export function ColaboradoresList({
         <div className="relative flex-1 max-w-md min-w-[240px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, função ou nível..."
+            placeholder="Buscar por nome, função, empresa ou regional..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="pl-9"
@@ -72,7 +126,7 @@ export function ColaboradoresList({
           value={status}
           onValueChange={(v) => setStatus(v as StatusFiltro)}
         >
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -82,7 +136,7 @@ export function ColaboradoresList({
           </SelectContent>
         </Select>
         <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-44">
             <SelectValue placeholder="Tipo de contratação" />
           </SelectTrigger>
           <SelectContent>
@@ -92,6 +146,40 @@ export function ColaboradoresList({
             <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
             <SelectItem value="clt">CLT</SelectItem>
             <SelectItem value="estagio">Estágio</SelectItem>
+            <SelectItem value="socio">Sócio</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={empresaFiltro}
+          onValueChange={(v) => setEmpresaFiltro(v)}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Empresa" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TODAS}>Todas as empresas</SelectItem>
+            {empresasOpcoes.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={regionalFiltro}
+          onValueChange={(v) => setRegionalFiltro(v)}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Regional" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TODAS}>Todas as regionais</SelectItem>
+            <SelectItem value={HUB}>Somente Hub</SelectItem>
+            {regionaisFiltradas.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.nome}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-2">
@@ -136,17 +224,14 @@ export function ColaboradoresList({
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                   Função
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-24">
-                  Nível
+                <th className="px-4 py-3 text-right font-medium text-muted-foreground w-32">
+                  Valor
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
-                  Contratação
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-28">
+                  Contrato
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
-                  Admissão
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
-                  Status
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-64">
+                  Alocação
                 </th>
               </tr>
             </thead>
@@ -163,7 +248,9 @@ export function ColaboradoresList({
                       router.push(`/rh/colaboradores/${c.id}`);
                     }
                   }}
-                  className="cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-muted/50"
+                  className={`cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-muted/50 ${
+                    c.status === "inativo" ? "opacity-60" : ""
+                  }`}
                 >
                   <td className="px-4 py-3 font-medium">
                     <Link
@@ -174,40 +261,44 @@ export function ColaboradoresList({
                     >
                       {c.nome}
                     </Link>
+                    {c.status === "inativo" && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        (inativo)
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {c.funcao}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {c.nivel_codigo ?? "—"}
+                  <td className="px-4 py-3 text-right tabular-nums font-medium">
+                    {c.salario_vigente != null
+                      ? brl.format(c.salario_vigente)
+                      : "—"}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {tipoContratacaoLabel(c.tipo_contratacao)}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground tabular-nums">
-                    {formatarData(c.data_admissao)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-                        c.status === "ativo"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          c.status === "ativo"
-                            ? "bg-emerald-500"
-                            : "bg-muted-foreground"
-                        }`}
-                      />
-                      {c.status === "ativo" ? "Ativo" : "Inativo"}
-                    </span>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatarAlocacao(c)}
                   </td>
                 </tr>
               ))}
             </tbody>
+            <tfoot className="border-t border-border bg-muted/30">
+              <tr>
+                <td
+                  colSpan={2}
+                  className="px-4 py-3 text-xs font-medium text-muted-foreground"
+                >
+                  {filtered.length}{" "}
+                  {filtered.length === 1 ? "colaborador" : "colaboradores"}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                  {brl.format(totalFiltrado)}
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
@@ -215,9 +306,9 @@ export function ColaboradoresList({
   );
 }
 
-function formatarData(iso: string): string {
-  // "2026-09-16" → "16/09/2026"
-  const [ano, mes, dia] = iso.split("-");
-  if (!ano || !mes || !dia) return iso;
-  return `${dia}/${mes}/${ano}`;
+function formatarAlocacao(c: ColaboradorRow): string {
+  if (!c.empresa_nome) return "—";
+  if (c.usa_rateio_empresa) return `${c.empresa_nome} · Hub`;
+  if (c.regional_nome) return `${c.empresa_nome} · ${c.regional_nome}`;
+  return c.empresa_nome;
 }

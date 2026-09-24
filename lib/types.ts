@@ -3044,7 +3044,8 @@ export type TipoContratacao =
   | "mei"
   | "clt_recibo"
   | "clt"
-  | "estagio";
+  | "estagio"
+  | "socio";
 
 export function tipoContratacaoLabel(tipo: TipoContratacao): string {
   switch (tipo) {
@@ -3058,6 +3059,8 @@ export function tipoContratacaoLabel(tipo: TipoContratacao): string {
       return "CLT";
     case "estagio":
       return "Estágio";
+    case "socio":
+      return "Sócio";
   }
 }
 
