@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, GraduationCap, Plus } from "lucide-react";
+import { Search, GraduationCap, Plus, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -66,6 +66,7 @@ export function ColaboradoresList({
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
   const [empresaFiltro, setEmpresaFiltro] = React.useState<string>(TODAS);
   const [regionalFiltro, setRegionalFiltro] = React.useState<string>(TODAS);
+  const [salariosOcultos, setSalariosOcultos] = React.useState(false);
 
   // Regionais disponíveis no dropdown: quando uma empresa está selecionada,
   // só as regionais dela; senão, todas do tenant. Hub aparece sempre.
@@ -241,7 +242,26 @@ export function ColaboradoresList({
                   Função
                 </th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground w-32">
-                  Valor
+                  <span className="inline-flex items-center gap-1.5">
+                    Valor
+                    <button
+                      type="button"
+                      onClick={() => setSalariosOcultos((v) => !v)}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                      aria-label={
+                        salariosOcultos ? "Mostrar salários" : "Esconder salários"
+                      }
+                      title={
+                        salariosOcultos ? "Mostrar salários" : "Esconder salários"
+                      }
+                    >
+                      {salariosOcultos ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </span>
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-28">
                   Contrato
@@ -287,9 +307,11 @@ export function ColaboradoresList({
                     {c.funcao}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium">
-                    {c.salario_vigente != null
-                      ? brl.format(c.salario_vigente)
-                      : "—"}
+                    {c.salario_vigente == null
+                      ? "—"
+                      : salariosOcultos
+                        ? "R$ ●●●●●●"
+                        : brl.format(c.salario_vigente)}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {tipoContratacaoLabel(c.tipo_contratacao)}
@@ -310,7 +332,7 @@ export function ColaboradoresList({
                   {filtered.length === 1 ? "colaborador" : "colaboradores"}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                  {brl.format(totalFiltrado)}
+                  {salariosOcultos ? "R$ ●●●●●●" : brl.format(totalFiltrado)}
                 </td>
                 <td colSpan={2} />
               </tr>
