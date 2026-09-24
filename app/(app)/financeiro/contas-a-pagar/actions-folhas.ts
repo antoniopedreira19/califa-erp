@@ -28,6 +28,7 @@ function subtipoCodigoParaContratacao(tipo: TipoContratacao): string {
       return "005"; // Estagiário
     case "pj":
     case "mei":
+    case "socio":
       return "011"; // ProLabore
   }
 }
