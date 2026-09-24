@@ -75,6 +75,8 @@ export default async function ColaboradoresPage() {
     colaboradoresRes,
     salariosVigentesRes,
     alocacoesVigentesRes,
+    empresasRes,
+    regionaisRes,
     niveisRes,
     ativosCountRes,
     admissoesMesRes,
@@ -94,13 +96,27 @@ export default async function ColaboradoresPage() {
       .select("colaborador_id, valor")
       .eq("tenant_id", session.activeTenant.id)
       .is("data_fim", null),
+    // Sem embed em empresa/regional — colaboradores_alocacoes tem duas FKs
+    // pra regionais (simples e composta com empresa_id), então PostgREST
+    // ambigua o embed e devolve null silenciosamente. Resolvo por mapa
+    // usando empresasRes/regionaisRes.
     supabase
       .from("colaboradores_alocacoes")
       .select(
-        "colaborador_id, usa_rateio_empresa, empresa_id, regional_id, empresa:empresas(id, nome_fantasia), regional:regionais(id, nome)",
+        "colaborador_id, usa_rateio_empresa, empresa_id, regional_id",
       )
       .eq("tenant_id", session.activeTenant.id)
       .is("data_fim", null),
+    supabase
+      .from("empresas")
+      .select("id, nome_fantasia")
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome_fantasia", { ascending: true }),
+    supabase
+      .from("regionais")
+      .select("id, nome, empresa_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome", { ascending: true }),
     supabase
       .from("niveis")
       .select("id", { count: "exact", head: true })
@@ -150,15 +166,23 @@ export default async function ColaboradoresPage() {
     salarioPorColaborador.set(s.colaborador_id, Number(s.valor));
   }
 
-  // Mapa colaborador → alocação vigente com empresa/regional já resolvidas.
-  type AlocacaoVigenteEmb = {
-    colaborador_id: string;
-    usa_rateio_empresa: boolean;
+  // Mapas de lookup pra resolver empresa/regional das alocações.
+  const empresaNomePorId = new Map<string, string>();
+  for (const e of (empresasRes.data ?? []) as {
+    id: string;
+    nome_fantasia: string;
+  }[]) {
+    empresaNomePorId.set(e.id, e.nome_fantasia);
+  }
+  const regionalNomePorId = new Map<string, string>();
+  for (const r of (regionaisRes.data ?? []) as {
+    id: string;
+    nome: string;
     empresa_id: string;
-    regional_id: string | null;
-    empresa: { id: string; nome_fantasia: string } | null;
-    regional: { id: string; nome: string } | null;
-  };
+  }[]) {
+    regionalNomePorId.set(r.id, r.nome);
+  }
+
   const alocacaoPorColaborador = new Map<
     string,
     {
@@ -169,23 +193,21 @@ export default async function ColaboradoresPage() {
       usa_rateio_empresa: boolean;
     }
   >();
-  const empresasMap = new Map<string, string>(); // id → nome
-  const regionaisPorEmpresa = new Map<string, Map<string, string>>(); // empresa_id → (regional_id → nome)
-  for (const a of (alocacoesVigentesRes.data ?? []) as unknown as AlocacaoVigenteEmb[]) {
-    if (!a.empresa) continue;
-    empresasMap.set(a.empresa.id, a.empresa.nome_fantasia);
-    if (a.regional) {
-      const bucket =
-        regionaisPorEmpresa.get(a.empresa.id) ??
-        new Map<string, string>();
-      bucket.set(a.regional.id, a.regional.nome);
-      regionaisPorEmpresa.set(a.empresa.id, bucket);
-    }
+  for (const a of (alocacoesVigentesRes.data ?? []) as {
+    colaborador_id: string;
+    usa_rateio_empresa: boolean;
+    empresa_id: string;
+    regional_id: string | null;
+  }[]) {
+    const empresaNome = empresaNomePorId.get(a.empresa_id);
+    if (!empresaNome) continue;
     alocacaoPorColaborador.set(a.colaborador_id, {
-      empresa_id: a.empresa.id,
-      empresa_nome: a.empresa.nome_fantasia,
-      regional_id: a.regional?.id ?? null,
-      regional_nome: a.regional?.nome ?? null,
+      empresa_id: a.empresa_id,
+      empresa_nome: empresaNome,
+      regional_id: a.regional_id,
+      regional_nome: a.regional_id
+        ? regionalNomePorId.get(a.regional_id) ?? null
+        : null,
       usa_rateio_empresa: a.usa_rateio_empresa,
     });
   }
@@ -214,21 +236,11 @@ export default async function ColaboradoresPage() {
 
   // Opções pros filtros de empresa e regional. Empresas vêm da tabela real
   // pra cobrir também as que não têm ninguém alocado (raro, mas correto).
-  const empresasRes = await supabase
-    .from("empresas")
-    .select("id, nome_fantasia")
-    .eq("tenant_id", session.activeTenant.id)
-    .order("nome_fantasia", { ascending: true });
   const empresasOpcoes: EmpresaOpcao[] = ((empresasRes.data ?? []) as {
     id: string;
     nome_fantasia: string;
   }[]).map((e) => ({ id: e.id, nome: e.nome_fantasia }));
 
-  const regionaisRes = await supabase
-    .from("regionais")
-    .select("id, nome, empresa_id")
-    .eq("tenant_id", session.activeTenant.id)
-    .order("nome", { ascending: true });
   const regionaisOpcoes: RegionalOpcao[] = ((regionaisRes.data ?? []) as {
     id: string;
     nome: string;
