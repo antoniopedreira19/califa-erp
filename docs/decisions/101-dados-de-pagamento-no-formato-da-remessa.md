@@ -104,5 +104,27 @@ gravado na remessa. As remessas de teste 13–15, de 21/09, tinham ficado
 sem os títulos e foram apagadas no mesmo dia (autorização do Tiago).
 Assim, a única remessa registrada é a 16, e o próximo sequencial é 17.
 
-Falta: a transmissão pelo internet banking e o retorno da Karen; depois,
-um teste de cada chave restante (e-mail, telefone, aleatória) e uma TED.
+⚠️ **24/09/2026:** o PE000016 não chegou a ser transmitido. O colaborador de
+teste foi apagado na importação dos colaboradores reais (frente do RH), e
+com ele a folha e o título; a remessa 16 foi apagada com autorização do
+Tiago. O teste passou a usar o fornecedor "Antonio" (mesmo CPF, chave CPF
+e conta Nubank), com dois títulos avulsos de R$ 0,05:
+
+| Arquivo | Forma | Pagamento |
+|---|---|---|
+| `PE000017.TXT` | PIX por chave CPF (forma 45) | 24/09/2026 |
+| `PE000018.TXT` | TED (forma 03, finalidade 00005, câmara 018) | 25/09/2026 |
+
+A TED foi para 25/09 porque o arquivo saiu às 18h, depois do horário limite
+da TED do dia. O PE000018 bate com o PE000013 aprovado nos campos de
+estrutura. Três campos diferem, todos dentro do manual: tipo de conta
+`CC` (a Publi mandava `00`), endereço do favorecido em branco (opcional) e
+histórico `0000` (padrão do convênio). Os dois hashes conferem com
+`cnab_remessas`. O Tiago abriu um chamado novo no Santander, que prevê
+"Teste de arquivo" no Internet Banking antes da produção.
+
+Teste de folha não se faz: gerar folha cria linhas para todos os
+colaboradores reais.
+
+Falta: a validação e a transmissão dos dois arquivos; depois, um teste de
+cada chave restante (e-mail, telefone, aleatória).

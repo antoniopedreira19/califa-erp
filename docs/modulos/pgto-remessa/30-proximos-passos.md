@@ -18,6 +18,8 @@ Atualizado a cada fechamento de rodada. Prioridade decrescente dentro de cada bl
 
 > ⚠️ **23/09/2026:** gerado o `PE000016.TXT` pelo fluxo real: folha 09/2026 do Antonio (teste), R$ 0,05, chave CPF, sequencial 16 (produção). O segmento B do PIX já segue as três críticas do Santander (decisão 101). As remessas de teste 13–15 de 21/09, que tinham ficado sem os títulos, foram apagadas em 23/09 com autorização do Tiago; o próximo sequencial é 17. Falta transmitir no internet banking e avisar a Karen (proposta 4557231). Depois, testar as outras chaves (e-mail, telefone, aleatória) e uma TED.
 
+> ⚠️ **24/09/2026:** o PE000016 ficou sem efeito (o colaborador de teste foi apagado na importação do RH, e a remessa 16 com ele). Gerados pelo fluxo real, para o fornecedor de teste "Antonio" (AV-00003 e AV-00004, R$ 0,05 cada): `PE000017.TXT` (PIX, 24/09) e `PE000018.TXT` (TED, 25/09). Próximo sequencial: 19. Falta a validação e a transmissão pelo chamado novo do Santander. Detalhes na decisão 101 §6. **Nunca gere folha para teste:** ela cria linhas para todos os colaboradores.
+
 - [ ] **Gerar o primeiro `.REM`** pelo botão da tela, com a folha do "Teste" (R$ 1). Terreno já está pronto no banco: 2 `contas_avulsas` aprovadas materializadas em 21/09/2026.
 - [ ] **Importar no site do Santander** e confirmar aceitação. Se rejeitar, o `.RET` traz o código de ocorrência (seção 5 do manual, pág. 61) — mapear qual campo desalinhou.
 - [ ] **Se PIX for aceito**: R$ 1,00 desce na chave PIX (CPF 86098531528) → E2E validado.
