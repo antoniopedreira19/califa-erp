@@ -1470,8 +1470,11 @@ function ModoGerar({
             O cliente paga o valor nesta nota, o serviço não acontece neste
             projeto, e o valor vira crédito {deCliente} para um projeto
             seguinte. A linha sai do valor do job e continua no faturamento.
-            {contextoJob &&
-              " O crédito só fica disponível para outros jobs depois que o financeiro aprovar."}
+            {/* Vale no orçamento também (24/09/2026): o pedido segue com o
+                envio do job e o crédito espera a aprovação na abertura. */}
+            {contextoJob
+              ? " O crédito só fica disponível para outros jobs depois que o financeiro aprovar."
+              : " O crédito só fica disponível para outros jobs depois que o financeiro aprovar, na abertura do job."}
           </p>
         </div>
       </div>

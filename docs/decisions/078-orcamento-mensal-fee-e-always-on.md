@@ -193,6 +193,15 @@ O que mudou:
   linha por mês com faturamento, no valor do mês (travado). A action relê o
   faturamento de cada mês, confere uma linha por mês e grava `mes` e
   `valor_save` em `jobs_previsao_recebimento`.
+
+  > ⚠️ **Centavos entre o total e a soma dos meses (24/09/2026).** Cada mês
+  > é arredondado em centavos; o faturamento previsto do job é o total,
+  > arredondado uma vez. Os dois podem diferir em centavos — no JOB-0034,
+  > R$ 381.359,51 no job e R$ 381.359,52 na soma dos meses —, como dividir
+  > R$ 100 em três parcelas. Por isso a regra "as parcelas precisam somar o
+  > faturamento" não vale para o mensal. O que se cobra são as notas
+  > mensais, e elas estão certas; o Tiago decidiu não forçar o total a ser
+  > a soma dos meses.
 - **Fluxo de caixa:** `vw_fluxo_caixa` esconde a previsão de um mês só
   quando aquele mês foi enviado; a receita própria sai de
   `valor - valor_save` da linha. `vw_faturamento_pendente` tira o save do

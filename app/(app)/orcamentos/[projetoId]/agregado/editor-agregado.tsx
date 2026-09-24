@@ -106,6 +106,9 @@ interface Props {
   /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional
    *  no modal de parâmetros (decisão do Tiago, 14/09/2026). */
   podeEditarImpostos: boolean;
+  /** `orcamentos.marcar_em_save` — administrador e GP geram e consomem
+   *  save (24/09/2026). Sem ela o pop-up de save abre só para ver. */
+  podeMarcarSave: boolean;
   /** Quantos orçamentos o projeto já tem — base do código previsto dos novos. */
   orcamentosExistentes: number;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
@@ -176,6 +179,7 @@ export function EditorAgregado({
   nomeDoGrupo,
   honorariosCliente,
   podeEditarImpostos,
+  podeMarcarSave,
   orcamentosExistentes,
   inicial,
   exportaveis,
@@ -1159,7 +1163,7 @@ export function EditorAgregado({
         }
         clienteNome={projeto.cliente ?? "cliente"}
         onMarcarSave={
-          linhaSave
+          linhaSave && podeMarcarSave
             ? async (marcar) => {
                 const r = await marcarSaveDaLinha(linhaSave.item.id, marcar);
                 if (r.ok) router.refresh();
@@ -1168,7 +1172,7 @@ export function EditorAgregado({
             : undefined
         }
         onSalvarConsumo={
-          linhaSave
+          linhaSave && podeMarcarSave
             ? async (origens) => {
                 const r = await salvarConsumoDeSave(
                   linhaSave.item.id,

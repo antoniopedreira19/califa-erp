@@ -4200,3 +4200,47 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
 - **Não conferido pela tela:** não existe verba em "devolução pendente" no
   banco. Montar uma exige o fluxo inteiro, com o login do financeiro.
 
+
+## ⚠️ Nota de 2026-09-24 — save de administrador e GP, errata numa transação e horário da Comunicação
+
+### Quem mexe no save (decisão 099 §7)
+
+- Gerar, consumir, retirar, cancelar pedido e enviar o legado: **administrador
+  ou qualquer GP**, responsável pelo job ou não. O produtor não mexe no save.
+- `jobs.consumir_save` ficou com administrador e GP. As quatro actions de
+  `save-errata-actions.ts` já passavam por esse portão; a conferência de
+  responsável (`recusaQuemNaoResponde`) saiu.
+- A seção da planilha recebe `podeMexerNoSave` (obrigatória; a página do
+  financeiro manda `false`). O modo do pop-up (`pedido` no job aberto,
+  `direto` no devolvido) deixou de depender de `podeAcoes`/`podeGerarPP`,
+  que continuam valendo para errata e PP com a regra "admin ou responsável".
+- No banco, `save_pode_mexer_no_job` é "administrador ou GP ativo", e
+  `cancelar_pedido_save` também confere (`20260924100001`).
+
+### Errata comum numa transação
+
+- `registrarErrata` agora só confere e calcula; as gravações vão todas para
+  `registrar_errata_do_job` (`20260924100005`), numa transação: a errata, as
+  linhas novas com a âncora de realizado, os itens da errata, as alteradas,
+  as removidas, o BV "a negociar" cancelado, os números do job e a revisão
+  da abertura. Ou grava tudo, ou nada.
+- SECURITY INVOKER: valem as mesmas policies e travas de antes. Mensagem de
+  trava do banco (P0001) aparece na tela depois de "Não foi possível
+  registrar a errata, e nada foi gravado."
+- Acabaram os "desfazer" manuais e a mensagem "Errata registrada, mas o
+  item X não foi atualizado. Avise o suporte".
+
+### Envio para faturamento: autor e papel no banco
+
+- Gatilho `trg_envio_faturamento_autor` (`20260924100002`): só
+  administrador ou GP inserem envio, e `enviado_por` é sempre quem está
+  logado, mesmo que o payload diga outro nome. No UPDATE o autor não muda.
+  A tela já fazia isso; o banco aceitava o envio direto pela API de
+  qualquer membro.
+
+### Horário da Comunicação
+
+- `lib/data/job-chat.ts` monta datas e horas no servidor, e o servidor da
+  Vercel roda em UTC: as mensagens apareciam 3 horas adiantadas e, depois
+  das 21:00, com a data do dia seguinte. Agora formata no horário de
+  Brasília. Coluna `date` continua como corte de string.

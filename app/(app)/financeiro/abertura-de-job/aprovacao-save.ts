@@ -24,7 +24,7 @@ import {
   type LinhaDoEspelho,
   type TotaisParaRpc,
 } from "@/lib/data/espelhos-do-job";
-import { pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
+import { grupoDoPedido, pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import type {
   OrigemDeSave,
@@ -90,6 +90,84 @@ export function numerosDasLinhasComSave(
     };
   }
   return saida;
+}
+
+/** O cabeçalho do job no financeiro, na conta do financeiro. */
+export interface ResumoDoFinanceiro {
+  valorJob: number;
+  deducoesDoResultado: number;
+  faturamentoPrevisto: number;
+  /** O planejado que os pedidos de GERAR save que ainda aguardam zeraram na
+   *  linha. Soma-se ao planejado da planilha para o resultado planejado. */
+  planejadoDosPedidos: number;
+}
+
+/**
+ * Valor do job, deduções e faturamento previsto como o FINANCEIRO vê
+ * (decisão 099, §3), mais o planejado que um "gerar save" que aguarda já
+ * zerou na linha (24/09/2026).
+ *
+ * A página do job no financeiro montava o cabeçalho com as linhas cruas —
+ * como a produção vê —, e durante um pedido o "Valor do job" já aparecia
+ * sem a linha, enquanto "Visualizar Jobs" e os espelhos mostravam o número
+ * de antes. Aqui nenhum pedido conta: é o número oficial até a aprovação.
+ * `null` quando a leitura falha — quem chama volta aos números da planilha.
+ */
+export async function resumoComoOFinanceiroVe(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<ResumoDoFinanceiro | null> {
+  const lida = await lerBaseDosEspelhos(supabase, tenantId, jobId, {
+    comMeses: false,
+  });
+  if (!lida.ok) {
+    console.error("[job-financeiro.resumo]", lida.message);
+    return null;
+  }
+  const totais = totaisDoFinanceiro(lida.base.itens, lida.base);
+
+  const linhasDevolvidas = lida.base.pedidos
+    .filter(
+      (p) =>
+        p.situacao === "aguardando" &&
+        p.momento === "job_aberto" &&
+        p.tipo === "gera" &&
+        p.jobItemOrcadoId !== null,
+    )
+    .map((p) => p.jobItemOrcadoId as string);
+
+  let planejadoDosPedidos = 0;
+  if (linhasDevolvidas.length > 0) {
+    const { data, error } = await supabase
+      .from("jobs_itens_orcado")
+      .select("id, planejado_antes_save")
+      .eq("tenant_id", tenantId)
+      .eq("job_id", jobId)
+      .in("id", linhasDevolvidas);
+    if (error) {
+      console.error("[job-financeiro.resumo.planejado]", error.message);
+      return null;
+    }
+    for (const linha of (data ?? []) as {
+      id: string;
+      planejado_antes_save: PlanejadoAntesDoSave | null;
+    }[]) {
+      const antes = linha.planejado_antes_save;
+      planejadoDosPedidos += antes
+        ? Number(antes.valor_unitario ?? 0) *
+          Number(antes.quantidade ?? 0) *
+          Number(antes.dias_meses ?? 0)
+        : 0;
+    }
+  }
+
+  return {
+    valorJob: totais.valorJob,
+    deducoesDoResultado: totais.deducoesDoResultado,
+    faturamentoPrevisto: totais.faturamentoPrevisto,
+    planejadoDosPedidos,
+  };
 }
 
 /**
@@ -312,7 +390,7 @@ export async function carregarAprovacaoDeSave(
   const { data: p, error } = await supabase
     .from("saves_aprovacoes")
     .select(
-      "id, job_id, job_item_orcado_id, situacao, tipo, momento, item_descricao, grupo_nome, valor, origens, enviado_por, enviado_em, errata_id, valor_job_antes, valor_job_depois, faturamento_previsto_antes, faturamento_previsto_depois",
+      "id, job_id, job_item_orcado_id, situacao, tipo, momento, item_descricao, grupo_nome, mes_do_pedido, valor, origens, enviado_por, enviado_em, errata_id, valor_job_antes, valor_job_depois, faturamento_previsto_antes, faturamento_previsto_depois",
     )
     .eq("id", pedidoId)
     .eq("tenant_id", tenantId)
@@ -367,7 +445,8 @@ export async function carregarAprovacaoDeSave(
       tipo: p.tipo as SaveAprovacaoTipo,
       momento: p.momento as SaveAprovacaoMomento,
       itemDescricao: p.item_descricao,
-      grupoNome: p.grupo_nome ?? null,
+      // No mensal, com o mês na frente (24/09/2026).
+      grupoNome: grupoDoPedido(p.grupo_nome ?? null, p.mes_do_pedido ?? null),
       valor: Number(p.valor ?? 0),
       origens: origens
         .map((o) => ({

@@ -16,6 +16,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { checarPermissao } from "@/lib/permissoes-server";
 
 export type ActionResult =
   | { ok: true }
@@ -92,6 +93,12 @@ export async function marcarSaveDaLinha(
   marcar: boolean,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  // Save no orçamento é do administrador e do GP (24/09/2026) — o
+  // produtor edita o orçamento, mas não gera nem consome save.
+  const gate = await checarPermissao(session, "orcamentos.marcar_em_save", {
+    item_id: itemId,
+  });
+  if (!gate.ok) return gate;
   const carga = await itemEditavel(itemId, session.activeTenant.id);
   if (!carga.ok) return carga;
   const { item, supabase } = carga;
@@ -147,6 +154,12 @@ export async function salvarConsumoDeSave(
   origens: OrigemEscolhida[],
 ): Promise<ActionResult> {
   const session = await requireSession();
+  // Save no orçamento é do administrador e do GP (24/09/2026) — o
+  // produtor edita o orçamento, mas não gera nem consome save.
+  const gate = await checarPermissao(session, "orcamentos.marcar_em_save", {
+    item_id: itemId,
+  });
+  if (!gate.ok) return gate;
   const carga = await itemEditavel(itemId, session.activeTenant.id);
   if (!carga.ok) return carga;
   const { item, supabase } = carga;

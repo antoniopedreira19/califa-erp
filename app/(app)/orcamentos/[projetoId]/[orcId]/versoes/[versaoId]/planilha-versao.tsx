@@ -51,6 +51,9 @@ interface Props {
   secoes: Array<{ grupo: VersaoOrcamentoGrupo; itens: VersaoOrcamentoItem[] }>;
   moeda: string;
   readOnly?: boolean;
+  /** Marcar save e consumo de save (`orcamentos.marcar_em_save`,
+   *  administrador e GP — 24/09/2026). Sem ela o pop-up abre só para ver. */
+  podeMarcarSave: boolean;
   categorias: Categoria[];
   bvsPorItem: Record<string, ItemBv[]>;
   fornecedores: FornecedorOpcao[];
@@ -103,6 +106,7 @@ export function PlanilhaVersao({
   secoes,
   moeda,
   readOnly,
+  podeMarcarSave,
   categorias,
   bvsPorItem,
   fornecedores,
@@ -142,6 +146,7 @@ export function PlanilhaVersao({
     React.useState<VersaoOrcamentoItem | null>(null);
 
   const editavel = !readOnly;
+  const saveEditavel = editavel && podeMarcarSave;
 
   const linhaDoDialog: LinhaDoSave | null = linhaAberta
     ? {
@@ -245,7 +250,7 @@ export function PlanilhaVersao({
         internacional={internacional}
         clienteNome={clienteNome}
         onMarcarSave={
-          linhaAberta
+          linhaAberta && saveEditavel
             ? async (marcar) => {
                 const r = await marcarSaveDaLinha(linhaAberta.id, marcar);
                 if (r.ok) router.refresh();
@@ -254,7 +259,7 @@ export function PlanilhaVersao({
             : undefined
         }
         onSalvarConsumo={
-          linhaAberta
+          linhaAberta && saveEditavel
             ? async (origens) => {
                 const r = await salvarConsumoDeSave(linhaAberta.id, origens);
                 if (r.ok) router.refresh();
