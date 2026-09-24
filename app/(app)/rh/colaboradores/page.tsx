@@ -81,7 +81,6 @@ export default async function ColaboradoresPage() {
     admissoesPrevMesRes,
     demissoesMesRes,
     demissoesPrevMesRes,
-    folhaPrevRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -92,7 +91,7 @@ export default async function ColaboradoresPage() {
       .order("nome", { ascending: true }),
     supabase
       .from("colaboradores_salarios")
-      .select("colaborador_id, salario_base")
+      .select("colaborador_id, valor")
       .eq("tenant_id", session.activeTenant.id)
       .is("data_fim", null),
     supabase
@@ -136,12 +135,6 @@ export default async function ColaboradoresPage() {
       .eq("tenant_id", session.activeTenant.id)
       .gte("data_encerramento", jPrev.inicio)
       .lte("data_encerramento", jPrev.fim),
-    supabase
-      .from("folhas_pagamento")
-      .select("salario_base")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("competencia_ano", prev.ano)
-      .eq("competencia_mes", prev.mes),
   ]);
 
   if (colaboradoresRes.error) {
@@ -152,9 +145,9 @@ export default async function ColaboradoresPage() {
   const salarioPorColaborador = new Map<string, number>();
   for (const s of (salariosVigentesRes.data ?? []) as {
     colaborador_id: string;
-    salario_base: string | number;
+    valor: string | number;
   }[]) {
-    salarioPorColaborador.set(s.colaborador_id, Number(s.salario_base));
+    salarioPorColaborador.set(s.colaborador_id, Number(s.valor));
   }
 
   // Mapa colaborador → alocação vigente com empresa/regional já resolvidas.
@@ -250,31 +243,28 @@ export default async function ColaboradoresPage() {
   const demissoesMes = demissoesMesRes.count ?? 0;
   const demissoesPrev = demissoesPrevMesRes.count ?? 0;
 
-  // Valor da folha atual = soma dos salários vigentes de colaboradores
-  // ATIVOS. Reflete o custo do quadro no minuto atual, independente de
-  // a folha da competência ter sido gerada.
+  // Custo do quadro = soma dos salários vigentes de colaboradores ATIVOS.
+  // Reflete o custo teórico no minuto atual, independente da folha da
+  // competência ter sido gerada. Folha efetivamente rodada fica em /rh/folhas.
   const idsAtivos = new Set(
     linhas.filter((l) => l.status === "ativo").map((l) => l.id),
   );
-  let folhaAtualValor = 0;
+  let custoQuadroAtivos = 0;
+  let colaboradoresAtivosComSalario = 0;
   for (const [colaboradorId, salario] of salarioPorColaborador) {
-    if (idsAtivos.has(colaboradorId)) folhaAtualValor += salario;
+    if (idsAtivos.has(colaboradorId)) {
+      custoQuadroAtivos += salario;
+      colaboradoresAtivosComSalario += 1;
+    }
   }
-
-  const folhaPrevLinhas =
-    (folhaPrevRes.data ?? []) as { salario_base: string | number }[];
-  const folhaPrevValor = folhaPrevLinhas.reduce(
-    (acc, l) => acc + Number(l.salario_base),
-    0,
-  );
-  const temFolhaPrev = folhaPrevLinhas.length > 0;
+  const colaboradoresAtivosSemSalario =
+    idsAtivos.size - colaboradoresAtivosComSalario;
 
   const brl = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
   });
 
-  const nomeMesAtual = `${NOMES_MES[mesAtual - 1]}/${anoAtual}`;
   const nomeMesAnterior = `${NOMES_MES[prev.mes - 1].slice(0, 3)}/${prev.ano}`;
 
   // Ativos no início do mês = ativos_hoje - admissões_no_mês + demissões_no_mês.
@@ -315,18 +305,19 @@ export default async function ColaboradoresPage() {
         />
         <KpiCard
           icone={<Wallet className="h-4 w-4" />}
-          rotulo={`Valor da folha (${nomeMesAtual})`}
-          valorPrincipal={brl.format(folhaAtualValor)}
+          rotulo="Custo do quadro atual"
+          valorPrincipal={brl.format(custoQuadroAtivos)}
           rodape={
-            temFolhaPrev ? (
-              <DeltaPercentual
-                atual={folhaAtualValor}
-                anterior={folhaPrevValor}
-                nomeAnterior={nomeMesAnterior}
-              />
+            colaboradoresAtivosSemSalario > 0 ? (
+              <span className="text-xs text-california-red">
+                {colaboradoresAtivosSemSalario}{" "}
+                {colaboradoresAtivosSemSalario === 1
+                  ? "colaborador sem salário vigente"
+                  : "colaboradores sem salário vigente"}
+              </span>
             ) : (
               <span className="text-xs text-muted-foreground">
-                Soma dos {ativosCount} salários vigentes
+                Soma dos {colaboradoresAtivosComSalario} salários vigentes
               </span>
             )
           }
@@ -473,46 +464,3 @@ function DeltaAbsoluto({
   );
 }
 
-function DeltaPercentual({
-  atual,
-  anterior,
-  nomeAnterior,
-}: {
-  atual: number;
-  anterior: number;
-  nomeAnterior: string;
-}) {
-  if (anterior === 0) {
-    return (
-      <span className="text-xs text-muted-foreground">
-        Primeira folha registrada
-      </span>
-    );
-  }
-  const diff = atual - anterior;
-  if (diff === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        <Minus className="h-3 w-3" />
-        Estável vs {nomeAnterior}
-      </span>
-    );
-  }
-  const pct = (diff / anterior) * 100;
-  const positivo = diff > 0;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs font-medium ${
-        positivo ? "text-emerald-700" : "text-california-red"
-      }`}
-    >
-      {positivo ? (
-        <ArrowUpRight className="h-3 w-3" />
-      ) : (
-        <ArrowDownRight className="h-3 w-3" />
-      )}
-      {positivo ? "+" : "−"}
-      {Math.abs(pct).toFixed(1).replace(".", ",")}% vs {nomeAnterior}
-    </span>
-  );
-}
