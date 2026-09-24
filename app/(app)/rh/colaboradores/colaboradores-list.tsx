@@ -129,7 +129,11 @@ export function ColaboradoresList({
           <SelectTrigger className="w-36">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent side="bottom" avoidCollisions={false}>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+          >
             <SelectItem value="ativos">Ativos</SelectItem>
             <SelectItem value="inativos">Inativos</SelectItem>
             <SelectItem value="todos">Todos</SelectItem>
@@ -139,7 +143,11 @@ export function ColaboradoresList({
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Tipo de contratação" />
           </SelectTrigger>
-          <SelectContent side="bottom" avoidCollisions={false}>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+          >
             <SelectItem value="todos">Todos os tipos</SelectItem>
             <SelectItem value="pj">PJ</SelectItem>
             <SelectItem value="mei">MEI</SelectItem>
@@ -156,7 +164,11 @@ export function ColaboradoresList({
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Empresa" />
           </SelectTrigger>
-          <SelectContent side="bottom" avoidCollisions={false}>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+          >
             <SelectItem value={TODAS}>Todas as empresas</SelectItem>
             {empresasOpcoes.map((e) => (
               <SelectItem key={e.id} value={e.id}>
@@ -172,7 +184,11 @@ export function ColaboradoresList({
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Regional" />
           </SelectTrigger>
-          <SelectContent side="bottom" avoidCollisions={false}>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+          >
             <SelectItem value={TODAS}>Todas as regionais</SelectItem>
             <SelectItem value={HUB}>Hub</SelectItem>
             {regionaisFiltradas.map((r) => (
