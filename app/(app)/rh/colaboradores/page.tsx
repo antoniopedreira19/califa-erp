@@ -4,7 +4,6 @@ import {
   Users,
   Plus,
   UserPlus,
-  Wallet,
   ArrowUpRight,
   ArrowDownRight,
   ArrowLeft,
@@ -21,6 +20,7 @@ import {
   type EmpresaOpcao,
   type RegionalOpcao,
 } from "./colaboradores-list";
+import { CardCustoQuadro } from "./card-custo-quadro";
 
 export const dynamic = "force-dynamic";
 
@@ -315,25 +315,10 @@ export default async function ColaboradoresPage() {
             />
           }
         />
-        <KpiCard
-          icone={<Wallet className="h-4 w-4" />}
-          rotulo="Custo do quadro atual"
-          valorPrincipal={brl.format(custoQuadroAtivos)}
-          rodape={
-            colaboradoresAtivosSemSalario > 0 ? (
-              <span className="text-xs text-california-red">
-                {colaboradoresAtivosSemSalario}{" "}
-                {colaboradoresAtivosSemSalario === 1
-                  ? "colaborador sem salário vigente"
-                  : "colaboradores sem salário vigente"}
-              </span>
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                Soma dos {colaboradoresAtivosComSalario} salários vigentes
-              </span>
-            )
-          }
-          destaque
+        <CardCustoQuadro
+          valor={custoQuadroAtivos}
+          colaboradoresComSalario={colaboradoresAtivosComSalario}
+          colaboradoresSemSalario={colaboradoresAtivosSemSalario}
         />
         <KpiCard
           icone={<ArrowUpRight className="h-4 w-4" />}
