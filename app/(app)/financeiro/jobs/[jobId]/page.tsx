@@ -374,7 +374,7 @@ export default async function JobNoFinanceiroPage({
             jobNaFila.projeto_financeiro_id ? "mt-5" : "mt-3",
           )}
         >
-          <div className="min-w-0 flex-1">
+          <div className="min-w-[18rem] flex-1">
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               {job.codigo}
             </p>

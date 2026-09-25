@@ -172,7 +172,7 @@ export default async function ProjetoNoFinanceiroPage({
         />
 
         <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex min-w-[18rem] flex-1 items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">
               <FolderKanban className="h-5 w-5 text-california-red" />
             </div>
