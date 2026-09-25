@@ -151,7 +151,6 @@ export function ColaboradoresList({
           >
             <SelectItem value="todos">Todos os tipos</SelectItem>
             <SelectItem value="pj">PJ</SelectItem>
-            <SelectItem value="mei">MEI</SelectItem>
             <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
             <SelectItem value="clt">CLT</SelectItem>
             <SelectItem value="estagio">Estágio</SelectItem>

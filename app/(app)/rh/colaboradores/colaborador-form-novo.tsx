@@ -42,7 +42,7 @@ export function ColaboradorFormNovo({
   >({});
 
   const [tipoContratacao, setTipoContratacao] = React.useState<
-    "pj" | "mei" | "clt_recibo" | "clt" | "estagio"
+    "pj" | "clt_recibo" | "clt" | "estagio"
   >("clt");
   const [empresaId, setEmpresaId] = React.useState<string>("");
   const [regionalId, setRegionalId] = React.useState<string>("");
@@ -51,9 +51,7 @@ export function ColaboradorFormNovo({
   const [dataAdmissao, setDataAdmissao] = React.useState<string>(hoje());
 
   const isPJ =
-    tipoContratacao === "pj" ||
-    tipoContratacao === "mei" ||
-    tipoContratacao === "clt_recibo";
+    tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
   const documentoLabel = isPJ ? "CNPJ" : "CPF";
   const documentoMask = isPJ ? "cnpj" : "cpf";
 
@@ -142,7 +140,6 @@ export function ColaboradorFormNovo({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pj">{tipoContratacaoLabel("pj")}</SelectItem>
-                <SelectItem value="mei">{tipoContratacaoLabel("mei")}</SelectItem>
                 <SelectItem value="clt_recibo">
                   {tipoContratacaoLabel("clt_recibo")}
                 </SelectItem>
@@ -156,15 +153,13 @@ export function ColaboradorFormNovo({
 
           <div className="space-y-2">
             <Label htmlFor="cpf_cnpj">
-              {documentoLabel}{" "}
-              <span className="text-xs font-normal text-muted-foreground">
-                (opcional — exigido antes de gerar folha)
-              </span>
+              {documentoLabel} <span className="text-california-red">*</span>
             </Label>
             <MaskedInput
               key={documentoMask}
               id="cpf_cnpj"
               mask={documentoMask}
+              required
               onDigitsChange={setCpfCnpj}
             />
             {fieldErrors.cpf_cnpj?.map((msg, i) => (
@@ -337,8 +332,7 @@ export function ColaboradorFormNovo({
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="salario_valor">
-              Salário / Pró-labore mensal{" "}
-              <span className="text-california-red">*</span>
+              Salário <span className="text-california-red">*</span>
             </Label>
             <MoedaInput id="salario_valor" name="salario_valor" required />
             {fieldErrors.valor?.map((msg, i) => (

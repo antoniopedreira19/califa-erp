@@ -18,8 +18,9 @@ const tipoContratacaoEnum = z.enum([
 
 /**
  * Schema base do colaborador — dados fixos que não mudam com alocação
- * nem com folha. CPF/CNPJ opcional no cadastro rápido (será exigido pela
- * folha na fase futura).
+ * nem com folha. CPF/CNPJ obrigatório no cadastro (decisão 2026-09-25:
+ * pendência do 20 colaboradores importados sem CPF é excepcional e não
+ * novo cadastro deve entrar sem documento).
  */
 export const colaboradorSchema = z
   .object({
@@ -42,9 +43,7 @@ export const colaboradorSchema = z
     cpf_cnpj: z
       .string()
       .trim()
-      .optional()
-      .transform((v) => (v ? v.replace(/\D/g, "") : ""))
-      .transform((v) => (v.length > 0 ? v : null)),
+      .transform((v) => (v ?? "").replace(/\D/g, "")),
     funcao: z
       .string()
       .trim()
@@ -61,28 +60,33 @@ export const colaboradorSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
   })
   .superRefine((val, ctx) => {
-    // Formato do documento pelo tipo de contratação
-    if (val.cpf_cnpj !== null) {
-      const isPJ = (TIPOS_CONTRATACAO_PJ as readonly string[]).includes(
-        val.tipo_contratacao,
-      );
-      const isPF = (TIPOS_CONTRATACAO_PF as readonly string[]).includes(
-        val.tipo_contratacao,
-      );
-      if (isPJ && val.cpf_cnpj.length !== 14) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["cpf_cnpj"],
-          message: "CNPJ precisa ter 14 dígitos.",
-        });
-      }
-      if (isPF && val.cpf_cnpj.length !== 11) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["cpf_cnpj"],
-          message: "CPF precisa ter 11 dígitos.",
-        });
-      }
+    if (val.cpf_cnpj.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cpf_cnpj"],
+        message: "Informe CPF ou CNPJ.",
+      });
+      return;
+    }
+    const isPJ = (TIPOS_CONTRATACAO_PJ as readonly string[]).includes(
+      val.tipo_contratacao,
+    );
+    const isPF = (TIPOS_CONTRATACAO_PF as readonly string[]).includes(
+      val.tipo_contratacao,
+    );
+    if (isPJ && val.cpf_cnpj.length !== 14) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cpf_cnpj"],
+        message: "CNPJ precisa ter 14 dígitos.",
+      });
+    }
+    if (isPF && val.cpf_cnpj.length !== 11) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cpf_cnpj"],
+        message: "CPF precisa ter 11 dígitos.",
+      });
     }
   });
 
