@@ -4397,6 +4397,23 @@ limpos.
   consumir Save no orçamento" e "Gerar e consumir Save no job".
 
 
+## ⚠️ Nota de 2026-09-25 — faixa do projeto no orçamento e na agregada (decisão 106)
+
+- A primeira linha da tela do orçamento e da visão agregada é a **faixa do
+  projeto** (`components/faixa-do-projeto.tsx`): seta e projeto num link só
+  (o voltar de antes, para `/orcamentos/[projetoId]`), a aba Visão agregada
+  e uma aba por orçamento. As abas de versão seguem abaixo, sem mudança.
+- Entram os orçamentos da agregada — todos menos cancelados e recusados —
+  e o aberto, sempre. Aprovado ou com job leva cadeado; em revisão, ponto
+  âmbar.
+- Na tela do orçamento, os irmãos vêm de `faixa-orcamentos.tsx`, consulta
+  própria dentro de um `<Suspense>` cujo fallback é a mesma faixa sem os
+  itens. A consulta da página não mudou.
+- Na agregada, a faixa é montada no `page.tsx` e entra no `EditorAgregado`
+  pela prop `faixa` (obrigatória).
+- Navegar pela faixa com alteração não salva na agregada perde o rascunho,
+  como o voltar de antes já perdia.
+
 ## ⚠️ Nota de 2026-09-24 (2) — o item muda de lugar pela alça (decisão 104)
 
 - **Planilha da versão e visão agregada:** alça (⋮⋮) no recuo do item, no

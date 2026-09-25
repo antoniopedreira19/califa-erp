@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { AGREGADA, itensDeOrcamentos } from "@/lib/faixa-do-projeto";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
@@ -538,6 +540,20 @@ export default async function OrcamentosAgregadoPage({
       savePorItem={savePorItem}
       saldosDeSave={saldosDeSave}
       nomeDoGrupo={nomeDoGrupo}
+      faixa={
+        <FaixaDoProjeto
+          modulo="orcamentos"
+          voltar={{
+            href: `/orcamentos/${projeto.id}`,
+            rotulo: `${projeto.codigo} · ${projeto.nome}`,
+            titulo: `Voltar para ${projeto.codigo} · ${projeto.nome}`,
+          }}
+          projeto={{ codigo: projeto.codigo, nome: projeto.nome }}
+          agregadaHref={`/orcamentos/${projeto.id}/agregado`}
+          itens={itensDeOrcamentos(projeto.id, orcamentos, null)}
+          ativo={AGREGADA}
+        />
+      }
       projeto={{
         id: projeto.id,
         codigo: projeto.codigo,

@@ -243,7 +243,7 @@ export function PlanilhaJobCard({
         </div>
 
         <Link
-          href={jobHref ?? `/jobs/${job.id}?from=jobs`}
+          href={jobHref ?? `/jobs/${job.id}?from=jobs&aba=planilha`}
           prefetch={false}
           onClick={(e) => e.stopPropagation()}
           className="ml-2 inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.06em] text-california-red hover:text-california-red/80"

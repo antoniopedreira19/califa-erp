@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { itensDeJobs } from "@/lib/faixa-do-projeto";
+import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
 import { notFound, redirect } from "next/navigation";
 import { AlertTriangle, ArrowLeft, FilePenLine, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -331,14 +334,46 @@ export default async function JobNoFinanceiroPage({
   return (
     <div className="space-y-5">
       <div>
-        <Link
-          href="/financeiro/abertura-de-job?aba=abertos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        {/* Faixa do projeto (decisão 106), no projeto do FINANCEIRO: a
+            agregada e os jobs da lista "Visualizar Jobs", os mesmos da
+            agregada. Job sem projeto do financeiro (anterior à migration
+            20260820000011) não tem agregada, e fica o voltar de antes. */}
+        {jobNaFila.projeto_financeiro_id ? (
+          <FaixaDoProjeto
+            modulo="financeiro"
+            voltar={{
+              href: "/financeiro/abertura-de-job?aba=abertos",
+              rotulo: "Visualizar Jobs",
+              titulo: "Voltar para Visualizar Jobs",
+            }}
+            projeto={{
+              codigo: jobNaFila.projeto_financeiro_codigo ?? "—",
+              nome: jobNaFila.projeto_financeiro_nome ?? "—",
+            }}
+            agregadaHref={`/financeiro/projetos/${jobNaFila.projeto_financeiro_id}`}
+            itens={itensDeJobs(
+              "/financeiro/jobs/",
+              jobsDoProjetoFinanceiro,
+              job.id,
+              (status) => (STATUS_NA_LISTA as readonly string[]).includes(status),
+            )}
+            ativo={job.id}
+          />
+        ) : (
+          <Link
+            href="/financeiro/abertura-de-job?aba=abertos"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Voltar para Visualizar Jobs
+          </Link>
+        )}
+        <div
+          className={cn(
+            "flex flex-wrap items-start justify-between gap-x-6 gap-y-3",
+            jobNaFila.projeto_financeiro_id ? "mt-5" : "mt-3",
+          )}
         >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para Visualizar Jobs
-        </Link>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0 flex-1">
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               {job.codigo}

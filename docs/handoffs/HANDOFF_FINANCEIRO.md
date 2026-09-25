@@ -5813,6 +5813,24 @@ era o imposto de R$ 28.318,52). Regra completa na
   aguardando abertura. Ela usa as mesmas conferências e a mesma gravação
   da edição, e a edição foi testada gravando no JOB-0032.
 
+## ⚠️ Nota de 2026-09-25 — faixa do projeto no job e na agregada do financeiro (decisão 106)
+
+- A primeira linha de `/financeiro/jobs/[jobId]` e de
+  `/financeiro/projetos/[projetoId]` é a **faixa do projeto**
+  (`components/faixa-do-projeto.tsx`), no projeto do FINANCEIRO: o voltar
+  para Visualizar Jobs, a aba Visão agregada e uma aba por job da lista
+  (`STATUS_NA_LISTA`) — os mesmos da agregada — e o job aberto, sempre.
+  Tudo dentro do módulo.
+- Job sem projeto do financeiro (anterior à migration 20260820000011) não
+  tem agregada: nele fica o "Voltar para Visualizar Jobs" de antes.
+- **Entre jobs, a aba de seção se mantém** (o `?aba=` que as abas do job já
+  gravavam). Da agregada, o job abre na Planilha Interna; com a agregada no
+  **Fluxo de Caixa do Projeto**, abre no **Fluxo de Caixa do Job**, e a
+  volta cai na agregada no fluxo.
+- As abas da agregada (`projeto-tabs.tsx`) passaram a gravar `?aba=fluxo`
+  com `replaceState`. A árvore de jobs usa `LinkDoJobNaAgregada`, que leva
+  aonde a aba do job na faixa levaria.
+
 ## ⚠️ Nota de 2026-09-24 — rateio da nota com o save, relatório de rentabilidade e ajustes da aprovação de save
 
 ### Regra 21: o rateio da nota acompanha o save ([decisão 102](../decisions/102-rateio-da-nota-acompanha-o-save.md))

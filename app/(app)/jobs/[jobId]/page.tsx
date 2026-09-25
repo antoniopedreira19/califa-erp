@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { itensDeJobs } from "@/lib/faixa-do-projeto";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Undo2 } from "lucide-react";
+import { Undo2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
@@ -132,12 +134,15 @@ export default async function JobDetailPage({
   // produção não tem link para o financeiro — os módulos são isolados. Quem
   // chega com `?from=financeiro` volta para o orçamento, como quem chega
   // sem origem. O link para o orçamento fica.
+  // Desde a decisão 106 o voltar mora na faixa do projeto, com o texto
+  // encurtado (`rotulo`) e o completo no `title`.
   const backLink =
     fromParam === "jobs"
-      ? { href: "/jobs", label: "Voltar para jobs" }
+      ? { href: "/jobs", label: "Voltar para jobs", rotulo: "Jobs" }
       : {
           href: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`,
           label: `Voltar para orçamento ${raw.orcamento?.codigo}`,
+          rotulo: `Orçamento ${raw.orcamento?.codigo}`,
         };
 
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
@@ -148,17 +153,32 @@ export default async function JobDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href={backLink.href}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          {backLink.label}
-        </Link>
+        {/* Faixa do projeto (decisão 106): a agregada e os jobs do projeto,
+            os mesmos da agregada — sem os cancelados, menos este. */}
+        <FaixaDoProjeto
+          modulo="jobs"
+          voltar={{
+            href: backLink.href,
+            rotulo: backLink.rotulo,
+            titulo: backLink.label,
+          }}
+          projeto={{
+            codigo: raw.projeto?.codigo ?? "",
+            nome: raw.projeto?.nome ?? "",
+          }}
+          agregadaHref={`/jobs/projeto/${raw.projeto_id}`}
+          itens={itensDeJobs(
+            "/jobs/",
+            jobsDoProjeto,
+            job.id,
+            (status) => status !== "cancelado",
+          )}
+          ativo={job.id}
+        />
         {/* O resumo tem largura fixa e fica ancorado à direita: quem cede
             espaço para nome longo é a coluna do título, que quebra dentro
             de si mesma (min-w-0 permite o encolhimento). */}
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0 flex-1">
             <p className="font-mono text-xs font-semibold text-muted-foreground">{job.codigo}</p>
             <div className="mt-1 flex flex-wrap items-center gap-3">

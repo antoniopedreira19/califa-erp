@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeft,
   ArrowRight,
   ClipboardList,
   FolderKanban,
@@ -29,6 +27,11 @@ import {
   carregarPrazosDosJobs,
 } from "../../jobs/[jobId]/fluxo-do-job";
 import { ProjetoTabs } from "./projeto-tabs";
+import {
+  FaixaDoProjeto,
+  LinkDoJobNaAgregada,
+} from "@/components/faixa-do-projeto";
+import { AGREGADA, itensDeJobs } from "@/lib/faixa-do-projeto";
 
 export const dynamic = "force-dynamic";
 
@@ -154,15 +157,21 @@ export default async function ProjetoNoFinanceiroPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link
-          href="/financeiro/abertura-de-job?aba=abertos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para Visualizar Jobs
-        </Link>
+        {/* Faixa do projeto (decisão 106): os mesmos jobs desta tela. */}
+        <FaixaDoProjeto
+          modulo="financeiro"
+          voltar={{
+            href: "/financeiro/abertura-de-job?aba=abertos",
+            rotulo: "Visualizar Jobs",
+            titulo: "Voltar para Visualizar Jobs",
+          }}
+          projeto={{ codigo: projeto.codigo, nome: projeto.nome }}
+          agregadaHref={`/financeiro/projetos/${projeto.id}`}
+          itens={itensDeJobs("/financeiro/jobs/", jobsDoProjeto, null, () => true)}
+          ativo={AGREGADA}
+        />
 
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">
               <FolderKanban className="h-5 w-5 text-california-red" />
@@ -197,14 +206,16 @@ export default async function ProjetoNoFinanceiroPage({
           {jobsDoProjeto.map((j, i) => {
             const planilha = planilhas.find((p) => p.id === j.id);
             return (
-              <Link
+              <LinkDoJobNaAgregada
                 key={j.id}
                 // Abre o job já na Planilha Interna: quem está na visão
                 // agregada do projeto e clica num job quer a planilha
                 // DAQUELE job, não a ficha (decisão do Tiago,
-                // 08/09/2026). O `?aba=` é lido em `../jobs/[jobId]/abas.ts`.
-                href={`/financeiro/jobs/${j.id}?aba=planilha`}
-                prefetch={false}
+                // 08/09/2026). Com o Fluxo de Caixa do Projeto aberto,
+                // abre no Fluxo de Caixa do Job — o mesmo destino da aba
+                // do job na faixa (decisão 106).
+                modulo="financeiro"
+                href={`/financeiro/jobs/${j.id}`}
                 className="group relative grid grid-cols-[28px_auto_1fr] items-center gap-2.5 py-[5px]"
               >
                 <span
@@ -240,7 +251,7 @@ export default async function ProjetoNoFinanceiroPage({
                   </span>
                   <ArrowRight className="h-3 w-3 text-[#c9c9c9] transition-colors group-hover:text-california-red" />
                 </span>
-              </Link>
+              </LinkDoJobNaAgregada>
             );
           })}
         </div>

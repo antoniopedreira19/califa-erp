@@ -2,11 +2,9 @@
 
 import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
-  ArrowLeft,
   EyeOff,
   FolderKanban,
   Plus,
@@ -103,6 +101,9 @@ interface Props {
     cliente: string | null;
     responsavel: string | null;
   };
+  /** Faixa do projeto (decisão 106), montada no servidor: o voltar, a
+   *  agregada e os orçamentos do projeto. */
+  faixa: React.ReactNode;
   /** Honorários do cadastro do cliente. Vale para os orçamentos criados
    *  aqui; os que já existem mantêm o percentual gravado na versão. */
   honorariosCliente: number;
@@ -202,6 +203,7 @@ function nosGrupos(
 
 export function EditorAgregado({
   projeto,
+  faixa,
   savePorItem,
   saldosDeSave,
   nomeDoGrupo,
@@ -868,16 +870,9 @@ export function EditorAgregado({
   return (
     <div className="flex flex-col gap-6 pb-4">
       <div>
-        <Link
-          href={`/orcamentos/${projeto.id}`}
-          prefetch={false}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para {projeto.codigo} · {projeto.nome}
-        </Link>
+        {faixa}
 
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-6">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-6">
           <div className="min-w-0">
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               {projeto.codigo}
