@@ -7,6 +7,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { pode } from "@/lib/permissoes";
 import { grupoSchema } from "@/lib/validations/grupos";
+import { gruposNaOrdemDaTela } from "@/lib/calculos/ordem-itens";
 import { itemSchema } from "@/lib/validations/itens";
 import { bvSchema } from "@/lib/validations/bv";
 import type {
@@ -37,6 +38,7 @@ export type SalvarAlteracoesResult =
 interface ItemAtual {
   id: string;
   grupo_id: string;
+  ordem: number;
   item: string;
   tipo_custo: string;
   categoria_id: string | null;
@@ -319,7 +321,7 @@ async function aplicarEdicao(
     supabase
       .from("versoes_orcamento_itens")
       .select(
-        "id, grupo_id, item, tipo_custo, categoria_id, planilha_origem, " +
+        "id, grupo_id, ordem, item, tipo_custo, categoria_id, planilha_origem, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
           "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado",
       )
@@ -451,6 +453,13 @@ async function aplicarEdicao(
   const itensMantidos = new Set<string>();
   // A ordem é global dentro da versão, como no resto do app.
   let ordemItem = 0;
+  // Itens em que SÓ a ordem mudou (decisão 104: o item mudou de lugar
+  // arrastando, ou outro mudou e o empurrou). Vão ao banco juntos, numa
+  // RPC só, depois do laço — um UPDATE por linha seria uma ida ao banco
+  // por item deslocado.
+  const soOrdemMudou: { id: string; grupo_id: string; ordem: number }[] = [];
+  // A sequência dos itens que já existiam, como a tela nova os deixou.
+  const sequenciaNova: string[] = [];
 
   for (const [i, grupo] of alvo.grupos.entries()) {
     const grupoId = grupoIdPorIndice.get(i);
@@ -477,6 +486,10 @@ async function aplicarEdicao(
           };
         }
         itensMantidos.add(itemId);
+        sequenciaNova.push(`${grupoId}:${itemId}`);
+        if (!mudou(atual, linha) && atual.ordem !== ordemItem) {
+          soOrdemMudou.push({ id: itemId, grupo_id: grupoId, ordem: ordemItem });
+        }
         if (mudou(atual, linha)) {
           const { error } = await supabase
             .from("versoes_orcamento_itens")
@@ -560,6 +573,33 @@ async function aplicarEdicao(
           if (error) console.error("[agregado.bv.update]", error.message);
         }
       }
+    }
+  }
+
+  // ---------- Ordem ----------
+  // O "Salvar alterações" manda TODOS os orçamentos da tela, e a numeração
+  // gravada nem sempre é 1..N na sequência dos grupos (item acrescentado
+  // num grupo de cima depois ganha número maior). Sem esta conferência,
+  // salvar qualquer coisa renumeraria os orçamentos que ninguém tocou. A
+  // ordem só vai ao banco quando a SEQUÊNCIA dos itens mudou.
+  const sequenciaAtual = gruposNaOrdemDaTela(gruposAtuais, itensAtuais)
+    .flatMap((g) => g.itens.map((it) => `${g.id}:${it.id}`))
+    .filter((chave) => itensMantidos.has(chave.split(":")[1]));
+  const sequenciaMudou =
+    sequenciaAtual.length !== sequenciaNova.length ||
+    sequenciaAtual.some((chave, i) => chave !== sequenciaNova[i]);
+
+  if (sequenciaMudou && soOrdemMudou.length > 0) {
+    const { error } = await supabase.rpc("aplicar_ordem_itens_versao", {
+      p_versao_id: versao.id,
+      p_itens: soOrdemMudou,
+    });
+    if (error) {
+      console.error("[agregado.item.ordem]", error.message);
+      return {
+        ok: false,
+        message: `${orcamento.codigo}: não foi possível salvar a ordem dos itens.`,
+      };
     }
   }
 

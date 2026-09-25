@@ -7,6 +7,7 @@ import {
   type JobMensagem,
   type SaveAprovacaoTipo,
 } from "@/lib/types";
+import { grupoDoPedido } from "@/lib/data/saves";
 
 /**
  * Monta a thread de Comunicação do job.
@@ -55,7 +56,7 @@ export async function lerRecusasDeSaveDoJob(
   const { data, error } = await supabase
     .from("saves_aprovacoes")
     .select(
-      "id, tipo, item_descricao, grupo_nome, valor, substitui_id, justificativa, decidido_em, decidido_por",
+      "id, tipo, item_descricao, grupo_nome, mes_do_pedido, valor, substitui_id, justificativa, decidido_em, decidido_por",
     )
     .eq("tenant_id", tenantId)
     .eq("job_id", jobId)
@@ -83,7 +84,8 @@ export async function lerRecusasDeSaveDoJob(
     id: l.id,
     tipo: l.tipo as SaveAprovacaoTipo,
     itemDescricao: l.item_descricao,
-    grupoNome: l.grupo_nome ?? null,
+    // No mensal, com o mês na frente (24/09/2026).
+    grupoNome: grupoDoPedido(l.grupo_nome ?? null, l.mes_do_pedido ?? null),
     valor: Number(l.valor ?? 0),
     substituiId: l.substitui_id ?? null,
     justificativa: l.justificativa,
@@ -108,28 +110,65 @@ export function recusasDeSaveNaoLidas(
   ).length;
 }
 
+/**
+ * Datas e horas da Comunicação no horário de BRASÍLIA (24/09/2026).
+ *
+ * Estes rótulos são montados no servidor, e o servidor da Vercel roda em
+ * UTC — três horas à frente. Com `getHours()`/`getDate()` puros, uma
+ * mensagem das 10:00 aparecia como 13:00, e o que acontecia depois das
+ * 21:00 saía com a data do dia seguinte. No servidor local (Mac em
+ * Brasília) o erro não aparecia. O fuso vai explícito, como já fazem a
+ * fila de abertura e o contas a pagar.
+ */
+const FUSO_BR = "America/Sao_Paulo";
+
+function partesEmBrasilia(iso: string): {
+  dia: string;
+  mes: string;
+  ano: string;
+  hora: string;
+  min: string;
+} {
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: FUSO_BR,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const de = (t: Intl.DateTimeFormatPartTypes) =>
+    partes.find((p) => p.type === t)?.value ?? "";
+  return {
+    dia: de("day"),
+    mes: de("month"),
+    ano: de("year"),
+    hora: de("hour"),
+    min: de("minute"),
+  };
+}
+
 function dataHora(iso: string): string {
-  const d = new Date(iso);
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const hora = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes}/${d.getFullYear()} ${hora}:${min}`;
+  const d = partesEmBrasilia(iso);
+  return `${d.dia}/${d.mes}/${d.ano} ${d.hora}:${d.min}`;
 }
 
 /** Mensagens humanas usam formato curto, como no design ("10/07 09:14"). */
 function dataHoraCurta(iso: string): string {
-  const d = new Date(iso);
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const hora = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes} ${hora}:${min}`;
+  const d = partesEmBrasilia(iso);
+  return `${d.dia}/${d.mes} ${d.hora}:${d.min}`;
 }
 
+/** dd/mm/aaaa. Coluna `date` ("2026-09-23") é corte de string, sem fuso;
+ *  timestamp ("2026-09-23T01:30:00+00:00") vira a data de Brasília. */
 function dataCurta(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  return `${d}/${m}/${y}`;
+  if (iso.length <= 10) {
+    const [y, m, d] = iso.slice(0, 10).split("-");
+    return `${d}/${m}/${y}`;
+  }
+  const d = partesEmBrasilia(iso);
+  return `${d.dia}/${d.mes}/${d.ano}`;
 }
 
 function moeda(v: number, moedaCode: string): string {

@@ -1132,6 +1132,11 @@ export async function carregarDetalheDoJob(
     moedaEstrangeira: planilha.moedaEstrangeira,
     podeEditarRealizado,
     podeAcoesPlanilha,
+    // Save (decisão 099, revista em 24/09/2026): gerar, consumir, retirar e
+    // cancelar pedido é do administrador ou de QUALQUER GP — não segue a
+    // regra "admin ou responsável" de errata e PP, e o produtor fica de
+    // fora. O banco confere de novo (`save_pode_mexer_no_job`).
+    podeMexerNoSave: pode(session.activeRole, "jobs.consumir_save"),
     podeGerarPP,
     podeCadastrarFornecedor,
     podeEditarFornecedor,

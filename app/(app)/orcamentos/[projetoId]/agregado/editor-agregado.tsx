@@ -67,6 +67,7 @@ import {
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
 import { salvarAlteracoesDoProjeto } from "./actions";
+import { moverNaLista } from "@/lib/calculos/ordem-itens";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 import {
   estagioFunilBadgeClasses,
@@ -106,6 +107,9 @@ interface Props {
   /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional
    *  no modal de parâmetros (decisão do Tiago, 14/09/2026). */
   podeEditarImpostos: boolean;
+  /** `orcamentos.marcar_em_save` — administrador e GP geram e consomem
+   *  save (24/09/2026). Sem ela o pop-up de save abre só para ver. */
+  podeMarcarSave: boolean;
   /** Quantos orçamentos o projeto já tem — base do código previsto dos novos. */
   orcamentosExistentes: number;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
@@ -176,6 +180,7 @@ export function EditorAgregado({
   nomeDoGrupo,
   honorariosCliente,
   podeEditarImpostos,
+  podeMarcarSave,
   orcamentosExistentes,
   inicial,
   exportaveis,
@@ -502,6 +507,30 @@ export function EditorAgregado({
               itens: grupo.itens.filter((it) => it.id !== itemId),
             })),
           })),
+        );
+        return { ok: true, id: itemId };
+      },
+
+      // Decisão 104: a ordem nova fica no rascunho, como qualquer outra
+      // edição daqui, e vai ao banco no "Salvar alterações". O item só se
+      // move entre os grupos do MESMO orçamento — cada card tem a sua
+      // planilha, e a tabela só enxerga os grupos dela.
+      mover: async (itemId, grupoId, indice) => {
+        // Pela ref, como o `acharItem`: o adaptador não se refaz a cada edição.
+        const dono = orcamentosRef.current.find(
+          (o) =>
+            o.grupos.some((g) => g.itens.some((it) => it.id === itemId)) &&
+            o.grupos.some((g) => g.id === grupoId),
+        );
+        if (!dono) {
+          return { ok: false, message: "O item só muda de lugar dentro do próprio orçamento." };
+        }
+        setOrcamentos((atuais) =>
+          atuais.map((orc) => {
+            if (orc.id !== dono.id) return orc;
+            const grupos = moverNaLista(orc.grupos, itemId, grupoId, indice);
+            return grupos ? { ...orc, grupos } : orc;
+          }),
         );
         return { ok: true, id: itemId };
       },
@@ -1159,7 +1188,7 @@ export function EditorAgregado({
         }
         clienteNome={projeto.cliente ?? "cliente"}
         onMarcarSave={
-          linhaSave
+          linhaSave && podeMarcarSave
             ? async (marcar) => {
                 const r = await marcarSaveDaLinha(linhaSave.item.id, marcar);
                 if (r.ok) router.refresh();
@@ -1168,7 +1197,7 @@ export function EditorAgregado({
             : undefined
         }
         onSalvarConsumo={
-          linhaSave
+          linhaSave && podeMarcarSave
             ? async (origens) => {
                 const r = await salvarConsumoDeSave(
                   linhaSave.item.id,

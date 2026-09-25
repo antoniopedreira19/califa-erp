@@ -964,72 +964,41 @@ export async function registrarErrata(
   const depois = totaisDoFinanceiro(depoisItens, base);
   const espelhos = espelhosDe(depois);
 
-  // ---- Grava a errata ----
-  const { data: errata, error: errataErr } = await supabase
-    .from("jobs_erratas")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      job_id: jobId,
-      // A "Descrição da errata" do pop-up mora aqui: é a coluna que o
-      // histórico e o chat já liam. A `justificativa` NÃO entra: a
-      // migration 20260827120001 removeu a coluna (decisão 030), e
-      // mandá-la fazia o PostgREST recusar o insert inteiro com
-      // "Could not find the 'justificativa' column" — a errata nunca
-      // chegava a gravar (corrigido em 31/08/2026).
-      titulo: descricao,
-      // Duas casas em tudo que é dinheiro: `jobs.valor_total` e
-      // `valor_job_abertura` também são gravados assim, e sem isso o
-      // card de Erratas mostra o mesmo delta com 1 centavo de diferença.
-      custo_orcado_antes: dinheiro(antes.subtotalGeral),
-      custo_orcado_depois: dinheiro(depois.subtotalGeral),
-      valor_job_antes: dinheiro(antes.valorJob),
-      valor_job_depois: dinheiro(depois.valorJob),
-      faturamento_previsto_antes: dinheiro(antes.faturamentoPrevisto),
-      faturamento_previsto_depois: dinheiro(depois.faturamentoPrevisto),
-      created_by: session.profile.id,
-    })
-    .select("id")
-    .single();
-
-  if (errataErr || !errata) {
-    console.error("[errata.insert]", errataErr?.message);
-    return { ok: false, message: "Falha ao registrar a errata." };
-  }
-
-  /** Desfaz a errata quando a aplicação falha no meio. */
-  const desfazer = async () => {
-    await supabase.from("jobs_erratas").delete().eq("id", errata.id);
-  };
-
-  // ---- Aplica: primeiro as linhas novas, que precisam de id ----
+  // ---- Grava tudo numa transação só (24/09/2026) ----
   //
-  // A ordem importa. A linha nova é inserida antes do item da errata
-  // porque `jobs_erratas_itens.job_item_orcado_id` só faz sentido com o id
-  // já existindo — e é ele que liga o histórico à linha viva.
+  // `registrar_errata_do_job` faz as gravações que esta action fazia uma a
+  // uma, na mesma ordem — a errata, as linhas novas com a âncora de
+  // realizado, os itens da errata, as alteradas, as removidas, o BV "a
+  // negociar" que perdeu a razão de existir e, por fim, os números do job
+  // com a revisão da abertura —, mas numa transação: ou tudo, ou nada.
+  // Antes, uma falha no meio deixava o histórico dizendo que a linha mudou
+  // sem ela ter mudado. A função roda como o usuário: valem as mesmas
+  // policies e as travas de banco (save, linha vermelha…).
+  //
+  // A ordem das linhas novas continua sendo decidida aqui: a última do
+  // grupo + 1, uma a uma.
   const ordemPorGrupo = new Map<string, number>();
   for (const i of itensAtuais as any[]) {
     const atual = ordemPorGrupo.get(i.grupo_id) ?? 0;
     ordemPorGrupo.set(i.grupo_id, Math.max(atual, Number(i.ordem ?? 0)));
   }
-
-  for (const m of mudancas.filter((x) => x.acao === "nova")) {
-    const grupoId = m.grupoId as string;
-    const ordem = (ordemPorGrupo.get(grupoId) ?? 0) + 1;
-    ordemPorGrupo.set(grupoId, ordem);
-
-    const { data: criada, error: novaErr } = await supabase
-      .from("jobs_itens_orcado")
-      .insert({
-        tenant_id: session.activeTenant.id,
-        job_id: jobId,
-        // Sem contrapartida na versão: é o que define a linha de errata.
-        item_versao_id: null,
-        errata_origem_id: errata.id,
-        linha_vermelha: m.linhaVermelha,
+  const chaveDaNova = new Map<Mudanca, string>();
+  const linhasNovas = mudancas
+    .filter((x) => x.acao === "nova")
+    .map((m, k) => {
+      const grupoId = m.grupoId as string;
+      const ordem = (ordemPorGrupo.get(grupoId) ?? 0) + 1;
+      ordemPorGrupo.set(grupoId, ordem);
+      const chave = `nova-${k}`;
+      chaveDaNova.set(m, chave);
+      return {
+        chave,
         grupo_id: grupoId,
         ordem,
         item: m.itemNome,
         tipo_custo: m.tipoPara,
+        // Sem contrapartida na versão: é o que define a linha de errata.
+        linha_vermelha: m.linhaVermelha,
         valor_unitario_orcado: m.unitarioPara,
         quantidade_orcada: m.qtdPara,
         dias_meses_orcado: m.dmPara,
@@ -1040,150 +1009,11 @@ export async function registrarErrata(
         valor_unitario_planejado: m.planUnitPara,
         quantidade_planejada: m.planQtdPara,
         dias_meses_planejado: m.planDmPara,
-      })
-      .select("id")
-      .single();
-
-    if (novaErr || !criada) {
-      console.error("[errata.linha_nova]", novaErr?.message);
-      await desfazer();
-      return {
-        ok: false,
-        message: `Não foi possível criar a linha "${m.itemNome}". A errata não foi registrada.`,
       };
-    }
+    });
 
-    m.copiaId = criada.id;
-
-    // Âncora do realizado: é nela que a PP se pendura. Sem ela a linha
-    // nova — e a vermelha em especial, que existe só para isso — não teria
-    // como pedir nada.
-    const { error: ancoraErr } = await supabase
-      .from("jobs_itens_realizado")
-      .insert({
-        tenant_id: session.activeTenant.id,
-        job_id: jobId,
-        item_id: null,
-        job_item_orcado_id: criada.id,
-        valor_unitario_realizado: 0,
-        quantidade_realizada: 0,
-        dias_meses_realizado: 0,
-        created_by: session.profile.id,
-      });
-
-    if (ancoraErr) {
-      console.error("[errata.ancora_nova]", ancoraErr.message);
-      await supabase.from("jobs_itens_orcado").delete().eq("id", criada.id);
-      await desfazer();
-      return {
-        ok: false,
-        message: `A linha "${m.itemNome}" foi criada sem a âncora de realizado e por isso não ficaria apta a gerar PP. A errata não foi registrada.`,
-      };
-    }
-  }
-
-  // ---- Itens da errata ----
-  const { error: itensErrataErr } = await supabase
-    .from("jobs_erratas_itens")
-    .insert(
-      mudancas.map((m) => ({
-        tenant_id: session.activeTenant.id,
-        errata_id: errata.id,
-        // Na remoção fica nulo desde já: a linha some logo abaixo, e a FK
-        // é `on delete set null` de todo jeito. `item_nome` é o que conta.
-        job_item_orcado_id: m.acao === "removida" ? null : m.copiaId,
-        acao: m.acao,
-        linha_vermelha: m.linhaVermelha,
-        grupo_id: m.grupoId,
-        item_nome: m.itemNome,
-        grupo_nome: m.grupoNome,
-        tipo_custo_de: m.tipoDe,
-        tipo_custo_para: m.tipoPara,
-        valor_unitario_de: m.unitarioDe,
-        valor_unitario_para: m.unitarioPara,
-        quantidade_de: m.qtdDe,
-        quantidade_para: m.qtdPara,
-        dias_meses_de: m.dmDe,
-        dias_meses_para: m.dmPara,
-        total_de: dinheiro(m.totalDe),
-        total_para: dinheiro(m.totalPara),
-        valor_unitario_planejado_de: m.planUnitDe,
-        valor_unitario_planejado_para: m.planUnitPara,
-        quantidade_planejada_de: m.planQtdDe,
-        quantidade_planejada_para: m.planQtdPara,
-        dias_meses_planejado_de: m.planDmDe,
-        dias_meses_planejado_para: m.planDmPara,
-        total_planejado_de: dinheiro(m.planTotalDe),
-        total_planejado_para: dinheiro(m.planTotalPara),
-        efeito_valor_job: dinheiro(m.efeito.valorJob),
-        efeito_faturamento_previsto: dinheiro(m.efeito.faturamentoPrevisto),
-      })),
-    );
-
-  if (itensErrataErr) {
-    console.error("[errata.itens_insert]", itensErrataErr.message);
-    // Errata sem itens não serve de histórico. As linhas novas já criadas
-    // saem junto: elas apontam para a errata que está sendo desfeita.
-    for (const m of mudancas.filter((x) => x.acao === "nova")) {
-      if (m.copiaId) {
-        await supabase.from("jobs_itens_orcado").delete().eq("id", m.copiaId);
-      }
-    }
-    await desfazer();
-    return { ok: false, message: "Falha ao registrar os itens da errata." };
-  }
-
-  // ---- Correções ----
-  for (const m of mudancas.filter((x) => x.acao === "alterada")) {
-    const { error: updErr } = await supabase
-      .from("jobs_itens_orcado")
-      .update({
-        valor_unitario_orcado: m.unitarioPara,
-        quantidade_orcada: m.qtdPara,
-        dias_meses_orcado: m.dmPara,
-        tipo_custo: m.tipoPara,
-        // Igual ao atual quando o planejado não abriu — gravar o mesmo
-        // número é inócuo, e o trigger tem a última palavra em A/D e save.
-        valor_unitario_planejado: m.planUnitPara,
-        quantidade_planejada: m.planQtdPara,
-        dias_meses_planejado: m.planDmPara,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", m.copiaId as string)
-      .eq("tenant_id", session.activeTenant.id);
-
-    if (updErr) {
-      console.error("[errata.aplicar]", m.copiaId, updErr.message);
-      return {
-        ok: false,
-        message: `Errata registrada, mas o item "${m.itemNome}" não foi atualizado. Avise o suporte.`,
-      };
-    }
-  }
-
-  // ---- Remoções ----
-  // A linha sai por último: a errata já está gravada com `item_nome`, e o
-  // cascade leva junto a âncora de realizado e um BV que ainda estivesse
-  // "a negociar" — as situações travadas foram barradas lá em cima.
-  for (const m of mudancas.filter((x) => x.acao === "removida")) {
-    const { error: delErr } = await supabase
-      .from("jobs_itens_orcado")
-      .delete()
-      .eq("id", m.copiaId as string)
-      .eq("tenant_id", session.activeTenant.id);
-
-    if (delErr) {
-      console.error("[errata.remover]", m.copiaId, delErr.message);
-      return {
-        ok: false,
-        message: `Errata registrada, mas a linha "${m.itemNome}" não foi removida. Avise o suporte.`,
-      };
-    }
-  }
-
-  // ---- BV que perdeu a razão de existir ----
-  // Item que sai de A/D deixa de ter comissão a negociar. O BV em
-  // "a negociar" é cancelado junto — os travados já foram barrados lá em
+  // Item que sai de A/D deixa de ter comissão a negociar: o BV "a
+  // negociar" é cancelado junto — os travados já foram barrados lá em
   // cima. Ir de A para D não cancela: em D o cliente também paga o
   // fornecedor direto e o BV continua válido.
   const perderamBv = mudancas.filter(
@@ -1191,63 +1021,131 @@ export async function registrarErrata(
       m.acao === "alterada" && aceitaBV(m.tipoDe) && !aceitaBV(m.tipoPara),
   );
 
-  for (const m of perderamBv) {
-    const { data: bvCancelado } = await supabase
-      .from("itens_bv")
-      .update({ situacao: "cancelado" })
-      .eq("job_item_orcado_id", m.copiaId as string)
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("situacao", "a_negociar")
-      .select("id, valor")
-      .maybeSingle<{ id: string; valor: number }>();
-
-    if (bvCancelado) {
-      await logAuditEvent({
-        acao: "item_bv.cancelado",
-        tenantId: session.activeTenant.id,
-        entidadeTipo: "item_bv",
-        entidadeId: bvCancelado.id,
-        metadata: {
-          job_item_orcado_id: m.copiaId,
-          item: m.itemNome,
-          valor: bvCancelado.valor,
-          motivo: "errata_mudou_tipo_de_custo",
-          errata_id: errata.id,
-          tipo_de: m.tipoDe,
-          tipo_para: m.tipoPara,
-        },
-      });
-    }
-  }
-
-  // `jobs.valor_total` é o Valor do Job; os dois números acompanham o
-  // orçado e precisam andar juntos, senão a listagem mostra um par que não
-  // fecha com a planilha do job.
-  //
-  // E a errata devolve o job ao mural de abertura. Só quando o financeiro
-  // JÁ abriu: numa errata anterior à abertura não há nada a revisar — o
-  // job ainda está na fila de abertura normal.
+  // A errata devolve o job ao mural de abertura só quando o financeiro JÁ
+  // abriu: numa errata anterior à abertura não há nada a revisar — o job
+  // ainda está na fila de abertura normal. "Desde" é a PRIMEIRA errata
+  // ainda não revisada (decisão do Tiago, 14/09/2026); a função cuida disso.
   const devolveAoMural = job.data_abertura_financeiro !== null;
 
-  await supabase
-    .from("jobs")
-    .update({
-      ...espelhos,
-      ...(devolveAoMural
-        ? {
-            abertura_em_revisao: true,
-            // "Desde" é a PRIMEIRA errata ainda não revisada: a revisão
-            // trata todas as que se acumularam (decisão do Tiago,
-            // 14/09/2026). Só a última errata é que troca.
-            ...(job.abertura_em_revisao === true
-              ? {}
-              : { abertura_revisao_desde: new Date().toISOString() }),
-            abertura_revisao_errata_id: errata.id,
-          }
-        : {}),
-    })
-    .eq("id", jobId)
-    .eq("tenant_id", session.activeTenant.id);
+  const { data: gravada, error: gravarErr } = await supabase.rpc(
+    "registrar_errata_do_job",
+    {
+      p_job_id: jobId,
+      p: {
+        errata: {
+          // A "Descrição da errata" do pop-up mora em `titulo`: é a coluna
+          // que o histórico e o chat já liam.
+          titulo: descricao,
+          // Duas casas em tudo que é dinheiro: `jobs.valor_total` e
+          // `valor_job_abertura` também são gravados assim, e sem isso o
+          // card de Erratas mostra o mesmo delta com 1 centavo de diferença.
+          custo_orcado_antes: dinheiro(antes.subtotalGeral),
+          custo_orcado_depois: dinheiro(depois.subtotalGeral),
+          valor_job_antes: dinheiro(antes.valorJob),
+          valor_job_depois: dinheiro(depois.valorJob),
+          faturamento_previsto_antes: dinheiro(antes.faturamentoPrevisto),
+          faturamento_previsto_depois: dinheiro(depois.faturamentoPrevisto),
+        },
+        novas: linhasNovas,
+        itens: mudancas.map((m) => ({
+          // A linha nova ganha id dentro da função; o item da errata aponta
+          // para ela pela chave. Na remoção fica nulo desde já: a linha some
+          // logo depois, e `item_nome` é o que conta.
+          ...(m.acao === "nova"
+            ? { chave_nova: chaveDaNova.get(m) }
+            : { job_item_orcado_id: m.acao === "removida" ? null : m.copiaId }),
+          acao: m.acao,
+          linha_vermelha: m.linhaVermelha,
+          grupo_id: m.grupoId,
+          item_nome: m.itemNome,
+          grupo_nome: m.grupoNome,
+          tipo_custo_de: m.tipoDe,
+          tipo_custo_para: m.tipoPara,
+          valor_unitario_de: m.unitarioDe,
+          valor_unitario_para: m.unitarioPara,
+          quantidade_de: m.qtdDe,
+          quantidade_para: m.qtdPara,
+          dias_meses_de: m.dmDe,
+          dias_meses_para: m.dmPara,
+          total_de: dinheiro(m.totalDe),
+          total_para: dinheiro(m.totalPara),
+          valor_unitario_planejado_de: m.planUnitDe,
+          valor_unitario_planejado_para: m.planUnitPara,
+          quantidade_planejada_de: m.planQtdDe,
+          quantidade_planejada_para: m.planQtdPara,
+          dias_meses_planejado_de: m.planDmDe,
+          dias_meses_planejado_para: m.planDmPara,
+          total_planejado_de: dinheiro(m.planTotalDe),
+          total_planejado_para: dinheiro(m.planTotalPara),
+          efeito_valor_job: dinheiro(m.efeito.valorJob),
+          efeito_faturamento_previsto: dinheiro(m.efeito.faturamentoPrevisto),
+        })),
+        alteradas: mudancas
+          .filter((m) => m.acao === "alterada")
+          .map((m) => ({
+            id: m.copiaId,
+            tipo_custo: m.tipoPara,
+            valor_unitario_orcado: m.unitarioPara,
+            quantidade_orcada: m.qtdPara,
+            dias_meses_orcado: m.dmPara,
+            // Igual ao atual quando o planejado não abriu — gravar o mesmo
+            // número é inócuo, e o trigger tem a última palavra em A/D e save.
+            valor_unitario_planejado: m.planUnitPara,
+            quantidade_planejada: m.planQtdPara,
+            dias_meses_planejado: m.planDmPara,
+          })),
+        // A linha sai por último dentro da função: a errata já está gravada
+        // com `item_nome`, e o cascade leva junto a âncora de realizado e um
+        // BV que ainda estivesse "a negociar" — as situações travadas foram
+        // barradas lá em cima.
+        removidas: mudancas
+          .filter((m) => m.acao === "removida")
+          .map((m) => m.copiaId),
+        bv_cancelar: perderamBv.map((m) => m.copiaId),
+        // `jobs.valor_total` é o Valor do Job; os dois números acompanham
+        // o orçado e precisam andar juntos, senão a listagem mostra um par
+        // que não fecha com a planilha do job.
+        espelhos,
+        devolve_ao_mural: devolveAoMural,
+      },
+    },
+  );
+
+  if (gravarErr || !gravada) {
+    console.error("[errata.gravar]", gravarErr?.message);
+    // P0001 é mensagem nossa, escrita para a tela (as travas do banco).
+    const doBanco =
+      gravarErr?.code === "P0001" && gravarErr.message ? ` ${gravarErr.message}` : "";
+    return {
+      ok: false,
+      message: `Não foi possível registrar a errata, e nada foi gravado.${doBanco}`,
+    };
+  }
+
+  const resultado = gravada as {
+    errata_id: string;
+    bvs_cancelados: Array<{ id: string; valor: number; job_item_orcado_id: string }>;
+  };
+  const errata = { id: resultado.errata_id };
+
+  for (const bv of resultado.bvs_cancelados ?? []) {
+    const m = perderamBv.find((x) => x.copiaId === bv.job_item_orcado_id);
+    await logAuditEvent({
+      acao: "item_bv.cancelado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "item_bv",
+      entidadeId: bv.id,
+      metadata: {
+        job_item_orcado_id: bv.job_item_orcado_id,
+        item: m?.itemNome ?? null,
+        valor: bv.valor,
+        motivo: "errata_mudou_tipo_de_custo",
+        errata_id: errata.id,
+        tipo_de: m?.tipoDe ?? null,
+        tipo_para: m?.tipoPara ?? null,
+      },
+    });
+  }
 
   const contar = (a: ErrataAcao) =>
     mudancas.filter((m) => m.acao === a).length;
