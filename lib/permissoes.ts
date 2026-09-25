@@ -104,6 +104,8 @@ export const permissoes = {
   "orcamentos.exportar":           ["administrador", "gerente_producao", "produtor"],
   "orcamentos.editar_impostos":    ["administrador", "gerente_producao"],
   "orcamentos.aprovar":            ["administrador", "gerente_producao"],
+  /** Marcar save e consumo de save no orçamento (24/09/2026): a mesma
+   *  regra do job — administrador ou GP. */
   "orcamentos.marcar_em_save":     ["administrador", "gerente_producao"],
 
   // ==================================================================
@@ -118,7 +120,10 @@ export const permissoes = {
   "jobs.editar_metadata":         ["administrador", "gerente_producao", "produtor"],
   /** Freelancer edita realizado dos jobs dele (escopo row-level pelo RLS). */
   "jobs.editar_realizado":        ["administrador", "gerente_producao", "produtor", "freelancer"],
-  "jobs.consumir_save":           ["administrador", "gerente_producao", "produtor"],
+  /** Gerar, consumir, retirar e cancelar pedido de save no job (decisão
+   *  099, revista em 24/09/2026): administrador ou qualquer GP. O produtor
+   *  não mexe no save. O banco confere de novo (`save_pode_mexer_no_job`). */
+  "jobs.consumir_save":           ["administrador", "gerente_producao"],
   "jobs.criar_errata":            ["administrador", "gerente_producao", "produtor"],
   "jobs.emitir_pp":               ["administrador", "gerente_producao", "produtor"],
   "jobs.cancelar_pp":             ["administrador", "gerente_producao", "produtor"],

@@ -277,11 +277,11 @@ test("Produtor faz TUDO em job/orcamento menos aprovar/enviar_faturamento/encerr
   assert.equal(pode("produtor", "jobs.criar_errata"), true);
   assert.equal(pode("produtor", "jobs.emitir_pp"), true);
   assert.equal(pode("produtor", "jobs.cancelar_pp"), true);
-  assert.equal(pode("produtor", "jobs.consumir_save"), true);
-  // Nao aprova
+  // Nao aprova, e nao mexe no save (24/09/2026)
   assert.equal(pode("produtor", "orcamentos.aprovar"), false);
   assert.equal(pode("produtor", "orcamentos.editar_impostos"), false);
   assert.equal(pode("produtor", "orcamentos.marcar_em_save"), false);
+  assert.equal(pode("produtor", "jobs.consumir_save"), false);
   assert.equal(pode("produtor", "jobs.enviar_faturamento"), false);
   assert.equal(pode("produtor", "jobs.encerrar"), false);
 });

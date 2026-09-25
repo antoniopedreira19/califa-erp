@@ -11,8 +11,10 @@ protótipo clicável aprovado)
 `20260922140005_rentabilidade_volta_ao_original.sql`,
 `20260922140006_retirar_save_nao_enviado.sql`,
 `20260922140007_recusa_de_save_com_errata.sql`,
-`20260922140008_save_quem_pede_e_mes_enviado.sql` e
-`20260922140009_save_revisao_das_correcoes.sql` (correções de 23/09).
+`20260922140008_save_quem_pede_e_mes_enviado.sql`,
+`20260922140009_save_revisao_das_correcoes.sql` (correções de 23/09),
+`20260924100001_save_administrador_e_gp.sql` e
+`20260924100006_mes_do_pedido_de_save.sql` (revisão de 24/09, §7).
 
 Revê a [028](028-save-entre-jobs.md) na nota de 01/09/2026 (o saldo de save
 só era oferecido depois do envio do job ao faturamento). O resto da 028 —
@@ -100,7 +102,9 @@ Textos aprovados, estados do pop-up e o contrato completo:
   GP/produtor **responsável** pelo job — a mesma regra de `quemPodeMexer` da
   tela. As actions conferem o mesmo antes (`acao_negada` na auditoria).
   Cancelar pedido segue aberto a quem enxerga o job, como a especificação
-  pede. Sem isso, pela API, o financeiro pedia save num job aberto e
+  pede. ⚠️ **Revisto em 24/09/2026 (§7):** administrador ou qualquer GP,
+  responsável ou não; o produtor não mexe no save, e cancelar pedido
+  passa pela mesma regra. Sem isso, pela API, o financeiro pedia save num job aberto e
   aprovava o próprio pedido. ⚠️ A trava do banco é das RPCs de job
   **aberto**: na cópia do job em pré-abertura ou devolvido a escrita segue
   direta, por desenho, e ali a conferência do responsável é só da action
@@ -188,9 +192,47 @@ o fechamento.
   nota deveria redividir job × save nos títulos EM ABERTO dela. Não
   implementado: pede desenho próprio (a divisão hoje é derivada de
   `faturamento_itens` em `vw_titulo_partes`, e mudar ali mudaria também os
-  títulos recebidos).
+  títulos recebidos). ⚠️ **Resolvida em 24/09/2026 pela
+  [102](102-rateio-da-nota-acompanha-o-save.md):** o rateio se refaz na
+  hora da mudança de save, e o save se apropria também do que já foi
+  recebido.
 - `vw_job_rentabilidade` (relatórios, frente do Antonio) segue lendo a
   linha crua: durante um pedido aguardando, o relatório já tira a linha do
   imposto previsto e do custo, com o faturamento previsto antigo. A troca
   foi feita e desfeita no mesmo dia (`20260922140005`); a decisão é do
-  Tiago com o Antonio.
+  Tiago com o Antonio. ⚠️ **Resolvido em 24/09/2026 pela
+  [103](103-rentabilidade-separa-o-save.md):** o relatório lê as linhas
+  como o financeiro vê e tira o save do faturamento do job que o gera.
+
+## 7. Revisão de 24/09/2026 (Tiago)
+
+- **Quem mexe no save:** administrador ou **qualquer GP** — gerar,
+  consumir, retirar, cancelar pedido e enviar o legado, no orçamento e no
+  job, responsável pelo job ou não. O produtor não mexe no save. O que o
+  financeiro precisa é saber quem fez, e isso já vai no pedido
+  (`enviado_por`), que a aprovação mostra.
+  - Banco: `save_pode_mexer_no_job` passou a "administrador ou GP ativo";
+    `cancelar_pedido_save` também confere
+    (`20260924100001_save_administrador_e_gp.sql`).
+  - Permissões: `jobs.consumir_save` e `orcamentos.marcar_em_save` ficam
+    com administrador e GP. A de orçamento existia na matriz, mas nada a
+    conferia: agora a tela e as actions do orçamento conferem.
+  - A troca de responsável do job deixou de ser risco para o save e segue
+    como era.
+- **O mês no pedido do mensal:** fila, pop-up de aprovação, bloco "Saves
+  deste job" da conferência e card da Comunicação mostram "Outubro de 2026
+  · Agrupamento 1". O mês vem do campo calculado `mes_do_pedido`
+  (`20260924100006`).
+- **Pedido cancelado ou recusado na revisão:** a errata que o pedido gerou
+  fica no histórico, mas a lista de erratas da revisão e o resumo da fila
+  marcam "pedido cancelado" ou "save recusado".
+- **Cabeçalho do job no financeiro:** valor do job, resultado planejado e o
+  card de Erratas passam a usar a conta do financeiro. Um pedido que
+  aguarda não mexe neles até a aprovação.
+- **Home do financeiro e do administrador:** o card "Jobs aguardando
+  abertura" soma os saves a aprovar, como a aba da fila, e o subtítulo diz
+  quantos são jobs e quantos são saves.
+- **Pop-up do orçamento:** diz que o crédito só fica disponível para
+  outros jobs depois que o financeiro aprovar, na abertura do job.
+- **Consumo aguardando no mensal:** segue travando o envio de todos os
+  meses. A revisão aberta já trava todos.

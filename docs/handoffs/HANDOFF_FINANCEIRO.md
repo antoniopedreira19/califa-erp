@@ -5812,3 +5812,47 @@ era o imposto de R$ 28.318,52). Regra completa na
 - **A action de abrir não foi exercitada na tela:** não havia job de teste
   aguardando abertura. Ela usa as mesmas conferências e a mesma gravação
   da edição, e a edição foi testada gravando no JOB-0032.
+
+## ⚠️ Nota de 2026-09-24 — rateio da nota com o save, relatório de rentabilidade e ajustes da aprovação de save
+
+### Regra 21: o rateio da nota acompanha o save ([decisão 102](../decisions/102-rateio-da-nota-acompanha-o-save.md))
+
+- Quando o save muda depois da nota emitida, `save_rateio_das_notas`
+  refaz os itens `job`/`save` das notas do job pela regra "job primeiro,
+  save por último", com a conta de `vw_faturamento_pendente`. O save
+  maior do que falta receber se apropria de parte do que já foi recebido.
+- Roda dentro de `save_gravar_totais` (aprovar, recusar pedido já contado,
+  cancelar, retirar). Auditoria: `faturamento.rateio_save_refeito`.
+- Títulos, baixas e fluxo de caixa acompanham sozinhos: tudo deriva dos
+  itens da nota.
+
+### Relatório de rentabilidade ([decisão 103](../decisions/103-rentabilidade-separa-o-save.md))
+
+- `vw_job_rentabilidade` tira a parte de save do faturamento do job que o
+  gera e soma a receita migrada no job que consome (a conta do fluxo de
+  caixa). As linhas são lidas como o financeiro vê. Jobs sem save não
+  mudam. A view é da frente de relatórios; a mudança foi decidida pelo
+  Tiago em 24/09.
+
+### Aprovação de save (decisão 099 §7)
+
+- **Cabeçalho do job** (`/financeiro/jobs/[jobId]`): valor do job,
+  resultado planejado e card de Erratas pela conta do financeiro
+  (`resumoComoOFinanceiroVe`). Um pedido que aguarda não mexe neles; o
+  planejado que um "gerar save" zerou volta na conta.
+- **Mês no pedido do mensal:** fila, pop-up de aprovação, bloco "Saves
+  deste job" e card da Comunicação mostram "Outubro de 2026 · Agrupamento
+  1" (`grupoDoPedido`, campo calculado `mes_do_pedido`).
+- **Revisão:** errata de pedido cancelado ou recusado aparece marcada
+  ("pedido cancelado", "save recusado") na lista da revisão e no resumo da
+  fila (`ErrataDaRevisao.pedidoQueNaoVale`).
+- **Fila:** o resumo mostra só o que existe. Sem job, sai o "0 jobs na
+  fila · R$ 0,00".
+- **Home** do financeiro e do administrador: o card "Jobs aguardando
+  abertura" soma os saves a aprovar, e o subtítulo separa os dois.
+
+### Dado de teste
+
+- O envio de outubro do JOB-0034 ("TESTE 099 — NÃO EMITIR NOTA") foi
+  removido. Não havia nota sobre ele, e ele saiu da fila do contas a
+  receber.

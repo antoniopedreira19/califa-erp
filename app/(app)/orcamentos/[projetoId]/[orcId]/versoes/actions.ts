@@ -35,6 +35,12 @@ import type {
   VersaoOrcamentoItem,
 } from "@/lib/types";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
+import {
+  gruposNaOrdemDaTela,
+  moverNaLista,
+  numerarItens,
+  ordensAlteradas,
+} from "@/lib/calculos/ordem-itens";
 import { formatCurrency } from "@/lib/utils";
 
 export type ActionResult =
@@ -1394,6 +1400,123 @@ export async function removerItem(itemId: string): Promise<ActionResult> {
   }
 
   revalidatePath(`/orcamentos/${check.projeto_id}/${check.orcamento_id}`);
+  return { ok: true, id: itemId };
+}
+
+/**
+ * Muda o item de lugar na planilha — decisão 104. Vem da alça de arrastar
+ * e do Alt + ↑ ↓ da tela da versão.
+ *
+ * `indice` é a posição entre os itens do grupo de destino SEM o item que
+ * se move, como a linha de inserção da tela a mede. A regra do movimento
+ * e a renumeração moram em `lib/calculos/ordem-itens.ts`; aqui se lê a
+ * ordem ATUAL do banco (não a da tela, que pode estar atrasada), aplica o
+ * movimento e grava só o que mudou, numa transação (RPC
+ * `aplicar_ordem_itens_versao`).
+ *
+ * Trava igual à da edição de célula (resposta do Tiago, 24/09/2026):
+ * permissão `orcamentos.editar` e versão que não está aprovada nem
+ * cancelada. O item pode trocar de agrupamento, mas só dentro da versão.
+ */
+export async function moverItem(
+  itemId: string,
+  grupoDestinoId: string,
+  indice: number,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
+  if (!Number.isInteger(indice) || indice < 0) {
+    return { ok: false, message: "Posição inválida." };
+  }
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: item, error: loadError } = await supabase
+    .from("versoes_orcamento_itens")
+    .select(
+      "versao_orcamento_id, versao:versoes_orcamento!inner(orcamento_id, status)",
+    )
+    .eq("id", itemId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      versao_orcamento_id: string;
+      versao: { orcamento_id: string; status: string };
+    }>();
+
+  if (loadError) {
+    console.error("[itens.mover.load]", loadError.message);
+    return { ok: false, message: "Não foi possível carregar o item." };
+  }
+  if (!item?.versao) return { ok: false, message: "Item não encontrado." };
+  if (item.versao.status === "aprovada" || item.versao.status === "cancelada") {
+    return {
+      ok: false,
+      message: `Versão ${item.versao.status} não permite mudar a ordem dos itens.`,
+    };
+  }
+
+  const versaoId = item.versao_orcamento_id;
+  const [gruposRes, itensRes, orcRes] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_grupos")
+      .select("id, ordem")
+      .eq("versao_orcamento_id", versaoId)
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("id, grupo_id, ordem")
+      .eq("versao_orcamento_id", versaoId)
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("orcamentos")
+      .select("projeto_id")
+      .eq("id", item.versao.orcamento_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ projeto_id: string }>(),
+  ]);
+
+  if (gruposRes.error || itensRes.error) {
+    console.error(
+      "[itens.mover.ordem]",
+      gruposRes.error?.message ?? itensRes.error?.message,
+    );
+    return { ok: false, message: "Não foi possível ler a ordem da planilha." };
+  }
+
+  const grupos = (gruposRes.data ?? []) as { id: string; ordem: number }[];
+  const itens = (itensRes.data ?? []) as {
+    id: string;
+    grupo_id: string;
+    ordem: number;
+  }[];
+  if (!grupos.some((g) => g.id === grupoDestinoId)) {
+    return { ok: false, message: "O agrupamento de destino não é desta versão." };
+  }
+
+  const movido = moverNaLista(
+    gruposNaOrdemDaTela(grupos, itens),
+    itemId,
+    grupoDestinoId,
+    indice,
+  );
+  // Nada mudou (mesmo lugar): não é erro, a tela já está certa.
+  if (!movido) return { ok: true, id: itemId };
+
+  const alteradas = ordensAlteradas(itens, numerarItens(movido));
+  if (alteradas.length > 0) {
+    const { error } = await supabase.rpc("aplicar_ordem_itens_versao", {
+      p_versao_id: versaoId,
+      p_itens: alteradas,
+    });
+    if (error) {
+      console.error("[itens.mover]", error.message);
+      return { ok: false, message: "Não foi possível mudar o item de lugar." };
+    }
+  }
+
+  revalidatePath(`/orcamentos/${orcRes.data?.projeto_id}/${item.versao.orcamento_id}`);
   return { ok: true, id: itemId };
 }
 

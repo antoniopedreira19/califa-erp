@@ -37,6 +37,7 @@ import { fotosDaAbertura } from "../../abertura-de-job/fotos";
 import {
   carregarAprovacaoDeSave,
   custoPrevistoDoFinanceiro,
+  resumoComoOFinanceiroVe,
 } from "../../abertura-de-job/aprovacao-save";
 import {
   competenciasGravadas,
@@ -120,6 +121,7 @@ export default async function JobNoFinanceiroPage({
     aprovacaoLida,
     custoLido,
     impostoLido,
+    resumoFinanceiro,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -181,6 +183,9 @@ export default async function JobNoFinanceiroPage({
       params.jobId,
       searchParams?.aprovarSave ? [searchParams.aprovarSave] : [],
     ),
+    // O cabeçalho e o card de Erratas na conta do financeiro (decisão 099):
+    // durante um pedido de save, os números oficiais até a aprovação.
+    resumoComoOFinanceiroVe(supabase, tenantId, params.jobId),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
@@ -375,11 +380,19 @@ export default async function JobNoFinanceiroPage({
           {detalhe.itens.length > 0 && (
             <div className="mt-[10px]">
               <ResumoResultado
-                valorJob={totaisJob.valorJob}
+                // Na conta do financeiro (24/09/2026): um pedido de save que
+                // aguarda ainda não mexe no valor do job nem no planejado.
+                // Leitura que falha volta aos números da planilha.
+                valorJob={resumoFinanceiro?.valorJob ?? totaisJob.valorJob}
                 // No internacional são impostos BR + int. taxes + custos de
                 // transação (decisão 072) — o mesmo campo da página de Jobs.
-                deducoes={totaisJob.deducoesDoResultado}
-                custoPlanejado={custoPlanejadoJob}
+                deducoes={
+                  resumoFinanceiro?.deducoesDoResultado ??
+                  totaisJob.deducoesDoResultado
+                }
+                custoPlanejado={
+                  custoPlanejadoJob + (resumoFinanceiro?.planejadoDosPedidos ?? 0)
+                }
                 custoRealizado={custoRealizadoJob}
                 bvRealizado={bvRealizadoJob}
                 moeda={versaoAprovada.moeda}
@@ -537,8 +550,11 @@ export default async function JobNoFinanceiroPage({
               erratas={detalhe.erratas}
               valorJobAbertura={job.valor_job_abertura}
               faturamentoPrevistoAbertura={job.faturamento_previsto_abertura}
-              valorJobAtual={totaisJob.valorJob}
-              faturamentoPrevistoAtual={totaisJob.faturamentoPrevisto}
+              valorJobAtual={resumoFinanceiro?.valorJob ?? totaisJob.valorJob}
+              faturamentoPrevistoAtual={
+                resumoFinanceiro?.faturamentoPrevisto ??
+                totaisJob.faturamentoPrevisto
+              }
               moeda={versaoAprovada.moeda}
             />
           </div>
@@ -640,6 +656,7 @@ export default async function JobNoFinanceiroPage({
               realizadosMap={detalhe.realizadosMap}
               categoriasMap={detalhe.categoriasMap}
               podeAcoes={false}
+              podeMexerNoSave={false}
               podeExportarInterna={podeExportarInterna}
               podeConfirmarBv={false}
               ppsPorItemId={detalhe.ppsPorItemId}

@@ -172,6 +172,13 @@ export function ResumoErrataDialog({
                   </p>
                   <p className="mt-1 text-[12.5px] italic leading-relaxed text-foreground">
                     “{unica.descricao}”
+                    {unica.pedidoQueNaoVale && (
+                      <span className="ml-1.5 rounded-full bg-muted px-2 py-[1px] text-[10.5px] font-semibold not-italic uppercase tracking-wide text-muted-foreground">
+                        {unica.pedidoQueNaoVale === "cancelado"
+                          ? "pedido cancelado"
+                          : "save recusado"}
+                      </span>
+                    )}
                   </p>
                 </div>
               )}
@@ -212,6 +219,14 @@ export function ResumoErrataDialog({
                             {i + 1}.
                           </span>{" "}
                           <span className="italic">“{e.descricao}”</span>
+                          {/* Pedido de save que já não vale (24/09/2026). */}
+                          {e.pedidoQueNaoVale && (
+                            <span className="ml-1.5 rounded-full bg-muted px-2 py-[1px] text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {e.pedidoQueNaoVale === "cancelado"
+                                ? "pedido cancelado"
+                                : "save recusado"}
+                            </span>
+                          )}
                         </p>
                         <p className="mt-0.5 text-[11.5px] text-muted-foreground">
                           {e.autorNome ?? "—"} · {dataHora(e.em)} ·{" "}

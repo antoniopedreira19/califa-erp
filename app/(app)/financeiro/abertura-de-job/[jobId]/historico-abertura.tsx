@@ -360,6 +360,15 @@ export function ResumoDaAberturaAnterior({
                 "Errata "
               )}
               <span className="italic text-foreground">“{e.descricao}”</span>
+              {/* O pedido que gerou esta errata já não vale (24/09/2026):
+                  a errata fica no histórico, mas não conta. */}
+              {e.pedidoQueNaoVale && (
+                <span className="ml-1.5 rounded-full bg-muted px-2 py-[1px] text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {e.pedidoQueNaoVale === "cancelado"
+                    ? "pedido cancelado"
+                    : "save recusado"}
+                </span>
+              )}
               {e.autorNome ? ` · ${e.autorNome}` : ""} ·{" "}
               {formatDataHoraBr(e.em)} · faturamento previsto{" "}
               <span className="font-mono line-through">

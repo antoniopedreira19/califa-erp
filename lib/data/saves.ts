@@ -26,6 +26,7 @@ import type {
   SaveAprovacaoTipo,
 } from "@/lib/types";
 import type { PedidoParaFinanceiro } from "@/lib/calculos/save-financeiro";
+import { rotuloMes } from "@/lib/calculos/meses-trimestre";
 
 /** Um job com saldo de save a oferecer. */
 export interface SaldoDeSave {
@@ -50,6 +51,22 @@ export interface SaldoDeSave {
   percentualImposto: number;
   /** As linhas que formaram o saldo — o detalhe do pop-up. */
   linhas: { descricao: string; tipoCusto: string; valor: number }[];
+}
+
+/**
+ * O grupo do pedido de save como a tela mostra (24/09/2026). No modelo
+ * mensal (decisão 078) os mesmos grupos se repetem mês a mês, e o pedido
+ * sai com o mês na frente: "Outubro de 2026 · Agrupamento 1". Fora do
+ * mensal `mes` é nulo e o grupo fica como está. O mês vem do campo
+ * calculado `mes_do_pedido` de `saves_aprovacoes`.
+ */
+export function grupoDoPedido(
+  grupoNome: string | null,
+  mes: string | null,
+): string | null {
+  if (!mes) return grupoNome;
+  const rotulo = rotuloMes(mes);
+  return grupoNome ? `${rotulo} · ${grupoNome}` : rotulo;
 }
 
 /**

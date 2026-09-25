@@ -40,6 +40,17 @@ function diasNoFuturo(dias: number): string {
 }
 
 /**
+ * Subtítulo do card da fila de abertura: com save a aprovar, diz quantos
+ * são jobs e quantos são saves; sem, fica o texto de sempre (24/09/2026).
+ */
+function subtituloDaFila(jobs: number, saves: number, padrao: string): string {
+  if (saves === 0) return padrao;
+  const j = `${jobs} ${jobs === 1 ? "job" : "jobs"} para abrir`;
+  const sv = `${saves} ${saves === 1 ? "save" : "saves"} a aprovar`;
+  return jobs === 0 ? sv : `${j} · ${sv}`;
+}
+
+/**
  * Home do Administrador: ve o tenant inteiro. Cards de pendencia e KPIs
  * do mes corrente. Todas as contagens em Promise.all — nenhuma query
  * bloqueia a proxima.
@@ -67,6 +78,7 @@ export async function carregarHomeAdmin(
     contasPagarVencidas,
     contasReceberVencidas,
     jobsAguardandoAbertura,
+    savesAguardando,
     ppsEmAvaliacao,
     desembolsosEmAvaliacao,
     jobsFaturamentoProximo,
@@ -94,6 +106,13 @@ export async function carregarHomeAdmin(
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("status", "aguardando_abertura"),
+    // Saves a aprovar (decisão 099): a fila da abertura pede os dois ao
+    // financeiro, e o card conta os dois, como a aba da fila (24/09/2026).
+    supabase
+      .from("saves_aprovacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("situacao", "aguardando"),
     supabase
       .from("pedidos_compra")
       .select("id", { count: "exact", head: true })
@@ -183,8 +202,12 @@ export async function carregarHomeAdmin(
     },
     {
       titulo: "Jobs aguardando abertura",
-      contagem: jobsAguardandoAbertura.count ?? 0,
-      subtitulo: "Fila do financeiro pra abrir jobs",
+      contagem: (jobsAguardandoAbertura.count ?? 0) + (savesAguardando.count ?? 0),
+      subtitulo: subtituloDaFila(
+        jobsAguardandoAbertura.count ?? 0,
+        savesAguardando.count ?? 0,
+        "Fila do financeiro pra abrir jobs",
+      ),
       href: "/financeiro/abertura-de-job",
       icone: Briefcase,
     },
@@ -271,6 +294,7 @@ export async function carregarHomeFinanceiro(
     contasPagarVencidas,
     contasReceberVencidas,
     jobsAguardandoAbertura,
+    savesAguardando,
     ppsEmAvaliacao,
     desembolsosEmAvaliacao,
     faturasCartaoFechadas,
@@ -296,6 +320,13 @@ export async function carregarHomeFinanceiro(
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("status", "aguardando_abertura"),
+    // Saves a aprovar (decisão 099): a fila da abertura pede os dois ao
+    // financeiro, e o card conta os dois, como a aba da fila (24/09/2026).
+    supabase
+      .from("saves_aprovacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("situacao", "aguardando"),
     supabase
       .from("pedidos_compra")
       .select("id", { count: "exact", head: true })
@@ -368,8 +399,12 @@ export async function carregarHomeFinanceiro(
     },
     {
       titulo: "Jobs aguardando abertura",
-      contagem: jobsAguardandoAbertura.count ?? 0,
-      subtitulo: "Sua fila principal",
+      contagem: (jobsAguardandoAbertura.count ?? 0) + (savesAguardando.count ?? 0),
+      subtitulo: subtituloDaFila(
+        jobsAguardandoAbertura.count ?? 0,
+        savesAguardando.count ?? 0,
+        "Sua fila principal",
+      ),
       href: "/financeiro/abertura-de-job",
       icone: Briefcase,
     },

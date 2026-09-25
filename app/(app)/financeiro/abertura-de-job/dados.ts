@@ -15,6 +15,7 @@ import {
   contatosDeCobrancaPorJob,
   type ContatoCobranca,
 } from "@/lib/data/contatos-cobranca";
+import { grupoDoPedido } from "@/lib/data/saves";
 
 /**
  * Um job na fila de abertura, com tudo que a conferência do financeiro
@@ -214,6 +215,11 @@ export interface ErrataDaRevisao {
   /** A errata nasceu de um pedido de save (`saves_aprovacoes.errata_id`,
    *  decisão 099) — a "errata de save" do job aberto. */
   deSave: boolean;
+  /** O pedido de save desta errata já não vale (24/09/2026): `cancelado`
+   *  pela produção antes da decisão, ou `recusado` pelo financeiro. A
+   *  errata fica no histórico, e a revisão mostra que ela não conta.
+   *  `null` na errata comum e no pedido que ainda vale. */
+  pedidoQueNaoVale: "cancelado" | "recusado" | null;
 }
 
 /**
@@ -604,7 +610,7 @@ async function revisoesPendentes(
     // não pelas erratas, para rodar junto das outras duas.
     supabase
       .from("saves_aprovacoes")
-      .select("id, job_id, errata_id, situacao")
+      .select("id, job_id, errata_id, situacao, decidido_em")
       .eq("tenant_id", tenantId)
       .in("job_id", ids)
       .not("errata_id", "is", null),
@@ -616,13 +622,25 @@ async function revisoesPendentes(
     console.error("[abertura-job.revisoes.pedidos]", pedidosRes.error.message);
   }
   const pedidosPorErrata = new Map<string, string[]>();
+  // Pedido que já não vale: retirado sem decisão = cancelado pela produção;
+  // recusado (ou recusado e depois arquivado) = recusado pelo financeiro.
+  const naoVale = new Map<string, "cancelado" | "recusado">();
   for (const p of (pedidosRes.data ?? []) as Array<{
     errata_id: string;
     situacao: string;
+    decidido_em: string | null;
   }>) {
     const lista = pedidosPorErrata.get(p.errata_id) ?? [];
     lista.push(p.situacao);
     pedidosPorErrata.set(p.errata_id, lista);
+    if (p.situacao === "retirado" && p.decidido_em === null) {
+      naoVale.set(p.errata_id, "cancelado");
+    } else if (
+      p.situacao === "recusado" ||
+      (p.situacao === "retirado" && p.decidido_em !== null)
+    ) {
+      naoVale.set(p.errata_id, "recusado");
+    }
   }
 
   if (fotosRes.error) {
@@ -676,6 +694,7 @@ async function revisoesPendentes(
       linhasNovas: conta("nova"),
       linhasRemovidas: conta("removida"),
       deSave: pedidosPorErrata.has(e.id),
+      pedidoQueNaoVale: naoVale.get(e.id) ?? null,
     });
     porJob.set(e.job_id, lista);
   }
@@ -716,7 +735,7 @@ async function savesDaConferencia(
   const { data, error } = await supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, job_id, item, total_orcado, em_save, save_consumido, ordem, grupo:versoes_orcamento_grupos!jobs_itens_orcado_grupo_id_fkey(nome, ordem)",
+      "id, job_id, item, total_orcado, em_save, save_consumido, ordem, grupo:versoes_orcamento_grupos!jobs_itens_orcado_grupo_id_fkey(nome, ordem, mes:versoes_orcamento_meses!versoes_orcamento_grupos_mes_da_mesma_versao_fkey(mes))",
     )
     .eq("tenant_id", tenantId)
     .in("job_id", jobIds)
@@ -759,9 +778,10 @@ async function savesDaConferencia(
     }
   }
 
-  // Na ordem da planilha: agrupamento, depois item.
+  // Na ordem da planilha: mês (no mensal), agrupamento, depois item.
   linhas.sort(
     (a, b) =>
+      String(a.grupo?.mes?.mes ?? "").localeCompare(String(b.grupo?.mes?.mes ?? "")) ||
       Number(a.grupo?.ordem ?? 0) - Number(b.grupo?.ordem ?? 0) ||
       Number(a.ordem ?? 0) - Number(b.ordem ?? 0),
   );
@@ -771,7 +791,8 @@ async function savesDaConferencia(
     lista.push({
       id: l.id,
       tipo: gera ? "gera" : "consome",
-      grupoNome: l.grupo?.nome ?? null,
+      // No mensal, com o mês na frente (24/09/2026).
+      grupoNome: grupoDoPedido(l.grupo?.nome ?? null, l.grupo?.mes?.mes ?? null),
       item: l.item,
       valor: gera ? Number(l.total_orcado ?? 0) : Number(l.save_consumido ?? 0),
       origens: gera
@@ -840,7 +861,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
   const { data, error } = await supabase
     .from("saves_aprovacoes")
     .select(
-      "id, job_id, job_item_orcado_id, item_descricao, grupo_nome, tipo, momento, valor, origens, enviado_por, enviado_em, errata_id, valor_job_antes, valor_job_depois, faturamento_previsto_antes, faturamento_previsto_depois",
+      "id, job_id, job_item_orcado_id, item_descricao, grupo_nome, mes_do_pedido, tipo, momento, valor, origens, enviado_por, enviado_em, errata_id, valor_job_antes, valor_job_depois, faturamento_previsto_antes, faturamento_previsto_depois",
     )
     .eq("tenant_id", tenantId)
     .eq("situacao", "aguardando")
@@ -994,7 +1015,8 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       tipo: p.tipo as SaveAprovacaoTipo,
       momento: p.momento as SaveAprovacaoMomento,
       itemDescricao: p.item_descricao,
-      grupoNome: p.grupo_nome ?? null,
+      // No mensal, com o mês na frente (24/09/2026).
+      grupoNome: grupoDoPedido(p.grupo_nome ?? null, p.mes_do_pedido ?? null),
       tipoCusto: p.job_item_orcado_id
         ? (tipos.get(p.job_item_orcado_id) ?? null)
         : null,
