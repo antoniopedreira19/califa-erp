@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
 }
 
 type TabKey = "info" | "planilha" | "pps" | "chat";
+
+const TAB_KEYS: TabKey[] = ["info", "planilha", "pps", "chat"];
 
 /**
  * Deixa o conteúdo das abas trocar de aba. O chat usa pra levar até o card
@@ -48,8 +51,30 @@ export function JobTabs({
 }: Props) {
   const [tab, setTab] = React.useState<TabKey>(abaInicial);
 
+  // A aba vive também no `?aba=` (decisão 106): é por ele que a faixa do
+  // projeto leva ao job irmão na mesma aba. Mesmo desenho das abas do job
+  // no financeiro — a URL, quando muda, manda; o clique grava sem passar
+  // pelo router, porque a página é `force-dynamic` e um `router.replace`
+  // refaria todas as consultas só para trocar de aba.
+  const valorNaUrl = useSearchParams().get("aba");
+  const abaNaUrl = TAB_KEYS.includes(valorNaUrl as TabKey)
+    ? (valorNaUrl as TabKey)
+    : undefined;
+  React.useEffect(() => {
+    setTab(abaNaUrl ?? abaInicial);
+  }, [abaNaUrl, abaInicial]);
+
+  const irPara = React.useCallback((nova: TabKey) => {
+    setTab(nova);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("aba", nova);
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, []);
+
   return (
-    <JobTabsContext.Provider value={setTab}>
+    <JobTabsContext.Provider value={irPara}>
     <div className="space-y-6">
       <div
         role="tablist"
@@ -58,17 +83,17 @@ export function JobTabs({
       >
         <TabButton
           active={tab === "info"}
-          onClick={() => setTab("info")}
+          onClick={() => irPara("info")}
         >
           Informações do Job
         </TabButton>
         <TabButton
           active={tab === "planilha"}
-          onClick={() => setTab("planilha")}
+          onClick={() => irPara("planilha")}
         >
           Planilha Interna
         </TabButton>
-        <TabButton active={tab === "pps"} onClick={() => setTab("pps")}>
+        <TabButton active={tab === "pps"} onClick={() => irPara("pps")}>
           Pedidos de Produção (PPs)
           {ppsCount > 0 && (
             <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
@@ -76,7 +101,7 @@ export function JobTabs({
             </span>
           )}
         </TabButton>
-        <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
+        <TabButton active={tab === "chat"} onClick={() => irPara("chat")}>
           Comunicação
           {chatCount > 0 && (
             <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">

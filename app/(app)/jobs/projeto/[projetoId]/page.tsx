@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowLeft,
   ArrowRight,
   ClipboardList,
   FolderKanban,
@@ -20,6 +19,8 @@ import {
   type JobStatusExibido,
   jobStatusBadgeClasses,
 } from "@/lib/types";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { AGREGADA, itensDeJobs } from "@/lib/faixa-do-projeto";
 import { carregarPlanilhasDosJobs } from "./carregar-planilhas";
 import { PlanilhasDoProjeto } from "./planilhas-do-projeto";
 
@@ -131,16 +132,18 @@ export default async function ProjetoAgregadoPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link
-          href="/jobs"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para jobs
-        </Link>
+        {/* Faixa do projeto (decisão 106): os mesmos jobs desta tela. */}
+        <FaixaDoProjeto
+          modulo="jobs"
+          voltar={{ href: "/jobs", rotulo: "Jobs", titulo: "Voltar para jobs" }}
+          projeto={{ codigo: projetoTyped.codigo, nome: projetoTyped.nome }}
+          agregadaHref={`/jobs/projeto/${params.projetoId}`}
+          itens={itensDeJobs("/jobs/", jobs, null, () => true)}
+          ativo={AGREGADA}
+        />
         {/* O resumo fica ancorado à direita; o bloco do título encolhe
             dentro da própria coluna quando o nome do projeto é longo. */}
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">
               <FolderKanban className="h-5 w-5 text-california-red" />
@@ -180,7 +183,8 @@ export default async function ProjetoAgregadoPage({
           {planilhas.map((j, i) => (
             <Link
               key={j.id}
-              href={`/jobs/${j.id}?from=jobs`}
+              // Da agregada, o job abre na Planilha Interna (decisão 106).
+              href={`/jobs/${j.id}?from=jobs&aba=planilha`}
               prefetch={false}
               className="group relative grid grid-cols-[28px_auto_1fr] items-center gap-2.5 py-[5px]"
             >

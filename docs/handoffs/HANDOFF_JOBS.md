@@ -4201,6 +4201,24 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   banco. Montar uma exige o fluxo inteiro, com o login do financeiro.
 
 
+## ⚠️ Nota de 2026-09-25 — faixa do projeto na página do job e na agregada (decisão 106)
+
+- A primeira linha da página do job (`/jobs/[jobId]`) e da agregada
+  (`/jobs/projeto/[projetoId]`) é a **faixa do projeto**
+  (`components/faixa-do-projeto.tsx`): o voltar, o projeto e uma aba para
+  a Visão agregada e para cada job do projeto. O "Voltar para" solto saiu;
+  o destino é o mesmo (`/jobs` com `?from=jobs`, o orçamento sem ele), com
+  o texto encurtado na faixa e o completo no `title`.
+- Entram os jobs da agregada — todos menos os cancelados — e o job aberto,
+  sempre.
+- **As abas do job gravam o `?aba=`** (`job-tabs.tsx`, `replaceState`),
+  como as do financeiro já faziam. É por ele que a troca de job pela faixa
+  mantém a aba de seção. O `?from=jobs` acompanha.
+- **Da agregada, o job abre na Planilha Interna** (antes, Informações): a
+  aba da faixa, a árvore, o "Abrir job" do bloco e o código no card de
+  Totais levam `?from=jobs&aba=planilha`.
+- A árvore sob o título e o card "Jobs do projeto" da ficha ficam.
+
 ## ⚠️ Nota de 2026-09-24 — save de administrador e GP, errata numa transação e horário da Comunicação
 
 ### Quem mexe no save (decisão 099 §7)

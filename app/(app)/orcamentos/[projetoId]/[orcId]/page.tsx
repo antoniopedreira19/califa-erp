@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { FaixaDosOrcamentos, faixaDoOrcamentoSemItens } from "../faixa-orcamentos";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileStack, FolderTree, Lock } from "lucide-react";
+import { FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
@@ -525,16 +528,34 @@ export default async function OrcamentoDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href={`/orcamentos/${params.projetoId}`}
-          prefetch={false}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        {/* Faixa do projeto (decisão 106): o voltar, a agregada e os
+            orçamentos irmãos. Os irmãos chegam por streaming; o fallback
+            é a mesma faixa sem eles, na mesma altura. */}
+        <Suspense
+          fallback={
+            <FaixaDoProjeto
+              {...faixaDoOrcamentoSemItens({
+                id: params.projetoId,
+                codigo: projetoRaw.codigo,
+                nome: projetoRaw.nome,
+              })}
+              ativo={orcamento.id}
+              itens={null}
+            />
+          }
         >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para {projetoRaw.codigo} · {projetoRaw.nome}
-        </Link>
+          <FaixaDosOrcamentos
+            tenantId={session.activeTenant.id}
+            projeto={{
+              id: params.projetoId,
+              codigo: projetoRaw.codigo,
+              nome: projetoRaw.nome,
+            }}
+            orcamentoId={orcamento.id}
+          />
+        </Suspense>
 
-        <div className="mt-3">
+        <div className="mt-5">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             {orcamento.codigo}
           </p>
