@@ -202,6 +202,11 @@ export function PlanilhaVersao({
             editavel && !interno
               ? async (ligado) => {
                   setPadrao(ligado);
+                  // Ligar o orçamento de save abre a coluna: todo item novo
+                  // vai nascer em save, e a marca dele só aparece nela
+                  // (decisão 107). Desligar não recolhe — as linhas que já
+                  // nasceram em save continuam lá.
+                  if (ligado) setSaveVisivel(true);
                   const r = await definirSavePorPadrao(versaoId, ligado);
                   if (!r.ok) setPadrao(!ligado);
                   router.refresh();

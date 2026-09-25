@@ -35,7 +35,9 @@ só nasce **aberta** quando o próprio orçamento ou job já tem save:
 - **O saldo do cliente em outros jobs não abre mais a coluna.** Ele segue
   oferecido no pop-up de save de cada linha, como antes.
 - **O "Orçamento de save" abre a coluna** mesmo antes da primeira linha:
-  nele todo item novo nasce em save.
+  nele todo item novo nasce em save. Vale ao carregar a página e também
+  na hora em que o interruptor é ligado; desligar não recolhe, porque as
+  linhas que já nasceram em save continuam lá.
 - **O estado é da tela, não é gravado.** Quem recolhe ou abre a coluna
   pela alça ou pelo menu "Exibir" vê o estado mudar só até sair da página.
 - **O financeiro ganhou o liga-desliga.** A agregada dele passou a ter o
