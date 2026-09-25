@@ -57,9 +57,7 @@ export function EditarDadosDrawer({
   );
 
   const isPJ =
-    tipoContratacao === "pj" ||
-    tipoContratacao === "mei" ||
-    tipoContratacao === "clt_recibo";
+    tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
   const documentoLabel = isPJ ? "CNPJ" : "CPF";
   const documentoMask = isPJ ? "cnpj" : "cpf";
 
@@ -153,9 +151,6 @@ export function EditarDadosDrawer({
                   <SelectContent>
                     <SelectItem value="pj">
                       {tipoContratacaoLabel("pj")}
-                    </SelectItem>
-                    <SelectItem value="mei">
-                      {tipoContratacaoLabel("mei")}
                     </SelectItem>
                     <SelectItem value="clt_recibo">
                       {tipoContratacaoLabel("clt_recibo")}
