@@ -89,6 +89,9 @@ interface Props {
   /** Moeda e taxa de compra da coluna calculada da planilha. `null` fora
    *  do internacional. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
+   *  planejado igual ao orçado e nenhum controle de save. Obrigatória. */
+  interno: boolean;
   // ---- MODELO MENSAL (docs/decisions/078)
   /** O mês desta planilha: o "Novo grupo" nasce dentro dele. Ausente fora
    *  do modelo mensal. */
@@ -122,6 +125,7 @@ export function PlanilhaVersao({
   modeloPlanilha,
   internacional,
   moedaEstrangeira,
+  interno,
   mes,
   semTotais,
   tituloTotais,
@@ -146,7 +150,9 @@ export function PlanilhaVersao({
     React.useState<VersaoOrcamentoItem | null>(null);
 
   const editavel = !readOnly;
-  const saveEditavel = editavel && podeMarcarSave;
+  // O Interno não tem save (decisão 105): nem coluna, nem "Orçamento de
+  // save", nem formulário da linha.
+  const saveEditavel = editavel && podeMarcarSave && !interno;
 
   const linhaDoDialog: LinhaDoSave | null = linhaAberta
     ? {
@@ -185,15 +191,16 @@ export function PlanilhaVersao({
           bvsPorItem={bvsPorItem}
           fornecedores={fornecedores}
           versaoLabel={versaoLabel}
-          saveVisivel={saveVisivel}
+          saveVisivel={saveVisivel && !interno}
           savePorItem={savePorItem}
-          onAbrirSave={editavel ? setLinhaAberta : undefined}
-          onAlternarSave={() => setSaveVisivel((v) => !v)}
+          onAbrirSave={editavel && !interno ? setLinhaAberta : undefined}
+          onAlternarSave={interno ? undefined : () => setSaveVisivel((v) => !v)}
           moedaEstrangeira={moedaEstrangeira}
+          interno={interno}
           rotuloTotal={mes ? `Total de ${mes.nome}` : undefined}
-          savePorPadrao={padrao}
+          savePorPadrao={padrao && !interno}
           onAlternarSavePadrao={
-            editavel
+            editavel && !interno
               ? async (ligado) => {
                   setPadrao(ligado);
                   const r = await definirSavePorPadrao(versaoId, ligado);

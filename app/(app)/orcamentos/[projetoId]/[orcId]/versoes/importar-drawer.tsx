@@ -48,6 +48,10 @@ interface Props {
   /** Modelo do orçamento (decisão 072). Muda as instruções da tela; o
    *  servidor recusa planilha do outro modelo. Obrigatório. */
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Orçamento de serviço Interno (decisão 105): toda linha entra como
+   *  F · Interno com o planejado igual ao orçado — quem grava é o banco.
+   *  A pergunta "de onde vem o planejado" não existe aqui. Obrigatório. */
+  interno: boolean;
   disabled?: boolean;
   disabledReason?: string;
   modo?: ModoImportacao;
@@ -72,6 +76,7 @@ export function ImportarPlanilhaDrawer({
   projetoId,
   orcamentoId,
   modeloPlanilha,
+  interno,
   disabled,
   disabledReason,
   modo = "nova-versao",
@@ -372,6 +377,7 @@ export function ImportarPlanilhaDrawer({
                 origemPlanejado={origemPlanejado}
                 onOrigemPlanejado={setOrigemPlanejado}
                 mensal={mensal}
+                interno={interno}
               />
             )}
 
@@ -583,6 +589,7 @@ function PreviewPanel({
   origemPlanejado,
   onOrigemPlanejado,
   mensal,
+  interno,
 }: {
   preview: Preview;
   arquivoNome: string;
@@ -591,12 +598,19 @@ function PreviewPanel({
   /** Fee e Always On (decisão 078): o planejado da planilha interna não
    *  mora nas colunas fixas — o texto da opção diz de onde ele vem. */
   mensal: boolean;
+  /** Orçamento Interno (decisão 105): o planejado é o orçado, sem
+   *  pergunta. */
+  interno: boolean;
 }) {
   const p = preview.planejado;
-  const perguntar = p.versao_anterior !== null;
+  const perguntar = p.versao_anterior !== null && !interno;
   const herdando = perguntar && origemPlanejado === "anterior";
   const planejadoDoGrupo = (g: Preview["grupos"][number]) =>
-    herdando ? g.total_planejado_herdado : g.total_planejado;
+    interno
+      ? g.total_bruto
+      : herdando
+        ? g.total_planejado_herdado
+        : g.total_planejado;
   const totalOrcadoGeral = preview.grupos.reduce((s, g) => s + g.total_bruto, 0);
   const totalPlanejadoGeral = preview.grupos.reduce(
     (s, g) => s + planejadoDoGrupo(g),
@@ -626,6 +640,14 @@ function PreviewPanel({
           </p>
         </div>
       </div>
+
+      {interno && (
+        <p className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <b className="text-foreground">Orçamento Interno.</b> Toda linha
+          entra como F · Interno, com o planejado igual ao orçado — o tipo de
+          custo e o bloco PLANEJADO da planilha não são usados.
+        </p>
+      )}
 
       {perguntar && (
         <fieldset className="space-y-2 rounded-xl border border-border p-4">

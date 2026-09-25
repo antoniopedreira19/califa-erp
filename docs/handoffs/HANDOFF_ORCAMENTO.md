@@ -4427,3 +4427,39 @@ limpos.
   salvar grava só o `TES-0001/26-03`, Esc cancela sem sujar). Todas as
   ordens de teste foram devolvidas ao estado original. tsc, lint e 11 testes
   de `ordem-itens.test.ts` limpos.
+
+## ⚠️ Nota de 2026-09-25 — o serviço Interno: só F · Interno, planejado = orçado e sem save (decisão 105)
+
+- **Formulário do orçamento** (novo, editar e visão agregada): com o serviço
+  Interno a Categoria lista as nacionais e a **Always On** (planilha mensal);
+  a **Internacional** some. Nota abaixo do Serviço: "Investimento da
+  California…". Passar um orçamento já preenchido para o Interno abre a
+  confirmação "As linhas que já existem, em todas as versões, passam a ser
+  F · Interno, com o planejado igual ao orçado…" (junto com a da planilha
+  mensal quando as duas acontecem). `atualizarOrcamento` recusa antes de
+  gravar se houver linha em save ou BV confirmado/recebido, e grava a
+  auditoria `orcamento.virou_interno`.
+- **Planilha da versão, mês, trimestre e visão agregada** (`ItensTable`, prop
+  `interno` obrigatória): linha nova nasce FI; Tipo e planejado não abrem; o
+  planejado mostra o orçado ao vivo; sem coluna, alça e chave de save.
+  Na agregada, `itemDoInterno` normaliza o rascunho.
+- **Importar planilha:** sem a pergunta "de onde vem o planejado"; o preview
+  avisa que toda linha entra como F · Interno.
+- **Enviar job para abertura:** com faturamento previsto zero (Interno ou
+  não), "Data prevista para recebimento" fica travada em "Sem recebimento" e
+  não é cobrada; a confirmação diz "Recebimento em: Sem recebimento".
+  `enviarJobParaAbertura` decide pelo mesmo número e grava a data vazia.
+- **Banco** (`20260925100001_servico_interno.sql`): marcas
+  `investimento_interno` / `aceita_servico_interno`; o gatilho das linhas
+  (`planejado_espelha_orcado`) faz FI, planejado = orçado e recusa save em
+  todos os caminhos de escrita; `orcamento_entra_no_interno` converte na
+  troca de serviço.
+- Arquivos: `lib/categorias-do-servico.ts`, `orcamento-form.tsx`,
+  `[projetoId]/actions.ts`, `itens-table.tsx`, `planilha-versao.tsx`,
+  `grupos-section.tsx`, `planilha-mensal.tsx`, `importar-drawer.tsx`,
+  `enviar-job-modal.tsx`, `fluxo-abertura.tsx`, `abertura-actions.ts`,
+  `lib/validations/abertura-job.ts`, `agregado/editor-agregado.tsx`,
+  `_rascunho/rascunho.ts`, `_rascunho/orcamento-card.tsx`.
+- **Conferido na tela:** TES-0001/26-12 (Interno nacional) e TES-0001/26-13
+  (Ativação convertido para Interno e depois para Always On mensal) — ver a
+  decisão 105 §5.

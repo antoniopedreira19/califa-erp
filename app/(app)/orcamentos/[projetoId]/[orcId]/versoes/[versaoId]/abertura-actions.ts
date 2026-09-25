@@ -410,6 +410,26 @@ export async function enviarJobParaAbertura(
     linhasDoJobDevolvido = lida.base.itens.map((i) => i.id);
   }
 
+  // 4b'. Recebimento só existe com faturamento (decisão 105). O job sem
+  //      faturamento previsto — todo em F · Interno, pago só por save, ou
+  //      só com custos que o cliente paga direto sem honorário — não tem o
+  //      que receber: a data vai vazia, mande o formulário o que mandar. Com
+  //      faturamento, ela continua obrigatória.
+  const previstoDoEnvio = espelhosDoReenvio
+    ? Number(espelhosDoReenvio.faturamento_previsto ?? 0)
+    : totais.faturamentoPrevisto;
+  const semRecebimento = previstoDoEnvio <= 0.004;
+  if (!semRecebimento && !parsed.data.data_prevista_faturamento) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: {
+        data_prevista_faturamento: ["Data prevista para recebimento é obrigatória."],
+      },
+    };
+  }
+  if (semRecebimento) parsed.data.data_prevista_faturamento = null;
+
   // 4c. O consumo de save cabe no saldo APROVADO (decisão 099)? Na criação,
   //     o consumo ainda aponta para a versão; no reenvio, para a cópia.
   const idsDaVersaoConsumo = ((itensBrutos ?? []) as { id: string }[]).map((i) => i.id);

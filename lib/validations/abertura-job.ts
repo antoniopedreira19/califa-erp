@@ -87,10 +87,18 @@ export const aberturaJobSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data do evento é obrigatória."),
     // Coluna `data_prevista_faturamento`; o rótulo da tela virou "Data
-    // prevista para recebimento" em 27/08/2026.
+    // prevista para recebimento" em 27/08/2026. Vazia vira `null`: o job
+    // sem faturamento previsto não tem recebimento (decisão 105), e a
+    // obrigatoriedade depende do fechamento — quem cobra é
+    // `enviarJobParaAbertura`, que conhece o número.
     data_prevista_faturamento: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista para recebimento é obrigatória."),
+      .union([
+        z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista para recebimento é obrigatória."),
+        z.literal(""),
+      ])
+      .transform((v) => (v === "" ? null : v)),
     // Obrigatório desde 03/09/2026, e só AQUI: é o texto que a produção
     // deixa para quem abre o job no financeiro. A coluna
     // `jobs.observacoes` segue nullable — 27 dos 30 jobs existentes

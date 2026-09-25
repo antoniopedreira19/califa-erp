@@ -53,6 +53,7 @@ import { ParametrosModal } from "../../_rascunho/parametros-modal";
 import { TotaisProjetoCard } from "../../_totais/totais-projeto-card";
 import {
   ITEM_VAZIO,
+  itemDoInterno,
   contarItens,
   divergenciaHonorarios,
   novoId,
@@ -127,7 +128,7 @@ interface Props {
   nomesDeCategoria: Pick<CategoriaDominio, "id" | "nome">[];
   /** Serviço do job — escopo `projeto` de `categorias_dominio`,
    *  lista distinta das categorias acima (decisão 037). */
-  servicos: Pick<CategoriaDominio, "id" | "nome">[];
+  servicos: Pick<CategoriaDominio, "id" | "nome" | "investimento_interno">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   /** Primeiras cidades do cadastro — o combobox do formulário busca o
    *  resto no servidor. O rótulo do card sai de `orc.cidade_nome`. */
@@ -223,6 +224,39 @@ export function EditorAgregado({
   } | null>(null);
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
+
+  // Serviço Interno (decisão 105): toda linha F · Interno, planejado igual
+  // ao orçado. Aplicado ao estado num lugar só — linha nova, célula
+  // editada, planilha importada, orçamento novo com o Interno —, em vez de
+  // em cada mutação. `itemDoInterno` devolve o mesmo objeto quando já está
+  // certo, então o efeito só grava quando algo precisou mudar.
+  const servicosInternos = React.useMemo(
+    () =>
+      new Set(servicos.filter((s) => s.investimento_interno).map((s) => s.id)),
+    [servicos],
+  );
+  React.useEffect(() => {
+    if (servicosInternos.size === 0) return;
+    setOrcamentos((atuais) => {
+      let mudou = false;
+      const proximos = atuais.map((orc) => {
+        if (!orc.servico_id || !servicosInternos.has(orc.servico_id)) return orc;
+        let mudouAqui = false;
+        const grupos = orc.grupos.map((grupo) => {
+          const itens = grupo.itens.map((it) => {
+            const certo = itemDoInterno(it);
+            if (certo !== it) mudouAqui = true;
+            return certo;
+          });
+          return mudouAqui ? { ...grupo, itens } : grupo;
+        });
+        if (!mudouAqui) return orc;
+        mudou = true;
+        return { ...orc, grupos };
+      });
+      return mudou ? proximos : atuais;
+    });
+  }, [orcamentos, servicosInternos]);
   // "Exibir": filtro de TELA. Cards e Totais seguem esta lista; os três
   // indicadores do topo são do projeto inteiro e não seguem. Nada é
   // salvo — o que está escondido continua entrando no "Salvar
@@ -955,6 +989,9 @@ export function EditorAgregado({
           return (
             <JobRascunhoCard
               modeloPlanilha={orc.modeloPlanilha}
+              interno={
+                orc.servico_id !== null && servicosInternos.has(orc.servico_id)
+              }
               savePorItem={savePorItem}
               saveVisivel={saveVisivel}
               onAlternarSave={() => setSaveVisivel((v) => !v)}

@@ -1134,10 +1134,13 @@ export function AberturaForm({
     },
     {
       // Mesma regra do diálogo de conferência: a data é de
-      // recebimento, não de faturamento (27/08/2026).
+      // recebimento, não de faturamento (27/08/2026). Sem faturamento
+      // previsto não há recebimento (decisão 105).
       rotulo: "Recebimento em",
-      valor: formatDataBr(job.data_prevista_faturamento),
-      mono: true,
+      valor: semRecebimento
+        ? "Sem recebimento"
+        : formatDataBr(job.data_prevista_faturamento),
+      mono: !semRecebimento,
     },
   ];
 

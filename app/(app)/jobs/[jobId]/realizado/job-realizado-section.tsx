@@ -231,6 +231,10 @@ interface Props {
   /** Exportar a planilha interna do job (decisão 088). Quem vê a tela
    *  exporta; o freelancer, que só tem a visão restrita, não. */
   podeExportarInterna?: boolean;
+  /** Job de serviço Interno (decisão 105): a errata trava tipo e
+   *  planejado, e o save não existe — nem coluna, nem pedido. Obrigatória:
+   *  prop opcional esconde a fronteira em que o campo some. */
+  interno: boolean;
 }
 
 export function JobRealizadoSection({
@@ -264,6 +268,7 @@ export function JobRealizadoSection({
   mesPedido,
   hrefPlanilha,
   faturamentoMensal = SEM_FATURAMENTO_MENSAL,
+  interno,
 }: Props) {
   const router = useRouter();
 
@@ -282,7 +287,7 @@ export function JobRealizadoSection({
   // então o rascunho tem que morar no ancestral comum dos três. Antes de
   // 27/08/2026 isto era um drawer com uma segunda tabela, e o problema não
   // existia porque nada da tela reagia.
-  const errata = useRascunhoErrata(itens);
+  const errata = useRascunhoErrata(itens, interno);
   // A barra de ações do job é irmã das abas e precisa sair de cena
   // enquanto a barra da errata está no ar — as duas grudam no mesmo pé de
   // janela. Nas telas que não têm barra de ações (financeiro, conferência
@@ -385,7 +390,8 @@ export function JobRealizadoSection({
     Object.keys(savePorItem).length > 0 ||
       saldosDeSave.some((s) => s.disponivel > 0),
   );
-  const temSave = saveLigado;
+  // O Interno não tem save (decisão 105).
+  const temSave = saveLigado && !interno;
   const [linhaSave, setLinhaSave] = React.useState<ItemPlanilhaJob | null>(
     null,
   );
@@ -428,7 +434,7 @@ export function JobRealizadoSection({
   // Quem age nos dois primeiros é o administrador ou qualquer GP
   // (`podeMexerNoSave`, 24/09/2026) — não a regra "admin ou responsável"
   // de errata e PP.
-  const modoDoSave: "pedido" | "direto" | null = !podeMexerNoSave
+  const modoDoSave: "pedido" | "direto" | null = !podeMexerNoSave || interno
     ? null
     : jobAceitaAcoesPlanilha(job.status)
       ? "pedido"
@@ -752,12 +758,12 @@ export function JobRealizadoSection({
           bvsPorItem={bvsPorItem}
           versaoLabel={`v${versao.numero_versao}`}
           saveVisivel={temSave}
-          onAlternarSave={() => setSaveLigado((v) => !v)}
+          onAlternarSave={interno ? undefined : () => setSaveLigado((v) => !v)}
           savePorItem={savePorItem}
           // O pop-up de save abre em toda tela do job — em leitura onde não
           // se edita (decisão 099 §18). A errata ligada fecha a coluna: as
           // duas mexem na mesma linha.
-          onAbrirSave={!errata.ativo ? setLinhaSave : undefined}
+          onAbrirSave={!errata.ativo && !interno ? setLinhaSave : undefined}
           abrirSaveSoComSave={modoDoSave === null}
           destacarItens={destacarItens}
           errata={podeErrata && !mesEnviado ? errata : undefined}

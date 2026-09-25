@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { carregarJobParaAbertura } from "../dados";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
-import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
+import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { formatDataHoraBr } from "../formatos";
 import { sugerirCurva, sugerirRecebimento, trimestreDe } from "../curva";
 import { AberturaForm } from "./abertura-form";
@@ -161,7 +161,7 @@ export default async function AbrirJobNoFinanceiroPage({
     <AberturaForm
       job={job}
       categorias={categoriasDoModelo}
-      servicos={servicosRes.data ?? []}
+      servicos={servicosDoLado(servicosRes.data ?? [], job)}
       projetos={projetos}
       contas={contas}
       custoPrevisto={custoPrevisto}

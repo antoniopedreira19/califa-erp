@@ -228,6 +228,9 @@ export function FluxoAbertura({
               rotulo: rotuloVersao,
               origem: "versao",
             };
+  // Sem faturamento previsto não há recebimento (decisão 105). Mesmo
+  // número que o modal e o servidor usam.
+  const semRecebimento = fechamento.faturamentoPrevisto <= 0.004;
 
   // "Revisar abertura" da página do job: chega com `?abertura=revisar`,
   // abre o formulário preenchido e tira o parâmetro da URL, para um
@@ -293,7 +296,12 @@ export function FluxoAbertura({
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_evento", dados.dataEvento);
-    formData.set("data_prevista_faturamento", dados.dataFaturamento);
+    // Sem faturamento previsto não há recebimento (decisão 105): vai vazia,
+    // mesmo que o formulário guarde uma data de antes.
+    formData.set(
+      "data_prevista_faturamento",
+      semRecebimento ? "" : dados.dataFaturamento,
+    );
     formData.set("observacoes", dados.observacoes);
     // Único campo composto do formulário: vai como JSON e a action
     // parseia antes de validar. Linha totalmente em branco é descartada
@@ -384,8 +392,10 @@ export function FluxoAbertura({
       // Era "Faturamento em" até 27/08/2026 — o campo é o mesmo
       // (`data_prevista_faturamento`), só o rótulo mudou.
       rotulo: "Recebimento em",
-      valor: formatarData(dados.dataFaturamento),
-      mono: true,
+      valor: semRecebimento
+        ? "Sem recebimento"
+        : formatarData(dados.dataFaturamento),
+      mono: !semRecebimento,
     },
   ];
 

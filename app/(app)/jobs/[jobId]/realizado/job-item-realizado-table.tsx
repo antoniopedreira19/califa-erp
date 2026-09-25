@@ -912,7 +912,8 @@ export function JobItemRealizadoTable({
         return null;
       }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
-      if (coluna === "tipo_custo") return "lista";
+      // No Interno o tipo é sempre F · Interno (decisão 105).
+      if (coluna === "tipo_custo") return errata.interno ? null : "lista";
       if (
         coluna === "valor_unitario_orcado" ||
         coluna === "quantidade_orcada" ||

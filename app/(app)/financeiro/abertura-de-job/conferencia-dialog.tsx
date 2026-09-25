@@ -68,8 +68,12 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
       // o RECEBIMENTO — "faturamento" fica para o valor e para o
       // processo de emitir a nota (27/08/2026).
       rotulo: "Recebimento em",
-      valor: formatDataBr(job.data_prevista_faturamento),
-      mono: true,
+      // Sem faturamento previsto não há recebimento (decisão 105).
+      valor:
+        Number(job.faturamento_previsto ?? 0) <= 0.004
+          ? "Sem recebimento"
+          : formatDataBr(job.data_prevista_faturamento),
+      mono: Number(job.faturamento_previsto ?? 0) > 0.004,
     },
   ];
 

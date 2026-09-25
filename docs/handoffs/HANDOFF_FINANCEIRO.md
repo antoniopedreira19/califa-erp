@@ -5856,3 +5856,23 @@ era o imposto de R$ 28.318,52). Regra completa na
 - O envio de outubro do JOB-0034 ("TESTE 099 — NÃO EMITIR NOTA") foi
   removido. Não havia nota sobre ele, e ele saiu da fila do contas a
   receber.
+
+## ⚠️ Nota de 2026-09-25 — "Sem faturamento" e o serviço do job na abertura (decisão 105)
+
+- **Esteira** (`faturamentoPorJob`): situação nova `sem_faturamento`, selo
+  "Sem faturamento" (contorno neutro), para todo job com faturamento
+  previsto zero e sem consumo de save pendente — o Interno, o de custo só
+  direto ao fornecedor e o pago só com save (que antes aparecia
+  "Faturado"). Fica fora do filtro "Aguardando faturamento". Vale para
+  "Visualizar Jobs" e para o cabeçalho do job.
+- **Abertura e "Editar registro":** o Serviço só oferece os do mesmo lado do
+  Interno que o orçamento (`servicosDoLado`; `conferirServico` recusa); a
+  Categoria, só as do mesmo modelo de planilha (o "Editar registro" passou
+  a filtrar também). No banco, `job_servico_e_categoria_seguem_a_planilha`.
+- **"Dados da produção":** "Recebimento em: Sem recebimento" no job sem
+  faturamento; a conferência da fila idem.
+- **Prazos do job:** sem faturamento, "—", fora da média do projeto.
+- **Conferido:** JOB-0047 na abertura (Serviço só "Interno", Categoria só
+  Always On e Fee), aberto com a Conta Teste, "R$ 0,00 · Sem faturamento"
+  na lista, "Aberto · Sem faturamento · Aguardando encerramento" no
+  cabeçalho e, depois do encerramento, "Finalizado · Sem faturamento".

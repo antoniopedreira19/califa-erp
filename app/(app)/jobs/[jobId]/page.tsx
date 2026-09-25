@@ -257,6 +257,7 @@ export default async function JobDetailPage({
                 dataAbertura: job.data_abertura_financeiro,
                 abertoPorNome,
                 dataPrevistaFaturamento: job.data_prevista_faturamento,
+                semFaturamento: Number(job.faturamento_previsto ?? 0) <= 0.004,
               }}
               projeto={{
                 id: raw.projeto_id,
@@ -311,6 +312,7 @@ export default async function JobDetailPage({
         }
         planilha={
           <JobRealizadoSection
+            interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
             savePorItem={detalhe.savePorItem}

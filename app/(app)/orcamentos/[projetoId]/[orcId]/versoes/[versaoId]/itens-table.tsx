@@ -209,6 +209,14 @@ interface Props {
    *  Prop opcional desliga a checagem do TypeScript exatamente onde ela
    *  mais serve — a fronteira em que um campo novo some em silêncio. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Orçamento de serviço Interno (decisão 105): o tipo de custo é sempre
+   *  F · Interno e fica travado, o planejado mostra o orçado e não se
+   *  digita, e a coluna Save não existe. Quem grava a regra é o banco
+   *  (`planejado_espelha_orcado`); aqui a tela só não oferece o que ele
+   *  recusaria ou reescreveria.
+   *
+   *  **Obrigatória**, pelo mesmo motivo da `moedaEstrangeira`. */
+  interno: boolean;
 }
 
 /** Campos que a grade edita — espelha o allowlist do server action. */
@@ -362,6 +370,10 @@ interface Draft {
   /** A que grupo a linha nova pertence. Com uma tabela só para a planilha
    *  inteira, o rascunho precisa dizer onde nasceu. */
   grupoId: string;
+  /** O tipo com que a linha nasceu — B, ou F · Interno no orçamento
+   *  Interno (decisão 105). Não vai ao servidor: é a régua do
+   *  `draftIntocado`, que compara a linha com o estado de nascimento. */
+  tipoPadrao: TipoCusto;
   item: string;
   tipo_custo: TipoCusto;
   categoria_id: string | null;
@@ -376,11 +388,12 @@ interface Draft {
 /** Planejado nasce igual ao orçado (0 · 1 · 1): a linha nova é uma folha
  *  em branco nos dois blocos, e não um planejado zerado ao lado de um
  *  orçado preenchido. */
-function draftVazio(grupoId: string): Draft {
+function draftVazio(grupoId: string, tipoPadrao: TipoCusto = "B"): Draft {
   return {
     grupoId,
+    tipoPadrao,
     item: "",
-    tipo_custo: "B",
+    tipo_custo: tipoPadrao,
     categoria_id: null,
     valor_unitario_orcado: 0,
     quantidade_orcada: 1,
@@ -397,10 +410,28 @@ function draftVazio(grupoId: string): Draft {
  *  é um item, é só o cursor esperando. Digitou qualquer coisa (inclusive
  *  um valor sem descrição), ela fica na tela até o usuário decidir. */
 function draftIntocado(d: Draft): boolean {
-  const zero = draftVazio(d.grupoId);
+  const zero = draftVazio(d.grupoId, d.tipoPadrao);
   return (Object.keys(zero) as Array<keyof Draft>).every(
     (campo) => d[campo] === zero[campo],
   );
+}
+
+/** A coluna do ORÇADO que o planejado espelha no orçamento Interno. */
+const ORCADO_DO_PLANEJADO: Record<string, Campo> = {
+  valor_unitario_planejado: "valor_unitario_orcado",
+  quantidade_planejada: "quantidade_orcada",
+  dias_meses_planejado: "dias_meses_orcado",
+};
+
+/** Orçamento Interno (decisão 105): o planejado da linha nova acompanha o
+ *  orçado, como o banco vai gravar. */
+function espelharPlanejado(d: Draft): Draft {
+  return {
+    ...d,
+    valor_unitario_planejado: d.valor_unitario_orcado,
+    quantidade_planejada: d.quantidade_orcada,
+    dias_meses_planejado: d.dias_meses_orcado,
+  };
 }
 
 /** O item que a linha provisória mostra enquanto o banco não responde.
@@ -500,14 +531,20 @@ export function ItensTable({
   acoesDoGrupo,
   novoGrupo,
   rotuloTotal,
-  saveVisivel = false,
-  onAlternarSave,
+  saveVisivel: saveVisivelProp = false,
+  onAlternarSave: onAlternarSaveProp,
   savePorItem,
   onAbrirSave,
   orcadoVisivel = true,
   rentabilidadeVisivel = true,
   moedaEstrangeira,
+  interno,
 }: Props) {
+  // O Interno não tem save (decisão 105): nem a coluna, nem a alça que a
+  // abre — mesmo que a tela de cima esqueça de desligar.
+  const saveVisivel = saveVisivelProp && !interno;
+  const onAlternarSave = interno ? undefined : onAlternarSaveProp;
+  const tipoPadrao: TipoCusto = interno ? "FI" : "B";
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
 
@@ -740,6 +777,10 @@ export function ItensTable({
     // não vale nela, senão o custo que o banco zerou voltaria pela tela.
     if (item.em_save === true) return { orcado, planejado: 0 };
 
+    // Orçamento Interno (decisão 105): o planejado É o orçado. Lido do
+    // orçado em edição, para não piscar atrasado enquanto o banco regrava.
+    if (interno) return { orcado, planejado: orcado };
+
     // ⚠️ O espelho de `A`/`D` saiu em 08/09/2026 (decisão 062): os dois
     // tipos voltaram a ter planejado digitado, como todos os outros.
     const planejado = overrides[item.id]
@@ -813,11 +854,14 @@ export function ItensTable({
    *  decidir qualquer coisa aqui. */
   const planejadoTravadoEm = React.useCallback(
     (rowId: string): boolean => {
+      // Orçamento Interno (decisão 105): o planejado espelha o orçado em
+      // toda linha, inclusive na nova.
+      if (interno) return true;
       const item = itensPorId.get(rowId);
       if (!item) return false;
       return item.em_save === true;
     },
-    [itensPorId],
+    [itensPorId, interno],
   );
 
   /** A linha provisória ainda sem id real não abre célula: qualquer
@@ -835,14 +879,17 @@ export function ItensTable({
       if (!editavel) return null;
       if (rowId !== DRAFT_ID && provisoriaTravada(rowId)) return null;
       if (coluna === "item") return "texto";
+      // No Interno o tipo é sempre F · Interno (decisão 105).
+      if (coluna === "tipo_custo" && interno) return null;
       if ((CAMPOS_LISTA as readonly string[]).includes(coluna)) return "lista";
       if ((CAMPOS_ORCADO as readonly string[]).includes(coluna)) return "numero";
       if ((CAMPOS_PLANEJADO as readonly string[]).includes(coluna)) {
+        if (interno) return null;
         return rowId !== DRAFT_ID && planejadoTravadoEm(rowId) ? null : "numero";
       }
       return null;
     },
-    [editavel, provisoriaTravada, planejadoTravadoEm],
+    [editavel, provisoriaTravada, planejadoTravadoEm, interno],
   );
 
   const selecao: Selecao = useSelecaoPlanilha({
@@ -1202,7 +1249,8 @@ export function ItensTable({
 
   function confirmarDraft(campo: Campo, valor: ValorCampo, destino?: Direcao) {
     if (!draft) return;
-    const atualizado = { ...draft, [campo]: valor } as Draft;
+    const editado = { ...draft, [campo]: valor } as Draft;
+    const atualizado = interno ? espelharPlanejado(editado) : editado;
     setErro(null);
     // Sem descrição o banco recusa: a linha fica local até ter texto, e a
     // navegação segue dentro do próprio rascunho.
@@ -1237,7 +1285,7 @@ export function ItensTable({
 
   /** Abre a linha nova NO grupo pedido, com o cursor na descrição. */
   function abrirDraft(grupoId: string) {
-    setDraft(draftVazio(grupoId));
+    setDraft(draftVazio(grupoId, tipoPadrao));
     selecao.selecionar({ linhaId: DRAFT_ID, coluna: "item" });
     setAtiva({ rowId: DRAFT_ID, campo: "item", porTeclado: true });
   }
@@ -1920,7 +1968,12 @@ export function ItensTable({
                                 existir. */}
                             <CelulaNumero
                               valor={num(
-                                valorAtual(item, "valor_unitario_planejado"),
+                                valorAtual(
+                                  item,
+                                  interno
+                                    ? "valor_unitario_orcado"
+                                    : "valor_unitario_planejado",
+                                ),
                               )}
                               formato="moeda"
                               moeda={moeda}
@@ -1940,7 +1993,12 @@ export function ItensTable({
                               tdClassName={cn("font-mono", PLANEJADO.celulaAbre)}
                             />
                             <CelulaNumero
-                              valor={num(valorAtual(item, "quantidade_planejada"))}
+                              valor={num(
+                                valorAtual(
+                                  item,
+                                  interno ? "quantidade_orcada" : "quantidade_planejada",
+                                ),
+                              )}
                               editando={ativaAqui("quantidade_planejada")}
                               semente={sementeDe("quantidade_planejada")}
                               nav={selecao.celulaProps(item.id, "quantidade_planejada")}
@@ -1957,7 +2015,12 @@ export function ItensTable({
                               tdClassName={PLANEJADO.celulaMeio}
                             />
                             <CelulaNumero
-                              valor={num(valorAtual(item, "dias_meses_planejado"))}
+                              valor={num(
+                                valorAtual(
+                                  item,
+                                  interno ? "dias_meses_orcado" : "dias_meses_planejado",
+                                ),
+                              )}
                               editando={ativaAqui("dias_meses_planejado")}
                               semente={sementeDe("dias_meses_planejado")}
                               nav={selecao.celulaProps(item.id, "dias_meses_planejado")}

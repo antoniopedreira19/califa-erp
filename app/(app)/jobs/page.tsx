@@ -3,14 +3,17 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { pode } from "@/lib/permissoes";
-import { jobStatusExibido } from "@/lib/types";
+import { JOB_STATUS_ABERTO, jobStatusExibido } from "@/lib/types";
+import {
+  impedimentosDosJobs,
+  podeEncerrar,
+} from "@/lib/data/impedimentos-encerramento";
 import { JobsList, type JobRow } from "./jobs-list";
 import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
 // TODO: filtro=faturamento_pronto — precisa lógica combinada de status + faturamento_previsto; implementar em fase 2
-// TODO: filtro=encerrar_pronto — precisa join com jobs_envio_faturamento; implementar em fase 2
 // TODO: filtro=chat_pendente — precisa join com jobs_chat_leituras; implementar em fase 2
 // TODO: filtro=pps_rejeitadas — precisa join com pedidos_compra; implementar em fase 2
 // TODO: filtro=minhas_pps — precisa join com pedidos_compra; implementar em fase 2
@@ -91,6 +94,8 @@ export default async function JobsPage({
     jobsQuery = jobsQuery
       // O encerrado ainda fatura (decisão 087, 16/09/2026).
       .in("status", ["aberto", "encerrado"])
+      // O job sem faturamento previsto não tem o que faturar (decisão 105).
+      .gt("faturamento_previsto", 0.004)
       .gte("data_prevista_faturamento", hoje)
       .lte("data_prevista_faturamento", em7iso);
   } else if (filtro === "realizado_pendente") {
@@ -102,7 +107,13 @@ export default async function JobsPage({
     }
   }
   // TODO: filtro=faturamento_pronto — precisa lógica combinada; deixar sem filtro por ora (link funciona, retorna lista completa)
-  // TODO: filtro=encerrar_pronto — join com jobs_envio_faturamento; deixar sem filtro por ora
+  // Prontos pra encerrar (decisão 105): o job aberto que o botão "Enviar
+  // job para encerramento" liberaria agora — a MESMA régua dele, em
+  // `impedimentosDosJobs`. Aqui só o recorte de status; o resto é
+  // conferido depois da lista, em memória.
+  if (filtro === "encerrar_pronto") {
+    jobsQuery = jobsQuery.in("status", JOB_STATUS_ABERTO);
+  }
   // TODO: filtro=chat_pendente — join com jobs_chat_leituras; deixar sem filtro por ora
   // TODO: filtro=pps_rejeitadas — join com pedidos_compra; deixar sem filtro por ora
   // TODO: filtro=minhas_pps — join com pedidos_compra; deixar sem filtro por ora
@@ -114,7 +125,23 @@ export default async function JobsPage({
 
   if (jobsRes.error) console.error("[jobs.list]", jobsRes.error.message);
 
-  const rows: JobRow[] = (jobsRes.data ?? []).map((r: any) => ({
+  // Segunda onda só com o filtro ligado: as pendências dependem dos ids
+  // que a lista trouxe. Sete leituras em paralelo, qualquer que seja o
+  // número de jobs (`docs/PERFORMANCE.md`).
+  let linhas = (jobsRes.data ?? []) as any[];
+  if (filtro === "encerrar_pronto" && linhas.length > 0) {
+    const impedimentos = await impedimentosDosJobs(
+      supabase,
+      session.activeTenant.id,
+      linhas.map((r) => r.id as string),
+    );
+    linhas = linhas.filter((r) => {
+      const imp = impedimentos.get(r.id);
+      return imp ? podeEncerrar(imp) : false;
+    });
+  }
+
+  const rows: JobRow[] = linhas.map((r: any) => ({
     id: r.id,
     codigo: r.codigo,
     nome: r.nome,
@@ -150,7 +177,16 @@ export default async function JobsPage({
         activeEmpresas={activeEmpresasEfetivas}
       />
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && filtro === "encerrar_pronto" ? (
+        <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">
+          <h2 className="text-xl font-semibold">Nenhum job pronto para encerrar</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Um job fica pronto quando não tem PP por pagar, verba sem prestação
+            aprovada, BV por receber, item sem marcar que as PPs foram geradas
+            nem save aguardando o financeiro.
+          </p>
+        </div>
+      ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-california-red/10 text-california-red">
             <Briefcase className="h-6 w-6" />

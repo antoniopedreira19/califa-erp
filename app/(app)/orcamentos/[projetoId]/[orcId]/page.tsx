@@ -189,6 +189,10 @@ export default async function OrcamentoDetailPage({
           // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
           // desde 02/09/2026 (categoria e servico).
           "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), regional:regionais(nome), cidade:cidades(id, nome), " +
+          // O serviço Interno muda a planilha (decisão 105). Lido pelo
+          // embed, e não pela lista de serviços ativos: um serviço
+          // desativado continua valendo para o orçamento que o usa.
+          "servico:categorias_dominio!servico_id(investimento_interno), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -217,7 +221,7 @@ export default async function OrcamentoDetailPage({
     // categoria do Fee e do Always On (decisão 078).
     supabase
       .from("categorias_dominio")
-      .select("id, nome, modelo_planilha, servico_exclusivo_id")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -659,6 +663,7 @@ export default async function OrcamentoDetailPage({
         honorariosCliente={honorariosCliente}
         clienteNome={clienteNome}
         modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
+        interno={orcamentoRaw?.servico?.investimento_interno === true}
         travarImpostos={
           (orcamentoRaw?.categoria?.modelo_planilha ?? "nacional") === "internacional" &&
           !pode(session.activeRole, "orcamentos.editar_impostos")
@@ -704,6 +709,7 @@ export default async function OrcamentoDetailPage({
           projetoId={params.projetoId}
           orcamentoId={orcamento.id}
           modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
+          interno={orcamentoRaw?.servico?.investimento_interno === true}
           travarImpostos={
             (orcamentoRaw?.categoria?.modelo_planilha ?? "nacional") === "internacional" &&
           !pode(session.activeRole, "orcamentos.editar_impostos")
@@ -788,6 +794,9 @@ function VersaoSelecionada({
   /** Job devolvido ou aguardando abertura: o fechamento da cópia do job. */
   fechamentoDaCopia: FechamentoDaCopia | null;
 }) {
+  // Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
+  // planejado igual ao orçado e sem save.
+  const interno: boolean = orcamentoRaw?.servico?.investimento_interno === true;
   const itens: VersaoOrcamentoItem[] = itensBrutos.map((it: any) => ({
     ...it,
     valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
@@ -1030,6 +1039,7 @@ function VersaoSelecionada({
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           planilha={planilha}
+          interno={interno}
           importacao={{
             disabled: temJobAtivo || !podeCriarVersao,
             disabledReason: temJobAtivo
@@ -1062,6 +1072,7 @@ function VersaoSelecionada({
               projetoId={params.projetoId}
               orcamentoId={params.orcId}
               modeloPlanilha={planilha.modeloPlanilha}
+              interno={interno}
               modo="sobrescrever"
               versaoId={versao.id}
               conteudoAtual={{
@@ -1119,6 +1130,7 @@ function VersaoSelecionada({
           modeloPlanilha={planilha.modeloPlanilha}
           internacional={planilha.internacional}
           moedaEstrangeira={planilha.moedaEstrangeira}
+          interno={interno}
         />
       </div>
       </>
@@ -1179,6 +1191,7 @@ function SemVersoes({
   projetoId,
   orcamentoId,
   modeloPlanilha,
+  interno,
   travarImpostos,
   honorariosCliente,
   clienteNome,
@@ -1188,6 +1201,8 @@ function SemVersoes({
   projetoId: string;
   orcamentoId: string;
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Orçamento de serviço Interno (decisão 105). */
+  interno: boolean;
   travarImpostos: boolean;
   honorariosCliente: number;
   clienteNome: string | null;
@@ -1217,6 +1232,7 @@ function SemVersoes({
           projetoId={projetoId}
           orcamentoId={orcamentoId}
           modeloPlanilha={modeloPlanilha}
+          interno={interno}
           disabled={!podeCriarVersao}
           disabledReason={motivoBloqueio}
         />

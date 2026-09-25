@@ -38,7 +38,7 @@ export default async function NovoOrcamentoPage({
       // Fee e do Always On por eles (decisão 078).
       supabase
         .from("categorias_dominio")
-        .select("id, nome, modelo_planilha, servico_exclusivo_id")
+        .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
         .eq("tenant_id", session.activeTenant.id)
         .eq("escopo", "orcamento")
         .eq("ativo", true)
@@ -48,7 +48,7 @@ export default async function NovoOrcamentoPage({
       // repetir opção (decisão 037).
       supabase
         .from("categorias_dominio")
-        .select("id, nome")
+        .select("id, nome, investimento_interno")
         .eq("tenant_id", session.activeTenant.id)
         .eq("escopo", "projeto")
         .eq("ativo", true)
@@ -73,7 +73,10 @@ export default async function NovoOrcamentoPage({
   if (!projeto) notFound();
 
   const categorias = (categoriasRes.data ?? []) as CategoriaParaServico[];
-  const servicos = (servicosRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
+  const servicos = (servicosRes.data ?? []) as Pick<
+    CategoriaDominio,
+    "id" | "nome" | "investimento_interno"
+  >[];
 
   const regionaisDoProjeto = ((regionaisRes.data ?? []) as any[])
     .filter((v) => v.regional)

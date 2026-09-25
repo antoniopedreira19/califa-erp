@@ -29,6 +29,12 @@ uma lista só de grupos e itens.
    Always On, a Always On. E essas categorias só valem para os seus
    serviços. A relação é o campo `categorias_dominio.servico_exclusivo_id`,
    nunca o nome.
+
+   > ⚠️ **25/09/2026 ([decisão 105](105-servico-interno-e-job-sem-faturamento.md)).**
+   > A categoria **Always On** vale também para o serviço **Interno**
+   > (marca `aceita_servico_interno`): o investimento recorrente da
+   > agência sai na planilha mensal, com custo F · Interno e planejado igual
+   > ao orçado. A Fee continua só do serviço Fee.
 3. **Quem escolhe a planilha é a categoria**, pelo enum `modelo_planilha`
    (valor novo `mensal`) — o mesmo mecanismo da [072](072-orcamento-internacional.md).
 4. **O período é obrigatório e cabe num trimestre.** Início e fim no mesmo

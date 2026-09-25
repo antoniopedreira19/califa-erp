@@ -43,7 +43,7 @@ import {
   competenciasGravadas,
   previsoesGravadas,
 } from "../../abertura-de-job/consumo";
-import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
+import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { trimestreDe } from "../../abertura-de-job/curva";
 import { formatDataHoraBr } from "../../abertura-de-job/formatos";
 import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
@@ -136,7 +136,9 @@ export default async function JobNoFinanceiroPage({
     // categoria só do financeiro.
     supabase
       .from("categorias_dominio")
-      .select("id, nome")
+      // `modelo_planilha`: o combo só oferece categorias do modelo do
+      // orçamento (decisões 072 e 105), como a abertura.
+      .select("id, nome, modelo_planilha")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -429,8 +431,12 @@ export default async function JobNoFinanceiroPage({
             fotos={fotos}
             revisao={revisao}
             aprovacaoSave={aprovacaoSave}
-            categorias={categoriasRes.data ?? []}
-            servicos={servicosRes.data ?? []}
+            categorias={(categoriasRes.data ?? []).filter(
+              (c) =>
+                c.modelo_planilha === jobNaFila.modelo_planilha_orcamento ||
+                c.id === jobNaFila.categoria_id,
+            )}
+            servicos={servicosDoLado(servicosRes.data ?? [], jobNaFila)}
             projetos={projetos}
             contas={contas}
             custoPrevisto={custoPrevisto}
@@ -501,6 +507,7 @@ export default async function JobNoFinanceiroPage({
                 dataAbertura: job.data_abertura_financeiro,
                 abertoPorNome: detalhe.abertoPorNome,
                 dataPrevistaFaturamento: job.data_prevista_faturamento,
+                semFaturamento: Number(job.faturamento_previsto ?? 0) <= 0.004,
               }}
               projeto={{
                 // O projeto do FINANCEIRO, com fallback no da produção
@@ -604,6 +611,7 @@ export default async function JobNoFinanceiroPage({
               </div>
             )}
             <JobRealizadoSection
+              interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}
               clienteNome={detalhe.clienteNome}

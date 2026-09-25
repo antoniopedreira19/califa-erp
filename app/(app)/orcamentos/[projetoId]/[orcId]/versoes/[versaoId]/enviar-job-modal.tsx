@@ -126,7 +126,12 @@ export function emailContatoInvalido(c: ContatoCobranca): boolean {
   return !EMAIL_PLAUSIVEL.test(c.email.trim());
 }
 
-export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
+/** `semRecebimento`: o job não tem faturamento previsto (decisão 105) —
+ *  a data de recebimento não existe e não é cobrada. */
+export function faltamCampos(
+  d: DadosJob,
+  semRecebimento: boolean,
+): Record<CampoObrigatorio, boolean> {
   return {
     nome: d.nome.trim().length < 2,
     cidade_id: !d.cidadeId,
@@ -134,7 +139,7 @@ export function faltamCampos(d: DadosJob): Record<CampoObrigatorio, boolean> {
     data_inicio_prevista: !d.dataInicio,
     data_fim_prevista: !d.dataFim,
     data_evento: !d.dataEvento,
-    data_prevista_faturamento: !d.dataFaturamento,
+    data_prevista_faturamento: !semRecebimento && !d.dataFaturamento,
     // Descritivo obrigatório desde 03/09/2026 — é o recado da produção
     // para quem abre o job no financeiro.
     observacoes: d.observacoes.trim().length === 0,
@@ -237,7 +242,10 @@ export function EnviarJobModal({
     if (open) setTentou(false);
   }, [open]);
 
-  const faltando = faltamCampos(dados);
+  // Sem faturamento previsto não há recebimento (decisão 105): o campo
+  // aparece travado e não é cobrado. O servidor decide pelo mesmo número.
+  const semRecebimento = faturamentoPrevisto <= 0.004;
+  const faltando = faltamCampos(dados, semRecebimento);
   const completo = !Object.values(faltando).some(Boolean);
 
   /** Erro visível: o que o servidor devolveu, ou o que faltou ao tentar. */
@@ -477,19 +485,28 @@ export function EnviarJobModal({
               para o contato de cobrança começar em linha própria. */}
           <Campo
             rotulo="Data prevista para recebimento"
-            obrigatorio
-            erro={erroDe("data_prevista_faturamento")}
+            obrigatorio={!semRecebimento}
+            erro={semRecebimento ? null : erroDe("data_prevista_faturamento")}
           >
-            <DatePicker
-              key={`fat-${dados.dataFaturamento}`}
-              name="__job_data_faturamento"
-              defaultValue={dados.dataFaturamento}
-              onDateChange={(d) => onChange({ dataFaturamento: d ? toIso(d) : "" })}
-              className={cn(
-                erroDe("data_prevista_faturamento") &&
-                  "border-california-red ring-2 ring-california-red/15",
-              )}
-            />
+            {semRecebimento ? (
+              <>
+                <Travado valor="Sem recebimento" />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  O job não tem faturamento previsto.
+                </p>
+              </>
+            ) : (
+              <DatePicker
+                key={`fat-${dados.dataFaturamento}`}
+                name="__job_data_faturamento"
+                defaultValue={dados.dataFaturamento}
+                onDateChange={(d) => onChange({ dataFaturamento: d ? toIso(d) : "" })}
+                className={cn(
+                  erroDe("data_prevista_faturamento") &&
+                    "border-california-red ring-2 ring-california-red/15",
+                )}
+              />
+            )}
           </Campo>
 
           <div className="hidden md:col-span-2 md:block" aria-hidden />

@@ -57,24 +57,52 @@ export type ActionResult =
  * On, Ativação, Fee, Interno), do mesmo tenant, ativa. Sem esta
  * conferência um id de CATEGORIA passaria pela FK — as duas listas moram
  * na mesma tabela (decisão 037).
+ *
+ * E não cruza a fronteira do Interno (decisão 105, resposta 3-a do Tiago):
+ * o serviço Interno decide a planilha do job — só custo F · Interno, com o
+ * planejado igual ao orçado —, e essa planilha nasceu no orçamento. O
+ * financeiro troca Ativação por Fee à vontade, mas não põe nem tira um job
+ * do Interno. O gatilho `job_servico_e_categoria_seguem_a_planilha` recusa
+ * o mesmo no banco.
  */
 async function conferirServico(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   servicoId: string,
+  orcamentoId: string,
 ): Promise<string | null> {
-  const { data: servico } = await supabase
-    .from("categorias_dominio")
-    .select("id, escopo, ativo")
-    .eq("id", servicoId)
-    .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string; escopo: string; ativo: boolean }>();
+  const [{ data: servico }, { data: orc }] = await Promise.all([
+    supabase
+      .from("categorias_dominio")
+      .select("id, escopo, ativo, investimento_interno")
+      .eq("id", servicoId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{
+        id: string;
+        escopo: string;
+        ativo: boolean;
+        investimento_interno: boolean;
+      }>(),
+    // `!servico_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
+    supabase
+      .from("orcamentos")
+      .select("servico:categorias_dominio!servico_id(investimento_interno)")
+      .eq("id", orcamentoId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ servico: { investimento_interno: boolean } | null }>(),
+  ]);
 
   if (!servico || servico.escopo !== "projeto") {
     return "Serviço de job inválido.";
   }
   if (!servico.ativo) {
     return "Este serviço foi inativado. Escolha outro.";
+  }
+  const orcamentoInterno = orc?.servico?.investimento_interno === true;
+  if (servico.investimento_interno !== orcamentoInterno) {
+    return orcamentoInterno
+      ? "O orçamento deste job é do serviço Interno, que decide a planilha (só custo F · Interno, planejado igual ao orçado). O serviço do job não pode sair dele."
+      : "O serviço Interno decide a planilha do job (só custo F · Interno, planejado igual ao orçado) e só vale para job cujo orçamento já é Interno.";
   }
   return null;
 }
@@ -352,6 +380,7 @@ export async function abrirJobNoFinanceiro(
     supabase,
     session.activeTenant.id,
     parsed.data.servico_id,
+    job.orcamento_id,
   );
   if (servicoErro) return { ok: false, message: servicoErro };
 
@@ -1271,6 +1300,7 @@ export async function editarRegistroDaAbertura(
     supabase,
     session.activeTenant.id,
     parsed.data.servico_id,
+    job.orcamento_id,
   );
   if (servicoErro) return { ok: false, message: servicoErro };
 
