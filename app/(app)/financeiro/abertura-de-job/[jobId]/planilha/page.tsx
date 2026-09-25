@@ -52,7 +52,9 @@ export default async function PlanilhaDaAberturaPage({
       // internacional (decisão 072): é a categoria do orçamento, e não a do
       // job, que decide como este fechamento soma.
       "versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
-        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+        // O serviço do orçamento diz se o job é Interno, que não tem
+        // coluna Save nem alça (decisão 105).
+        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno)), " +
         // O nome do cliente é do pop-up de save: os textos dele falam do
         // crédito "de {cliente}", e sem o nome diziam "do cliente"
         // (decisão 099, revisão de 22/09/2026).
@@ -282,6 +284,9 @@ export default async function PlanilhaDaAberturaPage({
         categoriasMap={categoriasMap}
         bvsPorItem={bvsPorItem}
         savePorItem={savePorItem}
+        interno={
+          (raw as any).orcamento?.servico?.investimento_interno === true
+        }
         clienteNome={(raw as any).projeto?.cliente?.nome_fantasia ?? null}
         versaoLabel={`v${versao?.numero_versao ?? 1}`}
         moeda={versao?.moeda ?? "BRL"}

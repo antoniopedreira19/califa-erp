@@ -138,12 +138,11 @@ export function PlanilhaVersao({
   const visao: VisaoBv = "bruto";
   const router = useRouter();
 
-  // A coluna abre sozinha em quem já usa save, e fica fechada em quem
-  // nunca usou: assim a planilha de sempre continua a de sempre.
-  const temSave =
-    savePorPadrao ||
-    Object.keys(savePorItem).length > 0 ||
-    saldosDeSave.some((s) => s.disponivel > 0);
+  // A coluna nasce recolhida na alça lateral e só abre sozinha quando ESTA
+  // versão já gera ou consome save — ou é um "Orçamento de save", em que
+  // todo item novo nasce em save (decisão 107). O saldo que o cliente tem
+  // em outros jobs não abre mais a coluna: ele abria em quase todo cliente.
+  const temSave = savePorPadrao || Object.keys(savePorItem).length > 0;
   const [saveVisivel, setSaveVisivel] = React.useState(temSave);
   const [padrao, setPadrao] = React.useState(savePorPadrao);
   const [linhaAberta, setLinhaAberta] =

@@ -4500,3 +4500,15 @@ limpos.
   (`parseOficial` com `tipoFixo`), visão agregada (`ImportarPlanilhaModal.interno`)
   e projeto inteiro (`parsePlanilhaProjeto` com `orcamentosInternos`). Teste
   em `lib/importacao/tipo-fixo.test.ts`.
+
+---
+
+## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
+
+- **Versão do orçamento (e a mensal):** a coluna Save nasce recolhida na
+  alça lateral. Só abre sozinha quando alguma linha da versão gera ou
+  consome save, ou quando a versão é "Orçamento de save".
+- **Saiu o gatilho do saldo do cliente:** ter crédito disponível em outros
+  jobs do cliente não abre mais a coluna. O saldo continua oferecido no
+  pop-up de save da linha.
+- A agregada do orçamento já seguia essa regra e não mudou.

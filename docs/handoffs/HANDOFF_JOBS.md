@@ -4315,3 +4315,16 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   `/jobs?filtro=faturamento_pendente`; os links antigos caem nele.
 - A lista abre em "Meus" com `meus=1`, em "Todos" com filtro sem `meus=1`, e
   no padrão sem filtro (`JobsList.meusInicial`).
+
+---
+
+## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
+
+- **Planilha interna do job:** a coluna Save nasce recolhida na alça
+  lateral. Só abre sozinha quando alguma linha do job gera ou consome save
+  (ou tem recusa de save ainda não retirada).
+- **Saiu o gatilho do saldo do cliente:** ter crédito disponível em outros
+  jobs do cliente não abre mais a coluna. Quem quer criar o primeiro save
+  abre pela alça ou pelo menu "Exibir".
+- A agregada de jobs já seguia essa regra; o financeiro, que forçava a
+  coluna sempre aberta, passou a segui-la também (ver `HANDOFF_FINANCEIRO`).

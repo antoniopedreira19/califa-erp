@@ -27,7 +27,6 @@ export function PlanilhasDoProjeto({
   moeda,
   jobHrefBase,
   jobHrefSuffix = "",
-  saveSempreVisivel = false,
 }: {
   planilhas: JobPlanilhaProjeto[];
   moeda: string;
@@ -49,18 +48,15 @@ export function PlanilhasDoProjeto({
    *  DAQUELE job, não a ficha dele (decisão do Tiago, 08/09/2026).
    *  Vazio ⇒ a aba padrão de cada módulo. */
   jobHrefSuffix?: string;
-  /** Financeiro: a coluna Save fica SEMPRE presente e sem liga-desliga —
-   *  aquele módulo confere o crédito entre jobs, e esconder a coluna
-   *  esconderia justamente o que ele foi ver. */
-  saveSempreVisivel?: boolean;
 }) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
 
-  // A coluna nasce aberta em quem já usa save e fechada em quem nunca
-  // usou — a mesma regra das planilhas internas.
+  // A coluna nasce aberta quando algum job do projeto já gera ou consome
+  // save e recolhida quando nenhum usa — a mesma regra das planilhas
+  // internas (decisão 107). Vale também no financeiro, que até 25/09/2026
+  // mostrava a coluna sempre, sem liga-desliga.
   const algumJobTemSave = planilhas.some((j) => j.temSave);
-  const [saveLigado, setSaveLigado] = React.useState(algumJobTemSave);
-  const saveVisivel = saveSempreVisivel || saveLigado;
+  const [saveVisivel, setSaveVisivel] = React.useState(algumJobTemSave);
 
   const rotaDoJob = React.useMemo(
     () =>
@@ -89,21 +85,19 @@ export function PlanilhasDoProjeto({
               card de cada job é `overflow-hidden` — uma alça em
               `right-full` seria cortada pela borda dele. É o mesmo
               controle das internas, no mesmo lugar da barra. */}
-          {!saveSempreVisivel && (
-            <MenuExibirColunas
-              blocos={[
-                {
-                  chave: "save",
-                  rotulo: "Save",
-                  visivel: saveVisivel,
-                  onAlternar: () => setSaveLigado((v) => !v),
-                },
-                { chave: "orcado", rotulo: "Orçado", visivel: true },
-                { chave: "planejado", rotulo: "Planejado", visivel: true },
-                { chave: "realizado", rotulo: "Realizado", visivel: true },
-              ]}
-            />
-          )}
+          <MenuExibirColunas
+            blocos={[
+              {
+                chave: "save",
+                rotulo: "Save",
+                visivel: saveVisivel,
+                onAlternar: () => setSaveVisivel((v) => !v),
+              },
+              { chave: "orcado", rotulo: "Orçado", visivel: true },
+              { chave: "planejado", rotulo: "Planejado", visivel: true },
+              { chave: "realizado", rotulo: "Realizado", visivel: true },
+            ]}
+          />
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-[11px] py-1 text-[11px] font-semibold text-muted-foreground">
             <Lock className="h-[11px] w-[11px]" />
             Somente leitura
