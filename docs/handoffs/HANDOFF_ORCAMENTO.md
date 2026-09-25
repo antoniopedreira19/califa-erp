@@ -4512,3 +4512,30 @@ limpos.
   jobs do cliente não abre mais a coluna. O saldo continua oferecido no
   pop-up de save da linha.
 - A agregada do orçamento já seguia essa regra e não mudou.
+
+---
+
+## ⚠️ Nota de 2026-09-25 — item que nasce em save não gravava (corrigido)
+
+**De 22/09 a 25/09/2026, nenhum item de versão conseguia nascer em save.**
+Com o "Orçamento de save" ligado, adicionar item dava "Não foi possível
+adicionar o item."; na importação de planilha com linha em save, "não foi
+possível gravar os itens.".
+
+- **Causa:** o trigger `save_marca_autor_e_planejado()` (migration
+  `20260922140001`, decisão 099) testava
+  `tg_table_name = 'jobs_itens_orcado' and new.item_versao_id is not null`.
+  O PL/pgSQL não curto-circuita campo de registro: prepara a expressão
+  inteira contra NEW, e `versoes_orcamento_itens` não tem
+  `item_versao_id`. Erro `42703`, PostgREST 400.
+- **Por que o teste da 099 não pegou:** marcar save numa linha que já
+  existe é UPDATE, e esse ramo não tinha o problema. Só o INSERT com
+  `em_save = true` caía.
+- **Correção:** migration `20260925110001_save_marca_autor_insert_na_versao`
+  — o IF virou dois IFs aninhados; o resto do corpo é idêntico.
+- **Conferido pela tela** no TES-0001/26-05: interruptor ligado, item novo
+  gravou com `em_save`, autor e data da marcação, planejado zerado e o
+  planejado anterior guardado; a célula mostra "Save gerado". O item e o
+  interruptor foram desfeitos depois.
+- **Junto:** ligar o "Orçamento de save" agora abre a coluna Save na hora
+  (decisão 107).
