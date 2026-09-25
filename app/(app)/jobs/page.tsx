@@ -13,7 +13,6 @@ import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
-// TODO: filtro=faturamento_pronto — precisa lógica combinada de status + faturamento_previsto; implementar em fase 2
 // TODO: filtro=chat_pendente — precisa join com jobs_chat_leituras; implementar em fase 2
 // TODO: filtro=pps_rejeitadas — precisa join com pedidos_compra; implementar em fase 2
 // TODO: filtro=minhas_pps — precisa join com pedidos_compra; implementar em fase 2
@@ -21,11 +20,18 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams?: { filtro?: string; empresa?: string };
+  searchParams?: { filtro?: string; empresa?: string; meus?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
-  const filtro = searchParams?.filtro;
+  // `faturamento_proximo` e `faturamento_pronto` eram os links dos cards
+  // de faturamento até 25/09/2026; os dois viraram "pendentes de envio"
+  // (decisão 105) — o link antigo cai no filtro novo.
+  const filtro =
+    searchParams?.filtro === "faturamento_proximo" ||
+    searchParams?.filtro === "faturamento_pronto"
+      ? "faturamento_pendente"
+      : searchParams?.filtro;
 
   const empresaFiltroIds: string[] =
     typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
@@ -86,18 +92,14 @@ export default async function JobsPage({
   }
 
   // Aplicar filtros de aterrissagem simples (status/data)
-  if (filtro === "faturamento_proximo") {
-    const hoje = new Date().toISOString().slice(0, 10);
-    const em7 = new Date();
-    em7.setDate(em7.getDate() + 7);
-    const em7iso = em7.toISOString().slice(0, 10);
+  if (filtro === "faturamento_pendente") {
+    // Pendentes de envio para faturamento (decisão 105): a mesma régua dos
+    // cards da home (`pendentesDeEnvioQuery`). O encerrado ainda fatura
+    // (087); o carimbo do envio completo é do banco (094).
     jobsQuery = jobsQuery
-      // O encerrado ainda fatura (decisão 087, 16/09/2026).
-      .in("status", ["aberto", "encerrado"])
-      // O job sem faturamento previsto não tem o que faturar (decisão 105).
+      .in("status", ["aberto", "em_producao", "encerrado"])
       .gt("faturamento_previsto", 0.004)
-      .gte("data_prevista_faturamento", hoje)
-      .lte("data_prevista_faturamento", em7iso);
+      .is("faturamento_enviado_em", null);
   } else if (filtro === "realizado_pendente") {
     if (jobIdsComPendencia !== null && jobIdsComPendencia.length === 0) {
       // Nenhum job com pendência — força resultado vazio
@@ -106,7 +108,6 @@ export default async function JobsPage({
       jobsQuery = jobsQuery.in("id", jobIdsComPendencia);
     }
   }
-  // TODO: filtro=faturamento_pronto — precisa lógica combinada; deixar sem filtro por ora (link funciona, retorna lista completa)
   // Prontos pra encerrar (decisão 105): o job aberto que o botão "Enviar
   // job para encerramento" liberaria agora — a MESMA régua dele, em
   // `impedimentosDosJobs`. Aqui só o recorte de status; o resto é
@@ -140,6 +141,8 @@ export default async function JobsPage({
       return imp ? podeEncerrar(imp) : false;
     });
   }
+
+  const podeAlternarMeusTodos = pode(session.activeRole, "listas.chave_meus_todos");
 
   const rows: JobRow[] = linhas.map((r: any) => ({
     id: r.id,
@@ -177,7 +180,15 @@ export default async function JobsPage({
         activeEmpresas={activeEmpresasEfetivas}
       />
 
-      {rows.length === 0 && filtro === "encerrar_pronto" ? (
+      {rows.length === 0 && filtro === "faturamento_pendente" ? (
+        <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">
+          <h2 className="text-xl font-semibold">Nenhum job pendente de envio para faturamento</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Todo job aberto ou encerrado com faturamento previsto já foi enviado
+            ao financeiro.
+          </p>
+        </div>
+      ) : rows.length === 0 && filtro === "encerrar_pronto" ? (
         <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">
           <h2 className="text-xl font-semibold">Nenhum job pronto para encerrar</h2>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -202,7 +213,14 @@ export default async function JobsPage({
           rows={rows}
           empresas={empresas}
           usuarioId={session.profile.id}
-          podeAlternarMeusTodos={pode(session.activeRole, "listas.chave_meus_todos")}
+          podeAlternarMeusTodos={podeAlternarMeusTodos}
+          // O link diz de quem é a lista: `meus=1` abre no Meus; um filtro de
+          // aterrissagem sem ele (o card do administrador, que conta a
+          // empresa inteira) abre em Todos, para o número do card bater com
+          // a lista. Sem filtro, o padrão de sempre (decisão 036).
+          meusInicial={
+            podeAlternarMeusTodos && (searchParams?.meus === "1" || !filtro)
+          }
         />
       )}
     </div>

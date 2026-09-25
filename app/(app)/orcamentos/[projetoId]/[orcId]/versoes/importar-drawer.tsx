@@ -327,7 +327,17 @@ export function ImportarPlanilhaDrawer({
                       D/M vazio ou zerado entra como 1, com aviso.
                     </li>
                     <li>
-                      Tipo fora de <b>A, AR, B, C, D, F, FI</b> deixa a linha de fora, com aviso.
+                      {interno ? (
+                        <>
+                          Serviço Interno: o tipo da coluna G é ignorado — toda
+                          linha com valor entra como <b>F · Interno</b>, mesmo
+                          com o tipo em branco.
+                        </>
+                      ) : (
+                        <>
+                          Tipo fora de <b>A, AR, B, C, D, F, FI</b> deixa a linha de fora, com aviso.
+                        </>
+                      )}
                     </li>
                     <li>
                       Bloco <b>PLANEJADO</b> entra pelas colunas H · R$, I · QT, J · D/M.

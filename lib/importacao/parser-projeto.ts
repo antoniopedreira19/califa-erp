@@ -242,6 +242,12 @@ function marcas(h: string): {
 
 export async function parsePlanilhaProjeto(
   buffer: ArrayBuffer | Buffer,
+  opcoes: {
+    /** Orçamentos de serviço Interno (decisão 105), pelo id da marca da
+     *  seção: o item deles entra como F · Interno, inclusive com o tipo em
+     *  branco ou desconhecido, que nos outros é descartado. */
+    orcamentosInternos?: ReadonlySet<string>;
+  } = {},
 ): Promise<LeituraProjeto> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as any);
@@ -463,7 +469,15 @@ export async function parsePlanilhaProjeto(
       }
 
       const tipoUpper = colG.toUpperCase().trim();
-      if (!layoutInternacional && !TIPOS_VALIDOS.includes(tipoUpper as TipoCusto)) {
+      const secaoInterna = Boolean(
+        secaoAtual?.orcamentoId &&
+          opcoes.orcamentosInternos?.has(secaoAtual.orcamentoId),
+      );
+      if (
+        !layoutInternacional &&
+        !secaoInterna &&
+        !TIPOS_VALIDOS.includes(tipoUpper as TipoCusto)
+      ) {
         warnings.push({
           linha: rowNumber,
           coluna: "G",
@@ -521,7 +535,11 @@ export async function parsePlanilhaProjeto(
       grupoAtual.itens.push({
         itemId: m.itemId,
         item: colB,
-        tipo_custo: layoutInternacional ? null : (tipoUpper as TipoCusto),
+        tipo_custo: layoutInternacional
+          ? null
+          : secaoInterna
+            ? "FI"
+            : (tipoUpper as TipoCusto),
         valor_unitario_orcado: valorC.n,
         quantidade_orcada: qt.ok ? qt.n : 1,
         dias_meses_orcado: dm.ok ? dm.n : 1,

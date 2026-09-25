@@ -28,6 +28,9 @@ interface Props {
   /** Modelo do orçamento que recebe a planilha: a de outro modelo é
    *  recusada (decisão 072). Obrigatório para não cair no nacional. */
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Orçamento de serviço Interno (decisão 105): toda linha com valor entra
+   *  como F · Interno, inclusive a de tipo em branco. Obrigatório. */
+  interno: boolean;
   onImportado: (planilha: PlanilhaLida) => void;
 }
 
@@ -44,6 +47,7 @@ export function ImportarPlanilhaModal({
   onOpenChange,
   codigo,
   modeloPlanilha,
+  interno,
   onImportado,
 }: Props) {
   const [pending, startTransition] = React.useTransition();
@@ -68,6 +72,7 @@ export function ImportarPlanilhaModal({
     const formData = new FormData();
     formData.set("arquivo", file);
     formData.set("modelo_planilha", modeloPlanilha);
+    if (interno) formData.set("interno", "1");
     startTransition(async () => {
       const res = await parsePlanilhaRascunho(formData);
       if (!res.ok) {

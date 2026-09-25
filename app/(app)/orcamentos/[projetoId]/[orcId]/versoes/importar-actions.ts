@@ -218,6 +218,8 @@ async function verificarOrcamento(
       modelo: CategoriaModeloPlanilha;
       /** Período do orçamento — os meses da versão nova do mensal sem vigente. */
       periodo: { inicio: string | null; fim: string | null };
+      /** Serviço Interno (decisão 105): toda linha entra como F · Interno. */
+      interno: boolean;
     }
   | { ok: false; message: string }
 > {
@@ -226,7 +228,7 @@ async function verificarOrcamento(
     .from("orcamentos")
     // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
     .select(
-      "id, status, projeto_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+      "id, status, projeto_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno)",
     )
     .eq("id", orcamentoId)
     .eq("tenant_id", tenantId)
@@ -237,6 +239,7 @@ async function verificarOrcamento(
       data_inicio_prevista: string | null;
       data_fim_prevista: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+      servico: { investimento_interno: boolean } | null;
     }>();
 
   if (error || !orc) {
@@ -253,6 +256,7 @@ async function verificarOrcamento(
     projeto_id: orc.projeto_id,
     modelo: orc.categoria?.modelo_planilha ?? "nacional",
     periodo: { inicio: orc.data_inicio_prevista, fim: orc.data_fim_prevista },
+    interno: orc.servico?.investimento_interno === true,
   };
 }
 
@@ -308,7 +312,10 @@ export async function previewImportacao(
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
+    parsed = await parseOficial(arq.buffer, {
+      mensal: check.modelo === "mensal",
+      tipoFixo: check.interno ? "FI" : undefined,
+    });
   } catch (err) {
     console.error("[importacao.preview.parse]", err);
     return {
@@ -444,7 +451,10 @@ export async function confirmarImportacao(
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
+    parsed = await parseOficial(arq.buffer, {
+      mensal: check.modelo === "mensal",
+      tipoFixo: check.interno ? "FI" : undefined,
+    });
   } catch (err) {
     console.error("[importacao.confirmar.parse]", err);
     return {
@@ -828,7 +838,10 @@ export async function sobrescreverVersaoComPlanilha(
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
+    parsed = await parseOficial(arq.buffer, {
+      mensal: check.modelo === "mensal",
+      tipoFixo: check.interno ? "FI" : undefined,
+    });
   } catch (err) {
     console.error("[importacao.sobrescrever.parse]", err);
     return { ok: false, message: "Falha ao processar o arquivo." };
