@@ -55,8 +55,10 @@ interface Props {
   bvsPorItem: Record<string, ItemBv[]>;
   /** Save por linha, só leitura: o financeiro precisa ver POR QUE o
    *  faturamento previsto e o valor do job vieram diferentes. Vazio em
-   *  job sem save, e aí a coluna nem aparece. */
+   *  job sem save, e aí a coluna nasce recolhida na alça (decisão 107). */
   savePorItem: Record<string, EstadoSaveDaLinha>;
+  /** Job de serviço Interno: sem coluna Save e sem alça (decisão 105). */
+  interno: boolean;
   /** Nome do cliente do job — os textos do pop-up de save falam do
    *  crédito "de {cliente}". `null` só se o projeto estiver sem cliente,
    *  e aí o pop-up volta a dizer "do cliente". */
@@ -84,6 +86,7 @@ export function PlanilhaConferencia({
   categoriasMap,
   bvsPorItem,
   savePorItem,
+  interno,
   clienteNome,
   versaoLabel,
   moeda,
@@ -94,7 +97,11 @@ export function PlanilhaConferencia({
   moedaEstrangeira,
 }: Props) {
   const [visao, setVisao] = React.useState<VisaoBv>(VISAO_BV_PADRAO);
-  const temSave = Object.keys(savePorItem).length > 0;
+  // A coluna Save nasce aberta só quando o job já gera ou consome save, e
+  // recolhida na alça lateral quando não (decisão 107).
+  const [saveVisivel, setSaveVisivel] = React.useState(
+    Object.keys(savePorItem).length > 0,
+  );
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
   // O pop-up de save abre em LEITURA nas linhas com save (decisão 099 §18):
@@ -178,7 +185,10 @@ export function PlanilhaConferencia({
           jobResponsavelId={jobResponsavelId}
           bvsPorItem={bvsPorItem}
           versaoLabel={versaoLabel}
-          saveVisivel={temSave}
+          saveVisivel={saveVisivel && !interno}
+          onAlternarSave={
+            interno ? undefined : () => setSaveVisivel((v) => !v)
+          }
           savePorItem={savePorItem}
           onAbrirSave={setLinhaSave}
           abrirSaveSoComSave

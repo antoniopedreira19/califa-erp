@@ -383,12 +383,12 @@ export function JobRealizadoSection({
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
 
-  // SAVE — a coluna abre sozinha em quem já usa save ou tem saldo a
-  // gastar; quem nunca usou liga pelo menu "Exibir", sem o qual não
-  // haveria como criar o primeiro save de um job.
+  // SAVE — a coluna nasce recolhida na alça lateral e só abre sozinha
+  // quando ESTE job já gera ou consome save (decisão 107). O saldo que o
+  // cliente tem em outros jobs não abre mais a coluna. Quem nunca usou
+  // liga pela alça ou pelo menu "Exibir" para criar o primeiro save.
   const [saveLigado, setSaveLigado] = React.useState(
-    Object.keys(savePorItem).length > 0 ||
-      saldosDeSave.some((s) => s.disponivel > 0),
+    Object.keys(savePorItem).length > 0,
   );
   // O Interno não tem save (decisão 105).
   const temSave = saveLigado && !interno;

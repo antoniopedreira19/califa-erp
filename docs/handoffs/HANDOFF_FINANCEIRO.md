@@ -3213,6 +3213,8 @@ O financeiro não tem card de Totais próprio: a conferência da abertura
 reusa o do job e a visão de projeto reusa a das agregadas de Jobs. Então
 as duas herdaram o que mudou lá. O que é específico daqui:
 
+- ⚠️ **Revisto em 25/09/2026 (decisão 107): a coluna agora nasce recolhida
+  quando nenhum job do projeto usa save, e tem liga-desliga no "Exibir".**
 - **A visão agregada do projeto (`/financeiro/projetos/[id]`) ganhou a
   coluna Save, SEMPRE presente e sem liga-desliga.** Foi decisão do
   Tiago: é aqui que se confere o crédito entre jobs, e esconder a coluna
@@ -5902,3 +5904,20 @@ era o imposto de R$ 28.318,52). Regra completa na
   Always On e Fee), aberto com a Conta Teste, "R$ 0,00 · Sem faturamento"
   na lista, "Aberto · Sem faturamento · Aguardando encerramento" no
   cabeçalho e, depois do encerramento, "Finalizado · Sem faturamento".
+
+---
+
+## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
+
+**Isto revoga o primeiro tópico da nota de 2026-09-01.**
+
+- **Agregada do projeto:** a coluna Save deixou de ser sempre presente. Ela
+  nasce aberta quando algum job do projeto gera ou consome save, e
+  recolhida quando nenhum usa. O menu "Exibir" (Save · Orçado · Planejado ·
+  Realizado) passou a aparecer aqui também, igual à agregada de Jobs.
+- **Conferência da abertura:** a coluna, que sem save nem existia, agora
+  nasce recolhida na alça lateral e abre pela alça. Job Interno segue sem
+  coluna e sem alça (a página passou a ler `investimento_interno` do
+  serviço do orçamento).
+- **Planilha do job no financeiro:** já seguia a regra (o financeiro não
+  passa o saldo do cliente), e não mudou.
