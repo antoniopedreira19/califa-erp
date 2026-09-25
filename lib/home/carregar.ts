@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import type { SessionContext } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
+import {
+  impedimentosDosJobs,
+  podeEncerrar,
+} from "@/lib/data/impedimentos-encerramento";
 import type { CardKpi, CardPendencia, DadosHome } from "./tipos";
 import { projetoIdsDoUsuario } from "./escopo-meus";
 
@@ -126,11 +130,14 @@ export async function carregarHomeAdmin(
     // jobs em andamento: "aberto" ou "em_producao" (enum real). O encerrado
     // ainda fatura desde a decisão 087 (16/09/2026) e entra na conta, como na
     // lista que o card abre (`/jobs?filtro=faturamento_proximo`).
+    // Job sem faturamento previsto não tem faturamento a chegar (decisão
+    // 105) — fica fora, como na lista.
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .in("status", ["aberto", "em_producao", "encerrado"])
+      .gt("faturamento_previsto", 0.004)
       .gte("data_prevista_faturamento", hoje)
       .lte("data_prevista_faturamento", em7dias),
     // orcamentos parados: "em_revisao" + "enviado_cliente" (enum real)
@@ -608,6 +615,8 @@ export async function carregarHomeGerenteProducao(
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
           .in("status", ["aberto", "em_producao", "encerrado"])
+          // Sem faturamento previsto não há faturamento próximo (105).
+          .gt("faturamento_previsto", 0.004)
           .gte("data_prevista_faturamento", hoje)
           .lte("data_prevista_faturamento", em7dias),
     // CONTEXTO: mensagens no chat dos jobs onde participo
@@ -667,6 +676,11 @@ export async function carregarHomeGerenteProducao(
   ]);
 
   const saveDosMeusJobs = saveNaEsteiraDoGp(meusPedidosDeSave, minhasLinhasComSave);
+  const prontosPraEncerrar = await contarProntosPraEncerrar(
+    supabase,
+    tenantId,
+    meusJobsNaEsteira,
+  );
 
   const pendencias: CardPendencia[] = [
     {
@@ -685,8 +699,8 @@ export async function carregarHomeGerenteProducao(
     },
     {
       titulo: "Jobs prontos pra encerrar",
-      contagem: contarProntosPraEncerrar(meusJobsNaEsteira, saveDosMeusJobs),
-      subtitulo: "Seus jobs com faturamento emitido",
+      contagem: prontosPraEncerrar,
+      subtitulo: "Seus jobs abertos sem nenhuma pendência de produção",
       href: "/jobs?filtro=encerrar_pronto&meus=1",
       icone: Receipt,
     },
@@ -962,29 +976,31 @@ function contarProntosPraFaturar(
   }).length;
 }
 
-/** Com o envio registrado — no mensal, o de todos os meses.
+/** O job aberto que o botão "Enviar job para encerramento" liberaria
+ *  agora (decisão 105, 25/09/2026): sem PP por pagar, sem verba com
+ *  prestação por aprovar, sem BV por receber, com todo item marcado como
+ *  "todas as PPs geradas", sem save aguardando ou por enviar e sem revisão
+ *  da abertura. A régua é a do próprio encerramento
+ *  (`impedimentosDosJobs`), para o card nunca contar o que o botão recusa.
  *
- *  ⚠️ Critério anterior à decisão 087 (16/09/2026): desde então o
- *  encerramento não espera o envio, e "pronto pra encerrar" deveria ser o
- *  job aberto sem PP, BV, verba ou item pendente. Ficou restrito ao job
- *  aberto até o Tiago definir o card — o filtro da lista também não existe
- *  (`app/(app)/jobs/page.tsx`, TODO `encerrar_pronto`).
+ *  O envio para faturamento NÃO entra: desde a decisão 087 faturamento e
+ *  encerramento correm separados — era o critério antigo deste card, e o
+ *  motivo de o job sem nada a faturar nunca aparecer nele.
  *
- *  Desde a decisão 099 (22/09/2026), sem save ou consumo aguardando o
- *  financeiro ou nunca enviado para aprovação, e sem revisão da abertura
- *  pendente: o encerramento recusa os três. */
-function contarProntosPraEncerrar(
+ *  É uma segunda onda de leituras, depois da primeira: depende dos ids dos
+ *  jobs. Sete consultas em paralelo, qualquer que seja o número de jobs. */
+async function contarProntosPraEncerrar(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
   res: { data: unknown; error?: { message: string } | null },
-  save: SaveNaEsteiraDoGp,
-): number {
-  return jobsNaEsteira(res).filter((j) =>
-    j.status !== "aberto" ||
-    j.abertura_em_revisao === true ||
-    save.falhou ||
-    save.comSavePendente.has(j.id)
-      ? false
-      : j.meses > 0
-        ? j.mensaisEnviados >= j.meses
-        : j.envios.length > 0,
-  ).length;
+): Promise<number> {
+  const abertos = jobsNaEsteira(res)
+    .filter((j) => j.status === "aberto" || j.status === "em_producao")
+    .map((j) => j.id);
+  if (abertos.length === 0) return 0;
+  const impedimentos = await impedimentosDosJobs(supabase, tenantId, abertos);
+  return abertos.filter((id) => {
+    const imp = impedimentos.get(id);
+    return imp ? podeEncerrar(imp) : false;
+  }).length;
 }

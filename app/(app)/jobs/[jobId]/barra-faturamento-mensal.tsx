@@ -129,8 +129,13 @@ export function BarraFaturamentoMensal({
     );
   }
 
-  const resumo =
-    enviados.length === 0
+  // Nenhum mês fatura (o job Interno, por exemplo — decisão 105): não há
+  // o que enviar, e a frase não pode pedir envio.
+  const nadaAFaturar =
+    meses.length > 0 && meses.every((m) => m.situacao === "sem_faturamento");
+  const resumo = nadaAFaturar
+    ? "Este job não tem faturamento previsto: não há nota a emitir."
+    : enviados.length === 0
       ? "Envie cada mês quando o cliente validar."
       : `${enviados.length} de ${meses.length} ${
           meses.length === 1 ? "mês enviado" : "meses enviados"

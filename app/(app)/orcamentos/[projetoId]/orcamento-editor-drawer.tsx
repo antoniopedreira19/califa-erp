@@ -29,7 +29,7 @@ interface Props {
   modeloPlanilhaAtual: CategoriaModeloPlanilha;
   /** Serviço do job — escopo `projeto` de `categorias_dominio`,
    *  lista distinta das categorias acima (decisão 037). */
-  servicos: Pick<CategoriaDominio, "id" | "nome">[];
+  servicos: Pick<CategoriaDominio, "id" | "nome" | "investimento_interno">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   cidadesIniciais: CidadeOption[];
   cidadeAtual: CidadeOption | null;

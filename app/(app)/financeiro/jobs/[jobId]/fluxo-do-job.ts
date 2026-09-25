@@ -192,7 +192,7 @@ export async function carregarPrazosDosJobs(
   const [jobsRes, notasPorJob, previsoesRes] = await Promise.all([
     supabase
       .from("jobs")
-      .select("id, data_abertura_financeiro, data_prevista_faturamento")
+      .select("id, data_abertura_financeiro, data_prevista_faturamento, faturamento_previsto")
       .eq("tenant_id", tenantId)
       .in("id", jobIds),
     notasEmitidasDosJobs(tenantId, jobIds),
@@ -219,7 +219,13 @@ export async function carregarPrazosDosJobs(
     jobId: j.id as string,
     ...calcularPrazosDoJob({
       abertura: j.data_abertura_financeiro ?? null,
-      faturamentoPrevisto: j.data_prevista_faturamento ?? null,
+      // Job sem faturamento previsto (decisão 105) não tem prazo de
+      // faturamento nem de recebimento: a data prevista, quando existe, é
+      // de antes da regra e não marca nada. Sai "—" e fica fora da média.
+      faturamentoPrevisto:
+        Number(j.faturamento_previsto ?? 0) <= 0.004
+          ? null
+          : (j.data_prevista_faturamento ?? null),
       notas: notasPorJob.get(j.id) ?? [],
       previsoesRecebimento: previsaoPorJob.get(j.id) ?? [],
     }),

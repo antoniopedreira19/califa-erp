@@ -4244,3 +4244,28 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   Vercel roda em UTC: as mensagens apareciam 3 horas adiantadas e, depois
   das 21:00, com a data do dia seguinte. Agora formata no horário de
   Brasília. Coluna `date` continua como corte de string.
+
+## ⚠️ Nota de 2026-09-25 — job Interno, job sem faturamento e "prontos pra encerrar" (decisão 105)
+
+- **Job Interno** (o serviço do orçamento de origem): na errata a linha nova
+  nasce FI, Tipo e planejado não abrem e a prévia usa planejado = orçado;
+  sem coluna nem pedido de save (`useRascunhoErrata(itens, interno)`,
+  `JobRealizadoSection.interno`, obrigatória). `carregarDetalheDoJob`
+  devolve `interno`.
+- **Job sem faturamento:** ficha "Prev. recebimento: Sem faturamento"; a
+  barra do mensal diz "Este job não tem faturamento previsto: não há nota a
+  emitir." quando nenhum mês fatura. Ele continua ficando **finalizado só
+  com o encerramento** (gatilho `jobs_finaliza_ao_encerrar`, da 087).
+- **"Jobs prontos pra encerrar"** (home do GP) e **`/jobs?filtro=encerrar_pronto`**
+  (era TODO): o job aberto que o botão de encerrar liberaria agora — sem PP
+  por pagar, verba sem prestação aprovada, BV por receber, item sem marcar,
+  save aguardando ou por enviar, revisão da abertura. O envio para
+  faturamento não entra. A régua é `impedimentosDosJobs`
+  (`lib/data/impedimentos-encerramento.ts`), que `encerrarJob` passou a usar
+  também. Subtítulo do card: "Seus jobs abertos sem nenhuma pendência de
+  produção".
+- **"Jobs com faturamento próximo"** (home e filtro): o job com faturamento
+  previsto zero saiu.
+- **Conferido:** JOB-0047 (Interno, Always On, TES-0001/26) aberto, marcado
+  pelo "Concluir PPs", listado no filtro e contado no card (2, com o
+  JOB-0043), encerrado → **Finalizado** direto, sem envio.

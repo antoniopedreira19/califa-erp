@@ -84,7 +84,8 @@ export async function lerItensSemConclusao(
 
 /**
  * A mesma lista, para o ENCERRAMENTO: leitura que falhou trava a mais,
- * nunca a menos — como as outras consultas de `levantarImpedimentos`.
+ * nunca a menos — como as outras consultas de `impedimentosDosJobs`
+ * (`lib/data/impedimentos-encerramento.ts`), que faz o mesmo recorte em lote.
  *
  * Até 22/09/2026 a falha devolvia lista vazia, e o encerramento lia
  * "nenhum item em aberto" e passava. Agora volta um item só, que não existe

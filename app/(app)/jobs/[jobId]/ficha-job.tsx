@@ -55,6 +55,9 @@ export interface JobDaFicha {
   dataAbertura: string | null;
   abertoPorNome: string | null;
   dataPrevistaFaturamento: string | null;
+  /** Faturamento previsto zero (decisão 105): não há recebimento, e a
+   *  linha diz isso em vez de uma data. Obrigatório. */
+  semFaturamento: boolean;
 }
 
 export interface ProjetoDaFicha {
@@ -224,7 +227,9 @@ export function FichaJob({
                 )}
               </Campo>
               <Campo rotulo="Prev. recebimento" mono ultimo>
-                {formatData(job.dataPrevistaFaturamento)}
+                {job.semFaturamento
+                  ? "Sem faturamento"
+                  : formatData(job.dataPrevistaFaturamento)}
               </Campo>
             </div>
 

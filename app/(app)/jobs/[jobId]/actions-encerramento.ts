@@ -6,236 +6,29 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import {
-  PP_STATUS_EM_ABERTO,
-  BV_SITUACAO_EM_ABERTO,
-  situacaoDaVerba,
   situacaoVerbaLabel,
-  verbaPendenteNoEncerramento,
   jobStatusLabel,
   jobEstaAberto,
   JOB_STATUS_ABERTO,
   type JobStatus,
-  type SituacaoVerba,
 } from "@/lib/types";
-import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verba";
-import { itensSemConclusaoDoJob } from "./realizado/conclusao-item";
+import { impedimentosDosJobs } from "@/lib/data/impedimentos-encerramento";
 
 export type ActionResult =
   | { ok: true; id: string; status: JobStatus }
   | { ok: false; message: string };
 
-/** O que impede o encerramento agora. Vazio = pode encerrar. */
-export interface ImpedimentosEncerramento {
-  ppsEmAberto: { codigo: string; status: string }[];
-  /** Verbas pagas que ainda não fecharam (decisão 081, pergunta 10a). */
-  verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
-  bvsEmAberto: { item: string; situacao: string }[];
-  /** Itens de custo que ainda não disseram se sairá mais PP deles
-   *  (decisão 052). Só as linhas de calha PP — A e D não geram PP e não
-   *  têm o que marcar. */
-  itensSemMarcacao: { item: string }[];
-  /** Aprovação de save (decisão 099, 22/09/2026): o job não encerra com
-   *  pedido de save que o financeiro ainda não decidiu — nem o que gera
-   *  crédito, nem o que consome —, com linha de save que nunca foi enviada
-   *  para aprovação (o legado, que tem o botão "Enviar saves para
-   *  aprovação"), nem com a revisão da abertura pendente. */
-  savesAguardando: { item: string }[];
-  consumosAguardando: { item: string }[];
-  /** `comRecusa`: a linha tem pedido recusado ainda não arquivado, e o
-   *  botão "Enviar saves para aprovação" não a envia até o GP retirar a
-   *  recusa. */
-  savesNaoEnviados: { item: string; comRecusa: boolean }[];
-  revisaoDaAberturaPendente: boolean;
-}
+// Os impedimentos saíram daqui em 25/09/2026 (decisão 105) para
+// `lib/data/impedimentos-encerramento.ts`: a mesma régua agora alimenta o
+// card "Jobs prontos pra encerrar" da home e o filtro da lista de jobs, e
+// três cópias dela divergiriam no primeiro ajuste. Aqui o encerramento
+// refaz a conta antes de gravar — a tela pode ter sido carregada antes de
+// alguém emitir uma PP.
 
 /** "Item 1, Item 2" — os itens de um impedimento de save, entre parênteses
  *  na mensagem. */
 function listaDeItens(itens: { item: string }[]): string {
   return itens.map((i) => i.item).join(", ");
-}
-
-/**
- * Levanta os impedimentos do encerramento, para `encerrarJob` refazer a
- * conta antes de gravar. A tela não passa por aqui: o fechamento é montado
- * em `carregar-detalhe.ts`, com os dados que a página já carregou.
- *
- * NÃO EXPORTAR (15/09/2026). Todo export async de arquivo "use server"
- * vira Server Action, chamável pelo navegador com qualquer argumento — e
- * esta recebe `tenantId` confiando em quem chama. O único chamador é
- * `encerrarJob`, que tira o tenant da sessão.
- *
- * Regra do time (13/08/2026): job não encerra com PP ou BV em aberto.
- * "Em aberto" é PP que ainda não foi paga e BV que ainda não foi
- * recebido — cancelada não conta, porque não é compromisso nem desembolso
- * (a rejeitada conta desde a decisão 083).
- *
- * E não encerra com item de custo em aberto (04/09/2026, decisão 052), nem
- * com verba de produção não concluída (decisão 081 §7), nem — desde
- * 22/09/2026 (decisão 099) — com save ou consumo de save aguardando o
- * financeiro ou nunca enviado para aprovação, nem com a revisão da abertura
- * pendente: depois do encerramento o save não muda mais, e o crédito
- * ficaria sem decisão para sempre.
- *
- * ⚠️ O FATURAMENTO SAIU DAQUI em 16/09/2026 (decisão 087). Até então o job
- * só encerrava enviado para faturamento (decisão 008 §1) e sem saldo a
- * faturar (decisão 034), porque o job encerrado sumia da fila de
- * faturamento. Agora a fila e o fluxo de caixa enxergam o job encerrado,
- * faturamento e encerramento correm separados, e o job fica FINALIZADO
- * quando os dois terminam — quem marca é o banco.
- */
-async function levantarImpedimentos(
-  tenantId: string,
-  jobId: string,
-  /** Lido por `encerrarJob` na mesma consulta do status. */
-  aberturaEmRevisao: boolean,
-): Promise<ImpedimentosEncerramento> {
-  const supabase = createClient();
-
-  const [
-    ppsRes,
-    verbasRes,
-    bvsRes,
-    semMarcacaoRes,
-    pedidosSaveRes,
-    linhasComSaveRes,
-  ] = await Promise.all([
-    supabase
-      .from("pedidos_compra")
-      .select("codigo, status")
-      .eq("job_id", jobId)
-      .eq("tenant_id", tenantId)
-      .in("status", PP_STATUS_EM_ABERTO),
-    // Verba paga sem prestação aprovada (decisão 081, pergunta 10a; o estorno
-    // por baixar deixou de travar em 22/09/2026). As dicas de FK
-    // são as de `SELECT_PRESTACAO_DA_VERBA` — sem elas o embed é ambíguo.
-    supabase
-      .from("pedidos_compra")
-      .select(
-        "codigo, status, verba_producao, " +
-          "prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(status, valor_devolvido), " +
-          "devolucao:pp_verba_devolucoes!pp_verba_devolucoes_pedido_compra_id_fkey(pago_em)",
-      )
-      .eq("job_id", jobId)
-      .eq("tenant_id", tenantId)
-      .eq("verba_producao", true)
-      .eq("status", "pago"),
-    // BV pendura na CÓPIA do job desde 27/08/2026 — pelo caminho antigo
-    // (versão aprovada) o BV de uma linha criada por errata ficaria de
-    // fora, e o job encerraria com comissão em aberto. O `!inner` aqui é
-    // filtro, não embed, como na leitura de BVs da página do job.
-    supabase
-      .from("itens_bv")
-      .select("situacao, copia:jobs_itens_orcado!inner(item, job_id)")
-      .eq("tenant_id", tenantId)
-      .eq("copia.job_id", jobId)
-      .in("situacao", BV_SITUACAO_EM_ABERTO),
-    // Mesma consulta que o botão "Concluir PPs" da barra usa para saber
-    // quem ele vai marcar — o recorte mora num lugar só (decisão 052).
-    itensSemConclusaoDoJob(supabase, tenantId, jobId),
-    // Pedidos de save ativos do job (decisão 099): os que aguardam travam;
-    // aguardando e aprovado dizem que o lado da linha já foi enviado; o
-    // recusado não arquivado só diz que a linha tem recusa a retirar.
-    supabase
-      .from("saves_aprovacoes")
-      .select("job_item_orcado_id, item_descricao, tipo, situacao")
-      .eq("job_id", jobId)
-      .eq("tenant_id", tenantId)
-      .in("situacao", ["aguardando", "aprovado", "recusado"]),
-    // As linhas que geram ou consomem save hoje.
-    supabase
-      .from("jobs_itens_orcado")
-      .select("id, item, em_save, save_consumido")
-      .eq("job_id", jobId)
-      .eq("tenant_id", tenantId)
-      .or("em_save.eq.true,save_consumido.gt.0"),
-  ]);
-
-  const pedidosSave = (pedidosSaveRes.data ?? []) as {
-    job_item_orcado_id: string | null;
-    item_descricao: string;
-    tipo: "gera" | "consome";
-    situacao: "aguardando" | "aprovado" | "recusado";
-  }[];
-  // "Não enviado" é por LADO da linha (decisão 099, revisão de 22/09/2026):
-  // save gerado sem pedido de gera aguardando ou aprovado, ou consumo sem
-  // pedido de consumo aguardando ou aprovado. O recusado não conta como
-  // envio — depois de uma edição de consumo recusada a linha volta ao
-  // consumo de antes, que pode nunca ter sido aprovado, e escapava daqui.
-  const enviado = (tipo: "gera" | "consome") =>
-    new Set(
-      pedidosSave
-        .filter(
-          (p) =>
-            p.tipo === tipo &&
-            (p.situacao === "aguardando" || p.situacao === "aprovado"),
-        )
-        .map((p) => p.job_item_orcado_id)
-        .filter((id): id is string => Boolean(id)),
-    );
-  const geraEnviado = enviado("gera");
-  const consomeEnviado = enviado("consome");
-  const comRecusa = new Set(
-    pedidosSave
-      .filter((p) => p.situacao === "recusado")
-      .map((p) => p.job_item_orcado_id)
-      .filter((id): id is string => Boolean(id)),
-  );
-  const aguardando = (tipo: "gera" | "consome") =>
-    pedidosSave
-      .filter((p) => p.situacao === "aguardando" && p.tipo === tipo)
-      .map((p) => ({ item: p.item_descricao }));
-
-  return {
-    // Leitura que falhou trava a mais, nunca a menos.
-    ppsEmAberto: ppsRes.error
-      ? [{ codigo: "Pedidos de Produção", status: "gerada" }]
-      : ((ppsRes.data ?? []) as any[]).map((p) => ({
-          codigo: p.codigo,
-          status: p.status,
-        })),
-    verbasEmAberto: verbasRes.error
-      ? [{ codigo: "Verbas de produção", situacao: "aguardando_prestacao" }]
-      : ((verbasRes.data ?? []) as any[]).flatMap((pp) => {
-          const situacao = situacaoDaVerba({
-            verba_producao: pp.verba_producao === true,
-            status: pp.status,
-            prestacao: prestacaoDaVerba(pp.prestacao),
-            devolucao: devolucaoDaVerba(pp.devolucao),
-          });
-          return verbaPendenteNoEncerramento(situacao)
-            ? [{ codigo: pp.codigo as string, situacao }]
-            : [];
-        }),
-    bvsEmAberto: bvsRes.error
-      ? [{ item: "BVs", situacao: "confirmado" }]
-      : ((bvsRes.data ?? []) as any[]).map((b) => ({
-          item: b.copia?.item ?? "Item",
-          situacao: b.situacao,
-        })),
-    itensSemMarcacao: semMarcacaoRes.map((i) => ({ item: i.nome })),
-    savesAguardando: pedidosSaveRes.error
-      ? [{ item: "pedidos de save" }]
-      : aguardando("gera"),
-    consumosAguardando: pedidosSaveRes.error ? [] : aguardando("consome"),
-    savesNaoEnviados:
-      pedidosSaveRes.error || linhasComSaveRes.error
-        ? [{ item: "linhas com save", comRecusa: false }]
-        : (
-            (linhasComSaveRes.data ?? []) as {
-              id: string;
-              item: string;
-              em_save: boolean | null;
-              save_consumido: number | string | null;
-            }[]
-          )
-            .filter(
-              (l) =>
-                (l.em_save === true && !geraEnviado.has(l.id)) ||
-                (Number(l.save_consumido ?? 0) > 0 && !consomeEnviado.has(l.id)),
-            )
-            .map((l) => ({ item: l.item, comRecusa: comRecusa.has(l.id) })),
-    revisaoDaAberturaPendente: aberturaEmRevisao,
-  };
 }
 
 /**
@@ -287,11 +80,10 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     };
   }
 
-  const imp = await levantarImpedimentos(
-    session.activeTenant.id,
-    jobId,
-    job.abertura_em_revisao === true,
-  );
+  const imp =
+    (await impedimentosDosJobs(supabase, session.activeTenant.id, [jobId])).get(jobId) ??
+    null;
+  if (!imp) return { ok: false, message: "Não foi possível conferir o job. Tente de novo." };
 
   if (
     imp.ppsEmAberto.length > 0 ||

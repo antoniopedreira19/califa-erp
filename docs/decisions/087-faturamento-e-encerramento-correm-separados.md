@@ -328,10 +328,14 @@ dois jobs finalizados.
 
 - **Fluxo de confirmação do encerramento pelo financeiro** (regra 6) — a
   desenhar depois desta entrega.
-- **Card "Jobs prontos pra encerrar" da home do GP:** ainda conta job aberto com
+- ~~**Card "Jobs prontos pra encerrar" da home do GP:** ainda conta job aberto com
   envio registrado, critério anterior a esta decisão. O certo seria job aberto
   sem PP, BV, verba ou item pendente; o filtro `encerrar_pronto` da lista nunca
-  foi implementado. Precisa de definição.
+  foi implementado. Precisa de definição.~~ **Fechada em 25/09/2026
+  ([decisão 105](105-servico-interno-e-job-sem-faturamento.md)):** o card e o
+  filtro contam o job aberto que o botão de encerrar liberaria agora, pela
+  mesma régua (`lib/data/impedimentos-encerramento.ts`), sem olhar o
+  faturamento.
 - ~~**Janela entre migration e deploy:** as migrations valem para o app que está
   no ar, que não conhece `finalizado`. Nenhum job aberto está todo faturado
   hoje, então nenhum deveria virar finalizado antes do deploy.~~ Fechada: o

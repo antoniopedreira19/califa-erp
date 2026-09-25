@@ -20,7 +20,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CategoriaDominio } from "@/lib/types";
 
-export type ServicoOption = Pick<CategoriaDominio, "id" | "nome">;
+/** `investimento_interno` vai junto porque o serviço Interno muda a
+ *  planilha (decisão 105): o formulário filtra as categorias por ele, e as
+ *  telas da versão travam tipo de custo e planejado. */
+export type ServicoOption = Pick<
+  CategoriaDominio,
+  "id" | "nome" | "investimento_interno"
+>;
 
 /** Devolve a PROMISE, não o resultado: quem chama põe dentro do
  *  `Promise.all` que já tem, em vez de somar um await em série
@@ -31,11 +37,30 @@ export function servicosDoOrcamentoQuery(
 ) {
   return supabase
     .from("categorias_dominio")
-    .select("id, nome")
+    .select("id, nome, investimento_interno")
     .eq("tenant_id", tenantId)
     .eq("escopo", "projeto")
     .eq("ativo", true)
     .order("nome");
+}
+
+/**
+ * Os serviços que o financeiro pode dar a um job na abertura (decisão 105,
+ * resposta 3-a do Tiago): só os do mesmo lado do Interno que o orçamento
+ * de origem. O Interno decide a planilha do job e não entra nem sai ali.
+ * O serviço que o job já tem fica na lista de qualquer jeito, para o
+ * campo nunca abrir vazio. A server action e o gatilho
+ * `job_servico_e_categoria_seguem_a_planilha` recusam o mesmo.
+ */
+export function servicosDoLado<T extends ServicoOption>(
+  servicos: T[],
+  job: { servico_id: string | null; servico_orcamento_interno: boolean },
+): T[] {
+  return servicos.filter(
+    (s) =>
+      s.investimento_interno === job.servico_orcamento_interno ||
+      s.id === job.servico_id,
+  );
 }
 
 /**

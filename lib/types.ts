@@ -710,6 +710,14 @@ export interface CategoriaDominio {
    *  e o serviço só aceita as categorias exclusivas dele. Nas categorias
    *  de escopo `projeto` (os serviços) é sempre `null`. */
   servico_exclusivo_id: string | null;
+  /** Serviço (escopo `projeto`) de investimento interno da California
+   *  (decisão 105): o orçamento só aceita custo FI, o planejado acompanha o
+   *  orçado e não há save. Hoje só o serviço Interno. Nas categorias de
+   *  escopo `orcamento` é sempre `false`. */
+  investimento_interno: boolean;
+  /** Categoria exclusiva de outro serviço que TAMBÉM vale para o serviço
+   *  de investimento interno (decisão 105). Hoje só a Always On. */
+  aceita_servico_interno: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;

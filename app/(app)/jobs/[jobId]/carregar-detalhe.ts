@@ -107,7 +107,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -788,10 +788,12 @@ export async function carregarDetalheDoJob(
   // travava dos dois lados: não dá para enviar (valor zero) e o
   // encerramento só aparecia depois do envio.
   //
-  // A condição é DUPLA de propósito: faturamento zero sem save é outra
-  // coisa (orçado vazio), e esse continua tendo de passar pelo
-  // faturamento. Mesma régua de `lib/data/faturamento-por-job.ts` e do
-  // portão de `encerrarJob`.
+  // A condição é DUPLA só para escolher a FRASE da trilha: o job zerado
+  // sem save — todo em F · Interno, ou só com custo que o cliente paga
+  // direto — também não tem faturamento e também finaliza só com o
+  // encerramento (`jobs_finaliza_ao_encerrar`, decisão 105); a trilha dele
+  // diz "não há nota a emitir". Mesma régua de
+  // `lib/data/faturamento-por-job.ts`.
   const saveConsumidoNoJob = itens.reduce(
     (soma, it) => soma + Number(it.save_consumido ?? 0),
     0,
@@ -1102,6 +1104,12 @@ export async function carregarDetalheDoJob(
     podeEnviarFaturamento,
     podeEnviarFaturamentoMensal,
     pagoSoPorSave,
+    // Serviço Interno (decisão 105): lido do ORÇAMENTO, que é quem decide a
+    // planilha — o financeiro não troca o job para dentro ou para fora dele
+    // (`job_servico_e_categoria_seguem_a_planilha`).
+    interno:
+      (raw.orcamento as { servico?: { investimento_interno?: boolean } | null } | null)
+        ?.servico?.investimento_interno === true,
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,

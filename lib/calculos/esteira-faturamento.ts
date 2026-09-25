@@ -8,9 +8,13 @@
  */
 
 /**
- * Onde o job está na esteira. Os cinco estados são exclusivos entre si —
+ * Onde o job está na esteira. Os seis estados são exclusivos entre si —
  * cada job está em exatamente um.
  *
+ * - `sem_faturamento`: o job não tem nada a faturar — faturamento previsto
+ *   zero, seja por ser todo F · Interno, por ser pago só com save de outro
+ *   job, ou por só ter custo que o cliente paga direto sem honorário.
+ *   Não há envio nem nota; ele sai da esteira (decisão 105, 25/09/2026).
  * - `aguardando_envio`: a produção ainda não liberou o job.
  * - `enviado`: liberado, esperando o financeiro emitir a nota.
  * - `faturado`: nota emitida, dinheiro ainda dentro do prazo.
@@ -18,6 +22,7 @@
  * - `liquidado`: tudo recebido.
  */
 export type SituacaoFaturamento =
+  | "sem_faturamento"
   | "aguardando_envio"
   | "enviado"
   | "faturado"
@@ -47,19 +52,19 @@ export function classificarFaturamento(
   temEnvio: boolean,
   titulos: TituloDaNota[],
   hoje: string,
-  /** Job cujo faturamento previsto é ZERO porque tudo nele é pago por
-   *  saldo de save de outro job. Ele **pula a etapa de faturamento** e se
-   *  comporta como já faturado: não há nota a emitir, ela já saiu no job
-   *  que gerou o crédito (decisão do Tiago em 27/08/2026, decisão 028
-   *  §11). Sem isto ele ficaria eternamente em "aguardando envio",
-   *  travado dos dois lados. */
+  /** Job cujo faturamento previsto é ZERO: não há nota a emitir. Até
+   *  25/09/2026 só o job pago inteiro por save chegava aqui, e aparecia
+   *  como `faturado` (decisão 028 §11). Desde a decisão 105 todo job sem
+   *  faturamento — o Interno, o pago por save, o de custo só direto ao
+   *  fornecedor — é `sem_faturamento`: "faturado" sem nota mentia sobre
+   *  este job, cuja nota (quando existe) saiu em outro. */
   nadaAFaturar = false,
   /** Job mensal — Fee e Always On (decisão 078) — com mês ainda não
    *  enviado ou não faturado inteiro. As notas emitidas até aqui podem estar
    *  todas pagas, mas o job não recebeu tudo: fica em `faturado`. */
   faltaFaturar = false,
 ): SituacaoFaturamento {
-  if (nadaAFaturar && !temNota) return "faturado";
+  if (nadaAFaturar && !temNota) return "sem_faturamento";
   if (!temNota) return temEnvio ? "enviado" : "aguardando_envio";
 
   const emAberto = titulos.filter((t) => t.status !== "pago");

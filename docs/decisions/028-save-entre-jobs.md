@@ -211,6 +211,12 @@ save encerra direto. Não há nota a emitir — ela saiu no job de origem.
 > encerrar. O job pago só por save encerra como qualquer outro e, como não
 > tem nada a faturar, fica **finalizado** no mesmo instante.
 
+> ⚠️ **25/09/2026 ([decisão 105](105-servico-interno-e-job-sem-faturamento.md)).**
+> Na esteira do financeiro o job pago só por save deixou de aparecer como
+> "Faturado" (sem nota nenhuma) e passou a "Sem faturamento", como todo job
+> com faturamento previsto zero. Consumo ainda aguardando o financeiro
+> segue "Aguardando envio".
+
 ## Por que o saldo não leva honorários e imposto
 
 A alternativa era um saldo de R$ 41.009,07 — o faturamento cheio da linha.

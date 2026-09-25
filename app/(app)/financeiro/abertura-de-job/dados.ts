@@ -86,6 +86,10 @@ export interface JobNaFila {
   /** O serviço que a PRODUÇÃO mandou — o do orçamento, fixo. É o que o
    *  painel "Dados da produção" mostra, ao lado da categoria. */
   servico_producao_nome: string | null;
+  /** O serviço do ORÇAMENTO é o Interno (decisão 105)? O combo de serviço
+   *  do financeiro só oferece os do mesmo lado: o Interno decide a
+   *  planilha do job e não entra nem sai na abertura. */
+  servico_orcamento_interno: boolean;
   /** Agregados da planilha interna do job. */
   planilha_grupos: number;
   planilha_itens: number;
@@ -278,7 +282,7 @@ const SELECT_JOB_FILA =
   // desde 02/09/2026 (categoria e servico).
   "orcamento:orcamentos(codigo, categoria_id, servico_id, " +
   "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
-  "servico:categorias_dominio!servico_id(nome))";
+  "servico:categorias_dominio!servico_id(nome, investimento_interno))";
 
 /**
  * Soma o orçado e o planejado da planilha interna de vários jobs numa
@@ -394,6 +398,8 @@ function montarJobNaFila(
       ? (j.servico?.nome ?? null)
       : (j.orcamento?.servico?.nome ?? null),
     servico_producao_nome: j.orcamento?.servico?.nome ?? null,
+    servico_orcamento_interno:
+      j.orcamento?.servico?.investimento_interno === true,
     planilha_grupos: totais?.grupos ?? 0,
     planilha_itens: totais?.itens ?? 0,
     planilha_orcado: totais?.orcado ?? 0,

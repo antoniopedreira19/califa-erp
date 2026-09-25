@@ -71,6 +71,10 @@ interface Props {
   savePorItem: Record<string, EstadoSaveDaLinha>;
   saldosDeSave: SaldoDeSave[];
   planilha: ConfigDaPlanilha;
+  /** Orçamento de serviço Interno com a categoria Always On (decisão 105):
+   *  a planilha mensal com tipo F · Interno travado, planejado igual ao
+   *  orçado e sem save. Obrigatória. */
+  interno: boolean;
   /** "Importar planilha" da versão (decisão 078, 15/09/2026): troca o
    *  conteúdo de todos os meses de uma vez, por isso mora na régua e não
    *  no mês. `null` esconde. */
@@ -95,6 +99,7 @@ export function PlanilhaMensal({
   savePorItem,
   saldosDeSave,
   planilha,
+  interno,
   importacao,
 }: Props) {
   const base = `/orcamentos/${projetoId}/${orcamentoId}?v=${versao.id}`;
@@ -219,6 +224,7 @@ export function PlanilhaMensal({
         modeloPlanilha={planilha.modeloPlanilha}
         internacional={planilha.internacional}
         moedaEstrangeira={planilha.moedaEstrangeira}
+        interno={interno}
         mes={{ id: d.mes.id, nome: nomeDoMes(d.mes.mes) }}
         semTotais={opcoes.semTotais}
         tituloTotais={`Totais de ${nomeDoMes(d.mes.mes)}`}
@@ -261,6 +267,7 @@ export function PlanilhaMensal({
               projetoId={projetoId}
               orcamentoId={orcamentoId}
               modeloPlanilha={planilha.modeloPlanilha}
+              interno={interno}
               modo="sobrescrever"
               versaoId={versao.id}
               conteudoAtual={{

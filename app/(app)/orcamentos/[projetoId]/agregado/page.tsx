@@ -112,7 +112,7 @@ export default async function OrcamentosAgregadoPage({
       // `modelo_planilha` vem junto: é ele que diz como o orçamento criado
       // aqui vai fechar (decisão 072). `servico_exclusivo_id` separa as
       // categorias do Fee e do Always On, que não nascem por aqui (078).
-      .select("id, nome, modelo_planilha, servico_exclusivo_id")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)

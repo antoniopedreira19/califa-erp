@@ -35,4 +35,10 @@ export const SITUACAO_META: Record<
     rotulo: "Aguardando envio",
     classes: "border-border bg-muted/80 text-muted-foreground",
   },
+  // Nada a faturar (decisão 105): não é pendência, é ausência. Contorno
+  // neutro sem fundo, para não se confundir com o "Aguardando envio".
+  sem_faturamento: {
+    rotulo: "Sem faturamento",
+    classes: "border-border bg-transparent text-muted-foreground",
+  },
 };

@@ -53,6 +53,9 @@ export type AuditAction =
   // Troca de categoria que entra ou sai do modelo mensal: muda a estrutura
   // de todas as versões, e saindo apaga os meses depois do primeiro.
   | "orcamento.modelo_planilha_trocado"
+  // Decisão 105: o orçamento passou para o serviço Interno e as linhas
+  // viraram F · Interno, com o planejado igual ao orçado.
+  | "orcamento.virou_interno"
   // SAVE — o crédito entre jobs (docs/decisions/028-save-entre-jobs.md).
   // Registrado porque marcar uma linha ou definir um consumo move
   // faturamento previsto e valor do job, e move dinheiro entre jobs.
