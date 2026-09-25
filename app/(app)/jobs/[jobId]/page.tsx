@@ -175,11 +175,14 @@ export default async function JobDetailPage({
           )}
           ativo={job.id}
         />
-        {/* O resumo tem largura fixa e fica ancorado à direita: quem cede
-            espaço para nome longo é a coluna do título, que quebra dentro
-            de si mesma (min-w-0 permite o encolhimento). */}
+        {/* O resumo tem largura fixa e fica ancorado à direita. O título
+            cede espaço quebrando dentro da própria coluna, mas nunca abaixo
+            de 18rem: sem esse piso (era `min-w-0` com `flex-1`, base 0)
+            a linha nunca quebrava e, com a janela estreita, o card cobria
+            o nome. Com o piso, quando os dois não cabem, o resumo desce
+            para a linha de baixo — como na agregada de Orçamentos. */}
         <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-[18rem] flex-1">
             <p className="font-mono text-xs font-semibold text-muted-foreground">{job.codigo}</p>
             <div className="mt-1 flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-bold tracking-tight">{job.nome}</h1>

@@ -5830,6 +5830,14 @@ era o imposto de R$ 28.318,52). Regra completa na
 - As abas da agregada (`projeto-tabs.tsx`) passaram a gravar `?aba=fluxo`
   com `replaceState`. A árvore de jobs usa `LinkDoJobNaAgregada`, que leva
   aonde a aba do job na faixa levaria.
+- **Cabeçalho: o card de resumo não cobre mais o título.** Com a janela
+  estreita (largura útil abaixo de ~950–1020 px) o card "Valor do job /
+  Resultado Op." cobria o nome do job ou do projeto — defeito antigo, já na
+  produção. O bloco do título tinha `min-w-0 flex-1` (base 0), e a linha
+  nunca quebrava; agora tem `min-w-[18rem] flex-1`, e quando os dois não
+  cabem o card desce para a linha de baixo, como na agregada de Orçamentos.
+  Em 1838 px nada muda; o card desce abaixo de ~1150 px. Vale para a página
+  do job e a agregada, em Jobs e no Financeiro.
 
 ## ⚠️ Nota de 2026-09-24 — rateio da nota com o save, relatório de rentabilidade e ajustes da aprovação de save
 

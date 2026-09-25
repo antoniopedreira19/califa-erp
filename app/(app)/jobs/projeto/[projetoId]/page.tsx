@@ -142,9 +142,11 @@ export default async function ProjetoAgregadoPage({
           ativo={AGREGADA}
         />
         {/* O resumo fica ancorado à direita; o bloco do título encolhe
-            dentro da própria coluna quando o nome do projeto é longo. */}
+            dentro da própria coluna quando o nome do projeto é longo, mas
+            nunca abaixo de 18rem — sem esse piso o card cobria o nome com a
+            janela estreita. Quando os dois não cabem, o resumo desce. */}
         <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex min-w-[18rem] flex-1 items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">
               <FolderKanban className="h-5 w-5 text-california-red" />
             </div>
