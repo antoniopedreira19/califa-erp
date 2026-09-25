@@ -110,13 +110,15 @@ export const aberturaJobSchema = z
       .max(OBSERVACOES_MAX, `Máximo ${OBSERVACOES_MAX} caracteres.`),
     // Chega como JSON num campo do FormData e é parseado antes de validar
     // (ver `extractInput`). Ao menos um contato é obrigatório desde
-    // 17/08/2026: sem ele o financeiro não sabe a quem cobrar.
+    // 17/08/2026 — sem ele o financeiro não sabe a quem cobrar —, mas só
+    // quando há o que cobrar: o job sem faturamento previsto dispensa
+    // (decisão 105, 25/09/2026). Quem cobra o mínimo é
+    // `enviarJobParaAbertura`, que conhece o faturamento.
     contatos_cobranca: z
       .array(contatoCobrancaSchema, {
         required_error: "Informe ao menos um contato de cobrança.",
         invalid_type_error: "Informe ao menos um contato de cobrança.",
       })
-      .min(1, "Informe ao menos um contato de cobrança.")
       .max(
         CONTATOS_COBRANCA_MAX,
         `Máximo ${CONTATOS_COBRANCA_MAX} contatos de cobrança.`,

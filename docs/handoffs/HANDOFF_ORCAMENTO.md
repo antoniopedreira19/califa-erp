@@ -4463,3 +4463,15 @@ limpos.
 - **Conferido na tela:** TES-0001/26-12 (Interno nacional) e TES-0001/26-13
   (Ativação convertido para Interno e depois para Always On mensal) — ver a
   decisão 105 §5.
+
+## ⚠️ Nota de 2026-09-25 (2) — contato de cobrança opcional sem faturamento e a calha que remedia a cada tecla (decisão 105 §7)
+
+- **Enviar job para abertura:** sem faturamento previsto, o contato de
+  cobrança é opcional ("Opcional: o job não tem faturamento previsto.");
+  linha começada ainda precisa de nome e e-mail. Servidor cobra o contato só
+  com faturamento; lista vazia não grava nada em `jobs_contatos`.
+- **Calha da planilha** (`itens-table.tsx`): `usePosicoesDaCalha` depende da
+  estrutura das linhas, não da referência dos grupos. **Visão agregada:**
+  `nosGrupos` preserva os orçamentos não editados. De 12–15 para 2–3
+  medições de layout por edição; corrige o "Maximum update depth exceeded"
+  visto na agregada.

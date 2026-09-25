@@ -126,6 +126,15 @@ export function emailContatoInvalido(c: ContatoCobranca): boolean {
   return !EMAIL_PLAUSIVEL.test(c.email.trim());
 }
 
+/** Linha que ninguém começou a preencher — o envio a descarta. */
+export function contatoEmBranco(c: ContatoCobranca): boolean {
+  return (
+    c.nome.trim().length === 0 &&
+    c.email.trim().length === 0 &&
+    c.numero.trim().length === 0
+  );
+}
+
 /** `semRecebimento`: o job não tem faturamento previsto (decisão 105) —
  *  a data de recebimento não existe e não é cobrada. */
 export function faltamCampos(
@@ -143,11 +152,18 @@ export function faltamCampos(
     // Descritivo obrigatório desde 03/09/2026 — é o recado da produção
     // para quem abre o job no financeiro.
     observacoes: d.observacoes.trim().length === 0,
-    // Espelha o schema do servidor: ao menos uma linha, e TODA linha com
-    // nome e e-mail. Número em branco não conta como pendência.
-    contatos_cobranca:
-      d.contatos.length === 0 ||
-      d.contatos.some((c) => nomeContatoInvalido(c) || emailContatoInvalido(c)),
+    // Espelha o servidor: ao menos uma linha, e TODA linha com nome e
+    // e-mail. Número em branco não conta como pendência. Sem faturamento
+    // o contato é opcional (decisão 105): só a linha começada precisa
+    // estar completa.
+    contatos_cobranca: semRecebimento
+      ? d.contatos.some(
+          (c) =>
+            !contatoEmBranco(c) &&
+            (nomeContatoInvalido(c) || emailContatoInvalido(c)),
+        )
+      : d.contatos.length === 0 ||
+        d.contatos.some((c) => nomeContatoInvalido(c) || emailContatoInvalido(c)),
   };
 }
 
@@ -265,7 +281,7 @@ export function EnviarJobModal({
     const doServidor = fieldErrors.contatos_cobranca?.[0];
     if (doServidor) return doServidor;
     if (!tentou) return null;
-    if (dados.contatos.length === 0) {
+    if (!semRecebimento && dados.contatos.length === 0) {
       return "Informe ao menos um contato de cobrança.";
     }
     if (faltando.contatos_cobranca) {
@@ -516,10 +532,14 @@ export function EnviarJobModal({
               o financeiro usa para cobrar, e muda de job para job. */}
           <Campo
             rotulo="Contato de cobrança"
-            obrigatorio
+            obrigatorio={!semRecebimento}
             className="md:col-span-3"
             erro={erroContatos}
-            apoio="Quem recebe a cobrança no cliente."
+            apoio={
+              semRecebimento
+                ? "Opcional: o job não tem faturamento previsto."
+                : "Quem recebe a cobrança no cliente."
+            }
           >
             <div className="space-y-2">
               {/* Cabeçalho das colunas. O asterisco do rótulo "Contato de
@@ -553,6 +573,7 @@ export function EnviarJobModal({
                     aria-label={`Nome do contato ${i + 1}`}
                     className={cn(
                       tentou &&
+                        !(semRecebimento && contatoEmBranco(c)) &&
                         nomeContatoInvalido(c) &&
                         "border-california-red ring-2 ring-california-red/15",
                     )}
@@ -573,6 +594,7 @@ export function EnviarJobModal({
                     aria-label={`E-mail do contato ${i + 1}`}
                     className={cn(
                       tentou &&
+                        !(semRecebimento && contatoEmBranco(c)) &&
                         emailContatoInvalido(c) &&
                         "border-california-red ring-2 ring-california-red/15",
                     )}

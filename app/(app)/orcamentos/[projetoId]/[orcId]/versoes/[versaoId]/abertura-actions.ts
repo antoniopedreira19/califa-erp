@@ -429,6 +429,17 @@ export async function enviarJobParaAbertura(
     };
   }
   if (semRecebimento) parsed.data.data_prevista_faturamento = null;
+  // O contato de cobrança segue a mesma régua: obrigatório com faturamento,
+  // opcional sem ele (pedido do Tiago, 25/09/2026).
+  if (!semRecebimento && parsed.data.contatos_cobranca.length === 0) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: {
+        contatos_cobranca: ["Informe ao menos um contato de cobrança."],
+      },
+    };
+  }
 
   // 4c. O consumo de save cabe no saldo APROVADO (decisão 099)? Na criação,
   //     o consumo ainda aponta para a versão; no reenvio, para a cópia.
@@ -523,18 +534,23 @@ export async function enviarJobParaAbertura(
       };
     }
 
-    const { error: errNovosContatos } = await supabase.from("jobs_contatos").insert(
-      parsed.data.contatos_cobranca.map((c, i) => ({
-        tenant_id: session.activeTenant.id,
-        job_id: jobDevolvido.id,
-        tipo: "cobranca",
-        nome: c.nome,
-        numero: c.numero,
-        email: c.email,
-        ordem: i + 1,
-        created_by: session.profile.id,
-      })),
-    );
+    // Sem faturamento a lista pode vir vazia (decisão 105): os antigos
+    // saem e nada entra.
+    const { error: errNovosContatos } =
+      parsed.data.contatos_cobranca.length === 0
+        ? { error: null }
+        : await supabase.from("jobs_contatos").insert(
+            parsed.data.contatos_cobranca.map((c, i) => ({
+              tenant_id: session.activeTenant.id,
+              job_id: jobDevolvido.id,
+              tipo: "cobranca",
+              nome: c.nome,
+              numero: c.numero,
+              email: c.email,
+              ordem: i + 1,
+              created_by: session.profile.id,
+            })),
+          );
 
     if (errNovosContatos) {
       console.error("[abertura.reenvio_contatos_insert]", errNovosContatos.message);
@@ -852,22 +868,26 @@ export async function enviarJobParaAbertura(
     }
   }
 
-  // 6c. Contatos de cobrança — quem o financeiro procura para cobrar. O
-  //     schema garante ao menos um, então o insert nunca vem vazio; em
-  //     bulk, não um por vez (docs/PERFORMANCE.md, anti-padrão I).
-  const { error: errContatos } = await supabase.from("jobs_contatos").insert(
-    parsed.data.contatos_cobranca.map((c, i) => ({
-      tenant_id: session.activeTenant.id,
-      job_id: novo.id,
-      tipo: "cobranca",
-      nome: c.nome,
-      numero: c.numero,
-      email: c.email,
-      // Posição no formulário: o primeiro é o contato principal na prática.
-      ordem: i + 1,
-      created_by: session.profile.id,
-    })),
-  );
+  // 6c. Contatos de cobrança — quem o financeiro procura para cobrar. Com
+  //     faturamento há ao menos um (conferido no passo 4b'); sem
+  //     faturamento a lista pode vir vazia e não há o que gravar (decisão
+  //     105). Em bulk, não um por vez (docs/PERFORMANCE.md, anti-padrão I).
+  const { error: errContatos } =
+    parsed.data.contatos_cobranca.length === 0
+      ? { error: null }
+      : await supabase.from("jobs_contatos").insert(
+          parsed.data.contatos_cobranca.map((c, i) => ({
+            tenant_id: session.activeTenant.id,
+            job_id: novo.id,
+            tipo: "cobranca",
+            nome: c.nome,
+            numero: c.numero,
+            email: c.email,
+            // Posição no formulário: o primeiro é o contato principal na prática.
+            ordem: i + 1,
+            created_by: session.profile.id,
+          })),
+        );
 
   if (errContatos) {
     console.error("[abertura.contatos_insert]", errContatos.message);

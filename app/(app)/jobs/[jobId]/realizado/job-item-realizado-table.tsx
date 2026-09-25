@@ -729,12 +729,24 @@ export function JobItemRealizadoTable({
   // A calha vive fora do frame da tabela e agora acompanha linhas de
   // alturas diferentes (grupo e item). Medir é a única forma de acertar —
   // ver o cabeçalho de `_planilha/calha`.
+  // Remede só quando as LINHAS mudam (decisão 105, §6): o array de grupos
+  // chega novo a cada render da tela, e editar um valor não move linha.
+  // Altura que muda sem mudar linha chega pelo ResizeObserver do wrapper.
+  const assinaturaDasLinhas = React.useMemo(
+    () =>
+      grupos
+        .map(
+          (g) =>
+            `${g.id}${estaAberto(g.id) ? "+" : "-"}:${g.itens.map((i) => i.id).join(",")}`,
+        )
+        .join("|"),
+    [grupos, estaAberto],
+  );
   const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
-    grupos,
+    assinaturaDasLinhas,
     visao,
     podeAcoes,
     preAbertura,
-    grupos.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
   ]);
 
   /** O chip da calha abre o painel; o formulário só se chega por ele. */
