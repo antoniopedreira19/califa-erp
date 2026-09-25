@@ -4492,3 +4492,11 @@ limpos.
   `nosGrupos` preserva os orçamentos não editados. De 12–15 para 2–3
   medições de layout por edição; corrige o "Maximum update depth exceeded"
   visto na agregada.
+
+## ⚠️ Nota de 2026-09-25 (3) — importação no Interno aceita linha sem tipo (decisão 105 §8)
+
+- No orçamento Interno, a linha com valor e tipo em branco ou desconhecido
+  entra como F · Interno (fora dele, continua descartada). Versão
+  (`parseOficial` com `tipoFixo`), visão agregada (`ImportarPlanilhaModal.interno`)
+  e projeto inteiro (`parsePlanilhaProjeto` com `orcamentosInternos`). Teste
+  em `lib/importacao/tipo-fixo.test.ts`.

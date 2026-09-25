@@ -304,3 +304,52 @@ medições por edição na agregada — as que sobram são da própria tabela
 editada, quando o Enter abre e o Esc fecha a linha nova. Conferido que a
 calha continua alinhada: JOB-0032 (PPs, BV, pílula dividida BV | PP,
 recolher e expandir todos) e TES-0001/26-01 v4 (linha nova com o "x").
+
+## 8. Terceira rodada (25/09/2026)
+
+### "Jobs pendentes de envio para faturamento" no lugar de "faturamento próximo"
+
+Pedido do Tiago: o card "Jobs com faturamento próximo" não fazia sentido,
+porque a data prevista não é uma data planejada de verdade. Respostas:
+
+- **Home do administrador:** "Jobs pendentes de envio para faturamento", da
+  empresa inteira.
+- **Home do GP:** um card só com esse nome, no lugar de "Jobs prontos pra
+  enviar pra faturamento" e de "Jobs com faturamento próximo", contando os
+  jobs em que ele é o **GP responsável** — o "Meus" da lista de jobs
+  (decisão 036). (Na primeira pergunta eu descrevi o "Meus" das listas como
+  o recorte amplo de projetos e orçamentos; na de jobs ele é só o GP
+  responsável, e o Tiago escolheu esse depois da correção.)
+- **Pendente de envio** = job aberto ou encerrado (o encerrado ainda fatura,
+  087), com faturamento previsto e sem o envio completo — o carimbo
+  `faturamento_enviado_em` da 094; no mensal, com algum mês por enviar. O
+  job travado por consumo de save aguardando também conta: ele ainda deve o
+  envio. A régua mora em `pendentesDeEnvioQuery` (`lib/home/carregar.ts`) e
+  no filtro `/jobs?filtro=faturamento_pendente`. Os links antigos
+  (`faturamento_proximo`, `faturamento_pronto`) caem no filtro novo.
+- **A lista abre no recorte do card:** com `meus=1` em "Meus"; com um filtro
+  sem `meus=1` (o card do administrador) em "Todos"; sem filtro, o padrão de
+  sempre. Antes o card do administrador contava a empresa e a lista abria
+  em "Meus".
+- Saíram da home do GP as duas leituras de save que só alimentavam o card
+  "prontos pra enviar".
+
+Conferido: administrador 9 (a lista abre em "Todos" com os mesmos 9); GP
+Tiago 6 (a lista abre em "Meus" com os mesmos 6), pela rota temporária já
+apagada; `/jobs` sem filtro continua em "Meus".
+
+### Importação no Interno: tipo vazio ou desconhecido entra como FI
+
+Resposta do Tiago: no orçamento Interno, a linha com valor e tipo de custo
+em branco ou desconhecido **entra como F · Interno** — nos outros
+orçamentos continua descartada com aviso. Vale para o "Importar planilha"
+da versão (`parseOficial(buf, { tipoFixo: "FI" })`), para a importação na
+visão agregada e para a importação pelo projeto inteiro
+(`parsePlanilhaProjeto(buf, { orcamentosInternos })`, por seção). A linha
+de agrupamento (sem valor e sem tipo) continua agrupamento. O drawer de
+importação explica a regra no Interno.
+
+Conferido pelo teste `lib/importacao/tipo-fixo.test.ts`: a mesma planilha,
+com um tipo apagado e outro trocado por "X", descarta as duas linhas fora
+do Interno e traz as três como FI com o tipo fixo. Não houve teste pelo
+navegador: o navegador embutido não anexa arquivo local.

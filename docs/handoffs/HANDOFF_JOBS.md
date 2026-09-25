@@ -4303,3 +4303,15 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   grupos, que chega novo a cada render. Conferido no JOB-0032 que PPs, BV e
   a pílula dividida BV | PP seguem alinhados, inclusive ao recolher e
   expandir todos.
+
+## ⚠️ Nota de 2026-09-25 (3) — "Jobs pendentes de envio para faturamento" (decisão 105 §8)
+
+- **Home do administrador:** o card "Jobs com faturamento próximo" virou
+  "Jobs pendentes de envio para faturamento" (empresa inteira). **Home do
+  GP:** um card só com esse nome, no lugar de "prontos pra enviar" e de
+  "faturamento próximo", nos jobs em que ele é o GP responsável.
+- Pendente = aberto ou encerrado, faturamento previsto > 0 e sem
+  `faturamento_enviado_em` (`pendentesDeEnvioQuery`). Filtro
+  `/jobs?filtro=faturamento_pendente`; os links antigos caem nele.
+- A lista abre em "Meus" com `meus=1`, em "Todos" com filtro sem `meus=1`, e
+  no padrão sem filtro (`JobsList.meusInicial`).

@@ -428,9 +428,16 @@ export async function parseOficial(
   opcoes: {
     /** Orçamento de Fee ou Always On: lê os blocos de mês (decisão 078). */
     mensal?: boolean;
+    /** Orçamento de serviço Interno (decisão 105): todo item entra com
+     *  este tipo, seja qual for a coluna de tipo — inclusive a linha com
+     *  tipo em branco ou desconhecido, que nos outros orçamentos é
+     *  descartada. A coluna continua servindo para reconhecer a linha de
+     *  agrupamento (sem valor e sem tipo). */
+    tipoFixo?: TipoCusto;
   } = {},
 ): Promise<ParseResultado> {
   const mensal = opcoes.mensal === true;
+  const tipoFixo = opcoes.tipoFixo;
   const wb = new ExcelJS.Workbook();
   // ExcelJS.xlsx.load aceita ArrayBuffer/Buffer. Tipagem antiga do ExcelJS
   // não bate com o Buffer generic novo do @types/node — cast explícito.
@@ -663,8 +670,9 @@ export async function parseOficial(
       ordem: grupoAtual.itens.length + 1,
       item_id: marcaDe(marcasDaLinha, "it:"),
       item: colB,
-      // Sem coluna de tipo: B, a conta do modelo (decisão do Tiago).
-      tipo_custo: "B",
+      // Sem coluna de tipo: B, a conta do modelo (decisão do Tiago) — ou o
+      // tipo fixo do orçamento Interno (decisão 105).
+      tipo_custo: tipoFixo ?? "B",
       valor_unitario_orcado: numeroDaLinha(row.getCell(4).value, colD, 4, rowNumber, "unitario"),
       quantidade_orcada: numeroDaLinha(row.getCell(5).value, colE, 5, rowNumber, "quantidade"),
       dias_meses_orcado: numeroDaLinha(row.getCell(6).value, colF, 6, rowNumber, "dias"),
@@ -846,8 +854,9 @@ export async function parseOficial(
     }
 
     // Tipo de custo (coluna G). Sem tipo válido a linha não entra: é ele
-    // que decide tributação, honorário e faturamento do item.
-    if (!temTipoValido) {
+    // que decide tributação, honorário e faturamento do item. No Interno o
+    // tipo é fixo (decisão 105), e a linha entra com ele.
+    if (!temTipoValido && !tipoFixo) {
       warnings.push({
         linha: rowNumber,
         coluna: letra(col.tipo),
@@ -967,7 +976,7 @@ export async function parseOficial(
       ordem: grupoAtual.itens.length + 1,
       item_id: marcaDe(marcasDaLinha, "it:"),
       item: nomeItem,
-      tipo_custo: tipoUpper as TipoCusto,
+      tipo_custo: tipoFixo ?? (tipoUpper as TipoCusto),
       valor_unitario_orcado: valorUnitario,
       quantidade_orcada: quantidade,
       dias_meses_orcado: diasMeses,

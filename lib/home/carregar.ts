@@ -75,7 +75,6 @@ export async function carregarHomeAdmin(
   const tenantId = session.activeTenant.id;
   const { primeiro, ultimo } = limitesDoMes();
   const hoje = hojeISO();
-  const em7dias = diasNoFuturo(7);
   const ha15dias = diasNoFuturo(-15);
 
   const [
@@ -85,7 +84,7 @@ export async function carregarHomeAdmin(
     savesAguardando,
     ppsEmAvaliacao,
     desembolsosEmAvaliacao,
-    jobsFaturamentoProximo,
+    jobsPendentesDeEnvio,
     orcamentosParados,
     saldoBancosRes,
     previstoPagarMes,
@@ -127,19 +126,10 @@ export async function carregarHomeAdmin(
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("status", "em_avaliacao"),
-    // jobs em andamento: "aberto" ou "em_producao" (enum real). O encerrado
-    // ainda fatura desde a decisão 087 (16/09/2026) e entra na conta, como na
-    // lista que o card abre (`/jobs?filtro=faturamento_proximo`).
-    // Job sem faturamento previsto não tem faturamento a chegar (decisão
-    // 105) — fica fora, como na lista.
-    supabase
-      .from("jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .in("status", ["aberto", "em_producao", "encerrado"])
-      .gt("faturamento_previsto", 0.004)
-      .gte("data_prevista_faturamento", hoje)
-      .lte("data_prevista_faturamento", em7dias),
+    // Jobs pendentes de envio para faturamento, da empresa inteira (decisão
+    // 105): o administrador acompanha tudo. Era "Jobs com faturamento
+    // próximo", pela data prevista — que não é uma data planejada de verdade.
+    pendentesDeEnvioQuery(supabase, tenantId),
     // orcamentos parados: "em_revisao" + "enviado_cliente" (enum real)
     // rascunho = editing normal, nao abandono; por isso excluido
     supabase
@@ -233,10 +223,10 @@ export async function carregarHomeAdmin(
       icone: Wallet,
     },
     {
-      titulo: "Jobs com faturamento próximo",
-      contagem: jobsFaturamentoProximo.count ?? 0,
-      subtitulo: "Data prevista nos próximos 7 dias",
-      href: "/jobs?filtro=faturamento_proximo",
+      titulo: "Jobs pendentes de envio para faturamento",
+      contagem: jobsPendentesDeEnvio.count ?? 0,
+      subtitulo: "Com faturamento previsto e ainda não enviados",
+      href: "/jobs?filtro=faturamento_pendente",
       icone: CalendarClock,
     },
     {
@@ -553,8 +543,6 @@ export async function carregarHomeGerenteProducao(
   const supabase = await createClient();
   const tenantId = session.activeTenant.id;
   const userId = session.profile.id;
-  const hoje = hojeISO();
-  const em7dias = diasNoFuturo(7);
 
   // Escopo expandido: rodado uma vez, reusado nos cards de contexto.
   const projetoIds = await projetoIdsDoUsuario(session, supabase);
@@ -562,13 +550,11 @@ export async function carregarHomeGerenteProducao(
 
   const [
     versoesAguardandoMim,
-    meusJobsNaEsteira,
-    jobsFaturamentoProximo,
+    meusJobsAbertos,
+    meusPendentesDeEnvio,
     mensagensNaoLidas,
     meusJobsAndamento,
     meusOrcamentosAbertos,
-    meusPedidosDeSave,
-    minhasLinhasComSave,
   ] = await Promise.all([
     // ESTRITO: versoes aguardando revisao ou enviadas ao cliente, onde eu sou o GP
     // "enviada_cliente" EXISTE no enum — incluido agora
@@ -585,40 +571,19 @@ export async function carregarHomeGerenteProducao(
       .eq("tenant_id", tenantId)
       .in("status", ["em_revisao", "enviada_cliente"])
       .eq("orcamento.gp_responsavel_id", userId),
-    // ESTRITO: meus jobs abertos com os envios e os meses da previsão de
-    // recebimento — base dos cards "prontos pra faturar" e "prontos pra
-    // encerrar" (`contarProntosPraFaturar`, `contarProntosPraEncerrar`). A
-    // conta passou para a memória com a decisão 078: o job mensal tem um
-    // envio por mês, e o anti-join do PostgREST (`envio is null`) deixava de
-    // contá-lo depois do primeiro mês enviado. Leitura rasa: só as colunas
-    // `mes` dos embeds, poucas linhas por job.
+    // ESTRITO: meus jobs abertos — base do "prontos pra encerrar", que
+    // confere as pendências numa segunda onda (`contarProntosPraEncerrar`).
     supabase
       .from("jobs")
-      .select(
-        "id, status, faturamento_previsto, abertura_em_revisao, " +
-          "envios:jobs_envio_faturamento(mes), previsoes:jobs_previsao_recebimento(mes)",
-      )
+      .select("id, status")
       .eq("tenant_id", tenantId)
       .eq("responsavel_id", userId)
-      // O encerrado ainda não enviado continua "pronto pra faturar" desde a
-      // decisão 087 (16/09/2026): faturamento e encerramento correm separados.
-      .in("status", ["aberto", "encerrado"])
-      .not("previsoes.mes", "is", null),
-    // CONTEXTO: jobs proximos do vencimento nos meus projetos
-    // "aberto" + "em_producao" (enum real) + "encerrado", que ainda fatura
-    // desde a decisão 087 (16/09/2026)
-    semProjetos
-      ? Promise.resolve({ count: 0 })
-      : supabase
-          .from("jobs")
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", tenantId)
-          .in("projeto_id", projetoIds)
-          .in("status", ["aberto", "em_producao", "encerrado"])
-          // Sem faturamento previsto não há faturamento próximo (105).
-          .gt("faturamento_previsto", 0.004)
-          .gte("data_prevista_faturamento", hoje)
-          .lte("data_prevista_faturamento", em7dias),
+      .in("status", ["aberto", "em_producao"]),
+    // ESTRITO: meus jobs pendentes de envio para faturamento (decisão 105).
+    // Um card só no lugar de "prontos pra enviar pra faturamento" e de
+    // "faturamento próximo" (pedido do Tiago, 25/09/2026). "Meus" é o da
+    // lista de jobs: sou o GP responsável (decisão 036).
+    pendentesDeEnvioQuery(supabase, tenantId, userId),
     // CONTEXTO: mensagens no chat dos jobs onde participo
     // TODO: migrar pra join com jobs_chat_leituras pra contar so "nao lidas" de verdade
     semProjetos
@@ -652,34 +617,12 @@ export async function carregarHomeGerenteProducao(
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
           .in("status", ["rascunho", "em_revisao", "enviado_cliente"]),
-    // ESTRITO: pedidos de save dos meus jobs (decisão 099), para os cards
-    // "prontos pra faturar" e "prontos pra encerrar". Poucas linhas: um
-    // pedido ativo por linha de save.
-    // Aguardando e aprovado dizem que o lado da linha foi enviado; o
-    // recusado não conta como envio (revisão de 22/09/2026).
-    supabase
-      .from("saves_aprovacoes")
-      .select("job_id, job_item_orcado_id, tipo, situacao, jobs!inner(responsavel_id)")
-      .eq("tenant_id", tenantId)
-      .eq("jobs.responsavel_id", userId)
-      .in("situacao", ["aguardando", "aprovado"]),
-    // ESTRITO: as linhas com save ou consumo dos meus jobs na esteira
-    // (abertos e encerrados, o mesmo recorte de `meusJobsNaEsteira`) —
-    // contra os pedidos acima, dão o save "não enviado".
-    supabase
-      .from("jobs_itens_orcado")
-      .select("id, job_id, em_save, save_consumido, jobs!inner(responsavel_id, status)")
-      .eq("tenant_id", tenantId)
-      .eq("jobs.responsavel_id", userId)
-      .in("jobs.status", ["aberto", "encerrado"])
-      .or("em_save.eq.true,save_consumido.gt.0"),
   ]);
 
-  const saveDosMeusJobs = saveNaEsteiraDoGp(meusPedidosDeSave, minhasLinhasComSave);
   const prontosPraEncerrar = await contarProntosPraEncerrar(
     supabase,
     tenantId,
-    meusJobsNaEsteira,
+    meusJobsAbertos,
   );
 
   const pendencias: CardPendencia[] = [
@@ -691,10 +634,10 @@ export async function carregarHomeGerenteProducao(
       icone: FileClock,
     },
     {
-      titulo: "Jobs prontos pra enviar pra faturamento",
-      contagem: contarProntosPraFaturar(meusJobsNaEsteira, saveDosMeusJobs),
-      subtitulo: "Seus jobs abertos ou encerrados com previsão positiva, ainda não enviados",
-      href: "/jobs?filtro=faturamento_pronto&meus=1",
+      titulo: "Jobs pendentes de envio para faturamento",
+      contagem: meusPendentesDeEnvio.count ?? 0,
+      subtitulo: "Seus jobs com faturamento previsto e ainda não enviados",
+      href: "/jobs?filtro=faturamento_pendente&meus=1",
       icone: Mail,
     },
     {
@@ -703,13 +646,6 @@ export async function carregarHomeGerenteProducao(
       subtitulo: "Seus jobs abertos sem nenhuma pendência de produção",
       href: "/jobs?filtro=encerrar_pronto&meus=1",
       icone: Receipt,
-    },
-    {
-      titulo: "Jobs com faturamento próximo",
-      contagem: jobsFaturamentoProximo.count ?? 0,
-      subtitulo: "Nos seus projetos, nos próximos 7 dias",
-      href: "/jobs?filtro=faturamento_proximo&meus=1",
-      icone: CalendarClock,
     },
     {
       titulo: "Mensagens no chat",
@@ -870,110 +806,31 @@ export async function carregarHomeProdutor(
 }
 
 // ---------------------------------------------------------------------------
-// Cards de faturamento da home do GP (decisão 078)
+// Cards de faturamento e encerramento (decisão 105)
 
-interface JobNaEsteiraDoGp {
-  id: string;
-  status: string;
-  faturamento_previsto: number | string | null;
-  abertura_em_revisao: boolean | null;
-  envios: { mes: string | null }[] | null;
-  previsoes: { mes: string | null }[] | null;
-}
-
-function jobsNaEsteira(res: { data: unknown; error?: { message: string } | null }) {
-  if (res.error) console.error("[home.gp.esteira]", res.error.message);
-  return ((res.data ?? []) as JobNaEsteiraDoGp[]).map((j) => {
-    const envios = j.envios ?? [];
-    return {
-      ...j,
-      envios,
-      // Meses que o job mensal fatura: uma linha por mês na previsão de
-      // recebimento. Zero nos outros jobs.
-      meses: new Set((j.previsoes ?? []).map((p) => p.mes).filter(Boolean)).size,
-      mensaisEnviados: envios.filter((e) => e.mes !== null).length,
-    };
-  });
-}
-
-/** O save dos jobs do GP que segura os dois cards (decisão 099,
- *  22/09/2026): quem tem consumo aguardando o financeiro ou nunca enviado
- *  para aprovação (o envio para faturamento recusa os dois), e quem tem
- *  save ou consumo aguardando ou nunca enviado (o encerramento recusa).
- *  Leitura que falhou segura todo mundo: o card conta a menos, nunca a
- *  mais. */
-interface SaveNaEsteiraDoGp {
-  falhou: boolean;
-  /** Consumo aguardando o financeiro ou nunca enviado: segura o envio
-   *  para faturamento. */
-  comConsumoPendente: Set<string>;
-  comSavePendente: Set<string>;
-}
-
-function saveNaEsteiraDoGp(
-  pedidosRes: { data: unknown; error?: { message: string } | null },
-  linhasRes: { data: unknown; error?: { message: string } | null },
-): SaveNaEsteiraDoGp {
-  if (pedidosRes.error) console.error("[home.gp.save_pedidos]", pedidosRes.error.message);
-  if (linhasRes.error) console.error("[home.gp.save_linhas]", linhasRes.error.message);
-  const pedidos = (pedidosRes.data ?? []) as {
-    job_id: string;
-    job_item_orcado_id: string | null;
-    tipo: string;
-    situacao: string;
-  }[];
-  const comConsumoPendente = new Set<string>();
-  const comSavePendente = new Set<string>();
-  // O lado da linha que já foi enviado: pedido aguardando ou aprovado.
-  const geraEnviado = new Set<string>();
-  const consomeEnviado = new Set<string>();
-  for (const p of pedidos) {
-    if (p.job_item_orcado_id) {
-      (p.tipo === "gera" ? geraEnviado : consomeEnviado).add(p.job_item_orcado_id);
-    }
-    if (p.situacao !== "aguardando") continue;
-    comSavePendente.add(p.job_id);
-    if (p.tipo === "consome") comConsumoPendente.add(p.job_id);
-  }
-  // Não enviado, por lado da linha: save gerado sem pedido de gera
-  // aguardando ou aprovado, ou consumo sem pedido de consumo aguardando ou
-  // aprovado — o mesmo recorte do encerramento (`actions-encerramento.ts`).
-  // O recusado não conta como envio: depois de uma edição de consumo
-  // recusada a linha volta ao consumo de antes, que pode nunca ter sido
-  // aprovado.
-  for (const l of (linhasRes.data ?? []) as {
-    id: string;
-    job_id: string;
-    em_save: boolean | null;
-    save_consumido: number | string | null;
-  }[]) {
-    const geraNaoEnviado = l.em_save === true && !geraEnviado.has(l.id);
-    const consomeNaoEnviado =
-      Number(l.save_consumido ?? 0) > 0 && !consomeEnviado.has(l.id);
-    if (geraNaoEnviado || consomeNaoEnviado) comSavePendente.add(l.job_id);
-    if (consomeNaoEnviado) comConsumoPendente.add(l.job_id);
-  }
-  return {
-    falhou: Boolean(pedidosRes.error || linhasRes.error),
-    comConsumoPendente,
-    comSavePendente,
-  };
-}
-
-/** Com faturamento previsto, sem errata pendente e com o que enviar: o job
- *  sem envio, ou o mensal com mês ainda sem envio. Desde a decisão 099
- *  (22/09/2026), sem consumo de save aguardando o financeiro ou nunca
- *  enviado para aprovação — o envio fica travado até ele decidir. */
-function contarProntosPraFaturar(
-  res: { data: unknown; error?: { message: string } | null },
-  save: SaveNaEsteiraDoGp,
-): number {
-  return jobsNaEsteira(res).filter((j) => {
-    if (j.abertura_em_revisao === true) return false;
-    if (save.falhou || save.comConsumoPendente.has(j.id)) return false;
-    if (!(Number(j.faturamento_previsto ?? 0) > 0)) return false;
-    return j.meses > 0 ? j.mensaisEnviados < j.meses : j.envios.length === 0;
-  }).length;
+/** Os jobs que ainda devem o envio para faturamento: abertos ou encerrados
+ *  (o encerrado ainda fatura desde a decisão 087), com faturamento previsto
+ *  e sem o envio completo — `faturamento_enviado_em` é o carimbo que o
+ *  banco grava quando o envio cobre o previsto (decisão 094; no mensal,
+ *  com todos os meses enviados). Job sem faturamento nunca entra.
+ *
+ *  `responsavelId` recorta nos jobs de um GP (o "Meus" da lista de jobs,
+ *  decisão 036); sem ele, a empresa inteira. É a mesma régua do filtro
+ *  `/jobs?filtro=faturamento_pendente`. Só conta: `head: true`. */
+function pendentesDeEnvioQuery(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  responsavelId?: string,
+) {
+  let q = supabase
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .in("status", ["aberto", "em_producao", "encerrado"])
+    .gt("faturamento_previsto", 0.004)
+    .is("faturamento_enviado_em", null);
+  if (responsavelId) q = q.eq("responsavel_id", responsavelId);
+  return q;
 }
 
 /** O job aberto que o botão "Enviar job para encerramento" liberaria
@@ -984,8 +841,7 @@ function contarProntosPraFaturar(
  *  (`impedimentosDosJobs`), para o card nunca contar o que o botão recusa.
  *
  *  O envio para faturamento NÃO entra: desde a decisão 087 faturamento e
- *  encerramento correm separados — era o critério antigo deste card, e o
- *  motivo de o job sem nada a faturar nunca aparecer nele.
+ *  encerramento correm separados.
  *
  *  É uma segunda onda de leituras, depois da primeira: depende dos ids dos
  *  jobs. Sete consultas em paralelo, qualquer que seja o número de jobs. */
@@ -994,9 +850,8 @@ async function contarProntosPraEncerrar(
   tenantId: string,
   res: { data: unknown; error?: { message: string } | null },
 ): Promise<number> {
-  const abertos = jobsNaEsteira(res)
-    .filter((j) => j.status === "aberto" || j.status === "em_producao")
-    .map((j) => j.id);
+  if (res.error) console.error("[home.gp.jobs_abertos]", res.error.message);
+  const abertos = ((res.data ?? []) as { id: string }[]).map((j) => j.id);
   if (abertos.length === 0) return 0;
   const impedimentos = await impedimentosDosJobs(supabase, tenantId, abertos);
   return abertos.filter((id) => {

@@ -96,6 +96,7 @@ export function JobsList({
   empresas,
   usuarioId,
   podeAlternarMeusTodos = true,
+  meusInicial,
 }: {
   rows: JobRow[];
   empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
@@ -110,12 +111,15 @@ export function JobsList({
    * `lib/permissoes.ts`, recurso `listas.chave_meus_todos`.
    */
   podeAlternarMeusTodos?: boolean;
+  /** Com o que a chave "Meus/Todos" abre. A página decide pelo link — ver
+   *  `app/(app)/jobs/page.tsx`. Ausente, vale `podeAlternarMeusTodos`. */
+  meusInicial?: boolean;
 }) {
   const router = useRouter();
   // Meus é o padrão pra quem pode alternar — quem abre a lista quer o
   // próprio trabalho. Freelancer nao pode alternar; comeca em "todos" e
   // conta com o filtro do RLS.
-  const [meus, setMeus] = React.useState(podeAlternarMeusTodos);
+  const [meus, setMeus] = React.useState(meusInicial ?? podeAlternarMeusTodos);
   // Status virou seleção ÚNICA (design 01/09/2026). Eram cinco pílulas
   // combináveis; ocupavam a barra inteira e não deixavam espaço para
   // Produto e Regional.

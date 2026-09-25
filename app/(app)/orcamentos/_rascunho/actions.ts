@@ -43,7 +43,11 @@ export async function parsePlanilhaRascunho(
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer);
+    // Serviço Interno (decisão 105): a linha com tipo em branco ou
+    // desconhecido entra como F · Interno em vez de ser descartada.
+    parsed = await parseOficial(arq.buffer, {
+      tipoFixo: formData.get("interno") === "1" ? "FI" : undefined,
+    });
   } catch (err) {
     console.error("[multi.parse]", err);
     return {
