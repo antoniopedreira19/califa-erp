@@ -63,6 +63,7 @@ import {
   PARAMETROS_PADRAO,
   type AlteracoesProjetoPayload,
   type GrupoPayload,
+  type GrupoRascunho,
   type ItemRascunho,
   type OrcamentoRascunho,
   type ParametrosVersao,
@@ -174,6 +175,31 @@ type Modal =
  * caem na versão aberta. Versão nova continua sendo ato da tela do
  * orçamento.
  */
+/**
+ * Aplica `fn` a cada grupo e devolve os MESMOS objetos para o que não mudou
+ * — orçamento, lista de grupos e grupo. Quem não foi editado mantém a
+ * referência, então a planilha dele não recalcula nem remede a calha.
+ * Se nada mudou, devolve a própria lista (o React descarta o setState).
+ */
+function nosGrupos(
+  orcamentos: OrcamentoRascunho[],
+  fn: (grupo: GrupoRascunho) => GrupoRascunho,
+): OrcamentoRascunho[] {
+  let algum = false;
+  const proximos = orcamentos.map((orc) => {
+    let mudou = false;
+    const grupos = orc.grupos.map((grupo) => {
+      const novo = fn(grupo);
+      if (novo !== grupo) mudou = true;
+      return novo;
+    });
+    if (!mudou) return orc;
+    algum = true;
+    return { ...orc, grupos };
+  });
+  return algum ? proximos : orcamentos;
+}
+
 export function EditorAgregado({
   projeto,
   savePorItem,
@@ -326,16 +352,22 @@ export function EditorAgregado({
   }
 
   // ---------- mutações ----------
+  // Toda mutação de item passa por `nosGrupos`, que devolve o MESMO objeto
+  // para o orçamento e o grupo que não mudaram. Até 25/09/2026 cada tecla
+  // recriava os grupos de todos os orçamentos da página, e cada planilha
+  // remedia todas as linhas (a calha de ações mede o layout): 12 a 15
+  // medições por edição no projeto de teste, e a tela chegou a cair uma vez
+  // com "Maximum update depth exceeded".
   const mutarItem = React.useCallback(
     (itemId: string, fn: (item: ItemRascunho) => ItemRascunho) => {
       setOrcamentos((atuais) =>
-        atuais.map((orc) => ({
-          ...orc,
-          grupos: orc.grupos.map((grupo) => ({
-            ...grupo,
-            itens: grupo.itens.map((it) => (it.id === itemId ? fn(it) : it)),
-          })),
-        })),
+        nosGrupos(atuais, (grupo) => {
+          const i = grupo.itens.findIndex((it) => it.id === itemId);
+          if (i < 0) return grupo;
+          const itens = grupo.itens.slice();
+          itens[i] = fn(itens[i]);
+          return { ...grupo, itens };
+        }),
       );
     },
     [],
@@ -514,33 +546,28 @@ export function EditorAgregado({
         }
         const id = novoId("it");
         setOrcamentos((atuais) =>
-          atuais.map((orc) => ({
-            ...orc,
-            grupos: orc.grupos.map((grupo) =>
-              grupo.id === grupoId
-                ? {
-                    ...grupo,
-                    itens: [
-                      ...grupo.itens,
-                      { ...parsed.data, id, planilha_origem: null, bv: null },
-                    ],
-                  }
-                : grupo,
-            ),
-          })),
+          nosGrupos(atuais, (grupo) =>
+            grupo.id === grupoId
+              ? {
+                  ...grupo,
+                  itens: [
+                    ...grupo.itens,
+                    { ...parsed.data, id, planilha_origem: null, bv: null },
+                  ],
+                }
+              : grupo,
+          ),
         );
         return { ok: true, id };
       },
 
       remover: async (itemId) => {
         setOrcamentos((atuais) =>
-          atuais.map((orc) => ({
-            ...orc,
-            grupos: orc.grupos.map((grupo) => ({
-              ...grupo,
-              itens: grupo.itens.filter((it) => it.id !== itemId),
-            })),
-          })),
+          nosGrupos(atuais, (grupo) =>
+            grupo.itens.some((it) => it.id === itemId)
+              ? { ...grupo, itens: grupo.itens.filter((it) => it.id !== itemId) }
+              : grupo,
+          ),
         );
         return { ok: true, id: itemId };
       },

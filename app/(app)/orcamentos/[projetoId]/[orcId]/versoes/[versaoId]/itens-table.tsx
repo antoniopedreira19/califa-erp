@@ -677,14 +677,28 @@ export function ItensTable({
   // A calha vive fora do frame da tabela e agora acompanha linhas de
   // alturas diferentes (grupo, item, "Novo item"). Medir é a única forma
   // de acertar — ver o cabeçalho de `_planilha/calha`.
+  // A calha só se remede quando as LINHAS mudam — quais existem, em que
+  // ordem, em que grupo, e onde está a linha nova —, não a cada render.
+  // Editar um valor não move linha nenhuma; e na visão agregada cada tecla
+  // re-renderiza todas as planilhas da página. Até 25/09/2026 a dependência
+  // era o próprio array de grupos, e toda edição fazia todas as tabelas
+  // lerem o layout de novo (decisão 105, §6). Altura que muda sem mudar
+  // linha (um nome que quebra) chega pelo ResizeObserver do wrapper.
+  const assinaturaDasLinhas = React.useMemo(
+    () =>
+      gruposDaTela
+        .map(
+          (g) =>
+            `${g.id}${estaAberto(g.id) ? "+" : "-"}:${g.itens.map((i) => i.id).join(",")}`,
+        )
+        .join("|"),
+    [gruposDaTela, estaAberto],
+  );
   const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
-    gruposDaTela,
-    draft,
+    assinaturaDasLinhas,
+    draft?.grupoId ?? "",
     readOnly,
     visao,
-    // Recolher/expandir muda o que existe no DOM e, com isso, todos os
-    // offsets abaixo do grupo que se moveu.
-    gruposDaTela.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
   ]);
 
   // O handler de clique-fora lê o rascunho por ref, e não pela closure:

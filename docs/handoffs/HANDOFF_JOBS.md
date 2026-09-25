@@ -4269,3 +4269,11 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
 - **Conferido:** JOB-0047 (Interno, Always On, TES-0001/26) aberto, marcado
   pelo "Concluir PPs", listado no filtro e contado no card (2, com o
   JOB-0043), encerrado → **Finalizado** direto, sem envio.
+
+## ⚠️ Nota de 2026-09-25 (2) — a calha da planilha do job só remede quando as linhas mudam (decisão 105 §7)
+
+- `job-item-realizado-table.tsx`: `usePosicoesDaCalha` passou a depender da
+  estrutura das linhas (ids, grupo aberto ou recolhido), não do array de
+  grupos, que chega novo a cada render. Conferido no JOB-0032 que PPs, BV e
+  a pílula dividida BV | PP seguem alinhados, inclusive ao recolher e
+  expandir todos.

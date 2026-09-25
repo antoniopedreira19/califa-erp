@@ -233,19 +233,74 @@ as 2 falhas do RH, anteriores.
 
 ## 6. Observações e pendências
 
-- **Uma vez, na visão agregada, a tela caiu com "Maximum update depth
-  exceeded"** (medição da calha) logo depois de editar uma linha do
-  Interno, numa aba que já tinha passado por várias recompilações do
-  servidor de desenvolvimento. A mesma sequência, numa aba nova e na
-  frente, não repetiu — nem no orçamento Interno, nem no comum. Fica o
-  registro, caso alguém veja de novo.
+- ~~**Uma vez, na visão agregada, a tela caiu com "Maximum update depth
+  exceeded"**~~ — investigado e corrigido na mesma data; ver §7.
 - **"Jobs com faturamento próximo" ainda conta job já enviado para
   faturamento.** Anterior a esta decisão e fora do pedido; não foi mexido.
 - **JOB-0046** ("[gravadora/editora] Operação T4", HIT-0001/26) é Always
   On, não Interno, todo em FI com 12% de honorários — faturamento zero. A
   regra do Interno não o atinge; ele passa a aparecer como "Sem
   faturamento". Vale conferir se o tipo de custo dele está certo.
-- **Contato de cobrança** continua obrigatório no envio para abertura mesmo
-  sem faturamento. Não foi pedido; fica a pergunta.
+- ~~**Contato de cobrança** continua obrigatório no envio para abertura mesmo
+  sem faturamento.~~ Deixou de ser, a pedido do Tiago — ver §7.
 - **Dado de teste criado** (TES-0001/26): orçamentos TES-0001/26-12 e -13 e
   o JOB-0047, finalizado.
+
+## 7. Segunda rodada (25/09/2026)
+
+### Contato de cobrança opcional sem faturamento
+
+Pedido do Tiago. No envio para abertura de um job com faturamento previsto
+zero, "Contato de cobrança" perde o asterisco e ganha a nota "Opcional: o
+job não tem faturamento previsto."; a linha em branco é descartada e a
+linha começada ainda precisa de nome e e-mail. O servidor passou a cobrar
+o contato só quando há faturamento (o schema aceita a lista vazia e
+`enviarJobParaAbertura` confere pelo mesmo número da data de recebimento);
+sem contato, nada é gravado em `jobs_contatos`, inclusive no reenvio.
+
+Conferido: TES-0001/26-12 aprovado e enviado sem contato → JOB-0048 em
+"aguardando abertura" com 0 contatos e recebimento vazio; a confirmação
+mostrou "Contato de cobrança: —". O envio foi cancelado pela tela em
+seguida (JOB-0048 cancelado, orçamento de volta a "Aprovado"). O caminho
+com faturamento não mudou na tela; no servidor a recusa foi conferida só
+pelo código.
+
+### O "Maximum update depth exceeded" da visão agregada
+
+**O que acontecia.** A calha de ações (lixeira, BV, PP) fica fora da
+tabela e é posicionada medindo o layout de cada linha
+(`usePosicoesDaCalha`, num efeito de layout). A medição rodava de novo
+sempre que a *referência* do array de grupos mudava — e na visão agregada:
+
+- toda edição (cada Enter numa célula) recriava os grupos de **todos** os
+  orçamentos da página, não só do editado (`mutarItem`, `adicionar` e
+  `remover` do editor mapeavam tudo com objetos novos);
+- no orçamento mensal, o filtro dos grupos por mês criava um array novo a
+  cada render.
+
+Resultado: cada edição fazia todas as planilhas da página relerem o layout
+— **12 a 15 medições por Enter** no TES-0001/26, cada uma forçando o
+navegador a recalcular o layout. Não é "a página pesada" por si: é uma
+cadeia de atualizações síncronas (render → medir → setState → render…) que
+o React corta em 50 com esse erro. Basta a posição de alguma linha
+oscilar entre duas medições — um campo de edição abrindo, a barra de
+rolagem aparecendo — para a cadeia não parar. Numa aba nova a mesma
+sequência não repetiu, o que é típico desse tipo de laço: depende do
+layout do momento.
+
+**O que mudou.**
+
+- `usePosicoesDaCalha` passou a depender da **estrutura das linhas** (ids
+  dos grupos e dos itens, grupo aberto ou recolhido, onde está a linha
+  nova), e não da referência do array. Editar um valor não move linha e
+  não remede nada; altura que muda sem mudar linha (um nome que quebra)
+  continua chegando pelo `ResizeObserver` do contêiner, que é assíncrono e
+  não entra na cadeia. Vale para a planilha do orçamento e para a do job.
+- O editor da visão agregada preserva os objetos do que não mudou
+  (`nosGrupos`): só o orçamento e o grupo editados ganham referência nova.
+
+**Medido** (contador temporário, já removido): de 12–15 para **2–3**
+medições por edição na agregada — as que sobram são da própria tabela
+editada, quando o Enter abre e o Esc fecha a linha nova. Conferido que a
+calha continua alinhada: JOB-0032 (PPs, BV, pílula dividida BV | PP,
+recolher e expandir todos) e TES-0001/26-01 v4 (linha nova com o "x").

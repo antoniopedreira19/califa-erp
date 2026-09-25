@@ -28,6 +28,7 @@ import {
 } from "./abertura-actions";
 import {
   EnviarJobModal,
+  contatoEmBranco,
   type DadosJob,
   type HerdadosJob,
 } from "./enviar-job-modal";
@@ -654,7 +655,9 @@ export function FluxoAbertura({
         faturamentoPrevisto={fechamento.faturamentoPrevisto}
         totalGeradoEmSave={fechamento.totalGeradoEmSave}
         moeda={moeda}
-        contatos={dados.contatos}
+        // Só o que vai ao servidor: a linha em branco é descartada no envio
+        // e, sem faturamento, o contato é opcional (decisão 105).
+        contatos={dados.contatos.filter((c) => !contatoEmBranco(c))}
         observacoes={dados.observacoes}
         erro={erroGeral}
       />
