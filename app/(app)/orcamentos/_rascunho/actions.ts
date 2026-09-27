@@ -1,77 +1,136 @@
 "use server";
 
 import { requireSession } from "@/lib/auth/session";
-import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
+import { baixarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
 import {
-  parseOficial,
-  recusaPorModelo,
-  type ParseResultado,
-} from "@/lib/importacao/parser-oficial";
-import type { CategoriaModeloPlanilha, ImportacaoWarning } from "@/lib/types";
+  abaSugerida,
+  lerTodasAsAbas,
+  ordenarAbas,
+  totaisDaAba,
+  type AbaLida,
+  type AbaResumo,
+} from "@/lib/importacao/abas-do-arquivo";
+import { parseOficial, recusaPorModelo, type ParseResultado } from "@/lib/importacao/parser-oficial";
+import { montarPreviewDaAba } from "@/lib/importacao/preview-da-aba";
+import type { PreviewDaAba, PreviewResult } from "@/lib/importacao/tipos-da-importacao";
+import type { CategoriaModeloPlanilha } from "@/lib/types";
 import type { GrupoPayload } from "./tipos";
 
 // ============================================================
-// Parse da planilha SEM persistir
+// Importação de planilha no editor do orçamento — SEM persistir
 // ============================================================
+//
+// No editor do orçamento do projeto o banco só é tocado no "Salvar
+// orçamentos". O arquivo já está no Storage (o navegador o subiu direto,
+// decisão 110): aqui ele é lido, e o "Salvar orçamentos" o arquiva junto
+// do orçamento criado.
 
-export type ParseRascunhoResult =
-  | {
-      ok: true;
-      grupos: GrupoPayload[];
-      warnings: ImportacaoWarning[];
-      percentual_honorarios: number | null;
-      arquivo_nome: string;
-      linhas_lidas: number;
-      linhas_importadas: number;
-      linhas_ignoradas: number;
-    }
-  | { ok: false; message: string };
+interface EntradaDoRascunho {
+  envio: EnvioDaPlanilha;
+  /** O modelo do orçamento que recebe a planilha: a de outro modelo é
+   *  recusada (decisão 072). Orçamento mensal não nasce por aqui. */
+  modelo_planilha: CategoriaModeloPlanilha;
+  /** Serviço Interno (decisão 105): a linha com tipo em branco ou
+   *  desconhecido entra como F · Interno em vez de ser descartada. */
+  interno: boolean;
+}
 
-/**
- * Lê o XLSX e devolve grupos e itens prontos para entrar no rascunho.
- * Não escreve nada — no editor do orçamento do projeto o banco só é
- * tocado no "Salvar orçamentos". O arquivo original fica com o cliente e
- * volta no salvamento, que é quando ele é arquivado no bucket.
- */
-export async function parsePlanilhaRascunho(
-  formData: FormData,
-): Promise<ParseRascunhoResult> {
-  await requireSession();
+function modeloDoRascunho(m: CategoriaModeloPlanilha): CategoriaModeloPlanilha {
+  return m === "internacional" ? "internacional" : "nacional";
+}
 
-  const arq = await extrairArquivoXlsx(formData);
+/** A tabela de abas e o resumo de cada aba legível (decisão 110). */
+export async function lerPlanilhaDoRascunho(entrada: EntradaDoRascunho): Promise<PreviewResult> {
+  const session = await requireSession();
+  const arq = await baixarEnvio(entrada.envio, session.activeTenant.id);
   if (!arq.ok) return { ok: false, message: arq.message };
 
-  let parsed: ParseResultado;
+  let lidas: AbaLida[];
   try {
-    // Serviço Interno (decisão 105): a linha com tipo em branco ou
-    // desconhecido entra como F · Interno em vez de ser descartada.
-    parsed = await parseOficial(arq.buffer, {
-      tipoFixo: formData.get("interno") === "1" ? "FI" : undefined,
-    });
+    lidas = await lerTodasAsAbas(arq.buffer, { tipoFixo: entrada.interno ? "FI" : undefined });
   } catch (err) {
     console.error("[multi.parse]", err);
     return {
       ok: false,
-      message:
-        "Não conseguimos ler o arquivo. Verifique se é a planilha padrão salva como .xlsx.",
+      message: "Não conseguimos ler o arquivo. Verifique se é uma planilha salva como .xlsx.",
     };
   }
 
-  // O editor manda o modelo do orçamento que recebe a planilha. Aqui nada
-  // é gravado, então o campo é conforto de tela: quem salva é o "Salvar
-  // orçamentos", que não lê este resultado.
-  const modeloEsperado: CategoriaModeloPlanilha =
-    formData.get("modelo_planilha") === "internacional" ? "internacional" : "nacional";
-  const recusa = recusaPorModelo(parsed.modelo, modeloEsperado);
-  if (recusa) return { ok: false, message: recusa };
+  const previews: Record<string, PreviewDaAba> = {};
+  const abas: AbaResumo[] = lidas.map((lida) => {
+    const r = montarPreviewDaAba(lida.parsed, {
+      modelo: modeloDoRascunho(entrada.modelo_planilha),
+      anterior: null,
+      mesesDestino: null,
+      honorarios: null,
+    });
+    if (!r.ok) {
+      return {
+        nome: lida.nome,
+        visivel: lida.visivel,
+        legivel: false,
+        motivo: r.motivo,
+        grupos: 0,
+        itens: 0,
+        orcado: 0,
+        planejado: 0,
+      };
+    }
+    previews[lida.nome] = r.preview;
+    return { nome: lida.nome, visivel: lida.visivel, legivel: true, motivo: null, ...totaisDaAba(r.parsed) };
+  });
 
-  if (parsed.grupos.length === 0) {
+  const sugerida = abaSugerida(abas);
+  if (!sugerida) {
     return {
       ok: false,
       message:
-        parsed.warnings[0]?.motivo ??
-        "Nenhum item encontrado na planilha. Confira se a aba 'Padrão' traz o agrupamento na coluna A, o nome do item na B e o tipo de custo na G.",
+        abas.length === 1
+          ? (abas[0].motivo ?? "Nenhum item encontrado na planilha.")
+          : `Nenhuma das ${abas.length} abas do arquivo está no formato do orçamento. Confira o modelo e envie de novo.`,
     };
+  }
+  return {
+    ok: true,
+    arquivo: { nome: entrada.envio.nome, tamanho: entrada.envio.tamanho },
+    abas: ordenarAbas(abas),
+    sugerida,
+    previews,
+  };
+}
+
+export type AbaNoRascunhoResult =
+  | {
+      ok: true;
+      grupos: GrupoPayload[];
+      percentual_honorarios: number | null;
+      avisos: number;
+    }
+  | { ok: false; message: string };
+
+/** Grupos e itens da aba escolhida, prontos para entrar no rascunho. */
+export async function carregarAbaNoRascunho(
+  entrada: EntradaDoRascunho & { aba: string },
+): Promise<AbaNoRascunhoResult> {
+  const session = await requireSession();
+  const arq = await baixarEnvio(entrada.envio, session.activeTenant.id);
+  if (!arq.ok) return { ok: false, message: arq.message };
+
+  let parsed: ParseResultado;
+  try {
+    parsed = await parseOficial(arq.buffer, {
+      tipoFixo: entrada.interno ? "FI" : undefined,
+      aba: entrada.aba,
+    });
+  } catch (err) {
+    console.error("[multi.parse]", err);
+    return { ok: false, message: "Não conseguimos ler o arquivo. Envie de novo." };
+  }
+
+  const recusa = recusaPorModelo(parsed.modelo, modeloDoRascunho(entrada.modelo_planilha));
+  if (recusa) return { ok: false, message: recusa };
+  if (parsed.grupos.length === 0) {
+    return { ok: false, message: parsed.warnings[0]?.motivo ?? "Nenhum item encontrado na aba." };
   }
 
   return {
@@ -92,11 +151,7 @@ export async function parsePlanilhaRascunho(
         bv: null,
       })),
     })),
-    warnings: parsed.warnings,
     percentual_honorarios: parsed.percentual_honorarios,
-    arquivo_nome: arq.nome,
-    linhas_lidas: parsed.linhas_lidas,
-    linhas_importadas: parsed.linhas_importadas,
-    linhas_ignoradas: parsed.linhas_ignoradas,
+    avisos: parsed.warnings.length,
   };
 }

@@ -42,7 +42,7 @@ import { TotaisCard } from "./versoes/[versaoId]/totais-card";
 import { ReguaMeses } from "./versoes/[versaoId]/regua-meses";
 import { CopiarItensDoMes } from "./versoes/[versaoId]/copiar-itens-mes";
 import { TrimestreEmpilhado } from "./versoes/[versaoId]/trimestre-empilhado";
-import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
+import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 
 /** `2026-07` — a chave do mês na URL. */
 function chaveDoMes(mes: string): string {
@@ -263,13 +263,14 @@ export function PlanilhaMensal({
         editar={editar}
         acao={
           importacao && !readOnly ? (
-            <ImportarPlanilhaDrawer
+            <ImportarPlanilhaVersao
               projetoId={projetoId}
               orcamentoId={orcamentoId}
               modeloPlanilha={planilha.modeloPlanilha}
               interno={interno}
               modo="sobrescrever"
               versaoId={versao.id}
+              numeroVersao={versao.numero_versao}
               conteudoAtual={{
                 grupos: grupos.length,
                 itens: itens.length,

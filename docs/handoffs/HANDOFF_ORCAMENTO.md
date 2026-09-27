@@ -4564,6 +4564,30 @@ limpos.
 
 ---
 
+## ⚠️ Nota de 2026-09-27 — importação de planilha em modal, com escolha de aba (decisão 110)
+
+- **O drawer "Importar planilha" virou um modal no centro**, nas duas
+  portas da versão e no editor do orçamento. O componente novo é
+  `ImportarPlanilhaVersao` (`versoes/importar-planilha-versao.tsx`); o
+  `importar-drawer.tsx` saiu.
+- **O arquivo não passa mais pela Server Action:** o navegador o sobe para
+  `<tenant>/envios/` no bucket `orcamento-importacoes`, e as actions
+  recebem `{ path, nome, tamanho }`. Limite de 10 MB (era 1 MB na prática).
+  `previewImportacao`, `confirmarImportacao` e `sobrescreverVersaoComPlanilha`
+  trocaram o `FormData` por objeto: `{ envio, versao_id }` no preview e
+  `{ envio, aba, origem_planejado }` na gravação.
+- **O preview lê todas as abas** e devolve a tabela de abas mais o resumo de
+  cada aba legível. A gravação lê só a aba escolhida, pelo nome exato.
+- **O resumo perdeu os cartões de número:** os totais viraram a última linha
+  da lista de grupos, com rentabilidade em R$ e %, em grafite.
+- **Confirmação** só no substituir de versão com conteúdo, num pop-up.
+- **Editor do orçamento:** o payload do "Salvar orçamentos" leva
+  `envio: { path, nome, tamanho, aba }` no lugar de `arquivoCampo`.
+- **Planilha modelo** para baixar em
+  `GET /api/orcamentos/modelo-de-planilha`.
+
+---
+
 ## ⚠️ Nota de 2026-09-25 — item que nasce em save não gravava (corrigido)
 
 **De 22/09 a 25/09/2026, nenhum item de versão conseguia nascer em save.**

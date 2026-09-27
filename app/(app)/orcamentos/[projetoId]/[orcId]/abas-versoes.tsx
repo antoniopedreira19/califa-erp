@@ -16,7 +16,7 @@ import type {
   CategoriaModeloPlanilha, VersaoOrcamentoStatus } from "@/lib/types";
 import { duplicarVersao } from "./versoes/actions";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
-import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
+import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 
 export interface VersaoAba {
   id: string;
@@ -308,7 +308,7 @@ export function AbasVersoes({
         onAbertoChange={setNovaAberta}
         semGatilho
       />
-      <ImportarPlanilhaDrawer
+      <ImportarPlanilhaVersao
         projetoId={projetoId}
         orcamentoId={orcamentoId}
         modeloPlanilha={modeloPlanilha}

@@ -12,7 +12,8 @@ import { ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
  *
  * O mesmo formato atravessa a fronteira cliente → servidor no salvamento,
  * então não pode conter `File`, `Map` nem nada que não sobreviva ao JSON.
- * O arquivo da planilha importada viaja à parte, no FormData.
+ * O arquivo da planilha importada já está no Storage; o payload leva o
+ * caminho e a aba (decisão 110).
  */
 
 /** BV de um item do rascunho. Vira uma linha em `itens_bv` no salvamento,
@@ -189,12 +190,12 @@ export interface GrupoPayload {
 
 export interface JobPayload extends DadosOrcamentoRascunho {
   grupos: GrupoPayload[];
-  /** Nome do campo do FormData onde vai o XLSX original, quando o job
-   *  veio de importação. O servidor reparseia o arquivo para gravar
-   *  `orcamento_importacoes` com contagens em que se pode confiar — os
-   *  itens, esses, vêm do payload, porque o usuário pode ter editado a
+  /** O XLSX original, já no Storage (decisão 110), e a aba escolhida,
+   *  quando o orçamento veio de importação. O servidor relê a aba para
+   *  gravar `orcamento_importacoes` com contagens em que se pode confiar —
+   *  os itens, esses, vêm do payload, porque o usuário pode ter editado a
    *  planilha depois de importar. */
-  arquivoCampo: string | null;
+  envio: { path: string; nome: string; tamanho: number; aba: string } | null;
 }
 
 export interface OrcamentoProjetoPayload extends ParametrosVersao {

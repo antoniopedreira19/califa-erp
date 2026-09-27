@@ -37,7 +37,7 @@ import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { AbasVersoes, type VersaoAba } from "./abas-versoes";
 import { AcoesVersao } from "./acoes-versao";
 import { MetaVersao } from "./meta-versao";
-import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
+import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { PlanilhaVersao } from "./versoes/[versaoId]/planilha-versao";
 import {
@@ -1089,13 +1089,14 @@ function VersaoSelecionada({
                 importou a planilha errada troca por aqui mesmo, sem sair
                 da aba. Em versão congelada some — lá não há o que
                 substituir. */}
-            <ImportarPlanilhaDrawer
+            <ImportarPlanilhaVersao
               projetoId={params.projetoId}
               orcamentoId={params.orcId}
               modeloPlanilha={planilha.modeloPlanilha}
               interno={interno}
               modo="sobrescrever"
               versaoId={versao.id}
+              numeroVersao={versao.numero_versao}
               conteudoAtual={{
                 grupos: grupos.length,
                 itens: itens.length,
@@ -1249,7 +1250,7 @@ function SemVersoes({
           disabled={!podeCriarVersao}
           disabledReason={motivoBloqueio}
         />
-        <ImportarPlanilhaDrawer
+        <ImportarPlanilhaVersao
           projetoId={projetoId}
           orcamentoId={orcamentoId}
           modeloPlanilha={modeloPlanilha}

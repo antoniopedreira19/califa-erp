@@ -45,6 +45,7 @@ import { OrcamentoForm, type DadosOrcamento } from "../orcamento-form";
 import { JobRascunhoCard } from "../../_rascunho/orcamento-card";
 import {
   ImportarPlanilhaModal,
+  type EnvioComAba,
   type PlanilhaLida,
 } from "../../_rascunho/importar-planilha-modal";
 import { ParametrosModal } from "../../_rascunho/parametros-modal";
@@ -301,9 +302,10 @@ export function EditorAgregado({
   const [askSair, setAskSair] = React.useState<string | null>(null);
   const [salvando, startSalvar] = React.useTransition();
 
-  /** O XLSX de cada orçamento importado nesta sessão. Fora do estado
-   *  porque `File` não é serializável e nenhum render depende dele. */
-  const arquivos = React.useRef(new Map<string, File>());
+  /** O XLSX de cada orçamento importado nesta sessão — já no Storage, com
+   *  a aba escolhida (decisão 110). Fora do estado porque nenhum render
+   *  depende dele. */
+  const arquivos = React.useRef(new Map<string, EnvioComAba>());
 
   /** Retrato do que está gravado. É contra ele que "houve mudança?" é
    *  respondido — sem isso o botão de salvar ficaria sempre aceso.
@@ -468,11 +470,11 @@ export function EditorAgregado({
   }
 
   function aplicarImportacao(id: string, planilha: PlanilhaLida) {
-    arquivos.current.set(id, planilha.arquivo);
+    arquivos.current.set(id, planilha.envio);
     mutarOrcamento(id, (o) => ({
       ...o,
       origem: "importado",
-      arquivoNome: planilha.arquivo.name,
+      arquivoNome: planilha.envio.nome,
       percentualHonorariosDetectado: planilha.percentualHonorarios,
       grupos: planilha.grupos.map((g: GrupoPayload) => ({
         id: novoId("g"),
@@ -820,7 +822,7 @@ export function EditorAgregado({
         produtor_id: o.produtor_id,
         data_inicio_prevista: o.data_inicio_prevista,
         data_fim_prevista: o.data_fim_prevista,
-        arquivoCampo: arquivos.current.has(o.id) ? `arquivo_${o.id}` : null,
+        envio: arquivos.current.get(o.id) ?? null,
         grupos: o.grupos.map((g) => ({
           nome: g.nome,
           itens: g.itens.map((it) => ({
@@ -843,10 +845,6 @@ export function EditorAgregado({
 
     const formData = new FormData();
     formData.set("payload", JSON.stringify(payload));
-    for (const o of novos) {
-      const arquivo = arquivos.current.get(o.id);
-      if (arquivo) formData.set(`arquivo_${o.id}`, arquivo);
-    }
 
     startSalvar(async () => {
       const res = await salvarAlteracoesDoProjeto(projeto.id, formData);

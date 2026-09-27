@@ -8,7 +8,7 @@ import { checarPermissao } from "@/lib/permissoes-server";
 import { honorariosDoProjeto } from "@/lib/data/clientes";
 import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
 import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
-import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
+import { arquivarEnvio, baixarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
 import {
   parseOficial,
   type ParseResultado,
@@ -20,7 +20,6 @@ import { bvSchema } from "@/lib/validations/bv";
 import type { GrupoPayload, OrcamentoProjetoPayload } from "./tipos";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 
-const BUCKET = "orcamento-importacoes";
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
 
 // ============================================================
@@ -143,7 +142,7 @@ export async function salvarOrcamentosDoProjeto(
   const validados: {
     orcamento: Record<string, unknown>;
     grupos: GrupoPayload[];
-    arquivoCampo: string | null;
+    envio: (EnvioDaPlanilha & { aba: string }) | null;
     nome: string;
   }[] = [];
 
@@ -240,7 +239,15 @@ export async function salvarOrcamentosDoProjeto(
     validados.push({
       orcamento: dados,
       grupos,
-      arquivoCampo: job.arquivoCampo ?? null,
+      envio:
+        job.envio && typeof job.envio.path === "string" && typeof job.envio.aba === "string"
+          ? {
+              path: job.envio.path,
+              nome: String(job.envio.nome ?? ""),
+              tamanho: Number(job.envio.tamanho ?? 0),
+              aba: job.envio.aba,
+            }
+          : null,
       nome: parsed.data.nome,
     });
   }
@@ -273,21 +280,17 @@ export async function salvarOrcamentosDoProjeto(
     // contrário, vêm do rascunho — o usuário pode tê-los editado depois
     // de importar, e é o que está na tela que ele mandou salvar.
     let importacao: {
-      buffer: Buffer;
-      nome: string;
-      tamanho: number;
+      envio: EnvioDaPlanilha;
       parsed: ParseResultado;
     } | null = null;
 
-    if (alvo.arquivoCampo) {
-      const arq = await extrairArquivoXlsx(formData, alvo.arquivoCampo);
+    if (alvo.envio) {
+      const arq = await baixarEnvio(alvo.envio, tenantId);
       if (arq.ok) {
         try {
           importacao = {
-            buffer: arq.buffer,
-            nome: arq.nome,
-            tamanho: arq.tamanho,
-            parsed: await parseOficial(arq.buffer),
+            envio: alvo.envio,
+            parsed: await parseOficial(arq.buffer, { aba: alvo.envio.aba }),
           };
         } catch (err) {
           // Arquivo ilegível agora não invalida o orçamento: os itens já
@@ -334,7 +337,7 @@ export async function salvarOrcamentosDoProjeto(
         tenant_id: tenantId,
         orcamento_id: orcamento.id,
         numero_versao: 1,
-        nome: importacao ? `Importada de ${importacao.nome}` : null,
+        nome: importacao ? `Importada de ${importacao.envio.nome}` : null,
         status: "rascunho",
         moeda,
         taxa_cambio: taxaCambio,
@@ -503,7 +506,7 @@ export async function salvarOrcamentosDoProjeto(
         orcamento_id: orcamento.id,
         numero_versao: 1,
         origem: "orcamento_do_projeto",
-        ...(importacao ? { arquivo_nome: importacao.nome } : {}),
+        ...(importacao ? { arquivo_nome: importacao.envio.nome, aba: importacao.parsed.aba } : {}),
         ...(honorariosDaPlanilha !== null &&
         honorariosDaPlanilha !== honorarios
           ? {
@@ -536,23 +539,14 @@ async function arquivarImportacao({
   tenantId: string;
   orcamentoId: string;
   versaoId: string;
-  arquivo: { buffer: Buffer; nome: string; tamanho: number; parsed: ParseResultado };
+  arquivo: { envio: EnvioDaPlanilha; parsed: ParseResultado };
   createdBy: string;
 }): Promise<void> {
   const service = createServiceClient();
   const importacaoId = crypto.randomUUID();
-  const slug = arquivo.nome.replace(/[^\w.\-]/g, "_");
-  const caminho = `${tenantId}/${orcamentoId}/${importacaoId}-${slug}`;
-
-  const { error: uploadErr } = await service.storage
-    .from(BUCKET)
-    .upload(caminho, arquivo.buffer, {
-      contentType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      upsert: false,
-    });
-
-  if (uploadErr) console.error("[multi.salvar.upload]", uploadErr.message);
+  // O original, que o navegador subiu para a pasta de envios (decisão
+  // 110), vai para a pasta do orçamento.
+  const caminho = await arquivarEnvio(arquivo.envio, tenantId, orcamentoId, importacaoId);
 
   const { error: registroErr } = await service
     .from("orcamento_importacoes")
@@ -561,9 +555,9 @@ async function arquivarImportacao({
       tenant_id: tenantId,
       orcamento_id: orcamentoId,
       versao_orcamento_id: versaoId,
-      arquivo_path: uploadErr ? "" : caminho,
-      arquivo_nome_original: arquivo.nome,
-      arquivo_tamanho_bytes: arquivo.tamanho,
+      arquivo_path: caminho,
+      arquivo_nome_original: arquivo.envio.nome,
+      arquivo_tamanho_bytes: arquivo.envio.tamanho,
       aba_origem: arquivo.parsed.aba,
       linhas_lidas: arquivo.parsed.linhas_lidas,
       linhas_importadas: arquivo.parsed.linhas_importadas,
