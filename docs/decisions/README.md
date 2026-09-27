@@ -128,6 +128,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 106 | [Faixa do projeto: a agregada e cada orçamento ou job em abas, no topo da tela](106-faixa-do-projeto.md) | 2026-09-25 |
 | 107 | [A coluna Save nasce recolhida, e só abre sozinha onde já há save](107-coluna-save-nasce-recolhida.md) | 2026-09-25 |
 | 108 | [O botão Voltar: visível, igual em todas as telas, e leva à página anterior](108-botao-voltar.md) | 2026-09-27 |
+| 111 | [A abertura de job mostra as abas do job, e trocar de aba não apaga o preenchimento](111-abertura-de-job-com-as-abas-do-job.md) | 2026-09-27 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -140,4 +141,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 109.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 112.** (091 e 092 existem na pasta e ainda não estão nesta tabela. 109 e 110 estavam em uso na frente da importação de planilha em 27/09/2026, ainda sem linha aqui.)

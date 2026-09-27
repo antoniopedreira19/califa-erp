@@ -12,7 +12,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ClipboardCheck,
   Clock,
   CornerUpLeft,
   FileText,
@@ -92,7 +91,11 @@ import {
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
 import type { AprovacaoDeSave } from "../aprovacao-save";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
-import { BotaoVoltar, useVoltar } from "@/components/voltar/botao-voltar";
+import { useVoltar } from "@/components/voltar/botao-voltar";
+import { useProtegerSaida } from "@/components/voltar/estado";
+import { nomeDaPagina } from "@/lib/voltar";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useIrParaAbaDoJob } from "../../jobs/[jobId]/job-financeiro-tabs";
 
 interface CategoriaOption {
   id: string;
@@ -275,6 +278,10 @@ interface Props {
   aprovacaoSave: AprovacaoDeSave | null;
 }
 
+/** O atalho "Visualizar planilha interna" — link ou botão de aba, mesma cara. */
+const CLASSE_ATALHO_PLANILHA =
+  "mt-1.5 flex w-full items-center gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3 text-left transition-colors hover:border-california-red/50 hover:bg-california-red/5";
+
 function parseMoeda(texto: string): number {
   const limpo = texto
     .replace(/[^\d,.-]/g, "")
@@ -385,6 +392,9 @@ export function AberturaForm({
   // Revisão aberta pela fila volta à fila; pela Visualizar Jobs, volta lá
   // (decisão 108). A reserva é a fila, o destino fixo de antes.
   const voltar = useVoltar("/financeiro/abertura-de-job?aba=aguardando");
+  // A abertura mora na primeira das abas do job (decisão 111): o atalho da
+  // planilha troca de aba em vez de sair da página. Nulo fora das abas.
+  const irParaAba = useIrParaAbaDoJob();
 
   // Modo leitura só destrava quando alguém clica em "Editar registro".
   // A revisão já nasce destravada: reconferir a abertura depois de uma
@@ -1000,6 +1010,77 @@ export function AberturaForm({
     };
   }
 
+  // ---------- Saída com preenchimento não gravado (decisão 111) ----------
+  // A abertura só grava ao confirmar. Com as abas do job na mesma página,
+  // consultar é trocar de aba, e o formulário fica montado; mas um link que
+  // sai da página descartaria o que foi preenchido. A "foto" é o formulário
+  // como ele chegou do servidor — todo o estado inicial vem das props, sem
+  // efeito no mount, então a primeira renderização já é a foto certa.
+  const assinatura = JSON.stringify(montarPayload());
+  const [assinaturaInicial] = React.useState(assinatura);
+  const preenchimentoPendente =
+    modo === "abertura" && assinatura !== assinaturaInicial;
+  const [saidaPendente, setSaidaPendente] = React.useState<string | null>(
+    null,
+  );
+
+  // Fechar a aba e recarregar: o aviso do próprio navegador.
+  React.useEffect(() => {
+    if (!preenchimentoPendente) return;
+    function avisar(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [preenchimentoPendente]);
+
+  // O Voltar do topo e as saídas para outro módulo (decisão 108) caem na
+  // mesma confirmação desta tela.
+  useProtegerSaida(preenchimentoPendente, (href) => setSaidaPendente(href));
+
+  // Os demais links que saem da página — o menu lateral e os links das abas
+  // Informações e Planilha — navegam por dentro do app e passariam direto.
+  // Um ouvinte na fase de CAPTURA os segura antes do onClick do Link do
+  // Next. Clique com ctrl/cmd, botão do meio ou alvo em outra aba não
+  // descarta nada e passa.
+  React.useEffect(() => {
+    if (!preenchimentoPendente) return;
+    function segurar(e: MouseEvent) {
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      const alvo =
+        e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!(alvo instanceof HTMLAnchorElement)) return;
+      if (alvo.target && alvo.target !== "_self") return;
+      if (alvo.hasAttribute("download")) return;
+      // O Voltar tem a proteção dele (acima): ele anota o rastro da aba
+      // antes de sair, e segurá-lo aqui pularia essa anotação.
+      if (alvo.closest("[data-voltar-da-pagina]")) return;
+      const destino = new URL(alvo.href, window.location.href);
+      if (destino.origin !== window.location.origin) return;
+      // Mesma página — outra aba, outro mês da planilha: nada se perde.
+      if (destino.pathname === window.location.pathname) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setSaidaPendente(destino.pathname + destino.search + destino.hash);
+    }
+    document.addEventListener("click", segurar, true);
+    return () => document.removeEventListener("click", segurar, true);
+  }, [preenchimentoPendente]);
+
+  const nomeDoDestino = saidaPendente
+    ? nomeDaPagina(saidaPendente, {})
+    : null;
+
   function confirmarAbertura() {
     setErro(null);
     startTransition(async () => {
@@ -1152,6 +1233,19 @@ export function AberturaForm({
       ? `${job.planilha_grupos} ${job.planilha_grupos === 1 ? "agrupamento" : "agrupamentos"} · ${job.planilha_itens} ${job.planilha_itens === 1 ? "item" : "itens"} · orçado ${formatCurrency(job.planilha_orcado)}`
       : "Planilha interna sem itens.";
 
+  const conteudoDoAtalhoDaPlanilha = (
+    <>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
+        <Table2 className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[12.5px] font-semibold">Visualizar planilha interna</p>
+        <p className="text-[11px] text-muted-foreground">{resumoPlanilha}</p>
+      </div>
+      <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-5 pb-6">
       {/* ---------- Cabeçalho ---------- */}
@@ -1191,35 +1285,10 @@ export function AberturaForm({
         </div>
       )}
 
-      {/* O cabeçalho grande é só da fila. Dentro da aba do job aberto a
-          página já tem o próprio (código, nome e situação), e repetir
-          "Abrir job no financeiro" num job que já está aberto seria
-          simplesmente falso. */}
-      {modo === "abertura" && (
-        <div>
-          <BotaoVoltar reserva="/financeiro/abertura-de-job?aba=aguardando" />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <Landmark className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-[26px] font-bold tracking-tight">
-              Abrir job no financeiro
-            </h1>
-            <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[12.5px] font-bold">
-              {job.codigo}
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-              <ClipboardCheck className="h-3 w-3" />
-              Em conferência
-            </span>
-          </div>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Confira os dados da produção ao lado — e a planilha interna do job
-            — e complete o registro financeiro: nome, projeto, categoria,
-            serviço, competência e as previsões de recebimento e de custos.
-          </p>
-        </div>
-      )}
+      {/* O cabeçalho grande da abertura ("Abrir job no financeiro") mora na
+          página da fila desde a decisão 111, ACIMA das abas do job: o
+          formulário é só o conteúdo da aba "Abertura do Job". Dentro da aba
+          do job aberto a página já tem o próprio cabeçalho. */}
 
       {erro && (
         <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
@@ -2722,30 +2791,32 @@ export function AberturaForm({
                 para a aba da abertura continua na aprovação. Sem ele, a
                 revisão registrada na volta não aprovaria nada (achado da
                 revisão de 22/09/2026). */}
-            <Link
-              href={
-                modo === "abertura"
-                  ? `/financeiro/abertura-de-job/${job.id}/planilha`
-                  : aprovacaoSave
-                    ? `/financeiro/jobs/${job.id}?aba=planilha&aprovarSave=${aprovacaoSave.pedidoId}`
-                    : `/financeiro/jobs/${job.id}?aba=planilha`
-              }
-              prefetch={false}
-              className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3 text-left transition-colors hover:border-california-red/50 hover:bg-california-red/5"
-            >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
-                <Table2 className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[12.5px] font-semibold">
-                  Visualizar planilha interna
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {resumoPlanilha}
-                </p>
-              </div>
-              <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            </Link>
+            {/* Na abertura (decisão 111) a planilha é a aba ao lado, e o
+                atalho só troca de aba: sair para a rota da conferência
+                descartaria o que já foi preenchido. */}
+            {modo === "abertura" && irParaAba ? (
+              <button
+                type="button"
+                onClick={() => irParaAba("planilha")}
+                className={CLASSE_ATALHO_PLANILHA}
+              >
+                {conteudoDoAtalhoDaPlanilha}
+              </button>
+            ) : (
+              <Link
+                href={
+                  modo === "abertura"
+                    ? `/financeiro/abertura-de-job/${job.id}/planilha`
+                    : aprovacaoSave
+                      ? `/financeiro/jobs/${job.id}?aba=planilha&aprovarSave=${aprovacaoSave.pedidoId}`
+                      : `/financeiro/jobs/${job.id}?aba=planilha`
+                }
+                prefetch={false}
+                className={CLASSE_ATALHO_PLANILHA}
+              >
+                {conteudoDoAtalhoDaPlanilha}
+              </Link>
+            )}
           </div>
 
           {/* O que a produção escreveu ao enviar o job. Mesmo dado e mesmo
@@ -3103,6 +3174,40 @@ export function AberturaForm({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={saidaPendente !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setSaidaPendente(null);
+        }}
+        title="Sair sem abrir o job?"
+        description={
+          <>
+            <p>
+              O que você preencheu na abertura do{" "}
+              <span className="font-mono">{job.codigo}</span> só é gravado
+              quando o job é aberto. Saindo desta página agora, o
+              preenchimento se perde.
+            </p>
+            {nomeDoDestino && nomeDoDestino !== "a página anterior" && (
+              <p className="mt-2">
+                Destino:{" "}
+                <strong className="font-semibold text-foreground">
+                  {nomeDoDestino}
+                </strong>
+              </p>
+            )}
+          </>
+        }
+        confirmLabel="Sair e descartar"
+        cancelLabel="Continuar na abertura"
+        variant="destructive"
+        onConfirm={() => {
+          const destino = saidaPendente;
+          setSaidaPendente(null);
+          if (destino) router.push(destino);
+        }}
+      />
 
       <ReprovarDialog
         open={reprovarAberto}

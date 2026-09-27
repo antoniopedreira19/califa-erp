@@ -108,6 +108,12 @@ interface Props {
    * Orçamentos, então o caminho fica, mas avisado.
    */
   confirmarSaidaParaOrcamento?: boolean;
+  /**
+   * Job ainda na fila da abertura (decisão 111): competência e data de
+   * abertura só nascem quando o financeiro confirma, e a ficha diz isso em
+   * vez de um travessão que pareceria dado faltando.
+   */
+  antesDaAbertura?: boolean;
   gpNome: string | null;
   produtorNome: string | null;
   origem: OrigemDaFicha;
@@ -134,6 +140,7 @@ export function FichaJob({
   jobLinkSuffix,
   jobHrefBase = "/jobs/",
   confirmarSaidaParaOrcamento = false,
+  antesDaAbertura = false,
   gpNome,
   produtorNome,
   origem,
@@ -193,7 +200,11 @@ export function FichaJob({
                   "—"}
               </Campo>
               <Campo rotulo="Competência">
-                {job.competencias && job.competencias.length > 1 ? (
+                {antesDaAbertura ? (
+                  <span className="text-muted-foreground">
+                    Definida na abertura
+                  </span>
+                ) : job.competencias && job.competencias.length > 1 ? (
                   <span className="flex flex-col gap-0.5">
                     {ordenarCompetencias(job.competencias).map((c) => (
                       <span key={`${c.ano}-${c.trimestre}`}>
@@ -228,6 +239,10 @@ export function FichaJob({
                       </span>
                     )}
                   </>
+                ) : antesDaAbertura ? (
+                  <span className="text-muted-foreground">
+                    Ainda não aberto no financeiro
+                  </span>
                 ) : (
                   "—"
                 )}

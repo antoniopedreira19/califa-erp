@@ -140,10 +140,13 @@ e foi alinhada às abas do job e da abertura.
 
 ## 6. O que fica para depois
 
-- **Formulário de abertura → "Visualizar planilha interna"** (R3 do
+- ~~**Formulário de abertura → "Visualizar planilha interna"** (R3 do
   mapeamento): na fila, a planilha é outra página, e o que foi digitado e
-  não salvo se perde ao voltar. O voltar acerta a tela; guardar o
-  rascunho é outra conversa.
+  não salvo se perde ao voltar.~~ ⚠️ **Resolvido na
+  [decisão 111](111-abertura-de-job-com-as-abas-do-job.md) (2026-09-27):**
+  a abertura ganhou as abas do job, o atalho só troca de aba, e o
+  preenchimento sobrevive à consulta. Sair da página com alteração pergunta
+  antes, pela mesma proteção de saída desta decisão.
 - **Os achados X1–X6** do mapeamento (filtros da Home que a tela não
   aplica, avisos de permissão que ninguém lê, nome do parâmetro da aba)
   não são do voltar e ficaram como estavam.

@@ -5935,9 +5935,33 @@ era o imposto de R$ 28.318,52). Regra completa na
   `replaceState(null, …)` — com o `history.state` no argumento o Next não
   repassava a aba ao `useSearchParams`. E a busca e o "só abertas" da capa
   do Cartão sobrevivem à ida e volta da fatura.
-- **Pendente:** na fila, "Visualizar planilha interna" do formulário de
+- ~~**Pendente:** na fila, "Visualizar planilha interna" do formulário de
   abertura troca de página, e o que foi digitado e não salvo se perde ao
-  voltar (R3 do mapeamento).
+  voltar (R3 do mapeamento).~~ Resolvido na decisão 111 — ver a nota
+  seguinte.
+
+## ⚠️ Nota de 2026-09-27 — abertura de job com as abas do job (decisão 111)
+
+- **Abrir job no financeiro** (`/financeiro/abertura-de-job/[jobId]`)
+  ganhou as cinco abas do job aberto, abaixo do cabeçalho de sempre:
+  Abertura do Job (o formulário, igual ao de antes), Informações do Job,
+  Planilha Interna, Fluxo de Caixa do Job e Comunicação. Mesmos componentes
+  e mesmo carregamento da página do job no financeiro.
+- **Trocar de aba não apaga o preenchimento**, e cada aba volta ao ponto da
+  página em que a pessoa estava. "Visualizar planilha interna" agora troca
+  para a aba Planilha Interna, em vez de abrir a rota da conferência.
+- **A barra de ação** segue só na aba Abertura do Job, como na revisão.
+- **Sair com alteração não gravada pergunta antes** ("Sair sem abrir o
+  job?"): Voltar do topo, menu lateral, links das abas e as saídas para
+  Orçamentos (estas depois da confirmação de saída de módulo). Recarregar
+  ou fechar a aba dispara o aviso do navegador. Sem alteração, sai direto.
+- **Aba Informações antes da abertura:** projeto da produção, categoria do
+  orçamento, "Definida na abertura" e "Ainda não aberto no financeiro";
+  jobs do projeto sem os devolvidos e cancelados.
+- **Aba Fluxo de Caixa sem lançamento:** aviso de que o fluxo começa na
+  abertura.
+- **Não mudou:** a página do job já aberto (leitura, edição, revisão,
+  aprovação de save) e as actions de gravação.
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
