@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  ArrowLeft,
   Check,
   ChevronDown,
   FolderKanban,
@@ -12,6 +11,9 @@ import {
   Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { saidaSegurada } from "@/components/voltar/estado";
+import { useMarcarPagina } from "@/components/voltar/marcar-pagina";
 import {
   AGREGADA,
   destinoDaAba,
@@ -21,9 +23,12 @@ import {
 
 interface Props {
   modulo: ModuloDaFaixa;
-  /** O voltar de sempre de cada tela — mesmo destino, texto encurtado. */
-  voltar: { href: string; rotulo: string; titulo: string };
-  projeto: { codigo: string; nome: string };
+  /** Para onde o voltar leva quando não há página anterior fora da faixa
+   *  (decisão 108): o voltar fixo que cada tela tinha. */
+  reservaDoVoltar: string;
+  /** `href` só em Orçamentos, onde o projeto é uma página própria e o chip
+   *  leva até ela. */
+  projeto: { codigo: string; nome: string; href?: string };
   agregadaHref: string;
   /** `null` enquanto carregam (fallback do Suspense na tela do orçamento). */
   itens: ItemDaFaixa[] | null;
@@ -50,7 +55,7 @@ interface Props {
  */
 export function FaixaDoProjeto({
   modulo,
-  voltar,
+  reservaDoVoltar,
   projeto,
   agregadaHref,
   itens,
@@ -67,6 +72,20 @@ export function FaixaDoProjeto({
 
   const destino = (alvo: string, href: string) =>
     destinoDaAba({ modulo, alvo, ativo, href, abaAtual, from });
+
+  // As abas da faixa são da mesma sessão (decisão 108): o voltar pula as
+  // páginas deste grupo e leva para onde a pessoa estava antes de entrar
+  // no projeto. O rótulo é o nome no balão do voltar de quem sair daqui.
+  const itemAberto = itens?.find((i) => i.id === ativo);
+  useMarcarPagina({
+    grupo: `${modulo}:${agregadaHref}`,
+    rotulo:
+      ativo === AGREGADA
+        ? `Visão agregada · ${projeto.codigo}`
+        : itemAberto
+          ? `${itemAberto.codigo} · ${itemAberto.nome}`
+          : undefined,
+  });
 
   // O botão "Todos" só existe quando as abas não cabem na largura.
   React.useLayoutEffect(() => {
@@ -140,34 +159,24 @@ export function FaixaDoProjeto({
       aria-label="Navegação do projeto"
       className="relative flex items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-soft"
     >
-      {/* Em Orçamentos o voltar vai para o próprio projeto: seta e projeto
-          são um link só. Nos outros módulos vai para a lista. */}
-      {modulo === "orcamentos" ? (
+      {/* O voltar leva à página anterior à faixa (decisão 108). Em
+          Orçamentos o projeto é uma página, e o chip leva até ela. */}
+      <BotaoVoltar reserva={reservaDoVoltar} variante="faixa" />
+      <Divisoria />
+      {projeto.href ? (
         <Link
-          href={voltar.href}
+          href={projeto.href}
           prefetch={false}
-          title={voltar.titulo}
-          className="inline-flex h-8 min-w-0 flex-none items-center gap-2 rounded-lg px-2.5 text-muted-foreground transition-colors hover:bg-muted"
+          title={`${projeto.codigo} · ${projeto.nome}`}
+          onClick={(e) => segurarSaida(e, projeto.href!)}
+          className="inline-flex h-8 min-w-0 flex-none items-center gap-2 rounded-lg px-2 transition-colors hover:bg-muted"
         >
-          <ArrowLeft className="h-3.5 w-3.5 flex-none" />
           {chipDoProjeto}
         </Link>
       ) : (
-        <>
-          <Link
-            href={voltar.href}
-            prefetch={false}
-            title={voltar.titulo}
-            className="inline-flex h-8 flex-none items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {voltar.rotulo}
-          </Link>
-          <Divisoria />
-          <span className="inline-flex min-w-0 flex-none items-center gap-2 px-2">
-            {chipDoProjeto}
-          </span>
-        </>
+        <span className="inline-flex min-w-0 flex-none items-center gap-2 px-2">
+          {chipDoProjeto}
+        </span>
       )}
 
       <Divisoria />
@@ -320,6 +329,16 @@ export function LinkDoJobNaAgregada({
   );
 }
 
+/**
+ * Tela com alteração não salva (visão agregada de Orçamentos, errata) segura
+ * a saída pela faixa como segura a do voltar (decisão 108). Clique com
+ * ctrl/cmd abre outra aba e não precisa de aviso.
+ */
+function segurarSaida(e: React.MouseEvent, href: string) {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if (saidaSegurada(href)) e.preventDefault();
+}
+
 function Divisoria() {
   return <span aria-hidden className="mx-1 h-5 w-px flex-none bg-border" />;
 }
@@ -350,7 +369,13 @@ function Aba({
     );
   }
   return (
-    <Link href={href} prefetch={false} title={titulo} className={classes}>
+    <Link
+      href={href}
+      prefetch={false}
+      title={titulo}
+      onClick={(e) => segurarSaida(e, href)}
+      className={classes}
+    >
       {children}
     </Link>
   );
@@ -379,7 +404,10 @@ function ItemDoMenu({
       prefetch={false}
       role="menuitem"
       aria-current={aberta ? "page" : undefined}
-      onClick={onEscolher}
+      onClick={(e) => {
+        onEscolher();
+        segurarSaida(e, href);
+      }}
       className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-accent"
     >
       <span className="flex h-4 w-4 flex-none items-center justify-center text-california-red">

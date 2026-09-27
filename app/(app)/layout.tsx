@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { requireSession } from "@/lib/auth/session";
 import { Sidebar } from "@/components/sidebar";
+import { RastroDeNavegacao } from "@/components/voltar/rastro-de-navegacao";
 
 export default async function AppLayout({
   children,
@@ -14,6 +16,11 @@ export default async function AppLayout({
         role={session.activeRole}
         nome={session.profile.nome}
       />
+      {/* Rastro das páginas desta aba, para o botão Voltar (decisão 108).
+          Não desenha nada; o Suspense é exigência do useSearchParams. */}
+      <Suspense fallback={null}>
+        <RastroDeNavegacao />
+      </Suspense>
       {/* pl-[76px] = largura colapsada da sidebar.
           Ao hover, ela expande POR CIMA do conteúdo.
 

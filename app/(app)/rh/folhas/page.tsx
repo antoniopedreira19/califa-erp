@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Receipt, ArrowLeft, Wallet, AlertCircle, PlayCircle, CalendarClock } from "lucide-react";
+import { Receipt, Wallet, AlertCircle, PlayCircle, CalendarClock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,6 +12,7 @@ import {
   type StatusAgregado,
 } from "./folhas-list";
 import { NovaFolhaModal } from "./nova-folha-modal";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -145,14 +145,7 @@ export default async function FolhasPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/rh"
-        prefetch={false}
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-3 w-3" />
-        Voltar para RH
-      </Link>
+      <BotaoVoltar reserva="/rh" />
 
       <PageHeader
         eyebrow="RH"

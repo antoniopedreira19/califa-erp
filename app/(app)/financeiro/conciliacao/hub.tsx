@@ -7,7 +7,7 @@
  * com `&highlight=` continuam valendo sem nenhuma mudança.
  */
 import Link from "next/link";
-import { ArrowLeft, BookOpen } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PageHeader } from "@/components/ui/page-header";
 import { formatCurrency } from "@/lib/utils";
@@ -19,6 +19,7 @@ import {
   fatiarPorEmpresa,
   fatiarPorTipo,
 } from "./hub-resumo";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export async function HubConciliacao({
   supabase,
@@ -38,13 +39,7 @@ export async function HubConciliacao({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
+        <BotaoVoltar reserva="/financeiro" />
       </div>
 
       <PageHeader

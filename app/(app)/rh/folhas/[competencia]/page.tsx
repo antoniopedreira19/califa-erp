@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -15,6 +14,7 @@ import {
   type ContagemStatus,
 } from "./folha-competencia-view";
 import { CardsResumoFolha } from "./cards-resumo-folha";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -241,13 +241,7 @@ export default async function FolhaCompetenciaPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/rh/folhas"
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-3 w-3" />
-        Voltar para folhas
-      </Link>
+      <BotaoVoltar reserva="/rh/folhas" />
 
       <PageHeader
         eyebrow={`RH · FOLHA MENSAL`}

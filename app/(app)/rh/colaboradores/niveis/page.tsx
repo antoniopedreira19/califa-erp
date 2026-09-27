@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Nivel } from "@/lib/types";
 import { NiveisList } from "./niveis-list";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -28,13 +28,7 @@ export default async function NiveisPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/rh/colaboradores"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para colaboradores
-        </Link>
+        <BotaoVoltar reserva="/rh/colaboradores" />
         <header className="mt-3 space-y-2">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">

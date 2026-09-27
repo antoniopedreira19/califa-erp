@@ -6,7 +6,6 @@ import {
   UserPlus,
   ArrowUpRight,
   ArrowDownRight,
-  ArrowLeft,
   Minus,
   UserCheck,
 } from "lucide-react";
@@ -21,6 +20,7 @@ import {
   type RegionalOpcao,
 } from "./colaboradores-list";
 import { CardCustoQuadro } from "./card-custo-quadro";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -286,14 +286,7 @@ export default async function ColaboradoresPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/rh"
-        prefetch={false}
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-3 w-3" />
-        Voltar para RH
-      </Link>
+      <BotaoVoltar reserva="/rh" />
 
       <PageHeader
         eyebrow="RH"

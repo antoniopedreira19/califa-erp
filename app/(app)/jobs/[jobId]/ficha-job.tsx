@@ -141,6 +141,12 @@ export function FichaJob({
   statusBadgeClasses,
 }: Props) {
   const texto = descritivo?.trim();
+  // No financeiro, o projeto do job é a visão agregada do próprio
+  // financeiro. Job sem projeto do financeiro (anterior à migration
+  // 20260820000011) cai no projeto da produção: saída de módulo, com aviso
+  // (decisões 021 e 108).
+  const saiDoModuloPeloProjeto =
+    confirmarSaidaParaOrcamento && origem.projetoHref.startsWith("/orcamentos");
 
   return (
     <div className="space-y-4">
@@ -235,13 +241,14 @@ export function FichaJob({
 
             <div className="flex flex-col border-l border-border">
               <CabecalhoColuna titulo="Projeto">
-                <Link
+                <LinkDoProjeto
                   href={origem.projetoHref}
-                  prefetch={false}
+                  saiDoModulo={saiDoModuloPeloProjeto}
+                  projeto={projeto}
                   className="font-mono text-[11.5px] font-semibold text-california-red hover:underline"
                 >
                   {projeto.codigo}
-                </Link>
+                </LinkDoProjeto>
               </CabecalhoColuna>
               <Campo rotulo="Nome do projeto" destaque>
                 {projeto.nome}
@@ -326,14 +333,15 @@ export function FichaJob({
               </span>
             </CampoLateral>
             <CampoLateral rotulo="Projeto">
-              <Link
+              <LinkDoProjeto
                 href={origem.projetoHref}
-                prefetch={false}
+                saiDoModulo={saiDoModuloPeloProjeto}
+                projeto={projeto}
                 className="text-california-red hover:underline"
               >
                 <span className="font-mono text-[13px]">{projeto.codigo}</span> ·{" "}
                 {projeto.nome}
-              </Link>
+              </LinkDoProjeto>
             </CampoLateral>
             <CampoLateral rotulo="Orçamento aprovado">
               {confirmarSaidaParaOrcamento ? (
@@ -425,6 +433,45 @@ export function FichaJob({
         </div>
       </div>
     </div>
+  );
+}
+
+/** O link "Projeto" da ficha: comum, ou com o aviso de saída do módulo. */
+function LinkDoProjeto({
+  href,
+  saiDoModulo,
+  projeto,
+  className,
+  children,
+}: {
+  href: string;
+  saiDoModulo: boolean;
+  projeto: ProjetoDaFicha;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (saiDoModulo) {
+    return (
+      <LinkSaidaDeModulo
+        href={href}
+        modulo="Orçamentos"
+        descricao={
+          <>
+            O projeto <span className="font-mono">{projeto.codigo}</span> ·{" "}
+            {projeto.nome} mora no módulo de Orçamentos, e este job não tem
+            projeto no financeiro. Você sai desta tela para abri-lo.
+          </>
+        }
+        className={className}
+      >
+        <span>{children}</span>
+      </LinkSaidaDeModulo>
+    );
+  }
+  return (
+    <Link href={href} prefetch={false} className={className}>
+      {children}
+    </Link>
   );
 }
 

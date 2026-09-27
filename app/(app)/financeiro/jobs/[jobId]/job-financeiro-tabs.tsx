@@ -48,7 +48,7 @@ export function JobFinanceiroTabs({
   const [tab, setTab] = React.useState<TabKey>(abaInicial);
 
   // Um link para a MESMA página com outro `?aba=` (o "Visualizar planilha
-  // interna" do formulário da abertura e o "Voltar para a aprovação" da
+  // interna" do formulário da abertura e o "Ir para a aprovação" da
   // planilha em destaque — decisão 099) é navegação suave: o componente
   // não remonta e o `useState` guardaria a aba velha. A aba pedida pela
   // URL, quando muda, manda.

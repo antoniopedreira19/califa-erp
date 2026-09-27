@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { Regional } from "@/lib/types";
@@ -12,6 +11,7 @@ import { EmpresasTabs } from "./tabs";
 import { EmpresaContabilCard } from "./contabeis/empresa-contabil-card";
 import { EmpresaContabilDrawer } from "./contabeis/empresa-contabil-drawer";
 import type { EmpresaContabilRow } from "./contabeis/types";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -226,13 +226,7 @@ export default async function AdminEmpresasPage() {
 
   return (
     <div className="space-y-8">
-      <Link
-        href="/admin"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-california-red transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para Administração
-      </Link>
+      <BotaoVoltar reserva="/admin" />
 
       <PageHeader
         eyebrow="ADMINISTRAÇÃO"

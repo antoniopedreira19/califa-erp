@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   CalendarCheck,
   CalendarDays,
@@ -93,6 +92,7 @@ import {
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
 import type { AprovacaoDeSave } from "../aprovacao-save";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
+import { BotaoVoltar, useVoltar } from "@/components/voltar/botao-voltar";
 
 interface CategoriaOption {
   id: string;
@@ -382,6 +382,9 @@ export function AberturaForm({
   aprovacaoSave,
 }: Props) {
   const router = useRouter();
+  // Revisão aberta pela fila volta à fila; pela Visualizar Jobs, volta lá
+  // (decisão 108). A reserva é a fila, o destino fixo de antes.
+  const voltar = useVoltar("/financeiro/abertura-de-job?aba=aguardando");
 
   // Modo leitura só destrava quando alguém clica em "Editar registro".
   // A revisão já nasce destravada: reconferir a abertura depois de uma
@@ -1194,13 +1197,7 @@ export function AberturaForm({
           simplesmente falso. */}
       {modo === "abertura" && (
         <div>
-          <Link
-            href="/financeiro/abertura-de-job?aba=aguardando"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Voltar para a fila de abertura
-          </Link>
+          <BotaoVoltar reserva="/financeiro/abertura-de-job?aba=aguardando" />
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">
               <Landmark className="h-5 w-5 text-california-red" />
@@ -2914,12 +2911,20 @@ export function AberturaForm({
           <div className="flex items-center gap-2.5">
             {ehRevisao ? (
               <>
+                {/* O mesmo destino do voltar do topo (decisão 108): a fila
+                    para quem veio dela, Visualizar Jobs para quem veio de lá. */}
                 <Link
-                  href="/financeiro/abertura-de-job?aba=aguardando"
+                  href={voltar.href}
                   prefetch={false}
+                  title={voltar.titulo}
+                  onClick={(e) => {
+                    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    voltar.irVoltar();
+                  }}
                   className="rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold transition-colors hover:bg-muted"
                 >
-                  Voltar para a fila
+                  Voltar
                 </Link>
                 <button
                   type="button"

@@ -3,7 +3,8 @@ import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { itensDeJobs } from "@/lib/faixa-do-projeto";
 import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, ArrowLeft, FilePenLine, Lock } from "lucide-react";
+import { AlertTriangle, ArrowRight, FilePenLine, Lock } from "lucide-react";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
@@ -341,11 +342,7 @@ export default async function JobNoFinanceiroPage({
         {jobNaFila.projeto_financeiro_id ? (
           <FaixaDoProjeto
             modulo="financeiro"
-            voltar={{
-              href: "/financeiro/abertura-de-job?aba=abertos",
-              rotulo: "Visualizar Jobs",
-              titulo: "Voltar para Visualizar Jobs",
-            }}
+            reservaDoVoltar="/financeiro/abertura-de-job?aba=abertos"
             projeto={{
               codigo: jobNaFila.projeto_financeiro_codigo ?? "—",
               nome: jobNaFila.projeto_financeiro_nome ?? "—",
@@ -360,13 +357,7 @@ export default async function JobNoFinanceiroPage({
             ativo={job.id}
           />
         ) : (
-          <Link
-            href="/financeiro/abertura-de-job?aba=abertos"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Voltar para Visualizar Jobs
-          </Link>
+          <BotaoVoltar reserva="/financeiro/abertura-de-job?aba=abertos" />
         )}
         <div
           className={cn(
@@ -640,12 +631,15 @@ export default async function JobNoFinanceiroPage({
                   prefetch={false}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Voltar para a aprovação
+                  {/* Troca de aba na mesma página, e não um voltar
+                      (decisão 108): o voltar é o do topo. */}
+                  Ir para a aprovação
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
             )}
             <JobRealizadoSection
+              confirmarSaidaParaOrcamento
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}

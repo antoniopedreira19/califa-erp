@@ -49,12 +49,12 @@ export function faixaDoOrcamentoSemItens(projeto: {
 }) {
   return {
     modulo: "orcamentos" as const,
-    voltar: {
+    reservaDoVoltar: `/orcamentos/${projeto.id}`,
+    projeto: {
+      codigo: projeto.codigo,
+      nome: projeto.nome,
       href: `/orcamentos/${projeto.id}`,
-      rotulo: `${projeto.codigo} · ${projeto.nome}`,
-      titulo: `Voltar para ${projeto.codigo} · ${projeto.nome}`,
     },
-    projeto: { codigo: projeto.codigo, nome: projeto.nome },
     agregadaHref: `/orcamentos/${projeto.id}/agregado`,
   };
 }

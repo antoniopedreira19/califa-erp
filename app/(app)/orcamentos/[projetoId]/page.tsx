@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Layers, Plus } from "lucide-react";
+import { FileText, Layers, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
@@ -35,6 +35,8 @@ import {
   ExportarOrcamentosMenu,
   type OrcamentoExportavel,
 } from "../_selecao/exportar-orcamentos-menu";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { MarcarPagina } from "@/components/voltar/marcar-pagina";
 
 export const dynamic = "force-dynamic";
 
@@ -363,13 +365,9 @@ export default async function ProjetoDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/orcamentos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para projetos
-        </Link>
+        <BotaoVoltar reserva="/orcamentos" />
+        {/* Nome desta página no balão do voltar de quem sair daqui. */}
+        <MarcarPagina rotulo={`${projeto.codigo} · ${projeto.nome}`} />
 
         <div className="mt-3">
           <p className="font-mono text-xs font-semibold text-muted-foreground">

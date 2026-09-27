@@ -16,19 +16,32 @@ import type { CartaoDaCapa } from "./cartao-tab";
 
 const LIMITE_GRADE = 5;
 
+export interface FiltroDaCapa {
+  busca: string;
+  soAbertas: boolean;
+}
+export const FILTRO_DA_CAPA_VAZIO: FiltroDaCapa = { busca: "", soAbertas: false };
+
 export function CartaoCapa({
   capa,
   pending,
   onAbrir,
   lancarPagamento,
+  filtro,
+  onFiltro,
 }: {
   capa: CartaoDaCapa[];
   pending: boolean;
   onAbrir: (cartaoId: string) => void;
   lancarPagamento: React.ReactNode;
+  /** Busca e "só abertas" moram na aba, e não aqui: a capa desmonta quando
+   *  a fatura abre, e o filtro tem de estar lá quando ela volta (decisão
+   *  108 — o filtro dura enquanto a pessoa está na página). */
+  filtro: FiltroDaCapa;
+  onFiltro: (filtro: FiltroDaCapa) => void;
 }) {
-  const [busca, setBusca] = React.useState("");
-  const [soAbertas, setSoAbertas] = React.useState(false);
+  const { busca, soAbertas } = filtro;
+  const setBusca = (valor: string) => onFiltro({ ...filtro, busca: valor });
 
   const totalAbertas = capa.reduce(
     (s, c) => s + (c.emCurso?.status === "aberta" ? c.emCurso.total : 0),
@@ -81,7 +94,7 @@ export function CartaoCapa({
             </div>
             <button
               type="button"
-              onClick={() => setSoAbertas((v) => !v)}
+              onClick={() => onFiltro({ ...filtro, soAbertas: !soAbertas })}
               className={cn(
                 "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
                 soAbertas

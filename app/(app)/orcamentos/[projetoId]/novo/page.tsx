@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
@@ -8,6 +6,7 @@ import { listarCidadesIniciais } from "@/lib/data/cidades";
 import type { CategoriaDominio, Profile, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
 import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -91,13 +90,7 @@ export default async function NovoOrcamentoPage({
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div>
-        <Link
-          href={`/orcamentos/${params.projetoId}`}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para {projeto.codigo} · {projeto.nome}
-        </Link>
+        <BotaoVoltar reserva={`/orcamentos/${params.projetoId}`} />
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Novo orçamento</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           O código será gerado no formato{" "}

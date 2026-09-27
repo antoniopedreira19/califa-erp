@@ -113,6 +113,9 @@ import type {
   MesDeFaturamento,
   SituacaoDoMes,
 } from "@/lib/calculos/faturamento-por-mes";
+import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useProtegerSaida } from "@/components/voltar/estado";
 
 const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
 
@@ -235,6 +238,10 @@ interface Props {
    *  planejado, e o save não existe — nem coluna, nem pedido. Obrigatória:
    *  prop opcional esconde a fronteira em que o campo some. */
   interno: boolean;
+  /** Na tela do job no financeiro, "Ver versão aprovada" sai do módulo e
+   *  pede confirmação, como o "Orçamento aprovado" da ficha (decisões 021
+   *  e 108). Obrigatória pelo mesmo motivo de `interno`. */
+  confirmarSaidaParaOrcamento: boolean;
 }
 
 export function JobRealizadoSection({
@@ -269,6 +276,7 @@ export function JobRealizadoSection({
   hrefPlanilha,
   faturamentoMensal = SEM_FATURAMENTO_MENSAL,
   interno,
+  confirmarSaidaParaOrcamento,
 }: Props) {
   const router = useRouter();
 
@@ -296,6 +304,12 @@ export function JobRealizadoSection({
     definirModoErrata(errata.ativo);
     return () => definirModoErrata(false);
   }, [errata.ativo]);
+
+  // Errata com alteração ainda não registrada: o voltar e as abas da faixa
+  // do projeto perguntam antes de descartar (decisão 108). O rascunho só
+  // existe na memória da tela.
+  const [saidaDaErrata, setSaidaDaErrata] = React.useState<string | null>(null);
+  useProtegerSaida(errata.ativo && errata.temMudanca, (href) => setSaidaDaErrata(href));
 
   // Quem ainda não disse se sai mais PP (decisão 052) — o alcance do
   // botão "Concluir PPs" da barra. O servidor refaz esta lista antes de
@@ -945,13 +959,24 @@ export function JobRealizadoSection({
               itensEmAberto={itensEmAberto}
             />
           )}
-          <Link
-            href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
-            prefetch={false}
-            className="text-xs text-california-red hover:underline"
-          >
-            Ver versão aprovada →
-          </Link>
+          {confirmarSaidaParaOrcamento ? (
+            <LinkSaidaDeModulo
+              href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+              modulo="Orçamentos"
+              descricao="A versão aprovada mora no módulo de Orçamentos — não existe cópia dela no financeiro. Você sai desta tela para abri-la."
+              className="text-xs text-california-red hover:underline"
+            >
+              Ver versão aprovada
+            </LinkSaidaDeModulo>
+          ) : (
+            <Link
+              href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+              prefetch={false}
+              className="text-xs text-california-red hover:underline"
+            >
+              Ver versão aprovada →
+            </Link>
+          )}
         </div>
       </div>
 
@@ -1070,6 +1095,22 @@ export function JobRealizadoSection({
         percentualImposto={versao.percentual_imposto}
         internacional={planilha.internacional}
         clienteNome={clienteNome}
+      />
+
+      <ConfirmDialog
+        open={saidaDaErrata !== null}
+        onOpenChange={(aberto) => !aberto && setSaidaDaErrata(null)}
+        title="Sair sem registrar a errata?"
+        description="As alterações da errata ainda não foram registradas e serão descartadas."
+        confirmLabel="Sair e descartar"
+        cancelLabel="Continuar na errata"
+        variant="destructive"
+        onConfirm={() => {
+          const destino = saidaDaErrata;
+          setSaidaDaErrata(null);
+          errata.descartar();
+          if (destino) router.push(destino);
+        }}
       />
 
       <EnviarSavesDialog

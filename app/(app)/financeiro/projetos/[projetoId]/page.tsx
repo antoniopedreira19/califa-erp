@@ -160,11 +160,7 @@ export default async function ProjetoNoFinanceiroPage({
         {/* Faixa do projeto (decisão 106): os mesmos jobs desta tela. */}
         <FaixaDoProjeto
           modulo="financeiro"
-          voltar={{
-            href: "/financeiro/abertura-de-job?aba=abertos",
-            rotulo: "Visualizar Jobs",
-            titulo: "Voltar para Visualizar Jobs",
-          }}
+          reservaDoVoltar="/financeiro/abertura-de-job?aba=abertos"
           projeto={{ codigo: projeto.codigo, nome: projeto.nome }}
           agregadaHref={`/financeiro/projetos/${projeto.id}`}
           itens={itensDeJobs("/financeiro/jobs/", jobsDoProjeto, null, () => true)}

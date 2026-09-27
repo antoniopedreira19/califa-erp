@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, FileText, Paperclip, Wallet } from "lucide-react";
+import { FileText, Paperclip, Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
@@ -10,6 +9,7 @@ import {
 } from "@/lib/types";
 import { ParcelasLista } from "./parcelas-lista";
 import { BaixarAnexoDesembolsoButton } from "./baixar-anexo-button";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -168,13 +168,7 @@ export default async function DesembolsoDetalhePage({
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div>
-        <Link
-          href="/financeiro/desembolsos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para desembolsos
-        </Link>
+        <BotaoVoltar reserva="/financeiro/desembolsos" />
       </div>
       <header className="space-y-2">
         <div className="flex items-center gap-3">

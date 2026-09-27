@@ -131,19 +131,13 @@ export default async function JobDetailPage({
 
 
   // Sem "Voltar para aprovações" desde a decisão 099 (22/09/2026): a
-  // produção não tem link para o financeiro — os módulos são isolados. Quem
-  // chega com `?from=financeiro` volta para o orçamento, como quem chega
-  // sem origem. O link para o orçamento fica.
-  // Desde a decisão 106 o voltar mora na faixa do projeto, com o texto
-  // encurtado (`rotulo`) e o completo no `title`.
-  const backLink =
-    fromParam === "jobs"
-      ? { href: "/jobs", label: "Voltar para jobs", rotulo: "Jobs" }
-      : {
-          href: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`,
-          label: `Voltar para orçamento ${raw.orcamento?.codigo}`,
-          rotulo: `Orçamento ${raw.orcamento?.codigo}`,
-        };
+  // produção não tem link para o financeiro — os módulos são isolados.
+  // Desde a decisão 106 o voltar mora na faixa do projeto, e desde a 108
+  // ele leva à página anterior. Isto é só a reserva, para quando não há
+  // página anterior (link colado, aba nova): a lista para quem veio com
+  // `?from=jobs`, o orçamento para os outros.
+  const reservaDoVoltar =
+    fromParam === "jobs" ? "/jobs" : `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`;
 
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   // O selo do cabeçalho: "Em faturamento" é o aberto com o envio completo
@@ -157,11 +151,7 @@ export default async function JobDetailPage({
             os mesmos da agregada — sem os cancelados, menos este. */}
         <FaixaDoProjeto
           modulo="jobs"
-          voltar={{
-            href: backLink.href,
-            rotulo: backLink.rotulo,
-            titulo: backLink.label,
-          }}
+          reservaDoVoltar={reservaDoVoltar}
           projeto={{
             codigo: raw.projeto?.codigo ?? "",
             nome: raw.projeto?.nome ?? "",
@@ -335,6 +325,7 @@ export default async function JobDetailPage({
         }
         planilha={
           <JobRealizadoSection
+            confirmarSaidaParaOrcamento={false}
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}

@@ -796,7 +796,10 @@ export function FornecedorForm({
           <UserCheck className="h-3.5 w-3.5" />
           Usar este cadastro
         </button>
-      ) : (
+      ) : emDialog ? null : (
+        // Dentro de PP, BV, conta a pagar ou desembolso o cadastro não sai
+        // da tela (decisão 108, D5): o inativo fica só com o aviso, e quem
+        // cuida dos cadastros reativa. Abrir o cadastro é coisa da página.
         <Link
           href={`/fornecedores/${duplicado.id}`}
           prefetch={false}

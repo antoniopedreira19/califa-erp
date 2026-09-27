@@ -43,6 +43,7 @@ import {
   type TituloElegivelParaRemessa,
 } from "./remessa-cnab-dialog";
 import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao, DesembolsoStatus } from "@/lib/types";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -1600,6 +1601,7 @@ export default async function PedidosCompraFinanceiroPage({
 
   return (
     <div className="space-y-8">
+      <BotaoVoltar reserva="/financeiro" />
       <PageHeader
         eyebrow="FINANCEIRO"
         title="Contas a Pagar"

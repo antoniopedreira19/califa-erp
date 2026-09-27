@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Edit, Pause, Play, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ContaRecorrenteDrawer } from "../../conta-recorrente-drawer";
@@ -17,6 +16,7 @@ import type {
   RateioLinhaInput,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import { useVoltar } from "@/components/voltar/botao-voltar";
 
 // ---------------------------------------------------------------------------
 // Tipos auxiliares compartilhados
@@ -206,7 +206,7 @@ export function ExcluirRecorrenteButton({
   descricao,
   geradasCount,
 }: ExcluirProps) {
-  const router = useRouter();
+  const { irVoltar } = useVoltar("/financeiro/contas-a-pagar");
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
 
@@ -223,7 +223,9 @@ export function ExcluirRecorrenteButton({
         return;
       }
       setOpen(false);
-      router.push("/financeiro/contas-a-pagar");
+      // Volta para onde a pessoa estava (decisão 108): a aba de Contas a
+      // Pagar de onde abriu, ou a recorrência de onde abriu a ocorrência.
+      irVoltar();
     });
   }
 

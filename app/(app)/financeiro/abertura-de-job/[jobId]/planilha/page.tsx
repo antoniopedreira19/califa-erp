@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Lock, Table2 } from "lucide-react";
+import { Lock, Table2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -15,6 +14,7 @@ import { saveDoJob } from "@/lib/data/saves";
 import { PlanilhaConferencia } from "./planilha-conferencia";
 import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
 import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -247,14 +247,7 @@ export default async function PlanilhaDaAberturaPage({
   return (
     <div className="flex flex-col gap-4 pb-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href={`/financeiro/abertura-de-job/${params.jobId}`}
-          prefetch={false}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3.5 py-2 text-[12.5px] font-semibold transition-colors hover:border-[#d7d7d7]"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Voltar para a abertura
-        </Link>
+        <BotaoVoltar reserva={`/financeiro/abertura-de-job/${params.jobId}`} />
         <div className="flex flex-wrap items-center gap-2.5">
           <Table2 className="h-4 w-4 text-california-red" />
           <h1 className="text-base font-bold tracking-tight">

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import { ArrowLeft, Receipt } from "lucide-react";
-import Link from "next/link";
+import { Receipt } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +22,7 @@ import type {
   TituloReceberStatus,
 } from "@/lib/types";
 import { chaveInfoDoEnvio } from "./chave-info";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -562,13 +562,7 @@ export default async function ContasReceberPage({
   return (
     <div className="space-y-8">
       <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
+        <BotaoVoltar reserva="/financeiro" />
       </div>
       <PageHeader
         eyebrow="FINANCEIRO"

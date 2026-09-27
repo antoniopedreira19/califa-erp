@@ -10,6 +10,7 @@ import {
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,7 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-8">
+      <BotaoVoltar reserva="/configuracoes" />
       <PageHeader
         eyebrow="ADMINISTRAÇÃO"
         title="Administração"

@@ -1,7 +1,6 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { FornecedorForm } from "../fornecedor-form";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export default async function NovoFornecedorPage() {
   await requireSession();
@@ -12,13 +11,7 @@ export default async function NovoFornecedorPage() {
     // coluna de explicação de cada seção.
     <div className="mx-auto max-w-5xl space-y-5">
       <div>
-        <Link
-          href="/fornecedores"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para fornecedores
-        </Link>
+        <BotaoVoltar reserva="/fornecedores" />
         <h1 className="mt-2.5 text-[28px] font-bold leading-tight tracking-tight">
           Novo fornecedor
         </h1>

@@ -1,10 +1,10 @@
-import Link from "next/link";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Cidade } from "@/lib/types";
 import { CidadesList } from "./cidades-list";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +27,7 @@ export default async function CidadesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/cadastros"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para cadastros
-        </Link>
+        <BotaoVoltar reserva="/cadastros" className="mb-3" />
         <PageHeader
           eyebrow="CADASTROS"
           title="Cidades"

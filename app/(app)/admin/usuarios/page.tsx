@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  ArrowLeft,
   Table2,
   UserPlus,
   Users,
@@ -11,6 +10,7 @@ import type { AppRole } from "@/lib/types";
 import { ConvidarUsuarioDrawer } from "./convidar-drawer";
 import { UsuariosLista, type UsuarioRow } from "./usuarios-lista";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -150,13 +150,7 @@ export default async function AdminUsuariosPage() {
 
   return (
     <div className="space-y-8">
-      <Link
-        href="/admin"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-california-red transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para Administração
-      </Link>
+      <BotaoVoltar reserva="/admin" />
 
       <PageHeader
         eyebrow="ADMINISTRAÇÃO"
