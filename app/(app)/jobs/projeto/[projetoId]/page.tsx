@@ -135,7 +135,7 @@ export default async function ProjetoAgregadoPage({
         {/* Faixa do projeto (decisão 106): os mesmos jobs desta tela. */}
         <FaixaDoProjeto
           modulo="jobs"
-          voltar={{ href: "/jobs", rotulo: "Jobs", titulo: "Voltar para jobs" }}
+          reservaDoVoltar="/jobs"
           projeto={{ codigo: projetoTyped.codigo, nome: projetoTyped.nome }}
           agregadaHref={`/jobs/projeto/${params.projetoId}`}
           itens={itensDeJobs("/jobs/", jobs, null, () => true)}

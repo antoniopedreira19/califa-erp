@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { CreditCard, ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { CreditCard, } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { CartoesList } from "./cartoes-list";
 import type { CartaoCredito } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -52,13 +52,7 @@ export default async function CartoesCreditoPage() {
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       <div>
-        <Link
-          href="/financeiro/cadastros"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para cadastros do financeiro
-        </Link>
+        <BotaoVoltar reserva="/financeiro/cadastros" className="mb-3" />
         <PageHeader
           eyebrow="FINANCEIRO"
           title="Cartões de Crédito"

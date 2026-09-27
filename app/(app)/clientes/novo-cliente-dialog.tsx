@@ -81,6 +81,9 @@ export function NovoClienteDialog({
           portais={portais}
           nomeInicial={nomeInicial}
           onCriado={onCriado}
+          // Para o campo do projeto, usar o cliente que já existe é o mesmo
+          // que usar o recém-criado: ele fica escolhido (decisão 108, D5).
+          onSelecionarExistente={onCriado}
           onSalvo={onSalvo}
           onCancelar={() => onOpenChange(false)}
         />

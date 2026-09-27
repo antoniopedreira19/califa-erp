@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
@@ -7,6 +5,7 @@ import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas, getEmpresaPrincipal } from "@/lib/data/empresas";
 import type { CategoriaDominio, Cliente, Regional } from "@/lib/types";
 import { ProjetoForm, type ProdutoOption } from "../projeto-form";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -61,13 +60,7 @@ export default async function NovoProjetoPage() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div>
-        <Link
-          href="/orcamentos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para projetos
-        </Link>
+        <BotaoVoltar reserva="/orcamentos" />
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Novo projeto</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           O código do projeto é gerado automaticamente no formato{" "}

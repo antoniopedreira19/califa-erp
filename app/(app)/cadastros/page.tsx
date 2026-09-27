@@ -3,6 +3,7 @@ import { Users, Building2, Building, ArrowRight, FolderKanban, type LucideIcon }
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function CadastrosPage() {
 
   return (
     <div className="space-y-8">
+      <BotaoVoltar reserva="/configuracoes" />
       <PageHeader
         eyebrow="CADASTROS"
         title="Cadastros da empresa"

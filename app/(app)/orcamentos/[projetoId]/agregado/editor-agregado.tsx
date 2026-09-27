@@ -92,6 +92,7 @@ import {
   marcarSaveDaLinha,
   salvarConsumoDeSave,
 } from "../[orcId]/versoes/[versaoId]/save-actions";
+import { useProtegerSaida } from "@/components/voltar/estado";
 
 interface Props {
   projeto: {
@@ -321,6 +322,11 @@ export function EditorAgregado({
     window.addEventListener("beforeunload", avisar);
     return () => window.removeEventListener("beforeunload", avisar);
   }, [sujo]);
+
+  // O `beforeunload` só pega fechar a aba e recarregar. O voltar e as abas
+  // da faixa do projeto navegam por dentro do app e passariam direto: com
+  // alteração não salva, eles caem na mesma confirmação (decisão 108).
+  useProtegerSaida(sujo, (href) => setAskSair(href));
 
   // ---------- rótulos ----------
   const nomePor = React.useMemo(

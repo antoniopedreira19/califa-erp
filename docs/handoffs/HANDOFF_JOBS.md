@@ -4209,6 +4209,8 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   a Visão agregada e para cada job do projeto. O "Voltar para" solto saiu;
   o destino é o mesmo (`/jobs` com `?from=jobs`, o orçamento sem ele), com
   o texto encurtado na faixa e o completo no `title`.
+  ⚠️ **Revisto em 27/09/2026 (decisão 108):** o voltar da faixa leva à
+  página anterior à faixa; esses destinos viraram só a reserva.
 - Entram os jobs da agregada — todos menos os cancelados — e o job aberto,
   sempre.
 - **As abas do job gravam o `?aba=`** (`job-tabs.tsx`, `replaceState`),
@@ -4317,6 +4319,24 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   no padrão sem filtro (`JobsList.meusInicial`).
 
 ---
+
+## ⚠️ Nota de 2026-09-27 — botão Voltar (decisão 108)
+
+- **Página do job e agregada de Jobs:** o voltar da faixa virou o botão
+  contornado "Voltar", com o destino num balão. Ele leva à página de onde
+  a pessoa entrou no projeto: do job aberto pelo orçamento, volta ao
+  orçamento; trocar de job ou abrir a agregada pela faixa não muda isso
+  (as abas da faixa não contam como página anterior). O `?from=jobs`
+  ficou só para escolher a reserva (sem página anterior: `/jobs` com ele,
+  o orçamento sem ele).
+- **Errata com alteração não registrada** pergunta "Sair sem registrar a
+  errata?" antes de sair pelo voltar ou pelas abas da faixa. O rascunho só
+  vive na memória da tela e se perdia sem aviso.
+- **`JobRealizadoSection`** ganhou `confirmarSaidaParaOrcamento`
+  (obrigatória): no financeiro, "Ver versão aprovada" pede confirmação de
+  saída de módulo. Na produção passa `false` e nada muda.
+- **Ficha do job:** no financeiro, o link "Projeto" de job sem projeto do
+  financeiro (vai para `/orcamentos/…`) também pede a confirmação.
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 

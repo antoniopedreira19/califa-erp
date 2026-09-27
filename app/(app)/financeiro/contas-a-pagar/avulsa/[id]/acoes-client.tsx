@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Trash2, CreditCard, Ban, Edit } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -23,6 +22,7 @@ import type {
   RateioLinhaInput,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import { useVoltar } from "@/components/voltar/botao-voltar";
 
 // ---------------------------------------------------------------------------
 // EditarAvulsaButton
@@ -101,7 +101,7 @@ interface ExcluirProps {
 }
 
 export function ExcluirAvulsaButton({ contaId, descricao, recorrenteId }: ExcluirProps) {
-  const router = useRouter();
+  const { irVoltar } = useVoltar("/financeiro/contas-a-pagar");
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [pararRecorrencia, setPararRecorrencia] = React.useState<"nao" | "sim">("nao");
@@ -116,7 +116,9 @@ export function ExcluirAvulsaButton({ contaId, descricao, recorrenteId }: Exclui
         return;
       }
       setOpen(false);
-      router.push("/financeiro/contas-a-pagar");
+      // Volta para onde a pessoa estava (decisão 108): a aba de Contas a
+      // Pagar de onde abriu, ou a recorrência de onde abriu a ocorrência.
+      irVoltar();
     });
   }
 

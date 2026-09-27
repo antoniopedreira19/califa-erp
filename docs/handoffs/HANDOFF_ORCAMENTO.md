@@ -4413,6 +4413,11 @@ limpos.
   pela prop `faixa` (obrigatória).
 - Navegar pela faixa com alteração não salva na agregada perde o rascunho,
   como o voltar de antes já perdia.
+- ⚠️ **Revisto em 27/09/2026 (decisão 108):** seta e projeto deixaram de ser
+  um link só — o voltar virou o botão "Voltar" e leva à página anterior; o
+  chip do projeto segue levando à tela do projeto. E a agregada com
+  alteração não salva agora pergunta antes de sair pelo voltar ou pela
+  faixa.
 
 ## ⚠️ Nota de 2026-09-24 (2) — o item muda de lugar pela alça (decisão 104)
 
@@ -4514,6 +4519,29 @@ limpos.
 - A agregada do orçamento já seguia essa regra e não mudou.
 
 ---
+
+## ⚠️ Nota de 2026-09-27 — botão Voltar (decisão 108)
+
+- **Todas as telas de Orçamentos** trocaram o link cinza "Voltar para …"
+  pelo botão contornado "Voltar" (`components/voltar/botao-voltar.tsx`),
+  com o destino num balão ao passar o mouse. Lista de projetos, novo
+  projeto, categorias, tela do projeto, novo orçamento, e a faixa do
+  orçamento e da agregada.
+- **O voltar leva à página anterior**, e não mais a um destino fixo. As
+  abas da faixa do projeto não contam: do orçamento aberto pela faixa, o
+  voltar leva para onde a pessoa estava antes de entrar no projeto. O
+  destino fixo de antes virou a reserva, para quando não há página
+  anterior (link colado, aba nova).
+- **Faixa:** o voltar é o botão; o chip do projeto continua levando à
+  tela do projeto.
+- **Agregada com alteração não salva** pergunta "Sair sem salvar?" também
+  no voltar e nas abas da faixa (antes perdia o rascunho sem aviso).
+- **Tela do projeto** registra o nome ("TES-0002/26 · Teste Demo") para o
+  balão de quem sair dela.
+- **Cliente novo pelo "+" do projeto:** CNPJ de cliente ativo mostra
+  "Usar este cadastro", que o escolhe no campo; cliente inativo fica só
+  com o aviso. O "Abrir cadastro existente" trocava de página e perdia o
+  projeto. Na página de Clientes o link continua.
 
 ## ⚠️ Nota de 2026-09-25 — item que nasce em save não gravava (corrigido)
 

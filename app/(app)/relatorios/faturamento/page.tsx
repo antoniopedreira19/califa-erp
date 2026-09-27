@@ -10,6 +10,7 @@ import { TabelaFaturamento, type LinhaFaturamento } from "./tabela-faturamento";
 // mesmas dimensões (cache warm compartilhado).
 import { carregarLinhas } from "../rentabilidade/carregar-linhas";
 import { carregarDimensoesRelatorio } from "../rentabilidade/carregar-dimensoes";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,7 @@ export default async function FaturamentoPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
+      <BotaoVoltar reserva="/relatorios" />
       <PageHeader
         eyebrow="RELATÓRIOS"
         title={`Faturamento de Jobs ${filtros.ano}`}

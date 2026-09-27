@@ -318,6 +318,24 @@ Mapa atual:
 
 **Case study** (2026-07-30): 8 páginas top-level e sub-hub estavam com kicker/breadcrumb + título sem ícone, quebrando o reconhecimento visual. Padronizado em massa; `/financeiro` que já tinha o padrão virou referência.
 
+⚠️ **Revisto em 27/09/2026 (decisão 108):** o "← Voltar para {contexto}" das linhas de detalhe e formulário acima virou o botão da seção seguinte.
+
+## Botão Voltar
+
+Toda página que não é o topo do módulo (rota direta da sidebar) tem o **`BotaoVoltar`** (`components/voltar/botao-voltar.tsx`), na primeira linha, acima do kicker ou do código. Nas telas com a faixa do projeto (decisão 106), ele é o primeiro item da faixa (`variante="faixa"`).
+
+```tsx
+<BotaoVoltar reserva="/financeiro" />
+```
+
+- **Desenho (A2, decisão 108):** botão contornado, 36 px (32 na faixa), seta de 16 px e a palavra "Voltar". O destino aparece num balão grafite ao passar o mouse ou focar pelo teclado. Nunca escrever o destino no botão, nem voltar ao link cinza de 12 px.
+- **Leva à página anterior.** `reserva` é só para quando não há página anterior (link colado, aba nova) ou quando ela é a Home: use o destino hierárquico de sempre (a lista, o hub, o início do módulo).
+- **Não é para aba, drawer, pop-up ou formulário.** Isso se fecha dentro da própria página (X, Cancelar, clicar fora, trocar de aba). O botão só leva a outra página.
+- **Tela com alteração não salva** chama `useProtegerSaida(sujo, (href) => …)` (`components/voltar/estado.ts`) e mostra a própria confirmação; o voltar e as abas da faixa passam por ela.
+- **Aba que grava a URL** usa `window.history.replaceState(null, "", url)`. Com o `history.state` atual no argumento, o Next não repassa a troca ao `useSearchParams` e o voltar perde a aba.
+
+**Case study** (2026-09-25): o voltar era um link cinza de 12 px com destino fixo; 32 caminhos voltavam para a tela errada, e 6 telas não tinham voltar. Mapeamento e desenhos no artifact "Botão Voltar do ERP".
+
 ## Componentes
 
 Usar shadcn/ui como base e adaptar ao padrão visual do RH:

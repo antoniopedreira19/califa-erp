@@ -1,10 +1,10 @@
-import Link from "next/link";
-import { ArrowLeft, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { ContaBancaria, EmpresaContabil } from "@/lib/types";
 import { ContasBancariasList } from "./contas-bancarias-list";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +49,7 @@ export default async function ContasBancariasPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/financeiro/cadastros"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para cadastros do financeiro
-        </Link>
+        <BotaoVoltar reserva="/financeiro/cadastros" className="mb-3" />
         <PageHeader
           eyebrow="FINANCEIRO"
           title="Contas bancárias"

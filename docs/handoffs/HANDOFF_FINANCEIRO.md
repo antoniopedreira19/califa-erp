@@ -5825,6 +5825,8 @@ era o imposto de R$ 28.318,52). Regra completa na
   Tudo dentro do módulo.
 - Job sem projeto do financeiro (anterior à migration 20260820000011) não
   tem agregada: nele fica o "Voltar para Visualizar Jobs" de antes.
+  ⚠️ **Revisto em 27/09/2026 (decisão 108):** nos dois casos o voltar é o
+  botão "Voltar" e leva à página anterior; Visualizar Jobs é a reserva.
 - **Entre jobs, a aba de seção se mantém** (o `?aba=` que as abas do job já
   gravavam). Da agregada, o job abre na Planilha Interna; com a agregada no
   **Fluxo de Caixa do Projeto**, abre no **Fluxo de Caixa do Job**, e a
@@ -5906,6 +5908,36 @@ era o imposto de R$ 28.318,52). Regra completa na
   cabeçalho e, depois do encerramento, "Finalizado · Sem faturamento".
 
 ---
+
+## ⚠️ Nota de 2026-09-27 — botão Voltar (decisão 108)
+
+- **Todas as telas do financeiro** trocaram o link cinza pelo botão
+  contornado "Voltar", com o destino num balão. **Contas a Pagar e Fluxo
+  de Caixa ganharam o voltar** (reserva: Central Financeira).
+- **O voltar leva à página anterior.** O job no financeiro volta para onde
+  foi aberto: Contas a Pagar (aba PPs), Calendário, Fila, Visualizar Jobs,
+  Conciliação. A recorrência volta para Contas a Pagar na aba
+  Recorrências; a conta avulsa aberta pela recorrência volta para ela.
+  Aberta por um card da Home, a tela volta para a Central Financeira, e
+  não para a Home.
+- **Conciliação e fatura do cartão** abrem o job do financeiro
+  (`/financeiro/jobs/…`), e não mais o da produção com `?from=financeiro`.
+- **"Ver versão aprovada"** (planilha do job) e o **"Projeto"** da ficha de
+  job sem projeto do financeiro pedem a confirmação de saída de módulo. Do
+  orçamento aberto assim, o voltar traz de volta ao job do financeiro.
+- **Barra da revisão da abertura:** "Voltar para a fila" virou "Voltar",
+  com o mesmo destino do botão do topo (a fila, ou Visualizar Jobs para
+  quem veio de lá).
+- **"Voltar para a aprovação"** na planilha do job virou **"Ir para a
+  aprovação"**: é troca de aba, não voltar.
+- **Excluir conta avulsa ou recorrência** volta para onde a pessoa estava.
+- **Contas a Pagar:** a troca de aba passou a escrever a URL com
+  `replaceState(null, …)` — com o `history.state` no argumento o Next não
+  repassava a aba ao `useSearchParams`. E a busca e o "só abertas" da capa
+  do Cartão sobrevivem à ida e volta da fatura.
+- **Pendente:** na fila, "Visualizar planilha interna" do formulário de
+  abertura troca de página, e o que foi digitado e não salvo se perde ao
+  voltar (R3 do mapeamento).
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
