@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
+import { saidaSegurada } from "@/components/voltar/estado";
 
 /**
  * Link que leva para FORA do módulo financeiro, avisando antes.
@@ -59,6 +60,12 @@ export function LinkSaidaDeModulo({
         cancelLabel="Ficar no financeiro"
         onConfirm={() => {
           setAberto(false);
+          // Tela com alteração ainda não gravada (a abertura de job, ou
+          // qualquer uma que use `useProtegerSaida`) pergunta antes de
+          // descartar — a mesma proteção do Voltar (decisões 108 e 111).
+          // Sem isso, confirmar a saída de módulo levava embora o que
+          // estava preenchido sem aviso.
+          if (saidaSegurada(href)) return;
           router.push(href);
         }}
       />
