@@ -553,8 +553,8 @@ export async function parseOficial(
   }
 
   /** Unitário, QT ou D/M internacional, com as mesmas guardas do nacional:
-   *  unitário inválido ou negativo vira 0; QT e D/M precisam ser positivos
-   *  (CHECK do banco) e viram 1. */
+   *  unitário inválido ou negativo vira 0; QT e D/M inválidos ou negativos
+   *  viram 1, e zero fica zero. */
   function numeroDaLinha(
     v: unknown,
     bruto: string,
@@ -578,9 +578,9 @@ export async function parseOficial(
       }
       return padrao;
     }
-    // QT zero vale desde 15/09/2026 (decisão 078); D/M continua > 0.
-    const minimoOk = tipo === "dias" ? lido.n > 0 : lido.n >= 0;
-    if (!minimoOk) {
+    // QT zero vale desde 15/09/2026 (decisão 078), e D/M zero desde
+    // 27/09/2026 (decisão 109): só o negativo vira o padrão.
+    if (lido.n < 0) {
       warnings.push({
         linha: rowNumber,
         coluna: letra(col),
@@ -589,7 +589,7 @@ export async function parseOficial(
             ? `Valor unitário negativo (${bruto}) — assumido R$ 0,00.`
             : tipo === "quantidade"
               ? `Quantidade negativa (${bruto}) — assumida 1.`
-              : `${rotulo} ${bruto || "0"} não é aceito (precisa ser maior que zero) — ${assumido}.`,
+              : `Dias/meses negativo (${bruto}) — assumido 1.`,
         severidade: "ajuste",
       });
       return padrao;
@@ -913,10 +913,11 @@ export async function parseOficial(
       valorUnitario = 0;
     }
 
-    // D/M precisa ser POSITIVO (CHECK `itens_dias_meses_positivo`): zero ou
-    // negativo derrubaria o insert inteiro, então vira 1 com aviso. QT zero
-    // vale desde 15/09/2026 (decisão 078) — na planilha interna ele marca o
-    // item que não é cobrado no mês —, e só QT negativo vira 1.
+    // Zero entra como zero nos dois fatores: a QT desde 15/09/2026 (decisão
+    // 078) — na planilha interna ela marca o item que não é cobrado no mês —
+    // e o D/M desde 27/09/2026 (decisão 109), para a importação não emendar
+    // a planilha (o "Bonificado 100%" com D/M 0 virava R$ 3.000 cobrados).
+    // Vazio ou ilegível vira 1, e só o negativo vira 1 com aviso.
     const qtd = toNumber(colD);
     const dm = toNumber(colE);
 
@@ -948,19 +949,19 @@ export async function parseOficial(
         severidade: "ajuste",
       });
     }
-    if (diasMeses <= 0) {
+    if (diasMeses < 0) {
       warnings.push({
         linha: rowNumber,
         coluna: letra(col.dm),
-        motivo: `Dias/meses ${colE || "0"} não é aceito (precisa ser maior que zero) — assumido 1.`,
+        motivo: `Dias/meses negativo (${colE}) — assumido 1.`,
         severidade: "ajuste",
       });
       diasMeses = 1;
     }
 
     // Bloco PLANEJADO: H · R$, I · QT, J · D/M. K (TT) e L (RENTA) são
-    // calculados pelo sistema. Vazio entra como zero — planejado pode ser
-    // zero no banco, diferente de QT e D/M do orçado.
+    // calculados pelo sistema. Vazio entra como zero — no orçado, QT e D/M
+    // vazios viram 1; no planejado, vazio é zero.
     // Na exportação do ERP a H é o id oculto e a I, o crédito consumido —
     // nada disso é planejado. Até 14/09/2026 a I entrava como quantidade
     // planejada.
