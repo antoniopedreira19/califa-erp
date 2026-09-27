@@ -129,6 +129,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 107 | [A coluna Save nasce recolhida, e só abre sozinha onde já há save](107-coluna-save-nasce-recolhida.md) | 2026-09-25 |
 | 108 | [O botão Voltar: visível, igual em todas as telas, e leva à página anterior](108-botao-voltar.md) | 2026-09-27 |
 | 109 | [Dias/meses do orçado pode ser zero, e não trava a aprovação](109-dias-meses-zero-no-orcado.md) | 2026-09-27 |
+| 110 | [Importação de planilha: modal no centro, escolha da aba e arquivo de até 10 MB](110-importacao-de-planilha-em-modal.md) | 2026-09-27 |
 | 111 | [A abertura de job mostra as abas do job, e trocar de aba não apaga o preenchimento](111-abertura-de-job-com-as-abas-do-job.md) | 2026-09-27 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
@@ -142,4 +143,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 112.** (091 e 092 existem na pasta e ainda não estão nesta tabela. A 110 está em uso na frente da importação de planilha, ainda sem linha aqui.)
+**Próximo número livre: 112.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

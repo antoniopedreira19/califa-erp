@@ -423,34 +423,62 @@ function abaTemBlocosDeMes(ws: ExcelJS.Worksheet): boolean {
 
 // ---------- parser principal ----------
 
-export async function parseOficial(
-  buffer: ArrayBuffer | Buffer,
-  opcoes: {
-    /** Orçamento de Fee ou Always On: lê os blocos de mês (decisão 078). */
-    mensal?: boolean;
-    /** Orçamento de serviço Interno (decisão 105): todo item entra com
-     *  este tipo, seja qual for a coluna de tipo — inclusive a linha com
-     *  tipo em branco ou desconhecido, que nos outros orçamentos é
-     *  descartada. A coluna continua servindo para reconhecer a linha de
-     *  agrupamento (sem valor e sem tipo). */
-    tipoFixo?: TipoCusto;
-  } = {},
-): Promise<ParseResultado> {
-  const mensal = opcoes.mensal === true;
-  const tipoFixo = opcoes.tipoFixo;
+/** Abre o arquivo. Separado do parse para a leitura de TODAS as abas (a
+ *  escolha de aba na importação, decisão 110) abrir o arquivo uma vez só:
+ *  abrir é a parte cara — 1 s e 300 MB numa planilha de 1,2 MB. */
+export async function carregarPlanilha(buffer: ArrayBuffer | Buffer): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
   // ExcelJS.xlsx.load aceita ArrayBuffer/Buffer. Tipagem antiga do ExcelJS
   // não bate com o Buffer generic novo do @types/node — cast explícito.
   await wb.xlsx.load(buffer as any);
+  return wb;
+}
 
-  let ws = wb.worksheets.find((w) =>
-    ABAS_CONHECIDAS.includes(semAcento(w.name)),
-  );
+/** Aba com o nome que a agência dá à planilha do orçamento. */
+export function ehAbaConhecida(nome: string): boolean {
+  return ABAS_CONHECIDAS.includes(semAcento(nome));
+}
+
+/** Aba oculta no Excel. `veryHidden` é a que nem o menu "Reexibir" mostra. */
+export function abaOculta(ws: ExcelJS.Worksheet): boolean {
+  return ws.state === "hidden" || ws.state === "veryHidden";
+}
+
+export interface OpcoesDoParse {
+  /** Orçamento de Fee ou Always On: lê os blocos de mês (decisão 078). */
+  mensal?: boolean;
+  /** Orçamento de serviço Interno (decisão 105): todo item entra com
+   *  este tipo, seja qual for a coluna de tipo — inclusive a linha com
+   *  tipo em branco ou desconhecido, que nos outros orçamentos é
+   *  descartada. A coluna continua servindo para reconhecer a linha de
+   *  agrupamento (sem valor e sem tipo). */
+  tipoFixo?: TipoCusto;
+  /** A aba escolhida na tela (decisão 110), pelo nome exato — com os
+   *  espaços do começo e do fim, que distinguem abas de nome parecido.
+   *  Sem ela, vale a regra antiga: "Padrão"/"Oficial", no mensal a primeira
+   *  com blocos de mês, e por fim a primeira aba do arquivo. */
+  aba?: string;
+}
+
+export async function parseOficial(
+  entrada: ArrayBuffer | Buffer | ExcelJS.Workbook,
+  opcoes: OpcoesDoParse = {},
+): Promise<ParseResultado> {
+  const mensal = opcoes.mensal === true;
+  const tipoFixo = opcoes.tipoFixo;
+  const wb =
+    entrada instanceof ExcelJS.Workbook ? entrada : await carregarPlanilha(entrada);
+
+  const escolhida = opcoes.aba;
+  let ws =
+    escolhida !== undefined
+      ? wb.worksheets.find((w) => w.name === escolhida)
+      : wb.worksheets.find((w) => ABAS_CONHECIDAS.includes(semAcento(w.name)));
   // Mensal: a planilha interna tem uma aba por regional (SUL, SP…) com os
   // blocos de mês, e costuma vir junto de abas de controle. Vale a primeira
   // que tiver blocos; havendo mais de uma, o aviso diz qual foi lida.
   const avisosDaAba: ImportacaoWarning[] = [];
-  if (!ws && mensal) {
+  if (!ws && mensal && escolhida === undefined) {
     const comMeses = wb.worksheets.filter(abaTemBlocosDeMes);
     ws = comMeses[0];
     if (comMeses.length > 1) {
@@ -463,11 +491,11 @@ export async function parseOficial(
       });
     }
   }
-  if (!ws) ws = wb.worksheets[0];
+  if (!ws && escolhida === undefined) ws = wb.worksheets[0];
 
   if (!ws) {
     return {
-      aba: "",
+      aba: escolhida ?? "",
       grupos: [],
       meses: [],
       modelo: "nacional",
@@ -475,7 +503,10 @@ export async function parseOficial(
       warnings: [
         {
           linha: 0,
-          motivo: "Planilha sem abas legíveis.",
+          motivo:
+            escolhida !== undefined
+              ? `A aba "${escolhida}" não está no arquivo.`
+              : "Planilha sem abas legíveis.",
           severidade: "ignorada",
         },
       ],
