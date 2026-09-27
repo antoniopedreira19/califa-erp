@@ -4543,6 +4543,27 @@ limpos.
   com o aviso. O "Abrir cadastro existente" trocava de página e perdia o
   projeto. Na página de Clientes o link continua.
 
+---
+
+## ⚠️ Nota de 2026-09-27 — dias/meses do orçado pode ser zero (decisão 109)
+
+- **D/M zero vale, como a QT** (decisão 078): a edição da planilha, o
+  editor do orçamento e a importação aceitam 0; negativo continua
+  recusado. Item novo segue nascendo com QT 1 e D/M 1.
+- **A importação não troca mais o 0 por 1.** Vazio ou ilegível vira 1;
+  só o negativo vira 1 com aviso. O "Motion (Bonificado 100%)" da
+  planilha da Budweiser (R$ 3.000 × 1 × 0) entra zerado, e o orçado
+  importado bate com o TOTAL da planilha (R$ 152.775,00).
+- **A aprovação não trava por QT ou D/M zero.** Quem analisa é o
+  financeiro, na abertura. O R$ unitário zerado continua travando o
+  "Salvar orçamentos" e a aprovação (decisão 011).
+- Banco: migration `20260927100001` trocou `itens_dias_meses_positivo`
+  (> 0) por `itens_dias_meses_nao_negativo` (>= 0). A nota de 15/09 dizia
+  "D/M segue > 0"; não vale mais.
+- Teste em `lib/importacao/dias-meses-zero.test.ts`.
+
+---
+
 ## ⚠️ Nota de 2026-09-25 — item que nasce em save não gravava (corrigido)
 
 **De 22/09 a 25/09/2026, nenhum item de versão conseguia nascer em save.**
