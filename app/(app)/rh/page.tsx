@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Users, ArrowRight, Receipt, type LucideIcon } from "lucide-react";
+import {
+  Users,
+  ArrowRight,
+  Receipt,
+  FileSignature,
+  type LucideIcon,
+} from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -19,33 +25,59 @@ export default async function CentralRHPage() {
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth() + 1;
 
-  const [colaboradoresAtivosRes, pendenciasRes] = await Promise.all([
-    supabase
-      .from("colaboradores")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo"),
-    supabase
-      .from("folhas_pagamento")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("competencia_ano", anoAtual)
-      .eq("competencia_mes", mesAtual)
-      .eq("status", "pendente_correcao"),
-  ]);
+  const [colaboradoresAtivosRes, pendenciasRes, contratacoesEmAndamentoRes] =
+    await Promise.all([
+      supabase
+        .from("colaboradores")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "ativo"),
+      supabase
+        .from("folhas_pagamento")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("competencia_ano", anoAtual)
+        .eq("competencia_mes", mesAtual)
+        .eq("status", "pendente_correcao"),
+      supabase
+        .from("contratacoes")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .in("status", [
+          "rascunho",
+          "proposta_enviada",
+          "aceite_recebido",
+          "dados_completos",
+          "contrato_gerado",
+          "contrato_assinado",
+        ]),
+    ]);
   const colaboradoresAtivos = colaboradoresAtivosRes.count ?? 0;
   const pendenciasNoMes = pendenciasRes.count ?? 0;
+  const contratacoesEmAndamento = contratacoesEmAndamentoRes.count ?? 0;
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow="RH"
         title="Recursos Humanos"
-        description="Cadastro de colaboradores, alocação por empresa e regional, e histórico salarial. Benefícios, férias e folha entram nas próximas fases."
+        description="Pipeline de contratação, cadastro de colaboradores, alocação por empresa e regional, histórico salarial e folha mensal."
         icon={Users}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <RhCard
+          href="/rh/contratacoes"
+          icon={FileSignature}
+          title="Contratações"
+          description="Pipeline que antecede o cadastro: proposta, aceite, coleta de dados, contrato, assinatura e efetivação."
+          count={contratacoesEmAndamento}
+          countLabel={
+            contratacoesEmAndamento === 1
+              ? "em andamento"
+              : "em andamento"
+          }
+        />
         <RhCard
           href="/rh/colaboradores"
           icon={Users}
