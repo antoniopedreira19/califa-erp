@@ -4490,9 +4490,10 @@ código publicado logo depois (`3305751`).
 
 ## ⚠️ Nota de 2026-09-28 (5) — a produção vê as Alterações do Financeiro (decisão 115)
 
-- **O financeiro passou a editar o orçado** do job aberto, na Planilha
-  Interna dele: R$ Unit., QT e D/M, sem aprovação e sem revisão da
-  abertura, até a primeira nota emitida ou o encerramento do job. No
+- **O financeiro passou a editar o orçado** do job, na Planilha Interna
+  dele: R$ Unit., QT e D/M, sem aprovação e sem revisão da abertura, desde
+  a conferência na abertura até a primeira nota emitida ou o encerramento
+  do job. No
   serviço Interno o planejado acompanha o orçado, como na errata; a curva
   de desembolso não. A planilha da produção não muda:
   segue só com o "Realizar errata", e a errata continua valendo sobre os
