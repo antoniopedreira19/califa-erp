@@ -278,6 +278,22 @@ export async function atualizarProjeto(
 
   const supabase = createClient();
 
+  // Decisão 118: projeto arquivado é só leitura — só o Reativar muda algo
+  // nele. O banco recusa também; aqui a mensagem chega inteira.
+  const { data: atual } = await supabase
+    .from("projetos")
+    .select("status")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ status: string }>();
+  if (!atual) return { ok: false, message: "Projeto não encontrado." };
+  if (atual.status === "arquivado") {
+    return {
+      ok: false,
+      message: "Projeto arquivado é só leitura. Reative o projeto para editar.",
+    };
+  }
+
   const { regional_ids, responsavel_ids, equipe_ids, ...campos } = parsed.data;
 
   const check = await validarProdutoERegionais(

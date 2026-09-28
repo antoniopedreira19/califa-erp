@@ -20,6 +20,8 @@ export type AuditAction =
   | "fornecedor.inativado"
   | "orcamento.criado"
   | "orcamento.editado"
+  | "orcamento.arquivado"
+  | "orcamento.reativado"
   | "projeto.criado"
   | "projeto.atualizado"
   | "projeto.arquivado"

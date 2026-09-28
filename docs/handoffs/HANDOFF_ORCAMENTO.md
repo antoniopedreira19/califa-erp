@@ -4661,3 +4661,37 @@ aplicada na hora combinada com a frente do Antonio, junto da
   barram.
 - **Nenhuma migration.**
 
+## ⚠️ Nota de 2026-09-28 (2) — o orçamento se arquiva, o arquivado é só leitura, e o status é do sistema (decisões 117 e 118)
+
+- **Arquivar orçamento** (`arquivarOrcamento` / `reativarOrcamento` em
+  `[projetoId]/actions.ts`):
+  - o botão fica no rodapé do "Editar orçamento", como no projeto;
+  - o Reativar fica no aviso do topo (`orcamentos/aviso-arquivado.tsx`,
+    que serve ao projeto e ao orçamento);
+  - colunas novas: `orcamentos.arquivado_em` e `arquivado_por`.
+- **Onde o arquivado some:** agregada (`.is("arquivado_em", null)`), faixa
+  (`itensDeOrcamentos`), Exportar do projeto, lista de projetos e home.
+- **Lista do projeto** (`orcamentos-list.tsx`): filtro Ativos / Arquivados
+  / Todos e selo "Arquivado".
+- **Arquivado é só leitura:**
+  - na página do orçamento, `arquivado` entra em `protegido`,
+    `podeCriarVersao`, `readOnly` da planilha e `MetaVersao`;
+  - somem `AprovacaoActions`, `FluxoAbertura` e o "Excluir versão"
+    (`AcoesVersao.arquivado`);
+  - no projeto arquivado, somem "Editar projeto", "Importar" e "Novo
+    orçamento", e a agregada recebe `projetoArquivado`;
+  - as actions de projeto, orçamento e importação recusam com mensagem
+    própria, e o banco recusa por trás.
+- **Status do orçamento só pelo sistema:**
+  - o campo Status saiu do `OrcamentoForm`, do `orcamentoSchema` e do
+    `extractInput`;
+  - `ORCAMENTO_STATUS_EDITAVEIS` virou `ORCAMENTO_STATUS_MANUAIS_ANTIGOS`
+    (os que o Reativar leva a rascunho).
+- **Migrations:** `20260928400002` (arquivar + só leitura) e
+  `20260928400003` (guarda do status). Conferidas antes de aplicar, numa
+  transação desfeita.
+- **Testado pela tela:**
+  - TES-P001/26-03: arquivar, filtro, agregada, abas e reativar;
+  - TES-P003/26: arquivar e reativar o projeto;
+  - "Salvar alterações" sem o campo Status.
+

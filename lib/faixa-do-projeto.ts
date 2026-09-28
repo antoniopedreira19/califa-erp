@@ -98,18 +98,25 @@ function comQuery(href: string, params: URLSearchParams): string {
 
 /**
  * Orçamentos do projeto como abas. Entram os mesmos da visão agregada —
- * todos, menos cancelados e recusados —, e o aberto na tela sempre, para a
- * faixa nunca ficar sem a aba marcada.
+ * todos, menos arquivados (decisão 118), cancelados e recusados —, e o
+ * aberto na tela sempre, para a faixa nunca ficar sem a aba marcada.
  */
 export function itensDeOrcamentos(
   projetoId: string,
-  orcamentos: Array<{ id: string; codigo: string; nome: string; status: string }>,
+  orcamentos: Array<{
+    id: string;
+    codigo: string;
+    nome: string;
+    status: string;
+    arquivado_em: string | null;
+  }>,
   atualId: string | null,
 ): ItemDaFaixa[] {
   return orcamentos
     .filter(
       (o) =>
-        o.id === atualId || (o.status !== "cancelado" && o.status !== "recusado"),
+        o.id === atualId ||
+        (!o.arquivado_em && o.status !== "cancelado" && o.status !== "recusado"),
     )
     .sort((a, b) => a.codigo.localeCompare(b.codigo))
     .map((o) => ({

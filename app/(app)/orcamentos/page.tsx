@@ -120,7 +120,9 @@ export default async function ProjetosPage({
             "id, projeto_id, status, gp_responsavel_id, produtor_id, created_by, updated_at",
           )
           .in("projeto_id", projetoIds)
-          .eq("tenant_id", session.activeTenant.id);
+          .eq("tenant_id", session.activeTenant.id)
+          // Arquivado (decisão 118) saiu da mesa: não conta no projeto.
+          .is("arquivado_em", null);
         if (filtro === "aguardando_aprovacao") {
           q = q.eq("status", "em_revisao");
         } else if (filtro === "parados") {

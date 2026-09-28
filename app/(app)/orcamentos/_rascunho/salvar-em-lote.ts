@@ -152,7 +152,6 @@ export async function salvarOrcamentosDoProjeto(
     const parsed = orcamentoSchema.safeParse({
       codigo: "",
       nome: job.nome ?? "",
-      status: "rascunho",
       categoria_id: job.categoria_id ?? "",
       servico_id: job.servico_id ?? "",
       descritivo: job.descritivo ?? "",

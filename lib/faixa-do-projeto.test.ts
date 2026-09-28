@@ -86,16 +86,17 @@ test("Orçamentos: o link é a rota do orçamento, sem query", () => {
   );
 });
 
-test("Orçamentos: fora cancelados e recusados, menos o aberto; cadeado e revisão", () => {
+test("Orçamentos: fora arquivados, cancelados e recusados, menos o aberto; cadeado e revisão", () => {
   const itens = itensDeOrcamentos(
     "p",
     [
-      { id: "o3", codigo: "TES-0002/26-03", nome: "Teste 3", status: "job_criado" },
-      { id: "o1", codigo: "TES-0002/26-01", nome: "Teste 1", status: "aprovado" },
-      { id: "o2", codigo: "TES-0002/26-02", nome: "Teste 2", status: "rascunho" },
-      { id: "o4", codigo: "TES-0002/26-04", nome: "Cancelado", status: "cancelado" },
-      { id: "o5", codigo: "TES-0002/26-05", nome: "Recusado aberto", status: "recusado" },
-      { id: "o6", codigo: "TES-0002/26-06", nome: "Revisão", status: "em_revisao" },
+      { id: "o3", codigo: "TES-0002/26-03", nome: "Teste 3", status: "job_criado", arquivado_em: null },
+      { id: "o1", codigo: "TES-0002/26-01", nome: "Teste 1", status: "aprovado", arquivado_em: null },
+      { id: "o2", codigo: "TES-0002/26-02", nome: "Teste 2", status: "rascunho", arquivado_em: null },
+      { id: "o4", codigo: "TES-0002/26-04", nome: "Cancelado", status: "cancelado", arquivado_em: null },
+      { id: "o5", codigo: "TES-0002/26-05", nome: "Recusado aberto", status: "recusado", arquivado_em: null },
+      { id: "o6", codigo: "TES-0002/26-06", nome: "Revisão", status: "em_revisao", arquivado_em: null },
+      { id: "o7", codigo: "TES-0002/26-07", nome: "Arquivado", status: "rascunho", arquivado_em: "2026-09-28T12:00:00Z" },
     ],
     "o5",
   );

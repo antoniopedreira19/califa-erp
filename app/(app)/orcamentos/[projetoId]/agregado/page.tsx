@@ -90,7 +90,7 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("projetos")
       .select(
-        "id, codigo, nome, cliente_id, cliente:clientes(nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(nome)",
+        "id, codigo, nome, status, cliente_id, cliente:clientes(nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
@@ -98,7 +98,7 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("orcamentos")
       .select(
-        "id, codigo, nome, status, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
+        "id, codigo, nome, status, arquivado_em, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
         // `!categoria_id`: `orcamentos` tem duas FKs para
         // `categorias_dominio`, e o embed ambíguo derruba a query inteira.
         "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
@@ -108,6 +108,9 @@ export default async function OrcamentosAgregadoPage({
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId)
       .not("status", "in", `(${STATUS_FORA.join(",")})`)
+      // Arquivado (decisão 118) não entra na agregada: saiu da mesa como o
+      // cancelado, e só volta pelo filtro da lista do projeto.
+      .is("arquivado_em", null)
       .order("codigo", { ascending: true }),
     supabase
       .from("categorias_dominio")
@@ -159,6 +162,7 @@ export default async function OrcamentosAgregadoPage({
     codigo: string;
     nome: string;
     status: string;
+    arquivado_em: string | null;
     versao_aprovada_id: string | null;
     categoria_id: string | null;
     /** Só o modelo: é ele que diz como este orçamento fecha (decisão 072). */
@@ -389,12 +393,18 @@ export default async function OrcamentosAgregadoPage({
     gruposPorVersao.set(g.versao_orcamento_id, lista);
   }
 
+  // Projeto arquivado é só leitura (decisão 118): todos os orçamentos
+  // ficam em consulta, e o "Criar orçamento de job" some.
+  const projetoArquivado = projeto.status === "arquivado";
+
   const inicial: OrcamentoRascunho[] = orcamentos.map((orc) => {
     const versao = vigentePorOrcamento.get(orc.id);
     const grupos = versao ? (gruposPorVersao.get(versao.id) ?? []) : [];
-    const bloqueio = versao
-      ? motivoBloqueio(orc.status, versao.status)
-      : "Este orçamento ainda não tem nenhuma versão. Crie a primeira na tela do orçamento.";
+    const bloqueio = projetoArquivado
+      ? "Projeto arquivado — reative o projeto para editar."
+      : versao
+        ? motivoBloqueio(orc.status, versao.status)
+        : "Este orçamento ainda não tem nenhuma versão. Crie a primeira na tela do orçamento.";
 
     return {
       id: orc.id,
@@ -561,6 +571,7 @@ export default async function OrcamentosAgregadoPage({
         cliente: projeto.cliente?.nome_fantasia ?? null,
         responsavel: projeto.responsavel?.nome ?? null,
       }}
+      projetoArquivado={projetoArquivado}
       podeEditarImpostos={pode(session.activeRole, "orcamentos.editar_impostos")}
       podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
       honorariosCliente={Number(

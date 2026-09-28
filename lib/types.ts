@@ -299,16 +299,21 @@ export interface Orcamento {
   produtor_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
+  /** Decisão 118: o orçamento arquivado sai da visão agregada e das abas
+   *  do projeto, e fica só leitura até o Reativar. Não é status — o status
+   *  de antes fica intacto. Nulo = ativo. */
+  arquivado_em: string | null;
+  arquivado_por: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
 
-/** Status editáveis via UI. `aprovado` e `job_criado` são setados pelo
- *  sistema em Tasks 004 e 005 e ficam bloqueados aqui. */
-export const ORCAMENTO_STATUS_EDITAVEIS: OrcamentoStatus[] = [
-  "rascunho",
-  "em_revisao",
+/** Status que não se escolhem mais (decisão 117, 28/09/2026). Eram do
+ *  campo Status do "Editar orçamento", que saiu: o status passou a ser só
+ *  do sistema. Continuam no enum do banco; o orçamento que ainda estiver
+ *  num deles volta a `rascunho` no Reativar. */
+export const ORCAMENTO_STATUS_MANUAIS_ANTIGOS: OrcamentoStatus[] = [
   "enviado_cliente",
   "recusado",
   "cancelado",

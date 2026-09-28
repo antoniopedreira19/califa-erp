@@ -140,6 +140,7 @@ export async function carregarHomeAdmin(
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .in("status", ["em_revisao", "enviado_cliente"])
+      .is("arquivado_em", null)
       .lt("updated_at", ha15dias),
     // saldo_inicial como aproximacao (adendo §3)
     // TODO: virar RPC de saldo_atual quando o modulo de conciliacao existir
@@ -624,7 +625,9 @@ export async function carregarHomeGerenteProducao(
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
-          .in("status", ["rascunho", "em_revisao", "enviado_cliente"]),
+          .in("status", ["rascunho", "em_revisao", "enviado_cliente"])
+          // Arquivado (decisão 118) não é orçamento em aberto.
+          .is("arquivado_em", null),
   ]);
 
   const prontosPraEncerrar = await contarProntosPraEncerrar(
