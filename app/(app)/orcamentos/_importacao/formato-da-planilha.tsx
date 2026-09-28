@@ -60,7 +60,7 @@ function LinhaDeLetras({ letras }: { letras: string[] }) {
 // ---------- nacional (e Interno) ----------
 
 function PlanilhaNacional({ interno, mensal }: { interno: boolean; mensal: boolean }) {
-  const pesos = [32, 220, 230, 84, 56, 60, 84, 56, 84, 56, 60, 84, 76, 150];
+  const pesos = [32, 220, 210, 84, 56, 60, 84, 76, 84, 56, 60, 84, 76, 150];
   const tipo: Papel = interno ? "ign" : "lido";
   const item = (lin: number, cat: string, nome: string, v: string[]) => (
     <tr key={lin}>
@@ -126,11 +126,16 @@ function PlanilhaNacional({ interno, mensal }: { interno: boolean; mensal: boole
       <td className={NUMERO_LINHA}>{lin}</td>
       <td className={classeDoPapel("ign")} />
       <td className={classeDoPapel("ign")} />
-      <td colSpan={3} className={cn(classeDoPapel("ign"), "text-center font-semibold text-[#8a8a8a]")}>
+      <td
+        colSpan={valor ? 3 : 4}
+        className={cn(classeDoPapel("ign"), "text-center font-semibold text-[#8a8a8a]")}
+      >
         {marca && <Marca n={marca} />}
         {rotulo}
       </td>
-      <td className={cn(classeDoPapel("ign"), "text-right tabular-nums text-[#8a8a8a]")}>{valor}</td>
+      {valor && (
+        <td className={cn(classeDoPapel("ign"), "text-right tabular-nums text-[#8a8a8a]")}>{valor}</td>
+      )}
       <td colSpan={7} className={classeDoPapel("ign")} />
     </tr>
   );
@@ -151,7 +156,7 @@ function PlanilhaNacional({ interno, mensal }: { interno: boolean; mensal: boole
         cabecalho(3),
         item(4, "EQUIPE", "Coordenador", ["12.000", "1", "1", "12.000", "10.000", "1", "1", "10.000", "2.000"]),
         item(5, "MÍDIA", "Gestão de tráfego", ["4.500", "1", "1", "4.500", "3.800", "1", "1", "3.800", "700"]),
-        ignorada(6, "FATURAMENTO DE OUTUBRO", "18.953", 4),
+        ignorada(6, "FATURAMENTO DE OUTUBRO", "", 4),
         tituloDoMes(7, "Novembro de 2026"),
         cabecalho(8),
         item(9, "EQUIPE", "Coordenador", ["12.000", "1", "1", "12.000", "10.000", "1", "1", "10.000", "2.000"]),
