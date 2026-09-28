@@ -4338,6 +4338,30 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
 - **Ficha do job:** no financeiro, o link "Projeto" de job sem projeto do
   financeiro (vai para `/orcamentos/…`) também pede a confirmação.
 
+## ⚠️ Nota de 2026-09-28 — "Categoria · Serviço" do job na fila mostra a categoria do orçamento
+
+- **O defeito:** na página do job (`/jobs/[jobId]`), o campo "Categoria ·
+  Serviço" da aba Informações mostrava só o serviço enquanto o job não
+  tinha sido aberto (JOB-0051 · Teste 2 mostrava "Ativação" em vez de
+  "Evento · Ativação"). A categoria vinha só de `jobs.categoria_id`, que
+  o financeiro grava na abertura; o serviço já caía no do orçamento
+  (decisão 055), a categoria não.
+- **A correção:** a ficha usa `jobs.categoria_id` e, sem ele, a categoria
+  do orçamento — a mesma regra da aba Informações da abertura (decisão
+  111). `carregarDetalheDoJob` já embutia a categoria do orçamento para o
+  `modelo_planilha`; o embed passou a trazer também o `nome`. Nenhuma
+  consulta nova.
+- **Job aberto não muda:** a abertura exige categoria
+  (`abertura-financeiro.ts`), e a gravada no job vem antes do fallback.
+  Em 28/09 os 13 jobs abertos ou finalizados tinham categoria gravada.
+- **Quem passa a mostrar a categoria do orçamento:** aguardando abertura,
+  devolvido pelo financeiro e cancelado antes da abertura. Os três já
+  mostravam o serviço do orçamento.
+- **Fora desta correção:** a página do job no financeiro
+  (`/financeiro/jobs/[jobId]`) lê só `jobs.categoria_id`. Lá o aguardando
+  abertura redireciona para a abertura, mas o devolvido e o cancelado
+  antes da abertura continuam sem categoria.
+
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
 - **Planilha interna do job:** a coluna Save nasce recolhida na alça

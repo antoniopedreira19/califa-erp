@@ -252,7 +252,13 @@ export default async function JobDetailPage({
               job={{
                 codigo: job.codigo,
                 nome: job.nome,
-                categoriaNome: raw.categoria?.nome ?? null,
+                // Categoria do job = `jobs.categoria_id`, que só é gravado
+                // quando o financeiro abre o job (e a abertura a exige).
+                // Na fila, ou devolvido, vale a do orçamento — a mesma
+                // regra da aba Informações da abertura (decisão 111). Job
+                // aberto nunca cai no fallback: a dele já está gravada.
+                categoriaNome:
+                  raw.categoria?.nome ?? raw.orcamento?.categoria?.nome ?? null,
                 // Serviço do job = `jobs.servico_id` (gravado na abertura,
                 // decisão 055), com o do orçamento como fallback. Antes
                 // esta ficha lia a categoria do PROJETO, que virou legada
