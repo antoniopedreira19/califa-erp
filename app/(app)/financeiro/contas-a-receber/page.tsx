@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import { ArrowLeft, Receipt } from "lucide-react";
-import Link from "next/link";
+import { Receipt } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +22,7 @@ import type {
   TituloReceberStatus,
 } from "@/lib/types";
 import { chaveInfoDoEnvio } from "./chave-info";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -156,7 +156,9 @@ export default async function ContasReceberPage({
       .from("jobs")
       .select("id, codigo, nome")
       .eq("tenant_id", tenantId)
-      .order("codigo", { ascending: false })
+      // Ordem de criação, e não a do código: desde a decisão 114 o código
+      // começa pela sigla do cliente, e o texto não diz mais a ordem.
+      .order("created_at", { ascending: false })
       .limit(500),
     // O que a produção mandou no envio para faturamento: a PO e a instrução
     // do GP sobre como a nota deve ser descrita. É o conteúdo do botão `i`
@@ -562,13 +564,7 @@ export default async function ContasReceberPage({
   return (
     <div className="space-y-8">
       <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
+        <BotaoVoltar reserva="/financeiro" />
       </div>
       <PageHeader
         eyebrow="FINANCEIRO"

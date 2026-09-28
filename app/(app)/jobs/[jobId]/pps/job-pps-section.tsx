@@ -93,17 +93,54 @@ function formatarData(iso: string | null): string {
 }
 
 /**
- * "30 dias": distância entre a emissão e o vencimento combinado. Não é
- * campo no banco — deriva de created_at e prazo_pagamento.
+ * A coluna "Dt. Pagamento" (decisão 112, 28/09/2026), que substituiu o
+ * "Prazo" (os dias entre a emissão e o vencimento).
+ *
+ * Uma linha por parcela: paga → o dia em que foi paga; aprovada e ainda
+ * não paga → a data que o financeiro programou (a de hoje, se ele
+ * repactuou em Títulos a Pagar); antes da aprovação → travessão. A linha
+ * sem parcela (PP anterior ao parcelamento) lê os campos da própria PP.
  */
-function prazoEmDias(createdAt: string, prazoPagamento: string): string {
-  const emissao = new Date(createdAt.slice(0, 10));
-  const vencimento = new Date(prazoPagamento.slice(0, 10));
-  const dias = Math.round(
-    (vencimento.getTime() - emissao.getTime()) / 86_400_000,
+function DtPagamento({
+  pp,
+  parcela,
+}: {
+  pp: PedidoCompraNaLista;
+  parcela: PedidoCompraParcela | null;
+}) {
+  const paga = parcela ? parcela.pago_em : pp.pago_em;
+  const programada = parcela
+    ? parcela.data_pagamento
+    : pp.prazo_pagamento_financeiro;
+  if (paga) {
+    return (
+      <span className="flex flex-col leading-tight">
+        <span className="font-mono text-xs">{formatarData(paga)}</span>
+        <span className="text-[10.5px] font-semibold text-emerald-700">
+          paga
+        </span>
+      </span>
+    );
+  }
+  // Só PP aprovada tem data programada que vale: a que voltou para
+  // avaliação (rejeitada, reenviada) pode guardar a data da aprovação
+  // desfeita, e ela não vai ser paga nessa data.
+  if (programada && (pp.status === "aprovada" || pp.status === "pago")) {
+    return (
+      <span className="flex flex-col leading-tight">
+        <span className="font-mono text-xs">{formatarData(programada)}</span>
+        <span className="text-[10.5px] text-muted-foreground">programada</span>
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-[12.5px] text-muted-foreground"
+      title="A data sai na aprovação da PP pelo financeiro."
+    >
+      —
+    </span>
   );
-  if (!Number.isFinite(dias)) return "—";
-  return `${dias} ${dias === 1 ? "dia" : "dias"}`;
 }
 
 export function JobPPsSection({
@@ -371,13 +408,13 @@ export function JobPPsSection({
             <table className="w-full min-w-[980px] table-fixed border-collapse text-[13px]">
               <colgroup>
                 <col className="w-[7%]" />
-                <col className="w-[21%]" />
-                <col className="w-[21%]" />
+                <col className="w-[20%]" />
+                <col className="w-[20%]" />
                 <col className="w-[15%]" />
                 <col className="w-[8.5%]" />
-                <col className="w-[6%]" />
                 <col className="w-[8.5%]" />
-                <col className="w-[9.5%]" />
+                <col className="w-[8.5%]" />
+                <col className="w-[9%]" />
                 <col className="w-[3.5%]" />
               </colgroup>
               <thead>
@@ -387,7 +424,7 @@ export function JobPPsSection({
                   <th className="px-3.5 py-2.5 text-left">Serviço</th>
                   <th className="px-3.5 py-2.5 text-left">Fornecedor</th>
                   <th className="px-3.5 py-2.5 text-left">Vencimento</th>
-                  <th className="px-3.5 py-2.5 text-left">Prazo</th>
+                  <th className="px-3.5 py-2.5 text-left">Dt. Pagamento</th>
                   <th className="px-3.5 py-2.5 text-right">Valor</th>
                   <th className="px-3.5 py-2.5 text-left">Status</th>
                   <th className="px-3.5 py-2.5" />
@@ -548,8 +585,8 @@ export function JobPPsSection({
                     <td className="whitespace-nowrap px-3.5 py-2.5 align-middle font-mono text-xs">
                       {formatarData(vencimento)}
                     </td>
-                    <td className="whitespace-nowrap px-3.5 py-2.5 align-middle text-[12.5px] text-muted-foreground">
-                      {prazoEmDias(pp.created_at, vencimento)}
+                    <td className="whitespace-nowrap px-3.5 py-2.5 align-middle">
+                      <DtPagamento pp={pp} parcela={parcela} />
                     </td>
                     <td className="whitespace-nowrap px-3.5 py-2.5 align-middle text-right font-mono text-[12.5px] font-semibold">
                       {formatCurrency(valorLinha, "BRL")}

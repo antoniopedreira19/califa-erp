@@ -61,6 +61,8 @@ interface Props {
    *  (decisão 072). Obrigatória: quem monta esta seção tem que dizer, e
    *  não deixar o default responder por ele. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Orçamento de serviço Interno (decisão 105) — ver `ItensTable`. */
+  interno: boolean;
   /** Rótulo do pé da tabela. Ausente ⇒ "Total do orçamento"; no modelo
    *  mensal é o do mês ("Total de outubro"). */
   rotuloTotal?: string;
@@ -84,6 +86,7 @@ export function GruposSection({
   savePorPadrao,
   onAlternarSavePadrao,
   moedaEstrangeira,
+  interno,
   rotuloTotal,
 }: Props) {
   // A máquina de estado mora em `_planilha/recolher-grupos`: a planilha do
@@ -194,6 +197,7 @@ export function GruposSection({
         grupos={grupos}
         moeda={moeda}
         moedaEstrangeira={moedaEstrangeira}
+        interno={interno}
         percentualImposto={percentualImposto}
         visao={visao}
         readOnly={readOnly}

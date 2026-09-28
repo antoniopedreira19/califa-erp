@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Users, Plus, ArrowLeft } from "lucide-react";
+import { Users, Plus, } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { ClientesList } from "./clientes-list";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -29,13 +30,7 @@ export default async function ClientesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/cadastros"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para cadastros
-        </Link>
+        <BotaoVoltar reserva="/cadastros" className="mb-3" />
         <PageHeader
           eyebrow="COMERCIAL"
           title="Clientes"

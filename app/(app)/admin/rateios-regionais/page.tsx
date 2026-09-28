@@ -1,9 +1,9 @@
-import Link from "next/link";
-import { ArrowLeft, Percent } from "lucide-react";
+import { Percent } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { RateiosAdminView, type EmpresaRateios } from "./rateios-admin-view";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -75,14 +75,7 @@ export default async function RateiosRegionaisPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/admin"
-        prefetch={false}
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-3 w-3" />
-        Voltar para Administração
-      </Link>
+      <BotaoVoltar reserva="/admin" />
 
       <PageHeader
         eyebrow="ADMINISTRAÇÃO"

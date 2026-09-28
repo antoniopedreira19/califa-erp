@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { ClienteForm } from "../cliente-form";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -65,14 +64,7 @@ export default async function EditarClientePage({
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <div>
-        <Link
-          href="/clientes"
-          prefetch={false}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para clientes
-        </Link>
+        <BotaoVoltar reserva="/clientes" />
         <div className="mt-3 flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">
             {cliente.nome_fantasia}

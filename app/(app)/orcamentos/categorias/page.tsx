@@ -1,9 +1,9 @@
-import Link from "next/link";
-import { ArrowLeft, Tags } from "lucide-react";
+import { Tags } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Categoria, CategoriaDominio } from "@/lib/types";
 import { CategoriasTabs } from "./categorias-tabs";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -39,13 +39,7 @@ export default async function CategoriasHubPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/orcamentos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para projetos
-        </Link>
+        <BotaoVoltar reserva="/orcamentos" />
         <header className="mt-3 space-y-2">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">

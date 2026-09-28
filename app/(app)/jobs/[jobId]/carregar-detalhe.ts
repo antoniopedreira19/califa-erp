@@ -22,6 +22,7 @@ import { itemPrecisaDeConclusao } from "@/lib/calculos/pps-item";
 import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
+  FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
   JOB_STATUS_TRANSICOES,
   jobAceitaRealizado,
   jobAceitaEnvioParaFaturamento,
@@ -101,13 +102,16 @@ export async function carregarDetalheDoJob(
     // como fallback para job ainda na fila. Não vem mais da categoria do
     // projeto: desde 02/09/2026 (migration `20260902110001`) o Serviço
     // desceu do projeto para o orçamento e `projetos.categoria_id` ficou
-    // legada. As dicas `!categoria_id` / `!servico_id` são obrigatórias:
+    // legada. A Categoria segue a mesma regra: `jobs.categoria_id` também
+    // só é gravado na abertura, e a do orçamento (o `nome` no embed de
+    // `orcamento`) cobre o job ainda na fila. As dicas `!categoria_id` /
+    // `!servico_id` são obrigatórias:
     // `jobs` e `orcamentos` têm duas FKs cada para `categorias_dominio`,
     // e sem elas o embed fica ambíguo.
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome), categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, codigo_anterior, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -296,13 +300,17 @@ export async function carregarDetalheDoJob(
       .order("nome"),
     // Irmãos do job na ficha: o projeto é o guarda-chuva, e quem abre um
     // job quer ver de relance o que mais corre debaixo dele. Coberta pelo
-    // índice `idx_jobs_projeto`; quatro colunas, sem embed.
+    // índice `idx_jobs_projeto`; quatro colunas, sem embed. O cancelado
+    // antes da abertura não é mais job (decisão 113) e fica de fora.
     supabase
       .from("jobs")
       .select("id, codigo, nome, status, faturamento_enviado_em")
       .eq("projeto_id", raw.projeto_id)
       .eq("tenant_id", session.activeTenant.id)
-      .order("codigo", { ascending: true }),
+      .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA)
+      // Ordem de criação, e não a do código: desde a decisão 114 o código
+      // começa pela sigla do cliente, e o texto não diz mais a ordem.
+      .order("created_at", { ascending: true }),
     // `aberto_por` NÃO entra como embed: a FK aponta para `auth.users`, e
     // o nome mora em `profiles`. Query própria, e só quando há alguém.
     raw.aberto_por
@@ -588,6 +596,7 @@ export async function carregarDetalheDoJob(
     tenant_id: raw.tenant_id,
     empresa_id: raw.empresa_id,
     codigo: raw.codigo,
+    codigo_anterior: raw.codigo_anterior ?? null,
     projeto_id: raw.projeto_id,
     orcamento_id: raw.orcamento_id,
     versao_orcamento_aprovada_id: raw.versao_orcamento_aprovada_id,
@@ -788,10 +797,12 @@ export async function carregarDetalheDoJob(
   // travava dos dois lados: não dá para enviar (valor zero) e o
   // encerramento só aparecia depois do envio.
   //
-  // A condição é DUPLA de propósito: faturamento zero sem save é outra
-  // coisa (orçado vazio), e esse continua tendo de passar pelo
-  // faturamento. Mesma régua de `lib/data/faturamento-por-job.ts` e do
-  // portão de `encerrarJob`.
+  // A condição é DUPLA só para escolher a FRASE da trilha: o job zerado
+  // sem save — todo em F · Interno, ou só com custo que o cliente paga
+  // direto — também não tem faturamento e também finaliza só com o
+  // encerramento (`jobs_finaliza_ao_encerrar`, decisão 105); a trilha dele
+  // diz "não há nota a emitir". Mesma régua de
+  // `lib/data/faturamento-por-job.ts`.
   const saveConsumidoNoJob = itens.reduce(
     (soma, it) => soma + Number(it.save_consumido ?? 0),
     0,
@@ -1102,6 +1113,12 @@ export async function carregarDetalheDoJob(
     podeEnviarFaturamento,
     podeEnviarFaturamentoMensal,
     pagoSoPorSave,
+    // Serviço Interno (decisão 105): lido do ORÇAMENTO, que é quem decide a
+    // planilha — o financeiro não troca o job para dentro ou para fora dele
+    // (`job_servico_e_categoria_seguem_a_planilha`).
+    interno:
+      (raw.orcamento as { servico?: { investimento_interno?: boolean } | null } | null)
+        ?.servico?.investimento_interno === true,
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,

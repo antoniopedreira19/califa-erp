@@ -729,12 +729,24 @@ export function JobItemRealizadoTable({
   // A calha vive fora do frame da tabela e agora acompanha linhas de
   // alturas diferentes (grupo e item). Medir é a única forma de acertar —
   // ver o cabeçalho de `_planilha/calha`.
+  // Remede só quando as LINHAS mudam (decisão 105, §6): o array de grupos
+  // chega novo a cada render da tela, e editar um valor não move linha.
+  // Altura que muda sem mudar linha chega pelo ResizeObserver do wrapper.
+  const assinaturaDasLinhas = React.useMemo(
+    () =>
+      grupos
+        .map(
+          (g) =>
+            `${g.id}${estaAberto(g.id) ? "+" : "-"}:${g.itens.map((i) => i.id).join(",")}`,
+        )
+        .join("|"),
+    [grupos, estaAberto],
+  );
   const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
-    grupos,
+    assinaturaDasLinhas,
     visao,
     podeAcoes,
     preAbertura,
-    grupos.map((g) => (estaAberto(g.id) ? "1" : "0")).join(""),
   ]);
 
   /** O chip da calha abre o painel; o formulário só se chega por ele. */
@@ -912,7 +924,8 @@ export function JobItemRealizadoTable({
         return null;
       }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
-      if (coluna === "tipo_custo") return "lista";
+      // No Interno o tipo é sempre F · Interno (decisão 105).
+      if (coluna === "tipo_custo") return errata.interno ? null : "lista";
       if (
         coluna === "valor_unitario_orcado" ||
         coluna === "quantidade_orcada" ||
@@ -2062,6 +2075,9 @@ export function JobItemRealizadoTable({
               }
               moeda={moeda}
               totalPlanejado={planejadoAtual}
+              unitarioPlanejado={unitarioPlanejado}
+              quantidadePlanejada={quantidadePlanejada}
+              dmPlanejado={dmPlanejado}
               pps={ppsDoItem.map((pp) => ({
                 id: pp.id,
                 codigo: pp.codigo,
@@ -2071,6 +2087,9 @@ export function JobItemRealizadoTable({
                   fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
                   responsavel: pp.responsavel,
                 }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
+                valorUnitario: Number(pp.valor_unitario ?? 0),
+                quantidade: Number(pp.quantidade ?? 0),
+                diasMeses: Number(pp.dias_meses ?? 0),
                 valor: Number(pp.valor ?? 0),
                 verbaProducao: pp.verba_producao === true,
                 temAnexo: (pp.anexos ?? []).length > 0,

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 type TabKey = "planilha" | "fluxo";
@@ -20,7 +21,25 @@ export function ProjetoTabs({
   planilha: React.ReactNode;
   fluxo: React.ReactNode;
 }) {
-  const [tab, setTab] = React.useState<TabKey>("planilha");
+  // A aba vive no `?aba=` (decisão 106): é por ele que a faixa do projeto
+  // leva do Fluxo de Caixa do Projeto ao Fluxo de Caixa do Job, e de volta.
+  // Sem `?aba=`, a planilha — como sempre foi.
+  const abaNaUrl: TabKey =
+    useSearchParams().get("aba") === "fluxo" ? "fluxo" : "planilha";
+  const [tab, setTab] = React.useState<TabKey>(abaNaUrl);
+  React.useEffect(() => {
+    setTab(abaNaUrl);
+  }, [abaNaUrl]);
+
+  // Grava sem passar pelo router: a página é `force-dynamic`, e um
+  // `router.replace` refaria todas as consultas só para trocar de aba.
+  function irPara(nova: TabKey) {
+    setTab(nova);
+    const url = new URL(window.location.href);
+    if (nova === "fluxo") url.searchParams.set("aba", "fluxo");
+    else url.searchParams.delete("aba");
+    window.history.replaceState(null, "", url.toString());
+  }
 
   return (
     <div className="space-y-6">
@@ -29,10 +48,10 @@ export function ProjetoTabs({
         aria-label="Seções do projeto no financeiro"
         className="flex items-center gap-1 border-b border-border"
       >
-        <TabButton active={tab === "planilha"} onClick={() => setTab("planilha")}>
+        <TabButton active={tab === "planilha"} onClick={() => irPara("planilha")}>
           Planilha Interna agregada
         </TabButton>
-        <TabButton active={tab === "fluxo"} onClick={() => setTab("fluxo")}>
+        <TabButton active={tab === "fluxo"} onClick={() => irPara("fluxo")}>
           Fluxo de Caixa do Projeto
         </TabButton>
       </div>

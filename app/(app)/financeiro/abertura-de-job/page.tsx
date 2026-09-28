@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Landmark } from "lucide-react";
+import { Landmark } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { listarFilaDeAbertura, listarSavesNaFila } from "./dados";
 import { listarJobsDoFinanceiro } from "./dados-abertos";
@@ -8,6 +7,7 @@ import { formatEnviadoEm } from "./formatos";
 import { type FilaLinha, type SaveFilaLinha } from "./fila-list";
 import { AberturaTabs, type Aba } from "./abertura-tabs";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -67,13 +67,7 @@ export default async function AberturaDeJobPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
+        <BotaoVoltar reserva="/financeiro" />
       </div>
       <PageHeader
         eyebrow="FINANCEIRO"

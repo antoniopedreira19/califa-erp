@@ -53,6 +53,9 @@ export type AuditAction =
   // Troca de categoria que entra ou sai do modelo mensal: muda a estrutura
   // de todas as versões, e saindo apaga os meses depois do primeiro.
   | "orcamento.modelo_planilha_trocado"
+  // Decisão 105: o orçamento passou para o serviço Interno e as linhas
+  // viraram F · Interno, com o planejado igual ao orçado.
+  | "orcamento.virou_interno"
   // SAVE — o crédito entre jobs (docs/decisions/028-save-entre-jobs.md).
   // Registrado porque marcar uma linha ou definir um consumo move
   // faturamento previsto e valor do job, e move dinheiro entre jobs.
@@ -108,6 +111,15 @@ export type AuditAction =
   | "job.atualizado"
   | "job.hierarquia_alterada"
   | "job.status_alterado"
+  // O código do job trocou de formato (decisão 114): JOB-NNNN virou
+  // [SIGLA]-[SEQ]/[AA]. Gravado pela migration, um evento por job, com o
+  // código anterior e o novo no metadata.
+  | "job.codigo_trocado"
+  // Decisão 114: a troca de código dos projetos e orçamentos (P) e dos
+  // projetos do financeiro (F). Só a migration grava estes.
+  | "projeto.codigo_trocado"
+  | "orcamento.codigo_trocado"
+  | "projeto_financeiro.codigo_trocado"
   | "job.abertura_aprovada"
   | "job.aberto_no_financeiro"
   // Edição do registro da abertura de um job já aberto ("Editar

@@ -82,6 +82,9 @@ export async function enviarMensagemPPFinanceiro(
     .eq("job_id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     .neq("status", "gerada")
+    // Enviada de fato (decisão 113): a cancelada sem envio sai de `gerada`
+    // sem ter passado pelo financeiro.
+    .not("enviada_financeiro_em", "is", null)
     .limit(1)
     .maybeSingle();
 

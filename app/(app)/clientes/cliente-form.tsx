@@ -296,6 +296,9 @@ interface Props {
   nomeInicial?: string;
   /** Só no dialog, na criação: o cliente recém-gravado. */
   onCriado?: (cliente: { id: string; nome_fantasia: string }) => void;
+  /** Só no dialog, na criação: o CNPJ já é de um cliente ativo, e a pessoa
+   *  escolheu usá-lo em vez de criar outro (decisão 108, D5). */
+  onSelecionarExistente?: (cliente: { id: string; nome_fantasia: string }) => void;
   /** Só no dialog, na edição: o cadastro foi salvo. */
   onSalvo?: () => void;
   /** Só no dialog: fechar sem gravar. */
@@ -310,6 +313,7 @@ export function ClienteForm({
   modo = "pagina",
   nomeInicial,
   onCriado,
+  onSelecionarExistente,
   onSalvo,
   onCancelar,
 }: Props) {
@@ -712,18 +716,43 @@ export function ClienteForm({
                     <span>
                       CNPJ já cadastrado como{" "}
                       <strong>{cnpjDuplicado.nome_fantasia}</strong>
-                      {cnpjDuplicado.nome_fantasia.endsWith(".") ? "" : "."} Use
-                      o cadastro existente em vez de criar outro.
+                      {cnpjDuplicado.status === "inativo"
+                        ? " — cliente inativo. Reative-o em Clientes para poder selecioná-lo."
+                        : `${cnpjDuplicado.nome_fantasia.endsWith(".") ? "" : "."} Use o cadastro existente em vez de criar outro.`}
                     </span>
                   </span>
-                  <Link
-                    href={`/clientes/${cnpjDuplicado.id}`}
-                    prefetch={false}
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-[#f2cd8a] bg-white px-[9px] py-[5px] text-[11.5px] font-semibold text-[#7c3d0a] transition-colors hover:bg-[#fef3c7]"
-                  >
-                    <UserCheck className="h-[13px] w-[13px]" />
-                    Abrir cadastro existente
-                  </Link>
+                  {emDialog ? (
+                    // Dentro do projeto o cadastro não sai da tela (decisão
+                    // 108, D5): o cliente ativo se escolhe aqui mesmo; o
+                    // inativo fica só com o aviso, e quem cuida dos
+                    // cadastros reativa. Abrir o cadastro é coisa da página.
+                    !isEdit &&
+                    cnpjDuplicado.status === "ativo" &&
+                    onSelecionarExistente && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSelecionarExistente({
+                            id: cnpjDuplicado.id,
+                            nome_fantasia: cnpjDuplicado.nome_fantasia,
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-[#f2cd8a] bg-white px-[9px] py-[5px] text-[11.5px] font-semibold text-[#7c3d0a] transition-colors hover:bg-[#fef3c7]"
+                      >
+                        <UserCheck className="h-[13px] w-[13px]" />
+                        Usar este cadastro
+                      </button>
+                    )
+                  ) : (
+                    <Link
+                      href={`/clientes/${cnpjDuplicado.id}`}
+                      prefetch={false}
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-[#f2cd8a] bg-white px-[9px] py-[5px] text-[11.5px] font-semibold text-[#7c3d0a] transition-colors hover:bg-[#fef3c7]"
+                    >
+                      <UserCheck className="h-[13px] w-[13px]" />
+                      Abrir cadastro existente
+                    </Link>
+                  )}
                 </div>
               )}
             </Campo>

@@ -89,6 +89,9 @@ interface Props {
   /** Moeda e taxa de compra da coluna calculada da planilha. `null` fora
    *  do internacional. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
+   *  planejado igual ao orçado e nenhum controle de save. Obrigatória. */
+  interno: boolean;
   // ---- MODELO MENSAL (docs/decisions/078)
   /** O mês desta planilha: o "Novo grupo" nasce dentro dele. Ausente fora
    *  do modelo mensal. */
@@ -122,6 +125,7 @@ export function PlanilhaVersao({
   modeloPlanilha,
   internacional,
   moedaEstrangeira,
+  interno,
   mes,
   semTotais,
   tituloTotais,
@@ -134,19 +138,20 @@ export function PlanilhaVersao({
   const visao: VisaoBv = "bruto";
   const router = useRouter();
 
-  // A coluna abre sozinha em quem já usa save, e fica fechada em quem
-  // nunca usou: assim a planilha de sempre continua a de sempre.
-  const temSave =
-    savePorPadrao ||
-    Object.keys(savePorItem).length > 0 ||
-    saldosDeSave.some((s) => s.disponivel > 0);
+  // A coluna nasce recolhida na alça lateral e só abre sozinha quando ESTA
+  // versão já gera ou consome save — ou é um "Orçamento de save", em que
+  // todo item novo nasce em save (decisão 107). O saldo que o cliente tem
+  // em outros jobs não abre mais a coluna: ele abria em quase todo cliente.
+  const temSave = savePorPadrao || Object.keys(savePorItem).length > 0;
   const [saveVisivel, setSaveVisivel] = React.useState(temSave);
   const [padrao, setPadrao] = React.useState(savePorPadrao);
   const [linhaAberta, setLinhaAberta] =
     React.useState<VersaoOrcamentoItem | null>(null);
 
   const editavel = !readOnly;
-  const saveEditavel = editavel && podeMarcarSave;
+  // O Interno não tem save (decisão 105): nem coluna, nem "Orçamento de
+  // save", nem formulário da linha.
+  const saveEditavel = editavel && podeMarcarSave && !interno;
 
   const linhaDoDialog: LinhaDoSave | null = linhaAberta
     ? {
@@ -185,17 +190,23 @@ export function PlanilhaVersao({
           bvsPorItem={bvsPorItem}
           fornecedores={fornecedores}
           versaoLabel={versaoLabel}
-          saveVisivel={saveVisivel}
+          saveVisivel={saveVisivel && !interno}
           savePorItem={savePorItem}
-          onAbrirSave={editavel ? setLinhaAberta : undefined}
-          onAlternarSave={() => setSaveVisivel((v) => !v)}
+          onAbrirSave={editavel && !interno ? setLinhaAberta : undefined}
+          onAlternarSave={interno ? undefined : () => setSaveVisivel((v) => !v)}
           moedaEstrangeira={moedaEstrangeira}
+          interno={interno}
           rotuloTotal={mes ? `Total de ${mes.nome}` : undefined}
-          savePorPadrao={padrao}
+          savePorPadrao={padrao && !interno}
           onAlternarSavePadrao={
-            editavel
+            editavel && !interno
               ? async (ligado) => {
                   setPadrao(ligado);
+                  // Ligar o orçamento de save abre a coluna: todo item novo
+                  // vai nascer em save, e a marca dele só aparece nela
+                  // (decisão 107). Desligar não recolhe — as linhas que já
+                  // nasceram em save continuam lá.
+                  if (ligado) setSaveVisivel(true);
                   const r = await definirSavePorPadrao(versaoId, ligado);
                   if (!r.ok) setPadrao(!ligado);
                   router.refresh();

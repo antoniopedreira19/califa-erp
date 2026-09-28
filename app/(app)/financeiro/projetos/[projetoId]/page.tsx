@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeft,
   ArrowRight,
   ClipboardList,
   FolderKanban,
@@ -29,6 +27,11 @@ import {
   carregarPrazosDosJobs,
 } from "../../jobs/[jobId]/fluxo-do-job";
 import { ProjetoTabs } from "./projeto-tabs";
+import {
+  FaixaDoProjeto,
+  LinkDoJobNaAgregada,
+} from "@/components/faixa-do-projeto";
+import { AGREGADA, itensDeJobs } from "@/lib/faixa-do-projeto";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +80,7 @@ export default async function ProjetoNoFinanceiroPage({
   const [projetoRes, jobsRes] = await Promise.all([
     supabase
       .from("projetos_financeiro")
-      .select("id, codigo, nome, cliente:clientes(nome_fantasia)")
+      .select("id, codigo, codigo_anterior, nome, cliente:clientes(nome_fantasia)")
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
       .maybeSingle(),
@@ -87,7 +90,9 @@ export default async function ProjetoNoFinanceiroPage({
       .eq("tenant_id", tenantId)
       .eq("projeto_financeiro_id", params.projetoId)
       .in("status", STATUS_NA_LISTA as unknown as string[])
-      .order("codigo", { ascending: true }),
+      // Ordem de criação, e não a do código: desde a decisão 114 o código
+      // começa pela sigla do cliente, e o texto não diz mais a ordem.
+      .order("created_at", { ascending: true }),
   ]);
 
   if (projetoRes.error) {
@@ -154,22 +159,31 @@ export default async function ProjetoNoFinanceiroPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link
-          href="/financeiro/abertura-de-job?aba=abertos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para Visualizar Jobs
-        </Link>
+        {/* Faixa do projeto (decisão 106): os mesmos jobs desta tela. */}
+        <FaixaDoProjeto
+          modulo="financeiro"
+          reservaDoVoltar="/financeiro/abertura-de-job?aba=abertos"
+          projeto={{ codigo: projeto.codigo, nome: projeto.nome }}
+          agregadaHref={`/financeiro/projetos/${projeto.id}`}
+          itens={itensDeJobs("/financeiro/jobs/", jobsDoProjeto, null, () => true)}
+          ativo={AGREGADA}
+        />
 
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="flex min-w-[18rem] flex-1 items-center gap-3">
             <div className="rounded-lg bg-california-red/10 p-2">
               <FolderKanban className="h-5 w-5 text-california-red" />
             </div>
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold text-muted-foreground">
                 {projeto.codigo}
+                {/* Decisão 114: o que foi emitido antes de 28/09/2026 cita
+                    o código antigo. */}
+                {projeto.codigo_anterior && (
+                  <span className="ml-2 font-sans font-normal">
+                    · Código anterior: {projeto.codigo_anterior}
+                  </span>
+                )}
               </p>
               <h1 className="text-2xl font-bold tracking-tight">
                 {projeto.nome}
@@ -197,14 +211,16 @@ export default async function ProjetoNoFinanceiroPage({
           {jobsDoProjeto.map((j, i) => {
             const planilha = planilhas.find((p) => p.id === j.id);
             return (
-              <Link
+              <LinkDoJobNaAgregada
                 key={j.id}
                 // Abre o job já na Planilha Interna: quem está na visão
                 // agregada do projeto e clica num job quer a planilha
                 // DAQUELE job, não a ficha (decisão do Tiago,
-                // 08/09/2026). O `?aba=` é lido em `../jobs/[jobId]/abas.ts`.
-                href={`/financeiro/jobs/${j.id}?aba=planilha`}
-                prefetch={false}
+                // 08/09/2026). Com o Fluxo de Caixa do Projeto aberto,
+                // abre no Fluxo de Caixa do Job — o mesmo destino da aba
+                // do job na faixa (decisão 106).
+                modulo="financeiro"
+                href={`/financeiro/jobs/${j.id}`}
                 className="group relative grid grid-cols-[28px_auto_1fr] items-center gap-2.5 py-[5px]"
               >
                 <span
@@ -240,7 +256,7 @@ export default async function ProjetoNoFinanceiroPage({
                   </span>
                   <ArrowRight className="h-3 w-3 text-[#c9c9c9] transition-colors group-hover:text-california-red" />
                 </span>
-              </Link>
+              </LinkDoJobNaAgregada>
             );
           })}
         </div>
@@ -290,11 +306,10 @@ export default async function ProjetoNoFinanceiroPage({
                 moeda={moedaProjeto}
                 jobHrefBase="/financeiro/jobs"
                 jobHrefSuffix="?aba=planilha"
-                // No financeiro a coluna Save é sempre presente e não tem
-                // liga-desliga: é aqui que se confere o crédito entre
-                // jobs, e esconder a coluna esconderia o motivo de o
-                // faturamento previsto e o valor do job divergirem.
-                saveSempreVisivel
+                // A coluna Save segue a regra das outras planilhas
+                // (decisão 107): aberta quando algum job usa save,
+                // recolhida quando nenhum usa, com liga-desliga no
+                // "Exibir". Até 25/09/2026 era sempre presente aqui.
               />
             </>
           }

@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { FluxoCaixaView, type FluxoItem, type ContaOpcao } from "./fluxo-caixa-view";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +144,7 @@ export default async function FluxoCaixaPage({
 
   return (
     <div className="space-y-8">
+      <BotaoVoltar reserva="/financeiro" />
       <PageHeader
         eyebrow="FINANCEIRO"
         title="Fluxo de caixa"

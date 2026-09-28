@@ -54,24 +54,22 @@ function brl(v: number): string {
 }
 
 /**
- * Caminho do PDF de UMA parcela, no mesmo prefixo da PP.
+ * Caminho do PDF da PP — um documento só, com todas as parcelas
+ * (decisão 112, 28/09/2026).
  *
- * PP de parcela única mantém o nome histórico (`pp-PP-00008.pdf`): é o
- * caminho que as PPs já emitidas usam, e mudá-lo quebraria o link delas
- * sem ganhar nada. Parcelada ganha o sufixo, que é o que distingue os
- * documentos na hora de baixar.
+ * É o nome histórico da PP de parcela única (`pp-PP-00008.pdf`), que
+ * agora vale também para a parcelada. De 17/08 a 28/09 a parcelada tinha
+ * um documento por parcela (`pp-PP-00008-parcela-2de3.pdf`); as PPs
+ * daquele período guardam esses arquivos até serem editadas ou
+ * reenviadas, quando o documento único os substitui.
  */
-function caminhoPdfParcela(
+function caminhoPdfDaPP(
   tenantId: string,
   jobId: string,
   ppId: string,
   codigo: string,
-  numero: number,
-  total: number,
 ): string {
-  const nome =
-    total > 1 ? `pp-${codigo}-parcela-${numero}de${total}.pdf` : `pp-${codigo}.pdf`;
-  return `${tenantId}/${jobId}/${ppId}/${nome}`;
+  return `${tenantId}/${jobId}/${ppId}/pp-${codigo}.pdf`;
 }
 
 type Ok<T = object> = { ok: true } & T;
@@ -634,17 +632,19 @@ async function carregarContextoPdf(
 }
 
 /**
- * Um documento POR PARCELA (Tela 2.3), renderizado em memória.
+ * O documento da PP, com todas as parcelas, renderizado em memória
+ * (decisão 112, 28/09/2026). Até ali era um documento por parcela.
  *
- * O fornecedor recebe um PDF por vencimento, e é ele que o financeiro
- * confere na hora de pagar. Tudo idêntico entre eles, menos o Prazo de
- * Pagto, a linha "Parcela: N/T" e o valor em destaque. Verba de Produção
- * também gera PDF, com layout adaptado — ver `lib/pdf/pedido-compra.ts`.
+ * O financeiro aprova a PP inteira e as parcelas seguem juntas para
+ * Títulos a Pagar, então um papel só, com o valor e o prazo de cada
+ * parcela e o total do pedido, é o que o fornecedor e o financeiro leem.
+ * Verba de Produção também gera PDF, com layout adaptado — ver
+ * `lib/pdf/pedido-compra.ts`.
  *
  * Quem chama decide o que fazer com o buffer: a geração desfaz a PP se o
  * upload falhar; a edição e o reenvio sobrescrevem o documento anterior.
  */
-async function renderizarDocumentosDaPP(args: {
+async function renderizarDocumentoDaPP(args: {
   tenantId: string;
   jobId: string;
   ppId: string;
@@ -661,56 +661,43 @@ async function renderizarDocumentosDaPP(args: {
   responsavelVerbaNome: string | null;
   job: { nome: string; produto: string };
   contexto: ContextoPdf;
-  parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number }>;
-}): Promise<Array<{ parcelaId: string; path: string; buffer: Buffer }>> {
+  parcelas: Array<{ numero: number; data_vencimento: string; valor: number }>;
+}): Promise<{ path: string; buffer: Buffer }> {
   // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
   // seus side-effects de inicialização do resto do módulo.
   const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
-  const emitidoEm = new Date().toISOString();
-  const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+  const parcelas = args.parcelas.slice().sort((a, b) => a.numero - b.numero);
 
-  for (const parcela of args.parcelas) {
-    const buffer = await renderPedidoCompraPDF({
-      pp: {
-        codigo: args.codigo,
-        servico: args.pp.servico,
-        quantidade: args.pp.quantidade,
-        especificacoes: args.pp.especificacoes,
-        valor: args.pp.valor,
-        prazo_pagamento: parcela.data_vencimento,
-        created_at: emitidoEm,
-        verba_producao: args.pp.verba_producao,
-      },
-      empresa: args.empresa as never,
-      fornecedor: (args.fornecedor ?? null) as never,
-      responsavelVerbaNome: args.responsavelVerbaNome,
-      job: args.job,
-      projeto: args.contexto.projeto,
-      orcamento: args.contexto.orcamento,
-      cliente: args.contexto.cliente,
-      responsavelNome: args.contexto.responsavelNome,
-      parcela: {
-        numero: parcela.numero,
-        total: args.parcelas.length,
-        data_vencimento: parcela.data_vencimento,
-        valor: parcela.valor,
-      },
-    });
-    documentos.push({
-      parcelaId: parcela.id,
-      path: caminhoPdfParcela(
-        args.tenantId,
-        args.jobId,
-        args.ppId,
-        args.codigo,
-        parcela.numero,
-        args.parcelas.length,
-      ),
-      buffer,
-    });
-  }
+  const buffer = await renderPedidoCompraPDF({
+    pp: {
+      codigo: args.codigo,
+      servico: args.pp.servico,
+      quantidade: args.pp.quantidade,
+      especificacoes: args.pp.especificacoes,
+      valor: args.pp.valor,
+      prazo_pagamento: parcelas[0]?.data_vencimento ?? "",
+      created_at: new Date().toISOString(),
+      verba_producao: args.pp.verba_producao,
+    },
+    empresa: args.empresa as never,
+    fornecedor: (args.fornecedor ?? null) as never,
+    responsavelVerbaNome: args.responsavelVerbaNome,
+    job: args.job,
+    projeto: args.contexto.projeto,
+    orcamento: args.contexto.orcamento,
+    cliente: args.contexto.cliente,
+    responsavelNome: args.contexto.responsavelNome,
+    parcelas: parcelas.map((p) => ({
+      numero: p.numero,
+      data_vencimento: p.data_vencimento,
+      valor: p.valor,
+    })),
+  });
 
-  return documentos;
+  return {
+    path: caminhoPdfDaPP(args.tenantId, args.jobId, args.ppId, args.codigo),
+    buffer,
+  };
 }
 
 /**
@@ -1181,73 +1168,67 @@ async function finalizarPedidoCompraImpl(
   // Carrega dados enriquecidos pro PDF
   const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
 
-  // ---- Um documento POR PARCELA (Tela 2.3) ----
-  // O fornecedor recebe um PDF por vencimento, e é ele que o financeiro
-  // confere na hora de pagar. Tudo idêntico entre eles, menos o Prazo de
-  // Pagto, a linha "Parcela: N/T" e o valor em destaque.
+  // ---- Um documento só, com todas as parcelas (decisão 112) ----
+  // O financeiro aprova a PP inteira e as parcelas seguem juntas para
+  // Títulos a Pagar: o papel é da PP, com o valor e o prazo de cada
+  // parcela e o total do pedido.
   //
   // Verba de Produção também gera PDF, mas com layout adaptado (trocado
   // bloco Fornecedor por Responsável, omitido bloco de dados bancários) —
   // ver `lib/pdf/pedido-compra.ts`. Vai como comprovante interno do
   // adiantamento ao gerente.
   const parcelas = (parcelasCriadas ?? []).slice().sort((a, b) => a.numero - b.numero);
-  const documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+  let documento: { path: string; buffer: Buffer };
 
-  {
-    try {
-      documentos.push(
-        ...(await renderizarDocumentosDaPP({
-          tenantId: session.activeTenant.id,
-          jobId: job.id,
-          ppId: pp_id,
-          codigo,
-          pp: {
-            servico: d.servico,
-            quantidade: d.quantidade,
-            especificacoes: d.especificacoes ?? null,
-            valor,
-            verba_producao: d.verba_producao,
-          },
-          empresa: empRes.data,
-          fornecedor: fornRes.data ?? null,
-          responsavelVerbaNome: d.verba_producao
-            ? (responsavelRes.data?.nome ?? "")
-            : null,
-          job: { nome: job.nome, produto: job.produto ?? "" },
-          contexto,
-          parcelas: parcelas.map((p) => ({
-            id: p.id,
-            numero: p.numero,
-            data_vencimento: p.data_vencimento,
-            valor: Number(p.valor),
-          })),
-        })),
-      );
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await supabase
-        .from("pedidos_compra")
-        .delete()
-        .eq("id", pp_id)
-        .eq("tenant_id", session.activeTenant.id);
-      await supabase.storage
-        .from(BUCKET)
-        .remove(anexosParsed.data.map((a) => a.path));
-      return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
-    }
+  try {
+    documento = await renderizarDocumentoDaPP({
+      tenantId: session.activeTenant.id,
+      jobId: job.id,
+      ppId: pp_id,
+      codigo,
+      pp: {
+        servico: d.servico,
+        quantidade: d.quantidade,
+        especificacoes: d.especificacoes ?? null,
+        valor,
+        verba_producao: d.verba_producao,
+      },
+      empresa: empRes.data,
+      fornecedor: fornRes.data ?? null,
+      responsavelVerbaNome: d.verba_producao
+        ? (responsavelRes.data?.nome ?? "")
+        : null,
+      job: { nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas: parcelas.map((p) => ({
+        numero: p.numero,
+        data_vencimento: p.data_vencimento,
+        valor: Number(p.valor),
+      })),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await supabase
+      .from("pedidos_compra")
+      .delete()
+      .eq("id", pp_id)
+      .eq("tenant_id", session.activeTenant.id);
+    await supabase.storage
+      .from(BUCKET)
+      .remove(anexosParsed.data.map((a) => a.path));
+    return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
-  for (const doc of documentos) {
+  {
     const { error: uploadErr } = await supabase.storage
       .from(BUCKET)
-      .upload(doc.path, doc.buffer, {
+      .upload(documento.path, documento.buffer, {
         contentType: "application/pdf",
         upsert: false,
       });
 
     if (uploadErr) {
-      // Rollback inteiro: PP com metade dos documentos é pior que PP
-      // nenhuma — o fornecedor receberia parcela sem papel.
+      // Rollback inteiro: PP sem documento não vai para o fornecedor.
       await supabase
         .from("pedidos_compra")
         .delete()
@@ -1255,10 +1236,7 @@ async function finalizarPedidoCompraImpl(
         .eq("tenant_id", session.activeTenant.id);
       await supabase.storage
         .from(BUCKET)
-        .remove([
-          ...documentos.map((x) => x.path),
-          ...anexosParsed.data.map((a) => a.path),
-        ]);
+        .remove([documento.path, ...anexosParsed.data.map((a) => a.path)]);
       return {
         ok: false,
         message: `Falha ao subir PDF: ${uploadErr.message}`,
@@ -1266,19 +1244,20 @@ async function finalizarPedidoCompraImpl(
     }
   }
 
-  // Cada parcela guarda o caminho do SEU documento; `pedidos_compra.pdf_path`
-  // segue apontando para o da primeira, que é o que as telas do financeiro
-  // abrem hoje quando falam "a PP".
-  const pdfPath = documentos[0]?.path ?? "";
-  for (const doc of documentos) {
+  // Toda parcela aponta para o documento da PP: é o mesmo papel. O
+  // `pdf_path` da parcela continua existindo por causa das PPs de 17/08 a
+  // 28/09, que têm um documento por parcela.
+  const pdfPath = documento.path;
+  {
     const { error: errPath } = await supabase
       .from("pedidos_compra_parcelas")
-      .update({ pdf_path: doc.path })
-      .eq("id", doc.parcelaId)
+      .update({ pdf_path: pdfPath })
+      .eq("pedido_compra_id", pp_id)
       .eq("tenant_id", session.activeTenant.id);
     if (errPath) {
       // Documento existe no bucket; só o ponteiro falhou. Não desfaz a
-      // PP por isso — avisa, que é o padrão das falhas parciais daqui.
+      // PP por isso — avisa, que é o padrão das falhas parciais daqui. A
+      // parcela sem ponteiro cai no documento da PP (`signedUrlPdfParcela`).
       console.error("[pp.parcela.pdf_path]", errPath.message);
     }
   }
@@ -1299,10 +1278,7 @@ async function finalizarPedidoCompraImpl(
   if (updPP.error || updReal.error) {
     await supabase.storage
       .from(BUCKET)
-      .remove([
-        ...documentos.map((x) => x.path),
-        ...anexosParsed.data.map((a) => a.path),
-      ]);
+      .remove([documento.path, ...anexosParsed.data.map((a) => a.path)]);
     await supabase
       .from("pedidos_compra")
       .delete()
@@ -1763,11 +1739,11 @@ export async function reenviarPedidoCompra(
   if (pedidoDeConfirmacao) return pedidoDeConfirmacao;
 
   // ---- Parcelas: valores redivididos, datas conforme a 1ª ----
-  // Precisa vir ANTES do PDF: cada documento carrega o vencimento e o
-  // valor da SUA parcela, então os números têm que estar decididos.
+  // Precisa vir ANTES do PDF: o documento carrega o vencimento e o valor
+  // de cada parcela, então os números têm que estar decididos.
   const { data: parcelasAtuais } = await supabase
     .from("pedidos_compra_parcelas")
-    .select("id, numero, data_vencimento")
+    .select("id, numero, data_vencimento, pdf_path")
     .eq("pedido_compra_id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .order("numero", { ascending: true });
@@ -1811,13 +1787,13 @@ export async function reenviarPedidoCompra(
     };
   });
 
-  // ---- PDFs novos, sobrescrevendo os antigos ----
-  // Um por parcela, como na emissão. Aqui o snapshot É regerado de
-  // propósito: a PP foi corrigida, e o papel que o fornecedor recebe não
-  // pode contradizer o que o financeiro vai aprovar.
-  let documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+  // ---- PDF novo, sobrescrevendo o antigo ----
+  // Um documento só, como na emissão (decisão 112). Aqui o snapshot É
+  // regerado de propósito: a PP foi corrigida, e o papel que o fornecedor
+  // recebe não pode contradizer o que o financeiro vai aprovar.
+  let documento: { path: string; buffer: Buffer };
   try {
-    documentos = await renderizarDocumentosDaPP({
+    documento = await renderizarDocumentoDaPP({
       tenantId: session.activeTenant.id,
       jobId: job.id,
       ppId: pp_id,
@@ -1843,10 +1819,10 @@ export async function reenviarPedidoCompra(
     return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
-  for (const doc of documentos) {
+  {
     const { error: uploadErr } = await supabase.storage
       .from(BUCKET)
-      .upload(doc.path, doc.buffer, {
+      .upload(documento.path, documento.buffer, {
         contentType: "application/pdf",
         upsert: true,
       });
@@ -1855,7 +1831,7 @@ export async function reenviarPedidoCompra(
     }
   }
 
-  const pdfPath = documentos[0]?.path ?? ppRow.pdf_path;
+  const pdfPath = documento.path;
 
   // ---- Persiste: PP volta pra avaliação, rejeição some do registro ----
   const { error: updErr } = await supabase
@@ -1892,13 +1868,13 @@ export async function reenviarPedidoCompra(
     return { ok: false, message: `Falha ao reenviar PP: ${updErr.message}` };
   }
 
-  for (const [i, parcela] of parcelasNovas.entries()) {
+  for (const parcela of parcelasNovas) {
     const { error: updParcelaErr } = await supabase
       .from("pedidos_compra_parcelas")
       .update({
         valor: parcela.valor,
         data_vencimento: parcela.data_vencimento,
-        pdf_path: documentos[i]?.path ?? null,
+        pdf_path: pdfPath,
       })
       .eq("id", parcela.id)
       .eq("tenant_id", session.activeTenant.id);
@@ -1907,6 +1883,19 @@ export async function reenviarPedidoCompra(
         ok: false,
         message: `PP reenviada, mas as parcelas não foram atualizadas: ${updParcelaErr.message}`,
       };
+    }
+  }
+
+  // Documento por parcela de antes da decisão 112 sai do bucket: o
+  // documento único acabou de substituí-lo, e um PDF órfão diria outra
+  // coisa. Na PP de parcela única o caminho é o mesmo e nada sai.
+  {
+    const orfaos = [
+      ...parcelas.map((p) => p.pdf_path as string | null),
+      ppRow.pdf_path as string | null,
+    ].filter((c): c is string => Boolean(c) && c !== pdfPath);
+    if (orfaos.length > 0) {
+      await supabase.storage.from(BUCKET).remove(Array.from(new Set(orfaos)));
     }
   }
 
@@ -2017,10 +2006,12 @@ export async function signedUrlPdf(
 /**
  * URL assinada do documento de UMA parcela (Tela 2.3).
  *
- * Cada linha de parcela baixa o SEU papel — o que tem o vencimento e o
- * valor dela. PP legada cai no `pdf_path` que a migration backfillou, que
- * é o documento único de sempre; e se a parcela ainda não tiver caminho
- * (falha no ponteiro durante a emissão), cai no da PP, que existe.
+ * Desde a decisão 112 (28/09/2026) toda parcela aponta para o documento
+ * único da PP. As PPs parceladas de 17/08 a 28/09 ainda têm um documento
+ * por parcela, e é para elas que esta action continua existindo: cada
+ * linha baixa o SEU papel. PP legada cai no `pdf_path` que a migration
+ * backfillou; e se a parcela ainda não tiver caminho (falha no ponteiro
+ * durante a emissão), cai no da PP, que existe.
  */
 export async function signedUrlPdfParcela(
   parcela_id: string,
@@ -2485,11 +2476,11 @@ async function editarPedidoCompraGeradaImpl(
       valor: Number(p.valor),
     }));
 
-  // ---- PDFs novos, sobrescrevendo os antigos ----
+  // ---- PDF novo, sobrescrevendo o antigo (um só, decisão 112) ----
   const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
-  let documentos: Array<{ parcelaId: string; path: string; buffer: Buffer }> = [];
+  let documento: { path: string; buffer: Buffer };
   try {
-    documentos = await renderizarDocumentosDaPP({
+    documento = await renderizarDocumentoDaPP({
       tenantId: session.activeTenant.id,
       jobId: job.id,
       ppId: pp_id,
@@ -2515,10 +2506,10 @@ async function editarPedidoCompraGeradaImpl(
     return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
   }
 
-  for (const doc of documentos) {
+  {
     const { error: uploadErr } = await supabase.storage
       .from(BUCKET)
-      .upload(doc.path, doc.buffer, {
+      .upload(documento.path, documento.buffer, {
         contentType: "application/pdf",
         upsert: true,
       });
@@ -2526,7 +2517,7 @@ async function editarPedidoCompraGeradaImpl(
       return { ok: false, message: `Falha ao subir PDF: ${uploadErr.message}` };
     }
   }
-  const pdfPath = documentos[0]?.path ?? ppRow.pdf_path;
+  const pdfPath = documento.path;
 
   // ---- Persiste a PP, ainda gerada ----
   const { error: updErr } = await supabase
@@ -2559,19 +2550,19 @@ async function editarPedidoCompraGeradaImpl(
     return { ok: false, message: `Falha ao salvar a PP: ${updErr.message}` };
   }
 
-  for (const doc of documentos) {
+  {
     const { error: errPath } = await supabase
       .from("pedidos_compra_parcelas")
-      .update({ pdf_path: doc.path })
-      .eq("id", doc.parcelaId)
+      .update({ pdf_path: pdfPath })
+      .eq("pedido_compra_id", pp_id)
       .eq("tenant_id", session.activeTenant.id);
     if (errPath) console.error("[pp.editar.parcela.pdf_path]", errPath.message);
   }
 
-  // Documento antigo que não foi sobrescrito (mudou o número de parcelas)
-  // sai do bucket — senão fica um PDF órfão dizendo outra coisa.
-  const caminhosNovos = new Set(documentos.map((x) => x.path));
-  const orfaos = Array.from(caminhosAntigos).filter((c) => !caminhosNovos.has(c));
+  // Documento antigo que não foi sobrescrito (o documento por parcela de
+  // antes da decisão 112) sai do bucket — senão fica um PDF órfão
+  // dizendo outra coisa.
+  const orfaos = Array.from(caminhosAntigos).filter((c) => c !== pdfPath);
   if (orfaos.length > 0) {
     await supabase.storage.from(BUCKET).remove(orfaos);
   }

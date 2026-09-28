@@ -3213,6 +3213,8 @@ O financeiro não tem card de Totais próprio: a conferência da abertura
 reusa o do job e a visão de projeto reusa a das agregadas de Jobs. Então
 as duas herdaram o que mudou lá. O que é específico daqui:
 
+- ⚠️ **Revisto em 25/09/2026 (decisão 107): a coluna agora nasce recolhida
+  quando nenhum job do projeto usa save, e tem liga-desliga no "Exibir".**
 - **A visão agregada do projeto (`/financeiro/projetos/[id]`) ganhou a
   coluna Save, SEMPRE presente e sem liga-desliga.** Foi decisão do
   Tiago: é aqui que se confere o crédito entre jobs, e esconder a coluna
@@ -5813,6 +5815,34 @@ era o imposto de R$ 28.318,52). Regra completa na
   aguardando abertura. Ela usa as mesmas conferências e a mesma gravação
   da edição, e a edição foi testada gravando no JOB-0032.
 
+## ⚠️ Nota de 2026-09-25 — faixa do projeto no job e na agregada do financeiro (decisão 106)
+
+- A primeira linha de `/financeiro/jobs/[jobId]` e de
+  `/financeiro/projetos/[projetoId]` é a **faixa do projeto**
+  (`components/faixa-do-projeto.tsx`), no projeto do FINANCEIRO: o voltar
+  para Visualizar Jobs, a aba Visão agregada e uma aba por job da lista
+  (`STATUS_NA_LISTA`) — os mesmos da agregada — e o job aberto, sempre.
+  Tudo dentro do módulo.
+- Job sem projeto do financeiro (anterior à migration 20260820000011) não
+  tem agregada: nele fica o "Voltar para Visualizar Jobs" de antes.
+  ⚠️ **Revisto em 27/09/2026 (decisão 108):** nos dois casos o voltar é o
+  botão "Voltar" e leva à página anterior; Visualizar Jobs é a reserva.
+- **Entre jobs, a aba de seção se mantém** (o `?aba=` que as abas do job já
+  gravavam). Da agregada, o job abre na Planilha Interna; com a agregada no
+  **Fluxo de Caixa do Projeto**, abre no **Fluxo de Caixa do Job**, e a
+  volta cai na agregada no fluxo.
+- As abas da agregada (`projeto-tabs.tsx`) passaram a gravar `?aba=fluxo`
+  com `replaceState`. A árvore de jobs usa `LinkDoJobNaAgregada`, que leva
+  aonde a aba do job na faixa levaria.
+- **Cabeçalho: o card de resumo não cobre mais o título.** Com a janela
+  estreita (largura útil abaixo de ~950–1020 px) o card "Valor do job /
+  Resultado Op." cobria o nome do job ou do projeto — defeito antigo, já na
+  produção. O bloco do título tinha `min-w-0 flex-1` (base 0), e a linha
+  nunca quebrava; agora tem `min-w-[18rem] flex-1`, e quando os dois não
+  cabem o card desce para a linha de baixo, como na agregada de Orçamentos.
+  Em 1838 px nada muda; o card desce abaixo de ~1150 px. Vale para a página
+  do job e a agregada, em Jobs e no Financeiro.
+
 ## ⚠️ Nota de 2026-09-24 — rateio da nota com o save, relatório de rentabilidade e ajustes da aprovação de save
 
 ### Regra 21: o rateio da nota acompanha o save ([decisão 102](../decisions/102-rateio-da-nota-acompanha-o-save.md))
@@ -5856,3 +5886,153 @@ era o imposto de R$ 28.318,52). Regra completa na
 - O envio de outubro do JOB-0034 ("TESTE 099 — NÃO EMITIR NOTA") foi
   removido. Não havia nota sobre ele, e ele saiu da fila do contas a
   receber.
+
+## ⚠️ Nota de 2026-09-25 — "Sem faturamento" e o serviço do job na abertura (decisão 105)
+
+- **Esteira** (`faturamentoPorJob`): situação nova `sem_faturamento`, selo
+  "Sem faturamento" (contorno neutro), para todo job com faturamento
+  previsto zero e sem consumo de save pendente — o Interno, o de custo só
+  direto ao fornecedor e o pago só com save (que antes aparecia
+  "Faturado"). Fica fora do filtro "Aguardando faturamento". Vale para
+  "Visualizar Jobs" e para o cabeçalho do job.
+- **Abertura e "Editar registro":** o Serviço só oferece os do mesmo lado do
+  Interno que o orçamento (`servicosDoLado`; `conferirServico` recusa); a
+  Categoria, só as do mesmo modelo de planilha (o "Editar registro" passou
+  a filtrar também). No banco, `job_servico_e_categoria_seguem_a_planilha`.
+- **"Dados da produção":** "Recebimento em: Sem recebimento" no job sem
+  faturamento; a conferência da fila idem.
+- **Prazos do job:** sem faturamento, "—", fora da média do projeto.
+- **Conferido:** JOB-0047 na abertura (Serviço só "Interno", Categoria só
+  Always On e Fee), aberto com a Conta Teste, "R$ 0,00 · Sem faturamento"
+  na lista, "Aberto · Sem faturamento · Aguardando encerramento" no
+  cabeçalho e, depois do encerramento, "Finalizado · Sem faturamento".
+
+---
+
+## ⚠️ Nota de 2026-09-27 — botão Voltar (decisão 108)
+
+- **Todas as telas do financeiro** trocaram o link cinza pelo botão
+  contornado "Voltar", com o destino num balão. **Contas a Pagar e Fluxo
+  de Caixa ganharam o voltar** (reserva: Central Financeira).
+- **O voltar leva à página anterior.** O job no financeiro volta para onde
+  foi aberto: Contas a Pagar (aba PPs), Calendário, Fila, Visualizar Jobs,
+  Conciliação. A recorrência volta para Contas a Pagar na aba
+  Recorrências; a conta avulsa aberta pela recorrência volta para ela.
+  Aberta por um card da Home, a tela volta para a Central Financeira, e
+  não para a Home.
+- **Conciliação e fatura do cartão** abrem o job do financeiro
+  (`/financeiro/jobs/…`), e não mais o da produção com `?from=financeiro`.
+- **"Ver versão aprovada"** (planilha do job) e o **"Projeto"** da ficha de
+  job sem projeto do financeiro pedem a confirmação de saída de módulo. Do
+  orçamento aberto assim, o voltar traz de volta ao job do financeiro.
+- **Barra da revisão da abertura:** "Voltar para a fila" virou "Voltar",
+  com o mesmo destino do botão do topo (a fila, ou Visualizar Jobs para
+  quem veio de lá).
+- **"Voltar para a aprovação"** na planilha do job virou **"Ir para a
+  aprovação"**: é troca de aba, não voltar.
+- **Excluir conta avulsa ou recorrência** volta para onde a pessoa estava.
+- **Contas a Pagar:** a troca de aba passou a escrever a URL com
+  `replaceState(null, …)` — com o `history.state` no argumento o Next não
+  repassava a aba ao `useSearchParams`. E a busca e o "só abertas" da capa
+  do Cartão sobrevivem à ida e volta da fatura.
+- ~~**Pendente:** na fila, "Visualizar planilha interna" do formulário de
+  abertura troca de página, e o que foi digitado e não salvo se perde ao
+  voltar (R3 do mapeamento).~~ Resolvido na decisão 111 — ver a nota
+  seguinte.
+
+## ⚠️ Nota de 2026-09-27 — abertura de job com as abas do job (decisão 111)
+
+- **Abrir job no financeiro** (`/financeiro/abertura-de-job/[jobId]`)
+  ganhou as cinco abas do job aberto, abaixo do cabeçalho de sempre:
+  Abertura do Job (o formulário, igual ao de antes), Informações do Job,
+  Planilha Interna, Fluxo de Caixa do Job e Comunicação. Mesmos componentes
+  e mesmo carregamento da página do job no financeiro.
+- **Trocar de aba não apaga o preenchimento**, e cada aba volta ao ponto da
+  página em que a pessoa estava. "Visualizar planilha interna" agora troca
+  para a aba Planilha Interna, em vez de abrir a rota da conferência.
+- **A barra de ação** segue só na aba Abertura do Job, como na revisão.
+- **Sair com alteração não gravada pergunta antes** ("Sair sem abrir o
+  job?"): Voltar do topo, menu lateral, links das abas e as saídas para
+  Orçamentos (estas depois da confirmação de saída de módulo). Recarregar
+  ou fechar a aba dispara o aviso do navegador. Sem alteração, sai direto.
+- **Aba Informações antes da abertura:** projeto da produção, categoria do
+  orçamento, "Definida na abertura" e "Ainda não aberto no financeiro";
+  jobs do projeto sem os devolvidos e cancelados.
+- **Aba Fluxo de Caixa sem lançamento:** aviso de que o fluxo começa na
+  abertura.
+- **Não mudou:** a página do job já aberto (leitura, edição, revisão,
+  aprovação de save) e as actions de gravação.
+
+## ⚠️ Nota de 2026-09-28 — busca no campo Projeto da abertura (decisão 111 §7)
+
+- **O campo Projeto** do formulário da abertura ganhou busca: a lista abre
+  com o cursor no campo de busca, filtra por nome e código (sem acento), o
+  Enter escolhe o primeiro e a lista rola quando é longa.
+- **Sugestão:** o texto de fundo da busca traz o projeto do financeiro do
+  último job aberto no mesmo projeto da produção ("Sugestão: Stella Artois
+  Unificado — último job deste projeto (JOB-0031)"). Não vem escolhido.
+  Sem job anterior aberto, ou com o projeto fora da lista, o fundo é
+  "Digite o nome ou o código do projeto".
+- A busca vale também na edição e na revisão do registro; a sugestão, só na
+  abertura.
+
+## ⚠️ Nota de 2026-09-28 — job não aberto não existe no financeiro, e só PP enviada aparece (decisão 113)
+
+- **O financeiro só vê job que ele abriu**, fora a fila de abertura. O
+  devolvido e o cancelado antes da abertura não aparecem em tela nenhuma.
+- **Página do job** (`/financeiro/jobs/[jobId]`): o devolvido e o cancelado
+  antes da abertura vão para `/financeiro/abertura-de-job?aba=aguardando`,
+  como a página da abertura já fazia. Até aqui os dois abriam a página
+  inteira (JOB-0033 e JOB-0050, conferidos no navegador).
+- **"Jobs do projeto" na ficha:** o mesmo filtro da faixa
+  (`STATUS_NA_LISTA`, mais o próprio job). Antes, não tinha filtro.
+- **Só PP enviada ao financeiro** (`enviada_financeiro_em` preenchido),
+  além do `status <> 'gerada'` da decisão 039. Até aqui, a PP cancelada sem
+  nunca ter sido enviada aparecia. Vale para:
+  - Contas a Pagar › PPs: "Canceladas" de 6 para 2, "Todas" de 43 para 39
+    (saíram PP-00092, PP-00047, PP-00046 e PP-00042);
+  - a caixa de entrada do chat de PPs (`chat_pps_conversas`, migration
+    `20260928100001`): de 8 para 7 conversas, sai o JOB-0040, que não tinha
+    mensagem;
+  - o fio de PPs do job (`carregarThreadPPs` e `montarThreadChatPPs`, que é
+    o mesmo da produção) e a trava de envio de mensagem do chat;
+  - a lista de PPs da página do job (`financeiro/jobs/[jobId]/dados.ts`).
+- **A consulta de PPs do Contas a Pagar é do Antonio.** O Tiago autorizou
+  a mudança em 28/09/2026; entrou só o filtro, com comentário.
+- **Fica como está:** save consumido por job ainda não aberto continua no
+  fluxo de caixa e na planilha do job de origem (sem caso em 28/09/2026).
+
+## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA], e o projeto do financeiro leva F (decisão 114)
+
+**No ar desde 28/09/2026:** migrations `20260928200001` e
+`20260928200002` (destrutivas) aplicadas na hora combinada com a frente do
+Antonio, e o código publicado logo depois (`3305751`).
+
+- Todo job aparece no financeiro com o código novo (`AMB-1006/26` no lugar
+  de `JOB-0036`). A fila e o Visualizar Jobs também acham pelo código
+  anterior; a ficha mostra "Código anterior".
+- Visualizar Jobs, a visão agregada do financeiro, os irmãos na ficha e o
+  seletor de jobs de Contas a Receber passam a ordenar pela criação.
+- **Contas a Pagar** busca só pelo código atual do job.
+- **Projeto do financeiro:** `F` no lugar do primeiro zero, mesmo número
+  (`AMB-0004/26` → `AMB-F004/26`), em sequência própria como antes. Os 17
+  existentes trocam; o código de antes fica em
+  `projetos_financeiro.codigo_anterior`, aparece no cabeçalho da página do
+  projeto e vale na busca do campo Projeto da abertura. O projeto da
+  produção leva `P` (`AMB-P006/26`), e os dois nunca mais têm o mesmo
+  código.
+
+## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
+
+**Isto revoga o primeiro tópico da nota de 2026-09-01.**
+
+- **Agregada do projeto:** a coluna Save deixou de ser sempre presente. Ela
+  nasce aberta quando algum job do projeto gera ou consome save, e
+  recolhida quando nenhum usa. O menu "Exibir" (Save · Orçado · Planejado ·
+  Realizado) passou a aparecer aqui também, igual à agregada de Jobs.
+- **Conferência da abertura:** a coluna, que sem save nem existia, agora
+  nasce recolhida na alça lateral e abre pela alça. Job Interno segue sem
+  coluna e sem alça (a página passou a ler `investimento_interno` do
+  serviço do orçamento).
+- **Planilha do job no financeiro:** já seguia a regra (o financeiro não
+  passa o saldo do cliente), e não mudou.

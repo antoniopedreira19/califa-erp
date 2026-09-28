@@ -43,7 +43,11 @@ test("sem nota: a classificação antiga continua valendo", () => {
   assert.equal(semEnvio.numeros_nf, null);
 
   assert.equal(consolidarNotasDoJob([], true, HOJE).situacao, "enviado");
-  assert.equal(consolidarNotasDoJob([], false, HOJE, true).situacao, "faturado");
+  // Nada a faturar (decisão 105): era "faturado" até 25/09/2026.
+  assert.equal(
+    consolidarNotasDoJob([], false, HOJE, true).situacao,
+    "sem_faturamento",
+  );
 });
 
 test("NF agrupada: cada job mostra a sua parte, nunca o total da nota", () => {

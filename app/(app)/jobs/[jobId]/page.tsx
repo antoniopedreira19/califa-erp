@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft, Undo2 } from "lucide-react";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { itensDeJobs } from "@/lib/faixa-do-projeto";
+import { notFound, redirect } from "next/navigation";
+import { Undo2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { nomeVersao } from "@/lib/nome-versao";
 import { createClient } from "@/lib/supabase/server";
@@ -16,6 +18,7 @@ import {
   jobEstaCongelado,
   jobAceitaRealizado,
   jobAceitaAcoesPlanilha,
+  jobCanceladoAntesDaAbertura,
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO, jobStatusBadgeClasses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +83,13 @@ export default async function JobDetailPage({
   const detalhe = await carregarDetalheDoJob(session, params.jobId);
   if (!detalhe) notFound();
 
+  // Cancelado antes da abertura (decisão 113): não é mais job, voltou a ser
+  // só o orçamento — que o cancelamento já devolveu a "aprovado". Quem
+  // chega por link antigo vai para lá.
+  if (jobCanceladoAntesDaAbertura(detalhe.job)) {
+    redirect(`/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}`);
+  }
+
   const {
     raw,
     job,
@@ -129,16 +139,13 @@ export default async function JobDetailPage({
 
 
   // Sem "Voltar para aprovações" desde a decisão 099 (22/09/2026): a
-  // produção não tem link para o financeiro — os módulos são isolados. Quem
-  // chega com `?from=financeiro` volta para o orçamento, como quem chega
-  // sem origem. O link para o orçamento fica.
-  const backLink =
-    fromParam === "jobs"
-      ? { href: "/jobs", label: "Voltar para jobs" }
-      : {
-          href: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`,
-          label: `Voltar para orçamento ${raw.orcamento?.codigo}`,
-        };
+  // produção não tem link para o financeiro — os módulos são isolados.
+  // Desde a decisão 106 o voltar mora na faixa do projeto, e desde a 108
+  // ele leva à página anterior. Isto é só a reserva, para quando não há
+  // página anterior (link colado, aba nova): a lista para quem veio com
+  // `?from=jobs`, o orçamento para os outros.
+  const reservaDoVoltar =
+    fromParam === "jobs" ? "/jobs" : `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`;
 
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   // O selo do cabeçalho: "Em faturamento" é o aberto com o envio completo
@@ -148,18 +155,32 @@ export default async function JobDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href={backLink.href}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          {backLink.label}
-        </Link>
-        {/* O resumo tem largura fixa e fica ancorado à direita: quem cede
-            espaço para nome longo é a coluna do título, que quebra dentro
-            de si mesma (min-w-0 permite o encolhimento). */}
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="min-w-0 flex-1">
+        {/* Faixa do projeto (decisão 106): a agregada e os jobs do projeto,
+            os mesmos da agregada — sem os cancelados, menos este. */}
+        <FaixaDoProjeto
+          modulo="jobs"
+          reservaDoVoltar={reservaDoVoltar}
+          projeto={{
+            codigo: raw.projeto?.codigo ?? "",
+            nome: raw.projeto?.nome ?? "",
+          }}
+          agregadaHref={`/jobs/projeto/${raw.projeto_id}`}
+          itens={itensDeJobs(
+            "/jobs/",
+            jobsDoProjeto,
+            job.id,
+            (status) => status !== "cancelado",
+          )}
+          ativo={job.id}
+        />
+        {/* O resumo tem largura fixa e fica ancorado à direita. O título
+            cede espaço quebrando dentro da própria coluna, mas nunca abaixo
+            de 18rem: sem esse piso (era `min-w-0` com `flex-1`, base 0)
+            a linha nunca quebrava e, com a janela estreita, o card cobria
+            o nome. Com o piso, quando os dois não cabem, o resumo desce
+            para a linha de baixo — como na agregada de Orçamentos. */}
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-[18rem] flex-1">
             <p className="font-mono text-xs font-semibold text-muted-foreground">{job.codigo}</p>
             <div className="mt-1 flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-bold tracking-tight">{job.nome}</h1>
@@ -238,8 +259,15 @@ export default async function JobDetailPage({
               descritivo={job.observacoes}
               job={{
                 codigo: job.codigo,
+                codigoAnterior: job.codigo_anterior,
                 nome: job.nome,
-                categoriaNome: raw.categoria?.nome ?? null,
+                // Categoria do job = `jobs.categoria_id`, que só é gravado
+                // quando o financeiro abre o job (e a abertura a exige).
+                // Na fila, ou devolvido, vale a do orçamento — a mesma
+                // regra da aba Informações da abertura (decisão 111). Job
+                // aberto nunca cai no fallback: a dele já está gravada.
+                categoriaNome:
+                  raw.categoria?.nome ?? raw.orcamento?.categoria?.nome ?? null,
                 // Serviço do job = `jobs.servico_id` (gravado na abertura,
                 // decisão 055), com o do orçamento como fallback. Antes
                 // esta ficha lia a categoria do PROJETO, que virou legada
@@ -257,6 +285,7 @@ export default async function JobDetailPage({
                 dataAbertura: job.data_abertura_financeiro,
                 abertoPorNome,
                 dataPrevistaFaturamento: job.data_prevista_faturamento,
+                semFaturamento: Number(job.faturamento_previsto ?? 0) <= 0.004,
               }}
               projeto={{
                 id: raw.projeto_id,
@@ -311,6 +340,8 @@ export default async function JobDetailPage({
         }
         planilha={
           <JobRealizadoSection
+            confirmarSaidaParaOrcamento={false}
+            interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
             savePorItem={detalhe.savePorItem}

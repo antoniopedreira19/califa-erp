@@ -113,6 +113,9 @@ import type {
   MesDeFaturamento,
   SituacaoDoMes,
 } from "@/lib/calculos/faturamento-por-mes";
+import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useProtegerSaida } from "@/components/voltar/estado";
 
 const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
 
@@ -231,6 +234,14 @@ interface Props {
   /** Exportar a planilha interna do job (decisão 088). Quem vê a tela
    *  exporta; o freelancer, que só tem a visão restrita, não. */
   podeExportarInterna?: boolean;
+  /** Job de serviço Interno (decisão 105): a errata trava tipo e
+   *  planejado, e o save não existe — nem coluna, nem pedido. Obrigatória:
+   *  prop opcional esconde a fronteira em que o campo some. */
+  interno: boolean;
+  /** Na tela do job no financeiro, "Ver versão aprovada" sai do módulo e
+   *  pede confirmação, como o "Orçamento aprovado" da ficha (decisões 021
+   *  e 108). Obrigatória pelo mesmo motivo de `interno`. */
+  confirmarSaidaParaOrcamento: boolean;
 }
 
 export function JobRealizadoSection({
@@ -264,6 +275,8 @@ export function JobRealizadoSection({
   mesPedido,
   hrefPlanilha,
   faturamentoMensal = SEM_FATURAMENTO_MENSAL,
+  interno,
+  confirmarSaidaParaOrcamento,
 }: Props) {
   const router = useRouter();
 
@@ -282,7 +295,7 @@ export function JobRealizadoSection({
   // então o rascunho tem que morar no ancestral comum dos três. Antes de
   // 27/08/2026 isto era um drawer com uma segunda tabela, e o problema não
   // existia porque nada da tela reagia.
-  const errata = useRascunhoErrata(itens);
+  const errata = useRascunhoErrata(itens, interno);
   // A barra de ações do job é irmã das abas e precisa sair de cena
   // enquanto a barra da errata está no ar — as duas grudam no mesmo pé de
   // janela. Nas telas que não têm barra de ações (financeiro, conferência
@@ -291,6 +304,12 @@ export function JobRealizadoSection({
     definirModoErrata(errata.ativo);
     return () => definirModoErrata(false);
   }, [errata.ativo]);
+
+  // Errata com alteração ainda não registrada: o voltar e as abas da faixa
+  // do projeto perguntam antes de descartar (decisão 108). O rascunho só
+  // existe na memória da tela.
+  const [saidaDaErrata, setSaidaDaErrata] = React.useState<string | null>(null);
+  useProtegerSaida(errata.ativo && errata.temMudanca, (href) => setSaidaDaErrata(href));
 
   // Quem ainda não disse se sai mais PP (decisão 052) — o alcance do
   // botão "Concluir PPs" da barra. O servidor refaz esta lista antes de
@@ -378,14 +397,15 @@ export function JobRealizadoSection({
   const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
 
-  // SAVE — a coluna abre sozinha em quem já usa save ou tem saldo a
-  // gastar; quem nunca usou liga pelo menu "Exibir", sem o qual não
-  // haveria como criar o primeiro save de um job.
+  // SAVE — a coluna nasce recolhida na alça lateral e só abre sozinha
+  // quando ESTE job já gera ou consome save (decisão 107). O saldo que o
+  // cliente tem em outros jobs não abre mais a coluna. Quem nunca usou
+  // liga pela alça ou pelo menu "Exibir" para criar o primeiro save.
   const [saveLigado, setSaveLigado] = React.useState(
-    Object.keys(savePorItem).length > 0 ||
-      saldosDeSave.some((s) => s.disponivel > 0),
+    Object.keys(savePorItem).length > 0,
   );
-  const temSave = saveLigado;
+  // O Interno não tem save (decisão 105).
+  const temSave = saveLigado && !interno;
   const [linhaSave, setLinhaSave] = React.useState<ItemPlanilhaJob | null>(
     null,
   );
@@ -428,7 +448,7 @@ export function JobRealizadoSection({
   // Quem age nos dois primeiros é o administrador ou qualquer GP
   // (`podeMexerNoSave`, 24/09/2026) — não a regra "admin ou responsável"
   // de errata e PP.
-  const modoDoSave: "pedido" | "direto" | null = !podeMexerNoSave
+  const modoDoSave: "pedido" | "direto" | null = !podeMexerNoSave || interno
     ? null
     : jobAceitaAcoesPlanilha(job.status)
       ? "pedido"
@@ -752,12 +772,12 @@ export function JobRealizadoSection({
           bvsPorItem={bvsPorItem}
           versaoLabel={`v${versao.numero_versao}`}
           saveVisivel={temSave}
-          onAlternarSave={() => setSaveLigado((v) => !v)}
+          onAlternarSave={interno ? undefined : () => setSaveLigado((v) => !v)}
           savePorItem={savePorItem}
           // O pop-up de save abre em toda tela do job — em leitura onde não
           // se edita (decisão 099 §18). A errata ligada fecha a coluna: as
           // duas mexem na mesma linha.
-          onAbrirSave={!errata.ativo ? setLinhaSave : undefined}
+          onAbrirSave={!errata.ativo && !interno ? setLinhaSave : undefined}
           abrirSaveSoComSave={modoDoSave === null}
           destacarItens={destacarItens}
           errata={podeErrata && !mesEnviado ? errata : undefined}
@@ -939,13 +959,24 @@ export function JobRealizadoSection({
               itensEmAberto={itensEmAberto}
             />
           )}
-          <Link
-            href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
-            prefetch={false}
-            className="text-xs text-california-red hover:underline"
-          >
-            Ver versão aprovada →
-          </Link>
+          {confirmarSaidaParaOrcamento ? (
+            <LinkSaidaDeModulo
+              href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+              modulo="Orçamentos"
+              descricao="A versão aprovada mora no módulo de Orçamentos — não existe cópia dela no financeiro. Você sai desta tela para abri-la."
+              className="text-xs text-california-red hover:underline"
+            >
+              Ver versão aprovada
+            </LinkSaidaDeModulo>
+          ) : (
+            <Link
+              href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+              prefetch={false}
+              className="text-xs text-california-red hover:underline"
+            >
+              Ver versão aprovada →
+            </Link>
+          )}
         </div>
       </div>
 
@@ -1064,6 +1095,22 @@ export function JobRealizadoSection({
         percentualImposto={versao.percentual_imposto}
         internacional={planilha.internacional}
         clienteNome={clienteNome}
+      />
+
+      <ConfirmDialog
+        open={saidaDaErrata !== null}
+        onOpenChange={(aberto) => !aberto && setSaidaDaErrata(null)}
+        title="Sair sem registrar a errata?"
+        description="As alterações da errata ainda não foram registradas e serão descartadas."
+        confirmLabel="Sair e descartar"
+        cancelLabel="Continuar na errata"
+        variant="destructive"
+        onConfirm={() => {
+          const destino = saidaDaErrata;
+          setSaidaDaErrata(null);
+          errata.descartar();
+          if (destino) router.push(destino);
+        }}
       />
 
       <EnviarSavesDialog

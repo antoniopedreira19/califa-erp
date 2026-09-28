@@ -99,8 +99,12 @@ export function montarThreadChatPPs(
   // emissão passa a ser o ENVIO — data e autor de `enviada_financeiro_*`;
   // a PP anterior a essa data foi enviada na própria geração, então os
   // dois carimbos coincidem e nada muda para ela.
+  //
+  // Nem a PP cancelada que nunca foi enviada (decisão 113, 28/09/2026):
+  // cancelar tira a PP de `gerada` sem ela ter passado pelo financeiro, e o
+  // fio ganhava um card "cancelada" de uma conversa que não existiu.
   for (const pp of pps) {
-    if (pp.status === "gerada") continue;
+    if (pp.status === "gerada" || !pp.enviada_financeiro_em) continue;
     const enviadaEm = pp.enviada_financeiro_em ?? pp.created_at;
     const enviadaPorNome = pp.enviada_financeiro_por_nome ?? pp.emitida_por_nome;
     const fornecedorLookup = pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null;

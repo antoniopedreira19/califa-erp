@@ -186,8 +186,9 @@ do job, removido na Entrega 4.
 
 ### Detalhes que não estão no design
 
-- A coluna **"Prazo" (`15 dias`) é derivada** de `created_at` × `prazo_pagamento` —
-  não existe campo pra isso no banco.
+- A coluna **"Prazo" (`15 dias`) era derivada** de `created_at` × `prazo_pagamento` —
+  não existe campo pra isso no banco. ⚠️ Substituída por **"Dt. Pagamento"**
+  em 2026-09-28 (decisão 112, ver a nota no fim deste arquivo).
 - Os **cards de resumo ignoram canceladas**: PP cancelada não é PP gerada.
 
 ### Verificado
@@ -1534,6 +1535,17 @@ etapa final do plano. ⚠️ **Não exercitado:** a emissão real de uma PP
 parcelada (gerar 3 PDFs e abrir cada um) — depende de criar PP de
 verdade, com anexo, num job aberto. É o primeiro caso a rodar na etapa
 final.
+
+⚠️ **Revisto em 2026-09-28 (decisão 112): a PP voltou a ter UM documento
+só, com todas as parcelas.** O financeiro aprova a PP inteira e as
+parcelas seguem juntas para Títulos a Pagar; um papel por parcela, com só
+o valor dela e o total, não correspondia a nada no fluxo, e o "Ver PDF"
+do painel e da ficha abria só o da 1ª. O documento único tem a tabela
+PARCELAS DO PEDIDO e o valor total em destaque; o nome é `pp-PP-XXXXX.pdf`
+também na parcelada. `renderizarDocumentosDaPP` e `caminhoPdfParcela`
+saíram (viraram `renderizarDocumentoDaPP` e `caminhoPdfDaPP`). As PPs
+parceladas emitidas de 17/08 a 28/09 guardam os documentos por parcela
+até a próxima edição ou reenvio.
 
 ---
 
@@ -4201,6 +4213,34 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   banco. Montar uma exige o fluxo inteiro, com o login do financeiro.
 
 
+## ⚠️ Nota de 2026-09-25 — faixa do projeto na página do job e na agregada (decisão 106)
+
+- A primeira linha da página do job (`/jobs/[jobId]`) e da agregada
+  (`/jobs/projeto/[projetoId]`) é a **faixa do projeto**
+  (`components/faixa-do-projeto.tsx`): o voltar, o projeto e uma aba para
+  a Visão agregada e para cada job do projeto. O "Voltar para" solto saiu;
+  o destino é o mesmo (`/jobs` com `?from=jobs`, o orçamento sem ele), com
+  o texto encurtado na faixa e o completo no `title`.
+  ⚠️ **Revisto em 27/09/2026 (decisão 108):** o voltar da faixa leva à
+  página anterior à faixa; esses destinos viraram só a reserva.
+- Entram os jobs da agregada — todos menos os cancelados — e o job aberto,
+  sempre.
+- **As abas do job gravam o `?aba=`** (`job-tabs.tsx`, `replaceState`),
+  como as do financeiro já faziam. É por ele que a troca de job pela faixa
+  mantém a aba de seção. O `?from=jobs` acompanha.
+- **Da agregada, o job abre na Planilha Interna** (antes, Informações): a
+  aba da faixa, a árvore, o "Abrir job" do bloco e o código no card de
+  Totais levam `?from=jobs&aba=planilha`.
+- A árvore sob o título e o card "Jobs do projeto" da ficha ficam.
+- **Cabeçalho: o card de resumo não cobre mais o título.** Com a janela
+  estreita (largura útil abaixo de ~950–1020 px) o card "Valor do job /
+  Resultado Op." cobria o nome do job ou do projeto — defeito antigo, já na
+  produção. O bloco do título tinha `min-w-0 flex-1` (base 0), e a linha
+  nunca quebrava; agora tem `min-w-[18rem] flex-1`, e quando os dois não
+  cabem o card desce para a linha de baixo, como na agregada de Orçamentos.
+  Em 1838 px nada muda; o card desce abaixo de ~1150 px. Vale para a página
+  do job e a agregada, em Jobs e no Financeiro.
+
 ## ⚠️ Nota de 2026-09-24 — save de administrador e GP, errata numa transação e horário da Comunicação
 
 ### Quem mexe no save (decisão 099 §7)
@@ -4244,3 +4284,184 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   Vercel roda em UTC: as mensagens apareciam 3 horas adiantadas e, depois
   das 21:00, com a data do dia seguinte. Agora formata no horário de
   Brasília. Coluna `date` continua como corte de string.
+
+## ⚠️ Nota de 2026-09-25 — job Interno, job sem faturamento e "prontos pra encerrar" (decisão 105)
+
+- **Job Interno** (o serviço do orçamento de origem): na errata a linha nova
+  nasce FI, Tipo e planejado não abrem e a prévia usa planejado = orçado;
+  sem coluna nem pedido de save (`useRascunhoErrata(itens, interno)`,
+  `JobRealizadoSection.interno`, obrigatória). `carregarDetalheDoJob`
+  devolve `interno`.
+- **Job sem faturamento:** ficha "Prev. recebimento: Sem faturamento"; a
+  barra do mensal diz "Este job não tem faturamento previsto: não há nota a
+  emitir." quando nenhum mês fatura. Ele continua ficando **finalizado só
+  com o encerramento** (gatilho `jobs_finaliza_ao_encerrar`, da 087).
+- **"Jobs prontos pra encerrar"** (home do GP) e **`/jobs?filtro=encerrar_pronto`**
+  (era TODO): o job aberto que o botão de encerrar liberaria agora — sem PP
+  por pagar, verba sem prestação aprovada, BV por receber, item sem marcar,
+  save aguardando ou por enviar, revisão da abertura. O envio para
+  faturamento não entra. A régua é `impedimentosDosJobs`
+  (`lib/data/impedimentos-encerramento.ts`), que `encerrarJob` passou a usar
+  também. Subtítulo do card: "Seus jobs abertos sem nenhuma pendência de
+  produção".
+- **"Jobs com faturamento próximo"** (home e filtro): o job com faturamento
+  previsto zero saiu.
+- **Conferido:** JOB-0047 (Interno, Always On, TES-0001/26) aberto, marcado
+  pelo "Concluir PPs", listado no filtro e contado no card (2, com o
+  JOB-0043), encerrado → **Finalizado** direto, sem envio.
+
+## ⚠️ Nota de 2026-09-25 (2) — a calha da planilha do job só remede quando as linhas mudam (decisão 105 §7)
+
+- `job-item-realizado-table.tsx`: `usePosicoesDaCalha` passou a depender da
+  estrutura das linhas (ids, grupo aberto ou recolhido), não do array de
+  grupos, que chega novo a cada render. Conferido no JOB-0032 que PPs, BV e
+  a pílula dividida BV | PP seguem alinhados, inclusive ao recolher e
+  expandir todos.
+
+## ⚠️ Nota de 2026-09-25 (3) — "Jobs pendentes de envio para faturamento" (decisão 105 §8)
+
+- **Home do administrador:** o card "Jobs com faturamento próximo" virou
+  "Jobs pendentes de envio para faturamento" (empresa inteira). **Home do
+  GP:** um card só com esse nome, no lugar de "prontos pra enviar" e de
+  "faturamento próximo", nos jobs em que ele é o GP responsável.
+- Pendente = aberto ou encerrado, faturamento previsto > 0 e sem
+  `faturamento_enviado_em` (`pendentesDeEnvioQuery`). Filtro
+  `/jobs?filtro=faturamento_pendente`; os links antigos caem nele.
+- A lista abre em "Meus" com `meus=1`, em "Todos" com filtro sem `meus=1`, e
+  no padrão sem filtro (`JobsList.meusInicial`).
+
+---
+
+## ⚠️ Nota de 2026-09-27 — botão Voltar (decisão 108)
+
+- **Página do job e agregada de Jobs:** o voltar da faixa virou o botão
+  contornado "Voltar", com o destino num balão. Ele leva à página de onde
+  a pessoa entrou no projeto: do job aberto pelo orçamento, volta ao
+  orçamento; trocar de job ou abrir a agregada pela faixa não muda isso
+  (as abas da faixa não contam como página anterior). O `?from=jobs`
+  ficou só para escolher a reserva (sem página anterior: `/jobs` com ele,
+  o orçamento sem ele).
+- **Errata com alteração não registrada** pergunta "Sair sem registrar a
+  errata?" antes de sair pelo voltar ou pelas abas da faixa. O rascunho só
+  vive na memória da tela e se perdia sem aviso.
+- **`JobRealizadoSection`** ganhou `confirmarSaidaParaOrcamento`
+  (obrigatória): no financeiro, "Ver versão aprovada" pede confirmação de
+  saída de módulo. Na produção passa `false` e nada muda.
+- **Ficha do job:** no financeiro, o link "Projeto" de job sem projeto do
+  financeiro (vai para `/orcamentos/…`) também pede a confirmação.
+
+## ⚠️ Nota de 2026-09-28 — "Categoria · Serviço" do job na fila mostra a categoria do orçamento
+
+- **O defeito:** na página do job (`/jobs/[jobId]`), o campo "Categoria ·
+  Serviço" da aba Informações mostrava só o serviço enquanto o job não
+  tinha sido aberto (JOB-0051 · Teste 2 mostrava "Ativação" em vez de
+  "Evento · Ativação"). A categoria vinha só de `jobs.categoria_id`, que
+  o financeiro grava na abertura; o serviço já caía no do orçamento
+  (decisão 055), a categoria não.
+- **A correção:** a ficha usa `jobs.categoria_id` e, sem ele, a categoria
+  do orçamento — a mesma regra da aba Informações da abertura (decisão
+  111). `carregarDetalheDoJob` já embutia a categoria do orçamento para o
+  `modelo_planilha`; o embed passou a trazer também o `nome`. Nenhuma
+  consulta nova.
+- **Job aberto não muda:** a abertura exige categoria
+  (`abertura-financeiro.ts`), e a gravada no job vem antes do fallback.
+  Em 28/09 os 13 jobs abertos ou finalizados tinham categoria gravada.
+- **Quem passa a mostrar a categoria do orçamento:** aguardando abertura,
+  devolvido pelo financeiro e cancelado antes da abertura. Os três já
+  mostravam o serviço do orçamento.
+- **Fora desta correção:** a página do job no financeiro
+  (`/financeiro/jobs/[jobId]`) lê só `jobs.categoria_id`. Lá o aguardando
+  abertura redireciona para a abertura, mas o devolvido e o cancelado
+  antes da abertura continuam sem categoria. **Resolvido pela decisão 113,
+  no mesmo dia:** os dois não abrem mais a página do financeiro.
+
+## ⚠️ Nota de 2026-09-28 — o cancelado antes da abertura volta a ser só orçamento (decisão 113)
+
+- **O job cancelado antes da abertura some da produção.** A linha fica no
+  banco, com o código queimado; o orçamento já voltava a "aprovado" no
+  cancelamento (decisão 057). "Antes da abertura" é sem
+  `data_abertura_financeiro`: `jobCanceladoAntesDaAbertura` e
+  `FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA`, em `lib/types.ts`.
+- **Lista de Jobs:** sai da lista, da busca, das contagens e do total do
+  projeto (18 jobs em vez de 23 em 28/09). A opção "Cancelado" saiu do
+  filtro de status. O devolvido continua na lista: ele é da produção, que
+  revisa e reenvia.
+- **Página do job:** o link para um cancelado antes da abertura leva ao
+  orçamento (`/orcamentos/[projetoId]/[orcId]`). Conferido com o JOB-0050,
+  que caiu no TES-0002/26-02 com "Ver job JOB-0051".
+- **"Jobs do projeto" na ficha** (`carregarDetalheDoJob`): o cancelado sai
+  da consulta. A ficha do JOB-0051 passou de 4 para 3 jobs.
+- **Fio de PPs do job** (`montarThreadChatPPs`): a PP cancelada que nunca
+  foi enviada ao financeiro não gera mais card — o fio é a conversa com o
+  financeiro. O do JOB-0040 ficou vazio (a PP-00092 nunca foi enviada).
+- **Coluna Save da versão** (`saveDaVersao`): o consumidor resolvido pelo
+  orçamento pula o cancelado; antes, pegava o primeiro job do orçamento.
+  Sem consumo nessa situação em 28/09, então o caminho não foi exercitado
+  em tela.
+- **Home** do GP, do produtor e do freelancer: "Mensagens no chat" e "PPs
+  emitidas por mim" deixam de contar o job cancelado antes da abertura
+  (`lib/home/carregar.ts`, código do Antonio, mudança autorizada pelo
+  Tiago). Conferido por rota temporária com as funções reais: 1 mensagem
+  na home do freelancer e 11 PPs emitidas no mês na do produtor, como no
+  banco; o formato da contagem do GP achou a 1 mensagem do projeto do
+  JOB-0025 sem erro; e o mesmo filtro no embed tirou exatamente os 40 itens
+  dos jobs cancelados (309 → 269).
+- **Ficou de fora:** a exportação `/api/jobs/[jobId]/export` não confere o
+  status.
+
+## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
+
+- **Planilha interna do job:** a coluna Save nasce recolhida na alça
+  lateral. Só abre sozinha quando alguma linha do job gera ou consome save
+  (ou tem recusa de save ainda não retirada).
+- **Saiu o gatilho do saldo do cliente:** ter crédito disponível em outros
+  jobs do cliente não abre mais a coluna. Quem quer criar o primeiro save
+  abre pela alça ou pelo menu "Exibir".
+- A agregada de jobs já seguia essa regra; o financeiro, que forçava a
+  coluna sempre aberta, passou a segui-la também (ver `HANDOFF_FINANCEIRO`).
+
+## ⚠️ Nota de 2026-09-28 (2) — quebra das PPs no painel, linha do tempo, PDF único e Dt. Pagamento (decisão 112)
+
+- **Painel "Destrinchar realizado"** (`realizado/painel-pps-item.tsx`):
+  cada PP em duas linhas — código, fornecedor e situação em cima (na PP
+  ainda no job, o botão "Enviar ao financeiro" no lugar da situação);
+  R$ Unit., QT, D/M e Total embaixo, com os botões na mesma linha, em
+  colunas de largura fixa. O aviso de NF e o "Preste contas na aba de PPs"
+  vão para uma terceira linha, quando existem. Fundo branco, sem a cor do
+  REALIZADO. O painel foi de 430 para 500 px; os cartões do topo ganharam
+  a conta do planejado e quantas PPs o item tem. `PPDoItem` ganhou
+  `valorUnitario`, `quantidade` e `diasMeses` obrigatórios.
+- **Ficha da PP** (`pps/ver-pp-drawer.tsx`): a linha do tempo saiu da
+  faixa fixa acima do rodapé e é a última seção do formulário, rolando
+  com ele.
+- **PDF** (`lib/pdf/pedido-compra.ts`, `realizado/actions-pp.ts`): um
+  documento só por PP (ver a nota ⚠️ da entrega 34). Emissão, edição da
+  gerada e reenvio sobem um arquivo e gravam o mesmo caminho em todas as
+  parcelas; edição e reenvio apagam os documentos por parcela que sobraram.
+- **Aba "Pedidos de Produção"** (`pps/job-pps-section.tsx`): "Prazo" saiu
+  e entrou **"Dt. Pagamento"** — paga: o dia em que foi paga; aprovada e
+  ainda não paga: a data programada pelo financeiro (a atual, se ele
+  repactuou); antes da aprovação: "—".
+- **Nenhuma consulta nova, nenhuma migration.**
+- **Teste:** PP-00092 gerada no JOB-0040 (TES-0001/26) com duas parcelas,
+  editada para três e cancelada pela tela no fim. O reenvio de PP
+  rejeitada não foi exercitado ao vivo (detalhes na decisão 112, §4).
+
+## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA] (decisão 114)
+
+**No ar desde 28/09/2026:** migration `20260928200001` (destrutiva)
+aplicada na hora combinada com a frente do Antonio, junto da
+`20260928200002`, que troca os códigos de projeto (ver HANDOFF_ORCAMENTO);
+código publicado logo depois (`3305751`).
+
+- **Formato novo:** `AMB-1006/26` — sigla atual do cliente, sequencial por
+  sigla e ano, ano da criação do job. Em 2026 começa em 1001 (o outro
+  sistema da agência usa o mesmo formato abaixo do milhar); de 2027 em
+  diante, 0001.
+- **Os 23 jobs existentes** trocam de código na ordem de criação; o
+  `JOB-NNNN` fica em `jobs.codigo_anterior`, aparece na ficha como "Código
+  anterior" e continua achando o job na busca da lista de Jobs.
+- **Ordem:** a lista de Jobs, a visão agregada e os irmãos da ficha passam a
+  ordenar pela criação, não pelo código.
+- **Prévia do código** no envio para abertura: sigla do cliente e ano de
+  hoje.

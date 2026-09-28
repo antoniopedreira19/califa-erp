@@ -74,6 +74,9 @@ interface Props {
   /** Qual cadeia fecha ESTE orçamento (decisão 072). Obrigatório: na visão
    *  agregada cada card tem a sua, e um default somaria pela errada. */
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Orçamento de serviço Interno (decisão 105): a planilha trava o tipo em
+   *  F · Interno e o planejado no orçado. Obrigatório. */
+  interno: boolean;
   /** Bruto ou Líquido (− BV). O estado mora no editor: a chave vale para
    *  a página inteira, e aqui há vários orçamentos na mesma tela. */
   visao: VisaoBv;
@@ -148,6 +151,7 @@ export function JobRascunhoCard({
   badge,
   onEditarParametros,
   modeloPlanilha,
+  interno,
 }: Props) {
   const [askRemover, setAskRemover] = React.useState(false);
   const totais = totaisDoJob(job, parametros, modeloPlanilha);
@@ -430,6 +434,7 @@ export function JobRascunhoCard({
                             grupos={gruposDaPlanilha.filter((g) => idsDoMes.has(g.id))}
                             moeda={parametros.moeda}
                             moedaEstrangeira={null}
+                            interno={interno}
                             percentualImposto={parametros.percentual_imposto}
                             visao={visao}
                             readOnly={readOnly}
@@ -565,6 +570,7 @@ export function JobRascunhoCard({
                     // Valor neutro EXPLÍCITO, não default — é o que faz o
                     // TypeScript avisar quando o internacional chegar aqui.
                     moedaEstrangeira={null}
+                    interno={interno}
                     percentualImposto={parametros.percentual_imposto}
                     visao={visao}
                     readOnly={readOnly}

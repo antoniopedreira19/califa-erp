@@ -124,6 +124,16 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 102 | [O rateio job × save da nota emitida acompanha o save](102-rateio-da-nota-acompanha-o-save.md) | 2026-09-24 |
 | 103 | [O relatório de rentabilidade separa o save](103-rentabilidade-separa-o-save.md) | 2026-09-24 |
 | 104 | [O item da planilha muda de lugar pela alça, e pode trocar de agrupamento](104-o-item-muda-de-lugar-pela-alca.md) | 2026-09-24 |
+| 105 | [O serviço Interno é investimento da agência, e o job sem faturamento só precisa ser encerrado](105-servico-interno-e-job-sem-faturamento.md) | 2026-09-25 |
+| 106 | [Faixa do projeto: a agregada e cada orçamento ou job em abas, no topo da tela](106-faixa-do-projeto.md) | 2026-09-25 |
+| 107 | [A coluna Save nasce recolhida, e só abre sozinha onde já há save](107-coluna-save-nasce-recolhida.md) | 2026-09-25 |
+| 108 | [O botão Voltar: visível, igual em todas as telas, e leva à página anterior](108-botao-voltar.md) | 2026-09-27 |
+| 109 | [Dias/meses do orçado pode ser zero, e não trava a aprovação](109-dias-meses-zero-no-orcado.md) | 2026-09-27 |
+| 110 | [Importação de planilha: modal no centro, escolha da aba e arquivo de até 10 MB](110-importacao-de-planilha-em-modal.md) | 2026-09-27 |
+| 111 | [A abertura de job mostra as abas do job, e trocar de aba não apaga o preenchimento](111-abertura-de-job-com-as-abas-do-job.md) | 2026-09-27 |
+| 112 | [A quebra das PPs no painel do item, um documento só por PP e a data de pagamento na aba de PPs](112-quebra-das-pps-documento-unico-e-data-de-pagamento.md) | 2026-09-28 |
+| 113 | [Job não aberto não existe no financeiro, e o cancelado antes da abertura volta a ser só orçamento](113-job-nao-aberto-nao-existe-no-financeiro.md) | 2026-09-28 |
+| 114 | [O código do job é [SIGLA]-[SEQ]/[AA], com 1 na frente em 2026; o projeto leva P, e o do financeiro F](114-codigo-do-job-por-sigla-e-ano.md) | 2026-09-28 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -136,4 +146,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 105.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 115.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

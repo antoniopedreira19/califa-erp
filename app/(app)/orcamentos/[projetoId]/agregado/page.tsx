@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { AGREGADA, itensDeOrcamentos } from "@/lib/faixa-do-projeto";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
@@ -112,7 +114,7 @@ export default async function OrcamentosAgregadoPage({
       // `modelo_planilha` vem junto: é ele que diz como o orçamento criado
       // aqui vai fechar (decisão 072). `servico_exclusivo_id` separa as
       // categorias do Fee e do Always On, que não nascem por aqui (078).
-      .select("id, nome, modelo_planilha, servico_exclusivo_id")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -538,6 +540,20 @@ export default async function OrcamentosAgregadoPage({
       savePorItem={savePorItem}
       saldosDeSave={saldosDeSave}
       nomeDoGrupo={nomeDoGrupo}
+      faixa={
+        <FaixaDoProjeto
+          modulo="orcamentos"
+          reservaDoVoltar={`/orcamentos/${projeto.id}`}
+          projeto={{
+            codigo: projeto.codigo,
+            nome: projeto.nome,
+            href: `/orcamentos/${projeto.id}`,
+          }}
+          agregadaHref={`/orcamentos/${projeto.id}/agregado`}
+          itens={itensDeOrcamentos(projeto.id, orcamentos, null)}
+          ativo={AGREGADA}
+        />
+      }
       projeto={{
         id: projeto.id,
         codigo: projeto.codigo,

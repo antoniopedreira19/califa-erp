@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -22,6 +21,7 @@ import { FiltrosConta } from "./filtros-conta";
 import { ConciliacaoList } from "./conciliacao-list";
 import { HubConciliacao } from "./hub";
 import { lerPeriodo } from "./hub-periodo";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -176,13 +176,7 @@ export default async function ConciliacaoPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/financeiro/conciliacao"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para a lista de contas
-        </Link>
+        <BotaoVoltar reserva="/financeiro/conciliacao" />
       </div>
       <PageHeader
         eyebrow="FINANCEIRO"

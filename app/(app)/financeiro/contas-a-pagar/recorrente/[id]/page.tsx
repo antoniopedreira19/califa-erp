@@ -1,6 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Repeat } from "lucide-react";
+import { Repeat } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
@@ -21,6 +20,7 @@ import {
 } from "./acoes-client";
 import { HistoricoOcorrencias } from "./historico-ocorrencias";
 import { RateioCard } from "../../rateio-card";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -307,13 +307,7 @@ export default async function RecorrenteDetalhesPage({
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div>
-        <Link
-          href="/financeiro/contas-a-pagar"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para contas a pagar
-        </Link>
+        <BotaoVoltar reserva="/financeiro/contas-a-pagar" />
       </div>
       <header className="space-y-2">
         <div className="flex items-center justify-between gap-3">
