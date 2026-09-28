@@ -332,22 +332,27 @@ function SlidePagina1({ nome }: { nome: string }) {
 
   return (
     <div className="overflow-hidden rounded-3xl shadow-soft aspect-[16/9] grid grid-cols-[40%_1fr]">
-      {/* Coluna esquerda — bloco vermelho sólido em cima, cortina em baixo */}
+      {/* Coluna esquerda — imagem "Slide1-topo" no topo, cortina em baixo */}
       <div className="grid grid-rows-[45%_55%]">
-        {/* Topo: fundo sólido #D40D32 com logo + CARTA PROPOSTA */}
+        {/* Topo: imagem inteira exportada do PPT (logo + CARTA PROPOSTA
+            já embutidos). Se o arquivo não existir, cai num fundo
+            sólido #D40D32 pra não quebrar layout. */}
         <div
-          className="p-4 md:p-6 flex flex-col justify-start"
+          className="relative"
           style={{ background: "#D40D32" }}
         >
-          <LogoCalifornia />
-          <div className="mt-4 md:mt-6">
-            <p className="text-white text-3xl md:text-5xl font-black leading-none tracking-tight">
-              CARTA
-            </p>
-            <p className="text-white text-3xl md:text-5xl font-light leading-none tracking-tight mt-1 md:mt-2">
-              PROPOSTA
-            </p>
-          </div>
+          <Image
+            src="/proposta/carta/Slide1-topo.jpg"
+            alt="Carta Proposta California"
+            fill
+            sizes="(max-width: 768px) 40vw, 500px"
+            className="object-cover"
+            priority
+            unoptimized
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
         </div>
 
         {/* Base: textura de cortina densa + linha vertical + nome */}
@@ -400,51 +405,6 @@ function SlidePagina1({ nome }: { nome: string }) {
           }}
         />
       </div>
-    </div>
-  );
-}
-
-/**
- * Logo California. Usa a imagem real em
- * /public/proposta/carta/california-logo.png. Se o arquivo não estiver
- * lá, cai num placeholder textual (chip com 🐻 + "CALIFORNIA").
- *
- * A imagem deve ser PNG com fundo transparente e o logo em versão
- * clara (urso branco + "CALIFORNIA" em branco), pra ficar sobre o
- * bloco vermelho #D40D32.
- */
-function LogoCalifornia() {
-  const [erro, setErro] = React.useState(false);
-
-  if (erro) {
-    return (
-      <div className="inline-flex items-center gap-2 self-start">
-        <span
-          className="inline-flex items-center justify-center rounded-full bg-white"
-          style={{ width: 26, height: 26 }}
-        >
-          <span className="text-sm leading-none" role="img" aria-label="urso">
-            🐻
-          </span>
-        </span>
-        <span className="text-white font-black text-base md:text-lg tracking-wider">
-          CALIFORNIA
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative self-start h-8 md:h-10 w-32 md:w-40">
-      <Image
-        src="/proposta/carta/california-logo.png"
-        alt="California"
-        fill
-        sizes="160px"
-        className="object-contain object-left"
-        unoptimized
-        onError={() => setErro(true)}
-      />
     </div>
   );
 }
