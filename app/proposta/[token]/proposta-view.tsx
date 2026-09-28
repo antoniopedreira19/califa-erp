@@ -3,20 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import {
-  Check,
-  X,
-  AlertCircle,
-  MapPin,
-  Sparkles,
-  Building,
-  Users,
-  Heart,
-  Coffee,
-  Calendar,
-  Clock,
-  GraduationCap,
-} from "lucide-react";
+import { Check, X, AlertCircle, Sparkles, Calendar, Wallet, Briefcase } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MaskedInput } from "@/components/ui/masked-input";
@@ -51,11 +38,6 @@ function formatarData(iso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
-function formatarHoje(): string {
-  const d = new Date();
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`;
-}
-
 export function PropostaView({
   contratacao: c,
   token,
@@ -73,7 +55,8 @@ export function PropostaView({
 }
 
 /* =========================================================================
- * LANDING CARTA — reproduz as 7 páginas da carta proposta California
+ * LANDING CARTA — apresenta os 7 slides originais da California + card com
+ * os dados personalizados do candidato + botões de aceitar/recusar
  * ========================================================================= */
 
 function LandingCarta({
@@ -109,472 +92,124 @@ function LandingCarta({
     });
   }
 
-  const nomeCargo = c.cargo;
-  const tipoRegime = tipoContratacaoLabel(c.tipo_contratacao);
+  const primeiroNome = c.nome.split(" ")[0];
 
   return (
     <div className="space-y-8">
-      {/* PÁGINA 1 — CAPA */}
-      <section className="overflow-hidden rounded-3xl shadow-elevated">
-        <div className="grid md:grid-cols-2">
-          <div className="relative bg-gradient-to-br from-california-red via-california-red to-red-900 p-10 md:p-14 text-white">
-            <div className="flex items-center gap-2 mb-8">
-              <span className="rounded-full bg-white text-california-red font-bold text-sm w-8 h-8 inline-flex items-center justify-center">
-                CA
-              </span>
-              <span className="font-bold text-sm tracking-wider">CALIFORNIA</span>
-            </div>
-            <h1 className="text-5xl md:text-6xl font-black leading-none">
-              CARTA
-              <br />
-              <span className="font-light">PROPOSTA</span>
-            </h1>
-            <div className="mt-10 md:mt-20">
-              <p className="text-sm opacity-70 mb-2">{formatarHoje()}</p>
-              <p className="text-2xl md:text-3xl font-bold uppercase leading-tight">
-                {c.nome}
-              </p>
-            </div>
-            <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/20 to-transparent" />
-          </div>
-          <div className="relative min-h-[300px] md:min-h-[500px] bg-gradient-to-br from-neutral-200 to-neutral-400">
-            <Image
-              src="/proposta/carta/01-capa.jpg"
-              alt="Escritórios California"
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover"
-              // Se a imagem não existir, o next/image mostra um espaço vazio;
-              // o gradient do container serve como fallback visual.
-              priority
-              unoptimized
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm font-medium pointer-events-none">
-              {/* Placeholder text — invisível se a imagem carregar */}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* PÁGINA 2 — ESTAMOS POR TODO O PAÍS */}
-      <section className="rounded-3xl bg-[#F5F0E8] shadow-elevated overflow-hidden">
-        <div className="p-8 md:p-14">
-          <div className="grid md:grid-cols-[auto_1fr_auto] gap-8 items-center">
-            <div className="hidden md:block">
-              <h2
-                className="text-6xl font-black text-california-red leading-none"
-                style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-              >
-                ESTAMOS POR
-                <br />
-                <span className="text-neutral-900">TODO O PAÍS!</span>
-              </h2>
-            </div>
-            <div className="md:hidden">
-              <h2 className="text-4xl font-black leading-tight">
-                <span className="text-california-red">ESTAMOS POR</span>
-                <br />
-                <span>TODO O PAÍS!</span>
-              </h2>
-            </div>
-
-            <div className="space-y-6">
-              <NumeroDestaque numero="8" label="Escritórios" />
-              <NumeroDestaque numero="6" label="Regionais" />
-              <NumeroDestaque numero="300" label="Californianos" />
-              <NumeroDestaque numero="20" label="mil m² Estúdios" />
-
-              <div className="mt-8 pt-6 border-t border-neutral-300">
-                <h3 className="text-lg font-bold text-california-red">
-                  Projac do Conteúdo & Criatividade!
-                </h3>
-                <p className="mt-3 text-sm text-neutral-700 leading-relaxed">
-                  A <strong>presença</strong> nas{" "}
-                  <strong>principais cidades</strong> do Brasil nos permite
-                  viver o que o local fala, sente e cria. É dessa imersão que{" "}
-                  <strong>transformamos tendências</strong> em{" "}
-                  <strong>ideias</strong> e <strong>conteúdos</strong> que{" "}
-                  <strong>pautam cultura</strong>, conectando{" "}
-                  <strong>marcas</strong> a <strong>conversas reais</strong> que
-                  nascem do território <strong>regional</strong>, ganham força
-                  no <strong>digital</strong> e ditam comportamento no{" "}
-                  <strong>mundo</strong>.
-                </p>
-              </div>
-            </div>
-
-            <div className="hidden md:flex flex-col gap-3 text-sm font-bold text-california-red">
-              <RegionalPin nome="FOR" />
-              <RegionalPin nome="SSA" />
-              <RegionalPin nome="BH" />
-              <RegionalPin nome="RIO" />
-              <RegionalPin nome="SP" />
-              <p className="text-xs font-normal text-neutral-500 mt-1">
-                São Sebastião*
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8 md:hidden flex flex-wrap gap-3 text-sm font-bold text-california-red">
-            <RegionalPin nome="FOR" />
-            <RegionalPin nome="SSA" />
-            <RegionalPin nome="BH" />
-            <RegionalPin nome="RIO" />
-            <RegionalPin nome="SP" />
-            <span className="text-xs font-normal text-neutral-500 self-center">
-              São Sebastião*
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* PÁGINA 3 — BOAS-VINDAS + DETALHES */}
-      <section className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-elevated">
-        <div className="grid md:grid-cols-[80px_1fr_1fr]">
-          <div className="hidden md:block bg-gradient-to-b from-california-red to-red-800 p-6 text-white">
-            <p className="text-xs font-bold tracking-wider">CARTA</p>
-            <p className="text-xs opacity-70">PROPOSTA</p>
-          </div>
-          <div className="p-10 md:p-14 text-center">
-            <p className="text-lg font-bold">Boas-vindas à Califa! 🐻</p>
-            <p className="mt-4 text-sm text-neutral-800 leading-relaxed max-w-md mx-auto">
-              É com muita alegria que convidamos você para surfar na nossa
-              onda, assumindo o cargo de{" "}
-              <strong>({nomeCargo}).</strong> Estamos animados para criar,
-              trocar e construir coisas incríveis juntos!
-            </p>
-            <p className="mt-6 text-sm text-neutral-800 max-w-md mx-auto">
-              Abaixo, você encontra todos os detalhes da nossa proposta:
-            </p>
-
-            <div className="mt-8 space-y-4 max-w-sm mx-auto">
-              <div className="rounded-2xl bg-gradient-to-r from-california-red to-red-800 p-5 text-white shadow-brand">
-                <p className="text-lg font-bold">
-                  Data de Início: {formatarData(c.data_admissao)}
-                </p>
-              </div>
-              <div className="rounded-2xl bg-gradient-to-r from-california-red to-red-800 p-5 text-white shadow-brand">
-                <p className="text-lg">
-                  Remuneração:{" "}
-                  <span className="font-bold">
-                    {brl.format(Number(c.salario_proposto))}
-                  </span>
-                </p>
-                <p className="text-sm opacity-90">
-                  em regime <strong>{tipoRegime}</strong>
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="relative min-h-[300px] bg-gradient-to-br from-neutral-300 to-neutral-500">
-            <Image
-              src="/proposta/carta/03-escritorio-janela.jpg"
-              alt="Escritório California"
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover"
-              unoptimized
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* PÁGINA 4 — BENEFÍCIOS */}
-      <section className="rounded-3xl bg-[#F5F0E8] shadow-elevated overflow-hidden">
-        <div className="relative min-h-[140px] bg-gradient-to-br from-emerald-900 to-emerald-700">
-          <Image
-            src="/proposta/carta/04-planta-fundo.jpg"
-            alt=""
-            fill
-            className="object-cover opacity-90"
-            unoptimized
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
-          <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-            <div className="border-2 border-white rounded-full px-8 py-3 text-white font-bold text-lg">
-              Dá um check nos benefícios de ser um Urso Califa
-            </div>
-          </div>
-        </div>
-        <div className="p-8 md:p-12 grid md:grid-cols-3 gap-6">
-          <BeneficioCard cor="sulamerica">
-            <div className="mb-3">
-              <span className="text-2xl font-bold text-blue-800">SulAmérica</span>
-            </div>
-            <p className="font-bold">Plano de saúde SulAmérica</p>
-            <p className="text-sm text-neutral-700">(Sem Coparticipação)</p>
-            <p className="text-sm text-neutral-700">Elegível para dependentes;</p>
-            <div className="mt-4">
-              <p className="font-bold">Plano odontológico SulAmérica</p>
-              <p className="text-sm text-neutral-700">Elegível para dependentes;</p>
-            </div>
-          </BeneficioCard>
-
-          <BeneficioCard cor="wellhub">
-            <div className="mb-3">
-              <span className="text-2xl font-bold text-pink-600">wellhub</span>
-              <span className="ml-1">✿</span>
-            </div>
-            <p className="text-sm">
-              <strong>Wellhub/Gympass</strong> - parceria;
-            </p>
-            <div className="mt-4 text-sm">
-              <p>
-                <strong>Convênio com as faculdades:</strong> Grupo Ânima
-                Educação, Baiana Business School, FIAP, ESPM, Miami ad School e
-                com a escola de idiomas Campus Live;
-              </p>
-            </div>
-            <div className="mt-4 text-sm">
-              <p>
-                Convênio com a <strong>CENTRAL PSI</strong> para terapia
-                presencial e online (Elegível para dependentes);
-              </p>
-            </div>
-          </BeneficioCard>
-
-          <BeneficioCard>
-            <p className="text-sm">
-              <strong>Eventos comemorativos e de aniversário</strong> conforme
-              calendário festivos;
-            </p>
-            <p className="mt-3 text-sm">No Dress Code;</p>
-            <p className="mt-3 text-sm">
-              O pagamento do salário é mensal,{" "}
-              <strong>todo dia 3 do mês subsequente.</strong>
-            </p>
-            <p className="mt-3 text-sm">
-              A agência funciona das <strong>09:00h</strong> às{" "}
-              <strong>19:00h</strong> (segunda a sexta), com{" "}
-              <strong>2 horas de almoço</strong>.
-            </p>
-          </BeneficioCard>
-
-          <BeneficioCard className="md:col-span-3 md:max-w-md">
-            <p className="text-sm">Férias remuneradas;</p>
-            <p className="mt-2 text-sm">Day-Off de aniversário;</p>
-            <p className="mt-2 text-sm">Décimo terceiro salário;</p>
-          </BeneficioCard>
-        </div>
-        <div className="px-8 pb-6 text-xs font-bold text-neutral-500">
-          CARTA <span className="font-normal">PROPOSTA</span>
-        </div>
-      </section>
-
-      {/* PÁGINA 5 — DOCUMENTAÇÃO */}
-      <section className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-elevated">
-        <div className="grid md:grid-cols-[80px_1fr_1fr]">
-          <div className="hidden md:block bg-gradient-to-b from-california-red to-red-800 p-6 text-white">
-            <p className="text-xs font-bold tracking-wider">CARTA</p>
-            <p className="text-xs opacity-70">PROPOSTA</p>
-          </div>
-          <div className="p-10 md:p-12">
-            <h3 className="text-base font-bold">
-              <strong>Documentação necessária</strong> para adesão aos{" "}
-              <strong>Planos SulAmérica Saúde e Odonto</strong> (sem carência
-              dentro dos 30 dias de contratação e para PJ não há carência a
-              ser cumprida):
-            </h3>
-
-            <div className="mt-6">
-              <p className="text-lg font-bold">
-                PJ&rsquo;s{" "}
-                <span className="inline-block w-16 h-px bg-neutral-400 align-middle" />
-              </p>
-              <ul className="mt-3 space-y-2 text-sm list-disc pl-5">
-                <li>RG e CPF (ou CNH)</li>
-                <li>
-                  contrato de prestação de serviços + (MEI) cartão CNPJ ou
-                  CCMEI ou Contrato social se for ME ou LTDA. (necessário 06
-                  meses de abertura)
-                </li>
-                <li>Última nota fiscal emitida para a empresa.</li>
-              </ul>
-            </div>
-
-            <div className="mt-6">
-              <p className="text-lg font-bold">
-                CLT&rsquo;s{" "}
-                <span className="inline-block w-16 h-px bg-neutral-400 align-middle" />
-              </p>
-              <ul className="mt-3 space-y-2 text-sm list-disc pl-5">
-                <li>RG e CPF (ou CNH)</li>
-                <li>Contrato de trabalho</li>
-              </ul>
-            </div>
-          </div>
-          <div className="relative min-h-[300px] bg-gradient-to-br from-amber-800 to-amber-950">
-            <Image
-              src="/proposta/carta/05-fachada.jpg"
-              alt="Fachada California"
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover"
-              unoptimized
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* PÁGINA 6 — PLANOS */}
-      <section className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-elevated">
-        <div className="grid md:grid-cols-[80px_1fr]">
-          <div className="hidden md:block bg-gradient-to-b from-california-red to-red-800 p-6 text-white">
-            <p className="text-xs font-bold tracking-wider">CARTA</p>
-            <p className="text-xs opacity-70">PROPOSTA</p>
-          </div>
-          <div className="p-8 md:p-12">
-            <div className="mb-6">
-              <span className="text-3xl font-bold text-blue-800">SulAmérica</span>
-            </div>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4 text-sm">
-                <div>
-                  <p className="font-bold">Plano Direto (sem coparticipação)</p>
-                  <p className="text-neutral-700">
-                    - (vide valor de acordo com a faixa etária na tabela) Valor
-                    Califa 60% e Valor do Urso 40% (Sobre o valor total do
-                    plano escolhido)
-                  </p>
-                </div>
-                <div>
-                  <p className="font-bold">Plano Especial (sem coparticipação)</p>
-                  <p className="text-neutral-700">
-                    - (vide valor de acordo com a faixa etária na tabela) Valor
-                    Califa 60% e Valor do Urso 40% (Sobre o valor total do
-                    plano escolhido)
-                  </p>
-                </div>
-                <div>
-                  <p>
-                    <strong>Plano Odonto -</strong> Vinculado ao Saúde
-                    SulAmérica (sem desconto) em folha.
-                  </p>
-                </div>
-                <div>
-                  <p>
-                    <strong>Seguro de vida SulAmérica</strong> para
-                    beneficiários do plano SulAmérica Saúde (sem custo).
-                  </p>
-                </div>
-                <div>
-                  <p>
-                    <strong>Se quiser adicionar dependentes</strong>, basta
-                    enviar RG e CPF + certidão de casamento ou união estável
-                    pública (para cônjuge) ou Certidão de Nascimento (para
-                    filhos). <strong>Eles pagarão o valor integral do plano escolhido pelo titular.</strong>
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <BeneficioCard cor="bradesco">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg font-bold text-red-700">bradesco</span>
-                    <span className="text-xs text-red-600">dental</span>
-                  </div>
-                  <p className="text-sm">
-                    <strong>Plano Bradesco</strong> Odonto UNNA -{" "}
-                    <strong>R$ 13,00 com desconto em folha.</strong> (Estendido
-                    para dependentes)
-                  </p>
-                </BeneficioCard>
-
-                <BeneficioCard cor="wellhub">
-                  <div className="mb-3">
-                    <span className="text-lg font-bold text-pink-600">wellhub</span>
-                    <span className="ml-1">✿</span>
-                  </div>
-                  <p className="text-sm">
-                    Aproveite também para explorar opções de planos que
-                    incentivam a prática de atividade física, saúde e bem
-                    estar. Se cadastre no aplicativo da Wellhub (Gympass)
-                    através do link de convite e escolher o plano ideal.
-                  </p>
-                  <p className="text-sm mt-3">
-                    A forma de pagamento:{" "}
-                    <strong>via cartão de crédito direto no APP.</strong>
-                  </p>
-                  <p className="text-sm mt-3">
-                    Caso queira incluir dependentes, basta cadastrar os dados
-                    deles no APP, e a forma de pagamento será via cartão de
-                    crédito
-                  </p>
-                </BeneficioCard>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* PÁGINA 7 — XÊRO + CTA */}
-      <section className="relative overflow-hidden rounded-3xl shadow-elevated min-h-[400px] bg-gradient-to-br from-neutral-700 to-neutral-900">
-        <Image
-          src="/proposta/carta/07-xero-fundo.jpg"
-          alt=""
-          fill
-          className="object-cover opacity-70"
-          unoptimized
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/50 to-black/70" />
-        <div className="relative p-10 md:p-16 min-h-[400px] flex flex-col justify-between">
-          <div className="text-white text-center">
-            <h2
-              className="text-6xl md:text-8xl font-black tracking-tighter drop-shadow-lg"
-              style={{ fontFamily: "Georgia, serif" }}
-            >
-              Xêro!
-            </h2>
-          </div>
-
+      {/* Card personalizado no topo com os dados reais do candidato */}
+      <section className="rounded-3xl bg-gradient-to-br from-california-red via-california-red to-red-900 p-8 md:p-10 text-white shadow-elevated">
+        <div className="flex items-start gap-3">
+          <Sparkles className="h-6 w-6 mt-1 shrink-0" />
           <div>
-            {erro && (
-              <div className="mb-6 rounded-xl bg-white/95 px-4 py-3 text-sm text-california-red flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{erro}</span>
-              </div>
-            )}
-
-            <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-center">
-              <button
-                type="button"
-                onClick={aceitar}
-                disabled={pending}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-california-red px-8 py-4 text-base font-bold text-white shadow-brand hover:bg-california-red-hover disabled:opacity-50 transition-all"
-              >
-                <Check className="h-5 w-5" />
-                {pending ? "Enviando..." : "Aceitar proposta"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpenRecusa(true)}
-                disabled={pending}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/95 px-8 py-4 text-base font-medium text-neutral-800 hover:bg-white disabled:opacity-50 transition-colors"
-              >
-                <X className="h-5 w-5" />
-                Recusar
-              </button>
-            </div>
-
-            <div className="mt-8 text-white/80 text-center text-xs">
-              <p className="font-medium">Time de Cultura & Talento</p>
-              <p>Contato: rh@agenciacalifornia.com.br</p>
-            </div>
+            <p className="text-xs font-bold uppercase tracking-widest opacity-80">
+              Sua proposta
+            </p>
+            <h1 className="mt-1 text-2xl md:text-3xl font-bold leading-tight">
+              Olá, {primeiroNome}! Boas-vindas à Califa. 🐻
+            </h1>
+            <p className="mt-2 text-sm md:text-base opacity-90">
+              Preparamos uma proposta exclusiva pra você. Confira os detalhes
+              abaixo e, depois, dá um role pela nossa apresentação institucional.
+            </p>
           </div>
+        </div>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <DadoCard
+            icon={<Briefcase className="h-5 w-5" />}
+            label="Cargo"
+            valor={c.cargo}
+          />
+          <DadoCard
+            icon={<Wallet className="h-5 w-5" />}
+            label="Remuneração"
+            valor={brl.format(Number(c.salario_proposto))}
+            complemento={`em regime ${tipoContratacaoLabel(c.tipo_contratacao)}`}
+            destaque
+          />
+          <DadoCard
+            icon={<Calendar className="h-5 w-5" />}
+            label="Data de início"
+            valor={formatarData(c.data_admissao)}
+          />
+        </div>
+      </section>
+
+      {/* Aviso de ação — sticky pra ficar visível durante o scroll */}
+      <div className="sticky top-4 z-30 rounded-2xl border border-california-red/20 bg-white/90 backdrop-blur px-5 py-3 shadow-elevated">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-neutral-700">
+            <strong>Passe pela apresentação abaixo</strong> e responda ao final.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={aceitar}
+              disabled={pending}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover disabled:opacity-50 transition-colors"
+            >
+              <Check className="h-4 w-4" />
+              Aceitar
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpenRecusa(true)}
+              disabled={pending}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              <X className="h-4 w-4" />
+              Recusar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Apresentação institucional — os 7 slides originais */}
+      <section className="space-y-6">
+        {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+          <SlideImagem key={n} numero={n} candidato={c.nome} />
+        ))}
+      </section>
+
+      {erro && (
+        <div className="rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>{erro}</span>
+        </div>
+      )}
+
+      {/* CTA final grande */}
+      <section className="rounded-3xl bg-neutral-900 p-10 md:p-14 text-center text-white shadow-elevated">
+        <h2 className="text-2xl md:text-3xl font-bold">
+          Vamos surfar juntos, {primeiroNome}? 🌊
+        </h2>
+        <p className="mt-3 text-sm md:text-base opacity-80 max-w-md mx-auto">
+          Ao aceitar, você vai preencher alguns dados para o RH preparar seu
+          contrato.
+        </p>
+        <div className="mt-8 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-center">
+          <button
+            type="button"
+            onClick={aceitar}
+            disabled={pending}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-california-red px-8 py-4 text-base font-bold text-white shadow-brand hover:bg-california-red-hover disabled:opacity-50 transition-all"
+          >
+            <Check className="h-5 w-5" />
+            {pending ? "Enviando..." : "Aceitar proposta"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpenRecusa(true)}
+            disabled={pending}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 border border-white/20 px-8 py-4 text-base font-medium text-white hover:bg-white/20 disabled:opacity-50 transition-colors"
+          >
+            <X className="h-5 w-5" />
+            Recusar proposta
+          </button>
+        </div>
+        <div className="mt-8 pt-6 border-t border-white/10 text-xs opacity-70">
+          <p className="font-medium">Time de Cultura & Talento</p>
+          <p>Contato: rh@agenciacalifornia.com.br</p>
         </div>
       </section>
 
@@ -619,56 +254,77 @@ function LandingCarta({
   );
 }
 
-/* --- Componentes de apoio da landing --- */
+/* Componentes de apoio da landing */
 
-function NumeroDestaque({
-  numero,
+function DadoCard({
+  icon,
   label,
+  valor,
+  complemento,
+  destaque,
 }: {
-  numero: string;
+  icon: React.ReactNode;
   label: string;
+  valor: string;
+  complemento?: string;
+  destaque?: boolean;
 }) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <span className="text-5xl md:text-6xl font-black text-california-red leading-none">
-        {numero}
-      </span>
-      <span className="text-lg font-medium text-neutral-800">{label}</span>
-    </div>
-  );
-}
-
-function RegionalPin({ nome }: { nome: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="h-2 w-2 rounded-full bg-california-red" />
-      <span>{nome}</span>
-    </div>
-  );
-}
-
-function BeneficioCard({
-  children,
-  cor,
-  className,
-}: {
-  children: React.ReactNode;
-  cor?: "sulamerica" | "wellhub" | "bradesco";
-  className?: string;
-}) {
-  const border =
-    cor === "sulamerica"
-      ? "border-blue-300"
-      : cor === "wellhub"
-        ? "border-pink-300"
-        : cor === "bradesco"
-          ? "border-red-300"
-          : "border-california-red/30";
   return (
     <div
-      className={`rounded-2xl border-2 ${border} bg-white/60 p-5 ${className ?? ""}`}
+      className={`rounded-2xl p-5 ${destaque ? "bg-white/20 ring-2 ring-white/30" : "bg-white/10"}`}
     >
-      {children}
+      <div className="flex items-center gap-2 text-white/80">
+        {icon}
+        <span className="text-xs font-bold uppercase tracking-wider">
+          {label}
+        </span>
+      </div>
+      <p
+        className={`mt-2 leading-tight font-bold ${destaque ? "text-3xl" : "text-xl"}`}
+      >
+        {valor}
+      </p>
+      {complemento && <p className="text-xs opacity-80 mt-1">{complemento}</p>}
+    </div>
+  );
+}
+
+/**
+ * Renderiza uma das 7 páginas da apresentação institucional da California.
+ * Se a imagem ainda não existir em /public/proposta/carta/SlideN.JPG,
+ * cai num placeholder discreto (não quebra layout).
+ */
+function SlideImagem({
+  numero,
+  candidato,
+}: {
+  numero: number;
+  candidato: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-3xl bg-neutral-100 shadow-soft">
+      <div className="relative aspect-[16/9]">
+        <Image
+          src={`/proposta/carta/Slide${numero}.JPG`}
+          alt={`Carta Proposta California — página ${numero}`}
+          fill
+          sizes="(max-width: 768px) 100vw, 900px"
+          className="object-contain"
+          priority={numero <= 2}
+          unoptimized
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm">
+          {/* Placeholder — fica visível se a imagem não carregar */}
+          <div className="text-center opacity-30">
+            <p className="text-4xl font-black">
+              Página {numero} de 7
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
