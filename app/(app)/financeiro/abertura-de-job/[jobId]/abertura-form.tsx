@@ -65,6 +65,7 @@ import {
   type FaturamentoDoMes,
 } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+import { distribuirDelta } from "@/lib/calculos/alteracao-financeiro";
 import { formatDataBr, formatPeriodo } from "../formatos";
 import {
   curvaFecha,
@@ -349,6 +350,19 @@ function recebimentoMensalParaForm(
     }));
 }
 
+/**
+ * As parcelas acompanham a mudança do total — a regra do "Editar orçado"
+ * (decisão 115): cada uma na proporção dela, com a mesma data, e a última
+ * fecha o centavo.
+ */
+function acompanharTotal<T extends LinhaPrevisaoForm>(linhas: T[], delta: number): T[] {
+  const valores = distribuirDelta(
+    linhas.map((l) => ({ valor: parseMoeda(l.valorTexto) })),
+    delta,
+  );
+  return linhas.map((l, i) => ({ ...l, valorTexto: formatMoedaTexto(valores[i].valor) }));
+}
+
 /** O dia comum às datas gravadas, para o campo "Dia do recebimento". Datas
  *  com dias diferentes (revisadas uma a uma) deixam o campo vazio. */
 function diaComumDoRecebimento(linhas: RecebimentoLinha[]): string {
@@ -596,6 +610,96 @@ export function AberturaForm({
   const difImpostos = emCentavos(somaDosImpostos - impostoPrevisto);
   const impDatasOk = impostos.every((l) => l.data.length === 10);
   const impValoresOk = linhasImp.every((l) => l.valor > 0);
+
+  // ---------- Os números do servidor mudaram (decisão 115) ----------
+  // O "Editar orçado" do financeiro grava na hora, pela aba Planilha desta
+  // mesma página, e o refresh traz faturamento, imposto e previsões novos
+  // com o formulário montado (as abas escondem, não desmontam).
+  //   * Em leitura, o formulário é o registro gravado: relê as previsões.
+  //   * Preenchendo a abertura ou editando o registro, o que já foi
+  //     preenchido fica, e o recebimento ACOMPANHA como na regra da 115:
+  //     cada parcela na proporção dela, com a mesma data; no mensal, o valor
+  //     de cada mês é o da planilha. Os impostos soltos acompanham do mesmo
+  //     jeito — os que seguem as parcelas se refazem sozinhos. A curva de
+  //     desembolso não acompanha (Tiago, 28/09/2026): se o custo previsto
+  //     mudar, a diferença aparece e o "Distribuir" resolve.
+  const chaveDoServidor = JSON.stringify([
+    faturamentoPrevisto,
+    impostoPrevisto,
+    custoPrevisto,
+    curvaInicial,
+    recebimentoInicial,
+    impostosIniciais,
+    faturamentoPorMes,
+  ]);
+  const doServidorAnterior = React.useRef({
+    chave: chaveDoServidor,
+    faturamento: faturamentoPrevisto,
+    imposto: impostoPrevisto,
+  });
+  React.useEffect(() => {
+    const antes = doServidorAnterior.current;
+    if (antes.chave === chaveDoServidor) return;
+    doServidorAnterior.current = {
+      chave: chaveDoServidor,
+      faturamento: faturamentoPrevisto,
+      imposto: impostoPrevisto,
+    };
+    if (travado) {
+      setCurva(paraForm(curvaInicial));
+      setRecebimento(
+        faturamentoPorMes
+          ? recebimentoMensalParaForm(faturamentoPorMes, recebimentoInicial)
+          : paraForm(recebimentoInicial),
+      );
+      setDiaRecebimento(diaComumDoRecebimento(recebimentoInicial));
+      setImpostosSoltos(
+        impostosIniciais.length > 0
+          ? paraForm(impostosIniciais).map((l) => ({ ...l, origem: null }))
+          : null,
+      );
+      setDatasImposto({});
+      setRodadaDoDia((r) => r + 1);
+      return;
+    }
+    if (faturamentoPorMes) {
+      setRecebimento((atual) =>
+        recebimentoMensalParaForm(
+          faturamentoPorMes,
+          atual.map((l) => ({
+            id: l.id,
+            data: l.data,
+            valor: parseMoeda(l.valorTexto),
+            mes: l.mes,
+          })),
+        ),
+      );
+    } else if (antes.faturamento !== faturamentoPrevisto) {
+      setRecebimento((atual) =>
+        faturamentoPrevisto <= 0
+          ? []
+          : atual.length === 0
+            ? paraForm(recebimentoInicial)
+            : acompanharTotal(atual, faturamentoPrevisto - antes.faturamento),
+      );
+    }
+    if (antes.imposto !== impostoPrevisto) {
+      setImpostosSoltos((atual) =>
+        atual === null || atual.length === 0
+          ? atual
+          : acompanharTotal(atual, impostoPrevisto - antes.imposto),
+      );
+    }
+  }, [
+    chaveDoServidor,
+    travado,
+    faturamentoPrevisto,
+    impostoPrevisto,
+    curvaInicial,
+    recebimentoInicial,
+    impostosIniciais,
+    faturamentoPorMes,
+  ]);
   // As três contas são obrigatórias quando a previsão delas existe
   // (decisão 100) — até 23/09/2026 as de recebimento e pagamento eram
   // opcionais.

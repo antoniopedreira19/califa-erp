@@ -43,6 +43,9 @@ import type {
   ItemPlanilhaJob,
   JobItemRealizado,
   JobErrataComItens,
+  JobAlteracaoFinanceiroComItens,
+  PrevisaoDaAlteracao,
+  EnvioDaAlteracao,
   JobCompetencia,
   PedidoCompra,
   PedidoCompraNaLista,
@@ -156,6 +159,7 @@ export async function carregarDetalheDoJob(
     mesesRes,
     recusasDeSave,
     consumosComPedidoRes,
+    alteracoesFinanceiroRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -342,6 +346,17 @@ export async function carregarDetalheDoJob(
       .eq("tenant_id", session.activeTenant.id)
       .eq("tipo", "consome")
       .in("situacao", ["aprovado", "aguardando"]),
+    // As edições do orçado feitas pelo financeiro (decisão 115): o card
+    // "Alterações do Financeiro" da aba Informações e o aviso na
+    // Comunicação, nas duas telas do job.
+    supabase
+      .from("jobs_alteracoes_financeiro")
+      .select(
+        "*, autor:profiles!created_by(nome), itens:jobs_alteracoes_financeiro_itens(*)",
+      )
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -557,6 +572,58 @@ export async function carregarDetalheDoJob(
     })),
   }));
 
+  // numeric do Postgres chega como texto: tudo que é dinheiro passa por
+  // Number, senão o card somaria strings.
+  if (alteracoesFinanceiroRes.error) {
+    console.error("[job.alteracoes-financeiro]", alteracoesFinanceiroRes.error.message);
+  }
+  const numero = (v: unknown) => Number(v ?? 0);
+  const previsoesDaFoto = (ls: unknown): PrevisaoDaAlteracao[] =>
+    ((ls ?? []) as any[]).map((l) => ({
+      data_prevista: String(l.data_prevista ?? ""),
+      valor: numero(l.valor),
+    }));
+  const enviosDaFoto = (ls: unknown): EnvioDaAlteracao[] =>
+    ((ls ?? []) as any[]).map((e) => ({
+      mes: e.mes ?? null,
+      valor_faturado: numero(e.valor_faturado),
+      parcelas: ((e.parcelas ?? []) as any[]).map((p) => ({
+        data_vencimento: String(p.data_vencimento ?? ""),
+        valor: numero(p.valor),
+      })),
+    }));
+  const alteracoesFinanceiro: JobAlteracaoFinanceiroComItens[] = (
+    (alteracoesFinanceiroRes.data ?? []) as any[]
+  ).map((a) => ({
+    ...a,
+    custo_orcado_antes: numero(a.custo_orcado_antes),
+    custo_orcado_depois: numero(a.custo_orcado_depois),
+    valor_job_antes: numero(a.valor_job_antes),
+    valor_job_depois: numero(a.valor_job_depois),
+    faturamento_previsto_antes: numero(a.faturamento_previsto_antes),
+    faturamento_previsto_depois: numero(a.faturamento_previsto_depois),
+    recebimento_antes: previsoesDaFoto(a.recebimento_antes),
+    recebimento_depois: previsoesDaFoto(a.recebimento_depois),
+    impostos_antes: previsoesDaFoto(a.impostos_antes),
+    impostos_depois: previsoesDaFoto(a.impostos_depois),
+    envio_antes: enviosDaFoto(a.envio_antes),
+    envio_depois: enviosDaFoto(a.envio_depois),
+    autor_nome: a.autor?.nome ?? null,
+    itens: ((a.itens ?? []) as any[]).map((i) => ({
+      ...i,
+      valor_unitario_de: numero(i.valor_unitario_de),
+      valor_unitario_para: numero(i.valor_unitario_para),
+      quantidade_de: numero(i.quantidade_de),
+      quantidade_para: numero(i.quantidade_para),
+      dias_meses_de: numero(i.dias_meses_de),
+      dias_meses_para: numero(i.dias_meses_para),
+      total_de: numero(i.total_de),
+      total_para: numero(i.total_para),
+      efeito_valor_job: numero(i.efeito_valor_job),
+      efeito_faturamento_previsto: numero(i.efeito_faturamento_previsto),
+    })),
+  }));
+
   const versaoAprovada = raw.versao as {
     id: string;
     numero_versao: number;
@@ -720,6 +787,7 @@ export async function carregarDetalheDoJob(
     mensagens,
     versaoAprovada.moeda,
     recusasDeSave,
+    alteracoesFinanceiro,
   );
 
   // Não lidas = o que chegou de outra pessoa depois da última leitura.
@@ -733,6 +801,11 @@ export async function carregarDetalheDoJob(
     ).length +
     erratas.filter(
       (e) => e.created_by !== session.profile.id && (!lidaAte || e.created_at > lidaAte),
+    ).length +
+    // A alteração do financeiro conta como a errata: é o aviso que a
+    // produção mais precisa ver (decisão 115).
+    alteracoesFinanceiro.filter(
+      (a) => a.created_by !== session.profile.id && (!lidaAte || a.created_at > lidaAte),
     ).length +
     recusasDeSaveNaoLidas(recusasDeSave, session.profile.id, lidaAte);
 
@@ -1090,6 +1163,7 @@ export async function carregarDetalheDoJob(
     realizadosMap,
     categoriasMap,
     erratas,
+    alteracoesFinanceiro,
     versaoAprovada,
     versaoLabel,
     regionais,

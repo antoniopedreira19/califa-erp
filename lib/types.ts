@@ -1933,6 +1933,80 @@ export interface JobErrataComItens extends JobErrata {
   itens: JobErrataItem[];
 }
 
+// ---------- Alterações do financeiro (decisão 115) ----------
+// O "Editar orçado" da Planilha Interna do job no financeiro: os valores do
+// orçado, sem aprovação. Tabela própria, e não `jobs_erratas`: errata é o
+// que devolve o job ao mural de abertura, e a alteração do financeiro não
+// passa por revisão nenhuma.
+
+/** Uma data e um valor — parcela de recebimento ou recolhimento de imposto,
+ *  como a alteração guardou o antes e o depois. */
+export interface PrevisaoDaAlteracao {
+  data_prevista: string;
+  valor: number;
+}
+
+/** O envio para faturamento que a alteração acompanhou (job enviado e ainda
+ *  sem nota). `mes` só no modelo mensal. */
+export interface EnvioDaAlteracao {
+  mes: string | null;
+  valor_faturado: number;
+  parcelas: Array<{ data_vencimento: string; valor: number }>;
+}
+
+export interface JobAlteracaoFinanceiro {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  /** O "Motivo da alteração" do pop-up: obrigatório. */
+  motivo: string;
+  custo_orcado_antes: number;
+  custo_orcado_depois: number;
+  valor_job_antes: number;
+  valor_job_depois: number;
+  faturamento_previsto_antes: number;
+  faturamento_previsto_depois: number;
+  recebimento_antes: PrevisaoDaAlteracao[];
+  recebimento_depois: PrevisaoDaAlteracao[];
+  impostos_antes: PrevisaoDaAlteracao[];
+  impostos_depois: PrevisaoDaAlteracao[];
+  /** Vazio quando o job ainda não tinha envio para faturamento. */
+  envio_antes: EnvioDaAlteracao[];
+  envio_depois: EnvioDaAlteracao[];
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface JobAlteracaoFinanceiroItem {
+  id: string;
+  tenant_id: string;
+  alteracao_id: string;
+  /** Nulo se a linha sumiu depois (uma errata a removeu). */
+  job_item_orcado_id: string | null;
+  item_nome: string;
+  grupo_nome: string;
+  /** Mês da linha no modelo mensal (decisão 078); nulo nos outros. */
+  mes: string | null;
+  tipo_custo: TipoCusto;
+  valor_unitario_de: number;
+  valor_unitario_para: number;
+  quantidade_de: number;
+  quantidade_para: number;
+  dias_meses_de: number;
+  dias_meses_para: number;
+  total_de: number;
+  total_para: number;
+  efeito_valor_job: number;
+  efeito_faturamento_previsto: number;
+  created_at: string;
+}
+
+/** Alteração com os itens e o autor, como o card precisa. */
+export interface JobAlteracaoFinanceiroComItens extends JobAlteracaoFinanceiro {
+  autor_nome: string | null;
+  itens: JobAlteracaoFinanceiroItem[];
+}
+
 // ---------- Comunicação do job ----------
 
 export type ChatArea = "producao" | "financeiro";
