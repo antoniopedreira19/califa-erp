@@ -22,6 +22,7 @@ import { itemPrecisaDeConclusao } from "@/lib/calculos/pps-item";
 import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
+  FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
   JOB_STATUS_TRANSICOES,
   jobAceitaRealizado,
   jobAceitaEnvioParaFaturamento,
@@ -299,12 +300,14 @@ export async function carregarDetalheDoJob(
       .order("nome"),
     // Irmãos do job na ficha: o projeto é o guarda-chuva, e quem abre um
     // job quer ver de relance o que mais corre debaixo dele. Coberta pelo
-    // índice `idx_jobs_projeto`; quatro colunas, sem embed.
+    // índice `idx_jobs_projeto`; quatro colunas, sem embed. O cancelado
+    // antes da abertura não é mais job (decisão 113) e fica de fora.
     supabase
       .from("jobs")
       .select("id, codigo, nome, status, faturamento_enviado_em")
       .eq("projeto_id", raw.projeto_id)
       .eq("tenant_id", session.activeTenant.id)
+      .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA)
       .order("codigo", { ascending: true }),
     // `aberto_por` NÃO entra como embed: a FK aponta para `auth.users`, e
     // o nome mora em `profiles`. Query própria, e só quando há alguém.

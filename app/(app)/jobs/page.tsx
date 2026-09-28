@@ -3,7 +3,11 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { pode } from "@/lib/permissoes";
-import { JOB_STATUS_ABERTO, jobStatusExibido } from "@/lib/types";
+import {
+  FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
+  JOB_STATUS_ABERTO,
+  jobStatusExibido,
+} from "@/lib/types";
 import {
   impedimentosDosJobs,
   podeEncerrar,
@@ -84,6 +88,9 @@ export default async function JobsPage({
         "empresa:empresas(id, razao_social, nome_fantasia)",
     )
     .eq("tenant_id", session.activeTenant.id)
+    // O cancelado antes da abertura voltou a ser só orçamento (decisão
+    // 113): sai da lista, da busca, das contagens e do total do projeto.
+    .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA)
     .order("codigo", { ascending: true });
 
   // Filtro multi-empresa

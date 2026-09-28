@@ -64,7 +64,9 @@ const STATUS_FILTROS: JobStatusExibido[] = [
   "em_faturamento",
   "encerrado",
   "finalizado",
-  "cancelado",
+  // Sem "cancelado" (decisão 113): o cancelado antes da abertura saiu da
+  // lista, e é o único cancelamento que existe — o depois da abertura não
+  // tem tela. A opção ficaria sempre vazia.
 ];
 
 const statusBadgeClasses = jobStatusBadgeClasses;

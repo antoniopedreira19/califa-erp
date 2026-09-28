@@ -168,7 +168,10 @@ export async function carregarThreadPPs(
       )
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
-      .neq("status", "gerada"),
+      .neq("status", "gerada")
+      // Só PP enviada ao financeiro (decisão 113), o mesmo recorte da
+      // caixa de entrada (`chat_pps_conversas`).
+      .not("enviada_financeiro_em", "is", null),
     supabase
       .from("jobs_mensagens")
       .select("*, autor:profiles!autor_id(nome)")

@@ -132,6 +132,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 110 | [Importação de planilha: modal no centro, escolha da aba e arquivo de até 10 MB](110-importacao-de-planilha-em-modal.md) | 2026-09-27 |
 | 111 | [A abertura de job mostra as abas do job, e trocar de aba não apaga o preenchimento](111-abertura-de-job-com-as-abas-do-job.md) | 2026-09-27 |
 | 112 | [A quebra das PPs no painel do item, um documento só por PP e a data de pagamento na aba de PPs](112-quebra-das-pps-documento-unico-e-data-de-pagamento.md) | 2026-09-28 |
+| 113 | [Job não aberto não existe no financeiro, e o cancelado antes da abertura volta a ser só orçamento](113-job-nao-aberto-nao-existe-no-financeiro.md) | 2026-09-28 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -144,4 +145,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 113.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 114.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

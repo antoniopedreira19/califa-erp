@@ -165,7 +165,12 @@ export default async function PedidosCompraFinanceiroPage({
         .eq("tenant_id", session.activeTenant.id)
         // PP gerada ainda está no job, sem envio: o financeiro não a vê —
         // nem no chip "Todas" (02/09/2026, decisão 039).
-        .neq("status", "gerada");
+        .neq("status", "gerada")
+        // Nem a cancelada que nunca foi enviada (decisão 113): cancelar
+        // tira a PP de `gerada`, e até 28/09/2026 ela aparecia em
+        // "Canceladas". Cobre também a PP de job não aberto, que não pode
+        // ser enviada.
+        .not("enviada_financeiro_em", "is", null);
       if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q.order("created_at", { ascending: false });
     })(),
