@@ -481,11 +481,11 @@ function SlidePagina3({
           `,
         }}
       >
-        <div>
-          <p className="text-sm md:text-base font-black tracking-wider leading-none">
+        <div className="leading-none">
+          <p className="text-lg md:text-xl font-black tracking-tight leading-none">
             CARTA
           </p>
-          <p className="text-xs md:text-sm opacity-80 leading-tight mt-1">
+          <p className="text-lg md:text-xl font-light tracking-tight leading-none">
             PROPOSTA
           </p>
         </div>
