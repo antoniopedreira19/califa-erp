@@ -458,13 +458,14 @@ function SlidePagina3({
   regime: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-soft aspect-[16/9] grid grid-cols-[60px_1fr_38%] md:grid-cols-[70px_1fr_38%]">
+    <div className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-soft aspect-[16/9] grid grid-cols-[110px_1fr_38%] md:grid-cols-[140px_1fr_38%]">
       {/* Faixa vermelha à esquerda — textura de "cortina" reproduzida
           com duas camadas de gradient: base vermelha vertical + listras
           verticais semi-transparentes por cima (repeating-linear-gradient).
-          Mesma técnica usada no PPT original: forma sólida + forma listrada. */}
+          Mesma técnica usada no PPT original: forma sólida + forma listrada.
+          Largura ~10% do total, batendo com a proporção dos slides institucionais. */}
       <div
-        className="relative p-3 md:p-4 text-white flex flex-col"
+        className="relative p-4 md:p-5 text-white flex flex-col"
         style={{
           backgroundImage: `
             repeating-linear-gradient(
@@ -481,15 +482,15 @@ function SlidePagina3({
         }}
       >
         <div>
-          <p className="text-[10px] md:text-xs font-black tracking-wider leading-none">
+          <p className="text-sm md:text-base font-black tracking-wider leading-none">
             CARTA
           </p>
-          <p className="text-[9px] md:text-[10px] opacity-80 leading-tight mt-0.5">
+          <p className="text-xs md:text-sm opacity-80 leading-tight mt-1">
             PROPOSTA
           </p>
         </div>
-        <div className="mt-auto flex justify-center pb-1">
-          <span className="text-lg md:text-xl" role="img" aria-label="urso">
+        <div className="mt-auto flex justify-start pb-1">
+          <span className="text-xl md:text-2xl" role="img" aria-label="urso">
             🐻
           </span>
         </div>
