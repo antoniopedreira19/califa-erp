@@ -80,6 +80,18 @@ import {
 } from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
+import { EditarOrcadoButton } from "./editar-orcado-button";
+import { EdicaoFinanceiroBarra } from "./edicao-financeiro-barra";
+import {
+  EdicaoFinanceiroConfirmarDialog,
+  type ParcelaQueAcompanha,
+} from "./edicao-financeiro-confirmar-dialog";
+import { registrarAlteracaoDoFinanceiro } from "./actions-alteracao-financeiro";
+import {
+  distribuirDelta,
+  emReais,
+  linhasAlteradasPeloFinanceiro,
+} from "@/lib/calculos/alteracao-financeiro";
 import { ExportarInternaButton } from "./exportar-interna-button";
 import {
   ConcluirPPsButton,
@@ -118,6 +130,35 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useProtegerSaida } from "@/components/voltar/estado";
 
 const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
+
+/** O "Editar orçado" do financeiro (decisão 115): o que a tela precisa saber
+ *  além da planilha. A página do financeiro monta; a da produção manda
+ *  `null`. */
+export interface EdicaoDoFinanceiro {
+  /** Por que o botão não abre: o job já tem nota emitida (P4). */
+  travadoPor: string | null;
+  /** Modelo mensal: ids dos meses com nota — as linhas deles não abrem. */
+  mesesComNota: string[];
+  /** A previsão de recebimento gravada, na ordem de `previsoesGravadas`
+   *  (a mesma da action): o pop-up mostra cada parcela antes e depois. */
+  recebimento: Array<{ data: string; valor: number; mes: string | null }>;
+  /** Os envios para faturamento ainda SEM nota: as parcelas deles
+   *  acompanham a alteração. */
+  envios: Array<{
+    id: string;
+    mes: string | null;
+    parcelas: Array<{ id: string; data_vencimento: string; valor: number }>;
+  }>;
+}
+
+/** O planejado na edição do financeiro: nunca abre (decisão 115, P1). */
+const MOTIVO_PLANEJADO_DO_FINANCEIRO =
+  "Na edição do orçado pelo financeiro o planejado não muda — ele é da produção.";
+
+function dataBr(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}
 
 /** O texto da situação do mês na régua — o mesmo da barra do rodapé. */
 const ROTULO_DA_SITUACAO: Record<SituacaoDoMes, string> = {
@@ -242,6 +283,10 @@ interface Props {
    *  pede confirmação, como o "Orçamento aprovado" da ficha (decisões 021
    *  e 108). Obrigatória pelo mesmo motivo de `interno`. */
   confirmarSaidaParaOrcamento: boolean;
+  /** "Editar orçado" do financeiro (decisão 115). `null` na tela da
+   *  produção e onde ninguém edita. Obrigatória pelo mesmo motivo de
+   *  `interno`. */
+  edicaoDoFinanceiro: EdicaoDoFinanceiro | null;
 }
 
 export function JobRealizadoSection({
@@ -277,6 +322,7 @@ export function JobRealizadoSection({
   faturamentoMensal = SEM_FATURAMENTO_MENSAL,
   interno,
   confirmarSaidaParaOrcamento,
+  edicaoDoFinanceiro,
 }: Props) {
   const router = useRouter();
 
@@ -295,7 +341,25 @@ export function JobRealizadoSection({
   // então o rascunho tem que morar no ancestral comum dos três. Antes de
   // 27/08/2026 isto era um drawer com uma segunda tabela, e o problema não
   // existia porque nada da tela reagia.
-  const errata = useRascunhoErrata(itens, interno);
+  const rascunho = useRascunhoErrata(itens, interno);
+  // O "Editar orçado" do financeiro (decisão 115) é o MESMO rascunho, com o
+  // escopo dele: o planejado nunca abre. Tipo, linha nova e a trava de PP
+  // ficam com a tabela (`modoDaEdicao`).
+  const modoFinanceiro = edicaoDoFinanceiro !== null;
+  const errata = React.useMemo(
+    () =>
+      modoFinanceiro
+        ? {
+            ...rascunho,
+            planejadoLiberado: () => false,
+            // No Interno o planejado acompanha o orçado (decisão 105): vale o
+            // texto do rascunho, que diz isso.
+            motivoPlanejadoTravado: (chave: string) =>
+              interno ? rascunho.motivoPlanejadoTravado(chave) : MOTIVO_PLANEJADO_DO_FINANCEIRO,
+          }
+        : rascunho,
+    [modoFinanceiro, rascunho, interno],
+  );
   // A barra de ações do job é irmã das abas e precisa sair de cena
   // enquanto a barra da errata está no ar — as duas grudam no mesmo pé de
   // janela. Nas telas que não têm barra de ações (financeiro, conferência
@@ -378,6 +442,46 @@ export function JobRealizadoSection({
     [paraTotais, errata.itens],
   );
 
+  // ---- "Editar orçado" do financeiro (decisão 115) ----------------------
+  // As linhas mexidas (só os valores do orçado contam) e o que acompanha:
+  // o envio ainda sem nota e a previsão de recebimento, parcela a parcela,
+  // pela MESMA conta que a action grava (`distribuirDelta`).
+  const linhasDoFinanceiro = React.useMemo(
+    () =>
+      modoFinanceiro && errata.ativo
+        ? linhasAlteradasPeloFinanceiro(itens, errata.itens)
+        : [],
+    [modoFinanceiro, errata.ativo, errata.itens, itens],
+  );
+  const resumoDoFinanceiro =
+    linhasDoFinanceiro.length === 0
+      ? "nenhuma linha alterada ainda"
+      : `${linhasDoFinanceiro.length} ${
+          linhasDoFinanceiro.length === 1 ? "linha alterada" : "linhas alteradas"
+        }`;
+
+  async function confirmarEdicaoDoFinanceiro(motivo: string) {
+    setSalvando(true);
+    setErroErrata(null);
+    const r = await registrarAlteracaoDoFinanceiro(job.id, {
+      motivo,
+      linhas: linhasDoFinanceiro.map((l) => ({
+        job_item_orcado_id: l.id,
+        valor_unitario: l.valorUnitarioPara,
+        quantidade: l.quantidadePara,
+        dias_meses: l.diasMesesPara,
+      })),
+    });
+    setSalvando(false);
+    if (!r.ok) {
+      setErroErrata(r.message);
+      return;
+    }
+    setConfirmando(false);
+    errata.descartar();
+    router.refresh();
+  }
+
   async function confirmarErrata(descricao: string) {
     setSalvando(true);
     setErroErrata(null);
@@ -420,7 +524,9 @@ export function JobRealizadoSection({
   const [rentabRealizada, setRentabRealizada] = React.useState(false);
   // A errata exige job aberto, a porta de `AlterarOrcadoButton`, e fecha
   // com o envio para faturamento. O financeiro chega aqui com `podeAcoes`
-  // falso e lê sem editar.
+  // falso e não faz errata: desde a decisão 115 (28/09/2026) ele edita os
+  // valores do orçado pelo "Editar orçado" (`edicaoDoFinanceiro`), que é
+  // outra porta — fecha na primeira nota, não no envio.
   //
   // Modelo mensal (decisão 078): a porta fecha por MÊS. Só as tabelas dos
   // meses já enviados perdem a errata; o botão da errata só trava quando
@@ -437,6 +543,28 @@ export function JobRealizadoSection({
   const todosOsMesesEnviados =
     faturamentoMensal.length > 0 && mesesEnviados.size === faturamentoMensal.length;
   const podeErrata = podeAcoes && !jaEnviadoParaFaturamento && !todosOsMesesEnviados;
+
+  // "Editar orçado" do financeiro (decisão 115): até a primeira nota ou o
+  // encerramento — o encerrado chega com `travadoPor`, montado pela página.
+  // No mensal a trava da nota é por mês — só o mês com nota fica de fora
+  // (P4 do Tiago, 28/09/2026).
+  const mesesComNota = React.useMemo(
+    () => new Set(edicaoDoFinanceiro?.mesesComNota ?? []),
+    [edicaoDoFinanceiro],
+  );
+  const todosOsMesesComNota =
+    faturamentoMensal.length > 0 &&
+    faturamentoMensal.every((m) => mesesComNota.has(m.mesId));
+  const motivoEdicaoTravada =
+    edicaoDoFinanceiro?.travadoPor ??
+    (todosOsMesesComNota
+      ? "Todos os meses do job já têm nota emitida: o orçado não muda mais pelo financeiro."
+      : null);
+  const podeEditarOrcado = modoFinanceiro && motivoEdicaoTravada === null;
+  /** O mês que fecha para quem edita nesta tela: na errata, o mês enviado;
+   *  na edição do financeiro, o mês com nota. */
+  const mesTravado = (mesId: string) =>
+    modoFinanceiro ? mesesComNota.has(mesId) : mesesEnviados.has(mesId);
 
   // SAVE NO JOB (decisão 099). Três modos:
   //  - `pedido`: job aberto — cada mudança é errata de save, vira pedido ao
@@ -685,6 +813,72 @@ export function JobRealizadoSection({
       : (dadosDosMeses.find((d) => d.chave === mesPedido) ??
         dadosDosMeses[0] ??
         null);
+  // O que acompanha a alteração do financeiro (decisão 115): o pop-up mostra
+  // o antes → depois de cada parcela que muda. No mensal só andam os meses
+  // mexidos; no job normal, o faturamento do job inteiro.
+  const acompanhamDoFinanceiro = React.useMemo(() => {
+    const envio: ParcelaQueAcompanha[] = [];
+    const recebimento: ParcelaQueAcompanha[] = [];
+    if (!edicaoDoFinanceiro || linhasDoFinanceiro.length === 0) {
+      return { envio, recebimento };
+    }
+    const deltaTotal = emReais(
+      emReais(totaisDepois.faturamentoPrevisto) - emReais(totaisAntes.faturamentoPrevisto),
+    );
+    const deltaDoMes = new Map<string, number>();
+    if (mensal) {
+      const mesDoGrupo = new Map(grupos.map((g) => [g.id, g.mes_id]));
+      for (const d of dadosDosMeses) {
+        const salvosDoMes = itens.filter((it) => mesDoGrupo.get(it.grupo_id) === d.mes.id);
+        const antes = emReais(paraTotais(salvosDoMes).faturamentoPrevisto);
+        const delta = emReais(emReais(d.faturamento) - antes);
+        if (Math.abs(delta) >= 0.005) deltaDoMes.set(d.mes.mes.slice(0, 7), delta);
+      }
+    }
+    const blocosDoRecebimento = mensal
+      ? [...deltaDoMes.entries()].map(([chave, delta]) => ({
+          delta,
+          linhas: edicaoDoFinanceiro.recebimento.filter((r) => r.mes?.slice(0, 7) === chave),
+        }))
+      : [{ delta: deltaTotal, linhas: edicaoDoFinanceiro.recebimento }];
+    for (const bloco of blocosDoRecebimento) {
+      const depois = distribuirDelta(bloco.linhas, bloco.delta);
+      bloco.linhas.forEach((l, k) => {
+        if (depois[k].valor === l.valor) return;
+        recebimento.push({
+          chave: `recebimento-${l.mes ?? ""}-${l.data}-${k}`,
+          rotulo: `${l.mes ? `${nomeDoMes(l.mes)} · ` : ""}${dataBr(l.data)}`,
+          antes: l.valor,
+          depois: depois[k].valor,
+        });
+      });
+    }
+    for (const e of edicaoDoFinanceiro.envios) {
+      const delta = e.mes ? (deltaDoMes.get(e.mes.slice(0, 7)) ?? 0) : mensal ? 0 : deltaTotal;
+      const depois = distribuirDelta(e.parcelas, delta);
+      e.parcelas.forEach((parcela, k) => {
+        if (depois[k].valor === parcela.valor) return;
+        envio.push({
+          chave: parcela.id,
+          rotulo: `${e.mes ? `${nomeDoMes(e.mes)} · ` : ""}Parcela ${k + 1} · ${dataBr(parcela.data_vencimento)}`,
+          antes: parcela.valor,
+          depois: depois[k].valor,
+        });
+      });
+    }
+    return { envio, recebimento };
+  }, [
+    edicaoDoFinanceiro,
+    linhasDoFinanceiro,
+    totaisAntes,
+    totaisDepois,
+    mensal,
+    grupos,
+    dadosDosMeses,
+    itens,
+    paraTotais,
+  ]);
+
   const faturamentoDoMes = new Map(faturamentoMensal.map((m) => [m.mesId, m]));
   const faturadosNoTrimestre = faturamentoMensal.filter(
     (m) => m.situacao === "faturado",
@@ -737,7 +931,7 @@ export function JobRealizadoSection({
   function tabela(
     gruposDoTrecho: GrupoDoJob[],
     rotuloTotal?: string,
-    mesEnviado = false,
+    mesFechado = false,
   ) {
     // Um card para a planilha inteira — antes era um por grupo. Sem
     // `overflow-hidden`: a calha de ações precisa escapar do frame, e são
@@ -780,7 +974,13 @@ export function JobRealizadoSection({
           onAbrirSave={!errata.ativo && !interno ? setLinhaSave : undefined}
           abrirSaveSoComSave={modoDoSave === null}
           destacarItens={destacarItens}
-          errata={podeErrata && !mesEnviado ? errata : undefined}
+          errata={
+            (modoFinanceiro ? podeEditarOrcado : podeErrata) && !mesFechado
+              ? errata
+              : undefined
+          }
+          modoDaEdicao={modoFinanceiro ? "financeiro" : "errata"}
+          podeEditarLinhas={!modoFinanceiro}
           orcadoVisivel={orcadoVisivel}
           rentabPlanejadaVisivel={rentabPlanejada}
           rentabRealizadaVisivel={rentabRealizada}
@@ -873,7 +1073,9 @@ export function JobRealizadoSection({
                   ? undefined
                   : () => setOrcadoVisivel((v) => !v),
                 dica: errata.ativo
-                  ? "Na errata o Orçado fica sempre aberto."
+                  ? modoFinanceiro
+                    ? "Na edição do orçado o bloco fica sempre aberto."
+                    : "Na errata o Orçado fica sempre aberto."
                   : undefined,
               },
               {
@@ -945,6 +1147,22 @@ export function JobRealizadoSection({
                 }
                 // A errata é edição do Orçado: o bloco volta à tela
                 // junto com ela, esteja escondido ou não.
+                setOrcadoVisivel(true);
+                errata.ligar();
+              }}
+            />
+          )}
+          {/* O "Editar orçado" do financeiro (decisão 115), no mesmo lugar
+              em que a produção tem o "Realizar errata". */}
+          {modoFinanceiro && (
+            <EditarOrcadoButton
+              ativo={errata.ativo}
+              travadoPor={motivoEdicaoTravada}
+              onAlternar={() => {
+                if (errata.ativo) {
+                  errata.descartar();
+                  return;
+                }
                 setOrcadoVisivel(true);
                 errata.ligar();
               }}
@@ -1030,7 +1248,7 @@ export function JobRealizadoSection({
               {tabela(
                 mesSelecionado.grupos,
                 `Total de ${nomeDoMes(mesSelecionado.mes.mes)}`,
-                mesesEnviados.has(mesSelecionado.mes.id),
+                mesTravado(mesSelecionado.mes.id),
               )}
               <DicasDeTeclado editavel={errata.ativo} />
               {cardDeTotais(
@@ -1058,7 +1276,7 @@ export function JobRealizadoSection({
                   conteudo: tabela(
                     d.grupos,
                     `Total de ${nomeDoMes(d.mes.mes)}`,
-                    mesesEnviados.has(d.mes.id),
+                    mesTravado(d.mes.id),
                   ),
                 }))}
               />
@@ -1100,10 +1318,14 @@ export function JobRealizadoSection({
       <ConfirmDialog
         open={saidaDaErrata !== null}
         onOpenChange={(aberto) => !aberto && setSaidaDaErrata(null)}
-        title="Sair sem registrar a errata?"
-        description="As alterações da errata ainda não foram registradas e serão descartadas."
+        title={modoFinanceiro ? "Sair sem gravar a alteração?" : "Sair sem registrar a errata?"}
+        description={
+          modoFinanceiro
+            ? "A edição do orçado ainda não foi confirmada e será descartada."
+            : "As alterações da errata ainda não foram registradas e serão descartadas."
+        }
         confirmLabel="Sair e descartar"
-        cancelLabel="Continuar na errata"
+        cancelLabel={modoFinanceiro ? "Continuar editando" : "Continuar na errata"}
         variant="destructive"
         onConfirm={() => {
           const destino = saidaDaErrata;
@@ -1123,7 +1345,31 @@ export function JobRealizadoSection({
         onEnviado={() => router.refresh()}
       />
 
-      {errata.ativo && (
+      {errata.ativo && modoFinanceiro && (
+        <EdicaoFinanceiroBarra
+          resumo={resumoDoFinanceiro}
+          temMudanca={linhasDoFinanceiro.length > 0}
+          faturamento={{
+            antes: totaisAntes.faturamentoPrevisto,
+            depois: totaisDepois.faturamentoPrevisto,
+          }}
+          valorJob={{
+            antes: totaisAntes.valorJob,
+            depois: totaisDepois.valorJob,
+          }}
+          moeda={versao.moeda}
+          onDescartar={errata.descartar}
+          onDesfazer={errata.desfazer}
+          podeDesfazer={errata.podeDesfazer}
+          onConfirmar={() => {
+            setErroErrata(null);
+            setConfirmando(true);
+          }}
+          naAbertura={job.status === "aguardando_abertura"}
+        />
+      )}
+
+      {errata.ativo && !modoFinanceiro && (
         <ErrataBarra
           resumo={errata.resumo}
           temMudanca={errata.temMudanca}
@@ -1146,8 +1392,39 @@ export function JobRealizadoSection({
         />
       )}
 
+      <EdicaoFinanceiroConfirmarDialog
+        open={confirmando && modoFinanceiro}
+        onOpenChange={(aberto) => {
+          if (!salvando) setConfirmando(aberto);
+        }}
+        jobCodigo={job.codigo}
+        jobNome={nomeJob}
+        resumo={resumoDoFinanceiro}
+        mudancas={linhasDoFinanceiro}
+        orcado={{
+          antes: totaisAntes.subtotalGeral,
+          depois: totaisDepois.subtotalGeral,
+        }}
+        faturamento={{
+          antes: totaisAntes.faturamentoPrevisto,
+          depois: totaisDepois.faturamentoPrevisto,
+        }}
+        valorJob={{
+          antes: totaisAntes.valorJob,
+          depois: totaisDepois.valorJob,
+        }}
+        moeda={versao.moeda}
+        envio={acompanhamDoFinanceiro.envio}
+        recebimento={acompanhamDoFinanceiro.recebimento}
+        planejadoAcompanha={interno}
+        naAbertura={job.status === "aguardando_abertura"}
+        salvando={salvando}
+        erro={erroErrata}
+        onConfirmar={confirmarEdicaoDoFinanceiro}
+      />
+
       <ErrataConfirmarDialog
-        open={confirmando}
+        open={confirmando && !modoFinanceiro}
         onOpenChange={(aberto) => {
           if (!salvando) setConfirmando(aberto);
         }}

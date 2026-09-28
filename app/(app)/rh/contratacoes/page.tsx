@@ -19,28 +19,56 @@ export default async function ContratacoesPage() {
   await expirarContratacoesVencidas(session.activeTenant.id);
 
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("contratacoes")
-    .select(
-      "id, nome, cargo, tipo_contratacao, status, created_at, empresa:empresas(id, nome_fantasia), regional:regionais(id, nome)",
-    )
-    .eq("tenant_id", session.activeTenant.id)
-    .order("created_at", { ascending: false });
+  // Sem embed em regional/empresa (contratacoes tem duas FKs pra
+  // regionais → embed ambíguo do PostgREST). Resolvo por mapa.
+  const [contratacoesRes, empresasRes, regionaisRes] = await Promise.all([
+    supabase
+      .from("contratacoes")
+      .select(
+        "id, nome, cargo, tipo_contratacao, status, created_at, empresa_id, regional_id",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("empresas")
+      .select("id, nome_fantasia")
+      .eq("tenant_id", session.activeTenant.id),
+    supabase
+      .from("regionais")
+      .select("id, nome")
+      .eq("tenant_id", session.activeTenant.id),
+  ]);
 
-  if (error) {
-    console.error("[rh.contratacoes.page]", error.message);
+  if (contratacoesRes.error) {
+    console.error("[rh.contratacoes.page]", contratacoesRes.error.message);
   }
 
-  const linhas: ContratacaoRow[] = ((data ?? []) as any[]).map((c) => ({
-    id: c.id,
-    nome: c.nome,
-    cargo: c.cargo,
-    tipo_contratacao: c.tipo_contratacao,
-    status: c.status,
-    created_at: c.created_at,
-    empresa_nome: c.empresa?.nome_fantasia ?? null,
-    regional_nome: c.regional?.nome ?? null,
-  }));
+  const empresaNomePorId = new Map<string, string>(
+    ((empresasRes.data ?? []) as { id: string; nome_fantasia: string }[]).map(
+      (e) => [e.id, e.nome_fantasia],
+    ),
+  );
+  const regionalNomePorId = new Map<string, string>(
+    ((regionaisRes.data ?? []) as { id: string; nome: string }[]).map((r) => [
+      r.id,
+      r.nome,
+    ]),
+  );
+
+  const linhas: ContratacaoRow[] = ((contratacoesRes.data ?? []) as any[]).map(
+    (c) => ({
+      id: c.id,
+      nome: c.nome,
+      cargo: c.cargo,
+      tipo_contratacao: c.tipo_contratacao,
+      status: c.status,
+      created_at: c.created_at,
+      empresa_nome: empresaNomePorId.get(c.empresa_id) ?? null,
+      regional_nome: c.regional_id
+        ? regionalNomePorId.get(c.regional_id) ?? null
+        : null,
+    }),
+  );
 
   return (
     <div className="space-y-6">

@@ -150,6 +150,9 @@ export type AuditAction =
   | "job.envio_abertura_cancelado"
   | "job.realizado_atualizado"
   | "job.errata_registrada"
+  // "Editar orçado" do financeiro (decisão 115): os valores do orçado, sem
+  // aprovação, com as previsões e o envio sem nota acompanhando.
+  | "job.orcado_alterado_financeiro"
   | "job.enviado_para_faturamento"
   | "job.encerrado"
   | "job.finalizado"

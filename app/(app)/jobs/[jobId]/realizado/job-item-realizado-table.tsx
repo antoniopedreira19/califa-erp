@@ -207,6 +207,11 @@ interface Props {
    *  VERMELHA, não. Hoje todo mundo passa — a separação existe para o dia
    *  em que os papéis entrarem, e para o gate nascer num lugar só. */
   podeEditarLinhas?: boolean;
+  /** Quem está editando o orçado (decisão 115). `financeiro` é o "Editar
+   *  orçado" da tela do job no financeiro: só os valores do orçado abrem
+   *  (P1) — tipo de custo não, e não há linha nova nem vermelha — e a linha
+   *  com PP já no financeiro também abre (P2), ao contrário da errata. */
+  modoDaEdicao?: "errata" | "financeiro";
   /** Menu "Exibir" (decisão 045). Default: a planilha de sempre — os
    *  três blocos, sem colunas de rentabilidade. Escondido, o ORÇADO sai
    *  da grade inteira; ligada, cada rentabilidade entra como as duas
@@ -258,18 +263,23 @@ const MOTIVO_TRAVA_PP =
 function motivoDaTravaDeSave(
   item: ItemPlanilhaJob,
   estado: EstadoSaveDaLinha | undefined,
+  /** A mesma trava vale na edição do orçado pelo financeiro (decisão 115);
+   *  só o nome de onde a linha não entra muda. */
+  modo: "errata" | "financeiro" = "errata",
 ): string | null {
+  const naoEntra =
+    modo === "financeiro" ? "não entra na edição do orçado" : "não entra em errata";
   if (estado?.pedidos?.aguardando) {
-    return "Linha com pedido de save aguardando o financeiro não entra em errata. Para mudar esta linha, cancele o pedido antes, pelo pop-up da coluna Save.";
+    return `Linha com pedido de save aguardando o financeiro ${naoEntra}. Para mudar esta linha, cancele o pedido antes, pelo pop-up da coluna Save.`;
   }
   if (estado?.pedidos?.recusado) {
-    return "Linha com save recusado pelo financeiro não entra em errata. Para mudar esta linha, retire a recusa antes, pelo pop-up da coluna Save.";
+    return `Linha com save recusado pelo financeiro ${naoEntra}. Para mudar esta linha, retire a recusa antes, pelo pop-up da coluna Save.`;
   }
   if (item.em_save === true || estado?.emSave) {
-    return "Linha com save não entra em errata. Para mudar esta linha, retire o save antes, pelo pop-up da coluna Save.";
+    return `Linha com save ${naoEntra}. Para mudar esta linha, retire o save antes, pelo pop-up da coluna Save.`;
   }
   if (Number(item.save_consumido ?? 0) > 0 || (estado?.origens.length ?? 0) > 0) {
-    return "Linha paga com saldo de save de outro job não entra em errata. Para mudar esta linha, desfaça o consumo antes, pelo pop-up da coluna Save.";
+    return `Linha paga com saldo de save de outro job ${naoEntra}. Para mudar esta linha, desfaça o consumo antes, pelo pop-up da coluna Save.`;
   }
   return null;
 }
@@ -652,6 +662,7 @@ export function JobItemRealizadoTable({
   destacarItens,
   errata,
   podeEditarLinhas = true,
+  modoDaEdicao = "errata",
   orcadoVisivel = true,
   rentabPlanejadaVisivel = false,
   rentabRealizadaVisivel = false,
@@ -851,19 +862,20 @@ export function JobItemRealizadoTable({
       const pps = ppsPorItemId.get(realizadoId) ?? [];
       if (pps.some((pp) => ppChegouAoFinanceiro(pp.status))) travadas.add(it.id);
     }
-    return travadas;
-  }, [todosOsItens, realizadosMap, ppsPorItemId]);
+    // A edição do financeiro passa por cima desta trava (decisão 115, P2).
+    return modoDaEdicao === "financeiro" ? new Set<string>() : travadas;
+  }, [todosOsItens, realizadosMap, ppsPorItemId, modoDaEdicao]);
 
   /** Linhas que a errata não toca por causa do save (decisão 099 §15),
    *  com o motivo de cada uma. O servidor tem a mesma trava. */
   const travadasPorSave = React.useMemo(() => {
     const travadas = new Map<string, string>();
     for (const it of todosOsItens) {
-      const motivo = motivoDaTravaDeSave(it, savePorItem?.[it.id]);
+      const motivo = motivoDaTravaDeSave(it, savePorItem?.[it.id], modoDaEdicao);
       if (motivo) travadas.set(it.id, motivo);
     }
     return travadas;
-  }, [todosOsItens, savePorItem]);
+  }, [todosOsItens, savePorItem, modoDaEdicao]);
 
   const fmt = (v: number) => formatCurrency(v, moeda);
 
@@ -924,8 +936,11 @@ export function JobItemRealizadoTable({
         return null;
       }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
-      // No Interno o tipo é sempre F · Interno (decisão 105).
-      if (coluna === "tipo_custo") return errata.interno ? null : "lista";
+      // No Interno o tipo é sempre F · Interno (decisão 105); na edição do
+      // financeiro o tipo não é dele (decisão 115, P1).
+      if (coluna === "tipo_custo") {
+        return errata.interno || modoDaEdicao === "financeiro" ? null : "lista";
+      }
       if (
         coluna === "valor_unitario_orcado" ||
         coluna === "quantidade_orcada" ||
@@ -944,7 +959,7 @@ export function JobItemRealizadoTable({
       }
       return null;
     },
-    [editando, errata, itemPorId, travadasPorPP, travadasPorSave],
+    [editando, errata, itemPorId, travadasPorPP, travadasPorSave, modoDaEdicao],
   );
 
   /** Cria a linha nova e já abre a descrição dela — é o que o input
@@ -1648,7 +1663,7 @@ export function JobItemRealizadoTable({
 
                       Criar item normal fica atrás de acesso; criar linha
                       vermelha, não. */}
-                  {abertoAqui && editando && errata && (
+                  {abertoAqui && editando && errata && modoDaEdicao === "errata" && (
                     <tr className="border-b border-border">
                       <td
                         colSpan={totalDeColunasJob(colunas)}
