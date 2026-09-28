@@ -52,7 +52,8 @@ import { acharColunaDeMarcas, RECUSA_INTERNA_DO_JOB } from "./coluna-marcas";
  *      vão até a 18), então nada é lido delas além do nome.
  *   2. Item sem valor unitário ENTRA, com R$ 0,00 — o modelo é um gabarito
  *      em branco, e o nome do item é o que interessa preservar. Quem barra
- *      orçado zerado é o salvar do rascunho, na tela, não o parser.
+ *      orçado zerado é a aprovação da versão, não o parser (desde 28/09/2026
+ *      o salvar do rascunho também deixa passar — revisão da decisão 011).
  *   3. A coluna A só agrupa: `categoria_id` continua nascendo vazia.
  *   4. O % de honorários vem da coluna E da linha HONORÁRIOS (0,12 → 12).
  *
@@ -924,7 +925,7 @@ export async function parseOficial(
     }
 
     // Valor unitário (coluna C). Vazio entra como zero — decisão do Tiago
-    // em 08/09/2026. Quem barra orçado zerado é o salvar, na tela.
+    // em 08/09/2026. Quem barra orçado zerado é a aprovação da versão.
     let valorUnitario = valorC.ok ? valorC.n : 0;
     if (!valorC.ok && colC !== "") {
       warnings.push({

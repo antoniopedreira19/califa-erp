@@ -4588,6 +4588,16 @@ limpos.
 
 ---
 
+## ⚠️ Nota de 2026-09-28 — orçado zerado salva na agregada (revisão da decisão 011)
+
+- O "Salvar" da agregada (orçamento novo do rascunho) **não barra mais item
+  com R$ unitário orçado zerado**, como a tela da versão. A trava ficou só
+  na aprovação da versão.
+- Na importação, a pergunta "Manter o planejado da vN" some quando a versão
+  de origem não tem itens (antes aparecia com "0 de N linhas casadas").
+
+---
+
 ## ⚠️ Nota de 2026-09-25 — item que nasce em save não gravava (corrigido)
 
 **De 22/09 a 25/09/2026, nenhum item de versão conseguia nascer em save.**

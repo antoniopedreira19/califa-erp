@@ -207,14 +207,10 @@ export async function salvarOrcamentosDoProjeto(
             }`,
           };
         }
-        // Orçado zerado não salva — regra crítica, então vale aqui e não
-        // só no aviso da tela. O planejado pode ficar em 0 (16/08/2026).
-        if (!(itemOk.data.valor_unitario_orcado > 0)) {
-          return {
-            ok: false,
-            message: `${rotulo} · ${grupo.nome}: "${itemOk.data.item}" com R$ unitário orçado zerado. Preencha o orçado de todos os itens antes de salvar.`,
-          };
-        }
+        // Orçado zerado SALVA desde 28/09/2026 (revisão da decisão 011, pedido
+        // do Tiago): como dentro do orçamento, a trava é só a aprovação da
+        // versão (`bloqueioAprovacaoVersao`). A planilha da agência traz item
+        // "Resp. Cliente" e bonificado com R$ 0, e ela precisa entrar.
         if (item.bv) {
           if (!aceitaBV(itemOk.data.tipo_custo)) {
             return {

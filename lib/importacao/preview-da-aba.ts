@@ -90,7 +90,9 @@ export function montarPreviewDaAba(
         total_planejado_herdado: casamento?.planejadoHerdadoPorGrupo[gi] ?? 0,
       })),
       planejado: {
-        versao_anterior: anterior?.numero_versao ?? null,
+        // Versão de origem sem item não tem planejado a manter: a pergunta
+        // "manter o planejado da vN" sairia com "0 de N linhas casadas".
+        versao_anterior: anterior && anterior.itens.length > 0 ? anterior.numero_versao : null,
         casadas: casamento?.casadas ?? 0,
         por_descricao: casamento?.porDescricao ?? 0,
         total_itens: casamento?.totalItens ?? 0,
