@@ -38,6 +38,31 @@ function formatarData(iso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+/**
+ * Textura de "cortina listrada" da carta California, reproduzida em CSS.
+ * Duas camadas empilhadas:
+ *   1. repeating-linear-gradient com bandas verticais alternadas
+ *      (transparente / escura sutil / clara sutil) — dá o efeito de
+ *      cortina.
+ *   2. linear-gradient vertical do vermelho mais vivo ao bordô — dá
+ *      o gradient de "iluminação" da carta.
+ *
+ * Versão "cortina" (usada em card grande): bandas espaçadas (30px)
+ * e opacidade baixa (0.10) pra não competir com o texto.
+ */
+const CORTINA_CARTA_CARD = `
+  repeating-linear-gradient(
+    to right,
+    rgba(0,0,0,0)       0px,
+    rgba(0,0,0,0)       26px,
+    rgba(0,0,0,0.10)    26px,
+    rgba(0,0,0,0.10)    30px,
+    rgba(255,255,255,0.02) 30px,
+    rgba(255,255,255,0.02) 40px
+  ),
+  linear-gradient(to bottom right, #C42B3B 0%, #A02330 60%, #6E1620 100%)
+`;
+
 export function PropostaView({
   contratacao: c,
   token,
@@ -96,8 +121,12 @@ function LandingCarta({
 
   return (
     <div className="space-y-8">
-      {/* Card personalizado no topo com os dados reais do candidato */}
-      <section className="rounded-3xl bg-gradient-to-br from-california-red via-california-red to-red-900 p-8 md:p-10 text-white shadow-elevated">
+      {/* Card personalizado no topo com os dados reais do candidato.
+          Textura de cortina listrada assinatura da carta California. */}
+      <section
+        className="rounded-3xl p-8 md:p-10 text-white shadow-elevated"
+        style={{ backgroundImage: CORTINA_CARTA_CARD }}
+      >
         <div className="flex items-start gap-3">
           <Sparkles className="h-6 w-6 mt-1 shrink-0" />
           <div>
@@ -161,8 +190,11 @@ function LandingCarta({
         </div>
       )}
 
-      {/* CTA final — mesmo visual do card do topo (gradient California) */}
-      <section className="rounded-3xl bg-gradient-to-br from-california-red via-california-red to-red-900 p-8 md:p-12 text-white shadow-elevated">
+      {/* CTA final — mesma assinatura visual do card do topo */}
+      <section
+        className="rounded-3xl p-8 md:p-12 text-white shadow-elevated"
+        style={{ backgroundImage: CORTINA_CARTA_CARD }}
+      >
         <div className="flex items-start gap-3">
           <Sparkles className="h-6 w-6 mt-1 shrink-0" />
           <div>
