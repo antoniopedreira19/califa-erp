@@ -47,11 +47,13 @@ obrigatório**; o item A · Repasse já **concluído continua concluído**, e a
 diferença vira rentabilidade; o selo do cabeçalho troca de "Somente
 leitura" para **"Editando orçado"** durante a edição.
 
-Depois de ver a entrega, no mesmo dia, ele respondeu mais três pontos:
+Depois de ver a entrega, no mesmo dia, ele respondeu:
 
-- **Só a previsão de recebimento acompanha.** A entrega tinha ligado a
-  curva de desembolso no serviço Interno, e ele recusou: "É a previsão de
-  recebimento que deve acompanhar, como vc colocou o design."
+- **A curva de desembolso não acompanha.** A entrega tinha ligado a curva
+  no serviço Interno, e ele recusou: "É a previsão de recebimento que deve
+  acompanhar, como vc colocou o design." Perguntado em seguida sobre os
+  recolhimentos de imposto previstos, que a entrega também fazia
+  acompanhar, confirmou: "Impostos acompanham sim".
 - **O encerramento também trava.** Perguntado se o Interno — que nunca tem
   nota — devia travar ao finalizar: "Sim, isso devemos travar, tanto
   faturar, quanto ao encerrar o job (desse modo, sempre estará travado ao
@@ -155,7 +157,7 @@ do TES-1013/26, R$ 278,36 nas linhas contra R$ 278,37 no job. A action
 distribui o centavo que sobra, e a última linha fecha o total. O card
 mostra linhas que batem com o total da alteração.
 
-## 7. O que foi desfeito, e o que segue em aberto
+## 7. O que foi desfeito, e as decisões tomadas pela entrega
 
 - **A curva de desembolso chegou a acompanhar** no serviço Interno
   (migration `20260928300002`, testada no TES-1009/26). O Tiago recusou no
@@ -171,8 +173,8 @@ mostra linhas que batem com o total da alteração.
   caso. Foi levada ao Tiago na entrega e seguiu sem objeção.
 - **Recolhimentos de imposto:** acompanham desde a entrega, que os listou
   entre as decisões tomadas sem ele. Na segunda rodada o Tiago disse que a
-  previsão de recebimento "é a única" que muda com o orçado; a confirmação
-  sobre os impostos foi pedida a ele em 28/09/2026.
+  previsão de recebimento "é a única" que muda com o orçado; perguntado
+  sobre os impostos, confirmou que acompanham (§2).
 
 ## 8. Conferência (28/09/2026)
 
