@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Gera código do orçamento no formato "[CODIGO_PROJETO]-[SEQ_2]".
- * Sequencial por projeto. Ex.: "AMB-0003/26-01".
+ * Sequencial por projeto. Ex.: "AMB-P003/26-01" — até a decisão 114
+ * (28/09/2026), "AMB-0003/26-01"; o de antes fica em
+ * `orcamentos.codigo_anterior`.
  */
 export async function gerarCodigoOrcamento(
   supabase: SupabaseClient,

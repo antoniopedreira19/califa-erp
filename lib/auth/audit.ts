@@ -115,6 +115,11 @@ export type AuditAction =
   // [SIGLA]-[SEQ]/[AA]. Gravado pela migration, um evento por job, com o
   // código anterior e o novo no metadata.
   | "job.codigo_trocado"
+  // Decisão 114: a troca de código dos projetos e orçamentos (P) e dos
+  // projetos do financeiro (F). Só a migration grava estes.
+  | "projeto.codigo_trocado"
+  | "orcamento.codigo_trocado"
+  | "projeto_financeiro.codigo_trocado"
   | "job.abertura_aprovada"
   | "job.aberto_no_financeiro"
   // Edição do registro da abertura de um job já aberto ("Editar

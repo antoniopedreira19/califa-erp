@@ -1,8 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Gera código do projeto no formato "[CODIGO_CURTO_CLIENTE]-[SEQ_4]/[ANO_2]".
- * Ex.: "AMB-0003/26". O sequencial reinicia a cada ano.
+ * Gera código do projeto no formato "[CODIGO_CURTO_CLIENTE]-P[SEQ_3]/[ANO_2]".
+ * Ex.: "AMB-P003/26". O sequencial reinicia a cada ano.
+ *
+ * O "P" ocupa o lugar do primeiro zero (decisão 114, Tiago, 28/09/2026): o
+ * formato "[SIGLA]-[SEQ_4]/[ANO_2]" passou a ser o do JOB (`AMB-1006/26`),
+ * e o projeto do financeiro leva "F" (`AMB-F004/26`). Os três nunca se
+ * repetem, em 2026 ou depois. Até 28/09/2026 o projeto era "AMB-0003/26";
+ * o código daquela época fica em `projetos.codigo_anterior`.
  *
  * ⚠️ Até 14/09/2026 o sequencial era só a CONTAGEM de projetos do cliente no
  * ano + 1, e isso colidia com códigos que já existiam, por dois caminhos:
@@ -58,11 +64,16 @@ export async function gerarCodigoProjeto(
   );
   return proximoCodigoDeProjeto({
     codigoCurto: cliente.codigo_curto,
+    letra: LETRA_DO_PROJETO,
     ano,
     qtdDoCliente,
     codigosDaSigla,
   });
 }
+
+/** A letra no lugar do primeiro zero: P na produção, F no financeiro. */
+export const LETRA_DO_PROJETO = "P";
+export const LETRA_DO_PROJETO_FINANCEIRO = "F";
 
 /** As duas bases do sequencial, lidas em paralelo: quantos projetos o
  *  cliente tem no ano, e os códigos já usados com a sigla no ano (em
@@ -103,27 +114,34 @@ export async function lerBaseDoSequencial(
   };
 }
 
-/** "[SIGLA]-[sequencial]/[ANO]", com o sequencial no maior entre a
+/** "[SIGLA]-[LETRA][sequencial]/[ANO]", com o sequencial no maior entre a
  *  contagem do cliente + 1 e o maior número da sigla + 1. Código de outra
- *  sigla ou de outro ano não conta para o maior. */
+ *  sigla, de outro ano ou de outra letra não conta para o maior.
+ *
+ *  O código de antes da decisão 114 ("AMB-0006/26", com o zero no lugar
+ *  da letra) conta: é o mesmo número, e um projeto criado pelo gerador
+ *  antigo entre a troca do banco e a do código não pode ter o número
+ *  repetido. */
 export function proximoCodigoDeProjeto({
   codigoCurto,
+  letra,
   ano,
   qtdDoCliente,
   codigosDaSigla,
 }: {
   codigoCurto: string;
+  letra: string;
   ano: string;
   qtdDoCliente: number;
-  codigosDaSigla: string[];
+  codigosDaSigla: readonly string[];
 }): string {
   const escapado = codigoCurto.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const padrao = new RegExp(`^${escapado}-(\\d+)/${ano}$`);
+  const padrao = new RegExp(`^${escapado}-[0${letra}](\\d{3,})/${ano}$`);
   let maior = 0;
   for (const codigo of codigosDaSigla) {
     const m = padrao.exec(codigo);
     if (m) maior = Math.max(maior, Number(m[1]));
   }
   const seq = Math.max(qtdDoCliente + 1, maior + 1);
-  return `${codigoCurto}-${seq.toString().padStart(4, "0")}/${ano}`;
+  return `${codigoCurto}-${letra}${seq.toString().padStart(3, "0")}/${ano}`;
 }
