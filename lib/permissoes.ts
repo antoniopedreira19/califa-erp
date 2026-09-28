@@ -138,6 +138,10 @@ export const permissoes = {
   "jobs.encerrar":                ["administrador", "gerente_producao"],
   /** Abrir job no financeiro — via /financeiro/abertura-de-job. */
   "jobs.abrir_financeiro":        ["administrador", "financeiro"],
+  /** "Editar orçado" da Planilha Interna do job no financeiro (decisão
+   *  115): os valores do orçado, sem aprovação, até a primeira nota. O
+   *  banco confere de novo na policy de `jobs_alteracoes_financeiro`. */
+  "jobs.editar_orcado_financeiro": ["administrador", "financeiro"],
 
   // ==================================================================
   // Chat de job
