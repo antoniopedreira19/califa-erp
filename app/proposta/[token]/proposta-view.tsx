@@ -164,11 +164,11 @@ function LandingCarta({
         </div>
       </section>
 
-      {/* Apresentação institucional — slides originais + página 3
-          renderizada em HTML pra usar os dados reais do candidato no
-          lugar dos placeholders "XX/XX/XXXX" e "R$ 0.000,00" do PPT. */}
+      {/* Apresentação institucional. Páginas 1 e 3 são renderizadas
+          em HTML pra usar dados reais do candidato (nome / cargo /
+          data / salário) no lugar dos placeholders do PPT. */}
       <section className="space-y-6">
-        <SlideImagem numero={1} />
+        <SlidePagina1 nome={c.nome} />
         <SlideImagem numero={2} />
         <SlidePagina3
           nome={c.nome}
@@ -310,6 +310,111 @@ function DadoCard({
         {valor}
       </p>
       {complemento && <p className="text-xs opacity-80 mt-1">{complemento}</p>}
+    </div>
+  );
+}
+
+/**
+ * Página 1 (capa) da carta em HTML — substitui o Slide1.JPG pra
+ * mostrar o NOME REAL do candidato no lugar do placeholder
+ * "NOME E SOBRENOME" do PPT.
+ *
+ * Layout inspirado no slide original: coluna esquerda com bloco vermelho
+ * sólido (logo + "CARTA PROPOSTA") no topo e textura de cortina com o
+ * nome embaixo; coluna direita com a colagem de fotos dos escritórios.
+ */
+function SlidePagina1({ nome }: { nome: string }) {
+  return (
+    <div className="overflow-hidden rounded-3xl shadow-soft aspect-[16/9] grid grid-cols-[40%_1fr]">
+      {/* Coluna esquerda — bloco vermelho sólido em cima, cortina em baixo */}
+      <div className="grid grid-rows-[45%_55%]">
+        {/* Topo: fundo sólido #D40D32 com logo + CARTA PROPOSTA */}
+        <div
+          className="p-4 md:p-6 flex flex-col justify-start"
+          style={{ background: "#D40D32" }}
+        >
+          <LogoCalifornia />
+          <div className="mt-4 md:mt-6">
+            <p className="text-white text-3xl md:text-5xl font-black leading-none tracking-tight">
+              CARTA
+            </p>
+            <p className="text-white text-3xl md:text-5xl font-light leading-none tracking-tight mt-1 md:mt-2">
+              PROPOSTA
+            </p>
+          </div>
+        </div>
+
+        {/* Base: textura de cortina densa + linha vertical + nome */}
+        <div
+          className="p-4 md:p-6 flex items-end"
+          style={{
+            backgroundImage: `
+              repeating-linear-gradient(
+                to right,
+                rgba(0,0,0,0)       0px,
+                rgba(0,0,0,0)       6px,
+                rgba(0,0,0,0.22)    6px,
+                rgba(0,0,0,0.22)    8px,
+                rgba(255,255,255,0.05) 8px,
+                rgba(255,255,255,0.05) 14px
+              ),
+              linear-gradient(to bottom, #A02330 0%, #6E1620 60%, #3D0C10 100%)
+            `,
+          }}
+        >
+          <div className="flex items-stretch gap-3 md:gap-4">
+            <div className="w-px bg-white/70" />
+            <div>
+              <p className="text-white text-lg md:text-2xl font-black uppercase leading-tight tracking-wide">
+                {nome}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Coluna direita — foto/colagem dos escritórios (Slide1-foto.jpg).
+          Se o arquivo ainda não existir, cai num gradient neutro. */}
+      <div className="relative bg-gradient-to-br from-neutral-300 to-neutral-500">
+        <Image
+          src="/proposta/carta/Slide1-foto.jpg"
+          alt="Escritórios California"
+          fill
+          sizes="(max-width: 768px) 60vw, 600px"
+          className="object-cover"
+          priority
+          unoptimized
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Chip do logo California, aproximado em HTML. Usa a cor #D40D32 do
+ * bloco como fundo e um círculo branco com emoji 🐻 como marca-símbolo.
+ *
+ * Se você preferir o logo real, salve como
+ * /public/proposta/carta/california-logo.png e troque este componente
+ * por um <Image src="..." /> — o layout ao redor não muda.
+ */
+function LogoCalifornia() {
+  return (
+    <div className="inline-flex items-center gap-2 self-start">
+      <span
+        className="inline-flex items-center justify-center rounded-full bg-white"
+        style={{ width: 26, height: 26 }}
+      >
+        <span className="text-sm leading-none" role="img" aria-label="urso">
+          🐻
+        </span>
+      </span>
+      <span className="text-white font-black text-base md:text-lg tracking-wider">
+        CALIFORNIA
+      </span>
     </div>
   );
 }
