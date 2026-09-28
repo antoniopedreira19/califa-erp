@@ -89,10 +89,16 @@ Depois de ver a entrega, no mesmo dia, ele respondeu:
      save —, pela conta do financeiro (`totaisDoFinanceiro`, decisão 099),
      a mesma que a errata grava;
    - a **previsão de recebimento** (P3): cada parcela na proporção dela,
-     sem mudar a data, e a última fecha o centavo. No mensal, só as
-     parcelas do mês mexido;
+     sem mudar a data, e a última fecha o centavo. A soma continua batendo
+     com o faturamento previsto do job, que é o que a abertura confere. No
+     mensal, só as parcelas do mês mexido, pela mesma conta do envio do mês
+     e da abertura (`lerFaturamentoPorMesDoJob`, sem os parâmetros do
+     internacional);
    - os **recolhimentos de imposto previstos** (decisão 100), do mesmo
-     jeito, porque precisam fechar com o imposto previsto, que muda junto;
+     jeito, porque precisam fechar com o imposto previsto, que muda junto.
+     O imposto sai da mesma conta que a abertura usa para conferir o
+     cronograma (`impostoDoJob`: imposto da nota + int. taxes, com as
+     linhas como o financeiro vê);
    - o **envio para faturamento ainda sem nota** (P4): o valor enviado e as
      parcelas, do mesmo jeito, com as mesmas datas.
      `faturamento_enviado_em` não muda.
@@ -209,6 +215,15 @@ desfeito por uma segunda alteração:
 - **Build completo** da árvore que subiu (com o main de 28/09), com as
   dependências instaladas numa cópia isolada: `tsc`, lint e `next build`
   limpos.
+- **Recebimento e impostos contra a conta da abertura**, no TES-1013/26
+  (linha B, honorários de 12%, imposto de 19,53%): com a linha em
+  R$ 1.000, R$ 1.100 e R$ 1.200, o faturamento sai em R$ 1.391,82,
+  R$ 1.531,01 e R$ 1.670,19 e o imposto em R$ 271,82, R$ 299,01 e
+  R$ 326,19 — exatamente o que ficou gravado na previsão de recebimento e
+  no cronograma de impostos em cada teste. A parcela mensal passou a usar
+  a conta do envio do mês depois dessa conferência (a action passava os
+  parâmetros do internacional, que o leitor do mês não usa; nenhum job
+  internacional existia).
 - **AMB-1001/26** (job real): as 4 linhas com PP abrem na edição; a edição
   foi descartada, sem gravar.
 
