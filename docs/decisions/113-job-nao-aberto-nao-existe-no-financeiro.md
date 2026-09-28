@@ -101,13 +101,14 @@ envio grava (`20260902160002`, com backfill das PPs anteriores).
   JOB-…" citava o primeiro job do orçamento consumidor, que podia ser o
   cancelado. Agora cita o vivo. Em 28/09/2026 não havia consumo nessa
   situação.
+- **Home** do GP, do produtor e do freelancer (`lib/home/carregar.ts`): as
+  contagens de "Mensagens no chat" e de "PPs emitidas por mim" deixam de
+  contar o job cancelado antes da abertura. É código da frente do Antonio;
+  o Tiago autorizou a mudança em 28/09/2026. As outras contagens da home já
+  deixavam o cancelado de fora pelo status.
 
 ## 5. O que fica como está
 
-- **As contagens da home** do GP, do produtor e do freelancer (mensagens
-  do chat e "PPs emitidas por mim") não filtram o job cancelado. São
-  código da frente do Antonio e ficaram de fora. Nenhum dos 6 jobs
-  cancelados ou devolvidos tem mensagem ou PP.
 - **Save consumido por job ainda não aberto** continua aparecendo no fluxo
   de caixa e na planilha do job de origem: o valor sai do saldo de um job
   aberto. Não havia caso em 28/09/2026.

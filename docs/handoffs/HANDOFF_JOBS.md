@@ -4398,10 +4398,16 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   orçamento pula o cancelado; antes, pegava o primeiro job do orçamento.
   Sem consumo nessa situação em 28/09, então o caminho não foi exercitado
   em tela.
-- **Ficou de fora:** as contagens da home do GP, do produtor e do
-  freelancer (mensagens e "PPs emitidas por mim") ainda contam o job
-  cancelado. São da frente do Antonio; nenhum cancelado tem mensagem ou PP.
-  A exportação `/api/jobs/[jobId]/export` também não confere o status.
+- **Home** do GP, do produtor e do freelancer: "Mensagens no chat" e "PPs
+  emitidas por mim" deixam de contar o job cancelado antes da abertura
+  (`lib/home/carregar.ts`, código do Antonio, mudança autorizada pelo
+  Tiago). Conferido por rota temporária com as funções reais: 1 mensagem
+  na home do freelancer e 11 PPs emitidas no mês na do produtor, como no
+  banco; o formato da contagem do GP achou a 1 mensagem do projeto do
+  JOB-0025 sem erro; e o mesmo filtro no embed tirou exatamente os 40 itens
+  dos jobs cancelados (309 → 269).
+- **Ficou de fora:** a exportação `/api/jobs/[jobId]/export` não confere o
+  status.
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
