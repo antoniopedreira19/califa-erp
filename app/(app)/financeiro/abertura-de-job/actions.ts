@@ -6,11 +6,10 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
   aberturaFinanceiraSchema,
-  criarProjetoFinanceiroSchema,
   edicaoRegistroAberturaSchema,
+  nomeDoProjetoFinanceiroSchema,
   TOLERANCIA_CURVA,
   type AberturaFinanceiraInput,
-  type CriarProjetoFinanceiroInput,
   type EdicaoRegistroAberturaInput,
   type PrevisaoImpostosLinhaInput,
   type PrevisaoRecebimentoLinhaInput,
@@ -343,7 +342,7 @@ export async function abrirJobNoFinanceiro(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, projeto:projetos(cliente_id)",
+      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, data_inicio_prevista, projeto:projetos(cliente_id)",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -354,6 +353,7 @@ export async function abrirJobNoFinanceiro(
       orcamento_id: string;
       faturamento_previsto: number | string | null;
       valor_total: number | string | null;
+      data_inicio_prevista: string | null;
       projeto: { cliente_id: string } | null;
     }>();
 
@@ -531,9 +531,28 @@ export async function abrirJobNoFinanceiro(
   });
   if (contasErro) return { ok: false, message: contasErro };
 
+  // Projeto novo nasce aqui, junto com o job (decisão 119): tudo acima já
+  // foi conferido, e o update logo abaixo é o ponto sem volta.
+  const projetoNovo = parsed.data.projeto_financeiro_novo
+    ? await criarProjetoDoJob(supabase, {
+        tenantId: session.activeTenant.id,
+        profileId: session.profile.id,
+        // Conferido em `conferirProjetoEContas`: projeto novo exige cliente.
+        clienteId: job.projeto?.cliente_id ?? "",
+        dataInicio: job.data_inicio_prevista,
+        nome: parsed.data.projeto_financeiro_novo,
+      })
+    : null;
+  if (projetoNovo && !projetoNovo.ok) {
+    return { ok: false, message: projetoNovo.message };
+  }
+  const projetoFinanceiroId = projetoNovo
+    ? projetoNovo.id
+    : (parsed.data.projeto_financeiro_id as string);
+
   const agora = new Date().toISOString();
 
-  const { error: updateErro } = await supabase
+  const { data: abertos, error: updateErro } = await supabase
     .from("jobs")
     .update({
       status: "aberto",
@@ -541,7 +560,7 @@ export async function abrirJobNoFinanceiro(
       nome_financeiro: parsed.data.nome_financeiro,
       // Só a arrumação do financeiro. `projeto_id` (produção) fica como
       // está — quem manda nele é o orçamento.
-      projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+      projeto_financeiro_id: projetoFinanceiroId,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       conta_impostos_id: parsed.data.conta_impostos_id,
@@ -557,11 +576,41 @@ export async function abrirJobNoFinanceiro(
     .eq("tenant_id", session.activeTenant.id)
     // Trava de corrida: se outra aba abriu o job entre a leitura acima e
     // este update, o filtro não casa e nada é gravado duas vezes.
-    .eq("status", "aguardando_abertura");
+    .eq("status", "aguardando_abertura")
+    .select("id");
 
-  if (updateErro) {
-    console.error("[abertura-job.update]", updateErro.message);
-    return { ok: false, message: "Não foi possível abrir o job." };
+  if (updateErro || !abertos || abertos.length === 0) {
+    // O projeto criado para este job não pode ficar sem ele (decisão 119).
+    if (projetoNovo?.ok) {
+      await desfazerProjetoNovo(supabase, session.activeTenant.id, projetoNovo.id);
+    }
+    if (updateErro) {
+      console.error("[abertura-job.update]", updateErro.message);
+      return { ok: false, message: "Não foi possível abrir o job." };
+    }
+    // Até 28/09/2026 o filtro de corrida não casava e a action seguia
+    // gravando rateio, previsões e foto de um job que outra aba já tinha
+    // aberto ou reprovado. O `.select` é o que conta as linhas.
+    return {
+      ok: false,
+      message:
+        "Este job não está mais aguardando abertura — alguém pode ter aberto ou reprovado enquanto você preenchia.",
+    };
+  }
+
+  if (projetoNovo?.ok) {
+    await logAuditEvent({
+      acao: "projeto_financeiro.criado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "projeto_financeiro",
+      entidadeId: projetoNovo.id,
+      metadata: {
+        codigo: projetoNovo.codigo,
+        nome: parsed.data.projeto_financeiro_novo,
+        job_id: jobId,
+        na: "abertura",
+      },
+    });
   }
 
   // Os saves e consumos que vieram do orçamento entram na faixa Saves
@@ -739,7 +788,7 @@ export async function abrirJobNoFinanceiro(
     entidadeId: jobId,
     metadata: {
       nome_financeiro: parsed.data.nome_financeiro,
-      projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+      projeto_financeiro_id: projetoFinanceiroId,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       categoria_id: parsed.data.categoria_id,
@@ -769,7 +818,7 @@ export async function abrirJobNoFinanceiro(
     profileId: session.profile.id,
     registro: {
       nome_financeiro: parsed.data.nome_financeiro,
-      projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+      projeto_financeiro_id: projetoFinanceiroId,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       conta_impostos_id: parsed.data.conta_impostos_id,
@@ -871,6 +920,11 @@ function conferirImpostos(
  * garante que a linha existe, não que ela é sua) e uma conta inativada
  * voltaria a receber job.
  *
+ * Projeto NOVO (só o nome, decisão 119): confere que o nome está livre. É
+ * a mesma pergunta que o índice único faz no insert, feita antes para a
+ * mensagem dizer qual projeto já tem o nome — e para nada ser gravado
+ * quando o nome não serve.
+ *
  * Devolve a mensagem do problema, ou null quando está tudo certo.
  */
 async function conferirProjetoEContas(
@@ -878,7 +932,8 @@ async function conferirProjetoEContas(
   tenantId: string,
   clienteDoJob: string | null,
   input: {
-    projeto_financeiro_id: string;
+    projeto_financeiro_id: string | null;
+    projeto_financeiro_novo: string | null;
     conta_recebimento_id: string | null;
     conta_pagamento_id: string | null;
     conta_impostos_id: string | null;
@@ -902,13 +957,18 @@ async function conferirProjetoEContas(
     ),
   );
 
-  const [projetoRes, contasRes] = await Promise.all([
-    supabase
-      .from("projetos_financeiro")
-      .select("id, ativo, cliente_id")
-      .eq("id", input.projeto_financeiro_id)
-      .eq("tenant_id", tenantId)
-      .maybeSingle<{ id: string; ativo: boolean; cliente_id: string }>(),
+  const [projetoRes, nomeRes, contasRes] = await Promise.all([
+    input.projeto_financeiro_id
+      ? supabase
+          .from("projetos_financeiro")
+          .select("id, ativo, cliente_id")
+          .eq("id", input.projeto_financeiro_id)
+          .eq("tenant_id", tenantId)
+          .maybeSingle<{ id: string; ativo: boolean; cliente_id: string }>()
+      : Promise.resolve({ data: null }),
+    input.projeto_financeiro_novo
+      ? projetoComONome(supabase, tenantId, input.projeto_financeiro_novo, null)
+      : Promise.resolve(null),
     contasPedidas.length > 0
       ? supabase
           .from("contas_bancarias")
@@ -918,16 +978,22 @@ async function conferirProjetoEContas(
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const projeto = projetoRes.data;
-  if (!projeto) return "Projeto do financeiro inválido.";
-  if (!projeto.ativo) {
-    return "Este projeto foi inativado. Escolha outro para o job.";
-  }
-  // Agrupar jobs de clientes diferentes sob o mesmo projeto não é
-  // arrumação, é engano — e o total do projeto sairia somando dinheiro
-  // de dois clientes.
-  if (clienteDoJob && projeto.cliente_id !== clienteDoJob) {
-    return "O projeto escolhido é de outro cliente.";
+  if (input.projeto_financeiro_novo) {
+    if (nomeRes === "erro") return "Não foi possível conferir o nome do projeto.";
+    if (nomeRes) return mensagemDeNomeRepetido(nomeRes);
+    if (!clienteDoJob) return "O job não tem cliente no projeto de origem.";
+  } else {
+    const projeto = projetoRes.data;
+    if (!projeto) return "Projeto do financeiro inválido.";
+    if (!projeto.ativo) {
+      return "Este projeto foi inativado. Escolha outro para o job.";
+    }
+    // Agrupar jobs de clientes diferentes sob o mesmo projeto não é
+    // arrumação, é engano — e o total do projeto sairia somando dinheiro
+    // de dois clientes.
+    if (clienteDoJob && projeto.cliente_id !== clienteDoJob) {
+      return "O projeto escolhido é de outro cliente.";
+    }
   }
 
   if (contasRes.error) {
@@ -946,26 +1012,202 @@ async function conferirProjetoEContas(
   return null;
 }
 
+/** O projeto que já usa um nome, para a mensagem dizer qual é. */
+interface ProjetoDeMesmoNome {
+  codigo: string;
+  nome: string;
+  cliente_nome: string | null;
+}
+
 /**
- * Cria um projeto do financeiro e já devolve o id para o formulário
- * vincular ("Criar projeto para este job", do protótipo).
+ * O projeto do financeiro que já usa este nome, no tenant inteiro — sem
+ * distinguir caixa, acento nem espaço (decisão 119). A comparação é a do
+ * banco (`nome_de_projeto_normalizado`), a mesma do índice único: uma
+ * segunda normalização aqui em TypeScript acabaria divergindo da dele.
  *
- * O que vem da tela é só o nome. O código é gerado pelo sistema e o
- * cliente vem do projeto de produção do job — não é escolha de quem
- * preenche, e deixar escolher abriria a porta para projeto do financeiro
- * misturando clientes.
- *
- * Não grava nada no job: quem vincula é a abertura (ou a edição do
- * registro), no submit. Assim, desistir da abertura não deixa o job
- * apontando para um projeto que ninguém quis.
+ * `excetoId` tira o próprio projeto da conta, no renomear. Devolve
+ * "erro" quando a consulta falha — quem chama não pode ler isso como
+ * "nome livre".
  */
-export async function criarProjetoFinanceiro(
-  jobId: string,
-  input: CriarProjetoFinanceiroInput,
-): Promise<
-  | { ok: true; id: string; codigo: string; nome: string }
-  | { ok: false; message: string }
-> {
+async function projetoComONome(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  nome: string,
+  excetoId: string | null,
+): Promise<ProjetoDeMesmoNome | null | "erro"> {
+  const { data, error } = await supabase.rpc("projeto_financeiro_com_o_nome", {
+    p_tenant_id: tenantId,
+    p_nome: nome,
+    p_exceto: excetoId,
+  });
+  if (error) {
+    console.error("[projeto-financeiro.nome]", error.message);
+    return "erro";
+  }
+  const linha = ((data ?? []) as ProjetoDeMesmoNome[])[0];
+  return linha ?? null;
+}
+
+/** Diz qual projeto já tem o nome — e de que cliente, porque a unicidade
+ *  vale no sistema inteiro e o combo só mostra os do cliente do job. */
+function mensagemDeNomeRepetido(p: ProjetoDeMesmoNome): string {
+  const cliente = p.cliente_nome ? `, de ${p.cliente_nome}` : "";
+  return `Já existe um projeto com este nome: ${p.codigo} · ${p.nome}${cliente}. Use outro nome.`;
+}
+
+/** O 23505 do insert/update: o nome repetido, ou a corrida do código. */
+function ehNomeRepetido(error: { code?: string; message?: string } | null) {
+  return (
+    error?.code === "23505" &&
+    (error.message ?? "").includes("uniq_projetos_financeiro_nome")
+  );
+}
+
+/**
+ * Cria o projeto do financeiro que o job vai usar — chamada pela abertura
+ * e pela edição do registro, imediatamente antes do update do job.
+ *
+ * Até 28/09/2026 o "+" do campo Projeto gravava o projeto na hora, e quem
+ * desistia da abertura, errava o nome ou criava de novo deixava um
+ * projeto sem job (eram 11 de 17). Agora o "+" só reserva o nome no
+ * formulário, e o projeto nasce aqui, junto com o job (decisão 119).
+ *
+ * O código é gerado pelo sistema e o cliente vem do projeto de produção
+ * do job — nenhum dos dois é escolha de quem preenche. O ano do código
+ * sai do início do job, e não de hoje: job que começa em janeiro e é
+ * aberto em dezembro pertence ao ano de execução.
+ *
+ * Quem chama desfaz com `desfazerProjetoNovo` se o update do job falhar.
+ */
+async function criarProjetoDoJob(
+  supabase: ReturnType<typeof createClient>,
+  args: {
+    tenantId: string;
+    profileId: string;
+    clienteId: string;
+    dataInicio: string | null;
+    nome: string;
+  },
+): Promise<{ ok: true; id: string; codigo: string } | { ok: false; message: string }> {
+  const dataBase = args.dataInicio ?? new Date().toISOString().slice(0, 10);
+
+  let codigo: string;
+  try {
+    codigo = await gerarCodigoProjetoFinanceiro(
+      supabase,
+      args.tenantId,
+      args.clienteId,
+      dataBase,
+    );
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Não foi possível gerar o código do projeto.",
+    };
+  }
+
+  const { data: criado, error } = await supabase
+    .from("projetos_financeiro")
+    .insert({
+      tenant_id: args.tenantId,
+      codigo,
+      nome: args.nome,
+      cliente_id: args.clienteId,
+      created_by: args.profileId,
+    })
+    .select("id, codigo")
+    .maybeSingle<{ id: string; codigo: string }>();
+
+  if (error || !criado) {
+    console.error("[projeto-financeiro.criar]", error?.message);
+    if (ehNomeRepetido(error)) {
+      const outro = await projetoComONome(supabase, args.tenantId, args.nome, null);
+      return {
+        ok: false,
+        message:
+          outro && outro !== "erro"
+            ? mensagemDeNomeRepetido(outro)
+            : "Já existe um projeto com este nome. Use outro nome.",
+      };
+    }
+    // O índice único (tenant_id, codigo) é a rede da race condition do
+    // gerador: duas aberturas simultâneas disputam o mesmo sequencial.
+    return {
+      ok: false,
+      message:
+        error?.code === "23505"
+          ? "Outro projeto acabou de tomar o código deste. Tente de novo."
+          : "Não foi possível criar o projeto.",
+    };
+  }
+
+  return { ok: true, id: criado.id, codigo: criado.codigo };
+}
+
+/**
+ * Apaga o projeto que `criarProjetoDoJob` acabou de criar, quando o update
+ * do job que ia usá-lo não passou. Sem isto, a falha da abertura deixaria
+ * exatamente o projeto sem job que a decisão 119 proíbe. A policy de
+ * DELETE só deixa sair projeto sem job, e a FK recusa o resto.
+ */
+async function desfazerProjetoNovo(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  projetoId: string,
+) {
+  const { error } = await supabase
+    .from("projetos_financeiro")
+    .delete()
+    .eq("id", projetoId)
+    .eq("tenant_id", tenantId);
+  if (error) {
+    console.error("[projeto-financeiro.desfazer]", error.message);
+  }
+}
+
+/**
+ * Confere, antes de reservar ou renomear, se o nome já é de outro
+ * projeto — para a pessoa saber na hora, no próprio "+" ou no lápis, e
+ * não só ao abrir o job. Só leitura: nada é gravado aqui.
+ */
+export async function conferirNomeDeProjetoFinanceiro(
+  nome: string,
+  excetoId: string | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const session = await requireSession();
+
+  const parsed = nomeDoProjetoFinanceiroSchema.safeParse(nome);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Verifique o nome do projeto.",
+    };
+  }
+
+  const supabase = createClient();
+  const outro = await projetoComONome(
+    supabase,
+    session.activeTenant.id,
+    parsed.data,
+    excetoId,
+  );
+  if (outro === "erro") {
+    return { ok: false, message: "Não foi possível conferir o nome do projeto." };
+  }
+  if (outro) return { ok: false, message: mensagemDeNomeRepetido(outro) };
+  return { ok: true };
+}
+
+/**
+ * Renomeia um projeto do financeiro (o lápis do campo Projeto, decisão
+ * 119). Grava na hora, como a edição do cadastro de fornecedor: o nome é
+ * do projeto, não deste job, e muda para todos os jobs dele. Só o nome —
+ * o código e o cliente continuam do sistema.
+ */
+export async function renomearProjetoFinanceiro(
+  projetoId: string,
+  nome: string,
+): Promise<{ ok: true; nome: string } | { ok: false; message: string }> {
   const session = await requireSession();
 
   if (
@@ -975,109 +1217,79 @@ export async function criarProjetoFinanceiro(
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
-      entidadeTipo: "job",
-      entidadeId: jobId,
+      entidadeTipo: "projeto_financeiro",
+      entidadeId: projetoId,
       metadata: {
-        action: "projeto_financeiro.criar",
+        action: "projeto_financeiro.renomear",
         role: session.activeRole,
       },
     });
     return {
       ok: false,
-      message: "Só administrador ou financeiro pode criar projeto no financeiro.",
+      message: "Só administrador ou financeiro pode renomear projeto no financeiro.",
     };
   }
 
-  const parsed = criarProjetoFinanceiroSchema.safeParse(input);
+  const parsed = nomeDoProjetoFinanceiroSchema.safeParse(nome);
   if (!parsed.success) {
     return {
       ok: false,
-      message:
-        parsed.error.flatten().fieldErrors.nome?.[0] ??
-        "Verifique o nome do projeto.",
+      message: parsed.error.issues[0]?.message ?? "Verifique o nome do projeto.",
     };
   }
 
   const supabase = createClient();
 
-  const { data: job } = await supabase
-    .from("jobs")
-    .select("id, data_inicio_prevista, projeto:projetos(cliente_id)")
-    .eq("id", jobId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{
-      id: string;
-      data_inicio_prevista: string | null;
-      projeto: { cliente_id: string } | null;
-    }>();
-
-  if (!job) return { ok: false, message: "Job não encontrado." };
-
-  const clienteId = job.projeto?.cliente_id;
-  if (!clienteId) {
-    return {
-      ok: false,
-      message: "O job não tem cliente no projeto de origem.",
-    };
-  }
-
-  // O ano do código sai do início do job, e não de hoje: job que começa
-  // em janeiro e é aberto em dezembro pertence ao ano de execução.
-  const dataBase =
-    job.data_inicio_prevista ?? new Date().toISOString().slice(0, 10);
-
-  let codigo: string;
-  try {
-    codigo = await gerarCodigoProjetoFinanceiro(
-      supabase,
-      session.activeTenant.id,
-      clienteId,
-      dataBase,
-    );
-  } catch (e) {
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Não foi possível gerar o código.",
-    };
-  }
-
-  const { data: criado, error } = await supabase
+  const { data: projeto } = await supabase
     .from("projetos_financeiro")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      codigo,
-      nome: parsed.data.nome,
-      cliente_id: clienteId,
-      created_by: session.profile.id,
-    })
     .select("id, codigo, nome")
+    .eq("id", projetoId)
+    .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{ id: string; codigo: string; nome: string }>();
 
-  if (error || !criado) {
-    console.error("[projeto-financeiro.criar]", error?.message);
-    // O índice único (tenant_id, codigo) é a rede da race condition do
-    // gerador: dois cliques simultâneos disputam o mesmo sequencial.
+  if (!projeto) return { ok: false, message: "Projeto não encontrado." };
+  if (projeto.nome === parsed.data) return { ok: true, nome: projeto.nome };
+
+  const outro = await projetoComONome(
+    supabase,
+    session.activeTenant.id,
+    parsed.data,
+    projeto.id,
+  );
+  if (outro === "erro") {
+    return { ok: false, message: "Não foi possível conferir o nome do projeto." };
+  }
+  if (outro) return { ok: false, message: mensagemDeNomeRepetido(outro) };
+
+  const { error } = await supabase
+    .from("projetos_financeiro")
+    .update({ nome: parsed.data })
+    .eq("id", projeto.id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[projeto-financeiro.renomear]", error.message);
     return {
       ok: false,
-      message:
-        error?.code === "23505"
-          ? "Outro projeto acabou de tomar este código. Tente de novo."
-          : "Não foi possível criar o projeto.",
+      message: ehNomeRepetido(error)
+        ? "Outro projeto acabou de tomar este nome. Use outro nome."
+        : "Não foi possível renomear o projeto.",
     };
   }
 
   await logAuditEvent({
-    acao: "projeto_financeiro.criado",
+    acao: "projeto_financeiro.renomeado",
     tenantId: session.activeTenant.id,
     entidadeTipo: "projeto_financeiro",
-    entidadeId: criado.id,
-    metadata: { codigo: criado.codigo, nome: criado.nome, job_id: jobId },
+    entidadeId: projeto.id,
+    metadata: { codigo: projeto.codigo, de: projeto.nome, para: parsed.data },
   });
 
-  revalidatePath(`/financeiro/abertura-de-job/${jobId}`);
-  revalidatePath("/financeiro/abertura-de-job");
+  // O nome aparece em todo o módulo: abertura, jobs abertos, página do
+  // projeto e a do job.
+  revalidatePath("/financeiro", "layout");
 
-  return { ok: true, id: criado.id, codigo: criado.codigo, nome: criado.nome };
+  return { ok: true, nome: parsed.data };
 }
 
 /**
@@ -1166,7 +1378,7 @@ export async function editarRegistroDaAbertura(
         "nome_financeiro, projeto_financeiro_id, conta_recebimento_id, " +
         "conta_pagamento_id, conta_impostos_id, categoria_id, servico_id, competencia_trimestre, " +
         "competencia_ano, abertura_em_revisao, abertura_revisao_errata_id, " +
-        "projeto:projetos(cliente_id)",
+        "data_inicio_prevista, projeto:projetos(cliente_id)",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -1504,6 +1716,25 @@ export async function editarRegistroDaAbertura(
   });
   if (contasErro) return { ok: false, message: contasErro };
 
+  // Projeto novo nasce aqui, junto com o registro (decisão 119) — antes da
+  // aprovação, para que um nome recusado não deixe um save aprovado sem o
+  // registro que o aprova. Se algo abaixo falhar, o projeto é desfeito.
+  const projetoNovo = parsed.data.projeto_financeiro_novo
+    ? await criarProjetoDoJob(supabase, {
+        tenantId: session.activeTenant.id,
+        profileId: session.profile.id,
+        clienteId: job.projeto?.cliente_id ?? "",
+        dataInicio: job.data_inicio_prevista ?? null,
+        nome: parsed.data.projeto_financeiro_novo,
+      })
+    : null;
+  if (projetoNovo && !projetoNovo.ok) {
+    return { ok: false, message: projetoNovo.message };
+  }
+  const projetoFinanceiroId = projetoNovo
+    ? projetoNovo.id
+    : (parsed.data.projeto_financeiro_id as string);
+
   // Tudo conferido: agora a aprovação. A RPC confere de novo que a linha
   // continua como o pedido descreve, grava os espelhos (pedido
   // `job_aberto`) e muda a situação — numa transação só. Se ela recusar,
@@ -1519,6 +1750,9 @@ export async function editarRegistroDaAbertura(
     });
     if (rpcErr) {
       console.error("[abertura-job.aprovar-save.rpc]", rpcErr.message);
+      if (projetoNovo?.ok) {
+        await desfazerProjetoNovo(supabase, session.activeTenant.id, projetoNovo.id);
+      }
       return { ok: false, message: rpcErr.message };
     }
     await logAuditEvent({
@@ -1551,11 +1785,14 @@ export async function editarRegistroDaAbertura(
     aprovacao
       ? `${aprovado} e os dados do registro foram salvos, mas ${oQueFaltou}`
       : `Os dados do registro foram salvos, mas ${oQueFaltou}`;
-  const { error: updateErro } = await supabase
+  // Trocar o projeto pode deixar o antigo sem job: o gatilho
+  // `trg_jobs_projeto_financeiro_sem_job_some` apaga esse projeto no mesmo
+  // update (decisão 119). A produção não muda — `projeto_id` é outra coluna.
+  const { data: salvos, error: updateErro } = await supabase
     .from("jobs")
     .update({
       nome_financeiro: parsed.data.nome_financeiro,
-      projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+      projeto_financeiro_id: projetoFinanceiroId,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       conta_impostos_id: parsed.data.conta_impostos_id,
@@ -1576,16 +1813,39 @@ export async function editarRegistroDaAbertura(
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     // Trava de corrida: job encerrado em outra aba enquanto esta editava.
-    .in("status", JOB_STATUS_ABERTO);
+    .in("status", JOB_STATUS_ABERTO)
+    .select("id");
 
-  if (updateErro) {
-    console.error("[abertura-job.editar-update]", updateErro.message);
+  if (updateErro || !salvos || salvos.length === 0) {
+    if (projetoNovo?.ok) {
+      await desfazerProjetoNovo(supabase, session.activeTenant.id, projetoNovo.id);
+    }
+    if (updateErro) {
+      console.error("[abertura-job.editar-update]", updateErro.message);
+    }
     return {
       ok: false,
       message: aprovacao
         ? `${aprovado}, mas a revisão da abertura não foi registrada. Registre a revisão de novo na aba Abertura do Job.`
-        : "Não foi possível salvar as alterações.",
+        : updateErro
+          ? "Não foi possível salvar as alterações."
+          : "O job não está mais aberto — alguém pode tê-lo encerrado enquanto você editava.",
     };
+  }
+
+  if (projetoNovo?.ok) {
+    await logAuditEvent({
+      acao: "projeto_financeiro.criado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "projeto_financeiro",
+      entidadeId: projetoNovo.id,
+      metadata: {
+        codigo: projetoNovo.codigo,
+        nome: parsed.data.projeto_financeiro_novo,
+        job_id: jobId,
+        na: eraRevisao ? "revisao" : "edicao",
+      },
+    });
   }
 
   const rateioErro = await gravarRateio(
@@ -1737,7 +1997,7 @@ export async function editarRegistroDaAbertura(
       },
       para: {
         nome_financeiro: parsed.data.nome_financeiro,
-        projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+        projeto_financeiro_id: projetoFinanceiroId,
         conta_recebimento_id: parsed.data.conta_recebimento_id,
         conta_pagamento_id: parsed.data.conta_pagamento_id,
         categoria_id: parsed.data.categoria_id,
@@ -1764,7 +2024,7 @@ export async function editarRegistroDaAbertura(
     profileId: session.profile.id,
     registro: {
       nome_financeiro: parsed.data.nome_financeiro,
-      projeto_financeiro_id: parsed.data.projeto_financeiro_id,
+      projeto_financeiro_id: projetoFinanceiroId,
       conta_recebimento_id: parsed.data.conta_recebimento_id,
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       conta_impostos_id: parsed.data.conta_impostos_id,

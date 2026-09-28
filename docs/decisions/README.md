@@ -138,6 +138,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 116 | [Projeto com orçamento aprovado ou com job não se arquiva](116-projeto-com-orcamento-aprovado-nao-se-arquiva.md) | 2026-09-28 |
 | 117 | [O status só muda pelo sistema](117-status-so-muda-pelo-sistema.md) | 2026-09-28 |
 | 118 | [O orçamento se arquiva, e o arquivado (orçamento ou projeto) é só leitura](118-orcamento-se-arquiva-e-arquivado-e-so-leitura.md) | 2026-09-28 |
+| 119 | [O projeto do financeiro nasce com o job, tem nome único e se renomeia pelo lápis](119-projeto-do-financeiro-nasce-com-o-job-e-tem-nome-unico.md) | 2026-09-28 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -150,4 +151,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 120.** (A 119 está em uso na branch `feat/projeto-financeiro-119`, ainda fora do main.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 120.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

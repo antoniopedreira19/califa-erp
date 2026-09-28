@@ -262,8 +262,13 @@ export async function fotosDaAbertura(
       : null,
     erratas: erratasDaFoto(i),
     nomeFinanceiro: (l.nome_financeiro as string | null) ?? null,
+    // O projeto que perdeu o último job é apagado (decisão 119); a foto
+    // guardou o rótulo dele no insert, e é esse que fica.
     projetoLabel: l.projeto_financeiro_id
-      ? (projetos.get(l.projeto_financeiro_id) ?? null)
+      ? (projetos.get(l.projeto_financeiro_id) ??
+        (l.projeto_financeiro_rotulo
+          ? `${l.projeto_financeiro_rotulo} (projeto apagado)`
+          : null))
       : null,
     contaRecebimentoLabel: l.conta_recebimento_id
       ? (contas.get(l.conta_recebimento_id) ?? null)
