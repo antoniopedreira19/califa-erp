@@ -620,67 +620,70 @@ export function VerPPDrawer({
               ))
             )}
           </div>
-        </div>
 
-        {/* No lugar da pergunta "Esta é a última PP deste item?", que só
-            faz sentido na emissão: o que aconteceu com a PP até aqui. */}
-        <div className="flex flex-col gap-3 border-t border-border px-6 pb-5 pt-4">
-          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <History className="h-3.5 w-3.5 text-california-red" />
-            Linha do tempo
-          </span>
-          <ol className="flex flex-col">
-            {passos.map((passo, i) => (
-              <li
-                key={passo.chave}
-                className="relative grid grid-cols-[17px_1fr_auto] items-start gap-x-3"
-              >
-                {i < passos.length - 1 && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute bottom-0 left-2 top-4 w-px bg-border"
-                  />
-                )}
-                <span
-                  className={cn(
-                    "relative z-10 mt-0.5 inline-flex h-[17px] w-[17px] items-center justify-center rounded-full border-2 bg-card",
-                    passo.estado === "feito" &&
-                      "border-foreground bg-foreground text-white",
-                    passo.estado === "agora" &&
-                      "border-amber-600 bg-amber-50 text-amber-700",
-                    passo.estado === "futuro" && "border-border",
-                  )}
+          {/* No lugar da pergunta "Esta é a última PP deste item?", que só
+              faz sentido na emissão: o que aconteceu com a PP até aqui.
+              Desde 28/09/2026 (decisão 112) é a última seção do
+              formulário e rola com ele — antes ficava presa acima do
+              rodapé, sempre à vista, e encolhia a área do formulário. */}
+          <div className="flex flex-col gap-3 border-t border-border pt-5">
+            <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <History className="h-3.5 w-3.5 text-california-red" />
+              Linha do tempo
+            </span>
+            <ol className="flex flex-col">
+              {passos.map((passo, i) => (
+                <li
+                  key={passo.chave}
+                  className="relative grid grid-cols-[17px_1fr_auto] items-start gap-x-3"
                 >
-                  {passo.estado === "feito" && <Check className="h-2.5 w-2.5" />}
-                  {passo.estado === "agora" && <Clock className="h-2.5 w-2.5" />}
-                </span>
-                <span className={cn("flex flex-col pb-3.5")}>
+                  {i < passos.length - 1 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute bottom-0 left-2 top-4 w-px bg-border"
+                    />
+                  )}
                   <span
                     className={cn(
-                      "text-[12.5px] font-semibold",
-                      passo.estado === "futuro" &&
-                        "font-medium text-muted-foreground",
+                      "relative z-10 mt-0.5 inline-flex h-[17px] w-[17px] items-center justify-center rounded-full border-2 bg-card",
+                      passo.estado === "feito" &&
+                        "border-foreground bg-foreground text-white",
+                      passo.estado === "agora" &&
+                        "border-amber-600 bg-amber-50 text-amber-700",
+                      passo.estado === "futuro" && "border-border",
                     )}
                   >
-                    {passo.titulo}
+                    {passo.estado === "feito" && <Check className="h-2.5 w-2.5" />}
+                    {passo.estado === "agora" && <Clock className="h-2.5 w-2.5" />}
                   </span>
-                  {passo.detalhe && (
-                    <span className="text-[11.5px] leading-snug text-muted-foreground">
-                      {passo.detalhe}
+                  <span className={cn("flex flex-col pb-3.5")}>
+                    <span
+                      className={cn(
+                        "text-[12.5px] font-semibold",
+                        passo.estado === "futuro" &&
+                          "font-medium text-muted-foreground",
+                      )}
+                    >
+                      {passo.titulo}
                     </span>
-                  )}
-                </span>
-                <span
-                  className={cn(
-                    "font-mono text-[11px] text-muted-foreground",
-                    passo.estado === "agora" && "font-semibold text-amber-700",
-                  )}
-                >
-                  {passo.quando ?? "—"}
-                </span>
-              </li>
-            ))}
-          </ol>
+                    {passo.detalhe && (
+                      <span className="text-[11.5px] leading-snug text-muted-foreground">
+                        {passo.detalhe}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "font-mono text-[11px] text-muted-foreground",
+                      passo.estado === "agora" && "font-semibold text-amber-700",
+                    )}
+                  >
+                    {passo.quando ?? "—"}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 border-t border-border px-6 py-4">

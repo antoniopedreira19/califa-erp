@@ -186,8 +186,9 @@ do job, removido na Entrega 4.
 
 ### Detalhes que não estão no design
 
-- A coluna **"Prazo" (`15 dias`) é derivada** de `created_at` × `prazo_pagamento` —
-  não existe campo pra isso no banco.
+- A coluna **"Prazo" (`15 dias`) era derivada** de `created_at` × `prazo_pagamento` —
+  não existe campo pra isso no banco. ⚠️ Substituída por **"Dt. Pagamento"**
+  em 2026-09-28 (decisão 112, ver a nota no fim deste arquivo).
 - Os **cards de resumo ignoram canceladas**: PP cancelada não é PP gerada.
 
 ### Verificado
@@ -1534,6 +1535,17 @@ etapa final do plano. ⚠️ **Não exercitado:** a emissão real de uma PP
 parcelada (gerar 3 PDFs e abrir cada um) — depende de criar PP de
 verdade, com anexo, num job aberto. É o primeiro caso a rodar na etapa
 final.
+
+⚠️ **Revisto em 2026-09-28 (decisão 112): a PP voltou a ter UM documento
+só, com todas as parcelas.** O financeiro aprova a PP inteira e as
+parcelas seguem juntas para Títulos a Pagar; um papel por parcela, com só
+o valor dela e o total, não correspondia a nada no fluxo, e o "Ver PDF"
+do painel e da ficha abria só o da 1ª. O documento único tem a tabela
+PARCELAS DO PEDIDO e o valor total em destaque; o nome é `pp-PP-XXXXX.pdf`
+também na parcelada. `renderizarDocumentosDaPP` e `caminhoPdfParcela`
+saíram (viraram `renderizarDocumentoDaPP` e `caminhoPdfDaPP`). As PPs
+parceladas emitidas de 17/08 a 28/09 guardam os documentos por parcela
+até a próxima edição ou reenvio.
 
 ---
 
@@ -4372,3 +4384,30 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
   abre pela alça ou pelo menu "Exibir".
 - A agregada de jobs já seguia essa regra; o financeiro, que forçava a
   coluna sempre aberta, passou a segui-la também (ver `HANDOFF_FINANCEIRO`).
+
+## ⚠️ Nota de 2026-09-28 (2) — quebra das PPs no painel, linha do tempo, PDF único e Dt. Pagamento (decisão 112)
+
+- **Painel "Destrinchar realizado"** (`realizado/painel-pps-item.tsx`):
+  cada PP em duas linhas — código, fornecedor e situação em cima (na PP
+  ainda no job, o botão "Enviar ao financeiro" no lugar da situação);
+  R$ Unit., QT, D/M e Total embaixo, com os botões na mesma linha, em
+  colunas de largura fixa. O aviso de NF e o "Preste contas na aba de PPs"
+  vão para uma terceira linha, quando existem. Fundo branco, sem a cor do
+  REALIZADO. O painel foi de 430 para 500 px; os cartões do topo ganharam
+  a conta do planejado e quantas PPs o item tem. `PPDoItem` ganhou
+  `valorUnitario`, `quantidade` e `diasMeses` obrigatórios.
+- **Ficha da PP** (`pps/ver-pp-drawer.tsx`): a linha do tempo saiu da
+  faixa fixa acima do rodapé e é a última seção do formulário, rolando
+  com ele.
+- **PDF** (`lib/pdf/pedido-compra.ts`, `realizado/actions-pp.ts`): um
+  documento só por PP (ver a nota ⚠️ da entrega 34). Emissão, edição da
+  gerada e reenvio sobem um arquivo e gravam o mesmo caminho em todas as
+  parcelas; edição e reenvio apagam os documentos por parcela que sobraram.
+- **Aba "Pedidos de Produção"** (`pps/job-pps-section.tsx`): "Prazo" saiu
+  e entrou **"Dt. Pagamento"** — paga: o dia em que foi paga; aprovada e
+  ainda não paga: a data programada pelo financeiro (a atual, se ele
+  repactuou); antes da aprovação: "—".
+- **Nenhuma consulta nova, nenhuma migration.**
+- **Teste:** PP-00092 gerada no JOB-0040 (TES-0001/26) com duas parcelas,
+  editada para três e cancelada pela tela no fim. O reenvio de PP
+  rejeitada não foi exercitado ao vivo (detalhes na decisão 112, §4).
