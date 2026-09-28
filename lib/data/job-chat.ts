@@ -3,6 +3,7 @@ import {
   tipoCustoLabel,
   type ChatLinha,
   type ItemChat,
+  type JobAlteracaoFinanceiroComItens,
   type JobErrataComItens,
   type JobMensagem,
   type SaveAprovacaoTipo,
@@ -13,9 +14,10 @@ import { grupoDoPedido } from "@/lib/data/saves";
  * Monta a thread de Comunicação do job.
  *
  * Só as mensagens de pessoas vêm do banco. Os cards automáticos são
- * derivados de dados que já existem — a abertura do job, as erratas e,
- * desde a decisão 099 (22/09/2026), as recusas de save — então nunca
- * divergem da fonte e aparecem retroativamente, sem backfill.
+ * derivados de dados que já existem — a abertura do job, as erratas,
+ * desde a decisão 099 (22/09/2026) as recusas de save e, desde a 115
+ * (28/09/2026), as alterações do orçado feitas pelo financeiro — então
+ * nunca divergem da fonte e aparecem retroativamente, sem backfill.
  */
 
 /**
@@ -220,6 +222,12 @@ export function montarThreadChat(
    * contador de não lidas.
    */
   recusasDeSave: RecusaDeSaveNoChat[],
+  /**
+   * As edições do orçado feitas pelo financeiro (decisão 115). Obrigatório
+   * pelo mesmo motivo das recusas: um padrão `[]` deixaria o card sumir em
+   * silêncio. A produção vê a alteração aqui (P5 do Tiago, 28/09/2026).
+   */
+  alteracoesFinanceiro: JobAlteracaoFinanceiroComItens[],
 ): ItemChat[] {
   const itens: ItemChat[] = [];
 
@@ -363,6 +371,45 @@ export function montarThreadChat(
           ? "Job devolvido ao mural de abertura para revisão de recebimento e custos."
           : null,
       em: e.created_at,
+    });
+  }
+
+  // ---- Um card por alteração do financeiro (decisão 115) ----
+  // Mesma forma do card de errata: o resumo conta o que mudou, o motivo vai
+  // no bloco escrito por uma pessoa, com o nome dela. A nota diz o que a
+  // separa da errata — ela não devolve o job ao mural.
+  for (const a of alteracoesFinanceiro) {
+    const delta = a.valor_job_depois - a.valor_job_antes;
+    const n = a.itens.length;
+    const linhas: ChatLinha[] = a.itens.map((i) => ({
+      texto: `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`,
+      valor: comSinal(i.efeito_valor_job, moedaCode),
+      tom: i.efeito_valor_job >= 0 ? "positivo" : "negativo",
+    }));
+    linhas.push({
+      texto: "Novo faturamento previsto",
+      valor: moeda(a.faturamento_previsto_depois, moedaCode),
+      tom: "neutro",
+    });
+    linhas.push({
+      texto: "Novo valor do job",
+      valor: moeda(a.valor_job_depois, moedaCode),
+      tom: "neutro",
+    });
+    itens.push({
+      tipo: "sistema",
+      id: `alteracao-financeiro-${a.id}`,
+      icone: "file-pen-line",
+      cor: delta >= 0 ? "verde" : "vermelho",
+      titulo: `Orçado alterado pelo financeiro · ${dataCurta(a.created_at)}`,
+      quando: dataHora(a.created_at),
+      resumo: `${n} ${n === 1 ? "linha alterada" : "linhas alteradas"} · orçado ${moeda(a.custo_orcado_depois, moedaCode)}.`,
+      valor: comSinal(delta, moedaCode),
+      valorTom: delta >= 0 ? "positivo" : "negativo",
+      linhas,
+      descricao: { rotulo: "Motivo da alteração", texto: a.motivo, autor: a.autor_nome },
+      nota: "Alteração do financeiro: vale na hora, sem aprovação e sem revisão da abertura.",
+      em: a.created_at,
     });
   }
 
