@@ -135,11 +135,23 @@ function LandingCarta({
         </div>
       </section>
 
-      {/* Apresentação institucional — os 7 slides originais */}
+      {/* Apresentação institucional — slides originais + página 3
+          renderizada em HTML pra usar os dados reais do candidato no
+          lugar dos placeholders "XX/XX/XXXX" e "R$ 0.000,00" do PPT. */}
       <section className="space-y-6">
-        {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-          <SlideImagem key={n} numero={n} candidato={c.nome} />
-        ))}
+        <SlideImagem numero={1} />
+        <SlideImagem numero={2} />
+        <SlidePagina3
+          nome={c.nome}
+          cargo={c.cargo}
+          dataAdmissao={c.data_admissao}
+          salario={c.salario_proposto}
+          regime={tipoContratacaoLabel(c.tipo_contratacao)}
+        />
+        <SlideImagem numero={4} />
+        <SlideImagem numero={5} />
+        <SlideImagem numero={6} />
+        <SlideImagem numero={7} />
       </section>
 
       {erro && (
@@ -261,17 +273,11 @@ function DadoCard({
 }
 
 /**
- * Renderiza uma das 7 páginas da apresentação institucional da California.
- * Se a imagem ainda não existir em /public/proposta/carta/SlideN.JPG,
- * cai num placeholder discreto (não quebra layout).
+ * Renderiza um dos slides institucionais da California como imagem 16:9.
+ * Se o arquivo ainda não existir em /public/proposta/carta/SlideN.JPG,
+ * cai num fundo cinza discreto (não quebra layout).
  */
-function SlideImagem({
-  numero,
-  candidato,
-}: {
-  numero: number;
-  candidato: string;
-}) {
+function SlideImagem({ numero }: { numero: number }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-neutral-100 shadow-soft">
       <div className="relative aspect-[16/9]">
@@ -287,11 +293,67 @@ function SlideImagem({
             (e.currentTarget as HTMLImageElement).style.display = "none";
           }}
         />
-        <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm">
-          {/* Placeholder — fica visível se a imagem não carregar */}
-          <div className="text-center opacity-30">
-            <p className="text-4xl font-black">
-              Página {numero} de 7
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Página 3 da carta em HTML — substitui o Slide3.JPG pra que os cards
+ * de "Data de Início" e "Remuneração" mostrem os dados reais do
+ * candidato em vez dos placeholders do PPT ("XX/XX/XXXX", "R$ 0.000,00").
+ *
+ * Layout inspirado no slide original: faixa vermelha à esquerda com
+ * "CARTA PROPOSTA", corpo bege ao centro com boas-vindas + cards
+ * vermelhos com os dados dinâmicos.
+ */
+function SlidePagina3({
+  nome,
+  cargo,
+  dataAdmissao,
+  salario,
+  regime,
+}: {
+  nome: string;
+  cargo: string;
+  dataAdmissao: string;
+  salario: string;
+  regime: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-soft aspect-[16/9] grid grid-cols-[80px_1fr]">
+      <div className="bg-gradient-to-b from-california-red to-red-800 p-5 text-white">
+        <p className="text-xs font-bold tracking-wider">CARTA</p>
+        <p className="text-xs opacity-70">PROPOSTA</p>
+      </div>
+      <div className="flex flex-col items-center justify-center px-8 py-6 md:px-12 text-center">
+        <p className="text-base md:text-lg font-bold text-neutral-900">
+          Boas-vindas à Califa! 🐻
+        </p>
+        <p className="mt-3 text-xs md:text-sm text-neutral-800 leading-relaxed max-w-md">
+          É com muita alegria que convidamos você para surfar na nossa onda,
+          assumindo o cargo de <strong>({cargo}).</strong> Estamos animados
+          para criar, trocar e construir coisas incríveis juntos!
+        </p>
+        <p className="mt-3 text-xs md:text-sm text-neutral-800 max-w-md">
+          Abaixo, você encontra todos os detalhes da nossa proposta:
+        </p>
+
+        <div className="mt-4 md:mt-6 space-y-2 md:space-y-3 w-full max-w-xs">
+          <div className="rounded-xl bg-gradient-to-r from-california-red to-red-800 px-4 py-2.5 md:py-3 text-white shadow-brand">
+            <p className="text-sm md:text-base font-bold">
+              Data de Início: {formatarData(dataAdmissao)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-gradient-to-r from-california-red to-red-800 px-4 py-2.5 md:py-3 text-white shadow-brand">
+            <p className="text-sm md:text-base">
+              Remuneração:{" "}
+              <span className="font-bold">
+                {brl.format(Number(salario))}
+              </span>
+            </p>
+            <p className="text-xs opacity-90">
+              em regime <strong>{regime}</strong>
             </p>
           </div>
         </div>
