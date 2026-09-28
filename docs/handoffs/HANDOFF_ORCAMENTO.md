@@ -4643,3 +4643,21 @@ aplicada na hora combinada com a frente do Antonio, junto da
   não repetir número. Testes em `lib/codigos/projetos.test.ts`.
 - **Importar:** as planilhas exportadas antes da troca voltam normalmente
   — o Importar acha os orçamentos pelos ids escondidos, não pelo código.
+
+## ⚠️ Nota de 2026-09-28 — arquivar projeto: barra orçamento aprovado e job, libera o rascunho (decisão 116)
+
+- **Regra nova:** o "Arquivar" do drawer "Editar projeto" recusa o projeto
+  com orçamento `aprovado` ou `job_criado`, e com qualquer job que não
+  seja o cancelado antes da abertura. Orçamento em andamento (rascunho, em
+  revisão, enviado, recusado) deixou de barrar — antes era preciso
+  cancelar todos.
+- **Onde:** `arquivarProjeto` (`orcamentos/actions.ts`), duas contagens em
+  `Promise.all`; `projeto-editor-drawer.tsx` troca o texto do diálogo e
+  mostra a recusa dentro dele.
+- **Conferido em 28/09/2026:** no TES-P001/26 o "Arquivar" recusa com a
+  mensagem no diálogo e o projeto segue `ativo`. O caminho que arquiva não
+  foi exercitado no navegador (gravaria num projeto real); as duas
+  contagens foram rodadas no banco para os 18 projetos — 8 passam, 10
+  barram.
+- **Nenhuma migration.**
+
