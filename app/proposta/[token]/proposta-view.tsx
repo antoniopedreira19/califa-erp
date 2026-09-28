@@ -161,21 +161,30 @@ function LandingCarta({
         </div>
       )}
 
-      {/* CTA final grande */}
-      <section className="rounded-3xl bg-neutral-900 p-10 md:p-14 text-center text-white shadow-elevated">
-        <h2 className="text-2xl md:text-3xl font-bold">
-          Vamos surfar juntos, {primeiroNome}? 🌊
-        </h2>
-        <p className="mt-3 text-sm md:text-base opacity-80 max-w-md mx-auto">
-          Ao aceitar, você vai preencher alguns dados para o RH preparar seu
-          contrato.
-        </p>
+      {/* CTA final — mesmo visual do card do topo (gradient California) */}
+      <section className="rounded-3xl bg-gradient-to-br from-california-red via-california-red to-red-900 p-8 md:p-12 text-white shadow-elevated">
+        <div className="flex items-start gap-3">
+          <Sparkles className="h-6 w-6 mt-1 shrink-0" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest opacity-80">
+              É agora
+            </p>
+            <h2 className="mt-1 text-2xl md:text-3xl font-bold leading-tight">
+              Bora fazer parte da Califa, {primeiroNome}?
+            </h2>
+            <p className="mt-2 text-sm md:text-base opacity-90">
+              Se topar, é só clicar em aceitar. Você vai preencher alguns
+              dados rapidinho e o RH prepara o seu contrato.
+            </p>
+          </div>
+        </div>
+
         <div className="mt-8 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-center">
           <button
             type="button"
             onClick={aceitar}
             disabled={pending}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-california-red px-8 py-4 text-base font-bold text-white shadow-brand hover:bg-california-red-hover disabled:opacity-50 transition-all"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white text-california-red px-8 py-4 text-base font-bold shadow-brand hover:bg-white/90 disabled:opacity-50 transition-all"
           >
             <Check className="h-5 w-5" />
             {pending ? "Enviando..." : "Aceitar proposta"}
@@ -184,13 +193,14 @@ function LandingCarta({
             type="button"
             onClick={() => setOpenRecusa(true)}
             disabled={pending}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 border border-white/20 px-8 py-4 text-base font-medium text-white hover:bg-white/20 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 border border-white/30 px-8 py-4 text-base font-medium text-white hover:bg-white/20 disabled:opacity-50 transition-colors"
           >
             <X className="h-5 w-5" />
             Recusar proposta
           </button>
         </div>
-        <div className="mt-8 pt-6 border-t border-white/10 text-xs opacity-70">
+
+        <div className="mt-8 pt-6 border-t border-white/20 text-xs opacity-80 text-center">
           <p className="font-medium">Time de Cultura & Talento</p>
           <p>Contato: rh@agenciacalifornia.com.br</p>
         </div>
