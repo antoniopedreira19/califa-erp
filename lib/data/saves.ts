@@ -25,6 +25,7 @@ import type {
   SaveAprovacaoSituacao,
   SaveAprovacaoTipo,
 } from "@/lib/types";
+import { jobCanceladoAntesDaAbertura } from "@/lib/types";
 import type { PedidoParaFinanceiro } from "@/lib/calculos/save-financeiro";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
 
@@ -258,7 +259,7 @@ export async function saveDaVersao(
             // `orcamentos`, e sem a dica o PostgREST recusa a consulta por
             // ambiguidade (300) — o destino do consumo sumia em silêncio.
             .select(
-              "id, versoes_orcamento!inner(orcamentos!orcamento_id(jobs(id, codigo)))",
+              "id, versoes_orcamento!inner(orcamentos!orcamento_id(jobs(id, codigo, status, data_abertura_financeiro)))",
             )
             .in("id", idsVersao)
         : Promise.resolve({ data: [] as any[] }),
@@ -269,7 +270,17 @@ export async function saveDaVersao(
       consumidor.set(r.id, { id: r.job_id, codigo: r.jobs?.codigo ?? "—" });
     }
     for (const r of ((porVersao as any).data ?? []) as any[]) {
-      const job = r.versoes_orcamento?.orcamentos?.jobs?.[0];
+      // O job vivo do orçamento. O cancelado antes da abertura não é mais
+      // job (decisão 113): sem esta volta, o orçamento que teve o envio
+      // cancelado citava o código do cancelado — e, com um job novo ao
+      // lado, citava um dos dois ao acaso.
+      const jobs = (r.versoes_orcamento?.orcamentos?.jobs ?? []) as Array<{
+        id: string;
+        codigo: string;
+        status: string;
+        data_abertura_financeiro: string | null;
+      }>;
+      const job = jobs.find((j) => !jobCanceladoAntesDaAbertura(j));
       if (job) consumidor.set(r.id, { id: job.id, codigo: job.codigo });
     }
 

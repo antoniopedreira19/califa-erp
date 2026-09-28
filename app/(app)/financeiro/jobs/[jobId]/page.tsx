@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import {
   AREA_FINANCEIRO,
+  jobCanceladoAntesDaAbertura,
   jobStatusBadgeClasses,
   jobStatusExibido,
   jobStatusLabel,
@@ -212,9 +213,18 @@ export default async function JobNoFinanceiroPage({
     detalhe;
 
   // Job que ainda não passou pela abertura não tem registro para mostrar —
-  // o lugar dele é a fila.
+  // o lugar dele é a fila. O devolvido e o cancelado antes da abertura não
+  // existem no financeiro (decisão 113): quem chega por link antigo vai
+  // para a fila, como na página da abertura. Até 28/09/2026 os dois abriam
+  // esta página inteira.
   if (job.status === "aguardando_abertura") {
     redirect(`/financeiro/abertura-de-job/${job.id}`);
+  }
+  if (
+    job.status === "rejeitado_financeiro" ||
+    jobCanceladoAntesDaAbertura(job)
+  ) {
+    redirect("/financeiro/abertura-de-job?aba=aguardando");
   }
 
   // Só aprova quem abre job no financeiro (a página já barrou os outros
@@ -555,7 +565,15 @@ export default async function JobNoFinanceiroPage({
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
               }}
-              jobsDoProjeto={jobsDoProjetoFinanceiro}
+              // Os mesmos da faixa acima (decisão 113): só o que passou pela
+              // abertura — o job na fila, o devolvido e o cancelado não
+              // existem no financeiro. Até 28/09/2026 este box vinha sem
+              // filtro nenhum.
+              jobsDoProjeto={jobsDoProjetoFinanceiro.filter(
+                (j) =>
+                  j.id === job.id ||
+                  (STATUS_NA_LISTA as readonly string[]).includes(j.status),
+              )}
               jobAtualId={job.id}
               // Os jobs irmãos do box "Jobs do projeto" abrem na ficha,
               // não no registro da abertura: o box mora DENTRO da ficha,

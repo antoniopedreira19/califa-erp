@@ -5976,6 +5976,32 @@ era o imposto de R$ 28.318,52). Regra completa na
 - A busca vale também na edição e na revisão do registro; a sugestão, só na
   abertura.
 
+## ⚠️ Nota de 2026-09-28 — job não aberto não existe no financeiro, e só PP enviada aparece (decisão 113)
+
+- **O financeiro só vê job que ele abriu**, fora a fila de abertura. O
+  devolvido e o cancelado antes da abertura não aparecem em tela nenhuma.
+- **Página do job** (`/financeiro/jobs/[jobId]`): o devolvido e o cancelado
+  antes da abertura vão para `/financeiro/abertura-de-job?aba=aguardando`,
+  como a página da abertura já fazia. Até aqui os dois abriam a página
+  inteira (JOB-0033 e JOB-0050, conferidos no navegador).
+- **"Jobs do projeto" na ficha:** o mesmo filtro da faixa
+  (`STATUS_NA_LISTA`, mais o próprio job). Antes, não tinha filtro.
+- **Só PP enviada ao financeiro** (`enviada_financeiro_em` preenchido),
+  além do `status <> 'gerada'` da decisão 039. Até aqui, a PP cancelada sem
+  nunca ter sido enviada aparecia. Vale para:
+  - Contas a Pagar › PPs: "Canceladas" de 6 para 2, "Todas" de 43 para 39
+    (saíram PP-00092, PP-00047, PP-00046 e PP-00042);
+  - a caixa de entrada do chat de PPs (`chat_pps_conversas`, migration
+    `20260928100001`): de 8 para 7 conversas, sai o JOB-0040, que não tinha
+    mensagem;
+  - o fio de PPs do job (`carregarThreadPPs` e `montarThreadChatPPs`, que é
+    o mesmo da produção) e a trava de envio de mensagem do chat;
+  - a lista de PPs da página do job (`financeiro/jobs/[jobId]/dados.ts`).
+- **A consulta de PPs do Contas a Pagar é do Antonio.** O Tiago autorizou
+  a mudança em 28/09/2026; entrou só o filtro, com comentário.
+- **Fica como está:** save consumido por job ainda não aberto continua no
+  fluxo de caixa e na planilha do job de origem (sem caso em 28/09/2026).
+
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
 **Isto revoga o primeiro tópico da nota de 2026-09-01.**

@@ -1315,6 +1315,29 @@ export function jobEstaCongelado(status: JobStatus): boolean {
 }
 
 /**
+ * Job cancelado antes da abertura (decisão 113): a produção cancelou o
+ * envio (`cancelarEnvioParaAbertura`), o orçamento voltou a `aprovado` e o
+ * job deixa de existir nas telas — da produção e do financeiro. A linha
+ * fica no banco, com o código JOB-NNNN queimado. "Antes da abertura" é não
+ * ter `data_abertura_financeiro`: o cancelamento depois da abertura (sem
+ * tela hoje) não entra nesta regra.
+ */
+export function jobCanceladoAntesDaAbertura(job: {
+  status: JobStatus | string;
+  data_abertura_financeiro: string | null;
+}): boolean {
+  return job.status === "cancelado" && !job.data_abertura_financeiro;
+}
+
+/**
+ * O mesmo recorte para consultas: `.or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA)`
+ * numa consulta de `jobs` deixa de fora o cancelado antes da abertura. Numa
+ * consulta que embute o job, use `{ referencedTable: "<apelido do embed>" }`.
+ */
+export const FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA =
+  "status.neq.cancelado,data_abertura_financeiro.not.is.null";
+
+/**
  * O job aberto pelo financeiro e ainda não encerrado. O `em_producao` legado
  * conta como aberto, como em todas as outras travas (ver `JobStatus`).
  *

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { itensDeJobs } from "@/lib/faixa-do-projeto";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Undo2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { nomeVersao } from "@/lib/nome-versao";
@@ -18,6 +18,7 @@ import {
   jobEstaCongelado,
   jobAceitaRealizado,
   jobAceitaAcoesPlanilha,
+  jobCanceladoAntesDaAbertura,
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO, jobStatusBadgeClasses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +82,13 @@ export default async function JobDetailPage({
 
   const detalhe = await carregarDetalheDoJob(session, params.jobId);
   if (!detalhe) notFound();
+
+  // Cancelado antes da abertura (decisão 113): não é mais job, voltou a ser
+  // só o orçamento — que o cancelamento já devolveu a "aprovado". Quem
+  // chega por link antigo vai para lá.
+  if (jobCanceladoAntesDaAbertura(detalhe.job)) {
+    redirect(`/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}`);
+  }
 
   const {
     raw,

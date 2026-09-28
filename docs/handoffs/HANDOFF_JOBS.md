@@ -4372,7 +4372,36 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
 - **Fora desta correção:** a página do job no financeiro
   (`/financeiro/jobs/[jobId]`) lê só `jobs.categoria_id`. Lá o aguardando
   abertura redireciona para a abertura, mas o devolvido e o cancelado
-  antes da abertura continuam sem categoria.
+  antes da abertura continuam sem categoria. **Resolvido pela decisão 113,
+  no mesmo dia:** os dois não abrem mais a página do financeiro.
+
+## ⚠️ Nota de 2026-09-28 — o cancelado antes da abertura volta a ser só orçamento (decisão 113)
+
+- **O job cancelado antes da abertura some da produção.** A linha fica no
+  banco, com o código queimado; o orçamento já voltava a "aprovado" no
+  cancelamento (decisão 057). "Antes da abertura" é sem
+  `data_abertura_financeiro`: `jobCanceladoAntesDaAbertura` e
+  `FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA`, em `lib/types.ts`.
+- **Lista de Jobs:** sai da lista, da busca, das contagens e do total do
+  projeto (18 jobs em vez de 23 em 28/09). A opção "Cancelado" saiu do
+  filtro de status. O devolvido continua na lista: ele é da produção, que
+  revisa e reenvia.
+- **Página do job:** o link para um cancelado antes da abertura leva ao
+  orçamento (`/orcamentos/[projetoId]/[orcId]`). Conferido com o JOB-0050,
+  que caiu no TES-0002/26-02 com "Ver job JOB-0051".
+- **"Jobs do projeto" na ficha** (`carregarDetalheDoJob`): o cancelado sai
+  da consulta. A ficha do JOB-0051 passou de 4 para 3 jobs.
+- **Fio de PPs do job** (`montarThreadChatPPs`): a PP cancelada que nunca
+  foi enviada ao financeiro não gera mais card — o fio é a conversa com o
+  financeiro. O do JOB-0040 ficou vazio (a PP-00092 nunca foi enviada).
+- **Coluna Save da versão** (`saveDaVersao`): o consumidor resolvido pelo
+  orçamento pula o cancelado; antes, pegava o primeiro job do orçamento.
+  Sem consumo nessa situação em 28/09, então o caminho não foi exercitado
+  em tela.
+- **Ficou de fora:** as contagens da home do GP, do produtor e do
+  freelancer (mensagens e "PPs emitidas por mim") ainda contam o job
+  cancelado. São da frente do Antonio; nenhum cancelado tem mensagem ou PP.
+  A exportação `/api/jobs/[jobId]/export` também não confere o status.
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
