@@ -331,42 +331,75 @@ function SlidePagina3({
   regime: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-soft aspect-[16/9] grid grid-cols-[80px_1fr]">
-      <div className="bg-gradient-to-b from-california-red to-red-800 p-5 text-white">
-        <p className="text-xs font-bold tracking-wider">CARTA</p>
-        <p className="text-xs opacity-70">PROPOSTA</p>
+    <div className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-soft aspect-[16/9] grid grid-cols-[60px_1fr_38%] md:grid-cols-[70px_1fr_38%]">
+      {/* Faixa vermelha à esquerda */}
+      <div className="relative bg-gradient-to-b from-[#B02532] via-[#8E1E29] to-[#5D131B] p-3 md:p-4 text-white flex flex-col">
+        <div>
+          <p className="text-[10px] md:text-xs font-black tracking-wider leading-none">
+            CARTA
+          </p>
+          <p className="text-[9px] md:text-[10px] opacity-80 leading-tight mt-0.5">
+            PROPOSTA
+          </p>
+        </div>
+        <div className="mt-auto flex justify-center pb-1">
+          <span className="text-lg md:text-xl" role="img" aria-label="urso">
+            🐻
+          </span>
+        </div>
       </div>
-      <div className="flex flex-col items-center justify-center px-8 py-6 md:px-12 text-center">
-        <p className="text-base md:text-lg font-bold text-neutral-900">
+
+      {/* Corpo bege ao centro */}
+      <div className="flex flex-col items-center justify-center px-6 py-4 md:px-10 text-center overflow-hidden">
+        {/* Linha decorativa horizontal */}
+        <div className="w-full max-w-md h-px bg-neutral-500/60 mb-3 md:mb-4" />
+
+        <p className="text-sm md:text-lg font-bold text-neutral-900">
           Boas-vindas à Califa! 🐻
         </p>
-        <p className="mt-3 text-xs md:text-sm text-neutral-800 leading-relaxed max-w-md">
+        <p className="mt-2 md:mt-3 text-[10px] md:text-xs text-neutral-800 leading-relaxed max-w-sm">
           É com muita alegria que convidamos você para surfar na nossa onda,
           assumindo o cargo de <strong>({cargo}).</strong> Estamos animados
           para criar, trocar e construir coisas incríveis juntos!
         </p>
-        <p className="mt-3 text-xs md:text-sm text-neutral-800 max-w-md">
+        <p className="mt-2 md:mt-3 text-[10px] md:text-xs text-neutral-800 max-w-sm">
           Abaixo, você encontra todos os detalhes da nossa proposta:
         </p>
 
-        <div className="mt-4 md:mt-6 space-y-2 md:space-y-3 w-full max-w-xs">
-          <div className="rounded-xl bg-gradient-to-r from-california-red to-red-800 px-4 py-2.5 md:py-3 text-white shadow-brand">
-            <p className="text-sm md:text-base font-bold">
+        <div className="mt-3 md:mt-5 space-y-2 md:space-y-3 w-full max-w-[280px]">
+          <div className="rounded-xl bg-gradient-to-br from-[#D9394A] via-[#B02532] to-[#7A1820] px-4 py-2 md:py-2.5 text-white shadow-brand">
+            <p className="text-[11px] md:text-sm font-bold">
               Data de Início: {formatarData(dataAdmissao)}
             </p>
           </div>
-          <div className="rounded-xl bg-gradient-to-r from-california-red to-red-800 px-4 py-2.5 md:py-3 text-white shadow-brand">
-            <p className="text-sm md:text-base">
+          <div className="rounded-xl bg-gradient-to-br from-[#D9394A] via-[#B02532] to-[#7A1820] px-4 py-2.5 md:py-3 text-white shadow-brand">
+            <p className="text-[11px] md:text-sm">
               Remuneração:{" "}
               <span className="font-bold">
                 {brl.format(Number(salario))}
               </span>
             </p>
-            <p className="text-xs opacity-90">
+            <p className="text-[10px] md:text-xs opacity-90">
               em regime <strong>{regime}</strong>
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Foto à direita — usa a imagem separada Slide3-foto.jpg se
+          existir; se não, cai num gradient bege neutro (não quebra). */}
+      <div className="relative bg-gradient-to-br from-neutral-300 to-neutral-500">
+        <Image
+          src="/proposta/carta/Slide3-foto.jpg"
+          alt="Escritório California"
+          fill
+          sizes="(max-width: 768px) 40vw, 350px"
+          className="object-cover"
+          unoptimized
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
       </div>
     </div>
   );
