@@ -18,6 +18,10 @@
  *   acompanha, nem no serviço Interno, em que o banco faz o planejado
  *   espelhar o orçado (Tiago, 28/09/2026: "é a previsão de recebimento que
  *   deve acompanhar").
+ * - **Desde a abertura** — o job na fila, enquanto o financeiro o confere
+ *   (Tiago, 28/09/2026: "desde o momento da abertura de jobs"). Ali ainda
+ *   não há previsão, envio nem nota: quem acompanha é o formulário da
+ *   abertura, na mesma página.
  * - **Até a primeira nota**, mesmo que parcial (P4), **ou o encerramento**
  *   do job — o que vier antes; assim o finalizado nunca edita, nem o Interno,
  *   que não tem nota. Job enviado e ainda sem nota: o envio (valor e
@@ -90,7 +94,11 @@ const MENSAGEM_JOB_COM_NOTA =
 const SEM_DATA_PARA_ACOMPANHAR =
   "Valor novo precisa de data: peça a errata à produção, que devolve o job para a revisão da abertura.";
 
-/** O faturamento de cada mês (chave `yyyy-mm`) com as linhas num estado. */
+/** O faturamento de cada mês (chave `yyyy-mm`) com as linhas num estado.
+ *  A MESMA conta de `lerFaturamentoPorMesDoJob`, que fecha o envio do mês e
+ *  a parcela do mês na abertura — por isso sem os parâmetros do
+ *  internacional, como lá: a parcela que anda tem que bater com o que a
+ *  abertura confere. */
 function faturamentoDosMeses(
   itens: LinhaDoEspelho[],
   base: BaseDosEspelhos,
@@ -110,7 +118,6 @@ function faturamentoDosMeses(
     })),
     base.percentualHonorarios,
     base.percentualImposto,
-    base.internacional,
   );
   return new Map(porMes.map((m) => [m.mes.slice(0, 7), m.faturamento]));
 }
@@ -138,7 +145,7 @@ export async function registrarAlteracaoDoFinanceiro(
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
-  // ---- O job: aberto no financeiro, e ainda não encerrado ----
+  // ---- O job: na abertura, ou aberto e ainda não encerrado ----
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
     .select("id, status, data_abertura_financeiro, versao_orcamento_aprovada_id")
@@ -147,9 +154,13 @@ export async function registrarAlteracaoDoFinanceiro(
     .maybeSingle();
   if (jobErr || !job) return { ok: false, message: "Job não encontrado." };
 
+  // Na fila da abertura ainda não há previsão de recebimento, recolhimento
+  // de imposto, envio nem nota: nada disso anda aqui.
+  const naAbertura = job.status === "aguardando_abertura";
   if (
-    !job.data_abertura_financeiro ||
-    !JOB_STATUS_ABERTO.includes(job.status as JobStatus)
+    !naAbertura &&
+    (!job.data_abertura_financeiro ||
+      !JOB_STATUS_ABERTO.includes(job.status as JobStatus))
   ) {
     const encerrado = job.status === "encerrado" || job.status === "finalizado";
     await logAuditEvent({
@@ -167,7 +178,7 @@ export async function registrarAlteracaoDoFinanceiro(
       ok: false,
       message: encerrado
         ? MENSAGEM_JOB_ENCERRADO
-        : "O orçado só é editado pelo financeiro com o job aberto no financeiro.",
+        : "O orçado só é editado pelo financeiro com o job na abertura ou já aberto no financeiro.",
     };
   }
 
@@ -421,7 +432,7 @@ export async function registrarAlteracaoDoFinanceiro(
     for (const chave of mesesMexidos) {
       const delta = dinheiro((fatMesDepois.get(chave) ?? 0) - (fatMesAntes.get(chave) ?? 0));
       const doMes = recebimentoNovo.filter((r) => r.mes?.slice(0, 7) === chave);
-      if (doMes.length === 0 && Math.abs(delta) >= 0.005) {
+      if (!naAbertura && doMes.length === 0 && Math.abs(delta) >= 0.005) {
         const nome = nomeDoMes(`${chave}-01`);
         return {
           ok: false,
@@ -442,7 +453,7 @@ export async function registrarAlteracaoDoFinanceiro(
     }
   } else {
     const delta = dinheiro(fatDepois - fatAntes);
-    if (recebimentoAtual.length === 0 && Math.abs(delta) >= 0.005) {
+    if (!naAbertura && recebimentoAtual.length === 0 && Math.abs(delta) >= 0.005) {
       return {
         ok: false,
         message: `O job abriu sem faturamento previsto e não tem previsão de recebimento para acompanhar a alteração. ${SEM_DATA_PARA_ACOMPANHAR}`,
@@ -613,5 +624,6 @@ export async function registrarAlteracaoDoFinanceiro(
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/financeiro/jobs/${jobId}`);
   revalidatePath("/financeiro/abertura-de-job");
+  revalidatePath(`/financeiro/abertura-de-job/${jobId}`);
   return { ok: true, alteracaoId: alteracaoId as string };
 }
