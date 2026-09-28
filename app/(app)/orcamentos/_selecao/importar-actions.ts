@@ -107,6 +107,8 @@ interface OrcamentoRow {
   codigo: string;
   nome: string;
   status: OrcamentoStatus;
+  /** Decisão 118: arquivado é só leitura e não recebe versão. */
+  arquivado_em: string | null;
   versao_aprovada_id: string | null;
   categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
 }
@@ -176,10 +178,10 @@ async function analisar(
   const [{ data: projeto }, internosRes] = await Promise.all([
     supabase
       .from("projetos")
-      .select("id")
+      .select("id, status")
       .eq("id", projetoId)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{ id: string }>(),
+      .maybeSingle<{ id: string; status: string }>(),
     // Orçamentos Interno do projeto (decisão 105): o item deles entra como
     // F · Interno mesmo com o tipo em branco. `!servico_id`: `orcamentos`
     // tem duas FKs para `categorias_dominio`.
@@ -190,6 +192,13 @@ async function analisar(
       .eq("tenant_id", tenantId),
   ]);
   if (!projeto) return { ok: false, message: "Projeto não encontrado." };
+  // Decisão 118: projeto arquivado é só leitura.
+  if (projeto.status === "arquivado") {
+    return {
+      ok: false,
+      message: "Projeto arquivado é só leitura. Reative o projeto para importar.",
+    };
+  }
   if (internosRes.error) {
     console.error("[importacao.projeto.internos]", internosRes.error.message);
   }
@@ -240,7 +249,7 @@ async function analisar(
           .from("orcamentos")
           // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
           .select(
-            "id, codigo, nome, status, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+            "id, codigo, nome, status, arquivado_em, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
           )
           .eq("projeto_id", projetoId)
           .eq("tenant_id", tenantId)
@@ -435,6 +444,9 @@ async function analisar(
       orcamento.status,
       escolherJobDoFunil(jobsPorOrcamento.get(orcamento.id) ?? []),
     );
+    if (orcamento.arquivado_em) {
+      return recusar("Orçamento arquivado não recebe versão nova. Reative-o antes.");
+    }
     if (orcamento.status === "cancelado") {
       return recusar("Orçamento cancelado não recebe versão nova.");
     }

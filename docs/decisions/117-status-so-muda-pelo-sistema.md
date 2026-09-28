@@ -2,7 +2,7 @@
 
 **Data:** 2026-09-28
 **Decidido por:** Tiago
-**Migration:** `20260928400001_travas_de_escrita_direta_em_jobs_envios_e_notas.sql`.
+**Migrations:** `20260928400001_travas_de_escrita_direta_em_jobs_envios_e_notas.sql` (job) e `20260928400003_status_do_orcamento_so_pelo_sistema.sql` (orçamento).
 **Conferência:** `scripts/conferir-travas-escrita-direta.sql`.
 
 ---
@@ -69,3 +69,28 @@ o banco de produção.
   depois da guarda.
 - **20 ataques foram recusados,** entre eles produtor, GP e financeiro
   cancelando job aberto.
+
+## 3. Orçamento (no ar em 28/09/2026)
+
+- **O campo Status do "Editar orçamento" saiu.** Também saíram do schema e
+  da action. O orçamento nasce rascunho pelo default do banco.
+- **O antigo "Cancelado" virou o Arquivar** (decisão 118).
+- **Guarda no banco:** a mesma escrita feita pela API é recusada.
+
+| Mudança de status do orçamento | Ação | Quem |
+|---|---|---|
+| nasce `rascunho` | criar | quem cria orçamento |
+| rascunho, em revisão, enviado ao cliente ou recusado → aprovado | aprovar a versão | administrador, GP |
+| aprovado → em revisão | desfazer a aprovação | administrador, GP |
+| aprovado → job criado | enviar para abertura | administrador, GP |
+| job criado → aprovado | cancelar o envio | administrador, GP, produtor |
+| enviado ao cliente, recusado ou cancelado → rascunho | só junto do Reativar | administrador, GP, produtor |
+| qualquer outra | — | ninguém |
+
+**Os três status manuais antigos** (enviado ao cliente, recusado,
+cancelado) continuam no enum do banco. Nenhum orçamento está neles hoje fora
+do HIT-P001/26-02, que virou arquivado.
+
+**Conferência antes de aplicar:** numa transação desfeita, as 6 escritas
+que tinham de passar passaram, e os 7 ataques foram recusados.
+

@@ -109,6 +109,8 @@ interface Props {
   /** Honorários do cadastro do cliente. Vale para os orçamentos criados
    *  aqui; os que já existem mantêm o percentual gravado na versão. */
   honorariosCliente: number;
+  /** Projeto arquivado (decisão 118): tudo em consulta, sem orçamento novo. */
+  projetoArquivado: boolean;
   /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional
    *  no modal de parâmetros (decisão do Tiago, 14/09/2026). */
   podeEditarImpostos: boolean;
@@ -210,6 +212,7 @@ export function EditorAgregado({
   saldosDeSave,
   nomeDoGrupo,
   honorariosCliente,
+  projetoArquivado,
   podeEditarImpostos,
   podeMarcarSave,
   orcamentosExistentes,
@@ -933,18 +936,20 @@ export function EditorAgregado({
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
           <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-            Edite a planilha de cada orçamento aqui e veja o impacto no
-            consolidado do projeto. As alterações caem na versão aberta de cada
-            um — orçamento aprovado ou já aberto como job fica em consulta.
+            {projetoArquivado
+              ? "Projeto arquivado: a visão agregada fica só para consulta. Reative o projeto na tela dele para editar."
+              : "Edite a planilha de cada orçamento aqui e veja o impacto no consolidado do projeto. As alterações caem na versão aberta de cada um — orçamento aprovado ou já aberto como job fica em consulta."}
           </p>
-          <button
-            type="button"
-            onClick={() => setModal({ tipo: "form" })}
-            className="inline-flex flex-none items-center gap-2 rounded-xl bg-california-red px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
-          >
-            <Plus className="h-4 w-4" />
-            Criar orçamento de job
-          </button>
+          {!projetoArquivado && (
+            <button
+              type="button"
+              onClick={() => setModal({ tipo: "form" })}
+              className="inline-flex flex-none items-center gap-2 rounded-xl bg-california-red px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
+            >
+              <Plus className="h-4 w-4" />
+              Criar orçamento de job
+            </button>
+          )}
         </div>
       </div>
 

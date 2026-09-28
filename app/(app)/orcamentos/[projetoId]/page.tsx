@@ -37,6 +37,7 @@ import {
 } from "../_selecao/exportar-orcamentos-menu";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { MarcarPagina } from "@/components/voltar/marcar-pagina";
+import { AvisoArquivado } from "../aviso-arquivado";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,7 @@ export default async function ProjetoDetailPage({
         // `!categoria_id` é obrigatório desde 02/09/2026: `orcamentos` passou
         // a ter DUAS FKs para `categorias_dominio` (categoria e servico), e
         // sem desambiguar o PostgREST recusa o embed e devolve zero linhas.
-        "id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, " +
+        "id, codigo, nome, status, arquivado_em, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, " +
           "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
           "servico:categorias_dominio!servico_id(nome)",
       )
@@ -340,13 +341,14 @@ export default async function ProjetoDetailPage({
     data_fim_prevista: o.data_fim_prevista,
     valor_job: valorJobMap.get(o.id) ?? null,
     versoes_count: versoesCountMap.get(o.id) ?? 0,
+    arquivado: Boolean(o.arquivado_em),
     created_at: o.created_at,
   }));
 
-  // Cancelado fica fora do seletor de exportação: saiu da mesa e a visão
-  // agregada também não o lista.
+  // Arquivado (decisão 118) e cancelado ficam fora do seletor de
+  // exportação: saíram da mesa, e a visão agregada também não os lista.
   const exportaveis: OrcamentoExportavel[] = orcamentos
-    .filter((o) => o.estagio !== "cancelado")
+    .filter((o) => !o.arquivado && o.estagio !== "cancelado")
     .map((o) => ({
       id: o.id,
       codigo: o.codigo,
@@ -362,6 +364,12 @@ export default async function ProjetoDetailPage({
     Cliente,
     "id" | "nome_fantasia" | "codigo_curto"
   >[];
+
+  // Decisão 118: projeto arquivado é só leitura. Somem "Editar projeto",
+  // "Importar" e "Novo orçamento"; ficam o Exportar, a visão agregada e o
+  // Reativar do aviso.
+  const projetoArquivado = projeto.status === "arquivado";
+  const temOrcamentoAtivo = orcamentos.some((o) => !o.arquivado);
 
   return (
     <div className="space-y-6">
@@ -386,6 +394,7 @@ export default async function ProjetoDetailPage({
             <Badge className={cn("border", projetoBadgeClasses(projeto.status))}>
               {projetoStatusLabel(projeto.status)}
             </Badge>
+            {!projetoArquivado && (
             <ProjetoEditorDrawer
               podeCadastrarCliente={pode(
                 session.activeRole,
@@ -407,9 +416,12 @@ export default async function ProjetoDetailPage({
               equipeSelecionada={equipeManualDoProjeto}
               produtoresDosOrcamentos={produtoresDosOrcamentos}
             />
+            )}
             {/* Importar e Exportar logo depois de "Editar projeto", como no
                 design "Exportar e Exibir - Projeto e Visao Agregada". */}
-            <ImportarOrcamentosDrawer projetoId={projeto.id} />
+            {!projetoArquivado && (
+              <ImportarOrcamentosDrawer projetoId={projeto.id} />
+            )}
             <ExportarOrcamentosMenu projetoId={projeto.id} orcamentos={exportaveis} />
           </div>
 
@@ -484,6 +496,14 @@ export default async function ProjetoDetailPage({
         </div>
       </div>
 
+      {projetoArquivado && (
+        <AvisoArquivado
+          tipo="projeto"
+          projetoId={projeto.id}
+          podeReativar={pode(session.activeRole, "orcamentos.editar")}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <div className="flex items-center justify-between border-b border-border p-6">
           <div className="flex items-center gap-2">
@@ -498,7 +518,7 @@ export default async function ProjetoDetailPage({
             </div>
           </div>
           <div className="flex flex-none items-center gap-3">
-            {orcamentos.length > 0 && (
+            {temOrcamentoAtivo && (
               <Link
                 href={`/orcamentos/${projeto.id}/agregado`}
                 prefetch={false}
@@ -511,14 +531,16 @@ export default async function ProjetoDetailPage({
             {/* Uma porta só: o orçamento nasce um a um pelo formulário. O
                 orçamento do projeto é o que a visão agregada mostra — e o
                 que "Exportar" e "Importar" levam e trazem. */}
-            <Link
-              href={`/orcamentos/${projeto.id}/novo`}
-              prefetch={false}
-              className="inline-flex flex-none items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover"
-            >
-              <Plus className="h-4 w-4" />
-              Novo orçamento
-            </Link>
+            {!projetoArquivado && (
+              <Link
+                href={`/orcamentos/${projeto.id}/novo`}
+                prefetch={false}
+                className="inline-flex flex-none items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover"
+              >
+                <Plus className="h-4 w-4" />
+                Novo orçamento
+              </Link>
+            )}
           </div>
         </div>
         <div className="p-6">

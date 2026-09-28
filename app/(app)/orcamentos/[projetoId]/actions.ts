@@ -24,7 +24,12 @@ import {
   mesesDoPeriodo,
   trimestreDe,
 } from "@/lib/calculos/meses-trimestre";
-import type { CategoriaModeloPlanilha } from "@/lib/types";
+import {
+  FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
+  ORCAMENTO_STATUS_MANUAIS_ANTIGOS,
+  type CategoriaModeloPlanilha,
+  type OrcamentoStatus,
+} from "@/lib/types";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -34,7 +39,6 @@ function extractInput(formData: FormData) {
   return {
     codigo: formData.get("codigo")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
-    status: (formData.get("status")?.toString() ?? "rascunho") as any,
     categoria_id: formData.get("categoria_id")?.toString() ?? "",
     servico_id: formData.get("servico_id")?.toString() ?? "",
     descritivo: formData.get("descritivo")?.toString() ?? "",
@@ -244,15 +248,25 @@ async function assertProjetoDoTenant(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const { data, error } = await supabase
     .from("projetos")
-    .select("id")
+    .select("id, status")
     .eq("id", projetoId)
     .eq("tenant_id", tenantId)
-    .maybeSingle();
+    .maybeSingle<{ id: string; status: string }>();
   if (error || !data) {
     return { ok: false, message: "Projeto não encontrado." };
   }
+  // Decisão 118: projeto arquivado é só leitura. O banco recusa também;
+  // aqui a mensagem chega inteira.
+  if (data.status === "arquivado") {
+    return { ok: false, message: PROJETO_ARQUIVADO };
+  }
   return { ok: true };
 }
+
+const PROJETO_ARQUIVADO =
+  "Projeto arquivado é só leitura. Reative o projeto para editar.";
+const ORCAMENTO_ARQUIVADO =
+  "Orçamento arquivado é só leitura. Reative o orçamento para editar.";
 
 /**
  * Regional e GP do orçamento têm que sair do projeto — o formulário já
@@ -540,10 +554,17 @@ export async function atualizarOrcamento(
 
   const supabase = createClient();
 
+  const chkProjeto = await assertProjetoDoTenant(
+    supabase,
+    projetoId,
+    session.activeTenant.id,
+  );
+  if (!chkProjeto.ok) return chkProjeto;
+
   const { data: atual } = await supabase
     .from("orcamentos")
     .select(
-      "status, servico_id, categoria_id, data_inicio_prevista, data_fim_prevista, " +
+      "status, arquivado_em, servico_id, categoria_id, data_inicio_prevista, data_fim_prevista, " +
         // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
         "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
         "servico:categorias_dominio!servico_id(investimento_interno)",
@@ -553,6 +574,7 @@ export async function atualizarOrcamento(
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
       status: string;
+      arquivado_em: string | null;
       servico_id: string | null;
       categoria_id: string | null;
       data_inicio_prevista: string | null;
@@ -563,6 +585,9 @@ export async function atualizarOrcamento(
 
   if (!atual) {
     return { ok: false, message: "Orçamento não encontrado." };
+  }
+  if (atual.arquivado_em) {
+    return { ok: false, message: ORCAMENTO_ARQUIVADO };
   }
   if (atual.status === "aprovado" || atual.status === "job_criado") {
     return {
@@ -861,4 +886,157 @@ async function refazerMesesDoOrcamento(
     });
     if (!r.ok) console.error("[orcamentos.refazer_meses.criar]", r.message);
   }
+}
+
+/**
+ * Arquivar o orçamento (decisão 118). Ele sai da visão agregada, das abas
+ * do projeto e da exportação, e fica só leitura; na lista do projeto só
+ * aparece com o filtro "Arquivados". Arquivar não mexe no status: o
+ * Reativar devolve o orçamento como estava.
+ *
+ * Só antes da aprovação: aprovado precisa ter a aprovação desfeita, e com
+ * job nunca. O banco confere a mesma coisa (`orcamentos_guarda_arquivado`).
+ */
+export async function arquivarOrcamento(
+  projetoId: string,
+  orcId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
+  const supabase = createClient();
+
+  const chkProjeto = await assertProjetoDoTenant(
+    supabase,
+    projetoId,
+    session.activeTenant.id,
+  );
+  if (!chkProjeto.ok) return chkProjeto;
+
+  const [orcRes, jobsRes] = await Promise.all([
+    supabase
+      .from("orcamentos")
+      .select("status, arquivado_em")
+      .eq("id", orcId)
+      .eq("projeto_id", projetoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{ status: string; arquivado_em: string | null }>(),
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("orcamento_id", orcId)
+      .eq("tenant_id", session.activeTenant.id)
+      .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA),
+  ]);
+
+  if (!orcRes.data) return { ok: false, message: "Orçamento não encontrado." };
+  if (orcRes.data.arquivado_em) {
+    return { ok: false, message: "Este orçamento já está arquivado." };
+  }
+  if (
+    orcRes.data.status === "aprovado" ||
+    orcRes.data.status === "job_criado" ||
+    (jobsRes.count ?? 0) > 0
+  ) {
+    return {
+      ok: false,
+      message:
+        "Orçamento aprovado ou com job não se arquiva. Desfaça a aprovação antes.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("orcamentos")
+    .update({
+      arquivado_em: new Date().toISOString(),
+      arquivado_por: session.profile.id,
+    })
+    .eq("id", orcId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[orcamento.arquivar]", error.message);
+    return { ok: false, message: "Não foi possível arquivar o orçamento." };
+  }
+
+  await logAuditEvent({
+    acao: "orcamento.arquivado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "orcamento",
+    entidadeId: orcId,
+    metadata: { status: orcRes.data.status },
+  });
+
+  revalidatePath(`/orcamentos/${projetoId}`);
+  revalidatePath(`/orcamentos/${projetoId}/${orcId}`);
+  return { ok: true, id: orcId };
+}
+
+/** Tira o orçamento do arquivo, no status em que ele estava. Com o projeto
+ *  arquivado, recusa: o projeto se reativa primeiro.
+ *
+ *  Status manual antigo (cancelado, recusado, enviado ao cliente) não volta:
+ *  ninguém mais o escolhe (decisão 117), e o orçamento ficaria preso nele.
+ *  Volta como rascunho. */
+export async function reativarOrcamento(
+  projetoId: string,
+  orcId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return gate;
+  const supabase = createClient();
+
+  const chkProjeto = await assertProjetoDoTenant(
+    supabase,
+    projetoId,
+    session.activeTenant.id,
+  );
+  if (!chkProjeto.ok) {
+    return chkProjeto.message === PROJETO_ARQUIVADO
+      ? {
+          ok: false,
+          message:
+            "O projeto deste orçamento está arquivado. Reative o projeto primeiro.",
+        }
+      : chkProjeto;
+  }
+
+  const { data: atual } = await supabase
+    .from("orcamentos")
+    .select("status")
+    .eq("id", orcId)
+    .eq("projeto_id", projetoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ status: OrcamentoStatus }>();
+  if (!atual) return { ok: false, message: "Orçamento não encontrado." };
+
+  const { error } = await supabase
+    .from("orcamentos")
+    .update({
+      arquivado_em: null,
+      arquivado_por: null,
+      ...(ORCAMENTO_STATUS_MANUAIS_ANTIGOS.includes(atual.status)
+        ? { status: "rascunho" as const }
+        : {}),
+    })
+    .eq("id", orcId)
+    .eq("projeto_id", projetoId)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[orcamento.reativar]", error.message);
+    return { ok: false, message: "Não foi possível reativar o orçamento." };
+  }
+
+  await logAuditEvent({
+    acao: "orcamento.reativado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "orcamento",
+    entidadeId: orcId,
+  });
+
+  revalidatePath(`/orcamentos/${projetoId}`);
+  revalidatePath(`/orcamentos/${projetoId}/${orcId}`);
+  return { ok: true, id: orcId };
 }

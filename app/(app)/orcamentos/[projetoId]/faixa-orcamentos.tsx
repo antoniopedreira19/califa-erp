@@ -21,7 +21,7 @@ export async function FaixaDosOrcamentos({ tenantId, projeto, orcamentoId }: Pro
   const supabase = createClient();
   const { data, error } = await supabase
     .from("orcamentos")
-    .select("id, codigo, nome, status")
+    .select("id, codigo, nome, status, arquivado_em")
     .eq("tenant_id", tenantId)
     .eq("projeto_id", projeto.id)
     .order("codigo", { ascending: true });
@@ -34,7 +34,13 @@ export async function FaixaDosOrcamentos({ tenantId, projeto, orcamentoId }: Pro
       ativo={orcamentoId}
       itens={itensDeOrcamentos(
         projeto.id,
-        (data ?? []) as Array<{ id: string; codigo: string; nome: string; status: string }>,
+        (data ?? []) as Array<{
+          id: string;
+          codigo: string;
+          nome: string;
+          status: string;
+          arquivado_em: string | null;
+        }>,
         orcamentoId,
       )}
     />
