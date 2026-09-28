@@ -10,6 +10,8 @@ import {
   criarContratacaoSchema,
   motivoTextoSchema,
 } from "@/lib/validations/rh-contratacoes";
+import { gerarContratoPJ } from "@/lib/rh/gerar-contrato-pj";
+import type { Contratacao } from "@/lib/types";
 
 type ActionResult<T = { id: string }> =
   | ({ ok: true } & T)
@@ -227,16 +229,15 @@ export async function gerarContrato(id: string): Promise<ActionResult> {
   const supabase = createClient();
   const { data: contratacao, error: fetchError } = await supabase
     .from("contratacoes")
-    .select(
-      "id, tipo_contratacao, pj_natureza, cpf, cnpj, razao_social, rg, status",
-    )
+    .select("*")
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
   if (fetchError || !contratacao) {
     return { ok: false, message: "Contratação não encontrada." };
   }
-  if (contratacao.status !== "dados_completos") {
+  const c = contratacao as unknown as Contratacao;
+  if (c.status !== "dados_completos") {
     return {
       ok: false,
       message:
@@ -244,8 +245,8 @@ export async function gerarContrato(id: string): Promise<ActionResult> {
     };
   }
   if (
-    !TIPOS_PJ_QUE_GERAM_CONTRATO.includes(contratacao.tipo_contratacao) ||
-    !contratacao.pj_natureza
+    !TIPOS_PJ_QUE_GERAM_CONTRATO.includes(c.tipo_contratacao) ||
+    !c.pj_natureza
   ) {
     return {
       ok: false,
@@ -254,13 +255,55 @@ export async function gerarContrato(id: string): Promise<ActionResult> {
     };
   }
 
-  // TODO(subtask 6): chamar gerarContratoPJ({ contratacao }) da lib,
-  // subir o buffer pro bucket contratacoes-anexos e gravar o path.
-  return {
-    ok: false,
-    message:
-      "Gerador de PDF ainda não está pronto (Subtask 6 da task 007). Anexe o contrato manualmente por ora.",
-  };
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await gerarContratoPJ(c);
+  } catch (e: any) {
+    console.error("[rh.contratacao.gerar]", e?.message);
+    return {
+      ok: false,
+      message: e?.message ?? "Falha ao gerar o PDF do contrato.",
+    };
+  }
+
+  const path = `${session.activeTenant.id}/${id}/contrato-gerado.pdf`;
+  const { error: upErr } = await supabase.storage
+    .from("contratacoes-anexos")
+    .upload(path, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+  if (upErr) {
+    console.error("[rh.contratacao.gerar.upload]", upErr.message);
+    return { ok: false, message: "Falha ao subir o PDF gerado." };
+  }
+
+  const { error: updErr } = await supabase
+    .from("contratacoes")
+    .update({
+      status: "contrato_gerado",
+      contrato_gerado_path: path,
+      contrato_gerado_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id);
+  if (updErr) {
+    return { ok: false, message: mapDbError(updErr.message) };
+  }
+
+  await logAuditEvent({
+    acao: "contratacao.contrato_gerado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "contratacao",
+    entidadeId: id,
+    metadata: {
+      pj_natureza: c.pj_natureza,
+      tamanho_bytes: pdfBuffer.length,
+    },
+  });
+
+  revalidatePath(`/rh/contratacoes/${id}`);
+  return { ok: true, id };
 }
 
 /**
