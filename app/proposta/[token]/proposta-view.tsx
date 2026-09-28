@@ -135,35 +135,6 @@ function LandingCarta({
         </div>
       </section>
 
-      {/* Aviso de ação — sticky pra ficar visível durante o scroll */}
-      <div className="sticky top-4 z-30 rounded-2xl border border-california-red/20 bg-white/90 backdrop-blur px-5 py-3 shadow-elevated">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm text-neutral-700">
-            <strong>Passe pela apresentação abaixo</strong> e responda ao final.
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={aceitar}
-              disabled={pending}
-              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover disabled:opacity-50 transition-colors"
-            >
-              <Check className="h-4 w-4" />
-              Aceitar
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpenRecusa(true)}
-              disabled={pending}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-muted disabled:opacity-50 transition-colors"
-            >
-              <X className="h-4 w-4" />
-              Recusar
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Apresentação institucional — os 7 slides originais */}
       <section className="space-y-6">
         {[1, 2, 3, 4, 5, 6, 7].map((n) => (
