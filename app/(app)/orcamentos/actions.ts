@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { projetoSchema } from "@/lib/validations/projetos";
 import { gerarCodigoProjeto } from "@/lib/codigos/projetos";
+import { FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA } from "@/lib/types";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -341,23 +342,44 @@ export async function arquivarProjeto(id: string): Promise<ActionResult> {
   if (!gate.ok) return gate;
   const supabase = createClient();
 
-  // Bloqueia se houver orçamento não-cancelado no projeto.
-  const { count, error: errCount } = await supabase
-    .from("orcamentos")
-    .select("id", { count: "exact", head: true })
-    .eq("projeto_id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .neq("status", "cancelado");
+  // Decisão 116: projeto com orçamento aprovado ou com job não se arquiva,
+  // seja qual for o status do job — enviado para abertura, devolvido,
+  // aberto, encerrado ou finalizado. Orçamento em andamento (rascunho, em
+  // revisão, enviado ao cliente, recusado) não barra: sai da lista junto
+  // com o projeto e volta com ele no Reativar.
+  //
+  // As duas contagens se cobrem. O orçamento vira `job_criado` no envio e
+  // fica assim até o fim do job; a de jobs segura o orçamento cujo status
+  // se desencontrou do job. O cancelado antes da abertura não conta (113):
+  // o orçamento dele voltou a `aprovado`, e barra pela primeira.
+  const [orcRes, jobsRes] = await Promise.all([
+    supabase
+      .from("orcamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("projeto_id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", ["aprovado", "job_criado"]),
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("projeto_id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA),
+  ]);
 
-  if (errCount) {
-    console.error("[projetos.arquivar.count]", errCount.message);
-    return { ok: false, message: "Falha ao verificar orçamentos do projeto." };
+  if (orcRes.error || jobsRes.error) {
+    console.error(
+      "[projetos.arquivar.count]",
+      orcRes.error?.message ?? jobsRes.error?.message,
+    );
+    return { ok: false, message: "Falha ao verificar orçamentos e jobs do projeto." };
   }
 
-  if ((count ?? 0) > 0) {
+  if ((orcRes.count ?? 0) > 0 || (jobsRes.count ?? 0) > 0) {
     return {
       ok: false,
-      message: "Cancele todos os orçamentos do projeto antes de arquivar.",
+      message:
+        "Este projeto tem orçamento aprovado ou job e não pode ser arquivado.",
     };
   }
 
