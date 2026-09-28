@@ -180,7 +180,7 @@ function LandingCarta({
           salario={c.salario_proposto}
           regime={tipoContratacaoLabel(c.tipo_contratacao)}
         />
-        <SlideImagem numero={4} comFaixaLateral />
+        <SlideImagem numero={4} />
         <SlideImagem numero={5} comFaixaLateral />
         <SlideImagem numero={6} comFaixaLateral />
         <SlideImagem numero={7} />
