@@ -49,8 +49,10 @@ export function EditarDadosDrawer({
   const [nivelSel, setNivelSel] = React.useState<string>(
     colaborador.nivel_id ?? NONE_SENTINEL,
   );
-  const [cpfCnpj, setCpfCnpj] = React.useState<string>(
-    colaborador.cpf_cnpj ?? "",
+  const [cpf, setCpf] = React.useState<string>(colaborador.cpf ?? "");
+  const [cnpj, setCnpj] = React.useState<string>(colaborador.cnpj ?? "");
+  const [telefone, setTelefone] = React.useState<string>(
+    colaborador.telefone ?? "",
   );
   const [dataAdmissao, setDataAdmissao] = React.useState<string>(
     colaborador.data_admissao,
@@ -58,8 +60,6 @@ export function EditarDadosDrawer({
 
   const isPJ =
     tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
-  const documentoLabel = isPJ ? "CNPJ" : "CPF";
-  const documentoMask = isPJ ? "cnpj" : "cpf";
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -68,7 +68,9 @@ export function EditarDadosDrawer({
       // Reset ao estado do colaborador
       setTipoContratacao(colaborador.tipo_contratacao);
       setNivelSel(colaborador.nivel_id ?? NONE_SENTINEL);
-      setCpfCnpj(colaborador.cpf_cnpj ?? "");
+      setCpf(colaborador.cpf ?? "");
+      setCnpj(colaborador.cnpj ?? "");
+      setTelefone(colaborador.telefone ?? "");
       setDataAdmissao(colaborador.data_admissao);
     }
     setOpen(next);
@@ -80,7 +82,9 @@ export function EditarDadosDrawer({
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
     formData.set("tipo_contratacao", tipoContratacao);
-    formData.set("cpf_cnpj", cpfCnpj);
+    formData.set("cpf", cpf);
+    formData.set("cnpj", cnpj);
+    formData.set("telefone", telefone);
     formData.set("data_admissao", dataAdmissao);
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
@@ -166,20 +170,40 @@ export function EditarDadosDrawer({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="cpf_cnpj">{documentoLabel}</Label>
+                <Label htmlFor="cpf">
+                  CPF <span className="text-california-red">*</span>
+                </Label>
                 <MaskedInput
-                  key={documentoMask}
-                  id="cpf_cnpj"
-                  mask={documentoMask}
-                  defaultValue={cpfCnpj}
-                  onDigitsChange={setCpfCnpj}
+                  id="cpf"
+                  mask="cpf"
+                  defaultValue={cpf}
+                  onDigitsChange={setCpf}
                 />
-                {fieldErrors.cpf_cnpj?.map((msg, i) => (
+                {fieldErrors.cpf?.map((msg, i) => (
                   <p key={i} className="text-xs text-california-red">
                     {msg}
                   </p>
                 ))}
               </div>
+
+              {isPJ && (
+                <div className="space-y-2">
+                  <Label htmlFor="cnpj">
+                    CNPJ <span className="text-california-red">*</span>
+                  </Label>
+                  <MaskedInput
+                    id="cnpj"
+                    mask="cnpj"
+                    defaultValue={cnpj}
+                    onDigitsChange={setCnpj}
+                  />
+                  {fieldErrors.cnpj?.map((msg, i) => (
+                    <p key={i} className="text-xs text-california-red">
+                      {msg}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="funcao">Função</Label>
@@ -220,6 +244,21 @@ export function EditarDadosDrawer({
                   defaultValue={colaborador.email ?? ""}
                 />
                 {fieldErrors.email?.map((msg, i) => (
+                  <p key={i} className="text-xs text-california-red">
+                    {msg}
+                  </p>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="telefone">Telefone</Label>
+                <MaskedInput
+                  id="telefone"
+                  mask="telefone"
+                  defaultValue={telefone}
+                  onDigitsChange={setTelefone}
+                />
+                {fieldErrors.telefone?.map((msg, i) => (
                   <p key={i} className="text-xs text-california-red">
                     {msg}
                   </p>

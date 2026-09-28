@@ -47,22 +47,23 @@ export function ColaboradorFormNovo({
   const [empresaId, setEmpresaId] = React.useState<string>("");
   const [regionalId, setRegionalId] = React.useState<string>("");
   const [nivelSel, setNivelSel] = React.useState<string>(NONE_SENTINEL);
-  const [cpfCnpj, setCpfCnpj] = React.useState<string>("");
+  const [cpf, setCpf] = React.useState<string>("");
+  const [cnpj, setCnpj] = React.useState<string>("");
+  const [telefone, setTelefone] = React.useState<string>("");
   const [dataAdmissao, setDataAdmissao] = React.useState<string>(hoje());
 
   const isPJ =
     tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
-  const documentoLabel = isPJ ? "CNPJ" : "CPF";
-  const documentoMask = isPJ ? "cnpj" : "cpf";
 
   const regionaisDaEmpresa = regionais
     .filter((r) => r.empresa_id === empresaId)
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  // Ao trocar de PJ → PF ou vice-versa, zera o documento pra evitar formato errado
+  // Ao trocar pra tipo não-PJ, zera CNPJ pra não guardar dado que sairia
+  // como pendência silenciosa em cargo CLT/estágio.
   React.useEffect(() => {
-    setCpfCnpj("");
-  }, [tipoContratacao]);
+    if (!isPJ) setCnpj("");
+  }, [isPJ]);
 
   // Ao trocar de empresa, zera a regional (evita regional de outra empresa)
   React.useEffect(() => {
@@ -75,13 +76,14 @@ export function ColaboradorFormNovo({
     setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
-    // Traduz sentinels e valores derivados
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
     formData.set("tipo_contratacao", tipoContratacao);
     formData.set("empresa_id", empresaId);
     formData.set("regional_id", regionalId);
-    formData.set("cpf_cnpj", cpfCnpj);
+    formData.set("cpf", cpf);
+    formData.set("cnpj", cnpj);
+    formData.set("telefone", telefone);
     formData.set("data_admissao", dataAdmissao);
 
     startTransition(async () => {
@@ -152,22 +154,40 @@ export function ColaboradorFormNovo({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="cpf_cnpj">
-              {documentoLabel} <span className="text-california-red">*</span>
+            <Label htmlFor="cpf">
+              CPF <span className="text-california-red">*</span>
             </Label>
             <MaskedInput
-              key={documentoMask}
-              id="cpf_cnpj"
-              mask={documentoMask}
+              id="cpf"
+              mask="cpf"
               required
-              onDigitsChange={setCpfCnpj}
+              onDigitsChange={setCpf}
             />
-            {fieldErrors.cpf_cnpj?.map((msg, i) => (
+            {fieldErrors.cpf?.map((msg, i) => (
               <p key={i} className="text-xs text-california-red">
                 {msg}
               </p>
             ))}
           </div>
+
+          {isPJ && (
+            <div className="space-y-2">
+              <Label htmlFor="cnpj">
+                CNPJ <span className="text-california-red">*</span>
+              </Label>
+              <MaskedInput
+                id="cnpj"
+                mask="cnpj"
+                required
+                onDigitsChange={setCnpj}
+              />
+              {fieldErrors.cnpj?.map((msg, i) => (
+                <p key={i} className="text-xs text-california-red">
+                  {msg}
+                </p>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="funcao">
@@ -217,6 +237,20 @@ export function ColaboradorFormNovo({
               placeholder="colaborador@exemplo.com"
             />
             {fieldErrors.email?.map((msg, i) => (
+              <p key={i} className="text-xs text-california-red">
+                {msg}
+              </p>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="telefone">Telefone</Label>
+            <MaskedInput
+              id="telefone"
+              mask="telefone"
+              onDigitsChange={setTelefone}
+            />
+            {fieldErrors.telefone?.map((msg, i) => (
               <p key={i} className="text-xs text-california-red">
                 {msg}
               </p>
