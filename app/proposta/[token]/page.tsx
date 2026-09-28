@@ -9,19 +9,37 @@ export const dynamic = "force-dynamic";
 async function carregar(token: string) {
   if (!token || token.length < 32) return null;
   const service = createServiceClient();
-  const { data } = await service
+  // Sem embed em regional/empresa — contratacoes tem duas FKs pra
+  // regionais e o PostgREST fica ambíguo, retornando null silencioso.
+  const { data: base } = await service
     .from("contratacoes")
-    .select(
-      "*, empresa:empresas(id, nome_fantasia), regional:regionais(id, nome)",
-    )
+    .select("*")
     .eq("token", token)
     .maybeSingle();
-  return data as
-    | (Contratacao & {
-        empresa: Pick<Empresa, "id" | "nome_fantasia"> | null;
-        regional: { id: string; nome: string } | null;
-      })
-    | null;
+  if (!base) return null;
+  const c = base as unknown as Contratacao;
+  const [empresaRes, regionalRes] = await Promise.all([
+    service
+      .from("empresas")
+      .select("id, nome_fantasia")
+      .eq("id", c.empresa_id)
+      .maybeSingle(),
+    c.regional_id
+      ? service
+          .from("regionais")
+          .select("id, nome")
+          .eq("id", c.regional_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  return {
+    ...c,
+    empresa: empresaRes.data as Pick<Empresa, "id" | "nome_fantasia"> | null,
+    regional: regionalRes.data as { id: string; nome: string } | null,
+  } as Contratacao & {
+    empresa: Pick<Empresa, "id" | "nome_fantasia"> | null;
+    regional: { id: string; nome: string } | null;
+  };
 }
 
 export default async function PropostaPage({
