@@ -1,7 +1,7 @@
 # 020 — Cancelar job só existe antes da abertura
 
 **Data:** 2026-08-19
-**Status:** aceita
+**Status:** aceita · **revisada em 2026-09-28** — a action `atualizarStatusJob` saiu; nenhum caminho cancela job aberto (ver "Revisão" no fim)
 **Contexto:** aba "Informações do Job" (`/jobs/[jobId]`), handoff
 `Job - Informacoes - Cabecalho Opcoes.dc.html` / `Job - Informacoes - Barra
 de Acoes.dc.html`.
@@ -36,11 +36,32 @@ Cancelamento depois da abertura, se for necessário, é ação do
 
 ## O que NÃO mudou
 
-`JOB_STATUS_TRANSICOES` e a server action `atualizarStatusJob` continuam
-aceitando o cancelamento em qualquer status vivo. **É de propósito**: a
-fronteira aqui é de módulo, não de permissão. Fechar no servidor agora
-obrigaria a reabrir a regra quando a tela do financeiro chegar, e o
-cancelamento pós-abertura vai precisar dela.
+~~`JOB_STATUS_TRANSICOES` e a server action `atualizarStatusJob` continuam
+aceitando o cancelamento em qualquer status vivo.~~ Valeu até 28/09/2026 —
+ver "Revisão" abaixo. O argumento era que a fronteira era de módulo, não de
+permissão, e que o cancelamento no financeiro reaproveitaria a action como
+está.
 
-Quem for implementar o cancelamento no financeiro reaproveita a action
-como está.
+## ⚠️ Revisão (2026-09-28) — a action saiu
+
+Na prática a action era uma porta aberta: exportada como Server Action,
+qualquer GP ou produtor (`jobs.editar_metadata`) conseguia chamá-la pelo
+console e passar um job **aberto** para `cancelado`, sem nenhuma conferência
+de PP, previsão de custo, recebimento ou faturamento — exatamente o que o
+"O problema" acima diz que o módulo de Jobs não sabe desfazer. E, na
+pré-abertura, cancelava o job sem devolver o orçamento a `aprovado` nem o
+save à versão, o que `cancelarEnvioParaAbertura` (057) faz.
+
+- `atualizarStatusJob` (`app/(app)/jobs/actions.ts`) e a tabela
+  `JOB_STATUS_TRANSICOES` (`lib/types.ts`) **foram removidas**. Nenhuma tela
+  as chamava desde 08/09 (057).
+- Antes da abertura, o cancelamento continua sendo o "Cancelar envio" do
+  orçamento (`cancelarEnvioParaAbertura`).
+- Depois da abertura, **hoje ninguém cancela job pelo sistema**. Quando o
+  financeiro ganhar essa tela, ela nasce com action própria, que desfaça o
+  que a abertura gravou — não reaproveita uma troca de status solta.
+- Continua aberta a escrita direta pela API do Supabase (`jobs_modify` é
+  ALL para membro do tenant): a guarda de status em `jobs` está preparada
+  na branch `feat/travas-escrita-direta`, não aplicada, e ela ainda aceita
+  `aberto → cancelado` para GP e produtor — precisa ser ajustada antes de
+  aplicar.
