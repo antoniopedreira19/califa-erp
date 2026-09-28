@@ -265,7 +265,7 @@ linhasSql.push("begin");
 for (const r of registros) {
   linhasSql.push(`-- ${r.nome}`);
   linhasSql.push(
-    `insert into public.colaboradores (tenant_id, nome, tipo_contratacao, cpf_cnpj, funcao, data_admissao, data_nascimento, area, status, created_by) values ('${TENANT_ID}', ${sqlLiteral(r.nome)}, '${r.tipo}'::public.tipo_contratacao, ${sqlLiteral(r.cpf)}, ${sqlLiteral(r.funcao)}, '${r.data_admissao}'::date, ${r.data_nascimento ? `'${r.data_nascimento}'::date` : "null"}, ${sqlLiteral(r.area)}, 'ativo'::public.cadastro_status, '${CREATED_BY}') returning id into v_colab_id;`,
+    `insert into public.colaboradores (tenant_id, nome, tipo_contratacao, cpf, funcao, data_admissao, data_nascimento, area, status, created_by) values ('${TENANT_ID}', ${sqlLiteral(r.nome)}, '${r.tipo}'::public.tipo_contratacao, ${sqlLiteral(r.cpf)}, ${sqlLiteral(r.funcao)}, '${r.data_admissao}'::date, ${r.data_nascimento ? `'${r.data_nascimento}'::date` : "null"}, ${sqlLiteral(r.area)}, 'ativo'::public.cadastro_status, '${CREATED_BY}') returning id into v_colab_id;`,
   );
   linhasSql.push(
     `insert into public.colaboradores_salarios (tenant_id, colaborador_id, valor, data_inicio, created_by) values ('${TENANT_ID}', v_colab_id, ${r.salario}, '${r.data_admissao}'::date, '${CREATED_BY}');`,

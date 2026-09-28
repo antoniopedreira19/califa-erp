@@ -249,13 +249,13 @@ linhasSql.push("begin");
 for (const r of registros) {
   linhasSql.push(`-- ${r.nome} (CPF ${r.cpf})`);
   linhasSql.push(
-    `select exists (select 1 from public.colaboradores where tenant_id='${TENANT_ID}' and cpf_cnpj='${r.cpf}') into v_ja_existe;`,
+    `select exists (select 1 from public.colaboradores where tenant_id='${TENANT_ID}' and cpf='${r.cpf}') into v_ja_existe;`,
   );
   linhasSql.push(`if v_ja_existe then`);
   linhasSql.push(`  raise notice 'skip: % (CPF % já existe)', ${sqlLiteral(r.nome)}, '${r.cpf}';`);
   linhasSql.push(`else`);
   linhasSql.push(
-    `  insert into public.colaboradores (tenant_id, nome, tipo_contratacao, cpf_cnpj, funcao, nivel_id, data_admissao, data_nascimento, area, status, created_by) values ('${TENANT_ID}', ${sqlLiteral(r.nome)}, '${r.tipo}'::public.tipo_contratacao, '${r.cpf}', ${sqlLiteral(r.funcao)}, ${r.nivel_id ? `'${r.nivel_id}'` : "null"}, '${r.data_admissao}'::date, ${r.data_nascimento ? `'${r.data_nascimento}'::date` : "null"}, ${sqlLiteral(r.area)}, 'ativo'::public.cadastro_status, '${CREATED_BY}') returning id into v_colab_id;`,
+    `  insert into public.colaboradores (tenant_id, nome, tipo_contratacao, cpf, funcao, nivel_id, data_admissao, data_nascimento, area, status, created_by) values ('${TENANT_ID}', ${sqlLiteral(r.nome)}, '${r.tipo}'::public.tipo_contratacao, '${r.cpf}', ${sqlLiteral(r.funcao)}, ${r.nivel_id ? `'${r.nivel_id}'` : "null"}, '${r.data_admissao}'::date, ${r.data_nascimento ? `'${r.data_nascimento}'::date` : "null"}, ${sqlLiteral(r.area)}, 'ativo'::public.cadastro_status, '${CREATED_BY}') returning id into v_colab_id;`,
   );
   linhasSql.push(
     `  insert into public.colaboradores_salarios (tenant_id, colaborador_id, valor, data_inicio, created_by) values ('${TENANT_ID}', v_colab_id, ${r.salario}, '${r.data_admissao}'::date, '${CREATED_BY}');`,

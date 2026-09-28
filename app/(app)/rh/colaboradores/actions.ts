@@ -18,20 +18,26 @@ type ActionResult<T = { id: string }> =
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
 function mapColaboradorDbError(msg: string): string {
-  if (msg.includes("uniq_colaboradores_documento_por_tenant")) {
-    return "Já existe um colaborador com esse CPF/CNPJ.";
+  if (msg.includes("uniq_colaboradores_cpf_por_tenant")) {
+    return "Já existe um colaborador com esse CPF.";
   }
-  if (msg.includes("chk_colaboradores_cpf_cnpj_formato")) {
-    return "Formato do documento não bate com o tipo de contratação.";
+  if (msg.includes("uniq_colaboradores_cnpj_por_tenant")) {
+    return "Já existe um colaborador com esse CNPJ.";
+  }
+  if (msg.includes("chk_colaboradores_cpf_formato")) {
+    return "CPF precisa ter 11 dígitos.";
+  }
+  if (msg.includes("chk_colaboradores_cnpj_formato")) {
+    return "CNPJ precisa ter 14 dígitos.";
+  }
+  if (msg.includes("chk_colaboradores_telefone_formato")) {
+    return "Telefone precisa ter 10 (fixo) ou 11 dígitos (celular).";
   }
   if (msg.includes("chk_colaboradores_encerramento_coerente")) {
     return "Data de encerramento só pode existir em colaborador inativo.";
   }
   if (msg.includes("chk_colaboradores_nome_nao_vazio")) {
     return "Nome não pode ficar vazio.";
-  }
-  if (msg.includes("Rateio de alocacoes")) {
-    return "A soma dos percentuais das alocações vigentes precisa dar 100.";
   }
   return "Não foi possível salvar o colaborador.";
 }
@@ -59,8 +65,10 @@ export async function criarColaborador(
   const colaboradorParsed = colaboradorSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
     email: formData.get("email")?.toString() ?? "",
+    telefone: formData.get("telefone")?.toString() ?? "",
     tipo_contratacao: formData.get("tipo_contratacao")?.toString() ?? "",
-    cpf_cnpj: formData.get("cpf_cnpj")?.toString() ?? "",
+    cpf: formData.get("cpf")?.toString() ?? "",
+    cnpj: formData.get("cnpj")?.toString() ?? "",
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
@@ -108,8 +116,10 @@ export async function criarColaborador(
       tenant_id: session.activeTenant.id,
       nome: colaboradorParsed.data.nome,
       email: colaboradorParsed.data.email,
+      telefone: colaboradorParsed.data.telefone,
       tipo_contratacao: colaboradorParsed.data.tipo_contratacao,
-      cpf_cnpj: colaboradorParsed.data.cpf_cnpj,
+      cpf: colaboradorParsed.data.cpf,
+      cnpj: colaboradorParsed.data.cnpj,
       funcao: colaboradorParsed.data.funcao,
       nivel_id: colaboradorParsed.data.nivel_id,
       data_admissao: colaboradorParsed.data.data_admissao,
@@ -127,7 +137,7 @@ export async function criarColaborador(
   const colaboradorId = colabData.id;
   const service = createServiceClient();
 
-  // 2) Alocação inicial 100%
+  // 2) Alocação inicial vigente (regional específica, sem rateio)
   const { error: alocError } = await supabase
     .from("colaboradores_alocacoes")
     .insert({
@@ -135,7 +145,7 @@ export async function criarColaborador(
       colaborador_id: colaboradorId,
       empresa_id: alocacaoParsed.data.empresa_id,
       regional_id: alocacaoParsed.data.regional_id,
-      percentual: "100.00",
+      usa_rateio_empresa: false,
       data_inicio: alocacaoParsed.data.data_inicio,
       created_by: session.profile.id,
     });
@@ -199,8 +209,10 @@ export async function editarColaborador(
   const parsed = colaboradorSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
     email: formData.get("email")?.toString() ?? "",
+    telefone: formData.get("telefone")?.toString() ?? "",
     tipo_contratacao: formData.get("tipo_contratacao")?.toString() ?? "",
-    cpf_cnpj: formData.get("cpf_cnpj")?.toString() ?? "",
+    cpf: formData.get("cpf")?.toString() ?? "",
+    cnpj: formData.get("cnpj")?.toString() ?? "",
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
@@ -219,8 +231,10 @@ export async function editarColaborador(
     .update({
       nome: parsed.data.nome,
       email: parsed.data.email,
+      telefone: parsed.data.telefone,
       tipo_contratacao: parsed.data.tipo_contratacao,
-      cpf_cnpj: parsed.data.cpf_cnpj,
+      cpf: parsed.data.cpf,
+      cnpj: parsed.data.cnpj,
       funcao: parsed.data.funcao,
       nivel_id: parsed.data.nivel_id,
       data_admissao: parsed.data.data_admissao,

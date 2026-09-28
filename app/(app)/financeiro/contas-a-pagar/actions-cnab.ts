@@ -590,18 +590,21 @@ async function buscarDadosDestinatario(
     const { data, error } = await supabase
       .from("colaboradores")
       .select(
-        "nome, cpf_cnpj, banco_codigo, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave",
+        "nome, cpf, cnpj, banco_codigo, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave",
       )
       .eq("id", id)
       .eq("tenant_id", tenantId)
       .maybeSingle();
     if (error || !data) return { ok: false, message: "Colaborador não encontrado." };
-    if (!data.cpf_cnpj) return { ok: false, message: "Colaborador sem CPF/CNPJ." };
+    // CNAB usa CNPJ quando existe (colaborador PJ paga na conta jurídica);
+    // senão CPF (CLT/estágio/sócio paga na conta pessoa física).
+    const documento = data.cnpj ?? data.cpf;
+    if (!documento) return { ok: false, message: "Colaborador sem CPF/CNPJ." };
     return {
       ok: true,
       data: {
         nome: data.nome,
-        documento: data.cpf_cnpj,
+        documento,
         bancoCodigo: data.banco_codigo,
         agencia: data.agencia,
         agenciaDv: data.agencia_dv,

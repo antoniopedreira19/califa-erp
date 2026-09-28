@@ -3084,11 +3084,18 @@ export interface Colaborador {
   tenant_id: string;
   nome: string;
   email: string | null;
+  telefone: string | null;
   tipo_contratacao: TipoContratacao;
-  /** 11 dígitos (PF) ou 14 dígitos (PJ). Opcional no cadastro rápido. */
-  cpf_cnpj: string | null;
+  /** CPF do colaborador — 11 dígitos. Sempre obrigatório no cadastro
+   *  novo (decisão 2026-09-25). 20 legados ainda podem estar null. */
+  cpf: string | null;
+  /** CNPJ da razão social — 14 dígitos. Obrigatório app-level quando
+   *  tipo_contratacao é pj ou clt_recibo. Null pros demais tipos. */
+  cnpj: string | null;
   funcao: string;
   nivel_id: string | null;
+  data_nascimento: string | null;
+  area: string | null;
   data_admissao: string;
   data_encerramento: string | null;
   status: CadastroStatus;

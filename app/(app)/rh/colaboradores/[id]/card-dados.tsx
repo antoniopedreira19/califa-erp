@@ -93,14 +93,13 @@ export function CardDados({ colaborador, niveis }: Props) {
           label="Tipo de contratação"
           value={tipoContratacaoLabel(colaborador.tipo_contratacao)}
         />
-        <Info
-          label={colaborador.tipo_contratacao === "clt" || colaborador.tipo_contratacao === "estagio" ? "CPF" : "CNPJ"}
-          value={formatarDocumento(
-            colaborador.cpf_cnpj,
-            colaborador.tipo_contratacao,
-          )}
-        />
+        <Info label="CPF" value={formatarCpf(colaborador.cpf)} />
+        {(colaborador.tipo_contratacao === "pj" ||
+          colaborador.tipo_contratacao === "clt_recibo") && (
+          <Info label="CNPJ" value={formatarCnpj(colaborador.cnpj)} />
+        )}
         <Info label="E-mail" value={colaborador.email ?? "—"} />
+        <Info label="Telefone" value={formatarTelefone(colaborador.telefone)} />
         <Info label="Admissão" value={formatarData(colaborador.data_admissao)} />
         <Info
           label="Encerramento"
@@ -163,17 +162,25 @@ function formatarData(iso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
-function formatarDocumento(
-  documento: string | null,
-  tipoContratacao: Colaborador["tipo_contratacao"],
-): string {
-  if (!documento) return "—";
-  if (tipoContratacao === "clt" || tipoContratacao === "estagio") {
-    // CPF: 000.000.000-00
-    if (documento.length !== 11) return documento;
-    return `${documento.slice(0, 3)}.${documento.slice(3, 6)}.${documento.slice(6, 9)}-${documento.slice(9)}`;
+function formatarCpf(cpf: string | null): string {
+  if (!cpf) return "—";
+  if (cpf.length !== 11) return cpf;
+  return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
+}
+
+function formatarCnpj(cnpj: string | null): string {
+  if (!cnpj) return "—";
+  if (cnpj.length !== 14) return cnpj;
+  return `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`;
+}
+
+function formatarTelefone(tel: string | null): string {
+  if (!tel) return "—";
+  if (tel.length === 11) {
+    return `(${tel.slice(0, 2)}) ${tel.slice(2, 7)}-${tel.slice(7)}`;
   }
-  // CNPJ: 00.000.000/0000-00
-  if (documento.length !== 14) return documento;
-  return `${documento.slice(0, 2)}.${documento.slice(2, 5)}.${documento.slice(5, 8)}/${documento.slice(8, 12)}-${documento.slice(12)}`;
+  if (tel.length === 10) {
+    return `(${tel.slice(0, 2)}) ${tel.slice(2, 6)}-${tel.slice(6)}`;
+  }
+  return tel;
 }

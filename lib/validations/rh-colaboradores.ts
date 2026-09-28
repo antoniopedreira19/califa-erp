@@ -18,9 +18,10 @@ const tipoContratacaoEnum = z.enum([
 
 /**
  * Schema base do colaborador — dados fixos que não mudam com alocação
- * nem com folha. CPF/CNPJ obrigatório no cadastro (decisão 2026-09-25:
- * pendência do 20 colaboradores importados sem CPF é excepcional e não
- * novo cadastro deve entrar sem documento).
+ * nem com folha. Decisão 2026-09-25:
+ *   - CPF sempre obrigatório no cadastro novo (mesmo pra PJ; é do sócio).
+ *   - CNPJ obrigatório quando o tipo é PJ (pj ou clt_recibo).
+ *   - Telefone opcional. Formato BR: 10 dígitos (fixo) ou 11 (celular).
  */
 export const colaboradorSchema = z
   .object({
@@ -39,11 +40,27 @@ export const colaboradorSchema = z
         (v) => v === null || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
         "E-mail inválido.",
       ),
+    telefone: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ?? "").replace(/\D/g, ""))
+      .transform((v) => (v.length > 0 ? v : null))
+      .refine(
+        (v) => v === null || v.length === 10 || v.length === 11,
+        "Telefone precisa ter 10 dígitos (fixo) ou 11 (celular).",
+      ),
     tipo_contratacao: tipoContratacaoEnum,
-    cpf_cnpj: z
+    cpf: z
       .string()
       .trim()
       .transform((v) => (v ?? "").replace(/\D/g, "")),
+    cnpj: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ?? "").replace(/\D/g, ""))
+      .transform((v) => (v.length > 0 ? v : null)),
     funcao: z
       .string()
       .trim()
@@ -60,32 +77,44 @@ export const colaboradorSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
   })
   .superRefine((val, ctx) => {
-    if (val.cpf_cnpj.length === 0) {
+    // CPF sempre obrigatório, 11 dígitos
+    if (val.cpf.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["cpf_cnpj"],
-        message: "Informe CPF ou CNPJ.",
+        path: ["cpf"],
+        message: "Informe o CPF.",
       });
-      return;
+    } else if (val.cpf.length !== 11) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cpf"],
+        message: "CPF precisa ter 11 dígitos.",
+      });
     }
+    // CNPJ obrigatório se PJ (pj ou clt_recibo)
     const isPJ = (TIPOS_CONTRATACAO_PJ as readonly string[]).includes(
       val.tipo_contratacao,
     );
-    const isPF = (TIPOS_CONTRATACAO_PF as readonly string[]).includes(
-      val.tipo_contratacao,
-    );
-    if (isPJ && val.cpf_cnpj.length !== 14) {
+    if (isPJ) {
+      if (val.cnpj === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["cnpj"],
+          message: "Informe o CNPJ.",
+        });
+      } else if (val.cnpj.length !== 14) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["cnpj"],
+          message: "CNPJ precisa ter 14 dígitos.",
+        });
+      }
+    } else if (val.cnpj !== null && val.cnpj.length !== 14) {
+      // Se não é PJ mas colocaram CNPJ, ainda validamos formato
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["cpf_cnpj"],
+        path: ["cnpj"],
         message: "CNPJ precisa ter 14 dígitos.",
-      });
-    }
-    if (isPF && val.cpf_cnpj.length !== 11) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["cpf_cnpj"],
-        message: "CPF precisa ter 11 dígitos.",
       });
     }
   });

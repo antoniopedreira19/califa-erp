@@ -390,7 +390,7 @@ export default async function PedidosCompraFinanceiroPage({
     // CNAB: colaboradores ativos com dados bancários — enriquecimento do Dialog.
     supabase
       .from("colaboradores")
-      .select("id, nome, cpf_cnpj, banco_codigo, agencia, conta, pix_chave")
+      .select("id, nome, banco_codigo, agencia, conta, pix_chave")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
   ]);
