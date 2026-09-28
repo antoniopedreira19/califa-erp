@@ -332,8 +332,27 @@ function SlidePagina3({
 }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-soft aspect-[16/9] grid grid-cols-[60px_1fr_38%] md:grid-cols-[70px_1fr_38%]">
-      {/* Faixa vermelha à esquerda */}
-      <div className="relative bg-gradient-to-b from-[#B02532] via-[#8E1E29] to-[#5D131B] p-3 md:p-4 text-white flex flex-col">
+      {/* Faixa vermelha à esquerda — textura de "cortina" reproduzida
+          com duas camadas de gradient: base vermelha vertical + listras
+          verticais semi-transparentes por cima (repeating-linear-gradient).
+          Mesma técnica usada no PPT original: forma sólida + forma listrada. */}
+      <div
+        className="relative p-3 md:p-4 text-white flex flex-col"
+        style={{
+          backgroundImage: `
+            repeating-linear-gradient(
+              to right,
+              rgba(0,0,0,0) 0px,
+              rgba(0,0,0,0) 6px,
+              rgba(0,0,0,0.18) 6px,
+              rgba(0,0,0,0.18) 8px,
+              rgba(255,255,255,0.04) 8px,
+              rgba(255,255,255,0.04) 12px
+            ),
+            linear-gradient(to bottom, #C42B3B 0%, #A02330 40%, #6E1620 100%)
+          `,
+        }}
+      >
         <div>
           <p className="text-[10px] md:text-xs font-black tracking-wider leading-none">
             CARTA
