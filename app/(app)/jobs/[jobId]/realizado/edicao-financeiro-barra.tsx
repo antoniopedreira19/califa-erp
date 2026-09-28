@@ -26,6 +26,9 @@ interface Props {
   onDesfazer: () => void;
   podeDesfazer: boolean;
   onConfirmar: () => void;
+  /** Job ainda na fila da abertura: não há revisão a falar, e quem
+   *  acompanha é o formulário da aba Abertura do Job. */
+  naAbertura: boolean;
 }
 
 function corDoDelta(delta: number): string {
@@ -73,6 +76,7 @@ export function EdicaoFinanceiroBarra({
   onConfirmar,
   onDesfazer,
   podeDesfazer,
+  naAbertura,
 }: Props) {
   return (
     <div className="sticky bottom-0 z-30 -mx-1 mt-2 rounded-2xl border border-california-red/30 bg-card/95 px-4 py-3 shadow-elevated backdrop-blur">
@@ -86,9 +90,9 @@ export function EdicaoFinanceiroBarra({
               Edição do orçado · {resumo}
             </p>
             <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-              Confirmar grava a alteração na hora, sem aprovação e sem revisão
-              da abertura, e a registra em Alterações do Financeiro com o seu
-              nome.
+              {naAbertura
+                ? "Confirmar grava a alteração na hora, sem aprovação, e a registra em Alterações do Financeiro com o seu nome. O formulário da abertura acompanha."
+                : "Confirmar grava a alteração na hora, sem aprovação e sem revisão da abertura, e a registra em Alterações do Financeiro com o seu nome."}
             </p>
           </div>
         </div>

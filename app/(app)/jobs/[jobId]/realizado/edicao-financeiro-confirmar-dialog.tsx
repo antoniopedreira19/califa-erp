@@ -68,6 +68,9 @@ interface Props {
   /** Serviço Interno (decisão 105): o planejado é igual ao orçado e anda
    *  junto. Nos outros, o planejado não muda. */
   planejadoAcompanha: boolean;
+  /** Job ainda na fila da abertura (decisão 115): não há previsão gravada
+   *  nem envio, e quem acompanha é o formulário da abertura. */
+  naAbertura: boolean;
   salvando: boolean;
   erro: string | null;
   onConfirmar: (motivo: string) => void;
@@ -168,6 +171,7 @@ export function EdicaoFinanceiroConfirmarDialog({
   envio,
   recebimento,
   planejadoAcompanha,
+  naAbertura,
   salvando,
   erro,
   onConfirmar,
@@ -239,9 +243,9 @@ export function EdicaoFinanceiroConfirmarDialog({
                 A alteração vale na hora, sem aprovação
               </p>
               <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Não passa pela produção e não devolve o job ao mural de
-                abertura. A planilha, os Totais e o cabeçalho do job mudam
-                assim que você confirmar;{" "}
+                {naAbertura
+                  ? "Não passa pela produção. A planilha, os Totais e o formulário da aba Abertura do Job mudam assim que você confirmar, e a previsão de recebimento que você já preencheu acompanha, com as mesmas datas; "
+                  : "Não passa pela produção e não devolve o job ao mural de abertura. A planilha, os Totais e o cabeçalho do job mudam assim que você confirmar; "}
                 {planejadoAcompanha
                   ? "no serviço Interno o planejado acompanha o orçado, e o realizado fica como está."
                   : "o planejado e o realizado ficam como estão."}
