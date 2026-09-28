@@ -464,6 +464,8 @@ export default async function JobNoFinanceiroPage({
             )}
             servicos={servicosDoLado(servicosRes.data ?? [], jobNaFila)}
             projetos={projetos}
+            // O job aberto já tem projeto: a sugestão é só da fila.
+            sugestaoDeProjeto={null}
             contas={contas}
             custoPrevisto={custoPrevisto}
             faturamentoPrevisto={faturamentoPrevisto}

@@ -71,18 +71,55 @@ export default async function AbrirJobNoFinanceiroPage({
   const jobDaFila = carregarJobParaAbertura(tenantId, params.jobId).then(
     async (carregado) => {
       if (!carregado) return null;
-      const [projetos, faturamentoMensal] = await Promise.all([
-        listarProjetosFinanceiro(tenantId, carregado.job.cliente_id),
-        carregado.job.modelo_planilha_orcamento === "mensal"
-          ? lerFaturamentoMensalPeloJob(
-              supabase,
-              tenantId,
-              carregado.job.id,
-              [],
+      const [projetos, faturamentoMensal, ultimoDoProjetoRes] =
+        await Promise.all([
+          listarProjetosFinanceiro(tenantId, carregado.job.cliente_id),
+          carregado.job.modelo_planilha_orcamento === "mensal"
+            ? lerFaturamentoMensalPeloJob(
+                supabase,
+                tenantId,
+                carregado.job.id,
+                [],
+              )
+            : Promise.resolve(null),
+          // A sugestão do campo Projeto (decisão 111, revisão de 28/09): o projeto do
+          // financeiro do último job aberto no mesmo projeto da produção.
+          // Na maioria dos casos os jobs de um projeto da produção caem no
+          // mesmo projeto do financeiro (Tiago, 28/09/2026).
+          supabase
+            .from("jobs")
+            .select(
+              "codigo, projeto_financeiro_id, projeto_financeiro:projetos_financeiro(nome, codigo)",
             )
-          : Promise.resolve(null),
-      ]);
-      return { carregado, projetos, faturamentoMensal };
+            .eq("tenant_id", tenantId)
+            .eq("projeto_id", carregado.job.projeto_id)
+            .neq("id", carregado.job.id)
+            .not("projeto_financeiro_id", "is", null)
+            .order("data_abertura_financeiro", {
+              ascending: false,
+              nullsFirst: false,
+            })
+            .limit(1),
+        ]);
+      if (ultimoDoProjetoRes.error) {
+        console.error(
+          "[abertura-job.sugestao-projeto]",
+          ultimoDoProjetoRes.error.message,
+        );
+      }
+      const ultimo = (ultimoDoProjetoRes.data ?? [])[0] as any;
+      // Só sugere o que o combo oferece: projeto encerrado ou de outro
+      // cliente não aparece na lista, e a busca não o acharia.
+      const sugestaoDeProjeto =
+        ultimo &&
+        projetos.some((p) => p.id === ultimo.projeto_financeiro_id)
+          ? {
+              nome: (ultimo.projeto_financeiro?.nome as string) ?? "",
+              codigo: (ultimo.projeto_financeiro?.codigo as string) ?? "",
+              jobCodigo: ultimo.codigo as string,
+            }
+          : null;
+      return { carregado, projetos, faturamentoMensal, sugestaoDeProjeto };
     },
   );
 
@@ -137,7 +174,7 @@ export default async function AbrirJobNoFinanceiroPage({
   ]);
 
   if (!daFila || !detalhe) notFound();
-  const { carregado, projetos, faturamentoMensal } = daFila;
+  const { carregado, projetos, faturamentoMensal, sugestaoDeProjeto } = daFila;
 
   // Quem chegou por link antigo (ou por outra aba que já resolveu o job)
   // vai para onde o job está agora, e não para um formulário que não
@@ -268,6 +305,7 @@ export default async function AbrirJobNoFinanceiroPage({
             categorias={categoriasDoModelo}
             servicos={servicosDoLado(servicosRes.data ?? [], job)}
             projetos={projetos}
+            sugestaoDeProjeto={sugestaoDeProjeto}
             contas={contas}
             custoPrevisto={custoPrevisto}
             faturamentoPrevisto={faturamentoPrevisto}
