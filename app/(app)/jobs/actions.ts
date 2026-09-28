@@ -7,7 +7,6 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { jobSchema, rejeicaoAberturaSchema } from "@/lib/validations/jobs";
 import {
-  JOB_STATUS_TRANSICOES,
   jobEstaCongelado,
   jobStatusLabel,
   type JobStatus,
@@ -122,62 +121,20 @@ export async function atualizarJob(
   return { ok: true, id };
 }
 
-export async function atualizarStatusJob(
-  id: string,
-  novoStatus: JobStatus,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const gate = await checarPermissao(session, "jobs.editar_metadata");
-  if (!gate.ok) return gate;
-  const supabase = createClient();
-
-  const { data: job } = await supabase
-    .from("jobs")
-    .select("id, status, projeto_id, orcamento_id")
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{
-      id: string;
-      status: JobStatus;
-      projeto_id: string;
-      orcamento_id: string;
-    }>();
-
-  if (!job) return { ok: false, message: "Job não encontrado." };
-
-  const transicoesValidas = JOB_STATUS_TRANSICOES[job.status];
-  if (!transicoesValidas.includes(novoStatus)) {
-    return {
-      ok: false,
-      message: `Transição inválida: ${job.status} → ${novoStatus}.`,
-    };
-  }
-
-  const { error } = await supabase
-    .from("jobs")
-    .update({ status: novoStatus })
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (error) {
-    console.error("[jobs.status]", error.message);
-    return { ok: false, message: mapJobDbError(error.message) };
-  }
-
-  await logAuditEvent({
-    acao: "job.status_alterado",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "job",
-    entidadeId: id,
-    metadata: { de: job.status, para: novoStatus },
-  });
-
-  revalidatePath(`/jobs/${id}`);
-  revalidatePath("/jobs");
-  revalidatePath(`/orcamentos/${job.projeto_id}`);
-  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
-  return { ok: true, id };
-}
+/**
+ * `atualizarStatusJob` saiu daqui em 28/09/2026 (revisão da decisão 020).
+ * Nenhuma tela a chamava desde 08/09 (057), mas, exportada, era uma
+ * Server Action viva: GP e produtor (`jobs.editar_metadata`) conseguiam
+ * pelo console passar um job ABERTO para `cancelado`, sem conferir PP,
+ * previsão de custo, recebimento ou faturamento. E na pré-abertura ela
+ * cancelava o job sem devolver o orçamento a `aprovado` nem o save à
+ * versão — o que `cancelarEnvioParaAbertura` faz.
+ *
+ * O cancelamento antes da abertura é `cancelarEnvioParaAbertura`, em
+ * app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/abertura-actions.ts.
+ * O depois da abertura é do financeiro e ainda não tem tela; quando tiver,
+ * nasce com action própria, que desfaça o que a abertura gravou.
+ */
 
 /**
  * Aprovar a abertura NÃO mora mais aqui.

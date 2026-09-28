@@ -13,7 +13,6 @@ import type { Job, JobStatus, Regional } from "@/lib/types";
 import {
   jobStatusLabel,
   jobStatusExibido,
-  JOB_STATUS_TRANSICOES,
   AREA_PRODUCAO,
   jobEstaCongelado,
   jobAceitaRealizado,
