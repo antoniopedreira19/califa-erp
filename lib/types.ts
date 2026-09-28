@@ -3149,9 +3149,154 @@ export interface Colaborador {
   tipo_conta: TipoContaBancariaFornecedor | null;
   pix_tipo: PixTipoChave | null;
   pix_chave: string | null;
+  /** RG do colaborador. Texto livre (RG varia por estado). Obrigatório
+   *  no cadastro novo desde 29/09/2026 (task 007). */
+  rg: string | null;
+  /** Razão social do PJ (nome empresarial). Obrigatório app-level
+   *  quando tipo_contratacao é pj ou clt_recibo. */
+  razao_social: string | null;
+  /** Natureza jurídica do PJ. Ver lib/rh/naturezas-pj.ts pros textos
+   *  usados no contrato. Obrigatório app-level quando é PJ. */
+  pj_natureza: PjNatureza | null;
+  /** Endereço — 7 campos. Complemento é opcional; resto entra como
+   *  pendência Nível 2. */
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type PjNatureza = "mei" | "me" | "ltda" | "eireli" | "slu";
+
+export function pjNaturezaLabel(n: PjNatureza): string {
+  switch (n) {
+    case "mei":
+      return "MEI";
+    case "me":
+      return "ME";
+    case "ltda":
+      return "LTDA";
+    case "eireli":
+      return "EIRELI";
+    case "slu":
+      return "SLU";
+  }
+}
+
+export type ContratacaoStatus =
+  | "rascunho"
+  | "proposta_enviada"
+  | "aceite_recebido"
+  | "dados_completos"
+  | "contrato_gerado"
+  | "contrato_assinado"
+  | "efetivada"
+  | "recusada"
+  | "desistiu"
+  | "expirada";
+
+export function contratacaoStatusLabel(s: ContratacaoStatus): string {
+  switch (s) {
+    case "rascunho":
+      return "Rascunho";
+    case "proposta_enviada":
+      return "Aguardando aceite";
+    case "aceite_recebido":
+      return "Aguardando dados";
+    case "dados_completos":
+      return "Aguardando contrato";
+    case "contrato_gerado":
+      return "Aguardando assinatura";
+    case "contrato_assinado":
+      return "Pronta pra efetivar";
+    case "efetivada":
+      return "Efetivada";
+    case "recusada":
+      return "Recusada";
+    case "desistiu":
+      return "Desistiu";
+    case "expirada":
+      return "Link expirado";
+  }
+}
+
+/** Pipeline de contratação. Isolado de Colaborador; converte quando
+ *  status vira 'efetivada'. Task 007. */
+export interface Contratacao {
+  id: string;
+  tenant_id: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+
+  // Carta proposta
+  nome: string;
+  email: string;
+  cargo: string;
+  salario_proposto: string;
+  data_admissao: string;
+
+  // Interno RH
+  empresa_id: string;
+  regional_id: string | null;
+  tipo_contratacao: TipoContratacao;
+  nivel_id: string | null;
+  area: string | null;
+  pj_natureza: PjNatureza | null;
+
+  // Dados coletados no aceite
+  cpf: string | null;
+  cnpj: string | null;
+  razao_social: string | null;
+  rg: string | null;
+  telefone: string | null;
+  data_nascimento: string | null;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  agencia_dv: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: TipoContaBancariaFornecedor | null;
+  pix_tipo: PixTipoChave | null;
+  pix_chave: string | null;
+
+  // Estado
+  status: ContratacaoStatus;
+  motivo_recusa: string | null;
+  motivo_desistencia: string | null;
+
+  // Datas
+  proposta_enviada_em: string | null;
+  aceite_em: string | null;
+  dados_completados_em: string | null;
+  contrato_gerado_em: string | null;
+  contrato_assinado_anexado_em: string | null;
+  efetivada_em: string | null;
+
+  // Link público
+  token: string;
+  token_expira_em: string;
+
+  // Anexos
+  contrato_gerado_path: string | null;
+  contrato_assinado_path: string | null;
+
+  // Conversão
+  virou_colaborador_id: string | null;
 }
 
 /** Camada 1 — alocação vigente do colaborador. Novo modelo (2026-09-23):

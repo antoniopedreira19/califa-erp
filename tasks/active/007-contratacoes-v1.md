@@ -306,6 +306,19 @@ Layout do contrato:
 - Edição de proposta após enviar (só permite reenvio ou cancelamento).
 - Múltiplos templates de contrato (v1 tem um só, o de PJ).
 
+## Subtasks de execução
+
+Ordem de implementação (commit ao final de cada, checkpoint pra retomar depois se necessário):
+
+- [x] **Subtask 0** — Task documentada + Migration 1 (colaboradores ganha RG, endereço, razão social, natureza PJ). Commits `200c522` e `3ea2e00`.
+- [ ] **Subtask 1** — Fundação: Migration 2 (`contratacoes` + enum + índices + RLS + bucket storage), types em `lib/types.ts`, mapa `lib/rh/naturezas-pj.ts`, schemas Zod em `lib/validations/rh-contratacoes.ts`.
+- [ ] **Subtask 2** — Server actions internas: `app/(app)/rh/contratacoes/actions.ts` (criar, enviar proposta, renovar link, gerar contrato, anexar assinado, efetivar, marcar desistiu).
+- [ ] **Subtask 3** — Server actions públicas: `app/proposta/[token]/actions.ts` (aceitar, recusar, salvar dados).
+- [ ] **Subtask 4** — UI RH: `/rh/contratacoes` (lista/kanban), `/rh/contratacoes/nova` (form), `/rh/contratacoes/[id]` (detalhe).
+- [ ] **Subtask 5** — UI pública: `/proposta/[token]` (layout standalone, formulário do candidato).
+- [ ] **Subtask 6** — Gerador de PDF: instala `@react-pdf/renderer` + `extenso`, cria `_template/contrato-pj.tsx` e `lib/rh/gerar-contrato-pj.ts`.
+- [ ] **Subtask 7** — Integração no hub RH: card KPI "Contratações em andamento" + item de menu.
+
 ## Cenário de aceite
 
 Ao terminar a task, o cenário-teste é:
