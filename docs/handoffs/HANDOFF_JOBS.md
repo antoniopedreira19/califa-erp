@@ -315,7 +315,8 @@ filtro.
 Job aberto pelo financeiro fica **"Aberto"** até o encerramento. "Finalizado"
 virou **"Encerrado"**.
 
-`encerrado` **não entra em `JOB_STATUS_TRANSICOES` de propósito**: essa tabela
+`encerrado` **não entra em `JOB_STATUS_TRANSICOES` de propósito** (a tabela
+inteira saiu em 28/09/2026 — ver a nota ⚠️ de 2026-09-28 (4)): essa tabela
 gera os botões automaticamente, e incluí-lo criaria um botão ativo que encerraria
 o job sem processo nenhum por trás. O botão "Enviar job para encerramento" é
 renderizado à parte, **desabilitado**, com tooltip — mesmo padrão do "Dar Baixa"
@@ -2814,7 +2815,8 @@ e se reenvia no orçamento**, onde o formulário mora. E o envio pode ser
 | `barra-acoes-job.tsx` | perdeu a prop `transicoes` e ganhou `orcamentoHref`. **Sem "Cancelar job" em nenhum status**: na pré-abertura o que se cancela é o envio, pelo orçamento; depois da abertura é ação do financeiro (020). Os dois textos de pré-abertura apontam para o orçamento |
 
 `JOB_STATUS_TRANSICOES` e `atualizarStatusJob` seguem intactos (020) —
-nenhuma superfície do módulo os chama para cancelar.
+nenhuma superfície do módulo os chama para cancelar. ⚠️ Os dois saíram em
+28/09/2026 — ver a nota ⚠️ de 2026-09-28 (4).
 
 ### Verificado em 08/09/2026 (servidor próprio, logado no Chrome)
 
@@ -4466,7 +4468,27 @@ código publicado logo depois (`3305751`).
 - **Prévia do código** no envio para abertura: sigla do cliente e ano de
   hoje.
 
-## ⚠️ Nota de 2026-09-28 (4) — a produção vê as Alterações do Financeiro (decisão 115)
+## ⚠️ Nota de 2026-09-28 (4) — a troca de status solta do job saiu (revisão da decisão 020)
+
+- **O que era:** `atualizarStatusJob` (`jobs/actions.ts`) aceitava
+  `aberto → cancelado` com o gate `jobs.editar_metadata` (administrador,
+  GP, produtor) e sem conferir nada. Nenhuma tela a chamava desde 08/09
+  (057), mas a Server Action estava exportada e respondia pelo console.
+- **O que mudou:** a action e a tabela `JOB_STATUS_TRANSICOES`
+  (`lib/types.ts`) foram removidas, junto com o `transicoes` que o
+  `carregar-detalhe.ts` ainda calculava sem ninguém usar e o import morto
+  do `page.tsx`.
+- **O que continua:** o "Cancelar envio" do orçamento
+  (`cancelarEnvioParaAbertura`) na pré-abertura; `rejeitarAberturaJob` no
+  financeiro. Depois da abertura, nenhum caminho cancela job — a tela do
+  financeiro, quando vier, traz action própria.
+- **Ainda aberto:** o PATCH direto em `jobs.status` pela API do Supabase
+  (RLS `jobs_modify`). A guarda preparada em `feat/travas-escrita-direta`
+  aceita `aberto → cancelado` para GP e produtor e precisa desse ajuste
+  antes de aplicar.
+- **Nenhuma consulta nova, nenhuma migration.** `tsc` e `lint` limpos.
+
+## ⚠️ Nota de 2026-09-28 (5) — a produção vê as Alterações do Financeiro (decisão 115)
 
 - **O financeiro passou a editar o orçado** do job aberto, na Planilha
   Interna dele: R$ Unit., QT e D/M, sem aprovação e sem revisão da

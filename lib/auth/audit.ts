@@ -278,6 +278,18 @@ export type AuditAction =
   // Rateio anual por regional (2026-09-23)
   | "rateio.regional.salvo"
   | "rateio.regional.copiado"
+  // Contratação (task 007, 2026-09-29)
+  | "contratacao.criada"
+  | "contratacao.proposta_enviada"
+  | "contratacao.link_renovado"
+  | "contratacao.aceita"
+  | "contratacao.recusada"
+  | "contratacao.dados_salvos"
+  | "contratacao.contrato_gerado"
+  | "contratacao.contrato_anexado"
+  | "contratacao.efetivada"
+  | "contratacao.desistiu"
+  | "contratacao.expirada"
   | "acao_negada";
 
 export interface AuditPayload {

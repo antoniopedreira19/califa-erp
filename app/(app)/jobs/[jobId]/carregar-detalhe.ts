@@ -23,7 +23,6 @@ import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
   FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
-  JOB_STATUS_TRANSICOES,
   jobAceitaRealizado,
   jobAceitaEnvioParaFaturamento,
   jobAceitaAcoesPlanilha,
@@ -650,8 +649,6 @@ export async function carregarDetalheDoJob(
     versaoAprovada,
   );
 
-  const transicoes = JOB_STATUS_TRANSICOES[raw.status as JobStatus];
-
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
 
   const job: Job = {
@@ -1172,7 +1169,6 @@ export async function carregarDetalheDoJob(
     regionais,
     responsaveis,
     contatosCobranca,
-    transicoes,
     ppsDoJob,
     ppsPorItemId,
     fornecedores,
