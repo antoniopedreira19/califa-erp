@@ -4449,9 +4449,10 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
 
 ## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA] (decisão 114)
 
-**Preparado, não publicado:** a troca só entra na hora combinada com a
-frente do Antonio (migration `20260928200001`, destrutiva; junto dela, a
-`20260928200002` troca os códigos de projeto — ver HANDOFF_ORCAMENTO).
+**No ar desde 28/09/2026:** migration `20260928200001` (destrutiva)
+aplicada na hora combinada com a frente do Antonio, junto da
+`20260928200002`, que troca os códigos de projeto (ver HANDOFF_ORCAMENTO);
+código publicado logo depois (`3305751`).
 
 - **Formato novo:** `AMB-1006/26` — sigla atual do cliente, sequencial por
   sigla e ano, ano da criação do job. Em 2026 começa em 1001 (o outro
