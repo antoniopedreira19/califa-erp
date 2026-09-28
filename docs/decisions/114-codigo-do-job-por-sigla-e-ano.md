@@ -2,8 +2,9 @@
 
 **Data:** 2026-09-28
 **Decidido por:** Tiago
-**Migrations:** ⚠️ as duas destrutivas, aplicadas juntas só na hora
-combinada com a frente do Antonio:
+**Migrations:** ⚠️ as duas destrutivas, aplicadas juntas em 28/09/2026, na
+hora combinada com a frente do Antonio, com o código publicado logo depois
+(`3305751`):
 - `20260928200001_codigo_do_job_por_sigla.sql` — sobrescreve `jobs.codigo`;
 - `20260928200002_codigo_do_projeto_p_e_f.sql` — sobrescreve
   `projetos.codigo`, `orcamentos.codigo` e `projetos_financeiro.codigo`.
@@ -132,9 +133,20 @@ Então, num horário sem uso e combinado com o Antonio:
    financeiro (`[SIGLA]-0NNN/AA`) foi criado no intervalo e, se houver,
    trocá-lo pela mesma regra;
 4. conferir fila, Visualizar Jobs, lista de Jobs, ficha, faixa, prévia,
-   lista de projetos, página do projeto (produção e financeiro), busca do
-   campo Projeto na abertura e a criação de um projeto e de um orçamento no
-   projeto de teste.
+   lista de projetos, página do projeto (produção e financeiro) e busca do
+   campo Projeto na abertura.
+
+**Feito em 28/09/2026.** As duas migrations aplicadas e o código publicado
+em seguida. No banco: 23 jobs, 16 projetos, 39 orçamentos e 17 projetos do
+financeiro no formato novo, todos com `codigo_anterior` e um evento de
+auditoria cada; nada criado no intervalo. Nas telas: a busca por `JOB-0036`
+acha o `AMB-1006/26` na lista de Jobs e na fila, `JOB-0045` acha o
+`AMB-1009/26` no Visualizar Jobs, `AMB-0006` acha o `AMB-P006/26` na lista
+de projetos e o `AMB-F006/26` no campo Projeto da abertura; a ficha e o
+cabeçalho das páginas de projeto mostram o código anterior; a prévia do
+próximo job no projeto de teste é `TES-1013/26`. A primeira tentativa da
+`20260928200002` falhou sem gravar nada — o `null` do autor, dentro de um
+`union all`, virou `text` — e passou com `null::uuid`.
 
 ## 6. Fica de fora
 

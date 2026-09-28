@@ -6004,9 +6004,9 @@ era o imposto de R$ 28.318,52). Regra completa na
 
 ## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA], e o projeto do financeiro leva F (decisão 114)
 
-**Preparado, não publicado:** a troca só entra na hora combinada com a
-frente do Antonio (migrations `20260928200001` e `20260928200002`,
-destrutivas).
+**No ar desde 28/09/2026:** migrations `20260928200001` e
+`20260928200002` (destrutivas) aplicadas na hora combinada com a frente do
+Antonio, e o código publicado logo depois (`3305751`).
 
 - Todo job aparece no financeiro com o código novo (`AMB-1006/26` no lugar
   de `JOB-0036`). A fila e o Visualizar Jobs também acham pelo código

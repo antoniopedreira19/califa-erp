@@ -4625,9 +4625,10 @@ possível gravar os itens.".
 
 ## ⚠️ Nota de 2026-09-28 — o projeto leva P, e o orçamento acompanha (decisão 114)
 
-**Preparado, não publicado:** a troca só entra na hora combinada com a
-frente do Antonio (migration `20260928200002`, destrutiva, aplicada junto da
-`20260928200001`, que troca o código dos jobs).
+**No ar desde 28/09/2026:** migration `20260928200002` (destrutiva)
+aplicada na hora combinada com a frente do Antonio, junto da
+`20260928200001`, que troca o código dos jobs; código publicado logo depois
+(`3305751`).
 
 - **Formato novo:** `P` no lugar do primeiro zero, mesmo número.
   `AMB-0006/26` → `AMB-P006/26`, e o orçamento `AMB-0006/26-01` →
