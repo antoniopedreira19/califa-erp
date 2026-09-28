@@ -90,7 +90,11 @@ const MENSAGEM_JOB_COM_NOTA =
 const SEM_DATA_PARA_ACOMPANHAR =
   "Valor novo precisa de data: peça a errata à produção, que devolve o job para a revisão da abertura.";
 
-/** O faturamento de cada mês (chave `yyyy-mm`) com as linhas num estado. */
+/** O faturamento de cada mês (chave `yyyy-mm`) com as linhas num estado.
+ *  A MESMA conta de `lerFaturamentoPorMesDoJob`, que fecha o envio do mês e
+ *  a parcela do mês na abertura — por isso sem os parâmetros do
+ *  internacional, como lá: a parcela que anda tem que bater com o que a
+ *  abertura confere. */
 function faturamentoDosMeses(
   itens: LinhaDoEspelho[],
   base: BaseDosEspelhos,
@@ -110,7 +114,6 @@ function faturamentoDosMeses(
     })),
     base.percentualHonorarios,
     base.percentualImposto,
-    base.internacional,
   );
   return new Map(porMes.map((m) => [m.mes.slice(0, 7), m.faturamento]));
 }
