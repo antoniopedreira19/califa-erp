@@ -134,6 +134,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 112 | [A quebra das PPs no painel do item, um documento só por PP e a data de pagamento na aba de PPs](112-quebra-das-pps-documento-unico-e-data-de-pagamento.md) | 2026-09-28 |
 | 113 | [Job não aberto não existe no financeiro, e o cancelado antes da abertura volta a ser só orçamento](113-job-nao-aberto-nao-existe-no-financeiro.md) | 2026-09-28 |
 | 114 | [O código do job é [SIGLA]-[SEQ]/[AA], com 1 na frente em 2026; o projeto leva P, e o do financeiro F](114-codigo-do-job-por-sigla-e-ano.md) | 2026-09-28 |
+| 115 | [O financeiro edita o orçado do job na Planilha Interna, sem aprovação, até a primeira nota ou o encerramento](115-o-financeiro-edita-o-orcado-do-job.md) | 2026-09-28 |
 | 116 | [Projeto com orçamento aprovado ou com job não se arquiva](116-projeto-com-orcamento-aprovado-nao-se-arquiva.md) | 2026-09-28 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
@@ -147,4 +148,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 117.** (A 115 está em uso no worktree `editar-orcado-financeiro`, ainda fora do main.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 117.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

@@ -4488,3 +4488,23 @@ código publicado logo depois (`3305751`).
   antes de aplicar.
 - **Nenhuma consulta nova, nenhuma migration.** `tsc` e `lint` limpos.
 
+## ⚠️ Nota de 2026-09-28 (5) — a produção vê as Alterações do Financeiro (decisão 115)
+
+- **O financeiro passou a editar o orçado** do job aberto, na Planilha
+  Interna dele: R$ Unit., QT e D/M, sem aprovação e sem revisão da
+  abertura, até a primeira nota emitida ou o encerramento do job. No
+  serviço Interno o planejado acompanha o orçado, como na errata; a curva
+  de desembolso não. A planilha da produção não muda:
+  segue só com o "Realizar errata", e a errata continua valendo sobre os
+  valores novos.
+- **Card "Alterações do Financeiro"** na aba Informações do Job, abaixo do
+  de Erratas, só depois da primeira alteração: data, hora, motivo, autor e
+  o antes → depois de cada item, com os efeitos no faturamento previsto e
+  no valor do job.
+- **Card no fio da Comunicação**, "Orçado alterado pelo financeiro ·
+  dd/mm/aaaa", que conta como não lido para quem não fez a alteração.
+- O valor do job e o faturamento previsto do cabeçalho mudam na hora. O
+  "atual" do card de Erratas já inclui a alteração do financeiro.
+- **Código:** `JobItemRealizadoTable` ganhou `modoDaEdicao` (`"errata"` ou
+  `"financeiro"`), e `JobRealizadoSection` recebe `edicaoDoFinanceiro` —
+  `null` na produção e na fila de abertura.

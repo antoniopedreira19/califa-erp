@@ -407,3 +407,11 @@ test("confirmar BV: administrador e GP confirmam; produtor, freelancer e finance
   assert.equal(pode("freelancer", "jobs.confirmar_bv"), false);
   assert.equal(pode("financeiro", "jobs.confirmar_bv"), false);
 });
+
+test("Editar orçado pelo financeiro: administrador e financeiro; a produção corrige pela errata (decisao 115)", () => {
+  assert.equal(pode("administrador", "jobs.editar_orcado_financeiro"), true);
+  assert.equal(pode("financeiro", "jobs.editar_orcado_financeiro"), true);
+  assert.equal(pode("gerente_producao", "jobs.editar_orcado_financeiro"), false);
+  assert.equal(pode("produtor", "jobs.editar_orcado_financeiro"), false);
+  assert.equal(pode("freelancer", "jobs.editar_orcado_financeiro"), false);
+});
