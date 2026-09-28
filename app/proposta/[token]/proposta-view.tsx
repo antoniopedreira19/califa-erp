@@ -166,7 +166,10 @@ function LandingCarta({
 
       {/* Apresentação institucional. Páginas 1 e 3 são renderizadas
           em HTML pra usar dados reais do candidato (nome / cargo /
-          data / salário) no lugar dos placeholders do PPT. */}
+          data / salário) no lugar dos placeholders do PPT. Slides 4,
+          5 e 6 recebem a faixa lateral HTML sobreposta pra ficarem
+          coerentes com a página 3 (textura de cortina nítida em vez
+          da faixa do PPT que fica embutida na imagem). */}
       <section className="space-y-6">
         <SlidePagina1 nome={c.nome} />
         <SlideImagem numero={2} />
@@ -177,9 +180,9 @@ function LandingCarta({
           salario={c.salario_proposto}
           regime={tipoContratacaoLabel(c.tipo_contratacao)}
         />
-        <SlideImagem numero={4} />
-        <SlideImagem numero={5} />
-        <SlideImagem numero={6} />
+        <SlideImagem numero={4} comFaixaLateral />
+        <SlideImagem numero={5} comFaixaLateral />
+        <SlideImagem numero={6} comFaixaLateral />
         <SlideImagem numero={7} />
       </section>
 
@@ -410,11 +413,66 @@ function SlidePagina1({ nome }: { nome: string }) {
 }
 
 /**
+ * Faixa lateral esquerda com "CARTA PROPOSTA" e textura de cortina
+ * listrada. Reutilizada em vários slides pra manter consistência
+ * visual: SlidePagina3 usa direto no grid; slides 4-6 recebem por
+ * cima (position absolute) pra substituir a faixa embutida na imagem
+ * do PPT — que fica menos nítida que CSS puro.
+ */
+function FaixaLateralCartaProposta({
+  overlay = false,
+}: {
+  overlay?: boolean;
+}) {
+  const posClass = overlay
+    ? "absolute inset-y-0 left-0 w-[110px] md:w-[140px] z-10"
+    : "relative";
+  return (
+    <div
+      className={`${posClass} p-4 md:p-5 text-white flex flex-col`}
+      style={{
+        backgroundImage: `
+          repeating-linear-gradient(
+            to right,
+            rgba(0,0,0,0) 0px,
+            rgba(0,0,0,0) 6px,
+            rgba(0,0,0,0.18) 6px,
+            rgba(0,0,0,0.18) 8px,
+            rgba(255,255,255,0.04) 8px,
+            rgba(255,255,255,0.04) 12px
+          ),
+          linear-gradient(to bottom, #C42B3B 0%, #A02330 40%, #6E1620 100%)
+        `,
+      }}
+    >
+      <div className="leading-none">
+        <p className="text-lg md:text-xl font-black tracking-tight leading-none">
+          CARTA
+        </p>
+        <p className="text-lg md:text-xl font-light tracking-tight leading-none">
+          PROPOSTA
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Renderiza um dos slides institucionais da California como imagem 16:9.
  * Se o arquivo ainda não existir em /public/proposta/carta/SlideN.JPG,
  * cai num fundo cinza discreto (não quebra layout).
+ *
+ * Prop `comFaixaLateral` sobrepõe a FaixaLateralCartaProposta em cima
+ * do canto esquerdo do slide — útil pros slides 4-6 que no PPT
+ * original têm a faixa embutida na imagem, mas fica mais nítida em CSS.
  */
-function SlideImagem({ numero }: { numero: number }) {
+function SlideImagem({
+  numero,
+  comFaixaLateral = false,
+}: {
+  numero: number;
+  comFaixaLateral?: boolean;
+}) {
   return (
     <div className="overflow-hidden rounded-3xl bg-neutral-100 shadow-soft">
       <div className="relative aspect-[16/9]">
@@ -430,6 +488,7 @@ function SlideImagem({ numero }: { numero: number }) {
             (e.currentTarget as HTMLImageElement).style.display = "none";
           }}
         />
+        {comFaixaLateral && <FaixaLateralCartaProposta overlay />}
       </div>
     </div>
   );
@@ -459,42 +518,7 @@ function SlidePagina3({
 }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-[#F5F0E8] shadow-soft aspect-[16/9] grid grid-cols-[110px_1fr_38%] md:grid-cols-[140px_1fr_38%]">
-      {/* Faixa vermelha à esquerda — textura de "cortina" reproduzida
-          com duas camadas de gradient: base vermelha vertical + listras
-          verticais semi-transparentes por cima (repeating-linear-gradient).
-          Mesma técnica usada no PPT original: forma sólida + forma listrada.
-          Largura ~10% do total, batendo com a proporção dos slides institucionais. */}
-      <div
-        className="relative p-4 md:p-5 text-white flex flex-col"
-        style={{
-          backgroundImage: `
-            repeating-linear-gradient(
-              to right,
-              rgba(0,0,0,0) 0px,
-              rgba(0,0,0,0) 6px,
-              rgba(0,0,0,0.18) 6px,
-              rgba(0,0,0,0.18) 8px,
-              rgba(255,255,255,0.04) 8px,
-              rgba(255,255,255,0.04) 12px
-            ),
-            linear-gradient(to bottom, #C42B3B 0%, #A02330 40%, #6E1620 100%)
-          `,
-        }}
-      >
-        <div className="leading-none">
-          <p className="text-lg md:text-xl font-black tracking-tight leading-none">
-            CARTA
-          </p>
-          <p className="text-lg md:text-xl font-light tracking-tight leading-none">
-            PROPOSTA
-          </p>
-        </div>
-        <div className="mt-auto flex justify-start pb-1">
-          <span className="text-xl md:text-2xl" role="img" aria-label="urso">
-            🐻
-          </span>
-        </div>
-      </div>
+      <FaixaLateralCartaProposta />
 
       {/* Corpo bege ao centro */}
       <div className="flex flex-col items-center justify-center px-6 py-4 md:px-10 text-center overflow-hidden">
