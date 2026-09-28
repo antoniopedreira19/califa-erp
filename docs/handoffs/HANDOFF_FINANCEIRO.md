@@ -6002,6 +6002,18 @@ era o imposto de R$ 28.318,52). Regra completa na
 - **Fica como está:** save consumido por job ainda não aberto continua no
   fluxo de caixa e na planilha do job de origem (sem caso em 28/09/2026).
 
+## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA] (decisão 114)
+
+**Preparado, não publicado:** a troca só entra na hora combinada com a
+frente do Antonio (migration `20260928200001`, destrutiva).
+
+- Todo job aparece no financeiro com o código novo (`AMB-1006/26` no lugar
+  de `JOB-0036`). A fila e o Visualizar Jobs também acham pelo código
+  anterior; a ficha mostra "Código anterior".
+- Visualizar Jobs, a visão agregada do financeiro, os irmãos na ficha e o
+  seletor de jobs de Contas a Receber passam a ordenar pela criação.
+- **Contas a Pagar** busca só pelo código atual do job.
+
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
 **Isto revoga o primeiro tópico da nota de 2026-09-01.**

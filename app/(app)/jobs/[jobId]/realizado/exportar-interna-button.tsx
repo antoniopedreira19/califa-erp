@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   jobId: string;
-  /** "JOB-0033" — o código, que também nomeia o arquivo. */
+  /** "AMB-1006/26" — o código, que também nomeia o arquivo (a barra vira hífen). */
   codigo: string;
   /** Nome do job, como aparece no cabeçalho da planilha. */
   nome: string;

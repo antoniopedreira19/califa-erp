@@ -57,7 +57,9 @@ export default async function ProjetoAgregadoPage({
     .eq("tenant_id", session.activeTenant.id)
     .eq("projeto_id", params.projetoId)
     .neq("status", "cancelado")
-    .order("codigo", { ascending: true });
+    // Ordem de criação, e não a do código: desde a decisão 114 o código
+    // começa pela sigla do cliente, e o texto não diz mais a ordem.
+    .order("created_at", { ascending: true });
 
   // Nesta tela o status só vira selo e contagem, então já sai como o status
   // EXIBIDO: "Em faturamento" é o aberto com o envio completo (decisão 094).

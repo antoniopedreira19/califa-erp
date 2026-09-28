@@ -475,7 +475,8 @@ export async function enviarJobParaAbertura(
 
   let codigo: string;
   try {
-    codigo = await gerarCodigoJob(supabase, session.activeTenant.id);
+    // Sigla do cliente do projeto + ano de hoje (decisão 114).
+    codigo = await gerarCodigoJob(supabase, session.activeTenant.id, orc.projeto_id);
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
@@ -955,7 +956,7 @@ export type CancelarEnvioResult =
  * (decisão 057). É o inverso exato de `enviarJobParaAbertura`:
  *
  * - o job vai a `cancelado` — a linha fica, com auditoria, e o código
- *   JOB-NNNN fica queimado como em qualquer job cancelado;
+ *   do job fica queimado como em qualquer job cancelado;
  * - o consumo de save e os BVs voltam a apontar para a VERSÃO, de onde o
  *   envio os tinha movido para a cópia do job;
  * - o orçamento volta a `aprovado`, e a barra volta a oferecer o envio.

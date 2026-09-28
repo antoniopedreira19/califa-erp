@@ -90,7 +90,9 @@ export default async function ProjetoNoFinanceiroPage({
       .eq("tenant_id", tenantId)
       .eq("projeto_financeiro_id", params.projetoId)
       .in("status", STATUS_NA_LISTA as unknown as string[])
-      .order("codigo", { ascending: true }),
+      // Ordem de criação, e não a do código: desde a decisão 114 o código
+      // começa pela sigla do cliente, e o texto não diz mais a ordem.
+      .order("created_at", { ascending: true }),
   ]);
 
   if (projetoRes.error) {

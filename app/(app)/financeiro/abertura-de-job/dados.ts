@@ -26,6 +26,9 @@ import { grupoDoPedido } from "@/lib/data/saves";
 export interface JobNaFila {
   id: string;
   codigo: string;
+  /** O `JOB-NNNN` de antes da decisão 114 — a busca da fila também olha
+   *  ele. Nulo nos jobs criados depois da troca. */
+  codigo_anterior: string | null;
   nome: string;
   valor_total: number | null;
   /** O que a California emite nota — difere do valor total pelos custos
@@ -267,7 +270,7 @@ export interface TotaisPlanilhaJob {
 }
 
 const SELECT_JOB_FILA =
-  "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
+  "id, codigo, codigo_anterior, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
   "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, conta_impostos_id, " +
   // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
@@ -357,6 +360,7 @@ function montarJobNaFila(
   return {
     id: j.id,
     codigo: j.codigo,
+    codigo_anterior: j.codigo_anterior ?? null,
     nome: j.nome,
     valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
     faturamento_previsto:

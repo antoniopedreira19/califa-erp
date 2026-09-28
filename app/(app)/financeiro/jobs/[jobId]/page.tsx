@@ -262,7 +262,9 @@ export default async function JobNoFinanceiroPage({
           .select("id, codigo, nome, nome_financeiro, status")
           .eq("tenant_id", tenantId)
           .eq("projeto_financeiro_id", jobNaFila.projeto_financeiro_id)
-          .order("codigo", { ascending: true })
+          // Ordem de criação, e não a do código: desde a decisão 114 o código
+          // começa pela sigla do cliente, e o texto não diz mais a ordem.
+          .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -529,6 +531,7 @@ export default async function JobNoFinanceiroPage({
               descritivo={job.observacoes}
               job={{
                 codigo: job.codigo,
+                codigoAnterior: job.codigo_anterior,
                 nome: jobNaFila.nome,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —

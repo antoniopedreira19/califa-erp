@@ -4446,3 +4446,20 @@ Migration `20260922140008_save_quem_pede_e_mes_enviado.sql`.
 - **Teste:** PP-00092 gerada no JOB-0040 (TES-0001/26) com duas parcelas,
   editada para três e cancelada pela tela no fim. O reenvio de PP
   rejeitada não foi exercitado ao vivo (detalhes na decisão 112, §4).
+
+## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA] (decisão 114)
+
+**Preparado, não publicado:** a troca só entra na hora combinada com a
+frente do Antonio (migration `20260928200001`, destrutiva).
+
+- **Formato novo:** `AMB-1006/26` — sigla atual do cliente, sequencial por
+  sigla e ano, ano da criação do job. Em 2026 começa em 1001 (o outro
+  sistema da agência usa o mesmo formato abaixo do milhar); de 2027 em
+  diante, 0001.
+- **Os 23 jobs existentes** trocam de código na ordem de criação; o
+  `JOB-NNNN` fica em `jobs.codigo_anterior`, aparece na ficha como "Código
+  anterior" e continua achando o job na busca da lista de Jobs.
+- **Ordem:** a lista de Jobs, a visão agregada e os irmãos da ficha passam a
+  ordenar pela criação, não pelo código.
+- **Prévia do código** no envio para abertura: sigla do cliente e ano de
+  hoje.
