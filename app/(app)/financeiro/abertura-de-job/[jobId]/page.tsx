@@ -403,7 +403,7 @@ export default async function AbrirJobNoFinanceiroPage({
           <JobRealizadoSection
             confirmarSaidaParaOrcamento
             // Antes da abertura não há "Editar orçado" (decisão 115): ele
-            // vale da abertura até a primeira nota.
+            // vale da abertura até a primeira nota ou o encerramento.
             edicaoDoFinanceiro={null}
             interno={detalhe.interno}
             savePorItem={detalhe.savePorItem}

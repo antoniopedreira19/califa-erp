@@ -291,8 +291,11 @@ export default async function JobNoFinanceiroPage({
 
   // ---- "Editar orçado" (decisão 115) ----
   // Administrador e financeiro, do job aberto até a primeira nota — mesmo
-  // parcial. No mensal a trava é por mês: só o mês com nota fica de fora, e
-  // o botão só trava quando todos os meses têm nota (a seção decide).
+  // parcial — ou o encerramento, o que vier antes (Tiago, 28/09/2026). O
+  // encerrado e o finalizado mostram o botão travado, com o motivo. No
+  // mensal a trava da nota é por mês: só o mês com nota fica de fora, e o
+  // botão só trava quando todos os meses têm nota (a seção decide).
+  const jobEncerrado = job.status === "encerrado" || job.status === "finalizado";
   const envioUnico = detalhe.faturamentoEnvioUnico;
   const temNotaEmitida =
     situacao === "faturado" ||
@@ -303,8 +306,9 @@ export default async function JobNoFinanceiroPage({
     pode(session.activeRole, "jobs.editar_orcado_financeiro") &&
     ["aberto", "em_producao", "encerrado", "finalizado"].includes(job.status)
       ? {
-          travadoPor:
-            detalhe.modeloPlanilha !== "mensal" && temNotaEmitida
+          travadoPor: jobEncerrado
+            ? "O job já foi encerrado: o orçado não muda mais pelo financeiro."
+            : detalhe.modeloPlanilha !== "mensal" && temNotaEmitida
               ? "O job já tem nota emitida (faturamento parcial ou total): o orçado não muda mais pelo financeiro."
               : null,
           mesesComNota: detalhe.faturamentoMensal
@@ -330,8 +334,6 @@ export default async function JobNoFinanceiroPage({
               valor: p.valor,
             })),
           })),
-          // Só anda no serviço Interno (a seção decide pelo `interno`).
-          curva: previsoes.curva.map((c) => ({ data: c.data, valor: c.valor })),
         }
       : null;
   const situacaoMeta = SITUACAO_META[situacao];
@@ -675,7 +677,8 @@ export default async function JobNoFinanceiroPage({
           /* Em leitura, menos o orçado: quem edita realizado, BV e PP é a
              produção, na página de Jobs. Desde a decisão 115 (28/09/2026) o
              financeiro edita os VALORES do orçado pelo "Editar orçado"
-             (`edicaoDoFinanceiro`), sem aprovação, até a primeira nota.
+             (`edicaoDoFinanceiro`), sem aprovação, até a primeira nota ou
+             o encerramento.
 
              O save entra por inteiro na visualização — coluna, estados e
              rastro —, e `podeAcoes={false}` fecha a porta da edição, aqui

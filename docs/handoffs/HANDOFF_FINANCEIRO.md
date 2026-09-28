@@ -6026,27 +6026,32 @@ Antonio, e o código publicado logo depois (`3305751`).
 
 - **Botão "Editar orçado"** na Planilha Interna do job no financeiro, no
   lugar em que a produção tem o "Realizar errata". Administrador e
-  financeiro; do job aberto até a primeira nota emitida, parcial ou total
-  (no mensal, por mês: só o mês com nota trava). Edita só R$ Unit., QT e
-  D/M do orçado. Linha com PP abre; linha com save não.
+  financeiro; do job aberto até a primeira nota emitida, parcial ou total,
+  ou o encerramento, o que vier antes (no mensal, a trava da nota é por
+  mês: só o mês com nota trava). No encerrado e no finalizado o botão
+  aparece travado, com o motivo. Edita só R$ Unit., QT e D/M do orçado.
+  Linha com PP abre; linha com save não.
 - **Barra "Edição do orçado"** no rodapé e pop-up "Confirmar alteração do
   orçado", com "Motivo da alteração" obrigatório e o antes → depois do que
   acompanha. Durante a edição, o selo "Somente leitura" do cabeçalho vira
   "Editando orçado".
 - **Vale na hora**, sem aprovação e sem revisão da abertura. Acompanham, na
   mesma transação: valor do job, faturamento previsto e parte de save; a
-  previsão de recebimento; os recolhimentos de imposto; o envio para
-  faturamento ainda sem nota (valor e parcelas); e, no serviço Interno, a
-  curva de desembolso e o `custo_previsto_total`. Cada parcela na
-  proporção dela, com a mesma data.
+  previsão de recebimento; os recolhimentos de imposto; e o envio para
+  faturamento ainda sem nota (valor e parcelas). Cada parcela na proporção
+  dela, com a mesma data. **A curva de desembolso não acompanha**, nem no
+  serviço Interno, em que o planejado segue o orçado: quem ajusta é o
+  financeiro, no Editar registro da aba Abertura do Job.
 - **Card "Alterações do Financeiro"** na aba Informações do Job, abaixo do
   de Erratas, só depois da primeira alteração.
 - **Banco:** `jobs_alteracoes_financeiro` e `jobs_alteracoes_financeiro_itens`,
-  imutáveis, e a função `registrar_alteracao_do_financeiro` (migrations
-  `20260928300001` e `20260928300002`).
+  imutáveis, e a função `registrar_alteracao_do_financeiro`, que recusa
+  job fora de aberto/em produção (migrations `20260928300001` a
+  `20260928300003`; a `300002` ligou a curva do Interno e a `300003` a
+  desligou, deixando as colunas `curva_*` sem uso).
 - A planilha da fila de abertura continua sem edição.
-- **Dado de teste:** 2 entradas (o teste e o desfazer) em TES-1013/26,
-  TES-1002/26 e TES-1009/26.
+- **Dado de teste**, em pares (o teste e o desfazer): 4 entradas no
+  TES-1013/26, 2 no TES-1002/26 e 2 no TES-1009/26.
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 

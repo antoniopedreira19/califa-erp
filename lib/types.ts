@@ -1979,11 +1979,6 @@ export interface JobAlteracaoFinanceiro {
   /** Vazio quando o job ainda não tinha envio para faturamento. */
   envio_antes: EnvioDaAlteracao[];
   envio_depois: EnvioDaAlteracao[];
-  /** Serviço Interno (decisão 105): a curva de desembolso, que acompanha
-   *  o custo previsto porque o planejado espelha o orçado. Vazia nos
-   *  outros serviços. */
-  curva_antes: PrevisaoDaAlteracao[];
-  curva_depois: PrevisaoDaAlteracao[];
   created_by: string | null;
   created_at: string;
 }

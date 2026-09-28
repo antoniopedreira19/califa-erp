@@ -14,12 +14,15 @@
  * - **Sem aprovação e sem revisão da abertura.** A previsão de recebimento
  *   acompanha (P3), cada parcela na proporção dela e sem mudar a data; os
  *   recolhimentos de imposto (decisão 100), que precisam fechar com o
- *   imposto previsto, seguem a mesma regra. No serviço Interno (decisão
- *   105) o planejado espelha o orçado no banco, o custo previsto muda junto,
- *   e a curva de desembolso acompanha também.
- * - **Até a primeira nota**, mesmo que parcial (P4). Job enviado e ainda
- *   sem nota: o envio (valor e parcelas) acompanha. No modelo mensal a trava
- *   é por mês — só o mês com nota fica de fora.
+ *   imposto previsto, seguem a mesma regra. A curva de desembolso NÃO
+ *   acompanha, nem no serviço Interno, em que o banco faz o planejado
+ *   espelhar o orçado (Tiago, 28/09/2026: "é a previsão de recebimento que
+ *   deve acompanhar").
+ * - **Até a primeira nota**, mesmo que parcial (P4), **ou o encerramento**
+ *   do job — o que vier antes; assim o finalizado nunca edita, nem o Interno,
+ *   que não tem nota. Job enviado e ainda sem nota: o envio (valor e
+ *   parcelas) acompanha. No modelo mensal a trava da nota é por mês — só o
+ *   mês com nota fica de fora.
  *
  * Os números antes → depois são os do FINANCEIRO (`totaisDoFinanceiro`,
  * decisão 099), os mesmos que a errata grava. Tudo é gravado numa transação
@@ -32,7 +35,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
-import { calcularEfeitoDaMudanca, tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import { calcularEfeitoDaMudanca } from "@/lib/calculos/versao-totais";
 import { faturamentoPorMes } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { itensParaOFinanceiro } from "@/lib/calculos/save-financeiro";
@@ -45,11 +48,12 @@ import {
 } from "@/lib/data/espelhos-do-job";
 import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
 import { distribuirDelta as distribuir, emReais as dinheiro } from "@/lib/calculos/alteracao-financeiro";
-import type {
-  EnvioDaAlteracao,
-  JobStatus,
-  PrevisaoDaAlteracao,
-  TipoCusto,
+import {
+  JOB_STATUS_ABERTO,
+  type EnvioDaAlteracao,
+  type JobStatus,
+  type PrevisaoDaAlteracao,
+  type TipoCusto,
 } from "@/lib/types";
 
 type Result = { ok: true; alteracaoId: string } | { ok: false; message: string };
@@ -72,15 +76,10 @@ const payloadSchema = z.object({
 
 export type PayloadAlteracaoFinanceiro = z.input<typeof payloadSchema>;
 
-/** Job aberto no financeiro, em qualquer ponto até a nota — a produção
- *  pode já ter encerrado (decisão 087: faturamento e encerramento correm
- *  separados). */
-const STATUS_COM_EDICAO = new Set<JobStatus>([
-  "aberto",
-  "em_producao",
-  "encerrado",
-  "finalizado",
-]);
+/** O encerramento trava a edição, como a primeira nota (Tiago, 28/09/2026):
+ *  encerrado e finalizado ficam de fora. */
+const MENSAGEM_JOB_ENCERRADO =
+  "O job já foi encerrado: o orçado não muda mais pelo financeiro.";
 
 const MENSAGEM_JOB_COM_NOTA =
   "O job já tem nota emitida (faturamento parcial ou total): o orçado não muda mais pelo financeiro.";
@@ -139,31 +138,20 @@ export async function registrarAlteracaoDoFinanceiro(
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
-  // ---- O job: aberto no financeiro ----
+  // ---- O job: aberto no financeiro, e ainda não encerrado ----
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
-    .select(
-      "id, status, data_abertura_financeiro, versao_orcamento_aprovada_id, custo_previsto_total, orcamento:orcamentos(servico:categorias_dominio!servico_id(investimento_interno))",
-    )
+    .select("id, status, data_abertura_financeiro, versao_orcamento_aprovada_id")
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{
-      id: string;
-      status: string;
-      data_abertura_financeiro: string | null;
-      versao_orcamento_aprovada_id: string;
-      custo_previsto_total: number | string | null;
-      orcamento: { servico: { investimento_interno: boolean | null } | null } | null;
-    }>();
+    .maybeSingle();
   if (jobErr || !job) return { ok: false, message: "Job não encontrado." };
-  // Serviço Interno (decisão 105): o banco faz o planejado espelhar o
-  // orçado, e o custo previsto muda junto com a edição.
-  const interno = job.orcamento?.servico?.investimento_interno === true;
 
   if (
     !job.data_abertura_financeiro ||
-    !STATUS_COM_EDICAO.has(job.status as JobStatus)
+    !JOB_STATUS_ABERTO.includes(job.status as JobStatus)
   ) {
+    const encerrado = job.status === "encerrado" || job.status === "finalizado";
     await logAuditEvent({
       acao: "acao_negada",
       tenantId,
@@ -171,13 +159,15 @@ export async function registrarAlteracaoDoFinanceiro(
       entidadeId: jobId,
       metadata: {
         acao_tentada: "job.orcado_alterado_financeiro",
-        motivo: "job_fora_da_janela",
+        motivo: encerrado ? "job_encerrado" : "job_fora_da_janela",
         status_atual: job.status,
       },
     });
     return {
       ok: false,
-      message: "O orçado só é editado pelo financeiro com o job aberto no financeiro.",
+      message: encerrado
+        ? MENSAGEM_JOB_ENCERRADO
+        : "O orçado só é editado pelo financeiro com o job aberto no financeiro.",
     };
   }
 
@@ -189,7 +179,6 @@ export async function registrarAlteracaoDoFinanceiro(
     gruposRes,
     recebimentoRes,
     impostosRes,
-    curvaRes,
     enviosRes,
     notasPorJob,
   ] = await Promise.all([
@@ -197,7 +186,7 @@ export async function registrarAlteracaoDoFinanceiro(
     supabase
       .from("jobs_itens_orcado")
       .select(
-        "id, item, grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, total_planejado, em_save, save_consumido",
+        "id, item, grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, em_save, save_consumido",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
@@ -227,15 +216,6 @@ export async function registrarAlteracaoDoFinanceiro(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .order("ordem"),
-    // A curva só anda no serviço Interno; a leitura é barata e vai junto.
-    // Mesma ordem da tela (`previsoesGravadas`), por data.
-    supabase
-      .from("jobs_previsao_custo")
-      .select("id, ordem, data_prevista, valor")
-      .eq("job_id", jobId)
-      .eq("tenant_id", tenantId)
-      .order("data_prevista")
-      .order("ordem"),
     supabase
       .from("jobs_envio_faturamento")
       .select(
@@ -254,7 +234,6 @@ export async function registrarAlteracaoDoFinanceiro(
     gruposRes.error ??
     recebimentoRes.error ??
     impostosRes.error ??
-    curvaRes.error ??
     enviosRes.error;
   if (erroLeitura || !itensRes.data) {
     // Sem saber o estado inteiro (save, envio, previsões), gravar seria
@@ -345,8 +324,6 @@ export async function registrarAlteracaoDoFinanceiro(
     dmPara: number;
     totalDe: number;
     totalPara: number;
-    /** O planejado gravado: no Interno, é ele que vira `totalPara`. */
-    planejadoDe: number;
   }
   const mudancas: Mudanca[] = [];
 
@@ -402,7 +379,6 @@ export async function registrarAlteracaoDoFinanceiro(
       dmPara: l.dias_meses,
       totalDe: Number(atual.total_orcado ?? 0),
       totalPara: l.valor_unitario * l.quantidade * l.dias_meses,
-      planejadoDe: Number(atual.total_planejado ?? 0),
     });
   }
 
@@ -491,32 +467,9 @@ export async function registrarAlteracaoDoFinanceiro(
   }));
   const impostosNovos = distribuir(impostosAtuais, dinheiro(impostoDepois - impostoAntes));
 
-  // ---- Serviço Interno: a curva de desembolso acompanha ----
-  // O planejado vira o orçado novo (`planejado_espelha_orcado`), e o custo
-  // previsto é o planejado dos tipos que geram PP — no Interno, todos (FI).
-  const deltaCusto = interno
-    ? dinheiro(
-        mudancas
-          .filter((m) => tipoGeraDesembolso(m.tipo))
-          .reduce((s, m) => s + (m.totalPara - m.planejadoDe), 0),
-      )
-    : 0;
-  const curvaAtual = ((curvaRes.data ?? []) as any[]).map((r) => ({
-    id: r.id as string,
-    data_prevista: r.data_prevista as string,
-    valor: Number(r.valor ?? 0),
-  }));
-  if (curvaAtual.length === 0 && Math.abs(deltaCusto) >= 0.005) {
-    return {
-      ok: false,
-      message: `O job abriu sem custo previsto e não tem curva de desembolso para acompanhar a alteração. ${SEM_DATA_PARA_ACOMPANHAR}`,
-    };
-  }
-  const curvaNova = distribuir(curvaAtual, deltaCusto);
-  const custoPrevistoTotal =
-    Math.abs(deltaCusto) >= 0.005 && job.custo_previsto_total !== null
-      ? dinheiro(Number(job.custo_previsto_total) + deltaCusto)
-      : null;
+  // A curva de desembolso não acompanha, nem no Interno, em que o planejado
+  // muda junto com o orçado (Tiago, 28/09/2026). Quem ajusta é o financeiro,
+  // no Editar registro da aba Abertura do Job.
 
   // O envio não aceita parcela sem valor (`chk_envio_parcela_valor_positivo`),
   // e não se desfaz: melhor a frase aqui do que o erro de constraint.
@@ -588,9 +541,6 @@ export async function registrarAlteracaoDoFinanceiro(
           impostos_depois: foto(impostosNovos),
           envio_antes: enviosTocados.map(fotoEnvio),
           envio_depois: enviosTocados.map((e) => fotoEnvio(enviosNovos.get(e.id) as EnvioLido)),
-          // Fora do Interno a curva não anda: a foto fica vazia.
-          curva_antes: deltaCusto !== 0 ? foto(curvaAtual) : [],
-          curva_depois: deltaCusto !== 0 ? foto(curvaNova) : [],
         },
         itens: mudancas.map((m, k) => {
           return {
@@ -627,13 +577,7 @@ export async function registrarAlteracaoDoFinanceiro(
         impostos: impostosNovos
           .filter((r, k) => r.valor !== impostosAtuais[k]?.valor)
           .map((r) => ({ id: r.id, valor: r.valor })),
-        curva: curvaNova
-          .filter((r, k) => r.valor !== curvaAtual[k]?.valor)
-          .map((r) => ({ id: r.id, valor: r.valor })),
-        espelhos:
-          custoPrevistoTotal !== null
-            ? { ...espelhos, custo_previsto_total: custoPrevistoTotal }
-            : espelhos,
+        espelhos,
       },
     },
   );
@@ -663,7 +607,6 @@ export async function registrarAlteracaoDoFinanceiro(
       faturamento_previsto_antes: fatAntes,
       faturamento_previsto_depois: fatDepois,
       envios_acompanharam: enviosTocados.length,
-      custo_previsto_delta: deltaCusto,
     },
   });
 

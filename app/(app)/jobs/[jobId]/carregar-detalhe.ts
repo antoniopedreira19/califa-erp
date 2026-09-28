@@ -609,8 +609,6 @@ export async function carregarDetalheDoJob(
     impostos_depois: previsoesDaFoto(a.impostos_depois),
     envio_antes: enviosDaFoto(a.envio_antes),
     envio_depois: enviosDaFoto(a.envio_depois),
-    curva_antes: previsoesDaFoto(a.curva_antes),
-    curva_depois: previsoesDaFoto(a.curva_depois),
     autor_nome: a.autor?.nome ?? null,
     itens: ((a.itens ?? []) as any[]).map((i) => ({
       ...i,

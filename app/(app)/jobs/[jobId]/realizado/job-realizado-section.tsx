@@ -110,7 +110,6 @@ import { registrarErrata } from "./actions-errata";
 import {
   calcularResultadoOperacional,
   calcularTotaisVersao,
-  tipoGeraDesembolso,
 } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { jobAceitaAcoesPlanilha } from "@/lib/types";
@@ -150,9 +149,6 @@ export interface EdicaoDoFinanceiro {
     mes: string | null;
     parcelas: Array<{ id: string; data_vencimento: string; valor: number }>;
   }>;
-  /** A curva de desembolso gravada, por data. Só anda no serviço Interno,
-   *  em que o planejado espelha o orçado e o custo previsto muda junto. */
-  curva: Array<{ data: string; valor: number }>;
 }
 
 /** O planejado na edição do financeiro: nunca abre (decisão 115, P1). */
@@ -548,9 +544,10 @@ export function JobRealizadoSection({
     faturamentoMensal.length > 0 && mesesEnviados.size === faturamentoMensal.length;
   const podeErrata = podeAcoes && !jaEnviadoParaFaturamento && !todosOsMesesEnviados;
 
-  // "Editar orçado" do financeiro (decisão 115): até a primeira nota. No
-  // mensal a trava é por mês — só o mês com nota fica de fora (P4 do
-  // Tiago, 28/09/2026).
+  // "Editar orçado" do financeiro (decisão 115): até a primeira nota ou o
+  // encerramento — o encerrado chega com `travadoPor`, montado pela página.
+  // No mensal a trava da nota é por mês — só o mês com nota fica de fora
+  // (P4 do Tiago, 28/09/2026).
   const mesesComNota = React.useMemo(
     () => new Set(edicaoDoFinanceiro?.mesesComNota ?? []),
     [edicaoDoFinanceiro],
@@ -822,29 +819,8 @@ export function JobRealizadoSection({
   const acompanhamDoFinanceiro = React.useMemo(() => {
     const envio: ParcelaQueAcompanha[] = [];
     const recebimento: ParcelaQueAcompanha[] = [];
-    const curva: ParcelaQueAcompanha[] = [];
     if (!edicaoDoFinanceiro || linhasDoFinanceiro.length === 0) {
-      return { envio, recebimento, curva };
-    }
-    // Serviço Interno: o planejado vira o orçado novo, e a curva acompanha
-    // o custo previsto (planejado dos tipos que geram PP) — a conta da action.
-    if (interno) {
-      const planejadoSalvo = new Map(itens.map((it) => [it.id, it.total_planejado]));
-      const deltaCusto = emReais(
-        linhasDoFinanceiro
-          .filter((l) => tipoGeraDesembolso(l.tipoCusto))
-          .reduce((s, l) => s + (l.totalPara - (planejadoSalvo.get(l.id) ?? l.totalDe)), 0),
-      );
-      const depois = distribuirDelta(edicaoDoFinanceiro.curva, deltaCusto);
-      edicaoDoFinanceiro.curva.forEach((l, k) => {
-        if (depois[k].valor === l.valor) return;
-        curva.push({
-          chave: `curva-${l.data}-${k}`,
-          rotulo: dataBr(l.data),
-          antes: l.valor,
-          depois: depois[k].valor,
-        });
-      });
+      return { envio, recebimento };
     }
     const deltaTotal = emReais(
       emReais(totaisDepois.faturamentoPrevisto) - emReais(totaisAntes.faturamentoPrevisto),
@@ -890,7 +866,7 @@ export function JobRealizadoSection({
         });
       });
     }
-    return { envio, recebimento, curva };
+    return { envio, recebimento };
   }, [
     edicaoDoFinanceiro,
     linhasDoFinanceiro,
@@ -901,7 +877,6 @@ export function JobRealizadoSection({
     dadosDosMeses,
     itens,
     paraTotais,
-    interno,
   ]);
 
   const faturamentoDoMes = new Map(faturamentoMensal.map((m) => [m.mesId, m]));
@@ -1440,7 +1415,6 @@ export function JobRealizadoSection({
         moeda={versao.moeda}
         envio={acompanhamDoFinanceiro.envio}
         recebimento={acompanhamDoFinanceiro.recebimento}
-        curva={acompanhamDoFinanceiro.curva}
         planejadoAcompanha={interno}
         salvando={salvando}
         erro={erroErrata}
