@@ -1,10 +1,12 @@
-# 114 — O código do job é [SIGLA]-[SEQ]/[AA], com 1 na frente em 2026
+# 114 — O código do job é [SIGLA]-[SEQ]/[AA], com 1 na frente em 2026; o projeto leva P, e o do financeiro F
 
 **Data:** 2026-09-28
 **Decidido por:** Tiago
-**Migration:** `20260928200001_codigo_do_job_por_sigla.sql` — ⚠️ destrutiva
-(sobrescreve `jobs.codigo`), aplicada só na hora combinada com a frente do
-Antonio.
+**Migrations:** ⚠️ as duas destrutivas, aplicadas juntas só na hora
+combinada com a frente do Antonio:
+- `20260928200001_codigo_do_job_por_sigla.sql` — sobrescreve `jobs.codigo`;
+- `20260928200002_codigo_do_projeto_p_e_f.sql` — sobrescreve
+  `projetos.codigo`, `orcamentos.codigo` e `projetos_financeiro.codigo`.
 
 ---
 
@@ -38,6 +40,33 @@ https://claude.ai/artifact/LCRzQt1wbr3jL2YnUdbjS9
    `jobs.codigo_anterior`. A ficha do job mostra "Código anterior", e a
    busca da fila, do Visualizar Jobs e da lista de Jobs acha pelos dois.
 
+### 2.1 Projeto, orçamento e projeto do financeiro
+
+Com o formato do projeto passando para o job, o projeto precisava de outro
+(D5 e D6 do plano, aprovadas pelo Tiago em 28/09/2026):
+
+1. **Projeto da produção:** `P` no lugar do primeiro zero, **o número fica
+   o mesmo**. `AMB-0006/26` → `AMB-P006/26`. Sequencial e ano seguem a
+   regra de sempre (`lib/codigos/projetos.ts`).
+2. **Orçamento:** acompanha o projeto. `AMB-0006/26-01` → `AMB-P006/26-01`.
+3. **Projeto do financeiro:** `F` no lugar do primeiro zero, em sequência
+   própria como antes. `AMB-0004/26` → `AMB-F004/26`.
+4. **Os dois cadastros continuam separados.** O projeto da produção e o do
+   financeiro são arrumações diferentes — o financeiro pode agrupar os jobs
+   do jeito dele —, cada um com a sua numeração. Até aqui os dois usavam o
+   mesmo formato, e 8 códigos existiam nos dois lados apontando para
+   projetos diferentes (o `TES-0002/26` era "Teste Demo" na produção e
+   "Teste Always On" no financeiro); a letra desfaz a coincidência.
+5. **Por que a letra no primeiro zero:** ninguém tem mil projetos de um
+   cliente num ano, então esse zero não carregava informação. Com 1, P ou F
+   no lugar dele, job, projeto e projeto do financeiro têm o mesmo
+   comprimento e a mesma leitura (cliente, número, ano), e nunca são
+   iguais, em 2026 ou depois.
+6. **Código anterior:** as três tabelas ganham `codigo_anterior`. O
+   cabeçalho da página do projeto (produção e financeiro) mostra "Código
+   anterior"; a busca da lista de projetos e a do campo Projeto da abertura
+   acham pelos dois.
+
 ## 3. A troca dos jobs existentes
 
 Os 23 jobs de 28/09/2026, em ordem de criação dentro da sigla (ensaio de
@@ -55,6 +84,22 @@ A migration guarda o código anterior, troca o código e grava um evento
 job como texto; o histórico de auditoria e os arquivos já emitidos (PDFs de
 PP, planilhas) ficam com o código antigo.
 
+### 3.1 A troca dos projetos existentes
+
+Ensaio de 28/09 conferido contra o plano: 16 projetos, 39 orçamentos e 17
+projetos do financeiro, todos no formato `[SIGLA]-0NNN/AA`, e todo orçamento
+começando pelo código do próprio projeto. Cada código troca só o primeiro
+zero: `AMB-0003/26` → `AMB-P003/26` … `TES-0003/26` → `TES-P003/26`;
+`AMB-0004/26-03` → `AMB-P004/26-03`; no financeiro `AMB-0004/26` →
+`AMB-F004/26` … `UER-0001/26` → `UER-F001/26`. Um evento
+`projeto.codigo_trocado`, `orcamento.codigo_trocado` ou
+`projeto_financeiro.codigo_trocado` por linha.
+
+Nenhuma função ou view do banco monta ou lê o formato, e o resto do banco
+aponta para projeto e orçamento pela chave. As planilhas exportadas antes da
+troca voltam pelo Importar: ele acha os orçamentos pelos ids escondidos, não
+pelo código.
+
 ## 4. O que muda no sistema
 
 - `lib/codigos/jobs.ts`: gerador novo (`gerarCodigoJob` recebe o projeto),
@@ -69,26 +114,34 @@ PP, planilhas) ficam com o código antigo.
   de hoje; cliente sem código curto mostra travessão (o envio recusa).
 - `lib/types.ts` (`Job`), `JobNaFila`, `JobAberto`, `JobRow` e a ficha
   ganharam `codigo_anterior`, obrigatório.
+- **Projetos:** `proximoCodigoDeProjeto` recebe a letra (`P` ou `F`); o
+  código de antes da troca (zero no lugar da letra) conta para o maior
+  número, para um projeto criado no intervalo não repetir número. Testes em
+  `lib/codigos/projetos.test.ts`. `Projeto`, `ProjetoRow` e
+  `ProjetoFinanceiroOpcao` ganharam `codigo_anterior`, obrigatório.
 
 ## 5. Como publicar
 
-O código lê `jobs.codigo_anterior`, que só existe depois da migration, e o
-gerador antigo (`JOB-%`) deixa de achar código depois da troca. Então, num
-horário sem uso e combinado com o Antonio:
+O código lê as colunas `codigo_anterior`, que só existem depois das
+migrations, e os geradores antigos deixam de achar código depois da troca.
+Então, num horário sem uso e combinado com o Antonio:
 
-1. aplicar a migration pelo MCP e conferir no banco;
+1. aplicar as duas migrations pelo MCP, na ordem, e conferir no banco;
 2. publicar o código no main logo em seguida;
-3. conferir se algum job foi criado no intervalo com `JOB-NNNN` e, se
-   houver, trocá-lo pela mesma regra;
-4. conferir fila, Visualizar Jobs, lista de Jobs, ficha, faixa e prévia.
+3. conferir se algum job (`JOB-NNNN`), projeto, orçamento ou projeto do
+   financeiro (`[SIGLA]-0NNN/AA`) foi criado no intervalo e, se houver,
+   trocá-lo pela mesma regra;
+4. conferir fila, Visualizar Jobs, lista de Jobs, ficha, faixa, prévia,
+   lista de projetos, página do projeto (produção e financeiro), busca do
+   campo Projeto na abertura e a criação de um projeto e de um orçamento no
+   projeto de teste.
 
 ## 6. Fica de fora
 
-- **Códigos de projeto e de orçamento:** em decisão (D5 e D6 do plano). Em
-  2026 não há conflito — job começa em 1, projeto em 0 —, mas em 2027 um
-  job `AMB-0001/27` e um projeto `AMB-0001/27` teriam o mesmo texto. Precisa
-  estar resolvido antes da virada do ano.
 - **Contas a Pagar** busca pelo código atual do job; o anterior não entra
   lá.
 - **`vw_saves_por_job`** segue ordenada pelo código do job: a lista de
   saves fica agrupada por cliente.
+- **Orçamento:** o código anterior fica só guardado; nenhuma tela o mostra.
+- **Nomes repetidos no financeiro** ("Universal 4T 2026" três vezes, cinco
+  projetos de teste da Pevetech): não mudam com os códigos; limpeza à parte.

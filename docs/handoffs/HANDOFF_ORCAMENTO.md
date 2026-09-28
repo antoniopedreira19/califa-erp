@@ -4622,3 +4622,23 @@ possível gravar os itens.".
   interruptor foram desfeitos depois.
 - **Junto:** ligar o "Orçamento de save" agora abre a coluna Save na hora
   (decisão 107).
+
+## ⚠️ Nota de 2026-09-28 — o projeto leva P, e o orçamento acompanha (decisão 114)
+
+**Preparado, não publicado:** a troca só entra na hora combinada com a
+frente do Antonio (migration `20260928200002`, destrutiva, aplicada junto da
+`20260928200001`, que troca o código dos jobs).
+
+- **Formato novo:** `P` no lugar do primeiro zero, mesmo número.
+  `AMB-0006/26` → `AMB-P006/26`, e o orçamento `AMB-0006/26-01` →
+  `AMB-P006/26-01`. O formato de antes (`[SIGLA]-[SEQ_4]/[AA]`) passou a ser
+  o do job (`AMB-1006/26`), e o projeto do financeiro leva `F`.
+- **Os 16 projetos e 39 orçamentos existentes** trocam; o código de antes
+  fica em `codigo_anterior`. O cabeçalho da página do projeto mostra
+  "Código anterior", e a busca da lista de projetos acha pelos dois. O do
+  orçamento fica só guardado.
+- **Gerador:** `proximoCodigoDeProjeto` recebe a letra; o código antigo
+  conta para o maior número, para um projeto criado no intervalo da troca
+  não repetir número. Testes em `lib/codigos/projetos.test.ts`.
+- **Importar:** as planilhas exportadas antes da troca voltam normalmente
+  — o Importar acha os orçamentos pelos ids escondidos, não pelo código.

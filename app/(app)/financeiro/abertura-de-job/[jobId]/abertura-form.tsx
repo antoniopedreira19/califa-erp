@@ -664,14 +664,18 @@ export function AberturaForm({
   );
   const projetoSel = projetosVisiveis.find((p) => p.id === projetoId) ?? null;
   // Sem acento e sem caixa, no nome e no código — o mesmo critério do
-  // campo de fornecedor (`components/ui/combobox.tsx`).
+  // campo de fornecedor (`components/ui/combobox.tsx`). O código de antes
+  // da decisão 114 também vale ("AMB-0004/26" acha o AMB-F004/26).
   const projetosFiltrados = React.useMemo(() => {
     const normalizar = (t: string) =>
       t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const q = normalizar(buscaProjeto.trim());
     if (!q) return projetosVisiveis;
     return projetosVisiveis.filter(
-      (p) => normalizar(p.nome).includes(q) || normalizar(p.codigo).includes(q),
+      (p) =>
+        normalizar(p.nome).includes(q) ||
+        normalizar(p.codigo).includes(q) ||
+        normalizar(p.codigo_anterior ?? "").includes(q),
     );
   }, [projetosVisiveis, buscaProjeto]);
   function escolherProjeto(id: string) {
@@ -942,6 +946,7 @@ export function AberturaForm({
       setProjetoNovo({
         id: res.id,
         codigo: res.codigo,
+        codigo_anterior: null, // nasceu depois da decisão 114
         nome: res.nome,
         cliente_id: job.cliente_id ?? "",
         cliente_nome: job.cliente_nome,

@@ -6002,10 +6002,11 @@ era o imposto de R$ 28.318,52). Regra completa na
 - **Fica como está:** save consumido por job ainda não aberto continua no
   fluxo de caixa e na planilha do job de origem (sem caso em 28/09/2026).
 
-## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA] (decisão 114)
+## ⚠️ Nota de 2026-09-28 (3) — o código do job vira [SIGLA]-[SEQ]/[AA], e o projeto do financeiro leva F (decisão 114)
 
 **Preparado, não publicado:** a troca só entra na hora combinada com a
-frente do Antonio (migration `20260928200001`, destrutiva).
+frente do Antonio (migrations `20260928200001` e `20260928200002`,
+destrutivas).
 
 - Todo job aparece no financeiro com o código novo (`AMB-1006/26` no lugar
   de `JOB-0036`). A fila e o Visualizar Jobs também acham pelo código
@@ -6013,6 +6014,13 @@ frente do Antonio (migration `20260928200001`, destrutiva).
 - Visualizar Jobs, a visão agregada do financeiro, os irmãos na ficha e o
   seletor de jobs de Contas a Receber passam a ordenar pela criação.
 - **Contas a Pagar** busca só pelo código atual do job.
+- **Projeto do financeiro:** `F` no lugar do primeiro zero, mesmo número
+  (`AMB-0004/26` → `AMB-F004/26`), em sequência própria como antes. Os 17
+  existentes trocam; o código de antes fica em
+  `projetos_financeiro.codigo_anterior`, aparece no cabeçalho da página do
+  projeto e vale na busca do campo Projeto da abertura. O projeto da
+  produção leva `P` (`AMB-P006/26`), e os dois nunca mais têm o mesmo
+  código.
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
