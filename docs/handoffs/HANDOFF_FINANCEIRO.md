@@ -1562,7 +1562,7 @@ num job** na aba de jobs abertos.
 
 | Campo | O que é |
 |---|---|
-| **Projeto** * | Editável, com "+" para criar projeto ali mesmo. Arrumação do financeiro, invisível para a produção |
+| **Projeto** * | Editável, com "+" para criar projeto ali mesmo. Arrumação do financeiro, invisível para a produção. ⚠️ **28/09/2026 (decisão 119):** o "+" só reserva o nome, e o projeto nasce com a abertura; com projeto escolhido, o "+" vira lápis e renomeia. Ver a nota de 2026-09-28 (5). |
 | **Recebimento em** | Conta bancária de entrada do job, com saldo de hoje na opção |
 | **Pagamento em** | Conta bancária de saída do job |
 
@@ -6063,6 +6063,35 @@ Antonio, e o código publicado logo depois (`3305751`).
   TES-1013/26, 4 no TES-1002/26, 2 no TES-1009/26 e 2 no TES-1014/26. O
   TES-1014/26 (orçamento TES-P001/26-14, aprovado e enviado para o teste)
   ficou na fila da abertura.
+
+## ⚠️ Nota de 2026-09-28 (5) — o projeto do financeiro nasce com o job, tem nome único e se renomeia pelo lápis (decisão 119)
+
+**Isto revoga o "+" que gravava o projeto na hora, da seção 42.**
+
+- **O "+" do campo Projeto não grava mais nada.** Ele reserva o nome no
+  formulário; a linha aparece no combo com o selo **Novo** no lugar do
+  código. O projeto nasce no clique em "Abrir job no financeiro", "Salvar
+  alterações" ou "Registrar revisão de abertura", junto com o job. Se a
+  gravação falhar, a action apaga o projeto que acabou de criar.
+- **O "+" vira lápis** quando há projeto escolhido, como no campo de
+  fornecedor, e o ✕ no campo devolve o "+". Num projeto que já existe, o
+  lápis renomeia **na hora**, para todos os jobs dele, sem esperar a
+  abertura. Num projeto novo, só troca o nome reservado.
+- **Nome único no sistema inteiro**, sem distinguir maiúscula, acento ou
+  espaço. O "+" e o lápis avisam antes, dizendo qual projeto, e de que
+  cliente, já usa o nome.
+- **Projeto que fica sem job some.** Quando o financeiro troca o projeto do
+  único job de um projeto, o banco apaga o projeto antigo e registra na
+  auditoria. A foto da abertura guarda o rótulo do projeto, e o histórico
+  mostra "Código · Nome (projeto apagado)".
+- **Job encerrado ou finalizado fica no projeto para sempre** e aparece
+  dentro dele no Visualizar Jobs. Só job aberto ou em produção troca de
+  projeto, e mudar de status nunca tira o job do projeto.
+- **Limpeza de 28/09/2026:** 13 projetos do financeiro sem job apagados. O
+  AMB-F012/26 "Michelob - IMC NE" voltou em seguida, porque era de uma
+  abertura em curso (AMB-1008/26). Ficaram 9 projetos, sem nome repetido;
+  todos têm job, menos o AMB-F012/26, que ganha o dele quando o AMB-1008/26
+  for aberto.
 
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 

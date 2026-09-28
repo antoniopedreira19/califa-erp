@@ -138,8 +138,16 @@ export type AuditAction =
   | "job.abertura_revisada"
   // Projeto criado pela própria tela de abertura, na tabela
   // `projetos_financeiro`. Não é `projeto.criado`: aquele é o projeto da
-  // produção, que nasce do orçamento e a produção enxerga.
+  // produção, que nasce do orçamento e a produção enxerga. Desde a decisão
+  // 119 (28/09/2026) ele nasce na abertura ou no "Salvar registro", junto
+  // com o job — o metadata diz em qual (`na`).
   | "projeto_financeiro.criado"
+  // O lápis do campo Projeto: de/para do nome (decisão 119).
+  | "projeto_financeiro.renomeado"
+  // Projeto que ficou sem job, apagado pelo banco — na limpeza da
+  // migration ou pelo gatilho quando o último job troca de projeto. Só o
+  // banco grava este (decisão 119).
+  | "projeto_financeiro.apagado_sem_job"
   | "job.abertura_rejeitada"
   // Reenvio depois da rejeição: o MESMO job volta a `aguardando_abertura`
   // com os campos do formulário refeitos (decisão 057). Até 08/09/2026 a
