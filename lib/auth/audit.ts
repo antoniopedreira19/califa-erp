@@ -111,6 +111,10 @@ export type AuditAction =
   | "job.atualizado"
   | "job.hierarquia_alterada"
   | "job.status_alterado"
+  // O código do job trocou de formato (decisão 114): JOB-NNNN virou
+  // [SIGLA]-[SEQ]/[AA]. Gravado pela migration, um evento por job, com o
+  // código anterior e o novo no metadata.
+  | "job.codigo_trocado"
   | "job.abertura_aprovada"
   | "job.aberto_no_financeiro"
   // Edição do registro da abertura de um job já aberto ("Editar

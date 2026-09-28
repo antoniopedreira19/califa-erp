@@ -815,6 +815,9 @@ export interface Job {
   tenant_id: string;
   empresa_id: string;
   codigo: string;
+  /** O `JOB-NNNN` de antes da decisão 114 (28/09/2026). Nulo nos jobs
+   *  criados depois da troca. */
+  codigo_anterior: string | null;
   projeto_id: string;
   orcamento_id: string;
   versao_orcamento_aprovada_id: string;

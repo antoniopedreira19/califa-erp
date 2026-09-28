@@ -7,6 +7,8 @@
  * `components/faixa-do-projeto.tsx`.
  */
 
+import { compararCodigosDeJob } from "@/lib/codigos/jobs";
+
 export type ModuloDaFaixa = "orcamentos" | "jobs" | "financeiro";
 
 /** Id da primeira aba, a da visão agregada. Nenhum uuid colide com ele. */
@@ -132,7 +134,9 @@ export function itensDeJobs(
 ): ItemDaFaixa[] {
   return jobs
     .filter((j) => j.id === atualId || entra(j.status))
-    .sort((a, b) => a.codigo.localeCompare(b.codigo))
+    // Ano e número do código (decisão 114): no texto puro, o AMB-0001/27
+    // viria antes do AMB-1005/26 na virada do ano.
+    .sort((a, b) => compararCodigosDeJob(a.codigo, b.codigo))
     .map((j) => ({
       id: j.id,
       codigo: j.codigo,

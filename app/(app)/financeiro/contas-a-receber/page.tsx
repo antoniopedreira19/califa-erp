@@ -156,7 +156,9 @@ export default async function ContasReceberPage({
       .from("jobs")
       .select("id, codigo, nome")
       .eq("tenant_id", tenantId)
-      .order("codigo", { ascending: false })
+      // Ordem de criação, e não a do código: desde a decisão 114 o código
+      // começa pela sigla do cliente, e o texto não diz mais a ordem.
+      .order("created_at", { ascending: false })
       .limit(500),
     // O que a produção mandou no envio para faturamento: a PO e a instrução
     // do GP sobre como a nota deve ser descrita. É o conteúdo do botão `i`

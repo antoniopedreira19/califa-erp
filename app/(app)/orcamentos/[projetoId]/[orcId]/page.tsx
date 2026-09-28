@@ -57,7 +57,7 @@ import {
   type FechamentoDaCopia,
   type JobExistente,
 } from "./versoes/[versaoId]/fluxo-abertura";
-import { proximoCodigoDeJob } from "@/lib/codigos/jobs";
+import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
 import { lerBaseDosEspelhos, totaisDoFinanceiro } from "@/lib/data/espelhos-do-job";
 
 export const dynamic = "force-dynamic";
@@ -208,7 +208,7 @@ export default async function OrcamentoDetailPage({
         // `produto_id` cru além do embed `produto`: é ele que o servidor
         // confere para deixar abrir o job, e é ele que o modal usa para
         // decidir se a Marca está cadastrada (17/09/2026).
-        "id, codigo, nome, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
+        "id, codigo, nome, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -283,14 +283,15 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
-    // Prévia do código do próximo job: o maior JOB-NNNN do tenant + 1, a
-    // mesma conta de `gerarCodigoJob` (a contagem de jobs errava quando
-    // havia job apagado — 14/09/2026).
+    // Prévia do código do próximo job, a mesma conta de `gerarCodigoJob`
+    // (decisão 114): os códigos do ano de hoje. A sigla do cliente só se
+    // sabe depois do projeto, que vem nesta mesma onda — o filtro por sigla
+    // fica para a hora da conta.
     supabase
       .from("jobs")
       .select("codigo")
       .eq("tenant_id", session.activeTenant.id)
-      .like("codigo", "JOB-%"),
+      .like("codigo", `%/${anoDoCodigoDeJob()}`),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -714,11 +715,19 @@ export default async function OrcamentoDetailPage({
           job={job}
           abrirRevisao={abrirRevisao}
           temJobAtivo={temJobAtivo}
-          proximoCodigoJob={proximoCodigoDeJob(
-            ((codigosDeJobRes.data ?? []) as { codigo: string }[]).map(
-              (j) => j.codigo,
-            ),
-          )}
+          // Cliente sem código curto: o envio recusa com a mensagem que
+          // pede o cadastro; a prévia fica em travessão.
+          proximoCodigoJob={
+            projetoRaw.cliente?.codigo_curto
+              ? proximoCodigoDeJob({
+                  sigla: projetoRaw.cliente.codigo_curto,
+                  ano: anoDoCodigoDeJob(),
+                  codigos: (
+                    (codigosDeJobRes.data ?? []) as { codigo: string }[]
+                  ).map((j) => j.codigo),
+                })
+              : "—"
+          }
           podeCriarVersao={podeCriarVersao}
           motivoBloqueio={motivoBloqueio}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}

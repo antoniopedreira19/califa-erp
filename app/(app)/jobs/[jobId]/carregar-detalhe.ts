@@ -111,7 +111,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, codigo_anterior, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -308,7 +308,9 @@ export async function carregarDetalheDoJob(
       .eq("projeto_id", raw.projeto_id)
       .eq("tenant_id", session.activeTenant.id)
       .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA)
-      .order("codigo", { ascending: true }),
+      // Ordem de criação, e não a do código: desde a decisão 114 o código
+      // começa pela sigla do cliente, e o texto não diz mais a ordem.
+      .order("created_at", { ascending: true }),
     // `aberto_por` NÃO entra como embed: a FK aponta para `auth.users`, e
     // o nome mora em `profiles`. Query própria, e só quando há alguém.
     raw.aberto_por
@@ -594,6 +596,7 @@ export async function carregarDetalheDoJob(
     tenant_id: raw.tenant_id,
     empresa_id: raw.empresa_id,
     codigo: raw.codigo,
+    codigo_anterior: raw.codigo_anterior ?? null,
     projeto_id: raw.projeto_id,
     orcamento_id: raw.orcamento_id,
     versao_orcamento_aprovada_id: raw.versao_orcamento_aprovada_id,

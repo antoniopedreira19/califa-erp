@@ -345,6 +345,7 @@ export default async function AbrirJobNoFinanceiroPage({
             antesDaAbertura
             job={{
               codigo: jobDoDetalhe.codigo,
+              codigoAnterior: jobDoDetalhe.codigo_anterior,
               nome: job.nome,
               // Antes da abertura a categoria do job ainda é a do
               // orçamento: `jobs.categoria_id` só é gravado ao confirmar.

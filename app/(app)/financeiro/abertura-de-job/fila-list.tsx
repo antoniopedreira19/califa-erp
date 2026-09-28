@@ -51,7 +51,8 @@ export function FilaAbertura({
   const visiveis = React.useMemo(() => {
     if (!q) return linhas;
     return linhas.filter((l) =>
-      [l.codigo, l.nome, l.projeto_codigo, l.projeto_nome, l.cliente_nome]
+      // O código de antes da decisão 114 (JOB-NNNN) também acha o job.
+      [l.codigo, l.codigo_anterior, l.nome, l.projeto_codigo, l.projeto_nome, l.cliente_nome]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()

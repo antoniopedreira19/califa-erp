@@ -26,6 +26,9 @@ function formatPeriodo(inicio: string | null, fim: string | null): string {
 
 export interface JobDaFicha {
   codigo: string;
+  /** O `JOB-NNNN` de antes da decisão 114, que PDFs e planilhas antigas
+   *  ainda citam. Nulo nos jobs criados depois da troca. */
+  codigoAnterior: string | null;
   nome: string;
   categoriaNome: string | null;
   /**
@@ -347,6 +350,13 @@ export function FichaJob({
                 {job.codigo}
               </span>
             </CampoLateral>
+            {job.codigoAnterior && (
+              <CampoLateral rotulo="Código anterior">
+                <span className="font-mono text-[13px] text-muted-foreground">
+                  {job.codigoAnterior}
+                </span>
+              </CampoLateral>
+            )}
             <CampoLateral rotulo="Projeto">
               <LinkDoProjeto
                 href={origem.projetoHref}
