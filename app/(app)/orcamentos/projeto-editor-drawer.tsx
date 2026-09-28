@@ -136,7 +136,10 @@ export function ProjetoEditorDrawer({
             {projeto.status === "ativo" ? (
               <button
                 type="button"
-                onClick={() => setConfirmArquivar(true)}
+                onClick={() => {
+                  setError(null);
+                  setConfirmArquivar(true);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               >
                 <Archive className="h-3.5 w-3.5" />
@@ -160,7 +163,19 @@ export function ProjetoEditorDrawer({
         open={confirmArquivar}
         onOpenChange={setConfirmArquivar}
         title="Arquivar projeto?"
-        description="O projeto sai da lista principal e passa a aparecer só quando o filtro 'arquivados' estiver ligado. Só é possível arquivar se todos os orçamentos estiverem cancelados."
+        description={
+          <>
+            <p>
+              O projeto sai da lista principal e passa a aparecer só quando o
+              filtro &lsquo;arquivados&rsquo; estiver ligado. Projeto com
+              orçamento aprovado ou com job, em qualquer status, não pode ser
+              arquivado.
+            </p>
+            {/* A recusa do servidor aparece aqui: o erro do drawer fica
+                atrás deste diálogo. */}
+            {error && <p className="mt-2 text-california-red">{error}</p>}
+          </>
+        }
         confirmLabel="Arquivar"
         onConfirm={handleArquivar}
         pending={pending}
