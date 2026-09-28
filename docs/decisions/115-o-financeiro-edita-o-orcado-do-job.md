@@ -200,6 +200,15 @@ desfeito por uma segunda alteração:
   (R$ 1.391,82 → R$ 1.670,19, parcelas de R$ 835,10 e R$ 835,09, carimbo
   do envio preservado); a função recusa parcela que já virou nota e job
   finalizado.
+- **Sob as travas de escrita direta** (`20260928400001`, de outra frente,
+  aplicada no mesmo dia, que já conta com esta função): a mesma simulação,
+  com o envio criado pelo `enviar_job_para_faturamento` e a alteração
+  gravada pelo usuário Financeiro Teste. Envio, parcelas, carimbo, status
+  (`aberto`), números do job, linha e previsões ficaram certos, e o autor
+  gravado foi o financeiro. Tudo desfeito.
+- **Build completo** da árvore que subiu (com o main de 28/09), com as
+  dependências instaladas numa cópia isolada: `tsc`, lint e `next build`
+  limpos.
 - **AMB-1001/26** (job real): as 4 linhas com PP abrem na edição; a edição
   foi descartada, sem gravar.
 
