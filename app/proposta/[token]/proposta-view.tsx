@@ -324,6 +324,12 @@ function DadoCard({
  * nome embaixo; coluna direita com a colagem de fotos dos escritórios.
  */
 function SlidePagina1({ nome }: { nome: string }) {
+  // Quebra o nome em duas linhas: primeiro nome + resto. Se só tiver
+  // um nome, mostra ele sozinho na primeira linha.
+  const partes = nome.trim().split(/\s+/);
+  const primeiroNome = partes[0] ?? "";
+  const sobrenome = partes.slice(1).join(" ");
+
   return (
     <div className="overflow-hidden rounded-3xl shadow-soft aspect-[16/9] grid grid-cols-[40%_1fr]">
       {/* Coluna esquerda — bloco vermelho sólido em cima, cortina em baixo */}
@@ -365,9 +371,14 @@ function SlidePagina1({ nome }: { nome: string }) {
           <div className="flex items-stretch gap-3 md:gap-4">
             <div className="w-px bg-white/70" />
             <div>
-              <p className="text-white text-lg md:text-2xl font-black uppercase leading-tight tracking-wide">
-                {nome}
+              <p className="text-white text-2xl md:text-4xl font-black uppercase leading-none tracking-wide">
+                {primeiroNome}
               </p>
+              {sobrenome && (
+                <p className="mt-1 md:mt-2 text-white text-2xl md:text-4xl font-black uppercase leading-none tracking-wide">
+                  {sobrenome}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -394,27 +405,46 @@ function SlidePagina1({ nome }: { nome: string }) {
 }
 
 /**
- * Chip do logo California, aproximado em HTML. Usa a cor #D40D32 do
- * bloco como fundo e um círculo branco com emoji 🐻 como marca-símbolo.
+ * Logo California. Usa a imagem real em
+ * /public/proposta/carta/california-logo.png. Se o arquivo não estiver
+ * lá, cai num placeholder textual (chip com 🐻 + "CALIFORNIA").
  *
- * Se você preferir o logo real, salve como
- * /public/proposta/carta/california-logo.png e troque este componente
- * por um <Image src="..." /> — o layout ao redor não muda.
+ * A imagem deve ser PNG com fundo transparente e o logo em versão
+ * clara (urso branco + "CALIFORNIA" em branco), pra ficar sobre o
+ * bloco vermelho #D40D32.
  */
 function LogoCalifornia() {
-  return (
-    <div className="inline-flex items-center gap-2 self-start">
-      <span
-        className="inline-flex items-center justify-center rounded-full bg-white"
-        style={{ width: 26, height: 26 }}
-      >
-        <span className="text-sm leading-none" role="img" aria-label="urso">
-          🐻
+  const [erro, setErro] = React.useState(false);
+
+  if (erro) {
+    return (
+      <div className="inline-flex items-center gap-2 self-start">
+        <span
+          className="inline-flex items-center justify-center rounded-full bg-white"
+          style={{ width: 26, height: 26 }}
+        >
+          <span className="text-sm leading-none" role="img" aria-label="urso">
+            🐻
+          </span>
         </span>
-      </span>
-      <span className="text-white font-black text-base md:text-lg tracking-wider">
-        CALIFORNIA
-      </span>
+        <span className="text-white font-black text-base md:text-lg tracking-wider">
+          CALIFORNIA
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative self-start h-8 md:h-10 w-32 md:w-40">
+      <Image
+        src="/proposta/carta/california-logo.png"
+        alt="California"
+        fill
+        sizes="160px"
+        className="object-contain object-left"
+        unoptimized
+        onError={() => setErro(true)}
+      />
     </div>
   );
 }
