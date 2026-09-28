@@ -192,6 +192,15 @@ export const permissoes = {
   "rh.folhas.ver":                ["administrador", "rh", "financeiro"],
   "rh.folhas.editar_rh":          ["administrador", "rh"],
   "rh.folhas.aprovar_financeiro": ["administrador", "financeiro"],
+  /**
+   * Contratação — pipeline que antecede o cadastro do colaborador
+   * (task 007, 2026-09-29). RH e admin gerenciam; o candidato usa link
+   * público sem login pra aceitar/preencher, então não precisa
+   * permissão pra ele.
+   */
+  "rh.contratacoes.ver":          ["administrador", "rh"],
+  "rh.contratacoes.editar":       ["administrador", "rh"],
+  "rh.contratacoes.efetivar":     ["administrador", "rh"],
 } as const satisfies Record<string, readonly AppRole[]>;
 
 /** Chaves validas da matriz — usada como tipo em consumidores. */
