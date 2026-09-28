@@ -44,6 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -202,6 +203,12 @@ interface Props {
   servicos: ServicoOption[];
   /** Projetos do financeiro do mesmo cliente, para o combo. */
   projetos: ProjetoFinanceiroOpcao[];
+  /**
+   * O projeto do financeiro do último job aberto no mesmo projeto da
+   * produção — o texto de fundo da busca do campo Projeto (decisão 111,
+   * revisão de 28/09/2026). Nulo quando não há, e no job já aberto.
+   */
+  sugestaoDeProjeto: { nome: string; codigo: string; jobCodigo: string } | null;
   /** Contas ativas do tenant, com saldo de hoje. */
   contas: ContaBancariaOpcao[];
   custoPrevisto: number;
@@ -362,6 +369,7 @@ export function AberturaForm({
   categorias,
   servicos,
   projetos,
+  sugestaoDeProjeto,
   contas,
   custoPrevisto,
   faturamentoPrevisto,
@@ -432,6 +440,7 @@ export function AberturaForm({
     () => job.projeto_financeiro_id ?? "",
   );
   const [projetoAberto, setProjetoAberto] = React.useState(false);
+  const [buscaProjeto, setBuscaProjeto] = React.useState("");
   const [criandoProjeto, setCriandoProjeto] = React.useState(false);
   const [nomeNovoProjeto, setNomeNovoProjeto] = React.useState("");
   const [criandoPending, setCriandoPending] = React.useState(false);
@@ -654,6 +663,22 @@ export function AberturaForm({
     [projetos, projetoNovo],
   );
   const projetoSel = projetosVisiveis.find((p) => p.id === projetoId) ?? null;
+  // Sem acento e sem caixa, no nome e no código — o mesmo critério do
+  // campo de fornecedor (`components/ui/combobox.tsx`).
+  const projetosFiltrados = React.useMemo(() => {
+    const normalizar = (t: string) =>
+      t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const q = normalizar(buscaProjeto.trim());
+    if (!q) return projetosVisiveis;
+    return projetosVisiveis.filter(
+      (p) => normalizar(p.nome).includes(q) || normalizar(p.codigo).includes(q),
+    );
+  }, [projetosVisiveis, buscaProjeto]);
+  function escolherProjeto(id: string) {
+    setProjetoId(id);
+    setProjetoAberto(false);
+    setBuscaProjeto("");
+  }
   const projetoLabel = projetoSel?.nome ?? "Selecione o projeto";
   const projetoCodigo = projetoSel?.codigo ?? "";
   const projetoResumo = projetoSel
@@ -1345,7 +1370,11 @@ export function AberturaForm({
                 <div className="flex items-center gap-2">
                   <Popover
                     open={projetoAberto}
-                    onOpenChange={(o) => !travado && setProjetoAberto(o)}
+                    onOpenChange={(o) => {
+                      if (travado) return;
+                      setProjetoAberto(o);
+                      if (!o) setBuscaProjeto("");
+                    }}
                   >
                     <PopoverTrigger asChild>
                       <button
@@ -1376,44 +1405,77 @@ export function AberturaForm({
                         )}
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[320px] p-1.5" align="start">
-                      <p className="px-2.5 pb-2 pt-1.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
+                    {/* Busca digitável (decisão 111, revisão de 28/09): com
+                        muitos projetos, a lista só se acha digitando. O
+                        texto de fundo da busca traz a sugestão — o projeto
+                        do último job aberto no mesmo projeto da produção —
+                        para a pessoa digitar o nome que está vendo. */}
+                    <PopoverContent
+                      className="w-[var(--radix-popover-trigger-width)] min-w-[320px] p-0"
+                      align="start"
+                    >
+                      <div className="border-b border-border p-2">
+                        <Input
+                          autoFocus
+                          aria-label="Buscar projeto"
+                          value={buscaProjeto}
+                          onChange={(e) => setBuscaProjeto(e.target.value)}
+                          onKeyDown={(e) => {
+                            // Enter escolhe o primeiro da lista filtrada.
+                            if (e.key === "Enter" && projetosFiltrados[0]) {
+                              e.preventDefault();
+                              escolherProjeto(projetosFiltrados[0].id);
+                            }
+                          }}
+                          placeholder={
+                            sugestaoDeProjeto
+                              ? `Sugestão: ${sugestaoDeProjeto.nome} — último job deste projeto (${sugestaoDeProjeto.jobCodigo})`
+                              : "Digite o nome ou o código do projeto"
+                          }
+                          className="h-9 text-[13px]"
+                        />
+                      </div>
+                      <p className="px-4 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
                         Projetos abertos
                       </p>
-                      {projetosVisiveis.length === 0 ? (
-                        <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
-                          Nenhum projeto do financeiro para este cliente. Crie
-                          um no botão ao lado.
-                        </p>
-                      ) : (
-                        projetosVisiveis.map((pr) => (
-                          <button
-                            key={pr.id}
-                            type="button"
-                            onClick={() => {
-                              setProjetoId(pr.id);
-                              setProjetoAberto(false);
-                            }}
-                            className={cn(
-                              "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
-                              pr.id === projetoId &&
-                                "bg-california-red/[0.06] text-california-red",
-                            )}
-                          >
-                            <span className="flex items-baseline justify-between gap-3">
-                              <span className="truncate font-semibold">
-                                {pr.nome}
+                      <div className="max-h-64 overflow-y-auto px-1.5 pb-1.5">
+                        {projetosVisiveis.length === 0 ? (
+                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
+                            Nenhum projeto do financeiro para este cliente. Crie
+                            um no botão ao lado.
+                          </p>
+                        ) : projetosFiltrados.length === 0 ? (
+                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
+                            Nenhum projeto com “{buscaProjeto.trim()}”. Confira
+                            o nome ou crie um no botão ao lado.
+                          </p>
+                        ) : (
+                          projetosFiltrados.map((pr) => (
+                            <button
+                              key={pr.id}
+                              type="button"
+                              onClick={() => escolherProjeto(pr.id)}
+                              className={cn(
+                                "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
+                                pr.id === projetoId &&
+                                  "bg-california-red/[0.06] text-california-red",
+                              )}
+                            >
+                              <span className="flex items-baseline justify-between gap-3">
+                                <span className="truncate font-semibold">
+                                  {pr.nome}
+                                </span>
+                                <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
+                                  {pr.codigo}
+                                </span>
                               </span>
-                              <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
-                                {pr.codigo}
+                              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                {pr.cliente_nome ?? "—"}
                               </span>
-                            </span>
-                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                              {pr.cliente_nome ?? "—"}
-                            </span>
-                          </button>
-                        ))
-                      )}
+                            </button>
+                          ))
+                        )}
+                      </div>
                     </PopoverContent>
                   </Popover>
 

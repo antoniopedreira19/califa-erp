@@ -5963,6 +5963,19 @@ era o imposto de R$ 28.318,52). Regra completa na
 - **Não mudou:** a página do job já aberto (leitura, edição, revisão,
   aprovação de save) e as actions de gravação.
 
+## ⚠️ Nota de 2026-09-28 — busca no campo Projeto da abertura (decisão 111 §7)
+
+- **O campo Projeto** do formulário da abertura ganhou busca: a lista abre
+  com o cursor no campo de busca, filtra por nome e código (sem acento), o
+  Enter escolhe o primeiro e a lista rola quando é longa.
+- **Sugestão:** o texto de fundo da busca traz o projeto do financeiro do
+  último job aberto no mesmo projeto da produção ("Sugestão: Stella Artois
+  Unificado — último job deste projeto (JOB-0031)"). Não vem escolhido.
+  Sem job anterior aberto, ou com o projeto fora da lista, o fundo é
+  "Digite o nome ou o código do projeto".
+- A busca vale também na edição e na revisão do registro; a sugestão, só na
+  abertura.
+
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
 **Isto revoga o primeiro tópico da nota de 2026-09-01.**

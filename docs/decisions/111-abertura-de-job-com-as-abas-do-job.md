@@ -107,7 +107,31 @@ comparação, fica em 1,2–1,9 s.
   colunas, sem as colunas de consulta) não foi escolhida.
 - **Guardar um rascunho** ao sair ou recarregar (D6 do protótipo): não. O
   aviso de saída cobre o caso.
-- **Página de Jobs da produção:** antes da abertura, "Categoria · Serviço"
-  mostra só o serviço, porque `jobs.categoria_id` só é gravado ao abrir. A
-  aba Informações da abertura lê a categoria do orçamento; a página da
-  produção ficou como estava.
+- ~~**Página de Jobs da produção:** antes da abertura, "Categoria · Serviço"
+  mostra só o serviço, porque `jobs.categoria_id` só é gravado ao abrir.~~
+  ⚠️ Resolvido em 81fd0c5 (2026-09-27): a ficha da produção também cai na
+  categoria do orçamento.
+
+## 7. Revisão de 2026-09-28 — busca no campo Projeto e sugestão
+
+Pedido do Tiago: com muitos projetos, o campo Projeto precisa de busca
+digitável; e o nome do projeto do último job do mesmo projeto da produção
+serve de sugestão, porque na maioria dos casos os jobs de um projeto da
+produção ficam no mesmo projeto do financeiro.
+
+1. **Busca.** A lista do campo Projeto abre com um campo de busca no topo,
+   com o cursor já nele. Filtra por nome e por código, sem acento e sem
+   diferenciar maiúsculas — o mesmo critério do campo de fornecedor. Enter
+   escolhe o primeiro da lista; Esc ou clique fora fecha. A lista rola
+   quando passa de umas oito linhas.
+2. **Sugestão no fundo da busca.** O texto de fundo do campo de busca é
+   "Sugestão: [nome] — último job deste projeto ([código do job])": o
+   projeto do financeiro do job aberto mais recentemente
+   (`data_abertura_financeiro`) no mesmo projeto da produção. A sugestão
+   não vem escolhida; a pessoa digita o nome que está vendo.
+3. **Quando não há sugestão:** nenhum outro job do projeto foi aberto, ou
+   o projeto sugerido não está na lista (encerrado, ou de outro cliente).
+   O fundo fica "Digite o nome ou o código do projeto".
+4. **Onde vale:** a busca vale nos quatro momentos do formulário (abertura,
+   edição, revisão, aprovação de save). A sugestão só na abertura: no job
+   já aberto a página passa `sugestaoDeProjeto={null}`.
