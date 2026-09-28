@@ -337,7 +337,7 @@ export function ContratoPJDocument({ dados }: { dados: DadosContratoPJ }) {
           contrato, assim como referentes aos estudos, resultados de análises
           e planos criados e/ou produzidos pelo(a) CONTRATADO(A), seus
           empregados, representantes, administradores, sócios e/ou
-          subcontratados, na íntegra ou com modificações ("criações"),
+          subcontratados, na íntegra ou com modificações (&ldquo;criações&rdquo;),
           passando a CONTRATANTE a ser a única e exclusiva proprietária das
           criações e dos direitos de propriedade intelectual delas
           decorrentes, em caráter definitivo, irrevogável e irretratável, sem
