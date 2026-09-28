@@ -3,7 +3,7 @@ import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { itensDeJobs } from "@/lib/faixa-do-projeto";
 import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, ArrowRight, FilePenLine, Lock } from "lucide-react";
+import { AlertTriangle, ArrowRight, FilePenLine } from "lucide-react";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -30,7 +30,12 @@ import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { carregarDetalheDoJob } from "@/app/(app)/jobs/[jobId]/carregar-detalhe";
 import { FichaJob } from "@/app/(app)/jobs/[jobId]/ficha-job";
 import { ErratasCard } from "@/app/(app)/jobs/[jobId]/erratas-card";
-import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
+import { AlteracoesFinanceiroCard } from "@/app/(app)/jobs/[jobId]/alteracoes-financeiro-card";
+import {
+  JobRealizadoSection,
+  type EdicaoDoFinanceiro,
+} from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
+import { SeloDaEdicao } from "./selo-da-edicao";
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
 import { AberturaForm } from "../../abertura-de-job/[jobId]/abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
@@ -283,6 +288,52 @@ export default async function JobNoFinanceiroPage({
   // (decisão 075), envios por mês e o mensal que não liquida com mês por
   // faturar (decisão 078), e o job pago só por save (decisão 028 §11).
   const situacao = (esteira.get(params.jobId) ?? FATURAMENTO_VAZIO).situacao;
+
+  // ---- "Editar orçado" (decisão 115) ----
+  // Administrador e financeiro, do job aberto até a primeira nota — mesmo
+  // parcial. No mensal a trava é por mês: só o mês com nota fica de fora, e
+  // o botão só trava quando todos os meses têm nota (a seção decide).
+  const envioUnico = detalhe.faturamentoEnvioUnico;
+  const temNotaEmitida =
+    situacao === "faturado" ||
+    situacao === "inadimplente" ||
+    situacao === "liquidado" ||
+    (envioUnico?.faturado ?? 0) > 0.004;
+  const edicaoDoFinanceiro: EdicaoDoFinanceiro | null =
+    pode(session.activeRole, "jobs.editar_orcado_financeiro") &&
+    ["aberto", "em_producao", "encerrado", "finalizado"].includes(job.status)
+      ? {
+          travadoPor:
+            detalhe.modeloPlanilha !== "mensal" && temNotaEmitida
+              ? "O job já tem nota emitida (faturamento parcial ou total): o orçado não muda mais pelo financeiro."
+              : null,
+          mesesComNota: detalhe.faturamentoMensal
+            .filter((m) => m.faturado > 0.004)
+            .map((m) => m.mesId),
+          recebimento: previsoes.recebimento.map((r) => ({
+            data: r.data,
+            valor: r.valor,
+            mes: r.mes,
+          })),
+          // Os envios ainda sem nota: as parcelas deles acompanham.
+          envios: [
+            ...(envioUnico?.envio && envioUnico.faturado <= 0.004 ? [envioUnico.envio] : []),
+            ...detalhe.faturamentoMensal.flatMap((m) =>
+              m.envio && m.faturado <= 0.004 ? [m.envio] : [],
+            ),
+          ].map((e) => ({
+            id: e.id,
+            mes: e.mes,
+            parcelas: e.parcelas.map((p) => ({
+              id: p.id,
+              data_vencimento: p.data_vencimento,
+              valor: p.valor,
+            })),
+          })),
+          // Só anda no serviço Interno (a seção decide pelo `interno`).
+          curva: previsoes.curva.map((c) => ({ data: c.data, valor: c.valor })),
+        }
+      : null;
   const situacaoMeta = SITUACAO_META[situacao];
 
   // ---- Formulário de abertura em leitura (ou em revisão) ----
@@ -406,10 +457,8 @@ export default async function JobNoFinanceiroPage({
                   Revisão da abertura pendente
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1 text-[11px] font-semibold text-muted-foreground">
-                  <Lock className="h-3 w-3" />
-                  Somente leitura
-                </span>
+                // Vira "Editando orçado" durante o "Editar orçado" (decisão 115).
+                <SeloDaEdicao />
               )}
             </div>
           </div>
@@ -613,11 +662,20 @@ export default async function JobNoFinanceiroPage({
               }
               moeda={versaoAprovada.moeda}
             />
+
+            {/* O histórico do "Editar orçado" (decisão 115). Só existe
+                depois da primeira alteração. */}
+            <AlteracoesFinanceiroCard
+              alteracoes={detalhe.alteracoesFinanceiro}
+              moeda={versaoAprovada.moeda}
+            />
           </div>
         }
         planilha={
-          /* Sempre em leitura: quem edita realizado, BV e PP é a produção,
-             na página de Jobs. O financeiro confere.
+          /* Em leitura, menos o orçado: quem edita realizado, BV e PP é a
+             produção, na página de Jobs. Desde a decisão 115 (28/09/2026) o
+             financeiro edita os VALORES do orçado pelo "Editar orçado"
+             (`edicaoDoFinanceiro`), sem aprovação, até a primeira nota.
 
              O save entra por inteiro na visualização — coluna, estados e
              rastro —, e `podeAcoes={false}` fecha a porta da edição, aqui
@@ -663,6 +721,7 @@ export default async function JobNoFinanceiroPage({
             )}
             <JobRealizadoSection
               confirmarSaidaParaOrcamento
+              edicaoDoFinanceiro={edicaoDoFinanceiro}
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}

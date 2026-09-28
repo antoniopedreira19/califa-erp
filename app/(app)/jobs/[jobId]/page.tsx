@@ -36,6 +36,7 @@ import { JobRealizadoSection } from "./realizado/job-realizado-section";
 import { JobPPsSection } from "./pps/job-pps-section";
 import { JobTabs } from "./job-tabs";
 import { ErratasCard } from "./erratas-card";
+import { AlteracoesFinanceiroCard } from "./alteracoes-financeiro-card";
 import { JobChatSection } from "./comunicacao/job-chat-section";
 import { carregarDetalheDoJob } from "./carregar-detalhe";
 
@@ -336,11 +337,22 @@ export default async function JobDetailPage({
               faturamentoPrevistoAtual={totaisJob.faturamentoPrevisto}
               moeda={versaoAprovada.moeda}
             />
+
+            {/* As edições do orçado feitas pelo financeiro (decisão 115):
+                a produção vê o que mudou e quem mudou. O card só existe
+                depois da primeira. */}
+            <AlteracoesFinanceiroCard
+              alteracoes={detalhe.alteracoesFinanceiro}
+              moeda={versaoAprovada.moeda}
+            />
           </div>
         }
         planilha={
           <JobRealizadoSection
             confirmarSaidaParaOrcamento={false}
+            // O "Editar orçado" é do financeiro (decisão 115); aqui a
+            // produção corrige pela errata.
+            edicaoDoFinanceiro={null}
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
