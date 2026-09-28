@@ -34,7 +34,7 @@ export default function PropostaLayout({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 md:px-6 py-8">{children}</main>
       <footer className="mt-16 border-t border-border py-6 text-center text-xs text-muted-foreground">
         <p>
           Agência California — Rua Vale Cabral, 43, Pituba, Salvador/BA · CEP 41810-020
