@@ -15,6 +15,11 @@ import { CardDados } from "./card-dados";
 import { CardAlocacoes } from "./card-alocacoes";
 import { CardSalarios } from "./card-salarios";
 import { CardDadosBancarios } from "./card-dados-bancarios";
+import { BannerPendencias } from "./banner-pendencias";
+import {
+  avaliarPendencias,
+  separarPendenciasPorCard,
+} from "@/lib/rh/pendencias";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +149,28 @@ export default async function ColaboradorDetalhePage({
 
   const isAdmin = session.activeRole === "administrador";
 
+  const pendencias = avaliarPendencias({
+    colaborador: {
+      tipo_contratacao: colab.tipo_contratacao,
+      cpf: colab.cpf,
+      cnpj: colab.cnpj,
+      email: colab.email,
+      telefone: colab.telefone,
+      nivel_id: colab.nivel_id,
+      data_nascimento: colab.data_nascimento,
+      area: colab.area,
+      banco_codigo: colab.banco_codigo,
+      agencia: colab.agencia,
+      conta: colab.conta,
+      conta_dv: colab.conta_dv,
+      tipo_conta: colab.tipo_conta,
+      pix_chave: colab.pix_chave,
+    },
+    temSalarioVigente: salarios.some((s) => s.data_fim === null),
+    temAlocacaoVigente: alocacoes.some((a) => a.data_fim === null),
+  });
+  const pendenciasPorCard = separarPendenciasPorCard(pendencias);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div>
@@ -188,15 +215,21 @@ export default async function ColaboradorDetalhePage({
         </header>
       </div>
 
+      <BannerPendencias pendencias={pendencias} />
+
       <div className="grid gap-4">
         <CardDados
           colaborador={colab}
           empresas={empresas}
           regionais={regionais}
           niveis={niveis}
+          pendencia={pendenciasPorCard.dados}
         />
 
-        <CardDadosBancarios colaborador={colab} />
+        <CardDadosBancarios
+          colaborador={colab}
+          pendencia={pendenciasPorCard.bancario}
+        />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <CardAlocacoes
@@ -206,11 +239,13 @@ export default async function ColaboradorDetalhePage({
             regionais={regionais}
             rateiosDoAno={rateiosDoAno}
             anoRateio={anoRateio}
+            pendencia={pendenciasPorCard.alocacao}
           />
           <CardSalarios
             colaboradorId={colab.id}
             salarios={salarios}
             isAdmin={isAdmin}
+            pendencia={pendenciasPorCard.salario}
           />
         </div>
       </div>

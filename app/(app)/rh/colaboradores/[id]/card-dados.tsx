@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { Power, PowerOff, User } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Colaborador, Empresa, Nivel } from "@/lib/types";
+import type { NivelPendencia } from "@/lib/rh/pendencias";
 import { tipoContratacaoLabel } from "@/lib/types";
 import {
   inativarColaborador,
   reativarColaborador,
 } from "../actions";
 import { EditarDadosDrawer } from "./editar-dados-drawer";
+import { SeloPendencia } from "./selo-pendencia";
 
 type Props = {
   colaborador: Colaborador & {
@@ -19,9 +21,10 @@ type Props = {
   empresas: Pick<Empresa, "id" | "nome_fantasia">[];
   regionais: { id: string; nome: string; empresa_id: string }[];
   niveis: Pick<Nivel, "id" | "codigo" | "descricao">[];
+  pendencia?: NivelPendencia;
 };
 
-export function CardDados({ colaborador, niveis }: Props) {
+export function CardDados({ colaborador, niveis, pendencia }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [confirmando, setConfirmando] = React.useState<
@@ -55,6 +58,7 @@ export function CardDados({ colaborador, niveis }: Props) {
             <User className="h-4 w-4 text-california-red" />
           </div>
           <h2 className="text-lg font-semibold">Dados do colaborador</h2>
+          {pendencia && <SeloPendencia nivel={pendencia} />}
         </div>
         <div className="flex items-center gap-1">
           <EditarDadosDrawer colaborador={colaborador} niveis={niveis} />

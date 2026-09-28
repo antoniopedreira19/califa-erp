@@ -21,6 +21,7 @@ import {
   type RegionalOpcao,
 } from "./colaboradores-list";
 import { CardCustoQuadro } from "./card-custo-quadro";
+import { avaliarPendencias } from "@/lib/rh/pendencias";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +88,7 @@ export default async function ColaboradoresPage() {
     supabase
       .from("colaboradores")
       .select(
-        "id, nome, tipo_contratacao, funcao, status, data_admissao, data_encerramento, nivel:niveis(id, codigo)",
+        "id, nome, tipo_contratacao, funcao, status, data_admissao, data_encerramento, cpf, cnpj, email, telefone, nivel_id, data_nascimento, area, banco_codigo, agencia, conta, conta_dv, tipo_conta, pix_chave, nivel:niveis(id, codigo)",
       )
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true }),
@@ -215,6 +216,26 @@ export default async function ColaboradoresPage() {
   const linhas: ColaboradorRow[] = ((colaboradoresRes.data ?? []) as any[]).map(
     (c) => {
       const aloc = alocacaoPorColaborador.get(c.id);
+      const pendencia = avaliarPendencias({
+        colaborador: {
+          tipo_contratacao: c.tipo_contratacao,
+          cpf: c.cpf,
+          cnpj: c.cnpj,
+          email: c.email,
+          telefone: c.telefone,
+          nivel_id: c.nivel_id,
+          data_nascimento: c.data_nascimento,
+          area: c.area,
+          banco_codigo: c.banco_codigo,
+          agencia: c.agencia,
+          conta: c.conta,
+          conta_dv: c.conta_dv,
+          tipo_conta: c.tipo_conta,
+          pix_chave: c.pix_chave,
+        },
+        temSalarioVigente: salarioPorColaborador.has(c.id),
+        temAlocacaoVigente: alocacaoPorColaborador.has(c.id),
+      });
       return {
         id: c.id,
         nome: c.nome,
@@ -230,6 +251,8 @@ export default async function ColaboradoresPage() {
         regional_id: aloc?.regional_id ?? null,
         regional_nome: aloc?.regional_nome ?? null,
         usa_rateio_empresa: aloc?.usa_rateio_empresa ?? false,
+        pendencia_nivel: pendencia.nivel,
+        pendencia_total: pendencia.total,
       };
     },
   );

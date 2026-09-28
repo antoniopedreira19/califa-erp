@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ColaboradorAlocacao, Empresa } from "@/lib/types";
+import type { NivelPendencia } from "@/lib/rh/pendencias";
+import { SeloPendencia } from "./selo-pendencia";
 import { alterarAlocacao } from "./actions-alocacao";
 
 export type AlocacaoRow = ColaboradorAlocacao & {
@@ -44,6 +46,7 @@ export function CardAlocacoes({
   regionais,
   rateiosDoAno,
   anoRateio,
+  pendencia,
 }: {
   colaboradorId: string;
   alocacoes: AlocacaoRow[];
@@ -51,6 +54,7 @@ export function CardAlocacoes({
   regionais: { id: string; nome: string; empresa_id: string }[];
   rateiosDoAno: RateioEmpresa[];
   anoRateio: number;
+  pendencia?: NivelPendencia;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -155,7 +159,10 @@ export function CardAlocacoes({
             <Briefcase className="h-4 w-4 text-california-red" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">Alocação</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">Alocação</h2>
+              {pendencia && <SeloPendencia nivel={pendencia} />}
+            </div>
             <p className="text-xs text-muted-foreground">
               Vigente por vez. Regional específica ou todas as regionais da
               empresa via rateio anual.
