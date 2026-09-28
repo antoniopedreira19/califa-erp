@@ -1,11 +1,12 @@
-# 115 — O financeiro edita o orçado do job na Planilha Interna, sem aprovação, até a primeira nota ou o encerramento
+# 115 — O financeiro edita o orçado do job na Planilha Interna, sem aprovação, da abertura até a primeira nota ou o encerramento
 
 **Data:** 2026-09-28
-**Decidido por:** Tiago, sobre protótipo navegável (artifact `Re8sXDJpj8gzEk1tnCrt48`, v2), com uma segunda rodada de respostas no mesmo dia, sobre a entrega
+**Decidido por:** Tiago, sobre protótipo navegável (artifact `Re8sXDJpj8gzEk1tnCrt48`, v2), com mais duas rodadas de respostas no mesmo dia, sobre a entrega
 **Migrations:** `20260928300001_alteracoes_do_financeiro.sql`,
 `20260928300002_alteracao_financeiro_curva_do_interno.sql` (desfeita pela
-seguinte) e
-`20260928300003_alteracao_financeiro_so_recebimento_e_trava_no_encerramento.sql`.
+seguinte),
+`20260928300003_alteracao_financeiro_so_recebimento_e_trava_no_encerramento.sql`
+e `20260928300004_alteracao_financeiro_na_abertura_do_job.sql`.
 
 ---
 
@@ -62,21 +63,31 @@ Depois de ver a entrega, no mesmo dia, ele respondeu:
   edita", e não há trava por PP: "as PPs preenchem o realizado, não o
   planejado".
 
+Com a entrega no main, ainda no mesmo dia:
+
+- **A edição vale também durante a abertura.** "Percebi que não está sendo
+  possível editar o orçado, durante o momento de abertura do job, como eu
+  havia mencionado. Isso deverá ser possível." O pedido original dizia
+  "desde o momento da abertura de jobs", e a entrega o tinha lido como
+  "desde que o job foi aberto".
+
 ## 3. A regra
 
 1. **Quem:** administrador e financeiro (`jobs.editar_orcado_financeiro`
    em `lib/permissoes.ts`). A produção continua corrigindo pela errata.
 2. **Onde:** botão "Editar orçado" na Planilha Interna do job **no
-   financeiro** (`/financeiro/jobs/[jobId]?aba=planilha`), no lugar em que
-   a produção tem o "Realizar errata". A planilha da produção e a da fila
-   de abertura não têm o botão.
-3. **Quando:** do job aberto no financeiro (`data_abertura_financeiro`
-   preenchido) até a **primeira nota emitida**, parcial ou total, **ou o
-   encerramento** do job, o que vier antes. Na prática, o status precisa
-   ser aberto ou em produção (`JOB_STATUS_ABERTO`): encerrado e finalizado
-   nunca editam, nem o Interno, que não tem nota. No modelo mensal
-   (decisão 078) a trava da nota é por mês: as linhas do mês com nota não
-   abrem; as dos outros meses, sim.
+   financeiro**, no lugar em que a produção tem o "Realizar errata": na
+   tela da abertura (`/financeiro/abertura-de-job/[jobId]?aba=planilha`) e
+   na do job aberto (`/financeiro/jobs/[jobId]?aba=planilha`). A planilha
+   da produção não tem o botão.
+3. **Quando:** **desde a abertura** — o job na fila (`aguardando_abertura`),
+   enquanto o financeiro o confere — até a **primeira nota emitida**,
+   parcial ou total, **ou o encerramento** do job, o que vier antes. Depois
+   de aberto, o status precisa ser aberto ou em produção
+   (`JOB_STATUS_ABERTO`): encerrado e finalizado nunca editam, nem o
+   Interno, que não tem nota. O devolvido à produção (`rejeitado_financeiro`)
+   não edita. No modelo mensal (decisão 078) a trava da nota é por mês: as
+   linhas do mês com nota não abrem; as dos outros meses, sim.
 4. **O quê:** R$ Unit., QT e D/M do orçado. Tipo de custo, linha nova,
    linha vermelha e planejado continuam sendo da errata. Linha com PP é
    editável (P2). **Linha com save não:** o save tem porta própria (o
@@ -102,6 +113,20 @@ Depois de ver a entrega, no mesmo dia, ele respondeu:
    - o **envio para faturamento ainda sem nota** (P4): o valor enviado e as
      parcelas, do mesmo jeito, com as mesmas datas.
      `faturamento_enviado_em` não muda.
+
+   **Na abertura** ainda não há previsão gravada, envio nem nota: o que
+   acompanha é o **formulário da aba Abertura do Job**, na mesma página.
+   Faturamento, imposto e custo previstos passam a ser os novos; o que o
+   financeiro já preencheu fica (nome, projeto, contas, datas); as parcelas
+   de recebimento que ele montou andam pela mesma regra — cada uma na
+   proporção dela, com a mesma data, ou, no mensal, o valor novo de cada
+   mês —, e os impostos que seguem as parcelas se refazem. A foto da
+   abertura, ao confirmar, já sai com os números novos.
+
+   O mesmo formulário, na aba Abertura do Job do **job aberto**, relê as
+   previsões gravadas depois de uma edição do orçado (antes ficava com os
+   valores de antes até recarregar a página); com o Editar registro aberto,
+   acompanha como na abertura.
 8. **O que não muda:** o orçado aprovado da versão
    (`versoes_orcamento_itens`), o realizado, as PPs, o status de conclusão
    do A · Repasse, a foto da abertura (`valor_job_abertura`,
@@ -115,9 +140,9 @@ Depois de ver a entrega, no mesmo dia, ele respondeu:
    `jobs_alteracoes_financeiro`, com as linhas em
    `jobs_alteracoes_financeiro_itens`. É histórico imutável: sem UPDATE nem
    DELETE, nem na policy nem no grant. Aparece:
-   - no card **"Alterações do Financeiro"**, na aba Informações do Job, no
-     financeiro e na produção, abaixo do card de Erratas, só depois da
-     primeira alteração. Uma linha por alteração, com data, hora, motivo,
+   - no card **"Alterações do Financeiro"**, na aba Informações do Job — na
+     abertura, no job aberto no financeiro e na produção —, depois da ficha
+     e do card de Erratas, só depois da primeira alteração. Uma linha por alteração, com data, hora, motivo,
      "N itens · autor"; aberta, o antes → depois de cada item, os efeitos
      no faturamento previsto e no valor do job, e as parcelas que
      acompanharam;
@@ -127,18 +152,18 @@ Depois de ver a entrega, no mesmo dia, ele respondeu:
 ## 4. As recusas
 
 A action (`registrarAlteracaoDoFinanceiro`) confere tudo no servidor. A
-função do banco repete a trava do status (aberto ou em produção) e a das
-parcelas do envio que já viraram nota:
+função do banco repete a trava do status (na fila da abertura, aberto ou
+em produção) e a das parcelas do envio que já viraram nota:
 
 | Situação | Mensagem |
 |---|---|
 | Job encerrado ou finalizado | "O job já foi encerrado: o orçado não muda mais pelo financeiro." |
-| Job fora da janela (não aberto, cancelado, devolvido) | "O orçado só é editado pelo financeiro com o job aberto no financeiro." |
+| Job fora da janela (devolvido, cancelado) | "O orçado só é editado pelo financeiro com o job na abertura ou já aberto no financeiro." |
 | Job com nota emitida | "O job já tem nota emitida (faturamento parcial ou total): o orçado não muda mais pelo financeiro." |
 | Linha de mês com nota (mensal) | "Novembro já tem nota emitida: as linhas desse mês não mudam mais pelo financeiro." |
 | Linha com save | "\"Item\" tem save. Linha com save não entra na edição do orçado — o save muda pelo pop-up da coluna Save." |
 | Parcela do envio que já virou nota (no banco) | "Uma parcela do envio já virou nota emitida: o orçado desse faturamento não muda mais." |
-| Status fora da janela (no banco) | "O orçado só é editado pelo financeiro com o job aberto: depois do encerramento, não muda mais." |
+| Status fora da janela (no banco) | "O orçado só é editado pelo financeiro na abertura do job ou com o job aberto: depois do encerramento, não muda mais." |
 | Previsão de recebimento vazia que precisaria andar | "O job abriu sem faturamento previsto e não tem previsão de recebimento para acompanhar a alteração. Valor novo precisa de data: peça a errata à produção, que devolve o job para a revisão da abertura." (e a variante do mês, no mensal) |
 | Parcela do envio que zeraria | "Com essa alteração, uma parcela do envio para faturamento ficaria zerada ou negativa, e o envio não aceita parcela sem valor." |
 
@@ -227,6 +252,30 @@ desfeito por uma segunda alteração:
 - **AMB-1001/26** (job real): as 4 linhas com PP abrem na edição; a edição
   foi descartada, sem gravar.
 
+**Na abertura** (terceira rodada):
+
+- **TES-1014/26**, criado para o teste pelos fluxos da produção: a versão
+  do orçamento TES-P001/26-14 ("Teste importação 110", nacional, três
+  linhas B) foi aprovada e enviada para a abertura. Na tela da abertura, com
+  o formulário já mexido (nome do job trocado, recebimento em duas
+  parcelas de R$ 4.732,20), o Produtor foi de R$ 6.000 para R$ 7.000 na
+  aba Planilha. De volta à aba Abertura do Job: o nome continuou o
+  digitado, as parcelas foram para 2 × R$ 5.428,11 (R$ 10.856,22), os
+  impostos para 2 × R$ 1.060,11 (R$ 2.120,22), e as duas previsões
+  fecharam. O card apareceu na aba Informações. Desfeito do mesmo jeito,
+  e o formulário voltou a 2 × R$ 4.732,20. Nenhuma previsão foi gravada no
+  banco antes da abertura.
+- **TES-1013/26**, aberto: depois de uma edição, a aba Abertura do Job
+  passou a mostrar o recebimento e o imposto novos sem recarregar a página
+  (R$ 1.531,01 e R$ 299,01), e voltou ao desfazer.
+- **TES-1002/26**, mensal e aberto, com o Editar registro ligado:
+  novembro foi de R$ 118.304,96 para R$ 119.696,78 no formulário, as datas
+  ficaram, e os impostos que seguem as parcelas refizeram a soma
+  (R$ 74.751,34). O registro foi cancelado sem salvar, e o orçado,
+  desfeito.
+
 Ficaram entradas de teste em Alterações do Financeiro, sempre em pares (o
-teste e o desfazer): 4 no TES-1013/26, 2 no TES-1002/26 e 2 no
-TES-1009/26. O histórico é imutável.
+teste e o desfazer): 6 no TES-1013/26, 4 no TES-1002/26, 2 no TES-1009/26
+e 2 no TES-1014/26. O histórico é imutável. O TES-1014/26 ficou na fila
+da abertura, com os valores do orçamento aprovado, para quem quiser
+repetir o teste.

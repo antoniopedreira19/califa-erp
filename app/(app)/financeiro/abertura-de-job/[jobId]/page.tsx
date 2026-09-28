@@ -8,6 +8,7 @@ import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { carregarDetalheDoJob } from "@/app/(app)/jobs/[jobId]/carregar-detalhe";
 import { FichaJob } from "@/app/(app)/jobs/[jobId]/ficha-job";
+import { AlteracoesFinanceiroCard } from "@/app/(app)/jobs/[jobId]/alteracoes-financeiro-card";
 import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
 import { carregarJobParaAbertura } from "../dados";
@@ -340,71 +341,84 @@ export default async function AbrirJobNoFinanceiroPage({
           />
         }
         info={
-          <FichaJob
-            descritivo={jobDoDetalhe.observacoes}
-            antesDaAbertura
-            job={{
-              codigo: jobDoDetalhe.codigo,
-              codigoAnterior: jobDoDetalhe.codigo_anterior,
-              nome: job.nome,
-              // Antes da abertura a categoria do job ainda é a do
-              // orçamento: `jobs.categoria_id` só é gravado ao confirmar.
-              categoriaNome:
-                job.categoria_nome ?? detalhe.raw.categoria?.nome ?? null,
-              // O serviço do job, com o do orçamento como fallback —
-              // `dados.ts` já resolve (decisão 055).
-              servicoNome: job.servico_nome,
-              produto: jobDoDetalhe.produto,
-              regionalNome: detalhe.raw.regional?.nome ?? null,
-              cidade: jobDoDetalhe.cidade,
-              competenciaTrimestre: null,
-              competenciaAno: null,
-              competencias: [],
-              dataInicio: jobDoDetalhe.data_inicio_prevista,
-              dataFim: jobDoDetalhe.data_fim_prevista,
-              dataAbertura: null,
-              abertoPorNome: null,
-              dataPrevistaFaturamento: jobDoDetalhe.data_prevista_faturamento,
-              semFaturamento: faturamentoPrevisto <= 0.004,
-            }}
-            projeto={{
-              // Ainda sem projeto no financeiro: o da produção, e o link
-              // dele pergunta antes de sair para Orçamentos (decisão 108).
-              id: detalhe.raw.projeto_id,
-              codigo: detalhe.raw.projeto?.codigo ?? "—",
-              nome: detalhe.raw.projeto?.nome ?? "—",
-              clienteNome: detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
-              dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
-              dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
-            }}
-            jobsDoProjeto={jobsDoProjeto}
-            jobAtualId={job.id}
-            // Os irmãos abrem na ficha, como em "Visualizar Jobs" (decisão
-            // do Tiago, 08/09/2026).
-            jobLinkSuffix="?aba=info"
-            jobHrefBase="/financeiro/jobs/"
-            confirmarSaidaParaOrcamento
-            gpNome={detalhe.raw.responsavel?.nome ?? null}
-            produtorNome={detalhe.raw.produtor?.nome ?? null}
-            origem={{
-              projetoHref: `/orcamentos/${detalhe.raw.projeto_id}`,
-              orcamentoHref: `/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}/versoes/${detalhe.raw.versao_orcamento_aprovada_id}`,
-              orcamentoCodigo: detalhe.raw.orcamento?.codigo ?? null,
-              versaoLabel: detalhe.versaoLabel,
-            }}
-            contatos={detalhe.contatosCobranca}
-            statusBadgeClasses={jobStatusBadgeClasses}
-          />
+          <div className="space-y-4">
+            <FichaJob
+              descritivo={jobDoDetalhe.observacoes}
+              antesDaAbertura
+              job={{
+                codigo: jobDoDetalhe.codigo,
+                codigoAnterior: jobDoDetalhe.codigo_anterior,
+                nome: job.nome,
+                // Antes da abertura a categoria do job ainda é a do
+                // orçamento: `jobs.categoria_id` só é gravado ao confirmar.
+                categoriaNome:
+                  job.categoria_nome ?? detalhe.raw.categoria?.nome ?? null,
+                // O serviço do job, com o do orçamento como fallback —
+                // `dados.ts` já resolve (decisão 055).
+                servicoNome: job.servico_nome,
+                produto: jobDoDetalhe.produto,
+                regionalNome: detalhe.raw.regional?.nome ?? null,
+                cidade: jobDoDetalhe.cidade,
+                competenciaTrimestre: null,
+                competenciaAno: null,
+                competencias: [],
+                dataInicio: jobDoDetalhe.data_inicio_prevista,
+                dataFim: jobDoDetalhe.data_fim_prevista,
+                dataAbertura: null,
+                abertoPorNome: null,
+                dataPrevistaFaturamento: jobDoDetalhe.data_prevista_faturamento,
+                semFaturamento: faturamentoPrevisto <= 0.004,
+              }}
+              projeto={{
+                // Ainda sem projeto no financeiro: o da produção, e o link
+                // dele pergunta antes de sair para Orçamentos (decisão 108).
+                id: detalhe.raw.projeto_id,
+                codigo: detalhe.raw.projeto?.codigo ?? "—",
+                nome: detalhe.raw.projeto?.nome ?? "—",
+                clienteNome: detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
+                dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
+                dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
+              }}
+              jobsDoProjeto={jobsDoProjeto}
+              jobAtualId={job.id}
+              // Os irmãos abrem na ficha, como em "Visualizar Jobs" (decisão
+              // do Tiago, 08/09/2026).
+              jobLinkSuffix="?aba=info"
+              jobHrefBase="/financeiro/jobs/"
+              confirmarSaidaParaOrcamento
+              gpNome={detalhe.raw.responsavel?.nome ?? null}
+              produtorNome={detalhe.raw.produtor?.nome ?? null}
+              origem={{
+                projetoHref: `/orcamentos/${detalhe.raw.projeto_id}`,
+                orcamentoHref: `/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}/versoes/${detalhe.raw.versao_orcamento_aprovada_id}`,
+                orcamentoCodigo: detalhe.raw.orcamento?.codigo ?? null,
+                versaoLabel: detalhe.versaoLabel,
+              }}
+              contatos={detalhe.contatosCobranca}
+              statusBadgeClasses={jobStatusBadgeClasses}
+            />
+            {/* O que o financeiro já editou no orçado durante a conferência
+                (decisão 115). Some enquanto não houver alteração. */}
+            <AlteracoesFinanceiroCard
+              alteracoes={detalhe.alteracoesFinanceiro}
+              moeda={versaoAprovada.moeda}
+            />
+          </div>
         }
         planilha={
           /* Em leitura, como na página do job aberto: quem edita realizado,
              BV e PP é a produção. `saldosDeSave` vazio porque, sem edição,
-             não há de onde escolher origem. */
+             não há de onde escolher origem. O financeiro edita os VALORES
+             do orçado pelo "Editar orçado" já aqui, na abertura (decisão
+             115): ainda sem previsão, envio ou nota, o que acompanha é o
+             formulário da aba Abertura do Job. */
           <JobRealizadoSection
             confirmarSaidaParaOrcamento
-            // Antes da abertura não há "Editar orçado" (decisão 115): ele
-            // vale da abertura até a primeira nota ou o encerramento.
-            edicaoDoFinanceiro={null}
+            edicaoDoFinanceiro={
+              pode(session.activeRole, "jobs.editar_orcado_financeiro")
+                ? { travadoPor: null, mesesComNota: [], recebimento: [], envios: [] }
+                : null
+            }
             interno={detalhe.interno}
             savePorItem={detalhe.savePorItem}
             saldosDeSave={[]}

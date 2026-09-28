@@ -1365,6 +1365,7 @@ export function JobRealizadoSection({
             setErroErrata(null);
             setConfirmando(true);
           }}
+          naAbertura={job.status === "aguardando_abertura"}
         />
       )}
 
@@ -1416,6 +1417,7 @@ export function JobRealizadoSection({
         envio={acompanhamDoFinanceiro.envio}
         recebimento={acompanhamDoFinanceiro.recebimento}
         planejadoAcompanha={interno}
+        naAbertura={job.status === "aguardando_abertura"}
         salvando={salvando}
         erro={erroErrata}
         onConfirmar={confirmarEdicaoDoFinanceiro}
