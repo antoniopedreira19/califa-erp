@@ -2075,6 +2075,9 @@ export function JobItemRealizadoTable({
               }
               moeda={moeda}
               totalPlanejado={planejadoAtual}
+              unitarioPlanejado={unitarioPlanejado}
+              quantidadePlanejada={quantidadePlanejada}
+              dmPlanejado={dmPlanejado}
               pps={ppsDoItem.map((pp) => ({
                 id: pp.id,
                 codigo: pp.codigo,
@@ -2084,6 +2087,9 @@ export function JobItemRealizadoTable({
                   fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
                   responsavel: pp.responsavel,
                 }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
+                valorUnitario: Number(pp.valor_unitario ?? 0),
+                quantidade: Number(pp.quantidade ?? 0),
+                diasMeses: Number(pp.dias_meses ?? 0),
                 valor: Number(pp.valor ?? 0),
                 verbaProducao: pp.verba_producao === true,
                 temAnexo: (pp.anexos ?? []).length > 0,

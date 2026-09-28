@@ -26,6 +26,14 @@
  *    mostra: empresa emissora, parcelamento, anexos, quem enviou, motivo
  *    da rejeição) e "Cancelar", que já era regra do servidor
  *    (`podeCancelarPP`) e só existia na aba "Pedidos de Produção".
+ *  - 28/09/2026 (decisão 112, versão C do protótipo): cada PP mostra
+ *    R$ Unit., QT e D/M, como a planilha. Com mais de uma PP no item a
+ *    planilha deixa essas três colunas em "—" (01/09/2026), e a quebra
+ *    é aqui. A PP virou duas linhas: em cima código, fornecedor e
+ *    situação (ou o botão de enviar, na PP ainda no job); embaixo o trio,
+ *    o total e os botões. As colunas têm largura fixa para os valores de
+ *    uma PP ficarem embaixo dos da outra. Fundo branco, sem a cor do
+ *    bloco REALIZADO — pedido do Tiago. O painel foi de 430 para 500 px.
  */
 
 import * as React from "react";
@@ -46,10 +54,10 @@ import {
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
+import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
+import { PPStatusChip } from "../pps/pp-status-chip";
 import {
   podeCancelarPP,
-  ppStatusLabel,
-  situacaoVerbaLabel,
   verbaAguardaProducao,
   type PPStatus,
   type SituacaoVerba,
@@ -71,6 +79,12 @@ export interface PPDoItem {
   codigo: string;
   status: PPStatus;
   fornecedorNome: string;
+  /** O trio da PP, nas mesmas colunas do item na planilha:
+   *  valor = valorUnitario × quantidade × diasMeses. Obrigatórios: campo
+   *  opcional num tipo de linha montado por `.map` some em silêncio. */
+  valorUnitario: number;
+  quantidade: number;
+  diasMeses: number;
   valor: number;
   verbaProducao: boolean;
   /** Tem pelo menos um anexo. Fora da verba, é o que libera o envio. */
@@ -88,6 +102,10 @@ interface Props {
   moeda: string;
   /** PLANEJADO do item — a referência da PP desde 02/09/2026. */
   totalPlanejado: number;
+  /** A conta do planejado, embaixo do total no cartão do topo. */
+  unitarioPlanejado: number;
+  quantidadePlanejada: number;
+  dmPlanejado: number;
   /** PPs do item, sem as canceladas (o servidor já as tira do mapa). */
   pps: PPDoItem[];
   /** Soma de TODAS as PPs do item menos as canceladas — a gerada entra
@@ -129,6 +147,9 @@ export function PainelPPsItem({
   grupoNome,
   moeda,
   totalPlanejado,
+  unitarioPlanejado,
+  quantidadePlanejada,
+  dmPlanejado,
   pps,
   emPPs,
   envioBloqueadoPor,
@@ -278,7 +299,7 @@ export function PainelPPsItem({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="sm:max-w-[430px]">
+      <DrawerContent className="sm:max-w-[500px]">
         <div className="flex items-start justify-between gap-3 border-b border-border px-6 py-5">
           <div className="flex flex-col gap-1">
             <h2 className="text-[17px] font-bold tracking-tight">
@@ -334,11 +355,13 @@ export function PainelPPsItem({
             <FichaNumero
               rotulo="Planejado do item"
               valor={formatCurrency(totalPlanejado, moeda)}
+              conta={`${formatCurrency(unitarioPlanejado, moeda)} × ${formatarFator(quantidadePlanejada)} × ${formatarFator(dmPlanejado)}`}
               className="border-r border-border"
             />
             <FichaNumero
               rotulo="Em PPs emitidas"
               valor={formatCurrency(emPPs, moeda)}
+              conta={`${pps.length} ${pps.length === 1 ? "PP" : "PPs"}`}
               corValor={excede ? "text-california-red" : undefined}
             />
           </div>
@@ -369,32 +392,14 @@ export function PainelPPsItem({
                 const semNF = !pp.verbaProducao && !pp.temAnexo;
                 const podeEnviar = podeAgir && !semNF && !envioBloqueadoPor;
                 return (
-                  <div
+                  <CartaoPP
                     key={pp.id}
-                    className="flex flex-col gap-2.5 rounded-xl border border-border px-3.5 py-3"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="font-mono text-[11px] font-semibold text-muted-foreground">
-                        {pp.codigo}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
-                        {pp.fornecedorNome}
-                      </span>
-                      <span className="font-mono text-[13px] font-bold">
-                        {formatCurrency(pp.valor, moeda)}
-                      </span>
-                    </div>
-
-                    {semNF && (
-                      <span className="flex items-start gap-1.5 text-[11px] leading-snug text-california-red">
-                        <Paperclip className="mt-0.5 h-3 w-3 shrink-0" />
-                        Anexe a NF do fornecedor para enviar esta PP ao
-                        financeiro.
-                      </span>
-                    )}
-
-                    <div className="flex items-center gap-1.5">
-                      {podeAgir && (
+                    pp={pp}
+                    moeda={moeda}
+                    // Na PP ainda no job, o lugar da situação é do botão de
+                    // enviar — a situação já está no título do bloco.
+                    direita={
+                      podeAgir ? (
                         <button
                           type="button"
                           onClick={() => pedirEnvio(pp)}
@@ -404,7 +409,7 @@ export function PainelPPsItem({
                             (semNF ? "Anexe a NF antes de enviar." : undefined)
                           }
                           className={cn(
-                            "inline-flex items-center gap-1.5 rounded-[9px] border px-3 py-1.5 text-[11.5px] font-bold transition-colors",
+                            "inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border px-2.5 py-1 text-[11px] font-bold transition-colors",
                             podeEnviar
                               ? "border-california-red bg-california-red text-white hover:bg-california-red-hover"
                               : "cursor-not-allowed border-border bg-muted text-muted-foreground/70",
@@ -414,8 +419,12 @@ export function PainelPPsItem({
                           <Send className="h-3 w-3" />
                           Enviar ao financeiro
                         </button>
-                      )}
-                      <span className="ml-auto inline-flex items-center gap-1.5">
+                      ) : (
+                        <PPStatusChip status={pp.status} />
+                      )
+                    }
+                    botoes={
+                      <>
                         {onEditar && (
                           <BotaoIcone
                             titulo="Editar"
@@ -441,9 +450,18 @@ export function PainelPPsItem({
                             <XCircle className="h-3 w-3" />
                           </BotaoIcone>
                         )}
-                      </span>
-                    </div>
-                  </div>
+                      </>
+                    }
+                    aviso={
+                      semNF ? (
+                        <span className="flex items-start gap-1.5 text-[11px] leading-snug text-california-red">
+                          <Paperclip className="mt-0.5 h-3 w-3 shrink-0" />
+                          Anexe a NF do fornecedor para enviar esta PP ao
+                          financeiro.
+                        </span>
+                      ) : null
+                    }
+                  />
                 );
               })}
             </div>
@@ -457,34 +475,19 @@ export function PainelPPsItem({
               {enviadas.map((pp) => {
                 const cancelavel = podeCancelarPP(pp.status);
                 return (
-                  <div
+                  <CartaoPP
                     key={pp.id}
-                    className="flex flex-col gap-2 rounded-xl border border-border px-3.5 py-3"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="font-mono text-[11px] font-semibold text-muted-foreground">
-                        {pp.codigo}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
-                        {pp.fornecedorNome}
-                      </span>
-                      <span className="font-mono text-[13px] font-bold">
-                        {formatCurrency(pp.valor, moeda)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11.5px] text-muted-foreground">
-                        {pp.situacaoVerba
-                          ? situacaoVerbaLabel(pp.situacaoVerba)
-                          : ppStatusLabel(pp.status)}
-                        {verbaAguardaProducao(pp.situacaoVerba) && (
-                          <span className="block text-[10.5px] font-semibold text-amber-800">
-                            Preste contas na aba de PPs
-                          </span>
-                        )}
-                      </span>
-                      <span className="ml-auto inline-flex items-center gap-1.5">
+                    pp={pp}
+                    moeda={moeda}
+                    direita={
+                      pp.situacaoVerba ? (
+                        <SituacaoVerbaChip situacao={pp.situacaoVerba} />
+                      ) : (
+                        <PPStatusChip status={pp.status} />
+                      )
+                    }
+                    botoes={
+                      <>
                         <BotaoIcone
                           titulo="Ver formulário"
                           onClick={() => onVerFormulario(pp)}
@@ -519,9 +522,16 @@ export function PainelPPsItem({
                             <XCircle className="h-3 w-3" />
                           </BotaoIcone>
                         )}
-                      </span>
-                    </div>
-                  </div>
+                      </>
+                    }
+                    aviso={
+                      verbaAguardaProducao(pp.situacaoVerba) ? (
+                        <span className="text-[11px] font-semibold leading-snug text-amber-800">
+                          Preste contas na aba de PPs
+                        </span>
+                      ) : null
+                    }
+                  />
                 );
               })}
             </div>
@@ -748,11 +758,14 @@ function BotaoIcone({
 function FichaNumero({
   rotulo,
   valor,
+  conta,
   corValor,
   className,
 }: {
   rotulo: string;
   valor: string;
+  /** A linha de baixo: a conta do planejado, ou quantas PPs o item tem. */
+  conta: string;
   corValor?: string;
   className?: string;
 }) {
@@ -764,6 +777,88 @@ function FichaNumero({
       <span className={cn("font-mono text-[15px] font-bold", corValor)}>
         {valor}
       </span>
+      <span className="font-mono text-[11px] text-muted-foreground">{conta}</span>
     </div>
+  );
+}
+
+/** QT e D/M são fatores, não dinheiro: sem R$ e sem zeros à toa. */
+function formatarFator(n: number): string {
+  return Number(n ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
+/**
+ * Uma PP no painel, em duas linhas (decisão 112). Em cima: código,
+ * fornecedor e `direita` (a situação, ou o botão de enviar). Embaixo: o
+ * trio e o total da PP, com os `botoes` na mesma linha. `aviso` (NF que
+ * falta, prestação de contas) entra numa terceira linha, só quando existe.
+ *
+ * As larguras das colunas são fixas de propósito: num item com muitas
+ * PPs, os valores de uma ficam embaixo dos da outra, como numa tabela.
+ */
+function CartaoPP({
+  pp,
+  moeda,
+  direita,
+  botoes,
+  aviso,
+}: {
+  pp: PPDoItem;
+  moeda: string;
+  direita: React.ReactNode;
+  botoes: React.ReactNode;
+  aviso: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border px-3.5 py-2.5">
+      <div className="flex min-h-[26px] items-center gap-2.5">
+        <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+          {pp.codigo}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
+          {pp.fornecedorNome}
+        </span>
+        {direita}
+      </div>
+      <div className="grid grid-cols-[100px_30px_34px_104px_minmax(0,1fr)_auto] items-end gap-x-2.5">
+        <ValorDoTrio rotulo="R$ Unit.">
+          {formatCurrency(pp.valorUnitario, moeda)}
+        </ValorDoTrio>
+        <ValorDoTrio rotulo="QT">{formatarFator(pp.quantidade)}</ValorDoTrio>
+        <ValorDoTrio rotulo="D/M">{formatarFator(pp.diasMeses)}</ValorDoTrio>
+        <ValorDoTrio rotulo="Total" forte>
+          {formatCurrency(pp.valor, moeda)}
+        </ValorDoTrio>
+        <span />
+        <span className="inline-flex items-center gap-1.5">{botoes}</span>
+      </div>
+      {aviso}
+    </div>
+  );
+}
+
+function ValorDoTrio({
+  rotulo,
+  forte,
+  children,
+}: {
+  rotulo: string;
+  forte?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="flex min-w-0 flex-col items-end leading-tight">
+      <span className="text-[9px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
+        {rotulo}
+      </span>
+      <span
+        className={cn(
+          "mt-0.5 whitespace-nowrap font-mono",
+          forte ? "text-[12.5px] font-bold" : "text-[12px]",
+        )}
+      >
+        {children}
+      </span>
+    </span>
   );
 }

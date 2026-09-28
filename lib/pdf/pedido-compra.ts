@@ -166,24 +166,24 @@ interface Dados {
   cliente: Pick<Cliente, "nome_fantasia">;
   responsavelNome: string;
   /**
-   * A parcela que ESTE documento representa.
+   * TODAS as parcelas da PP, em ordem de número — sempre ao menos uma.
    *
-   * Desde 17/08/2026 a emissão arquiva um PDF por parcela: o fornecedor
-   * recebe um documento por vencimento, e é ele que o financeiro confere
-   * na hora de pagar. Os campos são idênticos entre os documentos da
-   * mesma PP — mudam só o Prazo de Pagto, a linha "Parcela: N/T" e o
-   * valor em destaque.
+   * Desde 28/09/2026 (decisão 112) a PP tem UM documento só, com todas as
+   * parcelas: o financeiro aprova a PP inteira, e as parcelas seguem
+   * juntas para Títulos a Pagar. De 17/08 a 28/09 a emissão arquivava um
+   * PDF por parcela, cada um mostrando só o valor dele e o total — as PPs
+   * daquele período guardam esses documentos como foram emitidos.
    *
-   * Obrigatório, inclusive em PP sem parcelamento: ela manda 1/1, e o
-   * documento sai com o mesmo desenho. Padrão uniforme é o que evita o
-   * fornecedor achar que "sem parcela" significa outra coisa.
+   * Parcela única sai com o desenho de sempre (Prazo de Pagto, "Parcela:
+   * 1/1" e "Valor"). Parcelada troca o prazo e a linha da parcela por
+   * "Parcelas: N" e ganha a tabela PARCELAS DO PEDIDO, com o valor total
+   * do pedido em destaque embaixo.
    */
-  parcela: {
+  parcelas: Array<{
     numero: number;
-    total: number;
     data_vencimento: string;
     valor: number;
-  };
+  }>;
 }
 
 export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
@@ -197,8 +197,11 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     orcamento,
     cliente,
     responsavelNome,
-    parcela,
+    parcelas,
   } = dados;
+
+  const parcelada = parcelas.length > 1;
+  const primeira = parcelas[0];
 
   const isVerba = pp.verba_producao === true;
 
@@ -333,6 +336,8 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   };
 
   // ===== 3. Serviço + Quantidade + Prazo pagamento =====
+  // Parcelada: o prazo de cada parcela está na tabela PARCELAS DO PEDIDO,
+  // então aqui fica só quantas são.
   const servicoTable: Content = {
     table: {
       widths: ["70%", "30%"],
@@ -341,16 +346,15 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
           lv("Serviço", pp.servico),
           lv("Quantidade", String(pp.quantidade)),
         ],
-        [
-          { text: "", fontSize: 8 },
-          // Vencimento DESTA parcela, não o da PP: é a data que o
-          // fornecedor tem que ler neste documento.
-          lv("Prazo de Pagto", fmtDate(parcela.data_vencimento)),
-        ],
-        [
-          { text: "", fontSize: 8 },
-          lv("Parcela", `${parcela.numero}/${parcela.total}`),
-        ],
+        ...(parcelada
+          ? [[{ text: "", fontSize: 8 }, lv("Parcelas", String(parcelas.length))]]
+          : [
+              [
+                { text: "", fontSize: 8 },
+                lv("Prazo de Pagto", fmtDate(primeira?.data_vencimento ?? pp.prazo_pagamento)),
+              ],
+              [{ text: "", fontSize: 8 }, lv("Parcela", "1/1")],
+            ]),
       ],
     },
     layout: BORDA,
@@ -500,15 +504,34 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
         } as Content,
       ];
 
-  // ===== 7. VALOR destacado =====
-  // O que está em destaque é o valor DA PARCELA — é o que vai ser pago
-  // contra este documento. O total do pedido continua visível, em peso
-  // normal, para o fornecedor situar a parcela dentro do pedido. Em PP de
-  // parcela única os dois números são o mesmo, e aí só o destaque aparece.
-  const valorParcelaTexto =
-    parcela.total > 1
-      ? `Valor da parcela (${parcela.numero}/${parcela.total}):  `
-      : "Valor:  ";
+  // ===== 7. PARCELAS + VALOR destacado =====
+  // Parcelada: a tabela com todas as parcelas, nenhuma em destaque (o
+  // documento é da PP inteira), e o valor total do pedido na faixa cinza
+  // fechando a conta. Parcela única: só a faixa, com o valor da PP.
+  const parcelasBloco: Content[] = parcelada
+    ? [
+        secaoHeader("PARCELAS DO PEDIDO"),
+        {
+          table: {
+            widths: ["24%", "38%", "38%"],
+            body: [
+              [
+                { text: "Parcela", bold: true, fontSize: 8 },
+                { text: "Prazo de Pagto", bold: true, fontSize: 8 },
+                { text: "Valor", bold: true, fontSize: 8, alignment: "right" },
+              ],
+              ...parcelas.map((p) => [
+                { text: `${p.numero}/${parcelas.length}`, fontSize: 8 },
+                { text: fmtDate(p.data_vencimento), fontSize: 8 },
+                { text: fmtBRL(p.valor), fontSize: 8, alignment: "right" as const },
+              ]),
+            ],
+          },
+          layout: BORDA,
+          margin: [0, 0, 0, 0],
+        } as Content,
+      ]
+    : [];
 
   const valorBlock: Content = {
     table: {
@@ -516,25 +539,15 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
       body: [
         [
           {
-            stack: [
+            text: [
               {
-                text: [
-                  { text: valorParcelaTexto, bold: true, fontSize: 11 },
-                  { text: fmtBRL(parcela.valor), bold: true, fontSize: 13 },
-                ],
-                alignment: "right",
+                text: parcelada ? "Valor total do pedido:  " : "Valor:  ",
+                bold: true,
+                fontSize: 11,
               },
-              ...(parcela.total > 1
-                ? [
-                    {
-                      text: `Valor total do pedido: ${fmtBRL(pp.valor)}`,
-                      fontSize: 9,
-                      alignment: "right" as const,
-                      margin: [0, 2, 0, 0] as [number, number, number, number],
-                    },
-                  ]
-                : []),
+              { text: fmtBRL(pp.valor), bold: true, fontSize: 13 },
             ],
+            alignment: "right",
             fillColor: "#e5e5e5",
             margin: [8, 5, 8, 5],
           },
@@ -711,6 +724,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     secaoHeader("DADOS PARA FATURAMENTO DA COBRANÇA"),
     faturamentoTable,
     ...bancariosBloco,
+    ...parcelasBloco,
     valorBlock,
     secaoHeader(isVerba ? "DADOS DO RESPONSÁVEL" : "DADOS DO FORNECEDOR"),
     contraparteTable,
