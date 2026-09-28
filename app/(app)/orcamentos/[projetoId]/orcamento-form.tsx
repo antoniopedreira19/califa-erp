@@ -72,7 +72,7 @@ interface Props {
   /** Opções de Serviço — `categorias_dominio` de escopo `projeto`. Lista
    *  diferente das categorias acima; o campo desceu do projeto em
    *  02/09/2026. */
-  servicos: Pick<CategoriaDominio, "id" | "nome">[];
+  servicos: Pick<CategoriaDominio, "id" | "nome" | "investimento_interno">[];
   /** Modelo de planilha que o orçamento em edição usa HOJE. Vem de fora
    *  porque a categoria atual pode estar inativa e fora da lista acima —
    *  e é comparando com ele que o formulário pede a confirmação da troca
@@ -108,6 +108,13 @@ interface Props {
 
 /** Qual confirmação a troca de categoria pede, se pedir. */
 type TrocaDePlanilha = "entra_no_mensal" | "sai_do_mensal" | null;
+
+/** O que a confirmação precisa dizer: a troca de planilha, a passagem para
+ *  o serviço Interno (decisão 105), ou as duas juntas. */
+interface Confirmacao {
+  planilha: TrocaDePlanilha;
+  entraNoInterno: boolean;
+}
 
 export function OrcamentoForm({
   projetoId,
@@ -158,7 +165,8 @@ export function OrcamentoForm({
   const [fim, setFim] = React.useState(orcamento?.data_fim_prevista ?? "");
 
   // Confirmação da troca de planilha — o FormData espera aqui até o "Sim".
-  const [troca, setTroca] = React.useState<TrocaDePlanilha>(null);
+  const [confirmacao, setConfirmacao] = React.useState<Confirmacao | null>(null);
+  const troca = confirmacao?.planilha ?? null;
   const formPendente = React.useRef<FormData | null>(null);
 
   // O par serviço × categoria que o orçamento JÁ tinha fica como está
@@ -173,22 +181,30 @@ export function OrcamentoForm({
   // O par original só destrava quando é um par antigo (serviço Fee com
   // categoria nacional). Se o orçamento já está na categoria exclusiva do
   // serviço, a edição mostra a mesma trava da criação.
+  const servicoEscolhido = servicos.find((s) => s.id === servicoId);
   const categoriaTravada =
-    servicoTemCategoriaExclusiva(servicoId, categorias) &&
+    servicoTemCategoriaExclusiva(servicoEscolhido, categorias) &&
     (!parOriginal ||
       categorias.find((c) => c.id === categoriaId)?.servico_exclusivo_id ===
         servicoId);
   const opcoesDeCategoria = React.useMemo(() => {
-    const permitidas = categoriasDoServico(servicoId, categorias);
+    const permitidas = categoriasDoServico(servicoEscolhido, categorias);
     if (parOriginal && !permitidas.some((c) => c.id === categoriaId)) {
       const atual = categorias.find((c) => c.id === categoriaId);
       return atual ? [...permitidas, atual] : permitidas;
     }
     return permitidas;
-  }, [servicoId, categorias, parOriginal, categoriaId]);
+  }, [servicoEscolhido, categorias, parOriginal, categoriaId]);
 
   const categoriaEscolhida = categorias.find((c) => c.id === categoriaId);
-  const servicoEscolhido = servicos.find((s) => s.id === servicoId);
+  // Decisão 105: o serviço Interno só aceita custo F · Interno, com o
+  // planejado igual ao orçado. Quem passa um orçamento já preenchido para
+  // ele confirma a conversão das linhas.
+  const ehInterno = servicoEscolhido?.investimento_interno === true;
+  const eraInterno =
+    isEdit &&
+    servicos.find((s) => s.id === orcamento!.servico_id)?.investimento_interno ===
+      true;
   const modeloEscolhido: CategoriaModeloPlanilha =
     categoriaEscolhida?.modelo_planilha ??
     (parOriginal ? (modeloPlanilhaAtual ?? "nacional") : "nacional");
@@ -201,8 +217,9 @@ export function OrcamentoForm({
       setCategoriaId(orcamento!.categoria_id ?? "");
       return;
     }
-    const permitidas = categoriasDoServico(novo, categorias);
-    if (servicoTemCategoriaExclusiva(novo, categorias)) {
+    const servicoNovo = servicos.find((s) => s.id === novo);
+    const permitidas = categoriasDoServico(servicoNovo, categorias);
+    if (servicoTemCategoriaExclusiva(servicoNovo, categorias)) {
       // Serviço com categoria própria: com uma só, ela entra sozinha e o
       // campo trava. (Com mais de uma, o Select mostra só as dele.)
       setCategoriaId(permitidas.length === 1 ? permitidas[0].id : "");
@@ -295,13 +312,23 @@ export function OrcamentoForm({
     }
 
     // Trocar de/para Fee ou Always On muda a estrutura da planilha — pede
-    // confirmação antes de gravar (decisão do Tiago, 14/09/2026).
+    // confirmação antes de gravar (decisão do Tiago, 14/09/2026). Passar
+    // para o Interno converte as linhas (decisão 105) — também pede, e as
+    // duas perguntas viram uma só quando acontecem juntas.
     if (isEdit && categoriaEscolhida) {
       const eraMensal = modeloPlanilhaAtual === "mensal";
-      if (eraMensal !== ehMensal) {
-        formData.set("confirmar_troca_modelo", "1");
+      const planilha: TrocaDePlanilha =
+        eraMensal === ehMensal
+          ? null
+          : ehMensal
+            ? "entra_no_mensal"
+            : "sai_do_mensal";
+      const entraNoInterno = ehInterno && !eraInterno;
+      if (planilha || entraNoInterno) {
+        if (planilha) formData.set("confirmar_troca_modelo", "1");
+        if (entraNoInterno) formData.set("confirmar_entrada_interno", "1");
         formPendente.current = formData;
-        setTroca(ehMensal ? "entra_no_mensal" : "sai_do_mensal");
+        setConfirmacao({ planilha, entraNoInterno });
         return;
       }
     }
@@ -372,6 +399,12 @@ export function OrcamentoForm({
               ))}
             </SelectContent>
           </Select>
+          {ehInterno && (
+            <p className="text-xs text-muted-foreground">
+              Investimento da California: todo custo é F · Interno, o
+              planejado é igual ao orçado e não há faturamento.
+            </p>
+          )}
         </Field>
 
         <Field label="Categoria" name="categoria_id" required errors={fieldErrors}>
@@ -629,35 +662,51 @@ export function OrcamentoForm({
       </div>
 
       <ConfirmDialog
-        open={troca !== null}
+        open={confirmacao !== null}
         onOpenChange={(aberto) => {
           if (!aberto) {
-            setTroca(null);
+            setConfirmacao(null);
             formPendente.current = null;
           }
         }}
         title={
           troca === "sai_do_mensal"
             ? "Tem certeza que quer trocar a planilha?"
-            : "Tem certeza que quer passar para a planilha mensal?"
+            : troca === "entra_no_mensal"
+              ? "Tem certeza que quer passar para a planilha mensal?"
+              : `Tem certeza que quer passar para o serviço ${servicoEscolhido?.nome ?? "Interno"}?`
         }
         description={
-          troca === "sai_do_mensal" ? (
-            <>
-              A categoria {categoriaEscolhida?.nome} não usa a planilha mensal.
-              Por causa da mudança no tipo de planilha,{" "}
-              <strong>todo o orçamento depois do primeiro mês será apagado</strong>:
-              só o primeiro mês permanece, e os grupos e itens dele passam a
-              valer para o orçamento inteiro, em todas as versões. Não dá para
-              desfazer.
-            </>
-          ) : (
-            <>
-              Com a categoria {categoriaEscolhida?.nome}, o orçamento passa a
-              ser dividido nos meses do período. Os grupos e itens que já
-              existem vão para o primeiro mês, em todas as versões.
-            </>
-          )
+          <>
+            {troca === "sai_do_mensal" ? (
+              <>
+                A categoria {categoriaEscolhida?.nome} não usa a planilha
+                mensal. Por causa da mudança no tipo de planilha,{" "}
+                <strong>todo o orçamento depois do primeiro mês será apagado</strong>:
+                só o primeiro mês permanece, e os grupos e itens dele passam a
+                valer para o orçamento inteiro, em todas as versões. Não dá
+                para desfazer.
+              </>
+            ) : troca === "entra_no_mensal" ? (
+              <>
+                Com a categoria {categoriaEscolhida?.nome}, o orçamento passa a
+                ser dividido nos meses do período. Os grupos e itens que já
+                existem vão para o primeiro mês, em todas as versões.
+              </>
+            ) : null}
+            {confirmacao?.entraNoInterno && (
+              <>
+                {troca ? " " : null}
+                No serviço {servicoEscolhido?.nome ?? "Interno"}, todo custo é
+                F · Interno e o planejado é igual ao orçado.{" "}
+                <strong>
+                  As linhas que já existem, em todas as versões, passam a ser
+                  F · Interno, com o planejado igual ao orçado
+                </strong>
+                , e o BV em negociação delas é cancelado.
+              </>
+            )}
+          </>
         }
         confirmLabel={
           troca === "sai_do_mensal" ? "Sim, trocar e apagar" : "Sim, trocar"
@@ -666,7 +715,7 @@ export function OrcamentoForm({
         pending={pending}
         onConfirm={() => {
           const dados = formPendente.current;
-          setTroca(null);
+          setConfirmacao(null);
           formPendente.current = null;
           if (dados) enviar(dados);
         }}

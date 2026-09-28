@@ -26,6 +26,9 @@ function formatPeriodo(inicio: string | null, fim: string | null): string {
 
 export interface JobDaFicha {
   codigo: string;
+  /** O `JOB-NNNN` de antes da decisão 114, que PDFs e planilhas antigas
+   *  ainda citam. Nulo nos jobs criados depois da troca. */
+  codigoAnterior: string | null;
   nome: string;
   categoriaNome: string | null;
   /**
@@ -55,6 +58,9 @@ export interface JobDaFicha {
   dataAbertura: string | null;
   abertoPorNome: string | null;
   dataPrevistaFaturamento: string | null;
+  /** Faturamento previsto zero (decisão 105): não há recebimento, e a
+   *  linha diz isso em vez de uma data. Obrigatório. */
+  semFaturamento: boolean;
 }
 
 export interface ProjetoDaFicha {
@@ -105,6 +111,12 @@ interface Props {
    * Orçamentos, então o caminho fica, mas avisado.
    */
   confirmarSaidaParaOrcamento?: boolean;
+  /**
+   * Job ainda na fila da abertura (decisão 111): competência e data de
+   * abertura só nascem quando o financeiro confirma, e a ficha diz isso em
+   * vez de um travessão que pareceria dado faltando.
+   */
+  antesDaAbertura?: boolean;
   gpNome: string | null;
   produtorNome: string | null;
   origem: OrigemDaFicha;
@@ -131,6 +143,7 @@ export function FichaJob({
   jobLinkSuffix,
   jobHrefBase = "/jobs/",
   confirmarSaidaParaOrcamento = false,
+  antesDaAbertura = false,
   gpNome,
   produtorNome,
   origem,
@@ -138,6 +151,12 @@ export function FichaJob({
   statusBadgeClasses,
 }: Props) {
   const texto = descritivo?.trim();
+  // No financeiro, o projeto do job é a visão agregada do próprio
+  // financeiro. Job sem projeto do financeiro (anterior à migration
+  // 20260820000011) cai no projeto da produção: saída de módulo, com aviso
+  // (decisões 021 e 108).
+  const saiDoModuloPeloProjeto =
+    confirmarSaidaParaOrcamento && origem.projetoHref.startsWith("/orcamentos");
 
   return (
     <div className="space-y-4">
@@ -184,7 +203,11 @@ export function FichaJob({
                   "—"}
               </Campo>
               <Campo rotulo="Competência">
-                {job.competencias && job.competencias.length > 1 ? (
+                {antesDaAbertura ? (
+                  <span className="text-muted-foreground">
+                    Definida na abertura
+                  </span>
+                ) : job.competencias && job.competencias.length > 1 ? (
                   <span className="flex flex-col gap-0.5">
                     {ordenarCompetencias(job.competencias).map((c) => (
                       <span key={`${c.ano}-${c.trimestre}`}>
@@ -219,24 +242,31 @@ export function FichaJob({
                       </span>
                     )}
                   </>
+                ) : antesDaAbertura ? (
+                  <span className="text-muted-foreground">
+                    Ainda não aberto no financeiro
+                  </span>
                 ) : (
                   "—"
                 )}
               </Campo>
               <Campo rotulo="Prev. recebimento" mono ultimo>
-                {formatData(job.dataPrevistaFaturamento)}
+                {job.semFaturamento
+                  ? "Sem faturamento"
+                  : formatData(job.dataPrevistaFaturamento)}
               </Campo>
             </div>
 
             <div className="flex flex-col border-l border-border">
               <CabecalhoColuna titulo="Projeto">
-                <Link
+                <LinkDoProjeto
                   href={origem.projetoHref}
-                  prefetch={false}
+                  saiDoModulo={saiDoModuloPeloProjeto}
+                  projeto={projeto}
                   className="font-mono text-[11.5px] font-semibold text-california-red hover:underline"
                 >
                   {projeto.codigo}
-                </Link>
+                </LinkDoProjeto>
               </CabecalhoColuna>
               <Campo rotulo="Nome do projeto" destaque>
                 {projeto.nome}
@@ -320,15 +350,23 @@ export function FichaJob({
                 {job.codigo}
               </span>
             </CampoLateral>
+            {job.codigoAnterior && (
+              <CampoLateral rotulo="Código anterior">
+                <span className="font-mono text-[13px] text-muted-foreground">
+                  {job.codigoAnterior}
+                </span>
+              </CampoLateral>
+            )}
             <CampoLateral rotulo="Projeto">
-              <Link
+              <LinkDoProjeto
                 href={origem.projetoHref}
-                prefetch={false}
+                saiDoModulo={saiDoModuloPeloProjeto}
+                projeto={projeto}
                 className="text-california-red hover:underline"
               >
                 <span className="font-mono text-[13px]">{projeto.codigo}</span> ·{" "}
                 {projeto.nome}
-              </Link>
+              </LinkDoProjeto>
             </CampoLateral>
             <CampoLateral rotulo="Orçamento aprovado">
               {confirmarSaidaParaOrcamento ? (
@@ -420,6 +458,45 @@ export function FichaJob({
         </div>
       </div>
     </div>
+  );
+}
+
+/** O link "Projeto" da ficha: comum, ou com o aviso de saída do módulo. */
+function LinkDoProjeto({
+  href,
+  saiDoModulo,
+  projeto,
+  className,
+  children,
+}: {
+  href: string;
+  saiDoModulo: boolean;
+  projeto: ProjetoDaFicha;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (saiDoModulo) {
+    return (
+      <LinkSaidaDeModulo
+        href={href}
+        modulo="Orçamentos"
+        descricao={
+          <>
+            O projeto <span className="font-mono">{projeto.codigo}</span> ·{" "}
+            {projeto.nome} mora no módulo de Orçamentos, e este job não tem
+            projeto no financeiro. Você sai desta tela para abri-lo.
+          </>
+        }
+        className={className}
+      >
+        <span>{children}</span>
+      </LinkSaidaDeModulo>
+    );
+  }
+  return (
+    <Link href={href} prefetch={false} className={className}>
+      {children}
+    </Link>
   );
 }
 

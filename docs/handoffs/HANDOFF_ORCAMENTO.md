@@ -4397,6 +4397,28 @@ limpos.
   consumir Save no orçamento" e "Gerar e consumir Save no job".
 
 
+## ⚠️ Nota de 2026-09-25 — faixa do projeto no orçamento e na agregada (decisão 106)
+
+- A primeira linha da tela do orçamento e da visão agregada é a **faixa do
+  projeto** (`components/faixa-do-projeto.tsx`): seta e projeto num link só
+  (o voltar de antes, para `/orcamentos/[projetoId]`), a aba Visão agregada
+  e uma aba por orçamento. As abas de versão seguem abaixo, sem mudança.
+- Entram os orçamentos da agregada — todos menos cancelados e recusados —
+  e o aberto, sempre. Aprovado ou com job leva cadeado; em revisão, ponto
+  âmbar.
+- Na tela do orçamento, os irmãos vêm de `faixa-orcamentos.tsx`, consulta
+  própria dentro de um `<Suspense>` cujo fallback é a mesma faixa sem os
+  itens. A consulta da página não mudou.
+- Na agregada, a faixa é montada no `page.tsx` e entra no `EditorAgregado`
+  pela prop `faixa` (obrigatória).
+- Navegar pela faixa com alteração não salva na agregada perde o rascunho,
+  como o voltar de antes já perdia.
+- ⚠️ **Revisto em 27/09/2026 (decisão 108):** seta e projeto deixaram de ser
+  um link só — o voltar virou o botão "Voltar" e leva à página anterior; o
+  chip do projeto segue levando à tela do projeto. E a agregada com
+  alteração não salva agora pergunta antes de sair pelo voltar ou pela
+  faixa.
+
 ## ⚠️ Nota de 2026-09-24 (2) — o item muda de lugar pela alça (decisão 104)
 
 - **Planilha da versão e visão agregada:** alça (⋮⋮) no recuo do item, no
@@ -4427,3 +4449,197 @@ limpos.
   salvar grava só o `TES-0001/26-03`, Esc cancela sem sujar). Todas as
   ordens de teste foram devolvidas ao estado original. tsc, lint e 11 testes
   de `ordem-itens.test.ts` limpos.
+
+## ⚠️ Nota de 2026-09-25 — o serviço Interno: só F · Interno, planejado = orçado e sem save (decisão 105)
+
+- **Formulário do orçamento** (novo, editar e visão agregada): com o serviço
+  Interno a Categoria lista as nacionais e a **Always On** (planilha mensal);
+  a **Internacional** some. Nota abaixo do Serviço: "Investimento da
+  California…". Passar um orçamento já preenchido para o Interno abre a
+  confirmação "As linhas que já existem, em todas as versões, passam a ser
+  F · Interno, com o planejado igual ao orçado…" (junto com a da planilha
+  mensal quando as duas acontecem). `atualizarOrcamento` recusa antes de
+  gravar se houver linha em save ou BV confirmado/recebido, e grava a
+  auditoria `orcamento.virou_interno`.
+- **Planilha da versão, mês, trimestre e visão agregada** (`ItensTable`, prop
+  `interno` obrigatória): linha nova nasce FI; Tipo e planejado não abrem; o
+  planejado mostra o orçado ao vivo; sem coluna, alça e chave de save.
+  Na agregada, `itemDoInterno` normaliza o rascunho.
+- **Importar planilha:** sem a pergunta "de onde vem o planejado"; o preview
+  avisa que toda linha entra como F · Interno.
+- **Enviar job para abertura:** com faturamento previsto zero (Interno ou
+  não), "Data prevista para recebimento" fica travada em "Sem recebimento" e
+  não é cobrada; a confirmação diz "Recebimento em: Sem recebimento".
+  `enviarJobParaAbertura` decide pelo mesmo número e grava a data vazia.
+- **Banco** (`20260925100001_servico_interno.sql`): marcas
+  `investimento_interno` / `aceita_servico_interno`; o gatilho das linhas
+  (`planejado_espelha_orcado`) faz FI, planejado = orçado e recusa save em
+  todos os caminhos de escrita; `orcamento_entra_no_interno` converte na
+  troca de serviço.
+- Arquivos: `lib/categorias-do-servico.ts`, `orcamento-form.tsx`,
+  `[projetoId]/actions.ts`, `itens-table.tsx`, `planilha-versao.tsx`,
+  `grupos-section.tsx`, `planilha-mensal.tsx`, `importar-drawer.tsx`,
+  `enviar-job-modal.tsx`, `fluxo-abertura.tsx`, `abertura-actions.ts`,
+  `lib/validations/abertura-job.ts`, `agregado/editor-agregado.tsx`,
+  `_rascunho/rascunho.ts`, `_rascunho/orcamento-card.tsx`.
+- **Conferido na tela:** TES-0001/26-12 (Interno nacional) e TES-0001/26-13
+  (Ativação convertido para Interno e depois para Always On mensal) — ver a
+  decisão 105 §5.
+
+## ⚠️ Nota de 2026-09-25 (2) — contato de cobrança opcional sem faturamento e a calha que remedia a cada tecla (decisão 105 §7)
+
+- **Enviar job para abertura:** sem faturamento previsto, o contato de
+  cobrança é opcional ("Opcional: o job não tem faturamento previsto.");
+  linha começada ainda precisa de nome e e-mail. Servidor cobra o contato só
+  com faturamento; lista vazia não grava nada em `jobs_contatos`.
+- **Calha da planilha** (`itens-table.tsx`): `usePosicoesDaCalha` depende da
+  estrutura das linhas, não da referência dos grupos. **Visão agregada:**
+  `nosGrupos` preserva os orçamentos não editados. De 12–15 para 2–3
+  medições de layout por edição; corrige o "Maximum update depth exceeded"
+  visto na agregada.
+
+## ⚠️ Nota de 2026-09-25 (3) — importação no Interno aceita linha sem tipo (decisão 105 §8)
+
+- No orçamento Interno, a linha com valor e tipo em branco ou desconhecido
+  entra como F · Interno (fora dele, continua descartada). Versão
+  (`parseOficial` com `tipoFixo`), visão agregada (`ImportarPlanilhaModal.interno`)
+  e projeto inteiro (`parsePlanilhaProjeto` com `orcamentosInternos`). Teste
+  em `lib/importacao/tipo-fixo.test.ts`.
+
+---
+
+## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
+
+- **Versão do orçamento (e a mensal):** a coluna Save nasce recolhida na
+  alça lateral. Só abre sozinha quando alguma linha da versão gera ou
+  consome save, ou quando a versão é "Orçamento de save".
+- **Saiu o gatilho do saldo do cliente:** ter crédito disponível em outros
+  jobs do cliente não abre mais a coluna. O saldo continua oferecido no
+  pop-up de save da linha.
+- A agregada do orçamento já seguia essa regra e não mudou.
+
+---
+
+## ⚠️ Nota de 2026-09-27 — botão Voltar (decisão 108)
+
+- **Todas as telas de Orçamentos** trocaram o link cinza "Voltar para …"
+  pelo botão contornado "Voltar" (`components/voltar/botao-voltar.tsx`),
+  com o destino num balão ao passar o mouse. Lista de projetos, novo
+  projeto, categorias, tela do projeto, novo orçamento, e a faixa do
+  orçamento e da agregada.
+- **O voltar leva à página anterior**, e não mais a um destino fixo. As
+  abas da faixa do projeto não contam: do orçamento aberto pela faixa, o
+  voltar leva para onde a pessoa estava antes de entrar no projeto. O
+  destino fixo de antes virou a reserva, para quando não há página
+  anterior (link colado, aba nova).
+- **Faixa:** o voltar é o botão; o chip do projeto continua levando à
+  tela do projeto.
+- **Agregada com alteração não salva** pergunta "Sair sem salvar?" também
+  no voltar e nas abas da faixa (antes perdia o rascunho sem aviso).
+- **Tela do projeto** registra o nome ("TES-0002/26 · Teste Demo") para o
+  balão de quem sair dela.
+- **Cliente novo pelo "+" do projeto:** CNPJ de cliente ativo mostra
+  "Usar este cadastro", que o escolhe no campo; cliente inativo fica só
+  com o aviso. O "Abrir cadastro existente" trocava de página e perdia o
+  projeto. Na página de Clientes o link continua.
+
+---
+
+## ⚠️ Nota de 2026-09-27 — dias/meses do orçado pode ser zero (decisão 109)
+
+- **D/M zero vale, como a QT** (decisão 078): a edição da planilha, o
+  editor do orçamento e a importação aceitam 0; negativo continua
+  recusado. Item novo segue nascendo com QT 1 e D/M 1.
+- **A importação não troca mais o 0 por 1.** Vazio ou ilegível vira 1;
+  só o negativo vira 1 com aviso. O "Motion (Bonificado 100%)" da
+  planilha da Budweiser (R$ 3.000 × 1 × 0) entra zerado, e o orçado
+  importado bate com o TOTAL da planilha (R$ 152.775,00).
+- **A aprovação não trava por QT ou D/M zero.** Quem analisa é o
+  financeiro, na abertura. O R$ unitário zerado continua travando o
+  "Salvar orçamentos" e a aprovação (decisão 011).
+- Banco: migration `20260927100001` trocou `itens_dias_meses_positivo`
+  (> 0) por `itens_dias_meses_nao_negativo` (>= 0). A nota de 15/09 dizia
+  "D/M segue > 0"; não vale mais.
+- Teste em `lib/importacao/dias-meses-zero.test.ts`.
+
+---
+
+## ⚠️ Nota de 2026-09-27 — importação de planilha em modal, com escolha de aba (decisão 110)
+
+- **O drawer "Importar planilha" virou um modal no centro**, nas duas
+  portas da versão e no editor do orçamento. O componente novo é
+  `ImportarPlanilhaVersao` (`versoes/importar-planilha-versao.tsx`); o
+  `importar-drawer.tsx` saiu.
+- **O arquivo não passa mais pela Server Action:** o navegador o sobe para
+  `<tenant>/envios/` no bucket `orcamento-importacoes`, e as actions
+  recebem `{ path, nome, tamanho }`. Limite de 10 MB (era 1 MB na prática).
+  `previewImportacao`, `confirmarImportacao` e `sobrescreverVersaoComPlanilha`
+  trocaram o `FormData` por objeto: `{ envio, versao_id }` no preview e
+  `{ envio, aba, origem_planejado }` na gravação.
+- **O preview lê todas as abas** e devolve a tabela de abas mais o resumo de
+  cada aba legível. A gravação lê só a aba escolhida, pelo nome exato.
+- **O resumo perdeu os cartões de número:** os totais viraram a última linha
+  da lista de grupos, com rentabilidade em R$ e %, em grafite.
+- **Confirmação** só no substituir de versão com conteúdo, num pop-up.
+- **Editor do orçamento:** o payload do "Salvar orçamentos" leva
+  `envio: { path, nome, tamanho, aba }` no lugar de `arquivoCampo`.
+- **Planilha modelo** para baixar em
+  `GET /api/orcamentos/modelo-de-planilha`.
+
+---
+
+## ⚠️ Nota de 2026-09-28 — orçado zerado salva na agregada (revisão da decisão 011)
+
+- O "Salvar" da agregada (orçamento novo do rascunho) **não barra mais item
+  com R$ unitário orçado zerado**, como a tela da versão. A trava ficou só
+  na aprovação da versão.
+- Na importação, a pergunta "Manter o planejado da vN" some quando a versão
+  de origem não tem itens (antes aparecia com "0 de N linhas casadas").
+
+---
+
+## ⚠️ Nota de 2026-09-25 — item que nasce em save não gravava (corrigido)
+
+**De 22/09 a 25/09/2026, nenhum item de versão conseguia nascer em save.**
+Com o "Orçamento de save" ligado, adicionar item dava "Não foi possível
+adicionar o item."; na importação de planilha com linha em save, "não foi
+possível gravar os itens.".
+
+- **Causa:** o trigger `save_marca_autor_e_planejado()` (migration
+  `20260922140001`, decisão 099) testava
+  `tg_table_name = 'jobs_itens_orcado' and new.item_versao_id is not null`.
+  O PL/pgSQL não curto-circuita campo de registro: prepara a expressão
+  inteira contra NEW, e `versoes_orcamento_itens` não tem
+  `item_versao_id`. Erro `42703`, PostgREST 400.
+- **Por que o teste da 099 não pegou:** marcar save numa linha que já
+  existe é UPDATE, e esse ramo não tinha o problema. Só o INSERT com
+  `em_save = true` caía.
+- **Correção:** migration `20260925110001_save_marca_autor_insert_na_versao`
+  — o IF virou dois IFs aninhados; o resto do corpo é idêntico.
+- **Conferido pela tela** no TES-0001/26-05: interruptor ligado, item novo
+  gravou com `em_save`, autor e data da marcação, planejado zerado e o
+  planejado anterior guardado; a célula mostra "Save gerado". O item e o
+  interruptor foram desfeitos depois.
+- **Junto:** ligar o "Orçamento de save" agora abre a coluna Save na hora
+  (decisão 107).
+
+## ⚠️ Nota de 2026-09-28 — o projeto leva P, e o orçamento acompanha (decisão 114)
+
+**No ar desde 28/09/2026:** migration `20260928200002` (destrutiva)
+aplicada na hora combinada com a frente do Antonio, junto da
+`20260928200001`, que troca o código dos jobs; código publicado logo depois
+(`3305751`).
+
+- **Formato novo:** `P` no lugar do primeiro zero, mesmo número.
+  `AMB-0006/26` → `AMB-P006/26`, e o orçamento `AMB-0006/26-01` →
+  `AMB-P006/26-01`. O formato de antes (`[SIGLA]-[SEQ_4]/[AA]`) passou a ser
+  o do job (`AMB-1006/26`), e o projeto do financeiro leva `F`.
+- **Os 16 projetos e 39 orçamentos existentes** trocam; o código de antes
+  fica em `codigo_anterior`. O cabeçalho da página do projeto mostra
+  "Código anterior", e a busca da lista de projetos acha pelos dois. O do
+  orçamento fica só guardado.
+- **Gerador:** `proximoCodigoDeProjeto` recebe a letra; o código antigo
+  conta para o maior número, para um projeto criado no intervalo da troca
+  não repetir número. Testes em `lib/codigos/projetos.test.ts`.
+- **Importar:** as planilhas exportadas antes da troca voltam normalmente
+  — o Importar acha os orçamentos pelos ids escondidos, não pelo código.

@@ -153,10 +153,6 @@ export async function salvarAlteracoesDoProjeto(
         jobs: [novo],
       }),
     );
-    if (novo.arquivoCampo) {
-      const arquivo = formData.get(novo.arquivoCampo);
-      if (arquivo instanceof File) fd.set(novo.arquivoCampo, arquivo);
-    }
 
     const res = await salvarOrcamentosDoProjeto(projetoId, fd);
     if (!res.ok) {

@@ -94,7 +94,11 @@ export function ContasPagarTabs({
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("tab", proxima);
-    window.history.replaceState(window.history.state, "", url.toString());
+    // `null`, e não o `history.state` atual: com o estado interno do Next
+    // (`__NA`) no argumento, o router toma a troca como dele e não a
+    // repassa ao `useSearchParams` — e o rastro do voltar ficava sem a aba
+    // (decisão 108). Mesma forma das abas do job e da abertura.
+    window.history.replaceState(null, "", url.toString());
   }
 
   // Quantos CHATS têm mensagem não lida (decisão 058). Vem do provider, que

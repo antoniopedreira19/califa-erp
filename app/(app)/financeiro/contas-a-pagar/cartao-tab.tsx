@@ -28,7 +28,7 @@ import type { ExtratoDaFatura, StatusFatura } from "@/lib/data/fatura-cartao-ext
 import type { TituloRow } from "./titulos-pagar-list";
 import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
-import { CartaoCapa } from "./cartao-capa";
+import { CartaoCapa, FILTRO_DA_CAPA_VAZIO, type FiltroDaCapa } from "./cartao-capa";
 import { CartaoFatura } from "./cartao-fatura";
 
 /** A fatura que o card da capa mostra: a aberta mais antiga do cartão
@@ -91,6 +91,9 @@ export interface CartaoTabProps {
 export function CartaoTab(props: CartaoTabProps) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+  // O filtro da capa sobrevive à ida e volta da fatura: esta aba continua
+  // montada no `router.push`, a capa não (decisão 108).
+  const [filtroDaCapa, setFiltroDaCapa] = React.useState<FiltroDaCapa>(FILTRO_DA_CAPA_VAZIO);
 
   function irPara(cartaoId: string | null, competencia?: string) {
     const params = new URLSearchParams({ tab: "cartao" });
@@ -136,6 +139,8 @@ export function CartaoTab(props: CartaoTabProps) {
         pending={pending}
         onAbrir={(id) => irPara(id)}
         lancarPagamento={lancarPagamento}
+        filtro={filtroDaCapa}
+        onFiltro={setFiltroDaCapa}
       />
     );
   }

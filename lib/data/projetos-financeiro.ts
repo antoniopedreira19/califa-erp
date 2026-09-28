@@ -15,6 +15,9 @@ import { createClient } from "@/lib/supabase/server";
 export interface ProjetoFinanceiroOpcao {
   id: string;
   codigo: string;
+  /** O código de antes da decisão 114 ("AMB-0004/26", hoje "AMB-F004/26"):
+   *  a busca do combo também olha este. Nulo nos criados depois. */
+  codigo_anterior: string | null;
   nome: string;
   cliente_id: string;
   cliente_nome: string | null;
@@ -35,7 +38,7 @@ export async function listarProjetosFinanceiro(
 
   let query = supabase
     .from("projetos_financeiro")
-    .select("id, codigo, nome, cliente_id, cliente:clientes(nome_fantasia)")
+    .select("id, codigo, codigo_anterior, nome, cliente_id, cliente:clientes(nome_fantasia)")
     .eq("tenant_id", tenantId)
     .eq("ativo", true)
     .order("codigo", { ascending: true });
@@ -52,6 +55,7 @@ export async function listarProjetosFinanceiro(
   return ((data ?? []) as any[]).map((p) => ({
     id: p.id,
     codigo: p.codigo,
+    codigo_anterior: p.codigo_anterior ?? null,
     nome: p.nome,
     cliente_id: p.cliente_id,
     cliente_nome: p.cliente?.nome_fantasia ?? null,

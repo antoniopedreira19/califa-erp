@@ -153,7 +153,7 @@ export function ConciliacaoList({
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                   {jobParaColuna.tipo === "link" ? (
                     <Link
-                      href={`/jobs/${jobParaColuna.id}?from=financeiro`}
+                      href={`/financeiro/jobs/${jobParaColuna.id}`}
                       prefetch={false}
                       className="text-california-red hover:underline"
                     >
@@ -296,7 +296,7 @@ function LinhasDaFatura({
                   <td className="whitespace-nowrap px-3 py-1.5 font-mono">
                     {it.job_id && it.job_codigo ? (
                       <Link
-                        href={`/jobs/${it.job_id}?from=financeiro`}
+                        href={`/financeiro/jobs/${it.job_id}`}
                         prefetch={false}
                         className="text-california-red hover:underline"
                       >

@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { FaixaDosOrcamentos, faixaDoOrcamentoSemItens } from "../faixa-orcamentos";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileStack, FolderTree, Lock } from "lucide-react";
+import { FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
@@ -34,7 +37,7 @@ import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { AbasVersoes, type VersaoAba } from "./abas-versoes";
 import { AcoesVersao } from "./acoes-versao";
 import { MetaVersao } from "./meta-versao";
-import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
+import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { PlanilhaVersao } from "./versoes/[versaoId]/planilha-versao";
 import {
@@ -54,7 +57,7 @@ import {
   type FechamentoDaCopia,
   type JobExistente,
 } from "./versoes/[versaoId]/fluxo-abertura";
-import { proximoCodigoDeJob } from "@/lib/codigos/jobs";
+import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
 import { lerBaseDosEspelhos, totaisDoFinanceiro } from "@/lib/data/espelhos-do-job";
 
 export const dynamic = "force-dynamic";
@@ -189,6 +192,10 @@ export default async function OrcamentoDetailPage({
           // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
           // desde 02/09/2026 (categoria e servico).
           "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), regional:regionais(nome), cidade:cidades(id, nome), " +
+          // O serviço Interno muda a planilha (decisão 105). Lido pelo
+          // embed, e não pela lista de serviços ativos: um serviço
+          // desativado continua valendo para o orçamento que o usa.
+          "servico:categorias_dominio!servico_id(investimento_interno), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -201,7 +208,7 @@ export default async function OrcamentoDetailPage({
         // `produto_id` cru além do embed `produto`: é ele que o servidor
         // confere para deixar abrir o job, e é ele que o modal usa para
         // decidir se a Marca está cadastrada (17/09/2026).
-        "id, codigo, nome, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
+        "id, codigo, nome, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -217,7 +224,7 @@ export default async function OrcamentoDetailPage({
     // categoria do Fee e do Always On (decisão 078).
     supabase
       .from("categorias_dominio")
-      .select("id, nome, modelo_planilha, servico_exclusivo_id")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -276,14 +283,15 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
-    // Prévia do código do próximo job: o maior JOB-NNNN do tenant + 1, a
-    // mesma conta de `gerarCodigoJob` (a contagem de jobs errava quando
-    // havia job apagado — 14/09/2026).
+    // Prévia do código do próximo job, a mesma conta de `gerarCodigoJob`
+    // (decisão 114): os códigos do ano de hoje. A sigla do cliente só se
+    // sabe depois do projeto, que vem nesta mesma onda — o filtro por sigla
+    // fica para a hora da conta.
     supabase
       .from("jobs")
       .select("codigo")
       .eq("tenant_id", session.activeTenant.id)
-      .like("codigo", "JOB-%"),
+      .like("codigo", `%/${anoDoCodigoDeJob()}`),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -521,16 +529,34 @@ export default async function OrcamentoDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href={`/orcamentos/${params.projetoId}`}
-          prefetch={false}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        {/* Faixa do projeto (decisão 106): o voltar, a agregada e os
+            orçamentos irmãos. Os irmãos chegam por streaming; o fallback
+            é a mesma faixa sem eles, na mesma altura. */}
+        <Suspense
+          fallback={
+            <FaixaDoProjeto
+              {...faixaDoOrcamentoSemItens({
+                id: params.projetoId,
+                codigo: projetoRaw.codigo,
+                nome: projetoRaw.nome,
+              })}
+              ativo={orcamento.id}
+              itens={null}
+            />
+          }
         >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para {projetoRaw.codigo} · {projetoRaw.nome}
-        </Link>
+          <FaixaDosOrcamentos
+            tenantId={session.activeTenant.id}
+            projeto={{
+              id: params.projetoId,
+              codigo: projetoRaw.codigo,
+              nome: projetoRaw.nome,
+            }}
+            orcamentoId={orcamento.id}
+          />
+        </Suspense>
 
-        <div className="mt-3">
+        <div className="mt-5">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             {orcamento.codigo}
           </p>
@@ -659,6 +685,7 @@ export default async function OrcamentoDetailPage({
         honorariosCliente={honorariosCliente}
         clienteNome={clienteNome}
         modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
+        interno={orcamentoRaw?.servico?.investimento_interno === true}
         travarImpostos={
           (orcamentoRaw?.categoria?.modelo_planilha ?? "nacional") === "internacional" &&
           !pode(session.activeRole, "orcamentos.editar_impostos")
@@ -688,11 +715,19 @@ export default async function OrcamentoDetailPage({
           job={job}
           abrirRevisao={abrirRevisao}
           temJobAtivo={temJobAtivo}
-          proximoCodigoJob={proximoCodigoDeJob(
-            ((codigosDeJobRes.data ?? []) as { codigo: string }[]).map(
-              (j) => j.codigo,
-            ),
-          )}
+          // Cliente sem código curto: o envio recusa com a mensagem que
+          // pede o cadastro; a prévia fica em travessão.
+          proximoCodigoJob={
+            projetoRaw.cliente?.codigo_curto
+              ? proximoCodigoDeJob({
+                  sigla: projetoRaw.cliente.codigo_curto,
+                  ano: anoDoCodigoDeJob(),
+                  codigos: (
+                    (codigosDeJobRes.data ?? []) as { codigo: string }[]
+                  ).map((j) => j.codigo),
+                })
+              : "—"
+          }
           podeCriarVersao={podeCriarVersao}
           motivoBloqueio={motivoBloqueio}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
@@ -704,6 +739,7 @@ export default async function OrcamentoDetailPage({
           projetoId={params.projetoId}
           orcamentoId={orcamento.id}
           modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
+          interno={orcamentoRaw?.servico?.investimento_interno === true}
           travarImpostos={
             (orcamentoRaw?.categoria?.modelo_planilha ?? "nacional") === "internacional" &&
           !pode(session.activeRole, "orcamentos.editar_impostos")
@@ -788,6 +824,9 @@ function VersaoSelecionada({
   /** Job devolvido ou aguardando abertura: o fechamento da cópia do job. */
   fechamentoDaCopia: FechamentoDaCopia | null;
 }) {
+  // Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
+  // planejado igual ao orçado e sem save.
+  const interno: boolean = orcamentoRaw?.servico?.investimento_interno === true;
   const itens: VersaoOrcamentoItem[] = itensBrutos.map((it: any) => ({
     ...it,
     valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
@@ -1030,6 +1069,7 @@ function VersaoSelecionada({
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           planilha={planilha}
+          interno={interno}
           importacao={{
             disabled: temJobAtivo || !podeCriarVersao,
             disabledReason: temJobAtivo
@@ -1058,12 +1098,14 @@ function VersaoSelecionada({
                 importou a planilha errada troca por aqui mesmo, sem sair
                 da aba. Em versão congelada some — lá não há o que
                 substituir. */}
-            <ImportarPlanilhaDrawer
+            <ImportarPlanilhaVersao
               projetoId={params.projetoId}
               orcamentoId={params.orcId}
               modeloPlanilha={planilha.modeloPlanilha}
+              interno={interno}
               modo="sobrescrever"
               versaoId={versao.id}
+              numeroVersao={versao.numero_versao}
               conteudoAtual={{
                 grupos: grupos.length,
                 itens: itens.length,
@@ -1119,6 +1161,7 @@ function VersaoSelecionada({
           modeloPlanilha={planilha.modeloPlanilha}
           internacional={planilha.internacional}
           moedaEstrangeira={planilha.moedaEstrangeira}
+          interno={interno}
         />
       </div>
       </>
@@ -1179,6 +1222,7 @@ function SemVersoes({
   projetoId,
   orcamentoId,
   modeloPlanilha,
+  interno,
   travarImpostos,
   honorariosCliente,
   clienteNome,
@@ -1188,6 +1232,8 @@ function SemVersoes({
   projetoId: string;
   orcamentoId: string;
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Orçamento de serviço Interno (decisão 105). */
+  interno: boolean;
   travarImpostos: boolean;
   honorariosCliente: number;
   clienteNome: string | null;
@@ -1213,10 +1259,11 @@ function SemVersoes({
           disabled={!podeCriarVersao}
           disabledReason={motivoBloqueio}
         />
-        <ImportarPlanilhaDrawer
+        <ImportarPlanilhaVersao
           projetoId={projetoId}
           orcamentoId={orcamentoId}
           modeloPlanilha={modeloPlanilha}
+          interno={interno}
           disabled={!podeCriarVersao}
           disabledReason={motivoBloqueio}
         />

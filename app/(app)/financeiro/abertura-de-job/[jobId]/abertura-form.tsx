@@ -6,14 +6,12 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   CalendarCheck,
   CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
-  ClipboardCheck,
   Clock,
   CornerUpLeft,
   FileText,
@@ -46,6 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -93,6 +92,11 @@ import {
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
 import type { AprovacaoDeSave } from "../aprovacao-save";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
+import { useVoltar } from "@/components/voltar/botao-voltar";
+import { useProtegerSaida } from "@/components/voltar/estado";
+import { nomeDaPagina } from "@/lib/voltar";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useIrParaAbaDoJob } from "../../jobs/[jobId]/job-financeiro-tabs";
 
 interface CategoriaOption {
   id: string;
@@ -199,6 +203,12 @@ interface Props {
   servicos: ServicoOption[];
   /** Projetos do financeiro do mesmo cliente, para o combo. */
   projetos: ProjetoFinanceiroOpcao[];
+  /**
+   * O projeto do financeiro do último job aberto no mesmo projeto da
+   * produção — o texto de fundo da busca do campo Projeto (decisão 111,
+   * revisão de 28/09/2026). Nulo quando não há, e no job já aberto.
+   */
+  sugestaoDeProjeto: { nome: string; codigo: string; jobCodigo: string } | null;
   /** Contas ativas do tenant, com saldo de hoje. */
   contas: ContaBancariaOpcao[];
   custoPrevisto: number;
@@ -274,6 +284,10 @@ interface Props {
    */
   aprovacaoSave: AprovacaoDeSave | null;
 }
+
+/** O atalho "Visualizar planilha interna" — link ou botão de aba, mesma cara. */
+const CLASSE_ATALHO_PLANILHA =
+  "mt-1.5 flex w-full items-center gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3 text-left transition-colors hover:border-california-red/50 hover:bg-california-red/5";
 
 function parseMoeda(texto: string): number {
   const limpo = texto
@@ -355,6 +369,7 @@ export function AberturaForm({
   categorias,
   servicos,
   projetos,
+  sugestaoDeProjeto,
   contas,
   custoPrevisto,
   faturamentoPrevisto,
@@ -382,6 +397,12 @@ export function AberturaForm({
   aprovacaoSave,
 }: Props) {
   const router = useRouter();
+  // Revisão aberta pela fila volta à fila; pela Visualizar Jobs, volta lá
+  // (decisão 108). A reserva é a fila, o destino fixo de antes.
+  const voltar = useVoltar("/financeiro/abertura-de-job?aba=aguardando");
+  // A abertura mora na primeira das abas do job (decisão 111): o atalho da
+  // planilha troca de aba em vez de sair da página. Nulo fora das abas.
+  const irParaAba = useIrParaAbaDoJob();
 
   // Modo leitura só destrava quando alguém clica em "Editar registro".
   // A revisão já nasce destravada: reconferir a abertura depois de uma
@@ -419,6 +440,7 @@ export function AberturaForm({
     () => job.projeto_financeiro_id ?? "",
   );
   const [projetoAberto, setProjetoAberto] = React.useState(false);
+  const [buscaProjeto, setBuscaProjeto] = React.useState("");
   const [criandoProjeto, setCriandoProjeto] = React.useState(false);
   const [nomeNovoProjeto, setNomeNovoProjeto] = React.useState("");
   const [criandoPending, setCriandoPending] = React.useState(false);
@@ -641,6 +663,26 @@ export function AberturaForm({
     [projetos, projetoNovo],
   );
   const projetoSel = projetosVisiveis.find((p) => p.id === projetoId) ?? null;
+  // Sem acento e sem caixa, no nome e no código — o mesmo critério do
+  // campo de fornecedor (`components/ui/combobox.tsx`). O código de antes
+  // da decisão 114 também vale ("AMB-0004/26" acha o AMB-F004/26).
+  const projetosFiltrados = React.useMemo(() => {
+    const normalizar = (t: string) =>
+      t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const q = normalizar(buscaProjeto.trim());
+    if (!q) return projetosVisiveis;
+    return projetosVisiveis.filter(
+      (p) =>
+        normalizar(p.nome).includes(q) ||
+        normalizar(p.codigo).includes(q) ||
+        normalizar(p.codigo_anterior ?? "").includes(q),
+    );
+  }, [projetosVisiveis, buscaProjeto]);
+  function escolherProjeto(id: string) {
+    setProjetoId(id);
+    setProjetoAberto(false);
+    setBuscaProjeto("");
+  }
   const projetoLabel = projetoSel?.nome ?? "Selecione o projeto";
   const projetoCodigo = projetoSel?.codigo ?? "";
   const projetoResumo = projetoSel
@@ -904,6 +946,7 @@ export function AberturaForm({
       setProjetoNovo({
         id: res.id,
         codigo: res.codigo,
+        codigo_anterior: null, // nasceu depois da decisão 114
         nome: res.nome,
         cliente_id: job.cliente_id ?? "",
         cliente_nome: job.cliente_nome,
@@ -996,6 +1039,77 @@ export function AberturaForm({
           })),
     };
   }
+
+  // ---------- Saída com preenchimento não gravado (decisão 111) ----------
+  // A abertura só grava ao confirmar. Com as abas do job na mesma página,
+  // consultar é trocar de aba, e o formulário fica montado; mas um link que
+  // sai da página descartaria o que foi preenchido. A "foto" é o formulário
+  // como ele chegou do servidor — todo o estado inicial vem das props, sem
+  // efeito no mount, então a primeira renderização já é a foto certa.
+  const assinatura = JSON.stringify(montarPayload());
+  const [assinaturaInicial] = React.useState(assinatura);
+  const preenchimentoPendente =
+    modo === "abertura" && assinatura !== assinaturaInicial;
+  const [saidaPendente, setSaidaPendente] = React.useState<string | null>(
+    null,
+  );
+
+  // Fechar a aba e recarregar: o aviso do próprio navegador.
+  React.useEffect(() => {
+    if (!preenchimentoPendente) return;
+    function avisar(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [preenchimentoPendente]);
+
+  // O Voltar do topo e as saídas para outro módulo (decisão 108) caem na
+  // mesma confirmação desta tela.
+  useProtegerSaida(preenchimentoPendente, (href) => setSaidaPendente(href));
+
+  // Os demais links que saem da página — o menu lateral e os links das abas
+  // Informações e Planilha — navegam por dentro do app e passariam direto.
+  // Um ouvinte na fase de CAPTURA os segura antes do onClick do Link do
+  // Next. Clique com ctrl/cmd, botão do meio ou alvo em outra aba não
+  // descarta nada e passa.
+  React.useEffect(() => {
+    if (!preenchimentoPendente) return;
+    function segurar(e: MouseEvent) {
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      const alvo =
+        e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!(alvo instanceof HTMLAnchorElement)) return;
+      if (alvo.target && alvo.target !== "_self") return;
+      if (alvo.hasAttribute("download")) return;
+      // O Voltar tem a proteção dele (acima): ele anota o rastro da aba
+      // antes de sair, e segurá-lo aqui pularia essa anotação.
+      if (alvo.closest("[data-voltar-da-pagina]")) return;
+      const destino = new URL(alvo.href, window.location.href);
+      if (destino.origin !== window.location.origin) return;
+      // Mesma página — outra aba, outro mês da planilha: nada se perde.
+      if (destino.pathname === window.location.pathname) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setSaidaPendente(destino.pathname + destino.search + destino.hash);
+    }
+    document.addEventListener("click", segurar, true);
+    return () => document.removeEventListener("click", segurar, true);
+  }, [preenchimentoPendente]);
+
+  const nomeDoDestino = saidaPendente
+    ? nomeDaPagina(saidaPendente, {})
+    : null;
 
   function confirmarAbertura() {
     setErro(null);
@@ -1134,10 +1248,13 @@ export function AberturaForm({
     },
     {
       // Mesma regra do diálogo de conferência: a data é de
-      // recebimento, não de faturamento (27/08/2026).
+      // recebimento, não de faturamento (27/08/2026). Sem faturamento
+      // previsto não há recebimento (decisão 105).
       rotulo: "Recebimento em",
-      valor: formatDataBr(job.data_prevista_faturamento),
-      mono: true,
+      valor: semRecebimento
+        ? "Sem recebimento"
+        : formatDataBr(job.data_prevista_faturamento),
+      mono: !semRecebimento,
     },
   ];
 
@@ -1145,6 +1262,19 @@ export function AberturaForm({
     job.planilha_itens > 0
       ? `${job.planilha_grupos} ${job.planilha_grupos === 1 ? "agrupamento" : "agrupamentos"} · ${job.planilha_itens} ${job.planilha_itens === 1 ? "item" : "itens"} · orçado ${formatCurrency(job.planilha_orcado)}`
       : "Planilha interna sem itens.";
+
+  const conteudoDoAtalhoDaPlanilha = (
+    <>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
+        <Table2 className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[12.5px] font-semibold">Visualizar planilha interna</p>
+        <p className="text-[11px] text-muted-foreground">{resumoPlanilha}</p>
+      </div>
+      <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+    </>
+  );
 
   return (
     <div className="flex flex-col gap-5 pb-6">
@@ -1185,41 +1315,10 @@ export function AberturaForm({
         </div>
       )}
 
-      {/* O cabeçalho grande é só da fila. Dentro da aba do job aberto a
-          página já tem o próprio (código, nome e situação), e repetir
-          "Abrir job no financeiro" num job que já está aberto seria
-          simplesmente falso. */}
-      {modo === "abertura" && (
-        <div>
-          <Link
-            href="/financeiro/abertura-de-job?aba=aguardando"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Voltar para a fila de abertura
-          </Link>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <Landmark className="h-5 w-5 text-california-red" />
-            </div>
-            <h1 className="text-[26px] font-bold tracking-tight">
-              Abrir job no financeiro
-            </h1>
-            <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[12.5px] font-bold">
-              {job.codigo}
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-              <ClipboardCheck className="h-3 w-3" />
-              Em conferência
-            </span>
-          </div>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Confira os dados da produção ao lado — e a planilha interna do job
-            — e complete o registro financeiro: nome, projeto, categoria,
-            serviço, competência e as previsões de recebimento e de custos.
-          </p>
-        </div>
-      )}
+      {/* O cabeçalho grande da abertura ("Abrir job no financeiro") mora na
+          página da fila desde a decisão 111, ACIMA das abas do job: o
+          formulário é só o conteúdo da aba "Abertura do Job". Dentro da aba
+          do job aberto a página já tem o próprio cabeçalho. */}
 
       {erro && (
         <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
@@ -1276,7 +1375,11 @@ export function AberturaForm({
                 <div className="flex items-center gap-2">
                   <Popover
                     open={projetoAberto}
-                    onOpenChange={(o) => !travado && setProjetoAberto(o)}
+                    onOpenChange={(o) => {
+                      if (travado) return;
+                      setProjetoAberto(o);
+                      if (!o) setBuscaProjeto("");
+                    }}
                   >
                     <PopoverTrigger asChild>
                       <button
@@ -1307,44 +1410,77 @@ export function AberturaForm({
                         )}
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[320px] p-1.5" align="start">
-                      <p className="px-2.5 pb-2 pt-1.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
+                    {/* Busca digitável (decisão 111, revisão de 28/09): com
+                        muitos projetos, a lista só se acha digitando. O
+                        texto de fundo da busca traz a sugestão — o projeto
+                        do último job aberto no mesmo projeto da produção —
+                        para a pessoa digitar o nome que está vendo. */}
+                    <PopoverContent
+                      className="w-[var(--radix-popover-trigger-width)] min-w-[320px] p-0"
+                      align="start"
+                    >
+                      <div className="border-b border-border p-2">
+                        <Input
+                          autoFocus
+                          aria-label="Buscar projeto"
+                          value={buscaProjeto}
+                          onChange={(e) => setBuscaProjeto(e.target.value)}
+                          onKeyDown={(e) => {
+                            // Enter escolhe o primeiro da lista filtrada.
+                            if (e.key === "Enter" && projetosFiltrados[0]) {
+                              e.preventDefault();
+                              escolherProjeto(projetosFiltrados[0].id);
+                            }
+                          }}
+                          placeholder={
+                            sugestaoDeProjeto
+                              ? `Sugestão: ${sugestaoDeProjeto.nome} — último job deste projeto (${sugestaoDeProjeto.jobCodigo})`
+                              : "Digite o nome ou o código do projeto"
+                          }
+                          className="h-9 text-[13px]"
+                        />
+                      </div>
+                      <p className="px-4 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
                         Projetos abertos
                       </p>
-                      {projetosVisiveis.length === 0 ? (
-                        <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
-                          Nenhum projeto do financeiro para este cliente. Crie
-                          um no botão ao lado.
-                        </p>
-                      ) : (
-                        projetosVisiveis.map((pr) => (
-                          <button
-                            key={pr.id}
-                            type="button"
-                            onClick={() => {
-                              setProjetoId(pr.id);
-                              setProjetoAberto(false);
-                            }}
-                            className={cn(
-                              "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
-                              pr.id === projetoId &&
-                                "bg-california-red/[0.06] text-california-red",
-                            )}
-                          >
-                            <span className="flex items-baseline justify-between gap-3">
-                              <span className="truncate font-semibold">
-                                {pr.nome}
+                      <div className="max-h-64 overflow-y-auto px-1.5 pb-1.5">
+                        {projetosVisiveis.length === 0 ? (
+                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
+                            Nenhum projeto do financeiro para este cliente. Crie
+                            um no botão ao lado.
+                          </p>
+                        ) : projetosFiltrados.length === 0 ? (
+                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
+                            Nenhum projeto com “{buscaProjeto.trim()}”. Confira
+                            o nome ou crie um no botão ao lado.
+                          </p>
+                        ) : (
+                          projetosFiltrados.map((pr) => (
+                            <button
+                              key={pr.id}
+                              type="button"
+                              onClick={() => escolherProjeto(pr.id)}
+                              className={cn(
+                                "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
+                                pr.id === projetoId &&
+                                  "bg-california-red/[0.06] text-california-red",
+                              )}
+                            >
+                              <span className="flex items-baseline justify-between gap-3">
+                                <span className="truncate font-semibold">
+                                  {pr.nome}
+                                </span>
+                                <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
+                                  {pr.codigo}
+                                </span>
                               </span>
-                              <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
-                                {pr.codigo}
+                              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                {pr.cliente_nome ?? "—"}
                               </span>
-                            </span>
-                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                              {pr.cliente_nome ?? "—"}
-                            </span>
-                          </button>
-                        ))
-                      )}
+                            </button>
+                          ))
+                        )}
+                      </div>
                     </PopoverContent>
                   </Popover>
 
@@ -2722,30 +2858,32 @@ export function AberturaForm({
                 para a aba da abertura continua na aprovação. Sem ele, a
                 revisão registrada na volta não aprovaria nada (achado da
                 revisão de 22/09/2026). */}
-            <Link
-              href={
-                modo === "abertura"
-                  ? `/financeiro/abertura-de-job/${job.id}/planilha`
-                  : aprovacaoSave
-                    ? `/financeiro/jobs/${job.id}?aba=planilha&aprovarSave=${aprovacaoSave.pedidoId}`
-                    : `/financeiro/jobs/${job.id}?aba=planilha`
-              }
-              prefetch={false}
-              className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3 text-left transition-colors hover:border-california-red/50 hover:bg-california-red/5"
-            >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
-                <Table2 className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[12.5px] font-semibold">
-                  Visualizar planilha interna
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {resumoPlanilha}
-                </p>
-              </div>
-              <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            </Link>
+            {/* Na abertura (decisão 111) a planilha é a aba ao lado, e o
+                atalho só troca de aba: sair para a rota da conferência
+                descartaria o que já foi preenchido. */}
+            {modo === "abertura" && irParaAba ? (
+              <button
+                type="button"
+                onClick={() => irParaAba("planilha")}
+                className={CLASSE_ATALHO_PLANILHA}
+              >
+                {conteudoDoAtalhoDaPlanilha}
+              </button>
+            ) : (
+              <Link
+                href={
+                  modo === "abertura"
+                    ? `/financeiro/abertura-de-job/${job.id}/planilha`
+                    : aprovacaoSave
+                      ? `/financeiro/jobs/${job.id}?aba=planilha&aprovarSave=${aprovacaoSave.pedidoId}`
+                      : `/financeiro/jobs/${job.id}?aba=planilha`
+                }
+                prefetch={false}
+                className={CLASSE_ATALHO_PLANILHA}
+              >
+                {conteudoDoAtalhoDaPlanilha}
+              </Link>
+            )}
           </div>
 
           {/* O que a produção escreveu ao enviar o job. Mesmo dado e mesmo
@@ -2911,12 +3049,20 @@ export function AberturaForm({
           <div className="flex items-center gap-2.5">
             {ehRevisao ? (
               <>
+                {/* O mesmo destino do voltar do topo (decisão 108): a fila
+                    para quem veio dela, Visualizar Jobs para quem veio de lá. */}
                 <Link
-                  href="/financeiro/abertura-de-job?aba=aguardando"
+                  href={voltar.href}
                   prefetch={false}
+                  title={voltar.titulo}
+                  onClick={(e) => {
+                    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    voltar.irVoltar();
+                  }}
                   className="rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold transition-colors hover:bg-muted"
                 >
-                  Voltar para a fila
+                  Voltar
                 </Link>
                 <button
                   type="button"
@@ -3095,6 +3241,40 @@ export function AberturaForm({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={saidaPendente !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setSaidaPendente(null);
+        }}
+        title="Sair sem abrir o job?"
+        description={
+          <>
+            <p>
+              O que você preencheu na abertura do{" "}
+              <span className="font-mono">{job.codigo}</span> só é gravado
+              quando o job é aberto. Saindo desta página agora, o
+              preenchimento se perde.
+            </p>
+            {nomeDoDestino && nomeDoDestino !== "a página anterior" && (
+              <p className="mt-2">
+                Destino:{" "}
+                <strong className="font-semibold text-foreground">
+                  {nomeDoDestino}
+                </strong>
+              </p>
+            )}
+          </>
+        }
+        confirmLabel="Sair e descartar"
+        cancelLabel="Continuar na abertura"
+        variant="destructive"
+        onConfirm={() => {
+          const destino = saidaPendente;
+          setSaidaPendente(null);
+          if (destino) router.push(destino);
+        }}
+      />
 
       <ReprovarDialog
         open={reprovarAberto}

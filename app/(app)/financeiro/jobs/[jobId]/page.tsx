@@ -1,11 +1,16 @@
 import Link from "next/link";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { itensDeJobs } from "@/lib/faixa-do-projeto";
+import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, ArrowLeft, FilePenLine, Lock } from "lucide-react";
+import { AlertTriangle, ArrowRight, FilePenLine, Lock } from "lucide-react";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import {
   AREA_FINANCEIRO,
+  jobCanceladoAntesDaAbertura,
   jobStatusBadgeClasses,
   jobStatusExibido,
   jobStatusLabel,
@@ -43,7 +48,7 @@ import {
   competenciasGravadas,
   previsoesGravadas,
 } from "../../abertura-de-job/consumo";
-import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
+import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { trimestreDe } from "../../abertura-de-job/curva";
 import { formatDataHoraBr } from "../../abertura-de-job/formatos";
 import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
@@ -136,7 +141,9 @@ export default async function JobNoFinanceiroPage({
     // categoria só do financeiro.
     supabase
       .from("categorias_dominio")
-      .select("id, nome")
+      // `modelo_planilha`: o combo só oferece categorias do modelo do
+      // orçamento (decisões 072 e 105), como a abertura.
+      .select("id, nome, modelo_planilha")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -206,9 +213,18 @@ export default async function JobNoFinanceiroPage({
     detalhe;
 
   // Job que ainda não passou pela abertura não tem registro para mostrar —
-  // o lugar dele é a fila.
+  // o lugar dele é a fila. O devolvido e o cancelado antes da abertura não
+  // existem no financeiro (decisão 113): quem chega por link antigo vai
+  // para a fila, como na página da abertura. Até 28/09/2026 os dois abriam
+  // esta página inteira.
   if (job.status === "aguardando_abertura") {
     redirect(`/financeiro/abertura-de-job/${job.id}`);
+  }
+  if (
+    job.status === "rejeitado_financeiro" ||
+    jobCanceladoAntesDaAbertura(job)
+  ) {
+    redirect("/financeiro/abertura-de-job?aba=aguardando");
   }
 
   // Só aprova quem abre job no financeiro (a página já barrou os outros
@@ -246,7 +262,9 @@ export default async function JobNoFinanceiroPage({
           .select("id, codigo, nome, nome_financeiro, status")
           .eq("tenant_id", tenantId)
           .eq("projeto_financeiro_id", jobNaFila.projeto_financeiro_id)
-          .order("codigo", { ascending: true })
+          // Ordem de criação, e não a do código: desde a decisão 114 o código
+          // começa pela sigla do cliente, e o texto não diz mais a ordem.
+          .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -329,15 +347,37 @@ export default async function JobNoFinanceiroPage({
   return (
     <div className="space-y-5">
       <div>
-        <Link
-          href="/financeiro/abertura-de-job?aba=abertos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        {/* Faixa do projeto (decisão 106), no projeto do FINANCEIRO: a
+            agregada e os jobs da lista "Visualizar Jobs", os mesmos da
+            agregada. Job sem projeto do financeiro (anterior à migration
+            20260820000011) não tem agregada, e fica o voltar de antes. */}
+        {jobNaFila.projeto_financeiro_id ? (
+          <FaixaDoProjeto
+            modulo="financeiro"
+            reservaDoVoltar="/financeiro/abertura-de-job?aba=abertos"
+            projeto={{
+              codigo: jobNaFila.projeto_financeiro_codigo ?? "—",
+              nome: jobNaFila.projeto_financeiro_nome ?? "—",
+            }}
+            agregadaHref={`/financeiro/projetos/${jobNaFila.projeto_financeiro_id}`}
+            itens={itensDeJobs(
+              "/financeiro/jobs/",
+              jobsDoProjetoFinanceiro,
+              job.id,
+              (status) => (STATUS_NA_LISTA as readonly string[]).includes(status),
+            )}
+            ativo={job.id}
+          />
+        ) : (
+          <BotaoVoltar reserva="/financeiro/abertura-de-job?aba=abertos" />
+        )}
+        <div
+          className={cn(
+            "flex flex-wrap items-start justify-between gap-x-6 gap-y-3",
+            jobNaFila.projeto_financeiro_id ? "mt-5" : "mt-3",
+          )}
         >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para Visualizar Jobs
-        </Link>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-[18rem] flex-1">
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               {job.codigo}
             </p>
@@ -429,9 +469,15 @@ export default async function JobNoFinanceiroPage({
             fotos={fotos}
             revisao={revisao}
             aprovacaoSave={aprovacaoSave}
-            categorias={categoriasRes.data ?? []}
-            servicos={servicosRes.data ?? []}
+            categorias={(categoriasRes.data ?? []).filter(
+              (c) =>
+                c.modelo_planilha === jobNaFila.modelo_planilha_orcamento ||
+                c.id === jobNaFila.categoria_id,
+            )}
+            servicos={servicosDoLado(servicosRes.data ?? [], jobNaFila)}
             projetos={projetos}
+            // O job aberto já tem projeto: a sugestão é só da fila.
+            sugestaoDeProjeto={null}
             contas={contas}
             custoPrevisto={custoPrevisto}
             faturamentoPrevisto={faturamentoPrevisto}
@@ -485,6 +531,7 @@ export default async function JobNoFinanceiroPage({
               descritivo={job.observacoes}
               job={{
                 codigo: job.codigo,
+                codigoAnterior: job.codigo_anterior,
                 nome: jobNaFila.nome,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —
@@ -501,6 +548,7 @@ export default async function JobNoFinanceiroPage({
                 dataAbertura: job.data_abertura_financeiro,
                 abertoPorNome: detalhe.abertoPorNome,
                 dataPrevistaFaturamento: job.data_prevista_faturamento,
+                semFaturamento: Number(job.faturamento_previsto ?? 0) <= 0.004,
               }}
               projeto={{
                 // O projeto do FINANCEIRO, com fallback no da produção
@@ -520,7 +568,15 @@ export default async function JobNoFinanceiroPage({
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
               }}
-              jobsDoProjeto={jobsDoProjetoFinanceiro}
+              // Os mesmos da faixa acima (decisão 113): só o que passou pela
+              // abertura — o job na fila, o devolvido e o cancelado não
+              // existem no financeiro. Até 28/09/2026 este box vinha sem
+              // filtro nenhum.
+              jobsDoProjeto={jobsDoProjetoFinanceiro.filter(
+                (j) =>
+                  j.id === job.id ||
+                  (STATUS_NA_LISTA as readonly string[]).includes(j.status),
+              )}
               jobAtualId={job.id}
               // Os jobs irmãos do box "Jobs do projeto" abrem na ficha,
               // não no registro da abertura: o box mora DENTRO da ficha,
@@ -598,12 +654,16 @@ export default async function JobNoFinanceiroPage({
                   prefetch={false}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Voltar para a aprovação
+                  {/* Troca de aba na mesma página, e não um voltar
+                      (decisão 108): o voltar é o do topo. */}
+                  Ir para a aprovação
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
             )}
             <JobRealizadoSection
+              confirmarSaidaParaOrcamento
+              interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}
               clienteNome={detalhe.clienteNome}

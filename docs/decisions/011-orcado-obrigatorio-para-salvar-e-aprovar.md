@@ -1,7 +1,7 @@
 # 011 — Orçado zerado não salva lote nem aprova versão
 
 **Data:** 2026-08-17
-**Status:** aceita
+**Status:** aceita · **revisada em 2026-09-28** — o salvar do lote deixou de barrar; só a aprovação barra (ver "Revisão" no fim)
 **Contexto:** editor de orçamento do projeto (`/orcamentos/[projetoId]/multi`)
 e tela da versão (`/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]`).
 Regra definida pelo Tiago e corrigida em 16/08/2026: a primeira redação
@@ -49,3 +49,20 @@ job com valor errado, que ninguém corrige depois sem errata.
   alterações" do agregado é decisão futura.
 - Nenhuma constraint de banco: itens em rascunho podem legitimamente
   estar com 0 no meio da edição.
+
+## Revisão de 2026-09-28 — o salvar não barra mais
+
+Pedido do Tiago, depois da importação da planilha da Budweiser: *"Da mesma
+maneira que isso é possível dentro de um orçamento, deverá ser possível na
+visão agregada."*
+
+- **"Salvar orçamentos" / "Salvar alterações" da agregada aceitam item com
+  R$ unitário orçado zerado**, como a tela da versão sempre aceitou.
+- **A aprovação continua barrando** (`bloqueioAprovacaoVersao`, mesma
+  mensagem na tela e no servidor). É ela o portão do orçado.
+- Motivo: a planilha da agência traz item "Resp. Cliente" e bonificado com
+  R$ 0 (5 dos 50 itens na Página9 da Budweiser). Pela porta da versão a
+  planilha importava; pela agregada, o salvar parava no primeiro deles.
+- O aviso de cliente (`itensComOrcadoZerado`) e o editor multi-jobs citados
+  acima não existem mais; a checagem do servidor saiu de
+  `app/(app)/orcamentos/_rascunho/salvar-em-lote.ts`.

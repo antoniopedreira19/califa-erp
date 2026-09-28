@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, type LucideIcon } from "lucide-react";
+import { ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +36,7 @@ export default async function CadastrosFinanceiroPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/financeiro"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para central financeira
-        </Link>
+        <BotaoVoltar reserva="/financeiro" className="mb-3" />
         <PageHeader
           eyebrow="FINANCEIRO"
           title="Cadastros do Financeiro"

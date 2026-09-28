@@ -130,6 +130,9 @@ function planejadoSalvo(e: EdicaoLinha, salvo: ItemPlanilhaJob): EdicaoLinha {
 
 export interface RascunhoErrata {
   ativo: boolean;
+  /** Job de serviço Interno (decisão 105): tipo sempre F · Interno e o
+   *  planejado igual ao orçado — a tabela não abre nenhum dos dois. */
+  interno: boolean;
   ligar: () => void;
   /** Sai do modo errata e joga fora tudo que foi digitado. */
   descartar: () => void;
@@ -196,6 +199,9 @@ export interface RascunhoErrata {
 
 export function useRascunhoErrata(
   itensSalvos: ItemPlanilhaJob[],
+  /** Job de serviço Interno (decisão 105): linha nova nasce F · Interno e o
+   *  planejado acompanha o orçado, como o banco vai gravar. */
+  interno: boolean,
 ): RascunhoErrata {
   const [ativo, setAtivo] = React.useState(false);
   const [edicoes, setEdicoes] = React.useState<Record<string, EdicaoLinha>>({});
@@ -300,6 +306,8 @@ export function useRascunhoErrata(
   );
 
   const editarTipo = React.useCallback((chave: string, tipo: TipoCusto) => {
+    // No Interno o tipo não muda (decisão 105).
+    if (interno) return;
     fotografar(null);
     setNovas((lista) =>
       lista.map((n) => (n.chave === chave ? { ...n, tipo } : n)),
@@ -307,7 +315,7 @@ export function useRascunhoErrata(
     setEdicoes((mapa) =>
       mapa[chave] ? { ...mapa, [chave]: { ...mapa[chave], tipo } } : mapa,
     );
-  }, [fotografar]);
+  }, [fotografar, interno]);
 
   const editarNome = React.useCallback((chave: string, nome: string) => {
     fotografar(`${chave}:nome`);
@@ -337,11 +345,11 @@ export function useRascunhoErrata(
         planUnitario: "0",
         planQuantidade: vermelha ? "0" : "1",
         planDiasMeses: vermelha ? "0" : "1",
-        tipo: "B",
+        tipo: interno ? "FI" : "B",
       },
     ]);
     return chave;
-  }, [fotografar]);
+  }, [fotografar, interno]);
 
   const remover = React.useCallback((chave: string) => {
     fotografar(null);
@@ -372,6 +380,7 @@ export function useRascunhoErrata(
    *  leem daqui. Devolve o motivo da trava, ou null quando ele abre. */
   const travaDoPlanejado = React.useCallback(
     (chave: string): string | null => {
+      if (interno) return "No serviço Interno o planejado é igual ao orçado.";
       const nova = novas.find((n) => n.chave === chave);
       if (nova) return null;
       const salvo = salvosPorId.get(chave);
@@ -384,7 +393,7 @@ export function useRascunhoErrata(
       }
       return null;
     },
-    [novas, salvosPorId, edicoes],
+    [novas, salvosPorId, edicoes, interno],
   );
 
   const planejadoLiberado = React.useCallback(
@@ -414,7 +423,9 @@ export function useRascunhoErrata(
         // O planejado segue a mesma regra que o banco vai aplicar:
         // liberado, é o que foi digitado; nos demais casos fica como está
         // salvo. O espelho de `A`/`D` saiu em 08/09/2026 (decisão 062).
-        const plan = i.em_save
+        const plan = interno
+          ? { u: unit, q: qtd, d: dm }
+          : i.em_save
           ? { u: 0, q: 0, d: 0 }
           : travaDoPlanejado(i.id) === null
               ? {
@@ -450,7 +461,9 @@ export function useRascunhoErrata(
       // `A`/`D` saiu em 08/09/2026 (decisão 062).
       const plan = n.vermelha
         ? { u: 0, q: 0, d: 0 }
-        : {
+        : interno
+          ? { u: unit, q: qtd, d: dm }
+          : {
             u: numeroDe(n.planUnitario, 0),
             q: numeroDe(n.planQuantidade, 0),
             d: numeroDe(n.planDiasMeses, 0),
@@ -482,7 +495,7 @@ export function useRascunhoErrata(
     });
 
     return [...vivos, ...criadas];
-  }, [ativo, itensSalvos, edicoes, novas, removidas, travaDoPlanejado]);
+  }, [ativo, itensSalvos, edicoes, novas, removidas, travaDoPlanejado, interno]);
 
   const mudancas = React.useMemo<MudancaErrata[]>(() => {
     if (!ativo) return [];
@@ -625,6 +638,7 @@ export function useRascunhoErrata(
 
   return {
     ativo,
+    interno,
     ligar,
     descartar,
     desfazer,

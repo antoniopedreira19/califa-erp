@@ -16,7 +16,7 @@ import type {
   CategoriaModeloPlanilha, VersaoOrcamentoStatus } from "@/lib/types";
 import { duplicarVersao } from "./versoes/actions";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
-import { ImportarPlanilhaDrawer } from "./versoes/importar-drawer";
+import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 
 export interface VersaoAba {
   id: string;
@@ -42,6 +42,8 @@ interface Props {
   clienteNome: string | null;
   /** Modelo do orçamento — segue para o "Importar planilha" (decisão 072). */
   modeloPlanilha: CategoriaModeloPlanilha;
+  /** Orçamento de serviço Interno (decisão 105) — repassado à importação. */
+  interno: boolean;
   /** Segue para o "Nova versão": impostos do internacional sem a permissão. */
   travarImpostos: boolean;
 }
@@ -75,6 +77,7 @@ export function AbasVersoes({
   honorariosCliente,
   clienteNome,
   modeloPlanilha,
+  interno,
   travarImpostos,
 }: Props) {
   const [menu, setMenu] = React.useState<Menu>(null);
@@ -305,10 +308,11 @@ export function AbasVersoes({
         onAbertoChange={setNovaAberta}
         semGatilho
       />
-      <ImportarPlanilhaDrawer
+      <ImportarPlanilhaVersao
         projetoId={projetoId}
         orcamentoId={orcamentoId}
         modeloPlanilha={modeloPlanilha}
+        interno={interno}
         aberto={importarAberto}
         onAbertoChange={setImportarAberto}
         semGatilho

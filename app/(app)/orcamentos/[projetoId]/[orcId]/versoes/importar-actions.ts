@@ -21,7 +21,17 @@ import {
   type OrigemDoPlanejado,
 } from "@/lib/importacao/planejado-anterior";
 import type { CategoriaModeloPlanilha, PlanejadoAntesDoSave } from "@/lib/types";
-import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
+import { arquivarEnvio, baixarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
+import type { PreviewDaAba, PreviewResult } from "@/lib/importacao/tipos-da-importacao";
+import { montarPreviewDaAba } from "@/lib/importacao/preview-da-aba";
+import {
+  abaSugerida,
+  lerTodasAsAbas,
+  ordenarAbas,
+  totaisDaAba,
+  type AbaLida,
+  type AbaResumo,
+} from "@/lib/importacao/abas-do-arquivo";
 import { casarBlocosComMeses } from "@/lib/importacao/meses-da-planilha";
 import {
   copiarMesesEntreVersoes,
@@ -34,58 +44,31 @@ import {
   rotuloMesCurto,
 } from "@/lib/calculos/meses-trimestre";
 
-const BUCKET = "orcamento-importacoes";
+export type { PreviewDaAba, PreviewResult } from "@/lib/importacao/tipos-da-importacao";
 
-export type PreviewResult =
-  | {
-      ok: true;
-      preview: {
-        aba: string;
-        grupos: {
-          nome: string;
-          ordem: number;
-          itens_count: number;
-          total_bruto: number;
-          total_planejado: number;
-          /** Planejado do grupo se a versão herdar o da anterior. */
-          total_planejado_herdado: number;
-        }[];
-        /** A pergunta "planejado da versão anterior ou da planilha". */
-        planejado: {
-          /** Número da versão de onde o planejado pode vir. `null` sem
-           *  versão anterior — a pergunta não aparece e vale a planilha. */
-          versao_anterior: number | null;
-          casadas: number;
-          por_descricao: number;
-          total_itens: number;
-          planilha_tem_planejado: boolean;
-        };
-        warnings: ParseResultado["warnings"];
-        /** % que a planilha traz. Não é o que vai ser aplicado — serve para
-         *  avisar quem importou quando difere do cadastro do cliente. */
-        percentual_honorarios: number | null;
-        /** % que a versão vai receber de fato: o do cadastro do cliente. */
-        percentual_honorarios_cliente: number;
-        cliente_nome: string;
-        linhas_lidas: number;
-        linhas_importadas: number;
-        linhas_ignoradas: number;
-        arquivo_nome: string;
-        arquivo_tamanho: number;
-      };
-    }
-  | { ok: false; message: string };
+/** O arquivo já no Storage e, no sobrescrever, a versão aberta. */
+export interface EntradaDoPreview {
+  envio: EnvioDaPlanilha;
+  versao_id?: string | null;
+}
+
+/** O que a tela manda para gravar. */
+export interface EntradaDaGravacao {
+  envio: EnvioDaPlanilha;
+  /** A aba escolhida na tabela, pelo nome exato. */
+  aba: string;
+  /** De onde vem o planejado. Sem versão anterior, vale a planilha. */
+  origem_planejado: "anterior" | "planilha";
+}
 
 export type ConfirmResult =
   | { ok: true; versao_id: string; orcamento_id: string; importacao_id: string }
   | { ok: false; message: string };
 
-const extractArquivo = extrairArquivoXlsx;
-
 /** O que a tela escolheu. Sem escolha — ou sem versão anterior — vale a
  *  planilha, que é o comportamento de antes. */
-function origemDoPlanejado(formData: FormData): OrigemDoPlanejado {
-  return formData.get("origem_planejado") === "anterior" ? "anterior" : "planilha";
+function origemDoPlanejado(entrada: EntradaDaGravacao): OrigemDoPlanejado {
+  return entrada.origem_planejado === "anterior" ? "anterior" : "planilha";
 }
 
 const numero = (v: unknown) => {
@@ -218,6 +201,8 @@ async function verificarOrcamento(
       modelo: CategoriaModeloPlanilha;
       /** Período do orçamento — os meses da versão nova do mensal sem vigente. */
       periodo: { inicio: string | null; fim: string | null };
+      /** Serviço Interno (decisão 105): toda linha entra como F · Interno. */
+      interno: boolean;
     }
   | { ok: false; message: string }
 > {
@@ -226,7 +211,7 @@ async function verificarOrcamento(
     .from("orcamentos")
     // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
     .select(
-      "id, status, projeto_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+      "id, status, projeto_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno)",
     )
     .eq("id", orcamentoId)
     .eq("tenant_id", tenantId)
@@ -237,6 +222,7 @@ async function verificarOrcamento(
       data_inicio_prevista: string | null;
       data_fim_prevista: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+      servico: { investimento_interno: boolean } | null;
     }>();
 
   if (error || !orc) {
@@ -253,6 +239,7 @@ async function verificarOrcamento(
     projeto_id: orc.projeto_id,
     modelo: orc.categoria?.modelo_planilha ?? "nacional",
     periodo: { inicio: orc.data_inicio_prevista, fim: orc.data_fim_prevista },
+    interno: orc.servico?.investimento_interno === true,
   };
 }
 
@@ -277,24 +264,27 @@ function mesesDeDestino(
 }
 
 /**
- * Faz o parse do arquivo enviado e retorna um resumo. Não persiste nada.
- * A tela usa isso para o admin revisar antes de confirmar.
+ * Lê TODAS as abas do arquivo enviado e devolve a tabela de abas e o
+ * resumo de cada aba legível (decisão 110). Não persiste nada. A tela
+ * troca de aba sem voltar ao servidor; quem grava é `confirmarImportacao`
+ * ou `sobrescreverVersaoComPlanilha`, com a aba escolhida.
  */
 export async function previewImportacao(
   orcamentoId: string,
-  formData: FormData,
+  entrada: EntradaDoPreview,
 ): Promise<PreviewResult> {
   const session = await requireSession();
+  const tenantId = session.activeTenant.id;
 
-  const check = await verificarOrcamento(orcamentoId, session.activeTenant.id);
+  const check = await verificarOrcamento(orcamentoId, tenantId);
   if (!check.ok) return { ok: false, message: check.message };
 
   // O percentual que a versão vai receber. Lido aqui para o preview poder
   // avisar antes de confirmar quando a planilha discorda do cadastro.
-  const honorariosCliente = await honorariosDoOrcamento(
-    orcamentoId,
-    session.activeTenant.id,
-  );
+  const [honorariosCliente, arq] = await Promise.all([
+    honorariosDoOrcamento(orcamentoId, tenantId),
+    baixarEnvio(entrada.envio, tenantId),
+  ]);
   if (!honorariosCliente) {
     return {
       ok: false,
@@ -302,114 +292,73 @@ export async function previewImportacao(
         "Não foi possível ler os honorários do cliente. Confira o cadastro do cliente do projeto.",
     };
   }
-
-  const arq = await extractArquivo(formData);
   if (!arq.ok) return { ok: false, message: arq.message };
 
-  let parsed: ParseResultado;
+  let lidas: AbaLida[];
   try {
-    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
+    lidas = await lerTodasAsAbas(arq.buffer, {
+      mensal: check.modelo === "mensal",
+      tipoFixo: check.interno ? "FI" : undefined,
+    });
   } catch (err) {
     console.error("[importacao.preview.parse]", err);
     return {
       ok: false,
-      message:
-        "Não conseguimos ler o arquivo. Verifique se é a planilha padrão salva como .xlsx.",
-    };
-  }
-
-  // Modelo errado é recusado antes de qualquer contagem (decisão 072).
-  const recusaPreview = recusaPorModelo(parsed.modelo, check.modelo);
-  if (recusaPreview) return { ok: false, message: recusaPreview };
-
-  if (parsed.grupos.length === 0) {
-    return {
-      ok: false,
-      message:
-        parsed.warnings[0]?.motivo ??
-        "Nenhum item encontrado na planilha. Confira se a aba 'Padrão' traz o agrupamento na coluna A, o nome do item na B e o tipo de custo na G.",
+      message: "Não conseguimos ler o arquivo. Verifique se é uma planilha salva como .xlsx.",
     };
   }
 
   // A versão nova herda da vigente; o sobrescrever manda a própria versão.
-  const versaoIdDoForm = formData.get("versao_id");
-  const anterior = await versaoAnterior(
-    orcamentoId,
-    session.activeTenant.id,
-    typeof versaoIdDoForm === "string" && versaoIdDoForm !== "" ? versaoIdDoForm : null,
-  );
-  // Mensal: cada bloco da planilha num mês da versão; meses a mais ou a
-  // menos recusam (decisão 078, 15/09/2026).
+  const anterior = await versaoAnterior(orcamentoId, tenantId, entrada.versao_id || null);
+  let mesesDestino: string[] | null = null;
   if (check.modelo === "mensal") {
     const destino = mesesDeDestino(anterior, check.periodo);
     if (!destino.ok) return { ok: false, message: destino.message };
-    const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, destino.datas);
-    if (!casados.ok) return { ok: false, message: casados.message };
-    parsed = {
-      ...parsed,
-      grupos: casados.grupos,
-      warnings: [...parsed.warnings, ...casados.avisos],
-      // A contagem segue os meses aceitos: item de bloco fora do trimestre
-      // não entra, e a confirmação não pode prometer mais itens do que grava.
-      linhas_importadas: casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-      linhas_ignoradas:
-        parsed.linhas_ignoradas +
-        parsed.linhas_importadas -
-        casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-    };
-    if (parsed.grupos.length === 0) {
-      return {
-        ok: false,
-        message: "Nenhum item nos meses do orçamento. Confira os blocos de mês da planilha.",
-      };
-    }
+    mesesDestino = destino.datas;
   }
 
-  const casamento = anterior
-    ? casarComAnterior(parsed.grupos, anterior.grupos, anterior.itens)
-    : null;
+  const previews: Record<string, PreviewDaAba> = {};
+  const abas: AbaResumo[] = lidas.map((lida) => {
+    const r = montarPreviewDaAba(lida.parsed, {
+      modelo: check.modelo,
+      anterior,
+      mesesDestino,
+      honorarios: honorariosCliente,
+    });
+    if (!r.ok) {
+      return {
+        nome: lida.nome,
+        visivel: lida.visivel,
+        legivel: false,
+        motivo: r.motivo,
+        grupos: 0,
+        itens: 0,
+        orcado: 0,
+        planejado: 0,
+      };
+    }
+    previews[lida.nome] = r.preview;
+    return { nome: lida.nome, visivel: lida.visivel, legivel: true, motivo: null, ...totaisDaAba(r.parsed) };
+  });
 
-  const preview = {
-    aba: parsed.aba,
-    grupos: parsed.grupos.map((g, gi) => ({
-      // No mensal o nome diz de que mês é o grupo.
-      nome: g.mes ? `${g.nome} · ${rotuloMesCurto(g.mes)}` : g.nome,
-      ordem: g.ordem,
-      itens_count: g.itens.length,
-      total_bruto: g.itens.reduce(
-        (s, it) =>
-          s + it.valor_unitario_orcado * it.quantidade_orcada * it.dias_meses_orcado,
-        0,
-      ),
-      total_planejado: g.itens.reduce(
-        (s, it) =>
-          s +
-          it.valor_unitario_planejado *
-            it.quantidade_planejada *
-            it.dias_meses_planejado,
-        0,
-      ),
-      total_planejado_herdado: casamento?.planejadoHerdadoPorGrupo[gi] ?? 0,
-    })),
-    planejado: {
-      versao_anterior: anterior?.numero_versao ?? null,
-      casadas: casamento?.casadas ?? 0,
-      por_descricao: casamento?.porDescricao ?? 0,
-      total_itens: casamento?.totalItens ?? 0,
-      planilha_tem_planejado: parsed.tem_planejado,
-    },
-    warnings: parsed.warnings,
-    percentual_honorarios: parsed.percentual_honorarios,
-    percentual_honorarios_cliente: honorariosCliente.percentual,
-    cliente_nome: honorariosCliente.clienteNome,
-    linhas_lidas: parsed.linhas_lidas,
-    linhas_importadas: parsed.linhas_importadas,
-    linhas_ignoradas: parsed.linhas_ignoradas,
-    arquivo_nome: arq.nome,
-    arquivo_tamanho: arq.tamanho,
+  const sugerida = abaSugerida(abas);
+  if (!sugerida) {
+    return {
+      ok: false,
+      message:
+        abas.length === 1
+          ? (abas[0].motivo ?? "Nenhum item encontrado na planilha.")
+          : `Nenhuma das ${abas.length} abas do arquivo está no formato do orçamento. Confira o modelo e envie de novo.`,
+    };
+  }
+
+  return {
+    ok: true,
+    arquivo: { nome: entrada.envio.nome, tamanho: entrada.envio.tamanho },
+    abas: ordenarAbas(abas),
+    sugerida,
+    previews,
   };
-
-  return { ok: true, preview };
 }
 
 /**
@@ -419,7 +368,7 @@ export async function previewImportacao(
  */
 export async function confirmarImportacao(
   orcamentoId: string,
-  formData: FormData,
+  entrada: EntradaDaGravacao,
 ): Promise<ConfirmResult> {
   const session = await requireSession();
 
@@ -439,12 +388,16 @@ export async function confirmarImportacao(
     };
   }
 
-  const arq = await extractArquivo(formData);
+  const arq = await baixarEnvio(entrada.envio, session.activeTenant.id);
   if (!arq.ok) return { ok: false, message: arq.message };
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
+    parsed = await parseOficial(arq.buffer, {
+      mensal: check.modelo === "mensal",
+      tipoFixo: check.interno ? "FI" : undefined,
+      aba: entrada.aba,
+    });
   } catch (err) {
     console.error("[importacao.confirmar.parse]", err);
     return {
@@ -483,7 +436,7 @@ export async function confirmarImportacao(
     datasDoMensal = destino.datas;
   }
   const origemPlanejado: OrigemDoPlanejado = anteriorConfirmar
-    ? origemDoPlanejado(formData)
+    ? origemDoPlanejado(entrada)
     : "planilha";
   const origensConfirmar = anteriorConfirmar
     ? casarComAnterior(parsed.grupos, anteriorConfirmar.grupos, anteriorConfirmar.itens).origens
@@ -527,7 +480,7 @@ export async function confirmarImportacao(
       tenant_id: tenantId,
       orcamento_id: orcamentoId,
       numero_versao: numero,
-      nome: `Importada de ${arq.nome}`,
+      nome: `Importada de ${entrada.envio.nome}`,
       status: "rascunho",
       moeda: "BRL",
       taxa_cambio: 1,
@@ -681,23 +634,10 @@ export async function confirmarImportacao(
     };
   }
 
-  // 6) Upload do arquivo original no bucket.
+  // 6) O original, que o navegador subiu para a pasta de envios, vai para
+  //    a pasta do orçamento. Falhar aqui não bloqueia: a versão já existe.
   const importacaoId = crypto.randomUUID();
-  const arquivoNomeSlug = arq.nome.replace(/[^\w.\-]/g, "_");
-  const arquivoPath = `${tenantId}/${orcamentoId}/${importacaoId}-${arquivoNomeSlug}`;
-
-  const { error: uploadErr } = await service.storage
-    .from(BUCKET)
-    .upload(arquivoPath, arq.buffer, {
-      contentType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      upsert: false,
-    });
-
-  if (uploadErr) {
-    console.error("[importacao.confirmar.upload]", uploadErr.message);
-    // Não bloqueia — a versão já está criada. Loga mas segue.
-  }
+  const arquivoPath = await arquivarEnvio(entrada.envio, tenantId, orcamentoId, importacaoId);
 
   // 7) Registrar em orcamento_importacoes.
   const { error: impErr } = await service.from("orcamento_importacoes").insert({
@@ -705,9 +645,9 @@ export async function confirmarImportacao(
     tenant_id: tenantId,
     orcamento_id: orcamentoId,
     versao_orcamento_id: versaoId,
-    arquivo_path: uploadErr ? "" : arquivoPath,
-    arquivo_nome_original: arq.nome,
-    arquivo_tamanho_bytes: arq.tamanho,
+    arquivo_path: arquivoPath,
+    arquivo_nome_original: entrada.envio.nome,
+    arquivo_tamanho_bytes: entrada.envio.tamanho,
     aba_origem: parsed.aba,
     linhas_lidas: parsed.linhas_lidas,
     linhas_importadas: parsed.linhas_importadas,
@@ -729,7 +669,8 @@ export async function confirmarImportacao(
     metadata: {
       orcamento_id: orcamentoId,
       importacao_id: importacaoId,
-      arquivo_nome: arq.nome,
+      arquivo_nome: entrada.envio.nome,
+      aba: parsed.aba,
       linhas_importadas: parsed.linhas_importadas,
       warnings_count: parsed.warnings.length,
       origem_planejado: origemPlanejado,
@@ -774,7 +715,7 @@ export async function confirmarImportacao(
  */
 export async function sobrescreverVersaoComPlanilha(
   versaoId: string,
-  formData: FormData,
+  entrada: EntradaDaGravacao,
 ): Promise<ConfirmResult> {
   const session = await requireSession();
   const tenantId = session.activeTenant.id;
@@ -823,12 +764,16 @@ export async function sobrescreverVersaoComPlanilha(
     };
   }
 
-  const arq = await extractArquivo(formData);
+  const arq = await baixarEnvio(entrada.envio, tenantId);
   if (!arq.ok) return { ok: false, message: arq.message };
 
   let parsed: ParseResultado;
   try {
-    parsed = await parseOficial(arq.buffer, { mensal: check.modelo === "mensal" });
+    parsed = await parseOficial(arq.buffer, {
+      mensal: check.modelo === "mensal",
+      tipoFixo: check.interno ? "FI" : undefined,
+      aba: entrada.aba,
+    });
   } catch (err) {
     console.error("[importacao.sobrescrever.parse]", err);
     return { ok: false, message: "Falha ao processar o arquivo." };
@@ -866,7 +811,7 @@ export async function sobrescreverVersaoComPlanilha(
     };
   }
   const origemPlanejado: OrigemDoPlanejado = anteriorSobrescrever
-    ? origemDoPlanejado(formData)
+    ? origemDoPlanejado(entrada)
     : "planilha";
   const origensSobrescrever = anteriorSobrescrever
     ? casarComAnterior(parsed.grupos, anteriorSobrescrever.grupos, anteriorSobrescrever.itens).origens
@@ -999,31 +944,19 @@ export async function sobrescreverVersaoComPlanilha(
   }
 
   // ---- 3) Guardar o arquivo e registrar ----
+  // O original vai da pasta de envios para a do orçamento. Falhar aqui não
+  // bloqueia: a planilha já está na versão.
   const importacaoId = crypto.randomUUID();
-  const arquivoNomeSlug = arq.nome.replace(/[^\w.\-]/g, "_");
-  const arquivoPath = `${tenantId}/${orcamentoId}/${importacaoId}-${arquivoNomeSlug}`;
-
-  const { error: uploadErr } = await service.storage
-    .from(BUCKET)
-    .upload(arquivoPath, arq.buffer, {
-      contentType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      upsert: false,
-    });
-
-  if (uploadErr) {
-    console.error("[importacao.sobrescrever.upload]", uploadErr.message);
-    // Não bloqueia: a planilha já está na versão.
-  }
+  const arquivoPath = await arquivarEnvio(entrada.envio, tenantId, orcamentoId, importacaoId);
 
   const { error: impErr } = await service.from("orcamento_importacoes").insert({
     id: importacaoId,
     tenant_id: tenantId,
     orcamento_id: orcamentoId,
     versao_orcamento_id: versaoId,
-    arquivo_path: uploadErr ? "" : arquivoPath,
-    arquivo_nome_original: arq.nome,
-    arquivo_tamanho_bytes: arq.tamanho,
+    arquivo_path: arquivoPath,
+    arquivo_nome_original: entrada.envio.nome,
+    arquivo_tamanho_bytes: entrada.envio.tamanho,
     aba_origem: parsed.aba,
     linhas_lidas: parsed.linhas_lidas,
     linhas_importadas: parsed.linhas_importadas,
@@ -1042,7 +975,8 @@ export async function sobrescreverVersaoComPlanilha(
     metadata: {
       orcamento_id: orcamentoId,
       importacao_id: importacaoId,
-      arquivo_nome: arq.nome,
+      arquivo_nome: entrada.envio.nome,
+      aba: parsed.aba,
       linhas_importadas: parsed.linhas_importadas,
       warnings_count: parsed.warnings.length,
       origem_planejado: origemPlanejado,

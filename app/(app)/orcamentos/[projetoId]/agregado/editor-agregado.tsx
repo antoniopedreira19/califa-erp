@@ -2,11 +2,9 @@
 
 import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
-  ArrowLeft,
   EyeOff,
   FolderKanban,
   Plus,
@@ -47,12 +45,14 @@ import { OrcamentoForm, type DadosOrcamento } from "../orcamento-form";
 import { JobRascunhoCard } from "../../_rascunho/orcamento-card";
 import {
   ImportarPlanilhaModal,
+  type EnvioComAba,
   type PlanilhaLida,
 } from "../../_rascunho/importar-planilha-modal";
 import { ParametrosModal } from "../../_rascunho/parametros-modal";
 import { TotaisProjetoCard } from "../../_totais/totais-projeto-card";
 import {
   ITEM_VAZIO,
+  itemDoInterno,
   contarItens,
   divergenciaHonorarios,
   novoId,
@@ -62,6 +62,7 @@ import {
   PARAMETROS_PADRAO,
   type AlteracoesProjetoPayload,
   type GrupoPayload,
+  type GrupoRascunho,
   type ItemRascunho,
   type OrcamentoRascunho,
   type ParametrosVersao,
@@ -92,6 +93,7 @@ import {
   marcarSaveDaLinha,
   salvarConsumoDeSave,
 } from "../[orcId]/versoes/[versaoId]/save-actions";
+import { useProtegerSaida } from "@/components/voltar/estado";
 
 interface Props {
   projeto: {
@@ -101,6 +103,9 @@ interface Props {
     cliente: string | null;
     responsavel: string | null;
   };
+  /** Faixa do projeto (decisão 106), montada no servidor: o voltar, a
+   *  agregada e os orçamentos do projeto. */
+  faixa: React.ReactNode;
   /** Honorários do cadastro do cliente. Vale para os orçamentos criados
    *  aqui; os que já existem mantêm o percentual gravado na versão. */
   honorariosCliente: number;
@@ -127,7 +132,7 @@ interface Props {
   nomesDeCategoria: Pick<CategoriaDominio, "id" | "nome">[];
   /** Serviço do job — escopo `projeto` de `categorias_dominio`,
    *  lista distinta das categorias acima (decisão 037). */
-  servicos: Pick<CategoriaDominio, "id" | "nome">[];
+  servicos: Pick<CategoriaDominio, "id" | "nome" | "investimento_interno">[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   /** Primeiras cidades do cadastro — o combobox do formulário busca o
    *  resto no servidor. O rótulo do card sai de `orc.cidade_nome`. */
@@ -173,8 +178,34 @@ type Modal =
  * caem na versão aberta. Versão nova continua sendo ato da tela do
  * orçamento.
  */
+/**
+ * Aplica `fn` a cada grupo e devolve os MESMOS objetos para o que não mudou
+ * — orçamento, lista de grupos e grupo. Quem não foi editado mantém a
+ * referência, então a planilha dele não recalcula nem remede a calha.
+ * Se nada mudou, devolve a própria lista (o React descarta o setState).
+ */
+function nosGrupos(
+  orcamentos: OrcamentoRascunho[],
+  fn: (grupo: GrupoRascunho) => GrupoRascunho,
+): OrcamentoRascunho[] {
+  let algum = false;
+  const proximos = orcamentos.map((orc) => {
+    let mudou = false;
+    const grupos = orc.grupos.map((grupo) => {
+      const novo = fn(grupo);
+      if (novo !== grupo) mudou = true;
+      return novo;
+    });
+    if (!mudou) return orc;
+    algum = true;
+    return { ...orc, grupos };
+  });
+  return algum ? proximos : orcamentos;
+}
+
 export function EditorAgregado({
   projeto,
+  faixa,
   savePorItem,
   saldosDeSave,
   nomeDoGrupo,
@@ -223,6 +254,39 @@ export function EditorAgregado({
   } | null>(null);
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
+
+  // Serviço Interno (decisão 105): toda linha F · Interno, planejado igual
+  // ao orçado. Aplicado ao estado num lugar só — linha nova, célula
+  // editada, planilha importada, orçamento novo com o Interno —, em vez de
+  // em cada mutação. `itemDoInterno` devolve o mesmo objeto quando já está
+  // certo, então o efeito só grava quando algo precisou mudar.
+  const servicosInternos = React.useMemo(
+    () =>
+      new Set(servicos.filter((s) => s.investimento_interno).map((s) => s.id)),
+    [servicos],
+  );
+  React.useEffect(() => {
+    if (servicosInternos.size === 0) return;
+    setOrcamentos((atuais) => {
+      let mudou = false;
+      const proximos = atuais.map((orc) => {
+        if (!orc.servico_id || !servicosInternos.has(orc.servico_id)) return orc;
+        let mudouAqui = false;
+        const grupos = orc.grupos.map((grupo) => {
+          const itens = grupo.itens.map((it) => {
+            const certo = itemDoInterno(it);
+            if (certo !== it) mudouAqui = true;
+            return certo;
+          });
+          return mudouAqui ? { ...grupo, itens } : grupo;
+        });
+        if (!mudouAqui) return orc;
+        mudou = true;
+        return { ...orc, grupos };
+      });
+      return mudou ? proximos : atuais;
+    });
+  }, [orcamentos, servicosInternos]);
   // "Exibir": filtro de TELA. Cards e Totais seguem esta lista; os três
   // indicadores do topo são do projeto inteiro e não seguem. Nada é
   // salvo — o que está escondido continua entrando no "Salvar
@@ -238,9 +302,10 @@ export function EditorAgregado({
   const [askSair, setAskSair] = React.useState<string | null>(null);
   const [salvando, startSalvar] = React.useTransition();
 
-  /** O XLSX de cada orçamento importado nesta sessão. Fora do estado
-   *  porque `File` não é serializável e nenhum render depende dele. */
-  const arquivos = React.useRef(new Map<string, File>());
+  /** O XLSX de cada orçamento importado nesta sessão — já no Storage, com
+   *  a aba escolhida (decisão 110). Fora do estado porque nenhum render
+   *  depende dele. */
+  const arquivos = React.useRef(new Map<string, EnvioComAba>());
 
   /** Retrato do que está gravado. É contra ele que "houve mudança?" é
    *  respondido — sem isso o botão de salvar ficaria sempre aceso.
@@ -259,6 +324,11 @@ export function EditorAgregado({
     window.addEventListener("beforeunload", avisar);
     return () => window.removeEventListener("beforeunload", avisar);
   }, [sujo]);
+
+  // O `beforeunload` só pega fechar a aba e recarregar. O voltar e as abas
+  // da faixa do projeto navegam por dentro do app e passariam direto: com
+  // alteração não salva, eles caem na mesma confirmação (decisão 108).
+  useProtegerSaida(sujo, (href) => setAskSair(href));
 
   // ---------- rótulos ----------
   const nomePor = React.useMemo(
@@ -292,16 +362,22 @@ export function EditorAgregado({
   }
 
   // ---------- mutações ----------
+  // Toda mutação de item passa por `nosGrupos`, que devolve o MESMO objeto
+  // para o orçamento e o grupo que não mudaram. Até 25/09/2026 cada tecla
+  // recriava os grupos de todos os orçamentos da página, e cada planilha
+  // remedia todas as linhas (a calha de ações mede o layout): 12 a 15
+  // medições por edição no projeto de teste, e a tela chegou a cair uma vez
+  // com "Maximum update depth exceeded".
   const mutarItem = React.useCallback(
     (itemId: string, fn: (item: ItemRascunho) => ItemRascunho) => {
       setOrcamentos((atuais) =>
-        atuais.map((orc) => ({
-          ...orc,
-          grupos: orc.grupos.map((grupo) => ({
-            ...grupo,
-            itens: grupo.itens.map((it) => (it.id === itemId ? fn(it) : it)),
-          })),
-        })),
+        nosGrupos(atuais, (grupo) => {
+          const i = grupo.itens.findIndex((it) => it.id === itemId);
+          if (i < 0) return grupo;
+          const itens = grupo.itens.slice();
+          itens[i] = fn(itens[i]);
+          return { ...grupo, itens };
+        }),
       );
     },
     [],
@@ -394,11 +470,11 @@ export function EditorAgregado({
   }
 
   function aplicarImportacao(id: string, planilha: PlanilhaLida) {
-    arquivos.current.set(id, planilha.arquivo);
+    arquivos.current.set(id, planilha.envio);
     mutarOrcamento(id, (o) => ({
       ...o,
       origem: "importado",
-      arquivoNome: planilha.arquivo.name,
+      arquivoNome: planilha.envio.nome,
       percentualHonorariosDetectado: planilha.percentualHonorarios,
       grupos: planilha.grupos.map((g: GrupoPayload) => ({
         id: novoId("g"),
@@ -480,33 +556,28 @@ export function EditorAgregado({
         }
         const id = novoId("it");
         setOrcamentos((atuais) =>
-          atuais.map((orc) => ({
-            ...orc,
-            grupos: orc.grupos.map((grupo) =>
-              grupo.id === grupoId
-                ? {
-                    ...grupo,
-                    itens: [
-                      ...grupo.itens,
-                      { ...parsed.data, id, planilha_origem: null, bv: null },
-                    ],
-                  }
-                : grupo,
-            ),
-          })),
+          nosGrupos(atuais, (grupo) =>
+            grupo.id === grupoId
+              ? {
+                  ...grupo,
+                  itens: [
+                    ...grupo.itens,
+                    { ...parsed.data, id, planilha_origem: null, bv: null },
+                  ],
+                }
+              : grupo,
+          ),
         );
         return { ok: true, id };
       },
 
       remover: async (itemId) => {
         setOrcamentos((atuais) =>
-          atuais.map((orc) => ({
-            ...orc,
-            grupos: orc.grupos.map((grupo) => ({
-              ...grupo,
-              itens: grupo.itens.filter((it) => it.id !== itemId),
-            })),
-          })),
+          nosGrupos(atuais, (grupo) =>
+            grupo.itens.some((it) => it.id === itemId)
+              ? { ...grupo, itens: grupo.itens.filter((it) => it.id !== itemId) }
+              : grupo,
+          ),
         );
         return { ok: true, id: itemId };
       },
@@ -751,7 +822,7 @@ export function EditorAgregado({
         produtor_id: o.produtor_id,
         data_inicio_prevista: o.data_inicio_prevista,
         data_fim_prevista: o.data_fim_prevista,
-        arquivoCampo: arquivos.current.has(o.id) ? `arquivo_${o.id}` : null,
+        envio: arquivos.current.get(o.id) ?? null,
         grupos: o.grupos.map((g) => ({
           nome: g.nome,
           itens: g.itens.map((it) => ({
@@ -774,10 +845,6 @@ export function EditorAgregado({
 
     const formData = new FormData();
     formData.set("payload", JSON.stringify(payload));
-    for (const o of novos) {
-      const arquivo = arquivos.current.get(o.id);
-      if (arquivo) formData.set(`arquivo_${o.id}`, arquivo);
-    }
 
     startSalvar(async () => {
       const res = await salvarAlteracoesDoProjeto(projeto.id, formData);
@@ -807,16 +874,9 @@ export function EditorAgregado({
   return (
     <div className="flex flex-col gap-6 pb-4">
       <div>
-        <Link
-          href={`/orcamentos/${projeto.id}`}
-          prefetch={false}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para {projeto.codigo} · {projeto.nome}
-        </Link>
+        {faixa}
 
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-6">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-6">
           <div className="min-w-0">
             <p className="font-mono text-xs font-semibold text-muted-foreground">
               {projeto.codigo}
@@ -955,6 +1015,9 @@ export function EditorAgregado({
           return (
             <JobRascunhoCard
               modeloPlanilha={orc.modeloPlanilha}
+              interno={
+                orc.servico_id !== null && servicosInternos.has(orc.servico_id)
+              }
               savePorItem={savePorItem}
               saveVisivel={saveVisivel}
               onAlternarSave={() => setSaveVisivel((v) => !v)}
@@ -1118,6 +1181,10 @@ export function EditorAgregado({
           onOpenChange={(o) => !o && setModal(null)}
           codigo={codigos.get(orcImportando.id) ?? ""}
           modeloPlanilha={orcImportando.modeloPlanilha}
+          interno={
+            orcImportando.servico_id !== null &&
+            servicosInternos.has(orcImportando.servico_id)
+          }
           onImportado={(planilha) =>
             aplicarImportacao(orcImportando.id, planilha)
           }

@@ -32,6 +32,13 @@ coluna `escopo` já separava as duas listas.
 | `projeto` | Serviço | Always On · Ativação · Fee · Interno |
 | `orcamento` | Categoria | Ativação · Conteúdo · Extra · Influencer |
 
+> ⚠️ **25/09/2026 ([decisão 105](105-servico-interno-e-job-sem-faturamento.md)).**
+> O serviço **Interno** deixou de ser só um rótulo: é o investimento da
+> própria California. O orçamento Interno só aceita custo F · Interno, o
+> planejado acompanha o orçado, não há save, a categoria Internacional não
+> vale e a Always On vale. Ele é reconhecido pela marca
+> `categorias_dominio.investimento_interno`, não pelo nome.
+
 O escopo se chama `projeto` porque o campo nasceu lá. Renomear um valor
 de enum em uso mexeria nas linhas gravadas sem devolver nada — o nome
 ficou, e o helper `lib/data/servicos.ts` explica a herança.

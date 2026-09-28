@@ -8,6 +8,7 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { jobStatusBadgeClasses, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
+import { compararCodigosDeJob } from "@/lib/codigos/jobs";
 
 const TODOS = "Todos";
 
@@ -315,7 +316,9 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
       if (q === "") return true;
       // Busca também pelo nome da produção: quem procura pode lembrar do
       // nome antigo, não do que o financeiro deu.
-      return [j.codigo, j.nome, j.nome_producao]
+      // E pelo código de antes da decisão 114 (JOB-NNNN), que os PDFs e
+      // as planilhas antigas ainda citam.
+      return [j.codigo, j.codigo_anterior ?? "", j.nome, j.nome_producao]
         .join(" ")
         .toLowerCase()
         .includes(q);
@@ -361,7 +364,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
 
   /**
    * A lista corrida da visão "Por job": abertura mais recente primeiro,
-   * código decrescente no empate. Sem a faixa do projeto, ordenar por
+   * código decrescente no empate (ano e número — decisão 114). Sem a faixa do projeto, ordenar por
    * código deixaria os jobs novos no fim da página.
    */
   const linhasPorJob = React.useMemo(
@@ -372,7 +375,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
           (a, b) =>
             (b.data_abertura_financeiro ?? "").localeCompare(
               a.data_abertura_financeiro ?? "",
-            ) || b.codigo.localeCompare(a.codigo, "pt-BR"),
+            ) || compararCodigosDeJob(b.codigo, a.codigo),
         ),
     [visiveis],
   );

@@ -189,6 +189,14 @@ export async function faturamentoPorJob(
     .eq("tenant_id", tenantId)
     .gt("save_consumido", 0)
     .lte("jobs.faturamento_previsto", 0.004);
+  // Todo job com faturamento previsto zero (decisão 105): o Interno, o
+  // pago só por save, o de custo só direto ao fornecedor. Poucas linhas e
+  // só o id — a coluna é gravada no envio para abertura e na errata.
+  let semFaturamentoQuery = supabase
+    .from("jobs")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .lte("faturamento_previsto", 0.004);
   // Os pedidos de CONSUMO que decidem se aquele consumo já vale (decisão
   // 099): só o aprovado conta; o que aguarda ainda pode voltar ao
   // faturamento. Poucas linhas — um pedido por linha consumidora.
@@ -211,18 +219,26 @@ export async function faturamentoPorJob(
   if (jobIds) {
     enviosQuery = enviosQuery.in("job_id", jobIds);
     saveOnlyQuery = saveOnlyQuery.in("job_id", jobIds);
+    semFaturamentoQuery = semFaturamentoQuery.in("id", jobIds);
     mesesQuery = mesesQuery.in("job_id", jobIds);
     consumosDecididosQuery = consumosDecididosQuery.in("job_id", jobIds);
   }
 
-  const [enviosRes, notasPorJob, saveOnlyRes, mesesPrevistosRes, consumosDecididosRes] =
-    await Promise.all([
-      enviosQuery,
-      notasEmitidasDosJobs(tenantId, jobIds),
-      saveOnlyQuery,
-      mesesQuery,
-      consumosDecididosQuery,
-    ]);
+  const [
+    enviosRes,
+    notasPorJob,
+    saveOnlyRes,
+    mesesPrevistosRes,
+    consumosDecididosRes,
+    semFaturamentoRes,
+  ] = await Promise.all([
+    enviosQuery,
+    notasEmitidasDosJobs(tenantId, jobIds),
+    saveOnlyQuery,
+    mesesQuery,
+    consumosDecididosQuery,
+    semFaturamentoQuery,
+  ]);
 
   if (enviosRes.error) {
     console.error("[faturamento-por-job.envios]", enviosRes.error.message);
@@ -253,9 +269,9 @@ export async function faturamentoPorJob(
   }
 
   // Job pago SÓ por saldo de save: faturamento previsto zero e consumo
-  // registrado. Ele pula a etapa de faturamento e entra na esteira como
-  // já faturado — a nota dele saiu no job que gerou o crédito (decisão
-  // 028 §11). Sem isto ficaria eternamente em "aguardando envio".
+  // registrado. Ele pula a etapa de faturamento — a nota dele saiu no job
+  // que gerou o crédito (decisão 028 §11). Desde a decisão 105 ele é
+  // "sem faturamento", como todo job zerado (era "faturado").
   //
   // Desde 22/09/2026 (decisão 099) só conta consumo APROVADO: toda linha
   // que consome precisa ter o pedido aprovado e nenhum aguardando (a
@@ -278,14 +294,30 @@ export async function faturamentoPorJob(
     lista.push(o.id as string);
     linhasPorJob.set(o.job_id, lista);
   }
-  const saveOnly = new Set<string>(
-    consumosDecididosRes.error
-      ? []
-      : [...linhasPorJob]
-          .filter(([, linhas]) =>
-            linhas.every((id) => aprovadas.has(id) && !aguardando.has(id)),
-          )
-          .map(([jobId]) => jobId),
+  // Job zerado cujo consumo de save ainda pode voltar ao faturamento:
+  // alguma linha consome sem o pedido aprovado (ou com um aguardando).
+  // Leitura dos pedidos que falhou: todo job que consome fica aqui.
+  const consumoPendente = new Set<string>(
+    [...linhasPorJob]
+      .filter(
+        ([, linhas]) =>
+          consumosDecididosRes.error ||
+          !linhas.every((id) => aprovadas.has(id) && !aguardando.has(id)),
+      )
+      .map(([jobId]) => jobId),
+  );
+
+  // Nada a faturar (decisão 105): faturamento previsto zero e nenhum
+  // consumo de save que possa voltar. Até 25/09/2026 só o job pago por
+  // save entrava aqui; o Interno e o de custo só direto ao fornecedor
+  // ficavam em "aguardando envio" para sempre, até depois de finalizados.
+  if (semFaturamentoRes.error) {
+    console.error("[faturamento-por-job.sem_faturamento]", semFaturamentoRes.error.message);
+  }
+  const nadaAFaturar = new Set<string>(
+    ((semFaturamentoRes.data ?? []) as { id: string }[])
+      .map((j) => j.id)
+      .filter((id) => !consumoPendente.has(id)),
   );
 
   // Todo job que apareceu em qualquer uma das leituras entra no mapa. Job
@@ -294,7 +326,7 @@ export async function faturamentoPorJob(
   const jobsNaEsteira = new Set<string>([
     ...envioPorJob.keys(),
     ...notasPorJob.keys(),
-    ...saveOnly,
+    ...nadaAFaturar,
   ]);
 
   for (const jobId of jobsNaEsteira) {
@@ -314,7 +346,7 @@ export async function faturamentoPorJob(
       notas,
       !!envio,
       hoje,
-      saveOnly.has(jobId) && !envio,
+      nadaAFaturar.has(jobId) && !envio,
       faltaFaturar,
     );
 

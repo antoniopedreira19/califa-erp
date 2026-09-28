@@ -48,6 +48,11 @@ function extractInput(formData: FormData) {
 }
 
 function mapDbError(msg: string): string {
+  // As recusas do serviço Interno (decisão 105) já saem do banco em
+  // português, com o motivo.
+  if (msg.includes("serviço Interno") || msg.includes("BV confirmado ou recebido")) {
+    return msg;
+  }
   if (msg.includes("uniq_orcamentos_codigo_por_tenant")) {
     return "Já existe um orçamento com este código neste tenant.";
   }
@@ -85,23 +90,23 @@ async function conferirServicoECategoria(
   servicoId: string,
   categoriaId: string,
 ): Promise<
-  | { ok: true; modelo: CategoriaModeloPlanilha }
+  | { ok: true; modelo: CategoriaModeloPlanilha; interno: boolean }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> }
 > {
   const [catRes, servRes] = await Promise.all([
     supabase
       .from("categorias_dominio")
-      .select("id, nome, modelo_planilha, servico_exclusivo_id")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .returns<CategoriaParaServico[]>(),
     supabase
       .from("categorias_dominio")
-      .select("id, nome")
+      .select("id, nome, investimento_interno")
       .eq("id", servicoId)
       .eq("tenant_id", tenantId)
       .eq("escopo", "projeto")
-      .maybeSingle<{ id: string; nome: string }>(),
+      .maybeSingle<{ id: string; nome: string; investimento_interno: boolean }>(),
   ]);
 
   const categorias = catRes.data ?? [];
@@ -121,7 +126,7 @@ async function conferirServicoECategoria(
     };
   }
   const erro = erroDoParServicoCategoria(
-    servicoId,
+    servRes.data,
     categoria,
     categorias,
     servRes.data.nome,
@@ -129,7 +134,93 @@ async function conferirServicoECategoria(
   if (erro) {
     return { ok: false, message: erro, fieldErrors: { categoria_id: [erro] } };
   }
-  return { ok: true, modelo: categoria.modelo_planilha };
+  return {
+    ok: true,
+    modelo: categoria.modelo_planilha,
+    interno: servRes.data.investimento_interno,
+  };
+}
+
+/**
+ * O orçamento já preenchido que passa para o serviço Interno (decisão 105,
+ * resposta 1-b do Tiago) tem as linhas CONVERTIDAS: tipo F · Interno e
+ * planejado igual ao orçado, em todas as versões. Quem converte é o
+ * gatilho `orcamento_entra_no_interno`; aqui ficam as recusas com a frase
+ * certa ANTES de qualquer gravação — o gatilho recusaria do mesmo jeito,
+ * mas depois de a action já ter salvo os outros campos.
+ *
+ * - linha em save (gerado ou consumido): o Interno não tem save, e o save
+ *   não se desfaz por efeito colateral;
+ * - BV confirmado ou recebido: FI não tem BV, e esse BV já está no
+ *   financeiro. O BV em negociação é cancelado pelo gatilho.
+ */
+async function conferirEntradaNoInterno(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  orcamentoId: string,
+): Promise<
+  | { ok: true; linhas: number; linhasConvertidas: number }
+  | { ok: false; message: string }
+> {
+  const { data: linhas, error } = await supabase
+    .from("versoes_orcamento_itens")
+    .select(
+      "id, item, tipo_custo, em_save, save_consumido, versao:versoes_orcamento!inner(orcamento_id)",
+    )
+    .eq("tenant_id", tenantId)
+    .eq("versao.orcamento_id", orcamentoId);
+  if (error) {
+    console.error("[orcamentos.entrada_interno.linhas]", error.message);
+    return { ok: false, message: "Não foi possível conferir as linhas do orçamento." };
+  }
+  const todas = (linhas ?? []) as {
+    id: string;
+    item: string;
+    tipo_custo: string;
+    em_save: boolean;
+    save_consumido: number | string | null;
+  }[];
+
+  const comSave = todas.filter(
+    (l) => l.em_save || Number(l.save_consumido ?? 0) > 0,
+  );
+  if (comSave.length > 0) {
+    const nomes = comSave.slice(0, 3).map((l) => `“${l.item}”`).join(", ");
+    return {
+      ok: false,
+      message: `O serviço Interno não usa save. Tire o save ${
+        comSave.length === 1 ? "da linha" : `das ${comSave.length} linhas`
+      } (${nomes}${comSave.length > 3 ? "…" : ""}) antes de trocar o serviço.`,
+    };
+  }
+
+  const ids = todas.map((l) => l.id);
+  if (ids.length > 0) {
+    const { data: bvs, error: bvErr } = await supabase
+      .from("itens_bv")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .in("item_versao_id", ids)
+      .in("situacao", ["confirmado", "recebido"])
+      .limit(1);
+    if (bvErr) {
+      console.error("[orcamentos.entrada_interno.bv]", bvErr.message);
+      return { ok: false, message: "Não foi possível conferir os BVs do orçamento." };
+    }
+    if ((bvs ?? []).length > 0) {
+      return {
+        ok: false,
+        message:
+          "Este orçamento tem BV confirmado ou recebido. O serviço Interno só usa custo F · Interno, que não tem BV — não é possível trocar o serviço.",
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    linhas: todas.length,
+    linhasConvertidas: todas.filter((l) => l.tipo_custo !== "FI").length,
+  };
 }
 
 function recusaDoPeriodoMensal(
@@ -454,7 +545,8 @@ export async function atualizarOrcamento(
     .select(
       "status, servico_id, categoria_id, data_inicio_prevista, data_fim_prevista, " +
         // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
-        "categoria:categorias_dominio!categoria_id(modelo_planilha)",
+        "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
+        "servico:categorias_dominio!servico_id(investimento_interno)",
     )
     .eq("id", orcId)
     .eq("projeto_id", projetoId)
@@ -466,6 +558,7 @@ export async function atualizarOrcamento(
       data_inicio_prevista: string | null;
       data_fim_prevista: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+      servico: { investimento_interno: boolean } | null;
     }>();
 
   if (!atual) {
@@ -494,6 +587,8 @@ export async function atualizarOrcamento(
   const modeloAtual: CategoriaModeloPlanilha =
     atual.categoria?.modelo_planilha ?? "nacional";
   let modeloNovo = modeloAtual;
+  const eraInterno = atual.servico?.investimento_interno === true;
+  let ficaInterno = eraInterno;
   const parMudou =
     parsed.data.servico_id !== atual.servico_id ||
     parsed.data.categoria_id !== atual.categoria_id;
@@ -506,6 +601,33 @@ export async function atualizarOrcamento(
     );
     if (!par.ok) return par;
     modeloNovo = par.modelo;
+    ficaInterno = par.interno;
+  }
+
+  // Passar para o Interno converte as linhas de todas as versões (decisão
+  // 105). A tela pede a confirmação; sem ela, nada é gravado.
+  const entraNoInterno = ficaInterno && !eraInterno;
+  let conversao: { linhas: number; linhasConvertidas: number } | null = null;
+  if (entraNoInterno) {
+    if (formData.get("confirmar_entrada_interno") !== "1") {
+      return {
+        ok: false,
+        message: "Confirme a passagem para o serviço Interno antes de salvar.",
+      };
+    }
+    const entrada = await conferirEntradaNoInterno(
+      supabase,
+      session.activeTenant.id,
+      orcId,
+    );
+    if (!entrada.ok) {
+      return {
+        ok: false,
+        message: entrada.message,
+        fieldErrors: { servico_id: [entrada.message] },
+      };
+    }
+    conversao = entrada;
   }
 
   const inicio = parsed.data.data_inicio_prevista;
@@ -600,6 +722,21 @@ export async function atualizarOrcamento(
         para: modeloNovo,
         categoria_de: atual.categoria_id,
         categoria_para: parsed.data.categoria_id,
+      },
+    });
+  }
+
+  if (conversao) {
+    await logAuditEvent({
+      acao: "orcamento.virou_interno",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "orcamento",
+      entidadeId: orcId,
+      metadata: {
+        servico_de: atual.servico_id,
+        servico_para: parsed.data.servico_id,
+        linhas: conversao.linhas,
+        linhas_convertidas_para_fi: conversao.linhasConvertidas,
       },
     });
   }

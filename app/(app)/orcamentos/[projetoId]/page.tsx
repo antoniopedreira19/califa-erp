@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Layers, Plus } from "lucide-react";
+import { FileText, Layers, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
@@ -35,6 +35,8 @@ import {
   ExportarOrcamentosMenu,
   type OrcamentoExportavel,
 } from "../_selecao/exportar-orcamentos-menu";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { MarcarPagina } from "@/components/voltar/marcar-pagina";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +64,7 @@ export default async function ProjetoDetailPage({
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
+        "id, tenant_id, empresa_id, codigo, codigo_anterior, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -128,6 +130,7 @@ export default async function ProjetoDetailPage({
     tenant_id: raw.tenant_id,
     empresa_id: raw.empresa_id,
     codigo: raw.codigo,
+    codigo_anterior: raw.codigo_anterior ?? null,
     nome: raw.nome,
     campanha: raw.campanha,
     status: raw.status,
@@ -363,17 +366,20 @@ export default async function ProjetoDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/orcamentos"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para projetos
-        </Link>
+        <BotaoVoltar reserva="/orcamentos" />
+        {/* Nome desta página no balão do voltar de quem sair daqui. */}
+        <MarcarPagina rotulo={`${projeto.codigo} · ${projeto.nome}`} />
 
         <div className="mt-3">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             {projeto.codigo}
+            {/* Decisão 114: planilhas e conversas de antes de 28/09/2026
+                citam o código antigo. */}
+            {projeto.codigo_anterior && (
+              <span className="ml-2 font-sans font-normal">
+                · Código anterior: {projeto.codigo_anterior}
+              </span>
+            )}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{projeto.nome}</h1>

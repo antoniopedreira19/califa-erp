@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Users, Briefcase, DollarSign } from "lucide-react";
+import { Users, Briefcase, DollarSign } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { tipoContratacaoLabel } from "@/lib/types";
@@ -20,6 +19,7 @@ import {
   avaliarPendencias,
   separarPendenciasPorCard,
 } from "@/lib/rh/pendencias";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -174,13 +174,7 @@ export default async function ColaboradorDetalhePage({
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div>
-        <Link
-          href="/rh/colaboradores"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para colaboradores
-        </Link>
+        <BotaoVoltar reserva="/rh/colaboradores" />
         <header className="mt-3">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>

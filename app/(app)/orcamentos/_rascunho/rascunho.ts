@@ -36,6 +36,31 @@ export const ITEM_VAZIO: Omit<ItemRascunho, "id"> = {
   bv: null,
 };
 
+/** Orçamento de serviço Interno (decisão 105): toda linha é F · Interno,
+ *  com o planejado igual ao orçado e sem BV. É o que o banco grava no
+ *  salvamento (`planejado_espelha_orcado`); o rascunho aplica antes para a
+ *  tela e os Totais não mostrarem outra coisa até lá. Devolve o MESMO
+ *  objeto quando já está certo — é por isso que o editor sabe se mudou. */
+export function itemDoInterno(item: ItemRascunho): ItemRascunho {
+  if (
+    item.tipo_custo === "FI" &&
+    item.valor_unitario_planejado === item.valor_unitario_orcado &&
+    item.quantidade_planejada === item.quantidade_orcada &&
+    item.dias_meses_planejado === item.dias_meses_orcado &&
+    item.bv === null
+  ) {
+    return item;
+  }
+  return {
+    ...item,
+    tipo_custo: "FI",
+    valor_unitario_planejado: item.valor_unitario_orcado,
+    quantidade_planejada: item.quantidade_orcada,
+    dias_meses_planejado: item.dias_meses_orcado,
+    bv: null,
+  };
+}
+
 export function totalOrcadoDe(item: ItemRascunho): number {
   return (
     item.valor_unitario_orcado * item.quantidade_orcada * item.dias_meses_orcado

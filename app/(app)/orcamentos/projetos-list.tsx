@@ -26,6 +26,8 @@ import { projetoStatusLabel } from "@/lib/types";
 export interface ProjetoRow {
   id: string;
   codigo: string;
+  /** O código de antes da decisão 114 ("AMB-0006/26"): só para a busca. */
+  codigo_anterior: string | null;
   nome: string;
   campanha: string | null;
   /** Descrição do projeto — obrigatória desde a decisão 043, e mostrada
@@ -165,7 +167,7 @@ export function ProjetosList({
       if (statusFiltro === "ativos" && p.status !== "ativo") return false;
       if (statusFiltro === "arquivados" && p.status !== "arquivado") return false;
       if (q) {
-        const hay = `${p.codigo} ${p.nome} ${p.campanha ?? ""} ${p.cliente_nome ?? ""}`.toLowerCase();
+        const hay = `${p.codigo} ${p.codigo_anterior ?? ""} ${p.nome} ${p.campanha ?? ""} ${p.cliente_nome ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;

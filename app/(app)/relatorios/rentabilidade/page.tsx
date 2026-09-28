@@ -13,6 +13,7 @@ import { carregarDimensoesRelatorio } from "./carregar-dimensoes";
 import { FiltrosCliente } from "./filtros-cliente";
 import { ModoProvider } from "./modo-provider";
 import { SecaoTabela } from "./secao-tabela";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -195,6 +196,7 @@ export default async function RentabilidadePage({ searchParams }: Props) {
   return (
     <ModoProvider modoInicial={filtros.modo}>
       <div className="space-y-6">
+        <BotaoVoltar reserva="/relatorios" />
         <PageHeader
           eyebrow="RELATÓRIOS"
           title={`Rentabilidade de Jobs ${filtros.ano}${filtros.compararAno !== null ? ` vs ${filtros.compararAno}` : ""}`}

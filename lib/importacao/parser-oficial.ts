@@ -52,7 +52,8 @@ import { acharColunaDeMarcas, RECUSA_INTERNA_DO_JOB } from "./coluna-marcas";
  *      vão até a 18), então nada é lido delas além do nome.
  *   2. Item sem valor unitário ENTRA, com R$ 0,00 — o modelo é um gabarito
  *      em branco, e o nome do item é o que interessa preservar. Quem barra
- *      orçado zerado é o salvar do rascunho, na tela, não o parser.
+ *      orçado zerado é a aprovação da versão, não o parser (desde 28/09/2026
+ *      o salvar do rascunho também deixa passar — revisão da decisão 011).
  *   3. A coluna A só agrupa: `categoria_id` continua nascendo vazia.
  *   4. O % de honorários vem da coluna E da linha HONORÁRIOS (0,12 → 12).
  *
@@ -423,27 +424,62 @@ function abaTemBlocosDeMes(ws: ExcelJS.Worksheet): boolean {
 
 // ---------- parser principal ----------
 
-export async function parseOficial(
-  buffer: ArrayBuffer | Buffer,
-  opcoes: {
-    /** Orçamento de Fee ou Always On: lê os blocos de mês (decisão 078). */
-    mensal?: boolean;
-  } = {},
-): Promise<ParseResultado> {
-  const mensal = opcoes.mensal === true;
+/** Abre o arquivo. Separado do parse para a leitura de TODAS as abas (a
+ *  escolha de aba na importação, decisão 110) abrir o arquivo uma vez só:
+ *  abrir é a parte cara — 1 s e 300 MB numa planilha de 1,2 MB. */
+export async function carregarPlanilha(buffer: ArrayBuffer | Buffer): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
   // ExcelJS.xlsx.load aceita ArrayBuffer/Buffer. Tipagem antiga do ExcelJS
   // não bate com o Buffer generic novo do @types/node — cast explícito.
   await wb.xlsx.load(buffer as any);
+  return wb;
+}
 
-  let ws = wb.worksheets.find((w) =>
-    ABAS_CONHECIDAS.includes(semAcento(w.name)),
-  );
+/** Aba com o nome que a agência dá à planilha do orçamento. */
+export function ehAbaConhecida(nome: string): boolean {
+  return ABAS_CONHECIDAS.includes(semAcento(nome));
+}
+
+/** Aba oculta no Excel. `veryHidden` é a que nem o menu "Reexibir" mostra. */
+export function abaOculta(ws: ExcelJS.Worksheet): boolean {
+  return ws.state === "hidden" || ws.state === "veryHidden";
+}
+
+export interface OpcoesDoParse {
+  /** Orçamento de Fee ou Always On: lê os blocos de mês (decisão 078). */
+  mensal?: boolean;
+  /** Orçamento de serviço Interno (decisão 105): todo item entra com
+   *  este tipo, seja qual for a coluna de tipo — inclusive a linha com
+   *  tipo em branco ou desconhecido, que nos outros orçamentos é
+   *  descartada. A coluna continua servindo para reconhecer a linha de
+   *  agrupamento (sem valor e sem tipo). */
+  tipoFixo?: TipoCusto;
+  /** A aba escolhida na tela (decisão 110), pelo nome exato — com os
+   *  espaços do começo e do fim, que distinguem abas de nome parecido.
+   *  Sem ela, vale a regra antiga: "Padrão"/"Oficial", no mensal a primeira
+   *  com blocos de mês, e por fim a primeira aba do arquivo. */
+  aba?: string;
+}
+
+export async function parseOficial(
+  entrada: ArrayBuffer | Buffer | ExcelJS.Workbook,
+  opcoes: OpcoesDoParse = {},
+): Promise<ParseResultado> {
+  const mensal = opcoes.mensal === true;
+  const tipoFixo = opcoes.tipoFixo;
+  const wb =
+    entrada instanceof ExcelJS.Workbook ? entrada : await carregarPlanilha(entrada);
+
+  const escolhida = opcoes.aba;
+  let ws =
+    escolhida !== undefined
+      ? wb.worksheets.find((w) => w.name === escolhida)
+      : wb.worksheets.find((w) => ABAS_CONHECIDAS.includes(semAcento(w.name)));
   // Mensal: a planilha interna tem uma aba por regional (SUL, SP…) com os
   // blocos de mês, e costuma vir junto de abas de controle. Vale a primeira
   // que tiver blocos; havendo mais de uma, o aviso diz qual foi lida.
   const avisosDaAba: ImportacaoWarning[] = [];
-  if (!ws && mensal) {
+  if (!ws && mensal && escolhida === undefined) {
     const comMeses = wb.worksheets.filter(abaTemBlocosDeMes);
     ws = comMeses[0];
     if (comMeses.length > 1) {
@@ -456,11 +492,11 @@ export async function parseOficial(
       });
     }
   }
-  if (!ws) ws = wb.worksheets[0];
+  if (!ws && escolhida === undefined) ws = wb.worksheets[0];
 
   if (!ws) {
     return {
-      aba: "",
+      aba: escolhida ?? "",
       grupos: [],
       meses: [],
       modelo: "nacional",
@@ -468,7 +504,10 @@ export async function parseOficial(
       warnings: [
         {
           linha: 0,
-          motivo: "Planilha sem abas legíveis.",
+          motivo:
+            escolhida !== undefined
+              ? `A aba "${escolhida}" não está no arquivo.`
+              : "Planilha sem abas legíveis.",
           severidade: "ignorada",
         },
       ],
@@ -546,8 +585,8 @@ export async function parseOficial(
   }
 
   /** Unitário, QT ou D/M internacional, com as mesmas guardas do nacional:
-   *  unitário inválido ou negativo vira 0; QT e D/M precisam ser positivos
-   *  (CHECK do banco) e viram 1. */
+   *  unitário inválido ou negativo vira 0; QT e D/M inválidos ou negativos
+   *  viram 1, e zero fica zero. */
   function numeroDaLinha(
     v: unknown,
     bruto: string,
@@ -571,9 +610,9 @@ export async function parseOficial(
       }
       return padrao;
     }
-    // QT zero vale desde 15/09/2026 (decisão 078); D/M continua > 0.
-    const minimoOk = tipo === "dias" ? lido.n > 0 : lido.n >= 0;
-    if (!minimoOk) {
+    // QT zero vale desde 15/09/2026 (decisão 078), e D/M zero desde
+    // 27/09/2026 (decisão 109): só o negativo vira o padrão.
+    if (lido.n < 0) {
       warnings.push({
         linha: rowNumber,
         coluna: letra(col),
@@ -582,7 +621,7 @@ export async function parseOficial(
             ? `Valor unitário negativo (${bruto}) — assumido R$ 0,00.`
             : tipo === "quantidade"
               ? `Quantidade negativa (${bruto}) — assumida 1.`
-              : `${rotulo} ${bruto || "0"} não é aceito (precisa ser maior que zero) — ${assumido}.`,
+              : `Dias/meses negativo (${bruto}) — assumido 1.`,
         severidade: "ajuste",
       });
       return padrao;
@@ -663,8 +702,9 @@ export async function parseOficial(
       ordem: grupoAtual.itens.length + 1,
       item_id: marcaDe(marcasDaLinha, "it:"),
       item: colB,
-      // Sem coluna de tipo: B, a conta do modelo (decisão do Tiago).
-      tipo_custo: "B",
+      // Sem coluna de tipo: B, a conta do modelo (decisão do Tiago) — ou o
+      // tipo fixo do orçamento Interno (decisão 105).
+      tipo_custo: tipoFixo ?? "B",
       valor_unitario_orcado: numeroDaLinha(row.getCell(4).value, colD, 4, rowNumber, "unitario"),
       quantidade_orcada: numeroDaLinha(row.getCell(5).value, colE, 5, rowNumber, "quantidade"),
       dias_meses_orcado: numeroDaLinha(row.getCell(6).value, colF, 6, rowNumber, "dias"),
@@ -846,8 +886,9 @@ export async function parseOficial(
     }
 
     // Tipo de custo (coluna G). Sem tipo válido a linha não entra: é ele
-    // que decide tributação, honorário e faturamento do item.
-    if (!temTipoValido) {
+    // que decide tributação, honorário e faturamento do item. No Interno o
+    // tipo é fixo (decisão 105), e a linha entra com ele.
+    if (!temTipoValido && !tipoFixo) {
       warnings.push({
         linha: rowNumber,
         coluna: letra(col.tipo),
@@ -884,7 +925,7 @@ export async function parseOficial(
     }
 
     // Valor unitário (coluna C). Vazio entra como zero — decisão do Tiago
-    // em 08/09/2026. Quem barra orçado zerado é o salvar, na tela.
+    // em 08/09/2026. Quem barra orçado zerado é a aprovação da versão.
     let valorUnitario = valorC.ok ? valorC.n : 0;
     if (!valorC.ok && colC !== "") {
       warnings.push({
@@ -904,10 +945,11 @@ export async function parseOficial(
       valorUnitario = 0;
     }
 
-    // D/M precisa ser POSITIVO (CHECK `itens_dias_meses_positivo`): zero ou
-    // negativo derrubaria o insert inteiro, então vira 1 com aviso. QT zero
-    // vale desde 15/09/2026 (decisão 078) — na planilha interna ele marca o
-    // item que não é cobrado no mês —, e só QT negativo vira 1.
+    // Zero entra como zero nos dois fatores: a QT desde 15/09/2026 (decisão
+    // 078) — na planilha interna ela marca o item que não é cobrado no mês —
+    // e o D/M desde 27/09/2026 (decisão 109), para a importação não emendar
+    // a planilha (o "Bonificado 100%" com D/M 0 virava R$ 3.000 cobrados).
+    // Vazio ou ilegível vira 1, e só o negativo vira 1 com aviso.
     const qtd = toNumber(colD);
     const dm = toNumber(colE);
 
@@ -939,19 +981,19 @@ export async function parseOficial(
         severidade: "ajuste",
       });
     }
-    if (diasMeses <= 0) {
+    if (diasMeses < 0) {
       warnings.push({
         linha: rowNumber,
         coluna: letra(col.dm),
-        motivo: `Dias/meses ${colE || "0"} não é aceito (precisa ser maior que zero) — assumido 1.`,
+        motivo: `Dias/meses negativo (${colE}) — assumido 1.`,
         severidade: "ajuste",
       });
       diasMeses = 1;
     }
 
     // Bloco PLANEJADO: H · R$, I · QT, J · D/M. K (TT) e L (RENTA) são
-    // calculados pelo sistema. Vazio entra como zero — planejado pode ser
-    // zero no banco, diferente de QT e D/M do orçado.
+    // calculados pelo sistema. Vazio entra como zero — no orçado, QT e D/M
+    // vazios viram 1; no planejado, vazio é zero.
     // Na exportação do ERP a H é o id oculto e a I, o crédito consumido —
     // nada disso é planejado. Até 14/09/2026 a I entrava como quantidade
     // planejada.
@@ -967,7 +1009,7 @@ export async function parseOficial(
       ordem: grupoAtual.itens.length + 1,
       item_id: marcaDe(marcasDaLinha, "it:"),
       item: nomeItem,
-      tipo_custo: tipoUpper as TipoCusto,
+      tipo_custo: tipoFixo ?? (tipoUpper as TipoCusto),
       valor_unitario_orcado: valorUnitario,
       quantidade_orcada: quantidade,
       dias_meses_orcado: diasMeses,

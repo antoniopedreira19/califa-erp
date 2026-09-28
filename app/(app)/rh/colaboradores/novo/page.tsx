@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Empresa, Nivel } from "@/lib/types";
 import { ColaboradorFormNovo } from "../colaborador-form-novo";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -55,13 +54,7 @@ export default async function NovoColaboradorPage() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div>
-        <Link
-          href="/rh/colaboradores"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para colaboradores
-        </Link>
+        <BotaoVoltar reserva="/rh/colaboradores" />
         <h1 className="mt-3 text-3xl font-bold tracking-tight">
           Novo colaborador
         </h1>

@@ -173,20 +173,41 @@ async function analisar(
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
-  const { data: projeto } = await supabase
-    .from("projetos")
-    .select("id")
-    .eq("id", projetoId)
-    .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string }>();
+  const [{ data: projeto }, internosRes] = await Promise.all([
+    supabase
+      .from("projetos")
+      .select("id")
+      .eq("id", projetoId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ id: string }>(),
+    // Orçamentos Interno do projeto (decisão 105): o item deles entra como
+    // F · Interno mesmo com o tipo em branco. `!servico_id`: `orcamentos`
+    // tem duas FKs para `categorias_dominio`.
+    supabase
+      .from("orcamentos")
+      .select("id, servico:categorias_dominio!servico_id(investimento_interno)")
+      .eq("projeto_id", projetoId)
+      .eq("tenant_id", tenantId),
+  ]);
   if (!projeto) return { ok: false, message: "Projeto não encontrado." };
+  if (internosRes.error) {
+    console.error("[importacao.projeto.internos]", internosRes.error.message);
+  }
+  const orcamentosInternos = new Set(
+    ((internosRes.data ?? []) as unknown as {
+      id: string;
+      servico: { investimento_interno: boolean } | null;
+    }[])
+      .filter((o) => o.servico?.investimento_interno === true)
+      .map((o) => o.id),
+  );
 
   const arq = await extrairArquivoXlsx(formData);
   if (!arq.ok) return { ok: false, message: arq.message };
 
   let leitura: LeituraProjeto;
   try {
-    leitura = await parsePlanilhaProjeto(arq.buffer);
+    leitura = await parsePlanilhaProjeto(arq.buffer, { orcamentosInternos });
   } catch (err) {
     console.error("[importacao.projeto.parse]", err);
     return {

@@ -210,3 +210,15 @@ dois o botão fica apagado com o motivo.
 
 `pedidos_compra.aprovada_em` entrou em `lib/types.ts` (a coluna já
 existia): é ela que acende o passo da aprovação.
+
+## ⚠️ Nota de 2026-09-28 — o painel mostra o trio de cada PP, e a linha do tempo rola com a ficha (decisão 112)
+
+- **Painel "Destrinchar realizado":** cada PP passou a duas linhas —
+  código, fornecedor e situação (ou o botão "Enviar ao financeiro", na PP
+  ainda no job) em cima; R$ Unit., QT, D/M e Total, com os botões, embaixo.
+  O painel foi de 430 para 500 px, e os cartões do topo ganharam a conta
+  do planejado e quantas PPs o item tem. Ver [112](112-quebra-das-pps-documento-unico-e-data-de-pagamento.md).
+- **Ficha da PP:** a nota de 09/09 acima diz "com a linha do tempo no
+  fim", mas o código a deixava fixa acima do rodapé, sempre à vista. Desde
+  28/09 ela é de fato a última seção do formulário e rola com ele.
+

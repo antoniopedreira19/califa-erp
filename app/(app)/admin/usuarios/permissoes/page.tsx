@@ -1,8 +1,8 @@
-import Link from "next/link";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { MatrizPermissoes } from "./matriz-permissoes";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +13,7 @@ export default async function AdminPermissoesPage() {
 
   return (
     <div className="space-y-8">
-      <Link
-        href="/admin/usuarios"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-california-red transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para Usuários
-      </Link>
+      <BotaoVoltar reserva="/admin/usuarios" />
 
       <PageHeader
         eyebrow="ADMINISTRAÇÃO"

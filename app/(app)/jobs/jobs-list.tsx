@@ -30,6 +30,11 @@ import { jobStatusLabel, type JobStatusExibido, jobStatusBadgeClasses } from "@/
 export interface JobRow {
   id: string;
   codigo: string;
+  /** O `JOB-NNNN` de antes da decisão 114 — a busca também olha ele. Nulo
+   *  nos jobs criados depois da troca. */
+  codigo_anterior: string | null;
+  /** Quando o job foi criado: é a ordem da lista (o código não diz mais). */
+  criado_em: string;
   nome: string;
   /** Status do selo — inclui o "Em faturamento" calculado (decisão 094). */
   status: JobStatusExibido;
@@ -64,7 +69,9 @@ const STATUS_FILTROS: JobStatusExibido[] = [
   "em_faturamento",
   "encerrado",
   "finalizado",
-  "cancelado",
+  // Sem "cancelado" (decisão 113): o cancelado antes da abertura saiu da
+  // lista, e é o único cancelamento que existe — o depois da abertura não
+  // tem tela. A opção ficaria sempre vazia.
 ];
 
 const statusBadgeClasses = jobStatusBadgeClasses;
@@ -96,6 +103,7 @@ export function JobsList({
   empresas,
   usuarioId,
   podeAlternarMeusTodos = true,
+  meusInicial,
 }: {
   rows: JobRow[];
   empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
@@ -110,12 +118,15 @@ export function JobsList({
    * `lib/permissoes.ts`, recurso `listas.chave_meus_todos`.
    */
   podeAlternarMeusTodos?: boolean;
+  /** Com o que a chave "Meus/Todos" abre. A página decide pelo link — ver
+   *  `app/(app)/jobs/page.tsx`. Ausente, vale `podeAlternarMeusTodos`. */
+  meusInicial?: boolean;
 }) {
   const router = useRouter();
   // Meus é o padrão pra quem pode alternar — quem abre a lista quer o
   // próprio trabalho. Freelancer nao pode alternar; comeca em "todos" e
   // conta com o filtro do RLS.
-  const [meus, setMeus] = React.useState(podeAlternarMeusTodos);
+  const [meus, setMeus] = React.useState(meusInicial ?? podeAlternarMeusTodos);
   // Status virou seleção ÚNICA (design 01/09/2026). Eram cinco pílulas
   // combináveis; ocupavam a barra inteira e não deixavam espaço para
   // Produto e Regional.
@@ -186,17 +197,23 @@ export function JobsList({
         return false;
       if (q === "") return true;
       return (
-        r.codigo.toLowerCase().includes(q) || r.nome.toLowerCase().includes(q)
+        r.codigo.toLowerCase().includes(q) ||
+        (r.codigo_anterior?.toLowerCase().includes(q) ?? false) ||
+        r.nome.toLowerCase().includes(q)
       );
     }
 
-    // Projetos ordenados pelo menor código de job do grupo.
+    // Projetos ordenados pelo job mais antigo do grupo, e os jobs pela
+    // criação. Era pelo código até a decisão 114 — com JOB-NNNN dava na
+    // mesma; com a sigla do cliente na frente, não dá mais.
+    const porCriacao = (a: JobRow, b: JobRow) =>
+      a.criado_em.localeCompare(b.criado_em);
     const ordenados = Array.from(gruposPorProjeto.entries())
       .map(([projetoId, jobsDoGrupo]) => ({
         projetoId,
-        jobs: [...jobsDoGrupo].sort((a, b) => a.codigo.localeCompare(b.codigo)),
+        jobs: [...jobsDoGrupo].sort(porCriacao),
       }))
-      .sort((a, b) => a.jobs[0].codigo.localeCompare(b.jobs[0].codigo));
+      .sort((a, b) => porCriacao(a.jobs[0], b.jobs[0]));
 
     const out: GrupoProjeto[] = [];
 

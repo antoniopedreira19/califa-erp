@@ -25,9 +25,12 @@ export const itemSchema = z.object({
     .number({ invalid_type_error: "Quantidade inválida." })
     .nonnegative("Quantidade não pode ser negativa.")
     .default(1),
+  // Zero vale desde 27/09/2026 (decisão 109), como a quantidade: nem a
+  // edição, nem a importação, nem a aprovação barram. Quem confere é o
+  // financeiro na abertura do job. O padrão de item novo segue 1.
   dias_meses_orcado: z.coerce
     .number({ invalid_type_error: "Dias/meses inválido." })
-    .positive("Dias/meses deve ser maior que zero.")
+    .nonnegative("Dias/meses não pode ser negativo.")
     .default(1),
   categoria_id: z
     .string()

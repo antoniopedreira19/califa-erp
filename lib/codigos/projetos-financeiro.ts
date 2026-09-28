@@ -1,19 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lerBaseDoSequencial, proximoCodigoDeProjeto } from "./projetos";
+import {
+  LETRA_DO_PROJETO_FINANCEIRO,
+  lerBaseDoSequencial,
+  proximoCodigoDeProjeto,
+} from "./projetos";
 
 /**
- * Gera código do projeto do financeiro, no mesmo formato do projeto da
- * produção: "[CODIGO_CURTO_CLIENTE]-[SEQ_4]/[ANO_2]". Ex.: "AMB-0003/26".
+ * Gera código do projeto do financeiro: "[CODIGO_CURTO_CLIENTE]-F[SEQ_3]/[ANO_2]".
+ * Ex.: "AMB-F003/26". O "F" ocupa o lugar do primeiro zero, como o "P" no
+ * projeto da produção (decisão 114, 28/09/2026). Até então os dois usavam
+ * o mesmo formato, e 8 códigos existiam nos dois lados apontando para
+ * projetos diferentes; na abertura de job os dois aparecem na mesma tela.
+ * O código de antes fica em `projetos_financeiro.codigo_anterior`.
  *
  * Sequencial PRÓPRIO, lido só dentro de `projetos_financeiro`. Os dois
  * espaços de código são independentes de propósito: as duas arrumações
  * divergem a partir do backfill, e amarrar o sequencial do financeiro ao
  * da produção faria o número pular sem motivo visível para quem usa.
  *
- * Consequência aceita: o mesmo código pode existir nas duas tabelas
- * apontando para arrumações diferentes. É o mesmo contrato de
- * `jobs.nome_financeiro` vs `jobs.nome` — o financeiro fala a língua
- * dele.
+ * O número pode coincidir com o de um projeto da produção (AMB-P004/26 e
+ * AMB-F004/26 são projetos diferentes); a letra é que separa os dois. É o
+ * mesmo contrato de `jobs.nome_financeiro` vs `jobs.nome` — o financeiro
+ * fala a língua dele.
  *
  * ⚠️ Até 14/09/2026 o sequencial era só a CONTAGEM de projetos do cliente
  * no ano + 1. O backfill copiou os códigos da produção, com os buracos
@@ -56,6 +64,7 @@ export async function gerarCodigoProjetoFinanceiro(
   );
   return proximoCodigoDeProjeto({
     codigoCurto: cliente.codigo_curto,
+    letra: LETRA_DO_PROJETO_FINANCEIRO,
     ano,
     qtdDoCliente,
     codigosDaSigla,

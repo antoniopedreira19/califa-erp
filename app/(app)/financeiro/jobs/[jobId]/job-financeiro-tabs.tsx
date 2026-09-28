@@ -15,6 +15,28 @@ interface Props {
   /** Mensagens e erratas ainda não lidas por quem está logado. */
   chatCount: number;
   abaInicial?: TabKey;
+  /**
+   * Cada aba volta ao ponto da página em que a pessoa estava nela; a aba
+   * ainda não visitada abre do topo das abas. Só a abertura de job usa
+   * (decisão 111): quem consulta a planilha no meio do preenchimento volta
+   * direto ao campo em que parou.
+   */
+  lembrarRolagem?: boolean;
+}
+
+/**
+ * Troca de aba de dentro do conteúdo de uma aba — o "Visualizar planilha
+ * interna" da abertura de job (decisão 111). As abas são estado desta
+ * casca, e não rota: um link para `?aba=` passaria pelo servidor e
+ * refaria todas as consultas da página só para trocar de aba.
+ */
+const IrParaAbaContext = React.createContext<((aba: TabKey) => void) | null>(
+  null,
+);
+
+/** A troca de aba, ou `null` fora das abas do job no financeiro. */
+export function useIrParaAbaDoJob() {
+  return React.useContext(IrParaAbaContext);
 }
 
 /**
@@ -44,11 +66,14 @@ export function JobFinanceiroTabs({
   chat,
   chatCount,
   abaInicial = "abertura",
+  lembrarRolagem = false,
 }: Props) {
   const [tab, setTab] = React.useState<TabKey>(abaInicial);
+  const barraRef = React.useRef<HTMLDivElement>(null);
+  const rolagens = React.useRef<Partial<Record<TabKey, number>>>({});
 
   // Um link para a MESMA página com outro `?aba=` (o "Visualizar planilha
-  // interna" do formulário da abertura e o "Voltar para a aprovação" da
+  // interna" do formulário da abertura e o "Ir para a aprovação" da
   // planilha em destaque — decisão 099) é navegação suave: o componente
   // não remonta e o `useState` guardaria a aba velha. A aba pedida pela
   // URL, quando muda, manda.
@@ -71,6 +96,7 @@ export function JobFinanceiroTabs({
    * ficam como estão.
    */
   function irPara(nova: TabKey) {
+    if (lembrarRolagem) rolagens.current[tab] = window.scrollY;
     setTab(nova);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -79,73 +105,94 @@ export function JobFinanceiroTabs({
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <div
-        role="tablist"
-        aria-label="Seções do job no financeiro"
-        className="flex items-center gap-1 overflow-x-auto border-b border-border"
-      >
-        <TabButton active={tab === "abertura"} onClick={() => irPara("abertura")}>
-          Abertura do Job
-        </TabButton>
-        <TabButton active={tab === "info"} onClick={() => irPara("info")}>
-          Informações do Job
-        </TabButton>
-        <TabButton active={tab === "planilha"} onClick={() => irPara("planilha")}>
-          Planilha Interna
-        </TabButton>
-        <TabButton active={tab === "fluxo"} onClick={() => irPara("fluxo")}>
-          Fluxo de Caixa do Job
-        </TabButton>
-        <TabButton active={tab === "chat"} onClick={() => irPara("chat")}>
-          Comunicação
-          {chatCount > 0 && (
-            <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
-              {chatCount}
-            </span>
-          )}
-        </TabButton>
-      </div>
+  // Antes da pintura, para a aba não aparecer um quadro na rolagem da
+  // anterior e só depois pular.
+  React.useLayoutEffect(() => {
+    if (!lembrarRolagem) return;
+    const salva = rolagens.current[tab];
+    if (salva !== undefined) {
+      window.scrollTo({ top: salva });
+      return;
+    }
+    // Aba ainda não visitada: se a página estava abaixo das abas (o
+    // "Visualizar planilha interna" mora na coluna que acompanha a
+    // rolagem), ela abre do começo, logo abaixo da barra de abas.
+    const barra = barraRef.current;
+    if (!barra) return;
+    const topoDasAbas = barra.getBoundingClientRect().top + window.scrollY - 16;
+    if (window.scrollY > topoDasAbas) window.scrollTo({ top: topoDasAbas });
+  }, [tab, lembrarRolagem]);
 
-      <div
-        role="tabpanel"
-        aria-hidden={tab !== "abertura"}
-        className={cn(tab === "abertura" ? "" : "hidden")}
-      >
-        {abertura}
+  return (
+    <IrParaAbaContext.Provider value={irPara}>
+      <div className="space-y-6">
+        <div
+          ref={barraRef}
+          role="tablist"
+          aria-label="Seções do job no financeiro"
+          className="flex items-center gap-1 overflow-x-auto border-b border-border"
+        >
+          <TabButton active={tab === "abertura"} onClick={() => irPara("abertura")}>
+            Abertura do Job
+          </TabButton>
+          <TabButton active={tab === "info"} onClick={() => irPara("info")}>
+            Informações do Job
+          </TabButton>
+          <TabButton active={tab === "planilha"} onClick={() => irPara("planilha")}>
+            Planilha Interna
+          </TabButton>
+          <TabButton active={tab === "fluxo"} onClick={() => irPara("fluxo")}>
+            Fluxo de Caixa do Job
+          </TabButton>
+          <TabButton active={tab === "chat"} onClick={() => irPara("chat")}>
+            Comunicação
+            {chatCount > 0 && (
+              <span className="ml-1.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-california-red px-1 text-[10px] font-bold text-white">
+                {chatCount}
+              </span>
+            )}
+          </TabButton>
+        </div>
+
+        <div
+          role="tabpanel"
+          aria-hidden={tab !== "abertura"}
+          className={cn(tab === "abertura" ? "" : "hidden")}
+        >
+          {abertura}
+        </div>
+        <div
+          role="tabpanel"
+          aria-hidden={tab !== "info"}
+          className={cn(tab === "info" ? "" : "hidden")}
+        >
+          {info}
+        </div>
+        <div
+          role="tabpanel"
+          aria-hidden={tab !== "planilha"}
+          className={cn(tab === "planilha" ? "" : "hidden")}
+        >
+          {planilha}
+        </div>
+        <div
+          role="tabpanel"
+          aria-hidden={tab !== "fluxo"}
+          className={cn(tab === "fluxo" ? "" : "hidden")}
+        >
+          {fluxo}
+        </div>
+        <div
+          role="tabpanel"
+          aria-hidden={tab !== "chat"}
+          className={cn(tab === "chat" ? "" : "hidden")}
+        >
+          {/* Só monta quando aberta: o chat marca a thread como lida ao
+              montar, e montar escondido zeraria o badge sem ninguém ler. */}
+          {tab === "chat" && chat}
+        </div>
       </div>
-      <div
-        role="tabpanel"
-        aria-hidden={tab !== "info"}
-        className={cn(tab === "info" ? "" : "hidden")}
-      >
-        {info}
-      </div>
-      <div
-        role="tabpanel"
-        aria-hidden={tab !== "planilha"}
-        className={cn(tab === "planilha" ? "" : "hidden")}
-      >
-        {planilha}
-      </div>
-      <div
-        role="tabpanel"
-        aria-hidden={tab !== "fluxo"}
-        className={cn(tab === "fluxo" ? "" : "hidden")}
-      >
-        {fluxo}
-      </div>
-      <div
-        role="tabpanel"
-        aria-hidden={tab !== "chat"}
-        className={cn(tab === "chat" ? "" : "hidden")}
-      >
-        {/* Só monta quando aberta: o chat marca a thread como lida ao
-            montar, e montar escondido zeraria o badge sem ninguém ler. */}
-        {tab === "chat" && chat}
-      </div>
-    </div>
+    </IrParaAbaContext.Provider>
   );
 }
 
