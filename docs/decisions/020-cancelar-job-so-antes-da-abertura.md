@@ -60,8 +60,9 @@ save à versão, o que `cancelarEnvioParaAbertura` (057) faz.
 - Depois da abertura, **hoje ninguém cancela job pelo sistema**. Quando o
   financeiro ganhar essa tela, ela nasce com action própria, que desfaça o
   que a abertura gravou — não reaproveita uma troca de status solta.
-- Continua aberta a escrita direta pela API do Supabase (`jobs_modify` é
+- ~~Continua aberta a escrita direta pela API do Supabase (`jobs_modify` é
   ALL para membro do tenant): a guarda de status em `jobs` está preparada
   na branch `feat/travas-escrita-direta`, não aplicada, e ela ainda aceita
   `aberto → cancelado` para GP e produtor — precisa ser ajustada antes de
-  aplicar.
+  aplicar.~~ Fechada no mesmo dia pela decisão 117: a guarda foi ajustada
+  (sem `aberto → cancelado`) e aplicada.

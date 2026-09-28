@@ -4485,6 +4485,21 @@ código publicado logo depois (`3305751`).
 - **Ainda aberto:** o PATCH direto em `jobs.status` pela API do Supabase
   (RLS `jobs_modify`). A guarda preparada em `feat/travas-escrita-direta`
   aceita `aberto → cancelado` para GP e produtor e precisa desse ajuste
-  antes de aplicar.
+  antes de aplicar. ⚠️ Fechado no mesmo dia — ver a nota ⚠️ de
+  2026-09-28 (5).
 - **Nenhuma consulta nova, nenhuma migration.** `tsc` e `lint` limpos.
+
+## ⚠️ Nota de 2026-09-28 (5) — o status do job só muda pelo sistema (decisão 117)
+
+- **No ar:** migration `20260928400001` — guarda em `jobs`, no envio para
+  faturamento e nas parcelas; INSERT/UPDATE direto de notas revogado. É a
+  preparada em 22/09 (`feat/travas-escrita-direta`), revista: sem
+  `aberto → cancelado`, e o UPDATE do envio virou guarda de papel
+  (administrador e financeiro) por causa da 115.
+- **Nada muda no app.** Cada transição de status continua na sua action;
+  a guarda recusa a mesma escrita feita por fora, pela API.
+- **Conferido antes de aplicar:** `scripts/conferir-travas-escrita-direta.sql`,
+  34 casos numa transação desfeita — 14 escritas do app passam, 20 ataques
+  são recusados. Repetir quando mudar papel, transição ou quem escreve em
+  `jobs`, envio ou nota.
 
