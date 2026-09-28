@@ -390,7 +390,7 @@ function SlidePagina3({
           existir; se não, cai num gradient bege neutro (não quebra). */}
       <div className="relative bg-gradient-to-br from-neutral-300 to-neutral-500">
         <Image
-          src="/proposta/carta/Slide3-foto.jpg"
+          src="/proposta/carta/Slide3-foto.png"
           alt="Escritório California"
           fill
           sizes="(max-width: 768px) 40vw, 350px"
