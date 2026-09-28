@@ -3,7 +3,15 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, GraduationCap, Plus, Eye, EyeOff } from "lucide-react";
+import {
+  Search,
+  GraduationCap,
+  Plus,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Circle,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -13,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CadastroStatus, TipoContratacao } from "@/lib/types";
+import type { NivelPendencia } from "@/lib/rh/pendencias";
 import { tipoContratacaoLabel } from "@/lib/types";
 
 export type ColaboradorRow = {
@@ -30,6 +39,8 @@ export type ColaboradorRow = {
   regional_id: string | null;
   regional_nome: string | null;
   usa_rateio_empresa: boolean;
+  pendencia_nivel: NivelPendencia;
+  pendencia_total: number;
 };
 
 export type EmpresaOpcao = { id: string; nome: string };
@@ -37,6 +48,7 @@ export type RegionalOpcao = { id: string; nome: string; empresa_id: string };
 
 type StatusFiltro = "ativos" | "inativos" | "todos";
 type TipoFiltro = "todos" | TipoContratacao;
+type PendenciaFiltro = "todos" | "criticas" | "parciais" | "completos";
 
 // Sentinel para "todas" (Radix Select não aceita value="").
 const TODAS = "__todas__";
@@ -66,6 +78,8 @@ export function ColaboradoresList({
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
   const [empresaFiltro, setEmpresaFiltro] = React.useState<string>(TODAS);
   const [regionalFiltro, setRegionalFiltro] = React.useState<string>(TODAS);
+  const [pendenciaFiltro, setPendenciaFiltro] =
+    React.useState<PendenciaFiltro>("todos");
   const [salariosOcultos, setSalariosOcultos] = React.useState(false);
 
   // Regionais disponíveis no dropdown: quando uma empresa está selecionada,
@@ -94,6 +108,12 @@ export function ColaboradoresList({
       } else if (regionalFiltro !== TODAS) {
         if (c.regional_id !== regionalFiltro) return false;
       }
+      if (pendenciaFiltro === "criticas" && c.pendencia_nivel !== "critica")
+        return false;
+      if (pendenciaFiltro === "parciais" && c.pendencia_nivel !== "parcial")
+        return false;
+      if (pendenciaFiltro === "completos" && c.pendencia_nivel !== "completo")
+        return false;
       if (!q) return true;
       return (
         c.nome.toLowerCase().includes(q) ||
@@ -102,7 +122,20 @@ export function ColaboradoresList({
         (c.regional_nome ?? "").toLowerCase().includes(q)
       );
     });
-  }, [colaboradores, busca, status, tipo, empresaFiltro, regionalFiltro]);
+  }, [
+    colaboradores,
+    busca,
+    status,
+    tipo,
+    empresaFiltro,
+    regionalFiltro,
+    pendenciaFiltro,
+  ]);
+
+  const contagemCriticas = React.useMemo(
+    () => colaboradores.filter((c) => c.pendencia_nivel === "critica").length,
+    [colaboradores],
+  );
 
   // Rodapé do card: total do que está filtrado. Ajuda a perceber quanto
   // "vale" o recorte da tela quando o usuário filtra por empresa/regional.
@@ -198,6 +231,27 @@ export function ColaboradoresList({
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={pendenciaFiltro}
+          onValueChange={(v) => setPendenciaFiltro(v as PendenciaFiltro)}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Cadastro" />
+          </SelectTrigger>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+          >
+            <SelectItem value="todos">Qualquer cadastro</SelectItem>
+            <SelectItem value="criticas">
+              Só pendências críticas
+              {contagemCriticas > 0 && ` (${contagemCriticas})`}
+            </SelectItem>
+            <SelectItem value="parciais">Só cadastros parciais</SelectItem>
+            <SelectItem value="completos">Só cadastros completos</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="ml-auto flex items-center gap-2">
           <Link
             href="/rh/colaboradores/niveis"
@@ -288,19 +342,39 @@ export function ColaboradoresList({
                   }`}
                 >
                   <td className="px-4 py-3 font-medium">
-                    <Link
-                      href={`/rh/colaboradores/${c.id}`}
-                      prefetch={false}
-                      onClick={(e) => e.stopPropagation()}
-                      className="hover:text-california-red transition-colors"
-                    >
-                      {c.nome}
-                    </Link>
-                    {c.status === "inativo" && (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        (inativo)
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link
+                        href={`/rh/colaboradores/${c.id}`}
+                        prefetch={false}
+                        onClick={(e) => e.stopPropagation()}
+                        className="hover:text-california-red transition-colors"
+                      >
+                        {c.nome}
+                      </Link>
+                      {c.pendencia_nivel === "critica" && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-california-red/10 px-2 py-0.5 text-[10px] font-medium text-california-red"
+                          title={`${c.pendencia_total} pendência(s) crítica(s)`}
+                        >
+                          <AlertCircle className="h-3 w-3" />
+                          Pendência
+                        </span>
+                      )}
+                      {c.pendencia_nivel === "parcial" && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+                          title={`${c.pendencia_total} campo(s) do cadastro em aberto`}
+                        >
+                          <Circle className="h-3 w-3" />
+                          Incompleto
+                        </span>
+                      )}
+                      {c.status === "inativo" && (
+                        <span className="text-xs text-muted-foreground">
+                          (inativo)
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {c.funcao}

@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MoedaInput } from "@/components/ui/moeda-input";
 import type { ColaboradorSalario } from "@/lib/types";
+import type { NivelPendencia } from "@/lib/rh/pendencias";
+import { SeloPendencia } from "./selo-pendencia";
 import {
   registrarMudancaSalarial,
   corrigirSalarioAtual,
@@ -25,10 +27,12 @@ export function CardSalarios({
   colaboradorId,
   salarios,
   isAdmin,
+  pendencia,
 }: {
   colaboradorId: string;
   salarios: ColaboradorSalario[];
   isAdmin: boolean;
+  pendencia?: NivelPendencia;
 }) {
   const router = useRouter();
   const [openMudanca, setOpenMudanca] = React.useState(false);
@@ -84,7 +88,10 @@ export function CardSalarios({
             <DollarSign className="h-4 w-4 text-california-red" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">Salário</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">Salário</h2>
+              {pendencia && <SeloPendencia nivel={pendencia} />}
+            </div>
             <p className="text-xs text-muted-foreground">
               Cada linha é uma mudança. Histórico completo preservado.
             </p>

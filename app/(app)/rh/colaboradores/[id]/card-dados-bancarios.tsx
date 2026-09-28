@@ -21,15 +21,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Colaborador } from "@/lib/types";
+import type { NivelPendencia } from "@/lib/rh/pendencias";
+import { SeloPendencia } from "./selo-pendencia";
 import { salvarDadosBancariosColaborador } from "../actions";
 
 const NONE_SENTINEL = "__none__";
 
 type Props = {
   colaborador: Colaborador;
+  pendencia?: NivelPendencia;
 };
 
-export function CardDadosBancarios({ colaborador }: Props) {
+export function CardDadosBancarios({ colaborador, pendencia }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
       <div className="flex items-start justify-between gap-3">
@@ -38,6 +41,7 @@ export function CardDadosBancarios({ colaborador }: Props) {
             <Landmark className="h-4 w-4 text-california-red" />
           </div>
           <h2 className="text-lg font-semibold">Dados bancários</h2>
+          {pendencia && <SeloPendencia nivel={pendencia} />}
         </div>
         <EditarDadosBancariosDrawer colaborador={colaborador} />
       </div>

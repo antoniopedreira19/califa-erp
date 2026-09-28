@@ -152,3 +152,27 @@ export function rotuloCampo(campo: CampoCritico | CampoParcial): string {
     campo
   );
 }
+
+/** Nível da pendência que cada card do detalhe deve exibir. Usado pra
+ *  pintar o selo do header do card sem duplicar lógica em cada arquivo. */
+export type PendenciasPorCard = {
+  dados: NivelPendencia;
+  bancario: NivelPendencia;
+  salario: NivelPendencia;
+  alocacao: NivelPendencia;
+};
+
+export function separarPendenciasPorCard(p: Pendencias): PendenciasPorCard {
+  const criticasDados = p.criticas.includes("cpf") || p.criticas.includes("cnpj");
+  const parciaisDados = p.parciais.some((c) =>
+    (["email", "telefone", "nivel", "data_nascimento", "area"] as CampoParcial[])
+      .includes(c),
+  );
+
+  return {
+    dados: criticasDados ? "critica" : parciaisDados ? "parcial" : "completo",
+    bancario: p.criticas.includes("meio_pagamento") ? "critica" : "completo",
+    salario: p.criticas.includes("salario_vigente") ? "critica" : "completo",
+    alocacao: p.criticas.includes("alocacao_vigente") ? "critica" : "completo",
+  };
+}
