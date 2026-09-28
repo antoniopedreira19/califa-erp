@@ -1255,27 +1255,16 @@ export function competenciaLabelLongo(
 }
 
 /**
- * Transições "livres" (sem role gate). Ações que exigem gate financeiro
- * (aprovar/rejeitar abertura) OU input adicional (motivo) têm server actions
- * próprias e NÃO estão nesta tabela.
- */
-export const JOB_STATUS_TRANSICOES: Record<JobStatus, JobStatus[]> = {
-  aguardando_abertura: ["cancelado"],
-  rejeitado_financeiro: ["cancelado"],
-  aberto: ["cancelado"],
-  // Legado: nenhum job novo entra aqui. Mantido pra não travar quem já
-  // estivesse neste status caso apareça de algum backup.
-  em_producao: ["cancelado"],
-  encerrado: [],
-  cancelado: [],
-  finalizado: [],
-};
-
-/**
- * `encerrado` e `finalizado` continuam FORA de `JOB_STATUS_TRANSICOES` de
- * propósito: encerrar não é troca de status solta. Exige nenhuma PP, BV,
- * verba ou item em aberto, e passa pelo fechamento. Quem faz é a action
- * `encerrarJob`, não `atualizarStatusJob`.
+ * Não existe troca de status "livre" do job. Cada mudança tem a sua action,
+ * com as travas dela: abrir e devolver (`abrirJobNoFinanceiro`,
+ * `rejeitarAberturaJob`), cancelar o envio antes da abertura
+ * (`cancelarEnvioParaAbertura`) e encerrar (`encerrarJob`). A tabela
+ * `JOB_STATUS_TRANSICOES` e a action `atualizarStatusJob`, que aceitavam
+ * `aberto → cancelado` sem conferir nada, saíram em 28/09/2026 (revisão
+ * da decisão 020).
+ *
+ * Encerrar exige nenhuma PP, BV, verba ou item em aberto, e passa pelo
+ * fechamento.
  *
  * ⚠️ Desde 16/09/2026 (decisão 087) o encerramento NÃO espera o
  * faturamento: nem o envio, nem a nota. `finalizado` é quem marca o fim das
