@@ -7,8 +7,8 @@
  * - a consequência: em vez de "devolve o job ao mural de abertura", a
  *   alteração vale na hora, sem aprovação;
  * - o que acompanha: o envio para faturamento (job enviado e ainda sem
- *   nota), a previsão de recebimento e, no serviço Interno, a curva de
- *   desembolso, parcela a parcela;
+ *   nota) e a previsão de recebimento, parcela a parcela — a curva de
+ *   desembolso não, nem no serviço Interno (Tiago, 28/09/2026);
  * - o campo obrigatório: "Motivo da alteração".
  *
  * Do protótipo aprovado em 28/09/2026 (artifact `Re8sXDJpj8gzEk1tnCrt48`).
@@ -65,9 +65,6 @@ interface Props {
   envio: ParcelaQueAcompanha[];
   /** Parcelas da previsão de recebimento que acompanham. */
   recebimento: ParcelaQueAcompanha[];
-  /** Parcelas da curva de desembolso que acompanham — só no serviço
-   *  Interno, em que o custo previsto muda com o orçado. */
-  curva: ParcelaQueAcompanha[];
   /** Serviço Interno (decisão 105): o planejado é igual ao orçado e anda
    *  junto. Nos outros, o planejado não muda. */
   planejadoAcompanha: boolean;
@@ -170,7 +167,6 @@ export function EdicaoFinanceiroConfirmarDialog({
   moeda,
   envio,
   recebimento,
-  curva,
   planejadoAcompanha,
   salvando,
   erro,
@@ -265,7 +261,7 @@ export function EdicaoFinanceiroConfirmarDialog({
                   O job já foi enviado e nenhuma nota saiu: o valor enviado e
                   as parcelas passam a ser os novos, com as mesmas datas. A
                   primeira nota emitida, mesmo que de uma parcela só, trava a
-                  edição.
+                  edição — e o encerramento do job também.
                 </p>
               </div>
             </div>
@@ -284,24 +280,6 @@ export function EdicaoFinanceiroConfirmarDialog({
                   recolhimentos de impostos previstos acompanham do mesmo
                   jeito. Para mudar data ou dividir em outras parcelas, use o
                   Editar registro, na aba Abertura do Job.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {curva.length > 0 && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
-              <CalendarClock className="mt-0.5 h-4 w-4 flex-none text-california-red" />
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <p className="text-[12.5px] font-semibold text-foreground">
-                  A curva de desembolso acompanha
-                </p>
-                <Parcelas linhas={curva} moeda={moeda} />
-                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  No serviço Interno o planejado acompanha o orçado, e com ele
-                  o custo previsto: cada parcela da curva na mesma proporção,
-                  com as mesmas datas. Para mudar data ou dividir em outras
-                  parcelas, use o Editar registro, na aba Abertura do Job.
                 </p>
               </div>
             </div>

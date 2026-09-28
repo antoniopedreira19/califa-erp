@@ -10,8 +10,8 @@
  * O que muda em relação às Erratas: não há coluna de Planejado (o
  * financeiro edita só o orçado), o cabeçalho mostra a soma das alterações
  * — o par "na abertura → atual" continua no card de Erratas, que é o do job
- * inteiro — e, embaixo de cada uma, o que aconteceu com o envio, a
- * previsão de recebimento e, no serviço Interno, a curva de desembolso.
+ * inteiro — e, embaixo de cada uma, o que aconteceu com o envio e a
+ * previsão de recebimento.
  *
  * Só existe depois da primeira alteração (Tiago, 28/09/2026): sem nenhuma,
  * a aba Informações fica como era.
@@ -320,12 +320,6 @@ export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
                   rotulo="Previsão de recebimento:"
                   antes={a.recebimento_antes}
                   depois={a.recebimento_depois}
-                  moeda={moeda}
-                />
-                <PrevisaoQueAcompanhou
-                  rotulo="Curva de desembolso:"
-                  antes={a.curva_antes}
-                  depois={a.curva_depois}
                   moeda={moeda}
                 />
               </div>
