@@ -162,103 +162,109 @@ export function ColaboradoresList({
 
   return (
     <div className="space-y-4">
-      {/* Filtros no padrão compacto de /jobs: h-9, text-[13px], dois
-          grupos separados. A versão anterior usava selects h-11 e Input
-          shadcn h-11, ocupando ~90px de altura. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={status}
-            onValueChange={(v) => setStatus(v as StatusFiltro)}
-          >
-            <SelectTrigger className="h-9 w-[110px] px-2.5 text-[13px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              side="bottom"
-              avoidCollisions={false}
-              className="w-[--radix-select-trigger-width]"
+      {/* Filtros em 2 linhas à esquerda + ações agrupadas à direita.
+          Linha 1: 4 selects + busca. Linha 2: toggle de pendências.
+          Ações (Níveis + Novo colaborador) ficam num bloco separado
+          na direita, alinhadas ao topo pra visualmente serem "outra
+          coisa" (ação != filtro). */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={status}
+              onValueChange={(v) => setStatus(v as StatusFiltro)}
             >
-              <SelectItem value="ativos">Ativos</SelectItem>
-              <SelectItem value="inativos">Inativos</SelectItem>
-              <SelectItem value="todos">Todos</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
-            <SelectTrigger className="h-9 w-[150px] px-2.5 text-[13px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              side="bottom"
-              avoidCollisions={false}
-              className="w-[--radix-select-trigger-width]"
+              <SelectTrigger className="h-9 w-[110px] px-2.5 text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="w-[--radix-select-trigger-width]"
+              >
+                <SelectItem value="ativos">Ativos</SelectItem>
+                <SelectItem value="inativos">Inativos</SelectItem>
+                <SelectItem value="todos">Todos</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
+              <SelectTrigger className="h-9 w-[150px] px-2.5 text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="w-[--radix-select-trigger-width]"
+              >
+                <SelectItem value="todos">Todos os tipos</SelectItem>
+                <SelectItem value="pj">PJ</SelectItem>
+                <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
+                <SelectItem value="clt">CLT</SelectItem>
+                <SelectItem value="estagio">Estágio</SelectItem>
+                <SelectItem value="socio">Sócio</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={empresaFiltro}
+              onValueChange={(v) => setEmpresaFiltro(v)}
             >
-              <SelectItem value="todos">Todos os tipos</SelectItem>
-              <SelectItem value="pj">PJ</SelectItem>
-              <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
-              <SelectItem value="clt">CLT</SelectItem>
-              <SelectItem value="estagio">Estágio</SelectItem>
-              <SelectItem value="socio">Sócio</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={empresaFiltro}
-            onValueChange={(v) => setEmpresaFiltro(v)}
-          >
-            <SelectTrigger className="h-9 w-[170px] px-2.5 text-[13px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              side="bottom"
-              avoidCollisions={false}
-              className="w-[--radix-select-trigger-width]"
+              <SelectTrigger className="h-9 w-[170px] px-2.5 text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="w-[--radix-select-trigger-width]"
+              >
+                <SelectItem value={TODAS}>Todas as empresas</SelectItem>
+                {empresasOpcoes.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={regionalFiltro}
+              onValueChange={(v) => setRegionalFiltro(v)}
             >
-              <SelectItem value={TODAS}>Todas as empresas</SelectItem>
-              {empresasOpcoes.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
-                  {e.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={regionalFiltro}
-            onValueChange={(v) => setRegionalFiltro(v)}
-          >
-            <SelectTrigger className="h-9 w-[160px] px-2.5 text-[13px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              side="bottom"
-              avoidCollisions={false}
-              className="w-[--radix-select-trigger-width]"
-            >
-              <SelectItem value={TODAS}>Todas as regionais</SelectItem>
-              <SelectItem value={HUB}>Hub</SelectItem>
-              {regionaisFiltradas.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <TogglePendencias
-            valor={pendenciaFiltro}
-            onChange={setPendenciaFiltro}
-            contagemPendentes={contagemPendentes}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center">
-            <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar colaborador..."
-              className="h-9 w-56 rounded-lg border border-border bg-white pl-[30px] pr-3 text-xs text-foreground outline-none focus:border-california-red/40"
+              <SelectTrigger className="h-9 w-[160px] px-2.5 text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="w-[--radix-select-trigger-width]"
+              >
+                <SelectItem value={TODAS}>Todas as regionais</SelectItem>
+                <SelectItem value={HUB}>Hub</SelectItem>
+                {regionaisFiltradas.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative flex items-center">
+              <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar colaborador..."
+                className="h-9 w-56 rounded-lg border border-border bg-white pl-[30px] pr-3 text-xs text-foreground outline-none focus:border-california-red/40"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <TogglePendencias
+              valor={pendenciaFiltro}
+              onChange={setPendenciaFiltro}
+              contagemPendentes={contagemPendentes}
             />
           </div>
+        </div>
+        <div className="flex items-center gap-2">
           <Link
             href="/rh/colaboradores/niveis"
             prefetch={false}
