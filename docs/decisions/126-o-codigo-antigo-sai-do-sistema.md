@@ -82,7 +82,7 @@ O cabeçalho do projeto já não o mostrava desde a decisão 122, §6.
 | **Histórico de importação** (`orcamento_importacoes`, 5 linhas) e **nome da versão** "Importada de interna-TES-0001_26-01-v3.xlsx" | O código antigo do orçamento no nome do arquivo vira o **nome** do orçamento, como a exportação nomeia o arquivo desde a decisão 121 (`interna-Orcamento de Teste-v3.xlsx`). Trocar pelo código novo poria o código do orçamento na tela, o que a 121 proíbe. |
 | **Registro de números usados** (`codigos_de_projeto_usados`, 34 linhas no formato antigo) | Passam ao formato com "P" (`AMB-0003/26` → `AMB-P003/26`), com o mesmo número e o mesmo projeto. O gerador já lia as duas formas como o mesmo número, então nenhum número volta a ser usado. Três projetos tinham um código antigo de outra sigla (`NOV-0001/26`, `NOV-0003/26`, `0-0002/26`); convertido, esse número passa a ser "dele" para a decisão 122, §6. Os três têm orçamento com job, e o cliente deles já não muda. |
 | **`codigo_anterior`** em projetos (16), orçamentos (39), projetos do financeiro (6) e jobs (23) | Esvaziado pela `20260929700001`; as colunas saíram do banco no mesmo dia, pela `20260929700002` (ver §8 e §10). |
-| **Storage** | Apagados os 63 PDFs de PP soltos, os 4 documentos por parcela das PPs acima e as 23 planilhas importadas. |
+| **Storage** | Apagados os 63 PDFs de PP soltos, os 4 documentos por parcela das PPs acima e as 23 planilhas importadas. Depois da reconferência, também os 20 anexos soltos de PPs apagadas (§10). |
 
 ## 6. O que fica, e por quê
 
@@ -136,9 +136,12 @@ repositório):
 - `manifesto.json`: caminho, tamanho, MD5 e SHA-256 de cada um;
 - `banco.json`: os valores de antes de cada campo que muda.
 
-Para voltar um arquivo, basta subi-lo ao mesmo caminho. Para voltar um
-valor, `banco.json` tem o id e o valor. A pasta é apagada depois da
-conferência do Tiago.
+Para voltar um arquivo, bastava subi-lo ao mesmo caminho; para voltar um
+valor, `banco.json` tinha o id e o valor.
+
+**Apagada em 29/09/2026**, com o OK do Tiago, depois da reconferência
+(§10). Desde então os scripts 1 a 5 não rodam mais (todos leem a cópia), e
+não há mais como voltar ao estado de antes.
 
 ## 10. Execução (29/09/2026)
 
@@ -203,6 +206,13 @@ RLS conferidos depois. As sessões ativas foram avisadas antes.
 
 **Reconferência independente** (`5-reconferir.ts`, a pedido do Tiago): os 47
 PDFs lidos pelo PDFKit da Apple e comparados com a cópia, sem nenhuma
-diferença fora do combinado; banco e Storage batem com a cópia. Achado fora
-do combinado: 20 anexos soltos de PPs apagadas em 21/09 (um deles, uma NF de
-teste, cita "0-0001/26"), aguardando decisão do Tiago.
+diferença fora do combinado; banco e Storage batem com a cópia.
+
+**Anexos soltos** (`6-apagar-anexos-orfaos.ts`): a reconferência achou 20
+anexos no bucket `pedidos-compra` que nenhuma tabela apontava, de PPs que
+já não existiam (sobras dos testes apagados até 21/09). Um deles, uma NF de
+teste, citava "0-0001/26". Com o OK do Tiago, os 20 saíram em 29/09/2026.
+Travas: só anexo sem referência, de PP inexistente e de antes de 22/09 —
+a geração de PP sobe o anexo antes de gravar a PP, e um anexo de PP em
+criação pareceria solto. Depois: 49 anexos de PP no Storage, os mesmos 49
+que as tabelas apontam.
