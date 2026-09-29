@@ -16,8 +16,8 @@
 É a entrega 3 da série de lançamentos e baixas (decisões 120 e 124). A
 entrega foi dividida em duas:
 
-- **3a — banco inteiro + Títulos a Receber** (esta data).
-- **3b — Títulos a Pagar**, detalhe da avulsa e remessa CNAB (a seguir).
+- **3a — banco inteiro + Títulos a Receber** (29/09, `734ed6bf`).
+- **3b — Títulos a Pagar**, detalhe da avulsa e remessa CNAB (29/09).
 
 ## 2. As regras
 
@@ -117,6 +117,39 @@ Estorno não entra na conta: é transação nova, não desfaz a baixa
   antes.
 - Home: o "previsto a receber" do mês desconta as baixas parciais.
 
+### Tela — Títulos a Pagar (3b)
+
+- Chip novo **Parciais**; o parcial continua também em "A pagar", como no
+  protótipo. Linha parcial: "pago R$ X · falta R$ Y", "R$ Z retidos · a
+  recolher", status **Parcial** (azul), o "Baixar" do restante e o olho.
+- Faixa de resumo: "Em aberto" e "Vencendo em 7 dias" somam o que **falta**;
+  "Pagos hoje", "Pagos este mês" e "Total pago" contam **cada baixa na data
+  dela, pelo que saiu da conta** (antes, o título inteiro na data da última
+  baixa).
+- Diálogo de baixa (`components/financeiro/baixa-titulo-dialog.tsx`), no
+  molde do protótipo: data e forma lado a lado, conta, o bloco **Valor a dar
+  baixa** (o mesmo do receber), o aviso "os impostos retidos ficam para a
+  agência recolher" e o centro de custo. Parcial desligada, com o motivo,
+  em desembolso, fatura de cartão, devolução de verba, folha, PP de verba,
+  documento em remessa ("Pago pela remessa com o valor cheio") e na forma
+  cartão. Retenção só em PP (não de verba), avulso e recorrência; em
+  remessa ela aparece desligada. Com baixa parcial, o cartão sai das formas.
+  O formulário virou filho com `key`: antes o efeito de abertura rodava a
+  cada renderização da tela.
+- Popup do olho com as baixas do documento e **"Baixar o restante"**;
+  cancelar é por baixa em PP, avulso, recorrência e folha, e pelo documento
+  em desembolso, devolução de verba e fatura (uma baixa só).
+- **Detalhe da avulsa** (`contas-a-pagar/avulsa/[id]`): situação "Parcial ·
+  falta R$ X", cartão "Baixas registradas" com cada baixa e seus retidos;
+  parcial não mostra Editar nem Excluir, só "Baixar" (o restante, inteiro)
+  e "Cancelar baixa" (a mais recente, com aviso próprio).
+- Travas nas actions da avulsa: editar não deixa o valor ficar igual ou
+  abaixo do já baixado; excluir recusa a parcial **antes** de apagar os
+  anexos do Storage (o banco já barrava a exclusão pela FK, mas depois que
+  os anexos tinham ido embora); cancelar aceita a parcial.
+- **Remessa CNAB (P5):** leva só o que falta pagar de PP e avulsa com baixa
+  parcial.
+
 ## 4. Conferência
 
 - SQL com rollback, como administrador e como GP: parcial com ISS e IRRF,
@@ -131,6 +164,17 @@ Estorno não entra na conta: é transação nova, não desfaz a baixa
   quitado com 2 baixas, cancelamento de cada uma até voltar a Em aberto;
   recebimento avulso AV-00005 parcial com ISS, cancelado e excluído. Banco
   sem dado de teste no fim.
+- Navegador, entrega 3b (Chrome do Tiago, 29/09): lançamento avulso de
+  teste (FORNECEDOR TESTE LTDA, Empresa Teste) com parcial de R$ 400 com ISS
+  5% e IRRF 1,5% (líquido R$ 374), popup com "Baixar o restante", restante
+  com "Repetir as alíquotas da AV-00005" e o cartão fora das formas, quitado
+  com R$ 65 retidos; detalhe da avulsa com duas baixas; "Cancelar baixa" do
+  detalhe desfazendo a mais recente; cancelamento pelo popup; exclusão.
+  PP-00083 (TES-1008/26): baixa original cancelada, parcial de R$ 5.000 com
+  ISS 2%, restante, PP paga, as duas canceladas e a baixa original refeita
+  igual (24/09, PIX, Conta Teste, 02 · Custo Operacional). Fatura FC-00004
+  (cartão ZZ Teste) com a parcial desligada, sem gravar. Banco sem dado de
+  teste no fim.
 
 ## 5. Pendências
 

@@ -57,6 +57,38 @@ async function checarGateFinanceiro(
   return { ok: true, session, supabase };
 }
 
+
+/**
+ * O que as baixas já quitaram da conta avulsa (decisão 125): cada baixa
+ * pelo valor a dar baixa, líquido + retidos. Com baixa parcial a conta
+ * continua "aprovada", e editar ou excluir precisa saber disso.
+ */
+async function baixadoDaAvulsa(
+  supabase: ReturnType<typeof createClient>,
+  id: string,
+): Promise<number> {
+  const { data } = await supabase
+    .from("lancamentos_financeiros")
+    .select("valor, retencoes:baixas_retencoes(valor)")
+    .eq("conta_avulsa_id", id)
+    .eq("origem", "avulsa_baixa");
+  const centavos = ((data ?? []) as Array<{
+    valor: number | string;
+    retencoes: Array<{ valor: number | string }> | null;
+  }>).reduce(
+    (acc, l) =>
+      acc +
+      Math.round(Number(l.valor) * 100) +
+      (l.retencoes ?? []).reduce((r, x) => r + Math.round(Number(x.valor) * 100), 0),
+    0,
+  );
+  return centavos / 100;
+}
+
+function reais(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 export async function criarContaAvulsa(input: unknown): Promise<Result> {
   const parsed = criarContaAvulsaSchema.safeParse(input);
   if (!parsed.success) {
@@ -252,6 +284,16 @@ export async function editarContaAvulsa(
   }
 
   const d = parsed.data;
+
+  // Com baixa parcial (decisão 125), o valor não desce ao que já foi pago:
+  // igual, a conta ficaria quitada sem virar baixada; abaixo, pago a mais.
+  const baixado = await baixadoDaAvulsa(supabase, id);
+  if (baixado > 0 && Number(d.valor) <= baixado + 0.004) {
+    return {
+      ok: false,
+      message: `O valor precisa ficar acima do que já foi baixado (${reais(baixado)}). Para reduzir mais, cancele as baixas antes.`,
+    };
+  }
 
   // Valida subtipo pertence ao tipo
   const { data: subtipo } = await supabase
@@ -454,6 +496,14 @@ export async function excluirContaAvulsa(
         "Baixa registrada. Para excluir, cancele a baixa antes.",
     };
   }
+  // Baixa parcial (decisão 125): a conta segue "aprovada", mas tem
+  // lançamento. Barra ANTES de apagar os anexos do Storage.
+  if ((await baixadoDaAvulsa(supabase, id)) > 0) {
+    return {
+      ok: false,
+      message: "Esta conta já tem baixa parcial. Para excluir, cancele as baixas antes.",
+    };
+  }
 
   // Carrega anexos pra deletar do storage antes do row cascade
   const { data: anexos } = await supabase
@@ -623,10 +673,12 @@ export async function cancelarBaixaAvulsa(input: unknown): Promise<Result> {
     .maybeSingle();
 
   if (!atual) return { ok: false, message: "Conta avulsa não encontrada." };
-  if (atual.status !== "baixada") {
+  // Paga, ou parcial (decisão 125): a parcial segue "aprovada", mas tem
+  // baixa. O banco cancela a mais recente.
+  if (atual.status !== "baixada" && (await baixadoDaAvulsa(supabase, atual.id)) <= 0) {
     return {
       ok: false,
-      message: "Só conta paga pode ter a baixa cancelada.",
+      message: "Esta conta não tem baixa para cancelar.",
     };
   }
 

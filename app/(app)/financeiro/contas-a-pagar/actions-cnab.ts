@@ -413,6 +413,35 @@ export async function gerarRemessaCnab(
 
 type Result<T> = { ok: true; data: T } | { ok: false; message: string };
 
+/**
+ * O que falta pagar do documento (decisão 125, P5): a remessa leva só o
+ * restante de quem já tem baixa parcial — o valor cheio pagaria de novo o
+ * que já saiu. Cada baixa conta pelo valor a dar baixa (líquido + retidos).
+ */
+async function faltaDoDocumento(
+  supabase: ReturnType<typeof createClient>,
+  campo: "pedido_compra_parcela_id" | "conta_avulsa_id",
+  id: string,
+  valor: number,
+): Promise<number> {
+  const { data } = await supabase
+    .from("lancamentos_financeiros")
+    .select("valor, retencoes:baixas_retencoes(valor)")
+    .eq(campo, id)
+    .eq("origem", campo === "conta_avulsa_id" ? "avulsa_baixa" : "pp_baixa");
+  const baixadoCentavos = ((data ?? []) as Array<{
+    valor: number | string;
+    retencoes: Array<{ valor: number | string }> | null;
+  }>).reduce(
+    (acc, l) =>
+      acc +
+      Math.round(Number(l.valor) * 100) +
+      (l.retencoes ?? []).reduce((r, x) => r + Math.round(Number(x.valor) * 100), 0),
+    0,
+  );
+  return (Math.round(valor * 100) - baixadoCentavos) / 100;
+}
+
 async function resolverOrigem(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
@@ -440,12 +469,14 @@ async function resolverOrigem(
     }
     const dest = resolverDestinatario(data);
     if (!dest) return { ok: false, message: "Sem destinatário identificável." };
+    const falta = await faltaDoDocumento(supabase, "conta_avulsa_id", data.id, Number(data.valor));
+    if (falta <= 0.004) return { ok: false, message: "Título já baixado." };
     return {
       ok: true,
       data: {
         origemTipo: item.origemTipo,
         origemId: data.id,
-        valor: Number(data.valor),
+        valor: falta,
         descricao: data.descricao,
         destinatarioId: dest.id,
         destinatarioTipo: dest.tipo,
@@ -480,12 +511,19 @@ async function resolverOrigem(
     if (!pp.fornecedor_id) {
       return { ok: false, message: "PP sem fornecedor." };
     }
+    const falta = await faltaDoDocumento(
+      supabase,
+      "pedido_compra_parcela_id",
+      data.id,
+      Number(data.valor),
+    );
+    if (falta <= 0.004) return { ok: false, message: "Parcela já baixada." };
     return {
       ok: true,
       data: {
         origemTipo: "pp",
         origemId: data.id,
-        valor: Number(data.valor),
+        valor: falta,
         descricao: `PP ${pp.servico.slice(0, 100)}`,
         destinatarioId: pp.fornecedor_id,
         destinatarioTipo: "fornecedor",

@@ -15,6 +15,9 @@ interface Props {
   contaId: string;
   descricao: string;
   recorrenteId: string | null;
+  /** Decisão 125: com mais de uma baixa, cancela a MAIS RECENTE, e a
+   *  conta continua parcial. */
+  variasBaixas?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -23,6 +26,7 @@ export function CancelarBaixaAvulsaModal({
   contaId,
   descricao,
   recorrenteId,
+  variasBaixas = false,
   open,
   onOpenChange,
 }: Props) {
@@ -71,11 +75,25 @@ export function CancelarBaixaAvulsaModal({
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          A conta{" "}
-          <span className="font-medium text-foreground">&quot;{descricao}&quot;</span>{" "}
-          volta ao status <span className="font-medium text-foreground">Aprovada</span>, e o
-          lançamento da baixa sai do extrato, sem linha nova. Se a baixa teve estornos,
-          eles saem junto. Fica no log de auditoria quem cancelou, quando e por quê.
+          {variasBaixas ? (
+            <>
+              A baixa mais recente da conta{" "}
+              <span className="font-medium text-foreground">&quot;{descricao}&quot;</span>{" "}
+              é desfeita: o lançamento dela sai do extrato, sem linha nova, e a conta
+              continua <span className="font-medium text-foreground">Parcial</span>. Se a
+              baixa teve impostos retidos ou estornos, eles saem junto. Para escolher qual
+              baixa cancelar, use o olho da linha em Títulos a Pagar.
+            </>
+          ) : (
+            <>
+              A conta{" "}
+              <span className="font-medium text-foreground">&quot;{descricao}&quot;</span>{" "}
+              volta ao status <span className="font-medium text-foreground">Aprovada</span>, e o
+              lançamento da baixa sai do extrato, sem linha nova. Se a baixa teve impostos
+              retidos ou estornos, eles saem junto.
+            </>
+          )}{" "}
+          Fica no log de auditoria quem cancelou, quando e por quê.
         </p>
 
         {recorrenteId && (

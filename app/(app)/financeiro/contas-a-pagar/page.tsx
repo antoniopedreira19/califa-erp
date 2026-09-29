@@ -26,6 +26,12 @@ import {
   SELECT_ESTORNO_DE_BAIXA,
   agruparEstornosPorBaixa,
 } from "@/lib/data/estornos-de-baixa";
+import {
+  SELECT_BAIXA_DO_DOCUMENTO,
+  agruparBaixasPorDocumento,
+  mapearUltimasRetencoes,
+  totalBaixado,
+} from "@/lib/data/baixas-do-documento";
 import { CartaoTab, type CartaoDaCapa, type FaturaTela } from "./cartao-tab";
 import {
   carregarExtratoDaFatura,
@@ -126,6 +132,8 @@ export default async function PedidosCompraFinanceiroPage({
     faturasDoCartaoSelRes,
     cnabAPagarRes,
     cnabColaboradoresRes,
+    remessasItensRes,
+    ultimasRetencoesRes,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -218,7 +226,7 @@ export default async function PedidosCompraFinanceiroPage({
           plano_conta_tipo_id, plano_conta_subtipo_id,
           forma_pagamento, cartao_credito_id, fatura_cartao_id,
           estorno_de_avulsa_id, parcela_numero, parcela_total, parcela_de_avulsa_id,
-          fornecedor:fornecedores(nome, razao_social)
+          fornecedor_id, fornecedor:fornecedores(nome, razao_social)
         `)
         .eq("tenant_id", session.activeTenant.id)
         // Recebimento avulso e rendimento também são contas avulsas, mas
@@ -235,22 +243,21 @@ export default async function PedidosCompraFinanceiroPage({
       if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q;
     })(),
-    // Baixas já realizadas — só o que a linha paga exibe no subtítulo
-    // ("Pago em X · conta · centro de custo"). Sem embed pesado: três
-    // nomes e nada mais.
+    // As baixas registradas (decisão 125: parcela de PP e avulsa podem ter
+    // várias), com conta, centro de custo e impostos retidos — o popup do
+    // olho e o "falta R$ X" da linha. Da mais antiga para a mais nova: a
+    // última de cada documento é a que a linha paga mostra.
     supabase
       .from("lancamentos_financeiros")
       .select(`
-        id, conta_bancaria_id,
+        ${SELECT_BAIXA_DO_DOCUMENTO},
         pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id,
-        pp_verba_devolucao_id, data_movimento,
-        forma_pagamento, cartao_credito_id,
-        conta:contas_bancarias(nome, banco),
-        tipo:plano_contas_tipos(codigo, nome),
-        subtipo:plano_contas_subtipos(nome)
+        pp_verba_devolucao_id, forma_pagamento, cartao_credito_id
       `)
       .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa", "pp_devolucao_verba"]),
+      .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa", "pp_devolucao_verba"])
+      .order("data_movimento", { ascending: true })
+      .order("created_at", { ascending: true }),
     // Estornos das baixas (decisão 120): o popup do olho lista, e a linha
     // mostra "estornado R$ X".
     supabase
@@ -421,11 +428,26 @@ export default async function PedidosCompraFinanceiroPage({
       .select("id, nome, banco_codigo, agencia, conta, pix_chave")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
+    // O que já foi para uma remessa CNAB: só aceita a baixa do que falta,
+    // sem retenção (interino da D15, decisão 125). Tabela pequena.
+    supabase
+      .from("cnab_remessas_itens")
+      .select("origem_id")
+      .eq("tenant_id", session.activeTenant.id),
+    // As alíquotas da última retenção de cada fornecedor, para o "Repetir
+    // as alíquotas" da baixa (decisão 125, D6 2a).
+    supabase
+      .from("vw_retencao_mais_recente")
+      .select("natureza, parte_id, referencia, data_movimento, aliquotas")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("natureza", "saida"),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
   if (avulsasRes.error) console.error("[financeiro.avulsas.list]", avulsasRes.error.message);
   if (baixasRes.error) console.error("[financeiro.baixas.list]", baixasRes.error.message);
+  if (remessasItensRes.error) console.error("[financeiro.remessas_itens]", remessasItensRes.error.message);
+  if (ultimasRetencoesRes.error) console.error("[financeiro.ultimas_retencoes]", ultimasRetencoesRes.error.message);
   if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
@@ -661,6 +683,31 @@ export default async function PedidosCompraFinanceiroPage({
   const baixaPorDevolucao = new Map<string, BaixaInfo>();
 
   const estornosPorBaixa = agruparEstornosPorBaixa(estornosRes.data);
+  // Todas as baixas de cada documento (decisão 125).
+  const baixasDaParcela = agruparBaixasPorDocumento(
+    baixasRes.data,
+    "pedido_compra_parcela_id",
+    estornosPorBaixa,
+  );
+  const baixasDaAvulsa = agruparBaixasPorDocumento(
+    baixasRes.data,
+    "conta_avulsa_id",
+    estornosPorBaixa,
+  );
+  const baixasDoDesembolso = agruparBaixasPorDocumento(
+    baixasRes.data,
+    "desembolso_parcela_id",
+    estornosPorBaixa,
+  );
+  const baixasDaDevolucao = agruparBaixasPorDocumento(
+    baixasRes.data,
+    "pp_verba_devolucao_id",
+    estornosPorBaixa,
+  );
+  const emRemessa = new Set(
+    ((remessasItensRes.data ?? []) as Array<{ origem_id: string }>).map((i) => i.origem_id),
+  );
+  const ultimasRetencoes = mapearUltimasRetencoes(ultimasRetencoesRes.data);
 
   for (const l of (baixasRes.data ?? []) as unknown as Array<{
     id: string;
@@ -748,6 +795,11 @@ export default async function PedidosCompraFinanceiroPage({
         estornos_da_baixa: baixa
           ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
           : [],
+        baixas: baixasDaParcela.get(par.id) ?? [],
+        baixado: totalBaixado(baixasDaParcela.get(par.id) ?? []),
+        em_remessa: emRemessa.has(par.id),
+        eh_verba: pp.verba_producao,
+        parte_id: pp.fornecedor_id || null,
         // A parcela roteada para o cartão carrega a forma da PP mesmo
         // antes de paga — é o que a faz aparecer na aba Cartão em vez de
         // Títulos a Pagar (29/08/2026). Fora do cartão continua como
@@ -804,6 +856,7 @@ export default async function PedidosCompraFinanceiroPage({
     parcela_numero: number | null;
     parcela_total: number | null;
     parcela_de_avulsa_id: string | null;
+    fornecedor_id: string | null;
     fornecedor: { nome: string | null; razao_social: string | null } | null;
   }>) {
     const baixa = baixaPorAvulsa.get(a.id);
@@ -846,6 +899,11 @@ export default async function PedidosCompraFinanceiroPage({
       estornos_da_baixa: baixa
         ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
         : [],
+      baixas: baixasDaAvulsa.get(a.id) ?? [],
+      baixado: totalBaixado(baixasDaAvulsa.get(a.id) ?? []),
+      em_remessa: emRemessa.has(a.id),
+      eh_verba: false,
+      parte_id: a.fornecedor_id ?? null,
       // Se paga, prefere a forma registrada na baixa (realizado); senão,
       // usa a forma planejada da origem (avulsa/recorrência).
       // A avulsa "no cartão" só é da aba Cartão quando ESTÁ numa fatura —
@@ -974,6 +1032,11 @@ export default async function PedidosCompraFinanceiroPage({
         estornos_da_baixa: baixa
           ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
           : [],
+        baixas: baixasDoDesembolso.get(par.id) ?? [],
+        baixado: totalBaixado(baixasDoDesembolso.get(par.id) ?? []),
+        em_remessa: emRemessa.has(par.id),
+        eh_verba: false,
+        parte_id: null,
         // Se paga, usa a forma registrada na baixa; senão, null (planejado
         // não existe para desembolso-parcela — Task 7 vai remover a coluna
         // do desembolso-pai).
@@ -1060,6 +1123,11 @@ export default async function PedidosCompraFinanceiroPage({
       estornos_da_baixa: baixa
         ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
         : [],
+      baixas: baixasDaDevolucao.get(dev.id) ?? [],
+      baixado: totalBaixado(baixasDaDevolucao.get(dev.id) ?? []),
+      em_remessa: false,
+      eh_verba: false,
+      parte_id: null,
       forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
       cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
       forma_prevista: null,
@@ -1272,6 +1340,11 @@ export default async function PedidosCompraFinanceiroPage({
       baixa_lancamento_id: null,
       baixa_conta_id: null,
       estornos_da_baixa: [],
+      baixas: [],
+      baixado: f.status === "paga" ? Number(f.valor_cobrado ?? 0) : 0,
+      em_remessa: false,
+      eh_verba: false,
+      parte_id: null,
       // A fatura NÃO é um título "no cartão": ela é o que se paga PELO
       // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
       forma_pagamento: null,
@@ -1704,6 +1777,7 @@ export default async function PedidosCompraFinanceiroPage({
               clientes={clientesList}
               regionais={regionaisList}
               cartoes={cartoesList}
+              ultimasRetencoes={ultimasRetencoes}
               exportarRemessaBotao={
                 <ExportarRemessaCnabDialog
                   contasSantander={contasSantander}

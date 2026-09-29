@@ -26,6 +26,12 @@ import {
 import { HistoricoMudancas } from "./historico-mudancas";
 import { RateioCard } from "../../rateio-card";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import {
+  SELECT_BAIXA_DO_DOCUMENTO,
+  agruparBaixasPorDocumento,
+  totalBaixado,
+  totalRetido,
+} from "@/lib/data/baixas-do-documento";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +88,7 @@ export default async function AvulsaDetalhesPage({
     regionaisRes,
     rateioRes,
     cartoesRes,
+    baixasRes,
   ] = await Promise.all([
     supabase
       .from("contas_avulsas_anexos")
@@ -154,6 +161,13 @@ export default async function AvulsaDetalhesPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
+    // As baixas da conta (decisão 125: pode haver várias, com impostos
+    // retidos). Da mais antiga para a mais nova.
+    supabase
+      .from("lancamentos_financeiros")
+      .select(`conta_avulsa_id, ${SELECT_BAIXA_DO_DOCUMENTO}`)
+      .eq("conta_avulsa_id", params.id)
+      .eq("origem", "avulsa_baixa"),
   ]);
 
   // conta vem do Supabase com embeds — usar cast amplo para acessar joins
@@ -253,6 +267,14 @@ export default async function AvulsaDetalhesPage({
     }),
   ) as CartaoOption[];
 
+  const baixas =
+    agruparBaixasPorDocumento(baixasRes.data, "conta_avulsa_id", new Map()).get(c.id) ?? [];
+  const baixado = totalBaixado(baixas);
+  const falta = Math.max(0, Math.round((Number(c.valor) - baixado) * 100) / 100);
+  // Com baixa e ainda faltando: segue "aprovada", mas não se edita nem se
+  // exclui — o que sobra é baixar o restante ou cancelar as baixas.
+  const parcial = c.status === "aprovada" && baixas.length > 0 && falta > 0.004;
+
   const contaParaDrawer: ContaAvulsa = {
     id: c.id,
     tenant_id: c.tenant_id,
@@ -307,19 +329,21 @@ export default async function AvulsaDetalhesPage({
               <h1 className="text-2xl font-bold">{c.descricao}</h1>
               <span
                 className={
-                  c.status === "aprovada"
-                    ? "inline-flex items-center rounded-full border border-[#fde68a] bg-[#fffbeb] px-2 py-0.5 text-[10px] font-semibold uppercase text-[#92400e]"
-                    : "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700"
+                  parcial
+                    ? "inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-sky-700"
+                    : c.status === "aprovada"
+                      ? "inline-flex items-center rounded-full border border-[#fde68a] bg-[#fffbeb] px-2 py-0.5 text-[10px] font-semibold uppercase text-[#92400e]"
+                      : "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-700"
                 }
               >
-                {contaAvulsaStatusLabel(c.status)}
+                {parcial ? `Parcial · falta ${formatCurrency(falta, "BRL")}` : contaAvulsaStatusLabel(c.status)}
               </span>
             </div>
           </div>
 
           {/* Botões de ação dependem do status */}
           <div className="flex items-center gap-2">
-            {c.status === "aprovada" && (
+            {c.status === "aprovada" && !parcial && (
               <>
                 <EditarAvulsaButton
                   conta={contaParaDrawer}
@@ -346,11 +370,22 @@ export default async function AvulsaDetalhesPage({
                 />
               </>
             )}
-            {c.status === "baixada" && (
+            {parcial && (
+              // O "Baixar" daqui baixa o que falta, por inteiro; a baixa
+              // parcial e a retenção moram em Títulos a Pagar.
+              <BaixarAvulsaModalClient
+                contaId={c.id}
+                descricao={c.descricao}
+                valor={falta}
+                contas={contasBancarias}
+              />
+            )}
+            {(c.status === "baixada" || parcial) && (
               <CancelarBaixaAvulsaModalClient
                 contaId={c.id}
                 descricao={c.descricao}
                 recorrenteId={c.recorrente_id ?? null}
+                variasBaixas={baixas.length > 1}
               />
             )}
           </div>
@@ -403,26 +438,52 @@ export default async function AvulsaDetalhesPage({
         regionaisPorId={regionaisPorId}
       />
 
-      {/* Card Baixa — só se baixada */}
-      {c.status === "baixada" && (
+      {/* Card das baixas — uma ou mais (decisão 125) */}
+      {baixas.length > 0 && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase text-emerald-700">
-            Baixa registrada
+            {baixas.length > 1 ? `Baixas registradas · ${baixas.length}` : "Baixa registrada"}
           </h2>
           <div className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-sm">
-            <span className="text-muted-foreground">Pago em</span>
-            <span>{formatDate(c.pago_em)}</span>
-
-            <span className="text-muted-foreground">Por</span>
-            <span>{c.pago_por_profile?.nome ?? "—"}</span>
-
-            <span className="text-muted-foreground">Conta bancária</span>
-            <span>
-              {c.conta_bancaria
-                ? `${c.conta_bancaria.nome} (${c.conta_bancaria.banco})`
-                : "—"}
+            <span className="text-muted-foreground">Situação</span>
+            <span className={parcial ? "font-semibold text-sky-700" : "font-semibold text-emerald-700"}>
+              {parcial
+                ? `Parcial · pago ${formatCurrency(baixado, "BRL")} · falta ${formatCurrency(falta, "BRL")}`
+                : "Pago"}
             </span>
+            {totalRetido(baixas) > 0 && (
+              <>
+                <span className="text-muted-foreground">Impostos retidos</span>
+                <span>{formatCurrency(totalRetido(baixas), "BRL")} · a recolher</span>
+              </>
+            )}
+            {c.status === "baixada" && (
+              <>
+                <span className="text-muted-foreground">Quitada por</span>
+                <span>{c.pago_por_profile?.nome ?? "—"}</span>
+              </>
+            )}
           </div>
+          <ul className="mt-3 space-y-1.5 text-sm">
+            {baixas.map((b, i) => (
+              <li key={b.lancamentoId ?? i} className="rounded-lg border border-emerald-200 bg-white px-3 py-2">
+                <span className="font-semibold">
+                  {baixas.length > 1 ? `Baixa ${i + 1} · ` : ""}
+                  Pago em {formatDate(b.data)}
+                </span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  · <span className="font-mono text-foreground">{formatCurrency(b.movimentado, "BRL")}</span> saiu
+                  de {b.contaNome ?? "—"}
+                </span>
+                {b.retencoes.length > 0 && (
+                  <span className="block text-xs text-muted-foreground">
+                    Retidos: {b.retencoes.map((r) => `${r.imposto} ${formatCurrency(r.valor, "BRL")}`).join(" · ")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
