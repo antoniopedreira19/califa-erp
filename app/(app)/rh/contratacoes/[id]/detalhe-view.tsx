@@ -536,7 +536,12 @@ function AcoesContextuais({
               Gerar contrato
             </button>
           ) : (
-            <UploadContratoButton id={c.id} pending={pending} onAcao={onAcao} />
+            <UploadContratoButton
+              id={c.id}
+              tenantId={c.tenant_id}
+              pending={pending}
+              onAcao={onAcao}
+            />
           )}
           <DesistirButton status={c.status} id={c.id} pending={pending} onAcao={onAcao} />
         </div>
@@ -567,7 +572,12 @@ function AcoesContextuais({
               Baixar contrato gerado
             </a>
           )}
-          <UploadContratoButton id={c.id} pending={pending} onAcao={onAcao} />
+          <UploadContratoButton
+              id={c.id}
+              tenantId={c.tenant_id}
+              pending={pending}
+              onAcao={onAcao}
+            />
           <DesistirButton status={c.status} id={c.id} pending={pending} onAcao={onAcao} />
         </div>
       </div>
@@ -761,10 +771,12 @@ function MarcarRecusadaButton({
 
 function UploadContratoButton({
   id,
+  tenantId,
   pending,
   onAcao,
 }: {
   id: string;
+  tenantId: string;
   pending: boolean;
   onAcao: (fn: () => Promise<{ ok: boolean; message?: string }>) => void;
 }) {
@@ -816,8 +828,6 @@ function UploadContratoButton({
             disabled={pending || !arquivo}
             onClick={() => {
               if (!arquivo) return;
-              // Validação client-side antes de pedir a signed URL, pra
-              // não gastar roundtrip com arquivo inválido.
               if (arquivo.type !== "application/pdf") {
                 onAcao(async () => ({
                   ok: false,
@@ -832,39 +842,38 @@ function UploadContratoButton({
                 }));
                 return;
               }
+              // Fecha o dialog na hora — feedback otimista. Se algo falhar,
+              // o erro aparece no card e o RH reabre pra tentar de novo.
+              setOpen(false);
+              const arquivoRef = arquivo;
+              const path = `${tenantId}/${id}/contrato-assinado.pdf`;
               onAcao(async () => {
-                // 1) Pede signed URL ao nosso backend (valida sessão/status).
-                const resp = await fetch(
-                  `/api/rh/contratacoes/${id}/upload-url`,
-                  { method: "POST" },
-                );
-                if (!resp.ok) {
-                  return {
-                    ok: false,
-                    message: "Não foi possível iniciar o upload.",
-                  };
-                }
-                const { path, token } = (await resp.json()) as {
-                  path: string;
-                  token: string;
-                };
-                // 2) Sobe o PDF direto pro Supabase — não passa pela Vercel.
+                // Upload direto do browser pro Supabase — RLS do bucket
+                // `contratacoes-anexos` só deixa RH/admin gravar em
+                // `{tenant_id}/...`. Mesmo padrão dos anexos de Pedido
+                // de Compra, Desembolso, Conta Avulsa, etc.
+                console.time("upload_storage");
                 const sb = createBrowserSupabase();
                 const { error: upErr } = await sb.storage
                   .from("contratacoes-anexos")
-                  .uploadToSignedUrl(path, token, arquivo, {
+                  .upload(path, arquivoRef, {
                     contentType: "application/pdf",
                     upsert: true,
                   });
+                console.timeEnd("upload_storage");
                 if (upErr) {
                   return {
                     ok: false,
                     message: "Falha no upload do PDF: " + upErr.message,
                   };
                 }
-                // 3) Finaliza: server action leve só pra atualizar o DB.
-                const r = await finalizarAnexoContrato(id, path, arquivo.size);
-                if (r.ok) setOpen(false);
+                console.time("finalize_action");
+                const r = await finalizarAnexoContrato(
+                  id,
+                  path,
+                  arquivoRef.size,
+                );
+                console.timeEnd("finalize_action");
                 return { ok: r.ok, message: r.ok ? undefined : r.message };
               });
             }}
