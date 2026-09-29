@@ -337,27 +337,8 @@ export async function anexarContratoAssinado(
   }
 
   const supabase = createClient();
-  const { data: contratacao, error: fetchError } = await supabase
-    .from("contratacoes")
-    .select("id, status")
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-  if (fetchError || !contratacao) {
-    return { ok: false, message: "Contratação não encontrada." };
-  }
-  if (
-    contratacao.status !== "dados_completos" &&
-    contratacao.status !== "contrato_gerado"
-  ) {
-    return {
-      ok: false,
-      message:
-        "O upload do contrato assinado só é aceito depois que os dados estão completos.",
-    };
-  }
-
   const path = `${session.activeTenant.id}/${id}/contrato-assinado.pdf`;
+
   // Passa o File direto pro cliente Supabase, sem materializar o PDF
   // inteiro num Uint8Array antes. O arrayBuffer() dobrava o pico de
   // memória (File + cópia) e derrubou a função serverless com SIGTERM
@@ -374,7 +355,10 @@ export async function anexarContratoAssinado(
     return { ok: false, message: "Falha ao subir o PDF assinado." };
   }
 
-  const { error: updErr } = await supabase
+  // UPDATE...RETURNING guarda o status esperado no WHERE — elimina o
+  // SELECT prévio de validação (1 roundtrip a menos). Se .data vier
+  // vazia, a contratação não existe ou está fora dos status válidos.
+  const { data: atualizada, error: updErr } = await supabase
     .from("contratacoes")
     .update({
       status: "contrato_assinado",
@@ -382,9 +366,19 @@ export async function anexarContratoAssinado(
       contrato_assinado_anexado_em: new Date().toISOString(),
     })
     .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id);
+    .eq("tenant_id", session.activeTenant.id)
+    .in("status", ["dados_completos", "contrato_gerado"])
+    .select("id")
+    .maybeSingle();
   if (updErr) {
     return { ok: false, message: mapDbError(updErr.message) };
+  }
+  if (!atualizada) {
+    return {
+      ok: false,
+      message:
+        "O upload do contrato assinado só é aceito depois que os dados estão completos.",
+    };
   }
 
   await logAuditEvent({
