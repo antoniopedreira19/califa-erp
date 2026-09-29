@@ -71,6 +71,11 @@ export const colaboradorSchema = z
       .trim()
       .optional()
       .transform((v) => (v && v.length > 0 ? v : null)),
+    lider_id: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
     data_admissao: z
       .string()
       .trim()

@@ -17,14 +17,16 @@ import { SeloPendencia } from "./selo-pendencia";
 type Props = {
   colaborador: Colaborador & {
     nivel: Pick<Nivel, "id" | "codigo" | "descricao"> | null;
+    lider: { id: string; nome: string } | null;
   };
   empresas: Pick<Empresa, "id" | "nome_fantasia">[];
   regionais: { id: string; nome: string; empresa_id: string }[];
   niveis: Pick<Nivel, "id" | "codigo" | "descricao">[];
+  lideres: { id: string; nome: string }[];
   pendencia?: NivelPendencia;
 };
 
-export function CardDados({ colaborador, niveis, pendencia }: Props) {
+export function CardDados({ colaborador, niveis, lideres, pendencia }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [confirmando, setConfirmando] = React.useState<
@@ -61,7 +63,11 @@ export function CardDados({ colaborador, niveis, pendencia }: Props) {
           {pendencia && <SeloPendencia nivel={pendencia} />}
         </div>
         <div className="flex items-center gap-1">
-          <EditarDadosDrawer colaborador={colaborador} niveis={niveis} />
+          <EditarDadosDrawer
+            colaborador={colaborador}
+            niveis={niveis}
+            lideres={lideres}
+          />
           <button
             type="button"
             onClick={() =>
@@ -104,6 +110,10 @@ export function CardDados({ colaborador, niveis, pendencia }: Props) {
         )}
         <Info label="E-mail" value={colaborador.email ?? "—"} />
         <Info label="Telefone" value={formatarTelefone(colaborador.telefone)} />
+        <Info
+          label="Líder direto"
+          value={colaborador.lider?.nome ?? "—"}
+        />
         <Info label="Admissão" value={formatarData(colaborador.data_admissao)} />
         <Info
           label="Encerramento"

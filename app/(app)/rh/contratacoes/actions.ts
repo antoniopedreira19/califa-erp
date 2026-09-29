@@ -75,6 +75,7 @@ export async function criarContratacao(
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
     area: formData.get("area")?.toString() ?? "",
     pj_natureza: formData.get("pj_natureza")?.toString() || undefined,
+    lider_id: formData.get("lider_id")?.toString() ?? "",
   });
   if (!parsed.success) {
     return {
@@ -101,6 +102,7 @@ export async function criarContratacao(
       nivel_id: parsed.data.nivel_id,
       area: parsed.data.area,
       pj_natureza: parsed.data.pj_natureza,
+      lider_id: parsed.data.lider_id,
       status: "rascunho",
       token: gerarToken(),
       token_expira_em: prazoLink(),
@@ -447,6 +449,7 @@ export async function efetivar(id: string): Promise<ActionResult> {
       rg: c.rg,
       funcao: c.cargo,
       nivel_id: c.nivel_id,
+      lider_id: c.lider_id,
       data_nascimento: c.data_nascimento,
       area: c.area,
       data_admissao: c.data_admissao,
