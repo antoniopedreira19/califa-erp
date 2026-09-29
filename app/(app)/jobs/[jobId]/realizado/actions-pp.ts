@@ -6,9 +6,15 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
+  COLUNAS_DE_PAGAMENTO,
+  aplicarPagamentoForaDoCadastro,
+  camposDoPagamentoForaDoCadastro,
+  resumoDoCadastroDePagamento,
   tirarFoto,
   type DadosDePagamento,
+  type PagamentoForaDoCadastro,
 } from "@/lib/data/foto-pagamento-da-pp";
+import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { DOCUMENTO_TIPOS, PP_URGENTE_JUSTIFICATIVA_MIN } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
@@ -76,6 +82,53 @@ type Ok<T = object> = { ok: true } & T;
 type Err = { ok: false; message: string };
 type Result<T = object> = Ok<T> | Err;
 
+/**
+ * O pagamento fora do cadastro que a PP vai gravar (decisão 127). Verba
+ * não tem: paga o responsável interno.
+ */
+function foraDoCadastroDe(d: {
+  verba_producao: boolean;
+  pagamento_fora_do_cadastro?: PagamentoForaDoCadastro | null;
+}): PagamentoForaDoCadastro | null {
+  return d.verba_producao ? null : (d.pagamento_fora_do_cadastro ?? null);
+}
+
+/**
+ * O fornecedor que vai para o PDF: o cadastro, com só o meio escolhido
+ * trocado. Regra do Tiago (29/09/2026): "o documento em si deverá
+ * permanecer igual, apenas com a chave escolhida" — nada de faixa, aviso
+ * ou motivo no documento, que o fornecedor assina.
+ */
+function fornecedorDoDocumento(
+  fornecedor: Record<string, unknown> | null,
+  fora: PagamentoForaDoCadastro | null,
+): Record<string, unknown> | null {
+  if (!fornecedor) return null;
+  if (!fora) return fornecedor;
+  return {
+    ...fornecedor,
+    ...aplicarPagamentoForaDoCadastro(fornecedor as unknown as DadosDePagamento, fora),
+  };
+}
+
+/** O que a auditoria guarda do pagamento fora do cadastro — o dado inteiro:
+ *  é o rastro de para onde o dinheiro foi mandado, e por quê. */
+function auditoriaDoForaDoCadastro(fora: PagamentoForaDoCadastro | null) {
+  if (!fora) return null;
+  return fora.meio === "pix"
+    ? { meio: fora.meio, motivo: fora.motivo, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave }
+    : {
+        meio: fora.meio,
+        motivo: fora.motivo,
+        banco_codigo: fora.banco_codigo,
+        agencia: fora.agencia,
+        agencia_dv: fora.agencia_dv,
+        conta: fora.conta,
+        conta_dv: fora.conta_dv,
+        tipo_conta: fora.tipo_conta,
+      };
+}
+
 const dataSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD");
@@ -117,11 +170,16 @@ const dadosBaseSchema = z.object({
       verba_producao: z.literal(false),
       fornecedor_id: z.string().uuid(),
       responsavel_verba_id: z.null().optional(),
+      // Decisão 127: outro PIX ou outra conta só nesta PP. Null = paga
+      // pelo cadastro, como toda PP até 29/09/2026.
+      pagamento_fora_do_cadastro: pagamentoForaDoCadastroSchema.nullable().optional(),
     }),
     z.object({
       verba_producao: z.literal(true),
       fornecedor_id: z.null().optional(),
       responsavel_verba_id: z.string().uuid(),
+      // Verba paga o responsável interno: não há cadastro a contornar.
+      pagamento_fora_do_cadastro: z.null().optional(),
     }),
   ])
 );
@@ -147,11 +205,16 @@ const dadosReenvioSchema = dadosCamposBase.and(
       verba_producao: z.literal(false),
       fornecedor_id: z.string().uuid(),
       responsavel_verba_id: z.null().optional(),
+      // Decisão 127: outro PIX ou outra conta só nesta PP. Null = paga
+      // pelo cadastro, como toda PP até 29/09/2026.
+      pagamento_fora_do_cadastro: pagamentoForaDoCadastroSchema.nullable().optional(),
     }),
     z.object({
       verba_producao: z.literal(true),
       fornecedor_id: z.null().optional(),
       responsavel_verba_id: z.string().uuid(),
+      // Verba paga o responsável interno: não há cadastro a contornar.
+      pagamento_fora_do_cadastro: z.null().optional(),
     }),
   ])
 );
@@ -778,6 +841,34 @@ function pedirConfirmacaoAcimaDoPlanejado(
  * Fase 1 do fluxo: reserva um pp_id UUID e retorna o path prefix para
  * client fazer upload direto dos anexos pro bucket. NAO persiste no DB.
  */
+/**
+ * O cadastro de pagamento do fornecedor numa linha, para o formulário da
+ * PP mostrar o que vale quando nada é trocado (decisão 127). Só o resumo
+ * atravessa para o cliente — não o cadastro inteiro.
+ */
+export async function resumoDoPagamentoDoFornecedor(
+  fornecedorId: string,
+): Promise<Result<{ resumo: string | null }>> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.emitir_pp");
+  if (!gate.ok) return gate;
+  if (!z.string().uuid().safeParse(fornecedorId).success) {
+    return { ok: false, message: "Fornecedor inválido." };
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("fornecedores")
+    .select(COLUNAS_DE_PAGAMENTO)
+    .eq("id", fornecedorId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (error) return { ok: false, message: "Não foi possível ler o cadastro do fornecedor." };
+  return {
+    ok: true,
+    resumo: resumoDoCadastroDePagamento((data as DadosDePagamento | null) ?? null),
+  };
+}
+
 export async function reservarPedidoCompra(
   itemRealizadoId: string,
 ): Promise<Result<{ pp_id: string; upload_prefix: string }>> {
@@ -1059,8 +1150,10 @@ async function finalizarPedidoCompraImpl(
     // financeiro confere na hora de pagar, e foto e documento não podem
     // divergir. Editar a PP re-monta os dois; enviada, nenhum dos dois
     // muda mais, e é isso que "congelar" quer dizer.
-    ...tirarFoto(fornRes.data as DadosDePagamento | null),
+    ...tirarFoto(fornRes.data as DadosDePagamento | null, foraDoCadastroDe(d)),
     dados_pagamento_congelados_em: fornRes.data ? new Date().toISOString() : null,
+    // Decisão 127: a foto acima já traz o meio trocado; estas dizem qual.
+    ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
   });
 
   if (insertErr) {
@@ -1185,7 +1278,7 @@ async function finalizarPedidoCompraImpl(
         verba_producao: d.verba_producao,
       },
       empresa: empRes.data,
-      fornecedor: fornRes.data ?? null,
+      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       responsavelVerbaNome: d.verba_producao
         ? (responsavelRes.data?.nome ?? "")
         : null,
@@ -1317,6 +1410,7 @@ async function finalizarPedidoCompraImpl(
       verba_producao: d.verba_producao,
       fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
       responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
+      pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
     },
@@ -1797,7 +1891,7 @@ export async function reenviarPedidoCompra(
         verba_producao: ehVerba,
       },
       empresa: empRes.data,
-      fornecedor: fornRes.data,
+      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       responsavelVerbaNome: ehVerba
         ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? null)
         : null,
@@ -1847,10 +1941,13 @@ export async function reenviarPedidoCompra(
       motivo_rejeicao: null,
       // Foto nova, porque o PDF foi remontado agora com este cadastro
       // (decisão 067). O reenvio pode inclusive ter TROCADO o fornecedor.
-      ...tirarFoto(fornRes.data as DadosDePagamento | null),
+      ...tirarFoto(fornRes.data as DadosDePagamento | null, foraDoCadastroDe(d)),
       dados_pagamento_congelados_em: fornRes.data
         ? new Date().toISOString()
         : null,
+      // Decisão 127: meio e motivo re-gravados, e a marcação da aprovação
+      // zera — PP corrigida é aprovada de novo, com a chave de agora.
+      ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
     })
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id);
@@ -1952,6 +2049,7 @@ export async function reenviarPedidoCompra(
       verba_producao: ehVerba,
       fornecedor_id: ehVerba ? null : (d.fornecedor_id ?? null),
       responsavel_verba_id: ehVerba ? (d.responsavel_verba_id ?? null) : null,
+      pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
       job_id: job.id,
       anexos_adicionados: anexosParsed.data.length,
       anexos_removidos: paraRemover.length,
@@ -2484,7 +2582,7 @@ async function editarPedidoCompraGeradaImpl(
         verba_producao: d.verba_producao,
       },
       empresa: empRes.data,
-      fornecedor: fornRes.data ?? null,
+      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       responsavelVerbaNome: d.verba_producao
         ? (responsavelRes.data?.nome ?? "")
         : null,
@@ -2529,10 +2627,13 @@ async function editarPedidoCompraGeradaImpl(
       pdf_path: pdfPath,
       // Foto nova junto do PDF novo (decisão 067). Verba de produção não
       // tem fornecedor: a foto zera e o PDF nem monta o bloco bancário.
-      ...tirarFoto(fornRes.data as DadosDePagamento | null),
+      ...tirarFoto(fornRes.data as DadosDePagamento | null, foraDoCadastroDe(d)),
       dados_pagamento_congelados_em: fornRes.data
         ? new Date().toISOString()
         : null,
+      // Decisão 127: meio e motivo re-gravados, e a marcação da aprovação
+      // zera — PP corrigida é aprovada de novo, com a chave de agora.
+      ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
     })
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -2637,6 +2738,7 @@ async function editarPedidoCompraGeradaImpl(
       dias_meses: d.dias_meses,
       parcelas: parcelas.length,
       verba_producao: d.verba_producao,
+      pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
       job_id: job.id,
       planejado_do_item: item.total_planejado,
       acima_do_planejado: passaDoPlanejado(emPPsEmitidas + valor, item.total_planejado),

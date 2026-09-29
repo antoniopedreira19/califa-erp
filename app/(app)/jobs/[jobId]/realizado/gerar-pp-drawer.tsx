@@ -67,6 +67,14 @@ import {
 } from "./prazo-e-urgencia-pp";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
+import {
+  PAGAMENTO_PELO_CADASTRO,
+  PagamentoDaPPField,
+  estadoDoPagamento,
+  pagamentoParaEnvio,
+  problemaDoPagamento,
+  type PagamentoDaPPEstado,
+} from "./pagamento-da-pp-field";
 
 interface Props {
   open: boolean;
@@ -238,6 +246,11 @@ export function GerarPPDrawer({
   // ON → responsável interno obrigatório, fornecedor escondido.
   const [verbaProducao, setVerbaProducao] = React.useState(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
+  // Pagamento fora do cadastro (decisão 127). Trocar de fornecedor volta
+  // para o cadastro: a chave ou a conta digitada era do anterior.
+  const [pagamento, setPagamento] =
+    React.useState<PagamentoDaPPEstado>(PAGAMENTO_PELO_CADASTRO);
+  const [faltaPagamento, setFaltaPagamento] = React.useState(false);
   // Cadastro rápido de fornecedor (04/09/2026, decisão 048). O combo vem
   // do server component, então o fornecedor que acabou de nascer só
   // chegaria nele depois do `router.refresh()`; enquanto isso ele mora
@@ -309,6 +322,7 @@ export function GerarPPDrawer({
     if (!fornecedorPendenteId) return;
     if (fornecedoresVisiveis.some((f) => f.id === fornecedorPendenteId)) {
       setFornecedorId(fornecedorPendenteId);
+      setPagamento(PAGAMENTO_PELO_CADASTRO);
       setFornecedorPendenteId(null);
     }
   }, [fornecedorPendenteId, fornecedoresVisiveis]);
@@ -398,6 +412,7 @@ export function GerarPPDrawer({
     setPpId(null);
     setFornecedorPendenteId(null);
     setFaltaResposta(false);
+    setFaltaPagamento(false);
     // Editar uma PP gerada não pergunta do zero: a resposta que vale é a
     // situação atual do item, e o GP muda se quiser.
     setUltimaPP(ppEditando ? itemConcluido : null);
@@ -414,6 +429,7 @@ export function GerarPPDrawer({
       // da correção de rejeitada, decisão 035 §4).
       setVerbaProducao(ppEditando.verba_producao);
       setFornecedorId(ppEditando.fornecedor_id ?? "");
+      setPagamento(estadoDoPagamento(ppEditando.pagamento_fora_do_cadastro));
       setResponsavelId(ppEditando.responsavel_verba_id ?? "");
       setEmpresaId(ppEditando.empresa_id);
       setPrazoPagamento(ppEditando.prazo_pagamento.slice(0, 10));
@@ -451,6 +467,7 @@ export function GerarPPDrawer({
 
     setVerbaProducao(false);
     setFornecedorId("");
+    setPagamento(PAGAMENTO_PELO_CADASTRO);
     setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
     setPrazoPagamento(defaultPrazoPagamento());
@@ -763,6 +780,14 @@ export function GerarPPDrawer({
       setErro("Escolha um fornecedor.");
       return false;
     }
+    if (!verbaProducao) {
+      const problema = problemaDoPagamento(pagamento);
+      if (problema) {
+        setFaltaPagamento(true);
+        setErro(problema);
+        return false;
+      }
+    }
     if (!empresaId) {
       setErro("Escolha uma empresa emissora.");
       return false;
@@ -868,6 +893,7 @@ export function GerarPPDrawer({
               verba_producao: false as const,
               fornecedor_id: fornecedorId,
               responsavel_verba_id: null,
+              pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
             };
         const anexosParaAction = anexosOk.map((a) => ({
           anexo_id: a.anexo_id,
@@ -1178,7 +1204,11 @@ export function GerarPPDrawer({
                       <Combobox
                         items={itensFornecedor}
                         value={fornecedorId || null}
-                        onChange={(v) => setFornecedorId(v ?? "")}
+                        onChange={(v) => {
+                          setFornecedorId(v ?? "");
+                          setPagamento(PAGAMENTO_PELO_CADASTRO);
+                          setFaltaPagamento(false);
+                        }}
                         placeholder="Escolha o fornecedor"
                         buscaPlaceholder="Escreva o nome ou o documento"
                         limpavel
@@ -1249,6 +1279,17 @@ export function GerarPPDrawer({
                       ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
                       : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
                   </p>
+                  {fornecedorId && (
+                    <div className="mt-3">
+                      <PagamentoDaPPField
+                        fornecedorId={fornecedorId}
+                        valor={pagamento}
+                        onChange={setPagamento}
+                        destacarFalta={faltaPagamento}
+                        disabled={pending}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

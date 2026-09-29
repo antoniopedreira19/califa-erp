@@ -6280,3 +6280,20 @@ estendido a Contas a Receber em 31/08.**
   status, não é usado em tela nenhuma.
 - **Conferido no navegador (29/09/2026)** com um lançamento avulso de teste
   (excluído no fim) e a PP-00083, restaurada igual à original.
+
+## ⚠️ Nota de 2026-09-29 (7) — PP com pagamento fora do cadastro (decisão 127)
+
+- **Dossiê da PP** (`pp-dossie.tsx`): três linhas abaixo do fornecedor —
+  "Fora do cadastro" com o meio, a chave (ou agência e conta) inteira, o
+  motivo que a produção informou.
+- **Aprovar** (`aprovar-pp-dialog.tsx`): uma linha obrigatória, "Aprovar
+  pagamento fora do cadastro: <chave>". `aprovarPPComData` exige a marcação e
+  a grava antes da RPC `aprovar_pp_com_data` (não tocada); a CHECK
+  `pp_fora_do_cadastro_aprovado` barra qualquer outro caminho.
+- **Remessa CNAB:** a PP fora do cadastro é recusada na geração, com o motivo
+  "Pagamento fora do cadastro: pague pelo PDF." (`resolverOrigem` em
+  `actions-cnab.ts`, autorizado pelo Tiago). O resto do módulo segue lendo o
+  cadastro ao vivo.
+- **O PDF** que o financeiro abre é o de sempre, com a chave escolhida no
+  campo da chave.
+- `PPRow.pagamento_fora_do_cadastro` (obrigatório).

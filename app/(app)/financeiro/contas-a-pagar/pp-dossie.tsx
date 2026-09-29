@@ -31,6 +31,7 @@ import {
   situacaoDaVerba,
 } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
+import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { qualJanela } from "@/lib/calculos/janelas-pagamento";
 import type { PPRow } from "./pedidos-compra-list";
 import { useChatPPs } from "./chat/chat-pps-provider";
@@ -155,6 +156,14 @@ export function PPDossie({
                 * O cadastro do fornecedor mudou depois que esta PP tirou a foto dos
                 dados de pagamento.
               </p>
+            )}
+            {/* Decisão 127: a PP paga por outra chave ou conta. Três linhas,
+                e a aprovação exige a marcação — ver `aprovar-pp-dialog`. */}
+            {pp.pagamento_fora_do_cadastro && (
+              <PagamentoForaDoCadastroCartao
+                pagamento={pp.pagamento_fora_do_cadastro}
+                className="mt-1.5"
+              />
             )}
           </Grupo>
 
