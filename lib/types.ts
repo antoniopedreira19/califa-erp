@@ -2641,20 +2641,26 @@ export type OrigemLancamento =
   | "pp_devolucao_verba"
   | "pp_devolucao_verba_estornada"
   | "pp_devolucao_verba_estorno"
-  | "manual";
+  | "manual"
+  // As duas pernas da transferência entre contas (decisão 124): sem
+  // empresa e sem plano de contas, fora do DRE e do fluxo consolidado.
+  | "transferencia_saida"
+  | "transferencia_entrada";
 
 export interface LancamentoFinanceiro {
   id: string;
   tenant_id: string;
-  empresa_id: string;
+  /** Nulo só na perna de transferência entre contas (decisão 124). */
+  empresa_id: string | null;
   regional_id: string;
   conta_bancaria_id: string;
   data_movimento: string; // YYYY-MM-DD
   valor: string; // numeric — Number(...)
   natureza: NaturezaLancamento;
   descricao: string;
-  plano_conta_tipo_id: string;
-  plano_conta_subtipo_id: string;
+  /** Nulos só na perna de transferência entre contas (decisão 124). */
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
   fornecedor_id: string | null;
   cliente_id: string | null;
   job_id: string | null;
@@ -2693,6 +2699,8 @@ export interface LancamentoFinanceiro {
    *  `*_estorno` criadas por `estornar_valor_da_baixa`; o estorno antigo
    *  guardava o motivo na descrição. */
   motivo_estorno: string | null;
+  /** A transferência entre contas de que esta linha é uma perna. */
+  transferencia_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
   created_at: string;
@@ -3014,10 +3022,24 @@ export interface ContaAvulsa {
   parcela_numero: number;
   parcela_total: number;
   parcela_de_avulsa_id: string | null;
+  /**
+   * Título de Títulos a Receber (decisão 124): a mesma tabela guarda o
+   * recebimento avulso e o rendimento de aplicação, sempre natureza
+   * `entrada`. `null` é a conta avulsa do contas a pagar, como sempre.
+   */
+  tipo_entrada: TipoEntradaAvulsa | null;
+  /** Rendimento: a conta de aplicação em que ele entra (a baixa só pode
+   *  ser nela). `null` fora do rendimento. */
+  conta_bancaria_prevista_id: string | null;
+  /** Rendimento: o mês, sempre no dia 1 ("2026-09-01"). Um por conta e
+   *  por mês. `null` fora do rendimento. */
+  competencia: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;
 }
+
+export type TipoEntradaAvulsa = "recebimento_avulso" | "rendimento";
 
 // ---------- Tela 3.2: título a pagar (visão unificada) ----------
 

@@ -6190,3 +6190,35 @@ estendido a Contas a Receber em 31/08.**
   decisão 114, como na produção (decisão 122, §6).
 - `projetos_financeiro.codigo_anterior` e a busca pelo código antigo
   continuam.
+
+## ⚠️ Nota de 2026-09-29 (3) — recebimento avulso, transferência e rendimento em Títulos a Receber (decisão 124)
+
+- **Botão "Recebimento avulso"** em Contas a Receber › Títulos a Receber,
+  com três tipos (`contas-a-receber/recebimento-avulso-dialog.tsx`) e o
+  rodapé "Criar / Criar e dar baixa" do lançamento avulso do pagar.
+- **Recebimento avulso e rendimento** são contas avulsas de natureza
+  entrada (`contas_avulsas.tipo_entrada`), com código AV. Aparecem na mesma
+  lista das notas (coluna Nota fiscal mostra o código AV; a de jobs, a
+  descrição), abrem a baixa geral (`baixa-recebimento-dialog.tsx`, agora
+  com o resumo montado por quem chama) e o olho da decisão 120. Rendimento:
+  só conta Investimento, um por conta e mês, centro de custo fixo, sem
+  estorno. Avulso e rendimento em aberto não ficam "Inadimplente" — isso é
+  só da nota.
+- **Transferência** mora em `transferencias_contas` (código TR) e, feita,
+  vira duas linhas sem empresa e sem plano (opção A). O "Dar baixa" da que
+  nasceu a transferir só pede a data (`transferir-dialog.tsx`); o olho
+  mostra as duas contas e cancela as duas linhas juntas; não tem estorno.
+- **Fora de Títulos a Receber:** Títulos a Pagar e `vw_a_pagar` não trazem
+  mais as avulsas de entrada; a conciliação mostra as linhas de
+  transferência (a consulta do extrato deixou de usar `!inner` no plano);
+  o fluxo de caixa consolidado filtra as duas origens de transferência.
+- **Conferido no navegador (29/09/2026):** AV-00005 (Empresa Teste) criado
+  em aberto, baixado na Conta Teste, estornado em R$ 20,00 e cancelado;
+  TR-00001 (Conta Teste → Teste) criada e feita, conferida no extrato,
+  cancelada, efetivada pelo "Dar baixa" e cancelada de novo; trava de CNPJ
+  diferente; formulário do rendimento sem gravar (as duas contas de
+  aplicação são reais).
+- **Excluir** (aprovado em 29/09): lixeira na calha da linha em aberto que
+  não vem de nota, com confirmação; o baixado cancela a baixa antes.
+  Conferido apagando os dois títulos de teste (AV-00005 e TR-00001) — o
+  banco ficou sem nenhum título nem linha de teste.
