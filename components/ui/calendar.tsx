@@ -24,6 +24,12 @@ function Calendar({
         month: "space-y-3",
         caption: "flex justify-center pt-1 relative items-center",
         caption_label: "text-sm font-semibold text-foreground",
+        caption_dropdowns: "flex gap-2 justify-center",
+        dropdown:
+          "rounded-md border border-border bg-white px-2 py-1 text-sm font-medium text-foreground hover:border-california-red/40 focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15 cursor-pointer",
+        dropdown_month: "",
+        dropdown_year: "",
+        vhidden: "hidden",
         nav: "space-x-1 flex items-center",
         nav_button:
           "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-california-red hover:bg-accent transition-colors",
