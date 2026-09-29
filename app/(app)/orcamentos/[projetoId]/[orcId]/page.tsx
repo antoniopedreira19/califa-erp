@@ -101,6 +101,19 @@ function statusVersaoBadgeClasses(status: VersaoOrcamento["status"]): string {
   }
 }
 
+/** O job cancelado pelo "Cancelar aprovação" da devolução (decisão 128). */
+interface JobReservado {
+  id: string;
+  codigo: string;
+  nome: string;
+  data_inicio_prevista: string | null;
+  data_fim_prevista: string | null;
+  data_evento: string | null;
+  data_prevista_faturamento: string | null;
+  observacoes: string | null;
+  motivo_rejeicao: string | null;
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -177,6 +190,7 @@ export default async function OrcamentoDetailPage({
     categoriasOrcRes,
     servicosRes,
     jobRes,
+    reservadoRes,
     regionaisProjRes,
     respProjRes,
     cidadesIniciais,
@@ -245,6 +259,21 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .neq("status", "cancelado")
       .maybeSingle<JobExistente>(),
+    // O job cancelado pelo "Cancelar aprovação" da devolução (decisão
+    // 128): o código dele volta no próximo envio, o motivo do financeiro
+    // fica à vista até lá, e o formulário do envio nasce do que ele tinha.
+    supabase
+      .from("jobs")
+      .select(
+        "id, codigo, nome, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, motivo_rejeicao",
+      )
+      .eq("orcamento_id", params.orcId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "cancelado")
+      .eq("codigo_reservado", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<JobReservado>(),
     // Opções de Regional e GP do orçamento: saem do cadastro do projeto.
     supabase
       .from("projeto_regionais")
@@ -306,6 +335,20 @@ export default async function OrcamentoDetailPage({
   const orcamento = orcamentoRaw as Orcamento;
   const job = jobRes.data ?? null;
   const temJobAtivo = job !== null;
+  // Decisão 128: com o job devolvido, os dados do orçamento e o planejado
+  // se corrigem sem cancelar a aprovação.
+  const jobDevolvido =
+    job?.status === "rejeitado_financeiro" && orcamento.status === "job_criado";
+  // O código reservado só vale sem job vivo e com a mesma sigla: se o
+  // cliente do projeto mudou depois do cancelamento, o envio gera outro.
+  const siglaDoCliente: string | null = projetoRaw.cliente?.codigo_curto ?? null;
+  const reservado =
+    !job &&
+    reservadoRes.data &&
+    siglaDoCliente &&
+    reservadoRes.data.codigo.startsWith(`${siglaDoCliente}-`)
+      ? reservadoRes.data
+      : null;
 
   const orcamentoCategoriaNome: string | null = orcamentoRaw.categoria?.nome ?? null;
   const clienteNome: string | null = projetoRaw.cliente?.nome_fantasia ?? null;
@@ -372,6 +415,9 @@ export default async function OrcamentoDetailPage({
     orcamento.status === "job_criado" ||
     readOnlyPeloPapel ||
     arquivado;
+  // Job devolvido (decisão 128): o "Editar" e o planejado abrem para
+  // corrigir; o orçado e as versões novas continuam travados.
+  const correcaoLiberada = jobDevolvido && !readOnlyPeloPapel && !arquivado;
   const podeCriarVersao =
     orcamento.status !== "job_criado" &&
     orcamento.status !== "cancelado" &&
@@ -432,12 +478,13 @@ export default async function OrcamentoDetailPage({
           .eq("tenant_id", session.activeTenant.id)
       : Promise.resolve({ data: [], error: null }),
     // Contatos de cobrança do job já enviado — quem os lê é o modo
-    // somente leitura do modal ("Ver dados do job").
-    job
+    // somente leitura do modal ("Ver dados do job"). Sem job vivo, os do
+    // job cancelado na devolução preenchem o próximo envio (decisão 128).
+    job || reservado
       ? supabase
           .from("jobs_contatos")
           .select("nome, numero, email")
-          .eq("job_id", job.id)
+          .eq("job_id", (job ?? reservado)!.id)
           .eq("tenant_id", session.activeTenant.id)
           .eq("tipo", "cobranca")
           .order("ordem", { ascending: true })
@@ -593,7 +640,8 @@ export default async function OrcamentoDetailPage({
               produtores={produtores}
               projetoNome={projetoRaw.nome}
               projetoCodigo={projetoRaw.codigo}
-              disabled={protegido}
+              disabled={protegido && !correcaoLiberada}
+              arquivavel={!correcaoLiberada}
               disabledReason={
                 arquivado
                   ? orcamentoArquivado
@@ -691,6 +739,15 @@ export default async function OrcamentoDetailPage({
           orcamentoArquivado={orcamentoArquivado}
           projetoArquivado={projetoArquivado}
         />
+      ) : correcaoLiberada ? (
+        <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 flex items-start gap-3">
+          <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+          <p className="text-sm text-muted-foreground">
+            Job devolvido pelo financeiro: os dados do orçamento e o planejado
+            estão abertos para correção. O orçado e a criação de novas versões
+            continuam bloqueados.
+          </p>
+        </div>
       ) : protegido && (
         <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 flex items-start gap-3">
           <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -742,12 +799,16 @@ export default async function OrcamentoDetailPage({
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           job={job}
+          reservado={reservado}
+          correcaoLiberada={correcaoLiberada}
           abrirRevisao={abrirRevisao}
           temJobAtivo={temJobAtivo}
           // Cliente sem código curto: o envio recusa com a mensagem que
           // pede o cadastro; a prévia fica em travessão.
           proximoCodigoJob={
-            projetoRaw.cliente?.codigo_curto
+            reservado
+              ? reservado.codigo
+              : projetoRaw.cliente?.codigo_curto
               ? proximoCodigoDeJob({
                   sigla: projetoRaw.cliente.codigo_curto,
                   ano: anoDoCodigoDeJob(),
@@ -810,6 +871,8 @@ function VersaoSelecionada({
   savePorItem,
   saldosDeSave,
   job,
+  reservado,
+  correcaoLiberada,
   abrirRevisao,
   temJobAtivo,
   proximoCodigoJob,
@@ -841,6 +904,11 @@ function VersaoSelecionada({
   savePorItem: Record<string, EstadoSaveDaLinha>;
   saldosDeSave: SaldoDeSave[];
   job: JobExistente | null;
+  /** Sem job vivo: o job cancelado na devolução, cujo código volta no
+   *  próximo envio (decisão 128). Já vem filtrado pela sigla do cliente. */
+  reservado: JobReservado | null;
+  /** Job devolvido: "Editar" e o planejado abertos para correção (128). */
+  correcaoLiberada: boolean;
   /** `?abertura=revisar` — ver `FluxoAbertura`. */
   abrirRevisao: boolean;
   temJobAtivo: boolean;
@@ -907,6 +975,12 @@ function VersaoSelecionada({
     readOnlyPeloPapel ||
     arquivado;
   const temBv = Object.keys(bvsPorItem).length > 0;
+  // Job devolvido (decisão 128): com a versão aprovada travada, só o
+  // planejado abre — na versão que gerou o job.
+  const soPlanejado =
+    correcaoLiberada &&
+    versao.status === "aprovada" &&
+    versao.id === orcamento.versao_aprovada_id;
 
   // De qual modelo é esta planilha. Sai da CATEGORIA do orçamento, pelo
   // campo `modelo_planilha` — nunca pelo nome dela (decisão 072). É o
@@ -960,24 +1034,34 @@ function VersaoSelecionada({
     email: (c.email as string | null) ?? "",
   }));
 
+  // Job devolvido (decisão 128): nome e datas se corrigem pelo "Editar"
+  // do orçamento, então o reenvio parte do orçamento — partir do job
+  // devolveria ao orçamento o valor de antes da correção. Sem job vivo e
+  // com o código reservado, o formulário nasce do job cancelado.
+  const devolvido = job?.status === "rejeitado_financeiro";
+  const origemDoEnvio = job ?? reservado;
   const inicialModal = {
-    nome: job?.nome ?? orcamento.nome,
+    nome: (devolvido ? null : job?.nome) ?? orcamento.nome,
     // Cidade e regional são editáveis no modal: entram pré-preenchidas
     // com o que está hoje no orçamento.
     cidadeId: orcamento.cidade_id ?? "",
     cidadeNome: orcamentoRaw.cidade?.nome ?? "",
     regionalId: orcamento.regional_id ?? "",
-    dataInicio: job?.data_inicio_prevista ?? orcamento.data_inicio_prevista ?? "",
-    dataFim: job?.data_fim_prevista ?? orcamento.data_fim_prevista ?? "",
+    dataInicio:
+      (devolvido ? null : job?.data_inicio_prevista) ??
+      orcamento.data_inicio_prevista ??
+      "",
+    dataFim:
+      (devolvido ? null : job?.data_fim_prevista) ?? orcamento.data_fim_prevista ?? "",
     // Só o job tem data de evento — não há de onde pré-preencher antes
     // do envio (o orçamento não guarda o campo).
-    dataEvento: job?.data_evento ?? "",
-    dataFaturamento: job?.data_prevista_faturamento ?? "",
+    dataEvento: origemDoEnvio?.data_evento ?? "",
+    dataFaturamento: origemDoEnvio?.data_prevista_faturamento ?? "",
     // O Descritivo do orçamento adianta o do envio (decisão 037): quem
     // escreveu no calor da negociação não reescreve aqui. O job manda
     // quando já existe — ali o texto já foi ajustado neste modal, e
     // sobrescrever com o do orçamento apagaria a edição.
-    observacoes: job?.observacoes ?? orcamento.descritivo ?? "",
+    observacoes: origemDoEnvio?.observacoes ?? orcamento.descritivo ?? "",
     // Job já enviado mostra o que foi gravado (lista vazia nos jobs
     // anteriores a 17/08/2026, que não tinham contato).
     contatos:
@@ -1062,8 +1146,10 @@ function VersaoSelecionada({
           {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && (
             <AprovacaoActions
               versaoId={versao.id}
+              versaoLabel={`v${versao.numero_versao}`}
               status={versao.status}
               temJobAtivo={temJobAtivo}
+              jobDevolvidoCodigo={devolvido && job ? job.codigo : null}
             />
           )}
         </div>
@@ -1081,6 +1167,11 @@ function VersaoSelecionada({
         aprovada={versao.status === "aprovada"}
         job={job}
         jobHref={job ? `/jobs/${job.id}` : null}
+        correcao={
+          reservado
+            ? { codigo: reservado.codigo, motivo: reservado.motivo_rejeicao }
+            : null
+        }
       />
 
       {/* Modelo mensal (decisão 078): régua de meses, planilha do mês ou
@@ -1099,6 +1190,7 @@ function VersaoSelecionada({
           mesPedido={mesPedido}
           inicioPrevisto={orcamento.data_inicio_prevista}
           readOnly={readOnly}
+          soPlanejado={soPlanejado}
           podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
           categorias={categorias}
           bvsPorItem={bvsPorItem}
@@ -1183,6 +1275,7 @@ function VersaoSelecionada({
           }))}
           moeda={versao.moeda}
           readOnly={readOnly}
+          soPlanejado={soPlanejado}
           podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
           categorias={categorias}
           bvsPorItem={bvsPorItem}
@@ -1242,6 +1335,7 @@ function VersaoSelecionada({
         moeda={versao.moeda}
         clienteNome={clienteNome}
         proximoCodigoJob={proximoCodigoJob}
+        codigoReservado={reservado?.codigo ?? null}
         projetoNome={projetoRaw?.nome ?? "—"}
         projetoCodigo={projetoRaw?.codigo ?? "—"}
         herdados={herdados}

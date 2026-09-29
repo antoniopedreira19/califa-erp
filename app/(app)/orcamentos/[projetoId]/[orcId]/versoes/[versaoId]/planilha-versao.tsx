@@ -51,6 +51,8 @@ interface Props {
   secoes: Array<{ grupo: VersaoOrcamentoGrupo; itens: VersaoOrcamentoItem[] }>;
   moeda: string;
   readOnly?: boolean;
+  /** Versão aprovada com o job devolvido: só o planejado abre (128). */
+  soPlanejado: boolean;
   /** Marcar save e consumo de save (`orcamentos.marcar_em_save`,
    *  administrador e GP — 24/09/2026). Sem ela o pop-up abre só para ver. */
   podeMarcarSave: boolean;
@@ -109,6 +111,7 @@ export function PlanilhaVersao({
   secoes,
   moeda,
   readOnly,
+  soPlanejado,
   podeMarcarSave,
   categorias,
   bvsPorItem,
@@ -186,6 +189,7 @@ export function PlanilhaVersao({
           percentualImposto={percentualImposto}
           visao={visao}
           readOnly={readOnly}
+          soPlanejado={soPlanejado}
           categorias={categorias}
           bvsPorItem={bvsPorItem}
           fornecedores={fornecedores}

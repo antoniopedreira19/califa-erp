@@ -12,6 +12,7 @@ import {
   Check,
   CheckCircle2,
   FileText,
+  History,
   Undo2,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -103,6 +104,10 @@ interface Props {
 
   clienteNome: string;
   proximoCodigoJob: string;
+  /** O código do job cancelado pelo "Cancelar aprovação" da devolução, que
+   *  volta no próximo envio (decisão 128). `null` sem reserva — ou quando
+   *  a sigla do cliente mudou e ele não serve mais. */
+  codigoReservado: string | null;
   projetoNome: string;
   projetoCodigo: string;
 
@@ -156,6 +161,7 @@ export function FluxoAbertura({
   moeda,
   clienteNome,
   proximoCodigoJob,
+  codigoReservado,
   projetoNome,
   projetoCodigo,
   herdados,
@@ -443,9 +449,13 @@ export function FluxoAbertura({
                 · valores travados para edição
               </span>
               <span className="text-xs text-muted-foreground">
-                {podeEnviarAbertura
-                  ? "Próximo passo: abrir o job para o financeiro"
-                  : "Próximo passo: o GP envia o job para abertura no financeiro"}
+                {codigoReservado
+                  ? podeEnviarAbertura
+                    ? `Próximo passo: reenviar o job ${codigoReservado} para o financeiro`
+                    : `Próximo passo: o GP reenvia o job ${codigoReservado} para o financeiro`
+                  : podeEnviarAbertura
+                    ? "Próximo passo: abrir o job para o financeiro"
+                    : "Próximo passo: o GP envia o job para abertura no financeiro"}
               </span>
             </>
           )}
@@ -478,8 +488,8 @@ export function FluxoAbertura({
               </span>
               <span className="text-xs text-muted-foreground">
                 {podeEnviarAbertura
-                  ? "Revise a abertura com o motivo acima e reenvie"
-                  : "O GP revisa a abertura com o motivo acima e reenvia"}
+                  ? "Corrija o que o motivo acima pede e reenvie. Para mudar o orçado, cancele a aprovação"
+                  : "O GP corrige o que o motivo acima pede e reenvia"}
               </span>
             </>
           )}
@@ -505,10 +515,12 @@ export function FluxoAbertura({
               Aprovar versão
             </button>
           )}
-          {/* Cancelar envio (decisão 057): só enquanto o financeiro não
-              abriu — os dois status de pré-abertura. Depois da abertura o
-              job nem chega aqui como cancelável. */}
-          {(etapa === "enviada" || etapa === "devolvida") && (
+          {/* Cancelar envio (decisão 057): só enquanto o job espera o
+              financeiro. No job devolvido ele saiu em 29/09/2026 (decisão
+              128): a correção se faz com o job vivo, e o que muda o orçado
+              passa pelo "Cancelar aprovação" da versão, que guarda o
+              código. */}
+          {etapa === "enviada" && (
             <button
               type="button"
               onClick={() => {
@@ -624,6 +636,7 @@ export function FluxoAbertura({
         projetoCodigo={projetoCodigo}
         clienteNome={clienteNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
+        codigoReaproveitado={!job && codigoReservado !== null}
         rotuloFechamento={fechamento.rotulo}
         origemFechamento={fechamento.origem}
         valorTotal={fechamento.valorJob}
@@ -679,13 +692,19 @@ export function BannersEstado({
   aprovada,
   job,
   jobHref,
+  correcao,
 }: {
   versaoLabel: string;
   aprovada: boolean;
   job: JobExistente | null;
   jobHref: string | null;
+  /** O job cancelado pelo "Cancelar aprovação" da devolução (decisão 128):
+   *  o código que volta no próximo envio e o motivo do financeiro, que fica
+   *  à vista até lá. `null` sem reserva ou com job vivo. */
+  correcao: { codigo: string; motivo: string | null } | null;
 }) {
-  if (!aprovada && !job) return null;
+  const devolvido = job?.status === "rejeitado_financeiro";
+  if (!aprovada && !job && !correcao) return null;
 
   return (
     <>
@@ -699,7 +718,9 @@ export function BannersEstado({
               Versão {versaoLabel} aprovada
             </p>
             <p className="mt-0.5 text-xs text-emerald-700">
-              Valores travados para edição · novas alterações exigem uma nova versão.
+              {devolvido
+                ? "Orçado travado · com o job devolvido, os dados do orçamento e o planejado podem ser corrigidos."
+                : "Valores travados para edição · novas alterações exigem uma nova versão."}
             </p>
           </div>
         </div>
@@ -718,8 +739,10 @@ export function BannersEstado({
               <span className="font-mono">{job.codigo}</span>
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Revise o formulário de abertura e reenvie o job. Para desistir,
-              cancele o envio.
+              Corrija o formulário de abertura, os dados do orçamento (Editar)
+              ou o planejado e reenvie o job. Para mudar o orçado, cancele a
+              aprovação da versão: o job volta com o mesmo código no próximo
+              envio.
             </p>
             <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-california-red">
               Motivo da rejeição
@@ -739,6 +762,10 @@ export function BannersEstado({
             </Link>
           )}
         </div>
+      )}
+
+      {!job && correcao && (
+        <FaixaCorrecao codigo={correcao.codigo} motivo={correcao.motivo} aprovada={aprovada} />
       )}
 
       {job && job.status !== "rejeitado_financeiro" && (
@@ -771,6 +798,47 @@ export function BannersEstado({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * O orçamento em correção depois do "Cancelar aprovação" da devolução
+ * (decisão 128): sem job vivo, o motivo do financeiro continuaria só no job
+ * cancelado, que não aparece em lugar nenhum. Fica aqui até o novo envio,
+ * com o código que volta.
+ */
+function FaixaCorrecao({
+  codigo,
+  motivo,
+  aprovada,
+}: {
+  codigo: string;
+  motivo: string | null;
+  aprovada: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-soft">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+        <History className="h-[18px] w-[18px]" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-semibold text-amber-900">
+          Em correção após a devolução do financeiro ·{" "}
+          <span className="font-mono">{codigo}</span>
+        </p>
+        <p className="mt-0.5 text-xs text-amber-800">
+          {aprovada
+            ? `Versão aprovada de novo. Ao enviar para abertura, o job volta com o mesmo código, ${codigo}.`
+            : `A aprovação foi cancelada para corrigir o orçamento. Ao aprovar de novo e enviar para abertura, o job volta com o mesmo código, ${codigo}.`}
+        </p>
+        <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-amber-800">
+          Motivo da devolução
+        </p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+          {motivo?.trim() || "— sem motivo informado"}
+        </p>
+      </div>
+    </div>
   );
 }
 

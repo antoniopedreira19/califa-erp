@@ -589,7 +589,21 @@ export async function atualizarOrcamento(
   if (atual.arquivado_em) {
     return { ok: false, message: ORCAMENTO_ARQUIVADO };
   }
-  if (atual.status === "aprovado" || atual.status === "job_criado") {
+  // Com o job devolvido pelo financeiro, os dados do orçamento se corrigem
+  // sem cancelar a aprovação (decisão 128) — menos o que muda o orçado,
+  // conferido mais abaixo.
+  let devolvido = false;
+  if (atual.status === "job_criado") {
+    const { data: jobVivo } = await supabase
+      .from("jobs")
+      .select("status")
+      .eq("orcamento_id", orcId)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("status", "cancelado")
+      .maybeSingle<{ status: string }>();
+    devolvido = jobVivo?.status === "rejeitado_financeiro";
+  }
+  if ((atual.status === "aprovado" || atual.status === "job_criado") && !devolvido) {
     return {
       ok: false,
       message:
@@ -627,6 +641,36 @@ export async function atualizarOrcamento(
     if (!par.ok) return par;
     modeloNovo = par.modelo;
     ficaInterno = par.interno;
+  }
+
+  // Job devolvido (decisão 128): o que muda o valor do job e o faturamento
+  // previsto é outro acordo com o cliente, e passa pelo "Cancelar
+  // aprovação".
+  if (devolvido) {
+    if (ficaInterno !== eraInterno) {
+      const msg =
+        "O serviço Interno muda o valor do job e o faturamento previsto. Para trocá-lo, cancele a aprovação da versão.";
+      return { ok: false, message: msg, fieldErrors: { servico_id: [msg] } };
+    }
+    if ((modeloNovo === "internacional") !== (modeloAtual === "internacional")) {
+      const msg =
+        "A planilha internacional muda o valor do job e o faturamento previsto. Para trocar a categoria, cancele a aprovação da versão.";
+      return { ok: false, message: msg, fieldErrors: { categoria_id: [msg] } };
+    }
+    if (
+      modeloNovo === "mensal" &&
+      modeloAtual !== "mensal" &&
+      parsed.data.data_inicio_prevista &&
+      parsed.data.data_fim_prevista &&
+      mesesDoPeriodo({
+        inicio: parsed.data.data_inicio_prevista,
+        fim: parsed.data.data_fim_prevista,
+      }).length > 1
+    ) {
+      const msg =
+        "Com o job devolvido, a planilha mensal só entra num período de um mês. Com mais meses, cancele a aprovação para distribuir as linhas e aprovar de novo.";
+      return { ok: false, message: msg, fieldErrors: { categoria_id: [msg] } };
+    }
   }
 
   // Passar para o Interno converte as linhas de todas as versões (decisão
@@ -781,9 +825,14 @@ export async function atualizarOrcamento(
     tenantId: session.activeTenant.id,
     entidadeTipo: "orcamento",
     entidadeId: orcId,
-    metadata: trocaDeTrimestre
-      ? { meses_refeitos: true, periodo: { inicio, fim } }
-      : undefined,
+    metadata:
+      trocaDeTrimestre || devolvido
+        ? {
+            ...(trocaDeTrimestre ? { meses_refeitos: true, periodo: { inicio, fim } } : {}),
+            // Corrigido com o job devolvido, sem cancelar a aprovação (128).
+            ...(devolvido ? { com_job_devolvido: true } : {}),
+          }
+        : undefined,
   });
 
   revalidatePath(`/orcamentos/${projetoId}`);

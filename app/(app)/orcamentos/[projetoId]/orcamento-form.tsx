@@ -647,13 +647,15 @@ export function OrcamentoForm({
         description={
           <>
             {troca === "sai_do_mensal" ? (
+              // Decisão 128: os meses se juntam; até 29/09/2026 só o
+              // primeiro ficava e os outros eram apagados.
               <>
                 A categoria {categoriaEscolhida?.nome} não usa a planilha
-                mensal. Por causa da mudança no tipo de planilha,{" "}
-                <strong>todo o orçamento depois do primeiro mês será apagado</strong>:
-                só o primeiro mês permanece, e os grupos e itens dele passam a
-                valer para o orçamento inteiro, em todas as versões. Não dá
-                para desfazer.
+                mensal. <strong>Os meses se juntam numa planilha só</strong>:
+                os grupos e itens de todos eles passam a valer para o
+                orçamento inteiro, em todas as versões, e nada é apagado.
+                Grupos com o mesmo nome em meses diferentes ganham o nome do
+                mês.
               </>
             ) : troca === "entra_no_mensal" ? (
               <>
@@ -676,10 +678,7 @@ export function OrcamentoForm({
             )}
           </>
         }
-        confirmLabel={
-          troca === "sai_do_mensal" ? "Sim, trocar e apagar" : "Sim, trocar"
-        }
-        variant={troca === "sai_do_mensal" ? "destructive" : "default"}
+        confirmLabel="Sim, trocar"
         pending={pending}
         onConfirm={() => {
           const dados = formPendente.current;

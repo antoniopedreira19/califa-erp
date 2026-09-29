@@ -1,7 +1,7 @@
 # 057 — A rejeição volta ao orçamento, e o envio à abertura se cancela de lá
 
 **Data:** 2026-09-08
-**Status:** aceita
+**Status:** aceita · **revisada em 2026-09-29** pela 128: no job devolvido, o "Cancelar envio" saiu; a correção se faz com o job vivo, e o que muda o orçado passa pelo "Cancelar aprovação", que guarda o código.
 **Contexto:** página do job (`/jobs/[jobId]`), tela do orçamento na versão
 aprovada (`/orcamentos/[projetoId]/[orcId]`) e a action
 `enviarJobParaAbertura`. Pedido do Tiago em 08/09/2026, com as seis
@@ -75,6 +75,8 @@ recebimento, descritivo e contatos). O parâmetro é retirado da URL com
 `router.replace`, para um reload não reabrir o modal — um
 `history.replaceState` solto não serve: o router do Next ressincroniza a
 URL na primeira server action e o parâmetro volta.
+
+⚠️ **29/09/2026 (decisão 128):** no job devolvido o "Cancelar envio" saiu da barra; ele vale só enquanto o job espera o financeiro. O parágrafo abaixo conta como era.
 
 O "Cancelar envio à abertura" vale nos dois status de pré-abertura: o job
 devolvido também precisa de uma saída além do reenvio, e o "Cancelar job"
@@ -151,3 +153,16 @@ cancelado, como histórico.
 - Os gates de PP e realizado na pré-abertura (013, 056).
 - `cancelarAprovacaoVersao`: continua exigindo nenhum job vivo. Com o job
   devolvido, o caminho para desaprovar é cancelar o envio primeiro.
+
+## ⚠️ Revisão (2026-09-29) — decisão 128
+
+O reenvio desta decisão só reabria o formulário, e nenhuma das quatro
+devoluções reais até 29/09 pedia isso. Pela 128:
+
+- com o job devolvido, o "Editar" do orçamento e o planejado da versão
+  aprovada abrem para correção, com o job vivo, e o reenvio é o daqui;
+- o "Cancelar envio à abertura" saiu do job devolvido. No lugar, o
+  "Cancelar aprovação" da versão (`cancelarAprovacaoDoJobDevolvido`) cancela
+  o envio com as mesmas travas e guarda o código, que volta no próximo envio;
+- `cancelarAprovacaoVersao` continua exigindo nenhum job vivo; com o job
+  devolvido o caminho é a action nova, que cancela os dois.

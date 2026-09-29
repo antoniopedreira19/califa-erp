@@ -423,6 +423,7 @@ export function JobRascunhoCard({
                       ) : (
                         <div>
                           <ItensTable
+                            soPlanejado={false}
                             grupos={gruposDaPlanilha.filter((g) => idsDoMes.has(g.id))}
                             moeda={parametros.moeda}
                             moedaEstrangeira={null}
@@ -554,6 +555,7 @@ export function JobRascunhoCard({
                 // duas coisas ocuparem UMA vaga do `gap-4` da coluna.
                 <div>
                   <ItensTable
+                    soPlanejado={false}
                     grupos={gruposDaPlanilha}
                     moeda={parametros.moeda}
                     // O rascunho do projeto é sempre nacional: a planilha

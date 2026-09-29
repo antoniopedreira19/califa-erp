@@ -62,6 +62,9 @@ interface Props {
    *  ainda não tem mês. */
   inicioPrevisto: string | null;
   readOnly: boolean;
+  /** Versão aprovada com o job devolvido: só o planejado abre, mês a mês
+   *  (decisão 128). */
+  soPlanejado: boolean;
   /** `orcamentos.marcar_em_save` — repassado à planilha de cada mês. */
   podeMarcarSave: boolean;
   categorias: Categoria[];
@@ -91,6 +94,7 @@ export function PlanilhaMensal({
   mesPedido,
   inicioPrevisto,
   readOnly,
+  soPlanejado,
   podeMarcarSave,
   categorias,
   bvsPorItem,
@@ -208,6 +212,7 @@ export function PlanilhaMensal({
         }))}
         moeda={moeda}
         readOnly={readOnly}
+        soPlanejado={soPlanejado}
         podeMarcarSave={podeMarcarSave}
         categorias={categorias}
         bvsPorItem={bvsPorItem}

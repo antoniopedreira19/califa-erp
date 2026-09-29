@@ -38,6 +38,8 @@ interface Props {
    *  Totais precisa da MESMA vista, e a planilha do job ainda alterna. */
   visao: VisaoBv;
   readOnly?: boolean;
+  /** Só o planejado abre, com a versão travada — job devolvido (128). */
+  soPlanejado: boolean;
   categorias: Categoria[];
   /** BV por id do item — indexado, e não Map, porque Map não atravessa a
    *  fronteira server → client. */
@@ -74,6 +76,7 @@ export function GruposSection({
   percentualImposto,
   visao,
   readOnly,
+  soPlanejado,
   categorias,
   bvsPorItem,
   fornecedores,
@@ -201,6 +204,7 @@ export function GruposSection({
         percentualImposto={percentualImposto}
         visao={visao}
         readOnly={readOnly}
+        soPlanejado={soPlanejado}
         categorias={categorias}
         estaAberto={recolher.estaAberto}
         onAlternarGrupo={recolher.alternar}

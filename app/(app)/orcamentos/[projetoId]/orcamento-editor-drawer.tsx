@@ -44,6 +44,9 @@ interface Props {
   projetoCodigo: string;
   disabled?: boolean;
   disabledReason?: string;
+  /** Com o job devolvido (decisão 128) o editor abre para corrigir, mas o
+   *  orçamento aprovado não se arquiva: o rodapé fica só com o status. */
+  arquivavel: boolean;
 }
 
 export function OrcamentoEditorDrawer({
@@ -61,6 +64,7 @@ export function OrcamentoEditorDrawer({
   projetoCodigo,
   disabled,
   disabledReason,
+  arquivavel,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -133,8 +137,8 @@ export function OrcamentoEditorDrawer({
           </div>
 
           {/* Como no "Editar projeto": o status e o Arquivar no rodapé
-              (decisão 118). O drawer só abre antes da aprovação, que é
-              quando o orçamento se arquiva. */}
+              (decisão 118). O Arquivar só vale antes da aprovação; com o
+              job devolvido o drawer abre para corrigir e ele some (128). */}
           <div className="flex items-center justify-between border-t border-border px-6 py-4">
             <p className="text-xs text-muted-foreground">
               Status:{" "}
@@ -142,6 +146,7 @@ export function OrcamentoEditorDrawer({
                 {orcamentoStatusLabel(orcamento.status)}
               </strong>
             </p>
+            {arquivavel && (
             <button
               type="button"
               onClick={() => {
@@ -153,6 +158,7 @@ export function OrcamentoEditorDrawer({
               <Archive className="h-3.5 w-3.5" />
               Arquivar
             </button>
+            )}
           </div>
         </DrawerContent>
       </Dialog>

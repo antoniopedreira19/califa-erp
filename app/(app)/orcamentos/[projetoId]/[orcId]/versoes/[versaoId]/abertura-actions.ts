@@ -18,6 +18,7 @@ import {
   type EspelhosDoJob,
 } from "@/lib/data/espelhos-do-job";
 import { formatCurrency } from "@/lib/utils";
+import { cancelarAprovacaoVersao } from "../actions";
 
 export type AberturaResult =
   | { ok: true; jobId: string; codigo: string }
@@ -676,6 +677,47 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: mapDbError(errIns.message) };
   }
 
+  // 6a. O código do job devolvido volta (decisão 128). O job cancelado pelo
+  //     "Cancelar aprovação" da devolução guardou o código; o job novo
+  //     nasceu com um código novo e válido, e a RPC troca os dois numa
+  //     transação só — o cancelado ganha o sufixo "-C1". Se ela recusar
+  //     (o cliente do projeto mudou de sigla, por exemplo), o job segue com
+  //     o código com que nasceu: nada fica pela metade.
+  const { data: reservado } = await supabase
+    .from("jobs")
+    .select("id, codigo")
+    .eq("orcamento_id", orc.id)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "cancelado")
+    .eq("codigo_reservado", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; codigo: string }>();
+
+  if (reservado) {
+    const { data: codigoDeVolta, error: errCodigo } = await supabase.rpc(
+      "reaproveitar_codigo_do_job_devolvido",
+      { p_job_novo: novo.id, p_job_reservado: reservado.id },
+    );
+    if (errCodigo || typeof codigoDeVolta !== "string") {
+      console.error("[abertura.codigo_reservado]", errCodigo?.message);
+    } else {
+      await logAuditEvent({
+        acao: "job.codigo_reaproveitado",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "job",
+        entidadeId: novo.id,
+        metadata: {
+          codigo: codigoDeVolta,
+          codigo_gerado: codigo,
+          job_cancelado_id: reservado.id,
+          decisao: "128",
+        },
+      });
+      codigo = codigoDeVolta;
+    }
+  }
+
   // 6b. Cópia do orçado que pertence ao job. A partir daqui a Planilha
   //     Interna lê daqui, e é isso que a errata altera — a versão
   //     aprovada continua sendo o registro do que o cliente aprovou.
@@ -977,8 +1019,92 @@ export async function cancelarEnvioParaAbertura(
   const gate = await checarPermissao(session, "jobs.editar_metadata");
   if (!gate.ok) return { ok: false, message: gate.message };
 
+  return cancelarEnvio(session, createClient(), jobId, { reservarCodigo: false });
+}
+
+/**
+ * "Cancelar aprovação" com o job devolvido pelo financeiro (decisão 128).
+ *
+ * Correção no formulário, nos dados do orçamento ou no planejado se faz com
+ * o job devolvido vivo, e o reenvio é o de sempre (decisão 057). O que muda
+ * o ORÇADO — valor, linha nova ou removida, entrada ou saída do Interno ou
+ * do internacional — é outro acordo com o cliente e passa por aqui:
+ *
+ * 1. o envio é cancelado como no "Cancelar envio" (mesmas travas: PP
+ *    gerada barra), mas o job fica com `codigo_reservado` — o código dele
+ *    volta no próximo envio deste orçamento (`enviarJobParaAbertura`, 6a);
+ * 2. a aprovação da versão é cancelada como no botão de sempre.
+ *
+ * Se o passo 2 falhar, o estado é o mesmo de um "Cancelar envio" comum,
+ * com o código guardado: o "Cancelar aprovação" da versão termina o
+ * trabalho.
+ */
+export async function cancelarAprovacaoDoJobDevolvido(
+  versaoId: string,
+): Promise<CancelarEnvioResult> {
+  const session = await requireSession();
+  const gateAprovar = await checarPermissao(session, "orcamentos.aprovar");
+  if (!gateAprovar.ok) return { ok: false, message: gateAprovar.message };
+  const gateJob = await checarPermissao(session, "jobs.editar_metadata");
+  if (!gateJob.ok) return { ok: false, message: gateJob.message };
+
   const supabase = createClient();
 
+  const { data: versao } = await supabase
+    .from("versoes_orcamento")
+    .select("id, status, orcamento_id")
+    .eq("id", versaoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: string; orcamento_id: string }>();
+
+  if (!versao) return { ok: false, message: "Versão não encontrada." };
+  if (versao.status !== "aprovada") {
+    return { ok: false, message: "Esta versão não está aprovada." };
+  }
+
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, status")
+    .eq("orcamento_id", versao.orcamento_id)
+    .eq("versao_orcamento_aprovada_id", versaoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .neq("status", "cancelado")
+    .maybeSingle<{ id: string; status: string }>();
+
+  if (!job || job.status !== "rejeitado_financeiro") {
+    return {
+      ok: false,
+      message: "Esta ação vale só para o job devolvido pelo financeiro.",
+    };
+  }
+
+  const cancelado = await cancelarEnvio(session, supabase, job.id, {
+    reservarCodigo: true,
+  });
+  if (!cancelado.ok) return cancelado;
+
+  const desaprovada = await cancelarAprovacaoVersao(versaoId);
+  if (!desaprovada.ok) {
+    return {
+      ok: false,
+      message: `O job foi cancelado e o código ficou guardado, mas a aprovação não foi cancelada (${desaprovada.message}). Use o “Cancelar aprovação” da versão.`,
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * O cancelamento em si, sem o portão de permissão (quem chama confere).
+ * Não exportada: todo export async de arquivo "use server" vira Server
+ * Action.
+ */
+async function cancelarEnvio(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  supabase: ReturnType<typeof createClient>,
+  jobId: string,
+  opcoes: { reservarCodigo: boolean },
+): Promise<CancelarEnvioResult> {
   const { data: job } = await supabase
     .from("jobs")
     .select("id, codigo, status, projeto_id, orcamento_id, versao_orcamento_aprovada_id")
@@ -1106,9 +1232,15 @@ export async function cancelarEnvioParaAbertura(
   }
 
   // 4. Job cancelado. O motivo da rejeição, se houver, fica — é histórico.
+  //    Pelo "Cancelar aprovação" da devolução (decisão 128), o código fica
+  //    reservado para o próximo envio, no mesmo update.
   const { error: errJob } = await supabase
     .from("jobs")
-    .update({ status: "cancelado" })
+    .update(
+      opcoes.reservarCodigo
+        ? { status: "cancelado", codigo_reservado: true }
+        : { status: "cancelado" },
+    )
     .eq("id", job.id)
     .eq("tenant_id", session.activeTenant.id)
     .in("status", ["aguardando_abertura", "rejeitado_financeiro"]);
@@ -1147,6 +1279,7 @@ export async function cancelarEnvioParaAbertura(
       orcamento_id: job.orcamento_id,
       versao_id: job.versao_orcamento_aprovada_id,
       qtd_saves_devolvidos: savesDevolvidos,
+      codigo_reservado: opcoes.reservarCodigo,
     },
   });
 

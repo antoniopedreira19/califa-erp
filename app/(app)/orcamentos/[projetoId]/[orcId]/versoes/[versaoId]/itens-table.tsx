@@ -153,6 +153,12 @@ interface Props {
   /** Bruto (padrão) ou Líquido (− BV). Decidida uma vez por página. */
   visao: VisaoBv;
   readOnly?: boolean;
+  /** Com `readOnly`, abre só as três colunas do PLANEJADO das linhas que
+   *  já existem: é a versão aprovada com o job devolvido pelo financeiro
+   *  (decisão 128). Nada mais se mexe — orçado, nome, tipo, linha nova,
+   *  ordem, save e BV continuam travados. Obrigatória, pelo mesmo motivo
+   *  da `moedaEstrangeira`. */
+  soPlanejado: boolean;
   categorias: Categoria[];
   /** BV por id do item. Só existe em item tipo A, AR ou D. */
   bvsPorItem: Record<string, ItemBv[]>;
@@ -519,6 +525,7 @@ export function ItensTable({
   percentualImposto,
   visao,
   readOnly,
+  soPlanejado,
   categorias,
   bvsPorItem,
   fornecedores,
@@ -890,7 +897,18 @@ export function ItensTable({
    *  seleciona, mas não abre. */
   const editorDe = React.useCallback(
     (rowId: string, coluna: string): TipoEditor | null => {
-      if (!editavel) return null;
+      if (!editavel) {
+        // Job devolvido (decisão 128): só o planejado, só em linha real.
+        if (
+          soPlanejado &&
+          rowId !== DRAFT_ID &&
+          (CAMPOS_PLANEJADO as readonly string[]).includes(coluna) &&
+          !planejadoTravadoEm(rowId)
+        ) {
+          return "numero";
+        }
+        return null;
+      }
       if (rowId !== DRAFT_ID && provisoriaTravada(rowId)) return null;
       if (coluna === "item") return "texto";
       // No Interno o tipo é sempre F · Interno (decisão 105).
@@ -903,7 +921,7 @@ export function ItensTable({
       }
       return null;
     },
-    [editavel, provisoriaTravada, planejadoTravadoEm, interno],
+    [editavel, soPlanejado, provisoriaTravada, planejadoTravadoEm, interno],
   );
 
   const selecao: Selecao = useSelecaoPlanilha({

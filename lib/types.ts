@@ -895,6 +895,9 @@ export interface Job {
    *  "Em faturamento" (`jobStatusExibido`, decisão 094). */
   faturamento_enviado_em: string | null;
   motivo_rejeicao: string | null;
+  /** Job cancelado pelo "Cancelar aprovação" da devolução (decisão 128): o
+   *  código dele volta no próximo envio do mesmo orçamento. */
+  codigo_reservado: boolean;
   /**
    * Nome do job NO FINANCEIRO. Quando nulo, vale `nome` (o da produção).
    * São dois nomes de propósito: o financeiro renomeia para o uso dele
