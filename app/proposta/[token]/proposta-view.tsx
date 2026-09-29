@@ -618,7 +618,16 @@ function VisaoDados({
   const [dataNascimento, setDataNascimento] = React.useState("");
   const [tipoConta, setTipoConta] = React.useState<string>("");
   const [pixTipo, setPixTipo] = React.useState<string>("");
+  const [pixChave, setPixChave] = React.useState("");
+  const [pixChaveDigitos, setPixChaveDigitos] = React.useState("");
   const [rg, setRg] = React.useState("");
+
+  // Ao trocar o tipo do PIX, zera a chave (a máscara muda e o valor
+  // antigo pode não bater com o formato novo).
+  React.useEffect(() => {
+    setPixChave("");
+    setPixChaveDigitos("");
+  }, [pixTipo]);
 
   // Endereço — controlled pra permitir autopreenchimento via ViaCEP.
   const [logradouro, setLogradouro] = React.useState("");
@@ -682,6 +691,11 @@ function VisaoDados({
     fd.set("data_nascimento", dataNascimento);
     if (tipoConta) fd.set("tipo_conta", tipoConta);
     if (pixTipo) fd.set("pix_tipo", pixTipo);
+    // Se PIX tem máscara (cpf/cnpj/telefone), envia só os dígitos.
+    // Email e chave aleatória vão como texto livre.
+    const pixMascarado =
+      pixTipo === "cpf" || pixTipo === "cnpj" || pixTipo === "telefone";
+    fd.set("pix_chave", pixMascarado ? pixChaveDigitos : pixChave);
 
     startTransition(async () => {
       const r = await salvarDadosCandidato(token, fd);
@@ -1018,13 +1032,44 @@ function VisaoDados({
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="pix_chave">Chave PIX</Label>
-            <Input
-              id="pix_chave"
-              name="pix_chave"
-              maxLength={200}
-              placeholder="Sua chave PIX"
-            />
-            {fieldErrors.banco_codigo?.map((m, i) => (
+            {pixTipo === "cpf" ? (
+              <MaskedInput
+                id="pix_chave"
+                mask="cpf"
+                placeholder="000.000.000-00"
+                onDigitsChange={setPixChaveDigitos}
+              />
+            ) : pixTipo === "cnpj" ? (
+              <MaskedInput
+                id="pix_chave"
+                mask="cnpj"
+                placeholder="00.000.000/0000-00"
+                onDigitsChange={setPixChaveDigitos}
+              />
+            ) : pixTipo === "telefone" ? (
+              <MaskedInput
+                id="pix_chave"
+                mask="telefone"
+                placeholder="(11) 99999-9999"
+                onDigitsChange={setPixChaveDigitos}
+              />
+            ) : (
+              <Input
+                id="pix_chave"
+                maxLength={200}
+                placeholder={
+                  pixTipo === "email"
+                    ? "seu@email.com"
+                    : pixTipo === "aleatoria"
+                      ? "Chave aleatória do banco"
+                      : "Selecione o tipo primeiro"
+                }
+                value={pixChave}
+                onChange={(e) => setPixChave(e.target.value)}
+                disabled={!pixTipo || pixTipo === ""}
+              />
+            )}
+            {fieldErrors.pix_chave?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
                 {m}
               </p>
