@@ -4,9 +4,13 @@
  * O navegador sobe o arquivo para `<tenant>/envios/<uuid>-<nome>` no bucket
  * `orcamento-importacoes` (a policy de INSERT já libera a pasta do tenant
  * para `authenticated`), e as Server Actions recebem só o caminho. Daqui
- * saem as três operações do servidor sobre esse arquivo: baixar para ler,
- * arquivar junto do orçamento quando a importação grava, e descartar
- * quando ela é cancelada.
+ * saem as operações do servidor sobre esse arquivo: baixar para ler e
+ * descartar.
+ *
+ * O arquivo é só de passagem (decisão 129, 29/09/2026): sai do Storage
+ * quando a importação grava — o conteúdo fica na versão — e quando ela é
+ * cancelada. O que escapa (aba fechada no meio, falha no descarte) sai
+ * pela limpeza de envios antigos.
  *
  * O caminho vem do cliente, então toda operação confere que ele é da pasta
  * de envios do tenant da sessão — é o que impede ler ou mover arquivo de
@@ -72,36 +76,49 @@ export async function baixarEnvio(
   return { ok: true, buffer };
 }
 
-/**
- * Leva o arquivo da pasta de envios para a do orçamento, no caminho que a
- * importação sempre usou (`<tenant>/<orcamento>/<importacao>-<nome>`).
- * Devolve o caminho onde ele ficou — o de envio, se mover falhar: a versão
- * já está gravada e o original não pode se perder por causa disso.
- */
-export async function arquivarEnvio(
-  envio: EnvioDaPlanilha,
-  tenantId: string,
-  orcamentoId: string,
-  importacaoId: string,
-): Promise<string> {
-  if (!envioDoTenant(envio.path, tenantId)) return "";
-  const destino = `${tenantId}/${orcamentoId}/${importacaoId}-${slugDoNome(envio.nome)}`;
-  const { error } = await createServiceClient()
-    .storage.from(BUCKET_IMPORTACOES)
-    .move(envio.path, destino);
-  if (error) {
-    console.error("[importacao.envio.arquivar]", error.message);
-    return envio.path;
-  }
-  return destino;
-}
-
-/** Apaga o arquivo de uma importação que não gravou. Melhor esforço. */
+/** Apaga o arquivo enviado: depois que a importação grava, ou quando ela
+ *  não grava. Melhor esforço — o que falhar aqui sai pela limpeza. */
 export async function descartarEnvio(path: string, tenantId: string): Promise<void> {
   if (!envioDoTenant(path, tenantId)) return;
   const { error } = await createServiceClient()
     .storage.from(BUCKET_IMPORTACOES)
     .remove([path]);
   if (error) console.error("[importacao.envio.descartar]", error.message);
+}
+
+/** Um envio só fica esquecido se a aba fechou no meio da importação, ou se
+ *  o descarte falhou. Um dia é folga para qualquer importação em curso —
+ *  inclusive a do editor do projeto, que guarda o arquivo até o "Salvar". */
+const VALIDADE_DO_ENVIO_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Apaga os envios do tenant com mais de um dia. Roda a cada envio novo
+ * (`prepararEnvioPlanilha`), então a pasta nunca acumula. Melhor esforço:
+ * falhar aqui não impede a importação que está começando.
+ */
+export async function limparEnviosAntigos(tenantId: string): Promise<void> {
+  try {
+    const pasta = `${tenantId}/envios`;
+    const service = createServiceClient();
+    const { data, error } = await service.storage
+      .from(BUCKET_IMPORTACOES)
+      .list(pasta, { limit: 1000 });
+    if (error || !data) {
+      if (error) console.error("[importacao.envio.limpar.listar]", error.message);
+      return;
+    }
+    const limite = Date.now() - VALIDADE_DO_ENVIO_MS;
+    const antigos = data
+      .filter((f) => {
+        const quando = Date.parse(f.created_at ?? f.updated_at ?? "");
+        return Number.isFinite(quando) && quando < limite;
+      })
+      .map((f) => `${pasta}/${f.name}`);
+    if (antigos.length === 0) return;
+    const { error: e } = await service.storage.from(BUCKET_IMPORTACOES).remove(antigos);
+    if (e) console.error("[importacao.envio.limpar.apagar]", e.message);
+  } catch (err) {
+    console.error("[importacao.envio.limpar]", err);
+  }
 }
 

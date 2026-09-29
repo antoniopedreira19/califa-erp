@@ -108,3 +108,12 @@ importava, por dois motivos independentes:
   `GET /api/orcamentos/modelo-de-planilha?modelo=…[&orcamento=…]`.
 - Testes: `lib/importacao/abas-do-arquivo.test.ts` e
   `lib/exportacao/modelo-de-planilha.test.ts`.
+
+## 5. Revisão de 29/09/2026: o arquivo não fica guardado (decisão 129)
+
+O "ao gravar, o original vai da pasta de envios para a do orçamento" (§2)
+não vale mais: o arquivo é descartado logo depois da importação, e o
+histórico fica sem caminho. A limpeza de envios esquecidos, que o §3
+deixou de fora, entrou com a mesma decisão: o editor do projeto descarta
+o que for trocado, removido ou abandonado, e cada envio novo apaga os
+envios do tenant com mais de um dia. Ver a decisão 129.

@@ -21,7 +21,7 @@ import {
   type OrigemDoPlanejado,
 } from "@/lib/importacao/planejado-anterior";
 import type { CategoriaModeloPlanilha, PlanejadoAntesDoSave } from "@/lib/types";
-import { arquivarEnvio, baixarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
+import { baixarEnvio, descartarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
 import type { PreviewDaAba, PreviewResult } from "@/lib/importacao/tipos-da-importacao";
 import { montarPreviewDaAba } from "@/lib/importacao/preview-da-aba";
 import {
@@ -363,7 +363,8 @@ export async function previewImportacao(
 
 /**
  * Persiste a importação: cria versão em rascunho, grupos, itens e a linha
- * em orcamento_importacoes, com o XLSX original salvo no bucket.
+ * em orcamento_importacoes, e descarta o XLSX (decisão 129) — o conteúdo
+ * fica na versão.
  * Reparseia o arquivo (não confiamos no que veio do client entre requests).
  */
 export async function confirmarImportacao(
@@ -634,18 +635,15 @@ export async function confirmarImportacao(
     };
   }
 
-  // 6) O original, que o navegador subiu para a pasta de envios, vai para
-  //    a pasta do orçamento. Falhar aqui não bloqueia: a versão já existe.
+  // 6) Registrar em orcamento_importacoes. Sem caminho: o arquivo não fica
+  //    guardado (decisão 129).
   const importacaoId = crypto.randomUUID();
-  const arquivoPath = await arquivarEnvio(entrada.envio, tenantId, orcamentoId, importacaoId);
-
-  // 7) Registrar em orcamento_importacoes.
   const { error: impErr } = await service.from("orcamento_importacoes").insert({
     id: importacaoId,
     tenant_id: tenantId,
     orcamento_id: orcamentoId,
     versao_orcamento_id: versaoId,
-    arquivo_path: arquivoPath,
+    arquivo_path: null,
     arquivo_nome_original: entrada.envio.nome,
     arquivo_tamanho_bytes: entrada.envio.tamanho,
     aba_origem: parsed.aba,
@@ -660,6 +658,9 @@ export async function confirmarImportacao(
     console.error("[importacao.confirmar.registro]", impErr.message);
     // Só o registro de auditoria falhou; a versão já existe. Segue.
   }
+
+  // 7) O arquivo sai do Storage: o conteúdo já está na versão.
+  await descartarEnvio(entrada.envio.path, tenantId);
 
   await logAuditEvent({
     acao: "versao_orcamento.importada",
@@ -943,18 +944,16 @@ export async function sobrescreverVersaoComPlanilha(
     };
   }
 
-  // ---- 3) Guardar o arquivo e registrar ----
-  // O original vai da pasta de envios para a do orçamento. Falhar aqui não
-  // bloqueia: a planilha já está na versão.
+  // ---- 3) Registrar e descartar o arquivo ----
+  // O registro fica sem caminho, e o arquivo sai do Storage (decisão 129):
+  // a planilha já está na versão.
   const importacaoId = crypto.randomUUID();
-  const arquivoPath = await arquivarEnvio(entrada.envio, tenantId, orcamentoId, importacaoId);
-
   const { error: impErr } = await service.from("orcamento_importacoes").insert({
     id: importacaoId,
     tenant_id: tenantId,
     orcamento_id: orcamentoId,
     versao_orcamento_id: versaoId,
-    arquivo_path: arquivoPath,
+    arquivo_path: null,
     arquivo_nome_original: entrada.envio.nome,
     arquivo_tamanho_bytes: entrada.envio.tamanho,
     aba_origem: parsed.aba,
@@ -966,6 +965,8 @@ export async function sobrescreverVersaoComPlanilha(
   });
 
   if (impErr) console.error("[importacao.sobrescrever.registro]", impErr.message);
+
+  await descartarEnvio(entrada.envio.path, tenantId);
 
   await logAuditEvent({
     acao: "versao_orcamento.sobrescrita_por_importacao",

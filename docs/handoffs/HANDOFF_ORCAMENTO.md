@@ -4823,3 +4823,24 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Testado no TES-P001/26 ("Orçamento de Teste": TES-1015/26 e
   TES-1015/26-C1; "Teste A" virou Influencer · Ativação com os meses
   juntos). Ver decisão 128, §8.
+
+## ⚠️ Nota de 2026-09-29 (6) — a planilha importada é descartada depois da importação (decisão 129)
+
+- **O XLSX não fica mais guardado.** Ele sobe para `<tenant>/envios/`, é
+  lido e sai do Storage quando a importação grava; `orcamento_importacoes`
+  segue registrando a importação, com `arquivo_path` nulo (migration
+  `20260929700003`).
+- **Por porta:**
+  - importar na versão: descarta logo depois de gravar;
+  - editor do projeto: descarta no fim do "Salvar", com o lote inteiro
+    gravado;
+  - planilha do projeto (041): não sobe mais.
+- **Vazamentos fechados** (a decisão 110, §3, tinha deixado de fora): a
+  tela do editor do projeto descarta o arquivo trocado, o do orçamento
+  removido, o que sobra depois de salvar e tudo ao sair sem salvar; e cada
+  envio novo apaga os envios do tenant com mais de um dia.
+- `arquivarEnvio` saiu de `lib/importacao/envio.ts`; entrou
+  `limparEnviosAntigos`.
+- Testado no TES-P001/26 (modal fechado, substituir, nova versão, rascunho
+  cancelado e salvo). Ficaram de dado de teste a v1/v2 do "Teste novo" e o
+  "Teste 129 descarte". Ver decisão 129, §5.
