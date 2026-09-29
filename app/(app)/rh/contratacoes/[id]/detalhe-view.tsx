@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Send,
   Copy,
@@ -124,7 +123,6 @@ export function ContratacaoDetalheView({
   contratacao: ContratacaoRica;
   linkPublico: string;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [copiado, setCopiado] = React.useState(false);
   const [erroAcao, setErroAcao] = React.useState<string | null>(null);
@@ -137,7 +135,10 @@ export function ContratacaoDetalheView({
     startTransition(async () => {
       const r = await fn();
       if (!r.ok) setErroAcao(r.message ?? "Falha na operação.");
-      else router.refresh();
+      // Sem router.refresh(): todas as actions daqui chamam
+      // revalidatePath(`/rh/contratacoes/${id}`) e o Next.js já devolve
+      // o RSC atualizado na resposta do server action. Um refresh
+      // extra disparava um GET RSC redundante de ~2s.
     });
   }
 
