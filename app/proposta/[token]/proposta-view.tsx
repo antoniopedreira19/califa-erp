@@ -656,10 +656,14 @@ function VisaoDados({
           setErroCep("CEP não encontrado — preencha o endereço manualmente.");
           return;
         }
-        setLogradouro(data.logradouro ?? "");
-        setBairro(data.bairro ?? "");
-        setCidade(data.localidade ?? "");
-        setUf((data.uf ?? "").toUpperCase());
+        // Guard defensivo: ViaCEP às vezes devolve campos null,
+        // undefined ou string "null" quando o registro é parcial.
+        const seguro = (v: unknown) =>
+          typeof v === "string" && v !== "null" ? v : "";
+        setLogradouro(seguro(data.logradouro));
+        setBairro(seguro(data.bairro));
+        setCidade(seguro(data.localidade));
+        setUf(seguro(data.uf).toUpperCase());
       })
       .catch((e) => {
         if (e.name === "AbortError") return;
