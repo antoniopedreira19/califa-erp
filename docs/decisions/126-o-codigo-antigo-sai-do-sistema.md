@@ -188,4 +188,13 @@ baixas. O SQL gravado no histórico de migrations do banco foi aplicado antes
 da troca, e por isso o comentário do topo ainda diz "Decisão 125"; o
 arquivo do repositório diz 126. O comando é o mesmo.
 
-**Pendente:** remover as colunas `codigo_anterior` (§8).
+**Colunas removidas (29/09/2026, autorização do Tiago):** migration
+`20260929700002_remove_codigo_anterior.sql`, com trava de que as quatro
+estivessem vazias. O índice `idx_jobs_codigo_anterior` saiu junto; grants e
+RLS conferidos depois. As sessões ativas foram avisadas antes.
+
+**Reconferência independente** (`5-reconferir.ts`, a pedido do Tiago): os 47
+PDFs lidos pelo PDFKit da Apple e comparados com a cópia, sem nenhuma
+diferença fora do combinado; banco e Storage batem com a cópia. Achado fora
+do combinado: 20 anexos soltos de PPs apagadas em 21/09 (um deles, uma NF de
+teste, cita "0-0001/26"), aguardando decisão do Tiago.
