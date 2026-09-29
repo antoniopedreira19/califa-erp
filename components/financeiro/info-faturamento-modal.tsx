@@ -32,8 +32,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn, formatCnpj } from "@/lib/utils";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
+import { AnexosDaPo, type AnexoDaPo } from "@/components/envio/anexos-da-po";
 
 /** A quebra da parcela entre o faturamento do job e o saldo em save. */
 export interface QuebraSave {
@@ -57,8 +58,15 @@ export interface InfoFaturamento {
    * rótulo ninguém sabe qual é qual (Tiago, 31/08/2026).
    */
   pos: PoDoJob[];
-  /** Instrução do GP sobre como a nota deve ser descrita. */
+  /** Instrução do GP sobre como a nota deve ser descrita. Desde a decisão
+   *  123 é o descritivo DA NOTA do envio. */
   descricaoNf: string | null;
+  /** Arquivos da PO anexados no envio (decisão 123). */
+  anexosPo?: AnexoDaPo[];
+  /** CNPJ do cliente para o qual a nota sai (decisão 123). */
+  cnpj?: string | null;
+  /** CNAE que o GP sugeriu para a nota (decisão 123). */
+  cnaeSugerido?: string | null;
   contatos: ContatoCobranca[];
   /** Só quando há saldo em save nesta linha. */
   quebra?: QuebraSave | null;
@@ -159,6 +167,30 @@ export function InfoFaturamentoModal({
               </div>
             )}
           </div>
+
+          {info?.anexosPo && info.anexosPo.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Rotulo>Anexos da PO</Rotulo>
+              <AnexosDaPo anexos={info.anexosPo} />
+            </div>
+          )}
+
+          {(info?.cnpj || info?.cnaeSugerido) && (
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {info?.cnpj && (
+                <div className="flex flex-col gap-1">
+                  <Rotulo>CNPJ da nota</Rotulo>
+                  <span className="font-mono text-[13px] font-semibold">{formatCnpj(info.cnpj)}</span>
+                </div>
+              )}
+              {info?.cnaeSugerido && (
+                <div className="flex flex-col gap-1">
+                  <Rotulo>CNAE sugerido</Rotulo>
+                  <span className="font-mono text-[13px] font-semibold">{info.cnaeSugerido}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Rotulo>Descrição de NF</Rotulo>

@@ -472,6 +472,11 @@ export default async function JobDetailPage({
         pagoSoPorSave={pagoSoPorSave}
         dataPrevistaFaturamento={job.data_prevista_faturamento}
         portais={portaisDoCliente}
+        contextoDoEnvio={{
+          tenantId: job.tenant_id,
+          cnpjCliente: detalhe.cnpjCliente,
+          contatosCobranca,
+        }}
         moeda={versaoAprovada.moeda}
         faturamentoPorMes={detalhe.modeloPlanilha === "mensal"}
         faturamentoMensal={detalhe.faturamentoMensal}

@@ -92,9 +92,11 @@ test("situação de cada mês: a enviar, na fila, parcial, faturado e sem fatura
     portal_url: null,
     enviado_em: `${mes}T12:00:00Z`,
     parcelas: [
-      { id: `${id}-p1`, ordem: 1, valor: valor / 2, data_vencimento: mes },
-      { id: `${id}-p2`, ordem: 2, valor: valor / 2, data_vencimento: mes },
+      { id: `${id}-p1`, ordem: 1, valor: valor / 2, data_vencimento: mes, nota_id: `${id}-n1` },
+      { id: `${id}-p2`, ordem: 2, valor: valor / 2, data_vencimento: mes, nota_id: `${id}-n1` },
     ],
+    notas: [{ id: `${id}-n1`, ordem: 1, cnpj: "25313018000174", cnae_sugerido: null, descritivo: null }],
+    anexos: [],
   });
   const nota = (parcela: string, valor: number) => ({
     envio_parcela_id: parcela,

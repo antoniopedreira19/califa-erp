@@ -23,9 +23,10 @@ import { formatCurrency } from "@/lib/utils";
 import type { MesDeFaturamento } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes, rotuloMes } from "@/lib/calculos/meses-trimestre";
 import {
-  EnviarFaturamentoDrawer,
+  EnviarFaturamentoDialog,
+  type ContextoDoEnvio,
   type PortalOption,
-} from "./enviar-faturamento-drawer";
+} from "./enviar-faturamento-dialog";
 import {
   ChipSituacao,
   VerEnvioFaturamentoDialog,
@@ -43,14 +44,13 @@ function detalheDoMes(m: MesDeFaturamento, moeda: string): string {
       ? "Este mês não tem faturamento na planilha: não há o que enviar."
       : "Envie quando o cliente validar o mês.";
   }
-  const n = envio.parcelas.length;
-  const primeira = envio.parcelas[0]?.data_vencimento;
+  // Decisão 123: o envio se conta em NOTAS; as parcelas são vencimentos.
+  const n = envio.notas.length || envio.parcelas.length;
+  const primeira = envio.parcelas.map((p) => p.data_vencimento).sort()[0];
   if (m.situacao === "na_fila") {
     return `Enviado em ${dataDoEnvio(envio.enviado_em)} · ${
-      n === 1
-        ? `1 parcela, vencimento ${primeira ? dataBr(primeira) : "—"}`
-        : `${n} parcelas, a primeira vencendo em ${primeira ? dataBr(primeira) : "—"}`
-    }`;
+      n === 1 ? "1 nota fiscal" : `${n} notas fiscais`
+    }, 1º vencimento em ${primeira ? dataBr(primeira) : "—"}`;
   }
   if (m.situacao === "faturado_parcial") {
     return `${m.notas.length} de ${n} ${n === 1 ? "nota emitida" : "notas emitidas"} · ${formatCurrency(
@@ -74,6 +74,8 @@ interface Props {
    *  Nulo quando não há. */
   bloqueio: string | null;
   portais: PortalOption[];
+  /** Tenant, CNPJ do cadastro e contatos de cobrança (decisão 123). */
+  contextoDoEnvio: ContextoDoEnvio;
   moeda: string;
   /** A trilha "Encerramento", abaixo da de faturamento (decisão 087). */
   trilhaEncerramento?: React.ReactNode;
@@ -88,6 +90,7 @@ export function BarraFaturamentoMensal({
   podeEnviar,
   bloqueio,
   portais,
+  contextoDoEnvio,
   moeda,
   trilhaEncerramento,
   jobEncerrado = false,
@@ -112,7 +115,7 @@ export function BarraFaturamentoMensal({
   function botaoEnviar(m: MesDeFaturamento, contorno: boolean) {
     const nome = nomeDoMes(m.mes);
     return (
-      <EnviarFaturamentoDrawer
+      <EnviarFaturamentoDialog
         key={`enviar-${m.mesId}-${contorno ? "linha" : "barra"}`}
         jobId={jobId}
         jobCodigo={jobCodigo}
@@ -120,6 +123,7 @@ export function BarraFaturamentoMensal({
         valorSave={m.save}
         dataPrevistaFaturamento={null}
         portais={portais}
+        {...contextoDoEnvio}
         moeda={moeda}
         mes={{ iso: m.mes, nome }}
         rotuloBotao={contorno ? "Enviar faturamento" : `Enviar faturamento de ${nome}`}

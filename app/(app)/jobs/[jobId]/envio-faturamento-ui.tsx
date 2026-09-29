@@ -11,7 +11,8 @@
  */
 
 import * as React from "react";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCnpj, formatCurrency } from "@/lib/utils";
+import { AnexosDaPo } from "@/components/envio/anexos-da-po";
 import {
   Dialog,
   DialogContent,
@@ -102,6 +103,11 @@ export function listaPtBr(itens: string[]): string {
  * O pop-up "Ver envio". 640 px e a descrição da nota em letra de leitura
  * desde 16/09/2026: a descrição aceita até 2.000 caracteres, e nos 512 px
  * de antes um texto longo virava uma coluna estreita e comprida.
+ *
+ * Desde a decisão 123 (29/09/2026) mostra as NOTAS FISCAIS do envio, cada
+ * uma com CNPJ, valor, vencimentos, CNAE sugerido e descritivo, e os
+ * anexos da PO. O envio anterior à 123 foi convertido: cada parcela antiga
+ * virou uma nota.
  */
 export function VerEnvioFaturamentoDialog({
   aberto,
@@ -148,33 +154,73 @@ export function VerEnvioFaturamentoDialog({
                 <dt className="text-muted-foreground">Número da PO</dt>
                 <dd>{envio.numero_po ?? "—"}</dd>
               </div>
+              {envio.anexos.length > 0 && (
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">Anexos da PO</dt>
+                  <dd>
+                    <AnexosDaPo anexos={envio.anexos} />
+                  </dd>
+                </div>
+              )}
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-muted-foreground">Portal</dt>
                 <dd className="truncate">{envio.portal_url ?? "Sem portal"}</dd>
               </div>
               <div className="space-y-1">
-                <dt className="text-muted-foreground">Descrição da nota fiscal</dt>
-                <dd className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-border bg-muted/30 px-3.5 py-3 text-sm leading-relaxed">
-                  {envio.descricao_nf ?? "—"}
-                </dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-muted-foreground">Parcelas</dt>
-                <dd className="divide-y divide-border rounded-lg border border-border">
-                  {envio.parcelas.map((par) => (
-                    <div
-                      key={par.id}
-                      className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs"
-                    >
-                      <span className="font-mono text-muted-foreground">
-                        {par.ordem}/{envio.parcelas.length}
-                      </span>
-                      <span className="font-mono font-semibold">
-                        {formatCurrency(par.valor, moeda)}
-                      </span>
-                      <span>vence {dataBr(par.data_vencimento)}</span>
-                    </div>
-                  ))}
+                <dt className="text-muted-foreground">
+                  {envio.notas.length === 1 ? "Nota fiscal" : `Notas fiscais (${envio.notas.length})`}
+                </dt>
+                <dd className="space-y-2">
+                  {envio.notas.map((nota) => {
+                    const parcelas = envio.parcelas.filter((p) => p.nota_id === nota.id);
+                    const valor = parcelas.reduce((t, p) => t + p.valor, 0);
+                    return (
+                      <div key={nota.id} className="overflow-hidden rounded-lg border border-border">
+                        <div className="flex items-center justify-between gap-3 bg-muted/40 px-3.5 py-2">
+                          <span className="text-xs font-semibold">
+                            NF {nota.ordem}
+                            <span className="ml-2 font-mono font-normal text-muted-foreground">
+                              {formatCnpj(nota.cnpj)}
+                            </span>
+                          </span>
+                          <span className="font-mono text-sm font-semibold">
+                            {formatCurrency(valor, moeda)}
+                          </span>
+                        </div>
+                        <div className="space-y-2 px-3.5 py-2.5">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                            {parcelas.map((par, i) => (
+                              <span key={par.id} className="text-muted-foreground">
+                                {parcelas.length > 1 && (
+                                  <span className="font-mono">
+                                    {i + 1}/{parcelas.length}{" "}
+                                  </span>
+                                )}
+                                <span className="font-mono font-semibold text-foreground">
+                                  {formatCurrency(par.valor, moeda)}
+                                </span>{" "}
+                                vence {dataBr(par.data_vencimento)}
+                              </span>
+                            ))}
+                          </div>
+                          {nota.cnae_sugerido && (
+                            <p className="text-xs text-muted-foreground">
+                              CNAE sugerido{" "}
+                              <span className="font-mono text-foreground">{nota.cnae_sugerido}</span>
+                            </p>
+                          )}
+                          <p
+                            className={cn(
+                              "whitespace-pre-wrap text-sm leading-relaxed",
+                              !nota.descritivo && "text-xs text-muted-foreground",
+                            )}
+                          >
+                            {nota.descritivo ?? "Sem descritivo — o financeiro escreve na emissão."}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </dd>
               </div>
               {notas.length > 0 && (

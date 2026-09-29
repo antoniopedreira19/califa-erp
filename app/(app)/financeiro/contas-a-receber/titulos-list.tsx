@@ -236,6 +236,8 @@ export function TitulosList({
       // Nota já emitida: vale a descrição que saiu NELA, e não mais a
       // instrução que o GP mandou no envio.
       descricaoNf: r.fat_descricao,
+      // Os anexos da PO que vieram no envio (decisão 123).
+      anexosPo: r.jobs.flatMap((j) => infoPorJob[j.job_id]?.anexos ?? []),
       contatos: dedupContatos(
         r.jobs.flatMap((j) => infoPorJob[j.job_id]?.contatos ?? []),
       ),
