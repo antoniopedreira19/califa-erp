@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { valorDaBaixaSchema } from "@/lib/validations/baixa-parcial";
 import { rateioSchema } from "@/lib/validations/conta-avulsa";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
@@ -282,6 +283,8 @@ const baixaSchema = z.object({
   plano_conta_subtipo_id: z
     .string()
     .uuid("Selecione o centro de custo do recebimento."),
+  // Baixa parcial e impostos retidos pelo cliente (decisão 125).
+  ...valorDaBaixaSchema,
 });
 
 export async function darBaixaTitulo(input: unknown): Promise<Result> {
@@ -297,13 +300,16 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
-  const { data: lancId, error } = await supabase.rpc("dar_baixa_titulo_com_plano", {
+  // O banco confere o que falta e os retidos (decisão 125); sem valor,
+  // baixa tudo o que falta.
+  const { data: lancId, error } = await supabase.rpc("baixar_titulo_receber", {
     p_titulo_id: parsed.data.titulo_id,
     p_pago_em: parsed.data.pago_em,
     p_conta_bancaria_id: parsed.data.conta_bancaria_id,
     p_tipo_id: parsed.data.plano_conta_tipo_id,
     p_subtipo_id: parsed.data.plano_conta_subtipo_id,
-    p_criado_por: session.profile.id,
+    p_valor_baixa: parsed.data.valor_baixa ?? null,
+    p_retencoes: parsed.data.retencoes,
   });
 
   if (error) return { ok: false, message: `Falha ao dar baixa: ${error.message}` };
@@ -318,6 +324,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       conta_bancaria_id: parsed.data.conta_bancaria_id,
       plano_conta_tipo_id: parsed.data.plano_conta_tipo_id,
       plano_conta_subtipo_id: parsed.data.plano_conta_subtipo_id,
+      valor_baixa: parsed.data.valor_baixa ?? null,
+      retencoes: parsed.data.retencoes,
       lancamento_id: lancId,
     },
   });

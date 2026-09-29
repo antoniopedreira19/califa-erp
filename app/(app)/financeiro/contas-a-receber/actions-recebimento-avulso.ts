@@ -16,6 +16,7 @@
  */
 
 import { z } from "zod";
+import { valorDaBaixaSchema } from "@/lib/validations/baixa-parcial";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -171,6 +172,8 @@ const baixaSchema = z.object({
   conta_bancaria_id: z.string().uuid("Escolha a conta que recebeu."),
   plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo."),
   plano_conta_subtipo_id: z.string().uuid("Selecione o subtipo do centro de custo."),
+  // Baixa parcial e impostos retidos (decisão 125).
+  ...valorDaBaixaSchema,
 });
 
 export async function darBaixaRecebimentoAvulso(input: unknown): Promise<Result> {
@@ -201,18 +204,19 @@ export async function darBaixaRecebimentoAvulso(input: unknown): Promise<Result>
     return { ok: false, message: "Este título já foi recebido." };
   }
 
-  const { data: lancamentoId, error } = await supabase.rpc(
-    "dar_baixa_avulsa_com_plano",
-    {
-      p_conta_avulsa_id: d.conta_avulsa_id,
-      p_pago_em: d.pago_em,
-      p_conta_bancaria_id: d.conta_bancaria_id,
-      p_plano_conta_tipo_id: d.plano_conta_tipo_id,
-      p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
-      p_forma_pagamento: null,
-      p_cartao_credito_id: null,
-    },
-  );
+  // O banco confere o que falta, os retidos e onde só cabe o valor
+  // inteiro (o rendimento).
+  const { data: lancamentoId, error } = await supabase.rpc("baixar_conta_avulsa", {
+    p_conta_avulsa_id: d.conta_avulsa_id,
+    p_pago_em: d.pago_em,
+    p_conta_bancaria_id: d.conta_bancaria_id,
+    p_tipo_id: d.plano_conta_tipo_id,
+    p_subtipo_id: d.plano_conta_subtipo_id,
+    p_forma_pagamento: null,
+    p_cartao_credito_id: null,
+    p_valor_baixa: d.valor_baixa ?? null,
+    p_retencoes: d.retencoes,
+  });
 
   if (error) {
     console.error("[recebimento_avulso.baixa]", error.message);
@@ -234,6 +238,8 @@ export async function darBaixaRecebimentoAvulso(input: unknown): Promise<Result>
       tipo_entrada: avulsa.tipo_entrada,
       descricao: avulsa.descricao,
       valor: Number(avulsa.valor),
+      valor_baixa: d.valor_baixa ?? null,
+      retencoes: d.retencoes,
       pago_em: d.pago_em,
       conta_bancaria_id: d.conta_bancaria_id,
       lancamento_id: lancamentoId,

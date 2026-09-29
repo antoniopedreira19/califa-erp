@@ -36,8 +36,14 @@ const motivoSchema = z
  * O que a tela chama de "tipo" da baixa. `avulso` e `recorrencia` são a
  * mesma tabela (`contas_avulsas`); o par {tipo, id} é o mesmo que a baixa
  * usou na ida.
+ *
+ * `baixa` cancela UMA baixa pelo lançamento dela (decisão 125): título a
+ * receber, parcela de PP e conta avulsa aceitam várias baixas, e o `id` é
+ * o do lançamento. Os tipos por documento ficam para quem só tem uma
+ * baixa (desembolso, devolução de verba, fatura, transferência).
  */
 const tipoSchema = z.enum([
+  "baixa",
   "titulo_receber",
   "pp",
   "avulso",
@@ -55,6 +61,7 @@ const RPC_DO_CANCELAMENTO: Record<
   TipoDeBaixa,
   { rpc: string; param: string }
 > = {
+  baixa: { rpc: "cancelar_baixa_lancamento", param: "p_lancamento_id" },
   titulo_receber: { rpc: "cancelar_baixa_titulo_receber", param: "p_titulo_id" },
   pp: { rpc: "cancelar_baixa_pp_parcela", param: "p_parcela_id" },
   avulso: { rpc: "cancelar_baixa_avulsa", param: "p_conta_avulsa_id" },

@@ -348,19 +348,24 @@ export function CartaoFatura({
                         : "Lançamento avulso",
                 parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
                 valor: conferindo.valor,
-                pagoEm: conferindo.pago_em,
-                contaNome: conferindo.conta_nome,
-                centroNome: conferindo.centro_nome,
-                subtipoNome: conferindo.subtipo_nome,
-                dataPagamento: conferindo.data_pagamento,
                 vencOriginal: conferindo.venc_original,
+                // No cartão a baixa é sempre uma, do valor inteiro (decisão 125).
+                baixas: [
+                  {
+                    lancamentoId: conferindo.baixa_lancamento_id,
+                    data: conferindo.pago_em,
+                    contaNome: conferindo.conta_nome,
+                    contaBancariaId: conferindo.baixa_conta_id,
+                    centroNome: conferindo.centro_nome,
+                    subtipoNome: conferindo.subtipo_nome,
+                    movimentado: conferindo.valor,
+                    retencoes: [],
+                    estornos: conferindo.estornos_da_baixa,
+                  },
+                ],
                 viaCartao: conferindo.forma_pagamento === "cartao_credito",
                 ehFaturaDeCartao: false,
                 ehTransferencia: false,
-                baixaLancamentoId: conferindo.baixa_lancamento_id,
-                valorMovimentado: conferindo.valor,
-                contaBancariaId: conferindo.baixa_conta_id,
-                estornos: conferindo.estornos_da_baixa,
                 // Tudo aqui foi pago no cartão (decisão 120): devolver é o
                 // "Estornar compra" da linha, que abate a fatura.
                 semEstorno:
@@ -372,7 +377,7 @@ export function CartaoFatura({
         pending={pendingAcao}
         erro={erroAcao}
         onEstornar={() => {}}
-        onCancelar={(motivo) => {
+        onCancelar={(_baixa, motivo) => {
           const alvo = conferindo;
           if (!alvo) return;
           startTransition(async () => {

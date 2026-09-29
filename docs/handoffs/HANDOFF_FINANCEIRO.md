@@ -6238,3 +6238,26 @@ estendido a Contas a Receber em 31/08.**
 - **Não mudou:** o dossiê da PP em Contas a Pagar (`pp-dossie.tsx`) segue
   mostrando o código do projeto como linha secundária, abaixo do código do
   job.
+
+## ⚠️ Nota de 2026-09-29 (5) — baixa parcial e impostos retidos (decisão 125, entrega 3a)
+
+- **Banco (as duas pontas):** o documento aceita várias baixas e só vira
+  pago quando a soma delas (líquido + retidos) chega ao valor. A baixa
+  segue sendo o lançamento, com o **líquido**; os retidos moram em
+  `baixas_retencoes`. Funções novas `baixar_titulo_receber`,
+  `baixar_conta_avulsa`, `baixar_parcela_pp` e `cancelar_baixa_lancamento`;
+  as `dar_baixa_*` e `cancelar_baixa_*` antigas delegam (baixam o que falta
+  / cancelam a mais recente). Sem os índices de uma baixa viva por título,
+  parcela e avulsa. `vw_a_pagar` e `vw_fluxo_caixa` projetam só o que falta.
+- **Títulos a Receber:** situação **Parcial** (chip próprio), linha com
+  "recebido · falta" e retidos, diálogo com o bloco "Valor a dar baixa"
+  (`components/financeiro/valor-da-baixa.tsx`) e popup do olho com um
+  cartão por baixa, cada um com Estornar e Cancelar, e "Dar baixa no
+  restante". Leitura das baixas em `lib/data/baixas-do-documento.ts`.
+- **Títulos a Pagar ainda não mudou na tela** (entrega 3b): o popup usa o
+  formato novo com uma baixa só. O banco já aceita a parcial e a retenção
+  no pagar, e já recusa onde só cabe o valor inteiro (folha, PP de verba,
+  cartão, remessa).
+- **Home:** "previsto a receber" desconta as baixas parciais.
+- **Conferido no navegador (29/09/2026)** no TES-1001/26 NF 1 2/2 e num
+  recebimento avulso de teste, tudo desfeito no fim. Detalhe na decisão 125.
