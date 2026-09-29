@@ -160,7 +160,9 @@ interface Dados {
   /** Nome do responsável interno da verba. Obrigatório quando `pp.verba_producao === true`. */
   responsavelVerbaNome?: string | null;
   job: Pick<Job, "codigo" | "nome" | "produto">;
-  projeto: Pick<Projeto, "codigo" | "campanha">;
+  /** Só a campanha: o código do projeto saiu do documento em 29/09/2026 —
+   *  o código da PP é o do JOB (decisão 126). */
+  projeto: Pick<Projeto, "campanha">;
   cliente: Pick<Cliente, "nome_fantasia">;
   responsavelNome: string;
   /**
@@ -300,7 +302,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     margin: [0, 0, 0, 0],
   };
 
-  // ===== 2. METADATA (Cliente/Fornecedor/... | Emissão/Orçamento/...) =====
+  // ===== 2. METADATA (Cliente/Fornecedor/... | Emissão/Job) =====
   const metadataTable: Content = {
     table: {
       widths: ["50%", "50%"],
@@ -321,11 +323,11 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
           {
             stack: [
               lv("Emissão", fmtDate(pp.created_at)),
-              // O código do JOB, não o do orçamento: é o que a produção e
-              // o financeiro usam para falar do trabalho; o do orçamento é
-              // só da base de dados (29/09/2026).
+              // O código do JOB, e só ele: é o que a produção e o
+              // financeiro usam para falar do trabalho. O do orçamento é só
+              // da base de dados (decisão 121) e o do projeto saiu também
+              // (decisão 126).
               lv("Job", job.codigo),
-              lv("Projeto", projeto.codigo),
             ],
           },
         ],

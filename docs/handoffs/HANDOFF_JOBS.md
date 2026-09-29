@@ -4556,3 +4556,21 @@ código publicado logo depois (`3305751`).
 - **PDF da PP** (`lib/pdf/pedido-compra.ts`): "Job: TES-1008/26" no lugar de
   "Orçamento: TES-P002/26-01". O `carregarContextoPdf` não lê mais o
   orçamento, e o job do `actions-pp.ts` agora carrega `codigo`.
+
+## ⚠️ Nota de 2026-09-29 (3) — o código antigo sai do sistema, e a PP mostra só o código do job (decisão 126)
+
+- **PDF da PP:** a linha "Projeto" saiu. A coluna da direita do cabeçalho
+  fica com Emissão e Job. `Dados.projeto` é só `{ campanha }`, e o
+  `carregarContextoPdf` não lê mais o código do projeto.
+- **As 47 PPs existentes foram refeitas** com o modelo de hoje: mesmo
+  número, mesma data de emissão, mesma foto bancária. PP-00040 e PP-00091,
+  que tinham um PDF por parcela, viraram documento único com a tabela das
+  parcelas. Os scripts estão em `scripts/rastros-codigo-anterior/`.
+- **Ficha do job:** o "Código anterior" saiu, com `JobDaFicha.codigoAnterior`,
+  nas três telas que usam a ficha.
+- **Lista de Jobs:** a busca acha só pelo código atual.
+- **`jobs.codigo_anterior`** foi esvaziado (migration `20260929700001`) e saiu
+  do tipo `Job`. A coluna sai do banco depois que as outras frentes
+  atualizarem o código.
+- O descritivo do TES-1003/26 citava o "JOB-0032"; agora cita o
+  "TES-1001/26".

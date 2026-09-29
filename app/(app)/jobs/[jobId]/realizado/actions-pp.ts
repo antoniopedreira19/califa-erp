@@ -589,7 +589,7 @@ export type ResultadoEnvio =
  *  responsável do projeto. Uma leitura só, usada pela geração, pela edição
  *  e pelo reenvio — os três documentos têm que sair iguais. */
 interface ContextoPdf {
-  projeto: { codigo: string; campanha: string | null };
+  projeto: { campanha: string | null };
   cliente: { nome_fantasia: string };
   responsavelNome: string;
 }
@@ -603,7 +603,7 @@ async function carregarContextoPdf(
     supabase
       .from("projetos")
       .select(
-        "id, codigo, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
+        "id, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
       )
       .eq("id", job.projeto_id ?? "")
       .eq("tenant_id", tenantId)
@@ -611,14 +611,13 @@ async function carregarContextoPdf(
   ]);
 
   const projeto = projetoRes.data as {
-    codigo: string;
     campanha: string | null;
     cliente: { nome_fantasia: string } | null;
     responsavel: { nome: string } | null;
   } | null;
 
   return {
-    projeto: { codigo: projeto?.codigo ?? "", campanha: projeto?.campanha ?? null },
+    projeto: { campanha: projeto?.campanha ?? null },
     cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
     responsavelNome: projeto?.responsavel?.nome ?? "",
   };

@@ -6222,3 +6222,19 @@ estendido a Contas a Receber em 31/08.**
   não vem de nota, com confirmação; o baixado cancela a baixa antes.
   Conferido apagando os dois títulos de teste (AV-00005 e TR-00001) — o
   banco ficou sem nenhum título nem linha de teste.
+
+## ⚠️ Nota de 2026-09-29 (4) — o código antigo sai do sistema (decisão 126)
+
+- **Fila, Jobs abertos e campo Projeto da abertura:** a busca acha só pelo
+  código atual.
+- **Ficha do job** (conferência e Visualizar Jobs): o "Código anterior"
+  saiu.
+- **`projetos_financeiro.codigo_anterior`** foi esvaziado (migration
+  `20260929700001`) e saiu de `ProjetoFinanceiroOpcao`. A coluna sai do banco
+  depois que as outras frentes atualizarem o código.
+- **PDF da PP** que o financeiro abre: só "Job: <código>", sem projeto. As
+  47 PPs existentes foram refeitas, com o mesmo número, a mesma data de
+  emissão e a mesma foto bancária (ver HANDOFF_JOBS).
+- **Não mudou:** o dossiê da PP em Contas a Pagar (`pp-dossie.tsx`) segue
+  mostrando o código do projeto como linha secundária, abaixo do código do
+  job.

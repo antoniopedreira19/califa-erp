@@ -4777,3 +4777,22 @@ aplicada na hora combinada com a frente do Antonio, junto da
   foi dele (`codigoQueOProjetoJaTeve`). Ver decisão 122, §6.
 - **"Código anterior"** saiu do cabeçalho do projeto (produção e
   financeiro). A coluna e a busca ficam.
+
+## ⚠️ Nota de 2026-09-29 (4) — o código antigo sai do sistema (decisão 126)
+
+- **Busca da lista de projetos:** só pelo código atual.
+  `projetos.codigo_anterior` e `orcamentos.codigo_anterior` foram
+  esvaziados (migration `20260929700001`) e saíram do tipo `Projeto`. As
+  colunas saem do banco depois que as outras frentes atualizarem o código.
+- **Registro de números usados:** as 34 linhas no formato antigo
+  (`AMB-0003/26`) passaram ao formato com "P", mesmo número e mesmo
+  projeto. O gerador e o `codigoQueOProjetoJaTeve` só encontram esse
+  formato agora.
+- **Nome de arquivo com código antigo de orçamento:** no histórico de
+  importação (5 linhas) e no nome da versão "Importada de
+  interna-TES-0001_26-01-v3.xlsx", o código virou o nome do orçamento
+  ("interna-Orcamento de Teste-v3.xlsx"), como a exportação nomeia o arquivo
+  desde a decisão 121.
+- **As 23 planilhas importadas** saíram do Storage (bucket
+  `orcamento-importacoes`), por decisão do Tiago. As linhas de
+  `orcamento_importacoes` ficam, e nenhuma tela as lê.

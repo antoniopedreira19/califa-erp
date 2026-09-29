@@ -37,7 +37,7 @@ export default async function ProjetosPage({
       let q = supabase
         .from("projetos")
         .select(
-          "id, codigo, codigo_anterior, nome, campanha, status, cliente_id, produto_id, " +
+          "id, codigo, nome, campanha, status, cliente_id, produto_id, " +
             "data_inicio_prevista, created_at, " +
             // Descrição do projeto: alimenta o cartão do ícone na coluna
             // Nome (handoff "Descritivos nas Listas", 04/09/2026). É texto
@@ -248,7 +248,6 @@ export default async function ProjetosPage({
   const projetos: ProjetoRow[] = projetosVisiveis.map((p) => ({
     id: p.id,
     codigo: p.codigo,
-    codigo_anterior: p.codigo_anterior ?? null,
     nome: p.nome,
     campanha: p.campanha,
     descricao: p.descricao ?? null,

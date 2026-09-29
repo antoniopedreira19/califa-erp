@@ -30,9 +30,6 @@ import { jobStatusLabel, type JobStatusExibido, jobStatusBadgeClasses } from "@/
 export interface JobRow {
   id: string;
   codigo: string;
-  /** O `JOB-NNNN` de antes da decisão 114 — a busca também olha ele. Nulo
-   *  nos jobs criados depois da troca. */
-  codigo_anterior: string | null;
   /** Quando o job foi criado: é a ordem da lista (o código não diz mais). */
   criado_em: string;
   nome: string;
@@ -198,7 +195,6 @@ export function JobsList({
       if (q === "") return true;
       return (
         r.codigo.toLowerCase().includes(q) ||
-        (r.codigo_anterior?.toLowerCase().includes(q) ?? false) ||
         r.nome.toLowerCase().includes(q)
       );
     }

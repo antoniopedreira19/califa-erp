@@ -582,7 +582,6 @@ export default async function JobNoFinanceiroPage({
               descritivo={job.observacoes}
               job={{
                 codigo: job.codigo,
-                codigoAnterior: job.codigo_anterior,
                 nome: jobNaFila.nome,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —

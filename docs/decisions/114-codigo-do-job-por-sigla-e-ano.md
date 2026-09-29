@@ -160,3 +160,17 @@ próximo job no projeto de teste é `TES-1013/26`. A primeira tentativa da
 - **Orçamento:** o código anterior fica só guardado; nenhuma tela o mostra.
 - **Nomes repetidos no financeiro** ("Universal 4T 2026" três vezes, cinco
   projetos de teste da Pevetech): não mudam com os códigos; limpeza à parte.
+
+## 7. Revisão de 29/09/2026: o código anterior sai do sistema (decisão 126)
+
+O Tiago pediu para tirar o "Código anterior" e, antes, apagar todo rastro
+dos códigos de antes desta decisão. Desde então:
+
+- a ficha e as buscas não usam mais `codigo_anterior`;
+- as quatro colunas foram esvaziadas e saem do banco depois;
+- os PDFs das 47 PPs foram refeitos com o código atual;
+- os arquivos antigos saíram do Storage;
+- o registro de números usados passou ao formato com a letra.
+
+A auditoria segue com os códigos da época, e esta decisão também, como
+registro. Ver a decisão 126.

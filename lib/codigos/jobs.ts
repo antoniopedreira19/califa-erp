@@ -19,8 +19,8 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
  * dois. De 2027 em diante o sequencial começa em 0001.
  *
  * ⚠️ Até 28/09/2026 o código era `JOB-NNNN`, um sequencial único do
- * tenant. Os jobs daquela época guardam o código antigo em
- * `jobs.codigo_anterior`.
+ * tenant. O código antigo saiu do sistema em 29/09/2026 (decisão 126):
+ * do banco, dos PDFs das PPs e dos arquivos.
  *
  * Sujeito a race condition entre dois envios simultâneos — o índice único
  * (tenant_id, codigo) captura a colisão, e a tela pede para tentar de novo.
