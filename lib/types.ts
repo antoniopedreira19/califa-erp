@@ -3283,7 +3283,11 @@ export interface Colaborador {
   id: string;
   tenant_id: string;
   nome: string;
+  /** E-mail corporativo (California). Usado como principal em UI. */
   email: string | null;
+  /** E-mail pessoal — coluna nova em 29/09/2026 pra suportar os dois
+   *  emails que o CSV do RH traz. Opcional; UI mostra apenas se houver. */
+  email_pessoal: string | null;
   telefone: string | null;
   tipo_contratacao: TipoContratacao;
   /** CPF do colaborador — 11 dígitos. Sempre obrigatório no cadastro

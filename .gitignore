@@ -74,3 +74,4 @@ CLAUDE.local.md
 
 # Planos de alteração montados fora do fluxo de tasks (uso local, enviados ao Claude Code sob demanda)
 planos-locais/
+tmp/
