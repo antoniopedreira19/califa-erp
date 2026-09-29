@@ -96,8 +96,8 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
               </DialogTitle>
               <DialogDescription className="pt-1.5 text-[13.5px] leading-relaxed">
                 Dados enviados pela produção a partir do orçamento{" "}
-                <strong className="font-mono text-foreground">
-                  {job.orcamento_codigo ?? "—"}
+                <strong className="text-foreground">
+                  {job.orcamento_nome ?? "—"}
                 </strong>
                 . Abra a planilha interna para conferir item por item.
               </DialogDescription>

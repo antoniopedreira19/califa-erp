@@ -46,7 +46,6 @@ import {
  */
 export interface LinhaTotaisProjeto {
   id: string;
-  codigo: string;
   nome: string;
   /** Rótulo curto à direita do nome — "v2 · aprovada", por exemplo. */
   detalhe?: string | null;
@@ -277,9 +276,6 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
                   <tr key={l.id} className="border-b border-border">
                     <td colSpan={3} className="p-3">
                       <div className="flex flex-wrap items-center gap-2.5">
-                        <span className="font-mono text-xs font-bold text-california-red">
-                          {l.codigo}
-                        </span>
                         <span className="text-[13.5px]">{l.nome}</span>
                         {l.detalhe && (
                           <span className="text-[11px] text-muted-foreground">

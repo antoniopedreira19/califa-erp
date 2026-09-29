@@ -104,6 +104,9 @@ test("Orçamentos: fora arquivados, cancelados e recusados, menos o aberto; cade
   assert.deepEqual(itens.map((i) => i.travado), [true, false, true, false, false]);
   assert.equal(itens.find((i) => i.id === "o6")?.emRevisao, true);
   assert.equal(itens[0].href, "/orcamentos/p/o1");
+  // O código do orçamento não vai para a aba (29/09/2026): só da base de
+  // dados. A ordem continua a dele, que é a de criação.
+  assert.ok(itens.every((i) => i.codigo === null));
 });
 
 test("Jobs: cada módulo filtra; o job aberto entra sempre", () => {

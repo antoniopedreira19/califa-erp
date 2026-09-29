@@ -3,7 +3,10 @@ import ExcelJS from "exceljs";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { nomeVersao } from "@/lib/nome-versao";
-import { adicionarAbaOrcamento } from "@/lib/exportacao/planilha-orcamento";
+import {
+  adicionarAbaOrcamento,
+  nomeDeArquivoSeguro,
+} from "@/lib/exportacao/planilha-orcamento";
 import {
   adicionarAbaOrcamentoMensal,
   mesesDaVersaoParaAba,
@@ -73,14 +76,13 @@ export async function GET(
       .from("orcamentos")
       // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
       .select(
-        "id, codigo, nome, projeto:projetos(cliente:clientes(nome_fantasia)), categoria:categorias_dominio!categoria_id(modelo_planilha)",
+        "id, nome, projeto:projetos(cliente:clientes(nome_fantasia)), categoria:categorias_dominio!categoria_id(modelo_planilha)",
       )
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{
         id: string;
-        codigo: string;
         nome: string;
         projeto: { cliente: { nome_fantasia: string } | null } | null;
         categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
@@ -157,7 +159,7 @@ export async function GET(
 
   if (interna) {
     adicionarAbaInterna(wb, "Interna", {
-      identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
+      identificacao: orcamento.nome,
       clienteNome,
       titulo: `${nomeVersao(orcamento.nome, versao.numero_versao)} · planilha interna`,
       marca: "interna:orcamento",
@@ -184,7 +186,7 @@ export async function GET(
       wb,
       "Orçamento",
       {
-        identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
+        identificacao: orcamento.nome,
         clienteNome,
         titulo: nomeVersao(orcamento.nome, versao.numero_versao),
         secoes: [
@@ -204,7 +206,7 @@ export async function GET(
       wb,
       "Orçamento",
       {
-        nome: `${orcamento.codigo} · ${nomeVersao(orcamento.nome, versao.numero_versao)}`,
+        nome: nomeVersao(orcamento.nome, versao.numero_versao),
         cambio: cambioDaVersao(versao),
         secoes: [
           {
@@ -224,7 +226,7 @@ export async function GET(
       wb,
       "Orçamento",
       {
-        identificacao: `${orcamento.codigo} · ${orcamento.nome}`,
+        identificacao: orcamento.nome,
         clienteNome,
         titulo: nomeVersao(orcamento.nome, versao.numero_versao),
         secoes: [
@@ -244,7 +246,18 @@ export async function GET(
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();
 
-  const nomeArquivo = `${interna ? "interna" : "orcamento"}-${orcamento.codigo}-v${versao.numero_versao}.xlsx`;
+  // O nome do orçamento no lugar do código dele (29/09/2026: o código do
+  // orçamento é só da base de dados). Sem acento e só ASCII: o cabeçalho
+  // `Content-Disposition` não aceita qualquer caractere.
+  const nomeAscii =
+    orcamento.nome
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\x20-\x7E]/g, "")
+      .trim() || "orcamento";
+  const nomeArquivo = nomeDeArquivoSeguro(
+    `${interna ? "interna" : "orcamento"}-${nomeAscii}-v${versao.numero_versao}.xlsx`,
+  );
 
   return new NextResponse(buffer as ArrayBuffer, {
     status: 200,

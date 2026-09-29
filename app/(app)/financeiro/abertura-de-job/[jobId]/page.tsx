@@ -391,7 +391,6 @@ export default async function AbrirJobNoFinanceiroPage({
               origem={{
                 projetoHref: `/orcamentos/${detalhe.raw.projeto_id}`,
                 orcamentoHref: `/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}/versoes/${detalhe.raw.versao_orcamento_aprovada_id}`,
-                orcamentoCodigo: detalhe.raw.orcamento?.codigo ?? null,
                 versaoLabel: detalhe.versaoLabel,
               }}
               contatos={detalhe.contatosCobranca}

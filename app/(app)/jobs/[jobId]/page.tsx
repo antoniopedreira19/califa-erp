@@ -308,7 +308,6 @@ export default async function JobDetailPage({
                 // "Orçamento aprovado", e o que foi aprovado é a versão. A
                 // tela da versão tem o caminho de volta ao orçamento.
                 orcamentoHref: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}/versoes/${raw.versao_orcamento_aprovada_id}`,
-                orcamentoCodigo: raw.orcamento?.codigo ?? null,
                 versaoLabel,
               }}
               contatos={contatosCobranca}

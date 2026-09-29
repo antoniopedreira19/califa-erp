@@ -769,7 +769,7 @@ export async function carregarDetalheDoJob(
     {
       criadoEm: raw.created_at,
       aberturaFinanceiroEm: raw.data_abertura_financeiro ?? null,
-      orcamentoCodigo: raw.orcamento?.codigo ?? null,
+      orcamentoNome: raw.orcamento?.nome ?? null,
       versaoNumero: raw.versao?.numero_versao ?? null,
       versaoNome: raw.versao?.nome ?? null,
       valorJobAbertura:

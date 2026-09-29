@@ -1860,7 +1860,7 @@ export function AberturaForm({
                 </Select>
                 <span className="text-[11px] text-muted-foreground">
                   Vem do orçamento{" "}
-                  <span className="font-mono">{job.orcamento_codigo ?? "—"}</span>
+                  <span className="font-medium text-foreground/80">{job.orcamento_nome ?? "—"}</span>
                   . Pode ser trocada aqui sem alterar o orçamento.
                 </span>
                 {categorias.length === 0 && (
@@ -1907,8 +1907,8 @@ export function AberturaForm({
                   {servicoOk ? (
                     <>
                       Vem do orçamento{" "}
-                      <span className="font-mono">
-                        {job.orcamento_codigo ?? "—"}
+                      <span className="font-medium text-foreground/80">
+                        {job.orcamento_nome ?? "—"}
                       </span>
                       . Pode ser trocado aqui sem alterar o orçamento.
                     </>
@@ -3190,8 +3190,8 @@ export function AberturaForm({
               <span className="text-xs text-muted-foreground">
                 Orçamento de origem
               </span>
-              <span className="font-mono text-xs font-semibold">
-                {job.orcamento_codigo ?? "—"}
+              <span className="text-xs font-semibold">
+                {job.orcamento_nome ?? "—"}
               </span>
             </div>
           </div>

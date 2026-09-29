@@ -569,11 +569,11 @@ export default async function OrcamentoDetailPage({
           />
         </Suspense>
 
+        {/* Sem a linha do código do orçamento acima do nome: ele é só da
+            base de dados e confundia a produção, que fala pelo código do
+            job — o "Ver job" ao lado leva a ele (29/09/2026). */}
         <div className="mt-5">
-          <p className="font-mono text-xs font-semibold text-muted-foreground">
-            {orcamento.codigo}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{orcamento.nome}</h1>
             <Badge className={cn("border", statusBadgeClasses(orcamento.status))}>
               {orcamentoStatusLabel(orcamento.status)}
@@ -591,6 +591,8 @@ export default async function OrcamentoDetailPage({
               cidadeAtual={cidadeAtual}
               gpsDoProjeto={gpsDoProjeto}
               produtores={produtores}
+              projetoNome={projetoRaw.nome}
+              projetoCodigo={projetoRaw.codigo}
               disabled={protegido}
               disabledReason={
                 arquivado
@@ -1210,7 +1212,7 @@ function VersaoSelecionada({
         versaoId={versao.id}
         versaoLabel={`v${versao.numero_versao}`}
         versaoStatus={versao.status}
-        orcamentoCodigo={orcamento.codigo}
+        orcamentoNome={orcamento.nome}
         jobHref={job ? `/jobs/${job.id}` : null}
         qtdGrupos={grupos.length}
         qtdItens={itens.length}

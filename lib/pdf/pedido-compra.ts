@@ -14,7 +14,6 @@ import type {
   Fornecedor,
   Job,
   Projeto,
-  Orcamento,
   Cliente,
 } from "@/lib/types";
 // Logo embed como base64: em serverless Vercel, `public/` não é copiado
@@ -160,9 +159,8 @@ interface Dados {
   fornecedor: Fornecedor | null;
   /** Nome do responsável interno da verba. Obrigatório quando `pp.verba_producao === true`. */
   responsavelVerbaNome?: string | null;
-  job: Pick<Job, "nome" | "produto">;
+  job: Pick<Job, "codigo" | "nome" | "produto">;
   projeto: Pick<Projeto, "codigo" | "campanha">;
-  orcamento: Pick<Orcamento, "codigo">;
   cliente: Pick<Cliente, "nome_fantasia">;
   responsavelNome: string;
   /**
@@ -194,7 +192,6 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     responsavelVerbaNome,
     job,
     projeto,
-    orcamento,
     cliente,
     responsavelNome,
     parcelas,
@@ -324,7 +321,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
           {
             stack: [
               lv("Emissão", fmtDate(pp.created_at)),
-              lv("Orçamento", orcamento.codigo),
+              // O código do JOB, não o do orçamento: é o que a produção e
+              // o financeiro usam para falar do trabalho; o do orçamento é
+              // só da base de dados (29/09/2026).
+              lv("Job", job.codigo),
               lv("Projeto", projeto.codigo),
             ],
           },
