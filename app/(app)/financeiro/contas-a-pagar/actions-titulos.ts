@@ -185,6 +185,11 @@ const aprovarSchema = z
       .nullable()
       .or(z.literal("").transform(() => null))
       .default(null),
+    /**
+     * Decisão 127: a marcação "Aprovar pagamento fora do cadastro". Só
+     * conta quando a PP paga por outra chave ou conta — e aí é obrigatória.
+     */
+    aprovar_pagamento_fora_do_cadastro: z.boolean().default(false),
   })
   .superRefine((d, ctx) => {
     if (d.forma_pagamento === "cartao_credito") {
@@ -242,7 +247,7 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
 
   const { data: pp } = await supabase
     .from("pedidos_compra")
-    .select("id, status, codigo, valor, job_id")
+    .select("id, status, codigo, valor, job_id, pagamento_fora_do_cadastro_meio")
     .eq("id", parsed.data.pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -283,11 +288,53 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
     tamanho_bytes: Number(a.arquivo_tamanho_bytes),
   }));
 
+  /**
+   * Pagamento fora do cadastro (decisão 127): a PP paga por uma chave ou
+   * conta que não é a do cadastro do fornecedor, e aprovar exige a
+   * marcação explícita. Ela é gravada ANTES da RPC, porque a CHECK
+   * `pp_fora_do_cadastro_aprovado` não deixa a PP virar `aprovada` sem
+   * ela — e a RPC não foi tocada. Se a RPC falhar, a marcação sai junto.
+   */
+  const foraDoCadastro = Boolean(pp.pagamento_fora_do_cadastro_meio);
+  if (foraDoCadastro) {
+    if (!parsed.data.aprovar_pagamento_fora_do_cadastro) {
+      return {
+        ok: false,
+        message: "Marque “Aprovar pagamento fora do cadastro” antes de aprovar.",
+      };
+    }
+    const { error: errMarcacao } = await supabase
+      .from("pedidos_compra")
+      .update({
+        pagamento_fora_do_cadastro_aprovado_por: session.profile.id,
+        pagamento_fora_do_cadastro_aprovado_em: new Date().toISOString(),
+      })
+      .eq("id", parsed.data.pp_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "em_avaliacao");
+    if (errMarcacao) {
+      return { ok: false, message: `Falha ao aprovar: ${errMarcacao.message}` };
+    }
+  }
+
   const { error } = await supabase.rpc("aprovar_pp_com_data", {
     p_pp_id: parsed.data.pp_id,
     p_data_pagamento: parsed.data.data_pagamento,
   });
-  if (error) return { ok: false, message: `Falha ao aprovar: ${error.message}` };
+  if (error) {
+    if (foraDoCadastro) {
+      await supabase
+        .from("pedidos_compra")
+        .update({
+          pagamento_fora_do_cadastro_aprovado_por: null,
+          pagamento_fora_do_cadastro_aprovado_em: null,
+        })
+        .eq("id", parsed.data.pp_id)
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "em_avaliacao");
+    }
+    return { ok: false, message: `Falha ao aprovar: ${error.message}` };
+  }
 
   // Depois do RPC: a aprovação é o que não pode falhar. Se este update
   // falhar, a PP segue aprovada e a coluna fica nula — que a tela lê como
@@ -344,6 +391,8 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
       // liberou dinheiro sem documento anexado.
       anexos_qtd: anexosNaAprovacao.length,
       anexos: anexosNaAprovacao,
+      // Decisão 127: aprovou pagamento para fora do cadastro do fornecedor.
+      pagamento_fora_do_cadastro: pp.pagamento_fora_do_cadastro_meio ?? null,
     },
   });
 

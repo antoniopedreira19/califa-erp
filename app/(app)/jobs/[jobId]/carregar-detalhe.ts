@@ -58,6 +58,7 @@ import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
 import {
   COLUNAS_DE_PAGAMENTO,
   cadastroMudouDepoisDaFoto,
+  lerPagamentoForaDoCadastro,
   type DadosDePagamento,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
@@ -526,6 +527,9 @@ export async function carregarDetalheDoJob(
         ? (pagamentoAtualPorFornecedor.get(pp.fornecedor_id) ?? null)
         : null,
     ),
+    // Decisão 127: só o meio trocado, lido da foto. A ficha mostra; o
+    // formulário de edição volta preenchido com ele.
+    pagamento_fora_do_cadastro: lerPagamentoForaDoCadastro(pp),
   }));
 
   // Um item pode ter VÁRIAS PPs desde 17/08/2026 (PPs parciais), então o

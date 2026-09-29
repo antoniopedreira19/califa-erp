@@ -15,7 +15,9 @@ import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
 import {
   cadastroMudouDepoisDaFoto,
   COLUNAS_DE_PAGAMENTO,
+  lerPagamentoForaDoCadastro,
   type DadosDePagamento,
+  type FotoDePagamentoDaPP,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { ChatPPsProvider } from "./chat/chat-pps-provider";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
@@ -147,6 +149,7 @@ export default async function PedidosCompraFinanceiroPage({
         fornecedor_agencia, fornecedor_agencia_dv,
         fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta,
         fornecedor_pix_tipo, fornecedor_pix_chave,
+        pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         enviada_financeiro_em, aprovada_em, anexos_na_aprovacao,
@@ -479,7 +482,7 @@ export default async function PedidosCompraFinanceiroPage({
     ]),
   );
 
-  const rows: PPRow[] = ((data ?? []) as unknown as Array<{
+  const rows: PPRow[] = ((data ?? []) as unknown as Array<FotoDePagamentoDaPP & {
     id: string;
     codigo: string;
     status: PPStatus;
@@ -497,6 +500,9 @@ export default async function PedidosCompraFinanceiroPage({
     motivo_rejeicao: string | null;
     pago_em: string | null;
     verba_producao: boolean;
+    dados_pagamento_congelados_em: string | null;
+    pagamento_fora_do_cadastro_meio: string | null;
+    pagamento_fora_do_cadastro_motivo: string | null;
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
     plano_conta_tipo_id: string | null;
@@ -600,6 +606,9 @@ export default async function PedidosCompraFinanceiroPage({
       r,
       r.fornecedor?.id ? cadastroDePagamentoPorFornecedor.get(r.fornecedor.id) : null,
     ),
+    // Decisão 127: só o meio trocado. O dossiê mostra, e a aprovação exige
+    // a marcação "Aprovar pagamento fora do cadastro".
+    pagamento_fora_do_cadastro: lerPagamentoForaDoCadastro(r),
     empresa_id: r.empresa?.id ?? "",
     empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
     job_id: r.job?.id ?? "",

@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
+import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { podeCancelarPP, type PedidoCompraNaLista, situacaoDaVerba, situacaoVerbaLabel } from "@/lib/types";
 import { PPStatusChip } from "./pp-status-chip";
 import {
@@ -496,6 +497,13 @@ export function VerPPDrawer({
                     documento dela — o cadastro novo vale para as próximas PPs.
                   </span>
                 </p>
+              )}
+              {/* Decisão 127: o meio que esta PP troca, em três linhas. */}
+              {pp.pagamento_fora_do_cadastro && (
+                <PagamentoForaDoCadastroCartao
+                  pagamento={pp.pagamento_fora_do_cadastro}
+                  className="mt-1.5"
+                />
               )}
             </div>
 

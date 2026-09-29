@@ -15,7 +15,13 @@
  * viraria Server Action.
  */
 
-import type { PixTipoChave, TipoContaBancariaFornecedor } from "@/lib/types";
+import type {
+  MeioForaDoCadastro,
+  PagamentoForaDoCadastroDaPP,
+  PixTipoChave,
+  TipoContaBancariaFornecedor,
+} from "@/lib/types";
+import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 
 /** Os nove campos de pagamento, do jeito que o cadastro os guarda. */
 export interface DadosDePagamento {
@@ -47,10 +53,126 @@ export interface FotoDePagamentoDaPP {
 export const COLUNAS_DE_PAGAMENTO =
   "banco_codigo, banco_nome, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave";
 
-/** Cadastro → foto: o que o envio grava na PP. */
+// ---------------------------------------------------------------------------
+// Pagamento fora do cadastro (decisão 127, 29/09/2026)
+// ---------------------------------------------------------------------------
+
+/**
+ * O que a produção escolhe no formulário quando a PP não paga pelo
+ * cadastro: UM meio (PIX ou conta) e o motivo. Já validado e normalizado
+ * por `pagamentoForaDoCadastroSchema`.
+ */
+export interface PagamentoForaDoCadastro {
+  meio: MeioForaDoCadastro;
+  motivo: string;
+  pix_tipo: PixTipoChave | null;
+  pix_chave: string | null;
+  banco_codigo: string | null;
+  agencia: string | null;
+  agencia_dv: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: TipoContaBancariaFornecedor | null;
+}
+
+/** Os campos de cada meio — o que "trocar o meio" troca, e mais nada. */
+const CAMPOS_DO_MEIO: Record<MeioForaDoCadastro, Array<keyof DadosDePagamento>> = {
+  pix: ["pix_tipo", "pix_chave"],
+  conta: ["banco_codigo", "banco_nome", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta"],
+};
+
+/**
+ * O cadastro com só o meio escolhido trocado.
+ *
+ * Regra do Tiago (29/09/2026): "o documento em si deverá permanecer igual,
+ * apenas com a chave escolhida". Por isso o outro meio continua o do
+ * cadastro — outro PIX mantém a conta; outra conta mantém a chave — e o
+ * PDF sai com o mesmo desenho de sempre.
+ */
+export function aplicarPagamentoForaDoCadastro(
+  cadastro: DadosDePagamento | null | undefined,
+  fora: PagamentoForaDoCadastro | null | undefined,
+): DadosDePagamento {
+  const base: DadosDePagamento = {
+    banco_codigo: cadastro?.banco_codigo ?? null,
+    banco_nome: cadastro?.banco_nome ?? null,
+    agencia: cadastro?.agencia ?? null,
+    agencia_dv: cadastro?.agencia_dv ?? null,
+    conta: cadastro?.conta ?? null,
+    conta_dv: cadastro?.conta_dv ?? null,
+    tipo_conta: cadastro?.tipo_conta ?? null,
+    pix_tipo: cadastro?.pix_tipo ?? null,
+    pix_chave: cadastro?.pix_chave ?? null,
+  };
+  if (!fora) return base;
+  if (fora.meio === "pix") {
+    return { ...base, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave };
+  }
+  return {
+    ...base,
+    banco_codigo: fora.banco_codigo,
+    banco_nome: fora.banco_codigo ? (getBancoByCodigo(fora.banco_codigo)?.nome ?? null) : null,
+    agencia: fora.agencia,
+    agencia_dv: fora.agencia_dv,
+    conta: fora.conta,
+    conta_dv: fora.conta_dv,
+    tipo_conta: fora.tipo_conta,
+  };
+}
+
+/**
+ * As colunas de `pedidos_compra` que dizem se a PP paga fora do cadastro.
+ * Toda gravação que re-tira a foto grava estas também — inclusive para
+ * zerar, quando a PP volta a pagar pelo cadastro. A marcação da aprovação
+ * sempre zera: a PP que foi editada ou reenviada é aprovada de novo.
+ */
+export function camposDoPagamentoForaDoCadastro(
+  fora: PagamentoForaDoCadastro | null | undefined,
+) {
+  return {
+    pagamento_fora_do_cadastro_meio: fora?.meio ?? null,
+    pagamento_fora_do_cadastro_motivo: fora?.motivo ?? null,
+    pagamento_fora_do_cadastro_aprovado_por: null,
+    pagamento_fora_do_cadastro_aprovado_em: null,
+  };
+}
+
+/**
+ * Da PP gravada para a tela: o meio, o motivo e SÓ os dados do meio
+ * trocado — o que o dossiê, a ficha e o formulário de edição mostram.
+ * Null = a PP paga pelo cadastro.
+ */
+export function lerPagamentoForaDoCadastro(
+  pp: Partial<FotoDePagamentoDaPP> & {
+    pagamento_fora_do_cadastro_meio?: string | null;
+    pagamento_fora_do_cadastro_motivo?: string | null;
+  },
+): PagamentoForaDoCadastroDaPP | null {
+  const meio = pp.pagamento_fora_do_cadastro_meio;
+  if (meio !== "pix" && meio !== "conta") return null;
+  const pix = meio === "pix";
+  return {
+    meio,
+    motivo: pp.pagamento_fora_do_cadastro_motivo ?? "",
+    pix_tipo: pix ? (pp.fornecedor_pix_tipo ?? null) : null,
+    pix_chave: pix ? (pp.fornecedor_pix_chave ?? null) : null,
+    banco_codigo: pix ? null : (pp.fornecedor_banco_codigo ?? null),
+    banco_nome: pix ? null : (pp.fornecedor_banco_nome ?? null),
+    agencia: pix ? null : (pp.fornecedor_agencia ?? null),
+    agencia_dv: pix ? null : (pp.fornecedor_agencia_dv ?? null),
+    conta: pix ? null : (pp.fornecedor_conta ?? null),
+    conta_dv: pix ? null : (pp.fornecedor_conta_dv ?? null),
+    tipo_conta: pix ? null : (pp.fornecedor_tipo_conta ?? null),
+  };
+}
+
+/** Cadastro → foto: o que o envio grava na PP. Com `fora`, o meio
+ *  escolhido entra no lugar do cadastro (decisão 127). */
 export function tirarFoto(
   cadastro: DadosDePagamento | null | undefined,
+  fora?: PagamentoForaDoCadastro | null,
 ): FotoDePagamentoDaPP {
+  if (fora) cadastro = aplicarPagamentoForaDoCadastro(cadastro, fora);
   return {
     fornecedor_banco_codigo: cadastro?.banco_codigo ?? null,
     fornecedor_banco_nome: cadastro?.banco_nome ?? null,
@@ -106,13 +228,74 @@ export function cadastroMudouDepoisDaFoto(
   pp: Partial<FotoDePagamentoDaPP> & {
     dados_pagamento_congelados_em?: string | null;
     status?: string;
+    pagamento_fora_do_cadastro_meio?: string | null;
   },
   cadastro: DadosDePagamento | null | undefined,
 ): boolean {
   if (!pp.dados_pagamento_congelados_em || !cadastro) return false;
   if (pp.status && !STATUS_COM_FOTO_CONGELADA.includes(pp.status)) return false;
   const foto = lerFoto(pp as FotoDePagamentoDaPP);
-  return (Object.keys(foto) as Array<keyof DadosDePagamento>).some(
-    (campo) => (foto[campo] ?? null) !== (cadastro[campo] ?? null),
-  );
+  // O meio trocado nesta PP (decisão 127) não veio do cadastro: compará-lo
+  // acenderia o asterisco em toda PP fora do cadastro. Só o meio que ainda
+  // é do cadastro entra na conta.
+  const meio = pp.pagamento_fora_do_cadastro_meio;
+  const ignorados =
+    meio === "pix" || meio === "conta" ? CAMPOS_DO_MEIO[meio] : [];
+  return (Object.keys(foto) as Array<keyof DadosDePagamento>)
+    .filter((campo) => !ignorados.includes(campo))
+    .some((campo) => (foto[campo] ?? null) !== (cadastro[campo] ?? null));
+}
+
+/**
+ * O cadastro numa linha, para o formulário da PP mostrar o que vale quando
+ * nada é trocado: o PIX quando existe (é o que a remessa usa por padrão),
+ * senão a conta. Montado no servidor — o dado bancário não atravessa
+ * inteiro para o cliente.
+ */
+export function resumoDoCadastroDePagamento(cadastro: DadosDePagamento | null): string | null {
+  if (!cadastro) return null;
+  if (cadastro.pix_tipo && cadastro.pix_chave) {
+    return `PIX ${ROTULO_PIX_CURTO[cadastro.pix_tipo]} · ${chavePixLegivel(cadastro.pix_tipo, cadastro.pix_chave)}`;
+  }
+  if (cadastro.banco_codigo) {
+    const conta = `${cadastro.conta ?? ""}${cadastro.conta_dv ? `-${cadastro.conta_dv}` : ""}`;
+    const agencia = `${cadastro.agencia ?? ""}${cadastro.agencia_dv ? `-${cadastro.agencia_dv}` : ""}`;
+    return `${nomeCurtoDoBanco(cadastro.banco_codigo, cadastro.banco_nome)} · Ag. ${agencia} · CC ${conta}`;
+  }
+  return null;
+}
+
+const ROTULO_PIX_CURTO: Record<PixTipoChave, string> = {
+  cnpj: "CNPJ",
+  cpf: "CPF",
+  email: "e-mail",
+  telefone: "telefone",
+  aleatoria: "aleatória",
+};
+
+/** CPF/CNPJ com máscara, telefone sem o +55; e-mail e EVP como estão. */
+export function chavePixLegivel(tipo: PixTipoChave | null, chave: string | null): string {
+  if (!tipo || !chave) return "";
+  const d = chave.replace(/\D/g, "");
+  if (tipo === "cpf" && d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  if (tipo === "cnpj" && d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  if (tipo === "telefone") {
+    const t = d.startsWith("55") && d.length > 11 ? d.slice(2) : d;
+    return t.length === 11 ? `(${t.slice(0, 2)}) ${t.slice(2, 7)}-${t.slice(7)}` : chave;
+  }
+  return chave;
+}
+
+/** "ITAÚ UNIBANCO S.A." → "ITAÚ UNIBANCO"; "NU PAGAMENTOS S.A. - IP" → "NU PAGAMENTOS". */
+export function nomeCurtoDoBanco(codigo: string, nome?: string | null): string {
+  const completo = nome ?? getBancoByCodigo(codigo)?.nome ?? codigo;
+  return completo
+    .split(" - ")[0]
+    .replace(/\s*\(.*?\)/g, "")
+    .replace(/\s+S\.?\s?A\.?$/i, "")
+    .trim();
 }

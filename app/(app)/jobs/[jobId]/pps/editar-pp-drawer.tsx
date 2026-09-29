@@ -59,6 +59,14 @@ import {
   reenviarPedidoCompra,
   type AcimaDoPlanejado,
 } from "../realizado/actions-pp";
+import {
+  PAGAMENTO_PELO_CADASTRO,
+  PagamentoDaPPField,
+  estadoDoPagamento,
+  pagamentoParaEnvio,
+  problemaDoPagamento,
+  type PagamentoDaPPEstado,
+} from "../realizado/pagamento-da-pp-field";
 
 interface Props {
   open: boolean;
@@ -121,6 +129,11 @@ export function EditarPPDrawer({
   const [erro, setErro] = React.useState<string | null>(null);
 
   const [fornecedorId, setFornecedorId] = React.useState("");
+  // Pagamento fora do cadastro (decisão 127): a correção abre com o que a
+  // PP já tem, e trocar de fornecedor volta para o cadastro.
+  const [pagamento, setPagamento] =
+    React.useState<PagamentoDaPPEstado>(PAGAMENTO_PELO_CADASTRO);
+  const [faltaPagamento, setFaltaPagamento] = React.useState(false);
   // Verba de produção: o responsável faz o papel do fornecedor, e a correção
   // pode trocá-lo (decisão 083, 7b).
   const [responsavelId, setResponsavelId] = React.useState("");
@@ -185,6 +198,7 @@ export function EditarPPDrawer({
     if (!fornecedorPendenteId) return;
     if (fornecedoresVisiveis.some((f) => f.id === fornecedorPendenteId)) {
       setFornecedorId(fornecedorPendenteId);
+      setPagamento(PAGAMENTO_PELO_CADASTRO);
       setFornecedorPendenteId(null);
     }
   }, [fornecedorPendenteId, fornecedoresVisiveis]);
@@ -243,6 +257,8 @@ export function EditarPPDrawer({
     setErro(null);
     setUploadPrefix(null);
     setFornecedorId(pp.fornecedor_id ?? "");
+    setPagamento(estadoDoPagamento(pp.pagamento_fora_do_cadastro));
+    setFaltaPagamento(false);
     setFornecedorPendenteId(null);
     setEmpresaId(pp.empresa_id);
     setPrazoPagamento(pp.prazo_pagamento.slice(0, 10));
@@ -373,6 +389,12 @@ export function EditarPPDrawer({
       if (!responsavelId) return setErro("Escolha o responsável pela verba.");
     } else if (!fornecedorId) {
       return setErro("Escolha um fornecedor.");
+    } else {
+      const problema = problemaDoPagamento(pagamento);
+      if (problema) {
+        setFaltaPagamento(true);
+        return setErro(problema);
+      }
     }
     if (!empresaId) return setErro("Escolha uma empresa emissora.");
     if (!prazoPagamento) return setErro("Prazo de pagamento é obrigatório.");
@@ -435,6 +457,7 @@ export function EditarPPDrawer({
                   verba_producao: false as const,
                   fornecedor_id: fornecedorId,
                   responsavel_verba_id: null,
+                  pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
                 }),
             empresa_id: empresaId,
             prazo_pagamento: prazoPagamento,
@@ -590,7 +613,11 @@ export function EditarPPDrawer({
                       <Combobox
                         items={itensFornecedor}
                         value={fornecedorId || null}
-                        onChange={(v) => setFornecedorId(v ?? "")}
+                        onChange={(v) => {
+                          setFornecedorId(v ?? "");
+                          setPagamento(PAGAMENTO_PELO_CADASTRO);
+                          setFaltaPagamento(false);
+                        }}
                         placeholder="Escolha o fornecedor"
                         buscaPlaceholder="Escreva o nome ou o documento"
                         limpavel
@@ -638,6 +665,17 @@ export function EditarPPDrawer({
                       ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
                       : "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."}
                   </p>
+                  {fornecedorId && (
+                    <div className="mt-3">
+                      <PagamentoDaPPField
+                        fornecedorId={fornecedorId}
+                        valor={pagamento}
+                        onChange={setPagamento}
+                        destacarFalta={faltaPagamento}
+                        disabled={pending}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

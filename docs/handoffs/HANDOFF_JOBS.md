@@ -4574,3 +4574,20 @@ código publicado logo depois (`3305751`).
   `20260929700002`, com o índice `idx_jobs_codigo_anterior`).
 - O descritivo do TES-1003/26 citava o "JOB-0032"; agora cita o
   "TES-1001/26".
+
+## ⚠️ Nota de 2026-09-29 (4) — a PP pode pagar por outra chave PIX ou outra conta (decisão 127)
+
+- **Formulário da PP** (gerar, editar a gerada, corrigir a rejeitada): abaixo
+  do fornecedor, "Pagamento *" com o seletor Cadastro do fornecedor / Outro
+  PIX / Outra conta (`realizado/pagamento-da-pp-field.tsx`). No cadastro, uma
+  linha com o PIX ou a conta que vale; "Outro" abre o meio e o motivo, sem
+  texto de apoio. Trocar de fornecedor volta para o cadastro. Verba não tem
+  o campo.
+- **A foto da PP é o cadastro com só o meio trocado**, e o PDF sai igual ao
+  de sempre, só com a chave (ou a conta) escolhida. O cadastro do fornecedor
+  não muda.
+- **Ficha da PP** (`ver-pp-drawer.tsx`): três linhas abaixo do fornecedor —
+  "Fora do cadastro", a chave inteira, o motivo.
+- **O asterisco da 067** passa a ignorar o meio trocado.
+- `PedidoCompraNaLista.pagamento_fora_do_cadastro` (obrigatório) e as quatro
+  colunas novas em `PedidoCompra`. Migration `20260929980001`.

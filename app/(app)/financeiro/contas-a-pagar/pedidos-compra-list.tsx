@@ -24,6 +24,7 @@ import type {
   DevolucaoDaVerba,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  PagamentoForaDoCadastroDaPP,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
@@ -85,6 +86,12 @@ export interface PPRow {
    * o booleano, nunca o dado bancário.
    */
   cadastro_do_fornecedor_mudou: boolean;
+  /**
+   * Decisão 127: a PP paga fora do cadastro do fornecedor — o meio
+   * trocado, o motivo e só os dados desse meio. Null = paga pelo cadastro.
+   * Obrigatório pelo mesmo motivo do histórico acima.
+   */
+  pagamento_fora_do_cadastro: PagamentoForaDoCadastroDaPP | null;
   fornecedor_nome: string;
   empresa_id: string;
   empresa_nome: string;

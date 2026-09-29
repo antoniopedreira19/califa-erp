@@ -39,7 +39,12 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
-import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type {
+  PagamentoForaDoCadastroDaPP,
+  PlanoContaTipo,
+  PlanoContaSubtipo,
+} from "@/lib/types";
+import { AprovarForaDoCadastro } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { aprovarPPComData } from "./actions-titulos";
 
 /** Radix não aceita `value=""` num item; este é o rótulo da ausência de
@@ -53,6 +58,9 @@ interface PPParaAprovar {
   /** Vencimento negociado pela produção — a referência da decisão. */
   vencimentoOriginal: string | null;
   parcelas: number;
+  /** Decisão 127: a PP paga fora do cadastro. Aprovar exige a marcação,
+   *  e o servidor e o banco conferem de novo. */
+  pagamentoForaDoCadastro: PagamentoForaDoCadastroDaPP | null;
 }
 
 function formatDate(iso: string | null): string {
@@ -84,6 +92,8 @@ export function AprovarPPDialog({
   const [cartaoId, setCartaoId] = React.useState("");
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
+  const [foraAprovado, setForaAprovado] = React.useState(false);
+  const [faltaForaAprovado, setFaltaForaAprovado] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
 
@@ -107,6 +117,8 @@ export function AprovarPPDialog({
     setCartaoId("");
     setTipoId("");
     setSubtipoId("");
+    setForaAprovado(false);
+    setFaltaForaAprovado(false);
     setErro(null);
   }, [open, pp?.id]);
 
@@ -118,6 +130,11 @@ export function AprovarPPDialog({
       setErro("Escolha a data de pagamento antes de aprovar.");
       return;
     }
+    if (pp.pagamentoForaDoCadastro && !foraAprovado) {
+      setFaltaForaAprovado(true);
+      setErro("Marque “Aprovar pagamento fora do cadastro” antes de aprovar.");
+      return;
+    }
     startTransition(async () => {
       const res = await aprovarPPComData({
         pp_id: pp.id,
@@ -126,6 +143,7 @@ export function AprovarPPDialog({
         cartao_credito_id: noCartao ? cartaoId || null : null,
         plano_conta_tipo_id: noCartao ? tipoId || null : null,
         plano_conta_subtipo_id: noCartao ? subtipoId || null : null,
+        aprovar_pagamento_fora_do_cadastro: pp.pagamentoForaDoCadastro ? foraAprovado : false,
       });
       if (!res.ok) {
         setErro(res.message);
@@ -172,6 +190,22 @@ export function AprovarPPDialog({
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{erro}</span>
             </div>
+          )}
+
+          {/* Decisão 127: uma linha, com a própria chave — o dossiê atrás
+              já mostra o resto, e este pop-up não repete a tela. */}
+          {pp.pagamentoForaDoCadastro && (
+            <AprovarForaDoCadastro
+              pagamento={pp.pagamentoForaDoCadastro}
+              marcado={foraAprovado}
+              onChange={(v) => {
+                setForaAprovado(v);
+                setFaltaForaAprovado(false);
+                setErro(null);
+              }}
+              emFalta={faltaForaAprovado}
+              disabled={pending}
+            />
           )}
 
           <div className="space-y-2">

@@ -114,6 +114,29 @@ export type CadastroStatus = "ativo" | "inativo";
 export type TipoContaBancariaFornecedor = "corrente" | "poupanca" | "pagamento";
 export type PixTipoChave = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria";
 
+/** O meio que uma PP troca quando não paga pelo cadastro (decisão 127). */
+export type MeioForaDoCadastro = "pix" | "conta";
+
+/**
+ * O pagamento fora do cadastro de uma PP, como as telas o leem (decisão
+ * 127): o meio trocado, o motivo e SÓ os dados desse meio — o outro meio
+ * continua o do cadastro, no documento e na foto. Montado no servidor por
+ * `lerPagamentoForaDoCadastro` (`lib/data/foto-pagamento-da-pp.ts`).
+ */
+export interface PagamentoForaDoCadastroDaPP {
+  meio: MeioForaDoCadastro;
+  motivo: string;
+  pix_tipo: PixTipoChave | null;
+  pix_chave: string | null;
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  agencia_dv: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: TipoContaBancariaFornecedor | null;
+}
+
 export type UF =
   | "AC" | "AL" | "AP" | "AM" | "BA" | "CE" | "DF" | "ES" | "GO"
   | "MA" | "MT" | "MS" | "MG" | "PA" | "PB" | "PR" | "PE" | "PI"
@@ -1644,6 +1667,14 @@ export interface PedidoCompra {
   fornecedor_pix_chave: string | null;
   /** Quando a foto foi tirada — o instante do envio. Null = sem foto. */
   dados_pagamento_congelados_em: string | null;
+  /** Decisão 127: a PP paga fora do cadastro — a foto acima é o cadastro
+   *  com este meio trocado. Null = paga pelo cadastro. */
+  pagamento_fora_do_cadastro_meio: MeioForaDoCadastro | null;
+  pagamento_fora_do_cadastro_motivo: string | null;
+  /** A marcação "Aprovar pagamento fora do cadastro". PP fora do cadastro
+   *  só vira aprovada com ela (CHECK `pp_fora_do_cadastro_aprovado`). */
+  pagamento_fora_do_cadastro_aprovado_por: string | null;
+  pagamento_fora_do_cadastro_aprovado_em: string | null;
   // Verba de Produção (subtipo de PP — pago ao responsável em vez do fornecedor)
   verba_producao: boolean;
   responsavel_verba_id: string | null;
@@ -2227,6 +2258,10 @@ export interface PedidoCompraNaLista extends PedidoCompra {
    *  campo (`lib/data/foto-pagamento-da-pp.ts`), para o dado bancário não
    *  precisar atravessar a fronteira até o cliente. */
   cadastro_do_fornecedor_mudou: boolean;
+  /** Decisão 127: o meio trocado nesta PP, para a ficha mostrar e o
+   *  formulário de edição voltar preenchido. Null = paga pelo cadastro.
+   *  Obrigatório pelo mesmo motivo do campo abaixo. */
+  pagamento_fora_do_cadastro: PagamentoForaDoCadastroDaPP | null;
   /** Prestação de contas da verba (decisão 081). Null fora da verba ou
    *  enquanto a produção não enviou. Obrigatório, e não opcional: campo
    *  opcional em tipo de linha deixa o `.map` descartá-lo em silêncio. */

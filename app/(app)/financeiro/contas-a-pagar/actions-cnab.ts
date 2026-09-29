@@ -487,7 +487,7 @@ async function resolverOrigem(
     const { data, error } = await supabase
       .from("pedidos_compra_parcelas")
       .select(
-        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id)",
+        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id, pagamento_fora_do_cadastro_meio)",
       )
       .eq("id", item.origemId)
       .eq("tenant_id", tenantId)
@@ -501,9 +501,16 @@ async function resolverOrigem(
           status: string;
           servico: string;
           fornecedor_id: string | null;
+          pagamento_fora_do_cadastro_meio: string | null;
         }
       | null;
     if (!pp) return { ok: false, message: "PP não encontrada." };
+    // Decisão 127: a remessa lê o cadastro ao vivo, e a PP fora do cadastro
+    // paga por outra chave ou conta. Até a remessa ler os dados da PP, ela
+    // fica fora do arquivo e é paga pelo PDF (Tiago, 29/09/2026).
+    if (pp.pagamento_fora_do_cadastro_meio) {
+      return { ok: false, message: "Pagamento fora do cadastro: pague pelo PDF." };
+    }
     if (data.pago_em) return { ok: false, message: "Parcela já baixada." };
     if (pp.status !== "aprovada" && pp.status !== "pago") {
       return { ok: false, message: "PP não aprovada." };

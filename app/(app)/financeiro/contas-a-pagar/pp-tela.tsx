@@ -569,6 +569,7 @@ export function PPTela({
           valor: pp.valor,
           vencimentoOriginal: pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento,
           parcelas: Math.max(pp.parcelas.length, 1),
+          pagamentoForaDoCadastro: pp.pagamento_fora_do_cadastro,
         }}
         cartoes={cartoes}
         tipos={tipos}
