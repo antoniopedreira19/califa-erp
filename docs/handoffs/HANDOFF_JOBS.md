@@ -4570,7 +4570,7 @@ código publicado logo depois (`3305751`).
   nas três telas que usam a ficha.
 - **Lista de Jobs:** a busca acha só pelo código atual.
 - **`jobs.codigo_anterior`** foi esvaziado (migration `20260929700001`) e saiu
-  do tipo `Job`. A coluna sai do banco depois que as outras frentes
-  atualizarem o código.
+  do tipo `Job`. A coluna saiu do banco no mesmo dia (migration
+  `20260929700002`, com o índice `idx_jobs_codigo_anterior`).
 - O descritivo do TES-1003/26 citava o "JOB-0032"; agora cita o
   "TES-1001/26".

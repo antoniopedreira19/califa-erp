@@ -4783,7 +4783,7 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **Busca da lista de projetos:** só pelo código atual.
   `projetos.codigo_anterior` e `orcamentos.codigo_anterior` foram
   esvaziados (migration `20260929700001`) e saíram do tipo `Projeto`. As
-  colunas saem do banco depois que as outras frentes atualizarem o código.
+  colunas saíram do banco no mesmo dia (migration `20260929700002`).
 - **Registro de números usados:** as 34 linhas no formato antigo
   (`AMB-0003/26`) passaram ao formato com "P", mesmo número e mesmo
   projeto. O gerador e o `codigoQueOProjetoJaTeve` só encontram esse
