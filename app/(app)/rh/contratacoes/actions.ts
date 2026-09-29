@@ -355,10 +355,14 @@ export async function anexarContratoAssinado(
   }
 
   const path = `${session.activeTenant.id}/${id}/contrato-assinado.pdf`;
-  const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  // Passa o File direto pro cliente Supabase, sem materializar o PDF
+  // inteiro num Uint8Array antes. O arrayBuffer() dobrava o pico de
+  // memória (File + cópia) e derrubou a função serverless com SIGTERM
+  // (exit 128) num upload em 29/09/2026 — o upload chegava a completar,
+  // mas o processo era morto antes de responder e a UI ficava 5s parada.
   const { error: upErr } = await supabase.storage
     .from("contratacoes-anexos")
-    .upload(path, bytes, {
+    .upload(path, arquivo, {
       contentType: "application/pdf",
       upsert: true,
     });
