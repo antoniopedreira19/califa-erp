@@ -39,6 +39,23 @@ function formatarData(iso: string): string {
 }
 
 /**
+ * Aplica máscara XX.XXX.XXX-X no RG. Aceita dígitos e a letra X no
+ * último caractere (dígito verificador em vários estados, incluindo
+ * SP). Limita a 10 caracteres alfanuméricos (formato mais generoso).
+ */
+function formatarRg(raw: string): string {
+  const cleaned = raw
+    .replace(/[^0-9Xx]/g, "")
+    .toUpperCase()
+    .slice(0, 10);
+  if (cleaned.length <= 2) return cleaned;
+  if (cleaned.length <= 5) return `${cleaned.slice(0, 2)}.${cleaned.slice(2)}`;
+  if (cleaned.length <= 8)
+    return `${cleaned.slice(0, 2)}.${cleaned.slice(2, 5)}.${cleaned.slice(5)}`;
+  return `${cleaned.slice(0, 2)}.${cleaned.slice(2, 5)}.${cleaned.slice(5, 8)}-${cleaned.slice(8)}`;
+}
+
+/**
  * Textura de "cortina listrada" da carta California, reproduzida em CSS.
  * Duas camadas empilhadas:
  *   1. repeating-linear-gradient com bandas verticais alternadas
@@ -601,6 +618,7 @@ function VisaoDados({
   const [dataNascimento, setDataNascimento] = React.useState("");
   const [tipoConta, setTipoConta] = React.useState<string>("");
   const [pixTipo, setPixTipo] = React.useState<string>("");
+  const [rg, setRg] = React.useState("");
 
   // Endereço — controlled pra permitir autopreenchimento via ViaCEP.
   const [logradouro, setLogradouro] = React.useState("");
@@ -655,6 +673,7 @@ function VisaoDados({
     fd.set("cpf", cpf);
     fd.set("cnpj", cnpj);
     fd.set("telefone", telefone);
+    fd.set("rg", rg);
     fd.set("cep", cep);
     fd.set("logradouro", logradouro);
     fd.set("bairro", bairro);
@@ -707,10 +726,13 @@ function VisaoDados({
             <Label htmlFor="rg">RG</Label>
             <Input
               id="rg"
-              name="rg"
+              inputMode="text"
+              autoComplete="off"
               required
-              maxLength={20}
-              placeholder="Ex.: 12.345.678-9"
+              maxLength={13}
+              placeholder="12.345.678-9"
+              value={rg}
+              onChange={(e) => setRg(formatarRg(e.target.value))}
             />
             {fieldErrors.rg?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
