@@ -33,6 +33,9 @@ https://claude.ai/artifact/LCRzQt1wbr3jL2YnUdbjS9
    fuso de São Paulo. Não a data de início, que se edita depois.
 4. **SEQ:** por sigla e ano — o maior número já usado + 1. Número não volta
    a ser usado: cancelado, devolvido ou apagado queima o dele.
+   ⚠️ **Exceção desde 29/09/2026 (decisão 128):** o job devolvido cancelado
+   pelo "Cancelar aprovação" guarda o código, que volta no próximo envio do
+   mesmo orçamento (mesma sigla); o cancelado ganha o sufixo "-C1".
 5. **O 1 de 2026:** em 2026 o sequencial começa em **1001** ("um 1 no lugar
    do primeiro 0"), para nunca repetir um código do outro sistema. De 2027
    em diante começa em **0001** — vale enquanto o outro sistema não abrir

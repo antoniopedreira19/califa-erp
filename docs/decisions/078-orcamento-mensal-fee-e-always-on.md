@@ -51,6 +51,10 @@ uma lista só de grupos e itens.
 8. **Trocar a categoria de/para Fee ou Always On pede confirmação.** Entrando
    no mensal, os grupos existentes vão para o primeiro mês; saindo, **só o
    primeiro mês permanece** — o resto é apagado, em todas as versões.
+   ⚠️ **Revisto em 29/09/2026 (decisão 128):** saindo do mensal, **os meses
+   se juntam** numa planilha só e nada é apagado; grupo de mesmo nome em
+   meses diferentes ganha o nome do mês. Apagar mudava o orçado e, com job,
+   falhava pela chave da cópia do job.
 9. **Os 5 orçamentos que já tinham serviço Fee/Always On com categoria
    nacional ficam como estão.** A trava só confere o par quando serviço ou
    categoria mudam.

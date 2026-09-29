@@ -4796,3 +4796,30 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **As 23 planilhas importadas** saíram do Storage (bucket
   `orcamento-importacoes`), por decisão do Tiago. As linhas de
   `orcamento_importacoes` ficam, e nenhuma tela as lê.
+
+## ⚠️ Nota de 2026-09-29 (5) — job devolvido se corrige no orçamento (decisão 128)
+
+- **Job devolvido pelo financeiro:** o "Editar" do orçamento e o planejado
+  da versão aprovada abrem para correção, com o job vivo; o reenvio é o de
+  sempre (057). O editor não mostra "Arquivar" nesse estado. O planejado
+  abre só nas três colunas e nas linhas que já existem (`soPlanejado` em
+  `ItensTable`), grava na versão e na cópia do job juntas
+  (`editar_planejado_do_job_devolvido`) e fica na auditoria.
+- **"Editar" recusa**, com o job devolvido, o que muda o valor do job ou o
+  faturamento: serviço Interno, categoria que entra ou sai do internacional
+  e entrada no mensal com período de vários meses. Para esses, "Cancelar
+  aprovação".
+- **"Cancelar envio à abertura" saiu da barra do job devolvido.** O
+  "Cancelar aprovação" da versão (`cancelarAprovacaoDoJobDevolvido`) cancela
+  o job, guarda o código (`jobs.codigo_reservado`) e cancela a aprovação. A
+  faixa âmbar "Em correção" mostra o motivo até o novo envio, e o envio
+  nasce preenchido do job cancelado e reaproveita o código
+  (`reaproveitar_codigo_do_job_devolvido`); o cancelado vira "…-C1".
+- **Reenvio:** nome e datas do formulário saem do orçamento (não do job),
+  para a correção do "Editar" não ser desfeita.
+- **Troca de planilha (todo orçamento):** sair do Fee/Always On junta os
+  meses em vez de apagar; a confirmação mudou de texto e deixou de ser
+  destrutiva.
+- Testado no TES-P001/26 ("Orçamento de Teste": TES-1015/26 e
+  TES-1015/26-C1; "Teste A" virou Influencer · Ativação com os meses
+  juntos). Ver decisão 128, §8.

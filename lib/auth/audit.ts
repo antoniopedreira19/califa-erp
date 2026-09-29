@@ -156,6 +156,11 @@ export type AuditAction =
   // Cancelar o envio pelo orçamento, antes de o financeiro abrir: o job
   // vai a `cancelado` e o orçamento volta a `aprovado` (decisão 057).
   | "job.envio_abertura_cancelado"
+  // Decisão 128: o envio depois do "Cancelar aprovação" da devolução volta
+  // com o código do job cancelado; e o planejado da versão aprovada se
+  // corrige com o job devolvido, na versão e na cópia do job.
+  | "job.codigo_reaproveitado"
+  | "item_versao.planejado_corrigido_na_devolucao"
   | "job.realizado_atualizado"
   | "job.errata_registrada"
   // "Editar orçado" do financeiro (decisão 115): os valores do orçado, sem

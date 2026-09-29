@@ -1320,6 +1320,19 @@ export async function atualizarCampoItem(
   }
   if (!item?.versao) return { ok: false, message: "Item não encontrado." };
   if (item.versao.status === "aprovada") {
+    // Com o job devolvido pelo financeiro, o planejado da versão aprovada
+    // se corrige sem cancelar a aprovação (decisão 128). A RPC confere o
+    // job devolvido, o save e o Interno, e grava a versão e a cópia do job
+    // numa transação só. Qualquer outro campo continua travado.
+    if (CAMPOS_PLANEJADO_DO_ITEM.includes(campo)) {
+      return corrigirPlanejadoDoJobDevolvido(
+        session,
+        itemId,
+        campo,
+        Number(parsed.data),
+        item.versao.orcamento_id,
+      );
+    }
     return { ok: false, message: "Versão aprovada não permite alterar itens." };
   }
 
@@ -1364,6 +1377,53 @@ export async function atualizarCampoItem(
   const projetoIdCampo = orcCampo?.projeto_id;
 
   revalidatePath(`/orcamentos/${projetoIdCampo}/${item.versao.orcamento_id}`);
+  return { ok: true, id: itemId };
+}
+
+/**
+ * Planejado da versão aprovada com o job devolvido (decisão 128). Não
+ * exportada: todo export async de arquivo "use server" vira Server Action.
+ */
+async function corrigirPlanejadoDoJobDevolvido(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  itemId: string,
+  campo: string,
+  valor: number,
+  orcamentoId: string,
+): Promise<ActionResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("editar_planejado_do_job_devolvido", {
+    p_item_id: itemId,
+    p_campo: campo,
+    p_valor: valor,
+  });
+
+  if (error) {
+    console.error("[itens.planejado_devolvido]", campo, error.message);
+    // As recusas da RPC já vêm escritas para a tela; o resto é técnico.
+    const daRegra = ["42501", "23514", "P0002"].includes(error.code ?? "") &&
+      !/row-level security/i.test(error.message);
+    return {
+      ok: false,
+      message: daRegra ? error.message : "Não foi possível salvar a alteração.",
+    };
+  }
+
+  await logAuditEvent({
+    acao: "item_versao.planejado_corrigido_na_devolucao",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "item_versao",
+    entidadeId: itemId,
+    metadata: { campo, valor, orcamento_id: orcamentoId, decisao: "128" },
+  });
+
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", orcamentoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ projeto_id: string }>();
+  revalidatePath(`/orcamentos/${orc?.projeto_id}/${orcamentoId}`);
   return { ok: true, id: itemId };
 }
 

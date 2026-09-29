@@ -197,6 +197,9 @@ interface Props {
   projetoCodigo: string;
   clienteNome: string;
   codigoJob: string;
+  /** O código é o do job cancelado pelo "Cancelar aprovação" da devolução,
+   *  que volta neste envio (decisão 128). */
+  codigoReaproveitado: boolean;
   /** "Fechamento da versão vN", ou "Fechamento do job devolvido" no
    *  reenvio, quando os números saem da cópia do job (decisão 099). */
   rotuloFechamento: string;
@@ -237,6 +240,7 @@ export function EnviarJobModal({
   projetoCodigo,
   clienteNome,
   codigoJob,
+  codigoReaproveitado,
   rotuloFechamento,
   origemFechamento,
   valorTotal,
@@ -338,7 +342,10 @@ export function EnviarJobModal({
           <Campo rotulo="Código do projeto">
             <Travado valor={projetoCodigo} mono />
           </Campo>
-          <Campo rotulo="Código do job">
+          <Campo
+            rotulo="Código do job"
+            apoio={codigoReaproveitado ? "O mesmo código do job devolvido." : undefined}
+          >
             <Travado valor={codigoJob} mono />
           </Campo>
 
