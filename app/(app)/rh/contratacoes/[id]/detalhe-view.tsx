@@ -21,6 +21,7 @@ import {
   Landmark,
   CreditCard,
   Calendar,
+  Loader2,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
@@ -135,6 +136,13 @@ export function ContratacaoDetalheView({
   const [statusOverride, setStatusOverride] =
     React.useState<ContratacaoStatus | null>(null);
   const [pathOverride, setPathOverride] = React.useState<string | null>(null);
+  // Mensagem visível no lugar do CTA enquanto o anexo roda. Não usamos
+  // `pending` do useTransition pra isso porque `pending` fica true pra
+  // qualquer action (efetivar, desistir, etc.) — aqui queremos texto
+  // específico ("Enviando PDF...", "Confirmando...").
+  const [progressoAnexo, setProgressoAnexo] = React.useState<string | null>(
+    null,
+  );
 
   // Se o dado real já reflete o que otimizamos localmente, limpa o override.
   React.useEffect(() => {
@@ -219,11 +227,14 @@ export function ContratacaoDetalheView({
         linkVencido={linkVencido}
         pending={pending}
         copiado={copiado}
+        progressoAnexo={progressoAnexo}
         onCopiarLink={copiarLink}
         onAcao={acao}
+        onProgressoAnexo={setProgressoAnexo}
         onSucessoAnexo={(path) => {
           setStatusOverride("contrato_assinado");
           setPathOverride(path);
+          setProgressoAnexo(null);
           router.refresh();
         }}
       />
@@ -428,8 +439,10 @@ function AcoesContextuais({
   linkVencido,
   pending,
   copiado,
+  progressoAnexo,
   onCopiarLink,
   onAcao,
+  onProgressoAnexo,
   onSucessoAnexo,
 }: {
   c: Contratacao & {
@@ -441,10 +454,32 @@ function AcoesContextuais({
   linkVencido: boolean;
   pending: boolean;
   copiado: boolean;
+  progressoAnexo: string | null;
   onCopiarLink: () => void;
   onAcao: (fn: () => Promise<{ ok: boolean; message?: string }>) => void;
+  onProgressoAnexo: (msg: string | null) => void;
   onSucessoAnexo: (path: string) => void;
 }) {
+  // Card de loading durante o anexo — evita a sensação de tela travada
+  // entre o clique em "Enviar" e o dado real chegar. Substitui o CTA
+  // enquanto o upload+finalize rodam.
+  if (progressoAnexo) {
+    return (
+      <div className="rounded-2xl border border-california-red/20 bg-california-red/5 p-6">
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-california-red" />
+          <div>
+            <h3 className="font-semibold text-california-red">
+              {progressoAnexo}
+            </h3>
+            <p className="mt-0.5 text-sm text-california-red/80">
+              Aguarde alguns segundos, o contrato está sendo salvo.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const ehPJ = c.tipo_contratacao === "pj" || c.tipo_contratacao === "clt_recibo";
 
   // Rascunho
@@ -572,6 +607,7 @@ function AcoesContextuais({
               tenantId={c.tenant_id}
               pending={pending}
               onAcao={onAcao}
+              onProgresso={onProgressoAnexo}
               onSucesso={onSucessoAnexo}
             />
           )}
@@ -609,6 +645,7 @@ function AcoesContextuais({
               tenantId={c.tenant_id}
               pending={pending}
               onAcao={onAcao}
+              onProgresso={onProgressoAnexo}
               onSucesso={onSucessoAnexo}
             />
           <DesistirButton status={c.status} id={c.id} pending={pending} onAcao={onAcao} />
@@ -807,12 +844,14 @@ function UploadContratoButton({
   tenantId,
   pending,
   onAcao,
+  onProgresso,
   onSucesso,
 }: {
   id: string;
   tenantId: string;
   pending: boolean;
   onAcao: (fn: () => Promise<{ ok: boolean; message?: string }>) => void;
+  onProgresso: (msg: string | null) => void;
   onSucesso: (path: string) => void;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -877,16 +916,13 @@ function UploadContratoButton({
                 }));
                 return;
               }
-              // Fecha o dialog na hora — feedback otimista. Se algo falhar,
-              // o erro aparece no card e o RH reabre pra tentar de novo.
+              // Fecha o dialog na hora + mostra loading no CTA. O
+              // progressoAnexo evita a sensação de tela travada.
               setOpen(false);
+              onProgresso("Enviando PDF do contrato...");
               const arquivoRef = arquivo;
               const path = `${tenantId}/${id}/contrato-assinado.pdf`;
               onAcao(async () => {
-                // Upload direto do browser pro Supabase — RLS do bucket
-                // `contratacoes-anexos` só deixa RH/admin gravar em
-                // `{tenant_id}/...`. Mesmo padrão dos anexos de Pedido
-                // de Compra, Desembolso, Conta Avulsa, etc.
                 console.time("upload_storage");
                 const sb = createBrowserSupabase();
                 const { error: upErr } = await sb.storage
@@ -897,11 +933,13 @@ function UploadContratoButton({
                   });
                 console.timeEnd("upload_storage");
                 if (upErr) {
+                  onProgresso(null);
                   return {
                     ok: false,
                     message: "Falha no upload do PDF: " + upErr.message,
                   };
                 }
+                onProgresso("Confirmando anexo...");
                 console.time("finalize_action");
                 const r = await finalizarAnexoContrato(
                   id,
@@ -909,7 +947,11 @@ function UploadContratoButton({
                   arquivoRef.size,
                 );
                 console.timeEnd("finalize_action");
-                if (r.ok) onSucesso(path);
+                if (r.ok) {
+                  onSucesso(path);
+                } else {
+                  onProgresso(null);
+                }
                 return { ok: r.ok, message: r.ok ? undefined : r.message };
               });
             }}
