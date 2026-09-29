@@ -12,25 +12,34 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
+  captionLayout,
   ...props
 }: CalendarProps) {
+  const usaDropdown =
+    captionLayout === "dropdown" || captionLayout === "dropdown-buttons";
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
       locale={ptBR}
-      className={cn("p-2", className)}
+      captionLayout={captionLayout}
+      className={cn("p-3", className)}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-3",
-        caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-semibold text-foreground",
-        caption_dropdowns: "flex gap-2 justify-center",
+        // Sem dropdowns: setas ficam absolutas nas bordas e a label
+        // no meio. Com dropdowns: layout flex normal, sem setas, sem
+        // label duplicada — os selects já mostram mês e ano.
+        caption: usaDropdown
+          ? "flex justify-center pt-1 pb-1 items-center"
+          : "flex justify-center pt-1 relative items-center",
+        caption_label: usaDropdown
+          ? "hidden"
+          : "text-sm font-semibold text-foreground capitalize",
+        caption_dropdowns: "flex gap-2 items-center justify-center",
         dropdown:
-          "rounded-md border border-border bg-white px-2 py-1 text-sm font-medium text-foreground hover:border-california-red/40 focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15 cursor-pointer",
-        dropdown_month: "",
-        dropdown_year: "",
+          "appearance-none rounded-lg border border-border bg-white pl-3 pr-8 py-1.5 text-sm font-medium text-foreground hover:border-california-red/40 focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15 cursor-pointer transition-colors [background-image:url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e\")] bg-no-repeat bg-[position:right_0.5rem_center] bg-[length:1.25rem_1.25rem]",
         vhidden: "hidden",
-        nav: "space-x-1 flex items-center",
+        nav: usaDropdown ? "hidden" : "space-x-1 flex items-center",
         nav_button:
           "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-california-red hover:bg-accent transition-colors",
         nav_button_previous: "absolute left-1",
@@ -38,7 +47,7 @@ function Calendar({
         table: "w-full border-collapse space-y-1",
         head_row: "flex",
         head_cell:
-          "text-muted-foreground rounded-md w-9 font-normal text-[0.75rem] uppercase tracking-wider",
+          "text-muted-foreground rounded-md w-9 font-normal text-[0.7rem] uppercase tracking-wider",
         row: "flex w-full mt-1",
         cell: "text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
         day: "h-9 w-9 p-0 font-normal rounded-md hover:bg-accent hover:text-california-red transition-colors aria-selected:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/40",

@@ -131,7 +131,7 @@ export function DatePicker({
           </button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-[300px] p-0"
+          className="w-auto p-0"
           align="start"
           side="bottom"
           sideOffset={6}
@@ -147,7 +147,7 @@ export function DatePicker({
             defaultMonth={date ?? undefined}
             {...(comSeletorAnoMes
               ? {
-                  captionLayout: "dropdown-buttons",
+                  captionLayout: "dropdown",
                   fromYear: fromYear ?? 1930,
                   toYear: toYear ?? new Date().getFullYear(),
                 }
