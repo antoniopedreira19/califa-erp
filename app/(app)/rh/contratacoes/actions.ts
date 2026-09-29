@@ -327,9 +327,14 @@ export async function finalizarAnexoContrato(
   path: string,
   tamanhoBytes: number,
 ): Promise<ActionResult> {
+  // Timing granular pra localizar gargalo residual — TTFB de 3-12s
+  // observado sem explicação óbvia. Aparece nos logs da Vercel.
+  const t0 = Date.now();
   const session = await requireSession();
+  const t1 = Date.now();
   const gate = await checarPermissao(session, "rh.contratacoes.editar");
   if (!gate.ok) return gate;
+  const t2 = Date.now();
 
   const pathEsperado = `${session.activeTenant.id}/${id}/contrato-assinado.pdf`;
   if (path !== pathEsperado) {
@@ -349,6 +354,7 @@ export async function finalizarAnexoContrato(
     .in("status", ["dados_completos", "contrato_gerado"])
     .select("id")
     .maybeSingle();
+  const t3 = Date.now();
   if (updErr) {
     return { ok: false, message: mapDbError(updErr.message) };
   }
@@ -367,8 +373,17 @@ export async function finalizarAnexoContrato(
     entidadeId: id,
     metadata: { tamanho_bytes: tamanhoBytes },
   });
+  const t4 = Date.now();
 
-  revalidatePath(`/rh/contratacoes/${id}`);
+  // Sem revalidatePath: ele forçava o Next.js a re-renderizar a página
+  // inteira e streamar o RSC atualizado na mesma resposta do POST, o
+  // que somava vários segundos. A UI reflete a mudança localmente via
+  // statusOverride no client, e um router.refresh() em background
+  // reconciliação eventual.
+  const t5 = Date.now();
+  console.log(
+    `[finalizarAnexoContrato] session=${t1 - t0}ms permissao=${t2 - t1}ms update=${t3 - t2}ms audit=${t4 - t3}ms return=${t5 - t4}ms total=${t5 - t0}ms`,
+  );
   return { ok: true, id };
 }
 
