@@ -30,6 +30,43 @@ const formatarBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 /** Data ISO 'YYYY-MM-DD' do primeiro e ultimo dia do mes corrente. */
+/**
+ * O que falta receber dos títulos em aberto do mês: o valor menos as
+ * baixas parciais já feitas (decisão 125), cada uma pelo valor a dar baixa
+ * (líquido + retidos). Uma leitura só, pelos títulos que têm saldo, e só
+ * quando há título em aberto.
+ */
+async function faltaReceberDosTitulos(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  titulos: Array<{ id: string; valor: number | string | null }>,
+): Promise<number> {
+  const total = titulos.reduce((s, t) => s + Number(t.valor ?? 0), 0);
+  if (titulos.length === 0) return total;
+  const { data, error } = await supabase
+    .from("lancamentos_financeiros")
+    .select("valor, retencoes:baixas_retencoes(valor)")
+    .eq("tenant_id", tenantId)
+    .eq("origem", "titulo_baixa")
+    .in(
+      "titulo_receber_id",
+      titulos.map((t) => t.id),
+    );
+  if (error) {
+    console.error("[home.falta_receber]", error.message);
+    return total;
+  }
+  const baixado = ((data ?? []) as Array<{
+    valor: number | string;
+    retencoes: Array<{ valor: number | string }> | null;
+  }>).reduce(
+    (s, l) =>
+      s + Number(l.valor) + (l.retencoes ?? []).reduce((r, x) => r + Number(x.valor), 0),
+    0,
+  );
+  return total - baixado;
+}
+
 function limitesDoMes(): { primeiro: string; ultimo: string } {
   const hoje = new Date();
   const p = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -140,6 +177,7 @@ export async function carregarHomeAdmin(
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .in("status", ["em_revisao", "enviado_cliente"])
+      .is("arquivado_em", null)
       .lt("updated_at", ha15dias),
     // saldo_inicial como aproximacao (adendo §3)
     // TODO: virar RPC de saldo_atual quando o modulo de conciliacao existir
@@ -158,7 +196,7 @@ export async function carregarHomeAdmin(
     // titulos_receber: previsto a receber do mes (adendo §2)
     supabase
       .from("titulos_receber")
-      .select("valor")
+      .select("id, valor")
       .eq("tenant_id", tenantId)
       .gte("data_previsao_recebimento", primeiro)
       .lte("data_previsao_recebimento", ultimo)
@@ -179,9 +217,11 @@ export async function carregarHomeAdmin(
     (s, r) => s + Number(r.valor ?? 0),
     0,
   );
-  const totalAReceber = (previstoReceberMes.data ?? []).reduce(
-    (s, r) => s + Number(r.valor ?? 0),
-    0,
+  // O que falta, não o valor cheio: o título pode ter baixa parcial.
+  const totalAReceber = await faltaReceberDosTitulos(
+    supabase,
+    tenantId,
+    previstoReceberMes.data ?? [],
   );
 
   // 7 pendencias (card "Transacoes nao conciliadas" removido — adendo §4)
@@ -361,7 +401,7 @@ export async function carregarHomeFinanceiro(
     // titulos_receber: previsto a receber do mes (adendo §2)
     supabase
       .from("titulos_receber")
-      .select("valor")
+      .select("id, valor")
       .eq("tenant_id", tenantId)
       .gte("data_previsao_recebimento", primeiro)
       .lte("data_previsao_recebimento", ultimo)
@@ -376,9 +416,11 @@ export async function carregarHomeFinanceiro(
     (s, r) => s + Number(r.valor ?? 0),
     0,
   );
-  const totalReceber = (previstoReceberMes.data ?? []).reduce(
-    (s, r) => s + Number(r.valor ?? 0),
-    0,
+  // O que falta, não o valor cheio: o título pode ter baixa parcial.
+  const totalReceber = await faltaReceberDosTitulos(
+    supabase,
+    tenantId,
+    previstoReceberMes.data ?? [],
   );
 
   // 6 pendencias (card "Transacoes nao conciliadas" removido — adendo §4)
@@ -624,7 +666,9 @@ export async function carregarHomeGerenteProducao(
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .in("projeto_id", projetoIds)
-          .in("status", ["rascunho", "em_revisao", "enviado_cliente"]),
+          .in("status", ["rascunho", "em_revisao", "enviado_cliente"])
+          // Arquivado (decisão 118) não é orçamento em aberto.
+          .is("arquivado_em", null),
   ]);
 
   const prontosPraEncerrar = await contarProntosPraEncerrar(

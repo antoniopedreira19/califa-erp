@@ -109,14 +109,14 @@ interface Props {
   /** Honorários do cadastro do cliente. Vale para os orçamentos criados
    *  aqui; os que já existem mantêm o percentual gravado na versão. */
   honorariosCliente: number;
+  /** Projeto arquivado (decisão 118): tudo em consulta, sem orçamento novo. */
+  projetoArquivado: boolean;
   /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional
    *  no modal de parâmetros (decisão do Tiago, 14/09/2026). */
   podeEditarImpostos: boolean;
   /** `orcamentos.marcar_em_save` — administrador e GP geram e consomem
    *  save (24/09/2026). Sem ela o pop-up de save abre só para ver. */
   podeMarcarSave: boolean;
-  /** Quantos orçamentos o projeto já tem — base do código previsto dos novos. */
-  orcamentosExistentes: number;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
   inicial: OrcamentoRascunho[];
   /** Os orçamentos gravados, como o seletor "Exportar" os vê — versão
@@ -210,9 +210,9 @@ export function EditorAgregado({
   saldosDeSave,
   nomeDoGrupo,
   honorariosCliente,
+  projetoArquivado,
   podeEditarImpostos,
   podeMarcarSave,
-  orcamentosExistentes,
   inicial,
   exportaveis,
   categorias,
@@ -352,13 +352,6 @@ export function EditorAgregado({
     ]
       .filter(Boolean)
       .join(" · ");
-  }
-
-  /** Existente mostra o código real; novo, o próximo da sequência. */
-  function codigoDe(orc: OrcamentoRascunho, indiceEntreNovos: number): string {
-    if (orc.origemBanco) return orc.origemBanco.codigo;
-    const seq = orcamentosExistentes + indiceEntreNovos + 1;
-    return `${projeto.codigo}-${String(seq).padStart(2, "0")}`;
   }
 
   // ---------- mutações ----------
@@ -650,26 +643,14 @@ export function EditorAgregado({
   );
 
   // ---------- consolidado ----------
-  // Código de cada orçamento, calculado uma vez sobre a lista INTEIRA: os
-  // novos numeram pela posição entre os novos, e o filtro "Exibir" não
-  // pode renumerar ninguém ao esconder um deles.
-  const codigos = React.useMemo(() => {
-    let novos = -1;
-    return new Map(
-      orcamentos.map((orc) => {
-        if (!orc.origemBanco) novos += 1;
-        return [orc.id, codigoDe(orc, novos)] as const;
-      }),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orcamentos, orcamentosExistentes, projeto.codigo]);
-
+  // Sem o código do orçamento (nem o previsto dos novos) desde 29/09/2026:
+  // ele é só da base de dados e confundia a produção, que fala pelo nome
+  // e, depois da aprovação, pelo código do job.
   const linhasTodas = React.useMemo(() => {
     return orcamentos.map((orc) => {
       const t = totaisDoJob(orc, orc.parametros, orc.modeloPlanilha);
       return {
         id: orc.id,
-        codigo: codigos.get(orc.id) ?? "",
         nome: orc.nome,
         modeloPlanilha: orc.modeloPlanilha,
         detalhe: orc.origemBanco
@@ -692,7 +673,7 @@ export function EditorAgregado({
         percentualImposto: orc.parametros.percentual_imposto,
       };
     });
-  }, [orcamentos, codigos]);
+  }, [orcamentos]);
 
   // O que a tela mostra: cards e Totais seguem o "Exibir".
   const visiveis = orcamentos.filter((o) => exibidos.includes(o.id));
@@ -933,18 +914,20 @@ export function EditorAgregado({
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
           <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-            Edite a planilha de cada orçamento aqui e veja o impacto no
-            consolidado do projeto. As alterações caem na versão aberta de cada
-            um — orçamento aprovado ou já aberto como job fica em consulta.
+            {projetoArquivado
+              ? "Projeto arquivado: a visão agregada fica só para consulta. Reative o projeto na tela dele para editar."
+              : "Edite a planilha de cada orçamento aqui e veja o impacto no consolidado do projeto. As alterações caem na versão aberta de cada um — orçamento aprovado ou já aberto como job fica em consulta."}
           </p>
-          <button
-            type="button"
-            onClick={() => setModal({ tipo: "form" })}
-            className="inline-flex flex-none items-center gap-2 rounded-xl bg-california-red px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
-          >
-            <Plus className="h-4 w-4" />
-            Criar orçamento de job
-          </button>
+          {!projetoArquivado && (
+            <button
+              type="button"
+              onClick={() => setModal({ tipo: "form" })}
+              className="inline-flex flex-none items-center gap-2 rounded-xl bg-california-red px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
+            >
+              <Plus className="h-4 w-4" />
+              Criar orçamento de job
+            </button>
+          )}
         </div>
       </div>
 
@@ -1010,7 +993,6 @@ export function EditorAgregado({
             062), pelo mesmo motivo da tela da versão: o BV passou a
             descontar só o REALIZADO, e o rascunho não tem realizado. */}
         {visiveis.map((orc) => {
-          const codigo = codigos.get(orc.id) ?? "";
           const bloqueio = orc.origemBanco?.bloqueio ?? null;
           return (
             <JobRascunhoCard
@@ -1046,7 +1028,6 @@ export function EditorAgregado({
                 evento.preventDefault();
                 setAskSair(href);
               }}
-              codigo={codigo}
               parametros={orc.parametros}
               visao={visao}
               descricao={descricao(orc)}
@@ -1158,7 +1139,7 @@ export function EditorAgregado({
             Novo orçamento de job
           </DialogTitle>
           <DialogDescription className="text-[13px]">
-            O código será gerado quando as alterações forem salvas.
+            O orçamento será criado quando as alterações forem salvas.
           </DialogDescription>
           <OrcamentoForm
             projetoId={projeto.id}
@@ -1179,7 +1160,7 @@ export function EditorAgregado({
         <ImportarPlanilhaModal
           open
           onOpenChange={(o) => !o && setModal(null)}
-          codigo={codigos.get(orcImportando.id) ?? ""}
+          nome={orcImportando.nome}
           modeloPlanilha={orcImportando.modeloPlanilha}
           interno={
             orcImportando.servico_id !== null &&

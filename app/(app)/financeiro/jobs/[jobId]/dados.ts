@@ -55,7 +55,6 @@ export interface JobNoFinanceiro {
   projeto_nome: string | null;
   cliente_nome: string | null;
   orcamento_id: string;
-  orcamento_codigo: string | null;
   versao_numero: number | null;
   moeda: string;
   /** Soma do planejado de TODOS os itens — controle interno da planilha. */
@@ -246,7 +245,6 @@ export async function carregarJobNoFinanceiro(
       projeto_nome: raw.projeto?.nome ?? null,
       cliente_nome: raw.projeto?.cliente?.nome_fantasia ?? null,
       orcamento_id: raw.orcamento_id,
-      orcamento_codigo: raw.orcamento?.codigo ?? null,
       versao_numero: raw.versao?.numero_versao ?? null,
       moeda: raw.versao?.moeda ?? "BRL",
       planejado_total: planejadoTotal,

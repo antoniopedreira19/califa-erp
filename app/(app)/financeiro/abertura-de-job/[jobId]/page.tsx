@@ -347,7 +347,6 @@ export default async function AbrirJobNoFinanceiroPage({
               antesDaAbertura
               job={{
                 codigo: jobDoDetalhe.codigo,
-                codigoAnterior: jobDoDetalhe.codigo_anterior,
                 nome: job.nome,
                 // Antes da abertura a categoria do job ainda é a do
                 // orçamento: `jobs.categoria_id` só é gravado ao confirmar.
@@ -391,7 +390,6 @@ export default async function AbrirJobNoFinanceiroPage({
               origem={{
                 projetoHref: `/orcamentos/${detalhe.raw.projeto_id}`,
                 orcamentoHref: `/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}/versoes/${detalhe.raw.versao_orcamento_aprovada_id}`,
-                orcamentoCodigo: detalhe.raw.orcamento?.codigo ?? null,
                 versaoLabel: detalhe.versaoLabel,
               }}
               contatos={detalhe.contatosCobranca}

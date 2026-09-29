@@ -582,7 +582,6 @@ export default async function JobNoFinanceiroPage({
               descritivo={job.observacoes}
               job={{
                 codigo: job.codigo,
-                codigoAnterior: job.codigo_anterior,
                 nome: jobNaFila.nome,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —
@@ -646,7 +645,6 @@ export default async function JobNoFinanceiroPage({
                   ? `/financeiro/projetos/${jobNaFila.projeto_financeiro_id}`
                   : `/orcamentos/${detalhe.raw.projeto_id}`,
                 orcamentoHref: `/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}/versoes/${detalhe.raw.versao_orcamento_aprovada_id}`,
-                orcamentoCodigo: detalhe.raw.orcamento?.codigo ?? null,
                 versaoLabel: detalhe.versaoLabel,
               }}
               contatos={detalhe.contatosCobranca}

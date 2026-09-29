@@ -19,15 +19,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Lock } from "lucide-react";
 import { format } from "date-fns";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
-import {
-  ORCAMENTO_STATUS_EDITAVEIS,
-  orcamentoStatusLabel,
-  type CategoriaDominio,
-  type CategoriaModeloPlanilha,
-  type Orcamento,
-  type OrcamentoStatus,
-  type Profile,
-  type Regional,
+import type {
+  CategoriaDominio,
+  CategoriaModeloPlanilha,
+  Orcamento,
+  Profile,
+  Regional,
 } from "@/lib/types";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import {
@@ -139,11 +136,6 @@ export function OrcamentoForm({
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
-  const [status, setStatus] = React.useState<OrcamentoStatus>(
-    orcamento?.status && ORCAMENTO_STATUS_EDITAVEIS.includes(orcamento.status)
-      ? orcamento.status
-      : "rascunho",
-  );
   // Categoria é obrigatória desde 17/08/2026: sem opção "Sem categoria",
   // estado inicial vazio mostra o placeholder e o Zod cobra a escolha.
   const [categoriaId, setCategoriaId] = React.useState(
@@ -261,7 +253,6 @@ export function OrcamentoForm({
     setError(null);
     setFieldErrors({});
     const formData = new FormData(e.currentTarget);
-    if (isEdit) formData.set("status", status);
     formData.set("categoria_id", categoriaId);
     formData.set("servico_id", servicoId);
     formData.set("regional_id", regionalId);
@@ -289,7 +280,6 @@ export function OrcamentoForm({
       const parsed = orcamentoSchema.safeParse({
         codigo: "",
         nome: formData.get("nome")?.toString() ?? "",
-        status: "rascunho",
         categoria_id: formData.get("categoria_id")?.toString() ?? "",
         servico_id: servicoId,
         descritivo: descritivo,
@@ -306,7 +296,7 @@ export function OrcamentoForm({
         setFieldErrors(parsed.error.flatten().fieldErrors);
         return;
       }
-      const { codigo: _semCodigo, status: _semStatus, ...dados } = parsed.data;
+      const { codigo: _semCodigo, ...dados } = parsed.data;
       onRascunho({ ...dados, cidade_nome: cidade?.nome ?? "" });
       return;
     }
@@ -349,21 +339,14 @@ export function OrcamentoForm({
           />
         </Field>
 
-        {isEdit && (
-          <Field label="Código" name="codigo" errors={fieldErrors}>
-            <Input
-              name="codigo"
-              defaultValue={orcamento?.codigo ?? ""}
-              placeholder="Auto-gerado"
-            />
-          </Field>
-        )}
-
         {/* Projeto — pré-preenchido e travado. Quem chegou aqui veio de
             dentro do projeto; repetir a escolha só abriria espaço para
             criar o orçamento no lugar errado. Mesmo cinza dos campos
-            travados do envio para abertura. */}
-        {!isEdit && projetoNome && (
+            travados do envio para abertura. Vale para a edição também: ali
+            ele ocupa o lugar do campo "Código", que saiu em 29/09/2026 — o
+            código do orçamento é só da base de dados e confundia a
+            produção. */}
+        {projetoNome && (
           <Field label="Projeto" name="projeto_id" errors={fieldErrors}>
             <div className="flex h-10 items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-3 text-sm font-medium text-muted-foreground">
               <span className="truncate">
@@ -601,21 +584,6 @@ export function OrcamentoForm({
             />
           </Field>
         </div>
-
-        {isEdit && (
-          <Field label="Status" name="status" errors={fieldErrors}>
-            <Select value={status} onValueChange={(v) => setStatus(v as OrcamentoStatus)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ORCAMENTO_STATUS_EDITAVEIS.map((s) => (
-                  <SelectItem key={s} value={s}>{orcamentoStatusLabel(s)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        )}
       </div>
 
       {error && (

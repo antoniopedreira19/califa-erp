@@ -221,9 +221,6 @@ export interface Projeto {
   tenant_id: string;
   empresa_id: string;
   codigo: string;
-  /** O código de antes da decisão 114 ("AMB-0006/26", hoje "AMB-P006/26").
-   *  Nulo nos projetos criados depois de 28/09/2026. */
-  codigo_anterior: string | null;
   nome: string;
   /** Saiu do formulário no handoff de 30/07/2026; a coluna e os dados
    *  gravados continuam (a busca da lista ainda casa por campanha). */
@@ -299,16 +296,21 @@ export interface Orcamento {
   produtor_id: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
+  /** Decisão 118: o orçamento arquivado sai da visão agregada e das abas
+   *  do projeto, e fica só leitura até o Reativar. Não é status — o status
+   *  de antes fica intacto. Nulo = ativo. */
+  arquivado_em: string | null;
+  arquivado_por: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
 
-/** Status editáveis via UI. `aprovado` e `job_criado` são setados pelo
- *  sistema em Tasks 004 e 005 e ficam bloqueados aqui. */
-export const ORCAMENTO_STATUS_EDITAVEIS: OrcamentoStatus[] = [
-  "rascunho",
-  "em_revisao",
+/** Status que não se escolhem mais (decisão 117, 28/09/2026). Eram do
+ *  campo Status do "Editar orçamento", que saiu: o status passou a ser só
+ *  do sistema. Continuam no enum do banco; o orçamento que ainda estiver
+ *  num deles volta a `rascunho` no Reativar. */
+export const ORCAMENTO_STATUS_MANUAIS_ANTIGOS: OrcamentoStatus[] = [
   "enviado_cliente",
   "recusado",
   "cancelado",
@@ -818,9 +820,6 @@ export interface Job {
   tenant_id: string;
   empresa_id: string;
   codigo: string;
-  /** O `JOB-NNNN` de antes da decisão 114 (28/09/2026). Nulo nos jobs
-   *  criados depois da troca. */
-  codigo_anterior: string | null;
   projeto_id: string;
   orcamento_id: string;
   versao_orcamento_aprovada_id: string;
@@ -1025,12 +1024,13 @@ export interface JobEnvioFaturamento {
   /** Cópia do `faturamento_previsto` no instante do envio. */
   valor_faturado: number;
   numero_po: string | null;
-  /** Vencimento acordado com o cliente. */
+  /** O vencimento mais cedo das parcelas do envio. */
   data_faturamento: string;
   /**
    * Como o GP quer que a nota seja descrita — o texto que o cliente exige
-   * ver na NF. O financeiro copia daqui na emissão. Nulo nos envios
-   * anteriores a 31/08/2026, quando o campo passou a existir.
+   * ver na NF. Nulo nos envios anteriores a 31/08/2026 e nos posteriores à
+   * decisão 123 (29/09/2026), que guardam o descritivo em cada nota
+   * (`JobEnvioFaturamentoNota.descritivo`).
    */
   descricao_nf: string | null;
   /**
@@ -1055,24 +1055,65 @@ export interface JobEnvioFaturamento {
 }
 
 /**
- * Uma parcela do faturamento do job — em quantas notas ele será faturado.
+ * Uma parcela do faturamento do job — um vencimento de uma nota do envio.
  *
- * Informada pela produção no envio (decisão do Tiago, 17/08/2026). Cada
- * parcela é uma linha da aba Faturamento; a NF emitida a consome, total
- * ou parcialmente. Não confundir com `JobPrevisaoRecebimento`, que diz
- * quando o dinheiro entra, não em quantas notas o job sai.
+ * Informada pela produção no envio (decisão do Tiago, 17/08/2026). Até a
+ * decisão 123 (29/09/2026) cada parcela era uma nota própria; desde então
+ * ela é um vencimento DA NOTA a que pertence (`nota_id`): "uma nota,
+ * vários vencimentos". Continua sendo a unidade de saldo do financeiro —
+ * a NF emitida a consome, total ou parcialmente. Não confundir com
+ * `JobPrevisaoRecebimento`, que diz quando o dinheiro entra.
  */
 export interface JobEnvioFaturamentoParcela {
   id: string;
   tenant_id: string;
   envio_id: string;
   job_id: string;
+  /** Decisão 123: a nota do envio a que este vencimento pertence. */
+  nota_id: string;
   ordem: number;
   valor: number;
   /** Vencimento acordado com o cliente para esta parcela. */
   data_vencimento: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Uma nota fiscal do envio para faturamento (decisão 123, 29/09/2026).
+ *
+ * O valor da nota é a soma das parcelas dela — não há coluna de valor.
+ * O CNPJ é do cliente tomador (campo livre no envio, nasce com o do
+ * cadastro); CNAE sugerido e descritivo são opcionais. No Faturar o CNAE
+ * sugerido aparece como texto de fundo, sem preencher (D3).
+ */
+export interface JobEnvioFaturamentoNota {
+  id: string;
+  tenant_id: string;
+  envio_id: string;
+  job_id: string;
+  ordem: number;
+  /** Só dígitos, 14. */
+  cnpj: string;
+  cnae_sugerido: string | null;
+  descritivo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Arquivo da PO anexado no envio (decisão 123). Bucket `envios-faturamento`. */
+export interface JobEnvioFaturamentoAnexo {
+  id: string;
+  tenant_id: string;
+  envio_id: string;
+  job_id: string;
+  /** `{tenant}/{job}/{uuid}-{nome}` no bucket `envios-faturamento`. */
+  path: string;
+  nome_arquivo: string;
+  mime_type: "application/pdf" | "image/png" | "image/jpeg";
+  tamanho_bytes: number;
+  created_by: string | null;
+  created_at: string;
 }
 
 /** Uma data da curva de desembolso do job. */
@@ -2594,20 +2635,26 @@ export type OrigemLancamento =
   | "pp_devolucao_verba"
   | "pp_devolucao_verba_estornada"
   | "pp_devolucao_verba_estorno"
-  | "manual";
+  | "manual"
+  // As duas pernas da transferência entre contas (decisão 124): sem
+  // empresa e sem plano de contas, fora do DRE e do fluxo consolidado.
+  | "transferencia_saida"
+  | "transferencia_entrada";
 
 export interface LancamentoFinanceiro {
   id: string;
   tenant_id: string;
-  empresa_id: string;
+  /** Nulo só na perna de transferência entre contas (decisão 124). */
+  empresa_id: string | null;
   regional_id: string;
   conta_bancaria_id: string;
   data_movimento: string; // YYYY-MM-DD
   valor: string; // numeric — Number(...)
   natureza: NaturezaLancamento;
   descricao: string;
-  plano_conta_tipo_id: string;
-  plano_conta_subtipo_id: string;
+  /** Nulos só na perna de transferência entre contas (decisão 124). */
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
   fornecedor_id: string | null;
   cliente_id: string | null;
   job_id: string | null;
@@ -2642,6 +2689,12 @@ export interface LancamentoFinanceiro {
   /** Cartão usado quando forma = cartao_credito. */
   cartao_credito_id: string | null;
   estorno_de_lancamento_id: string | null;
+  /** Motivo do estorno de uma baixa (decisão 120). Só nas linhas
+   *  `*_estorno` criadas por `estornar_valor_da_baixa`; o estorno antigo
+   *  guardava o motivo na descrição. */
+  motivo_estorno: string | null;
+  /** A transferência entre contas de que esta linha é uma perna. */
+  transferencia_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
   created_at: string;
@@ -2701,6 +2754,13 @@ export interface Faturamento {
    * projeto. Antes de 31/08/2026 era pedido à produção no envio.
    */
   cnae: string;
+  /**
+   * CNPJ para o qual a nota saiu, só dígitos (decisão 123). Preenchido por
+   * `emitir_faturamento`: o das notas do envio cobertas, ou o do cadastro
+   * do cliente na avulsa. Nulo nas notas anteriores a 29/09/2026 — que
+   * saíram para o CNPJ do cadastro — e nas de BV.
+   */
+  cnpj_tomador: string | null;
   anexo_nf_path: string;
   /**
    * Preenchido só no faturamento avulso (campo "Centro de custo" do
@@ -2956,10 +3016,50 @@ export interface ContaAvulsa {
   parcela_numero: number;
   parcela_total: number;
   parcela_de_avulsa_id: string | null;
+  /**
+   * Título de Títulos a Receber (decisão 124): a mesma tabela guarda o
+   * recebimento avulso e o rendimento de aplicação, sempre natureza
+   * `entrada`. `null` é a conta avulsa do contas a pagar, como sempre.
+   */
+  tipo_entrada: TipoEntradaAvulsa | null;
+  /** Rendimento: a conta de aplicação em que ele entra (a baixa só pode
+   *  ser nela). `null` fora do rendimento. */
+  conta_bancaria_prevista_id: string | null;
+  /** Rendimento: o mês, sempre no dia 1 ("2026-09-01"). Um por conta e
+   *  por mês. `null` fora do rendimento. */
+  competencia: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;
 }
+
+export type TipoEntradaAvulsa = "recebimento_avulso" | "rendimento";
+
+// ---------- Decisão 125: baixa parcial e impostos retidos ----------
+
+/** Os impostos que podem ser retidos na fonte numa baixa (sem INSS, D6 1a). */
+export type ImpostoRetido = "ISS" | "PIS" | "COFINS" | "CSLL" | "IRRF";
+
+/** Uma linha de `baixas_retencoes`: o imposto retido numa baixa. */
+export interface RetencaoDaBaixa {
+  imposto: ImpostoRetido;
+  /** Em %, com até 4 casas. Nula quando só o valor foi informado. */
+  aliquota: number | null;
+  valor: number;
+}
+
+/** Na ordem em que a baixa mostra. `nota` vai ao lado do nome. */
+export const IMPOSTOS_RETIDOS: ReadonlyArray<{
+  imposto: ImpostoRetido;
+  dica: string;
+  nota: string | null;
+}> = [
+  { imposto: "ISS", dica: "Imposto sobre serviços, retido para o município.", nota: null },
+  { imposto: "PIS", dica: "Retenção de PIS na fonte.", nota: null },
+  { imposto: "COFINS", dica: "Retenção de COFINS na fonte.", nota: null },
+  { imposto: "CSLL", dica: "Retenção de CSLL na fonte.", nota: null },
+  { imposto: "IRRF", dica: "Imposto de renda retido na fonte.", nota: "IR retido (antecipa o IRPJ)" },
+];
 
 // ---------- Tela 3.2: título a pagar (visão unificada) ----------
 

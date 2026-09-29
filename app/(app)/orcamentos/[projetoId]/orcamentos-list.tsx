@@ -4,6 +4,13 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import {
@@ -14,7 +21,6 @@ import {
 
 export interface OrcamentoRow {
   id: string;
-  codigo: string;
   nome: string;
   categoria_nome: string | null;
   /** Serviço do job deste orçamento. Desceu do projeto em 02/09/2026
@@ -30,8 +36,17 @@ export interface OrcamentoRow {
    *  `null` quando o orçamento ainda não tem versão. */
   valor_job: number | null;
   versoes_count: number;
+  /** Decisão 118: arquivado só aparece com o filtro "Arquivados". */
+  arquivado: boolean;
   created_at: string;
+  /** O job vivo do orçamento (`jobVivoDoOrcamento`): a coluna Código
+   *  mostra o código DELE, não o do orçamento — o código do orçamento é só
+   *  da base de dados e confundia a produção (29/09/2026). `null` sem job
+   *  ou só com job cancelado. Obrigatório de propósito (CLAUDE.md). */
+  job: { id: string; codigo: string } | null;
 }
+
+type FiltroArquivo = "ativos" | "arquivados" | "todos";
 
 interface Props {
   projetoId: string;
@@ -46,7 +61,30 @@ function formatDate(iso: string | null): string {
 
 export function OrcamentosList({ projetoId, orcamentos }: Props) {
   const router = useRouter();
+  // O mesmo filtro da lista de projetos: o arquivado sai da vista, mas
+  // continua a um clique (decisão 118).
+  const [filtro, setFiltro] = React.useState<FiltroArquivo>("ativos");
+  const visiveis = orcamentos.filter((o) =>
+    filtro === "todos" ? true : filtro === "arquivados" ? o.arquivado : !o.arquivado,
+  );
+  const qtdArquivados = orcamentos.filter((o) => o.arquivado).length;
+
   return (
+    <div className="space-y-3">
+    <div className="flex items-center justify-end">
+      <Select value={filtro} onValueChange={(v) => setFiltro(v as FiltroArquivo)}>
+        <SelectTrigger className="w-[160px]" aria-label="Filtrar orçamentos arquivados">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="ativos">Ativos</SelectItem>
+          <SelectItem value="arquivados">
+            {qtdArquivados > 0 ? `Arquivados (${qtdArquivados})` : "Arquivados"}
+          </SelectItem>
+          <SelectItem value="todos">Todos</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
       <table className="w-full text-sm">
         <thead>
@@ -63,7 +101,7 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
           </tr>
         </thead>
         <tbody>
-          {orcamentos.map((o) => (
+          {visiveis.map((o) => (
             <tr
               key={o.id}
               role="button"
@@ -78,14 +116,20 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
               }}
             >
               <td className="px-4 py-3 font-mono text-xs">
-                <Link
-                  href={`/orcamentos/${projetoId}/${o.id}`}
-                  prefetch={false}
-                  className="hover:text-california-red"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {o.codigo}
-                </Link>
+                {/* O código do job leva ao job; o resto da linha continua
+                    levando ao orçamento. */}
+                {o.job ? (
+                  <Link
+                    href={`/jobs/${o.job.id}`}
+                    prefetch={false}
+                    className="font-semibold hover:text-california-red"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {o.job.codigo}
+                  </Link>
+                ) : (
+                  <span className="font-sans text-muted-foreground">—</span>
+                )}
               </td>
               <td className="px-4 py-3 font-medium">{o.nome}</td>
               <td className="px-4 py-3 text-muted-foreground">{o.categoria_nome ?? "—"}</td>
@@ -101,21 +145,32 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
               </td>
               <td className="px-4 py-3 text-center tabular-nums">{o.versoes_count}</td>
               <td className="px-4 py-3">
-                <Badge className={cn("border", estagioFunilBadgeClasses(o.estagio))}>
-                  {estagioFunilLabel(o.estagio)}
-                </Badge>
+                {o.arquivado ? (
+                  <Badge className="border border-slate-200 bg-slate-100 text-slate-500">
+                    Arquivado
+                  </Badge>
+                ) : (
+                  <Badge className={cn("border", estagioFunilBadgeClasses(o.estagio))}>
+                    {estagioFunilLabel(o.estagio)}
+                  </Badge>
+                )}
               </td>
             </tr>
           ))}
-          {orcamentos.length === 0 && (
+          {visiveis.length === 0 && (
             <tr>
-              <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                Nenhum orçamento neste projeto ainda.
+              <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                {orcamentos.length === 0
+                  ? "Nenhum orçamento neste projeto ainda."
+                  : filtro === "arquivados"
+                    ? "Nenhum orçamento arquivado neste projeto."
+                    : "Nenhum orçamento ativo neste projeto."}
               </td>
             </tr>
           )}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

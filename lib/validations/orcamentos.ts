@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { ORCAMENTO_STATUS_EDITAVEIS } from "@/lib/types";
 
 export const orcamentoSchema = z
   .object({
@@ -14,18 +13,9 @@ export const orcamentoSchema = z
       .trim()
       .min(2, "Informe o nome do orçamento (mín. 2 caracteres).")
       .max(200, "Máximo 200 caracteres."),
-    status: z
-      .enum([
-        "rascunho",
-        "em_revisao",
-        "enviado_cliente",
-        "recusado",
-        "cancelado",
-      ])
-      .default("rascunho")
-      .refine((v) => ORCAMENTO_STATUS_EDITAVEIS.includes(v), {
-        message: "Status inválido para edição manual.",
-      }),
+    // `status` saiu em 28/09/2026 (decisão 117): o status do orçamento é
+    // do sistema — nasce rascunho pelo default do banco e só muda pela
+    // aprovação, pelo envio para abertura e pelo cancelamento deles.
     // Obrigatória desde 17/08/2026, no mesmo padrão dos campos abaixo.
     categoria_id: z.string().uuid("Selecione a categoria."),
     // Serviço desceu do projeto em 02/09/2026 (decisão 037). Lê

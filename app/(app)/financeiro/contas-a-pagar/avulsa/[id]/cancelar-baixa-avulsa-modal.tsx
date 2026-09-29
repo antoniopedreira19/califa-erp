@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { estornarBaixaAvulsa } from "../../actions-avulsas";
+import { cancelarBaixaAvulsa } from "../../actions-avulsas";
 
 interface Props {
   contaId: string;
@@ -46,7 +46,7 @@ export function CancelarBaixaAvulsaModal({
       return;
     }
     startTransition(async () => {
-      const res = await estornarBaixaAvulsa({
+      const res = await cancelarBaixaAvulsa({
         conta_avulsa_id: contaId,
         motivo: motivo.trim(),
         parar_recorrencia: recorrenteId != null && pararRecorrencia === "sim",
@@ -73,9 +73,9 @@ export function CancelarBaixaAvulsaModal({
         <p className="text-sm text-muted-foreground">
           A conta{" "}
           <span className="font-medium text-foreground">&quot;{descricao}&quot;</span>{" "}
-          volta ao status <span className="font-medium text-foreground">Pendente</span>.
-          Um lançamento reverso é gerado na conta bancária, mantendo o histórico contábil.
-          O motivo fica no log de auditoria.
+          volta ao status <span className="font-medium text-foreground">Aprovada</span>, e o
+          lançamento da baixa sai do extrato, sem linha nova. Se a baixa teve estornos,
+          eles saem junto. Fica no log de auditoria quem cancelou, quando e por quê.
         </p>
 
         {recorrenteId && (
@@ -156,7 +156,7 @@ export function CancelarBaixaAvulsaModal({
             disabled={pending || motivo.trim().length < 10}
             className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50"
           >
-            {pending ? "Confirmando..." : "Confirmar estorno"}
+            {pending ? "Cancelando..." : "Confirmar cancelamento"}
           </button>
         </div>
       </DialogContent>

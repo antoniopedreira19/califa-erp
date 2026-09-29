@@ -4485,7 +4485,8 @@ código publicado logo depois (`3305751`).
 - **Ainda aberto:** o PATCH direto em `jobs.status` pela API do Supabase
   (RLS `jobs_modify`). A guarda preparada em `feat/travas-escrita-direta`
   aceita `aberto → cancelado` para GP e produtor e precisa desse ajuste
-  antes de aplicar.
+  antes de aplicar. ⚠️ Fechado no mesmo dia — ver a nota ⚠️ de
+  2026-09-28 (6).
 - **Nenhuma consulta nova, nenhuma migration.** `tsc` e `lint` limpos.
 
 ## ⚠️ Nota de 2026-09-28 (5) — a produção vê as Alterações do Financeiro (decisão 115)
@@ -4509,3 +4510,67 @@ código publicado logo depois (`3305751`).
 - **Código:** `JobItemRealizadoTable` ganhou `modoDaEdicao` (`"errata"` ou
   `"financeiro"`), e `JobRealizadoSection` recebe `edicaoDoFinanceiro` —
   `null` na produção e na fila de abertura.
+
+## ⚠️ Nota de 2026-09-29 — o envio para faturamento vira notas fiscais (decisão 123)
+
+**Isto revoga "cada parcela vira uma nota própria" do envio para faturamento.**
+
+- **Pop-up em duas colunas** no lugar do drawer (`enviar-faturamento-dialog.tsx`;
+  o `enviar-faturamento-drawer.tsx` saiu). À esquerda, as notas fiscais: CNPJ
+  do cliente (livre, nasce com o do cadastro), valor, vencimento ou parcelas
+  (1× 2× 3× 6×, vencimentos da MESMA nota), CNAE sugerido e descritivo, os
+  dois opcionais. À direita, fixos: valor total travado, a divisão entre as
+  notas, número e anexos da PO (vários, PDF ou imagem, até 10 MB), portal e
+  os contatos de cobrança.
+- **Todas as notas se digitam** (D6); o envio só sai quando a soma bate com
+  o total. O rodapé diz o que falta.
+- **Contatos de cobrança** vêm da abertura, com selo "Da abertura",
+  "Alterado" ou "Novo"; o que mudar no envio passa a ser a lista do job, e
+  a auditoria guarda o antes e o depois.
+- **A barra do job** diz "N notas fiscais, 1º vencimento em …", e o "Ver
+  envio" mostra cada nota e abre os anexos.
+- **Mensal (078):** o mesmo formulário, com o valor do mês e o vencimento em
+  branco.
+
+## ⚠️ Nota de 2026-09-28 (6) — o status do job só muda pelo sistema (decisão 117)
+
+- **No ar:** migration `20260928400001` — guarda em `jobs`, no envio para
+  faturamento e nas parcelas; INSERT/UPDATE direto de notas revogado. É a
+  preparada em 22/09 (`feat/travas-escrita-direta`), revista: sem
+  `aberto → cancelado`, e o UPDATE do envio virou guarda de papel
+  (administrador e financeiro) por causa da 115.
+- **Nada muda no app.** Cada transição de status continua na sua action;
+  a guarda recusa a mesma escrita feita por fora, pela API.
+- **Conferido antes de aplicar:** `scripts/conferir-travas-escrita-direta.sql`,
+  34 casos numa transação desfeita — 14 escritas do app passam, 20 ataques
+  são recusados. Repetir quando mudar papel, transição ou quem escreve em
+  `jobs`, envio ou nota.
+
+## ⚠️ Nota de 2026-09-29 — o código do orçamento sai do job (decisão 121)
+
+- **Ficha do job:** o "Orçamento aprovado" mostra só o rótulo da versão
+  ("Teste 1 - V1", que já traz o nome). `OrigemDaFicha.orcamentoCodigo`
+  saiu, também das duas telas do financeiro que usam a ficha.
+- **Card de abertura no chat:** "Criado a partir do orçamento “Teste 1” ·
+  v1". `DadosAberturaChat.orcamentoCodigo` virou `orcamentoNome`.
+- **PDF da PP** (`lib/pdf/pedido-compra.ts`): "Job: TES-1008/26" no lugar de
+  "Orçamento: TES-P002/26-01". O `carregarContextoPdf` não lê mais o
+  orçamento, e o job do `actions-pp.ts` agora carrega `codigo`.
+
+## ⚠️ Nota de 2026-09-29 (3) — o código antigo sai do sistema, e a PP mostra só o código do job (decisão 126)
+
+- **PDF da PP:** a linha "Projeto" saiu. A coluna da direita do cabeçalho
+  fica com Emissão e Job. `Dados.projeto` é só `{ campanha }`, e o
+  `carregarContextoPdf` não lê mais o código do projeto.
+- **As 47 PPs existentes foram refeitas** com o modelo de hoje: mesmo
+  número, mesma data de emissão, mesma foto bancária. PP-00040 e PP-00091,
+  que tinham um PDF por parcela, viraram documento único com a tabela das
+  parcelas. Os scripts estão em `scripts/rastros-codigo-anterior/`.
+- **Ficha do job:** o "Código anterior" saiu, com `JobDaFicha.codigoAnterior`,
+  nas três telas que usam a ficha.
+- **Lista de Jobs:** a busca acha só pelo código atual.
+- **`jobs.codigo_anterior`** foi esvaziado (migration `20260929700001`) e saiu
+  do tipo `Job`. A coluna saiu do banco no mesmo dia (migration
+  `20260929700002`, com o índice `idx_jobs_codigo_anterior`).
+- O descritivo do TES-1003/26 citava o "JOB-0032"; agora cita o
+  "TES-1001/26".

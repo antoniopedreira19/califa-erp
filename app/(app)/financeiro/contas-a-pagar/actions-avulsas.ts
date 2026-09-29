@@ -589,7 +589,18 @@ export async function darBaixaAvulsa(input: unknown): Promise<Result> {
   return { ok: true, id: parsed.data.conta_avulsa_id };
 }
 
-export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
+/**
+ * Cancela a baixa de uma conta avulsa, pela tela de detalhe dela
+ * (decisão 120, 29/09/2026). O lançamento sai do extrato, sem linha nova, e
+ * a conta volta para aprovada; o log de auditoria é gravado pela função do
+ * banco, na mesma transação. Até aqui esta action chamava
+ * `estornar_baixa_avulsa`, que desfazia com um lançamento reverso datado
+ * de hoje.
+ *
+ * O que só existe aqui, e não no popup de Títulos a Pagar: pausar a
+ * recorrência que gerou a conta.
+ */
+export async function cancelarBaixaAvulsa(input: unknown): Promise<Result> {
   const parsed = estornoAvulsaComRecorrenciaSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -599,7 +610,7 @@ export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
   }
   const gate = await checarGateFinanceiro(
     parsed.data.conta_avulsa_id,
-    "conta_avulsa.baixa_estornada",
+    "conta_avulsa.baixa_cancelada",
   );
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
@@ -615,42 +626,26 @@ export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
   if (atual.status !== "baixada") {
     return {
       ok: false,
-      message: "Só conta baixada pode ter a baixa estornada.",
+      message: "Só conta paga pode ter a baixa cancelada.",
     };
   }
 
-  const { data: reversoId, error } = await supabase.rpc(
-    "estornar_baixa_avulsa",
-    {
-      p_conta_avulsa_id: parsed.data.conta_avulsa_id,
-      p_motivo: parsed.data.motivo,
-    },
-  );
-
-  if (error) return { ok: false, message: `Falha ao estornar: ${error.message}` };
-
-  await logAuditEvent({
-    acao: "conta_avulsa.baixa_estornada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "conta_avulsa",
-    entidadeId: parsed.data.conta_avulsa_id,
-    metadata: {
-      descricao: atual.descricao,
-      motivo: parsed.data.motivo,
-      lancamento_reverso_id: reversoId,
-    },
+  const { error } = await supabase.rpc("cancelar_baixa_avulsa", {
+    p_conta_avulsa_id: parsed.data.conta_avulsa_id,
+    p_motivo: parsed.data.motivo,
   });
-  await logAuditEvent({
-    acao: "lancamento_financeiro.estornado",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "lancamento_financeiro",
-    entidadeId: reversoId as string,
-    metadata: {
-      origem: "avulsa_estorno",
-      conta_avulsa_id: parsed.data.conta_avulsa_id,
-      motivo: parsed.data.motivo,
-    },
-  });
+
+  if (error) {
+    console.error("[avulsa.cancelar_baixa]", error.message);
+    const limpa = error.message.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
+    return {
+      ok: false,
+      message:
+        limpa && !/["]|\b[a-z]+_[a-z_]+\b/.test(limpa)
+          ? limpa
+          : "Não foi possível cancelar a baixa. Tente novamente.",
+    };
+  }
 
   // Pausa template recorrente se solicitado e a conta era gerada por um.
   if (parsed.data.parar_recorrencia && atual.recorrente_id) {
@@ -667,7 +662,7 @@ export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
         entidadeTipo: "conta_recorrente",
         entidadeId: atual.recorrente_id,
         metadata: {
-          origem: "estornar_baixa_avulsa",
+          origem: "cancelar_baixa_avulsa",
           avulsa_id: parsed.data.conta_avulsa_id,
         },
       });
@@ -675,7 +670,7 @@ export async function estornarBaixaAvulsa(input: unknown): Promise<Result> {
         `/financeiro/contas-a-pagar/recorrente/${atual.recorrente_id}`,
       );
     } else {
-      console.error("[avulsa.estornar.pausar_recorrente]", pauseErr.message);
+      console.error("[avulsa.cancelar_baixa.pausar_recorrente]", pauseErr.message);
     }
   }
 

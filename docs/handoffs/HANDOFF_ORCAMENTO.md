@@ -4661,3 +4661,138 @@ aplicada na hora combinada com a frente do Antonio, junto da
   barram.
 - **Nenhuma migration.**
 
+## ⚠️ Nota de 2026-09-28 (2) — o orçamento se arquiva, o arquivado é só leitura, e o status é do sistema (decisões 117 e 118)
+
+- **Arquivar orçamento** (`arquivarOrcamento` / `reativarOrcamento` em
+  `[projetoId]/actions.ts`):
+  - o botão fica no rodapé do "Editar orçamento", como no projeto;
+  - o Reativar fica no aviso do topo (`orcamentos/aviso-arquivado.tsx`,
+    que serve ao projeto e ao orçamento);
+  - colunas novas: `orcamentos.arquivado_em` e `arquivado_por`.
+- **Onde o arquivado some:** agregada (`.is("arquivado_em", null)`), faixa
+  (`itensDeOrcamentos`), Exportar do projeto, lista de projetos e home.
+- **Lista do projeto** (`orcamentos-list.tsx`): filtro Ativos / Arquivados
+  / Todos e selo "Arquivado".
+- **Arquivado é só leitura:**
+  - na página do orçamento, `arquivado` entra em `protegido`,
+    `podeCriarVersao`, `readOnly` da planilha e `MetaVersao`;
+  - somem `AprovacaoActions`, `FluxoAbertura` e o "Excluir versão"
+    (`AcoesVersao.arquivado`);
+  - no projeto arquivado, somem "Editar projeto", "Importar" e "Novo
+    orçamento", e a agregada recebe `projetoArquivado`;
+  - as actions de projeto, orçamento e importação recusam com mensagem
+    própria, e o banco recusa por trás.
+- **Status do orçamento só pelo sistema:**
+  - o campo Status saiu do `OrcamentoForm`, do `orcamentoSchema` e do
+    `extractInput`;
+  - `ORCAMENTO_STATUS_EDITAVEIS` virou `ORCAMENTO_STATUS_MANUAIS_ANTIGOS`
+    (os que o Reativar leva a rascunho).
+- **Migrations:** `20260928400002` (arquivar + só leitura) e
+  `20260928400003` (guarda do status). Conferidas antes de aplicar, numa
+  transação desfeita.
+- **Testado pela tela:**
+  - TES-P001/26-03: arquivar, filtro, agregada, abas e reativar;
+  - TES-P003/26: arquivar e reativar o projeto;
+  - "Salvar alterações" sem o campo Status.
+
+
+## ⚠️ Nota de 2026-09-29 — o código do orçamento sai das telas (decisão 121) e o "Editar projeto" vira pop-up
+
+- **A coluna Código da lista do projeto** (`[projetoId]/orcamentos-list.tsx`)
+  mostra o código do **job vivo** (`jobVivoDoOrcamento`, em
+  `lib/calculos/funil.ts`, com teste em `funil.test.ts`). Sem job, ou só com
+  job cancelado, mostra "—". O código abre o job e a linha abre o
+  orçamento. `OrcamentoRow.job` é obrigatório, e `OrcamentoRow.codigo` saiu.
+- **O código do orçamento saiu de:**
+  - cabeçalho do orçamento;
+  - abas da faixa: `ItemDaFaixa.codigo` virou `string | null`, é `null` nas
+    abas de orçamento e segue com o código nas de job;
+  - balão do Voltar;
+  - título do "Editar orçamento";
+  - pop-ups de aprovação e de envio, que agora recebem `orcamentoNome`;
+  - visão agregada: cartão, Totais, modal de importação, 16 mensagens de
+    `agregado/actions.ts` e o "código previsto" dos novos
+    (`orcamentosExistentes` saiu);
+  - exportações da versão e do projeto;
+  - gaveta de importação.
+- **Campo "Código" do `OrcamentoForm` saiu.** Sem ele, o `atualizarOrcamento`
+  não mexe no código, porque só grava quando o campo vem preenchido. Na
+  edição, o "Projeto" travado da criação ocupa o lugar dele, com
+  `projetoNome` e `projetoCodigo` vindos do `OrcamentoEditorDrawer`.
+- **`OrcamentoExportavel.codigo` e `OrigemBanco.codigo` saíram.** Ninguém
+  os mostrava.
+- **"Editar projeto" (`projeto-editor-drawer.tsx`)** agora é um
+  `DialogContent` com `max-w-3xl`, a largura do cartão do Novo projeto. O
+  Status e o Arquivar/Reativar vão no pé do formulário, na linha do
+  Cancelar/Salvar, pela prop nova `ProjetoForm.rodapeEsquerda`. Abrir o
+  pop-up zera o erro de um Arquivar recusado antes. O nome do arquivo ficou
+  para não mexer nos imports.
+- **Nenhuma migration.** O código segue em `orcamentos.codigo`, e a
+  importação casa pelo `orc:<uuid>` oculto.
+
+## ⚠️ Nota de 2026-09-29 (2) — o cliente do projeto só muda antes da aprovação, e os códigos acompanham (decisão 122)
+
+- **Trava:** com orçamento aprovado ou com job (a régua do arquivar, agora
+  em `projetoTemAprovacao`, em `orcamentos/actions.ts`), o campo Cliente do
+  "Editar projeto" trava (`ProjetoForm.clienteTravado`, calculado na página
+  do projeto). O servidor recusa, e o banco também, pelo gatilho
+  `trg_projetos_b_guarda_cliente`.
+- **Troca antes da aprovação:** `atualizarProjeto` chama a função interna
+  `trocarClienteDoProjeto`, que:
+  - gera o código com `gerarCodigoProjeto`, só quando a sigla muda;
+  - chama a RPC `trocar_cliente_do_projeto`, que troca cliente, marca e
+    código do projeto e o prefixo dos orçamentos numa transação só, **antes**
+    do resto da gravação;
+  - registra `projeto.codigo_trocado` e `orcamento.codigo_trocado`.
+- **Orçamento arquivado:** `orcamentos_guarda_arquivado` passou a aceitar a
+  troca só do código, para o arquivado acompanhar o projeto.
+- **Migration:** `20260929300001`, aplicada e conferida:
+  - gatilho no lugar;
+  - RPC `security invoker`, com execução para `authenticated` e nada para
+    `anon`;
+  - guarda do arquivado com a exceção.
+- **Testado pela tela** no TES-P003/26: TES para TET-P001/26 e de volta a
+  TES-P003/26, com um orçamento arquivado junto. As três camadas da trava
+  foram testadas no TES-P002/26. Ver a decisão 122, §5.
+
+## ⚠️ Nota de 2026-09-29 (3) — Equipe para GP e produtor, número de projeto que não volta e o "Código anterior" fora do cabeçalho
+
+- **Equipe (e toda lista de pessoas) para quem não é administrador:**
+  - o sintoma: `listActiveMembers` lia `tenant_members` primeiro, e a RLS
+    dela só mostra a própria linha para quem não é administrador. GP e
+    produtor recebiam a lista com uma pessoa só, eles mesmos, e a produção
+    relatou que não conseguia acrescentar nem tirar ninguém da Equipe;
+  - a correção: a lista agora vem da função `membros_ativos_do_tenant`
+    (migration `20260929300002`), que devolve id e nome dos membros ativos
+    só para quem é membro do tenant. O papel de cada um continua só para o
+    administrador;
+  - vale para todas as listas que usam `listActiveMembers`: GPs, produtor,
+    responsável da verba e as demais;
+  - testado como o GP Teste Claude no TES-P003/26: a lista foi de 1 para
+    86 pessoas, acrescentar e tirar o "Financeiro Teste" gravou certo, e a
+    Equipe ficou como estava.
+- **Número de projeto não volta a ser usado:** registro
+  `codigos_de_projeto_usados` (migration `20260929300003`), que o gerador
+  passa a ler. Na troca de cliente, o projeto recupera um número que já
+  foi dele (`codigoQueOProjetoJaTeve`). Ver decisão 122, §6.
+- **"Código anterior"** saiu do cabeçalho do projeto (produção e
+  financeiro). A coluna e a busca ficam.
+
+## ⚠️ Nota de 2026-09-29 (4) — o código antigo sai do sistema (decisão 126)
+
+- **Busca da lista de projetos:** só pelo código atual.
+  `projetos.codigo_anterior` e `orcamentos.codigo_anterior` foram
+  esvaziados (migration `20260929700001`) e saíram do tipo `Projeto`. As
+  colunas saíram do banco no mesmo dia (migration `20260929700002`).
+- **Registro de números usados:** as 34 linhas no formato antigo
+  (`AMB-0003/26`) passaram ao formato com "P", mesmo número e mesmo
+  projeto. O gerador e o `codigoQueOProjetoJaTeve` só encontram esse
+  formato agora.
+- **Nome de arquivo com código antigo de orçamento:** no histórico de
+  importação (5 linhas) e no nome da versão "Importada de
+  interna-TES-0001_26-01-v3.xlsx", o código virou o nome do orçamento
+  ("interna-Orcamento de Teste-v3.xlsx"), como a exportação nomeia o arquivo
+  desde a decisão 121.
+- **As 23 planilhas importadas** saíram do Storage (bucket
+  `orcamento-importacoes`), por decisão do Tiago. As linhas de
+  `orcamento_importacoes` ficam, e nenhuma tela as lê.

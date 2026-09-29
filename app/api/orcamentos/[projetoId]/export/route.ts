@@ -355,7 +355,7 @@ export async function GET(
   const secoes: SecaoDaAba[] = orcamentos.map((o) => {
     const versao = versaoAlvo.get(o.id)!;
     return {
-      titulo: `${o.codigo} · ${nomeVersao(o.nome, versao.numero_versao)}`,
+      titulo: nomeVersao(o.nome, versao.numero_versao),
       orcamentoId: o.id,
       versaoId: versao.id,
       percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
@@ -378,7 +378,7 @@ export async function GET(
         itens: itensPorGrupo.get(g.id) ?? [],
       }));
       return secaoInternaDaVersao({
-        titulo: `${o.codigo} · ${nomeVersao(o.nome, versao.numero_versao)}`,
+        titulo: nomeVersao(o.nome, versao.numero_versao),
         orcamentoId: o.id,
         versaoId: versao.id,
         percentualHonorarios: Number(versao.percentual_honorarios ?? 0),
@@ -443,8 +443,8 @@ export async function GET(
         secoes: orcamentos.map((o) => {
           const versao = versaoAlvo.get(o.id)!;
           return {
-            titulo: `${o.codigo} · ${nomeVersao(o.nome, versao.numero_versao)}`,
-            rotuloNoResumo: o.codigo,
+            titulo: nomeVersao(o.nome, versao.numero_versao),
+            rotuloNoResumo: o.nome,
             orcamentoId: o.id,
             versaoId: versao.id,
             percentualHonorarios: Number(versao.percentual_honorarios ?? 0),

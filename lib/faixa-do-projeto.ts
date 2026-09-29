@@ -16,7 +16,10 @@ export const AGREGADA = "agregada";
 
 export interface ItemDaFaixa {
   id: string;
-  codigo: string;
+  /** Código mostrado na aba: o do job, nas abas de job. Nas de orçamento é
+   *  `null` — o código do orçamento é só da base de dados e confundia a
+   *  produção, que fala pelo código do job (29/09/2026). */
+  codigo: string | null;
   nome: string;
   /** Rota da tela do item, sem query: a aba de seção entra no clique. */
   href: string;
@@ -98,23 +101,31 @@ function comQuery(href: string, params: URLSearchParams): string {
 
 /**
  * Orçamentos do projeto como abas. Entram os mesmos da visão agregada —
- * todos, menos cancelados e recusados —, e o aberto na tela sempre, para a
- * faixa nunca ficar sem a aba marcada.
+ * todos, menos arquivados (decisão 118), cancelados e recusados —, e o
+ * aberto na tela sempre, para a faixa nunca ficar sem a aba marcada.
  */
 export function itensDeOrcamentos(
   projetoId: string,
-  orcamentos: Array<{ id: string; codigo: string; nome: string; status: string }>,
+  orcamentos: Array<{
+    id: string;
+    codigo: string;
+    nome: string;
+    status: string;
+    arquivado_em: string | null;
+  }>,
   atualId: string | null,
 ): ItemDaFaixa[] {
   return orcamentos
     .filter(
       (o) =>
-        o.id === atualId || (o.status !== "cancelado" && o.status !== "recusado"),
+        o.id === atualId ||
+        (!o.arquivado_em && o.status !== "cancelado" && o.status !== "recusado"),
     )
+    // A ordem segue a do código (a de criação), mesmo sem mostrá-lo.
     .sort((a, b) => a.codigo.localeCompare(b.codigo))
     .map((o) => ({
       id: o.id,
-      codigo: o.codigo,
+      codigo: null,
       nome: o.nome,
       href: `/orcamentos/${projetoId}/${o.id}`,
       travado: o.status === "aprovado" || o.status === "job_criado",

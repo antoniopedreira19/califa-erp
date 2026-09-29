@@ -104,3 +104,18 @@ export function escolherJobDoFunil(
   const ativo = ordenados.find((j) => j.status !== "cancelado");
   return (ativo ?? ordenados[0]).status;
 }
+
+/**
+ * O job vivo do orçamento: o não-cancelado mais recente, ou `null` se não
+ * houver. Diferente do funil acima, cancelado NÃO conta — o número de um
+ * job cancelado morreu, e é o código do job vivo que a produção usa para
+ * falar do trabalho (29/09/2026).
+ */
+export function jobVivoDoOrcamento<
+  T extends { status: JobStatus; created_at: string },
+>(jobs: T[]): T | null {
+  const vivos = jobs
+    .filter((j) => j.status !== "cancelado")
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return vivos[0] ?? null;
+}

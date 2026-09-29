@@ -63,7 +63,9 @@ interface Props {
   versaoId: string;
   versaoLabel: string;
   versaoStatus: string;
-  orcamentoCodigo: string;
+  /** Nome do orçamento. O código dele é só da base de dados e não aparece
+   *  para a produção (29/09/2026). */
+  orcamentoNome: string;
   jobHref: string | null;
 
   qtdGrupos: number;
@@ -136,7 +138,7 @@ export function FluxoAbertura({
   versaoId,
   versaoLabel,
   versaoStatus,
-  orcamentoCodigo,
+  orcamentoNome,
   jobHref,
   qtdGrupos,
   qtdItens,
@@ -577,7 +579,7 @@ export function FluxoAbertura({
           <>
             A versão <strong className="text-foreground">{versaoLabel}</strong>{" "}
             passa a ser a versão aprovada do orçamento{" "}
-            <strong className="text-foreground">{orcamentoCodigo}</strong> e seus
+            <strong className="text-foreground">{orcamentoNome}</strong> e seus
             valores ficam travados. Novas alterações exigem uma nova versão.
             <span className="mt-4 flex flex-col gap-2 rounded-xl border border-border bg-muted/40 px-4 py-3.5">
               <span className="flex items-baseline justify-between gap-3">
@@ -617,7 +619,7 @@ export function FluxoAbertura({
         onConfirmar={() => setModal("envio")}
         dados={dados}
         onChange={(patch) => setDados((d) => ({ ...d, ...patch }))}
-        orcamentoCodigo={orcamentoCodigo}
+        orcamentoNome={orcamentoNome}
         projetoNome={projetoNome}
         projetoCodigo={projetoCodigo}
         clienteNome={clienteNome}
@@ -649,7 +651,7 @@ export function FluxoAbertura({
         pending={pending}
         somenteLeitura={etapa === "enviada"}
         reenvio={etapa === "devolvida"}
-        orcamentoCodigo={orcamentoCodigo}
+        orcamentoNome={orcamentoNome}
         linhas={resumoEnvio}
         valorTotal={fechamento.valorJob}
         faturamentoPrevisto={fechamento.faturamentoPrevisto}

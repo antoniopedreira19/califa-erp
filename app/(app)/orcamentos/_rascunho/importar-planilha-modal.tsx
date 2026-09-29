@@ -21,9 +21,9 @@ export interface PlanilhaLida {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Código previsto do orçamento — deixa claro que a importação vale só
-   *  para este orçamento, e não para os outros do rascunho. */
-  codigo: string;
+  /** Nome do orçamento — deixa claro que a importação vale só para ele, e
+   *  não para os outros do rascunho. Era o código previsto até 29/09/2026. */
+  nome: string;
   /** Modelo do orçamento que recebe a planilha: a de outro modelo é
    *  recusada (decisão 072). Obrigatório para não cair no nacional. */
   modeloPlanilha: CategoriaModeloPlanilha;
@@ -42,7 +42,7 @@ interface Props {
 export function ImportarPlanilhaModal({
   open,
   onOpenChange,
-  codigo,
+  nome,
   modeloPlanilha,
   interno,
   onImportado,
@@ -55,7 +55,7 @@ export function ImportarPlanilhaModal({
       descricao={
         <>
           A importação vale só para{" "}
-          <span className="font-mono font-semibold text-foreground">{codigo}</span> — os demais
+          <span className="font-semibold text-foreground">{nome}</span> — os demais
           orçamentos do rascunho não são afetados.
         </>
       }

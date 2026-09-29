@@ -17,6 +17,7 @@ import {
   type JobStatus,
 } from "@/lib/types";
 import { lerFaturamentoPorMesDoJob } from "@/lib/data/faturamento-mensal";
+import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 
 /** "outubro" → "Outubro", para abrir frase. */
@@ -174,18 +175,19 @@ function formatarBRL(n: number): string {
  * (`vw_faturamento_pendente`), levando junto o que só a produção sabe:
  * número da PO, como a nota deve ser descrita, portal do cliente e o
  * vencimento acordado. O CNAE saiu daqui em 31/08/2026 — é do financeiro,
- * que o informa na emissão da nota.
+ * que o informa na emissão da nota — e voltou como SUGESTÃO na decisão 123.
  *
  * O valor NÃO vem do formulário — é relido de `jobs.faturamento_previsto`
  * aqui dentro. É valor de nota fiscal; o navegador não é fonte confiável
  * para ele. O que o formulário mostra é uma leitura travada do mesmo
  * número.
  *
- * Desde a Tela 3.3 o envio também diz EM QUANTAS NOTAS o job será
- * faturado (`jobs_envio_faturamento_parcelas`). Cada parcela vira uma
- * linha da aba Faturamento, com o seu próprio vencimento. A soma é
- * conferida contra o valor relido: quem diz o total é o banco, o
- * formulário só diz como reparti-lo.
+ * Desde a decisão 123 (29/09/2026) o envio se divide em NOTAS FISCAIS,
+ * cada uma com o próprio CNPJ do cliente, CNAE sugerido, descritivo e
+ * vencimentos ("uma nota, vários vencimentos"); leva os anexos da PO; e
+ * traz a lista revista dos contatos de cobrança, que passa a ser a do job
+ * (D1). A soma das notas é conferida contra o valor relido: quem diz o
+ * total é o banco, o formulário só diz como reparti-lo.
  */
 export async function enviarJobParaFaturamento(
   jobId: string,
@@ -206,9 +208,10 @@ export async function enviarJobParaFaturamento(
 
   const supabase = createClient();
 
-  // O job, os pedidos de save e as linhas que consomem save (decisão 099):
+  // O job, os pedidos de save, as linhas que consomem save (decisão 099) e
+  // os contatos de cobrança de antes (para a auditoria da troca, D1):
   // leituras independentes, em paralelo.
-  const [{ data: job }, pedidosSaveRes, linhasConsumoRes] = await Promise.all([
+  const [{ data: job }, pedidosSaveRes, linhasConsumoRes, contatosAntes] = await Promise.all([
     supabase
       .from("jobs")
       .select(
@@ -246,6 +249,7 @@ export async function enviarJobParaFaturamento(
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
       .gt("save_consumido", 0),
+    contatosDeCobrancaDoJob(jobId, session.activeTenant.id),
   ]);
 
   if (!job) return { ok: false, message: "Job não encontrado." };
@@ -449,17 +453,28 @@ export async function enviarJobParaFaturamento(
     };
   }
 
-  // A soma das parcelas fecha contra o valor RELIDO, não contra o que o
+  // A soma das notas fecha contra o valor RELIDO, não contra o que o
   // navegador mandou. Tolerância de 1 centavo pelo arredondamento da
-  // divisão em partes iguais.
-  const somaParcelas = parsed.data.parcelas.reduce((s, p) => s + p.valor, 0);
-  if (Math.abs(somaParcelas - valor) > 0.01) {
+  // divisão em partes iguais. O valor de cada nota é a soma das parcelas
+  // dela (decisão 123), então é a mesma conta.
+  const somaNotas = parsed.data.notas.reduce(
+    (s, n) => s + n.parcelas.reduce((t, p) => t + p.valor, 0),
+    0,
+  );
+  if (Math.abs(somaNotas - valor) > 0.01) {
     return {
       ok: false,
       message:
-        `A soma das parcelas (${formatarBRL(somaParcelas)}) não fecha com o ` +
+        `A soma das notas fiscais (${formatarBRL(somaNotas)}) não fecha com o ` +
         `valor a faturar (${formatarBRL(valor)}).`,
     };
+  }
+
+  // Os anexos da PO subiram direto do navegador ao Storage, na pasta do
+  // job. O banco confere de novo (`envio_anexo_guarda_escrita_direta`).
+  const pastaDoJob = `${session.activeTenant.id}/${jobId}/`;
+  if (parsed.data.anexos_po.some((a) => !a.path.startsWith(pastaDoJob))) {
+    return { ok: false, message: "Um dos anexos da PO não está na pasta deste job. Remova e anexe de novo." };
   }
 
   // Um envio por job — ou por job + mês no modelo mensal (índices únicos
@@ -505,7 +520,8 @@ export async function enviarJobParaFaturamento(
     portalUrl = portal.url;
   }
 
-  // Envio e parcelas numa transação só (decisão 075, 14/09/2026). Eram dois
+  // Envio, notas, parcelas, anexos e contatos numa transação só (decisões
+  // 075 e 123). Até a 075 eram dois
   // INSERTs do PostgREST — duas transações —, e o "desfazer" do primeiro
   // era um DELETE que o banco recusa: `jobs_envio_faturamento` não tem
   // DELETE para `authenticated`, porque envio é evento, não rascunho. Se
@@ -521,18 +537,22 @@ export async function enviarJobParaFaturamento(
         job_id: jobId,
         valor_faturado: valor,
         numero_po: parsed.data.numero_po,
-        data_faturamento: parsed.data.data_faturamento,
-        descricao_nf: parsed.data.descricao_nf,
         portal_id: parsed.data.portal_id,
         portal_url: portalUrl,
         enviado_por: session.profile.id,
         mes,
         valor_save: valorSave,
-        parcelas: parsed.data.parcelas.map((p) => ({
-          ordem: p.ordem,
-          valor: p.valor,
-          data_vencimento: p.data_vencimento,
+        notas: parsed.data.notas.map((n) => ({
+          cnpj: n.cnpj,
+          cnae_sugerido: n.cnae_sugerido,
+          descritivo: n.descritivo,
+          parcelas: n.parcelas.map((p) => ({
+            valor: p.valor,
+            data_vencimento: p.data_vencimento,
+          })),
         })),
+        anexos: parsed.data.anexos_po,
+        contatos: parsed.data.contatos,
       },
     },
   );
@@ -548,9 +568,19 @@ export async function enviarJobParaFaturamento(
       ok: false,
       message:
         "Não foi possível enviar o job para faturamento. Nada foi gravado — " +
-        "confira as parcelas e tente de novo.",
+        "confira as notas e tente de novo.",
     };
   }
+
+  const primeiroVencimento =
+    parsed.data.notas
+      .flatMap((n) => n.parcelas.map((p) => p.data_vencimento))
+      .sort()[0] ?? null;
+  const chaveContato = (c: { nome: string; numero: string | null; email: string }) =>
+    `${c.nome.trim()}|${(c.numero ?? "").trim()}|${c.email.trim().toLowerCase()}`;
+  const contatosMudaram =
+    contatosAntes.map(chaveContato).join("\n") !==
+    parsed.data.contatos.map(chaveContato).join("\n");
 
   await logAuditEvent({
     acao: "job.enviado_para_faturamento",
@@ -559,15 +589,36 @@ export async function enviarJobParaFaturamento(
     entidadeId: jobId,
     metadata: {
       valor_faturado: valor,
-      data_faturamento: parsed.data.data_faturamento,
-      tem_descricao_nf: parsed.data.descricao_nf.length > 0,
+      data_faturamento: primeiroVencimento,
+      qtd_notas: parsed.data.notas.length,
+      qtd_parcelas: parsed.data.notas.reduce((s, n) => s + n.parcelas.length, 0),
+      qtd_cnpjs: new Set(parsed.data.notas.map((n) => n.cnpj)).size,
+      notas_com_descritivo: parsed.data.notas.filter((n) => n.descritivo).length,
+      notas_com_cnae: parsed.data.notas.filter((n) => n.cnae_sugerido).length,
       tem_po: parsed.data.numero_po !== null,
+      qtd_anexos_po: parsed.data.anexos_po.length,
       tem_portal: parsed.data.portal_id !== null,
-      qtd_parcelas: parsed.data.parcelas.length,
+      contatos_alterados: contatosMudaram,
       mes,
       valor_save: valorSave,
     },
   });
+
+  // Os contatos de cobrança são do job (D1): trocar a lista no envio é
+  // alteração do job, e fica registrada com o antes e o depois.
+  if (contatosMudaram) {
+    await logAuditEvent({
+      acao: "job.contatos_cobranca_alterados",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        origem: "envio_faturamento",
+        antes: contatosAntes,
+        depois: parsed.data.contatos,
+      },
+    });
+  }
 
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");

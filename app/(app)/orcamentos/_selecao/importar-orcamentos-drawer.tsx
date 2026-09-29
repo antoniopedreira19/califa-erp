@@ -308,9 +308,6 @@ export function ImportarOrcamentosDrawer({ projetoId }: Props) {
                       key={c.versaoId}
                       className="flex items-center gap-3 px-3.5 py-2.5"
                     >
-                      <span className="font-mono text-xs text-california-red">
-                        {c.codigo}
-                      </span>
                       <span className="font-semibold">{c.nome}</span>
                       <span className="ml-auto font-mono text-xs">
                         v{c.numeroVersao} · rascunho
@@ -375,10 +372,9 @@ function LinhaPreview({ o }: { o: ResumoOrcamentoImportado }) {
       <td className="px-3 py-2.5 align-top">
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-foreground">{o.nome}</span>
-          {o.codigo && (
+          {o.versaoAtual !== null && (
             <span className="font-mono text-[11px] text-muted-foreground">
-              {o.codigo}
-              {o.versaoAtual !== null ? ` · v${o.versaoAtual} vigente` : ""}
+              v{o.versaoAtual} vigente
             </span>
           )}
         </div>

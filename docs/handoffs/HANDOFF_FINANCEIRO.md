@@ -1562,7 +1562,7 @@ num job** na aba de jobs abertos.
 
 | Campo | O que é |
 |---|---|
-| **Projeto** * | Editável, com "+" para criar projeto ali mesmo. Arrumação do financeiro, invisível para a produção |
+| **Projeto** * | Editável, com "+" para criar projeto ali mesmo. Arrumação do financeiro, invisível para a produção. ⚠️ **28/09/2026 (decisão 119):** o "+" só reserva o nome, e o projeto nasce com a abertura; com projeto escolhido, o "+" vira lápis e renomeia. Ver a nota de 2026-09-28 (5). |
 | **Recebimento em** | Conta bancária de entrada do job, com saldo de hoje na opção |
 | **Pagamento em** | Conta bancária de saída do job |
 
@@ -6064,6 +6064,53 @@ Antonio, e o código publicado logo depois (`3305751`).
   TES-1014/26 (orçamento TES-P001/26-14, aprovado e enviado para o teste)
   ficou na fila da abertura.
 
+## ⚠️ Nota de 2026-09-28 (5) — o projeto do financeiro nasce com o job, tem nome único e se renomeia pelo lápis (decisão 119)
+
+**Isto revoga o "+" que gravava o projeto na hora, da seção 42.**
+
+- **O "+" do campo Projeto não grava mais nada.** Ele reserva o nome no
+  formulário; a linha aparece no combo com o selo **Novo** no lugar do
+  código. O projeto nasce no clique em "Abrir job no financeiro", "Salvar
+  alterações" ou "Registrar revisão de abertura", junto com o job. Se a
+  gravação falhar, a action apaga o projeto que acabou de criar.
+- **O "+" vira lápis** quando há projeto escolhido, como no campo de
+  fornecedor, e o ✕ no campo devolve o "+". Num projeto que já existe, o
+  lápis renomeia **na hora**, para todos os jobs dele, sem esperar a
+  abertura. Num projeto novo, só troca o nome reservado.
+- **Nome único no sistema inteiro**, sem distinguir maiúscula, acento ou
+  espaço. O "+" e o lápis avisam antes, dizendo qual projeto, e de que
+  cliente, já usa o nome.
+- **Projeto que fica sem job some.** Quando o financeiro troca o projeto do
+  único job de um projeto, o banco apaga o projeto antigo e registra na
+  auditoria. A foto da abertura guarda o rótulo do projeto, e o histórico
+  mostra "Código · Nome (projeto apagado)".
+- **Job encerrado ou finalizado fica no projeto para sempre** e aparece
+  dentro dele no Visualizar Jobs. Só job aberto ou em produção troca de
+  projeto, e mudar de status nunca tira o job do projeto.
+- **Limpeza de 28/09/2026:** 13 projetos do financeiro sem job apagados. O
+  AMB-F012/26 "Michelob - IMC NE" voltou em seguida, porque era de uma
+  abertura em curso (AMB-1008/26). Ficaram 9 projetos, sem nome repetido;
+  todos têm job, menos o AMB-F012/26, que ganha o dele quando o AMB-1008/26
+  for aberto.
+
+## ⚠️ Nota de 2026-09-29 — Faturamento por nota do envio, CNPJ e CNAE sugerido (decisão 123)
+
+**Isto revoga "uma linha por parcela do envio" da aba Faturamento.**
+
+- **Uma linha por nota do envio.** A view segue por parcela; a tela junta as
+  parcelas de cada nota. A coluna Parcela virou **Nota** (1/2, "2 venc."),
+  o vencimento mostra "até …" quando há mais de um, e o CNPJ da nota
+  aparece embaixo do cliente.
+- **Faturar de uma nota do envio:** nasce com um título a receber por
+  vencimento, o descritivo da nota na descrição e o CNAE sugerido pelo GP
+  como **texto de fundo** do "CNAE a ser utilizado" — sem preencher (D3).
+- **Faturamento Agrupado** recusa CNPJs diferentes antes de abrir, e o banco
+  recusa de novo (`emitir_faturamento`).
+- **A nota emitida guarda o CNPJ** (`faturamentos.cnpj_tomador`). As notas
+  anteriores a 29/09/2026 ficam sem, porque saíram para o CNPJ do cadastro.
+- **Botão `i`:** CNPJ, CNAE sugerido, descritivo da nota e os anexos da PO,
+  que também aparecem em Títulos a Receber.
+
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
 **Isto revoga o primeiro tópico da nota de 2026-09-01.**
@@ -6078,3 +6125,139 @@ Antonio, e o código publicado logo depois (`3305751`).
   serviço do orçamento).
 - **Planilha do job no financeiro:** já seguia a regra (o financeiro não
   passa o saldo do cliente), e não mudou.
+
+## ⚠️ Nota de 2026-09-29 — o código do orçamento sai do financeiro (decisão 121)
+
+- **Conferência e abertura do job:** "Vem do orçamento…" e "Orçamento de
+  origem" mostram o nome do orçamento. `orcamento_codigo` virou
+  `orcamento_nome` em `abertura-de-job/dados.ts`, e saiu de
+  `financeiro/jobs/[jobId]/dados.ts`, onde ninguém o lia.
+- **Ficha do job:** mesma mudança da produção (ver HANDOFF_JOBS).
+
+## ⚠️ Nota de 2026-09-29 — cancelar e estornar baixa, nas duas pontas (decisão 120)
+
+**Isto substitui o "Estornar baixa" do popup do olho, religado em 18/08 e
+estendido a Contas a Receber em 31/08.**
+
+- **Popup do olho** (Títulos a Receber, Títulos a Pagar e a fatura do
+  cartão): o cartão da baixa tem **Estornar** e **Cancelar esta baixa**.
+  O componente é o mesmo nas três telas
+  (`components/financeiro/baixa-registrada-dialog.tsx`), e as ações das
+  duas pontas estão em `app/(app)/financeiro/actions-baixa-registrada.ts`.
+- **Cancelar** apaga o lançamento da baixa — sem linha nova no extrato —,
+  devolve o título a Em aberto / A pagar e leva junto os estornos da baixa.
+  Fatura de cartão paga volta para Fechada. Item de cartão só sai de fatura
+  aberta (regra de antes).
+- **Estornar** registra uma transação nova (data, conta, valor, motivo);
+  o título continua pago. A linha da lista mostra "estornado R$ X" sob o
+  valor, e o popup lista cada estorno com data, conta e motivo. Não existe
+  estorno de item pago no cartão nem de pagamento de fatura: o botão
+  aparece desabilitado, com o motivo.
+- **Detalhe da conta avulsa:** o "Cancelar baixa" de lá também passou a
+  cancelar de verdade (`cancelarBaixaAvulsa`), mantendo a opção de pausar a
+  recorrência.
+- **Saíram do código** as actions que faziam o reverso:
+  `estornarBaixaTitulo` (receber e pagar), `estornarBaixaParcela`,
+  `estornarBaixaDesembolsoParcela`, `estornarBaixaDevolucaoVerba`,
+  `estornarBaixaFaturaCartao` e `estornarBaixaAvulsa` (virou
+  `cancelarBaixaAvulsa`). As RPCs antigas continuam no banco, sem chamador.
+- **Desembolso:** o cancelamento da parcela de desembolso usa a função nova
+  `cancelar_baixa_desembolso_parcela`; a antiga
+  (`estornar_baixa_desembolso_parcela`) estava quebrada e não foi mexida.
+  O Tiago autorizou a mudança nessa ponta e avisa o Antonio.
+- **Permissão:** as funções novas exigem administrador ou financeiro no
+  próprio banco, e gravam o log de auditoria na mesma transação
+  (`*.baixa_cancelada`, `lancamento_financeiro.estorno_de_baixa`).
+- **Conciliação sem mudança nenhuma**, por pedido do Tiago.
+- **Conferido no navegador (29/09/2026), logado como administrador:**
+  NF 1 do TES-1001/26 recebeu baixa na Conta Teste, ganhou um estorno de
+  R$ 1.000,00 (a linha mostrou "estornado R$ 1.000,00", o popup listou o
+  estorno com o motivo) e teve a baixa cancelada — voltou a Inadimplente, sem
+  nenhum lançamento, e o log gravou o cancelamento com o estorno apagado. Na
+  PP-00083 (TES-1008/26), estorno de R$ 2.500,00 como entrada, cancelamento
+  (PP de volta a aprovada) e a baixa refeita igual à original (24/09, PIX,
+  Conta Teste, 02 · Geral). Fatura FC-00003 e item de cartão da FC-00004: o
+  Estornar aparece desabilitado com o motivo, e cancelar item de fatura
+  fechada é recusado com "Reabra a fatura…". A trava de valor acima do saldo
+  e a de motivo curto funcionaram na tela.
+- **Corrigido na conferência:** a recusa do servidor fechava o formulário do
+  popup e perdia o motivo digitado; o popup agora só se reinicia quando muda
+  o título.
+
+## ⚠️ Nota de 2026-09-29 (2) — o "Código anterior" sai do cabeçalho do projeto
+
+- A página do projeto do financeiro não mostra mais o "Código anterior" da
+  decisão 114, como na produção (decisão 122, §6).
+- `projetos_financeiro.codigo_anterior` e a busca pelo código antigo
+  continuam.
+
+## ⚠️ Nota de 2026-09-29 (3) — recebimento avulso, transferência e rendimento em Títulos a Receber (decisão 124)
+
+- **Botão "Recebimento avulso"** em Contas a Receber › Títulos a Receber,
+  com três tipos (`contas-a-receber/recebimento-avulso-dialog.tsx`) e o
+  rodapé "Criar / Criar e dar baixa" do lançamento avulso do pagar.
+- **Recebimento avulso e rendimento** são contas avulsas de natureza
+  entrada (`contas_avulsas.tipo_entrada`), com código AV. Aparecem na mesma
+  lista das notas (coluna Nota fiscal mostra o código AV; a de jobs, a
+  descrição), abrem a baixa geral (`baixa-recebimento-dialog.tsx`, agora
+  com o resumo montado por quem chama) e o olho da decisão 120. Rendimento:
+  só conta Investimento, um por conta e mês, centro de custo fixo, sem
+  estorno. Avulso e rendimento em aberto não ficam "Inadimplente" — isso é
+  só da nota.
+- **Transferência** mora em `transferencias_contas` (código TR) e, feita,
+  vira duas linhas sem empresa e sem plano (opção A). O "Dar baixa" da que
+  nasceu a transferir só pede a data (`transferir-dialog.tsx`); o olho
+  mostra as duas contas e cancela as duas linhas juntas; não tem estorno.
+- **Fora de Títulos a Receber:** Títulos a Pagar e `vw_a_pagar` não trazem
+  mais as avulsas de entrada; a conciliação mostra as linhas de
+  transferência (a consulta do extrato deixou de usar `!inner` no plano);
+  o fluxo de caixa consolidado filtra as duas origens de transferência.
+- **Conferido no navegador (29/09/2026):** AV-00005 (Empresa Teste) criado
+  em aberto, baixado na Conta Teste, estornado em R$ 20,00 e cancelado;
+  TR-00001 (Conta Teste → Teste) criada e feita, conferida no extrato,
+  cancelada, efetivada pelo "Dar baixa" e cancelada de novo; trava de CNPJ
+  diferente; formulário do rendimento sem gravar (as duas contas de
+  aplicação são reais).
+- **Excluir** (aprovado em 29/09): lixeira na calha da linha em aberto que
+  não vem de nota, com confirmação; o baixado cancela a baixa antes.
+  Conferido apagando os dois títulos de teste (AV-00005 e TR-00001) — o
+  banco ficou sem nenhum título nem linha de teste.
+
+## ⚠️ Nota de 2026-09-29 (4) — o código antigo sai do sistema (decisão 126)
+
+- **Fila, Jobs abertos e campo Projeto da abertura:** a busca acha só pelo
+  código atual.
+- **Ficha do job** (conferência e Visualizar Jobs): o "Código anterior"
+  saiu.
+- **`projetos_financeiro.codigo_anterior`** foi esvaziado (migration
+  `20260929700001`) e saiu de `ProjetoFinanceiroOpcao`. A coluna saiu do banco
+  no mesmo dia (migration `20260929700002`).
+- **PDF da PP** que o financeiro abre: só "Job: <código>", sem projeto. As
+  47 PPs existentes foram refeitas, com o mesmo número, a mesma data de
+  emissão e a mesma foto bancária (ver HANDOFF_JOBS).
+- **Não mudou:** o dossiê da PP em Contas a Pagar (`pp-dossie.tsx`) segue
+  mostrando o código do projeto como linha secundária, abaixo do código do
+  job.
+
+## ⚠️ Nota de 2026-09-29 (5) — baixa parcial e impostos retidos (decisão 125, entrega 3a)
+
+- **Banco (as duas pontas):** o documento aceita várias baixas e só vira
+  pago quando a soma delas (líquido + retidos) chega ao valor. A baixa
+  segue sendo o lançamento, com o **líquido**; os retidos moram em
+  `baixas_retencoes`. Funções novas `baixar_titulo_receber`,
+  `baixar_conta_avulsa`, `baixar_parcela_pp` e `cancelar_baixa_lancamento`;
+  as `dar_baixa_*` e `cancelar_baixa_*` antigas delegam (baixam o que falta
+  / cancelam a mais recente). Sem os índices de uma baixa viva por título,
+  parcela e avulsa. `vw_a_pagar` e `vw_fluxo_caixa` projetam só o que falta.
+- **Títulos a Receber:** situação **Parcial** (chip próprio), linha com
+  "recebido · falta" e retidos, diálogo com o bloco "Valor a dar baixa"
+  (`components/financeiro/valor-da-baixa.tsx`) e popup do olho com um
+  cartão por baixa, cada um com Estornar e Cancelar, e "Dar baixa no
+  restante". Leitura das baixas em `lib/data/baixas-do-documento.ts`.
+- **Títulos a Pagar ainda não mudou na tela** (entrega 3b): o popup usa o
+  formato novo com uma baixa só. O banco já aceita a parcial e a retenção
+  no pagar, e já recusa onde só cabe o valor inteiro (folha, PP de verba,
+  cartão, remessa).
+- **Home:** "previsto a receber" desconta as baixas parciais.
+- **Conferido no navegador (29/09/2026)** no TES-1001/26 NF 1 2/2 e num
+  recebimento avulso de teste, tudo desfeito no fim. Detalhe na decisão 125.

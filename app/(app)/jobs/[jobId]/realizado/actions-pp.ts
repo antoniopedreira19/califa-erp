@@ -282,6 +282,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
       };
       job: {
         id: string;
+        /** Vai no PDF da PP no lugar do código do orçamento (29/09/2026). */
+        codigo: string;
         tenant_id: string;
         status: string;
         responsavel_id: string | null;
@@ -355,7 +357,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const { data: jobRow, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao",
+      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao",
     )
     .eq("id", item.job_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -587,8 +589,7 @@ export type ResultadoEnvio =
  *  responsável do projeto. Uma leitura só, usada pela geração, pela edição
  *  e pelo reenvio — os três documentos têm que sair iguais. */
 interface ContextoPdf {
-  projeto: { codigo: string; campanha: string | null };
-  orcamento: { codigo: string };
+  projeto: { campanha: string | null };
   cliente: { nome_fantasia: string };
   responsavelNome: string;
 }
@@ -596,36 +597,27 @@ interface ContextoPdf {
 async function carregarContextoPdf(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
-  job: { projeto_id: string | null; orcamento_id: string | null },
+  job: { projeto_id: string | null },
 ): Promise<ContextoPdf> {
-  const [projetoRes, orcRes] = await Promise.all([
+  const [projetoRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
-        "id, codigo, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
+        "id, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
       )
       .eq("id", job.projeto_id ?? "")
-      .eq("tenant_id", tenantId)
-      .maybeSingle(),
-    supabase
-      .from("orcamentos")
-      .select("id, codigo")
-      .eq("id", job.orcamento_id ?? "")
       .eq("tenant_id", tenantId)
       .maybeSingle(),
   ]);
 
   const projeto = projetoRes.data as {
-    codigo: string;
     campanha: string | null;
     cliente: { nome_fantasia: string } | null;
     responsavel: { nome: string } | null;
   } | null;
-  const orcamento = orcRes.data as { codigo: string } | null;
 
   return {
-    projeto: { codigo: projeto?.codigo ?? "", campanha: projeto?.campanha ?? null },
-    orcamento: { codigo: orcamento?.codigo ?? "" },
+    projeto: { campanha: projeto?.campanha ?? null },
     cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
     responsavelNome: projeto?.responsavel?.nome ?? "",
   };
@@ -659,7 +651,7 @@ async function renderizarDocumentoDaPP(args: {
   empresa: unknown;
   fornecedor: unknown | null;
   responsavelVerbaNome: string | null;
-  job: { nome: string; produto: string };
+  job: { codigo: string; nome: string; produto: string };
   contexto: ContextoPdf;
   parcelas: Array<{ numero: number; data_vencimento: string; valor: number }>;
 }): Promise<{ path: string; buffer: Buffer }> {
@@ -684,7 +676,6 @@ async function renderizarDocumentoDaPP(args: {
     responsavelVerbaNome: args.responsavelVerbaNome,
     job: args.job,
     projeto: args.contexto.projeto,
-    orcamento: args.contexto.orcamento,
     cliente: args.contexto.cliente,
     responsavelNome: args.contexto.responsavelNome,
     parcelas: parcelas.map((p) => ({
@@ -1198,7 +1189,7 @@ async function finalizarPedidoCompraImpl(
       responsavelVerbaNome: d.verba_producao
         ? (responsavelRes.data?.nome ?? "")
         : null,
-      job: { nome: job.nome, produto: job.produto ?? "" },
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
       contexto,
       parcelas: parcelas.map((p) => ({
         numero: p.numero,
@@ -1810,7 +1801,7 @@ export async function reenviarPedidoCompra(
       responsavelVerbaNome: ehVerba
         ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? null)
         : null,
-      job: { nome: job.nome, produto: job.produto ?? "" },
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
       contexto,
       parcelas: parcelasNovas,
     });
@@ -2497,7 +2488,7 @@ async function editarPedidoCompraGeradaImpl(
       responsavelVerbaNome: d.verba_producao
         ? (responsavelRes.data?.nome ?? "")
         : null,
-      job: { nome: job.nome, produto: job.produto ?? "" },
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
       contexto,
       parcelas,
     });

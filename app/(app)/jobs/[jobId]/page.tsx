@@ -259,7 +259,6 @@ export default async function JobDetailPage({
               descritivo={job.observacoes}
               job={{
                 codigo: job.codigo,
-                codigoAnterior: job.codigo_anterior,
                 nome: job.nome,
                 // Categoria do job = `jobs.categoria_id`, que só é gravado
                 // quando o financeiro abre o job (e a abertura a exige).
@@ -308,7 +307,6 @@ export default async function JobDetailPage({
                 // "Orçamento aprovado", e o que foi aprovado é a versão. A
                 // tela da versão tem o caminho de volta ao orçamento.
                 orcamentoHref: `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}/versoes/${raw.versao_orcamento_aprovada_id}`,
-                orcamentoCodigo: raw.orcamento?.codigo ?? null,
                 versaoLabel,
               }}
               contatos={contatosCobranca}
@@ -473,6 +471,11 @@ export default async function JobDetailPage({
         pagoSoPorSave={pagoSoPorSave}
         dataPrevistaFaturamento={job.data_prevista_faturamento}
         portais={portaisDoCliente}
+        contextoDoEnvio={{
+          tenantId: job.tenant_id,
+          cnpjCliente: detalhe.cnpjCliente,
+          contatosCobranca,
+        }}
         moeda={versaoAprovada.moeda}
         faturamentoPorMes={detalhe.modeloPlanilha === "mensal"}
         faturamentoMensal={detalhe.faturamentoMensal}

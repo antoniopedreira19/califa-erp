@@ -47,7 +47,7 @@ import {
   somarMeses,
 } from "@/lib/cartoes/competencia";
 import type { TituloRow } from "./titulos-pagar-list";
-import { estornarBaixaTitulo } from "./actions-titulos";
+import { cancelarBaixa } from "../actions-baixa-registrada";
 import { ReabrirFaturaDialog } from "./reabrir-fatura-dialog";
 import {
   EstornarCompraDialog,
@@ -348,24 +348,41 @@ export function CartaoFatura({
                         : "Lançamento avulso",
                 parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
                 valor: conferindo.valor,
-                pagoEm: conferindo.pago_em,
-                contaNome: conferindo.conta_nome,
-                centroNome: conferindo.centro_nome,
-                subtipoNome: conferindo.subtipo_nome,
-                dataPagamento: conferindo.data_pagamento,
                 vencOriginal: conferindo.venc_original,
+                // No cartão a baixa é sempre uma, do valor inteiro (decisão 125).
+                baixas: [
+                  {
+                    lancamentoId: conferindo.baixa_lancamento_id,
+                    data: conferindo.pago_em,
+                    contaNome: conferindo.conta_nome,
+                    contaBancariaId: conferindo.baixa_conta_id,
+                    centroNome: conferindo.centro_nome,
+                    subtipoNome: conferindo.subtipo_nome,
+                    movimentado: conferindo.valor,
+                    retencoes: [],
+                    estornos: conferindo.estornos_da_baixa,
+                  },
+                ],
                 viaCartao: conferindo.forma_pagamento === "cartao_credito",
-              } as BaixaRegistradaAlvo)
+                ehFaturaDeCartao: false,
+                ehTransferencia: false,
+                // Tudo aqui foi pago no cartão (decisão 120): devolver é o
+                // "Estornar compra" da linha, que abate a fatura.
+                semEstorno:
+                  "Pago no cartão: para devolver, use Estornar compra, na linha da compra.",
+              } satisfies BaixaRegistradaAlvo)
             : null
         }
+        contas={[]}
         pending={pendingAcao}
         erro={erroAcao}
-        onEstornar={(motivo) => {
+        onEstornar={() => {}}
+        onCancelar={(_baixa, motivo) => {
           const alvo = conferindo;
           if (!alvo) return;
           startTransition(async () => {
-            const res = await estornarBaixaTitulo({
-              origem: alvo.origem,
+            const res = await cancelarBaixa({
+              tipo: alvo.origem,
               id: alvo.id,
               motivo,
             });
@@ -376,7 +393,7 @@ export function CartaoFatura({
             setConferindo(null);
             setErroAcao(null);
             setToast(
-              `Baixa estornada · ${formatCurrency(alvo.valor)} saiu da fatura e voltou para "A pagar".`,
+              `Baixa cancelada · ${formatCurrency(alvo.valor)} saiu da fatura e voltou para "A pagar".`,
             );
             router.refresh();
           });
