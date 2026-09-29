@@ -312,52 +312,34 @@ export async function gerarContrato(id: string): Promise<ActionResult> {
 }
 
 /**
- * RH faz upload do PDF assinado (voltou da ZapSign). Grava o path no
- * bucket e move o status pra `contrato_assinado`. Aceita a partir de
- * `dados_completos` (pra CLT, que pula "gerar") e `contrato_gerado`
- * (pra PJ).
+ * Finaliza o anexo do contrato assinado depois que o cliente já subiu
+ * o PDF direto pro Supabase Storage via signed URL (veja o route
+ * `/api/rh/contratacoes/[id]/upload-url`). Aqui só valida sessão/status
+ * e grava o path no DB — nenhum byte do PDF passa pela Function.
+ *
+ * O padrão anterior (`anexarContratoAssinado` recebendo FormData) fazia
+ * o PDF trafegar duas vezes (browser -> Vercel -> Supabase) e empurrava
+ * o tempo percebido pra ~7s em contratos de alguns MB.
  */
-export async function anexarContratoAssinado(
+export async function finalizarAnexoContrato(
   id: string,
-  formData: FormData,
+  path: string,
+  tamanhoBytes: number,
 ): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "rh.contratacoes.editar");
   if (!gate.ok) return gate;
 
-  const arquivo = formData.get("arquivo");
-  if (!(arquivo instanceof File) || arquivo.size === 0) {
-    return { ok: false, message: "Selecione o arquivo do contrato assinado." };
-  }
-  if (arquivo.type !== "application/pdf") {
-    return { ok: false, message: "O contrato assinado precisa ser PDF." };
-  }
-  if (arquivo.size > 20 * 1024 * 1024) {
-    return { ok: false, message: "Arquivo grande demais (limite 20 MB)." };
+  // Path canônico é `${tenant}/${id}/contrato-assinado.pdf`. Se o cliente
+  // mandar outro, rejeita — o token da signed URL foi emitido pra esse
+  // path exato, então o próprio Storage já teria recusado, mas checar
+  // aqui evita gravar um path bagunçado no DB.
+  const pathEsperado = `${session.activeTenant.id}/${id}/contrato-assinado.pdf`;
+  if (path !== pathEsperado) {
+    return { ok: false, message: "Caminho do arquivo inválido." };
   }
 
   const supabase = createClient();
-  const path = `${session.activeTenant.id}/${id}/contrato-assinado.pdf`;
-
-  // Passa o File direto pro cliente Supabase, sem materializar o PDF
-  // inteiro num Uint8Array antes. O arrayBuffer() dobrava o pico de
-  // memória (File + cópia) e derrubou a função serverless com SIGTERM
-  // (exit 128) num upload em 29/09/2026 — o upload chegava a completar,
-  // mas o processo era morto antes de responder e a UI ficava 5s parada.
-  const { error: upErr } = await supabase.storage
-    .from("contratacoes-anexos")
-    .upload(path, arquivo, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-  if (upErr) {
-    console.error("[rh.contratacao.anexar]", upErr.message);
-    return { ok: false, message: "Falha ao subir o PDF assinado." };
-  }
-
-  // UPDATE...RETURNING guarda o status esperado no WHERE — elimina o
-  // SELECT prévio de validação (1 roundtrip a menos). Se .data vier
-  // vazia, a contratação não existe ou está fora dos status válidos.
   const { data: atualizada, error: updErr } = await supabase
     .from("contratacoes")
     .update({
@@ -386,7 +368,7 @@ export async function anexarContratoAssinado(
     tenantId: session.activeTenant.id,
     entidadeTipo: "contratacao",
     entidadeId: id,
-    metadata: { tamanho_bytes: arquivo.size },
+    metadata: { tamanho_bytes: tamanhoBytes },
   });
 
   revalidatePath(`/rh/contratacoes/${id}`);
