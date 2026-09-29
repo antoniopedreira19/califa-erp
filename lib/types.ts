@@ -671,7 +671,9 @@ export interface OrcamentoImportacao {
   tenant_id: string;
   orcamento_id: string;
   versao_orcamento_id: string | null;
-  arquivo_path: string;
+  /** Nulo desde a decisão 129 (29/09/2026): o arquivo importado é
+   *  descartado logo depois da importação. */
+  arquivo_path: string | null;
   arquivo_nome_original: string;
   arquivo_tamanho_bytes: number;
   aba_origem: string | null;

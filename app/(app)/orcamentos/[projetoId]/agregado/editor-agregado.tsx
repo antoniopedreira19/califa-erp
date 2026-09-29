@@ -48,6 +48,7 @@ import {
   type EnvioComAba,
   type PlanilhaLida,
 } from "../../_rascunho/importar-planilha-modal";
+import { descartarEnvioPlanilha } from "../../_importacao/envio-actions";
 import { ParametrosModal } from "../../_rascunho/parametros-modal";
 import { TotaisProjetoCard } from "../../_totais/totais-projeto-card";
 import {
@@ -304,8 +305,37 @@ export function EditorAgregado({
 
   /** O XLSX de cada orçamento importado nesta sessão — já no Storage, com
    *  a aba escolhida (decisão 110). Fora do estado porque nenhum render
-   *  depende dele. */
+   *  depende dele. É só de passagem (decisão 129): o "Salvar" registra a
+   *  importação e o servidor descarta o arquivo; o que for trocado,
+   *  removido ou abandonado a tela descarta. */
   const arquivos = React.useRef(new Map<string, EnvioComAba>());
+
+  /** Descarta o arquivo de um orçamento (ou de todos) e esquece dele. */
+  function descartarArquivos(id?: string) {
+    const alvos =
+      id === undefined
+        ? Array.from(arquivos.current.keys())
+        : arquivos.current.has(id)
+          ? [id]
+          : [];
+    for (const alvo of alvos) {
+      const envio = arquivos.current.get(alvo);
+      arquivos.current.delete(alvo);
+      if (envio) void descartarEnvioPlanilha(envio.path);
+    }
+  }
+
+  // Sair da tela sem salvar — pelo Cancelar, pelo voltar ou por qualquer
+  // link — desmonta o editor: o que ficou importado e não foi salvo sai do
+  // Storage. Fechar a aba não chega aqui; a limpeza de envios com mais de
+  // um dia cobre esse caso.
+  React.useEffect(() => {
+    const mapa = arquivos.current;
+    return () => {
+      for (const envio of mapa.values()) void descartarEnvioPlanilha(envio.path);
+      mapa.clear();
+    };
+  }, []);
 
   /** Retrato do que está gravado. É contra ele que "houve mudança?" é
    *  respondido — sem isso o botão de salvar ficaria sempre aceso.
@@ -442,7 +472,7 @@ export function EditorAgregado({
   }
 
   function removerOrcamento(id: string) {
-    arquivos.current.delete(id);
+    descartarArquivos(id);
     setOrcamentos((atuais) => atuais.filter((o) => o.id !== id));
     setExibidos((atuais) => atuais.filter((x) => x !== id));
   }
@@ -463,6 +493,11 @@ export function EditorAgregado({
   }
 
   function aplicarImportacao(id: string, planilha: PlanilhaLida) {
+    // Importar de novo no mesmo orçamento troca a planilha: a anterior sai.
+    const anterior = arquivos.current.get(id);
+    if (anterior && anterior.path !== planilha.envio.path) {
+      void descartarEnvioPlanilha(anterior.path);
+    }
     arquivos.current.set(id, planilha.envio);
     mutarOrcamento(id, (o) => ({
       ...o,
@@ -839,6 +874,10 @@ export function EditorAgregado({
       const comIds = trocarIds(orcamentos, res.ids);
       setOrcamentos(comIds);
       setBaseline(assinatura(comIds));
+      // Gravado: nenhum arquivo importado fica. O servidor já descartou os
+      // dos orçamentos novos; o de um orçamento que já existia (importado
+      // na versão sem planilha) não vai no payload e sai por aqui.
+      descartarArquivos();
       router.refresh();
     });
   }

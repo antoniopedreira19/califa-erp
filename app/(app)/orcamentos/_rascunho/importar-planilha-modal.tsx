@@ -36,8 +36,9 @@ interface Props {
 /**
  * Importação de planilha dentro do editor do orçamento do projeto — o
  * mesmo modal da versão (decisão 110), sem gravar: a aba escolhida vira
- * grupos e itens do rascunho, e o arquivo sobe junto no "Salvar
- * orçamentos", que é quando ele vira registro em `orcamento_importacoes`.
+ * grupos e itens do rascunho. O "Salvar orçamentos" registra a importação
+ * em `orcamento_importacoes` e descarta o arquivo (decisão 129); o editor
+ * descarta também o que for trocado, removido ou abandonado.
  */
 export function ImportarPlanilhaModal({
   open,

@@ -31,8 +31,6 @@ import { cancelarAprovacaoVersao } from "../[projetoId]/[orcId]/versoes/actions"
 import { copiarMesesEntreVersoes } from "@/lib/data/meses-versao";
 import { conferirMesesDaSecao } from "@/lib/importacao/meses-da-planilha";
 
-const BUCKET = "orcamento-importacoes";
-
 /**
  * Importação da planilha do PROJETO — a que a exportação de vários
  * orçamentos gerou, de volta depois de editada (pelo cliente inclusive).
@@ -557,21 +555,10 @@ export async function confirmarImportacaoProjeto(
   const supabase = createClient();
   const service = createServiceClient();
 
-  // O arquivo sobe uma vez; cada versão criada aponta para ele.
+  // Liga, na auditoria, as versões criadas por esta importação. O arquivo
+  // não é guardado (decisão 129): ele chega no corpo da action e some com
+  // ela; o conteúdo fica nas versões.
   const importacaoId = crypto.randomUUID();
-  const arquivoNomeSlug = res.arquivo.nome.replace(/[^\w.\-]/g, "_");
-  const arquivoPath = `${tenantId}/projeto-${projetoId}/${importacaoId}-${arquivoNomeSlug}`;
-  const { error: uploadErr } = await service.storage
-    .from(BUCKET)
-    .upload(arquivoPath, res.arquivo.buffer, {
-      contentType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      upsert: false,
-    });
-  if (uploadErr) {
-    console.error("[importacao.projeto.upload]", uploadErr.message);
-    // Não bloqueia: a versão vale mais que o arquivo guardado.
-  }
 
   const criadas: Extract<ConfirmProjetoResult, { ok: true }>["versoes"] = [];
 
@@ -754,7 +741,7 @@ export async function confirmarImportacaoProjeto(
       tenant_id: tenantId,
       orcamento_id: orcamento.id,
       versao_orcamento_id: versaoId,
-      arquivo_path: uploadErr ? "" : arquivoPath,
+      arquivo_path: null,
       arquivo_nome_original: res.arquivo.nome,
       arquivo_tamanho_bytes: res.arquivo.tamanho,
       aba_origem: res.leitura.aba,

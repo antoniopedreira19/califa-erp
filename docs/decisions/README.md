@@ -148,6 +148,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 126 | [O código antigo sai do sistema, e a PP mostra só o código do job](126-o-codigo-antigo-sai-do-sistema.md) | 2026-09-29 |
 | 127 | [A PP pode pagar por outra chave PIX ou outra conta, sem mexer no cadastro do fornecedor](127-pp-com-pagamento-fora-do-cadastro.md) | 2026-09-29 |
 | 128 | [O job devolvido se corrige no orçamento e volta com o mesmo código](128-job-devolvido-se-corrige-e-volta-com-o-mesmo-codigo.md) | 2026-09-29 |
+| 129 | [A planilha importada é descartada depois da importação](129-planilha-importada-e-descartada.md) | 2026-09-29 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -160,4 +161,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 129.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 130.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

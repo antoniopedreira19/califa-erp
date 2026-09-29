@@ -8,7 +8,7 @@ import { checarPermissao } from "@/lib/permissoes-server";
 import { honorariosDoProjeto } from "@/lib/data/clientes";
 import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
 import { PERCENTUAL_INT_TAXES_PADRAO } from "@/lib/impostos";
-import { arquivarEnvio, baixarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
+import { baixarEnvio, descartarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
 import {
   parseOficial,
   type ParseResultado,
@@ -268,8 +268,13 @@ export async function salvarOrcamentosDoProjeto(
 
   let sequencial = orcCountRes.count ?? 0;
   const criados: Criado[] = [];
+  // Os arquivos enviados saem do Storage só no fim, com o lote inteiro
+  // gravado (decisão 129): se um orçamento falhar, os anteriores são
+  // desfeitos, e o "Salvar" de novo ainda precisa ler a planilha.
+  const enviosDoLote: string[] = [];
 
   for (const [i, alvo] of validados.entries()) {
+    if (alvo.envio) enviosDoLote.push(alvo.envio.path);
     // O arquivo é reparseado no servidor: as contagens e os avisos que vão
     // para `orcamento_importacoes` não podem vir do cliente. Os itens, ao
     // contrário, vêm do rascunho — o usuário pode tê-los editado depois
@@ -289,7 +294,7 @@ export async function salvarOrcamentosDoProjeto(
           };
         } catch (err) {
           // Arquivo ilegível agora não invalida o orçamento: os itens já
-          // estão no payload. Perde-se só o arquivamento do original.
+          // estão no payload. Perde-se só a linha do histórico.
           console.error("[multi.salvar.reparse]", err);
         }
       }
@@ -464,10 +469,10 @@ export async function salvarOrcamentosDoProjeto(
 
     criados.push(parcial);
 
-    // Arquivamento do XLSX original. Falha aqui não desfaz o orçamento —
-    // ele já está completo; o que se perde é a cópia do arquivo.
+    // Registro da importação. Falha aqui não desfaz o orçamento — ele já
+    // está completo; o que se perde é a linha do histórico.
     if (importacao) {
-      await arquivarImportacao({
+      await registrarImportacao({
         tenantId,
         orcamentoId: orcamento.id,
         versaoId: versao.id,
@@ -514,6 +519,8 @@ export async function salvarOrcamentosDoProjeto(
     });
   }
 
+  for (const path of enviosDoLote) await descartarEnvio(path, tenantId);
+
   revalidatePath(`/orcamentos/${projetoId}`);
   return { ok: true, criados: criados.length };
 }
@@ -524,7 +531,9 @@ function faixaPercentual(valor: unknown): number {
   return Math.min(100, Math.max(0, n));
 }
 
-async function arquivarImportacao({
+/** A linha do histórico de importação. Sem caminho: o arquivo não fica
+ *  guardado (decisão 129) e sai do Storage no fim do lote. */
+async function registrarImportacao({
   tenantId,
   orcamentoId,
   versaoId,
@@ -538,19 +547,14 @@ async function arquivarImportacao({
   createdBy: string;
 }): Promise<void> {
   const service = createServiceClient();
-  const importacaoId = crypto.randomUUID();
-  // O original, que o navegador subiu para a pasta de envios (decisão
-  // 110), vai para a pasta do orçamento.
-  const caminho = await arquivarEnvio(arquivo.envio, tenantId, orcamentoId, importacaoId);
-
   const { error: registroErr } = await service
     .from("orcamento_importacoes")
     .insert({
-      id: importacaoId,
+      id: crypto.randomUUID(),
       tenant_id: tenantId,
       orcamento_id: orcamentoId,
       versao_orcamento_id: versaoId,
-      arquivo_path: caminho,
+      arquivo_path: null,
       arquivo_nome_original: arquivo.envio.nome,
       arquivo_tamanho_bytes: arquivo.envio.tamanho,
       aba_origem: arquivo.parsed.aba,
