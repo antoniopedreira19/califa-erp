@@ -3035,6 +3035,32 @@ export interface ContaAvulsa {
 
 export type TipoEntradaAvulsa = "recebimento_avulso" | "rendimento";
 
+// ---------- Decisão 125: baixa parcial e impostos retidos ----------
+
+/** Os impostos que podem ser retidos na fonte numa baixa (sem INSS, D6 1a). */
+export type ImpostoRetido = "ISS" | "PIS" | "COFINS" | "CSLL" | "IRRF";
+
+/** Uma linha de `baixas_retencoes`: o imposto retido numa baixa. */
+export interface RetencaoDaBaixa {
+  imposto: ImpostoRetido;
+  /** Em %, com até 4 casas. Nula quando só o valor foi informado. */
+  aliquota: number | null;
+  valor: number;
+}
+
+/** Na ordem em que a baixa mostra. `nota` vai ao lado do nome. */
+export const IMPOSTOS_RETIDOS: ReadonlyArray<{
+  imposto: ImpostoRetido;
+  dica: string;
+  nota: string | null;
+}> = [
+  { imposto: "ISS", dica: "Imposto sobre serviços, retido para o município.", nota: null },
+  { imposto: "PIS", dica: "Retenção de PIS na fonte.", nota: null },
+  { imposto: "COFINS", dica: "Retenção de COFINS na fonte.", nota: null },
+  { imposto: "CSLL", dica: "Retenção de CSLL na fonte.", nota: null },
+  { imposto: "IRRF", dica: "Imposto de renda retido na fonte.", nota: "IR retido (antecipa o IRPJ)" },
+];
+
 // ---------- Tela 3.2: título a pagar (visão unificada) ----------
 
 /**

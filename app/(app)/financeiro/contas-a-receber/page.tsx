@@ -27,6 +27,12 @@ import {
   SELECT_ESTORNO_DE_BAIXA,
   agruparEstornosPorBaixa,
 } from "@/lib/data/estornos-de-baixa";
+import {
+  SELECT_BAIXA_DO_DOCUMENTO,
+  agruparBaixasPorDocumento,
+  mapearUltimasRetencoes,
+  totalBaixado,
+} from "@/lib/data/baixas-do-documento";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +69,7 @@ export default async function ContasReceberPage({
     jobsRes,
     enviosRes,
     regionaisRes,
+    ultimasRetencoesRes,
   ] = await Promise.all([
     supabase
       .from("vw_faturamento_pendente")
@@ -93,6 +100,7 @@ export default async function ContasReceberPage({
           inadimplente_desde, pago_em, empresa_id, faturamento_id,
           faturamento:faturamentos!inner(
             id, numero_nf, data_emissao, descricao, status, origem_tipo,
+            cliente_id, fornecedor_id,
             cliente:clientes(id, nome_fantasia, razao_social),
             fornecedor:fornecedores(id, nome, razao_social),
             itens:faturamento_itens(origem_tipo, origem_id, envio_parcela_id, valor)
@@ -107,16 +115,12 @@ export default async function ContasReceberPage({
       }
       return q;
     })(),
-    // Conta e centro de custo da baixa — o "Conciliação · conta · centro"
-    // da linha recebida. Query separada porque só as linhas pagas usam.
+    // As baixas dos títulos das notas (decisão 125: pode haver várias por
+    // título), com conta, centro de custo e impostos retidos — o popup do
+    // olho e o "falta R$ X" da linha.
     supabase
       .from("lancamentos_financeiros")
-      .select(`
-        id, titulo_receber_id, conta_bancaria_id,
-        conta:contas_bancarias(nome, banco),
-        tipo:plano_contas_tipos(codigo, nome),
-        subtipo:plano_contas_subtipos(nome)
-      `)
+      .select(`titulo_receber_id, ${SELECT_BAIXA_DO_DOCUMENTO}`)
       .eq("tenant_id", tenantId)
       .eq("origem", "titulo_baixa")
       .not("titulo_receber_id", "is", null),
@@ -142,15 +146,10 @@ export default async function ContasReceberPage({
       .eq("tenant_id", tenantId)
       .not("tipo_entrada", "is", null)
       .order("data_pagamento", { ascending: true }),
-    // A baixa desses títulos: conta e centro de custo, para o olho.
+    // As baixas desses títulos, do mesmo jeito que as das notas.
     supabase
       .from("lancamentos_financeiros")
-      .select(`
-        id, conta_avulsa_id, conta_bancaria_id,
-        conta:contas_bancarias(nome, banco),
-        tipo:plano_contas_tipos(codigo, nome),
-        subtipo:plano_contas_subtipos(nome)
-      `)
+      .select(`conta_avulsa_id, ${SELECT_BAIXA_DO_DOCUMENTO}`)
       .eq("tenant_id", tenantId)
       .eq("origem", "avulsa_baixa")
       .eq("natureza", "entrada")
@@ -234,6 +233,13 @@ export default async function ContasReceberPage({
       .select("id, nome, ativo, empresa_id")
       .eq("tenant_id", tenantId)
       .order("nome"),
+    // As alíquotas da última retenção de cada cliente, para o "Repetir as
+    // alíquotas" da baixa (decisão 125, D6 2a).
+    supabase
+      .from("vw_retencao_mais_recente")
+      .select("natureza, parte_id, referencia, data_movimento, aliquotas")
+      .eq("tenant_id", tenantId)
+      .eq("natureza", "entrada"),
   ]);
 
   for (const [nome, res] of [
@@ -246,6 +252,8 @@ export default async function ContasReceberPage({
     ["baixas_avulsas", baixasAvulsasRes],
     ["transferencias", transferenciasRes],
     ["estornos", estornosRes],
+    ["baixas", baixasRes],
+    ["ultimas_retencoes", ultimasRetencoesRes],
   ] as const) {
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
@@ -529,34 +537,13 @@ export default async function ContasReceberPage({
   // viravam "01 · Geral (provisório)" — o código do TIPO colado no nome do
   // SUBTIPO, com "Receita" fora da tela. Quem conferia a baixa lia só o
   // subtipo e achava que era o centro de custo inteiro.
-  const detalheBaixa = new Map<
-    string,
-    {
-      lancamentoId: string;
-      contaId: string;
-      conta: string;
-      centro: string;
-      subtipo: string | null;
-    }
-  >();
-  for (const l of (baixasRes.data ?? []) as unknown as Array<{
-    id: string;
-    titulo_receber_id: string | null;
-    conta_bancaria_id: string;
-    conta: { nome: string; banco: string } | null;
-    tipo: { codigo: string; nome: string } | null;
-    subtipo: { nome: string } | null;
-  }>) {
-    if (!l.titulo_receber_id) continue;
-    detalheBaixa.set(l.titulo_receber_id, {
-      lancamentoId: l.id,
-      contaId: l.conta_bancaria_id,
-      conta: l.conta ? `${l.conta.nome} · ${l.conta.banco}` : "—",
-      centro: l.tipo ? `${l.tipo.codigo} · ${l.tipo.nome}` : "—",
-      subtipo: l.subtipo?.nome ?? null,
-    });
-  }
   const estornosPorBaixa = agruparEstornosPorBaixa(estornosRes.data);
+  const baixasPorTitulo = agruparBaixasPorDocumento(
+    baixasRes.data,
+    "titulo_receber_id",
+    estornosPorBaixa,
+  );
+  const ultimasRetencoes = mapearUltimasRetencoes(ultimasRetencoesRes.data);
 
   const titulosRows: TituloRow[] = ((titulosRes.data ?? []) as unknown as Array<{
     id: string;
@@ -576,6 +563,8 @@ export default async function ContasReceberPage({
       descricao: string;
       status: "emitido" | "cancelado";
       origem_tipo: "job" | "bv" | "avulso";
+      cliente_id: string | null;
+      fornecedor_id: string | null;
       cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
       fornecedor: { nome: string | null; razao_social: string | null } | null;
       itens: Array<{
@@ -586,7 +575,7 @@ export default async function ContasReceberPage({
       }>;
     };
   }>).map((r) => {
-    const baixa = detalheBaixa.get(r.id);
+    const baixas = baixasPorTitulo.get(r.id) ?? [];
     const itens = r.faturamento.itens ?? [];
     // Um job por vez, na ordem em que aparece nos itens. O Set é o que
     // impede o job de sair duas vezes quando a nota tem item de save ou
@@ -636,12 +625,10 @@ export default async function ContasReceberPage({
           ],
       jobs: jobsDaNota.map((j) => ({ job_id: j.id, codigo: j.codigo })),
       inadimplente_desde: r.inadimplente_desde ?? null,
-      conta_nome: baixa?.conta ?? null,
-      centro_nome: baixa?.centro ?? null,
-      subtipo_nome: baixa?.subtipo ?? null,
-      baixa_lancamento_id: baixa?.lancamentoId ?? null,
-      baixa_conta_id: baixa?.contaId ?? null,
-      estornos: baixa ? estornosPorBaixa.get(baixa.lancamentoId) ?? [] : [],
+      baixas,
+      baixado: totalBaixado(baixas),
+      // Quem paga a nota: o cliente, ou o fornecedor na nota de BV.
+      parte_id: r.faturamento.cliente_id ?? r.faturamento.fornecedor_id ?? null,
       origem: "nf" as const,
       conta_avulsa_id: null,
       codigo_avulsa: null,
@@ -654,27 +641,11 @@ export default async function ContasReceberPage({
   // Recebimento avulso e rendimento (decisão 124), na mesma lista. Não têm
   // nota: a coluna Nota fiscal mostra o código AV, e a de jobs, a
   // descrição — eles não se vinculam a job.
-  const baixaDaAvulsa = new Map<
-    string,
-    { lancamentoId: string; contaId: string; conta: string; centro: string; subtipo: string | null }
-  >();
-  for (const l of (baixasAvulsasRes.data ?? []) as unknown as Array<{
-    id: string;
-    conta_avulsa_id: string | null;
-    conta_bancaria_id: string;
-    conta: { nome: string; banco: string } | null;
-    tipo: { codigo: string; nome: string } | null;
-    subtipo: { nome: string } | null;
-  }>) {
-    if (!l.conta_avulsa_id) continue;
-    baixaDaAvulsa.set(l.conta_avulsa_id, {
-      lancamentoId: l.id,
-      contaId: l.conta_bancaria_id,
-      conta: l.conta ? `${l.conta.nome} · ${l.conta.banco}` : "—",
-      centro: l.tipo ? `${l.tipo.codigo} · ${l.tipo.nome}` : "—",
-      subtipo: l.subtipo?.nome ?? null,
-    });
-  }
+  const baixasPorAvulsa = agruparBaixasPorDocumento(
+    baixasAvulsasRes.data,
+    "conta_avulsa_id",
+    estornosPorBaixa,
+  );
   const contaPorId = new Map((contasRes.data ?? []).map((c) => [c.id, c]));
   const todasAvulsasReceber = (avulsasReceberRes.data ?? []) as unknown as Array<{
     id: string;
@@ -701,7 +672,7 @@ export default async function ContasReceberPage({
       (a.status === "aprovada" && (a.data_pagamento ?? a.data_prevista_pagamento ?? "") < hoje),
   );
   const linhasAvulsas: TituloRow[] = avulsasReceber.map((a) => {
-    const baixa = baixaDaAvulsa.get(a.id);
+    const baixas = baixasPorAvulsa.get(a.id) ?? [];
     const data = a.data_pagamento ?? a.data_prevista_pagamento ?? hoje;
     const contaPrevista = a.conta_bancaria_prevista_id
       ? contaPorId.get(a.conta_bancaria_prevista_id)
@@ -728,12 +699,9 @@ export default async function ContasReceberPage({
       jobs_cobertos: [a.descricao],
       jobs: [],
       inadimplente_desde: null,
-      conta_nome: baixa?.conta ?? null,
-      centro_nome: baixa?.centro ?? null,
-      subtipo_nome: baixa?.subtipo ?? null,
-      baixa_lancamento_id: baixa?.lancamentoId ?? null,
-      baixa_conta_id: baixa?.contaId ?? null,
-      estornos: baixa ? estornosPorBaixa.get(baixa.lancamentoId) ?? [] : [],
+      baixas,
+      baixado: totalBaixado(baixas),
+      parte_id: a.cliente_id ?? a.fornecedor_id ?? null,
       origem: a.tipo_entrada,
       conta_avulsa_id: a.id,
       codigo_avulsa: a.codigo,
@@ -784,12 +752,26 @@ export default async function ContasReceberPage({
         jobs_cobertos: [descricao],
         jobs: [],
         inadimplente_desde: null,
-        conta_nome: t.status === "transferida" ? contas : null,
-        centro_nome: t.status === "transferida" ? "Transferência entre contas" : null,
-        subtipo_nome: t.status === "transferida" ? "fora do DRE" : null,
-        baixa_lancamento_id: null,
-        baixa_conta_id: null,
-        estornos: [],
+        // Uma baixa só, sem lançamento único (duas pernas): o popup cancela
+        // pela transferência.
+        baixas:
+          t.status === "transferida"
+            ? [
+                {
+                  lancamentoId: null,
+                  data: t.transferida_em,
+                  contaNome: contas,
+                  contaBancariaId: null,
+                  centroNome: "Transferência entre contas",
+                  subtipoNome: "fora do DRE",
+                  movimentado: Number(t.valor),
+                  retencoes: [],
+                  estornos: [],
+                },
+              ]
+            : [],
+        baixado: t.status === "transferida" ? Number(t.valor) : 0,
+        parte_id: null,
         origem: "transferencia" as const,
         conta_avulsa_id: null,
         codigo_avulsa: t.codigo,
@@ -861,6 +843,7 @@ export default async function ContasReceberPage({
             clientes={clientesList}
             fornecedores={fornecedoresList}
             rendimentosLancados={rendimentosLancados}
+            ultimasRetencoes={ultimasRetencoes}
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}

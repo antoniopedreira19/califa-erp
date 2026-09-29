@@ -1,25 +1,25 @@
 "use client";
 
 /**
- * O que um título JÁ BAIXADO abre quando você clica no olho, em "Títulos a
+ * O que um título com baixa abre quando você clica no olho, em "Títulos a
  * Receber", em "Títulos a Pagar" e na fatura do cartão.
  *
- * Mostra a baixa registrada — data, conta, centro de custo e os estornos
- * que ela já teve — e traz as duas ações da decisão 120, lado a lado no
- * cartão da baixa:
+ * Desde a decisão 125 (29/09/2026) o título pode ter VÁRIAS baixas (baixa
+ * parcial). O popup lista cada uma num cartão — data, o que entrou ou
+ * saiu da conta, os impostos retidos, o centro de custo e os estornos — e
+ * mostra a situação do título: quitado, ou "Parcial · falta R$ X", com o
+ * botão "Dar baixa no restante".
+ *
+ * Cada cartão traz as duas ações da decisão 120:
  *
  * - **Estornar**: uma transação nova, com data, conta e valor definidos
- *   agora. A baixa fica como está e o título continua pago. No receber é
- *   receita negativa; no pagar, despesa negativa. Vai até o que a baixa
- *   movimentou menos os estornos anteriores.
- * - **Cancelar esta baixa**: desfaz a baixa. O lançamento sai do extrato,
- *   sem linha nova, o título volta para Em aberto / A pagar, e os estornos
- *   da baixa saem junto. É a ferramenta de corrigir erro.
- *
- * Histórico: até 29/09/2026 havia um botão só, "Estornar baixa", que na
- * prática cancelava deixando duas linhas no extrato (o original riscado e
- * o reverso com a data do dia). O Tiago separou as duas ideias no
- * protótipo aprovado em 28/09 (seção 5).
+ *   agora. A baixa fica como está. No receber é receita negativa; no
+ *   pagar, despesa negativa. Vai até o que AQUELA baixa movimentou menos
+ *   os estornos dela.
+ * - **Cancelar esta baixa**: desfaz aquela baixa. O lançamento sai do
+ *   extrato, sem linha nova, com os estornos e os impostos retidos dela, e
+ *   o título volta para Em aberto / A pagar (ou Parcial, se sobrar outra
+ *   baixa). É a ferramenta de corrigir erro.
  *
  * As duas ações abrem em dois tempos de propósito: o botão sozinho, e só
  * depois o formulário com o confirmar. Mexem em dinheiro que já foi para a
@@ -36,6 +36,7 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  Banknote,
   Check,
   RotateCcw,
 } from "lucide-react";
@@ -55,6 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
+import type { RetencaoDaBaixa } from "@/lib/types";
 
 /** Um estorno já registrado sobre a baixa. */
 export interface EstornoDaBaixa {
@@ -65,21 +67,36 @@ export interface EstornoDaBaixa {
   motivo: string | null;
 }
 
+/** Uma baixa do título — um lançamento no extrato. */
+export interface BaixaDoTitulo {
+  /** O lançamento da baixa: cancelar e estornar se penduram nele. Nulo
+   *  quando a baixa não tem um lançamento só (a fatura de cartão e a
+   *  transferência têm duas pernas) — aí quem chama cancela pelo título. */
+  lancamentoId: string | null;
+  /** Data em que o dinheiro entrou ou saiu. */
+  data: string | null;
+  contaNome: string | null;
+  /** Conta da baixa: vem escolhida no formulário do estorno. */
+  contaBancariaId: string | null;
+  /** O centro de custo — o TIPO do plano de contas, "01 · Receita". */
+  centroNome: string | null;
+  /** O subtipo, ao lado. `undefined` esconde, para a aba que ainda manda o
+   *  par concatenado em `centroNome`. */
+  subtipoNome?: string | null;
+  /** O que entrou ou saiu da conta: o líquido, depois dos retidos. */
+  movimentado: number;
+  retencoes: RetencaoDaBaixa[];
+  estornos: EstornoDaBaixa[];
+}
+
 export interface BaixaRegistradaAlvo {
   titulo: string;
   origem: string;
   parcela: string;
   valor: number;
-  /** Data em que o dinheiro entrou ou saiu — o `pago_em` do título. */
-  pagoEm: string | null;
-  contaNome: string | null;
-  /** O centro de custo — o TIPO do plano de contas, "01 · Receita". */
-  centroNome: string | null;
-  /** O subtipo, na linha de baixo. `undefined` esconde a linha, para a
-   *  aba que ainda manda o par concatenado em `centroNome`. */
-  subtipoNome?: string | null;
-  dataPagamento: string | null;
   vencOriginal: string | null;
+  /** As baixas vivas, da mais antiga para a mais nova. */
+  baixas: BaixaDoTitulo[];
   /** A baixa foi no cartão (decisão 093): o item está numa fatura e não
    *  saiu da conta bancária. Cancelar o tira da fatura. */
   viaCartao: boolean;
@@ -89,15 +106,8 @@ export interface BaixaRegistradaAlvo {
   /** É uma transferência entre contas (decisão 124): duas pernas, uma em
    *  cada conta; cancelar tira as duas e a devolve para A transferir. */
   ehTransferencia: boolean;
-  /** O lançamento da baixa viva, onde o estorno se pendura. Nulo quando
-   *  a baixa não tem um lançamento só (a fatura tem duas pernas). */
-  baixaLancamentoId: string | null;
-  /** O que a baixa movimentou — o teto do estorno, antes dos estornos. */
-  valorMovimentado: number;
-  /** Conta da baixa: vem escolhida no formulário do estorno. */
-  contaBancariaId: string | null;
-  estornos: EstornoDaBaixa[];
-  /** Por que esta baixa não aceita estorno. `null` quando aceita. */
+  /** Por que as baixas deste título não aceitam estorno. `null` quando
+   *  aceitam. */
   semEstorno: string | null;
 }
 
@@ -122,6 +132,13 @@ function somarCentavos(valores: number[]): number {
   return valores.reduce((acc, v) => acc + Math.round(v * 100), 0) / 100;
 }
 
+/** O valor que a baixa quitou do título: o líquido mais os retidos. */
+export function valorQuitadoPelaBaixa(b: BaixaDoTitulo): number {
+  return somarCentavos([b.movimentado, ...b.retencoes.map((r) => r.valor)]);
+}
+
+type Acao = { indice: number; tipo: "estornar" | "cancelar" } | null;
+
 export function BaixaRegistradaDialog({
   open,
   onOpenChange,
@@ -131,6 +148,7 @@ export function BaixaRegistradaDialog({
   erro,
   onCancelar,
   onEstornar,
+  onDarBaixaNoRestante,
   sentido = "pagar",
 }: {
   open: boolean;
@@ -140,24 +158,26 @@ export function BaixaRegistradaDialog({
   contas: Array<{ id: string; nome: string; banco: string }>;
   pending: boolean;
   erro: string | null;
-  onCancelar: (motivo: string) => void;
-  onEstornar: (dados: DadosDoEstorno) => void;
+  onCancelar: (baixa: BaixaDoTitulo, motivo: string) => void;
+  onEstornar: (baixa: BaixaDoTitulo, dados: DadosDoEstorno) => void;
+  /** Título parcial: abre a baixa do que falta. Sem ele, o botão some. */
+  onDarBaixaNoRestante?: () => void;
   /** Lado da conta. Só muda rótulos; a mecânica é a mesma. */
   sentido?: "pagar" | "receber";
 }) {
   const ehReceber = sentido === "receber";
-  const [acao, setAcao] = React.useState<"estornar" | "cancelar" | null>(null);
+  const [acao, setAcao] = React.useState<Acao>(null);
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
 
   // Cada abertura começa do zero: o modal é reusado entre linhas, e um
   // motivo digitado para um título não pode sobrar para o seguinte.
   //
-  // A chave é o TÍTULO, não o objeto `alvo`: as telas montam o alvo de novo
-  // a cada renderização, e a recusa do servidor (que chega como `erro` e
-  // re-renderiza a tela) fechava o formulário e jogava fora o motivo
-  // digitado (visto na conferência de 29/09/2026).
+  // A chave é o TÍTULO e as baixas dele, não o objeto `alvo`: as telas
+  // montam o alvo de novo a cada renderização, e a recusa do servidor (que
+  // chega como `erro` e re-renderiza a tela) fechava o formulário e jogava
+  // fora o motivo digitado (visto na conferência de 29/09/2026).
   const chaveDoAlvo = alvo
-    ? `${alvo.titulo}|${alvo.parcela}|${alvo.pagoEm}|${alvo.baixaLancamentoId}`
+    ? `${alvo.titulo}|${alvo.parcela}|${alvo.baixas.map((b) => `${b.lancamentoId}:${b.estornos.length}`).join(",")}`
     : null;
   React.useEffect(() => {
     if (!open) return;
@@ -168,19 +188,12 @@ export function BaixaRegistradaDialog({
   if (!alvo) return null;
   const mensagemErro = erro ?? erroLocal;
 
-  const jaEstornado = somarCentavos(alvo.estornos.map((e) => e.valor));
-  const maximo = somarCentavos([alvo.valorMovimentado, -jaEstornado]);
-  const motivoSemEstorno =
-    alvo.semEstorno ??
-    (maximo <= 0 ? "Esta baixa já foi estornada por inteiro." : null);
-  const podeEstornar = motivoSemEstorno === null && alvo.baixaLancamentoId !== null;
-
-  const rotuloData = alvo.ehTransferencia
-    ? "Data da transferência"
-    : ehReceber
-      ? "Data de recebimento"
-      : "Data de pagamento";
+  const quitado = somarCentavos(alvo.baixas.map(valorQuitadoPelaBaixa));
+  const falta = Math.max(0, somarCentavos([alvo.valor, -quitado]));
+  const parcial = falta > 0.004;
+  const varias = alvo.baixas.length > 1;
   const SetaEstorno = ehReceber ? ArrowUpRight : ArrowDownLeft;
+  const rotuloFeito = alvo.ehTransferencia ? "Transferida" : ehReceber ? "Recebido" : "Pago";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -188,7 +201,7 @@ export function BaixaRegistradaDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Check className="h-5 w-5 text-emerald-600" />
-            Baixa registrada
+            {varias ? `Baixas registradas · ${alvo.baixas.length}` : "Baixa registrada"}
           </DialogTitle>
         </DialogHeader>
 
@@ -200,148 +213,167 @@ export function BaixaRegistradaDialog({
           <span className="text-muted-foreground">Origem</span>
           <span>{alvo.origem}</span>
           <span className="text-muted-foreground">Valor</span>
-          <span className="font-mono font-bold">
-            {formatCurrency(alvo.valor, "BRL")}
-          </span>
+          <span className="font-mono font-bold">{formatCurrency(alvo.valor, "BRL")}</span>
           <span className="text-muted-foreground">Venc. original</span>
-          <span className="font-mono text-xs">
-            {formatarData(alvo.vencOriginal)}
-          </span>
-          <span className="text-muted-foreground">{rotuloData}</span>
-          <span className="font-mono text-xs">
-            {formatarData(alvo.dataPagamento)}
+          <span className="font-mono text-xs">{formatarData(alvo.vencOriginal)}</span>
+          <span className="text-muted-foreground">Situação</span>
+          <span className={cn("font-semibold", parcial ? "text-sky-700" : "text-emerald-700")}>
+            {parcial ? `Parcial · falta ${formatCurrency(falta, "BRL")}` : rotuloFeito}
           </span>
         </div>
 
-        <div
-          className={cn(
-            "rounded-xl border p-4",
-            acao === "cancelar"
-              ? "border-california-red/30 bg-california-red/[0.03]"
-              : acao === "estornar"
-                ? "border-rose-200 bg-rose-50/40"
-                : "border-emerald-200 bg-emerald-50/50",
-          )}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">
-              {alvo.ehTransferencia ? "Transferida" : ehReceber ? "Recebido" : "Pago"} em{" "}
-              {formatarData(alvo.pagoEm)}
-            </p>
-            {acao === null && (
-              <div className="flex items-center gap-1.5">
-                {/* O `title` vai no span: botão desabilitado não recebe o
-                    mouse, e o motivo sumiria justamente quando importa. */}
-                <span title={motivoSemEstorno ?? undefined}>
-                  <button
-                    type="button"
-                    disabled={!podeEstornar}
-                    onClick={() => {
-                      setErroLocal(null);
-                      setAcao("estornar");
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-foreground transition-colors hover:border-rose-300 hover:text-rose-700 disabled:pointer-events-none disabled:opacity-40"
-                  >
-                    <SetaEstorno className="h-3.5 w-3.5" />
-                    Estornar
-                  </button>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErroLocal(null);
-                    setAcao("cancelar");
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-california-red transition-colors hover:bg-california-red/5"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Cancelar esta baixa
-                </button>
-              </div>
-            )}
-          </div>
+        <div className="max-h-[52vh] space-y-2.5 overflow-y-auto">
+          {alvo.baixas.map((b, i) => {
+            const retido = somarCentavos(b.retencoes.map((r) => r.valor));
+            const jaEstornado = somarCentavos(b.estornos.map((e) => e.valor));
+            const maximo = somarCentavos([b.movimentado, -jaEstornado]);
+            const motivoSemEstorno =
+              alvo.semEstorno ??
+              (maximo <= 0 ? "Esta baixa já foi estornada por inteiro." : null);
+            const podeEstornar = motivoSemEstorno === null && b.lancamentoId !== null;
+            const emEstorno = acao?.indice === i && acao.tipo === "estornar";
+            const emCancelamento = acao?.indice === i && acao.tipo === "cancelar";
+            return (
+              <div
+                key={b.lancamentoId ?? i}
+                className={cn(
+                  "rounded-xl border p-4",
+                  emCancelamento
+                    ? "border-california-red/30 bg-california-red/[0.03]"
+                    : emEstorno
+                      ? "border-rose-200 bg-rose-50/40"
+                      : "border-emerald-200 bg-emerald-50/50",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">
+                    {varias ? `Baixa ${i + 1} · ` : ""}
+                    {rotuloFeito} em {formatarData(b.data)}
+                  </p>
+                  {acao === null && (
+                    <div className="flex items-center gap-1.5">
+                      {/* O `title` vai no span: botão desabilitado não recebe o
+                          mouse, e o motivo sumiria justamente quando importa. */}
+                      <span title={motivoSemEstorno ?? undefined}>
+                        <button
+                          type="button"
+                          disabled={!podeEstornar}
+                          onClick={() => {
+                            setErroLocal(null);
+                            setAcao({ indice: i, tipo: "estornar" });
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-foreground transition-colors hover:border-rose-300 hover:text-rose-700 disabled:pointer-events-none disabled:opacity-40"
+                        >
+                          <SetaEstorno className="h-3.5 w-3.5" />
+                          Estornar
+                        </button>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setErroLocal(null);
+                          setAcao({ indice: i, tipo: "cancelar" });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-california-red transition-colors hover:bg-california-red/5"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Cancelar esta baixa
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-          <div className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px]">
-            <span className="text-muted-foreground">
-              {alvo.ehTransferencia
-                ? "Transferido"
-                : alvo.viaCartao
-                  ? "Lançado no cartão"
-                  : ehReceber
-                    ? "Entrou na conta"
-                    : "Saiu da conta"}
-            </span>
-            <span>
-              <b className="font-mono">
-                {formatCurrency(alvo.valorMovimentado, "BRL")}
-              </b>{" "}
-              <span className="text-muted-foreground">
-                · {alvo.contaNome ?? "—"}
-              </span>
-            </span>
-            <span className="text-muted-foreground">Centro de custo</span>
-            <span>
-              {alvo.centroNome ?? "—"}
-              {alvo.subtipoNome !== undefined && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {alvo.subtipoNome ?? "—"}
-                </span>
-              )}
-            </span>
-            {alvo.estornos.map((e) => (
-              <React.Fragment key={e.id}>
-                <span className="text-rose-700">Estorno</span>
-                <span className="text-rose-800">
-                  <b className="font-mono">{formatCurrency(e.valor, "BRL")}</b>{" "}
-                  em {formatarData(e.data)} · {e.contaNome ?? "—"}
-                  {e.motivo && (
+                <div className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px]">
+                  <span className="text-muted-foreground">
+                    {alvo.ehTransferencia
+                      ? "Transferido"
+                      : alvo.viaCartao
+                        ? "Lançado no cartão"
+                        : ehReceber
+                          ? "Entrou na conta"
+                          : "Saiu da conta"}
+                  </span>
+                  <span>
+                    <b className="font-mono">{formatCurrency(b.movimentado, "BRL")}</b>{" "}
+                    <span className="text-muted-foreground">· {b.contaNome ?? "—"}</span>
+                  </span>
+                  {retido > 0 && (
                     <>
-                      {" "}
-                      · <i>“{e.motivo}”</i>
+                      <span className="text-muted-foreground">Impostos retidos</span>
+                      <span>
+                        <b className="font-mono">{formatCurrency(retido, "BRL")}</b>{" "}
+                        <span className="text-muted-foreground">
+                          ·{" "}
+                          {b.retencoes
+                            .map((r) => `${r.imposto} ${formatCurrency(r.valor, "BRL")}`)
+                            .join(" · ")}
+                        </span>
+                      </span>
                     </>
                   )}
-                </span>
-              </React.Fragment>
-            ))}
-          </div>
+                  <span className="text-muted-foreground">Centro de custo</span>
+                  <span>
+                    {b.centroNome ?? "—"}
+                    {b.subtipoNome !== undefined && (
+                      <span className="text-muted-foreground"> · {b.subtipoNome ?? "—"}</span>
+                    )}
+                  </span>
+                  {b.estornos.map((e) => (
+                    <React.Fragment key={e.id}>
+                      <span className="text-rose-700">Estorno</span>
+                      <span className="text-rose-800">
+                        <b className="font-mono">{formatCurrency(e.valor, "BRL")}</b> em{" "}
+                        {formatarData(e.data)} · {e.contaNome ?? "—"}
+                        {e.motivo && (
+                          <>
+                            {" "}
+                            · <i>“{e.motivo}”</i>
+                          </>
+                        )}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </div>
 
-          {acao === null && motivoSemEstorno && alvo.semEstorno && (
-            <p className="mt-2 text-[11.5px] text-muted-foreground">
-              {motivoSemEstorno}
-            </p>
-          )}
+                {acao === null && motivoSemEstorno && alvo.semEstorno && (
+                  <p className="mt-2 text-[11.5px] text-muted-foreground">{motivoSemEstorno}</p>
+                )}
 
-          {acao === "estornar" && alvo.baixaLancamentoId && (
-            <FormEstorno
-              key={alvo.baixaLancamentoId}
-              ehReceber={ehReceber}
-              contas={contas}
-              contaInicial={alvo.contaBancariaId}
-              maximo={maximo}
-              pending={pending}
-              onErro={setErroLocal}
-              onVoltar={() => {
-                setAcao(null);
-                setErroLocal(null);
-              }}
-              onConfirmar={onEstornar}
-            />
-          )}
+                {emEstorno && b.lancamentoId && (
+                  <FormEstorno
+                    key={b.lancamentoId}
+                    ehReceber={ehReceber}
+                    contas={contas}
+                    contaInicial={b.contaBancariaId}
+                    maximo={maximo}
+                    pending={pending}
+                    onErro={setErroLocal}
+                    onVoltar={() => {
+                      setAcao(null);
+                      setErroLocal(null);
+                    }}
+                    onConfirmar={(dados) => onEstornar(b, dados)}
+                  />
+                )}
 
-          {acao === "cancelar" && (
-            <FormCancelamento
-              ehReceber={ehReceber}
-              alvo={alvo}
-              pending={pending}
-              onErro={setErroLocal}
-              onVoltar={() => {
-                setAcao(null);
-                setErroLocal(null);
-              }}
-              onConfirmar={onCancelar}
-            />
-          )}
+                {emCancelamento && (
+                  <FormCancelamento
+                    ehReceber={ehReceber}
+                    alvo={alvo}
+                    baixa={b}
+                    sobraOutraBaixa={varias}
+                    pending={pending}
+                    onErro={setErroLocal}
+                    onVoltar={() => {
+                      setAcao(null);
+                      setErroLocal(null);
+                    }}
+                    onConfirmar={(motivo) => onCancelar(b, motivo)}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {mensagemErro && (
@@ -360,6 +392,17 @@ export function BaixaRegistradaDialog({
           >
             Fechar
           </button>
+          {parcial && onDarBaixaNoRestante && acao === null && (
+            <button
+              type="button"
+              onClick={onDarBaixaNoRestante}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:opacity-50"
+            >
+              {ehReceber && <Banknote className="h-4 w-4" />}
+              {ehReceber ? "Dar baixa no restante" : "Baixar o restante"}
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -437,8 +480,7 @@ function FormEstorno({
               uma entrada que reduz a despesa (<b>despesa negativa</b>)
             </>
           )}
-          . A baixa continua como está, e o título continua{" "}
-          {ehReceber ? "recebido" : "pago"}.
+          . A baixa continua como está.
         </span>
       </p>
       <div className="grid grid-cols-3 gap-3">
@@ -550,6 +592,8 @@ function FormEstorno({
 function FormCancelamento({
   ehReceber,
   alvo,
+  baixa,
+  sobraOutraBaixa,
   pending,
   onErro,
   onVoltar,
@@ -557,6 +601,9 @@ function FormCancelamento({
 }: {
   ehReceber: boolean;
   alvo: BaixaRegistradaAlvo;
+  baixa: BaixaDoTitulo;
+  /** O título tem outra baixa: cancelar esta o deixa Parcial. */
+  sobraOutraBaixa: boolean;
   pending: boolean;
   onErro: (msg: string | null) => void;
   onVoltar: () => void;
@@ -564,10 +611,10 @@ function FormCancelamento({
 }) {
   const [motivo, setMotivo] = React.useState("");
   const motivoOk = motivo.trim().length >= MOTIVO_MINIMO;
-  const valor = (
-    <b className="font-mono">{formatCurrency(alvo.valorMovimentado, "BRL")}</b>
-  );
-  const nEstornos = alvo.estornos.length;
+  const valor = <b className="font-mono">{formatCurrency(baixa.movimentado, "BRL")}</b>;
+  const nEstornos = baixa.estornos.length;
+  const temRetidos = baixa.retencoes.length > 0;
+  const voltaPara = sobraOutraBaixa ? "Parcial" : ehReceber ? "Em aberto" : "A pagar";
 
   return (
     <div className="mt-3 space-y-2 border-t border-california-red/20 pt-3">
@@ -594,11 +641,11 @@ function FormCancelamento({
             </>
           ) : (
             <>
-              A baixa é desfeita: o título volta para{" "}
-              <b>{ehReceber ? "Em aberto" : "A pagar"}</b> e o lançamento de{" "}
-              {valor} sai do extrato, sem linha nova.
+              A baixa é desfeita: o título volta para <b>{voltaPara}</b> e o
+              lançamento de {valor} sai do extrato, sem linha nova.
             </>
           )}
+          {temRetidos && " Os impostos retidos desta baixa saem junto."}
           {nEstornos === 1 && " O estorno registrado nesta baixa sai junto."}
           {nEstornos > 1 &&
             ` Os ${nEstornos} estornos registrados nesta baixa saem junto.`}{" "}

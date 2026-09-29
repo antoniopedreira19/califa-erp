@@ -20,6 +20,11 @@
  * recebimento avulso chega com o centro de custo que foi escolhido na
  * criação, e o rendimento chega com a conta de aplicação e o centro de
  * custo travados.
+ *
+ * Decisão 125 (29/09/2026): o valor sai do quadro do topo e vira o bloco
+ * "Valor a dar baixa" (`BlocoValorDaBaixa`), com a baixa parcial e os
+ * impostos retidos pelo cliente. O formulário é um filho com `key` do
+ * título, para o estado do bloco recomeçar a cada título.
  */
 
 import * as React from "react";
@@ -40,7 +45,17 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type {
+  ContaBancaria,
+  PlanoContaTipo,
+  PlanoContaSubtipo,
+  RetencaoDaBaixa,
+} from "@/lib/types";
+import {
+  BlocoValorDaBaixa,
+  useValorDaBaixa,
+  type UltimaRetencao,
+} from "@/components/financeiro/valor-da-baixa";
 
 export type EstiloDoResumo = "mono" | "mono_negrito" | "mono_pequeno" | "negrito";
 
@@ -55,10 +70,22 @@ export interface BaixaRecebimentoAlvo {
   /** Identifica o título: o formulário só se reinicia quando ela muda
    *  (o objeto `alvo` é remontado a cada renderização da tela). */
   chave: string;
-  /** As linhas do quadro do topo, na ordem (o Valor fecha o quadro
-   *  sozinho). */
+  /** As linhas do quadro do topo, na ordem. */
   resumo: Array<{ rotulo: string; valor: string; estilo: EstiloDoResumo }>;
+  /** O valor do título inteiro. */
   valor: number;
+  /** O que falta receber: o valor menos as baixas já feitas (decisão 125).
+   *  É o valor a dar baixa que vem proposto. */
+  aberto: number;
+  /** "Parcela 1/2", embaixo do valor enquanto não há baixa. */
+  parcelaRotulo: string;
+  /** O fim da frase "Restam R$ X em aberto…". `null` fecha no ponto. */
+  restoTexto: string | null;
+  /** Rendimento só aceita o valor inteiro, sem retenção. */
+  aceitaParcial: boolean;
+  aceitaRetencao: boolean;
+  /** A última retenção do mesmo cliente, para o "Repetir as alíquotas". */
+  ultimaRetencao: UltimaRetencao | null;
   empresaId: string;
   /** Conta que vem escolhida e travada (rendimento: a conta de aplicação
    *  dele). `null` deixa a escolha livre. */
@@ -72,6 +99,16 @@ export interface BaixaRecebimentoAlvo {
   /** Data do recebimento que vem sugerida: hoje, ou a data do lançamento
    *  do rendimento (o último dia do mês dele). */
   dataInicial: string;
+}
+
+export interface BaixaRecebimentoPayload {
+  pago_em: string;
+  conta_bancaria_id: string;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  /** O valor a dar baixa: líquido + retidos. */
+  valor_baixa: number;
+  retencoes: RetencaoDaBaixa[];
 }
 
 export function BaixaRecebimentoDialog({
@@ -93,30 +130,62 @@ export function BaixaRecebimentoDialog({
   subtipos: PlanoContaSubtipo[];
   pending: boolean;
   erro: string | null;
-  onConfirm: (payload: {
-    pago_em: string;
-    conta_bancaria_id: string;
-    plano_conta_tipo_id: string;
-    plano_conta_subtipo_id: string;
-  }) => void;
+  onConfirm: (payload: BaixaRecebimentoPayload) => void;
+}) {
+  if (!alvo) return null;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Banknote className="h-5 w-5 text-emerald-700" />
+            Dar baixa no recebimento
+          </DialogTitle>
+        </DialogHeader>
+        {/* A chave do título recomeça o formulário (e o bloco de valores)
+            a cada título; o objeto `alvo` é remontado a cada renderização
+            da tela e não serve de chave. */}
+        <FormularioDaBaixa
+          key={alvo.chave}
+          alvo={alvo}
+          contas={contas}
+          tipos={tipos}
+          subtipos={subtipos}
+          pending={pending}
+          erro={erro}
+          onCancelar={() => onOpenChange(false)}
+          onConfirm={onConfirm}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FormularioDaBaixa({
+  alvo,
+  contas,
+  tipos,
+  subtipos,
+  pending,
+  erro,
+  onCancelar,
+  onConfirm,
+}: {
+  alvo: BaixaRecebimentoAlvo;
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
+  pending: boolean;
+  erro: string | null;
+  onCancelar: () => void;
+  onConfirm: (payload: BaixaRecebimentoPayload) => void;
 }) {
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
-  const [pagoEm, setPagoEm] = React.useState(format(new Date(), "yyyy-MM-dd"));
-  const [contaId, setContaId] = React.useState("");
-  const [tipoId, setTipoId] = React.useState("");
-  const [subtipoId, setSubtipoId] = React.useState("");
-
-  const chave = alvo?.chave ?? null;
-  React.useEffect(() => {
-    if (!open || !alvo) return;
-    setErroLocal(null);
-    setPagoEm(alvo.dataInicial);
-    setContaId(alvo.contaTravadaId ?? "");
-    setTipoId(alvo.tipoInicialId ?? "");
-    setSubtipoId(alvo.subtipoInicialId ?? "");
-    // Só a troca de título reinicia (ver `chave`).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, chave]);
+  const [pagoEm, setPagoEm] = React.useState(alvo.dataInicial);
+  const [contaId, setContaId] = React.useState(alvo.contaTravadaId ?? "");
+  const [tipoId, setTipoId] = React.useState(alvo.tipoInicialId ?? "");
+  const [subtipoId, setSubtipoId] = React.useState(alvo.subtipoInicialId ?? "");
+  const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao);
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão de 29/08/2026):
@@ -148,57 +217,50 @@ export function BaixaRecebimentoDialog({
       );
       return;
     }
+    const erroDoValor = v.erro();
+    if (erroDoValor) {
+      setErroLocal(erroDoValor);
+      return;
+    }
     onConfirm({
       pago_em: pagoEm,
       conta_bancaria_id: contaId,
       plano_conta_tipo_id: tipoId,
       plano_conta_subtipo_id: subtipoId,
+      valor_baixa: v.valor,
+      retencoes: v.retencoes(),
     });
   }
 
-  if (!alvo) return null;
   const mensagemErro = erro ?? erroLocal;
+  const baixaParcial = v.parcial && v.resta > 0.004;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[540px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Banknote className="h-5 w-5 text-emerald-700" />
-            Dar baixa no recebimento
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/50 p-4 text-[13px]">
+        {alvo.resumo.map((linha) => (
+          <React.Fragment key={linha.rotulo}>
+            <span className="text-muted-foreground">{linha.rotulo}</span>
+            <span className={CLASSE_DO_ESTILO[linha.estilo]}>{linha.valor}</span>
+          </React.Fragment>
+        ))}
+      </div>
 
-        <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/50 p-4 text-[13px]">
-          {alvo.resumo.map((linha) => (
-            <React.Fragment key={linha.rotulo}>
-              <span className="text-muted-foreground">{linha.rotulo}</span>
-              <span className={CLASSE_DO_ESTILO[linha.estilo]}>{linha.valor}</span>
-            </React.Fragment>
-          ))}
-          <span className="text-muted-foreground">Valor</span>
-          <span className="font-mono font-bold">
-            {alvo.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          </span>
+      {mensagemErro && (
+        <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{mensagemErro}</span>
         </div>
+      )}
 
-        {mensagemErro && (
-          <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{mensagemErro}</span>
-          </div>
-        )}
-
-        <div className="space-y-3">
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-xs font-semibold">
               Data do recebimento <span className="text-california-red">*</span>
             </label>
             <DatePicker
               name="pago_em"
-              // A sugestão vem do título, não do estado: o calendário monta
-              // junto com o diálogo, antes de o efeito acima rodar.
-              key={alvo.chave}
               defaultValue={alvo.dataInicial}
               onDateChange={(d) => {
                 setPagoEm(d ? format(d, "yyyy-MM-dd") : "");
@@ -215,8 +277,8 @@ export function BaixaRecebimentoDialog({
             <Select
               value={contaId}
               disabled={alvo.contaTravadaId !== null}
-              onValueChange={(v) => {
-                setContaId(v);
+              onValueChange={(valor) => {
+                setContaId(valor);
                 setErroLocal(null);
               }}
             >
@@ -239,80 +301,105 @@ export function BaixaRecebimentoDialog({
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold">
-              Centro de custo do recebimento{" "}
-              <span className="text-california-red">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <Combobox
-                items={tiposAtivos.map((t) => ({
-                  value: t.id,
-                  label: `${t.codigo} · ${t.nome}`,
-                }))}
-                value={tipoId || null}
-                onChange={(v) => handleTipo(v ?? "")}
-                placeholder={
-                  tiposAtivos.length === 0 ? "Nenhum tipo cadastrado" : "Tipo..."
-                }
-                buscaPlaceholder="Escreva o código ou o nome"
-                disabled={alvo.centroTravado || tiposAtivos.length === 0}
-                className={COMBOBOX_COMO_SELECT}
-              />
-              <Combobox
-                items={subtiposDoTipo.map((s) => ({ value: s.id, label: s.nome }))}
-                value={subtipoId || null}
-                onChange={(v) => {
-                  setSubtipoId(v ?? "");
-                  setErroLocal(null);
-                }}
-                disabled={alvo.centroTravado || !tipoId || subtiposDoTipo.length === 0}
-                placeholder={
-                  !tipoId
-                    ? "Escolha o tipo primeiro"
-                    : subtiposDoTipo.length === 0
-                      ? "Nenhum subtipo cadastrado"
-                      : "Subtipo..."
-                }
-                buscaPlaceholder="Escreva o nome do subtipo"
-                className={COMBOBOX_COMO_SELECT}
-              />
-            </div>
-            <p className="text-[11.5px] text-muted-foreground">
-              Define onde a receita entra no DRE.
-            </p>
-          </div>
-
-          <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-            <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
-            <span>
-              Ao confirmar, o recebimento é registrado e enviado para a{" "}
-              <strong className="font-semibold text-foreground">Conciliação</strong> com
-              a conta e o centro de custo escolhidos.
-            </span>
-          </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
-          >
-            <Banknote className="h-4 w-4" />
-            {pending ? "Confirmando..." : "Confirmar baixa"}
-          </button>
+        <BlocoValorDaBaixa
+          v={v}
+          lado="receber"
+          valorDoTitulo={alvo.valor}
+          parcelaRotulo={alvo.parcelaRotulo}
+          restoTexto={alvo.restoTexto}
+          parcial={
+            alvo.aceitaParcial
+              ? { aceita: true }
+              : { aceita: false, motivo: "Rendimento só aceita a baixa do valor inteiro." }
+          }
+          retencao={alvo.aceitaRetencao ? { mostra: true, motivo: null } : { mostra: false }}
+        />
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold">
+            Centro de custo do recebimento{" "}
+            <span className="text-california-red">*</span>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Combobox
+              items={tiposAtivos.map((t) => ({
+                value: t.id,
+                label: `${t.codigo} · ${t.nome}`,
+              }))}
+              value={tipoId || null}
+              onChange={(valor) => handleTipo(valor ?? "")}
+              placeholder={
+                tiposAtivos.length === 0 ? "Nenhum tipo cadastrado" : "Tipo..."
+              }
+              buscaPlaceholder="Escreva o código ou o nome"
+              disabled={alvo.centroTravado || tiposAtivos.length === 0}
+              className={COMBOBOX_COMO_SELECT}
+            />
+            <Combobox
+              items={subtiposDoTipo.map((s) => ({ value: s.id, label: s.nome }))}
+              value={subtipoId || null}
+              onChange={(valor) => {
+                setSubtipoId(valor ?? "");
+                setErroLocal(null);
+              }}
+              disabled={alvo.centroTravado || !tipoId || subtiposDoTipo.length === 0}
+              placeholder={
+                !tipoId
+                  ? "Escolha o tipo primeiro"
+                  : subtiposDoTipo.length === 0
+                    ? "Nenhum subtipo cadastrado"
+                    : "Subtipo..."
+              }
+              buscaPlaceholder="Escreva o nome do subtipo"
+              className={COMBOBOX_COMO_SELECT}
+            />
+          </div>
+          <p className="text-[11.5px] text-muted-foreground">
+            Define onde a receita entra no DRE.
+          </p>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+          <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
+          <span>
+            Ao confirmar, o recebimento é registrado e enviado para a{" "}
+            <strong className="font-semibold text-foreground">Conciliação</strong> com
+            a conta e o centro de custo escolhidos.
+            {v.retem && v.retido > 0 && (
+              <>
+                {" "}
+                Os impostos retidos ficam registrados na baixa, imposto por imposto,
+                para o módulo fiscal abater.
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={onCancelar}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+        >
+          <Banknote className="h-4 w-4" />
+          {pending
+            ? "Confirmando..."
+            : baixaParcial
+              ? "Confirmar baixa parcial"
+              : "Confirmar baixa"}
+        </button>
+      </div>
+    </>
   );
 }

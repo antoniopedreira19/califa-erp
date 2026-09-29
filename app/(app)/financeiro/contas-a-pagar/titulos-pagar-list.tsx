@@ -546,19 +546,24 @@ export function TitulosPagarList({
                     : "Lançamento avulso",
         parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
         valor: conferindo.valor,
-        pagoEm: conferindo.pago_em,
-        contaNome: conferindo.conta_nome,
-        centroNome: conferindo.centro_nome,
-        subtipoNome: conferindo.subtipo_nome,
-        dataPagamento: conferindo.data_pagamento,
         vencOriginal: conferindo.venc_original,
+        // Uma baixa só, do valor inteiro, até a entrega 3b da decisão 125.
+        baixas: [
+          {
+            lancamentoId: conferindo.baixa_lancamento_id,
+            data: conferindo.pago_em,
+            contaNome: conferindo.conta_nome,
+            contaBancariaId: conferindo.baixa_conta_id,
+            centroNome: conferindo.centro_nome,
+            subtipoNome: conferindo.subtipo_nome,
+            movimentado: conferindo.valor,
+            retencoes: [],
+            estornos: conferindo.estornos_da_baixa,
+          },
+        ],
         viaCartao: conferindo.forma_pagamento === "cartao_credito",
         ehFaturaDeCartao: conferindo.origem === "fatura_cartao",
         ehTransferencia: false,
-        baixaLancamentoId: conferindo.baixa_lancamento_id,
-        valorMovimentado: conferindo.valor,
-        contaBancariaId: conferindo.baixa_conta_id,
-        estornos: conferindo.estornos_da_baixa,
         semEstorno: motivoSemEstorno(conferindo),
       }
     : null;
@@ -1053,7 +1058,7 @@ export function TitulosPagarList({
         contas={contas.map((c) => ({ id: c.id, nome: c.nome, banco: c.banco }))}
         pending={pending}
         erro={erroAcao}
-        onCancelar={(motivo) => {
+        onCancelar={(_baixa, motivo) => {
           const alvo = conferindo;
           if (!alvo) return;
           startTransition(async () => {
@@ -1076,10 +1081,10 @@ export function TitulosPagarList({
             router.refresh();
           });
         }}
-        onEstornar={(dados) => {
+        onEstornar={(baixa, dados) => {
           const alvo = conferindo;
-          if (!alvo?.baixa_lancamento_id) return;
-          const lancamentoId = alvo.baixa_lancamento_id;
+          if (!alvo || !baixa.lancamentoId) return;
+          const lancamentoId = baixa.lancamentoId;
           startTransition(async () => {
             const res = await estornarValorDaBaixa({
               lancamento_id: lancamentoId,
