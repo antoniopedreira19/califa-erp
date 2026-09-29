@@ -12,7 +12,6 @@ import {
   AlertCircle,
   Circle,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -158,122 +157,128 @@ export function ColaboradoresList({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-md min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nome, função, empresa ou regional..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="pl-9"
-          />
+      {/* Filtros no padrão compacto de /jobs: h-9, text-[13px], dois
+          grupos separados. A versão anterior usava selects h-11 e Input
+          shadcn h-11, ocupando ~90px de altura. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={status}
+            onValueChange={(v) => setStatus(v as StatusFiltro)}
+          >
+            <SelectTrigger className="h-9 w-[110px] px-2.5 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value="ativos">Ativos</SelectItem>
+              <SelectItem value="inativos">Inativos</SelectItem>
+              <SelectItem value="todos">Todos</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
+            <SelectTrigger className="h-9 w-[150px] px-2.5 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value="todos">Todos os tipos</SelectItem>
+              <SelectItem value="pj">PJ</SelectItem>
+              <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
+              <SelectItem value="clt">CLT</SelectItem>
+              <SelectItem value="estagio">Estágio</SelectItem>
+              <SelectItem value="socio">Sócio</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={empresaFiltro}
+            onValueChange={(v) => setEmpresaFiltro(v)}
+          >
+            <SelectTrigger className="h-9 w-[170px] px-2.5 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value={TODAS}>Todas as empresas</SelectItem>
+              {empresasOpcoes.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={regionalFiltro}
+            onValueChange={(v) => setRegionalFiltro(v)}
+          >
+            <SelectTrigger className="h-9 w-[160px] px-2.5 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value={TODAS}>Todas as regionais</SelectItem>
+              <SelectItem value={HUB}>Hub</SelectItem>
+              {regionaisFiltradas.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={pendenciaFiltro}
+            onValueChange={(v) => setPendenciaFiltro(v as PendenciaFiltro)}
+          >
+            <SelectTrigger className="h-9 w-[180px] px-2.5 text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value="todos">Qualquer cadastro</SelectItem>
+              <SelectItem value="criticas">
+                Só pendências críticas
+                {contagemCriticas > 0 && ` (${contagemCriticas})`}
+              </SelectItem>
+              <SelectItem value="parciais">Só cadastros parciais</SelectItem>
+              <SelectItem value="completos">Só cadastros completos</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select
-          value={status}
-          onValueChange={(v) => setStatus(v as StatusFiltro)}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-          >
-            <SelectItem value="ativos">Ativos</SelectItem>
-            <SelectItem value="inativos">Inativos</SelectItem>
-            <SelectItem value="todos">Todos</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Tipo de contratação" />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-          >
-            <SelectItem value="todos">Todos os tipos</SelectItem>
-            <SelectItem value="pj">PJ</SelectItem>
-            <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
-            <SelectItem value="clt">CLT</SelectItem>
-            <SelectItem value="estagio">Estágio</SelectItem>
-            <SelectItem value="socio">Sócio</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={empresaFiltro}
-          onValueChange={(v) => setEmpresaFiltro(v)}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Empresa" />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-          >
-            <SelectItem value={TODAS}>Todas as empresas</SelectItem>
-            {empresasOpcoes.map((e) => (
-              <SelectItem key={e.id} value={e.id}>
-                {e.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={regionalFiltro}
-          onValueChange={(v) => setRegionalFiltro(v)}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Regional" />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-          >
-            <SelectItem value={TODAS}>Todas as regionais</SelectItem>
-            <SelectItem value={HUB}>Hub</SelectItem>
-            {regionaisFiltradas.map((r) => (
-              <SelectItem key={r.id} value={r.id}>
-                {r.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={pendenciaFiltro}
-          onValueChange={(v) => setPendenciaFiltro(v as PendenciaFiltro)}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Cadastro" />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-          >
-            <SelectItem value="todos">Qualquer cadastro</SelectItem>
-            <SelectItem value="criticas">
-              Só pendências críticas
-              {contagemCriticas > 0 && ` (${contagemCriticas})`}
-            </SelectItem>
-            <SelectItem value="parciais">Só cadastros parciais</SelectItem>
-            <SelectItem value="completos">Só cadastros completos</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar colaborador..."
+              className="h-9 w-56 rounded-lg border border-border bg-white pl-[30px] pr-3 text-xs text-foreground outline-none focus:border-california-red/40"
+            />
+          </div>
           <Link
             href="/rh/colaboradores/niveis"
             prefetch={false}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[13px] font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
           >
-            <GraduationCap className="h-4 w-4" />
+            <GraduationCap className="h-3.5 w-3.5" />
             Níveis
             {niveisAtivosCount > 0 && (
-              <span className="ml-1 text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 ({niveisAtivosCount})
               </span>
             )}
@@ -281,9 +286,9 @@ export function ColaboradoresList({
           <Link
             href="/rh/colaboradores/novo"
             prefetch={false}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-california-red px-3.5 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
             Novo colaborador
           </Link>
         </div>
