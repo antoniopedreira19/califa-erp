@@ -158,7 +158,9 @@ async function main() {
   const jobPorId = new Map(jobs.map((j) => [j.id, j] as const));
   const projetoPorId = new Map(projetos.map((p) => [p.id, p] as const));
   const shaGravacao = new Map(gravacao.map((g) => [g.pp, g.sha256] as const));
-  const manifestoPorPath = new Map(manifesto.map((m) => [`${m.bucket}/${m.path}`, m] as const));
+  const manifestoPorPath = new Map<string, (typeof manifesto)[number]>(
+    manifesto.map((m) => [`${m.bucket}/${m.path}`, m]),
+  );
   let pdfsConferidos = 0;
   let trocasDeCadastro = 0;
   let tabelasDeParcela = 0;
@@ -309,7 +311,9 @@ async function main() {
   if (versao.some((x) => x.nome === VERSAO_RENOMEADA.antes)) falha("ainda há versão com o nome antigo");
 
   // Registro: os do formato novo que já havia ficam; os antigos viram P, mesmo projeto.
-  const regAgora = new Map(registro.map((r) => [`${r.tenant_id}|${r.codigo}`, r] as const));
+  const regAgora = new Map<string, (typeof registro)[number]>(
+    registro.map((r) => [`${r.tenant_id}|${r.codigo}`, r]),
+  );
   const regEsperado = new Map<string, string | null>();
   for (const r of banco.codigos_de_projeto_usados) {
     const codigo = r.codigo.replace(/^(.+)-0(\d{3,})\/(\d{2})$/, "$1-P$2/$3");
