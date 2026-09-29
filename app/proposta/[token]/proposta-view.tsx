@@ -760,6 +760,9 @@ function VisaoDados({
             <DatePicker
               name="data_nascimento_visual"
               id="data_nascimento"
+              comSeletorAnoMes
+              fromYear={1930}
+              toYear={new Date().getFullYear()}
               onDateChange={(d) =>
                 setDataNascimento(d ? d.toISOString().slice(0, 10) : "")
               }

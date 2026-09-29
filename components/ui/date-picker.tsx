@@ -38,6 +38,14 @@ export interface DatePickerProps {
    *  no calendário. Uso: telas que só aceitam certas datas (ex.: janelas
    *  de pagamento do financeiro). */
   dateDisabled?: (date: Date) => boolean;
+  /** Se true, o cabeçalho do calendário mostra dropdowns de mês e ano
+   *  em vez das setas de navegação. Útil pra datas distantes tipo
+   *  nascimento. Exige `fromYear` e `toYear`. */
+  comSeletorAnoMes?: boolean;
+  /** Ano mínimo do dropdown (só quando `comSeletorAnoMes`). */
+  fromYear?: number;
+  /** Ano máximo do dropdown (só quando `comSeletorAnoMes`). */
+  toYear?: number;
 }
 
 function parseIsoDate(iso: string | undefined): Date | null {
@@ -60,6 +68,9 @@ export function DatePicker({
   className,
   onDateChange,
   dateDisabled,
+  comSeletorAnoMes,
+  fromYear,
+  toYear,
 }: DatePickerProps) {
   const [date, setDate] = React.useState<Date | null>(() => parseIsoDate(defaultValue));
   const [open, setOpen] = React.useState(false);
@@ -133,6 +144,14 @@ export function DatePicker({
             disabled={dateDisabled}
             initialFocus
             fixedWeeks
+            defaultMonth={date ?? undefined}
+            {...(comSeletorAnoMes
+              ? {
+                  captionLayout: "dropdown-buttons",
+                  fromYear: fromYear ?? 1930,
+                  toYear: toYear ?? new Date().getFullYear(),
+                }
+              : {})}
           />
         </PopoverContent>
       </Popover>
