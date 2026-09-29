@@ -253,6 +253,8 @@ export default async function ColaboradoresPage() {
         usa_rateio_empresa: aloc?.usa_rateio_empresa ?? false,
         pendencia_nivel: pendencia.nivel,
         pendencia_total: pendencia.total,
+        pendencia_criticas: pendencia.criticas,
+        pendencia_parciais: pendencia.parciais,
       };
     },
   );
