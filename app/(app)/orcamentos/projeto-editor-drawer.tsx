@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Pencil, Archive, RefreshCw } from "lucide-react";
 import {
   Dialog,
+  DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DrawerContent,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type {
@@ -87,76 +88,90 @@ export function ProjetoEditorDrawer({
     });
   }
 
+  // Status e Arquivar/Reativar vão para o pé do formulário, na linha de
+  // Cancelar e Salvar (opção C do Tiago, 29/09/2026).
+  const statusEArquivar = (
+    <div className="flex items-center gap-3">
+      <p className="text-xs text-muted-foreground">
+        Status: <strong className="text-foreground">{projeto.status}</strong>
+      </p>
+      {projeto.status === "ativo" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setConfirmArquivar(true);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          <Archive className="h-3.5 w-3.5" />
+          Arquivar
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirmReativar(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition-colors"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Reativar
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          // A recusa de um Arquivar anterior não reaparece ao reabrir.
+          setError(null);
+          setOpen(true);
+        }}
         className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition-colors"
       >
         <Pencil className="h-3.5 w-3.5" />
         Editar projeto
       </button>
 
+      {/* Pop-up centralizado sobre a página, com a largura do cartão do
+          "Novo projeto" (max-w-3xl): os campos ficam do mesmo tamanho da
+          criação. Até 29/09/2026 era um drawer de 512 px, que espremia as
+          duas colunas (opção C escolhida pelo Tiago). */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DrawerContent>
-          <DialogHeader className="border-b border-border px-6 py-4">
-            <DialogTitle>Editar projeto {projeto.codigo}</DialogTitle>
+        <DialogContent className="max-w-3xl gap-0 p-6">
+          <DialogHeader className="mb-6 space-y-0 pr-8">
+            <DialogTitle className="text-3xl font-bold leading-tight tracking-tight">
+              Editar projeto
+            </DialogTitle>
+            <DialogDescription className="mt-1">
+              Código do projeto: <span className="font-mono">{projeto.codigo}</span>
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            <ProjetoForm
-              podeCadastrarCliente={podeCadastrarCliente}
-              podeEditarCliente={podeEditarCliente}
-              projeto={projeto}
-              empresas={empresas}
-              clientes={clientes}
-              responsaveis={responsaveis}
-              regionais={regionais}
-              produtos={produtos}
-              categorias={categorias}
-              regionaisSelecionadas={regionaisSelecionadas}
-              responsaveisSelecionados={responsaveisSelecionados}
-              equipeSelecionada={equipeSelecionada}
-              produtoresDosOrcamentos={produtoresDosOrcamentos}
-              criadorId={projeto.created_by ?? undefined}
-              onSuccess={() => setOpen(false)}
-              onCancel={() => setOpen(false)}
-            />
+          <ProjetoForm
+            podeCadastrarCliente={podeCadastrarCliente}
+            podeEditarCliente={podeEditarCliente}
+            projeto={projeto}
+            empresas={empresas}
+            clientes={clientes}
+            responsaveis={responsaveis}
+            regionais={regionais}
+            produtos={produtos}
+            categorias={categorias}
+            regionaisSelecionadas={regionaisSelecionadas}
+            responsaveisSelecionados={responsaveisSelecionados}
+            equipeSelecionada={equipeSelecionada}
+            produtoresDosOrcamentos={produtoresDosOrcamentos}
+            criadorId={projeto.created_by ?? undefined}
+            rodapeEsquerda={statusEArquivar}
+            onSuccess={() => setOpen(false)}
+            onCancel={() => setOpen(false)}
+          />
 
-            {error && (
-              <p className="mt-4 text-sm text-california-red">{error}</p>
-            )}
-          </div>
-
-          <div className="border-t border-border px-6 py-4 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Status: <strong className="text-foreground">{projeto.status}</strong>
-            </p>
-            {projeto.status === "ativo" ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setConfirmArquivar(true);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <Archive className="h-3.5 w-3.5" />
-                Arquivar
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmReativar(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition-colors"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Reativar
-              </button>
-            )}
-          </div>
-        </DrawerContent>
+          {error && <p className="mt-4 text-sm text-california-red">{error}</p>}
+        </DialogContent>
       </Dialog>
 
       <ConfirmDialog
