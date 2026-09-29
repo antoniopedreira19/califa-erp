@@ -2,11 +2,62 @@
 
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, type DropdownProps } from "react-day-picker";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
+
+/**
+ * Substitui os <select> nativos que o react-day-picker renderiza no
+ * modo captionLayout='dropdown'. Motivo: os nativos abrem no browser
+ * padrão (subindo/ocupando tela toda com 96 anos), e não dá pra
+ * controlar direção nem scroll via CSS. Radix Select resolve com
+ * altura máxima + scroll interno + posição fixa pra baixo.
+ */
+function DropdownCalendario({ value, onChange, children }: DropdownProps) {
+  const opcoes = React.Children.toArray(
+    children,
+  ) as React.ReactElement<React.OptionHTMLAttributes<HTMLOptionElement>>[];
+
+  return (
+    <Select
+      value={value?.toString()}
+      onValueChange={(v) => {
+        onChange?.({
+          target: { value: v },
+        } as unknown as React.ChangeEvent<HTMLSelectElement>);
+      }}
+    >
+      <SelectTrigger className="h-8 w-auto min-w-[110px] gap-1 border-border bg-white px-2.5 py-1 text-sm font-medium capitalize">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent
+        side="bottom"
+        avoidCollisions={false}
+        position="popper"
+        sideOffset={4}
+        className="max-h-[240px]"
+      >
+        {opcoes.map((opcao) => {
+          const val = opcao.props.value?.toString() ?? "";
+          return (
+            <SelectItem key={val} value={val} className="capitalize">
+              {opcao.props.children}
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
+  );
+}
 
 function Calendar({
   className,
@@ -36,8 +87,10 @@ function Calendar({
           ? "hidden"
           : "text-sm font-semibold text-foreground capitalize",
         caption_dropdowns: "flex gap-2 items-center justify-center",
-        dropdown:
-          "appearance-none rounded-lg border border-border bg-white pl-3 pr-8 py-1.5 text-sm font-medium text-foreground hover:border-california-red/40 focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15 cursor-pointer transition-colors [background-image:url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e\")] bg-no-repeat bg-[position:right_0.5rem_center] bg-[length:1.25rem_1.25rem]",
+        // O <select> nativo do react-day-picker é substituído pelo
+        // DropdownCalendario abaixo via `components`, então o className
+        // do dropdown fica vazio (não é mais renderizado).
+        dropdown: "",
         vhidden: "hidden",
         nav: usaDropdown ? "hidden" : "space-x-1 flex items-center",
         nav_button:
@@ -62,6 +115,7 @@ function Calendar({
       components={{
         IconLeft: () => <ChevronLeft className="h-4 w-4" />,
         IconRight: () => <ChevronRight className="h-4 w-4" />,
+        ...(usaDropdown ? { Dropdown: DropdownCalendario } : {}),
       }}
       {...props}
     />
