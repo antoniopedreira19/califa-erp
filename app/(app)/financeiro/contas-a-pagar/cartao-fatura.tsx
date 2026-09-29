@@ -356,6 +356,7 @@ export function CartaoFatura({
                 vencOriginal: conferindo.venc_original,
                 viaCartao: conferindo.forma_pagamento === "cartao_credito",
                 ehFaturaDeCartao: false,
+                ehTransferencia: false,
                 baixaLancamentoId: conferindo.baixa_lancamento_id,
                 valorMovimentado: conferindo.valor,
                 contaBancariaId: conferindo.baixa_conta_id,

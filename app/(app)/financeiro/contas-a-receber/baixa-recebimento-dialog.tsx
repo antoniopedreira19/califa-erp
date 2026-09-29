@@ -14,6 +14,12 @@
  *    plano de contas (decisão 016 §6). Desde a Tela 3.3 é AQUI que a
  *    receita é classificada: o formulário de emissão da NF não pergunta
  *    mais tipo e subtipo.
+ *
+ * Desde 29/09/2026 (decisão 124) serve também ao recebimento avulso e ao
+ * rendimento de aplicação. Quem chama monta o resumo do topo; o
+ * recebimento avulso chega com o centro de custo que foi escolhido na
+ * criação, e o rendimento chega com a conta de aplicação e o centro de
+ * custo travados.
  */
 
 import * as React from "react";
@@ -36,15 +42,36 @@ import {
 } from "@/components/ui/select";
 import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
+export type EstiloDoResumo = "mono" | "mono_negrito" | "mono_pequeno" | "negrito";
+
+const CLASSE_DO_ESTILO: Record<EstiloDoResumo, string> = {
+  mono: "font-mono",
+  mono_negrito: "font-mono font-bold",
+  mono_pequeno: "font-mono text-xs",
+  negrito: "font-semibold",
+};
+
 export interface BaixaRecebimentoAlvo {
-  numeroNf: string;
-  cliente: string;
-  jobs: string[];
-  parcela: string;
-  vencimento: string;
-  previsao: string;
+  /** Identifica o título: o formulário só se reinicia quando ela muda
+   *  (o objeto `alvo` é remontado a cada renderização da tela). */
+  chave: string;
+  /** As linhas do quadro do topo, na ordem (o Valor fecha o quadro
+   *  sozinho). */
+  resumo: Array<{ rotulo: string; valor: string; estilo: EstiloDoResumo }>;
   valor: number;
   empresaId: string;
+  /** Conta que vem escolhida e travada (rendimento: a conta de aplicação
+   *  dele). `null` deixa a escolha livre. */
+  contaTravadaId: string | null;
+  /** Centro de custo que já vem escolhido (o da criação do título).
+   *  `null` nos dois começa vazio, como na nota. */
+  tipoInicialId: string | null;
+  subtipoInicialId: string | null;
+  /** O rendimento tem centro de custo fixo: não se troca na baixa. */
+  centroTravado: boolean;
+  /** Data do recebimento que vem sugerida: hoje, ou a data do lançamento
+   *  do rendimento (o último dia do mês dele). */
+  dataInicial: string;
 }
 
 export function BaixaRecebimentoDialog({
@@ -79,14 +106,17 @@ export function BaixaRecebimentoDialog({
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
 
+  const chave = alvo?.chave ?? null;
   React.useEffect(() => {
     if (!open || !alvo) return;
     setErroLocal(null);
-    setPagoEm(format(new Date(), "yyyy-MM-dd"));
-    setContaId("");
-    setTipoId("");
-    setSubtipoId("");
-  }, [open, alvo]);
+    setPagoEm(alvo.dataInicial);
+    setContaId(alvo.contaTravadaId ?? "");
+    setTipoId(alvo.tipoInicialId ?? "");
+    setSubtipoId(alvo.subtipoInicialId ?? "");
+    // Só a troca de título reinicia (ver `chave`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, chave]);
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão de 29/08/2026):
@@ -140,18 +170,12 @@ export function BaixaRecebimentoDialog({
         </DialogHeader>
 
         <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/50 p-4 text-[13px]">
-          <span className="text-muted-foreground">Nota fiscal</span>
-          <span className="font-mono font-bold">NF {alvo.numeroNf}</span>
-          <span className="text-muted-foreground">Cliente</span>
-          <span className="font-semibold">{alvo.cliente}</span>
-          <span className="text-muted-foreground">Jobs cobertos</span>
-          <span className="font-mono text-xs">{alvo.jobs.join("  ·  ")}</span>
-          <span className="text-muted-foreground">Parcela</span>
-          <span className="font-mono">{alvo.parcela}</span>
-          <span className="text-muted-foreground">Vencimento</span>
-          <span className="font-mono">{formatarData(alvo.vencimento)}</span>
-          <span className="text-muted-foreground">Previsão de recebimento</span>
-          <span className="font-mono">{formatarData(alvo.previsao)}</span>
+          {alvo.resumo.map((linha) => (
+            <React.Fragment key={linha.rotulo}>
+              <span className="text-muted-foreground">{linha.rotulo}</span>
+              <span className={CLASSE_DO_ESTILO[linha.estilo]}>{linha.valor}</span>
+            </React.Fragment>
+          ))}
           <span className="text-muted-foreground">Valor</span>
           <span className="font-mono font-bold">
             {alvo.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
@@ -172,7 +196,10 @@ export function BaixaRecebimentoDialog({
             </label>
             <DatePicker
               name="pago_em"
-              defaultValue={pagoEm}
+              // A sugestão vem do título, não do estado: o calendário monta
+              // junto com o diálogo, antes de o efeito acima rodar.
+              key={alvo.chave}
+              defaultValue={alvo.dataInicial}
               onDateChange={(d) => {
                 setPagoEm(d ? format(d, "yyyy-MM-dd") : "");
                 setErroLocal(null);
@@ -187,6 +214,7 @@ export function BaixaRecebimentoDialog({
             </label>
             <Select
               value={contaId}
+              disabled={alvo.contaTravadaId !== null}
               onValueChange={(v) => {
                 setContaId(v);
                 setErroLocal(null);
@@ -229,7 +257,7 @@ export function BaixaRecebimentoDialog({
                   tiposAtivos.length === 0 ? "Nenhum tipo cadastrado" : "Tipo..."
                 }
                 buscaPlaceholder="Escreva o código ou o nome"
-                disabled={tiposAtivos.length === 0}
+                disabled={alvo.centroTravado || tiposAtivos.length === 0}
                 className={COMBOBOX_COMO_SELECT}
               />
               <Combobox
@@ -239,7 +267,7 @@ export function BaixaRecebimentoDialog({
                   setSubtipoId(v ?? "");
                   setErroLocal(null);
                 }}
-                disabled={!tipoId || subtiposDoTipo.length === 0}
+                disabled={alvo.centroTravado || !tipoId || subtiposDoTipo.length === 0}
                 placeholder={
                   !tipoId
                     ? "Escolha o tipo primeiro"
@@ -287,10 +315,4 @@ export function BaixaRecebimentoDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function formatarData(iso: string): string {
-  if (!iso) return "—";
-  const [ano, mes, dia] = iso.slice(0, 10).split("-");
-  return `${dia}/${mes}/${ano}`;
 }

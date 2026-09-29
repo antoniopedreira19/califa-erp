@@ -51,6 +51,9 @@ export default async function ContasReceberPage({
     titulosRes,
     baixasRes,
     estornosRes,
+    avulsasReceberRes,
+    baixasAvulsasRes,
+    transferenciasRes,
     contasRes,
     tiposRes,
     subtiposRes,
@@ -123,8 +126,46 @@ export default async function ContasReceberPage({
       .from("lancamentos_financeiros")
       .select(SELECT_ESTORNO_DE_BAIXA)
       .eq("tenant_id", tenantId)
-      .eq("origem", "titulo_estorno")
+      .in("origem", ["titulo_estorno", "avulsa_estorno"])
       .not("estorno_de_lancamento_id", "is", null),
+    // Recebimento avulso e rendimento (decisão 124): contas avulsas de
+    // natureza entrada, marcadas por `tipo_entrada`. Entram na mesma lista
+    // dos títulos das notas.
+    supabase
+      .from("contas_avulsas")
+      .select(`
+        id, codigo, descricao, valor, status, tipo_entrada, empresa_id,
+        data_prevista_pagamento, data_pagamento, pago_em,
+        plano_conta_tipo_id, plano_conta_subtipo_id,
+        conta_bancaria_prevista_id, competencia, cliente_id, fornecedor_id
+      `)
+      .eq("tenant_id", tenantId)
+      .not("tipo_entrada", "is", null)
+      .order("data_pagamento", { ascending: true }),
+    // A baixa desses títulos: conta e centro de custo, para o olho.
+    supabase
+      .from("lancamentos_financeiros")
+      .select(`
+        id, conta_avulsa_id, conta_bancaria_id,
+        conta:contas_bancarias(nome, banco),
+        tipo:plano_contas_tipos(codigo, nome),
+        subtipo:plano_contas_subtipos(nome)
+      `)
+      .eq("tenant_id", tenantId)
+      .eq("origem", "avulsa_baixa")
+      .eq("natureza", "entrada")
+      .not("conta_avulsa_id", "is", null),
+    // Transferências entre contas (decisão 124). Duas FKs para
+    // contas_bancarias: o embed precisa dizer qual é qual.
+    supabase
+      .from("transferencias_contas")
+      .select(`
+        id, codigo, valor, data_prevista, descricao, status, transferida_em,
+        origem:contas_bancarias!conta_origem_id(nome, banco),
+        destino:contas_bancarias!conta_destino_id(nome, banco)
+      `)
+      .eq("tenant_id", tenantId)
+      .order("data_prevista", { ascending: true }),
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -201,6 +242,10 @@ export default async function ContasReceberPage({
     ["titulos", titulosRes],
     ["envios", enviosRes],
     ["regionais", regionaisRes],
+    ["avulsas_receber", avulsasReceberRes],
+    ["baixas_avulsas", baixasAvulsasRes],
+    ["transferencias", transferenciasRes],
+    ["estornos", estornosRes],
   ] as const) {
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
@@ -597,8 +642,175 @@ export default async function ContasReceberPage({
       baixa_lancamento_id: baixa?.lancamentoId ?? null,
       baixa_conta_id: baixa?.contaId ?? null,
       estornos: baixa ? estornosPorBaixa.get(baixa.lancamentoId) ?? [] : [],
+      origem: "nf" as const,
+      conta_avulsa_id: null,
+      codigo_avulsa: null,
+      plano_conta_tipo_id: null,
+      plano_conta_subtipo_id: null,
+      conta_prevista_id: null,
     };
   });
+
+  // Recebimento avulso e rendimento (decisão 124), na mesma lista. Não têm
+  // nota: a coluna Nota fiscal mostra o código AV, e a de jobs, a
+  // descrição — eles não se vinculam a job.
+  const baixaDaAvulsa = new Map<
+    string,
+    { lancamentoId: string; contaId: string; conta: string; centro: string; subtipo: string | null }
+  >();
+  for (const l of (baixasAvulsasRes.data ?? []) as unknown as Array<{
+    id: string;
+    conta_avulsa_id: string | null;
+    conta_bancaria_id: string;
+    conta: { nome: string; banco: string } | null;
+    tipo: { codigo: string; nome: string } | null;
+    subtipo: { nome: string } | null;
+  }>) {
+    if (!l.conta_avulsa_id) continue;
+    baixaDaAvulsa.set(l.conta_avulsa_id, {
+      lancamentoId: l.id,
+      contaId: l.conta_bancaria_id,
+      conta: l.conta ? `${l.conta.nome} · ${l.conta.banco}` : "—",
+      centro: l.tipo ? `${l.tipo.codigo} · ${l.tipo.nome}` : "—",
+      subtipo: l.subtipo?.nome ?? null,
+    });
+  }
+  const contaPorId = new Map((contasRes.data ?? []).map((c) => [c.id, c]));
+  const todasAvulsasReceber = (avulsasReceberRes.data ?? []) as unknown as Array<{
+    id: string;
+    codigo: string | null;
+    descricao: string;
+    valor: string | number;
+    status: "aprovada" | "baixada";
+    tipo_entrada: "recebimento_avulso" | "rendimento";
+    empresa_id: string;
+    data_prevista_pagamento: string | null;
+    data_pagamento: string | null;
+    pago_em: string | null;
+    plano_conta_tipo_id: string;
+    plano_conta_subtipo_id: string;
+    conta_bancaria_prevista_id: string | null;
+    competencia: string | null;
+    cliente_id: string | null;
+    fornecedor_id: string | null;
+  }>;
+  const avulsasReceber = todasAvulsasReceber.filter(
+    // O atalho "vencidas" da Home vale para eles também.
+    (a) =>
+      searchParams?.filtro !== "vencidas" ||
+      (a.status === "aprovada" && (a.data_pagamento ?? a.data_prevista_pagamento ?? "") < hoje),
+  );
+  const linhasAvulsas: TituloRow[] = avulsasReceber.map((a) => {
+    const baixa = baixaDaAvulsa.get(a.id);
+    const data = a.data_pagamento ?? a.data_prevista_pagamento ?? hoje;
+    const contaPrevista = a.conta_bancaria_prevista_id
+      ? contaPorId.get(a.conta_bancaria_prevista_id)
+      : undefined;
+    return {
+      id: a.id,
+      numero_parcela: 1,
+      total_parcelas: 1,
+      valor: Number(a.valor),
+      data_vencimento: a.data_prevista_pagamento ?? data,
+      data_previsao_recebimento: data,
+      data_previsao_recebimento_primeira: data,
+      status: a.status === "baixada" ? "pago" : "em_aberto",
+      pago_em: a.pago_em,
+      empresa_id: a.empresa_id,
+      faturamento_id: "",
+      fat_numero_nf: "",
+      fat_data_emissao: "",
+      fat_descricao: a.descricao,
+      contraparte_nome:
+        (a.cliente_id ? nomeCliente.get(a.cliente_id) : undefined) ??
+        (a.fornecedor_id ? nomeFornecedor.get(a.fornecedor_id) : undefined) ??
+        (contaPrevista ? `${contaPrevista.nome} · ${contaPrevista.banco}` : "—"),
+      jobs_cobertos: [a.descricao],
+      jobs: [],
+      inadimplente_desde: null,
+      conta_nome: baixa?.conta ?? null,
+      centro_nome: baixa?.centro ?? null,
+      subtipo_nome: baixa?.subtipo ?? null,
+      baixa_lancamento_id: baixa?.lancamentoId ?? null,
+      baixa_conta_id: baixa?.contaId ?? null,
+      estornos: baixa ? estornosPorBaixa.get(baixa.lancamentoId) ?? [] : [],
+      origem: a.tipo_entrada,
+      conta_avulsa_id: a.id,
+      codigo_avulsa: a.codigo,
+      plano_conta_tipo_id: a.plano_conta_tipo_id,
+      plano_conta_subtipo_id: a.plano_conta_subtipo_id,
+      conta_prevista_id: a.conta_bancaria_prevista_id,
+    };
+  });
+  // A transferência é título (D16), mas sem empresa, sem plano e sem
+  // estorno: o olho só mostra as duas contas e o cancelamento.
+  const linhasTransferencias: TituloRow[] = ((transferenciasRes.data ?? []) as unknown as Array<{
+    id: string;
+    codigo: string;
+    valor: string | number;
+    data_prevista: string;
+    descricao: string | null;
+    status: "a_transferir" | "transferida";
+    transferida_em: string | null;
+    origem: { nome: string; banco: string } | null;
+    destino: { nome: string; banco: string } | null;
+  }>)
+    .filter(
+      (t) =>
+        searchParams?.filtro !== "vencidas" ||
+        (t.status === "a_transferir" && t.data_prevista < hoje),
+    )
+    .map((t) => {
+      const contas = `${t.origem ? `${t.origem.nome} · ${t.origem.banco}` : "—"} → ${
+        t.destino ? `${t.destino.nome} · ${t.destino.banco}` : "—"
+      }`;
+      const descricao = t.descricao?.trim() || "Transferência entre contas";
+      return {
+        id: t.id,
+        numero_parcela: 1,
+        total_parcelas: 1,
+        valor: Number(t.valor),
+        data_vencimento: t.data_prevista,
+        data_previsao_recebimento: t.data_prevista,
+        data_previsao_recebimento_primeira: t.data_prevista,
+        status: t.status === "transferida" ? "pago" : "em_aberto",
+        pago_em: t.transferida_em,
+        empresa_id: "",
+        faturamento_id: "",
+        fat_numero_nf: "",
+        fat_data_emissao: "",
+        fat_descricao: descricao,
+        contraparte_nome: contas,
+        jobs_cobertos: [descricao],
+        jobs: [],
+        inadimplente_desde: null,
+        conta_nome: t.status === "transferida" ? contas : null,
+        centro_nome: t.status === "transferida" ? "Transferência entre contas" : null,
+        subtipo_nome: t.status === "transferida" ? "fora do DRE" : null,
+        baixa_lancamento_id: null,
+        baixa_conta_id: null,
+        estornos: [],
+        origem: "transferencia" as const,
+        conta_avulsa_id: null,
+        codigo_avulsa: t.codigo,
+        plano_conta_tipo_id: null,
+        plano_conta_subtipo_id: null,
+        conta_prevista_id: null,
+      };
+    });
+  const linhasTitulos = [...titulosRows, ...linhasAvulsas, ...linhasTransferencias].sort((a, b) =>
+    a.data_vencimento.localeCompare(b.data_vencimento),
+  );
+  // Um rendimento por conta e por mês: o diálogo avisa antes de o banco
+  // recusar.
+  const rendimentosLancados = todasAvulsasReceber
+    .filter((a) => a.tipo_entrada === "rendimento" && a.conta_bancaria_prevista_id && a.competencia)
+    .map((a) => ({
+      conta_bancaria_id: a.conta_bancaria_prevista_id as string,
+      competencia: (a.competencia as string).slice(0, 7),
+      valor: Number(a.valor),
+      codigo: a.codigo,
+    }));
 
   // Próximo número sugerido: o maior já emitido + 1. Quem decide é o
   // usuário — o campo vem preenchido, e é editável.
@@ -643,14 +855,19 @@ export default async function ContasReceberPage({
         faturamentoCount={pendentes.length}
         titulos={
           <TitulosList
-            rows={titulosRows}
+            rows={linhasTitulos}
+            empresas={empresasList}
+            regionais={regionaisList}
+            clientes={clientesList}
+            fornecedores={fornecedoresList}
+            rendimentosLancados={rendimentosLancados}
             contas={contasRes.data ?? []}
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}
             infoPorJob={infoPorJob}
           />
         }
-        titulosCount={titulosRows.filter((t) => t.status === "em_aberto").length}
+        titulosCount={linhasTitulos.filter((t) => t.status === "em_aberto").length}
       />
     </div>
   );

@@ -221,6 +221,9 @@ export default async function PedidosCompraFinanceiroPage({
           fornecedor:fornecedores(nome, razao_social)
         `)
         .eq("tenant_id", session.activeTenant.id)
+        // Recebimento avulso e rendimento também são contas avulsas, mas
+        // são de Títulos a Receber (decisão 124).
+        .is("tipo_entrada", null)
         .order("data_prevista_pagamento", { ascending: true })
         .order("created_at", { ascending: false });
       // Filtro de aterrissagem: vencidas = data prevista passada e ainda não baixadas

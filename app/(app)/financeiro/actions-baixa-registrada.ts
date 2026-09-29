@@ -45,6 +45,8 @@ const tipoSchema = z.enum([
   "desembolso",
   "pp_devolucao_verba",
   "fatura_cartao",
+  // Transferência entre contas (decisão 124): as duas pernas saem juntas.
+  "transferencia",
 ]);
 
 export type TipoDeBaixa = z.infer<typeof tipoSchema>;
@@ -60,6 +62,7 @@ const RPC_DO_CANCELAMENTO: Record<
   desembolso: { rpc: "cancelar_baixa_desembolso_parcela", param: "p_parcela_id" },
   pp_devolucao_verba: { rpc: "cancelar_baixa_devolucao_verba", param: "p_devolucao_id" },
   fatura_cartao: { rpc: "cancelar_baixa_fatura_cartao", param: "p_fatura_id" },
+  transferencia: { rpc: "cancelar_baixa_transferencia", param: "p_transferencia_id" },
 };
 
 /**

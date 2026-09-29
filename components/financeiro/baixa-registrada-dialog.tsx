@@ -86,6 +86,9 @@ export interface BaixaRegistradaAlvo {
   /** É o pagamento de uma fatura de cartão: cancelar devolve a fatura
    *  para Fechada, e não há estorno. */
   ehFaturaDeCartao: boolean;
+  /** É uma transferência entre contas (decisão 124): duas pernas, uma em
+   *  cada conta; cancelar tira as duas e a devolve para A transferir. */
+  ehTransferencia: boolean;
   /** O lançamento da baixa viva, onde o estorno se pendura. Nulo quando
    *  a baixa não tem um lançamento só (a fatura tem duas pernas). */
   baixaLancamentoId: string | null;
@@ -172,7 +175,11 @@ export function BaixaRegistradaDialog({
     (maximo <= 0 ? "Esta baixa já foi estornada por inteiro." : null);
   const podeEstornar = motivoSemEstorno === null && alvo.baixaLancamentoId !== null;
 
-  const rotuloData = ehReceber ? "Data de recebimento" : "Data de pagamento";
+  const rotuloData = alvo.ehTransferencia
+    ? "Data da transferência"
+    : ehReceber
+      ? "Data de recebimento"
+      : "Data de pagamento";
   const SetaEstorno = ehReceber ? ArrowUpRight : ArrowDownLeft;
 
   return (
@@ -218,7 +225,8 @@ export function BaixaRegistradaDialog({
         >
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">
-              {ehReceber ? "Recebido" : "Pago"} em {formatarData(alvo.pagoEm)}
+              {alvo.ehTransferencia ? "Transferida" : ehReceber ? "Recebido" : "Pago"} em{" "}
+              {formatarData(alvo.pagoEm)}
             </p>
             {acao === null && (
               <div className="flex items-center gap-1.5">
@@ -255,11 +263,13 @@ export function BaixaRegistradaDialog({
 
           <div className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px]">
             <span className="text-muted-foreground">
-              {alvo.viaCartao
-                ? "Lançado no cartão"
-                : ehReceber
-                  ? "Entrou na conta"
-                  : "Saiu da conta"}
+              {alvo.ehTransferencia
+                ? "Transferido"
+                : alvo.viaCartao
+                  ? "Lançado no cartão"
+                  : ehReceber
+                    ? "Entrou na conta"
+                    : "Saiu da conta"}
             </span>
             <span>
               <b className="font-mono">
@@ -564,7 +574,13 @@ function FormCancelamento({
       <p className="flex items-start gap-2 text-[13px]">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-california-red" />
         <span>
-          {alvo.ehFaturaDeCartao ? (
+          {alvo.ehTransferencia ? (
+            <>
+              A transferência é desfeita: as duas linhas de {valor} saem do
+              extrato — a saída da conta de origem e a entrada na de destino
+              —, sem linha nova, e ela volta para <b>A transferir</b>.
+            </>
+          ) : alvo.ehFaturaDeCartao ? (
             <>
               O pagamento é desfeito: a fatura volta para <b>Fechada</b>, como
               se ainda não tivesse sido paga, e o lançamento de {valor} sai do

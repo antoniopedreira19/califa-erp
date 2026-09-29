@@ -33,7 +33,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, CheckCheck, Eye, Layers, Pencil } from "lucide-react";
+import { Banknote, CheckCheck, Eye, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BotaoInfo,
@@ -55,6 +55,7 @@ import type {
   ContaBancaria,
   PlanoContaTipo,
   PlanoContaSubtipo,
+  TipoEntradaAvulsa,
   TituloReceberStatus,
 } from "@/lib/types";
 import {
@@ -69,6 +70,17 @@ import {
   darBaixaTitulo,
   repactuarPrevisaoRecebimento,
 } from "./actions";
+import {
+  darBaixaRecebimentoAvulso,
+  darBaixaTransferencia,
+  excluirTituloReceberAvulso,
+} from "./actions-recebimento-avulso";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TransferirDialog, type TransferirAlvo } from "./transferir-dialog";
+import {
+  RecebimentoAvulsoDialog,
+  type RendimentoLancado,
+} from "./recebimento-avulso-dialog";
 
 export interface TituloRow {
   id: string;
@@ -108,6 +120,24 @@ export interface TituloRow {
    *  antigos, que desfaziam a baixa inteira, não entram: apontam para um
    *  lançamento que já não é a baixa do título. */
   estornos: EstornoDaBaixa[];
+  /**
+   * De onde o título vem (decisão 124): a nota fiscal, ou uma conta avulsa
+   * de natureza entrada — recebimento avulso ou rendimento —, ou uma
+   * transferência entre contas (`transferencias_contas`). Os campos `fat_*`
+   * ficam vazios nesses: eles não têm nota.
+   */
+  origem: "nf" | TipoEntradaAvulsa | "transferencia";
+  /** A conta avulsa por trás do recebimento avulso e do rendimento.
+   *  `null` na nota. */
+  conta_avulsa_id: string | null;
+  /** "AV-00012" ou "TR-00003": vai na coluna Nota fiscal de quem não tem
+   *  nota. */
+  codigo_avulsa: string | null;
+  /** O centro de custo gravado no título avulso: a baixa já vem com ele. */
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
+  /** Rendimento: a conta de aplicação, travada na baixa. */
+  conta_prevista_id: string | null;
 }
 
 interface Props {
@@ -115,6 +145,12 @@ interface Props {
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
+  /** O que o diálogo "Recebimento avulso" oferece (decisão 124). */
+  empresas: Array<{ id: string; nome: string }>;
+  regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
+  clientes: Array<{ id: string; nome: string }>;
+  fornecedores: Array<{ id: string; nome: string }>;
+  rendimentosLancados: RendimentoLancado[];
   /** PO, instrução do GP e contatos, por job — o conteúdo do botão `i`. */
   infoPorJob: Record<string, InfoJob>;
 }
@@ -162,6 +198,11 @@ export function TitulosList({
   contas,
   tipos,
   subtipos,
+  empresas,
+  regionais,
+  clientes,
+  fornecedores,
+  rendimentosLancados,
   infoPorJob,
 }: Props) {
   const router = useRouter();
@@ -172,6 +213,34 @@ export function TitulosList({
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
   const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
+  const [novoAberto, setNovoAberto] = React.useState(false);
+  const [transferindo, setTransferindo] = React.useState<TituloRow | null>(null);
+  /** Título em aberto criado por engano (decisão 124 §5): só os que não
+   *  vêm de nota. */
+  const [excluindo, setExcluindo] = React.useState<TituloRow | null>(null);
+
+  /** Em aberto abre a baixa; a transferência a transferir só confirma a
+   *  data (as contas e o valor são do título). */
+  function abrirBaixa(r: TituloRow) {
+    setErro(null);
+    if (r.origem === "transferencia") setTransferindo(r);
+    else setBaixando(r);
+  }
+  /**
+   * "Criar e dar baixa" (decisão 124): o título acabou de nascer e ainda
+   * não está em `rows` — a baixa abre quando o `router.refresh()` o
+   * trouxer, como no lançamento avulso de Títulos a Pagar.
+   */
+  const [baixarAposCriar, setBaixarAposCriar] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!baixarAposCriar) return;
+    const novo = rows.find((r) => r.conta_avulsa_id === baixarAposCriar);
+    if (!novo) return;
+    setBaixarAposCriar(null);
+    setErro(null);
+    setBaixando(novo);
+  }, [rows, baixarAposCriar]);
   const [filtroStatus, setFiltroStatus] = React.useState<
     "todos" | "abertos" | "inadimplentes" | "recebidos"
   >("todos");
@@ -184,9 +253,14 @@ export function TitulosList({
    * repactuada à mão ou rolada de semana em semana pela rotina diária —, e
    * o vencimento é o que a nota diz e nunca muda.
    */
+  // Só a nota fica inadimplente: o recebimento avulso e o rendimento não
+  // são cobrança de cliente, e passam da data como "Em aberto".
   const estaInadimplente = React.useCallback(
     (r: TituloRow) =>
-      r.status !== "pago" && r.status !== "cancelado" && r.data_vencimento < hoje,
+      r.origem === "nf" &&
+      r.status !== "pago" &&
+      r.status !== "cancelado" &&
+      r.data_vencimento < hoje,
     [hoje],
   );
 
@@ -251,22 +325,67 @@ export function TitulosList({
   }, [toast]);
 
   const alvoBaixa: BaixaRecebimentoAlvo | null = baixando
-    ? {
-        numeroNf: baixando.fat_numero_nf,
-        cliente: baixando.contraparte_nome,
-        jobs: baixando.jobs_cobertos,
-        parcela: `${baixando.numero_parcela}/${baixando.total_parcelas}`,
-        vencimento: baixando.data_vencimento,
-        previsao: baixando.data_previsao_recebimento,
-        valor: baixando.valor,
-        empresaId: baixando.empresa_id,
-      }
+    ? baixando.origem === "nf"
+      ? {
+          chave: baixando.id,
+          resumo: [
+            { rotulo: "Nota fiscal", valor: `NF ${baixando.fat_numero_nf}`, estilo: "mono_negrito" },
+            { rotulo: "Cliente", valor: baixando.contraparte_nome, estilo: "negrito" },
+            { rotulo: "Jobs cobertos", valor: baixando.jobs_cobertos.join("  ·  "), estilo: "mono_pequeno" },
+            { rotulo: "Parcela", valor: `${baixando.numero_parcela}/${baixando.total_parcelas}`, estilo: "mono" },
+            { rotulo: "Vencimento", valor: formatDate(baixando.data_vencimento), estilo: "mono" },
+            { rotulo: "Previsão de recebimento", valor: formatDate(baixando.data_previsao_recebimento), estilo: "mono" },
+          ],
+          valor: baixando.valor,
+          empresaId: baixando.empresa_id,
+          contaTravadaId: null,
+          tipoInicialId: null,
+          subtipoInicialId: null,
+          centroTravado: false,
+          dataInicial: hoje,
+        }
+      : {
+          chave: baixando.id,
+          resumo: [
+            {
+              rotulo: baixando.origem === "rendimento" ? "Rendimento" : "Recebimento avulso",
+              valor: baixando.codigo_avulsa ?? "—",
+              estilo: "mono_negrito",
+            },
+            { rotulo: "Descrição", valor: baixando.fat_descricao, estilo: "negrito" },
+            {
+              rotulo: baixando.origem === "rendimento" ? "Conta de aplicação" : "Recebido de",
+              valor: baixando.contraparte_nome,
+              estilo: "negrito",
+            },
+            { rotulo: "Data prevista", valor: formatDate(baixando.data_previsao_recebimento), estilo: "mono" },
+          ],
+          valor: baixando.valor,
+          empresaId: baixando.empresa_id,
+          contaTravadaId: baixando.origem === "rendimento" ? baixando.conta_prevista_id : null,
+          tipoInicialId: baixando.plano_conta_tipo_id,
+          subtipoInicialId: baixando.plano_conta_subtipo_id,
+          centroTravado: baixando.origem === "rendimento",
+          dataInicial: baixando.origem === "rendimento" ? baixando.data_previsao_recebimento : hoje,
+        }
     : null;
 
   const alvoConferencia: BaixaRegistradaAlvo | null = conferindo
     ? {
-        titulo: `NF ${conferindo.fat_numero_nf} — ${conferindo.fat_descricao}`,
-        origem: conferindo.jobs_cobertos.join(" · ") || conferindo.contraparte_nome,
+        titulo:
+          conferindo.origem === "nf"
+            ? `NF ${conferindo.fat_numero_nf} — ${conferindo.fat_descricao}`
+            : `${conferindo.codigo_avulsa ?? ""} — ${conferindo.fat_descricao}`,
+        origem:
+          conferindo.origem === "nf"
+            ? conferindo.jobs_cobertos.join(" · ") || conferindo.contraparte_nome
+            : conferindo.origem === "rendimento"
+              ? `Rendimento de aplicação · ${conferindo.contraparte_nome}`
+              : conferindo.origem === "transferencia"
+                ? `Transferência entre contas · ${conferindo.contraparte_nome}`
+                : conferindo.contraparte_nome === "—"
+                  ? "Recebimento avulso"
+                  : `Recebimento avulso · ${conferindo.contraparte_nome}`,
         parcela: `${conferindo.numero_parcela}/${conferindo.total_parcelas}`,
         valor: conferindo.valor,
         pagoEm: conferindo.pago_em,
@@ -278,11 +397,29 @@ export function TitulosList({
         // Recebimento nunca é no cartão, nem pagamento de fatura.
         viaCartao: false,
         ehFaturaDeCartao: false,
+        ehTransferencia: conferindo.origem === "transferencia",
         baixaLancamentoId: conferindo.baixa_lancamento_id,
         valorMovimentado: conferindo.valor,
         contaBancariaId: conferindo.baixa_conta_id,
         estornos: conferindo.estornos,
-        semEstorno: null,
+        // Rendimento não tem estorno (D16): errou, cancela.
+        semEstorno:
+          conferindo.origem === "rendimento"
+            ? "Rendimento de aplicação não tem estorno. Se foi lançado errado, cancele a baixa."
+            : conferindo.origem === "transferencia"
+              ? "Transferência entre contas não tem estorno. Se foi lançada errado, cancele a baixa."
+              : null,
+      }
+    : null;
+
+  const alvoTransferencia: TransferirAlvo | null = transferindo
+    ? {
+        id: transferindo.id,
+        codigo: transferindo.codigo_avulsa ?? "—",
+        contas: transferindo.contraparte_nome,
+        descricao: transferindo.fat_descricao === "Transferência entre contas" ? null : transferindo.fat_descricao,
+        valor: transferindo.valor,
+        dataPrevista: transferindo.data_previsao_recebimento,
       }
     : null;
 
@@ -299,6 +436,7 @@ export function TitulosList({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap gap-1.5">
         {chips.map((c) => (
           <button
@@ -325,6 +463,18 @@ export function TitulosList({
             </span>
           </button>
         ))}
+      </div>
+        <button
+          type="button"
+          onClick={() => {
+            setErro(null);
+            setNovoAberto(true);
+          }}
+          className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-california-red-hover"
+        >
+          <Plus className="h-4 w-4" />
+          Recebimento avulso
+        </button>
       </div>
 
       {/* A caixa reserva 46px à direita para a calha, e o botão `i` mora numa
@@ -380,7 +530,7 @@ export function TitulosList({
                     // Recebido abre a baixa registrada, em leitura; em aberto
                     // abre o formulário de baixa.
                     if (recebido) setConferindo(r);
-                    else setBaixando(r);
+                    else abrirBaixa(r);
                   }}
                   className={cn(
                     "border-b border-border transition-colors last:border-0 hover:bg-accent/40",
@@ -389,7 +539,7 @@ export function TitulosList({
                 >
                   <td className="px-3.5 py-3">
                     <div className="flex items-center gap-2">
-                      {!recebido && !cancelado && (
+                      {!recebido && !cancelado && r.origem === "nf" && (
                         <button
                           type="button"
                           title="Editar previsão de recebimento"
@@ -419,14 +569,30 @@ export function TitulosList({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-xs font-bold text-california-red">
-                        NF {r.fat_numero_nf}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        Emitida {formatDate(r.fat_data_emissao)}
-                      </span>
-                    </div>
+                    {r.origem === "nf" ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-xs font-bold text-california-red">
+                          NF {r.fat_numero_nf}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          Emitida {formatDate(r.fat_data_emissao)}
+                        </span>
+                      </div>
+                    ) : (
+                      // Sem nota (decisão 124): o código AV e o tipo.
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-xs font-bold text-foreground">
+                          {r.codigo_avulsa ?? "—"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {r.origem === "rendimento"
+                            ? "Rendimento"
+                            : r.origem === "transferencia"
+                              ? "Transferência"
+                              : "Recebimento avulso"}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-[13px]">{r.contraparte_nome}</td>
                   <td className="px-4 py-3">
@@ -492,10 +658,14 @@ export function TitulosList({
                         {cancelado
                           ? "Cancelado"
                           : recebido
-                            ? "Recebido"
+                            ? r.origem === "transferencia"
+                              ? "Transferida"
+                              : "Recebido"
                             : inadimplente
                               ? "Inadimplente"
-                              : "Em aberto"}
+                              : r.origem === "transferencia"
+                                ? "A transferir"
+                                : "Em aberto"}
                       </span>
                       {inadimplente && (
                         <span className="whitespace-nowrap text-[10.5px] font-bold text-[#b3323c]">
@@ -534,8 +704,7 @@ export function TitulosList({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setErro(null);
-                          setBaixando(r);
+                          abrirBaixa(r);
                         }}
                         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-emerald-800"
                       >
@@ -545,6 +714,25 @@ export function TitulosList({
                     )}
                   </td>
                   <td className="relative w-0 p-0">
+                    {/* Na calha: o ⓘ da nota, ou a lixeira do título em
+                        aberto que não vem de nota — nunca os dois, e a
+                        tabela não alarga. */}
+                    {r.origem !== "nf" && !recebido && !cancelado && (
+                      <button
+                        type="button"
+                        title="Excluir este título (criado por engano)"
+                        aria-label="Excluir título"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setErro(null);
+                          setExcluindo(r);
+                        }}
+                        className="absolute left-3 top-1/2 inline-flex h-[30px] w-[30px] -translate-y-1/2 items-center justify-center rounded-full border border-border bg-white text-muted-foreground shadow-sm transition-colors hover:border-california-red hover:text-california-red"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {r.origem === "nf" && (
                     <BotaoInfo
                       className="absolute left-3 top-1/2 h-[30px] w-[30px] -translate-y-1/2 shadow-sm"
                       onClick={(e) => {
@@ -552,6 +740,7 @@ export function TitulosList({
                         setInfo(infoDoTitulo(r));
                       }}
                     />
+                    )}
                   </td>
                 </tr>
               );
@@ -579,7 +768,13 @@ export function TitulosList({
           const alvo = baixando;
           if (!alvo) return;
           startTransition(async () => {
-            const res = await darBaixaTitulo({ titulo_id: alvo.id, ...payload });
+            const res =
+              alvo.origem === "nf"
+                ? await darBaixaTitulo({ titulo_id: alvo.id, ...payload })
+                : await darBaixaRecebimentoAvulso({
+                    conta_avulsa_id: alvo.conta_avulsa_id,
+                    ...payload,
+                  });
             if (!res.ok) {
               setErro(res.message);
               return;
@@ -645,8 +840,13 @@ export function TitulosList({
           if (!alvo) return;
           startTransition(async () => {
             const res = await cancelarBaixa({
-              tipo: "titulo_receber",
-              id: alvo.id,
+              tipo:
+                alvo.origem === "nf"
+                  ? "titulo_receber"
+                  : alvo.origem === "transferencia"
+                    ? "transferencia"
+                    : "avulso",
+              id: alvo.origem === "nf" || alvo.origem === "transferencia" ? alvo.id : alvo.conta_avulsa_id,
               motivo,
             });
             if (!res.ok) {
@@ -656,7 +856,11 @@ export function TitulosList({
             setConferindo(null);
             setErro(null);
             setToast(
-              `Baixa cancelada · NF ${alvo.fat_numero_nf} ${alvo.numero_parcela}/${alvo.total_parcelas} voltou para Em aberto e saiu do extrato.`,
+              alvo.origem === "nf"
+                ? `Baixa cancelada · NF ${alvo.fat_numero_nf} ${alvo.numero_parcela}/${alvo.total_parcelas} voltou para Em aberto e saiu do extrato.`
+                : alvo.origem === "transferencia"
+                  ? `Transferência cancelada · ${alvo.codigo_avulsa ?? ""} voltou para A transferir, e as duas linhas saíram do extrato.`
+                  : `Baixa cancelada · ${alvo.codigo_avulsa ?? "o título"} voltou para Em aberto e saiu do extrato.`,
             );
             router.refresh();
           });
@@ -684,6 +888,102 @@ export function TitulosList({
             );
             router.refresh();
           });
+        }}
+      />
+
+      <ConfirmDialog
+        open={excluindo !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setExcluindo(null);
+            setErro(null);
+          }
+        }}
+        title={
+          excluindo?.origem === "transferencia"
+            ? `Excluir a transferência ${excluindo.codigo_avulsa ?? ""}?`
+            : `Excluir o título ${excluindo?.codigo_avulsa ?? ""}?`
+        }
+        description={
+          excluindo ? (
+            <>
+              {excluindo.fat_descricao} · {formatMoney(excluindo.valor)}. O título sai de
+              Títulos a Receber. Como ainda está em aberto, nada sai do extrato. Fica no
+              log de auditoria quem excluiu e quando.
+              {erro && <span className="mt-2 block font-medium text-california-red">{erro}</span>}
+            </>
+          ) : null
+        }
+        confirmLabel="Excluir"
+        variant="destructive"
+        pending={pending}
+        onConfirm={() => {
+          const alvo = excluindo;
+          if (!alvo || alvo.origem === "nf") return;
+          startTransition(async () => {
+            const res = await excluirTituloReceberAvulso({
+              origem: alvo.origem,
+              id: alvo.origem === "transferencia" ? alvo.id : alvo.conta_avulsa_id,
+            });
+            if (!res.ok) {
+              setErro(res.message);
+              return;
+            }
+            setExcluindo(null);
+            setErro(null);
+            setToast(`${alvo.codigo_avulsa ?? "O título"} excluído de Títulos a Receber.`);
+            router.refresh();
+          });
+        }}
+      />
+
+      <TransferirDialog
+        open={transferindo !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setTransferindo(null);
+            setErro(null);
+          }
+        }}
+        alvo={alvoTransferencia}
+        pending={pending}
+        erro={erro}
+        onConfirmar={(data) => {
+          const alvo = transferindo;
+          if (!alvo) return;
+          startTransition(async () => {
+            const res = await darBaixaTransferencia({ transferencia_id: alvo.id, data });
+            if (!res.ok) {
+              setErro(res.message);
+              return;
+            }
+            setTransferindo(null);
+            setErro(null);
+            setToast(
+              `Transferência registrada · ${formatMoney(alvo.valor)} em ${formatDate(data)}, com as duas linhas no extrato.`,
+            );
+            router.refresh();
+          });
+        }}
+      />
+
+      <RecebimentoAvulsoDialog
+        open={novoAberto}
+        onOpenChange={setNovoAberto}
+        empresas={empresas}
+        regionais={regionais}
+        clientes={clientes}
+        fornecedores={fornecedores}
+        tipos={tipos}
+        subtipos={subtipos}
+        contas={contas}
+        rendimentosLancados={rendimentosLancados}
+        onCriado={(id, abrirBaixaEmSeguida, mensagem) => {
+          setNovoAberto(false);
+          setFiltroStatus("todos");
+          if (abrirBaixaEmSeguida) setBaixarAposCriar(id);
+          else setToast(mensagem);
+          router.refresh();
         }}
       />
 
