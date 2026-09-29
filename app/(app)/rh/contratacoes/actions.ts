@@ -10,7 +10,6 @@ import {
   criarContratacaoSchema,
   motivoTextoSchema,
 } from "@/lib/validations/rh-contratacoes";
-import { gerarContratoPJ } from "@/lib/rh/gerar-contrato-pj";
 import type { Contratacao } from "@/lib/types";
 
 type ActionResult<T = { id: string }> =
@@ -259,6 +258,10 @@ export async function gerarContrato(id: string): Promise<ActionResult> {
 
   let pdfBuffer: Buffer;
   try {
+    // Dynamic import: mantém o pdfkit fora do cold start das outras
+    // actions (anexar/efetivar). Caso contrário, um Unhandled Rejection
+    // do pdfkit (fontes não traceadas) derrubava qualquer POST na rota.
+    const { gerarContratoPJ } = await import("@/lib/rh/gerar-contrato-pj");
     pdfBuffer = await gerarContratoPJ(c);
   } catch (e: any) {
     console.error("[rh.contratacao.gerar]", e?.message);
