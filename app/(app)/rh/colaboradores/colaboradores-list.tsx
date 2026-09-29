@@ -59,7 +59,11 @@ export type RegionalOpcao = { id: string; nome: string; empresa_id: string };
 
 type StatusFiltro = "ativos" | "inativos" | "todos";
 type TipoFiltro = "todos" | TipoContratacao;
-type PendenciaFiltro = "todos" | "criticas" | "parciais" | "completos";
+// A distinção anterior entre "críticas" e "parciais" era teoricamente
+// útil (crítica impede pagamento, parcial só incompleta) mas na prática
+// o RH sempre quer "quem tem algo pendente" — o detalhe de qual campo
+// já aparece no tooltip do selo na linha.
+type PendenciaFiltro = "todos" | "pendentes";
 
 // Sentinel para "todas" (Radix Select não aceita value="").
 const TODAS = "__todas__";
@@ -119,11 +123,7 @@ export function ColaboradoresList({
       } else if (regionalFiltro !== TODAS) {
         if (c.regional_id !== regionalFiltro) return false;
       }
-      if (pendenciaFiltro === "criticas" && c.pendencia_nivel !== "critica")
-        return false;
-      if (pendenciaFiltro === "parciais" && c.pendencia_nivel !== "parcial")
-        return false;
-      if (pendenciaFiltro === "completos" && c.pendencia_nivel !== "completo")
+      if (pendenciaFiltro === "pendentes" && c.pendencia_nivel === "completo")
         return false;
       if (!q) return true;
       return (
@@ -143,8 +143,11 @@ export function ColaboradoresList({
     pendenciaFiltro,
   ]);
 
-  const contagemCriticas = React.useMemo(
-    () => colaboradores.filter((c) => c.pendencia_nivel === "critica").length,
+  // Contagem de qualquer pendência (crítica ou parcial). Usada como
+  // badge do toggle "Só pendentes".
+  const contagemPendentes = React.useMemo(
+    () =>
+      colaboradores.filter((c) => c.pendencia_nivel !== "completo").length,
     [colaboradores],
   );
 
@@ -237,27 +240,11 @@ export function ColaboradoresList({
               ))}
             </SelectContent>
           </Select>
-          <Select
-            value={pendenciaFiltro}
-            onValueChange={(v) => setPendenciaFiltro(v as PendenciaFiltro)}
-          >
-            <SelectTrigger className="h-9 w-[180px] px-2.5 text-[13px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              side="bottom"
-              avoidCollisions={false}
-              className="w-[--radix-select-trigger-width]"
-            >
-              <SelectItem value="todos">Qualquer cadastro</SelectItem>
-              <SelectItem value="criticas">
-                Só pendências críticas
-                {contagemCriticas > 0 && ` (${contagemCriticas})`}
-              </SelectItem>
-              <SelectItem value="parciais">Só cadastros parciais</SelectItem>
-              <SelectItem value="completos">Só cadastros completos</SelectItem>
-            </SelectContent>
-          </Select>
+          <TogglePendencias
+            valor={pendenciaFiltro}
+            onChange={setPendenciaFiltro}
+            contagemPendentes={contagemPendentes}
+          />
         </div>
         <div className="flex items-center gap-2">
           <div className="relative flex items-center">
@@ -459,6 +446,77 @@ export function ColaboradoresList({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Toggle segmentado no lugar do Select de 4 opções que existia antes.
+ * Mesmo formato visual do ChaveMeusTodos (pílula em fundo cinza claro),
+ * mantendo a gramática das listas do sistema consistente.
+ */
+function TogglePendencias({
+  valor,
+  onChange,
+  contagemPendentes,
+}: {
+  valor: PendenciaFiltro;
+  onChange: (v: PendenciaFiltro) => void;
+  contagemPendentes: number;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Filtro de pendências"
+      className="inline-flex flex-none items-center gap-0.5 rounded-full bg-[#f1f0ec] p-[3px]"
+    >
+      <BotaoPill ativo={valor === "todos"} onClick={() => onChange("todos")}>
+        Todos
+      </BotaoPill>
+      <BotaoPill
+        ativo={valor === "pendentes"}
+        onClick={() => onChange("pendentes")}
+      >
+        <AlertCircle className="h-3 w-3" aria-hidden="true" />
+        Só pendentes
+        {contagemPendentes > 0 && (
+          <span
+            className={`ml-0.5 text-[10px] font-medium ${
+              valor === "pendentes"
+                ? "text-california-red"
+                : "text-muted-foreground"
+            }`}
+          >
+            ({contagemPendentes})
+          </span>
+        )}
+      </BotaoPill>
+    </div>
+  );
+}
+
+function BotaoPill({
+  ativo,
+  onClick,
+  children,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={ativo}
+      onClick={onClick}
+      className={
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-[5px] text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/30 " +
+        (ativo
+          ? "bg-white font-semibold text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+          : "bg-transparent font-medium text-[#8a8a8a] hover:text-foreground")
+      }
+    >
+      {children}
+    </button>
   );
 }
 
