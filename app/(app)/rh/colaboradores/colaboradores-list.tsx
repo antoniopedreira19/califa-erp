@@ -21,8 +21,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CadastroStatus, TipoContratacao } from "@/lib/types";
-import type { NivelPendencia } from "@/lib/rh/pendencias";
+import type {
+  NivelPendencia,
+  CampoCritico,
+  CampoParcial,
+} from "@/lib/rh/pendencias";
+import { ROTULO_CRITICO, ROTULO_PARCIAL } from "@/lib/rh/pendencias";
 import { tipoContratacaoLabel } from "@/lib/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export type ColaboradorRow = {
   id: string;
@@ -41,6 +51,8 @@ export type ColaboradorRow = {
   usa_rateio_empresa: boolean;
   pendencia_nivel: NivelPendencia;
   pendencia_total: number;
+  pendencia_criticas: CampoCritico[];
+  pendencia_parciais: CampoParcial[];
 };
 
 export type EmpresaOpcao = { id: string; nome: string };
@@ -352,22 +364,50 @@ export function ColaboradoresList({
                         {c.nome}
                       </Link>
                       {c.pendencia_nivel === "critica" && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full bg-california-red/10 px-2 py-0.5 text-[10px] font-medium text-california-red"
-                          title={`${c.pendencia_total} pendência(s) crítica(s)`}
-                        >
-                          <AlertCircle className="h-3 w-3" />
-                          Pendência
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-california-red/10 px-2 py-0.5 text-[10px] font-medium text-california-red cursor-help"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <AlertCircle className="h-3 w-3" />
+                              Pendência
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            align="start"
+                            className="max-w-[280px] p-0"
+                          >
+                            <PendenciaTooltipConteudo
+                              criticas={c.pendencia_criticas}
+                              parciais={c.pendencia_parciais}
+                            />
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                       {c.pendencia_nivel === "parcial" && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800"
-                          title={`${c.pendencia_total} campo(s) do cadastro em aberto`}
-                        >
-                          <Circle className="h-3 w-3" />
-                          Incompleto
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 cursor-help"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Circle className="h-3 w-3" />
+                              Incompleto
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            align="start"
+                            className="max-w-[280px] p-0"
+                          >
+                            <PendenciaTooltipConteudo
+                              criticas={c.pendencia_criticas}
+                              parciais={c.pendencia_parciais}
+                            />
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                       {c.status === "inativo" && (
                         <span className="text-xs text-muted-foreground">
@@ -422,4 +462,67 @@ function formatarAlocacao(c: ColaboradorRow): string {
   if (c.usa_rateio_empresa) return `${c.empresa_nome} · Hub`;
   if (c.regional_nome) return `${c.empresa_nome} · ${c.regional_nome}`;
   return c.empresa_nome;
+}
+
+/**
+ * Conteúdo do tooltip da pendência: separa críticas (impedem
+ * pagamento) das parciais (cadastro incompleto). Cada campo aparece
+ * com bullet colorido pra digitalização rápida.
+ */
+function PendenciaTooltipConteudo({
+  criticas,
+  parciais,
+}: {
+  criticas: CampoCritico[];
+  parciais: CampoParcial[];
+}) {
+  return (
+    <div className="min-w-[220px] p-3 space-y-2.5">
+      {criticas.length > 0 && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <AlertCircle className="h-3.5 w-3.5 text-california-red" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-california-red">
+              Impedem pagamento
+            </span>
+          </div>
+          <ul className="space-y-1">
+            {criticas.map((campo) => (
+              <li
+                key={campo}
+                className="flex items-center gap-2 text-xs text-foreground"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-california-red shrink-0" />
+                {ROTULO_CRITICO[campo]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {criticas.length > 0 && parciais.length > 0 && (
+        <div className="border-t border-border" />
+      )}
+      {parciais.length > 0 && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Circle className="h-3.5 w-3.5 text-amber-600" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+              Cadastro incompleto
+            </span>
+          </div>
+          <ul className="space-y-1">
+            {parciais.map((campo) => (
+              <li
+                key={campo}
+                className="flex items-center gap-2 text-xs text-foreground"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                {ROTULO_PARCIAL[campo]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
