@@ -4754,3 +4754,26 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **Testado pela tela** no TES-P003/26: TES para TET-P001/26 e de volta a
   TES-P003/26, com um orçamento arquivado junto. As três camadas da trava
   foram testadas no TES-P002/26. Ver a decisão 122, §5.
+
+## ⚠️ Nota de 2026-09-29 (3) — Equipe para GP e produtor, número de projeto que não volta e o "Código anterior" fora do cabeçalho
+
+- **Equipe (e toda lista de pessoas) para quem não é administrador:**
+  - o sintoma: `listActiveMembers` lia `tenant_members` primeiro, e a RLS
+    dela só mostra a própria linha para quem não é administrador. GP e
+    produtor recebiam a lista com uma pessoa só, eles mesmos, e a produção
+    relatou que não conseguia acrescentar nem tirar ninguém da Equipe;
+  - a correção: a lista agora vem da função `membros_ativos_do_tenant`
+    (migration `20260929300002`), que devolve id e nome dos membros ativos
+    só para quem é membro do tenant. O papel de cada um continua só para o
+    administrador;
+  - vale para todas as listas que usam `listActiveMembers`: GPs, produtor,
+    responsável da verba e as demais;
+  - testado como o GP Teste Claude no TES-P003/26: a lista foi de 1 para
+    86 pessoas, acrescentar e tirar o "Financeiro Teste" gravou certo, e a
+    Equipe ficou como estava.
+- **Número de projeto não volta a ser usado:** registro
+  `codigos_de_projeto_usados` (migration `20260929300003`), que o gerador
+  passa a ler. Na troca de cliente, o projeto recupera um número que já
+  foi dele (`codigoQueOProjetoJaTeve`). Ver decisão 122, §6.
+- **"Código anterior"** saiu do cabeçalho do projeto (produção e
+  financeiro). A coluna e a busca ficam.

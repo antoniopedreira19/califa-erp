@@ -21,6 +21,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *      SEBRAE guarda "NOV-0004/26". Contando por cliente, o cliente Novo
  *      não enxerga esses dois, e a sequência dele esbarra neles.
  *
+ * ⚠️ 29/09/2026 (decisão 122): "já usado" inclui o código que um projeto
+ * TEVE — o que saiu da sigla numa troca de cliente e o de projeto apagado
+ * (`codigos_de_projeto_usados`). Sem isso o número voltava a ser usado.
+ *
  * Agora o sequencial é o MAIOR entre (Tiago, 14/09/2026):
  *   - a contagem de projetos do cliente no ano + 1 — o número continua
  *     dizendo quantos projetos o cliente tem, como sempre leu; e
@@ -86,7 +90,7 @@ export async function lerBaseDoSequencial(
   codigoCurto: string,
   ano: string,
 ): Promise<{ qtdDoCliente: number; codigosDaSigla: string[] }> {
-  const [contagemRes, codigosRes] = await Promise.all([
+  const [contagemRes, codigosRes, usadosRes] = await Promise.all([
     supabase
       .from(tabela)
       .select("id", { count: "exact", head: true })
@@ -100,17 +104,29 @@ export async function lerBaseDoSequencial(
       .select("codigo")
       .eq("tenant_id", tenantId)
       .like("codigo", `${codigoCurto}-%/${ano}`),
+    // Decisão 122 (29/09/2026): na produção, conta também todo código que
+    // um projeto JÁ TEVE — o que saiu da sigla numa troca de cliente e o de
+    // projeto apagado. Número usado não volta a ser usado. O financeiro
+    // não troca de cliente (nasce com o job, depois da aprovação).
+    tabela === "projetos"
+      ? supabase
+          .from("codigos_de_projeto_usados")
+          .select("codigo")
+          .eq("tenant_id", tenantId)
+          .like("codigo", `${codigoCurto}-%/${ano}`)
+      : Promise.resolve({ data: [] as { codigo: string }[], error: null }),
   ]);
 
-  const erro = contagemRes.error ?? codigosRes.error;
+  const erro = contagemRes.error ?? codigosRes.error ?? usadosRes.error;
   if (erro) {
     throw new Error(`Falha ao ler os projetos existentes: ${erro.message}`);
   }
   return {
     qtdDoCliente: contagemRes.count ?? 0,
-    codigosDaSigla: ((codigosRes.data ?? []) as { codigo: string }[]).map(
-      (p) => p.codigo,
-    ),
+    codigosDaSigla: [
+      ...((codigosRes.data ?? []) as { codigo: string }[]),
+      ...((usadosRes.data ?? []) as { codigo: string }[]),
+    ].map((p) => p.codigo),
   };
 }
 
