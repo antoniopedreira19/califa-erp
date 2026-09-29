@@ -40,11 +40,12 @@ import {
   enviarProposta,
   renovarLink,
   gerarContrato,
-  anexarContratoAssinado,
+  finalizarAnexoContrato,
   efetivar,
   marcarDesistiu,
   marcarRecusadaPeloRh,
 } from "../actions";
+import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 type ContratacaoRica = Contratacao & {
   empresa: Pick<Empresa, "id" | "nome_fantasia"> | null;
@@ -815,10 +816,54 @@ function UploadContratoButton({
             disabled={pending || !arquivo}
             onClick={() => {
               if (!arquivo) return;
-              const fd = new FormData();
-              fd.set("arquivo", arquivo);
+              // Validação client-side antes de pedir a signed URL, pra
+              // não gastar roundtrip com arquivo inválido.
+              if (arquivo.type !== "application/pdf") {
+                onAcao(async () => ({
+                  ok: false,
+                  message: "O contrato assinado precisa ser PDF.",
+                }));
+                return;
+              }
+              if (arquivo.size > 20 * 1024 * 1024) {
+                onAcao(async () => ({
+                  ok: false,
+                  message: "Arquivo grande demais (limite 20 MB).",
+                }));
+                return;
+              }
               onAcao(async () => {
-                const r = await anexarContratoAssinado(id, fd);
+                // 1) Pede signed URL ao nosso backend (valida sessão/status).
+                const resp = await fetch(
+                  `/api/rh/contratacoes/${id}/upload-url`,
+                  { method: "POST" },
+                );
+                if (!resp.ok) {
+                  return {
+                    ok: false,
+                    message: "Não foi possível iniciar o upload.",
+                  };
+                }
+                const { path, token } = (await resp.json()) as {
+                  path: string;
+                  token: string;
+                };
+                // 2) Sobe o PDF direto pro Supabase — não passa pela Vercel.
+                const sb = createBrowserSupabase();
+                const { error: upErr } = await sb.storage
+                  .from("contratacoes-anexos")
+                  .uploadToSignedUrl(path, token, arquivo, {
+                    contentType: "application/pdf",
+                    upsert: true,
+                  });
+                if (upErr) {
+                  return {
+                    ok: false,
+                    message: "Falha no upload do PDF: " + upErr.message,
+                  };
+                }
+                // 3) Finaliza: server action leve só pra atualizar o DB.
+                const r = await finalizarAnexoContrato(id, path, arquivo.size);
                 if (r.ok) setOpen(false);
                 return { ok: r.ok, message: r.ok ? undefined : r.message };
               });
