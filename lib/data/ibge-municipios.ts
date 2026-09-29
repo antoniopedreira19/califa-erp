@@ -7,12 +7,12 @@
  * decisão de "Opção C" (2026-09-05).
  *
  * A API pública do IBGE não tem SLA — cacheamos os 5.570 municípios em
- * memória por 24h. Uma cold start baixa o JSON (~200KB) uma vez e as
+ * memória por 24h. Uma cold start baixa o JSON (~2,4 MB) uma vez e as
  * demais chamadas leem o array em memória sem I/O.
  */
 
 const IBGE_URL =
-  "https://servicodosdados.ibge.gov.br/api/v1/localidades/municipios";
+  "https://servicodados.ibge.gov.br/api/v1/localidades/municipios";
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
