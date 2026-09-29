@@ -70,6 +70,9 @@ interface Props {
    *  cadastrar nem editar, e a Marca perde o "+" (18/09/2026). */
   podeCadastrarCliente?: boolean;
   podeEditarCliente?: boolean;
+  /** Conteúdo à esquerda de Cancelar/Salvar, na mesma linha do pé. O
+   *  "Editar projeto" põe ali o status e o Arquivar (29/09/2026). */
+  rodapeEsquerda?: React.ReactNode;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -90,6 +93,7 @@ export function ProjetoForm({
   criadorId,
   podeCadastrarCliente = false,
   podeEditarCliente = false,
+  rodapeEsquerda,
   onSuccess,
   onCancel,
 }: Props) {
@@ -532,6 +536,7 @@ export function ProjetoForm({
       )}
 
       <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+        {rodapeEsquerda && <div className="mr-auto">{rodapeEsquerda}</div>}
         {onCancel ? (
           <button
             type="button"
