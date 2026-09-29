@@ -23,6 +23,10 @@ import type {
 } from "@/lib/types";
 import { chaveInfoDoEnvio } from "./chave-info";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import {
+  SELECT_ESTORNO_DE_BAIXA,
+  agruparEstornosPorBaixa,
+} from "@/lib/data/estornos-de-baixa";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +50,7 @@ export default async function ContasReceberPage({
     faturadosRes,
     titulosRes,
     baixasRes,
+    estornosRes,
     contasRes,
     tiposRes,
     subtiposRes,
@@ -103,7 +108,7 @@ export default async function ContasReceberPage({
     supabase
       .from("lancamentos_financeiros")
       .select(`
-        titulo_receber_id,
+        id, titulo_receber_id, conta_bancaria_id,
         conta:contas_bancarias(nome, banco),
         tipo:plano_contas_tipos(codigo, nome),
         subtipo:plano_contas_subtipos(nome)
@@ -111,6 +116,14 @@ export default async function ContasReceberPage({
       .eq("tenant_id", tenantId)
       .eq("origem", "titulo_baixa")
       .not("titulo_receber_id", "is", null),
+    // Estornos das baixas (decisão 120): o popup do olho lista, e a linha
+    // mostra "estornado R$ X".
+    supabase
+      .from("lancamentos_financeiros")
+      .select(SELECT_ESTORNO_DE_BAIXA)
+      .eq("tenant_id", tenantId)
+      .eq("origem", "titulo_estorno")
+      .not("estorno_de_lancamento_id", "is", null),
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -448,21 +461,32 @@ export default async function ContasReceberPage({
   // subtipo e achava que era o centro de custo inteiro.
   const detalheBaixa = new Map<
     string,
-    { conta: string; centro: string; subtipo: string | null }
+    {
+      lancamentoId: string;
+      contaId: string;
+      conta: string;
+      centro: string;
+      subtipo: string | null;
+    }
   >();
   for (const l of (baixasRes.data ?? []) as unknown as Array<{
+    id: string;
     titulo_receber_id: string | null;
+    conta_bancaria_id: string;
     conta: { nome: string; banco: string } | null;
     tipo: { codigo: string; nome: string } | null;
     subtipo: { nome: string } | null;
   }>) {
     if (!l.titulo_receber_id) continue;
     detalheBaixa.set(l.titulo_receber_id, {
+      lancamentoId: l.id,
+      contaId: l.conta_bancaria_id,
       conta: l.conta ? `${l.conta.nome} · ${l.conta.banco}` : "—",
       centro: l.tipo ? `${l.tipo.codigo} · ${l.tipo.nome}` : "—",
       subtipo: l.subtipo?.nome ?? null,
     });
   }
+  const estornosPorBaixa = agruparEstornosPorBaixa(estornosRes.data);
 
   const titulosRows: TituloRow[] = ((titulosRes.data ?? []) as unknown as Array<{
     id: string;
@@ -545,6 +569,9 @@ export default async function ContasReceberPage({
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
       subtipo_nome: baixa?.subtipo ?? null,
+      baixa_lancamento_id: baixa?.lancamentoId ?? null,
+      baixa_conta_id: baixa?.contaId ?? null,
+      estornos: baixa ? estornosPorBaixa.get(baixa.lancamentoId) ?? [] : [],
     };
   });
 

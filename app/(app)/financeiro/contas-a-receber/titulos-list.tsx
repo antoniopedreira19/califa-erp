@@ -15,9 +15,10 @@
  *
  * A aba dá baixa e, desde 31/08/2026, deixa CONFERIR a baixa já feita —
  * o botão de olho da linha recebida abre o `BaixaRegistradaDialog`, o
- * mesmo de Títulos a Pagar, com o estorno em dois tempos lá dentro. É a
- * simetria que o Tiago pediu. Cancelamento de NF continua sem porta aqui
- * (decisão 016 §9).
+ * mesmo de Títulos a Pagar. Desde 29/09/2026 (decisão 120) ele tem as
+ * duas ações: estornar (transação nova, receita negativa) e cancelar a
+ * baixa (o lançamento sai do extrato e o título volta a Em aberto).
+ * Cancelamento de NF continua sem porta aqui (decisão 016 §9).
  *
  * A coluna Ação da linha recebida é SÓ o olho (08/09/2026). O bloco
  * "Conciliação · conta · centro" que morava ali comia largura de tabela
@@ -42,7 +43,12 @@ import {
 import {
   BaixaRegistradaDialog,
   type BaixaRegistradaAlvo,
+  type EstornoDaBaixa,
 } from "@/components/financeiro/baixa-registrada-dialog";
+import {
+  cancelarBaixa,
+  estornarValorDaBaixa,
+} from "../actions-baixa-registrada";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import type { InfoJob } from "./faturar-drawer";
 import type {
@@ -61,7 +67,6 @@ import {
 } from "./editar-previsao-dialog";
 import {
   darBaixaTitulo,
-  estornarBaixaTitulo,
   repactuarPrevisaoRecebimento,
 } from "./actions";
 
@@ -95,6 +100,14 @@ export interface TituloRow {
   conta_nome: string | null;
   centro_nome: string | null;
   subtipo_nome: string | null;
+  /** O lançamento da baixa viva e a conta dele — o estorno se pendura
+   *  no primeiro e sugere a segunda. Nulos no título em aberto. */
+  baixa_lancamento_id: string | null;
+  baixa_conta_id: string | null;
+  /** Estornos registrados sobre a baixa viva (decisão 120). Os estornos
+   *  antigos, que desfaziam a baixa inteira, não entram: apontam para um
+   *  lançamento que já não é a baixa do título. */
+  estornos: EstornoDaBaixa[];
 }
 
 interface Props {
@@ -260,8 +273,14 @@ export function TitulosList({
         subtipoNome: conferindo.subtipo_nome,
         dataPagamento: conferindo.pago_em,
         vencOriginal: conferindo.data_vencimento,
-        // Recebimento nunca é no cartão: o estorno gera o reverso na conta.
+        // Recebimento nunca é no cartão, nem pagamento de fatura.
         viaCartao: false,
+        ehFaturaDeCartao: false,
+        baixaLancamentoId: conferindo.baixa_lancamento_id,
+        valorMovimentado: conferindo.valor,
+        contaBancariaId: conferindo.baixa_conta_id,
+        estornos: conferindo.estornos,
+        semEstorno: null,
       }
     : null;
 
@@ -436,7 +455,20 @@ export function TitulosList({
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
-                    {formatMoney(r.valor)}
+                    <div className="flex flex-col items-end">
+                      <span>{formatMoney(r.valor)}</span>
+                      {r.estornos.length > 0 && (
+                        <span className="text-[10.5px] font-medium text-rose-700">
+                          estornado{" "}
+                          {formatMoney(
+                            r.estornos.reduce(
+                              (acc, e) => acc + Math.round(e.valor * 100),
+                              0,
+                            ) / 100,
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                     {r.numero_parcela}/{r.total_parcelas}
@@ -483,7 +515,7 @@ export function TitulosList({
                             tabela para repetir o que o olho já mostra. */}
                         <button
                           type="button"
-                          title="Ver a baixa registrada — e estornar, se preciso"
+                          title="Ver a baixa registrada — estornar ou cancelar, se preciso"
                           aria-label="Ver baixa registrada"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -600,15 +632,19 @@ export function TitulosList({
           }
         }}
         alvo={alvoConferencia}
+        contas={contas
+          .filter((c) => c.ativo)
+          .map((c) => ({ id: c.id, nome: c.nome, banco: c.banco }))}
         pending={pending}
         erro={erro}
         sentido="receber"
-        onEstornar={(motivo) => {
+        onCancelar={(motivo) => {
           const alvo = conferindo;
           if (!alvo) return;
           startTransition(async () => {
-            const res = await estornarBaixaTitulo({
-              titulo_id: alvo.id,
+            const res = await cancelarBaixa({
+              tipo: "titulo_receber",
+              id: alvo.id,
               motivo,
             });
             if (!res.ok) {
@@ -618,7 +654,31 @@ export function TitulosList({
             setConferindo(null);
             setErro(null);
             setToast(
-              `Baixa estornada · ${formatMoney(alvo.valor)} voltou para Em aberto.`,
+              `Baixa cancelada · NF ${alvo.fat_numero_nf} ${alvo.numero_parcela}/${alvo.total_parcelas} voltou para Em aberto e saiu do extrato.`,
+            );
+            router.refresh();
+          });
+        }}
+        onEstornar={(dados) => {
+          const alvo = conferindo;
+          if (!alvo?.baixa_lancamento_id) return;
+          const lancamentoId = alvo.baixa_lancamento_id;
+          startTransition(async () => {
+            const res = await estornarValorDaBaixa({
+              lancamento_id: lancamentoId,
+              data: dados.data,
+              conta_bancaria_id: dados.contaBancariaId,
+              valor: dados.valor,
+              motivo: dados.motivo,
+            });
+            if (!res.ok) {
+              setErro(res.message);
+              return;
+            }
+            setConferindo(null);
+            setErro(null);
+            setToast(
+              `Estorno registrado · ${formatMoney(dados.valor)} saiu da conta em ${formatDate(dados.data)}. O título continua recebido.`,
             );
             router.refresh();
           });

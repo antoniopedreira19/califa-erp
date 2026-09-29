@@ -14,6 +14,11 @@
  * linha abre o `BaixaRegistradaDialog` com tudo aquilo, e lá o centro de
  * custo e o subtipo ocupam linhas próprias. Mesmo movimento feito na aba
  * Cartão e em Contas a Receber, no mesmo dia.
+ *
+ * Desde 29/09/2026 (decisão 120) o popup do olho tem duas ações: estornar
+ * (transação nova, despesa negativa, o título continua pago) e cancelar a
+ * baixa (o lançamento sai do extrato e o título volta para A pagar). A
+ * linha com estorno mostra "estornado R$ X" sob o valor.
  */
 
 import * as React from "react";
@@ -58,14 +63,18 @@ import { lerCompetencia, rotuloCurto } from "@/lib/cartoes/competencia";
 import {
   BaixaRegistradaDialog,
   type BaixaRegistradaAlvo,
+  type EstornoDaBaixa,
 } from "@/components/financeiro/baixa-registrada-dialog";
+import {
+  cancelarBaixa,
+  estornarValorDaBaixa,
+} from "../actions-baixa-registrada";
 import {
   EditarDataPagamentoDialog,
   type EditarDataAlvo,
 } from "./editar-data-pagamento-dialog";
 import {
   darBaixaTitulo,
-  estornarBaixaTitulo,
   repactuarDataPagamento,
 } from "./actions-titulos";
 
@@ -119,6 +128,16 @@ export interface TituloRow {
   conta_nome: string | null;
   centro_nome: string | null;
   subtipo_nome: string | null;
+  /**
+   * O lançamento da baixa viva e a conta dele (decisão 120): o estorno se
+   * pendura no primeiro e sugere a segunda. Nulos no título a pagar e na
+   * fatura de cartão, que tem duas pernas e não tem estorno.
+   */
+  baixa_lancamento_id: string | null;
+  baixa_conta_id: string | null;
+  /** Estornos registrados sobre a baixa viva. Obrigatório: quem não tem
+   *  manda `[]` explícito. */
+  estornos_da_baixa: EstornoDaBaixa[];
   /**
    * Forma de pagamento da conta avulsa ou recorrência.
    * Parcelas de PP ficam null (PP não tem forma_pagamento ainda).
@@ -186,6 +205,22 @@ export interface TituloRow {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Por que a baixa desta linha não aceita estorno (decisão 120). O estorno
+ * é dinheiro que volta para uma conta bancária: a fatura de cartão não tem
+ * (cancelar é o caminho), e o item pago no cartão já tem o "Estornar
+ * compra", na fatura.
+ */
+function motivoSemEstorno(r: TituloRow): string | null {
+  if (r.origem === "fatura_cartao") {
+    return "Pagamento de fatura não tem estorno. Se foi lançado errado, cancele a baixa.";
+  }
+  if (r.forma_pagamento === "cartao_credito") {
+    return "Pago no cartão: para devolver, use Estornar compra, na fatura do cartão.";
+  }
+  return null;
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -518,6 +553,12 @@ export function TitulosPagarList({
         dataPagamento: conferindo.data_pagamento,
         vencOriginal: conferindo.venc_original,
         viaCartao: conferindo.forma_pagamento === "cartao_credito",
+        ehFaturaDeCartao: conferindo.origem === "fatura_cartao",
+        baixaLancamentoId: conferindo.baixa_lancamento_id,
+        valorMovimentado: conferindo.valor,
+        contaBancariaId: conferindo.baixa_conta_id,
+        estornos: conferindo.estornos_da_baixa,
+        semEstorno: motivoSemEstorno(conferindo),
       }
     : null;
 
@@ -858,6 +899,17 @@ export function TitulosPagarList({
                   )}>
                     {/* Despesa negativa (decisão 081, 8a). */}
                     {r.origem === "pp_devolucao_verba" ? `−${formatMoney(r.valor)}` : formatMoney(r.valor)}
+                    {r.estornos_da_baixa.length > 0 && (
+                      <span className="block text-[10.5px] font-medium text-rose-700">
+                        estornado{" "}
+                        {formatMoney(
+                          r.estornos_da_baixa.reduce(
+                            (acc, e) => acc + Math.round(e.valor * 100),
+                            0,
+                          ) / 100,
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="px-2 py-3 text-center font-mono text-xs text-muted-foreground">
                     {r.parcela_numero}/{r.parcela_total}
@@ -894,7 +946,7 @@ export function TitulosPagarList({
                     {pago ? (
                       <button
                         type="button"
-                        title="Ver a baixa registrada — e estornar, se preciso"
+                        title="Ver a baixa registrada — estornar ou cancelar, se preciso"
                         aria-label="Ver baixa registrada"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -996,14 +1048,16 @@ export function TitulosPagarList({
           }
         }}
         alvo={alvoConferencia}
+        // A página já traz só contas ativas e sem cartão.
+        contas={contas.map((c) => ({ id: c.id, nome: c.nome, banco: c.banco }))}
         pending={pending}
         erro={erroAcao}
-        onEstornar={(motivo) => {
+        onCancelar={(motivo) => {
           const alvo = conferindo;
           if (!alvo) return;
           startTransition(async () => {
-            const res = await estornarBaixaTitulo({
-              origem: alvo.origem,
+            const res = await cancelarBaixa({
+              tipo: alvo.origem,
               id: alvo.id,
               motivo,
             });
@@ -1014,7 +1068,33 @@ export function TitulosPagarList({
             setConferindo(null);
             setErroAcao(null);
             setToast(
-              `Baixa estornada · ${formatMoney(alvo.valor)} devolvido para "A pagar".`,
+              alvo.origem === "fatura_cartao"
+                ? `Pagamento cancelado · a fatura ${alvo.origem_label} voltou para Fechada.`
+                : `Baixa cancelada · ${formatMoney(alvo.valor)} voltou para "A pagar" e saiu do extrato.`,
+            );
+            router.refresh();
+          });
+        }}
+        onEstornar={(dados) => {
+          const alvo = conferindo;
+          if (!alvo?.baixa_lancamento_id) return;
+          const lancamentoId = alvo.baixa_lancamento_id;
+          startTransition(async () => {
+            const res = await estornarValorDaBaixa({
+              lancamento_id: lancamentoId,
+              data: dados.data,
+              conta_bancaria_id: dados.contaBancariaId,
+              valor: dados.valor,
+              motivo: dados.motivo,
+            });
+            if (!res.ok) {
+              setErroAcao(res.message);
+              return;
+            }
+            setConferindo(null);
+            setErroAcao(null);
+            setToast(
+              `Estorno registrado · ${formatMoney(dados.valor)} ${alvo.origem === "pp_devolucao_verba" ? "saiu da" : "voltou para a"} conta em ${formatDate(dados.data)}. O título continua pago.`,
             );
             router.refresh();
           });

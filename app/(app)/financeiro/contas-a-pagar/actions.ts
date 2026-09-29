@@ -17,7 +17,8 @@
  * ⚠️ Atualização de 18/08/2026: `estornarBaixaPP` SAIU deste arquivo.
  * O estorno passou a ser por PARCELA (decisão do Tiago), e mora em
  * `estornarBaixaParcela`, em `actions-titulos.ts`, ao lado da baixa que
- * ele reverte.
+ * ele reverte. Desde 29/09/2026 (decisão 120) nem ela existe mais:
+ * cancelar e estornar baixa são `../actions-baixa-registrada.ts`.
  *
  * `rejeitarPedidoCompraFinanceiro` e `reprovarPPAprovada` seguem em uso.
  */
@@ -290,8 +291,9 @@ export async function darBaixaAvulsaInline(input: unknown): Promise<Result> {
  * aprovação é por PP". Manter a versão antiga exposta era um risco real
  * — ela devolvia a PP a `aprovada` sem limpar `pago_em` das parcelas.
  *
- * A substituta é `estornarBaixaParcela`, em `actions-titulos.ts`, ao
- * lado da baixa que ela reverte. A RPC `estornar_baixa_pp` continua no
+ * A substituta foi `estornarBaixaParcela`, em `actions-titulos.ts` —
+ * que também saiu, em 29/09/2026, para `cancelarBaixa` em
+ * `../actions-baixa-registrada.ts` (decisão 120). A RPC `estornar_baixa_pp` continua no
  * banco, desarmada, levantando exceção com o caminho novo
  * (`20260818000002_estorno_por_parcela.sql`).
  */
