@@ -602,6 +602,48 @@ function VisaoDados({
   const [tipoConta, setTipoConta] = React.useState<string>("");
   const [pixTipo, setPixTipo] = React.useState<string>("");
 
+  // Endereço — controlled pra permitir autopreenchimento via ViaCEP.
+  const [logradouro, setLogradouro] = React.useState("");
+  const [bairro, setBairro] = React.useState("");
+  const [cidade, setCidade] = React.useState("");
+  const [uf, setUf] = React.useState("");
+  const [buscandoCep, setBuscandoCep] = React.useState(false);
+  const [erroCep, setErroCep] = React.useState<string | null>(null);
+
+  // Autopreenche endereço quando o CEP completa 8 dígitos. Aborta a
+  // requisição anterior se o CEP mudar de novo antes de responder.
+  React.useEffect(() => {
+    if (cep.length !== 8) {
+      setErroCep(null);
+      return;
+    }
+    const controller = new AbortController();
+    setBuscandoCep(true);
+    setErroCep(null);
+    fetch(`https://viacep.com.br/ws/${cep}/json/`, {
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.erro) {
+          setErroCep("CEP não encontrado — preencha o endereço manualmente.");
+          return;
+        }
+        setLogradouro(data.logradouro ?? "");
+        setBairro(data.bairro ?? "");
+        setCidade(data.localidade ?? "");
+        setUf((data.uf ?? "").toUpperCase());
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setErroCep("Não conseguimos buscar o CEP — preencha manualmente.");
+      })
+      .finally(() => {
+        setBuscandoCep(false);
+      });
+    return () => controller.abort();
+  }, [cep]);
+
   const ehPJ =
     c.tipo_contratacao === "pj" || c.tipo_contratacao === "clt_recibo";
 
@@ -614,6 +656,10 @@ function VisaoDados({
     fd.set("cnpj", cnpj);
     fd.set("telefone", telefone);
     fd.set("cep", cep);
+    fd.set("logradouro", logradouro);
+    fd.set("bairro", bairro);
+    fd.set("cidade", cidade);
+    fd.set("uf", uf);
     fd.set("data_nascimento", dataNascimento);
     if (tipoConta) fd.set("tipo_conta", tipoConta);
     if (pixTipo) fd.set("pix_tipo", pixTipo);
@@ -751,10 +797,18 @@ function VisaoDados({
         <h2 className="text-sm font-semibold uppercase tracking-wider text-california-red">
           Endereço
         </h2>
+        <p className="text-xs text-muted-foreground -mt-3">
+          Digite o CEP e preenchemos o restante. Você pode ajustar depois.
+        </p>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="cep">CEP</Label>
+            <Label htmlFor="cep">
+              CEP {buscandoCep && <span className="text-xs text-muted-foreground">— buscando...</span>}
+            </Label>
             <MaskedInput id="cep" mask="cep" required onDigitsChange={setCep} />
+            {erroCep && (
+              <p className="text-xs text-amber-700">{erroCep}</p>
+            )}
             {fieldErrors.cep?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
                 {m}
@@ -769,6 +823,9 @@ function VisaoDados({
               required
               maxLength={200}
               placeholder="Ex.: Av. da França"
+              value={logradouro}
+              onChange={(e) => setLogradouro(e.target.value)}
+              disabled={buscandoCep}
             />
             {fieldErrors.logradouro?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
@@ -802,7 +859,15 @@ function VisaoDados({
           </div>
           <div className="space-y-2">
             <Label htmlFor="bairro">Bairro</Label>
-            <Input id="bairro" name="bairro" required maxLength={100} />
+            <Input
+              id="bairro"
+              name="bairro"
+              required
+              maxLength={100}
+              value={bairro}
+              onChange={(e) => setBairro(e.target.value)}
+              disabled={buscandoCep}
+            />
             {fieldErrors.bairro?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
                 {m}
@@ -811,7 +876,15 @@ function VisaoDados({
           </div>
           <div className="space-y-2">
             <Label htmlFor="cidade">Cidade</Label>
-            <Input id="cidade" name="cidade" required maxLength={100} />
+            <Input
+              id="cidade"
+              name="cidade"
+              required
+              maxLength={100}
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+              disabled={buscandoCep}
+            />
             {fieldErrors.cidade?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
                 {m}
@@ -827,6 +900,9 @@ function VisaoDados({
               maxLength={2}
               placeholder="Ex.: BA"
               className="uppercase"
+              value={uf}
+              onChange={(e) => setUf(e.target.value.toUpperCase())}
+              disabled={buscandoCep}
             />
             {fieldErrors.uf?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
