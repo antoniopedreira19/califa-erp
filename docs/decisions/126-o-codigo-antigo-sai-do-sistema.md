@@ -81,7 +81,7 @@ O cabeçalho do projeto já não o mostrava desde a decisão 122, §6.
 | **Descritivo do TES-1003/26** | "saldo do JOB-0032" vira "saldo do TES-1001/26". |
 | **Histórico de importação** (`orcamento_importacoes`, 5 linhas) e **nome da versão** "Importada de interna-TES-0001_26-01-v3.xlsx" | O código antigo do orçamento no nome do arquivo vira o **nome** do orçamento, como a exportação nomeia o arquivo desde a decisão 121 (`interna-Orcamento de Teste-v3.xlsx`). Trocar pelo código novo poria o código do orçamento na tela, o que a 121 proíbe. |
 | **Registro de números usados** (`codigos_de_projeto_usados`, 34 linhas no formato antigo) | Passam ao formato com "P" (`AMB-0003/26` → `AMB-P003/26`), com o mesmo número e o mesmo projeto. O gerador já lia as duas formas como o mesmo número, então nenhum número volta a ser usado. Três projetos tinham um código antigo de outra sigla (`NOV-0001/26`, `NOV-0003/26`, `0-0002/26`); convertido, esse número passa a ser "dele" para a decisão 122, §6. Os três têm orçamento com job, e o cliente deles já não muda. |
-| **`codigo_anterior`** em projetos (16), orçamentos (39), projetos do financeiro (6) e jobs (23) | Esvaziado já; a coluna sai depois que as outras frentes atualizarem o código (ver §8). |
+| **`codigo_anterior`** em projetos (16), orçamentos (39), projetos do financeiro (6) e jobs (23) | Esvaziado pela `20260929700001`; as colunas saíram do banco no mesmo dia, pela `20260929700002` (ver §8 e §10). |
 | **Storage** | Apagados os 63 PDFs de PP soltos, os 4 documentos por parcela das PPs acima e as 23 planilhas importadas. |
 
 ## 6. O que fica, e por quê
@@ -114,9 +114,17 @@ O cabeçalho do projeto já não o mostrava desde a decisão 122, §6.
 
 ## 8. As colunas `codigo_anterior`
 
-Saem do banco depois que o código novo estiver publicado e as outras
-frentes em andamento tiverem atualizado seus worktrees. Até lá, código que
-ainda lê a coluna recebe vazio, sem quebrar.
+Saíram do banco em 29/09/2026 (`20260929700002`), com autorização do
+Tiago, depois que o código que já não as lia (`f6a93b7d`) estava em
+produção. As sessões ativas foram avisadas antes; um worktree num commit
+anterior precisa trazer o main, porque as consultas antigas pedem a coluna.
+
+O commit da remoção (`0f457c2c`) derrubou o build do Vercel: o
+`5-reconferir.ts` tinha um erro de tipo, e a pasta `scripts/` entra no
+`tsc` do build (`**/*.ts` no tsconfig). A frente de baixas avisou, e a
+correção saiu minutos depois (`ae7cf912`). A produção ficou em `f6a93b7d`
+nesse intervalo. Script novo em `scripts/` passa por `npm run typecheck`
+antes do push, como o resto do código.
 
 ## 9. Cópia de segurança
 

@@ -6230,8 +6230,8 @@ estendido a Contas a Receber em 31/08.**
 - **Ficha do job** (conferência e Visualizar Jobs): o "Código anterior"
   saiu.
 - **`projetos_financeiro.codigo_anterior`** foi esvaziado (migration
-  `20260929700001`) e saiu de `ProjetoFinanceiroOpcao`. A coluna sai do banco
-  depois que as outras frentes atualizarem o código.
+  `20260929700001`) e saiu de `ProjetoFinanceiroOpcao`. A coluna saiu do banco
+  no mesmo dia (migration `20260929700002`).
 - **PDF da PP** que o financeiro abre: só "Job: <código>", sem projeto. As
   47 PPs existentes foram refeitas, com o mesmo número, a mesma data de
   emissão e a mesma foto bancária (ver HANDOFF_JOBS).
