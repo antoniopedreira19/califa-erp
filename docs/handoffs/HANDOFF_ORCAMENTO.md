@@ -4729,3 +4729,28 @@ aplicada na hora combinada com a frente do Antonio, junto da
   para não mexer nos imports.
 - **Nenhuma migration.** O código segue em `orcamentos.codigo`, e a
   importação casa pelo `orc:<uuid>` oculto.
+
+## ⚠️ Nota de 2026-09-29 (2) — o cliente do projeto só muda antes da aprovação, e os códigos acompanham (decisão 122)
+
+- **Trava:** com orçamento aprovado ou com job (a régua do arquivar, agora
+  em `projetoTemAprovacao`, em `orcamentos/actions.ts`), o campo Cliente do
+  "Editar projeto" trava (`ProjetoForm.clienteTravado`, calculado na página
+  do projeto). O servidor recusa, e o banco também, pelo gatilho
+  `trg_projetos_b_guarda_cliente`.
+- **Troca antes da aprovação:** `atualizarProjeto` chama a função interna
+  `trocarClienteDoProjeto`, que:
+  - gera o código com `gerarCodigoProjeto`, só quando a sigla muda;
+  - chama a RPC `trocar_cliente_do_projeto`, que troca cliente, marca e
+    código do projeto e o prefixo dos orçamentos numa transação só, **antes**
+    do resto da gravação;
+  - registra `projeto.codigo_trocado` e `orcamento.codigo_trocado`.
+- **Orçamento arquivado:** `orcamentos_guarda_arquivado` passou a aceitar a
+  troca só do código, para o arquivado acompanhar o projeto.
+- **Migration:** `20260929300001`, aplicada e conferida:
+  - gatilho no lugar;
+  - RPC `security invoker`, com execução para `authenticated` e nada para
+    `anon`;
+  - guarda do arquivado com a exceção.
+- **Testado pela tela** no TES-P003/26: TES para TET-P001/26 e de volta a
+  TES-P003/26, com um orçamento arquivado junto. As três camadas da trava
+  foram testadas no TES-P002/26. Ver a decisão 122, §5.

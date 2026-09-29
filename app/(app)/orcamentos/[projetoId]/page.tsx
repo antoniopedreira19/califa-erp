@@ -218,7 +218,13 @@ export default async function ProjetoDetailPage({
   const versoesPorOrcamento = new Map<string, VersaoLeve[]>();
   const jobsPorOrcamento = new Map<
     string,
-    { id: string; codigo: string; status: JobStatus; created_at: string }[]
+    {
+      id: string;
+      codigo: string;
+      status: JobStatus;
+      created_at: string;
+      aberto_no_financeiro: boolean;
+    }[]
   >();
   // Valor do job por orçamento: versão APROVADA quando existir; senão a
   // mais recente (número em negociação). Sem versão → null (travessão).
@@ -246,7 +252,7 @@ export default async function ProjetoDetailPage({
         .eq("tenant_id", session.activeTenant.id),
       supabase
         .from("jobs")
-        .select("id, codigo, orcamento_id, status, created_at")
+        .select("id, codigo, orcamento_id, status, created_at, data_abertura_financeiro")
         .in("orcamento_id", orcamentoIds)
         .eq("tenant_id", session.activeTenant.id),
     ]);
@@ -266,6 +272,7 @@ export default async function ProjetoDetailPage({
         codigo: j.codigo,
         status: j.status as JobStatus,
         created_at: j.created_at,
+        aberto_no_financeiro: j.data_abertura_financeiro !== null,
       });
       jobsPorOrcamento.set(j.orcamento_id, atuais);
     }
@@ -379,6 +386,15 @@ export default async function ProjetoDetailPage({
   // "Importar" e "Novo orçamento"; ficam o Exportar, a visão agregada e o
   // Reativar do aviso.
   const projetoArquivado = projeto.status === "arquivado";
+
+  // Decisão 122: com orçamento aprovado ou job, o cliente do projeto não
+  // muda mais. A mesma régua do arquivar (`projetoTemAprovacao`) — o
+  // cancelado antes da abertura não conta; o banco recusa por trás.
+  const clienteTravado =
+    orcamentosBrutos.some((o) => o.status === "aprovado" || o.status === "job_criado") ||
+    Array.from(jobsPorOrcamento.values()).some((jobs) =>
+      jobs.some((j) => j.status !== "cancelado" || j.aberto_no_financeiro),
+    );
   const temOrcamentoAtivo = orcamentos.some((o) => !o.arquivado);
 
   return (
@@ -425,6 +441,7 @@ export default async function ProjetoDetailPage({
               responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
               equipeSelecionada={equipeManualDoProjeto}
               produtoresDosOrcamentos={produtoresDosOrcamentos}
+              clienteTravado={clienteTravado}
             />
             )}
             {/* Importar e Exportar logo depois de "Editar projeto", como no

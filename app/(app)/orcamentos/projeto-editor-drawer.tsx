@@ -35,6 +35,9 @@ interface Props {
   equipeSelecionada?: string[];
   /** Produtores dos orçamentos do projeto — entram na Equipe travados. */
   produtoresDosOrcamentos?: string[];
+  /** Decisão 122: o projeto já tem orçamento aprovado ou job, e o
+   *  cliente não muda mais. */
+  clienteTravado: boolean;
   /** `cadastros.clientes.editar` — ver o ProjetoForm. */
   podeCadastrarCliente?: boolean;
   podeEditarCliente?: boolean;
@@ -52,6 +55,7 @@ export function ProjetoEditorDrawer({
   responsaveisSelecionados,
   equipeSelecionada,
   produtoresDosOrcamentos,
+  clienteTravado,
   podeCadastrarCliente,
   podeEditarCliente,
 }: Props) {
@@ -166,6 +170,7 @@ export function ProjetoEditorDrawer({
             produtoresDosOrcamentos={produtoresDosOrcamentos}
             criadorId={projeto.created_by ?? undefined}
             rodapeEsquerda={statusEArquivar}
+            clienteTravado={clienteTravado}
             onSuccess={() => setOpen(false)}
             onCancel={() => setOpen(false)}
           />

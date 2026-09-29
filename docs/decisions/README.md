@@ -140,6 +140,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 118 | [O orçamento se arquiva, e o arquivado (orçamento ou projeto) é só leitura](118-orcamento-se-arquiva-e-arquivado-e-so-leitura.md) | 2026-09-28 |
 | 119 | [O projeto do financeiro nasce com o job, tem nome único e se renomeia pelo lápis](119-projeto-do-financeiro-nasce-com-o-job-e-tem-nome-unico.md) | 2026-09-28 |
 | 121 | [O código do orçamento é só da base de dados; na tela, o código é o do job](121-o-codigo-do-orcamento-e-so-da-base-de-dados.md) | 2026-09-29 |
+| 122 | [O cliente do projeto só muda antes da aprovação, e os códigos acompanham](122-cliente-do-projeto-so-muda-antes-da-aprovacao.md) | 2026-09-29 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -152,4 +153,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 122.** (091 e 092 existem na pasta e ainda não estão nesta tabela. A 120 está reservada para "Cancelar e estornar baixa", da frente do financeiro, ainda sem commit em 29/09/2026.)
+**Próximo número livre: 124.** (091 e 092 existem na pasta e ainda não estão nesta tabela. Em 29/09/2026 estavam reservadas, ainda sem commit: a 120, para "Cancelar e estornar baixa", e a 123, para o envio para faturamento em notas fiscais.)
