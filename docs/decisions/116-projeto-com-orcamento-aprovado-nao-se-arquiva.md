@@ -63,8 +63,10 @@ o corpo do drawer, atrás do diálogo.
 
 - Arquivar só muda `projetos.status` para `arquivado` e grava
   `projeto.arquivado` na auditoria. Nada é apagado.
-- **O projeto arquivado não fica travado.** Quem chega nele pelo filtro
+- ~~**O projeto arquivado não fica travado.** Quem chega nele pelo filtro
   "arquivados" ainda cria orçamento, aprova versão e envia para abertura.
   Com esta regra isso pesa mais: dá para aprovar um rascunho de projeto já
-  arquivado. Levado ao Tiago em 28/09/2026, sem decisão ainda.
+  arquivado. Levado ao Tiago em 28/09/2026, sem decisão ainda.~~ ⚠️ Revisto
+  no mesmo dia pela decisão 118: projeto arquivado é só leitura, na tela e
+  no banco. O banco também confere a regra desta decisão ao arquivar.
 - Quem arquiva: `orcamentos.editar` (administrador, GP, produtor).

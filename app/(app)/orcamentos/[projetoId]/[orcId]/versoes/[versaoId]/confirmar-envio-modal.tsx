@@ -33,7 +33,7 @@ export function ConfirmarEnvioModal({
   pending,
   somenteLeitura = false,
   reenvio = false,
-  orcamentoCodigo,
+  orcamentoNome,
   linhas,
   valorTotal,
   faturamentoPrevisto,
@@ -54,7 +54,7 @@ export function ConfirmarEnvioModal({
   /** Job devolvido pelo financeiro sendo reenviado (decisão 057): o
    *  texto diz que ele volta à fila no mesmo código, não que é criado. */
   reenvio?: boolean;
-  orcamentoCodigo: string;
+  orcamentoNome: string;
   linhas: { rotulo: string; valor: string; mono?: boolean }[];
   /** Valor do Job — o que vai para `jobs.valor_total`. */
   valorTotal: number;
@@ -92,9 +92,9 @@ export function ConfirmarEnvioModal({
             {somenteLeitura ? (
               <>
                 Job já enviado para abertura. Estes são os dados gravados a
-                partir de{" "}
+                partir do orçamento{" "}
                 <strong className="font-semibold text-foreground">
-                  {orcamentoCodigo}
+                  {orcamentoNome}
                 </strong>
                 .
               </>
@@ -105,7 +105,7 @@ export function ConfirmarEnvioModal({
                   : "O job será criado e enviado ao financeiro. "}
                 Nome e datas alterados aqui serão gravados no orçamento{" "}
                 <strong className="font-semibold text-foreground">
-                  {orcamentoCodigo}
+                  {orcamentoNome}
                 </strong>
                 .
               </>

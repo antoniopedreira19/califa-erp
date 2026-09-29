@@ -26,9 +26,6 @@ import { grupoDoPedido } from "@/lib/data/saves";
 export interface JobNaFila {
   id: string;
   codigo: string;
-  /** O `JOB-NNNN` de antes da decisão 114 — a busca da fila também olha
-   *  ele. Nulo nos jobs criados depois da troca. */
-  codigo_anterior: string | null;
   nome: string;
   valor_total: number | null;
   /** O que a California emite nota — difere do valor total pelos custos
@@ -65,7 +62,9 @@ export interface JobNaFila {
   regional_nome: string | null;
   responsavel_nome: string | null;
   produtor_nome: string | null;
-  orcamento_codigo: string | null;
+  /** Nome do orçamento de origem. Era o código até 29/09/2026: o código do
+   *  orçamento é só da base de dados e não serve ao controle interno. */
+  orcamento_nome: string | null;
   /**
    * Categoria do job, herdada do orçamento de origem (categorias_dominio,
    * escopo 'orcamento'). Na fila, `jobs.categoria_id` ainda é null — quem
@@ -270,7 +269,7 @@ export interface TotaisPlanilhaJob {
 }
 
 const SELECT_JOB_FILA =
-  "id, codigo, codigo_anterior, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
+  "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
   "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, conta_impostos_id, " +
   // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
@@ -283,7 +282,7 @@ const SELECT_JOB_FILA =
   "produtor:profiles!produtor_id(nome), " +
   // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
   // desde 02/09/2026 (categoria e servico).
-  "orcamento:orcamentos(codigo, categoria_id, servico_id, " +
+  "orcamento:orcamentos(nome, categoria_id, servico_id, " +
   "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
   "servico:categorias_dominio!servico_id(nome, investimento_interno))";
 
@@ -360,7 +359,6 @@ function montarJobNaFila(
   return {
     id: j.id,
     codigo: j.codigo,
-    codigo_anterior: j.codigo_anterior ?? null,
     nome: j.nome,
     valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
     faturamento_previsto:
@@ -388,7 +386,7 @@ function montarJobNaFila(
     regional_nome: j.regional?.nome ?? null,
     responsavel_nome: j.responsavel?.nome ?? null,
     produtor_nome: j.produtor?.nome ?? null,
-    orcamento_codigo: j.orcamento?.codigo ?? null,
+    orcamento_nome: j.orcamento?.nome ?? null,
     categoria_id: j.orcamento?.categoria_id ?? null,
     categoria_nome: j.orcamento?.categoria?.nome ?? null,
     // Orçamento antigo, sem categoria, fecha como nacional — que é o que

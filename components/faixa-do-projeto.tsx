@@ -83,7 +83,9 @@ export function FaixaDoProjeto({
       ativo === AGREGADA
         ? `Visão agregada · ${projeto.codigo}`
         : itemAberto
-          ? `${itemAberto.codigo} · ${itemAberto.nome}`
+          ? itemAberto.codigo
+            ? `${itemAberto.codigo} · ${itemAberto.nome}`
+            : itemAberto.nome
           : undefined,
   });
 
@@ -209,16 +211,18 @@ export function FaixaDoProjeto({
                 key={item.id}
                 href={destino(item.id, item.href)}
                 aberta={aberta}
-                titulo={`${item.codigo} · ${item.nome}${item.travado ? " · somente leitura" : ""}${item.emRevisao ? " · em revisão" : ""}`}
+                titulo={`${item.codigo ? `${item.codigo} · ` : ""}${item.nome}${item.travado ? " · somente leitura" : ""}${item.emRevisao ? " · em revisão" : ""}`}
               >
-                <span
-                  className={cn(
-                    "font-mono text-[11px] font-semibold",
-                    aberta ? "text-white/60" : "text-[#b3323c]",
-                  )}
-                >
-                  {item.codigo}
-                </span>
+                {item.codigo && (
+                  <span
+                    className={cn(
+                      "font-mono text-[11px] font-semibold",
+                      aberta ? "text-white/60" : "text-[#b3323c]",
+                    )}
+                  >
+                    {item.codigo}
+                  </span>
+                )}
                 <span className="max-w-[300px] truncate">{item.nome}</span>
                 {item.travado && (
                   <Lock
@@ -281,7 +285,7 @@ export function FaixaDoProjeto({
                     href={destino(item.id, item.href)}
                     aberta={item.id === ativo}
                     titulo={item.nome}
-                    subtitulo={item.codigo}
+                    subtitulo={item.codigo ?? ""}
                     travado={item.travado}
                     emRevisao={item.emRevisao}
                     onEscolher={() => setMenuAberto(false)}

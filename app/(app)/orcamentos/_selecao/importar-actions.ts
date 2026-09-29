@@ -56,7 +56,6 @@ export type AcaoDoOrcamento = "nova_versao" | "sem_alteracao" | "recusado";
 
 export interface ResumoOrcamentoImportado {
   orcamentoId: string | null;
-  codigo: string | null;
   nome: string;
   /** Título da seção na planilha — o que o usuário reconhece. */
   titulo: string;
@@ -93,7 +92,6 @@ export type ConfirmProjetoResult =
       ok: true;
       versoes: {
         orcamentoId: string;
-        codigo: string;
         nome: string;
         versaoId: string;
         numeroVersao: number;
@@ -104,9 +102,10 @@ export type ConfirmProjetoResult =
 
 interface OrcamentoRow {
   id: string;
-  codigo: string;
   nome: string;
   status: OrcamentoStatus;
+  /** Decisão 118: arquivado é só leitura e não recebe versão. */
+  arquivado_em: string | null;
   versao_aprovada_id: string | null;
   categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
 }
@@ -176,10 +175,10 @@ async function analisar(
   const [{ data: projeto }, internosRes] = await Promise.all([
     supabase
       .from("projetos")
-      .select("id")
+      .select("id, status")
       .eq("id", projetoId)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{ id: string }>(),
+      .maybeSingle<{ id: string; status: string }>(),
     // Orçamentos Interno do projeto (decisão 105): o item deles entra como
     // F · Interno mesmo com o tipo em branco. `!servico_id`: `orcamentos`
     // tem duas FKs para `categorias_dominio`.
@@ -190,6 +189,13 @@ async function analisar(
       .eq("tenant_id", tenantId),
   ]);
   if (!projeto) return { ok: false, message: "Projeto não encontrado." };
+  // Decisão 118: projeto arquivado é só leitura.
+  if (projeto.status === "arquivado") {
+    return {
+      ok: false,
+      message: "Projeto arquivado é só leitura. Reative o projeto para importar.",
+    };
+  }
   if (internosRes.error) {
     console.error("[importacao.projeto.internos]", internosRes.error.message);
   }
@@ -240,7 +246,7 @@ async function analisar(
           .from("orcamentos")
           // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
           .select(
-            "id, codigo, nome, status, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+            "id, nome, status, arquivado_em, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
           )
           .eq("projeto_id", projetoId)
           .eq("tenant_id", tenantId)
@@ -378,7 +384,6 @@ async function analisar(
   const analises: Analise[] = leitura.secoes.map((secao) => {
     const base: ResumoOrcamentoImportado = {
       orcamentoId: secao.orcamentoId,
-      codigo: null,
       nome: secao.titulo || "Orçamento sem título",
       titulo: secao.titulo || "Orçamento sem título",
       acao: "recusado",
@@ -408,7 +413,6 @@ async function analisar(
     if (!orcamento) {
       return recusar("Este orçamento não pertence ao projeto.");
     }
-    base.codigo = orcamento.codigo;
     base.nome = orcamento.nome;
 
     if (jaVistos.has(orcamento.id)) {
@@ -435,6 +439,9 @@ async function analisar(
       orcamento.status,
       escolherJobDoFunil(jobsPorOrcamento.get(orcamento.id) ?? []),
     );
+    if (orcamento.arquivado_em) {
+      return recusar("Orçamento arquivado não recebe versão nova. Reative-o antes.");
+    }
     if (orcamento.status === "cancelado") {
       return recusar("Orçamento cancelado não recebe versão nova.");
     }
@@ -621,7 +628,7 @@ export async function confirmarImportacaoProjeto(
       .single();
     if (versaoErr || !nova) {
       console.error("[importacao.projeto.versao]", versaoErr?.message);
-      return falhar(`${orcamento.codigo}: não foi possível criar a versão.`);
+      return falhar(`Orçamento “${orcamento.nome}”: não foi possível criar a versão.`);
     }
     const versaoId = nova.id as string;
 
@@ -648,7 +655,7 @@ export async function confirmarImportacaoProjeto(
         plano.grupos.some((g) => !g.mes || !mesIdPorData.has(g.mes));
       if (faltouMes) {
         await desfazer();
-        return falhar(`${orcamento.codigo}: não foi possível copiar os meses da versão.`);
+        return falhar(`Orçamento “${orcamento.nome}”: não foi possível copiar os meses da versão.`);
       }
     }
 
@@ -670,7 +677,7 @@ export async function confirmarImportacaoProjeto(
     if (gruposErr || !gruposCriados) {
       console.error("[importacao.projeto.grupos]", gruposErr?.message);
       await desfazer();
-      return falhar(`${orcamento.codigo}: não foi possível criar os grupos.`);
+      return falhar(`Orçamento “${orcamento.nome}”: não foi possível criar os grupos.`);
     }
     const grupoIdPorOrdem = new Map(
       (gruposCriados as { id: string; ordem: number }[]).map((g) => [g.ordem, g.id]),
@@ -721,7 +728,7 @@ export async function confirmarImportacaoProjeto(
       if (itensErr) {
         console.error("[importacao.projeto.itens]", itensErr.message);
         await desfazer();
-        return falhar(`${orcamento.codigo}: não foi possível gravar os itens.`);
+        return falhar(`Orçamento “${orcamento.nome}”: não foi possível gravar os itens.`);
       }
     }
 
@@ -736,7 +743,7 @@ export async function confirmarImportacaoProjeto(
       if (!r.ok) {
         await desfazer();
         return falhar(
-          `${orcamento.codigo}: a versão nova não pôde ficar vigente porque a aprovação não foi desfeita (${r.message}).`,
+          `Orçamento “${orcamento.nome}”: a versão nova não pôde ficar vigente porque a aprovação não foi desfeita (${r.message}).`,
         );
       }
       aprovacaoDesfeita = true;
@@ -779,7 +786,6 @@ export async function confirmarImportacaoProjeto(
 
     criadas.push({
       orcamentoId: orcamento.id,
-      codigo: orcamento.codigo,
       nome: orcamento.nome,
       versaoId,
       numeroVersao: numero,

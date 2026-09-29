@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { valorDaBaixaSchema } from "@/lib/validations/baixa-parcial";
 import { rateioSchema } from "@/lib/validations/conta-avulsa";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
@@ -282,6 +283,8 @@ const baixaSchema = z.object({
   plano_conta_subtipo_id: z
     .string()
     .uuid("Selecione o centro de custo do recebimento."),
+  // Baixa parcial e impostos retidos pelo cliente (decisão 125).
+  ...valorDaBaixaSchema,
 });
 
 export async function darBaixaTitulo(input: unknown): Promise<Result> {
@@ -297,13 +300,16 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
   if (!gate.ok) return gate;
   const { session, supabase } = gate;
 
-  const { data: lancId, error } = await supabase.rpc("dar_baixa_titulo_com_plano", {
+  // O banco confere o que falta e os retidos (decisão 125); sem valor,
+  // baixa tudo o que falta.
+  const { data: lancId, error } = await supabase.rpc("baixar_titulo_receber", {
     p_titulo_id: parsed.data.titulo_id,
     p_pago_em: parsed.data.pago_em,
     p_conta_bancaria_id: parsed.data.conta_bancaria_id,
     p_tipo_id: parsed.data.plano_conta_tipo_id,
     p_subtipo_id: parsed.data.plano_conta_subtipo_id,
-    p_criado_por: session.profile.id,
+    p_valor_baixa: parsed.data.valor_baixa ?? null,
+    p_retencoes: parsed.data.retencoes,
   });
 
   if (error) return { ok: false, message: `Falha ao dar baixa: ${error.message}` };
@@ -318,6 +324,8 @@ export async function darBaixaTitulo(input: unknown): Promise<Result> {
       conta_bancaria_id: parsed.data.conta_bancaria_id,
       plano_conta_tipo_id: parsed.data.plano_conta_tipo_id,
       plano_conta_subtipo_id: parsed.data.plano_conta_subtipo_id,
+      valor_baixa: parsed.data.valor_baixa ?? null,
+      retencoes: parsed.data.retencoes,
       lancamento_id: lancId,
     },
   });
@@ -401,57 +409,15 @@ export async function repactuarPrevisaoRecebimento(input: unknown): Promise<Resu
 }
 
 // ---------------------------------------------------------------------------
-// Estorno e cancelamento — sem porta na UI desde a Tela 3.3
+// Cancelamento de NF — sem porta na UI desde a Tela 3.3
 // ---------------------------------------------------------------------------
 //
-// O protótipo não tem estorno nem cancelamento de NF em lugar nenhum:
-// título recebido exibe apenas "Conciliação". Mesma decisão que a 016 §9
-// tomou no contas a pagar. As duas actions continuam aqui, funcionando,
-// para o dia em que a tela voltar a precisar delas.
-
-const estornoSchema = z.object({
-  titulo_id: z.string().uuid(),
-  motivo: z.string().trim().min(10, "Motivo precisa ter ao menos 10 caracteres."),
-});
-
-export async function estornarBaixaTitulo(input: unknown): Promise<Result> {
-  const parsed = estornoSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
-  }
-  const gate = await checarGateFinanceiro(
-    parsed.data.titulo_id,
-    "titulo_receber",
-    "titulo.baixa_estornada",
-  );
-  if (!gate.ok) return gate;
-  const { session, supabase } = gate;
-
-  const { data: reversoId, error } = await supabase.rpc("estornar_baixa_titulo", {
-    p_titulo_id: parsed.data.titulo_id,
-    p_motivo: parsed.data.motivo,
-    p_criado_por: session.profile.id,
-  });
-
-  if (error) return { ok: false, message: `Falha ao estornar: ${error.message}` };
-
-  await logAuditEvent({
-    acao: "titulo.baixa_estornada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "titulo_receber",
-    entidadeId: parsed.data.titulo_id,
-    metadata: {
-      motivo: parsed.data.motivo,
-      lancamento_reverso_id: reversoId,
-    },
-  });
-
-  revalidatePath("/financeiro/contas-a-receber");
-  revalidatePath("/financeiro/conciliacao");
-  revalidatePath("/financeiro/fluxo-caixa");
-  revalidatePath("/financeiro");
-  return { ok: true };
-}
+// O protótipo não tem cancelamento de NF em lugar nenhum. A action continua
+// aqui, funcionando, para o dia em que a tela voltar a precisar dela.
+//
+// O estorno da baixa (`estornarBaixaTitulo`) saiu em 29/09/2026: cancelar e
+// estornar a baixa de um título agora são `cancelarBaixa` e
+// `estornarValorDaBaixa`, em `../actions-baixa-registrada.ts` (decisão 120).
 
 const cancelarSchema = z.object({
   faturamento_id: z.string().uuid(),

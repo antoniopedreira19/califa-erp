@@ -132,7 +132,6 @@ export interface OrigemBanco {
   orcamentoId: string;
   versaoId: string;
   numeroVersao: number;
-  codigo: string;
   statusOrcamento: string;
   statusVersao: string;
   /** `null` = editável. Preenchido, é o motivo de a planilha ser só leitura

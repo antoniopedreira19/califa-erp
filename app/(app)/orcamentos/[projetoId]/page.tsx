@@ -6,7 +6,7 @@ import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
-import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
+import { escolherJobDoFunil, estagioFunil, jobVivoDoOrcamento } from "@/lib/calculos/funil";
 import {
   calcularTotaisVersao,
   type ItemParaTotais,
@@ -37,6 +37,7 @@ import {
 } from "../_selecao/exportar-orcamentos-menu";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { MarcarPagina } from "@/components/voltar/marcar-pagina";
+import { AvisoArquivado } from "../aviso-arquivado";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export default async function ProjetoDetailPage({
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, codigo_anterior, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -75,7 +76,7 @@ export default async function ProjetoDetailPage({
         // `!categoria_id` é obrigatório desde 02/09/2026: `orcamentos` passou
         // a ter DUAS FKs para `categorias_dominio` (categoria e servico), e
         // sem desambiguar o PostgREST recusa o embed e devolve zero linhas.
-        "id, codigo, nome, status, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, " +
+        "id, codigo, nome, status, arquivado_em, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, " +
           "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
           "servico:categorias_dominio!servico_id(nome)",
       )
@@ -130,7 +131,6 @@ export default async function ProjetoDetailPage({
     tenant_id: raw.tenant_id,
     empresa_id: raw.empresa_id,
     codigo: raw.codigo,
-    codigo_anterior: raw.codigo_anterior ?? null,
     nome: raw.nome,
     campanha: raw.campanha,
     status: raw.status,
@@ -215,7 +215,16 @@ export default async function ProjetoDetailPage({
     cambio_compra: number | null;
   };
   const versoesPorOrcamento = new Map<string, VersaoLeve[]>();
-  const jobsPorOrcamento = new Map<string, { status: JobStatus; created_at: string }[]>();
+  const jobsPorOrcamento = new Map<
+    string,
+    {
+      id: string;
+      codigo: string;
+      status: JobStatus;
+      created_at: string;
+      aberto_no_financeiro: boolean;
+    }[]
+  >();
   // Valor do job por orçamento: versão APROVADA quando existir; senão a
   // mais recente (número em negociação). Sem versão → null (travessão).
   const valorJobMap = new Map<string, number>();
@@ -242,7 +251,7 @@ export default async function ProjetoDetailPage({
         .eq("tenant_id", session.activeTenant.id),
       supabase
         .from("jobs")
-        .select("orcamento_id, status, created_at")
+        .select("id, codigo, orcamento_id, status, created_at, data_abertura_financeiro")
         .in("orcamento_id", orcamentoIds)
         .eq("tenant_id", session.activeTenant.id),
     ]);
@@ -257,7 +266,13 @@ export default async function ProjetoDetailPage({
     }
     for (const j of ((jobsRes.data ?? []) as any[])) {
       const atuais = jobsPorOrcamento.get(j.orcamento_id) ?? [];
-      atuais.push({ status: j.status as JobStatus, created_at: j.created_at });
+      atuais.push({
+        id: j.id,
+        codigo: j.codigo,
+        status: j.status as JobStatus,
+        created_at: j.created_at,
+        aberto_no_financeiro: j.data_abertura_financeiro !== null,
+      });
       jobsPorOrcamento.set(j.orcamento_id, atuais);
     }
 
@@ -328,7 +343,6 @@ export default async function ProjetoDetailPage({
 
   const orcamentos: OrcamentoRow[] = orcamentosBrutos.map((o) => ({
     id: o.id,
-    codigo: o.codigo,
     nome: o.nome,
     categoria_nome: o.categoria?.nome ?? null,
     servico_nome: o.servico?.nome ?? null,
@@ -340,16 +354,20 @@ export default async function ProjetoDetailPage({
     data_fim_prevista: o.data_fim_prevista,
     valor_job: valorJobMap.get(o.id) ?? null,
     versoes_count: versoesCountMap.get(o.id) ?? 0,
+    arquivado: Boolean(o.arquivado_em),
     created_at: o.created_at,
+    job: (() => {
+      const vivo = jobVivoDoOrcamento(jobsPorOrcamento.get(o.id) ?? []);
+      return vivo ? { id: vivo.id, codigo: vivo.codigo } : null;
+    })(),
   }));
 
-  // Cancelado fica fora do seletor de exportação: saiu da mesa e a visão
-  // agregada também não o lista.
+  // Arquivado (decisão 118) e cancelado ficam fora do seletor de
+  // exportação: saíram da mesa, e a visão agregada também não os lista.
   const exportaveis: OrcamentoExportavel[] = orcamentos
-    .filter((o) => o.estagio !== "cancelado")
+    .filter((o) => !o.arquivado && o.estagio !== "cancelado")
     .map((o) => ({
       id: o.id,
-      codigo: o.codigo,
       nome: o.nome,
       numeroVersao: exportavelMap.get(o.id)?.numeroVersao ?? null,
       estagio: o.estagio,
@@ -363,6 +381,21 @@ export default async function ProjetoDetailPage({
     "id" | "nome_fantasia" | "codigo_curto"
   >[];
 
+  // Decisão 118: projeto arquivado é só leitura. Somem "Editar projeto",
+  // "Importar" e "Novo orçamento"; ficam o Exportar, a visão agregada e o
+  // Reativar do aviso.
+  const projetoArquivado = projeto.status === "arquivado";
+
+  // Decisão 122: com orçamento aprovado ou job, o cliente do projeto não
+  // muda mais. A mesma régua do arquivar (`projetoTemAprovacao`) — o
+  // cancelado antes da abertura não conta; o banco recusa por trás.
+  const clienteTravado =
+    orcamentosBrutos.some((o) => o.status === "aprovado" || o.status === "job_criado") ||
+    Array.from(jobsPorOrcamento.values()).some((jobs) =>
+      jobs.some((j) => j.status !== "cancelado" || j.aberto_no_financeiro),
+    );
+  const temOrcamentoAtivo = orcamentos.some((o) => !o.arquivado);
+
   return (
     <div className="space-y-6">
       <div>
@@ -373,19 +406,13 @@ export default async function ProjetoDetailPage({
         <div className="mt-3">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             {projeto.codigo}
-            {/* Decisão 114: planilhas e conversas de antes de 28/09/2026
-                citam o código antigo. */}
-            {projeto.codigo_anterior && (
-              <span className="ml-2 font-sans font-normal">
-                · Código anterior: {projeto.codigo_anterior}
-              </span>
-            )}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{projeto.nome}</h1>
             <Badge className={cn("border", projetoBadgeClasses(projeto.status))}>
               {projetoStatusLabel(projeto.status)}
             </Badge>
+            {!projetoArquivado && (
             <ProjetoEditorDrawer
               podeCadastrarCliente={pode(
                 session.activeRole,
@@ -406,10 +433,14 @@ export default async function ProjetoDetailPage({
               responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
               equipeSelecionada={equipeManualDoProjeto}
               produtoresDosOrcamentos={produtoresDosOrcamentos}
+              clienteTravado={clienteTravado}
             />
+            )}
             {/* Importar e Exportar logo depois de "Editar projeto", como no
                 design "Exportar e Exibir - Projeto e Visao Agregada". */}
-            <ImportarOrcamentosDrawer projetoId={projeto.id} />
+            {!projetoArquivado && (
+              <ImportarOrcamentosDrawer projetoId={projeto.id} />
+            )}
             <ExportarOrcamentosMenu projetoId={projeto.id} orcamentos={exportaveis} />
           </div>
 
@@ -484,6 +515,14 @@ export default async function ProjetoDetailPage({
         </div>
       </div>
 
+      {projetoArquivado && (
+        <AvisoArquivado
+          tipo="projeto"
+          projetoId={projeto.id}
+          podeReativar={pode(session.activeRole, "orcamentos.editar")}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <div className="flex items-center justify-between border-b border-border p-6">
           <div className="flex items-center gap-2">
@@ -498,7 +537,7 @@ export default async function ProjetoDetailPage({
             </div>
           </div>
           <div className="flex flex-none items-center gap-3">
-            {orcamentos.length > 0 && (
+            {temOrcamentoAtivo && (
               <Link
                 href={`/orcamentos/${projeto.id}/agregado`}
                 prefetch={false}
@@ -511,14 +550,16 @@ export default async function ProjetoDetailPage({
             {/* Uma porta só: o orçamento nasce um a um pelo formulário. O
                 orçamento do projeto é o que a visão agregada mostra — e o
                 que "Exportar" e "Importar" levam e trazem. */}
-            <Link
-              href={`/orcamentos/${projeto.id}/novo`}
-              prefetch={false}
-              className="inline-flex flex-none items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover"
-            >
-              <Plus className="h-4 w-4" />
-              Novo orçamento
-            </Link>
+            {!projetoArquivado && (
+              <Link
+                href={`/orcamentos/${projeto.id}/novo`}
+                prefetch={false}
+                className="inline-flex flex-none items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover"
+              >
+                <Plus className="h-4 w-4" />
+                Novo orçamento
+              </Link>
+            )}
           </div>
         </div>
         <div className="p-6">

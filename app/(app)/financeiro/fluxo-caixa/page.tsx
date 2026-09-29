@@ -74,6 +74,13 @@ export default async function FluxoCaixaPage({
       .eq("tenant_id", session.activeTenant.id)
       .gte("data_evento", ancora)
       .lte("data_evento", fim)
+      // Transferência entre contas (decisão 124) só muda o dinheiro de
+      // conta: fica fora do fluxo consolidado. O `or` com `is.null` é
+      // obrigatório — `not.in` sozinho também descartaria todo previsto,
+      // que não tem origem de lançamento.
+      .or(
+        "origem_lancamento.is.null,origem_lancamento.not.in.(transferencia_saida,transferencia_entrada)",
+      )
       .order("data_evento", { ascending: true });
     if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
     return q;

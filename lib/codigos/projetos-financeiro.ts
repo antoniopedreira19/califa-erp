@@ -11,7 +11,7 @@ import {
  * projeto da produção (decisão 114, 28/09/2026). Até então os dois usavam
  * o mesmo formato, e 8 códigos existiam nos dois lados apontando para
  * projetos diferentes; na abertura de job os dois aparecem na mesma tela.
- * O código de antes fica em `projetos_financeiro.codigo_anterior`.
+ * O código de antes saiu do sistema em 29/09/2026 (decisão 126).
  *
  * Sequencial PRÓPRIO, lido só dentro de `projetos_financeiro`. Os dois
  * espaços de código são independentes de propósito: as duas arrumações

@@ -316,9 +316,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
       if (q === "") return true;
       // Busca também pelo nome da produção: quem procura pode lembrar do
       // nome antigo, não do que o financeiro deu.
-      // E pelo código de antes da decisão 114 (JOB-NNNN), que os PDFs e
-      // as planilhas antigas ainda citam.
-      return [j.codigo, j.codigo_anterior ?? "", j.nome, j.nome_producao]
+      return [j.codigo, j.nome, j.nome_producao]
         .join(" ")
         .toLowerCase()
         .includes(q);

@@ -136,6 +136,16 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 114 | [O código do job é [SIGLA]-[SEQ]/[AA], com 1 na frente em 2026; o projeto leva P, e o do financeiro F](114-codigo-do-job-por-sigla-e-ano.md) | 2026-09-28 |
 | 115 | [O financeiro edita o orçado do job na Planilha Interna, sem aprovação, da abertura até a primeira nota ou o encerramento](115-o-financeiro-edita-o-orcado-do-job.md) | 2026-09-28 |
 | 116 | [Projeto com orçamento aprovado ou com job não se arquiva](116-projeto-com-orcamento-aprovado-nao-se-arquiva.md) | 2026-09-28 |
+| 117 | [O status só muda pelo sistema](117-status-so-muda-pelo-sistema.md) | 2026-09-28 |
+| 118 | [O orçamento se arquiva, e o arquivado (orçamento ou projeto) é só leitura](118-orcamento-se-arquiva-e-arquivado-e-so-leitura.md) | 2026-09-28 |
+| 119 | [O projeto do financeiro nasce com o job, tem nome único e se renomeia pelo lápis](119-projeto-do-financeiro-nasce-com-o-job-e-tem-nome-unico.md) | 2026-09-28 |
+| 120 | [Cancelar e estornar baixa são duas ações diferentes, nas duas pontas](120-cancelar-e-estornar-baixa.md) | 2026-09-28 |
+| 121 | [O código do orçamento é só da base de dados; na tela, o código é o do job](121-o-codigo-do-orcamento-e-so-da-base-de-dados.md) | 2026-09-29 |
+| 122 | [O cliente do projeto só muda antes da aprovação, e os códigos acompanham](122-cliente-do-projeto-so-muda-antes-da-aprovacao.md) | 2026-09-29 |
+| 123 | [O envio para faturamento vira notas fiscais](123-o-envio-para-faturamento-vira-notas-fiscais.md) | 2026-09-29 |
+| 124 | [Recebimento avulso, transferência entre contas e rendimento de aplicação viram títulos a receber](124-recebimento-avulso-transferencia-e-rendimento.md) | 2026-09-28 |
+| 125 | [Baixa parcial e impostos retidos na baixa, nas duas pontas](125-baixa-parcial-e-impostos-retidos.md) | 2026-09-28 |
+| 126 | [O código antigo sai do sistema, e a PP mostra só o código do job](126-o-codigo-antigo-sai-do-sistema.md) | 2026-09-29 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -148,4 +158,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 117.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 127.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

@@ -82,8 +82,9 @@ import {
 } from "../curva";
 import {
   abrirJobNoFinanceiro,
-  criarProjetoFinanceiro,
+  conferirNomeDeProjetoFinanceiro,
   editarRegistroDaAbertura,
+  renomearProjetoFinanceiro,
 } from "../actions";
 import { ReprovarDialog } from "../reprovar-dialog";
 import {
@@ -102,6 +103,26 @@ import { useIrParaAbaDoJob } from "../../jobs/[jobId]/job-financeiro-tabs";
 interface CategoriaOption {
   id: string;
   nome: string;
+}
+
+/** O valor do campo Projeto quando o escolhido é o projeto novo do "+",
+ *  que ainda não tem id: ele nasce com o job (decisão 119). */
+const PROJETO_NOVO = "novo";
+
+/** Uma linha do combo de projeto: as do servidor e a do projeto novo. */
+type OpcaoDeProjeto = ProjetoFinanceiroOpcao & { novo: boolean };
+
+/** "Novo" no lugar do código: o projeto ainda não existe, e o código só
+ *  sai quando ele nasce, com o job. */
+function SeloProjetoNovo() {
+  return (
+    <span
+      title="Criado ao gravar, com o código gerado pelo sistema"
+      className="shrink-0 rounded-full bg-california-red/10 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.06em] text-california-red"
+    >
+      Novo
+    </span>
+  );
 }
 
 /**
@@ -455,17 +476,35 @@ export function AberturaForm({
   );
   const [projetoAberto, setProjetoAberto] = React.useState(false);
   const [buscaProjeto, setBuscaProjeto] = React.useState("");
-  const [criandoProjeto, setCriandoProjeto] = React.useState(false);
-  const [nomeNovoProjeto, setNomeNovoProjeto] = React.useState("");
-  const [criandoPending, setCriandoPending] = React.useState(false);
   /**
-   * O combo desce do server component, então o projeto que acabou de ser
-   * criado só aparece nele depois do `router.refresh()`. Guardar a linha
-   * aqui evita a janela em que o campo mostra "Selecione o projeto"
-   * logo depois de criar um.
+   * O projeto novo do "+": só o nome, reservado no formulário. Ele nasce
+   * no banco quando o job abre (ou o registro é salvo), junto com o job —
+   * todo projeto do financeiro tem pelo menos um job (decisão 119). Até
+   * 28/09/2026 o "+" gravava na hora, e desistir deixava projeto solto.
    */
-  const [projetoNovo, setProjetoNovo] =
-    React.useState<ProjetoFinanceiroOpcao | null>(null);
+  const [nomeProjetoNovo, setNomeProjetoNovo] = React.useState<string | null>(
+    null,
+  );
+  /**
+   * Nomes trocados pelo lápis nesta visita. O renomear grava na hora, mas
+   * a lista desce do server component; sem `router.refresh()` no meio do
+   * preenchimento, o nome novo vem daqui.
+   */
+  const [nomesEditados, setNomesEditados] = React.useState<
+    Record<string, string>
+  >({});
+  // O popover do botão ao lado do campo: "+" cria, lápis renomeia.
+  const [cadastroProjetoAberto, setCadastroProjetoAberto] =
+    React.useState(false);
+  const [nomeNoCadastro, setNomeNoCadastro] = React.useState("");
+  const [cadastroPending, setCadastroPending] = React.useState(false);
+  const [erroCadastro, setErroCadastro] = React.useState<string | null>(null);
+  // Depois de salvar, o job volta do servidor com o projeto de verdade —
+  // inclusive o que acabou de nascer do nome reservado.
+  React.useEffect(() => {
+    setProjetoId(job.projeto_financeiro_id ?? "");
+    setNomeProjetoNovo(null);
+  }, [job.projeto_financeiro_id]);
   const [contaRecebId, setContaRecebId] = React.useState<string | null>(
     () => job.conta_recebimento_id,
   );
@@ -757,19 +796,31 @@ export function AberturaForm({
         }`;
 
   // ---------- Projeto do financeiro ----------
-  const projetosVisiveis = React.useMemo(
-    () =>
-      projetoNovo && !projetos.some((p) => p.id === projetoNovo.id)
-        ? [...projetos, projetoNovo].sort((a, b) =>
-            a.codigo.localeCompare(b.codigo),
-          )
-        : projetos,
-    [projetos, projetoNovo],
-  );
+  // A lista do servidor, com os nomes do lápis, e o projeto novo reservado
+  // no topo — ele ainda não tem código: o sistema gera ao gravar.
+  const projetosVisiveis = React.useMemo<OpcaoDeProjeto[]>(() => {
+    const lista = projetos.map((p) => ({
+      ...p,
+      nome: nomesEditados[p.id] ?? p.nome,
+      novo: false,
+    }));
+    return nomeProjetoNovo === null
+      ? lista
+      : [
+          {
+            id: PROJETO_NOVO,
+            codigo: "",
+            nome: nomeProjetoNovo,
+            cliente_id: job.cliente_id ?? "",
+            cliente_nome: job.cliente_nome,
+            novo: true,
+          },
+          ...lista,
+        ];
+  }, [projetos, nomesEditados, nomeProjetoNovo, job.cliente_id, job.cliente_nome]);
   const projetoSel = projetosVisiveis.find((p) => p.id === projetoId) ?? null;
   // Sem acento e sem caixa, no nome e no código — o mesmo critério do
-  // campo de fornecedor (`components/ui/combobox.tsx`). O código de antes
-  // da decisão 114 também vale ("AMB-0004/26" acha o AMB-F004/26).
+  // campo de fornecedor (`components/ui/combobox.tsx`).
   const projetosFiltrados = React.useMemo(() => {
     const normalizar = (t: string) =>
       t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -778,8 +829,7 @@ export function AberturaForm({
     return projetosVisiveis.filter(
       (p) =>
         normalizar(p.nome).includes(q) ||
-        normalizar(p.codigo).includes(q) ||
-        normalizar(p.codigo_anterior ?? "").includes(q),
+        normalizar(p.codigo).includes(q),
     );
   }, [projetosVisiveis, buscaProjeto]);
   function escolherProjeto(id: string) {
@@ -787,11 +837,24 @@ export function AberturaForm({
     setProjetoAberto(false);
     setBuscaProjeto("");
   }
+  /** O ✕ do campo: zera a escolha e devolve o "+". O projeto novo
+   *  reservado, que ainda não existe, sai junto. */
+  function limparProjeto() {
+    if (projetoId === PROJETO_NOVO) setNomeProjetoNovo(null);
+    setProjetoId("");
+  }
   const projetoLabel = projetoSel?.nome ?? "Selecione o projeto";
-  const projetoCodigo = projetoSel?.codigo ?? "";
+  const projetoCodigo = projetoSel && !projetoSel.novo ? projetoSel.codigo : "";
   const projetoResumo = projetoSel
-    ? `${projetoSel.nome} · ${projetoSel.codigo}`
+    ? `${projetoSel.nome} · ${projetoSel.novo ? "projeto novo" : projetoSel.codigo}`
     : "— não informado";
+  // Quando o projeto novo passa a existir: é o que o "+" explica.
+  const quandoNasceProjeto =
+    modo === "abertura"
+      ? "quando o job for aberto"
+      : ehRevisao
+        ? "quando a revisão for registrada"
+        : "quando o registro for salvo";
   // O projeto da produção fica como referência, e é explicitamente outra
   // coisa: mexer aqui não move o job em Orçamentos.
   const projetoDica = `Arrumação do financeiro. Na produção, o job segue em ${job.projeto_codigo ?? "—"}.`;
@@ -1027,39 +1090,59 @@ export function AberturaForm({
     mexerNosImpostos((atual) => atual.filter((l) => l.id !== id));
   }
 
-  /**
-   * Cria o projeto do financeiro e já vincula no formulário ("Criar
-   * projeto para este job"). O código e o cliente são do servidor — aqui
-   * só vai o nome.
-   */
-  function confirmarNovoProjeto() {
-    const nomeLimpo = nomeNovoProjeto.trim();
-    if (nomeLimpo.length < 2 || criandoPending) return;
+  /** Abre o popover do botão ao lado do campo, já com o nome certo. */
+  function abrirCadastroProjeto(aberto: boolean) {
+    setCadastroProjetoAberto(aberto);
+    if (!aberto) return;
+    setNomeNoCadastro(projetoSel?.nome ?? "");
+    setErroCadastro(null);
+  }
 
-    setErro(null);
-    setCriandoPending(true);
-    void criarProjetoFinanceiro(job.id, { nome: nomeLimpo }).then((res) => {
-      setCriandoPending(false);
+  /**
+   * O botão do popover. Três casos, como no campo de fornecedor
+   * (`campo-fornecedor.tsx`): sem projeto escolhido, o "+" reserva um
+   * projeto novo; com o novo escolhido, o lápis troca o nome reservado;
+   * com um que já existe, o lápis renomeia no banco, na hora.
+   *
+   * Reservar não grava nada — o projeto nasce com o job (decisão 119). O
+   * nome é conferido agora mesmo assim: repetido é recusado pelo banco, e
+   * saber disso só no fim da abertura seria tarde.
+   */
+  function confirmarCadastroProjeto() {
+    const nomeLimpo = nomeNoCadastro.trim();
+    if (nomeLimpo.length < 2 || cadastroPending) return;
+    if (projetoSel && nomeLimpo === projetoSel.nome) {
+      setCadastroProjetoAberto(false);
+      return;
+    }
+
+    setErroCadastro(null);
+    setCadastroPending(true);
+
+    if (!projetoSel || projetoSel.novo) {
+      void conferirNomeDeProjetoFinanceiro(nomeLimpo, null).then((res) => {
+        setCadastroPending(false);
+        if (!res.ok) {
+          setErroCadastro(res.message);
+          return;
+        }
+        setNomeProjetoNovo(nomeLimpo);
+        setProjetoId(PROJETO_NOVO);
+        setCadastroProjetoAberto(false);
+        setProjetoAberto(false);
+      });
+      return;
+    }
+
+    const projetoEditado = projetoSel.id;
+    void renomearProjetoFinanceiro(projetoEditado, nomeLimpo).then((res) => {
+      setCadastroPending(false);
       if (!res.ok) {
-        setErro(res.message);
+        setErroCadastro(res.message);
         return;
       }
-      // O combo desce do server component, então a linha nova só aparece
-      // nele depois do refresh. Selecionar por id já deixa o formulário
-      // válido antes disso.
-      setProjetoNovo({
-        id: res.id,
-        codigo: res.codigo,
-        codigo_anterior: null, // nasceu depois da decisão 114
-        nome: res.nome,
-        cliente_id: job.cliente_id ?? "",
-        cliente_nome: job.cliente_nome,
-      });
-      setProjetoId(res.id);
-      setCriandoProjeto(false);
-      setProjetoAberto(false);
-      setNomeNovoProjeto("");
-      router.refresh();
+      setNomesEditados((atual) => ({ ...atual, [projetoEditado]: res.nome }));
+      setCadastroProjetoAberto(false);
     });
   }
 
@@ -1115,7 +1198,11 @@ export function AberturaForm({
   function montarPayload() {
     return {
       nome_financeiro: nome.trim(),
-      projeto_financeiro_id: projetoId,
+      // Um projeto que existe OU o nome do novo (decisão 119).
+      projeto_financeiro_id:
+        projetoId === "" || projetoId === PROJETO_NOVO ? null : projetoId,
+      projeto_financeiro_novo:
+        projetoId === PROJETO_NOVO ? nomeProjetoNovo : null,
       conta_recebimento_id: contaRecebId,
       conta_pagamento_id: contaPagId,
       conta_impostos_id: contaImpId,
@@ -1294,6 +1381,7 @@ export function AberturaForm({
     setErro(null);
     setNome(job.nome);
     setProjetoId(job.projeto_financeiro_id ?? "");
+    setNomeProjetoNovo(null);
     setContaRecebId(job.conta_recebimento_id);
     setContaPagId(job.conta_pagamento_id);
     setContaImpId(job.conta_impostos_id);
@@ -1315,7 +1403,7 @@ export function AberturaForm({
     setRecebimento(recebimentoDoServidor());
     setDiaRecebimento(diaComumDoRecebimento(recebimentoInicial));
     setRodadaDoDia((r) => r + 1);
-    setCriandoProjeto(false);
+    setCadastroProjetoAberto(false);
     setProjetoAberto(false);
     setDropConta(null);
     setEditando(false);
@@ -1505,10 +1593,41 @@ export function AberturaForm({
                           >
                             {projetoLabel}
                           </span>
-                          <span className="shrink-0 font-mono text-[11.5px] text-muted-foreground">
-                            {projetoCodigo}
-                          </span>
+                          {projetoSel?.novo ? (
+                            <SeloProjetoNovo />
+                          ) : (
+                            <span className="shrink-0 font-mono text-[11.5px] text-muted-foreground">
+                              {projetoCodigo}
+                            </span>
+                          )}
                         </span>
+                        {/* Zerar a escolha devolve o "+" (decisão 119), como
+                            o ✕ do campo de fornecedor. <span> e não
+                            <button>: o gatilho já é um botão, e o clique
+                            para aqui antes de abrir a lista. */}
+                        {!travado && projetoSel && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            aria-label="Limpar projeto"
+                            title="Limpar projeto"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              limparProjeto();
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                limparProjeto();
+                              }
+                            }}
+                            className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-california-red/10 hover:text-california-red"
+                          >
+                            <X className="h-3 w-3" />
+                          </span>
+                        )}
                         {!travado && (
                           <ChevronDown className="h-[15px] w-[15px] shrink-0 text-[#8a8a8a]" />
                         )}
@@ -1551,12 +1670,14 @@ export function AberturaForm({
                         {projetosVisiveis.length === 0 ? (
                           <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
                             Nenhum projeto do financeiro para este cliente. Crie
-                            um no botão ao lado.
+                            um no “+” ao lado.
                           </p>
                         ) : projetosFiltrados.length === 0 ? (
                           <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
-                            Nenhum projeto com “{buscaProjeto.trim()}”. Confira
-                            o nome ou crie um no botão ao lado.
+                            Nenhum projeto com “{buscaProjeto.trim()}”.{" "}
+                            {projetoSel
+                              ? "Confira o nome, ou limpe o campo no ✕ e crie um no “+”."
+                              : "Confira o nome ou crie um no “+” ao lado."}
                           </p>
                         ) : (
                           projetosFiltrados.map((pr) => (
@@ -1574,9 +1695,13 @@ export function AberturaForm({
                                 <span className="truncate font-semibold">
                                   {pr.nome}
                                 </span>
-                                <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
-                                  {pr.codigo}
-                                </span>
+                                {pr.novo ? (
+                                  <SeloProjetoNovo />
+                                ) : (
+                                  <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
+                                    {pr.codigo}
+                                  </span>
+                                )}
                               </span>
                               <span className="mt-0.5 block text-[11px] text-muted-foreground">
                                 {pr.cliente_nome ?? "—"}
@@ -1588,36 +1713,61 @@ export function AberturaForm({
                     </PopoverContent>
                   </Popover>
 
+                  {/* "+" cria, lápis revisa o escolhido — o MESMO botão
+                      trocando de ícone, como no campo de fornecedor
+                      (decisão 119). O ✕ do campo é o que devolve o "+". */}
                   {!travado && (
                     <Popover
-                      open={criandoProjeto}
-                      onOpenChange={setCriandoProjeto}
+                      open={cadastroProjetoAberto}
+                      onOpenChange={abrirCadastroProjeto}
                     >
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          title="Criar projeto para este job"
-                          aria-label="Criar projeto para este job"
+                          title={
+                            projetoSel
+                              ? "Editar nome do projeto"
+                              : "Criar projeto para este job"
+                          }
+                          aria-label={
+                            projetoSel
+                              ? "Editar nome do projeto"
+                              : "Criar projeto para este job"
+                          }
                           className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
                         >
-                          <Plus className="h-[17px] w-[17px]" />
+                          {projetoSel ? (
+                            <Pencil className="h-4 w-4" />
+                          ) : (
+                            <Plus className="h-[17px] w-[17px]" />
+                          )}
                         </button>
                       </PopoverTrigger>
                       <PopoverContent
                         className="w-[420px] border-california-red/30 p-4"
                         align="end"
                       >
-                        <p className="text-[12.5px] font-semibold">
-                          Criar projeto para este job
+                        <p className="flex items-baseline justify-between gap-3 text-[12.5px] font-semibold">
+                          {projetoSel ? "Editar nome do projeto" : "Criar projeto para este job"}
+                          {projetoSel && !projetoSel.novo && (
+                            <span className="font-mono text-[11px] font-normal text-muted-foreground">
+                              {projetoSel.codigo}
+                            </span>
+                          )}
                         </p>
                         <div className="mt-2.5 flex flex-wrap items-center gap-2">
                           <input
-                            value={nomeNovoProjeto}
-                            onChange={(e) => setNomeNovoProjeto(e.target.value)}
+                            autoFocus
+                            aria-label="Nome do projeto"
+                            value={nomeNoCadastro}
+                            onChange={(e) => {
+                              setNomeNoCadastro(e.target.value);
+                              setErroCadastro(null);
+                            }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                confirmarNovoProjeto();
+                                confirmarCadastroProjeto();
                               }
                             }}
                             placeholder="Nome do novo projeto"
@@ -1626,24 +1776,51 @@ export function AberturaForm({
                           />
                           <button
                             type="button"
-                            onClick={confirmarNovoProjeto}
+                            onClick={confirmarCadastroProjeto}
                             disabled={
-                              nomeNovoProjeto.trim().length < 2 || criandoPending
+                              nomeNoCadastro.trim().length < 2 || cadastroPending
                             }
                             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-california-red px-3 text-[12.5px] font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             <Check className="h-3.5 w-3.5" />
-                            {criandoPending ? "Criando..." : "Criar e vincular"}
+                            {cadastroPending
+                              ? projetoSel && !projetoSel.novo
+                                ? "Salvando..."
+                                : "Conferindo..."
+                              : projetoSel
+                                ? "Salvar nome"
+                                : "Criar e vincular"}
                           </button>
                         </div>
+                        {erroCadastro && (
+                          <p
+                            role="alert"
+                            className="mt-2 flex items-start gap-1.5 text-[11.5px] font-medium leading-snug text-california-red"
+                          >
+                            <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+                            {erroCadastro}
+                          </p>
+                        )}
                         <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                          O código é gerado pelo sistema e o cliente vem do
-                          orçamento de origem. O projeto vale só no financeiro —
-                          a produção continua vendo o job em{" "}
-                          <span className="font-mono">
-                            {job.projeto_codigo ?? "—"}
-                          </span>
-                          .
+                          {projetoSel && !projetoSel.novo ? (
+                            <>
+                              O nome muda na hora, para todos os jobs deste
+                              projeto — não espera o resto do formulário. O
+                              código e o cliente não mudam.
+                            </>
+                          ) : (
+                            <>
+                              O projeto é criado {quandoNasceProjeto}, junto com
+                              o job — nenhum projeto fica sem job. O código é
+                              gerado pelo sistema e o cliente vem do orçamento
+                              de origem. Vale só no financeiro: a produção
+                              continua vendo o job em{" "}
+                              <span className="font-mono">
+                                {job.projeto_codigo ?? "—"}
+                              </span>
+                              .
+                            </>
+                          )}
                         </p>
                       </PopoverContent>
                     </Popover>
@@ -1680,7 +1857,7 @@ export function AberturaForm({
                 </Select>
                 <span className="text-[11px] text-muted-foreground">
                   Vem do orçamento{" "}
-                  <span className="font-mono">{job.orcamento_codigo ?? "—"}</span>
+                  <span className="font-medium text-foreground/80">{job.orcamento_nome ?? "—"}</span>
                   . Pode ser trocada aqui sem alterar o orçamento.
                 </span>
                 {categorias.length === 0 && (
@@ -1727,8 +1904,8 @@ export function AberturaForm({
                   {servicoOk ? (
                     <>
                       Vem do orçamento{" "}
-                      <span className="font-mono">
-                        {job.orcamento_codigo ?? "—"}
+                      <span className="font-medium text-foreground/80">
+                        {job.orcamento_nome ?? "—"}
                       </span>
                       . Pode ser trocado aqui sem alterar o orçamento.
                     </>
@@ -3010,8 +3187,8 @@ export function AberturaForm({
               <span className="text-xs text-muted-foreground">
                 Orçamento de origem
               </span>
-              <span className="font-mono text-xs font-semibold">
-                {job.orcamento_codigo ?? "—"}
+              <span className="text-xs font-semibold">
+                {job.orcamento_nome ?? "—"}
               </span>
             </div>
           </div>

@@ -256,65 +256,6 @@ export async function reabrirFaturaCartao(input: unknown): Promise<Result> {
   return { ok: true };
 }
 
-/**
- * Estornar a baixa de uma fatura paga.
- *
- * Diferente de reabrir: aqui o dinheiro saiu do banco, então o desfazer é
- * contra-lançamento, não delete — o extrato do banco também vai mostrar
- * as duas pernas. A fatura volta para "fechada", e só então pode reabrir.
- *
- * ⚠️ Antes de 29/08/2026 `estornarBaixaTitulo` mandava a fatura para o
- * caminho da conta avulsa, que respondia "Conta avulsa não encontrada".
- * Estornar a baixa de uma fatura simplesmente não funcionava.
- */
-export async function estornarBaixaFaturaCartao(
-  faturaId: string,
-  motivo: string,
-): Promise<Result> {
-  const session = await requireSession();
-
-  if (
-    session.activeRole !== "administrador" &&
-    session.activeRole !== "financeiro"
-  ) {
-    await logAuditEvent({
-      acao: "acao_negada",
-      tenantId: session.activeTenant.id,
-      entidadeTipo: "fatura_cartao",
-      entidadeId: faturaId,
-      metadata: {
-        acao_tentada: "fatura_cartao.baixa_estornada",
-        motivo: "sem_permissao_financeira",
-      },
-    });
-    return {
-      ok: false,
-      message: "Apenas admin ou financeiro pode estornar baixa.",
-    };
-  }
-
-  const supabase = createClient();
-
-  const { data: fatura } = await supabase
-    .from("faturas_cartao")
-    .select("id, codigo, status")
-    .eq("id", faturaId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  if (!fatura) return { ok: false, message: "Fatura não encontrada." };
-
-  const { error } = await supabase.rpc("estornar_baixa_fatura_cartao", {
-    p_fatura_id: faturaId,
-    p_motivo: motivo,
-  });
-
-  if (error) {
-    console.error("[fatura_cartao.estornar]", error.message);
-    return { ok: false, message: limparMensagem(error.message) };
-  }
-
-  revalidatePath("/financeiro/contas-a-pagar");
-  revalidatePath("/financeiro/conciliacao");
-  return { ok: true };
-}
+// O estorno da baixa da fatura (`estornarBaixaFaturaCartao`) saiu em
+// 29/09/2026: cancelar o pagamento, que devolve a fatura para "fechada",
+// é `cancelarBaixa` em `../actions-baixa-registrada.ts` (decisão 120).

@@ -25,8 +25,9 @@ export const SELECT_LANCAMENTO_LINHA = `id, data_movimento, descricao, natureza,
          fornecedores(nome, razao_social),
          jobs(id, codigo, regional:regionais(nome)),
          empresas(nome_fantasia, razao_social),
-         plano_contas_tipos!inner(codigo, nome),
-         plano_contas_subtipos!inner(codigo, nome),
+         plano_contas_tipos(codigo, nome),
+         plano_contas_subtipos(codigo, nome),
+         transferencia:transferencias_contas(codigo),
          forma_pagamento,
          pedido_compra:pedidos_compra(
            codigo,
@@ -81,8 +82,12 @@ export type LancamentoRaw = {
   fornecedores: { nome: string | null; razao_social: string | null } | null;
   jobs: { id: string; codigo: string; regional: { nome: string } | null } | null;
   empresas: { nome_fantasia: string | null; razao_social: string | null } | null;
-  plano_contas_tipos: { codigo: string; nome: string };
-  plano_contas_subtipos: { codigo: string; nome: string };
+  // Nulos só na perna de transferência entre contas (decisão 124). Até
+  // 29/09/2026 o embed era `!inner`, e isso descartava em silêncio a linha
+  // sem plano: a transferência entraria no saldo e sumiria do extrato.
+  plano_contas_tipos: { codigo: string; nome: string } | null;
+  plano_contas_subtipos: { codigo: string; nome: string } | null;
+  transferencia: { codigo: string } | null;
   forma_pagamento: string | null;
   fatura: { codigo: string } | null;
   pedido_compra: { codigo: string; anexos: AnexoRaw[] } | null;
@@ -204,6 +209,7 @@ export async function montarLinhasDeLancamentos(
         // eles apareciam com travessão, sem dizer de onde saíram
         // (28/08/2026).
         r.fatura?.codigo ??
+        r.transferencia?.codigo ??
         null,
       origem_recorrente: r.conta_avulsa?.recorrente_id != null,
       cartao_label:
@@ -224,10 +230,14 @@ export async function montarLinhasDeLancamentos(
         documentoFiscal(r.conta_avulsa?.anexos)?.path ??
         r.titulo?.faturamento?.anexo_nf_path ??
         null,
-      tipo_codigo: r.plano_contas_tipos.codigo,
-      tipo_nome: r.plano_contas_tipos.nome,
-      subtipo_codigo: r.plano_contas_subtipos.codigo,
-      subtipo_nome: r.plano_contas_subtipos.nome,
+      // A transferência não tem plano: não é receita nem despesa.
+      tipo_codigo: r.plano_contas_tipos?.codigo ?? "",
+      tipo_nome:
+        r.plano_contas_tipos?.nome ??
+        (r.transferencia ? "Transferência entre contas" : "—"),
+      subtipo_codigo: r.plano_contas_subtipos?.codigo ?? "",
+      subtipo_nome:
+        r.plano_contas_subtipos?.nome ?? (r.transferencia ? "fora do DRE" : "—"),
       empresa_nome: r.empresas?.nome_fantasia ?? r.empresas?.razao_social ?? null,
       origem: r.origem,
       papel_na_fatura: r.papel_na_fatura,

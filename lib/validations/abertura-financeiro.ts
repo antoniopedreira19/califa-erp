@@ -133,7 +133,23 @@ export type RateioCompetenciaLinhaInput = z.infer<
   typeof rateioCompetenciasSchema
 >[number];
 
-export const aberturaFinanceiraSchema = z.object({
+/**
+ * Nome de projeto do financeiro — o do "+" do campo Projeto e o do lápis
+ * que renomeia. Só o nome vem da tela: o código é gerado pelo sistema
+ * (`lib/codigos/projetos-financeiro.ts`) e o cliente vem do orçamento de
+ * origem do job — nenhum dos dois é escolha de quem preenche.
+ *
+ * Único no sistema inteiro, sem distinguir caixa, acento nem espaço
+ * (decisão 119): quem confere é o banco (`uniq_projetos_financeiro_nome`),
+ * não este schema.
+ */
+export const nomeDoProjetoFinanceiroSchema = z
+  .string()
+  .trim()
+  .min(2, "Informe o nome do projeto (mín. 2 caracteres).")
+  .max(200, "Máximo 200 caracteres.");
+
+const camposDaAbertura = z.object({
   /**
    * Nome do job NO FINANCEIRO. Não sobrescreve o nome da produção — quem
    * abre pode renomear para o uso do financeiro sem que o GP perca o nome
@@ -148,9 +164,17 @@ export const aberturaFinanceiraSchema = z.object({
    * Projeto do job NA VISÃO DO FINANCEIRO (`projetos_financeiro`). Não
    * mexe em `jobs.projeto_id`, que é o da produção e continua vindo do
    * orçamento — mesmo contrato de `nome_financeiro` vs `nome`.
-   * Obrigatório: o protótipo marca o campo com asterisco.
+   * Obrigatório: o protótipo marca o campo com asterisco — um projeto que
+   * já existe (`projeto_financeiro_id`) OU o nome de um novo
+   * (`projeto_financeiro_novo`), nunca os dois.
+   *
+   * O projeto novo nasce na própria gravação, junto com o job (decisão
+   * 119): todo projeto do financeiro tem pelo menos um job. Até 28/09/2026
+   * o "+" gravava o projeto na hora, e quem desistia da abertura deixava
+   * um projeto solto — eram 11 de 17.
    */
-  projeto_financeiro_id: z.string().uuid("Selecione o projeto do job."),
+  projeto_financeiro_id: z.string().uuid("Selecione o projeto do job.").nullable(),
+  projeto_financeiro_novo: nomeDoProjetoFinanceiroSchema.nullable(),
   /**
    * Contas bancárias do job: a da entrada, a dos custos e a dos impostos.
    * Nulas no schema porque a obrigação depende do dinheiro, que só a action
@@ -178,6 +202,12 @@ export const aberturaFinanceiraSchema = z.object({
   impostos: previsaoImpostosSchema,
 });
 
+export const aberturaFinanceiraSchema = camposDaAbertura.refine(
+  (d) =>
+    (d.projeto_financeiro_id === null) !== (d.projeto_financeiro_novo === null),
+  { message: "Selecione o projeto do job.", path: ["projeto_financeiro_id"] },
+);
+
 export type CurvaDesembolsoLinhaInput = z.infer<
   typeof curvaDesembolsoSchema
 >[number];
@@ -188,26 +218,6 @@ export type PrevisaoImpostosLinhaInput = z.infer<
   typeof previsaoImpostosSchema
 >[number];
 export type AberturaFinanceiraInput = z.infer<typeof aberturaFinanceiraSchema>;
-
-/**
- * Criação de projeto do financeiro direto do formulário de abertura
- * ("Criar projeto para este job", do protótipo).
- *
- * Só o nome vem da tela: o código é gerado pelo sistema
- * (`lib/codigos/projetos-financeiro.ts`) e o cliente vem do orçamento de
- * origem do job — nenhum dos dois é escolha de quem preenche.
- */
-export const criarProjetoFinanceiroSchema = z.object({
-  nome: z
-    .string()
-    .trim()
-    .min(2, "Informe o nome do projeto (mín. 2 caracteres).")
-    .max(200, "Máximo 200 caracteres."),
-});
-
-export type CriarProjetoFinanceiroInput = z.infer<
-  typeof criarProjetoFinanceiroSchema
->;
 
 /**
  * Edição do registro da abertura de um job JÁ ABERTO ("Editar registro",

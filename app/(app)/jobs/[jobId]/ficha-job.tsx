@@ -26,9 +26,6 @@ function formatPeriodo(inicio: string | null, fim: string | null): string {
 
 export interface JobDaFicha {
   codigo: string;
-  /** O `JOB-NNNN` de antes da decisão 114, que PDFs e planilhas antigas
-   *  ainda citam. Nulo nos jobs criados depois da troca. */
-  codigoAnterior: string | null;
   nome: string;
   categoriaNome: string | null;
   /**
@@ -83,8 +80,8 @@ export interface JobIrmao {
 export interface OrigemDaFicha {
   projetoHref: string;
   orcamentoHref: string;
-  orcamentoCodigo: string | null;
-  /** Nome da versão aprovada — "Teste A1 - V1". */
+  /** Nome da versão aprovada — "Teste A1 - V1". Já traz o nome do
+   *  orçamento; o código dele saiu em 29/09/2026 (só da base de dados). */
   versaoLabel: string;
 }
 
@@ -350,13 +347,6 @@ export function FichaJob({
                 {job.codigo}
               </span>
             </CampoLateral>
-            {job.codigoAnterior && (
-              <CampoLateral rotulo="Código anterior">
-                <span className="font-mono text-[13px] text-muted-foreground">
-                  {job.codigoAnterior}
-                </span>
-              </CampoLateral>
-            )}
             <CampoLateral rotulo="Projeto">
               <LinkDoProjeto
                 href={origem.projetoHref}
@@ -375,23 +365,14 @@ export function FichaJob({
                   modulo="Orçamentos"
                   descricao={
                     <>
-                      A versão aprovada{" "}
-                      <span className="font-mono">
-                        {origem.orcamentoCodigo ?? "—"}
-                      </span>{" "}
-                      · {origem.versaoLabel} mora no módulo de Orçamentos —
-                      não existe cópia dela no financeiro. Você sai desta
-                      tela para abri-la.
+                      A versão aprovada {origem.versaoLabel} mora no módulo
+                      de Orçamentos — não existe cópia dela no financeiro.
+                      Você sai desta tela para abri-la.
                     </>
                   }
                   className="text-california-red hover:underline"
                 >
-                  <span>
-                    <span className="font-mono text-[13px]">
-                      {origem.orcamentoCodigo ?? "—"}
-                    </span>{" "}
-                    · {origem.versaoLabel}
-                  </span>
+                  <span>{origem.versaoLabel}</span>
                 </LinkSaidaDeModulo>
               ) : (
               <Link
@@ -399,10 +380,7 @@ export function FichaJob({
                 prefetch={false}
                 className="text-california-red hover:underline"
               >
-                <span className="font-mono text-[13px]">
-                  {origem.orcamentoCodigo ?? "—"}
-                </span>{" "}
-                · {origem.versaoLabel}
+                {origem.versaoLabel}
               </Link>
               )}
             </CampoLateral>

@@ -66,10 +66,6 @@ interface Props {
     evento: React.MouseEvent<HTMLAnchorElement>,
     href: string,
   ) => void;
-  /** Código previsto ("PROJ-0001/26-03"). Vem do editor porque depende da
-   *  posição na lista: remover um job renumera os de baixo. O definitivo é
-   *  gerado no servidor, no salvamento. */
-  codigo: string;
   parametros: ParametrosVersao;
   /** Qual cadeia fecha ESTE orçamento (decisão 072). Obrigatório: na visão
    *  agregada cada card tem a sua, e um default somaria pela errada. */
@@ -128,7 +124,6 @@ export function JobRascunhoCard({
   meses,
   hrefOrcamento,
   onAbrirOrcamento,
-  codigo,
   parametros,
   visao,
   savePorItem,
@@ -249,9 +244,6 @@ export function JobRascunhoCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="font-mono text-xs font-bold text-california-red">
-              {codigo}
-            </span>
             <span className="text-base font-bold tracking-tight">
               {job.nome}
             </span>
@@ -618,7 +610,7 @@ export function JobRascunhoCard({
                     // O total do orçamento é o pé da tabela desde
                     // 24/08/2026 — era a faixa solta que ficava embaixo
                     // dos cards de grupo, com as colunas fora do eixo.
-                    rotuloTotal={`Total do orçamento · ${codigo}`}
+                    rotuloTotal="Total do orçamento"
                   />
                 </div>
               )}

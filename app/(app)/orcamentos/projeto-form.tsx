@@ -70,6 +70,12 @@ interface Props {
    *  cadastrar nem editar, e a Marca perde o "+" (18/09/2026). */
   podeCadastrarCliente?: boolean;
   podeEditarCliente?: boolean;
+  /** Conteúdo à esquerda de Cancelar/Salvar, na mesma linha do pé. O
+   *  "Editar projeto" põe ali o status e o Arquivar (29/09/2026). */
+  rodapeEsquerda?: React.ReactNode;
+  /** Decisão 122: com orçamento aprovado (ou job), o cliente não muda —
+   *  o campo trava. A criação não passa: lá nada foi aprovado. */
+  clienteTravado?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -90,6 +96,8 @@ export function ProjetoForm({
   criadorId,
   podeCadastrarCliente = false,
   podeEditarCliente = false,
+  rodapeEsquerda,
+  clienteTravado = false,
   onSuccess,
   onCancel,
 }: Props) {
@@ -224,6 +232,15 @@ export function ProjetoForm({
     setMarcaPendente(null);
   }, [marcaPendente, produtosDoCliente]);
 
+  /** Sigla do cliente escolhido, quando a troca vai mudar o código do
+   *  projeto (edição, cliente diferente e sigla diferente da do código). */
+  const siglaNova = React.useMemo(() => {
+    if (!projeto || !clienteId || clienteId === projeto.cliente_id) return null;
+    const sigla = clientesLocais.find((c) => c.id === clienteId)?.codigo_curto;
+    if (!sigla || projeto.codigo.startsWith(`${sigla}-`)) return null;
+    return sigla;
+  }, [projeto, clienteId, clientesLocais]);
+
   function handleClienteChange(novoClienteId: string) {
     setClienteId(novoClienteId);
     if (novoClienteId !== clienteId) setProdutoId("");
@@ -326,11 +343,30 @@ export function ProjetoForm({
             onCadastroMudou={absorverCadastro}
             podeCadastrar={podeCadastrarCliente}
             podeEditar={podeEditarCliente}
+            disabled={clienteTravado}
             className={erroClasses("cliente_id")}
             abrirMarcas={abrirMarcasDoCliente}
             onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
             onMarcaCriada={absorverMarca}
           />
+          {/* Decisão 122: o cliente trava na primeira aprovação; antes
+              dela, trocar leva o código do projeto e dos orçamentos para
+              a sigla do cliente novo. */}
+          {clienteTravado ? (
+            <p className="text-xs text-muted-foreground">
+              O cliente não muda depois que um orçamento do projeto é aprovado.
+            </p>
+          ) : (
+            siglaNova && (
+              <p className="text-xs text-muted-foreground">
+                Ao salvar, o projeto ganha um código novo com a sigla{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {siglaNova}
+                </span>
+                , e os orçamentos acompanham.
+              </p>
+            )
+          )}
         </Field>
 
         <Field label="Marca" name="produto_id" required errors={fieldErrors}>
@@ -532,6 +568,7 @@ export function ProjetoForm({
       )}
 
       <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+        {rodapeEsquerda && <div className="mr-auto">{rodapeEsquerda}</div>}
         {onCancel ? (
           <button
             type="button"

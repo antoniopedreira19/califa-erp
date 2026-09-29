@@ -51,6 +51,7 @@ import { mesesDaVersaoQuery, mesesSemItens } from "@/lib/data/meses-versao";
 import type { VersaoOrcamentoMes } from "@/lib/types";
 import { PlanilhaMensal } from "./planilha-mensal";
 import { AprovacaoActions } from "./versoes/[versaoId]/aprovacao-actions";
+import { AvisoArquivado } from "../../aviso-arquivado";
 import {
   BannersEstado,
   FluxoAbertura,
@@ -188,7 +189,7 @@ export default async function OrcamentoDetailPage({
     supabase
       .from("orcamentos")
       .select(
-        "id, tenant_id, projeto_id, codigo, nome, status, categoria_id, servico_id, descritivo, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, " +
+        "id, tenant_id, projeto_id, codigo, nome, status, arquivado_em, arquivado_por, categoria_id, servico_id, descritivo, regional_id, cidade_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, versao_aprovada_id, created_by, created_at, updated_at, " +
           // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`
           // desde 02/09/2026 (categoria e servico).
           "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), regional:regionais(nome), cidade:cidades(id, nome), " +
@@ -208,7 +209,7 @@ export default async function OrcamentoDetailPage({
         // `produto_id` cru além do embed `produto`: é ele que o servidor
         // confere para deixar abrir o job, e é ele que o modal usa para
         // decidir se a Marca está cadastrada (17/09/2026).
-        "id, codigo, nome, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
+        "id, codigo, nome, status, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -360,15 +361,27 @@ export default async function OrcamentoDetailPage({
   // aparece, nenhum campo edita. Task 3 ja fecha o servidor; esta
   // camada tira a UI enganosa. Fonte-verdade: `lib/permissoes.ts`.
   const readOnlyPeloPapel = !pode(session.activeRole, "orcamentos.editar");
+  // Decisão 118: orçamento arquivado, ou de projeto arquivado, é só leitura
+  // — tudo fica para consulta, e o único caminho de volta é o Reativar do
+  // aviso. O banco recusa a escrita também.
+  const orcamentoArquivado = Boolean(orcamento.arquivado_em);
+  const projetoArquivado = projetoRaw.status === "arquivado";
+  const arquivado = orcamentoArquivado || projetoArquivado;
   const protegido =
     orcamento.status === "aprovado" ||
     orcamento.status === "job_criado" ||
-    readOnlyPeloPapel;
+    readOnlyPeloPapel ||
+    arquivado;
   const podeCriarVersao =
     orcamento.status !== "job_criado" &&
     orcamento.status !== "cancelado" &&
-    !readOnlyPeloPapel;
-  const motivoBloqueio = readOnlyPeloPapel
+    !readOnlyPeloPapel &&
+    !arquivado;
+  const motivoBloqueio = arquivado
+    ? orcamentoArquivado
+      ? "Orçamento arquivado não aceita novas versões."
+      : "Projeto arquivado não aceita novas versões."
+    : readOnlyPeloPapel
     ? "Seu papel não permite editar orçamentos."
     : podeCriarVersao
       ? undefined
@@ -556,11 +569,11 @@ export default async function OrcamentoDetailPage({
           />
         </Suspense>
 
+        {/* Sem a linha do código do orçamento acima do nome: ele é só da
+            base de dados e confundia a produção, que fala pelo código do
+            job — o "Ver job" ao lado leva a ele (29/09/2026). */}
         <div className="mt-5">
-          <p className="font-mono text-xs font-semibold text-muted-foreground">
-            {orcamento.codigo}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{orcamento.nome}</h1>
             <Badge className={cn("border", statusBadgeClasses(orcamento.status))}>
               {orcamentoStatusLabel(orcamento.status)}
@@ -578,11 +591,17 @@ export default async function OrcamentoDetailPage({
               cidadeAtual={cidadeAtual}
               gpsDoProjeto={gpsDoProjeto}
               produtores={produtores}
+              projetoNome={projetoRaw.nome}
+              projetoCodigo={projetoRaw.codigo}
               disabled={protegido}
               disabledReason={
-                protegido
-                  ? `Bloqueado em ${orcamentoStatusLabel(orcamento.status).toLowerCase()} — alterações via fluxo de aprovação/job.`
-                  : undefined
+                arquivado
+                  ? orcamentoArquivado
+                    ? "Orçamento arquivado — reative para editar."
+                    : "Projeto arquivado — reative o projeto para editar."
+                  : protegido
+                    ? `Bloqueado em ${orcamentoStatusLabel(orcamento.status).toLowerCase()} — alterações via fluxo de aprovação/job.`
+                    : undefined
               }
             />
             {/* Exportar / Duplicar / Cancelar incidem sobre a ABA
@@ -603,6 +622,7 @@ export default async function OrcamentoDetailPage({
                 totalVersoes={versoesTodas.length}
                 podeCriarVersao={podeCriarVersao}
                 motivoBloqueio={motivoBloqueio}
+                arquivado={arquivado}
               />
             )}
             {orcamento.status === "job_criado" && job && (
@@ -662,7 +682,16 @@ export default async function OrcamentoDetailPage({
         </div>
       </div>
 
-      {protegido && (
+      {arquivado ? (
+        <AvisoArquivado
+          tipo="orcamento"
+          projetoId={params.projetoId}
+          orcamentoId={orcamento.id}
+          podeReativar={!readOnlyPeloPapel}
+          orcamentoArquivado={orcamentoArquivado}
+          projetoArquivado={projetoArquivado}
+        />
+      ) : protegido && (
         <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 flex items-start gap-3">
           <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
@@ -730,6 +759,7 @@ export default async function OrcamentoDetailPage({
           }
           podeCriarVersao={podeCriarVersao}
           motivoBloqueio={motivoBloqueio}
+          arquivado={arquivado}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
@@ -785,6 +815,7 @@ function VersaoSelecionada({
   proximoCodigoJob,
   podeCriarVersao,
   motivoBloqueio,
+  arquivado,
   meses,
   mesPedido,
   fechamentoDaCopia,
@@ -817,6 +848,8 @@ function VersaoSelecionada({
   proximoCodigoJob: string;
   podeCriarVersao: boolean;
   motivoBloqueio?: string;
+  /** Orçamento ou projeto arquivado (decisão 118): a aba vira consulta. */
+  arquivado: boolean;
   /** Meses da versão (modelo mensal, decisão 078); vazio nos demais. */
   meses: VersaoOrcamentoMes[];
   /** `?mes=` da URL. */
@@ -871,7 +904,8 @@ function VersaoSelecionada({
   const readOnly =
     versao.status === "aprovada" ||
     versao.status === "cancelada" ||
-    readOnlyPeloPapel;
+    readOnlyPeloPapel ||
+    arquivado;
   const temBv = Object.keys(bvsPorItem).length > 0;
 
   // De qual modelo é esta planilha. Sai da CATEGORIA do orçamento, pelo
@@ -994,8 +1028,12 @@ function VersaoSelecionada({
             // (Admin + GP a partir de 03/09/2026 — antes era so admin).
             podeEditarHonorarios={pode(session.activeRole, "orcamentos.editar_impostos")}
             clienteNome={clienteNome}
-            readOnly={versao.status === "aprovada"}
-            readOnlyReason="Versão aprovada não pode ser editada."
+            readOnly={versao.status === "aprovada" || arquivado}
+            readOnlyReason={
+              arquivado
+                ? "Orçamento arquivado não pode ser editado."
+                : "Versão aprovada não pode ser editada."
+            }
             internacional={
               planilha.modeloPlanilha === "internacional"
                 ? {
@@ -1021,7 +1059,7 @@ function VersaoSelecionada({
                 : null
             }
           />
-          {pode(session.activeRole, "orcamentos.aprovar") && (
+          {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && (
             <AprovacaoActions
               versaoId={versao.id}
               status={versao.status}
@@ -1167,11 +1205,14 @@ function VersaoSelecionada({
       </>
       )}
 
+      {/* Arquivado (decisão 118) não se aprova nem vira job: a barra de
+          aprovação e abertura não tem o que oferecer. */}
+      {!arquivado && (
       <FluxoAbertura
         versaoId={versao.id}
         versaoLabel={`v${versao.numero_versao}`}
         versaoStatus={versao.status}
-        orcamentoCodigo={orcamento.codigo}
+        orcamentoNome={orcamento.nome}
         jobHref={job ? `/jobs/${job.id}` : null}
         qtdGrupos={grupos.length}
         qtdItens={itens.length}
@@ -1213,6 +1254,7 @@ function VersaoSelecionada({
         podeEnviarAbertura={pode(session.activeRole, "jobs.enviar_abertura")}
         abrirRevisao={abrirRevisao}
       />
+      )}
     </>
   );
 }

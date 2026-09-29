@@ -192,7 +192,7 @@ interface Props {
   dados: DadosJob;
   onChange: (patch: Partial<DadosJob>) => void;
 
-  orcamentoCodigo: string;
+  orcamentoNome: string;
   projetoNome: string;
   projetoCodigo: string;
   clienteNome: string;
@@ -232,7 +232,7 @@ export function EnviarJobModal({
   onConfirmar,
   dados,
   onChange,
-  orcamentoCodigo,
+  orcamentoNome,
   projetoNome,
   projetoCodigo,
   clienteNome,
@@ -325,7 +325,7 @@ export function EnviarJobModal({
           <div className="min-w-0 space-y-1">
             <DialogTitle className="text-xl">Enviar job para abertura</DialogTitle>
             <DialogDescription>
-              {`Confira as informações essenciais. Alterações em nome, cidade, regional e datas são gravadas também no orçamento ${orcamentoCodigo}.`}
+              {`Confira as informações essenciais. Alterações em nome, cidade, regional e datas são gravadas também no orçamento “${orcamentoNome}”.`}
             </DialogDescription>
           </div>
         </DialogHeader>
