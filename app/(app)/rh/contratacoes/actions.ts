@@ -342,23 +342,37 @@ export async function finalizarAnexoContrato(
   }
 
   const supabase = createClient();
-  const { data: atualizada, error: updErr } = await supabase
-    .from("contratacoes")
-    .update({
-      status: "contrato_assinado",
-      contrato_assinado_path: path,
-      contrato_assinado_anexado_em: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .in("status", ["dados_completos", "contrato_gerado"])
-    .select("id")
-    .maybeSingle();
+  // UPDATE e audit rodam em paralelo. São independentes: o audit é
+  // best-effort (não bloqueia a resposta lógica) e o UPDATE é a única
+  // operação autoritativa. Se por algum motivo o UPDATE falhar por
+  // status, teremos um audit "falso" — mas audit é informativo, não
+  // fonte-verdade. Economia: ~400ms no caminho quente.
+  const [updateRes, _auditRes] = await Promise.all([
+    supabase
+      .from("contratacoes")
+      .update({
+        status: "contrato_assinado",
+        contrato_assinado_path: path,
+        contrato_assinado_anexado_em: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", ["dados_completos", "contrato_gerado"])
+      .select("id")
+      .maybeSingle(),
+    logAuditEvent({
+      acao: "contratacao.contrato_anexado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "contratacao",
+      entidadeId: id,
+      metadata: { tamanho_bytes: tamanhoBytes },
+    }),
+  ]);
   const t3 = Date.now();
-  if (updErr) {
-    return { ok: false, message: mapDbError(updErr.message) };
+  if (updateRes.error) {
+    return { ok: false, message: mapDbError(updateRes.error.message) };
   }
-  if (!atualizada) {
+  if (!updateRes.data) {
     return {
       ok: false,
       message:
@@ -366,23 +380,13 @@ export async function finalizarAnexoContrato(
     };
   }
 
-  await logAuditEvent({
-    acao: "contratacao.contrato_anexado",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "contratacao",
-    entidadeId: id,
-    metadata: { tamanho_bytes: tamanhoBytes },
-  });
-  const t4 = Date.now();
-
   // Sem revalidatePath: ele forçava o Next.js a re-renderizar a página
   // inteira e streamar o RSC atualizado na mesma resposta do POST, o
   // que somava vários segundos. A UI reflete a mudança localmente via
-  // statusOverride no client, e um router.refresh() em background
-  // reconciliação eventual.
-  const t5 = Date.now();
+  // statusOverride no client, e um router.refresh() em background faz
+  // a reconciliação.
   console.log(
-    `[finalizarAnexoContrato] session=${t1 - t0}ms permissao=${t2 - t1}ms update=${t3 - t2}ms audit=${t4 - t3}ms return=${t5 - t4}ms total=${t5 - t0}ms`,
+    `[finalizarAnexoContrato] session=${t1 - t0}ms permissao=${t2 - t1}ms update+audit(paralelo)=${t3 - t2}ms total=${t3 - t0}ms`,
   );
   return { ok: true, id };
 }
