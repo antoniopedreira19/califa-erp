@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Send,
   Copy,
@@ -118,15 +119,38 @@ function formatarCep(v: string | null): string {
 }
 
 export function ContratacaoDetalheView({
-  contratacao: c,
+  contratacao: cReal,
   linkPublico,
 }: {
   contratacao: ContratacaoRica;
   linkPublico: string;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [copiado, setCopiado] = React.useState(false);
   const [erroAcao, setErroAcao] = React.useState<string | null>(null);
+  // Override otimista: quando o RH anexa o contrato, mostramos "Pronto
+  // pra efetivar" na hora, sem esperar o revalidatePath do server ir e
+  // voltar. Reseta pra null quando o dado real chega via router.refresh.
+  const [statusOverride, setStatusOverride] =
+    React.useState<ContratacaoStatus | null>(null);
+  const [pathOverride, setPathOverride] = React.useState<string | null>(null);
+
+  // Se o dado real já reflete o que otimizamos localmente, limpa o override.
+  React.useEffect(() => {
+    if (statusOverride && cReal.status === statusOverride) {
+      setStatusOverride(null);
+      setPathOverride(null);
+    }
+  }, [cReal.status, statusOverride]);
+
+  const c: ContratacaoRica = statusOverride
+    ? {
+        ...cReal,
+        status: statusOverride,
+        contrato_assinado_path: pathOverride ?? cReal.contrato_assinado_path,
+      }
+    : cReal;
 
   const linkExpira = new Date(c.token_expira_em);
   const linkVencido = linkExpira.getTime() < Date.now();
@@ -197,6 +221,11 @@ export function ContratacaoDetalheView({
         copiado={copiado}
         onCopiarLink={copiarLink}
         onAcao={acao}
+        onSucessoAnexo={(path) => {
+          setStatusOverride("contrato_assinado");
+          setPathOverride(path);
+          router.refresh();
+        }}
       />
 
       {/* Trilha */}
@@ -401,6 +430,7 @@ function AcoesContextuais({
   copiado,
   onCopiarLink,
   onAcao,
+  onSucessoAnexo,
 }: {
   c: Contratacao & {
     empresa: Pick<Empresa, "id" | "nome_fantasia"> | null;
@@ -413,6 +443,7 @@ function AcoesContextuais({
   copiado: boolean;
   onCopiarLink: () => void;
   onAcao: (fn: () => Promise<{ ok: boolean; message?: string }>) => void;
+  onSucessoAnexo: (path: string) => void;
 }) {
   const ehPJ = c.tipo_contratacao === "pj" || c.tipo_contratacao === "clt_recibo";
 
@@ -541,6 +572,7 @@ function AcoesContextuais({
               tenantId={c.tenant_id}
               pending={pending}
               onAcao={onAcao}
+              onSucesso={onSucessoAnexo}
             />
           )}
           <DesistirButton status={c.status} id={c.id} pending={pending} onAcao={onAcao} />
@@ -577,6 +609,7 @@ function AcoesContextuais({
               tenantId={c.tenant_id}
               pending={pending}
               onAcao={onAcao}
+              onSucesso={onSucessoAnexo}
             />
           <DesistirButton status={c.status} id={c.id} pending={pending} onAcao={onAcao} />
         </div>
@@ -774,11 +807,13 @@ function UploadContratoButton({
   tenantId,
   pending,
   onAcao,
+  onSucesso,
 }: {
   id: string;
   tenantId: string;
   pending: boolean;
   onAcao: (fn: () => Promise<{ ok: boolean; message?: string }>) => void;
+  onSucesso: (path: string) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [arquivo, setArquivo] = React.useState<File | null>(null);
@@ -874,6 +909,7 @@ function UploadContratoButton({
                   arquivoRef.size,
                 );
                 console.timeEnd("finalize_action");
+                if (r.ok) onSucesso(path);
                 return { ok: r.ok, message: r.ok ? undefined : r.message };
               });
             }}
