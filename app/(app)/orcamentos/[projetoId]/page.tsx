@@ -407,13 +407,9 @@ export default async function ProjetoDetailPage({
         <div className="mt-3">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             {projeto.codigo}
-            {/* Decisão 114: planilhas e conversas de antes de 28/09/2026
-                citam o código antigo. */}
-            {projeto.codigo_anterior && (
-              <span className="ml-2 font-sans font-normal">
-                · Código anterior: {projeto.codigo_anterior}
-              </span>
-            )}
+            {/* O "Código anterior" (decisão 114) saiu daqui em 29/09/2026:
+                o Tiago não viu utilidade. O dado segue em
+                `projetos.codigo_anterior` e na busca da lista de projetos. */}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{projeto.nome}</h1>

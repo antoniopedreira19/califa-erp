@@ -75,13 +75,42 @@ servidor local do worktree, com o mesmo banco.
   - a auditoria registrou as seis trocas;
   - o -02 foi reativado no fim, e o projeto ficou como estava.
 
-## 6. O que fica em aberto
+## 6. Revisão de 29/09/2026: número de projeto nunca volta a ser usado
 
-- **O número que sai de uma sigla pode voltar a ser usado.** O sequencial é o
-  maior código existente na sigla + 1 (14/09/2026). Se o projeto de maior
-  número muda de cliente, o próximo projeto da sigla antiga ganha o mesmo
-  número. Não colide com nada, mas uma planilha antiga pode citar um código
-  que agora é de outro projeto. A auditoria guarda o histórico.
-- **O "Código anterior" do cabeçalho continua o da decisão 114**
-  (`projetos.codigo_anterior`, por exemplo "TES-0003/26"). Ele não recebe o
-  código de antes da troca de cliente, que fica só na auditoria.
+As duas pontas que ficaram em aberto, respondidas pelo Tiago no mesmo dia:
+
+> Melhor garantir que não ocorrerão conflitos.
+
+> [Sobre o "Código anterior"] Acredito que podemos apagar isso, não me
+> parece ter utilidade.
+
+**Número usado não volta.** Migration `20260929300003`:
+
+- A tabela `codigos_de_projeto_usados` guarda todo código que um projeto
+  da produção já teve. Ela só cresce.
+- É alimentada por um gatilho em `projetos` (criação e troca de código).
+- A carga inicial trouxe os códigos atuais, o `codigo_anterior` da decisão
+  114 e os códigos da auditoria (`projeto.criado` e
+  `projeto.codigo_trocado`). São 56 códigos, 15 de projetos já apagados na
+  limpeza de 21/09, como o AMB-0002/26.
+- O gerador (`lerBaseDoSequencial`) conta esse registro no "maior número
+  da sigla". Por isso o número de um projeto que saiu da sigla, ou de um
+  projeto apagado, não volta para outro projeto.
+
+**O próprio projeto recupera o seu número.** Na troca de cliente, se o
+projeto já teve um código daquela sigla e ano, ele volta a usá-lo
+(`codigoQueOProjetoJaTeve`). O número é dele, não de outro, então ida e
+volta não gasta número.
+
+Testado como GP, pela tela, no TES-P003/26:
+
+- a ida para o Teste 22 recuperou o **TET-P001/26** do teste anterior;
+- com o projeto fora da sigla, o gerador real deu **TES-P004/26** para o
+  próximo projeto do Teste. Antes desta revisão, daria o TES-P003/26 que
+  tinha ficado livre;
+- a volta recuperou o **TES-P003/26**.
+
+**O "Código anterior" saiu dos cabeçalhos de projeto**, na produção e no
+financeiro (revisão da decisão 114, item 6). O dado continua em
+`codigo_anterior` e na busca. O "Código anterior" da ficha do job
+(`JOB-NNNN`) ficou.

@@ -80,7 +80,7 @@ export default async function ProjetoNoFinanceiroPage({
   const [projetoRes, jobsRes] = await Promise.all([
     supabase
       .from("projetos_financeiro")
-      .select("id, codigo, codigo_anterior, nome, cliente:clientes(nome_fantasia)")
+      .select("id, codigo, nome, cliente:clientes(nome_fantasia)")
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
       .maybeSingle(),
@@ -177,13 +177,9 @@ export default async function ProjetoNoFinanceiroPage({
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold text-muted-foreground">
                 {projeto.codigo}
-                {/* Decisão 114: o que foi emitido antes de 28/09/2026 cita
-                    o código antigo. */}
-                {projeto.codigo_anterior && (
-                  <span className="ml-2 font-sans font-normal">
-                    · Código anterior: {projeto.codigo_anterior}
-                  </span>
-                )}
+                {/* O "Código anterior" (decisão 114) saiu daqui em
+                    29/09/2026, como no projeto da produção. O dado segue em
+                    `projetos_financeiro.codigo_anterior` e na busca. */}
               </p>
               <h1 className="text-2xl font-bold tracking-tight">
                 {projeto.nome}

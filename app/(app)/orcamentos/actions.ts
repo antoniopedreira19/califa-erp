@@ -264,6 +264,31 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
   redirect(`/orcamentos/${data.id}`);
 }
 
+/** O código no formato atual ("SIGLA-P001/AA") que ESTE projeto já teve na
+ *  sigla e no ano, pelo registro de códigos usados — ou `null`. O formato
+ *  de antes da decisão 114 ("SIGLA-0001/AA") não volta. */
+async function codigoQueOProjetoJaTeve(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  projetoId: string,
+  sigla: string,
+  ano: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("codigos_de_projeto_usados")
+    .select("codigo")
+    .eq("tenant_id", tenantId)
+    .eq("projeto_id", projetoId)
+    .like("codigo", `${sigla}-P%/${ano}`);
+  const escapada = sigla.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const formato = new RegExp(`^${escapada}-P\\d{3,}/${ano}$`);
+  return (
+    ((data ?? []) as { codigo: string }[])
+      .map((r) => r.codigo)
+      .find((c) => formato.test(c)) ?? null
+  );
+}
+
 /**
  * Troca o cliente do projeto e os códigos que carregam a sigla dele
  * (decisão 122). O código novo sai do mesmo gerador do cadastro; se a sigla
@@ -313,13 +338,26 @@ async function trocarClienteDoProjeto(
 
   let codigo = args.codigoAtual;
   if (!args.codigoAtual.startsWith(`${cliente.codigo_curto}-`)) {
+    // O projeto que volta a uma sigla em que já esteve recupera o próprio
+    // número: ele não é de outro projeto, e gastar um novo a cada ida e
+    // volta só abriria buracos. Número de OUTRO projeto nunca volta — o
+    // gerador pula tudo o que está em `codigos_de_projeto_usados`.
+    const proprio = await codigoQueOProjetoJaTeve(
+      supabase,
+      tenantId,
+      args.projetoId,
+      cliente.codigo_curto,
+      args.dataInicio.slice(2, 4),
+    );
     try {
-      codigo = await gerarCodigoProjeto(
-        supabase,
-        tenantId,
-        args.clienteId,
-        args.dataInicio,
-      );
+      codigo =
+        proprio ??
+        (await gerarCodigoProjeto(
+          supabase,
+          tenantId,
+          args.clienteId,
+          args.dataInicio,
+        ));
     } catch (e) {
       return {
         ok: false,

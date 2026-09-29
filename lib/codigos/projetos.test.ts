@@ -72,3 +72,19 @@ test("a letra do outro cadastro, código de job, outra sigla e outro ano não co
     "AMB-F005/26",
   );
 });
+
+test("número que saiu da sigla não volta: o registro de códigos usados conta (decisão 122)", () => {
+  // TES tinha P001..P003; o P003 trocou de cliente (virou TET-P001/26). O
+  // cliente Teste fica com 2 projetos, mas o P003 está no registro de
+  // códigos usados, que o gerador lê junto: o próximo é o P004.
+  assert.equal(
+    proximoCodigoDeProjeto({
+      codigoCurto: "TES",
+      ano: "26",
+      letra: "P",
+      qtdDoCliente: 2,
+      codigosDaSigla: ["TES-P001/26", "TES-P002/26", "TES-P003/26"],
+    }),
+    "TES-P004/26",
+  );
+});

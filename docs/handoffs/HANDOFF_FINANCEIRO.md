@@ -6165,3 +6165,10 @@ estendido a Contas a Receber em 31/08.**
 - **Corrigido na conferência:** a recusa do servidor fechava o formulário do
   popup e perdia o motivo digitado; o popup agora só se reinicia quando muda
   o título.
+
+## ⚠️ Nota de 2026-09-29 (2) — o "Código anterior" sai do cabeçalho do projeto
+
+- A página do projeto do financeiro não mostra mais o "Código anterior" da
+  decisão 114, como na produção (decisão 122, §6).
+- `projetos_financeiro.codigo_anterior` e a busca pelo código antigo
+  continuam.

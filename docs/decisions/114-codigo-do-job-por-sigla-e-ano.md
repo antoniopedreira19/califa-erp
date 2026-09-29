@@ -67,6 +67,9 @@ Com o formato do projeto passando para o job, o projeto precisava de outro
    cabeçalho da página do projeto (produção e financeiro) mostra "Código
    anterior"; a busca da lista de projetos e a do campo Projeto da abertura
    acham pelos dois.
+   ⚠️ **29/09/2026:** o "Código anterior" saiu dos dois cabeçalhos de
+   projeto, porque o Tiago não viu utilidade (decisão 122, §6). A coluna e a
+   busca ficam; a ficha do job continua mostrando o dela.
 
 ## 3. A troca dos jobs existentes
 
