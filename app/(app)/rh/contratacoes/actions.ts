@@ -312,14 +312,15 @@ export async function gerarContrato(id: string): Promise<ActionResult> {
 }
 
 /**
- * Finaliza o anexo do contrato assinado depois que o cliente já subiu
- * o PDF direto pro Supabase Storage via signed URL (veja o route
- * `/api/rh/contratacoes/[id]/upload-url`). Aqui só valida sessão/status
- * e grava o path no DB — nenhum byte do PDF passa pela Function.
+ * Finaliza o anexo do contrato assinado depois que o browser subiu o
+ * PDF direto pro Supabase Storage. Segue o padrão dos outros anexos do
+ * sistema (Pedidos Compra, Desembolsos, etc): a RLS do bucket
+ * `contratacoes-anexos` só deixa RH/admin gravar em `{tenant_id}/...`,
+ * então quando essa action é chamada o arquivo já está lá — resta só
+ * marcar o status e o path no DB.
  *
- * O padrão anterior (`anexarContratoAssinado` recebendo FormData) fazia
- * o PDF trafegar duas vezes (browser -> Vercel -> Supabase) e empurrava
- * o tempo percebido pra ~7s em contratos de alguns MB.
+ * O path canônico é `${tenant}/${id}/contrato-assinado.pdf`, checado
+ * abaixo pra evitar que a UI grave path bagunçado.
  */
 export async function finalizarAnexoContrato(
   id: string,
@@ -330,10 +331,6 @@ export async function finalizarAnexoContrato(
   const gate = await checarPermissao(session, "rh.contratacoes.editar");
   if (!gate.ok) return gate;
 
-  // Path canônico é `${tenant}/${id}/contrato-assinado.pdf`. Se o cliente
-  // mandar outro, rejeita — o token da signed URL foi emitido pra esse
-  // path exato, então o próprio Storage já teria recusado, mas checar
-  // aqui evita gravar um path bagunçado no DB.
   const pathEsperado = `${session.activeTenant.id}/${id}/contrato-assinado.pdf`;
   if (path !== pathEsperado) {
     return { ok: false, message: "Caminho do arquivo inválido." };
