@@ -39,6 +39,9 @@ interface Props {
   cidadeAtual: CidadeOption | null;
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
   produtores: Pick<Profile, "id" | "nome">[];
+  /** O projeto, travado no formulário como na criação. */
+  projetoNome: string;
+  projetoCodigo: string;
   disabled?: boolean;
   disabledReason?: string;
 }
@@ -54,6 +57,8 @@ export function OrcamentoEditorDrawer({
   cidadeAtual,
   gpsDoProjeto,
   produtores,
+  projetoNome,
+  projetoCodigo,
   disabled,
   disabledReason,
 }: Props) {
@@ -105,7 +110,7 @@ export function OrcamentoEditorDrawer({
       <Dialog open={open} onOpenChange={setOpen}>
         <DrawerContent>
           <DialogHeader className="border-b border-border px-6 py-4">
-            <DialogTitle>Editar orçamento {orcamento.codigo}</DialogTitle>
+            <DialogTitle>Editar orçamento</DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-6 py-6">
@@ -120,6 +125,8 @@ export function OrcamentoEditorDrawer({
               cidadeAtual={cidadeAtual}
               gpsDoProjeto={gpsDoProjeto}
               produtores={produtores}
+              projetoNome={projetoNome}
+              projetoCodigo={projetoCodigo}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />

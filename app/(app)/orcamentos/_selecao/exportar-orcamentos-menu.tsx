@@ -20,7 +20,6 @@ import {
 /** Um orçamento do projeto como o seletor de exportação o vê. */
 export interface OrcamentoExportavel {
   id: string;
-  codigo: string;
   nome: string;
   /** Versão que sai no arquivo: a aprovada, senão a mais recente.
    *  `null` = orçamento sem versão, que não tem o que exportar. */

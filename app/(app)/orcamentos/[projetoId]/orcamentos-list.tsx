@@ -21,7 +21,6 @@ import {
 
 export interface OrcamentoRow {
   id: string;
-  codigo: string;
   nome: string;
   categoria_nome: string | null;
   /** Serviço do job deste orçamento. Desceu do projeto em 02/09/2026
@@ -40,6 +39,11 @@ export interface OrcamentoRow {
   /** Decisão 118: arquivado só aparece com o filtro "Arquivados". */
   arquivado: boolean;
   created_at: string;
+  /** O job vivo do orçamento (`jobVivoDoOrcamento`): a coluna Código
+   *  mostra o código DELE, não o do orçamento — o código do orçamento é só
+   *  da base de dados e confundia a produção (29/09/2026). `null` sem job
+   *  ou só com job cancelado. Obrigatório de propósito (CLAUDE.md). */
+  job: { id: string; codigo: string } | null;
 }
 
 type FiltroArquivo = "ativos" | "arquivados" | "todos";
@@ -112,14 +116,20 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
               }}
             >
               <td className="px-4 py-3 font-mono text-xs">
-                <Link
-                  href={`/orcamentos/${projetoId}/${o.id}`}
-                  prefetch={false}
-                  className="hover:text-california-red"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {o.codigo}
-                </Link>
+                {/* O código do job leva ao job; o resto da linha continua
+                    levando ao orçamento. */}
+                {o.job ? (
+                  <Link
+                    href={`/jobs/${o.job.id}`}
+                    prefetch={false}
+                    className="font-semibold hover:text-california-red"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {o.job.codigo}
+                  </Link>
+                ) : (
+                  <span className="font-sans text-muted-foreground">—</span>
+                )}
               </td>
               <td className="px-4 py-3 font-medium">{o.nome}</td>
               <td className="px-4 py-3 text-muted-foreground">{o.categoria_nome ?? "—"}</td>

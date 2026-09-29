@@ -4695,3 +4695,37 @@ aplicada na hora combinada com a frente do Antonio, junto da
   - TES-P003/26: arquivar e reativar o projeto;
   - "Salvar alterações" sem o campo Status.
 
+
+## ⚠️ Nota de 2026-09-29 — o código do orçamento sai das telas (decisão 121) e o "Editar projeto" vira pop-up
+
+- **A coluna Código da lista do projeto** (`[projetoId]/orcamentos-list.tsx`)
+  mostra o código do **job vivo** (`jobVivoDoOrcamento`, em
+  `lib/calculos/funil.ts`, com teste em `funil.test.ts`). Sem job, ou só com
+  job cancelado, mostra "—". O código abre o job e a linha abre o
+  orçamento. `OrcamentoRow.job` é obrigatório, e `OrcamentoRow.codigo` saiu.
+- **O código do orçamento saiu de:**
+  - cabeçalho do orçamento;
+  - abas da faixa: `ItemDaFaixa.codigo` virou `string | null`, é `null` nas
+    abas de orçamento e segue com o código nas de job;
+  - balão do Voltar;
+  - título do "Editar orçamento";
+  - pop-ups de aprovação e de envio, que agora recebem `orcamentoNome`;
+  - visão agregada: cartão, Totais, modal de importação, 16 mensagens de
+    `agregado/actions.ts` e o "código previsto" dos novos
+    (`orcamentosExistentes` saiu);
+  - exportações da versão e do projeto;
+  - gaveta de importação.
+- **Campo "Código" do `OrcamentoForm` saiu.** Sem ele, o `atualizarOrcamento`
+  não mexe no código, porque só grava quando o campo vem preenchido. Na
+  edição, o "Projeto" travado da criação ocupa o lugar dele, com
+  `projetoNome` e `projetoCodigo` vindos do `OrcamentoEditorDrawer`.
+- **`OrcamentoExportavel.codigo` e `OrigemBanco.codigo` saíram.** Ninguém
+  os mostrava.
+- **"Editar projeto" (`projeto-editor-drawer.tsx`)** agora é um
+  `DialogContent` com `max-w-3xl`, a largura do cartão do Novo projeto. O
+  Status e o Arquivar/Reativar vão no pé do formulário, na linha do
+  Cancelar/Salvar, pela prop nova `ProjetoForm.rodapeEsquerda`. Abrir o
+  pop-up zera o erro de um Arquivar recusado antes. O nome do arquivo ficou
+  para não mexer nos imports.
+- **Nenhuma migration.** O código segue em `orcamentos.codigo`, e a
+  importação casa pelo `orc:<uuid>` oculto.

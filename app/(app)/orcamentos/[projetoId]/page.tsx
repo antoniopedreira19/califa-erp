@@ -6,7 +6,7 @@ import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers } from "@/lib/data/members";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
-import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
+import { escolherJobDoFunil, estagioFunil, jobVivoDoOrcamento } from "@/lib/calculos/funil";
 import {
   calcularTotaisVersao,
   type ItemParaTotais,
@@ -216,7 +216,10 @@ export default async function ProjetoDetailPage({
     cambio_compra: number | null;
   };
   const versoesPorOrcamento = new Map<string, VersaoLeve[]>();
-  const jobsPorOrcamento = new Map<string, { status: JobStatus; created_at: string }[]>();
+  const jobsPorOrcamento = new Map<
+    string,
+    { id: string; codigo: string; status: JobStatus; created_at: string }[]
+  >();
   // Valor do job por orçamento: versão APROVADA quando existir; senão a
   // mais recente (número em negociação). Sem versão → null (travessão).
   const valorJobMap = new Map<string, number>();
@@ -243,7 +246,7 @@ export default async function ProjetoDetailPage({
         .eq("tenant_id", session.activeTenant.id),
       supabase
         .from("jobs")
-        .select("orcamento_id, status, created_at")
+        .select("id, codigo, orcamento_id, status, created_at")
         .in("orcamento_id", orcamentoIds)
         .eq("tenant_id", session.activeTenant.id),
     ]);
@@ -258,7 +261,12 @@ export default async function ProjetoDetailPage({
     }
     for (const j of ((jobsRes.data ?? []) as any[])) {
       const atuais = jobsPorOrcamento.get(j.orcamento_id) ?? [];
-      atuais.push({ status: j.status as JobStatus, created_at: j.created_at });
+      atuais.push({
+        id: j.id,
+        codigo: j.codigo,
+        status: j.status as JobStatus,
+        created_at: j.created_at,
+      });
       jobsPorOrcamento.set(j.orcamento_id, atuais);
     }
 
@@ -329,7 +337,6 @@ export default async function ProjetoDetailPage({
 
   const orcamentos: OrcamentoRow[] = orcamentosBrutos.map((o) => ({
     id: o.id,
-    codigo: o.codigo,
     nome: o.nome,
     categoria_nome: o.categoria?.nome ?? null,
     servico_nome: o.servico?.nome ?? null,
@@ -343,6 +350,10 @@ export default async function ProjetoDetailPage({
     versoes_count: versoesCountMap.get(o.id) ?? 0,
     arquivado: Boolean(o.arquivado_em),
     created_at: o.created_at,
+    job: (() => {
+      const vivo = jobVivoDoOrcamento(jobsPorOrcamento.get(o.id) ?? []);
+      return vivo ? { id: vivo.id, codigo: vivo.codigo } : null;
+    })(),
   }));
 
   // Arquivado (decisão 118) e cancelado ficam fora do seletor de
@@ -351,7 +362,6 @@ export default async function ProjetoDetailPage({
     .filter((o) => !o.arquivado && o.estagio !== "cancelado")
     .map((o) => ({
       id: o.id,
-      codigo: o.codigo,
       nome: o.nome,
       numeroVersao: exportavelMap.get(o.id)?.numeroVersao ?? null,
       estagio: o.estagio,

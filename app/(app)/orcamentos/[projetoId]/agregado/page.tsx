@@ -448,7 +448,6 @@ export default async function OrcamentosAgregadoPage({
             orcamentoId: orc.id,
             versaoId: versao.id,
             numeroVersao: versao.numero_versao,
-            codigo: orc.codigo,
             statusOrcamento: orc.status,
             statusVersao: versao.status,
             bloqueio,
@@ -458,7 +457,6 @@ export default async function OrcamentosAgregadoPage({
             orcamentoId: orc.id,
             versaoId: "",
             numeroVersao: 0,
-            codigo: orc.codigo,
             statusOrcamento: orc.status,
             statusVersao: "",
             bloqueio,
@@ -498,7 +496,6 @@ export default async function OrcamentosAgregadoPage({
       : null;
     return {
       id: orc.id,
-      codigo: origem.codigo,
       nome: orc.nome,
       numeroVersao: temVersao ? origem.numeroVersao : null,
       estagio: origem.estagio ?? "orcamento",
@@ -578,7 +575,6 @@ export default async function OrcamentosAgregadoPage({
         projeto.cliente?.percentual_honorarios_padrao ??
           HONORARIOS_PADRAO_FALLBACK,
       )}
-      orcamentosExistentes={orcamentos.length}
       inicial={inicial}
       exportaveis={exportaveis}
       categorias={categoriasOrcamento.filter(

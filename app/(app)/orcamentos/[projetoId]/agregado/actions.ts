@@ -214,7 +214,7 @@ async function aplicarEdicao(
     supabase
       .from("orcamentos")
       .select(
-        "id, codigo, nome, status, projeto_id, " +
+        "id, nome, status, projeto_id, " +
           // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
           "categoria:categorias_dominio!categoria_id(modelo_planilha)",
       )
@@ -222,7 +222,6 @@ async function aplicarEdicao(
       .eq("tenant_id", tenantId)
       .maybeSingle<{
         id: string;
-        codigo: string;
         nome: string;
         status: string;
         projeto_id: string;
@@ -248,18 +247,18 @@ async function aplicarEdicao(
     return { ok: false, message: "Orçamento não encontrado neste projeto." };
   }
   if (!versao || versao.orcamento_id !== orcamento.id) {
-    return { ok: false, message: `${orcamento.codigo}: versão não encontrada.` };
+    return { ok: false, message: `Orçamento “${orcamento.nome}”: versão não encontrada.` };
   }
   if (ORCAMENTO_CONGELADO.includes(orcamento.status)) {
     return {
       ok: false,
-      message: `${orcamento.codigo} está em ${orcamento.status} e não pode mais ser editado aqui.`,
+      message: `O orçamento “${orcamento.nome}” está em ${orcamento.status} e não pode mais ser editado aqui.`,
     };
   }
   if (versao.status === "aprovada") {
     return {
       ok: false,
-      message: `${orcamento.codigo}: versão aprovada não permite alterar itens.`,
+      message: `Orçamento “${orcamento.nome}”: versão aprovada não permite alterar itens.`,
     };
   }
   // O orçamento de Fee ou Always On (decisão 078) se edita aqui desde
@@ -282,7 +281,7 @@ async function aplicarEdicao(
   ) {
     return {
       ok: false,
-      message: `${orcamento.codigo}: só administrador ou gerente de projeto altera os Impostos BR de orçamento internacional.`,
+      message: `Orçamento “${orcamento.nome}”: só administrador ou gerente de projeto altera os Impostos BR de orçamento internacional.`,
     };
   }
 
@@ -303,7 +302,7 @@ async function aplicarEdicao(
     console.error("[agregado.parametros]", paramErr.message);
     return {
       ok: false,
-      message: `${orcamento.codigo}: não foi possível salvar os parâmetros.`,
+      message: `Orçamento “${orcamento.nome}”: não foi possível salvar os parâmetros.`,
     };
   }
 
@@ -345,7 +344,7 @@ async function aplicarEdicao(
       console.error("[agregado.meses]", mesesErr.message);
       return {
         ok: false,
-        message: `${orcamento.codigo}: não foi possível ler os meses da versão.`,
+        message: `Orçamento “${orcamento.nome}”: não foi possível ler os meses da versão.`,
       };
     }
     for (const m of (meses ?? []) as { id: string }[]) mesesDaVersao.add(m.id);
@@ -393,7 +392,7 @@ async function aplicarEdicao(
       if (!atual) {
         return {
           ok: false,
-          message: `${orcamento.codigo}: um grupo foi removido por outra pessoa enquanto você editava. Recarregue a tela.`,
+          message: `Orçamento “${orcamento.nome}”: um grupo foi removido por outra pessoa enquanto você editava. Recarregue a tela.`,
         };
       }
       gruposMantidos.add(grupo.id);
@@ -408,7 +407,7 @@ async function aplicarEdicao(
           console.error("[agregado.grupo.update]", error.message);
           return {
             ok: false,
-            message: `${orcamento.codigo}: não foi possível renomear o grupo "${nome}".`,
+            message: `Orçamento “${orcamento.nome}”: não foi possível renomear o grupo "${nome}".`,
           };
         }
       }
@@ -418,7 +417,7 @@ async function aplicarEdicao(
       if (mensal && (!grupo.mesId || !mesesDaVersao.has(grupo.mesId))) {
         return {
           ok: false,
-          message: `${orcamento.codigo}: o grupo "${nome}" não está num mês deste orçamento. Recarregue a tela.`,
+          message: `Orçamento “${orcamento.nome}”: o grupo "${nome}" não está num mês deste orçamento. Recarregue a tela.`,
         };
       }
       const { data, error } = await supabase
@@ -436,7 +435,7 @@ async function aplicarEdicao(
         console.error("[agregado.grupo.insert]", error?.message);
         return {
           ok: false,
-          message: `${orcamento.codigo}: não foi possível criar o grupo "${nome}".`,
+          message: `Orçamento “${orcamento.nome}”: não foi possível criar o grupo "${nome}".`,
         };
       }
       gruposMantidos.add(data.id);
@@ -478,7 +477,7 @@ async function aplicarEdicao(
         if (!atual) {
           return {
             ok: false,
-            message: `${orcamento.codigo}: um item foi removido por outra pessoa enquanto você editava. Recarregue a tela.`,
+            message: `Orçamento “${orcamento.nome}”: um item foi removido por outra pessoa enquanto você editava. Recarregue a tela.`,
           };
         }
         itensMantidos.add(itemId);
@@ -496,7 +495,7 @@ async function aplicarEdicao(
             console.error("[agregado.item.update]", error.message);
             return {
               ok: false,
-              message: `${orcamento.codigo}: não foi possível salvar o item "${dados.item}".`,
+              message: `Orçamento “${orcamento.nome}”: não foi possível salvar o item "${dados.item}".`,
             };
           }
         }
@@ -514,7 +513,7 @@ async function aplicarEdicao(
           console.error("[agregado.item.insert]", error?.message);
           return {
             ok: false,
-            message: `${orcamento.codigo}: não foi possível criar o item "${dados.item}".`,
+            message: `Orçamento “${orcamento.nome}”: não foi possível criar o item "${dados.item}".`,
           };
         }
         itemId = data.id;
@@ -548,7 +547,7 @@ async function aplicarEdicao(
           console.error("[agregado.bv.insert]", error.message);
           return {
             ok: false,
-            message: `${orcamento.codigo}: não foi possível gravar o BV de "${dados.item}".`,
+            message: `Orçamento “${orcamento.nome}”: não foi possível gravar o BV de "${dados.item}".`,
           };
         }
       } else if (bvDesejado && bvAtual) {
@@ -594,7 +593,7 @@ async function aplicarEdicao(
       console.error("[agregado.item.ordem]", error.message);
       return {
         ok: false,
-        message: `${orcamento.codigo}: não foi possível salvar a ordem dos itens.`,
+        message: `Orçamento “${orcamento.nome}”: não foi possível salvar a ordem dos itens.`,
       };
     }
   }
@@ -615,7 +614,7 @@ async function aplicarEdicao(
       console.error("[agregado.item.delete]", error.message);
       return {
         ok: false,
-        message: `${orcamento.codigo}: não foi possível remover os itens excluídos.`,
+        message: `Orçamento “${orcamento.nome}”: não foi possível remover os itens excluídos.`,
       };
     }
   }
@@ -634,7 +633,7 @@ async function aplicarEdicao(
       console.error("[agregado.grupo.delete]", error.message);
       return {
         ok: false,
-        message: `${orcamento.codigo}: não foi possível remover os grupos excluídos.`,
+        message: `Orçamento “${orcamento.nome}”: não foi possível remover os grupos excluídos.`,
       };
     }
   }

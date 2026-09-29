@@ -197,7 +197,9 @@ export interface DadosAberturaChat {
    *  jobs anteriores à tela de abertura. Só a errata posterior a esta
    *  data devolve o job ao mural — é o que a nota do card diz. */
   aberturaFinanceiroEm?: string | null;
-  orcamentoCodigo: string | null;
+  /** Nome do orçamento de origem. Era o código até 29/09/2026 — o código
+   *  do orçamento é só da base de dados e confundia a produção. */
+  orcamentoNome: string | null;
   versaoNumero: number | null;
   versaoNome: string | null;
   valorJobAbertura: number | null;
@@ -264,8 +266,8 @@ export function montarThreadChat(
   }
 
   const origem =
-    abertura.orcamentoCodigo && abertura.versaoNumero !== null
-      ? `Criado a partir do orçamento ${abertura.orcamentoCodigo} · v${abertura.versaoNumero}${
+    abertura.orcamentoNome && abertura.versaoNumero !== null
+      ? `Criado a partir do orçamento “${abertura.orcamentoNome}” · v${abertura.versaoNumero}${
           abertura.versaoNome ? ` ${abertura.versaoNome}` : ""
         }, aprovado pelo cliente.`
       : "Criado a partir da versão aprovada do orçamento.";

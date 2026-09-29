@@ -339,21 +339,14 @@ export function OrcamentoForm({
           />
         </Field>
 
-        {isEdit && (
-          <Field label="Código" name="codigo" errors={fieldErrors}>
-            <Input
-              name="codigo"
-              defaultValue={orcamento?.codigo ?? ""}
-              placeholder="Auto-gerado"
-            />
-          </Field>
-        )}
-
         {/* Projeto — pré-preenchido e travado. Quem chegou aqui veio de
             dentro do projeto; repetir a escolha só abriria espaço para
             criar o orçamento no lugar errado. Mesmo cinza dos campos
-            travados do envio para abertura. */}
-        {!isEdit && projetoNome && (
+            travados do envio para abertura. Vale para a edição também: ali
+            ele ocupa o lugar do campo "Código", que saiu em 29/09/2026 — o
+            código do orçamento é só da base de dados e confundia a
+            produção. */}
+        {projetoNome && (
           <Field label="Projeto" name="projeto_id" errors={fieldErrors}>
             <div className="flex h-10 items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-3 text-sm font-medium text-muted-foreground">
               <span className="truncate">

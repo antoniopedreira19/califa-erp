@@ -6107,3 +6107,11 @@ Antonio, e o código publicado logo depois (`3305751`).
   serviço do orçamento).
 - **Planilha do job no financeiro:** já seguia a regra (o financeiro não
   passa o saldo do cliente), e não mudou.
+
+## ⚠️ Nota de 2026-09-29 — o código do orçamento sai do financeiro (decisão 121)
+
+- **Conferência e abertura do job:** "Vem do orçamento…" e "Orçamento de
+  origem" mostram o nome do orçamento. `orcamento_codigo` virou
+  `orcamento_nome` em `abertura-de-job/dados.ts`, e saiu de
+  `financeiro/jobs/[jobId]/dados.ts`, onde ninguém o lia.
+- **Ficha do job:** mesma mudança da produção (ver HANDOFF_JOBS).

@@ -4524,3 +4524,14 @@ código publicado logo depois (`3305751`).
   34 casos numa transação desfeita — 14 escritas do app passam, 20 ataques
   são recusados. Repetir quando mudar papel, transição ou quem escreve em
   `jobs`, envio ou nota.
+
+## ⚠️ Nota de 2026-09-29 — o código do orçamento sai do job (decisão 121)
+
+- **Ficha do job:** o "Orçamento aprovado" mostra só o rótulo da versão
+  ("Teste 1 - V1", que já traz o nome). `OrigemDaFicha.orcamentoCodigo`
+  saiu, também das duas telas do financeiro que usam a ficha.
+- **Card de abertura no chat:** "Criado a partir do orçamento “Teste 1” ·
+  v1". `DadosAberturaChat.orcamentoCodigo` virou `orcamentoNome`.
+- **PDF da PP** (`lib/pdf/pedido-compra.ts`): "Job: TES-1008/26" no lugar de
+  "Orçamento: TES-P002/26-01". O `carregarContextoPdf` não lê mais o
+  orçamento, e o job do `actions-pp.ts` agora carrega `codigo`.

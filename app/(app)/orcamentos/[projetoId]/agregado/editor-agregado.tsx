@@ -117,8 +117,6 @@ interface Props {
   /** `orcamentos.marcar_em_save` — administrador e GP geram e consomem
    *  save (24/09/2026). Sem ela o pop-up de save abre só para ver. */
   podeMarcarSave: boolean;
-  /** Quantos orçamentos o projeto já tem — base do código previsto dos novos. */
-  orcamentosExistentes: number;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
   inicial: OrcamentoRascunho[];
   /** Os orçamentos gravados, como o seletor "Exportar" os vê — versão
@@ -215,7 +213,6 @@ export function EditorAgregado({
   projetoArquivado,
   podeEditarImpostos,
   podeMarcarSave,
-  orcamentosExistentes,
   inicial,
   exportaveis,
   categorias,
@@ -355,13 +352,6 @@ export function EditorAgregado({
     ]
       .filter(Boolean)
       .join(" · ");
-  }
-
-  /** Existente mostra o código real; novo, o próximo da sequência. */
-  function codigoDe(orc: OrcamentoRascunho, indiceEntreNovos: number): string {
-    if (orc.origemBanco) return orc.origemBanco.codigo;
-    const seq = orcamentosExistentes + indiceEntreNovos + 1;
-    return `${projeto.codigo}-${String(seq).padStart(2, "0")}`;
   }
 
   // ---------- mutações ----------
@@ -653,26 +643,14 @@ export function EditorAgregado({
   );
 
   // ---------- consolidado ----------
-  // Código de cada orçamento, calculado uma vez sobre a lista INTEIRA: os
-  // novos numeram pela posição entre os novos, e o filtro "Exibir" não
-  // pode renumerar ninguém ao esconder um deles.
-  const codigos = React.useMemo(() => {
-    let novos = -1;
-    return new Map(
-      orcamentos.map((orc) => {
-        if (!orc.origemBanco) novos += 1;
-        return [orc.id, codigoDe(orc, novos)] as const;
-      }),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orcamentos, orcamentosExistentes, projeto.codigo]);
-
+  // Sem o código do orçamento (nem o previsto dos novos) desde 29/09/2026:
+  // ele é só da base de dados e confundia a produção, que fala pelo nome
+  // e, depois da aprovação, pelo código do job.
   const linhasTodas = React.useMemo(() => {
     return orcamentos.map((orc) => {
       const t = totaisDoJob(orc, orc.parametros, orc.modeloPlanilha);
       return {
         id: orc.id,
-        codigo: codigos.get(orc.id) ?? "",
         nome: orc.nome,
         modeloPlanilha: orc.modeloPlanilha,
         detalhe: orc.origemBanco
@@ -695,7 +673,7 @@ export function EditorAgregado({
         percentualImposto: orc.parametros.percentual_imposto,
       };
     });
-  }, [orcamentos, codigos]);
+  }, [orcamentos]);
 
   // O que a tela mostra: cards e Totais seguem o "Exibir".
   const visiveis = orcamentos.filter((o) => exibidos.includes(o.id));
@@ -1015,7 +993,6 @@ export function EditorAgregado({
             062), pelo mesmo motivo da tela da versão: o BV passou a
             descontar só o REALIZADO, e o rascunho não tem realizado. */}
         {visiveis.map((orc) => {
-          const codigo = codigos.get(orc.id) ?? "";
           const bloqueio = orc.origemBanco?.bloqueio ?? null;
           return (
             <JobRascunhoCard
@@ -1051,7 +1028,6 @@ export function EditorAgregado({
                 evento.preventDefault();
                 setAskSair(href);
               }}
-              codigo={codigo}
               parametros={orc.parametros}
               visao={visao}
               descricao={descricao(orc)}
@@ -1163,7 +1139,7 @@ export function EditorAgregado({
             Novo orçamento de job
           </DialogTitle>
           <DialogDescription className="text-[13px]">
-            O código será gerado quando as alterações forem salvas.
+            O orçamento será criado quando as alterações forem salvas.
           </DialogDescription>
           <OrcamentoForm
             projetoId={projeto.id}
@@ -1184,7 +1160,7 @@ export function EditorAgregado({
         <ImportarPlanilhaModal
           open
           onOpenChange={(o) => !o && setModal(null)}
-          codigo={codigos.get(orcImportando.id) ?? ""}
+          nome={orcImportando.nome}
           modeloPlanilha={orcImportando.modeloPlanilha}
           interno={
             orcImportando.servico_id !== null &&

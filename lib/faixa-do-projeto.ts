@@ -16,7 +16,10 @@ export const AGREGADA = "agregada";
 
 export interface ItemDaFaixa {
   id: string;
-  codigo: string;
+  /** Código mostrado na aba: o do job, nas abas de job. Nas de orçamento é
+   *  `null` — o código do orçamento é só da base de dados e confundia a
+   *  produção, que fala pelo código do job (29/09/2026). */
+  codigo: string | null;
   nome: string;
   /** Rota da tela do item, sem query: a aba de seção entra no clique. */
   href: string;
@@ -118,10 +121,11 @@ export function itensDeOrcamentos(
         o.id === atualId ||
         (!o.arquivado_em && o.status !== "cancelado" && o.status !== "recusado"),
     )
+    // A ordem segue a do código (a de criação), mesmo sem mostrá-lo.
     .sort((a, b) => a.codigo.localeCompare(b.codigo))
     .map((o) => ({
       id: o.id,
-      codigo: o.codigo,
+      codigo: null,
       nome: o.nome,
       href: `/orcamentos/${projetoId}/${o.id}`,
       travado: o.status === "aprovado" || o.status === "job_criado",
