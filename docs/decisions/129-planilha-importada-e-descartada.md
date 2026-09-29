@@ -64,9 +64,16 @@ irmãs) não mudou.
 Na hora da decisão havia 1 arquivo no bucket (a planilha BUDWEISER
 importada em 29/09 no TES-P002/26-04, de teste) e 12 linhas do histórico
 com caminho — 11 delas apontando para planilhas já apagadas na decisão
-126. Com o OK do Tiago, o arquivo sai e as 12 linhas ficam sem caminho
-(`20260929700004`), depois do deploy, para pegar também o que o código
-antigo guardar até lá.
+126. Com o OK do Tiago, foi feito depois do deploy do código novo, para
+pegar também o que o código antigo guardasse até lá (nada foi importado
+no intervalo):
+
+- o arquivo saiu (`scripts/apagar-planilhas-guardadas.ts`);
+- as 12 linhas ficaram sem caminho (`20260929700004`, com a contagem
+  conferida).
+
+Resultado: bucket vazio, e as 15 linhas do histórico (12 antigas + 3 dos
+testes) seguem registradas, todas sem caminho.
 
 ## 5. Testado
 
