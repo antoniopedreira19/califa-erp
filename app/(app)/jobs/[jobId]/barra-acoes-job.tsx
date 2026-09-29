@@ -15,7 +15,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { EnviarFaturamentoDrawer, type PortalOption } from "./enviar-faturamento-drawer";
+import {
+  EnviarFaturamentoDialog,
+  type ContextoDoEnvio,
+  type PortalOption,
+} from "./enviar-faturamento-dialog";
 import { useModoErrataAtivo } from "./modo-errata";
 import { BarraFaturamentoMensal } from "./barra-faturamento-mensal";
 import type {
@@ -61,6 +65,9 @@ interface Props {
   pagoSoPorSave?: boolean;
   dataPrevistaFaturamento: string | null;
   portais: PortalOption[];
+  /** Tenant, CNPJ do cadastro do cliente e contatos de cobrança — o que o
+   *  formulário de envio precisa além do valor (decisão 123). */
+  contextoDoEnvio: ContextoDoEnvio;
   moeda: string;
   /** Fee e Always On (modelo mensal, decisão 078): faturam mês a mês. */
   faturamentoPorMes?: boolean;
@@ -221,6 +228,7 @@ export function BarraAcoesJob({
   pagoSoPorSave = false,
   dataPrevistaFaturamento,
   portais,
+  contextoDoEnvio,
   moeda,
   faturamentoPorMes = false,
   faturamentoMensal = [],
@@ -298,6 +306,7 @@ export function BarraAcoesJob({
         podeEnviar={podeEnviarFaturamentoMensal}
         bloqueio={bloqueioFaturamento}
         portais={portais}
+        contextoDoEnvio={contextoDoEnvio}
         moeda={moeda}
         trilhaEncerramento={trilhaEncerramento}
         jobEncerrado={status === "encerrado"}
@@ -318,6 +327,7 @@ export function BarraAcoesJob({
         pagoSoPorSave={pagoSoPorSave}
         dataPrevistaFaturamento={dataPrevistaFaturamento}
         portais={portais}
+        contextoDoEnvio={contextoDoEnvio}
         moeda={moeda}
       />
       {trilhaEncerramento}
@@ -353,6 +363,7 @@ function TrilhaFaturamentoUnico({
   pagoSoPorSave,
   dataPrevistaFaturamento,
   portais,
+  contextoDoEnvio,
   moeda,
 }: {
   jobId: string;
@@ -366,6 +377,7 @@ function TrilhaFaturamentoUnico({
   pagoSoPorSave: boolean;
   dataPrevistaFaturamento: string | null;
   portais: PortalOption[];
+  contextoDoEnvio: ContextoDoEnvio;
   moeda: string;
 }) {
   const [verEnvio, setVerEnvio] = React.useState(false);
@@ -392,21 +404,25 @@ function TrilhaFaturamentoUnico({
       );
       if (podeEnviarFaturamento) {
         acoes = (
-          <EnviarFaturamentoDrawer
+          <EnviarFaturamentoDialog
             jobId={jobId}
             jobCodigo={jobCodigo}
             valorFaturado={faturamentoPrevisto}
             valorSave={faturamentoSavePrevisto}
             dataPrevistaFaturamento={dataPrevistaFaturamento}
             portais={portais}
+            {...contextoDoEnvio}
             moeda={moeda}
           />
         );
       }
     }
   } else {
-    const n = envio.parcelas.length;
-    const primeira = envio.parcelas[0]?.data_vencimento ?? null;
+    // Decisão 123: o envio se conta em NOTAS; as parcelas são vencimentos
+    // delas. O primeiro vencimento é o mais cedo de todos.
+    const n = envio.notas.length || envio.parcelas.length;
+    const primeira =
+      envio.parcelas.map((p) => p.data_vencimento).sort()[0] ?? null;
     const ultimaNota =
       faturamento && faturamento.notas.length > 0
         ? faturamento.notas[faturamento.notas.length - 1].dataEmissao
@@ -414,17 +430,8 @@ function TrilhaFaturamentoUnico({
     texto = (
       <>
         Enviado em <strong className={MONO}>{dataDoEnvio(envio.enviado_em)}</strong> ·{" "}
-        {n === 1 ? (
-          <>
-            1 parcela, vencimento{" "}
-            <strong className={MONO}>{primeira ? dataBr(primeira) : "—"}</strong>
-          </>
-        ) : (
-          <>
-            {n} parcelas, a primeira vencendo em{" "}
-            <strong className={MONO}>{primeira ? dataBr(primeira) : "—"}</strong>
-          </>
-        )}{" "}
+        {n === 1 ? "1 nota fiscal" : `${n} notas fiscais`}, 1º vencimento em{" "}
+        <strong className={MONO}>{primeira ? dataBr(primeira) : "—"}</strong>{" "}
         ·{" "}
         {situacao === "na_fila" ? (
           <>

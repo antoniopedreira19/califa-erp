@@ -3,19 +3,23 @@
 /**
  * Aba "Faturamento" (Tela 3.3) — o que ainda espera nota, e o que já saiu.
  *
- * Uma linha por PARCELA do envio: a produção diz, ao liberar o job, em
- * quantas notas ele será faturado. Cada parcela é faturada por sua
- * própria NF, total ou parcialmente.
+ * Uma linha por NOTA do envio (decisão 123, 29/09/2026): a produção diz,
+ * ao liberar o job, em quantas notas fiscais ele sai — cada uma com o
+ * próprio CNPJ, CNAE sugerido e descritivo — e em quantos vencimentos cada
+ * nota se paga. A view continua trazendo uma linha por PARCELA (a unidade
+ * de saldo); a tela junta as parcelas de uma nota numa linha só, e o
+ * Faturar emite a nota inteira, total ou parcialmente.
  *
  * As notas já emitidas continuam aqui, em verde — clicar em `NF <número>`
  * reabre o mesmo formulário em modo somente leitura.
  *
  * Duas regras do protótipo moram nesta tela:
  *
- * 1. **Uma NF agrupada só cobre jobs de um mesmo cliente.** Com mais de
- *    um cliente na seleção o formulário NÃO abre — o erro aparece na
- *    própria barra de seleção, nomeando os clientes. A conta é pelo
- *    `cliente_id`, e `emitir_faturamento` recusa de novo no banco (079).
+ * 1. **Uma NF agrupada só cobre jobs de um mesmo cliente e de um mesmo
+ *    CNPJ.** Com mais de um cliente (ou CNPJ) na seleção o formulário NÃO
+ *    abre — o erro aparece na própria barra de seleção. A conta é pelo
+ *    `cliente_id` e pelo CNPJ da nota do envio, e `emitir_faturamento`
+ *    recusa de novo no banco (079 e 123).
  * 2. **BV nunca entra em NF agrupada**, porque a contraparte dele é o
  *    fornecedor. O checkbox da linha fica desabilitado.
  */
@@ -35,7 +39,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCnpj } from "@/lib/utils";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import {
   FaturarDrawer,
@@ -90,6 +94,33 @@ export interface FaturamentoPendenteRow {
   parcela_numero: number;
   parcela_total: number;
   data_prevista: string | null;
+  /** A nota do envio a que esta parcela pertence (decisão 123). Nulo em BV. */
+  envio_nota_id: string | null;
+  /** Posição da nota no envio, e quantas notas o envio tem. Nulos em BV. */
+  nota_ordem: number | null;
+  nota_total: number | null;
+  /** CNPJ do cliente para o qual a nota sai (só dígitos). Nulo em BV. */
+  cnpj_tomador: string | null;
+  /** CNAE que o GP sugeriu — texto de fundo no Faturar (D3). */
+  cnae_sugerido: string | null;
+  /** O descritivo que o GP escreveu para esta nota. */
+  descritivo_nota: string | null;
+}
+
+/**
+ * Uma linha da fila: as parcelas (vencimentos) de UMA nota do envio, ou um
+ * BV. Os números são a soma das parcelas.
+ */
+interface LinhaDaFila {
+  chave: string;
+  /** A primeira parcela — o que é da nota inteira (job, cliente, CNPJ). */
+  p: FaturamentoPendenteRow;
+  parcelas: FaturamentoPendenteRow[];
+  valor: number;
+  jaFaturado: number;
+  saldo: number;
+  primeiroVencimento: string | null;
+  ultimoVencimento: string | null;
 }
 
 export interface FaturadoRow {
@@ -100,6 +131,9 @@ export interface FaturadoRow {
   descricao: string;
   /** CNAE usado na emissão — informado pelo financeiro desde 31/08/2026. */
   cnae: string;
+  /** CNPJ para o qual a nota saiu (decisão 123). Nulo nas notas antigas,
+   *  que saíram para o CNPJ do cadastro, e nas de BV. */
+  cnpj_tomador: string | null;
   anexo_nf_path: string;
   empresa_id: string;
   origem_tipo: "job" | "bv" | "avulso";
@@ -156,8 +190,47 @@ function dedupContatos(lista: ContatoCobranca[]): ContatoCobranca[] {
   });
 }
 
+/** A chave da linha da fila: a nota do envio junta as parcelas dela. */
 function chaveLinha(r: FaturamentoPendenteRow): string {
+  if (r.envio_nota_id) return `nota:${r.envio_nota_id}`;
   return r.envio_parcela_id ?? `${r.origem_tipo}:${r.origem_id}`;
+}
+
+/** Junta as parcelas de cada nota numa linha, na ordem em que aparecem. */
+function agruparPorNota(rows: FaturamentoPendenteRow[]): LinhaDaFila[] {
+  const porChave = new Map<string, LinhaDaFila>();
+  for (const r of rows) {
+    const k = chaveLinha(r);
+    const atual = porChave.get(k);
+    if (!atual) {
+      porChave.set(k, {
+        chave: k,
+        p: r,
+        parcelas: [r],
+        valor: r.valor_previsto,
+        jaFaturado: r.valor_ja_faturado,
+        saldo: r.saldo,
+        primeiroVencimento: r.data_prevista,
+        ultimoVencimento: r.data_prevista,
+      });
+      continue;
+    }
+    atual.parcelas.push(r);
+    atual.valor += r.valor_previsto;
+    atual.jaFaturado += r.valor_ja_faturado;
+    atual.saldo += r.saldo;
+    if (r.data_prevista) {
+      if (!atual.primeiroVencimento || r.data_prevista < atual.primeiroVencimento) {
+        atual.primeiroVencimento = r.data_prevista;
+      }
+      if (!atual.ultimoVencimento || r.data_prevista > atual.ultimoVencimento) {
+        atual.ultimoVencimento = r.data_prevista;
+      }
+    }
+  }
+  const linhas = Array.from(porChave.values());
+  for (const l of linhas) l.parcelas.sort((a, b) => a.parcela_numero - b.parcela_numero);
+  return linhas;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,11 +346,14 @@ export function FaturamentoList({
    * do JOB, e o BV é cobrado do FORNECEDOR. Nenhum se aplica, então o modal
    * mostra o job na referência e explica cada vazio (Tiago, 31/08/2026).
    */
-  function infoDaPendente(p: FaturamentoPendenteRow): InfoFaturamento {
+  function infoDaPendente(linha: LinhaDaFila): InfoFaturamento {
+    const p = linha.p;
     const referencia =
       `${p.codigo ?? p.descricao} · ${p.contraparte_nome}` +
       (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : "") +
-      ` · parcela ${p.parcela_numero}/${p.parcela_total}`;
+      (p.nota_ordem && p.nota_total ? ` · NF ${p.nota_ordem}/${p.nota_total}` : "");
+    const saldoProprio = linha.parcelas.reduce((t, x) => t + x.saldo_proprio, 0);
+    const saldoSave = linha.parcelas.reduce((t, x) => t + x.saldo_save, 0);
     if (p.origem_tipo === "bv") {
       return {
         referencia,
@@ -294,12 +370,14 @@ export function FaturamentoList({
     return {
       referencia,
       pos: [{ job: p.codigo ?? "", po: dados?.po ?? null }],
-      descricaoNf: dados?.descricaoNf ?? null,
+      // O descritivo é da NOTA desde a decisão 123; o do envio fica para
+      // os envios anteriores.
+      descricaoNf: p.descritivo_nota ?? dados?.descricaoNf ?? null,
+      anexosPo: dados?.anexos ?? [],
+      cnpj: p.cnpj_tomador,
+      cnaeSugerido: p.cnae_sugerido,
       contatos: dados?.contatos ?? [],
-      quebra:
-        p.saldo_save > 0.005
-          ? { job: p.saldo_proprio, save: p.saldo_save }
-          : null,
+      quebra: saldoSave > 0.005 ? { job: saldoProprio, save: saldoSave } : null,
     };
   }
 
@@ -316,6 +394,8 @@ export function FaturamentoList({
       // Nota emitida: o que vale é a descrição que SAIU nela, não mais a
       // instrução que o GP mandou no envio.
       descricaoNf: f.descricao,
+      anexosPo: f.jobs_cobertos.flatMap((j) => infoPorJob[j.job_id]?.anexos ?? []),
+      cnpj: f.cnpj_tomador,
       contatos: dedupContatos(
         f.jobs_cobertos.flatMap((j) => infoPorJob[j.job_id]?.contatos ?? []),
       ),
@@ -361,6 +441,9 @@ export function FaturamentoList({
     [faturados, filtroContraparte, filtroFat, q],
   );
 
+  // Uma linha por nota do envio (decisão 123); o BV segue sozinho.
+  const linhasVisiveis = React.useMemo(() => agruparPorNota(visiveis), [visiveis]);
+
   const selecionados = React.useMemo(
     () => pendentes.filter((p) => sel[chaveLinha(p)]),
     [pendentes, sel],
@@ -379,19 +462,31 @@ export function FaturamentoList({
     return Array.from(porId.values());
   }, [selecionados]);
   const misto = clientesSelecionados.length > 1;
+  // D4 (decisão 123): uma nota sai para um CNPJ só.
+  const cnpjsSelecionados = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          selecionados
+            .map((p) => p.cnpj_tomador)
+            .filter((c): c is string => Boolean(c)),
+        ),
+      ),
+    [selecionados],
+  );
   const totalSelecionado = selecionados.reduce((s, p) => s + p.saldo, 0);
 
   // BV não é agrupável — o checkbox nem aparece habilitado.
-  const agrupaveis = visiveis.filter((p) => p.origem_tipo === "job");
+  const agrupaveis = linhasVisiveis.filter((l) => l.p.origem_tipo === "job");
   const todosMarcados =
-    agrupaveis.length > 0 && agrupaveis.every((p) => sel[chaveLinha(p)]);
+    agrupaveis.length > 0 && agrupaveis.every((l) => sel[l.chave]);
 
   const totalAFaturar = pendentes.reduce((s, p) => s + p.saldo, 0);
 
-  function alternarLinha(p: FaturamentoPendenteRow) {
+  function alternarLinha(linha: LinhaDaFila) {
     limparErro();
     setSel((atual) => {
-      const k = chaveLinha(p);
+      const k = linha.chave;
       const proximo = { ...atual };
       if (proximo[k]) delete proximo[k];
       else proximo[k] = true;
@@ -406,7 +501,7 @@ export function FaturamentoList({
       return;
     }
     const proximo: Record<string, boolean> = {};
-    for (const p of agrupaveis) proximo[chaveLinha(p)] = true;
+    for (const l of agrupaveis) proximo[l.chave] = true;
     setSel(proximo);
   }
 
@@ -439,6 +534,16 @@ export function FaturamentoList({
         `A seleção tem ${clientesSelecionados.length} clientes ` +
           `(${rotulos.join("; ")}). Uma nota fiscal cobre apenas jobs ` +
           "de um mesmo cliente — desmarque os jobs dos outros clientes para continuar.",
+      );
+      return;
+    }
+    if (cnpjsSelecionados.length > 1) {
+      setErroTitulo("Não é possível agrupar notas de CNPJs diferentes");
+      setErroDetalhe(
+        `A seleção tem ${cnpjsSelecionados.length} CNPJs (${cnpjsSelecionados
+          .map(formatCnpj)
+          .join("; ")}). Uma nota fiscal sai para um CNPJ só — desmarque as ` +
+          "notas dos outros CNPJs para continuar.",
       );
       return;
     }
@@ -641,7 +746,7 @@ export function FaturamentoList({
               <th className="px-4 py-3 text-right font-semibold">Valor</th>
               <th className="px-4 py-3 text-right font-semibold">Já faturado</th>
               <th className="px-4 py-3 text-right font-semibold">Saldo a faturar</th>
-              <th className="w-[72px] px-3 py-3 font-semibold">Parcela</th>
+              <th className="w-[72px] px-3 py-3 font-semibold">Nota</th>
               <th className="w-[110px] px-4 py-3 font-semibold">Vencimento</th>
               <th className="w-[110px] px-4 py-3 text-right font-semibold">Ação</th>
               {/* A calha não é coluna: largura zero, e o botão sai do frame. */}
@@ -649,7 +754,7 @@ export function FaturamentoList({
             </tr>
           </thead>
           <tbody>
-            {visiveis.length === 0 && faturadosVisiveis.length === 0 && (
+            {linhasVisiveis.length === 0 && faturadosVisiveis.length === 0 && (
               <tr>
                 <td
                   colSpan={modoSelecao ? 10 : 9}
@@ -660,8 +765,9 @@ export function FaturamentoList({
               </tr>
             )}
 
-            {visiveis.map((p) => {
-              const k = chaveLinha(p);
+            {linhasVisiveis.map((linha) => {
+              const p = linha.p;
+              const k = linha.chave;
               const marcado = !!sel[k];
               const agrupavel = p.origem_tipo === "job";
               return (
@@ -671,11 +777,11 @@ export function FaturamentoList({
                     // No agrupamento o clique marca a linha; fora dele, abre
                     // o formulário. Espelha o protótipo `clicarLinha`.
                     if (modoSelecao) {
-                      if (agrupavel) alternarLinha(p);
+                      if (agrupavel) alternarLinha(linha);
                       return;
                     }
                     limparErro();
-                    setDrawer({ modo: "origem", linhas: [p] });
+                    setDrawer({ modo: "origem", linhas: linha.parcelas });
                   }}
                   className={cn(
                     "cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40",
@@ -690,7 +796,7 @@ export function FaturamentoList({
                         disabled={!agrupavel}
                         onClick={(e) => {
                           e.stopPropagation();
-                          alternarLinha(p);
+                          alternarLinha(linha);
                         }}
                         title={
                           agrupavel ? "Incluir nesta NF" : "BV é faturado individualmente"
@@ -730,32 +836,61 @@ export function FaturamentoList({
                       em 31/08/2026: dentro da célula ele empurrava a linha
                       para três alturas e mostrava só nome e e-mail. */}
                   <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {p.contraparte_nome}
+                    <div className="flex flex-col gap-0.5">
+                      <span>{p.contraparte_nome}</span>
+                      {/* O CNPJ para o qual a nota sai (decisão 123): pode
+                          não ser o do cadastro do cliente. */}
+                      {p.cnpj_tomador && (
+                        <span className="font-mono text-[11px]">
+                          {formatCnpj(p.cnpj_tomador)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {/* A quebra job × save saiu daqui em 31/08/2026 e foi para
                       o botão `i`: disputava espaço com o número que a coluna
                       existe para mostrar (decisão 033). */}
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
-                    {formatMoney(p.valor_previsto)}
+                    {formatMoney(linha.valor)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground/80">
-                    {formatMoney(p.valor_ja_faturado)}
+                    {formatMoney(linha.jaFaturado)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex flex-col items-end gap-0.5">
                       <span className="font-bold tabular-nums">
-                        {formatMoney(p.saldo_job)}
+                        {formatMoney(linha.saldo)}
                       </span>
                       <span className="text-[10.5px] text-muted-foreground">
-                        {p.mes_referencia ? "total do mês" : "total do job"}
+                        {(p.nota_total ?? 1) > 1
+                          ? `de ${formatMoney(p.saldo_job)} ${p.mes_referencia ? "no mês" : "no job"}`
+                          : p.mes_referencia
+                            ? "total do mês"
+                            : "total do job"}
                       </span>
                     </div>
                   </td>
                   <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                    {p.parcela_numero}/{p.parcela_total}
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        {p.nota_ordem ?? 1}/{p.nota_total ?? 1}
+                      </span>
+                      {linha.parcelas.length > 1 && (
+                        <span className="font-sans text-[10.5px]">
+                          {linha.parcelas.length} venc.
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {formatDate(p.data_prevista)}
+                    <div className="flex flex-col gap-0.5">
+                      <span>{formatDate(linha.primeiroVencimento)}</span>
+                      {linha.parcelas.length > 1 && (
+                        <span className="font-sans text-[10.5px]">
+                          até {formatDate(linha.ultimoVencimento)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -763,7 +898,7 @@ export function FaturamentoList({
                       onClick={(e) => {
                         e.stopPropagation();
                         limparErro();
-                        setDrawer({ modo: "origem", linhas: [p] });
+                        setDrawer({ modo: "origem", linhas: linha.parcelas });
                       }}
                       className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
                     >
@@ -776,7 +911,7 @@ export function FaturamentoList({
                       className="absolute left-3 top-1/2 h-[30px] w-[30px] -translate-y-1/2 shadow-sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setInfo(infoDaPendente(p));
+                        setInfo(infoDaPendente(linha));
                       }}
                     />
                   </td>
@@ -886,7 +1021,8 @@ export function FaturamentoList({
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           Uma NF agrupada só pode conter jobs de um{" "}
-          <strong className="font-semibold text-foreground">mesmo cliente</strong>. BVs
+          <strong className="font-semibold text-foreground">mesmo cliente</strong> e de um{" "}
+          <strong className="font-semibold text-foreground">mesmo CNPJ</strong>. BVs
           são faturados individualmente porque a contraparte é o fornecedor.
         </span>
       </p>
@@ -924,7 +1060,7 @@ export function FaturamentoList({
             </span>
             <div className="h-4 w-px bg-california-red/25" />
             <span className="whitespace-nowrap text-xs text-muted-foreground">
-              {selecionados.length} selecionado(s)
+              {new Set(selecionados.map(chaveLinha)).size} selecionado(s)
             </span>
             <span className="whitespace-nowrap font-mono text-sm font-bold tabular-nums">
               {formatMoney(totalSelecionado)}

@@ -1030,12 +1030,13 @@ export interface JobEnvioFaturamento {
   /** Cópia do `faturamento_previsto` no instante do envio. */
   valor_faturado: number;
   numero_po: string | null;
-  /** Vencimento acordado com o cliente. */
+  /** O vencimento mais cedo das parcelas do envio. */
   data_faturamento: string;
   /**
    * Como o GP quer que a nota seja descrita — o texto que o cliente exige
-   * ver na NF. O financeiro copia daqui na emissão. Nulo nos envios
-   * anteriores a 31/08/2026, quando o campo passou a existir.
+   * ver na NF. Nulo nos envios anteriores a 31/08/2026 e nos posteriores à
+   * decisão 123 (29/09/2026), que guardam o descritivo em cada nota
+   * (`JobEnvioFaturamentoNota.descritivo`).
    */
   descricao_nf: string | null;
   /**
@@ -1060,24 +1061,65 @@ export interface JobEnvioFaturamento {
 }
 
 /**
- * Uma parcela do faturamento do job — em quantas notas ele será faturado.
+ * Uma parcela do faturamento do job — um vencimento de uma nota do envio.
  *
- * Informada pela produção no envio (decisão do Tiago, 17/08/2026). Cada
- * parcela é uma linha da aba Faturamento; a NF emitida a consome, total
- * ou parcialmente. Não confundir com `JobPrevisaoRecebimento`, que diz
- * quando o dinheiro entra, não em quantas notas o job sai.
+ * Informada pela produção no envio (decisão do Tiago, 17/08/2026). Até a
+ * decisão 123 (29/09/2026) cada parcela era uma nota própria; desde então
+ * ela é um vencimento DA NOTA a que pertence (`nota_id`): "uma nota,
+ * vários vencimentos". Continua sendo a unidade de saldo do financeiro —
+ * a NF emitida a consome, total ou parcialmente. Não confundir com
+ * `JobPrevisaoRecebimento`, que diz quando o dinheiro entra.
  */
 export interface JobEnvioFaturamentoParcela {
   id: string;
   tenant_id: string;
   envio_id: string;
   job_id: string;
+  /** Decisão 123: a nota do envio a que este vencimento pertence. */
+  nota_id: string;
   ordem: number;
   valor: number;
   /** Vencimento acordado com o cliente para esta parcela. */
   data_vencimento: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Uma nota fiscal do envio para faturamento (decisão 123, 29/09/2026).
+ *
+ * O valor da nota é a soma das parcelas dela — não há coluna de valor.
+ * O CNPJ é do cliente tomador (campo livre no envio, nasce com o do
+ * cadastro); CNAE sugerido e descritivo são opcionais. No Faturar o CNAE
+ * sugerido aparece como texto de fundo, sem preencher (D3).
+ */
+export interface JobEnvioFaturamentoNota {
+  id: string;
+  tenant_id: string;
+  envio_id: string;
+  job_id: string;
+  ordem: number;
+  /** Só dígitos, 14. */
+  cnpj: string;
+  cnae_sugerido: string | null;
+  descritivo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Arquivo da PO anexado no envio (decisão 123). Bucket `envios-faturamento`. */
+export interface JobEnvioFaturamentoAnexo {
+  id: string;
+  tenant_id: string;
+  envio_id: string;
+  job_id: string;
+  /** `{tenant}/{job}/{uuid}-{nome}` no bucket `envios-faturamento`. */
+  path: string;
+  nome_arquivo: string;
+  mime_type: "application/pdf" | "image/png" | "image/jpeg";
+  tamanho_bytes: number;
+  created_by: string | null;
+  created_at: string;
 }
 
 /** Uma data da curva de desembolso do job. */
@@ -2710,6 +2752,13 @@ export interface Faturamento {
    * projeto. Antes de 31/08/2026 era pedido à produção no envio.
    */
   cnae: string;
+  /**
+   * CNPJ para o qual a nota saiu, só dígitos (decisão 123). Preenchido por
+   * `emitir_faturamento`: o das notas do envio cobertas, ou o do cadastro
+   * do cliente na avulsa. Nulo nas notas anteriores a 29/09/2026 — que
+   * saíram para o CNPJ do cadastro — e nas de BV.
+   */
+  cnpj_tomador: string | null;
   anexo_nf_path: string;
   /**
    * Preenchido só no faturamento avulso (campo "Centro de custo" do

@@ -6093,6 +6093,24 @@ Antonio, e o código publicado logo depois (`3305751`).
   todos têm job, menos o AMB-F012/26, que ganha o dele quando o AMB-1008/26
   for aberto.
 
+## ⚠️ Nota de 2026-09-29 — Faturamento por nota do envio, CNPJ e CNAE sugerido (decisão 123)
+
+**Isto revoga "uma linha por parcela do envio" da aba Faturamento.**
+
+- **Uma linha por nota do envio.** A view segue por parcela; a tela junta as
+  parcelas de cada nota. A coluna Parcela virou **Nota** (1/2, "2 venc."),
+  o vencimento mostra "até …" quando há mais de um, e o CNPJ da nota
+  aparece embaixo do cliente.
+- **Faturar de uma nota do envio:** nasce com um título a receber por
+  vencimento, o descritivo da nota na descrição e o CNAE sugerido pelo GP
+  como **texto de fundo** do "CNAE a ser utilizado" — sem preencher (D3).
+- **Faturamento Agrupado** recusa CNPJs diferentes antes de abrir, e o banco
+  recusa de novo (`emitir_faturamento`).
+- **A nota emitida guarda o CNPJ** (`faturamentos.cnpj_tomador`). As notas
+  anteriores a 29/09/2026 ficam sem, porque saíram para o CNPJ do cadastro.
+- **Botão `i`:** CNPJ, CNAE sugerido, descritivo da nota e os anexos da PO,
+  que também aparecem em Títulos a Receber.
+
 ## ⚠️ Nota de 2026-09-25 — a coluna Save nasce recolhida (decisão 107)
 
 **Isto revoga o primeiro tópico da nota de 2026-09-01.**

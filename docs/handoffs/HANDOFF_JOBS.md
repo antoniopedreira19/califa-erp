@@ -4511,6 +4511,27 @@ código publicado logo depois (`3305751`).
   `"financeiro"`), e `JobRealizadoSection` recebe `edicaoDoFinanceiro` —
   `null` na produção e na fila de abertura.
 
+## ⚠️ Nota de 2026-09-29 — o envio para faturamento vira notas fiscais (decisão 123)
+
+**Isto revoga "cada parcela vira uma nota própria" do envio para faturamento.**
+
+- **Pop-up em duas colunas** no lugar do drawer (`enviar-faturamento-dialog.tsx`;
+  o `enviar-faturamento-drawer.tsx` saiu). À esquerda, as notas fiscais: CNPJ
+  do cliente (livre, nasce com o do cadastro), valor, vencimento ou parcelas
+  (1× 2× 3× 6×, vencimentos da MESMA nota), CNAE sugerido e descritivo, os
+  dois opcionais. À direita, fixos: valor total travado, a divisão entre as
+  notas, número e anexos da PO (vários, PDF ou imagem, até 10 MB), portal e
+  os contatos de cobrança.
+- **Todas as notas se digitam** (D6); o envio só sai quando a soma bate com
+  o total. O rodapé diz o que falta.
+- **Contatos de cobrança** vêm da abertura, com selo "Da abertura",
+  "Alterado" ou "Novo"; o que mudar no envio passa a ser a lista do job, e
+  a auditoria guarda o antes e o depois.
+- **A barra do job** diz "N notas fiscais, 1º vencimento em …", e o "Ver
+  envio" mostra cada nota e abre os anexos.
+- **Mensal (078):** o mesmo formulário, com o valor do mês e o vencimento em
+  branco.
+
 ## ⚠️ Nota de 2026-09-28 (6) — o status do job só muda pelo sistema (decisão 117)
 
 - **No ar:** migration `20260928400001` — guarda em `jobs`, no envio para

@@ -111,6 +111,26 @@ export interface ParcelaDoEnvio {
   ordem: number;
   valor: number;
   data_vencimento: string;
+  /** A nota do envio a que o vencimento pertence (decisão 123). */
+  nota_id: string;
+}
+
+/** Uma nota fiscal do envio (decisão 123): o valor é a soma das parcelas. */
+export interface NotaDoEnvio {
+  id: string;
+  ordem: number;
+  cnpj: string;
+  cnae_sugerido: string | null;
+  descritivo: string | null;
+}
+
+/** Um arquivo da PO anexado no envio (decisão 123). */
+export interface AnexoDoEnvio {
+  id: string;
+  nome_arquivo: string;
+  path: string;
+  mime_type: string;
+  tamanho_bytes: number;
 }
 
 export interface EnvioDoJobComParcelas {
@@ -125,6 +145,8 @@ export interface EnvioDoJobComParcelas {
   portal_url: string | null;
   enviado_em: string;
   parcelas: ParcelaDoEnvio[];
+  notas: NotaDoEnvio[];
+  anexos: AnexoDoEnvio[];
 }
 
 /** Item de nota EMITIDA que cobre uma parcela de envio. */

@@ -71,6 +71,7 @@ export default async function ContasReceberPage({
       .from("faturamentos")
       .select(`
         id, numero_nf, data_emissao, valor_total, descricao, cnae, anexo_nf_path,
+        cnpj_tomador,
         empresa_id, origem_tipo, cliente_id, fornecedor_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
         itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor),
@@ -177,9 +178,13 @@ export default async function ContasReceberPage({
     // do GP sobre como a nota deve ser descrita. É o conteúdo do botão `i`
     // (31/08/2026). Um registro por job, tabela pequena — entra na mesma
     // onda paralela, sem custo de ida e volta extra.
+    // Desde a decisão 123 o envio também traz os anexos da PO — pela FK do
+    // envio, que a parcela (junção envio × nota) tornaria ambígua.
     supabase
       .from("jobs_envio_faturamento")
-      .select("job_id, mes, numero_po, descricao_nf")
+      .select(
+        "job_id, mes, numero_po, descricao_nf, anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
+      )
       .eq("tenant_id", tenantId),
     // As regionais do rateio da nota avulsa (decisão 086). O drawer oferece
     // só as da empresa emissora; inativas vêm para a nota antiga ler certo.
@@ -256,7 +261,16 @@ export default async function ContasReceberPage({
     mes: string | null;
     numero_po: string | null;
     descricao_nf: string | null;
+    anexos: Array<{
+      id: string;
+      nome_arquivo: string;
+      path: string;
+      mime_type: string;
+      tamanho_bytes: number | string;
+    }> | null;
   }>;
+  const anexosDoEnvio = (e: (typeof envios)[number]) =>
+    (e.anexos ?? []).map((a) => ({ ...a, tamanho_bytes: Number(a.tamanho_bytes) }));
   // Job mensal (decisão 078): cada mês na chave dele. A chave só do job,
   // que a nota já emitida consulta, junta as POs dos meses.
   const posDosMesesPorJob = new Map<string, Set<string>>();
@@ -265,6 +279,7 @@ export default async function ContasReceberPage({
       po: e.numero_po,
       descricaoNf: e.descricao_nf,
       contatos: contatosPorJob.get(e.job_id) ?? [],
+      anexos: anexosDoEnvio(e),
     };
     if (e.mes) {
       const pos = posDosMesesPorJob.get(e.job_id) ?? new Set<string>();
@@ -278,6 +293,7 @@ export default async function ContasReceberPage({
         po: pos.size > 0 ? [...pos].join(" · ") : null,
         descricaoNf: null,
         contatos: contatosPorJob.get(jobId) ?? [],
+        anexos: envios.filter((e) => e.job_id === jobId).flatMap(anexosDoEnvio),
       };
     }
   }
@@ -287,7 +303,7 @@ export default async function ContasReceberPage({
   // para o modal não ficar sem os contatos nesse caso.
   for (const [jobId, contatos] of contatosPorJob) {
     if (!infoPorJob[jobId]) {
-      infoPorJob[jobId] = { po: null, descricaoNf: null, contatos };
+      infoPorJob[jobId] = { po: null, descricaoNf: null, contatos, anexos: [] };
     }
   }
 
@@ -324,6 +340,13 @@ export default async function ContasReceberPage({
       parcela_numero: Number(r.parcela_numero ?? 1),
       parcela_total: Number(r.parcela_total ?? 1),
       data_prevista: (r.data_prevista as string | null) ?? null,
+      // A nota do envio a que a parcela pertence (decisão 123). Nulo no BV.
+      envio_nota_id: (r.envio_nota_id as string | null) ?? null,
+      nota_ordem: r.nota_ordem == null ? null : Number(r.nota_ordem),
+      nota_total: r.nota_total == null ? null : Number(r.nota_total),
+      cnpj_tomador: (r.cnpj_tomador as string | null) ?? null,
+      cnae_sugerido: (r.cnae_sugerido as string | null) ?? null,
+      descritivo_nota: (r.descritivo_nota as string | null) ?? null,
     };
   });
 
@@ -337,6 +360,7 @@ export default async function ContasReceberPage({
     descricao: string;
     cnae: string;
     anexo_nf_path: string;
+    cnpj_tomador: string | null;
     empresa_id: string;
     origem_tipo: "job" | "bv" | "avulso";
     cliente_id: string | null;
@@ -420,6 +444,7 @@ export default async function ContasReceberPage({
         }))
         .sort((a, b) => b.percentual - a.percentual),
       cnae: f.cnae,
+      cnpj_tomador: f.cnpj_tomador,
       // Jobs DISTINTOS da nota, na ordem dos itens. O item de save aponta o
       // mesmo job do item próprio, então o Set é o que impede a PO de
       // aparecer duas vezes no botão `i`.

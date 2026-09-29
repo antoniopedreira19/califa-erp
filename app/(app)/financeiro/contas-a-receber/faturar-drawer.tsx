@@ -48,7 +48,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MoneyInput } from "@/components/ui/money-input";
-import { cn } from "@/lib/utils";
+import { cn, formatCnpj } from "@/lib/utils";
 import {
   repartirEmJobESave,
   rotuloDaQuebra,
@@ -68,6 +68,7 @@ import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
 import { emitirFaturamento, uploadNfPdf, urlAnexoNf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
 import { chaveInfoDoEnvio } from "./chave-info";
+import type { AnexoDaPo } from "@/components/envio/anexos-da-po";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
 
 export type DrawerState =
@@ -109,6 +110,8 @@ export interface InfoJob {
   po: string | null;
   descricaoNf: string | null;
   contatos: ContatoCobranca[];
+  /** Arquivos da PO anexados no envio (decisão 123). */
+  anexos: AnexoDaPo[];
 }
 
 function formatMoney(n: number): string {
@@ -140,6 +143,21 @@ export function FaturarDrawer({
   const origemTipo: "job" | "bv" | "avulso" = primeira?.origem_tipo ?? "avulso";
   const ehBv = origemTipo === "bv";
 
+  // Decisão 123: as linhas são PARCELAS (vencimentos); a nota do envio junta
+  // as dela. Uma nota só = o Faturar de uma nota do envio; mais de uma = a
+  // nota agrupada.
+  const chaveNota = (l: FaturamentoPendenteRow) =>
+    l.envio_nota_id ?? l.envio_parcela_id ?? l.origem_id;
+  const umaNotaSo = new Set(linhas.map(chaveNota)).size === 1;
+  const cnaeSugerido = (() => {
+    const sugestoes = new Set(
+      linhas.map((l) => l.cnae_sugerido?.trim()).filter((c): c is string => Boolean(c)),
+    );
+    return sugestoes.size === 1 ? [...sugestoes][0] : null;
+  })();
+  const cnpjDaNota =
+    nota?.cnpj_tomador ?? (primeira?.origem_tipo === "job" ? primeira?.cnpj_tomador : null) ?? null;
+
   const [pending, startTransition] = React.useTransition();
   const [uploading, setUploading] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -163,6 +181,10 @@ export function FaturarDrawer({
       quebra?: { job: number; save: number } | null;
       codigoJob?: string | null;
       ehBv?: boolean;
+      /** O descritivo da nota do envio (decisão 123), antes do do envio. */
+      descritivoNota?: string | null;
+      cnpj?: string | null;
+      cnaeSugerido?: string | null;
     } = {},
   ): InfoFaturamento {
     const dados = jobId ? infoPorJob[jobId] : undefined;
@@ -182,7 +204,10 @@ export function FaturarDrawer({
     return {
       referencia,
       pos: [{ job: opcoes.codigoJob ?? "", po: dados?.po ?? null }],
-      descricaoNf: dados?.descricaoNf ?? null,
+      descricaoNf: opcoes.descritivoNota ?? dados?.descricaoNf ?? null,
+      anexosPo: dados?.anexos ?? [],
+      cnpj: opcoes.cnpj ?? null,
+      cnaeSugerido: opcoes.cnaeSugerido ?? null,
       contatos: dados?.contatos ?? [],
       quebra: opcoes.quebra ?? null,
     };
@@ -219,7 +244,10 @@ export function FaturarDrawer({
     // 31/08/2026): cada job tem a sua instrução do GP, e emendar as três
     // produziria um texto que nenhum dos clientes pediu. Quem emite lê uma
     // a uma pelo botão `i` da linha do job e escreve a descrição da nota.
-    if (linhas.length > 1) return "";
+    // Desde a decisão 123 as parcelas de UMA nota do envio chegam juntas, e
+    // isso não é agrupada: a nota nasce com o descritivo dela.
+    if (!umaNotaSo) return "";
+    if (primeira?.descritivo_nota?.trim()) return primeira.descritivo_nota.trim();
     // Job único: nasce com o que o GP mandou. Sem instrução — envio
     // anterior a 31/08/2026 ou BV, que não tem envio — cai no nome do job,
     // que é o que a tela sugeria antes.
@@ -293,6 +321,15 @@ export function FaturarDrawer({
         },
       ];
     }
+    // Uma nota do envio com vários vencimentos (decisão 123): cada
+    // vencimento vira uma parcela do recebimento, com o saldo dele.
+    if (umaNotaSo && linhas.length > 1) {
+      return linhas.map((l) => ({
+        valor: l.saldo,
+        data_vencimento:
+          l.data_prevista ?? format(addDays(new Date(), 30), "yyyy-MM-dd"),
+      }));
+    }
     return [
       {
         valor: primeira?.saldo ?? 0,
@@ -330,19 +367,22 @@ export function FaturarDrawer({
       ? (nota?.contraparte_nome ?? "—")
       : (primeira?.contraparte_nome ?? "—");
 
+  const notasAtivas = new Set(itensAtivos.map(chaveNota)).size;
+  const jobsAtivos = new Set(itensAtivos.map((l) => l.origem_id)).size;
   const titulo = leitura
     ? `NF ${nota?.numero_nf} emitida`
     : avulso
       ? "Faturamento avulso"
-      : itensAtivos.length > 1
+      : notasAtivas > 1
         ? "Faturamento agrupado"
         : `Faturar ${primeira?.codigo ?? primeira?.descricao ?? ""}`;
 
+  const cnpjTexto = cnpjDaNota ? ` · CNPJ ${formatCnpj(cnpjDaNota)}` : "";
   const subtitulo = leitura
-    ? `Somente leitura · emitida em ${formatarData(nota?.data_emissao ?? "")} para ${nota?.contraparte_nome}.`
+    ? `Somente leitura · emitida em ${formatarData(nota?.data_emissao ?? "")} para ${nota?.contraparte_nome}${cnpjTexto}.`
     : avulso
       ? "Nota fiscal sem vínculo com saldo de job — informe cliente, valor e centro de custo."
-      : `Cliente ${primeira?.contraparte_nome ?? "—"} · uma única nota fiscal; o valor por job pode ser total ou parcial.`;
+      : `Cliente ${primeira?.contraparte_nome ?? "—"}${cnpjTexto} · uma única nota fiscal; o valor por job pode ser total ou parcial.`;
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -537,8 +577,8 @@ export function FaturarDrawer({
       );
       const detalhe = avulso
         ? ` · avulso para ${clientes.find((c) => c.id === avClienteId)?.nome ?? ""}`
-        : itensAtivos.length > 1
-          ? ` cobrindo ${itensAtivos.length} jobs de ${primeira?.contraparte_nome}`
+        : jobsAtivos > 1
+          ? ` cobrindo ${jobsAtivos} jobs de ${primeira?.contraparte_nome}`
           : ` · ${primeira?.codigo ?? ""}`;
       const sobra =
         parciais.length > 0
@@ -567,10 +607,10 @@ export function FaturarDrawer({
           <DialogTitle className="flex flex-wrap items-center gap-2.5">
             <FileText className="h-4.5 w-4.5 shrink-0 text-california-red" />
             {titulo}
-            {itensAtivos.length > 1 && (
+            {jobsAtivos > 1 && (
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
                 <Layers className="h-3 w-3" />
-                Uma NF · {itensAtivos.length} jobs
+                Uma NF · {jobsAtivos} jobs
               </span>
             )}
           </DialogTitle>
@@ -691,7 +731,11 @@ export function FaturarDrawer({
                               </span>
                             )}
                             <span className="font-mono text-[11px] text-muted-foreground">
-                              {l.codigo} · parcela {l.parcela_numero}/{l.parcela_total} ·
+                              {l.codigo}
+                              {l.nota_ordem && l.nota_total
+                                ? ` · NF ${l.nota_ordem}/${l.nota_total}`
+                                : ""}
+                              {l.data_prevista ? ` · vence ${formatarData(l.data_prevista)}` : ""} ·
                               valor {formatMoney(l.saldo)}
                             </span>
                             {parcial && (
@@ -751,11 +795,14 @@ export function FaturarDrawer({
                                     : null,
                                   `${l.codigo ?? l.descricao}${
                                     l.mes_referencia ? ` · ${rotuloMes(l.mes_referencia)}` : ""
-                                  } · parcela ${l.parcela_numero}/${l.parcela_total}`,
+                                  }${l.nota_ordem && l.nota_total ? ` · NF ${l.nota_ordem}/${l.nota_total}` : ""}`,
                                   {
                                     quebra: quebra.save > 0.004 ? quebra : null,
                                     codigoJob: l.codigo,
                                     ehBv: l.origem_tipo === "bv",
+                                    descritivoNota: l.descritivo_nota,
+                                    cnpj: l.cnpj_tomador,
+                                    cnaeSugerido: l.cnae_sugerido,
                                   },
                                 ),
                               )
@@ -1007,7 +1054,13 @@ export function FaturarDrawer({
               readOnly={leitura}
               onChange={(e) => setCnae(e.target.value)}
               maxLength={120}
-              placeholder="Ex: 7311-4/00 — Agências de publicidade"
+              // D3 (decisão 123): a sugestão do GP vem de FUNDO, sem
+              // preencher — quem emite escolhe e confere o CNAE certo.
+              placeholder={
+                !leitura && cnaeSugerido
+                  ? `Sugerido pelo GP: ${cnaeSugerido}`
+                  : "Ex: 7311-4/00 — Agências de publicidade"
+              }
             />
           </div>
 
@@ -1025,9 +1078,9 @@ export function FaturarDrawer({
               className="w-full resize-none rounded-lg border border-border px-3 py-2.5 text-[13px] focus:border-california-red/40 focus:outline-none"
             />
             <p className="text-[11.5px] text-muted-foreground text-pretty">
-              {linhas.length > 1
+              {!umaNotaSo
                 ? "Cada job traz a instrução do seu gerente de projetos — leia uma a uma no botão de informações da linha e escreva aqui o texto da nota."
-                : "Texto que vai na nota fiscal. Vem sugerido pela instrução que o gerente de projetos mandou no envio."}
+                : "Texto que vai na nota fiscal. Vem sugerido pelo descritivo que o gerente de projetos mandou no envio."}
             </p>
           </div>
 

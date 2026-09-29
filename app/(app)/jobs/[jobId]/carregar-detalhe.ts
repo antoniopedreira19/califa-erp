@@ -113,7 +113,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, codigo_anterior, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia))",
+        "id, tenant_id, empresa_id, codigo, codigo_anterior, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -289,7 +289,10 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs_envio_faturamento")
       .select(
-        "id, mes, valor_faturado, valor_save, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em, parcelas:jobs_envio_faturamento_parcelas(id, ordem, valor, data_vencimento)",
+        // Notas e anexos pela FK do envio (decisão 123): a parcela é uma
+        // tabela de junção entre envio e nota, e sem o hint o PostgREST
+        // acharia dois caminhos e recusaria a consulta.
+        "id, mes, valor_faturado, valor_save, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em, parcelas:jobs_envio_faturamento_parcelas(id, ordem, valor, data_vencimento, nota_id), notas:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_envio_id_fkey(id, ordem, cnpj, cnae_sugerido, descritivo), anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -378,6 +381,11 @@ export async function carregarDetalheDoJob(
     parcelas: ((e.parcelas ?? []) as any[])
       .map((par) => ({ ...par, valor: Number(par.valor ?? 0) }))
       .sort((a, b) => a.ordem - b.ordem),
+    notas: ((e.notas ?? []) as any[]).sort((a, b) => a.ordem - b.ordem),
+    anexos: ((e.anexos ?? []) as any[]).map((a) => ({
+      ...a,
+      tamanho_bytes: Number(a.tamanho_bytes ?? 0),
+    })),
   }));
   // O envio único dos jobs que não são mensais — o de sempre.
   const envioFaturamento = envios.find((e) => e.mes === null) ?? null;
@@ -1157,6 +1165,9 @@ export async function carregarDetalheDoJob(
     savePorItem,
     saldosDeSave,
     clienteNome: raw.projeto?.cliente?.nome_fantasia ?? "—",
+    // O CNPJ do cadastro do cliente: cada nota do envio para faturamento
+    // nasce com ele (decisão 123).
+    cnpjCliente: (raw.projeto?.cliente as { cnpj?: string | null } | null)?.cnpj ?? null,
     job,
     grupos,
     itens,

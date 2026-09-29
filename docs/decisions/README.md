@@ -142,6 +142,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 120 | [Cancelar e estornar baixa são duas ações diferentes, nas duas pontas](120-cancelar-e-estornar-baixa.md) | 2026-09-28 |
 | 121 | [O código do orçamento é só da base de dados; na tela, o código é o do job](121-o-codigo-do-orcamento-e-so-da-base-de-dados.md) | 2026-09-29 |
 | 122 | [O cliente do projeto só muda antes da aprovação, e os códigos acompanham](122-cliente-do-projeto-so-muda-antes-da-aprovacao.md) | 2026-09-29 |
+| 123 | [O envio para faturamento vira notas fiscais](123-o-envio-para-faturamento-vira-notas-fiscais.md) | 2026-09-29 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -154,4 +155,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 124.** (091 e 092 existem na pasta e ainda não estão nesta tabela. Em 29/09/2026 estava reservada, ainda sem commit, a 123, para o envio para faturamento em notas fiscais.)
+**Próximo número livre: 124.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
