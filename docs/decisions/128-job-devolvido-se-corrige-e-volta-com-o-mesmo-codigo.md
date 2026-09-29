@@ -154,3 +154,26 @@ troca os dois. Se ela recusar, o job segue com o código com que nasceu.
 - Primeira tentativa de gravar o planejado: "permission denied for function
   orcamento_de_investimento_interno" — a RPC rodava como quem chama e usava
   uma função sem permissão para `authenticated`; consertada na `950005`.
+
+### Depois da publicação (29/09/2026, com o código do main)
+
+Como o **GP Teste Claude** (papel `gerente_producao`), no TES-P001/26; o
+administrador só montou os casos e devolveu os jobs como financeiro.
+
+- **Planejado no Always On com o job devolvido:** "Teste demonstração"
+  (Always On, uma linha em cada um dos 3 meses), job TES-1016/26 devolvido.
+  O planejado de outubro (R$ 8.000 → R$ 7.500) gravou na versão e na cópia
+  do job, com auditoria em nome do GP; o orçado não abriu.
+- **Recusa de entrar no mensal com vários meses:** no "Orçamento de Teste",
+  com o job devolvido, serviço Always On e período 01/07–30/09. A tela
+  recusou ("Com o job devolvido, a planilha mensal só entra num período de
+  um mês…"), e o banco ficou como estava (Conteúdo, 01/09–30/09, sem mês).
+- **Fluxo inteiro pelo GP:** reenvio do TES-1015/26; no Always On,
+  "Cancelar aprovação", orçado de outubro R$ 10.000 → R$ 12.000, aprovação e
+  envio com o formulário preenchido e a dica do código. O job voltou como
+  TES-1016/26 (R$ 44.538,34, planilha com as 3 linhas) e o cancelado virou
+  TES-1016/26-C1.
+- **Limpeza:** os envios do TES-1015/26 e do TES-1016/26 foram cancelados
+  pelo "Cancelar envio à abertura", para não ficarem na fila do financeiro.
+  Esse caminho continuou queimando o código (`codigo_reservado` falso),
+  como na 057.
