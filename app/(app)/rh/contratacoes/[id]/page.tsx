@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import type { Contratacao, Empresa } from "@/lib/types";
 import { ContratacaoDetalheView } from "./detalhe-view";
-import { expirarContratacoesVencidas } from "@/app/proposta/[token]/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +17,9 @@ export default async function ContratacaoDetalhePage({
     redirect("/home?reason=sem_permissao_rh");
   }
 
-  // Marca vencidas antes de carregar — v1 sem cron.
-  await expirarContratacoesVencidas(session.activeTenant.id);
-
+  // expirarContratacoesVencidas roda só em /rh/contratacoes (listagem).
+  // Aqui no detalhe era 1 roundtrip a mais por render — inclusive no
+  // rerender pós-anexo, empurrando o TTFB pra ~3s.
   const supabase = createClient();
   // Sem embeds — contratacoes tem duas FKs pra regionais (simples e
   // composta com empresa_id), o que deixa o PostgREST ambíguo e retorna
