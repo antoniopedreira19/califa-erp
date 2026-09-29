@@ -177,9 +177,6 @@ export default async function ProjetoNoFinanceiroPage({
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold text-muted-foreground">
                 {projeto.codigo}
-                {/* O "Código anterior" (decisão 114) saiu daqui em
-                    29/09/2026, como no projeto da produção. O dado segue em
-                    `projetos_financeiro.codigo_anterior` e na busca. */}
               </p>
               <h1 className="text-2xl font-bold tracking-tight">
                 {projeto.nome}

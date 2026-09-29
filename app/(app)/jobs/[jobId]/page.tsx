@@ -259,7 +259,6 @@ export default async function JobDetailPage({
               descritivo={job.observacoes}
               job={{
                 codigo: job.codigo,
-                codigoAnterior: job.codigo_anterior,
                 nome: job.nome,
                 // Categoria do job = `jobs.categoria_id`, que só é gravado
                 // quando o financeiro abre o job (e a abertura a exige).

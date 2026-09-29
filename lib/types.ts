@@ -221,9 +221,6 @@ export interface Projeto {
   tenant_id: string;
   empresa_id: string;
   codigo: string;
-  /** O código de antes da decisão 114 ("AMB-0006/26", hoje "AMB-P006/26").
-   *  Nulo nos projetos criados depois de 28/09/2026. */
-  codigo_anterior: string | null;
   nome: string;
   /** Saiu do formulário no handoff de 30/07/2026; a coluna e os dados
    *  gravados continuam (a busca da lista ainda casa por campanha). */
@@ -823,9 +820,6 @@ export interface Job {
   tenant_id: string;
   empresa_id: string;
   codigo: string;
-  /** O `JOB-NNNN` de antes da decisão 114 (28/09/2026). Nulo nos jobs
-   *  criados depois da troca. */
-  codigo_anterior: string | null;
   projeto_id: string;
   orcamento_id: string;
   versao_orcamento_aprovada_id: string;

@@ -71,7 +71,7 @@ export default async function JobsPage({
   let jobsQuery = supabase
     .from("jobs")
     .select(
-      "id, codigo, codigo_anterior, created_at, nome, status, faturamento_enviado_em, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
+      "id, codigo, created_at, nome, status, faturamento_enviado_em, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
         // Produto e Regional saem do PRÓPRIO job, não do projeto (decisão
         // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
         // "Ativação de marca" num projeto "Pevetech".
@@ -156,7 +156,6 @@ export default async function JobsPage({
   const rows: JobRow[] = linhas.map((r: any) => ({
     id: r.id,
     codigo: r.codigo,
-    codigo_anterior: r.codigo_anterior ?? null,
     criado_em: r.created_at,
     nome: r.nome,
     // O selo e o filtro da lista usam o status exibido: "Em faturamento" é

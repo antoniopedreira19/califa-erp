@@ -265,8 +265,10 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
 }
 
 /** O código no formato atual ("SIGLA-P001/AA") que ESTE projeto já teve na
- *  sigla e no ano, pelo registro de códigos usados — ou `null`. O formato
- *  de antes da decisão 114 ("SIGLA-0001/AA") não volta. */
+ *  sigla e no ano, pelo registro de códigos usados — ou `null`. Desde a
+ *  decisão 126 (29/09/2026) o registro só tem esse formato: os códigos de
+ *  antes da 114 ("SIGLA-0001/AA") passaram a "SIGLA-P001/AA", mesmo número
+ *  e mesmo projeto. */
 async function codigoQueOProjetoJaTeve(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,

@@ -87,3 +87,9 @@ No pé do formulário, na mesma linha, ficam o Status e o Arquivar/Reativar à
 esquerda e o Cancelar e o Salvar à direita. Para isso, o `ProjetoForm` ganhou
 o `rodapeEsquerda`. O Tiago escolheu entre quatro desenhos no protótipo de
 28–29/09/2026.
+
+## 6. Revisão de 29/09/2026: o PDF da PP fica só com o código do job (decisão 126)
+
+A linha "Projeto", que ficava logo abaixo do "Job", também saiu do PDF da
+PP. Nas palavras do Tiago: "Deveria ser o código do Job". As 47 PPs que já
+existiam foram refeitas com o modelo novo. Ver a decisão 126.

@@ -26,9 +26,6 @@ export type { SituacaoFaturamento };
 export interface JobAberto {
   id: string;
   codigo: string;
-  /** O `JOB-NNNN` de antes da decisão 114 — a busca também olha ele. Nulo
-   *  nos jobs criados depois da troca. */
-  codigo_anterior: string | null;
   /** Nome que o financeiro vê (financeiro, com fallback no da produção). */
   nome: string;
   /** Nome da produção, mostrado quando difere — some a dúvida de "que job é esse". */
@@ -137,7 +134,7 @@ export interface JobAberto {
 }
 
 const SELECT_JOB_ABERTO =
-  "id, codigo, codigo_anterior, nome, nome_financeiro, status, valor_total, faturamento_previsto, " +
+  "id, codigo, nome, nome_financeiro, status, valor_total, faturamento_previsto, " +
   // `custo_previsto_total` é o fallback da coluna Custos — job sem curva
   // de desembolso mostra o que a abertura previu.
   "custo_previsto_total, " +
@@ -265,7 +262,6 @@ export async function listarJobsDoFinanceiro(
     return {
       id: j.id,
       codigo: j.codigo,
-      codigo_anterior: j.codigo_anterior ?? null,
       nome: nomeDoJobNoFinanceiro(j),
       nome_producao: j.nome,
       status: j.status as JobStatus,

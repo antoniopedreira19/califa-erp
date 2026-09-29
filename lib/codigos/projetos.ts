@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * formato "[SIGLA]-[SEQ_4]/[ANO_2]" passou a ser o do JOB (`AMB-1006/26`),
  * e o projeto do financeiro leva "F" (`AMB-F004/26`). Os três nunca se
  * repetem, em 2026 ou depois. Até 28/09/2026 o projeto era "AMB-0003/26";
- * o código daquela época fica em `projetos.codigo_anterior`.
+ * o código daquela época saiu do sistema em 29/09/2026 (decisão 126).
  *
  * ⚠️ Até 14/09/2026 o sequencial era só a CONTAGEM de projetos do cliente no
  * ano + 1, e isso colidia com códigos que já existiam, por dois caminhos:
@@ -137,7 +137,8 @@ export async function lerBaseDoSequencial(
  *  O código de antes da decisão 114 ("AMB-0006/26", com o zero no lugar
  *  da letra) conta: é o mesmo número, e um projeto criado pelo gerador
  *  antigo entre a troca do banco e a do código não pode ter o número
- *  repetido. */
+ *  repetido. Desde a decisão 126 (29/09/2026) não resta código nesse
+ *  formato no banco; a expressão segue aceitando o zero, sem custo. */
 export function proximoCodigoDeProjeto({
   codigoCurto,
   letra,
