@@ -44,10 +44,11 @@ export default async function ColaboradorDetalhePage({
     regionaisRes,
     niveisRes,
     rateiosRes,
+    lideresRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
-      .select("*, nivel:niveis(id, codigo, descricao)")
+      .select("*, nivel:niveis(id, codigo, descricao), lider:profiles!lider_id(id, nome)")
       .eq("id", params.id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
@@ -89,14 +90,21 @@ export default async function ColaboradorDetalhePage({
       .select("empresa_id, percentual, regional:regionais(id, nome)")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ano_vigencia", anoRateio),
+    // Membros ativos do tenant pro Select de líder direto no drawer.
+    supabase
+      .from("tenant_members")
+      .select("user_id, profile:profiles(id, nome)")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo"),
   ]);
 
   if (!colabRes.data) {
     notFound();
   }
 
-  const colab = colabRes.data as Colaborador & {
+  const colab = colabRes.data as unknown as Colaborador & {
     nivel: Pick<Nivel, "id" | "codigo" | "descricao"> | null;
+    lider: { id: string; nome: string } | null;
   };
 
   const alocacoes = (alocacoesRes.data ?? []) as (ColaboradorAlocacao & {
@@ -146,6 +154,13 @@ export default async function ColaboradorDetalhePage({
   >[])
     .slice()
     .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
+
+  const lideres = ((lideresRes.data ?? []) as unknown as Array<{
+    user_id: string;
+    profile: { id: string; nome: string } | null;
+  }>)
+    .flatMap((tm) => (tm.profile ? [tm.profile] : []))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   const isAdmin = session.activeRole === "administrador";
 
@@ -217,6 +232,7 @@ export default async function ColaboradorDetalhePage({
           empresas={empresas}
           regionais={regionais}
           niveis={niveis}
+          lideres={lideres}
           pendencia={pendenciasPorCard.dados}
         />
 

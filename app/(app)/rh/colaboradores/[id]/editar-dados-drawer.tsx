@@ -28,12 +28,16 @@ import { editarColaborador } from "../actions";
 
 const NONE_SENTINEL = "__none__";
 
+type LiderOption = { id: string; nome: string };
+
 export function EditarDadosDrawer({
   colaborador,
   niveis,
+  lideres,
 }: {
   colaborador: Colaborador;
   niveis: Pick<Nivel, "id" | "codigo" | "descricao">[];
+  lideres: LiderOption[];
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -48,6 +52,9 @@ export function EditarDadosDrawer({
   );
   const [nivelSel, setNivelSel] = React.useState<string>(
     colaborador.nivel_id ?? NONE_SENTINEL,
+  );
+  const [liderSel, setLiderSel] = React.useState<string>(
+    colaborador.lider_id ?? NONE_SENTINEL,
   );
   const [cpf, setCpf] = React.useState<string>(colaborador.cpf ?? "");
   const [cnpj, setCnpj] = React.useState<string>(colaborador.cnpj ?? "");
@@ -68,6 +75,7 @@ export function EditarDadosDrawer({
       // Reset ao estado do colaborador
       setTipoContratacao(colaborador.tipo_contratacao);
       setNivelSel(colaborador.nivel_id ?? NONE_SENTINEL);
+      setLiderSel(colaborador.lider_id ?? NONE_SENTINEL);
       setCpf(colaborador.cpf ?? "");
       setCnpj(colaborador.cnpj ?? "");
       setTelefone(colaborador.telefone ?? "");
@@ -88,6 +96,8 @@ export function EditarDadosDrawer({
     formData.set("data_admissao", dataAdmissao);
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
+    if (liderSel === NONE_SENTINEL) formData.delete("lider_id");
+    else formData.set("lider_id", liderSel);
 
     startTransition(async () => {
       const res = await editarColaborador(colaborador.id, formData);
@@ -228,6 +238,27 @@ export function EditarDadosDrawer({
                       <SelectItem key={n.id} value={n.id}>
                         {n.codigo}
                         {n.descricao ? ` — ${n.descricao}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="lider_id">Líder direto</Label>
+                <Select value={liderSel} onValueChange={setLiderSel}>
+                  <SelectTrigger id="lider_id">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    side="bottom"
+                    avoidCollisions={false}
+                    className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+                  >
+                    <SelectItem value={NONE_SENTINEL}>Sem líder</SelectItem>
+                    {lideres.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.nome}
                       </SelectItem>
                     ))}
                   </SelectContent>

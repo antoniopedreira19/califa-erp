@@ -27,14 +27,18 @@ const NONE_SENTINEL = "__none__";
 const TIPOS = ["pj", "clt_recibo", "clt", "estagio"] as const;
 const NATUREZAS_PJ: PjNatureza[] = ["mei", "me", "ltda", "eireli", "slu"];
 
+type LiderOption = { id: string; nome: string; email: string };
+
 export function FormNovaContratacao({
   empresas,
   regionais,
   niveis,
+  lideres,
 }: {
   empresas: EmpresaOption[];
   regionais: RegionalOption[];
   niveis: NivelOption[];
+  lideres: LiderOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -49,6 +53,7 @@ export function FormNovaContratacao({
   const [empresaId, setEmpresaId] = React.useState<string>("");
   const [regionalId, setRegionalId] = React.useState<string>("");
   const [nivelSel, setNivelSel] = React.useState<string>(NONE_SENTINEL);
+  const [liderSel, setLiderSel] = React.useState<string>(NONE_SENTINEL);
   const [dataAdmissao, setDataAdmissao] = React.useState<string>("");
 
   const isPJ = tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
@@ -79,6 +84,8 @@ export function FormNovaContratacao({
     formData.set("data_admissao", dataAdmissao);
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
+    if (liderSel === NONE_SENTINEL) formData.delete("lider_id");
+    else formData.set("lider_id", liderSel);
     if (pjNatureza) formData.set("pj_natureza", pjNatureza);
 
     startTransition(async () => {
@@ -314,6 +321,27 @@ export function FormNovaContratacao({
                   <SelectItem key={n.id} value={n.id}>
                     {n.codigo}
                     {n.descricao ? ` — ${n.descricao}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lider_id">Líder direto</Label>
+            <Select value={liderSel} onValueChange={setLiderSel}>
+              <SelectTrigger id="lider_id">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                side="bottom"
+                avoidCollisions={false}
+                className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
+              >
+                <SelectItem value={NONE_SENTINEL}>Sem líder definido</SelectItem>
+                {lideres.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.nome}
                   </SelectItem>
                 ))}
               </SelectContent>

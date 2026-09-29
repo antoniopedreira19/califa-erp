@@ -3230,6 +3230,9 @@ export interface Colaborador {
   bairro: string | null;
   cidade: string | null;
   uf: string | null;
+  /** Líder direto — qualquer profile do sistema. Opcional. Adicionado
+   *  em 2026-09-29 (task 007). */
+  lider_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -3312,6 +3315,9 @@ export interface Contratacao {
   nivel_id: string | null;
   area: string | null;
   pj_natureza: PjNatureza | null;
+  /** Líder direto previsto pro candidato. Opcional. Migra pro
+   *  colaborador na efetivação. */
+  lider_id: string | null;
 
   // Dados coletados no aceite
   cpf: string | null;

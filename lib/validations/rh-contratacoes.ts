@@ -98,6 +98,11 @@ export const criarContratacaoSchema = z
       .enum(NATUREZAS_PJ)
       .optional()
       .transform((v) => v ?? null),
+    lider_id: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
   })
   .superRefine((val, ctx) => {
     const ehPJ = (TIPOS_PJ as readonly string[]).includes(val.tipo_contratacao);

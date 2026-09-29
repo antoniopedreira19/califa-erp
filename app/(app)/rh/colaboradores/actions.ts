@@ -71,6 +71,7 @@ export async function criarColaborador(
     cnpj: formData.get("cnpj")?.toString() ?? "",
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
+    lider_id: formData.get("lider_id")?.toString() ?? "",
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
   });
   if (!colaboradorParsed.success) {
@@ -122,6 +123,7 @@ export async function criarColaborador(
       cnpj: colaboradorParsed.data.cnpj,
       funcao: colaboradorParsed.data.funcao,
       nivel_id: colaboradorParsed.data.nivel_id,
+      lider_id: colaboradorParsed.data.lider_id,
       data_admissao: colaboradorParsed.data.data_admissao,
       status: "ativo",
       created_by: session.profile.id,
@@ -215,6 +217,7 @@ export async function editarColaborador(
     cnpj: formData.get("cnpj")?.toString() ?? "",
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
+    lider_id: formData.get("lider_id")?.toString() ?? "",
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
   });
   if (!parsed.success) {
@@ -237,6 +240,7 @@ export async function editarColaborador(
       cnpj: parsed.data.cnpj,
       funcao: parsed.data.funcao,
       nivel_id: parsed.data.nivel_id,
+      lider_id: parsed.data.lider_id,
       data_admissao: parsed.data.data_admissao,
     })
     .eq("id", id)
