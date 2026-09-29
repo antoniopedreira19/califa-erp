@@ -5,40 +5,27 @@ import type { Profile } from "@/lib/types";
  * Lista os membros ativos do tenant (com profile também ativo), ordenados
  * por nome. Retornam o mínimo necessário para popular selects.
  *
- * Feito em 2 queries porque tenant_members.user_id aponta para auth.users,
- * não para public.profiles — PostgREST não infere esse join. Duas queries
- * indexadas por tenant_id/status são baratas o suficiente pro MVP.
+ * ⚠️ Pela função `membros_ativos_do_tenant` desde 29/09/2026. Até ali eram
+ * duas queries, a primeira em `tenant_members` — e a RLS dela só mostra a
+ * própria linha para quem não é administrador. Para GP e produtor a lista
+ * vinha com UMA pessoa (eles mesmos): a Equipe do projeto não aceitava
+ * ninguém novo, e quem já estava nela nem aparecia para sair. A função
+ * devolve id e nome dos membros ativos só para quem é membro do tenant,
+ * sem abrir o papel de cada um.
  */
 export async function listActiveMembers(
   tenantId: string,
 ): Promise<Pick<Profile, "id" | "nome">[]> {
   const supabase = createClient();
 
-  const { data: memberRows, error: memberErr } = await supabase
-    .from("tenant_members")
-    .select("user_id")
-    .eq("tenant_id", tenantId)
-    .eq("status", "ativo");
+  const { data, error } = await supabase.rpc("membros_ativos_do_tenant", {
+    p_tenant_id: tenantId,
+  });
 
-  if (memberErr) {
-    console.error("[members.list.members]", memberErr.message);
+  if (error) {
+    console.error("[members.list]", error.message);
     return [];
   }
 
-  const userIds = (memberRows ?? []).map((r) => r.user_id);
-  if (userIds.length === 0) return [];
-
-  const { data: profiles, error: profileErr } = await supabase
-    .from("profiles")
-    .select("id, nome")
-    .in("id", userIds)
-    .eq("ativo", true)
-    .order("nome");
-
-  if (profileErr) {
-    console.error("[members.list.profiles]", profileErr.message);
-    return [];
-  }
-
-  return (profiles ?? []) as Pick<Profile, "id" | "nome">[];
+  return (data ?? []) as Pick<Profile, "id" | "nome">[];
 }
