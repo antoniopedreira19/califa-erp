@@ -15,6 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
+import { BANCOS_FEBRABAN } from "@/lib/dados/bancos-febraban";
 import type { Contratacao, Empresa } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
 import {
@@ -621,6 +623,21 @@ function VisaoDados({
   const [pixChave, setPixChave] = React.useState("");
   const [pixChaveDigitos, setPixChaveDigitos] = React.useState("");
   const [rg, setRg] = React.useState("");
+  const [bancoCodigo, setBancoCodigo] = React.useState<string | null>(null);
+
+  // Items do Combobox de banco — memoizado, pra não recriar a lista de
+  // ~300 bancos a cada re-render. Nome é o label; código entra na busca
+  // e aparece na segunda linha da opção.
+  const bancosItems = React.useMemo(
+    () =>
+      BANCOS_FEBRABAN.map((b) => ({
+        value: b.codigo,
+        label: b.nome,
+        descricao: `Código ${b.codigo}`,
+        busca: b.codigo,
+      })),
+    [],
+  );
 
   // Ao trocar o tipo do PIX, zera a chave (a máscara muda e o valor
   // antigo pode não bater com o formato novo).
@@ -695,6 +712,15 @@ function VisaoDados({
     fd.set("data_nascimento", dataNascimento);
     if (tipoConta) fd.set("tipo_conta", tipoConta);
     if (pixTipo) fd.set("pix_tipo", pixTipo);
+    // Banco vem do Combobox — o code é o value; o nome vem da lista.
+    if (bancoCodigo) {
+      const banco = BANCOS_FEBRABAN.find((b) => b.codigo === bancoCodigo);
+      fd.set("banco_codigo", bancoCodigo);
+      fd.set("banco_nome", banco?.nome ?? "");
+    } else {
+      fd.delete("banco_codigo");
+      fd.delete("banco_nome");
+    }
     // Se PIX tem máscara (cpf/cnpj/telefone), envia só os dígitos.
     // Email e chave aleatória vão como texto livre.
     const pixMascarado =
@@ -966,28 +992,23 @@ function VisaoDados({
           suficiente.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="banco_codigo">Código do banco</Label>
-            <Input
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="banco_codigo">Banco</Label>
+            <Combobox
               id="banco_codigo"
-              name="banco_codigo"
-              maxLength={3}
-              placeholder="Ex.: 341"
+              items={bancosItems}
+              value={bancoCodigo}
+              onChange={setBancoCodigo}
+              placeholder="Selecione ou digite o nome do banco"
+              buscaPlaceholder="Buscar por nome ou código..."
+              limpavel
+              className={COMBOBOX_COMO_SELECT}
             />
             {fieldErrors.banco_codigo?.map((m, i) => (
               <p key={i} className="text-xs text-california-red">
                 {m}
               </p>
             ))}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="banco_nome">Nome do banco</Label>
-            <Input
-              id="banco_nome"
-              name="banco_nome"
-              maxLength={200}
-              placeholder="Ex.: Itaú"
-            />
           </div>
           <div className="grid grid-cols-[1fr_60px] gap-2">
             <div className="space-y-2">
