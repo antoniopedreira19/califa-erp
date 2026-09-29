@@ -2647,6 +2647,10 @@ export interface LancamentoFinanceiro {
   /** Cartão usado quando forma = cartao_credito. */
   cartao_credito_id: string | null;
   estorno_de_lancamento_id: string | null;
+  /** Motivo do estorno de uma baixa (decisão 120). Só nas linhas
+   *  `*_estorno` criadas por `estornar_valor_da_baixa`; o estorno antigo
+   *  guardava o motivo na descrição. */
+  motivo_estorno: string | null;
   origem: OrigemLancamento;
   criado_por: string;
   created_at: string;

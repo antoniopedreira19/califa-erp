@@ -47,7 +47,7 @@ import {
   somarMeses,
 } from "@/lib/cartoes/competencia";
 import type { TituloRow } from "./titulos-pagar-list";
-import { estornarBaixaTitulo } from "./actions-titulos";
+import { cancelarBaixa } from "../actions-baixa-registrada";
 import { ReabrirFaturaDialog } from "./reabrir-fatura-dialog";
 import {
   EstornarCompraDialog,
@@ -355,17 +355,28 @@ export function CartaoFatura({
                 dataPagamento: conferindo.data_pagamento,
                 vencOriginal: conferindo.venc_original,
                 viaCartao: conferindo.forma_pagamento === "cartao_credito",
-              } as BaixaRegistradaAlvo)
+                ehFaturaDeCartao: false,
+                baixaLancamentoId: conferindo.baixa_lancamento_id,
+                valorMovimentado: conferindo.valor,
+                contaBancariaId: conferindo.baixa_conta_id,
+                estornos: conferindo.estornos_da_baixa,
+                // Tudo aqui foi pago no cartão (decisão 120): devolver é o
+                // "Estornar compra" da linha, que abate a fatura.
+                semEstorno:
+                  "Pago no cartão: para devolver, use Estornar compra, na linha da compra.",
+              } satisfies BaixaRegistradaAlvo)
             : null
         }
+        contas={[]}
         pending={pendingAcao}
         erro={erroAcao}
-        onEstornar={(motivo) => {
+        onEstornar={() => {}}
+        onCancelar={(motivo) => {
           const alvo = conferindo;
           if (!alvo) return;
           startTransition(async () => {
-            const res = await estornarBaixaTitulo({
-              origem: alvo.origem,
+            const res = await cancelarBaixa({
+              tipo: alvo.origem,
               id: alvo.id,
               motivo,
             });
@@ -376,7 +387,7 @@ export function CartaoFatura({
             setConferindo(null);
             setErroAcao(null);
             setToast(
-              `Baixa estornada · ${formatCurrency(alvo.valor)} saiu da fatura e voltou para "A pagar".`,
+              `Baixa cancelada · ${formatCurrency(alvo.valor)} saiu da fatura e voltou para "A pagar".`,
             );
             router.refresh();
           });

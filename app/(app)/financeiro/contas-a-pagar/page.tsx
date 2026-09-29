@@ -22,6 +22,10 @@ import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { lerTab } from "./contas-pagar-tab-url";
 import { TitulosPagarList, type TituloRow } from "./titulos-pagar-list";
+import {
+  SELECT_ESTORNO_DE_BAIXA,
+  agruparEstornosPorBaixa,
+} from "@/lib/data/estornos-de-baixa";
 import { CartaoTab, type CartaoDaCapa, type FaturaTela } from "./cartao-tab";
 import {
   carregarExtratoDaFatura,
@@ -106,6 +110,7 @@ export default async function PedidosCompraFinanceiroPage({
     ppsPendentesCountRes,
     avulsasRes,
     baixasRes,
+    estornosRes,
     empresasRes,
     fornecedoresRes,
     clientesRes,
@@ -233,6 +238,7 @@ export default async function PedidosCompraFinanceiroPage({
     supabase
       .from("lancamentos_financeiros")
       .select(`
+        id, conta_bancaria_id,
         pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id,
         pp_verba_devolucao_id, data_movimento,
         forma_pagamento, cartao_credito_id,
@@ -242,6 +248,19 @@ export default async function PedidosCompraFinanceiroPage({
       `)
       .eq("tenant_id", session.activeTenant.id)
       .in("origem", ["pp_baixa", "avulsa_baixa", "desembolso_baixa", "pp_devolucao_verba"]),
+    // Estornos das baixas (decisão 120): o popup do olho lista, e a linha
+    // mostra "estornado R$ X".
+    supabase
+      .from("lancamentos_financeiros")
+      .select(SELECT_ESTORNO_DE_BAIXA)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("origem", [
+        "pp_estorno",
+        "avulsa_estorno",
+        "desembolso_estorno",
+        "pp_devolucao_verba_estorno",
+      ])
+      .not("estorno_de_lancamento_id", "is", null),
     // Empresas ativas (dropdown do drawer)
     supabase
       .from("empresas")
@@ -619,6 +638,10 @@ export default async function PedidosCompraFinanceiroPage({
   //     `recorrente_id` (a recorrência materializa ocorrências ali)
 
   type BaixaInfo = {
+    /** O lançamento da baixa viva e a conta dele: o estorno (decisão 120)
+     *  se pendura no primeiro e sugere a segunda. */
+    lancamento_id: string;
+    conta_id: string;
     pago_em: string;
     conta: string;
     /** O centro de custo — o TIPO do plano de contas, "04 · Custo Fixo". */
@@ -634,7 +657,11 @@ export default async function PedidosCompraFinanceiroPage({
   const baixaPorDesembolsoParcela = new Map<string, BaixaInfo>();
   const baixaPorDevolucao = new Map<string, BaixaInfo>();
 
+  const estornosPorBaixa = agruparEstornosPorBaixa(estornosRes.data);
+
   for (const l of (baixasRes.data ?? []) as unknown as Array<{
+    id: string;
+    conta_bancaria_id: string;
     pedido_compra_parcela_id: string | null;
     conta_avulsa_id: string | null;
     desembolso_parcela_id: string | null;
@@ -647,6 +674,8 @@ export default async function PedidosCompraFinanceiroPage({
     subtipo: { nome: string } | null;
   }>) {
     const info: BaixaInfo = {
+      lancamento_id: l.id,
+      conta_id: l.conta_bancaria_id,
       pago_em: l.data_movimento,
       conta: l.conta?.nome
         ? `${l.conta.nome}${l.conta.banco ? ` · ${l.conta.banco}` : ""}`
@@ -711,6 +740,11 @@ export default async function PedidosCompraFinanceiroPage({
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
         subtipo_nome: baixa?.subtipo ?? null,
+        baixa_lancamento_id: baixa?.lancamento_id ?? null,
+        baixa_conta_id: baixa?.conta_id ?? null,
+        estornos_da_baixa: baixa
+          ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
+          : [],
         // A parcela roteada para o cartão carrega a forma da PP mesmo
         // antes de paga — é o que a faz aparecer na aba Cartão em vez de
         // Títulos a Pagar (29/08/2026). Fora do cartão continua como
@@ -804,6 +838,11 @@ export default async function PedidosCompraFinanceiroPage({
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
       subtipo_nome: baixa?.subtipo ?? null,
+      baixa_lancamento_id: baixa?.lancamento_id ?? null,
+      baixa_conta_id: baixa?.conta_id ?? null,
+      estornos_da_baixa: baixa
+        ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
+        : [],
       // Se paga, prefere a forma registrada na baixa (realizado); senão,
       // usa a forma planejada da origem (avulsa/recorrência).
       // A avulsa "no cartão" só é da aba Cartão quando ESTÁ numa fatura —
@@ -927,6 +966,11 @@ export default async function PedidosCompraFinanceiroPage({
         conta_nome: baixa?.conta ?? null,
         centro_nome: baixa?.centro ?? null,
         subtipo_nome: baixa?.subtipo ?? null,
+        baixa_lancamento_id: baixa?.lancamento_id ?? null,
+        baixa_conta_id: baixa?.conta_id ?? null,
+        estornos_da_baixa: baixa
+          ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
+          : [],
         // Se paga, usa a forma registrada na baixa; senão, null (planejado
         // não existe para desembolso-parcela — Task 7 vai remover a coluna
         // do desembolso-pai).
@@ -1008,6 +1052,11 @@ export default async function PedidosCompraFinanceiroPage({
       conta_nome: baixa?.conta ?? null,
       centro_nome: baixa?.centro ?? null,
       subtipo_nome: baixa?.subtipo ?? null,
+      baixa_lancamento_id: baixa?.lancamento_id ?? null,
+      baixa_conta_id: baixa?.conta_id ?? null,
+      estornos_da_baixa: baixa
+        ? estornosPorBaixa.get(baixa.lancamento_id) ?? []
+        : [],
       forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
       cartao_credito_id: dev.pago_em ? baixa?.cartao_credito_id ?? null : null,
       forma_prevista: null,
@@ -1215,6 +1264,11 @@ export default async function PedidosCompraFinanceiroPage({
         ? `${pagoBanco.tipo.codigo} · ${pagoBanco.tipo.nome}`
         : null,
       subtipo_nome: pagoBanco?.subtipo?.nome ?? null,
+      // Pagamento de fatura são duas pernas (banco e cartão) e não tem
+      // estorno: cancelar vai pelo id da fatura (decisão 120).
+      baixa_lancamento_id: null,
+      baixa_conta_id: null,
+      estornos_da_baixa: [],
       // A fatura NÃO é um título "no cartão": ela é o que se paga PELO
       // banco. Sem isto ela cairia na aba Cartão junto com os itens dela.
       forma_pagamento: null,

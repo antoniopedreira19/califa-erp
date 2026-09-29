@@ -6115,3 +6115,53 @@ Antonio, e o código publicado logo depois (`3305751`).
   `orcamento_nome` em `abertura-de-job/dados.ts`, e saiu de
   `financeiro/jobs/[jobId]/dados.ts`, onde ninguém o lia.
 - **Ficha do job:** mesma mudança da produção (ver HANDOFF_JOBS).
+
+## ⚠️ Nota de 2026-09-29 — cancelar e estornar baixa, nas duas pontas (decisão 120)
+
+**Isto substitui o "Estornar baixa" do popup do olho, religado em 18/08 e
+estendido a Contas a Receber em 31/08.**
+
+- **Popup do olho** (Títulos a Receber, Títulos a Pagar e a fatura do
+  cartão): o cartão da baixa tem **Estornar** e **Cancelar esta baixa**.
+  O componente é o mesmo nas três telas
+  (`components/financeiro/baixa-registrada-dialog.tsx`), e as ações das
+  duas pontas estão em `app/(app)/financeiro/actions-baixa-registrada.ts`.
+- **Cancelar** apaga o lançamento da baixa — sem linha nova no extrato —,
+  devolve o título a Em aberto / A pagar e leva junto os estornos da baixa.
+  Fatura de cartão paga volta para Fechada. Item de cartão só sai de fatura
+  aberta (regra de antes).
+- **Estornar** registra uma transação nova (data, conta, valor, motivo);
+  o título continua pago. A linha da lista mostra "estornado R$ X" sob o
+  valor, e o popup lista cada estorno com data, conta e motivo. Não existe
+  estorno de item pago no cartão nem de pagamento de fatura: o botão
+  aparece desabilitado, com o motivo.
+- **Detalhe da conta avulsa:** o "Cancelar baixa" de lá também passou a
+  cancelar de verdade (`cancelarBaixaAvulsa`), mantendo a opção de pausar a
+  recorrência.
+- **Saíram do código** as actions que faziam o reverso:
+  `estornarBaixaTitulo` (receber e pagar), `estornarBaixaParcela`,
+  `estornarBaixaDesembolsoParcela`, `estornarBaixaDevolucaoVerba`,
+  `estornarBaixaFaturaCartao` e `estornarBaixaAvulsa` (virou
+  `cancelarBaixaAvulsa`). As RPCs antigas continuam no banco, sem chamador.
+- **Desembolso:** o cancelamento da parcela de desembolso usa a função nova
+  `cancelar_baixa_desembolso_parcela`; a antiga
+  (`estornar_baixa_desembolso_parcela`) estava quebrada e não foi mexida.
+  O Tiago autorizou a mudança nessa ponta e avisa o Antonio.
+- **Permissão:** as funções novas exigem administrador ou financeiro no
+  próprio banco, e gravam o log de auditoria na mesma transação
+  (`*.baixa_cancelada`, `lancamento_financeiro.estorno_de_baixa`).
+- **Conciliação sem mudança nenhuma**, por pedido do Tiago.
+- **Conferido no navegador (29/09/2026), logado como administrador:**
+  NF 1 do TES-1001/26 recebeu baixa na Conta Teste, ganhou um estorno de
+  R$ 1.000,00 (a linha mostrou "estornado R$ 1.000,00", o popup listou o
+  estorno com o motivo) e teve a baixa cancelada — voltou a Inadimplente, sem
+  nenhum lançamento, e o log gravou o cancelamento com o estorno apagado. Na
+  PP-00083 (TES-1008/26), estorno de R$ 2.500,00 como entrada, cancelamento
+  (PP de volta a aprovada) e a baixa refeita igual à original (24/09, PIX,
+  Conta Teste, 02 · Geral). Fatura FC-00003 e item de cartão da FC-00004: o
+  Estornar aparece desabilitado com o motivo, e cancelar item de fatura
+  fechada é recusado com "Reabra a fatura…". A trava de valor acima do saldo
+  e a de motivo curto funcionaram na tela.
+- **Corrigido na conferência:** a recusa do servidor fechava o formulário do
+  popup e perdia o motivo digitado; o popup agora só se reinicia quando muda
+  o título.
