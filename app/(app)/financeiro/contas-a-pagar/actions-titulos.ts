@@ -16,6 +16,7 @@
  */
 
 import { z } from "zod";
+import { valorDaBaixaSchema } from "@/lib/validations/baixa-parcial";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -383,6 +384,10 @@ const baixaSchema = z
       .uuid()
       .nullable()
       .or(z.literal("").transform(() => null)),
+    // Baixa parcial e impostos retidos (decisão 125). Só PP, avulso,
+    // recorrência e folha levam isto ao banco; as demais origens baixam
+    // sempre o valor inteiro, e quem recusa o que não cabe é o banco.
+    ...valorDaBaixaSchema,
   })
   .superRefine((data, ctx) => {
     if (data.forma_pagamento !== "cartao_credito" && !data.conta_bancaria_id) {
@@ -512,15 +517,18 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
       };
     }
 
-    const { data: lancId, error } = await supabase.rpc("dar_baixa_pp_parcela", {
+    // O banco confere o que falta, os retidos e onde só cabe o valor
+    // inteiro — PP de verba, cartão, remessa (decisão 125).
+    const { data: lancId, error } = await supabase.rpc("baixar_parcela_pp", {
       p_parcela_id: d.id,
       p_pago_em: d.pago_em,
       p_conta_bancaria_id: d.conta_bancaria_id ?? null,
-      p_plano_conta_tipo_id: d.plano_conta_tipo_id,
-      p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
-      p_criado_por: session.profile.id,
+      p_tipo_id: d.plano_conta_tipo_id,
+      p_subtipo_id: d.plano_conta_subtipo_id,
       p_forma_pagamento: d.forma_pagamento,
       p_cartao_credito_id: d.cartao_credito_id,
+      p_valor_baixa: d.valor_baixa ?? null,
+      p_retencoes: d.retencoes,
     });
     if (error) {
       console.error("[titulos.baixa.pp]", error.message);
@@ -537,6 +545,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
         parcela_id: parcela.id,
         parcela_numero: parcela.numero,
         valor: Number(parcela.valor),
+        valor_baixa: d.valor_baixa ?? null,
+        retencoes: d.retencoes,
         pago_em: d.pago_em,
         job_id: parcela.pedido.job_id,
         conta_bancaria_id: d.conta_bancaria_id,
@@ -717,14 +727,18 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
     };
   }
 
-  const { data: lancId, error } = await supabase.rpc("dar_baixa_avulsa_com_plano", {
+  // O banco confere o que falta, os retidos e onde só cabe o valor
+  // inteiro — folha, cartão, remessa (decisão 125).
+  const { data: lancId, error } = await supabase.rpc("baixar_conta_avulsa", {
     p_conta_avulsa_id: d.id,
     p_pago_em: d.pago_em,
     p_conta_bancaria_id: d.conta_bancaria_id,
-    p_plano_conta_tipo_id: d.plano_conta_tipo_id,
-    p_plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+    p_tipo_id: d.plano_conta_tipo_id,
+    p_subtipo_id: d.plano_conta_subtipo_id,
     p_forma_pagamento: d.forma_pagamento,
     p_cartao_credito_id: d.cartao_credito_id,
+    p_valor_baixa: d.valor_baixa ?? null,
+    p_retencoes: d.retencoes,
   });
   if (error) {
     console.error("[titulos.baixa.avulsa]", error.message);
@@ -739,6 +753,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
     metadata: {
       descricao: avulsa.descricao,
       valor: Number(avulsa.valor),
+      valor_baixa: d.valor_baixa ?? null,
+      retencoes: d.retencoes,
       pago_em: d.pago_em,
       origem: avulsa.recorrente_id ? "recorrencia" : "avulso",
       conta_bancaria_id: d.conta_bancaria_id,

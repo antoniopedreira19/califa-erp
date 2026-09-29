@@ -54,6 +54,8 @@ import type {
   SituacaoVerba,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import type { UltimaRetencao } from "@/components/financeiro/valor-da-baixa";
+import { totalRetido } from "@/lib/data/baixas-do-documento";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
 import {
   BaixaTituloDialog,
@@ -62,6 +64,7 @@ import {
 import { lerCompetencia, rotuloCurto } from "@/lib/cartoes/competencia";
 import {
   BaixaRegistradaDialog,
+  type BaixaDoTitulo,
   type BaixaRegistradaAlvo,
   type EstornoDaBaixa,
 } from "@/components/financeiro/baixa-registrada-dialog";
@@ -138,6 +141,22 @@ export interface TituloRow {
   /** Estornos registrados sobre a baixa viva. Obrigatório: quem não tem
    *  manda `[]` explícito. */
   estornos_da_baixa: EstornoDaBaixa[];
+  /**
+   * Decisão 125: todas as baixas vivas do documento, da mais antiga para a
+   * mais nova — parcela de PP e avulsa podem ter várias (baixa parcial),
+   * cada uma com os impostos retidos dela. Os campos de uma baixa só, logo
+   * acima, são os da ÚLTIMA. Obrigatório: sem baixa, `[]`.
+   */
+  baixas: BaixaDoTitulo[];
+  /** O que as baixas quitaram: líquido + retidos. Falta = valor − baixado. */
+  baixado: number;
+  /** Já foi para uma remessa CNAB: só a baixa do que falta, sem retenção
+   *  (interino da D15). */
+  em_remessa: boolean;
+  /** PP de verba de produção: só o valor inteiro, sem retenção (P3). */
+  eh_verba: boolean;
+  /** O fornecedor — chave do "Repetir as alíquotas". `null` sem fornecedor. */
+  parte_id: string | null;
   /**
    * Forma de pagamento da conta avulsa ou recorrência.
    * Parcelas de PP ficam null (PP não tem forma_pagamento ainda).
@@ -288,13 +307,62 @@ function origemChipClass(origem: OrigemTitulo): string {
 // ---------------------------------------------------------------------------
 
 /** "aguardando_prestacao": título de verba paga cuja prestação depende da
- *  produção — sem prestação ou reprovada (decisão 081, 4a). */
-type StatusFiltro = "a_pagar" | "aguardando_prestacao" | "pago" | "todos";
+ *  produção — sem prestação ou reprovada (decisão 081, 4a). "parcial": com
+ *  baixa e ainda faltando (decisão 125); ele também está em "A pagar". */
+type StatusFiltro = "a_pagar" | "parcial" | "aguardando_prestacao" | "pago" | "todos";
 
 /** O estorno de verba é despesa negativa nas telas (decisão 081, 8a): no
  *  banco segue positivo, aqui abate as somas. */
 function valorComSinal(r: TituloRow): number {
   return r.origem === "pp_devolucao_verba" ? -r.valor : r.valor;
+}
+
+/** O que falta pagar (decisão 125): o valor menos as baixas (líquido +
+ *  retidos). */
+function faltaPagar(r: TituloRow): number {
+  return Math.max(0, Math.round((r.valor - r.baixado) * 100) / 100);
+}
+
+function ehParcial(r: TituloRow): boolean {
+  return r.status === "a_pagar" && r.baixas.length > 0 && faltaPagar(r) > 0.004;
+}
+
+/** Com o sinal da devolução de verba. */
+function comSinal(r: TituloRow, v: number): number {
+  return r.origem === "pp_devolucao_verba" ? -v : v;
+}
+
+/**
+ * O que saiu da conta num recorte de datas: cada baixa na data dela, pelo
+ * líquido (decisão 125 — antes, o título inteiro na data da última baixa).
+ * A fatura de cartão não tem baixa única (duas pernas): conta pelo título.
+ */
+function pagoNasDatas(r: TituloRow, casa: (data: string) => boolean): number {
+  if (r.baixas.length === 0) {
+    return r.status === "pago" && r.pago_em && casa(r.pago_em) ? valorComSinal(r) : 0;
+  }
+  return comSinal(
+    r,
+    r.baixas.reduce((acc, b) => (b.data && casa(b.data) ? acc + b.movimentado : acc), 0),
+  );
+}
+
+/** Por que a origem só aceita a baixa do valor inteiro (decisão 125).
+ *  `null`: aceita a parcial. */
+function motivoSemParcialDa(r: TituloRow): string | null {
+  switch (r.origem) {
+    case "desembolso":
+      return "Desembolso só aceita a baixa do valor inteiro.";
+    case "fatura_cartao":
+      return "Fatura de cartão só aceita a baixa do valor inteiro.";
+    case "pp_devolucao_verba":
+      return "Devolução de verba só aceita a baixa do valor inteiro.";
+    case "folha":
+      return "Folha só aceita a baixa do valor inteiro.";
+  }
+  if (r.eh_verba) return "PP de verba só aceita a baixa do valor inteiro.";
+  if (r.em_remessa) return "Pago pela remessa com o valor cheio: só a baixa do que falta.";
+  return null;
 }
 
 interface Props {
@@ -315,6 +383,9 @@ interface Props {
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /** Cartões de crédito ativos — repassados ao drawer de conta avulsa. */
   cartoes?: CartaoOption[];
+  /** A última retenção de cada fornecedor (por `parte_id`), para o
+   *  "Repetir as alíquotas" da baixa (decisão 125). */
+  ultimasRetencoes: Record<string, UltimaRetencao>;
   /** Botão "Exportar remessa Santander" já montado no server component,
    *  renderizado ao lado do "+ Lançamento Avulso" na toolbar. Módulo
    *  pgto-remessa. */
@@ -332,6 +403,7 @@ export function TitulosPagarList({
   clientes,
   regionais,
   cartoes = [],
+  ultimasRetencoes,
   exportarRemessaBotao,
 }: Props) {
   const router = useRouter();
@@ -353,7 +425,9 @@ export function TitulosPagarList({
           ? true
           : statusFiltro === "aguardando_prestacao"
             ? verbaAguardaProducao(r.verba_situacao)
-            : r.status === statusFiltro,
+            : statusFiltro === "parcial"
+              ? ehParcial(r)
+              : r.status === statusFiltro,
       ),
     [rowsBruto, statusFiltro],
   );
@@ -481,27 +555,31 @@ export function TitulosPagarList({
     [rowsBruto],
   );
 
+  // Decisão 125: o "a pagar" soma o que FALTA de cada título, e os pagos
+  // contam cada baixa na data dela, pelo que saiu da conta.
   const resumo = React.useMemo(() => {
     const hoje = hojeISO();
     const limite = somaDiasISO(hoje, 7);
     const mesAtual = hoje.slice(0, 7);
     const aPagar = rowsBruto.filter((r) => r.status === "a_pagar");
-    const pagos = rowsBruto.filter((r) => r.status === "pago");
+    const noPeriodo = (d: string) =>
+      !mostraPeriodo || ((!dataDe || d >= dataDe) && (!dataAte || d <= dataAte));
     return {
-      emAberto: aPagar.reduce((s, r) => s + valorComSinal(r), 0),
+      emAberto: aPagar.reduce((s, r) => s + comSinal(r, faltaPagar(r)), 0),
       semana: aPagar
         .filter(
           (r) =>
             r.data_pagamento && r.data_pagamento >= hoje && r.data_pagamento <= limite,
         )
-        .reduce((s, r) => s + valorComSinal(r), 0),
-      pagosHoje: pagos.filter((r) => r.pago_em === hoje).reduce((s, r) => s + valorComSinal(r), 0),
-      pagosMes: pagos
-        .filter((r) => (r.pago_em ?? "").slice(0, 7) === mesAtual)
-        .reduce((s, r) => s + valorComSinal(r), 0),
-      totalPago: pagos.filter((r) => casaPeriodo(r)).reduce((s, r) => s + valorComSinal(r), 0),
+        .reduce((s, r) => s + comSinal(r, faltaPagar(r)), 0),
+      pagosHoje: rowsBruto.reduce((s, r) => s + pagoNasDatas(r, (d) => d === hoje), 0),
+      pagosMes: rowsBruto.reduce(
+        (s, r) => s + pagoNasDatas(r, (d) => d.slice(0, 7) === mesAtual),
+        0,
+      ),
+      totalPago: rowsBruto.reduce((s, r) => s + pagoNasDatas(r, noPeriodo), 0),
     };
-  }, [rowsBruto, casaPeriodo]);
+  }, [rowsBruto, mostraPeriodo, dataDe, dataAte]);
 
   const alvoBaixa: BaixaTituloAlvo | null = baixando
     ? {
@@ -520,12 +598,33 @@ export function TitulosPagarList({
                     : "Lançamento avulso",
         parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
         vencimento: baixando.data_pagamento,
+        chave: `${baixando.origem}-${baixando.id}-${baixando.baixas.length}`,
         valor: baixando.valor,
+        aberto: faltaPagar(baixando),
+        restoTexto: baixando.data_pagamento
+          ? `, na data de ${formatDate(baixando.data_pagamento)}, que dá para repactuar pelo lápis.`
+          : null,
+        motivoSemParcial: motivoSemParcialDa(baixando),
+        // Retenção só no serviço de fornecedor (decisão 125): PP que não é
+        // de verba, avulso e recorrência. O que foi para uma remessa saiu
+        // com o valor cheio (interino da D15).
+        retencao:
+          (baixando.origem === "pp" && !baixando.eh_verba) ||
+          baixando.origem === "avulso" ||
+          baixando.origem === "recorrencia"
+            ? {
+                mostra: true,
+                motivo: baixando.em_remessa ? "Pago pela remessa com o valor cheio." : null,
+              }
+            : { mostra: false },
+        ultimaRetencao: baixando.parte_id ? ultimasRetencoes[baixando.parte_id] ?? null : null,
         empresaId: baixando.empresa_id,
         planoContaTipoId: baixando.plano_conta_tipo_id,
         planoContaSubtipoId: baixando.plano_conta_subtipo_id,
         isDevolucao: baixando.origem === "pp_devolucao_verba",
-        semCartao: baixando.origem === "fatura_cartao",
+        // Fatura não se paga com cartão, e o restante de uma parcial não
+        // vai para a fatura.
+        semCartao: baixando.origem === "fatura_cartao" || baixando.baixas.length > 0,
       }
     : null;
 
@@ -547,20 +646,25 @@ export function TitulosPagarList({
         parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
         valor: conferindo.valor,
         vencOriginal: conferindo.venc_original,
-        // Uma baixa só, do valor inteiro, até a entrega 3b da decisão 125.
-        baixas: [
-          {
-            lancamentoId: conferindo.baixa_lancamento_id,
-            data: conferindo.pago_em,
-            contaNome: conferindo.conta_nome,
-            contaBancariaId: conferindo.baixa_conta_id,
-            centroNome: conferindo.centro_nome,
-            subtipoNome: conferindo.subtipo_nome,
-            movimentado: conferindo.valor,
-            retencoes: [],
-            estornos: conferindo.estornos_da_baixa,
-          },
-        ],
+        // As baixas do documento (decisão 125). A fatura de cartão não tem
+        // um lançamento só (duas pernas): a baixa dela sai dos campos de
+        // uma baixa só, e cancela pela fatura.
+        baixas:
+          conferindo.baixas.length > 0
+            ? conferindo.baixas
+            : [
+                {
+                  lancamentoId: conferindo.baixa_lancamento_id,
+                  data: conferindo.pago_em,
+                  contaNome: conferindo.conta_nome,
+                  contaBancariaId: conferindo.baixa_conta_id,
+                  centroNome: conferindo.centro_nome,
+                  subtipoNome: conferindo.subtipo_nome,
+                  movimentado: conferindo.valor,
+                  retencoes: [],
+                  estornos: conferindo.estornos_da_baixa,
+                },
+              ],
         viaCartao: conferindo.forma_pagamento === "cartao_credito",
         ehFaturaDeCartao: conferindo.origem === "fatura_cartao",
         ehTransferencia: false,
@@ -597,6 +701,11 @@ export function TitulosPagarList({
             ativo={statusFiltro === "a_pagar"}
             onClick={() => setStatusFiltro("a_pagar")}
             label="A pagar"
+          />
+          <StatusChip
+            ativo={statusFiltro === "parcial"}
+            onClick={() => setStatusFiltro("parcial")}
+            label="Parciais"
           />
           <StatusChip
             ativo={statusFiltro === "aguardando_prestacao"}
@@ -777,21 +886,25 @@ export function TitulosPagarList({
                 r.data_pagamento !== null &&
                 r.venc_original !== r.data_pagamento;
               const pago = r.status === "pago";
+              const parcial = ehParcial(r);
+              const retido = totalRetido(r.baixas);
+              const estornos =
+                r.baixas.length > 0 ? r.baixas.flatMap((b) => b.estornos) : r.estornos_da_baixa;
               return (
                 <tr
                   key={`${r.origem}-${r.id}`}
-                  // Título pago abre a baixa registrada ao clique, como o
-                  // Tiago pediu em 18/08/2026. Em aberto a linha não é
-                  // clicável: as ações dele são os botões próprios (lápis
-                  // e "Baixar"), e um clique solto não pode disparar
-                  // pagamento.
-                  onClick={pago ? () => {
+                  // Título pago (ou parcial, decisão 125) abre as baixas
+                  // registradas ao clique, como o Tiago pediu em
+                  // 18/08/2026. Em aberto a linha não é clicável: as ações
+                  // dele são os botões próprios (lápis e "Baixar"), e um
+                  // clique solto não pode disparar pagamento.
+                  onClick={pago || parcial ? () => {
                     setErroAcao(null);
                     setConferindo(r);
                   } : undefined}
                   className={cn(
                     "border-b border-border transition-colors last:border-0 hover:bg-accent/40",
-                    pago && "cursor-pointer",
+                    (pago || parcial) && "cursor-pointer",
                   )}
                 >
                   <td className="px-2 py-3">
@@ -905,14 +1018,22 @@ export function TitulosPagarList({
                   )}>
                     {/* Despesa negativa (decisão 081, 8a). */}
                     {r.origem === "pp_devolucao_verba" ? `−${formatMoney(r.valor)}` : formatMoney(r.valor)}
-                    {r.estornos_da_baixa.length > 0 && (
+                    {parcial && (
+                      <span className="block text-[10.5px] font-medium text-sky-700">
+                        pago {formatMoney(r.baixado)} · falta{" "}
+                        <b className="font-semibold">{formatMoney(faltaPagar(r))}</b>
+                      </span>
+                    )}
+                    {retido > 0 && (
+                      <span className="block text-[10.5px] font-medium text-muted-foreground">
+                        {formatMoney(retido)} retidos · a recolher
+                      </span>
+                    )}
+                    {estornos.length > 0 && (
                       <span className="block text-[10.5px] font-medium text-rose-700">
                         estornado{" "}
                         {formatMoney(
-                          r.estornos_da_baixa.reduce(
-                            (acc, e) => acc + Math.round(e.valor * 100),
-                            0,
-                          ) / 100,
+                          estornos.reduce((acc, e) => acc + Math.round(e.valor * 100), 0) / 100,
                         )}
                       </span>
                     )}
@@ -935,7 +1056,9 @@ export function TitulosPagarList({
                             ? "whitespace-normal border-teal-200 bg-teal-50 text-center leading-tight text-teal-800"
                             : pago
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
+                              : parcial
+                                ? "border-sky-200 bg-sky-50 text-sky-700"
+                                : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
                         )}
                       >
                         {r.origem === "pp_devolucao_verba"
@@ -944,39 +1067,44 @@ export function TitulosPagarList({
                             : "Devolução pendente"
                           : pago
                             ? "Pago"
-                            : "A pagar"}
+                            : parcial
+                              ? "Parcial"
+                              : "A pagar"}
                       </span>
                     )}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    {pago ? (
-                      <button
-                        type="button"
-                        title="Ver a baixa registrada — estornar ou cancelar, se preciso"
-                        aria-label="Ver baixa registrada"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setErroAcao(null);
-                          setConferindo(r);
-                        }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setErroAcao(null);
-                          setBaixando(r);
-                        }}
-                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700"
-                      >
-                        <CreditCard className="h-3 w-3" />
-                        Baixar
-                      </button>
-                    )}
+                    <div className="flex items-center justify-center gap-1">
+                      {!pago && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setErroAcao(null);
+                            setBaixando(r);
+                          }}
+                          className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700"
+                        >
+                          <CreditCard className="h-3 w-3" />
+                          Baixar
+                        </button>
+                      )}
+                      {(pago || parcial) && (
+                        <button
+                          type="button"
+                          title="Ver as baixas registradas — estornar ou cancelar, se preciso"
+                          aria-label="Ver baixa registrada"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setErroAcao(null);
+                            setConferindo(r);
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -988,8 +1116,8 @@ export function TitulosPagarList({
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" />
         Baixa é feita aqui. A aprovação e a rejeição continuam na aba de
-        Pedidos de Produção. Clique num título pago para conferir a baixa
-        e, se preciso, estornar.
+        Pedidos de Produção. Clique num título pago ou parcial para conferir
+        as baixas e, se preciso, estornar ou cancelar.
       </p>
 
       <BaixaTituloDialog
@@ -1035,10 +1163,18 @@ export function TitulosPagarList({
             const competencia = res.fatura
               ? lerCompetencia(res.fatura.competencia_fechamento.slice(0, 7))
               : null;
+            const retidoNaBaixa =
+              payload.retencoes.reduce((acc, r) => acc + Math.round(r.valor * 100), 0) / 100;
+            const liquido = Math.round((payload.valor_baixa - retidoNaBaixa) * 100) / 100;
+            const resta = Math.round((faltaPagar(alvo) - payload.valor_baixa) * 100) / 100;
             setToast(
               res.fatura
                 ? `Confirmado no cartão · ${formatMoney(alvo.valor)} entrou na fatura${competencia ? ` de ${rotuloCurto(competencia)}` : ""}${cartao ? ` do ${cartao.nome}` : ""} (${res.fatura.codigo}).`
-                : `Baixa registrada · ${formatMoney(alvo.valor)} enviado para a conciliação.`,
+                : `Baixa registrada · ${formatMoney(liquido)} enviado para a conciliação.` +
+                    (retidoNaBaixa > 0
+                      ? ` ${formatMoney(retidoNaBaixa)} retidos, a recolher.`
+                      : "") +
+                    (resta > 0.004 ? ` Faltam ${formatMoney(resta)}.` : ""),
             );
             router.refresh();
           });
@@ -1058,25 +1194,40 @@ export function TitulosPagarList({
         contas={contas.map((c) => ({ id: c.id, nome: c.nome, banco: c.banco }))}
         pending={pending}
         erro={erroAcao}
-        onCancelar={(_baixa, motivo) => {
+        onDarBaixaNoRestante={() => {
           const alvo = conferindo;
           if (!alvo) return;
+          setConferindo(null);
+          setErroAcao(null);
+          setBaixando(alvo);
+        }}
+        onCancelar={(baixa, motivo) => {
+          const alvo = conferindo;
+          if (!alvo) return;
+          // PP, avulso, recorrência e folha cancelam AQUELA baixa (decisão
+          // 125); desembolso, devolução de verba e fatura têm uma baixa só
+          // e cancelam pelo documento.
+          const porBaixa =
+            baixa.lancamentoId !== null &&
+            (alvo.origem === "pp" ||
+              alvo.origem === "avulso" ||
+              alvo.origem === "recorrencia" ||
+              alvo.origem === "folha");
           startTransition(async () => {
-            const res = await cancelarBaixa({
-              tipo: alvo.origem,
-              id: alvo.id,
-              motivo,
-            });
+            const res = porBaixa
+              ? await cancelarBaixa({ tipo: "baixa", id: baixa.lancamentoId, motivo })
+              : await cancelarBaixa({ tipo: alvo.origem, id: alvo.id, motivo });
             if (!res.ok) {
               setErroAcao(res.message);
               return;
             }
             setConferindo(null);
             setErroAcao(null);
+            const sobraBaixa = porBaixa && alvo.baixas.length > 1;
             setToast(
               alvo.origem === "fatura_cartao"
                 ? `Pagamento cancelado · a fatura ${alvo.origem_label} voltou para Fechada.`
-                : `Baixa cancelada · ${formatMoney(alvo.valor)} voltou para "A pagar" e saiu do extrato.`,
+                : `Baixa cancelada · ${formatMoney(baixa.movimentado)} saíram do extrato e o título voltou para ${sobraBaixa ? "Parcial" : "A pagar"}.`,
             );
             router.refresh();
           });
@@ -1100,7 +1251,7 @@ export function TitulosPagarList({
             setConferindo(null);
             setErroAcao(null);
             setToast(
-              `Estorno registrado · ${formatMoney(dados.valor)} ${alvo.origem === "pp_devolucao_verba" ? "saiu da" : "voltou para a"} conta em ${formatDate(dados.data)}. O título continua pago.`,
+              `Estorno registrado · ${formatMoney(dados.valor)} ${alvo.origem === "pp_devolucao_verba" ? "saiu da" : "voltou para a"} conta em ${formatDate(dados.data)}. A baixa continua como está.`,
             );
             router.refresh();
           });

@@ -6261,3 +6261,22 @@ estendido a Contas a Receber em 31/08.**
 - **Home:** "previsto a receber" desconta as baixas parciais.
 - **Conferido no navegador (29/09/2026)** no TES-1001/26 NF 1 2/2 e num
   recebimento avulso de teste, tudo desfeito no fim. Detalhe na decisão 125.
+
+## ⚠️ Nota de 2026-09-29 (6) — baixa parcial e impostos retidos em Títulos a Pagar (decisão 125, entrega 3b)
+
+- **Títulos a Pagar:** chip "Parciais", linha parcial ("pago · falta",
+  retidos "a recolher"), resumo com o que falta e os pagos por baixa na data
+  dela, diálogo de baixa com o bloco "Valor a dar baixa" e popup com
+  "Baixar o restante". Regras de onde cabe parcial/retenção em
+  `motivoSemParcialDa` e no `alvoBaixa` de `titulos-pagar-list.tsx`.
+- **Página:** lê todas as baixas (com retidos), os itens de remessa CNAB e a
+  última retenção por fornecedor. `TituloRow` ganhou `baixas`, `baixado`,
+  `em_remessa`, `eh_verba` e `parte_id`, obrigatórios em todas as origens.
+- **Detalhe da avulsa:** "Baixas registradas" e estado parcial; travas de
+  editar/excluir/cancelar nas actions (a exclusão agora barra a parcial
+  antes de apagar os anexos do Storage).
+- **Remessa CNAB:** leva só o que falta (P5).
+- **Não mexido:** o `PpsCard` do financeiro de jobs, que soma PP paga pelo
+  status, não é usado em tela nenhuma.
+- **Conferido no navegador (29/09/2026)** com um lançamento avulso de teste
+  (excluído no fim) e a PP-00083, restaurada igual à original.

@@ -55,7 +55,12 @@ const ORDEM_DOS_IMPOSTOS: Record<ImpostoRetido, number> = {
  */
 export function agruparBaixasPorDocumento(
   data: unknown[] | null,
-  campo: "titulo_receber_id" | "pedido_compra_parcela_id" | "conta_avulsa_id",
+  campo:
+    | "titulo_receber_id"
+    | "pedido_compra_parcela_id"
+    | "conta_avulsa_id"
+    | "desembolso_parcela_id"
+    | "pp_verba_devolucao_id",
   estornosPorBaixa: Map<string, EstornoDaBaixa[]>,
 ): Map<string, BaixaDoTitulo[]> {
   const porDocumento = new Map<string, BaixaDoTitulo[]>();

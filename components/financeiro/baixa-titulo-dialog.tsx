@@ -14,11 +14,20 @@
  *    tem plano (avulsa/recorrência) e é editável.
  * 2. **Nenhuma conta bancária padrão.** A conta é escolhida na mão em
  *    toda baixa, de propósito.
+ *
+ * Decisão 125 (29/09/2026): o valor sai do quadro do topo e vira o bloco
+ * "Valor a dar baixa" (`BlocoValorDaBaixa`, o mesmo de Títulos a Receber),
+ * com a baixa parcial e a retenção na fonte. Parcial e retenção valem para
+ * PP, avulso e recorrência; o cartão, a folha, a PP de verba, o desembolso,
+ * a fatura, a devolução de verba e o que foi para uma remessa só aceitam o
+ * valor inteiro. O formulário é um filho com `key` do título: o estado
+ * recomeça a cada título (antes o efeito de abertura rodava a cada
+ * renderização da tela, porque o `alvo` é remontado sempre).
  */
 
 import * as React from "react";
 import { format } from "date-fns";
-import { AlertCircle, ArrowRightLeft, CreditCard } from "lucide-react";
+import { AlertCircle, ArrowRightLeft, CreditCard, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -34,9 +43,19 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
 import { proximaFatura } from "@/lib/cartoes/proxima-fatura";
-import type { ContaBancaria, FormaPagamento, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type {
+  ContaBancaria,
+  FormaPagamento,
+  PlanoContaTipo,
+  PlanoContaSubtipo,
+  RetencaoDaBaixa,
+} from "@/lib/types";
+import {
+  BlocoValorDaBaixa,
+  useValorDaBaixa,
+  type UltimaRetencao,
+} from "@/components/financeiro/valor-da-baixa";
 import {
   FormaPagamentoField,
   type CartaoOption,
@@ -44,11 +63,27 @@ import {
 } from "@/components/financeiro/forma-pagamento-field";
 
 export interface BaixaTituloAlvo {
+  /** Identifica o título e as baixas dele: o formulário recomeça quando
+   *  ela muda (o objeto `alvo` é remontado a cada renderização). */
+  chave: string;
   titulo: string;
   origem: string;
   parcela: string;
   vencimento: string | null;
+  /** O valor do título inteiro. */
   valor: number;
+  /** O que falta pagar: o valor menos as baixas já feitas (decisão 125). */
+  aberto: number;
+  /** O fim da frase "Restam R$ X a pagar…". `null` fecha no ponto. */
+  restoTexto: string | null;
+  /** Por que esta origem só aceita o valor inteiro. `null` aceita a baixa
+   *  parcial (o cartão ainda a desliga na hora, pela forma escolhida). */
+  motivoSemParcial: string | null;
+  /** A chave de retenção: some onde não há serviço de fornecedor, e fica
+   *  desligada, com o motivo, no que foi para uma remessa (D15). */
+  retencao: { mostra: false } | { mostra: true; motivo: string | null };
+  /** A última retenção do mesmo fornecedor, para o "Repetir as alíquotas". */
+  ultimaRetencao: UltimaRetencao | null;
   empresaId: string;
   planoContaTipoId: string | null;
   planoContaSubtipoId: string | null;
@@ -61,12 +96,29 @@ export interface BaixaTituloAlvo {
    */
   isDevolucao?: boolean;
   /**
-   * `true` na baixa da fatura de cartão: o campo Forma de pagamento
-   * aparece, mas sem a opção "Cartão de Crédito" — fatura de cartão não
-   * se paga com outro cartão, e o banco recusa (28/08/2026).
+   * `true` quando o cartão não entra como forma: na fatura de cartão (não
+   * se paga cartão com cartão, e o banco recusa — 28/08/2026) e no título
+   * que já tem baixa parcial (o restante não vai para a fatura).
    */
   semCartao?: boolean;
 }
+
+export interface BaixaTituloPayload {
+  pago_em: string;
+  /** `null` quando a forma é cartão: o item entra na fatura, e nada
+   *  sai de conta bancária nenhuma (decisão 093). */
+  conta_bancaria_id: string | null;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  /** `null` quando `alvo.isDevolucao` — a RPC de devolução não usa. */
+  forma_pagamento: FormaPagamento | null;
+  cartao_credito_id: string | null;
+  /** O valor a dar baixa: líquido + retidos (decisão 125). */
+  valor_baixa: number;
+  retencoes: RetencaoDaBaixa[];
+}
+
+const MOTIVO_CARTAO = "No cartão, a baixa é sempre do valor inteiro: o item entra inteiro na fatura.";
 
 export function BaixaTituloDialog({
   open,
@@ -96,43 +148,78 @@ export function BaixaTituloDialog({
   cartaoPlanejadoId?: string | null;
   pending: boolean;
   erro: string | null;
-  onConfirm: (payload: {
-    pago_em: string;
-    /** `null` quando a forma é cartão: o item entra na fatura, e nada
-     *  sai de conta bancária nenhuma (decisão 093). */
-    conta_bancaria_id: string | null;
-    plano_conta_tipo_id: string;
-    plano_conta_subtipo_id: string;
-    /** `null` quando `alvo.isDevolucao` — a RPC de devolução não usa. */
-    forma_pagamento: FormaPagamento | null;
-    cartao_credito_id: string | null;
-  }) => void;
+  onConfirm: (payload: BaixaTituloPayload) => void;
 }) {
+  if (!alvo) return null;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-emerald-600" />
+            {alvo.isDevolucao ? "Baixar estorno de verba" : "Dar baixa no pagamento"}
+          </DialogTitle>
+        </DialogHeader>
+        <FormularioDaBaixa
+          key={alvo.chave}
+          alvo={alvo}
+          contas={contas}
+          tipos={tipos}
+          subtipos={subtipos}
+          cartoes={cartoes}
+          // O cartão só vem sugerido onde ele cabe.
+          formaPlanejada={
+            alvo.semCartao && formaPlanejada === "cartao_credito" ? null : formaPlanejada ?? null
+          }
+          cartaoPlanejadoId={alvo.semCartao ? null : cartaoPlanejadoId ?? null}
+          pending={pending}
+          erro={erro}
+          onCancelar={() => onOpenChange(false)}
+          onConfirm={onConfirm}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FormularioDaBaixa({
+  alvo,
+  contas,
+  tipos,
+  subtipos,
+  cartoes,
+  formaPlanejada,
+  cartaoPlanejadoId,
+  pending,
+  erro,
+  onCancelar,
+  onConfirm,
+}: {
+  alvo: BaixaTituloAlvo;
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
+  cartoes: CartaoOption[];
+  formaPlanejada: FormaPagamento | null;
+  cartaoPlanejadoId: string | null;
+  pending: boolean;
+  erro: string | null;
+  onCancelar: () => void;
+  onConfirm: (payload: BaixaTituloPayload) => void;
+}) {
+  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão),
+  // centro de custo sugerido pela origem quando existe, e forma de
+  // pagamento pré-preenchida quando a origem já definiu.
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
   const [pagoEm, setPagoEm] = React.useState(format(new Date(), "yyyy-MM-dd"));
   const [contaId, setContaId] = React.useState("");
-  const [tipoId, setTipoId] = React.useState("");
-  const [subtipoId, setSubtipoId] = React.useState("");
+  const [tipoId, setTipoId] = React.useState(alvo.planoContaTipoId ?? "");
+  const [subtipoId, setSubtipoId] = React.useState(alvo.planoContaSubtipoId ?? "");
   const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamentoValue>({
-    forma_pagamento: null,
-    cartao_credito_id: null,
+    forma_pagamento: formaPlanejada,
+    cartao_credito_id: cartaoPlanejadoId,
   });
-
-  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão),
-  // centro de custo sugerido pela origem quando existe,
-  // e forma de pagamento pré-preenchida quando a origem já definiu.
-  React.useEffect(() => {
-    if (!open || !alvo) return;
-    setErroLocal(null);
-    setPagoEm(format(new Date(), "yyyy-MM-dd"));
-    setContaId("");
-    setTipoId(alvo.planoContaTipoId ?? "");
-    setSubtipoId(alvo.planoContaSubtipoId ?? "");
-    setFormaPagamento({
-      forma_pagamento: formaPlanejada ?? null,
-      cartao_credito_id: cartaoPlanejadoId ?? null,
-    });
-  }, [open, alvo, formaPlanejada, cartaoPlanejadoId]);
+  const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao);
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão do Tiago em
@@ -159,12 +246,12 @@ export function BaixaTituloDialog({
     );
   }
 
-  function handleFormaPagamento(v: FormaPagamentoValue) {
+  function handleFormaPagamento(valor: FormaPagamentoValue) {
     // A data sugerida pelo campo (vencimento da fatura) NÃO entra aqui:
     // na baixa, a data é a do pagamento de fato, e é ela que decide em
     // qual fatura o item cai (decisão 093). Aceitar a sugestão jogaria o
     // item na fatura seguinte.
-    setFormaPagamento(v);
+    setFormaPagamento(valor);
     setErroLocal(null);
   }
 
@@ -173,6 +260,17 @@ export function BaixaTituloDialog({
     ? cartoes.find((c) => c.id === formaPagamento.cartao_credito_id) ?? null
     : null;
   const faturaDestino = descreverFaturaDestino(cartaoEscolhido, pagoEm);
+
+  // O cartão desliga a parcial e a retenção na hora (decisão 125).
+  const motivoSemParcial = noCartao ? MOTIVO_CARTAO : alvo.motivoSemParcial;
+  const retencao: BaixaTituloAlvo["retencao"] = noCartao ? { mostra: false } : alvo.retencao;
+  const retencaoLiberada = retencao.mostra && retencao.motivo === null;
+  React.useEffect(() => {
+    if (motivoSemParcial !== null && v.parcial) v.setParcial(false);
+    if (!retencaoLiberada && v.retem) v.setRetem(false);
+    // `v` muda a cada renderização; o que decide é a regra.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motivoSemParcial, retencaoLiberada, v.parcial, v.retem]);
 
   function handleSubmit() {
     setErroLocal(null);
@@ -184,13 +282,9 @@ export function BaixaTituloDialog({
       );
       return;
     }
-    if (!tipoId || !subtipoId) {
-      setErroLocal("Selecione o centro de custo do pagamento.");
-      return;
-    }
     // Devolução de verba: RPC não recebe forma, então não coletamos nem
     // validamos.
-    const isDevolucao = alvo?.isDevolucao === true;
+    const isDevolucao = alvo.isDevolucao === true;
     if (!isDevolucao) {
       if (!formaPagamento.forma_pagamento) {
         setErroLocal("Selecione a forma de pagamento.");
@@ -204,6 +298,15 @@ export function BaixaTituloDialog({
         return;
       }
     }
+    if (!tipoId || !subtipoId) {
+      setErroLocal("Selecione o centro de custo do pagamento.");
+      return;
+    }
+    const erroDoValor = v.erro();
+    if (erroDoValor) {
+      setErroLocal(erroDoValor);
+      return;
+    }
     onConfirm({
       pago_em: pagoEm,
       conta_bancaria_id: noCartao ? null : contaId,
@@ -211,47 +314,38 @@ export function BaixaTituloDialog({
       plano_conta_subtipo_id: subtipoId,
       forma_pagamento: isDevolucao ? null : formaPagamento.forma_pagamento,
       cartao_credito_id: isDevolucao ? null : formaPagamento.cartao_credito_id,
+      valor_baixa: v.valor,
+      retencoes: v.retencoes(),
     });
   }
 
-  if (!alvo) return null;
   const mensagemErro = erro ?? erroLocal;
+  const baixaParcial = v.parcial && v.resta > 0.004;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-emerald-600" />
-            {alvo.isDevolucao ? "Baixar estorno de verba" : "Dar baixa no pagamento"}
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <div className="grid grid-cols-[max-content_1fr_max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/40 p-4 text-[13px]">
+        <span className="text-muted-foreground">Título</span>
+        <span className="font-semibold">{alvo.titulo}</span>
+        <span className="text-muted-foreground">Parcela</span>
+        <span className="font-mono text-xs">{alvo.parcela}</span>
+        <span className="text-muted-foreground">Origem</span>
+        <span>{alvo.origem}</span>
+        <span className="text-muted-foreground">Vencimento</span>
+        <span className="font-mono text-xs">
+          {alvo.vencimento ? formatarData(alvo.vencimento) : "—"}
+        </span>
+      </div>
 
-        <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/40 p-4 text-sm">
-          <span className="text-muted-foreground">Título</span>
-          <span className="font-semibold">{alvo.titulo}</span>
-          <span className="text-muted-foreground">Origem</span>
-          <span>{alvo.origem}</span>
-          <span className="text-muted-foreground">Parcela</span>
-          <span className="font-mono text-xs">{alvo.parcela}</span>
-          <span className="text-muted-foreground">Vencimento</span>
-          <span className="font-mono text-xs">
-            {alvo.vencimento ? formatarData(alvo.vencimento) : "—"}
-          </span>
-          <span className="text-muted-foreground">Valor</span>
-          <span className="font-mono font-bold">
-            {formatCurrency(alvo.valor, "BRL")}
-          </span>
+      {mensagemErro && (
+        <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{mensagemErro}</span>
         </div>
+      )}
 
-        {mensagemErro && (
-          <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{mensagemErro}</span>
-          </div>
-        )}
-
-        <div className="space-y-3">
+      <div className="space-y-3">
+        <div className={alvo.isDevolucao ? "space-y-1" : "grid grid-cols-2 items-start gap-3"}>
           <div className="space-y-1">
             <label className="text-xs font-semibold">
               {alvo.isDevolucao
@@ -279,27 +373,28 @@ export function BaixaTituloDialog({
               semCartao={alvo.semCartao === true}
             />
           )}
+        </div>
 
-          {noCartao && (
-            <div className="flex items-start gap-2 rounded-lg border border-california-red/30 bg-california-red/5 p-3 text-xs text-foreground">
-              <CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0 text-california-red" />
-              <span>
-                {faturaDestino ? (
-                  <>
-                    Entra na fatura de{" "}
-                    <strong className="font-semibold">{faturaDestino.competencia}</strong>
-                    {" — "}fecha {faturaDestino.fecha}, vence {faturaDestino.vence}.{" "}
-                  </>
-                ) : (
-                  <>Escolha o cartão para ver em qual fatura o item entra. </>
-                )}
-                Nada sai da conta bancária agora: o dinheiro sai na baixa da fatura.
-                Se essa competência já tiver fechado, o item cai na seguinte.
-              </span>
-            </div>
-          )}
+        {noCartao && (
+          <div className="flex items-start gap-2 rounded-lg border border-california-red/30 bg-california-red/5 p-3 text-xs text-foreground">
+            <CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0 text-california-red" />
+            <span>
+              {faturaDestino ? (
+                <>
+                  Entra na fatura de{" "}
+                  <strong className="font-semibold">{faturaDestino.competencia}</strong>
+                  {" — "}fecha {faturaDestino.fecha}, vence {faturaDestino.vence}.{" "}
+                </>
+              ) : (
+                <>Escolha o cartão para ver em qual fatura o item entra. </>
+              )}
+              Nada sai da conta bancária agora: o dinheiro sai na baixa da fatura.
+              Se essa competência já tiver fechado, o item cai na seguinte.
+            </span>
+          </div>
+        )}
 
-          {!noCartao && (
+        {!noCartao && (
           <div className="space-y-1">
             <label className="text-xs font-semibold">
               {alvo.isDevolucao
@@ -309,8 +404,8 @@ export function BaixaTituloDialog({
             </label>
             <Select
               value={contaId}
-              onValueChange={(v) => {
-                setContaId(v);
+              onValueChange={(valor) => {
+                setContaId(valor);
                 setErroLocal(null);
               }}
             >
@@ -333,92 +428,119 @@ export function BaixaTituloDialog({
               </SelectContent>
             </Select>
           </div>
-          )}
+        )}
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold">
-              Centro de custo do pagamento{" "}
-              <span className="text-california-red">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <Combobox
-                items={tiposAtivos.map((t) => ({
-                  value: t.id,
-                  label: `${t.codigo} · ${t.nome}`,
-                }))}
-                value={tipoId || null}
-                onChange={(v) => handleTipo(v ?? "")}
-                placeholder={
-                  tiposAtivos.length === 0 ? "Nenhum tipo cadastrado" : "Tipo..."
-                }
-                buscaPlaceholder="Escreva o código ou o nome"
-                disabled={tiposAtivos.length === 0}
-                className={COMBOBOX_COMO_SELECT}
-              />
-              <Combobox
-                items={subtiposDoTipo.map((s) => ({ value: s.id, label: s.nome }))}
-                value={subtipoId || null}
-                onChange={(v) => {
-                  setSubtipoId(v ?? "");
-                  setErroLocal(null);
-                }}
-                disabled={!tipoId || subtiposDoTipo.length === 0}
-                placeholder={
-                  !tipoId
-                    ? "Escolha o tipo primeiro"
-                    : subtiposDoTipo.length === 0
-                      ? "Nenhum subtipo cadastrado"
-                      : "Subtipo..."
-                }
-                buscaPlaceholder="Escreva o nome do subtipo"
-                className={COMBOBOX_COMO_SELECT}
-              />
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Define onde o custo entra no DRE.
-            </p>
-          </div>
+        <BlocoValorDaBaixa
+          v={v}
+          lado="pagar"
+          valorDoTitulo={alvo.valor}
+          parcelaRotulo={`Parcela ${alvo.parcela}`}
+          restoTexto={alvo.restoTexto}
+          parcial={
+            motivoSemParcial === null
+              ? { aceita: true }
+              : { aceita: false, motivo: motivoSemParcial }
+          }
+          retencao={retencao}
+        />
 
-          <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-            <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+        {v.retem && v.retido > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              {noCartao ? (
-                <>
-                  Ao confirmar, o item passa a pertencer à fatura do cartão e
-                  aparece no extrato dele, na aba{" "}
-                  <strong className="font-semibold text-foreground">Cartão</strong>.
-                </>
-              ) : (
-                <>
-                  Ao confirmar, o pagamento é registrado e enviado para a{" "}
-                  <strong className="font-semibold text-foreground">Conciliação</strong>{" "}
-                  com a conta e o centro de custo escolhidos.
-                </>
-              )}
+              Os impostos retidos ficam para a agência recolher (guia do ISS e DARF),
+              registrados imposto por imposto para o módulo fiscal.
             </span>
           </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold">
+            Centro de custo do pagamento{" "}
+            <span className="text-california-red">*</span>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Combobox
+              items={tiposAtivos.map((t) => ({
+                value: t.id,
+                label: `${t.codigo} · ${t.nome}`,
+              }))}
+              value={tipoId || null}
+              onChange={(valor) => handleTipo(valor ?? "")}
+              placeholder={
+                tiposAtivos.length === 0 ? "Nenhum tipo cadastrado" : "Tipo..."
+              }
+              buscaPlaceholder="Escreva o código ou o nome"
+              disabled={tiposAtivos.length === 0}
+              className={COMBOBOX_COMO_SELECT}
+            />
+            <Combobox
+              items={subtiposDoTipo.map((s) => ({ value: s.id, label: s.nome }))}
+              value={subtipoId || null}
+              onChange={(valor) => {
+                setSubtipoId(valor ?? "");
+                setErroLocal(null);
+              }}
+              disabled={!tipoId || subtiposDoTipo.length === 0}
+              placeholder={
+                !tipoId
+                  ? "Escolha o tipo primeiro"
+                  : subtiposDoTipo.length === 0
+                    ? "Nenhum subtipo cadastrado"
+                    : "Subtipo..."
+              }
+              buscaPlaceholder="Escreva o nome do subtipo"
+              className={COMBOBOX_COMO_SELECT}
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Define onde o custo entra no DRE.
+          </p>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-          >
-            <CreditCard className="h-4 w-4" />
-            {pending ? "Confirmando..." : "Confirmar baixa"}
-          </button>
+        <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+          <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+          <span>
+            {noCartao ? (
+              <>
+                Ao confirmar, o item passa a pertencer à fatura do cartão e
+                aparece no extrato dele, na aba{" "}
+                <strong className="font-semibold text-foreground">Cartão</strong>.
+              </>
+            ) : (
+              <>
+                Ao confirmar, o pagamento é registrado e enviado para a{" "}
+                <strong className="font-semibold text-foreground">Conciliação</strong>{" "}
+                com a conta e o centro de custo escolhidos.
+              </>
+            )}
+          </span>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={onCancelar}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          <CreditCard className="h-4 w-4" />
+          {pending
+            ? "Confirmando..."
+            : baixaParcial
+              ? "Confirmar baixa parcial"
+              : "Confirmar baixa"}
+        </button>
+      </div>
+    </>
   );
 }
 

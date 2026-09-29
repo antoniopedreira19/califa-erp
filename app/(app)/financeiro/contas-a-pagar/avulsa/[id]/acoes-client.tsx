@@ -277,12 +277,15 @@ interface CancelarBaixaProps {
   contaId: string;
   descricao: string;
   recorrenteId: string | null;
+  /** Mais de uma baixa (decisão 125): cancela a mais recente. */
+  variasBaixas?: boolean;
 }
 
 export function CancelarBaixaAvulsaModalClient({
   contaId,
   descricao,
   recorrenteId,
+  variasBaixas = false,
 }: CancelarBaixaProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -300,6 +303,7 @@ export function CancelarBaixaAvulsaModalClient({
         contaId={contaId}
         descricao={descricao}
         recorrenteId={recorrenteId}
+        variasBaixas={variasBaixas}
         open={open}
         onOpenChange={setOpen}
       />
