@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  CheckCircle2,
   Circle,
 } from "lucide-react";
 import {
@@ -59,11 +60,10 @@ export type RegionalOpcao = { id: string; nome: string; empresa_id: string };
 
 type StatusFiltro = "ativos" | "inativos" | "todos";
 type TipoFiltro = "todos" | TipoContratacao;
-// A distinção anterior entre "críticas" e "parciais" era teoricamente
-// útil (crítica impede pagamento, parcial só incompleta) mas na prática
-// o RH sempre quer "quem tem algo pendente" — o detalhe de qual campo
-// já aparece no tooltip do selo na linha.
-type PendenciaFiltro = "todos" | "pendentes";
+// Segmentado em 3: Todos / Com pendências / Sem pendências. O detalhe
+// de qual campo está pendente aparece no tooltip do selo na linha —
+// não precisa separar críticas de parciais no filtro.
+type PendenciaFiltro = "todos" | "pendentes" | "sem_pendencias";
 
 // Sentinel para "todas" (Radix Select não aceita value="").
 const TODAS = "__todas__";
@@ -124,6 +124,8 @@ export function ColaboradoresList({
         if (c.regional_id !== regionalFiltro) return false;
       }
       if (pendenciaFiltro === "pendentes" && c.pendencia_nivel === "completo")
+        return false;
+      if (pendenciaFiltro === "sem_pendencias" && c.pendencia_nivel !== "completo")
         return false;
       if (!q) return true;
       return (
@@ -450,9 +452,11 @@ export function ColaboradoresList({
 }
 
 /**
- * Toggle segmentado no lugar do Select de 4 opções que existia antes.
- * Mesmo formato visual do ChaveMeusTodos (pílula em fundo cinza claro),
- * mantendo a gramática das listas do sistema consistente.
+ * Toggle segmentado com 3 opções: Todos / Com pendências / Sem
+ * pendências. Segue o formato do ChaveMeusTodos (pílula em fundo cinza
+ * claro) pra manter a gramática das listas do sistema consistente.
+ * Padding do botão é px-3 (menor que o padrão px-3.5) porque 3
+ * posições ocupam mais espaço que 2 e a barra de filtros já é densa.
  */
 function TogglePendencias({
   valor,
@@ -477,7 +481,7 @@ function TogglePendencias({
         onClick={() => onChange("pendentes")}
       >
         <AlertCircle className="h-3 w-3" aria-hidden="true" />
-        Só pendentes
+        Com pendências
         {contagemPendentes > 0 && (
           <span
             className={`ml-0.5 text-[10px] font-medium ${
@@ -489,6 +493,13 @@ function TogglePendencias({
             ({contagemPendentes})
           </span>
         )}
+      </BotaoPill>
+      <BotaoPill
+        ativo={valor === "sem_pendencias"}
+        onClick={() => onChange("sem_pendencias")}
+      >
+        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+        Sem pendências
       </BotaoPill>
     </div>
   );
@@ -509,7 +520,7 @@ function BotaoPill({
       aria-pressed={ativo}
       onClick={onClick}
       className={
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-[5px] text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/30 " +
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-[5px] text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/30 " +
         (ativo
           ? "bg-white font-semibold text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
           : "bg-transparent font-medium text-[#8a8a8a] hover:text-foreground")
