@@ -97,10 +97,14 @@ export default async function ColaboradorDetalhePage({
       .select("empresa_id, percentual, regional:regionais(id, nome)")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ano_vigencia", anoRateio),
-    // Membros ativos do tenant pro Select de líder direto no drawer.
+    // Membros ativos do tenant pro Combobox de líder direto no drawer.
+    // Não usa embed `profile:profiles(...)` porque não há FK direta entre
+    // tenant_members.user_id e profiles.id — ambos referenciam auth.users,
+    // relação transitiva que o PostgREST não segue. Trazemos os user_ids
+    // aqui e resolvemos os nomes na próxima query.
     supabase
       .from("tenant_members")
-      .select("user_id, profile:profiles(id, nome)")
+      .select("user_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
   ]);
@@ -162,11 +166,18 @@ export default async function ColaboradorDetalhePage({
     .slice()
     .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
 
-  const lideres = ((lideresRes.data ?? []) as unknown as Array<{
-    user_id: string;
-    profile: { id: string; nome: string } | null;
-  }>)
-    .flatMap((tm) => (tm.profile ? [tm.profile] : []))
+  const memberIds = ((lideresRes.data ?? []) as { user_id: string }[]).map(
+    (m) => m.user_id,
+  );
+  const lideresRawRes =
+    memberIds.length > 0
+      ? await supabase
+          .from("profiles")
+          .select("id, nome")
+          .in("id", memberIds)
+      : { data: [] as { id: string; nome: string }[] };
+  const lideres = ((lideresRawRes.data ?? []) as { id: string; nome: string }[])
+    .slice()
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   const isAdmin = session.activeRole === "administrador";
