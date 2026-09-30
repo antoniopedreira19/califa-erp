@@ -32,6 +32,7 @@ import {
   contatoEmBranco,
   type DadosJob,
   type HerdadosJob,
+  type PessoaOpcao,
 } from "./enviar-job-modal";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
 
@@ -54,6 +55,11 @@ export interface JobExistente {
   data_evento: string | null;
   observacoes: string | null;
   nome: string;
+  /** GP e produtor que o envio gravou no job — o "Ver dados do job" os
+   *  mostra (decisão 135). Obrigatórios: linha montada à mão com campo
+   *  opcional descarta o dado em silêncio (CLAUDE.md). */
+  responsavel: { nome: string } | null;
+  produtor: { nome: string } | null;
   /** O que o envio (ou o reenvio) gravou — `numeric` chega como texto. É o
    *  que o "Ver dados do job" mostra depois do envio (decisão 099). */
   valor_job_abertura: number | string | null;
@@ -109,14 +115,16 @@ interface Props {
    *  a sigla do cliente mudou e ele não serve mais. */
   codigoReservado: string | null;
   projetoNome: string;
-  projetoCodigo: string;
 
-  /** Produto, GP e produtor: só exibidos. O servidor relê os três do
-   *  projeto/orçamento na hora de gravar o job. */
+  /** Produto, categoria e serviço: só exibidos. O servidor relê o produto
+   *  do projeto na hora de gravar o job. */
   herdados: HerdadosJob;
 
-  /** Opções de cidade e regional do modal — ver <EnviarJobModal>. */
+  /** Opções de cidade, regional, GP e produtor do modal — ver
+   *  <EnviarJobModal>. */
   regionaisDoProjeto: { id: string; nome: string }[];
+  gpsDoProjeto: PessoaOpcao[];
+  produtores: PessoaOpcao[];
   cidadesIniciais: { id: string; nome: string; uf: string | null }[];
 
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
@@ -163,9 +171,10 @@ export function FluxoAbertura({
   proximoCodigoJob,
   codigoReservado,
   projetoNome,
-  projetoCodigo,
   herdados,
   regionaisDoProjeto,
+  gpsDoProjeto,
+  produtores,
   cidadesIniciais,
   inicial,
   job,
@@ -295,13 +304,15 @@ export function FluxoAbertura({
     setErroGeral(null);
     setFieldErrors({});
 
-    // Produto, GP e produtor não vão no payload: o servidor lê os três
-    // do projeto e do orçamento. Cidade e regional vão, porque o modal
-    // deixa trocá-los — e o servidor confere os dois antes de gravar.
+    // Produto não vai no payload: o servidor o lê do projeto. Cidade,
+    // regional, GP e produtor vão, porque o modal deixa trocá-los (os dois
+    // últimos desde a decisão 135) — e o servidor confere antes de gravar.
     const formData = new FormData();
     formData.set("nome", dados.nome);
     formData.set("cidade_id", dados.cidadeId);
     formData.set("regional_id", dados.regionalId);
+    formData.set("gp_responsavel_id", dados.gpId);
+    formData.set("produtor_id", dados.produtorId);
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_evento", dados.dataEvento);
@@ -383,10 +394,23 @@ export function FluxoAbertura({
               "—"
             }`,
     },
-    { rotulo: "GP Responsável", valor: herdados.gpNome ?? "— não informado" },
+    // GP e produtor, desde a decisão 135, seguem a mesma regra: o que o
+    // formulário escolheu antes do envio, o que o job gravou depois.
+    {
+      rotulo: "GP Responsável",
+      valor:
+        (etapa === "enviada"
+          ? herdados.gpNome
+          : gpsDoProjeto.find((p) => p.id === dados.gpId)?.nome) ??
+        "— não informado",
+    },
     {
       rotulo: "Produtor Responsável",
-      valor: herdados.produtorNome ?? "— não informado",
+      valor:
+        (etapa === "enviada"
+          ? herdados.produtorNome
+          : produtores.find((p) => p.id === dados.produtorId)?.nome) ??
+        "— não informado",
     },
     {
       rotulo: "Início · fim",
@@ -634,7 +658,6 @@ export function FluxoAbertura({
         onChange={(patch) => setDados((d) => ({ ...d, ...patch }))}
         orcamentoNome={orcamentoNome}
         projetoNome={projetoNome}
-        projetoCodigo={projetoCodigo}
         clienteNome={clienteNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
         codigoReaproveitado={!job && codigoReservado !== null}
@@ -646,6 +669,8 @@ export function FluxoAbertura({
         moeda={moeda}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
+        gpsDoProjeto={gpsDoProjeto}
+        produtores={produtores}
         cidadesIniciais={cidadesIniciais}
         periodoTravado={periodoTravado}
         fieldErrors={fieldErrors}

@@ -47,6 +47,10 @@ export interface DadosJob {
   cidadeId: string;
   cidadeNome: string;
   regionalId: string;
+  /** Editáveis desde a decisão 135 — pré-preenchidos com os do orçamento,
+   *  que acompanha a troca. */
+  gpId: string;
+  produtorId: string;
   dataInicio: string;
   dataFim: string;
   /** Data do evento. Só do job — o orçamento não tem o campo. */
@@ -61,14 +65,16 @@ export interface DadosJob {
 }
 
 /**
- * Dados que a abertura só EXIBE: produto vem do projeto, GP e produtor
- * vêm do orçamento. O servidor relê os três do banco na hora de gravar —
- * o modal não pode alterá-los.
+ * Dados que a abertura só EXIBE: produto vem do projeto; categoria e
+ * serviço, do orçamento. O servidor relê o produto do banco na hora de
+ * gravar — o modal não pode alterá-lo.
  *
- * `cidadeNome` e `regionalNome` continuam aqui, mas não são lidos por
- * este modal: quem os usa é o resumo da conferência, que com o job já
- * enviado precisa mostrar o que o JOB congelou — e não o que está no
- * orçamento hoje. Ver `resumoEnvio` em `fluxo-abertura.tsx`.
+ * `cidadeNome`, `regionalNome`, `gpNome` e `produtorNome` continuam aqui,
+ * mas não são lidos por este modal: quem os usa é o resumo da
+ * conferência, que com o job já enviado precisa mostrar o que o JOB
+ * congelou — e não o que está no orçamento hoje. Ver `resumoEnvio` em
+ * `fluxo-abertura.tsx`. GP e produtor são campos do formulário desde a
+ * decisão 135 (`DadosJob`).
  */
 export interface HerdadosJob {
   produtoNome: string | null;
@@ -79,31 +85,34 @@ export interface HerdadosJob {
   /** Categoria do job, herdada do orçamento (categorias_dominio, escopo
    *  'orcamento'). É a mesma que o financeiro vê na abertura. */
   categoriaNome: string | null;
+  /** Serviço do orçamento (`orcamentos.servico_id`), só exibido — entrou
+   *  no formulário na decisão 135. */
+  servicoNome: string | null;
 
   /**
-   * Ids do que o servidor exige para abrir o job — marca no projeto, GP e
-   * produtor no orçamento.
+   * Id da marca que o servidor exige para abrir o job.
    *
-   * Obrigatórios, nunca opcionais: são eles que travam o envio, e campo
+   * Obrigatório, nunca opcional: é ele que trava o envio, e campo
    * opcional em tipo montado à mão é como um campo some em silêncio
    * (CLAUDE.md).
    *
-   * ⚠️ O bloqueio olha para o ID, e NUNCA para o nome (17/09/2026). O
-   * nome vem de `profiles`, e ler o perfil de um colega depende da RLS:
-   * até esta data só administrador conseguia, então para um GP o nome
-   * voltava nulo, o formulário concluía "cadastro incompleto" e o
-   * "Confirmar dados" não fazia nada — com o orçamento completo. A RLS
-   * foi corrigida na migration `20260917190001`, e o ID aqui garante que
-   * um tropeço de leitura não volte a travar o envio: o servidor confere
-   * exatamente estes três ids em `enviarJobParaAbertura`.
+   * ⚠️ O bloqueio olha para o ID, e NUNCA para o nome (17/09/2026). Até
+   * a decisão 135 valia também para GP e produtor, cujo nome vem de
+   * `profiles`: com a RLS de antes o nome voltava nulo para um GP, o
+   * formulário concluía "cadastro incompleto" e o "Confirmar dados" não
+   * fazia nada. O servidor confere este id em `enviarJobParaAbertura`.
    */
   produtoId: string | null;
   /** O projeto tem mais de uma marca (decisão 133). Nesse caso a Marca
    *  acima é a geral do cliente (PRD-01), e não uma das escolhidas — o
    *  modal diz isso embaixo do campo. Obrigatório, pelo mesmo motivo. */
   projetoComVariasMarcas: boolean;
-  gpId: string | null;
-  produtorId: string | null;
+}
+
+/** Uma pessoa numa lista do formulário (GP ou produtor). */
+export interface PessoaOpcao {
+  id: string;
+  nome: string;
 }
 
 /** Campos que o Zod do servidor valida — as chaves batem com `fieldErrors`. */
@@ -111,6 +120,8 @@ type CampoObrigatorio =
   | "nome"
   | "cidade_id"
   | "regional_id"
+  | "gp_responsavel_id"
+  | "produtor_id"
   | "data_inicio_prevista"
   | "data_fim_prevista"
   | "data_evento"
@@ -149,6 +160,8 @@ export function faltamCampos(
     nome: d.nome.trim().length < 2,
     cidade_id: !d.cidadeId,
     regional_id: !d.regionalId,
+    gp_responsavel_id: !d.gpId,
+    produtor_id: !d.produtorId,
     data_inicio_prevista: !d.dataInicio,
     data_fim_prevista: !d.dataFim,
     data_evento: !d.dataEvento,
@@ -171,18 +184,16 @@ export function faltamCampos(
   };
 }
 
-/** Falta algo herdado? Então o projeto/orçamento está incompleto e a
- *  abertura não tem como gravar o job. Cidade e regional não entram: são
- *  campos do formulário desde 12/08/2026 e o usuário resolve na hora.
+/** Falta algo herdado? Então o projeto está incompleto e a abertura não
+ *  tem como gravar o job. Cidade e regional não entram: são campos do
+ *  formulário desde 12/08/2026 e o usuário resolve na hora; GP e produtor
+ *  também, desde a decisão 135.
  *
- *  Espelha, item a item, a checagem do servidor em
- *  `enviarJobParaAbertura` — que olha `projeto.produto_id`,
- *  `orcamento.gp_responsavel_id` e `orcamento.produtor_id`. */
+ *  Espelha a checagem do servidor em `enviarJobParaAbertura`, que olha
+ *  `projeto.produto_id`. */
 export function herdadosIncompletos(h: HerdadosJob): string[] {
   const faltando: string[] = [];
   if (!h.produtoId) faltando.push("Marca (no projeto)");
-  if (!h.gpId) faltando.push("GP responsável (no orçamento)");
-  if (!h.produtorId) faltando.push("Produtor responsável (no orçamento)");
   return faltando;
 }
 
@@ -198,7 +209,6 @@ interface Props {
 
   orcamentoNome: string;
   projetoNome: string;
-  projetoCodigo: string;
   clienteNome: string;
   codigoJob: string;
   /** O código é o do job cancelado pelo "Cancelar aprovação" da devolução,
@@ -223,6 +233,12 @@ interface Props {
 
   /** Mesma regra do formulário do orçamento: só as regionais do projeto. */
   regionaisDoProjeto: { id: string; nome: string }[];
+  /** Mesmas listas do formulário do orçamento (decisão 135): o GP sai dos
+   *  responsáveis do projeto, o produtor dos membros ativos. Cada uma já
+   *  traz a pessoa gravada no orçamento, mesmo que ela tenha saído da
+   *  lista — ver `comQuemEstaNoOrcamento` na página. */
+  gpsDoProjeto: PessoaOpcao[];
+  produtores: PessoaOpcao[];
   /** Primeiras cidades do cadastro — o combobox busca o resto no servidor. */
   cidadesIniciais: CidadeOption[];
   /** Modelo mensal (decisão 078): início e fim são o período do orçamento,
@@ -241,7 +257,6 @@ export function EnviarJobModal({
   onChange,
   orcamentoNome,
   projetoNome,
-  projetoCodigo,
   clienteNome,
   codigoJob,
   codigoReaproveitado,
@@ -253,6 +268,8 @@ export function EnviarJobModal({
   moeda,
   herdados,
   regionaisDoProjeto,
+  gpsDoProjeto,
+  produtores,
   cidadesIniciais,
   periodoTravado = false,
   fieldErrors,
@@ -333,18 +350,17 @@ export function EnviarJobModal({
           <div className="min-w-0 space-y-1">
             <DialogTitle className="text-xl">Enviar job para abertura</DialogTitle>
             <DialogDescription>
-              {`Confira as informações essenciais. Alterações em nome, cidade, regional e datas são gravadas também no orçamento “${orcamentoNome}”.`}
+              {`Confira as informações essenciais. Alterações em nome, GP, produtor, cidade, regional e datas são gravadas também no orçamento “${orcamentoNome}”.`}
             </DialogDescription>
           </div>
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 gap-x-5 gap-y-3 overflow-y-auto px-6 py-4 md:grid-cols-3 md:content-start">
-          {/* Linha 1 — identificação, tudo travado. */}
+          {/* Linha 1 — identificação, tudo travado. O código do projeto
+              saiu em 30/09/2026 (decisão 135): o único código do
+              formulário é o do job. */}
           <Campo rotulo="Projeto">
             <Travado valor={projetoNome} />
-          </Campo>
-          <Campo rotulo="Código do projeto">
-            <Travado valor={projetoCodigo} mono />
           </Campo>
           <Campo
             rotulo="Código do job"
@@ -352,8 +368,11 @@ export function EnviarJobModal({
           >
             <Travado valor={codigoJob} mono />
           </Campo>
+          <Campo rotulo="Cliente">
+            <Travado valor={clienteNome} />
+          </Campo>
 
-          {/* Linha 2 — nome ocupa 2 colunas, cliente fecha a linha. */}
+          {/* Linha 2 — nome ocupa 2 colunas, a marca fecha a linha. */}
           <Campo
             rotulo="Nome do Job"
             obrigatorio
@@ -371,19 +390,6 @@ export function EnviarJobModal({
               placeholder="Ex.: Bebedouros SP"
             />
           </Campo>
-          <Campo rotulo="Cliente">
-            <Travado valor={clienteNome} />
-          </Campo>
-
-          {/* Linhas 3 e 4 — as três colunas ficam sempre cheias. Até
-              26/08/2026 Produto e Categoria vinham sozinhos, cada um com
-              dois espaçadores, e Cidade/Regional dividiam a linha
-              seguinte; o design "Enviar Job - Ajustes de Campos" fechou
-              os buracos e separou o par.
-
-              Separar Cidade de Regional é seguro: as opções de regional
-              saem do PROJETO (`regionaisDoProjeto`), não da cidade
-              escolhida — uma nunca dependeu da outra. */}
           <Campo
             rotulo="Marca"
             apoio={
@@ -393,6 +399,61 @@ export function EnviarJobModal({
             }
           >
             <Travado valor={herdados.produtoNome ?? "— não informado"} />
+          </Campo>
+
+          {/* Linhas 3 e 4 — as três colunas ficam sempre cheias (decisão
+              135): Serviço · Categoria · GP, depois Regional · Cidade ·
+              Produtor. A terceira coluna diz para quem é o job e quem
+              responde por ele; Regional e Cidade ficam lado a lado.
+
+              As opções de regional saem do PROJETO
+              (`regionaisDoProjeto`), não da cidade escolhida — uma nunca
+              dependeu da outra. */}
+          <Campo rotulo="Serviço" apoio="Cadastrado no orçamento.">
+            <Travado valor={herdados.servicoNome ?? "— não informado"} />
+          </Campo>
+
+          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
+            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
+          </Campo>
+
+          <Campo
+            rotulo="GP Responsável"
+            obrigatorio
+            erro={erroDe("gp_responsavel_id")}
+            apoio={
+              gpsDoProjeto.length === 0
+                ? "O projeto não tem responsável cadastrado. Edite o projeto."
+                : "Opções vindas dos responsáveis do projeto."
+            }
+          >
+            <Select
+              value={dados.gpId}
+              onValueChange={(v) => onChange({ gpId: v })}
+              disabled={gpsDoProjeto.length === 0}
+            >
+              <SelectTrigger
+                className={cn(
+                  erroDe("gp_responsavel_id") &&
+                    "border-california-red ring-2 ring-california-red/15",
+                )}
+              >
+                <SelectValue
+                  placeholder={
+                    gpsDoProjeto.length === 0
+                      ? "Projeto sem responsável cadastrado"
+                      : "Selecione o GP responsável"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {gpsDoProjeto.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Campo>
 
           <Campo
@@ -434,14 +495,6 @@ export function EnviarJobModal({
             </Select>
           </Campo>
 
-          <Campo rotulo="GP Responsável">
-            <Travado valor={herdados.gpNome ?? "— não informado"} />
-          </Campo>
-
-          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
-            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
-          </Campo>
-
           <Campo
             rotulo="Cidade"
             obrigatorio
@@ -460,8 +513,32 @@ export function EnviarJobModal({
             />
           </Campo>
 
-          <Campo rotulo="Produtor Responsável">
-            <Travado valor={herdados.produtorNome ?? "— não informado"} />
+          <Campo
+            rotulo="Produtor Responsável"
+            obrigatorio
+            erro={erroDe("produtor_id")}
+            apoio="Se alterar, o orçamento é atualizado na confirmação."
+          >
+            <Select
+              value={dados.produtorId}
+              onValueChange={(v) => onChange({ produtorId: v })}
+            >
+              <SelectTrigger
+                className={cn(
+                  erroDe("produtor_id") &&
+                    "border-california-red ring-2 ring-california-red/15",
+                )}
+              >
+                <SelectValue placeholder="Selecione o produtor responsável" />
+              </SelectTrigger>
+              <SelectContent>
+                {produtores.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Campo>
 
           {/* Linha 5 — início, fim e o evento. */}

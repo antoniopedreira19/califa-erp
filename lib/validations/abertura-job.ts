@@ -40,11 +40,14 @@ export type ContatoCobrancaInput = z.infer<typeof contatoCobrancaSchema>;
 /**
  * Modal "Enviar job para abertura" (handoff "Abertura de Job.dc.html").
  *
- * Só valida o que o modal deixa editar. Produto, GP responsável e produtor
- * responsável continuam herdados — produto vem do projeto, os dois
- * responsáveis vêm do orçamento — e aparecem travados na tela; o servidor
- * relê esses valores do banco em vez de aceitá-los do formulário, então
- * eles não têm campo aqui.
+ * Só valida o que o modal deixa editar. Produto continua herdado do
+ * projeto e aparece travado na tela; o servidor relê o valor do banco em
+ * vez de aceitá-lo do formulário, então ele não tem campo aqui.
+ *
+ * GP responsável e produtor responsável são editáveis desde 30/09/2026
+ * (decisão 135): chegam pré-preenchidos com os do orçamento e, se o
+ * usuário trocar, o valor novo vai para o job E para o orçamento. As
+ * opções são as mesmas do formulário do orçamento — o servidor confere.
  *
  * Cidade e regional voltaram a ser editáveis em 12/08/2026: chegam
  * pré-preenchidas com o que está no orçamento e, se o usuário trocar, o
@@ -57,8 +60,8 @@ export type ContatoCobrancaInput = z.infer<typeof contatoCobrancaSchema>;
  * `valor_total` também não está aqui: é recalculado no servidor a partir
  * dos itens da versão aprovada. Valor de faturamento não vem do cliente.
  *
- * Nome, datas, cidade e regional são gravados TAMBÉM no orçamento — ver
- * `enviarJobParaAbertura`. `data_evento` é a exceção: fica só no job,
+ * Nome, datas, cidade, regional, GP e produtor são gravados TAMBÉM no
+ * orçamento — ver `enviarJobParaAbertura`. `data_evento` é a exceção: fica só no job,
  * porque `orcamentos` não tem o campo (27/08/2026).
  *
  * `contatos_cobranca` é o único campo que não vira coluna de `jobs`: vai
@@ -74,6 +77,9 @@ export const aberturaJobSchema = z
       .max(200, "Máximo 200 caracteres."),
     cidade_id: z.string().uuid("Selecione a cidade."),
     regional_id: z.string().uuid("Selecione a regional."),
+    // Decisão 135: as mensagens são as do formulário do orçamento.
+    gp_responsavel_id: z.string().uuid("Selecione o GP responsável."),
+    produtor_id: z.string().uuid("Selecione o produtor responsável."),
     data_inicio_prevista: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início é obrigatória."),

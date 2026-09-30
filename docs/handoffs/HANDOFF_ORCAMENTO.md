@@ -4897,8 +4897,8 @@ aplicada na hora combinada com a frente do Antonio, junto da
   mostrar só o nome do projeto (antes, "nome · código"). O único código do
   pop-up é o do job, na linha **Código**. Pedido do Tiago; o mesmo vale
   para a conferência do financeiro.
-- O formulário "Enviar job para abertura" não mudou: segue com o campo
-  travado "Código do projeto".
+- O formulário "Enviar job para abertura" seguiu com o campo travado
+  "Código do projeto" até a nota (4) abaixo, que o tirou (decisão 135).
 
 ## ⚠️ Nota de 2026-09-30 (3) — regional só de folha: a AMBEV some da produção (decisão 134)
 
@@ -4918,3 +4918,21 @@ aplicada na hora combinada com a frente do Antonio, junto da
   no navegador.
 - O modelo definitivo (conta dedicada como dimensão da alocação) é a
   etapa 2, em aberto. Ver decisão 134, §5.
+
+## ⚠️ Nota de 2026-09-30 (4) — envio para abertura com GP e produtor editáveis e o Serviço (decisão 135)
+
+- **Campos reorganizados** no formulário "Enviar job para abertura":
+  Projeto · Código do job · Cliente / Nome do Job (duas colunas) · Marca /
+  Serviço · Categoria · GP Responsável / Regional · Cidade · Produtor
+  Responsável. O campo "Código do projeto" saiu. O resto não mudou.
+- **Serviço** entrou travado, vindo do orçamento ("Cadastrado no
+  orçamento.").
+- **GP e produtor são editáveis e obrigatórios**, com as listas do editor
+  do orçamento: responsáveis do projeto e usuários ativos. A troca vai
+  para o job e para o orçamento, como nome, cidade, regional e datas. O
+  servidor confere só o que mudou; quem já estava no orçamento passa.
+- A trava "Complete o cadastro: GP/Produtor (no orçamento)" saiu; a da
+  Marca ficou. A auditoria do envio e do reenvio registra os dois ids.
+- Testado no TES-P001/26 com envio real trocando o produtor (TES-1018/26,
+  cancelado em seguida). O "Orçamento de Teste" ficou com "Produtor
+  Teste". Ver decisão 135, §6.

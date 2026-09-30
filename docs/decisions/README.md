@@ -154,6 +154,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 132 | [A folha paga pela remessa com o líquido, sem mexer no salário do cadastro](132-folha-paga-pela-remessa-com-o-liquido.md) | 2026-09-30 |
 | 133 | [O projeto aceita mais de uma marca, e o job leva a marca geral do cliente](133-projeto-com-mais-de-uma-marca.md) | 2026-09-30 |
 | 134 | [Regional só de folha: a AMBEV some da produção](134-regional-so-de-folha.md) | 2026-09-30 |
+| 135 | [Envio para abertura: GP e produtor editáveis, Serviço no formulário e só o código do job](135-envio-com-gp-produtor-e-servico.md) | 2026-09-30 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -166,4 +167,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 135.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 136.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
