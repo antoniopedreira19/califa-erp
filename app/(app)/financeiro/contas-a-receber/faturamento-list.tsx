@@ -22,6 +22,10 @@
  *    recusa de novo no banco (079 e 123).
  * 2. **BV nunca entra em NF agrupada**, porque a contraparte dele é o
  *    fornecedor. O checkbox da linha fica desabilitado.
+ *
+ * Recebimento antes da NF (decisão 130): a linha da nota do envio e a do
+ * BV ganham o botão de registrar o que o cliente já pagou, e o selo com o
+ * que foi recebido. Na emissão, o recebido vira a parcela 1 da nota.
  */
 
 import * as React from "react";
@@ -32,6 +36,7 @@ import {
   ChevronDown,
   FileCheck2,
   FileText,
+  HandCoins,
   Hourglass,
   Info,
   Layers,
@@ -39,8 +44,9 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn, formatCnpj } from "@/lib/utils";
-import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import {
   FaturarDrawer,
   type DrawerState,
@@ -53,7 +59,18 @@ import {
   type InfoFaturamento,
 } from "@/components/financeiro/info-faturamento-modal";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
-import { chaveInfoDoEnvio } from "./chave-info";
+import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import {
+  RecebidosAntesNfDialog,
+  RecebimentoAntesNfDialog,
+  somaDosRecebidos,
+  type AlvoDoRecebidoAntes,
+  type RecebidoAntesDaNf,
+} from "./recebimento-antes-nf-dialog";
+import {
+  cancelarRecebimentoAntesNf,
+  registrarRecebimentoAntesNf,
+} from "./actions-recebimento-antes-nf";
 
 // ---------------------------------------------------------------------------
 // Tipos das linhas
@@ -250,6 +267,16 @@ interface Props {
   proximoNf: string;
   /** PO, instrução do GP e contatos, por job — o conteúdo do botão `i`. */
   infoPorJob: Record<string, InfoJob>;
+  /** Contas ativas, para o recebimento antes da NF. */
+  contas: ContaBancaria[];
+  /** O recebido antes da NF que ainda espera a nota (decisão 130), pela
+   *  chave da linha: `nota:<id>` ou `bv:<id>`. */
+  recebidosAntes: Record<string, RecebidoAntesDaNf[]>;
+}
+
+/** A chave do recebimento antes da NF desta parcela: a nota ou o BV. */
+function chaveAntes(p: FaturamentoPendenteRow): string | null {
+  return chaveDoRecebidoAntes(p.envio_nota_id, p.origem_tipo === "bv" ? p.origem_id : null);
 }
 
 export function FaturamentoList({
@@ -263,7 +290,10 @@ export function FaturamentoList({
   regionais,
   proximoNf,
   infoPorJob,
+  contas,
+  recebidosAntes,
 }: Props) {
+  const router = useRouter();
   const [drawer, setDrawer] = React.useState<DrawerState | null>(null);
   const [modoSelecao, setModoSelecao] = React.useState(false);
   const [sel, setSel] = React.useState<Record<string, boolean>>({});
@@ -282,6 +312,15 @@ export function FaturamentoList({
   const [busca, setBusca] = React.useState("");
   const [toast, setToast] = React.useState<string | null>(null);
   const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
+  // Recebimento antes da NF (decisão 130): o registro abre pela linha; o
+  // selo abre a lista, pela chave — depois do cancelamento a lista se
+  // refaz com o que sobrou.
+  const [registrarAntes, setRegistrarAntes] = React.useState<AlvoDoRecebidoAntes | null>(
+    null,
+  );
+  const [verAntes, setVerAntes] = React.useState<string | null>(null);
+  const [erroAntes, setErroAntes] = React.useState<string | null>(null);
+  const [pendingAntes, startAntes] = React.useTransition();
 
   React.useEffect(() => {
     if (!toast) return;
@@ -402,6 +441,45 @@ export function FaturamentoList({
       ehBv: f.origem_tipo === "bv",
     };
   }
+
+  /** A linha da fila como alvo do recebimento antes da NF. Nula na linha
+   *  que não aceita (parcela de envio anterior às notas). */
+  function alvoDoRecebido(linha: LinhaDaFila): AlvoDoRecebidoAntes | null {
+    const p = linha.p;
+    const chave = chaveAntes(p);
+    if (!chave) return null;
+    const vencimentos = linha.parcelas.length;
+    return {
+      chave,
+      envioNotaId: p.envio_nota_id,
+      itemBvId: p.origem_tipo === "bv" ? p.origem_id : null,
+      titulo:
+        [p.codigo, p.descricao].filter(Boolean).join(" · ") +
+        (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : ""),
+      contraparte: p.contraparte_nome,
+      ehBv: p.origem_tipo === "bv",
+      notaRotulo:
+        p.origem_tipo === "bv"
+          ? null
+          : `NF ${p.nota_ordem ?? 1}/${p.nota_total ?? 1}` +
+            (vencimentos > 1 ? ` · ${vencimentos} vencimentos` : ""),
+      saldo: linha.saldo,
+      recebidos: recebidosAntes[chave] ?? [],
+    };
+  }
+
+  const todasAsLinhas = React.useMemo(() => agruparPorNota(pendentes), [pendentes]);
+  const alvoVerAntes = (() => {
+    if (!verAntes) return null;
+    const linha = todasAsLinhas.find((l) => chaveAntes(l.p) === verAntes);
+    const alvo = linha ? alvoDoRecebido(linha) : null;
+    // Cancelado o último, a lista fecha sozinha.
+    return alvo && alvo.recebidos.length > 0 ? alvo : null;
+  })();
+  const totalRecebidoAntes = React.useMemo(
+    () => somaDosRecebidos(Object.values(recebidosAntes).flat()),
+    [recebidosAntes],
+  );
 
   /** O que o campo mostra quando não está sendo digitado. */
   const rotuloClienteAtivo =
@@ -710,6 +788,18 @@ export function FaturamentoList({
         <span className="font-mono text-sm font-bold tabular-nums">
           {formatMoney(totalAFaturar)}
         </span>
+        {totalRecebidoAntes > 0 && (
+          <>
+            <span className="mx-1 h-5 w-px bg-border" />
+            <HandCoins className="h-3.5 w-3.5 text-amber-700" />
+            <span className="whitespace-nowrap text-xs text-muted-foreground">
+              Recebido antes da NF
+            </span>
+            <span className="font-mono text-sm font-bold tabular-nums text-amber-800">
+              {formatMoney(totalRecebidoAntes)}
+            </span>
+          </>
+        )}
       </div>
 
       {/* Tabela.
@@ -748,7 +838,7 @@ export function FaturamentoList({
               <th className="px-4 py-3 text-right font-semibold">Saldo a faturar</th>
               <th className="w-[72px] px-3 py-3 font-semibold">Nota</th>
               <th className="w-[110px] px-4 py-3 font-semibold">Vencimento</th>
-              <th className="w-[110px] px-4 py-3 text-right font-semibold">Ação</th>
+              <th className="w-[150px] px-4 py-3 text-right font-semibold">Ação</th>
               {/* A calha não é coluna: largura zero, e o botão sai do frame. */}
               <th className="w-0 p-0" />
             </tr>
@@ -770,6 +860,9 @@ export function FaturamentoList({
               const k = linha.chave;
               const marcado = !!sel[k];
               const agrupavel = p.origem_tipo === "job";
+              const alvoAntes = alvoDoRecebido(linha);
+              const recebidoAntes = alvoAntes ? somaDosRecebidos(alvoAntes.recebidos) : 0;
+              const cabeRecebido = alvoAntes !== null && linha.saldo - recebidoAntes > 0.004;
               return (
                 <tr
                   key={k}
@@ -829,6 +922,21 @@ export function FaturamentoList({
                         <span className="text-[11px] font-semibold text-muted-foreground">
                           {rotuloMes(p.mes_referencia)}
                         </span>
+                      )}
+                      {alvoAntes && recebidoAntes > 0 && (
+                        <button
+                          type="button"
+                          title="Ver o recebimento antes da NF"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setErroAntes(null);
+                            setVerAntes(alvoAntes.chave);
+                          }}
+                          className="mt-0.5 inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 transition-colors hover:border-amber-400"
+                        >
+                          <HandCoins className="h-3 w-3" />
+                          Recebido antes da NF · {formatMoney(recebidoAntes)}
+                        </button>
                       )}
                     </div>
                   </td>
@@ -893,18 +1001,35 @@ export function FaturamentoList({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        limparErro();
-                        setDrawer({ modo: "origem", linhas: linha.parcelas });
-                      }}
-                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Faturar
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {cabeRecebido && !modoSelecao && (
+                        <button
+                          type="button"
+                          title="Registrar recebimento antes da NF"
+                          aria-label="Registrar recebimento antes da NF"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setErroAntes(null);
+                            setRegistrarAntes(alvoAntes);
+                          }}
+                          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:border-amber-400 hover:text-amber-700"
+                        >
+                          <HandCoins className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          limparErro();
+                          setDrawer({ modo: "origem", linhas: linha.parcelas });
+                        }}
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Faturar
+                      </button>
+                    </div>
                   </td>
                   <td className="relative w-0 p-0">
                     <BotaoInfo
@@ -1127,8 +1252,72 @@ export function FaturamentoList({
           regionais={regionais}
           infoPorJob={infoPorJob}
           proximoNf={proximoNf}
+          recebidosAntes={recebidosAntes}
         />
       )}
+
+      <RecebimentoAntesNfDialog
+        alvo={registrarAntes}
+        onOpenChange={(aberto) => {
+          if (!aberto && !pendingAntes) {
+            setRegistrarAntes(null);
+            setErroAntes(null);
+          }
+        }}
+        contas={contas}
+        tipos={tipos}
+        subtipos={subtipos}
+        pending={pendingAntes}
+        erro={erroAntes}
+        onConfirm={(dados) => {
+          const alvo = registrarAntes;
+          if (!alvo) return;
+          setErroAntes(null);
+          startAntes(async () => {
+            const res = await registrarRecebimentoAntesNf({
+              envio_nota_id: alvo.envioNotaId,
+              item_bv_id: alvo.itemBvId,
+              ...dados,
+            });
+            if (!res.ok) {
+              setErroAntes(res.message);
+              return;
+            }
+            setRegistrarAntes(null);
+            setToast(
+              `${formatMoney(dados.valor)} recebidos antes da NF em ${alvo.titulo}. ` +
+                "Na emissão da nota, o valor entra como a parcela 1, já recebida.",
+            );
+            router.refresh();
+          });
+        }}
+      />
+
+      <RecebidosAntesNfDialog
+        alvo={alvoVerAntes}
+        onOpenChange={(aberto) => {
+          if (!aberto && !pendingAntes) {
+            setVerAntes(null);
+            setErroAntes(null);
+          }
+        }}
+        pending={pendingAntes}
+        erro={erroAntes}
+        onCancelar={(recebido, motivo) => {
+          setErroAntes(null);
+          startAntes(async () => {
+            const res = await cancelarRecebimentoAntesNf({ id: recebido.id, motivo });
+            if (!res.ok) {
+              setErroAntes(res.message);
+              return;
+            }
+            setToast(
+              `Recebimento de ${formatMoney(recebido.valor)} cancelado: o lançamento saiu do extrato.`,
+            );
+            router.refresh();
+          });
+        }}
+      />
 
       <InfoFaturamentoModal
         info={info}

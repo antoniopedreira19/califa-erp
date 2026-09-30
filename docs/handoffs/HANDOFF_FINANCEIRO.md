@@ -6297,3 +6297,28 @@ estendido a Contas a Receber em 31/08.**
 - **O PDF** que o financeiro abre é o de sempre, com a chave escolhida no
   campo da chave.
 - `PPRow.pagamento_fora_do_cadastro` (obrigatório).
+
+## ⚠️ Nota de 2026-09-29 (8) — recebimento antes da NF (decisão 130, entrega 4)
+
+- **Banco:** origem nova `recebimento_antes_nf` no lançamento; tabela
+  `recebimentos_antes_nf` (presa à nota do envio ou ao BV, com o
+  lançamento); `registrar_recebimento_antes_nf` e
+  `cancelar_recebimento_antes_nf`. `emitir_faturamento`,
+  `cancelar_faturamento`, `cancelar_baixa_lancamento` e `vw_fluxo_caixa`
+  editadas pela definição publicada (a nota do envio desconta o recebido no
+  fluxo). Os CHECKs de origem de `lancamentos_financeiros` ganharam o ramo.
+- **Aba Faturamento:** botão de registrar na linha da nota e do BV, selo
+  "Recebido antes da NF · R$ X" (abre a lista com o cancelamento), total na
+  faixa de resumo. Diálogos em `recebimento-antes-nf-dialog.tsx`, actions em
+  `actions-recebimento-antes-nf.ts`, chave `nota:<id>`/`bv:<id>` em
+  `chave-info.ts`.
+- **Faturar:** parcela 1 travada com o recebido; o resto sai dos vencimentos
+  abatidos em ordem. Corrigido de passagem: o calendário da parcela não
+  acompanhava o "2×/3×/6×".
+- **Títulos a Receber:** marca "Antes da NF" nas baixas da parcela 1
+  (`BaixaDoTitulo.antesDaNf`, obrigatório; `false` nas baixas montadas à mão
+  do pagar, do cartão e da transferência).
+- **Em aberto:** não há cancelamento de NF na tela (o E6 está só no banco);
+  apagar BV ou job com recebimento esperando a nota dá o erro cru da FK.
+- **Conferido no navegador (29/09/2026)** no TES-1013/26 (NF TESTE-130,
+  emitida e cancelada) e no BV do TES-1001/26; nada ficou esperando a nota.

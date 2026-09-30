@@ -2679,7 +2679,10 @@ export type OrigemLancamento =
   // As duas pernas da transferência entre contas (decisão 124): sem
   // empresa e sem plano de contas, fora do DRE e do fluxo consolidado.
   | "transferencia_saida"
-  | "transferencia_entrada";
+  | "transferencia_entrada"
+  // O recebimento antes da NF (decisão 130), enquanto a nota não sai. Na
+  // emissão ele vira `titulo_baixa` da parcela 1.
+  | "recebimento_antes_nf";
 
 export interface LancamentoFinanceiro {
   id: string;

@@ -4,7 +4,8 @@
  * com os impostos retidos dela pendurados (`baixas_retencoes`).
  *
  * A consulta traz os lançamentos `*_baixa` com a conta, o centro de custo e
- * os retidos; o agrupamento monta, por documento, a lista na ordem em que
+ * os retidos (e, na parcela 1 de uma nota, o recebimento antes da NF que
+ * ela absorveu — decisão 130); o agrupamento monta, por documento, a lista na ordem em que
  * as baixas aconteceram — é o que o popup do olho mostra, e é da soma
  * delas (líquido + retidos) que sai o "falta R$ X" da linha.
  */
@@ -22,7 +23,8 @@ export const SELECT_BAIXA_DO_DOCUMENTO = `
   conta:contas_bancarias(nome, banco),
   tipo:plano_contas_tipos(codigo, nome),
   subtipo:plano_contas_subtipos(nome),
-  retencoes:baixas_retencoes(imposto, aliquota, valor)
+  retencoes:baixas_retencoes(imposto, aliquota, valor),
+  antes_nf:recebimentos_antes_nf(id)
 `;
 
 type BaixaRaw = {
@@ -39,6 +41,9 @@ type BaixaRaw = {
     aliquota: string | number | null;
     valor: string | number;
   }> | null;
+  /** O recebimento antes da NF que virou esta baixa (decisão 130). A RLS
+   *  só mostra ao financeiro; fora dele a lista vem vazia. */
+  antes_nf: Array<{ id: string }> | null;
 } & Record<string, unknown>;
 
 const ORDEM_DOS_IMPOSTOS: Record<ImpostoRetido, number> = {
@@ -90,6 +95,7 @@ export function agruparBaixasPorDocumento(
         }))
         .sort((a, b) => ORDEM_DOS_IMPOSTOS[a.imposto] - ORDEM_DOS_IMPOSTOS[b.imposto]),
       estornos: estornosPorBaixa.get(l.id) ?? [],
+      antesDaNf: (l.antes_nf ?? []).length > 0,
     });
     porDocumento.set(documento, lista);
   }

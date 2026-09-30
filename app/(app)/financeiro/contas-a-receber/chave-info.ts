@@ -13,3 +13,18 @@
 export function chaveInfoDoEnvio(jobId: string, mes: string | null): string {
   return mes ? `${jobId}|${mes}` : jobId;
 }
+
+/**
+ * A chave do recebimento antes da NF (decisão 130): a nota do envio ou o
+ * BV. É a mesma chave da linha da fila — `nota:<id>` junta os vencimentos
+ * de uma nota, e o BV é `bv:<id>`. Nula na linha que não aceita o
+ * recebimento (parcela de envio anterior às notas).
+ */
+export function chaveDoRecebidoAntes(
+  envioNotaId: string | null,
+  bvId: string | null,
+): string | null {
+  if (envioNotaId) return `nota:${envioNotaId}`;
+  if (bvId) return `bv:${bvId}`;
+  return null;
+}
