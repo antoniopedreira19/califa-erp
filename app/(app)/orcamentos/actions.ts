@@ -57,6 +57,10 @@ function mapDbError(msg: string): string {
   if (msg.includes("projetos_regional_id_fkey")) {
     return "Regional inválida.";
   }
+  // Trava do banco da decisão 134 (`ck_regional_disponivel_em_projetos`).
+  if (msg.includes("regional_nao_disponivel_em_projetos")) {
+    return "Esta regional é só de folha de pagamento e não pode ser usada em projetos.";
+  }
   if (msg.includes("projeto_responsaveis_profile_id_fkey")) {
     return "Responsável inválido.";
   }
@@ -81,8 +85,9 @@ function mapDbError(msg: string): string {
  * A marca é cadastrada por cliente e o banco não consegue garantir que as
  * escolhidas pertencem ao cliente do projeto — a FK só aponta para
  * `cliente_produtos`. A checagem é aqui, como já acontece na abertura de
- * job. Mesma ideia para as regionais: confirma que existem e estão ativas
- * no tenant antes de gravar os vínculos.
+ * job. Mesma ideia para as regionais: confirma que existem, estão ativas
+ * no tenant e não são só de folha (decisão 134) antes de gravar os
+ * vínculos. O banco tem a mesma trava; esta dá a mensagem no campo.
  *
  * Devolve também a MARCA DO JOB (decisão 133), que vai para
  * `projetos.produto_id`: a única escolhida ou, com mais de uma, a marca
@@ -111,7 +116,8 @@ async function validarMarcasERegionais(
       .select("id")
       .in("id", regionalIds)
       .eq("tenant_id", tenantId)
-      .eq("ativo", true),
+      .eq("ativo", true)
+      .eq("disponivel_em_projetos", true),
   ]);
 
   if (marcasRes.error) {
