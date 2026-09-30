@@ -1,0 +1,18 @@
+-- Import dos dados bancários do xlsx do RH (30/09/2026), Sub-passo 2:
+-- 21 casos que bateram por NOME (aprovados manualmente após dry-run).
+-- No xlsx a coluna CPF estava vazia ou com valor inválido, mas o nome
+-- casou com um colaborador ativo no DB.
+--
+-- Match final aplicado por CPF do DB (o pareamento nome→cpf foi feito
+-- no dry-run e verificado pelo RH).
+--
+-- Efeito: contas completas passou de 105 → 117. Sem nada caiu para 40.
+--
+-- Ficou de fora (não bateram por nome, provavelmente ex-colaboradores
+-- ou de outra empresa da holding):
+--   Camila Carrara Pereira, Carolina de Avila Castilho,
+--   Gabriel Martoni Martoni Criative, Luan Ribeiro Pugliesi Lessa,
+--   Marianna da Silva Lima, Renata Riguete Steffens Cardoso,
+--   Tiago Bittencourt Mendonca
+
+-- (UPDATE em bloco via CTE VALUES; ver tmp/bancarios-sub2.sql)
