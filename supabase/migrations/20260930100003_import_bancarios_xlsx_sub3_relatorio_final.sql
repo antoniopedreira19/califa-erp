@@ -1,0 +1,31 @@
+-- Import dos dados bancários do xlsx do RH (30/09/2026), Sub-passo 3:
+-- Relatório final. Não altera dado.
+--
+-- Estado após sub-passos 1 e 2:
+--   117 colaboradores ativos com conta bancária completa
+--   161 com PIX
+--    40 sem NADA — RH precisa preencher pela tela
+--
+-- Ganhos do import (antes do sub-passo 1 vs depois do sub-passo 2):
+--   Conta completa: 4 → 117 (+113)
+--   Com PIX: 152 → 161 (+9)
+--   Sem nada: 53 → 40 (-13)
+--
+-- Os 40 sem nada são majoritariamente colaboradores que não estavam
+-- no xlsx do RH, principalmente contratados novos (Amanda, Davi,
+-- Joao Thomaz, Leonardo, Lethicia — todos cadastrados na última
+-- reconciliação de 29/09) e alguns diretores/sócios (Rafael Kikote,
+-- Marco Alvarez, Felipe Berber).
+--
+-- Distribuição por empresa:
+--   Agência California: 18/104 ativos (17%)
+--   CCH: 17/73 ativos (23%)
+--   Hitlab: 2/9 ativos
+--   Ventura: 1/3 ativos (Gabriel Martoni — bateu por nome mas o
+--   "Martoni Criative" no xlsx confundiu o parser; RH pode adicionar
+--   manualmente ou reprocessar refinando o normalizador)
+--
+-- Nenhuma ação SQL aqui; migration existe só pra deixar registro no
+-- histórico de que o import encerrou nessa data.
+
+select 1 as import_bancario_xlsx_finalizado_2026_09_30;
