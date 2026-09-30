@@ -361,6 +361,7 @@ export function CartaoFatura({
                     movimentado: conferindo.valor,
                     retencoes: [],
                     estornos: conferindo.estornos_da_baixa,
+                    antesDaNf: false,
                   },
                 ],
                 viaCartao: conferindo.forma_pagamento === "cartao_credito",

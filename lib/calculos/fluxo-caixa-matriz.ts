@@ -105,6 +105,8 @@ const ROTULO_LANCAMENTO: Record<string, string> = {
   desembolso_baixa_estornada: "Desembolso (estornado)",
   desembolso_estorno: "Estorno de desembolso",
   manual: "Lançamento manual",
+  // Decisão 130: o dinheiro entrou e a nota ainda não saiu.
+  recebimento_antes_nf: "Recebimento antes da NF",
 };
 
 const ROTULO_ORIGEM: Record<string, string> = {

@@ -87,6 +87,9 @@ export interface BaixaDoTitulo {
   movimentado: number;
   retencoes: RetencaoDaBaixa[];
   estornos: EstornoDaBaixa[];
+  /** A baixa nasceu como recebimento antes da NF (decisão 130): cancelar
+   *  desfaz o recebimento também. Falso em toda baixa que não é de nota. */
+  antesDaNf: boolean;
 }
 
 export interface BaixaRegistradaAlvo {
@@ -249,6 +252,11 @@ export function BaixaRegistradaDialog({
                   <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">
                     {varias ? `Baixa ${i + 1} · ` : ""}
                     {rotuloFeito} em {formatarData(b.data)}
+                    {b.antesDaNf && (
+                      <span className="ml-2 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-800">
+                        Antes da NF
+                      </span>
+                    )}
                   </p>
                   {acao === null && (
                     <div className="flex items-center gap-1.5">
@@ -638,6 +646,13 @@ function FormCancelamento({
               A baixa é desfeita: o título volta para <b>A pagar</b> e sai da
               fatura do cartão, sem mexer em conta bancária. Se a fatura já
               fechou, reabra-a antes.
+            </>
+          ) : baixa.antesDaNf ? (
+            <>
+              A parcela volta para <b>{voltaPara}</b>, e o recebimento antes da
+              NF é desfeito: o lançamento de {valor} sai do extrato, sem linha
+              nova. Se o dinheiro entrou de fato, dê a baixa de novo nesta
+              parcela.
             </>
           ) : (
             <>

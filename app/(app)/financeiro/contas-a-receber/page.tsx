@@ -21,7 +21,8 @@ import type {
   PlanoContaSubtipo,
   TituloReceberStatus,
 } from "@/lib/types";
-import { chaveInfoDoEnvio } from "./chave-info";
+import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import type { RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import {
   SELECT_ESTORNO_DE_BAIXA,
@@ -70,6 +71,7 @@ export default async function ContasReceberPage({
     enviosRes,
     regionaisRes,
     ultimasRetencoesRes,
+    recebidosAntesRes,
   ] = await Promise.all([
     supabase
       .from("vw_faturamento_pendente")
@@ -240,6 +242,22 @@ export default async function ContasReceberPage({
       .select("natureza, parte_id, referencia, data_movimento, aliquotas")
       .eq("tenant_id", tenantId)
       .eq("natureza", "entrada"),
+    // O recebido antes da NF que ainda espera a nota (decisão 130): o selo
+    // da linha da aba Faturamento e a parcela 1 travada do Faturar.
+    supabase
+      .from("recebimentos_antes_nf")
+      .select(`
+        id, envio_nota_id, item_bv_id, valor, data, created_at,
+        conta:contas_bancarias(nome, banco),
+        lancamento:lancamentos_financeiros(
+          tipo:plano_contas_tipos(codigo, nome),
+          subtipo:plano_contas_subtipos(nome)
+        )
+      `)
+      .eq("tenant_id", tenantId)
+      .eq("status", "aguardando")
+      .order("data", { ascending: true })
+      .order("created_at", { ascending: true }),
   ]);
 
   for (const [nome, res] of [
@@ -254,6 +272,7 @@ export default async function ContasReceberPage({
     ["estornos", estornosRes],
     ["baixas", baixasRes],
     ["ultimas_retencoes", ultimasRetencoesRes],
+    ["recebidos_antes", recebidosAntesRes],
   ] as const) {
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
@@ -402,6 +421,34 @@ export default async function ContasReceberPage({
       descritivo_nota: (r.descritivo_nota as string | null) ?? null,
     };
   });
+
+  // O recebido antes da NF, pela chave da linha da fila (nota ou BV).
+  const recebidosAntes: Record<string, RecebidoAntesDaNf[]> = {};
+  for (const r of (recebidosAntesRes.data ?? []) as unknown as Array<{
+    id: string;
+    envio_nota_id: string | null;
+    item_bv_id: string | null;
+    valor: string | number;
+    data: string;
+    conta: { nome: string; banco: string } | null;
+    lancamento: {
+      tipo: { codigo: string; nome: string } | null;
+      subtipo: { nome: string } | null;
+    } | null;
+  }>) {
+    const chave = chaveDoRecebidoAntes(r.envio_nota_id, r.item_bv_id);
+    if (!chave) continue;
+    (recebidosAntes[chave] ??= []).push({
+      id: r.id,
+      data: r.data,
+      valor: Number(r.valor),
+      contaNome: r.conta ? `${r.conta.nome} · ${r.conta.banco}` : "—",
+      centroNome: r.lancamento?.tipo
+        ? `${r.lancamento.tipo.codigo} · ${r.lancamento.tipo.nome}`
+        : "—",
+      subtipoNome: r.lancamento?.subtipo?.nome ?? "—",
+    });
+  }
 
   // --- Aba Faturamento: notas já emitidas ---------------------------------
 
@@ -767,6 +814,7 @@ export default async function ContasReceberPage({
                   movimentado: Number(t.valor),
                   retencoes: [],
                   estornos: [],
+                  antesDaNf: false,
                 },
               ]
             : [],
@@ -832,6 +880,8 @@ export default async function ContasReceberPage({
             regionais={regionaisList}
             proximoNf={proximoNf}
             infoPorJob={infoPorJob}
+            contas={contasRes.data ?? []}
+            recebidosAntes={recebidosAntes}
           />
         }
         faturamentoCount={pendentes.length}

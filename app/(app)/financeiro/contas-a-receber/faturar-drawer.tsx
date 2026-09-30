@@ -17,6 +17,11 @@
  * título em Títulos a Receber, vinculado à MESMA NF. Não existe "NF
  * programada": esse modelo foi avaliado e descartado (notas de
  * implementação §4).
+ *
+ * Recebimento antes da NF (decisão 130): o que o cliente já pagou pelas
+ * notas (ou pelo BV) desta NF vira a parcela 1, travada e já quitada. As
+ * outras saem dos vencimentos do envio, com o recebido abatido em ordem, e
+ * continuam editáveis.
  */
 
 import * as React from "react";
@@ -30,6 +35,7 @@ import {
   FileCheck2,
   FileText,
   Layers,
+  Lock,
   Paperclip,
   Plus,
   Trash2,
@@ -67,7 +73,8 @@ import type {
 import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
 import { emitirFaturamento, uploadNfPdf, urlAnexoNf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
-import { chaveInfoDoEnvio } from "./chave-info";
+import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import { somaDosRecebidos, type RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import type { AnexoDaPo } from "@/components/envio/anexos-da-po";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
 
@@ -103,6 +110,32 @@ interface Props {
    * sabe mostrar cada vazio.
    */
   infoPorJob: Record<string, InfoJob>;
+  /** O recebido antes da NF que espera a nota, pela chave da linha
+   *  (`nota:<id>` ou `bv:<id>`) — decisão 130. */
+  recebidosAntes: Record<string, RecebidoAntesDaNf[]>;
+}
+
+/** O recebido antes da NF das notas (ou do BV) destas linhas, do mais
+ *  antigo para o mais novo. Cada nota conta uma vez, mesmo com vários
+ *  vencimentos na NF. */
+function recebidosDasLinhas(
+  linhas: FaturamentoPendenteRow[],
+  recebidosAntes: Record<string, RecebidoAntesDaNf[]>,
+): RecebidoAntesDaNf[] {
+  const chaves = new Set(
+    linhas
+      .map((l) =>
+        chaveDoRecebidoAntes(l.envio_nota_id, l.origem_tipo === "bv" ? l.origem_id : null),
+      )
+      .filter((k): k is string => k !== null),
+  );
+  return [...chaves]
+    .flatMap((k) => recebidosAntes[k] ?? [])
+    .sort((a, b) => a.data.localeCompare(b.data));
+}
+
+function centavos(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 /** O que o botão `i` mostra sobre um job. */
@@ -130,6 +163,7 @@ export function FaturarDrawer({
   regionais,
   proximoNf,
   infoPorJob,
+  recebidosAntes,
 }: Props) {
   const router = useRouter();
 
@@ -302,6 +336,17 @@ export function FaturarDrawer({
           0,
         );
 
+  // Recebido antes da NF (decisão 130): vira a parcela 1, travada. Conta
+  // pelas notas que continuam na NF — tirar o job da nota tira o recebido
+  // dele junto, como faz `emitir_faturamento`.
+  const recebidosDaNf = state.modo === "origem" ? recebidosDasLinhas(itensAtivos, recebidosAntes) : [];
+  const antesTotal = somaDosRecebidos(recebidosDaNf);
+  const temAntes = antesTotal > 0;
+  const antesData = recebidosDaNf[0]?.data ?? "";
+  const restoNf = centavos(totalNf - antesTotal);
+
+  // As parcelas que o usuário edita. Com recebido antes da NF, a parcela 1
+  // não está aqui: ela é o recebido, travada, e entra na frente na emissão.
   const [parcelas, setParcelas] = React.useState<Parcela[]>(() => {
     if (nota) {
       // As parcelas REAIS da nota, na ordem em que foram geradas. A
@@ -321,18 +366,30 @@ export function FaturarDrawer({
         },
       ];
     }
+    const antesInicial = somaDosRecebidos(recebidosDasLinhas(linhas, recebidosAntes));
     // Uma nota do envio com vários vencimentos (decisão 123): cada
-    // vencimento vira uma parcela do recebimento, com o saldo dele.
+    // vencimento vira uma parcela do recebimento, com o saldo dele. O
+    // recebido antes da NF sai dos vencimentos em ordem (decisão 130, E3):
+    // o que ele cobre inteiro some, o seguinte fica com o que sobra.
     if (umaNotaSo && linhas.length > 1) {
-      return linhas.map((l) => ({
-        valor: l.saldo,
-        data_vencimento:
-          l.data_prevista ?? format(addDays(new Date(), 30), "yyyy-MM-dd"),
-      }));
+      let resta = antesInicial;
+      return linhas
+        .map((l) => {
+          const usa = Math.min(l.saldo, resta);
+          resta = centavos(resta - usa);
+          return {
+            valor: centavos(l.saldo - usa),
+            data_vencimento:
+              l.data_prevista ?? format(addDays(new Date(), 30), "yyyy-MM-dd"),
+          };
+        })
+        .filter((p) => p.valor > 0.004);
     }
+    const resto = centavos((primeira?.saldo ?? 0) - antesInicial);
+    if (antesInicial > 0 && resto <= 0.004) return [];
     return [
       {
-        valor: primeira?.saldo ?? 0,
+        valor: resto,
         data_vencimento:
           primeira?.data_prevista ?? format(addDays(new Date(), 30), "yyyy-MM-dd"),
       },
@@ -341,15 +398,16 @@ export function FaturarDrawer({
 
   // Enquanto houver UMA parcela, ela espelha o total — o usuário não
   // precisa redigitar o valor a cada ajuste. Com duas ou mais, ele mandou
-  // repartir e o espelho pararia por cima do que ele escreveu.
+  // repartir e o espelho pararia por cima do que ele escreveu. Com recebido
+  // antes da NF, espelha o que falta depois dele.
   React.useEffect(() => {
     if (leitura) return;
     setParcelas((atuais) =>
-      atuais.length === 1 ? [{ ...atuais[0], valor: totalNf }] : atuais,
+      atuais.length === 1 ? [{ ...atuais[0], valor: Math.max(restoNf, 0) }] : atuais,
     );
-  }, [totalNf, leitura]);
+  }, [restoNf, leitura]);
 
-  const somaParcelas = parcelas.reduce((s, p) => s + p.valor, 0);
+  const somaParcelas = antesTotal + parcelas.reduce((s, p) => s + p.valor, 0);
   const somaOk = Math.abs(somaParcelas - totalNf) < 0.01;
 
   const saldoTotal = itensAtivos.reduce((s, l) => s + l.saldo, 0);
@@ -429,7 +487,9 @@ export function FaturarDrawer({
   }
 
   function aplicarParcelamento(n: number) {
-    const cents = Math.round(totalNf * 100);
+    // Com recebido antes da NF, reparte só o que falta depois da parcela 1.
+    const cents = Math.round(restoNf * 100);
+    if (cents <= 0) return;
     const base = Math.floor(cents / n);
     const sobra = cents - base * n;
     setParcelas(
@@ -475,6 +535,13 @@ export function FaturarDrawer({
         return;
       }
     }
+    if (temAntes && antesTotal > totalNf + 0.004) {
+      setErro(
+        `O recebido antes da NF (${formatMoney(antesTotal)}) passa do valor desta ` +
+          `nota (${formatMoney(totalNf)}). Fature ao menos o que já foi recebido.`,
+      );
+      return;
+    }
     if (descricao.trim().length < 3) {
       setErro("Escreva a descrição que vai na nota fiscal.");
       return;
@@ -489,6 +556,10 @@ export function FaturarDrawer({
     }
     if (totalNf <= 0) {
       setErro("O valor total da NF precisa ser maior que zero.");
+      return;
+    }
+    if (parcelas.some((p) => p.valor <= 0)) {
+      setErro("Toda parcela precisa ter valor maior que zero — remova a que ficou zerada.");
       return;
     }
     if (!somaOk) {
@@ -560,7 +631,12 @@ export function FaturarDrawer({
         plano_conta_subtipo_id: avulso ? avSubtipoId : null,
         rateio: avulso ? avRateio : [],
         itens,
-        parcelas: parcelas.map((p, i) => ({
+        // A parcela 1 é o recebido antes da NF, quando houver: o banco
+        // confere o valor e a transforma nas baixas desses recebimentos.
+        parcelas: [
+          ...(temAntes ? [{ valor: antesTotal, data_vencimento: antesData }] : []),
+          ...parcelas,
+        ].map((p, i) => ({
           numero: i + 1,
           valor: p.valor,
           data_vencimento: p.data_vencimento,
@@ -1149,7 +1225,7 @@ export function FaturarDrawer({
               <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                 Parcelas do recebimento desta NF
               </span>
-              {!leitura && (
+              {!leitura && restoNf > 0.004 && (
                 <div className="ml-auto flex gap-1.5">
                   {[2, 3, 6].map((n) => (
                     <button
@@ -1173,13 +1249,43 @@ export function FaturarDrawer({
             </div>
 
             <div className="space-y-2">
+              {temAntes && !leitura && (
+                <div>
+                  <div className="grid grid-cols-[22px_1fr_1fr_30px] items-center gap-2">
+                    <span className="text-center font-mono text-[11.5px] text-muted-foreground">
+                      1
+                    </span>
+                    <div className="flex h-9 items-center justify-end rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 font-mono text-[12.5px] font-semibold text-emerald-800">
+                      {formatMoney(antesTotal)}
+                    </div>
+                    <div className="flex h-9 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 font-mono text-[12.5px] text-emerald-800">
+                      {formatarData(antesData)}
+                    </div>
+                    <span
+                      className="flex items-center justify-center text-emerald-700"
+                      title="Já recebida"
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <p className="ml-[30px] mt-1 text-[11px] text-emerald-800 text-pretty">
+                    {recebidosDaNf.length === 1
+                      ? `Recebida antes da NF, em ${formatarData(antesData)} (${recebidosDaNf[0].contaNome}). Nasce quitada.`
+                      : `Recebida antes da NF em ${recebidosDaNf.length} recebimentos, ${
+                          antesData === recebidosDaNf[recebidosDaNf.length - 1].data
+                            ? `todos em ${formatarData(antesData)}`
+                            : `de ${formatarData(antesData)} a ${formatarData(recebidosDaNf[recebidosDaNf.length - 1].data)}`
+                        }. Nasce quitada, com uma baixa para cada.`}
+                  </p>
+                </div>
+              )}
               {parcelas.map((p, i) => (
                 <div
                   key={i}
                   className="grid grid-cols-[22px_1fr_1fr_30px] items-center gap-2"
                 >
                   <span className="text-center font-mono text-[11.5px] text-muted-foreground">
-                    {i + 1}
+                    {i + 1 + (temAntes && !leitura ? 1 : 0)}
                   </span>
                   {leitura ? (
                     <div className="flex h-9 items-center justify-end rounded-lg border border-border bg-white px-2.5 font-mono text-[12.5px] font-semibold">
@@ -1202,6 +1308,10 @@ export function FaturarDrawer({
                     </div>
                   ) : (
                     <DatePicker
+                      // O DatePicker guarda a data dele: sem a chave, o
+                      // "2×"/"3×" trocava o vencimento da parcela e a tela
+                      // continuava mostrando o antigo.
+                      key={p.data_vencimento}
                       name={`venc-${i}`}
                       defaultValue={p.data_vencimento}
                       onDateChange={(d) =>
@@ -1218,7 +1328,9 @@ export function FaturarDrawer({
                   {!leitura && (
                     <button
                       type="button"
-                      disabled={parcelas.length === 1}
+                      // Com a parcela 1 travada, a última editável pode sair
+                      // (o recebido cobre a nota inteira).
+                      disabled={parcelas.length === 1 && !temAntes}
                       onClick={() =>
                         setParcelas((a) => a.filter((_, j) => j !== i))
                       }
@@ -1278,7 +1390,13 @@ export function FaturarDrawer({
               ? "NF já emitida — os jobs receberam a baixa do valor faturado e as parcelas estão em Títulos a Receber."
               : avulso
                 ? "Ao emitir, as parcelas desta NF entram em Títulos a Receber como faturamento avulso, sem consumir saldo de nenhum job."
-                : "Ao emitir, cada job recebe a baixa do valor faturado — o que sobrar do saldo permanece aguardando faturamento — e as parcelas entram em Títulos a Receber vinculadas à mesma nota."}
+                : `Ao emitir, cada job recebe a baixa do valor faturado — o que sobrar do saldo permanece aguardando faturamento — e as parcelas entram em Títulos a Receber vinculadas à mesma nota.${
+                    temAntes
+                      ? recebidosDaNf.length === 1
+                        ? ` A parcela 1 já entra recebida, com a data de ${formatarData(antesData)}; nada entra de novo na conta.`
+                        : " A parcela 1 já entra recebida, com uma baixa para cada recebimento; nada entra de novo na conta."
+                      : ""
+                  }`}
           </p>
           <div className="flex items-center justify-end gap-2.5">
             {leitura ? (
