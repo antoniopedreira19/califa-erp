@@ -87,6 +87,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-09-30 | RH · Quadro real (209 ativos) + dados bancários + fluxo de contratação com Combobox de líder | [2026-09-30-rh-quadro-real-e-contratacao.md](handoffs/2026-09-30-rh-quadro-real-e-contratacao.md) |
 | 2026-09-24 | RH · Import dos 193 colaboradores do quadro real da Kika (socio no enum, CPF em PJ) | [2026-09-24-rh-import-colaboradores.md](handoffs/2026-09-24-rh-import-colaboradores.md) |
 | 2026-09-23 | RH · Alocação por empresa + toggle "todas as regionais" + rateio anual (task 006) | [2026-09-23-rh-alocacao-com-rateio-regional.md](handoffs/2026-09-23-rh-alocacao-com-rateio-regional.md) |
 | 2026-09-23 | pgto-remessa aberto (CNAB Santander) + impactos no RH documentados | [2026-09-23-pgto-remessa-e-impactos-no-rh.md](handoffs/2026-09-23-pgto-remessa-e-impactos-no-rh.md) |
