@@ -223,7 +223,11 @@ export default async function OrcamentoDetailPage({
         // `produto_id` cru além do embed `produto`: é ele que o servidor
         // confere para deixar abrir o job, e é ele que o modal usa para
         // decidir se a Marca está cadastrada (17/09/2026).
-        "id, codigo, nome, status, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos(nome)",
+        //
+        // Decisão 133: `produto` é a marca que o JOB leva — a única do
+        // projeto ou, com mais de uma, a geral do cliente. `marcas` traz
+        // as escolhidas, só para o modal avisar quando são várias.
+        "id, codigo, nome, status, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos!produto_id(nome), marcas:projeto_marcas(produto_id)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -1090,6 +1094,8 @@ function VersaoSelecionada({
     // enviar job (ver `HerdadosJob`). Vêm sempre do cadastro de hoje,
     // que é o que o servidor relê na hora de gravar.
     produtoId: (projetoRaw?.produto_id as string | null) ?? null,
+    projetoComVariasMarcas:
+      ((projetoRaw?.marcas as { produto_id: string }[] | null) ?? []).length > 1,
     gpId: (orcamentoRaw.gp_responsavel_id as string | null) ?? null,
     produtorId: (orcamentoRaw.produtor_id as string | null) ?? null,
   };

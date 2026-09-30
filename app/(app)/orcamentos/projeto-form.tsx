@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Plus, Save } from "lucide-react";
+import { AlertCircle, Info, Plus, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -43,6 +43,9 @@ export interface ProdutoOption {
   nome: string;
   codigo: string;
   cliente_id: string;
+  /** A marca geral do cliente (PRD-01): é a que o job leva ao financeiro
+   *  quando o projeto tem mais de uma marca (decisão 133). */
+  padrao: boolean;
 }
 
 interface Props {
@@ -57,6 +60,8 @@ interface Props {
   /** Ids já vinculados ao projeto, na ordem gravada. */
   regionaisSelecionadas?: string[];
   responsaveisSelecionados?: string[];
+  /** Marcas já gravadas no projeto (`projeto_marcas`, decisão 133). */
+  marcasSelecionadas?: string[];
   /** Acréscimos manuais à Equipe já gravados (papel `equipe`). Os
    *  automáticos NÃO vêm aqui: são derivados na hora. */
   equipeSelecionada?: string[];
@@ -91,6 +96,7 @@ export function ProjetoForm({
   categorias,
   regionaisSelecionadas,
   responsaveisSelecionados,
+  marcasSelecionadas,
   equipeSelecionada,
   produtoresDosOrcamentos,
   criadorId,
@@ -112,7 +118,15 @@ export function ProjetoForm({
   const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
   const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
-  const [produtoId, setProdutoId] = React.useState(projeto?.produto_id ?? "");
+  // Marcas do projeto — uma ou mais (decisão 133). Sem vínculo gravado
+  // (projeto salvo pela versão anterior do app), vale a marca do projeto.
+  const [produtoIds, setProdutoIds] = React.useState<string[]>(
+    marcasSelecionadas && marcasSelecionadas.length > 0
+      ? marcasSelecionadas
+      : projeto?.produto_id
+        ? [projeto.produto_id]
+        : [],
+  );
   const [responsavelIds, setResponsavelIds] = React.useState<string[]>(
     responsaveisSelecionados ?? (projeto ? [projeto.responsavel_id] : []),
   );
@@ -198,21 +212,23 @@ export function ProjetoForm({
         nome: m.nome,
         codigo: m.codigo,
         cliente_id: cliente.id,
+        padrao: m.padrao,
       })),
     ]);
   }
 
-  /** A marca criada pelo "+" ao lado do campo Marca. Entra na lista e fica
-   *  escolhida — quem clicou ali queria usá-la agora. */
-  const [marcaPendente, setMarcaPendente] = React.useState<string | null>(null);
-
+  /** A marca criada pelo "+" ao lado do campo Marcas. Entra na lista e
+   *  SOMA às já escolhidas — quem clicou ali queria usá-la agora. Nunca é
+   *  a geral: essa nasce com o cliente. */
   function absorverMarca(marca: { id: string; nome: string; codigo: string }) {
     if (!clienteId) return;
     setProdutosLocais((atual) => [
       ...atual,
-      { ...marca, cliente_id: clienteId },
+      { ...marca, cliente_id: clienteId, padrao: false },
     ]);
-    setMarcaPendente(marca.id);
+    setProdutoIds((atual) =>
+      atual.includes(marca.id) ? atual : [...atual, marca.id],
+    );
   }
 
   // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
@@ -221,16 +237,23 @@ export function ProjetoForm({
     [produtosLocais, clienteId],
   );
 
-  /** Escolher a marca nova é em DOIS tempos, de propósito: o `Select` do
-   *  Radix descarta um `value` cuja `<SelectItem>` ainda não existe, e
-   *  chama `onValueChange("")` em silêncio. Por isso a escolha espera a
-   *  opção aparecer na lista, no render seguinte. */
-  React.useEffect(() => {
-    if (!marcaPendente) return;
-    if (!produtosDoCliente.some((p) => p.id === marcaPendente)) return;
-    setProdutoId(marcaPendente);
-    setMarcaPendente(null);
-  }, [marcaPendente, produtosDoCliente]);
+  /** O que de fato está escolhido: só marca ATIVA do cliente atual. Uma
+   *  marca inativada depois de gravada no projeto não aparece na lista —
+   *  e, num campo de várias, ficaria escondida no estado e reprovaria o
+   *  envio sem o usuário ter como tirá-la. Derivar resolve: ela some daqui
+   *  e sai do projeto no próximo salvar. */
+  const marcasEscolhidas = React.useMemo(
+    () => produtoIds.filter((id) => produtosDoCliente.some((p) => p.id === id)),
+    [produtoIds, produtosDoCliente],
+  );
+
+  /** A marca geral do cliente escolhido (PRD-01). Com mais de uma marca no
+   *  projeto, é ela que o job leva ao financeiro — esteja entre as
+   *  escolhidas ou não (decisão 133). */
+  const marcaGeral = React.useMemo(
+    () => produtosDoCliente.find((p) => p.padrao) ?? null,
+    [produtosDoCliente],
+  );
 
   /** Sigla do cliente escolhido, quando a troca vai mudar o código do
    *  projeto (edição, cliente diferente e sigla diferente da do código). */
@@ -243,7 +266,7 @@ export function ProjetoForm({
 
   function handleClienteChange(novoClienteId: string) {
     setClienteId(novoClienteId);
-    if (novoClienteId !== clienteId) setProdutoId("");
+    if (novoClienteId !== clienteId) setProdutoIds([]);
   }
 
   /** Realce do campo com erro, como no handoff: borda vermelha + halo.
@@ -263,7 +286,7 @@ export function ProjetoForm({
     const formData = new FormData(e.currentTarget);
     formData.set("empresa_id", empresaId);
     formData.set("cliente_id", clienteId);
-    formData.set("produto_id", produtoId);
+    for (const id of marcasEscolhidas) formData.append("produto_ids", id);
     // Só os acréscimos manuais vão ao servidor: os travados ele deriva de
     // novo, e mandá-los daqui abriria caminho para um payload adulterado
     // gravar alguém como equipe manual.
@@ -369,8 +392,12 @@ export function ProjetoForm({
           )}
         </Field>
 
-        <Field label="Marca" name="produto_id" required errors={fieldErrors}>
-          {/* O "+" ao lado abre um dialog de UMA marca — não a ficha do
+        <Field label="Marcas" name="produto_ids" required errors={fieldErrors}>
+          {/* Uma ou mais marcas do cliente (decisão 133, 30/09/2026) — o
+              mesmo campo das Regionais. Até então era um Select de uma
+              marca só.
+
+              O "+" ao lado abre um dialog de UMA marca — não a ficha do
               cliente, como abria até 18/09/2026. Ele aparece assim que há
               cliente escolhido, e não só quando a lista está vazia.
 
@@ -378,35 +405,27 @@ export function ProjetoForm({
               Admin/GP/Produtor): a gravação é `adicionarMarcaAoCliente`,
               que só INSERE. Renomear e inativar marca continuam no
               cadastro do cliente, com o administrador — decisão 089 §6. */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <Select
-                value={produtoId}
-                onValueChange={setProdutoId}
+              <MultiSelect
+                items={produtosDoCliente.map((p) => ({
+                  value: p.id,
+                  label: p.nome,
+                  detalhe: p.codigo,
+                }))}
+                value={marcasEscolhidas}
+                onChange={setProdutoIds}
+                placeholder={
+                  !clienteId
+                    ? "Selecione o cliente primeiro"
+                    : produtosDoCliente.length === 0
+                      ? "Nenhuma marca cadastrada"
+                      : "Selecione uma ou mais marcas"
+                }
+                vazio="Nenhuma marca cadastrada."
                 disabled={!clienteId || produtosDoCliente.length === 0}
-              >
-                <SelectTrigger className={erroClasses("produto_id")}>
-                  <SelectValue
-                    placeholder={
-                      !clienteId
-                        ? "Selecione o cliente primeiro"
-                        : produtosDoCliente.length === 0
-                          ? "Nenhuma marca cadastrada"
-                          : "Selecione a marca"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {produtosDoCliente.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}{" "}
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {p.codigo}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                className={erroClasses("produto_ids")}
+              />
             </div>
             {clienteId && podeCadastrarCliente && (
               <button
@@ -420,6 +439,22 @@ export function ProjetoForm({
               </button>
             )}
           </div>
+          {/* A regra da decisão 133 dita na hora em que ela passa a valer:
+              com mais de uma marca, o job leva a geral do cliente — que
+              pode nem estar entre as escolhidas. */}
+          {marcasEscolhidas.length > 1 && marcaGeral && (
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Info className="mt-px h-3.5 w-3.5 flex-none" />
+              <span>
+                Com mais de uma marca, os jobs deste projeto seguem para o
+                financeiro com a marca geral do cliente:{" "}
+                <span className="font-medium text-foreground">
+                  {marcaGeral.nome}
+                </span>{" "}
+                <span className="font-mono">{marcaGeral.codigo}</span>.
+              </span>
+            </p>
+          )}
           {clienteId && produtosDoCliente.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Este cliente ainda não tem marcas.{" "}

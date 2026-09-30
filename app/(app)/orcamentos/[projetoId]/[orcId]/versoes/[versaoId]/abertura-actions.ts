@@ -294,7 +294,10 @@ export async function enviarJobParaAbertura(
     };
   }
 
-  // 3. Produto vem do projeto; GP e produtor vêm do orçamento. O
+  // 3. Produto vem do projeto; GP e produtor vêm do orçamento.
+  //    `projetos.produto_id` é a marca que o job leva (decisão 133): a
+  //    única escolhida no projeto ou, com mais de uma, a geral do cliente
+  //    (PRD-01). Quem a grava é a action do projeto. O
   //    formulário só exibe esses três — reler do banco é o que garante
   //    que o job grave o que está cadastrado, e não o que chegou no
   //    payload. Cidade e regional, ao contrário, o modal deixa trocar:
@@ -349,7 +352,7 @@ export async function enviarJobParaAbertura(
   if (!produtoRes.data) {
     return {
       ok: false,
-      message: "O produto cadastrado no projeto não pertence mais a este cliente. Edite o projeto.",
+      message: "A marca cadastrada no projeto não pertence mais a este cliente. Edite o projeto.",
     };
   }
   if (!cidadeRes.data) {

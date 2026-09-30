@@ -31,7 +31,7 @@ export default async function NovoProjetoPage() {
     // pelo cliente escolhido, sem ida extra ao servidor a cada troca.
     supabase
       .from("cliente_produtos")
-      .select("id, nome, codigo, cliente_id")
+      .select("id, nome, codigo, cliente_id, padrao")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("codigo"),

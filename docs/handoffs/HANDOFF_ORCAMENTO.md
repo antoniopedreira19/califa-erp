@@ -4863,3 +4863,29 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Migrations `20260929996001` (estrutura e travas, linhas inativas) e
   `20260929996002` (ativa). Dado de teste: "Teste Mídia On 131" no
   TES-P001/26. Ver decisão 131.
+
+## ⚠️ Nota de 2026-09-30 — o projeto aceita mais de uma marca (decisão 133)
+
+- **Campo Marcas.** No formulário do projeto (criar e editar), "Marca"
+  virou "Marcas": seleção múltipla com chips, como Regionais, com o código
+  ao lado do nome na lista. O "+" soma a marca nova às escolhidas.
+- **A marca que o job leva:** com uma marca, é ela; com mais de uma, é a
+  marca geral do cliente (`padrao`, PRD-01), esteja entre as escolhidas ou
+  não. O formulário avisa embaixo do campo, e o modal de envio do job troca
+  o apoio do campo Marca.
+- **Banco:** `projeto_marcas` guarda as escolhidas (migration
+  `20260930200001`); `projetos.produto_id` passou a ser a marca do job,
+  gravada pela action via `marcaDoJob` (`lib/marcas-do-projeto.ts`). O
+  envio para abertura, `jobs.produto` e a `vw_job_rentabilidade` não
+  mudaram — nos relatórios, o job de projeto com várias marcas cai na
+  marca geral.
+- **Lista de projetos:** coluna Marca com a primeira e "+N"; o filtro acha
+  o projeto por qualquer uma das marcas. **Cabeçalho do projeto:** todas.
+- **Chave primária `id` em `projeto_marcas`, e não a composta** dos outros
+  vínculos: com a composta, o PostgREST veria dois caminhos entre
+  `projetos` e `cliente_produtos` e o embed `produto:cliente_produtos(...)`
+  ficaria ambíguo em produção. Os três embeds ganharam `!produto_id`.
+- Testado no TES-P001/26, inclusive com um envio real para abertura (job
+  TES-1017/26 com a marca geral, cancelado em seguida). Ficaram de dado de
+  teste as marcas "ZZ Marca 133 A" e "ZZ Marca 133 B" do cliente Teste,
+  inativas. Ver decisão 133, §7.

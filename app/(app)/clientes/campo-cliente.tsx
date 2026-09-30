@@ -39,6 +39,9 @@ export interface MarcaNova {
   nome: string;
   codigo: string;
   cliente_id: string;
+  /** A marca geral do cliente (PRD-01). Obrigatório: é ela que o job leva
+   *  quando o projeto tem mais de uma marca (decisão 133). */
+  padrao: boolean;
 }
 
 export function CampoCliente({
@@ -203,6 +206,7 @@ export function CampoCliente({
                 nome: m.nome,
                 codigo: m.codigo,
                 cliente_id: item.id,
+                padrao: m.padrao,
               }))
           : [],
       );

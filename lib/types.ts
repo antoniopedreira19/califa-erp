@@ -250,9 +250,13 @@ export interface Projeto {
   campanha: string | null;
   categoria_id: string | null;
   cliente_id: string;
-  /** Produto do cadastro do cliente (`cliente_produtos`). Herdado pelo job
-   *  na abertura. Nullable no banco por causa dos projetos anteriores a
-   *  06/08/2026; obrigatório no formulário. */
+  /** Marca que o JOB leva ao financeiro (`cliente_produtos`), copiada para
+   *  `jobs.produto` no envio para abertura. Desde a decisão 133
+   *  (30/09/2026) o projeto aceita mais de uma marca: as escolhidas vivem
+   *  em `projeto_marcas`, e esta coluna guarda a única escolhida ou, com
+   *  mais de uma, a marca geral do cliente (`padrao`, PRD-01) — ver
+   *  `lib/marcas-do-projeto.ts`. Nullable no banco por causa dos projetos
+   *  anteriores a 06/08/2026; obrigatória no formulário. */
   produto_id: string | null;
   /** Compatibilidade: primeiro responsável selecionado. A lista completa
    *  vive em `projeto_responsaveis`. Não confundir com `created_by`, que
@@ -824,6 +828,16 @@ export interface ClienteProduto {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Marca escolhida num projeto (decisão 133). Uma linha por par; a marca
+ *  que o job leva fica em `projetos.produto_id`. */
+export interface ProjetoMarca {
+  id: string;
+  tenant_id: string;
+  projeto_id: string;
+  produto_id: string;
+  created_at: string;
 }
 
 // ---------- Jobs ----------
