@@ -4889,3 +4889,13 @@ aplicada na hora combinada com a frente do Antonio, junto da
   TES-1017/26 com a marca geral, cancelado em seguida). Ficaram de dado de
   teste as marcas "ZZ Marca 133 A" e "ZZ Marca 133 B" do cliente Teste,
   inativas. Ver decisão 133, §7.
+
+## ⚠️ Nota de 2026-09-30 (2) — a conferência do envio mostra só o código do job
+
+- No pop-up de confirmação do envio para abertura (e no "Ver dados do job",
+  que é o mesmo pop-up em modo leitura), a linha **Projeto** passou a
+  mostrar só o nome do projeto (antes, "nome · código"). O único código do
+  pop-up é o do job, na linha **Código**. Pedido do Tiago; o mesmo vale
+  para a conferência do financeiro.
+- O formulário "Enviar job para abertura" não mudou: segue com o campo
+  travado "Código do projeto".

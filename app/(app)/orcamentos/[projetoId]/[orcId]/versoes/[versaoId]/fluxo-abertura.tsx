@@ -359,7 +359,8 @@ export function FluxoAbertura({
   const resumoEnvio = [
     { rotulo: "Job", valor: dados.nome || "—" },
     { rotulo: "Código", valor: job?.codigo ?? proximoCodigoJob, mono: true },
-    { rotulo: "Projeto", valor: `${projetoNome} · ${projetoCodigo}` },
+    // Só o nome: o único código da conferência é o do job (30/09/2026).
+    { rotulo: "Projeto", valor: projetoNome },
     { rotulo: "Cliente", valor: clienteNome },
     { rotulo: "Marca", valor: herdados.produtoNome ?? "— não informada" },
     {
