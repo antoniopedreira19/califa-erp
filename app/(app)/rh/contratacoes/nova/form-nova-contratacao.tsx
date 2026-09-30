@@ -28,7 +28,7 @@ const NONE_SENTINEL = "__none__";
 const TIPOS = ["pj", "clt_recibo", "clt", "estagio"] as const;
 const NATUREZAS_PJ: PjNatureza[] = ["mei", "me", "ltda", "eireli", "slu"];
 
-type LiderOption = { id: string; nome: string; email: string };
+type LiderOption = { id: string; nome: string };
 
 export function FormNovaContratacao({
   empresas,
