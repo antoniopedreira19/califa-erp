@@ -187,6 +187,16 @@ export function OrcamentoForm({
     }
     return permitidas;
   }, [servicoEscolhido, categorias, parOriginal, categoriaId]);
+  // Categoria em breve (decisão 131): fica no fim da lista, travada. É o
+  // que o nome dela no aviso abaixo do campo explica.
+  const opcoesNaLista = React.useMemo(
+    () =>
+      [...opcoesDeCategoria].sort(
+        (a, b) => Number(a.em_breve) - Number(b.em_breve),
+      ),
+    [opcoesDeCategoria],
+  );
+  const categoriasEmBreve = opcoesDeCategoria.filter((c) => c.em_breve);
 
   const categoriaEscolhida = categorias.find((c) => c.id === categoriaId);
   // Decisão 105: o serviço Interno só aceita custo F · Interno, com o
@@ -409,18 +419,43 @@ export function OrcamentoForm({
               </p>
             </>
           ) : (
-            <Select value={categoriaId} onValueChange={setCategoriaId}>
+            // `key` por serviço: Mídia e Ativação têm listas que não se
+            // cruzam. Sem remontar, voltar de Ativação para Mídia no editar
+            // trocava os itens e o valor no mesmo render, e o Radix zerava
+            // a categoria (visto no protótipo da decisão 131).
+            <Select key={servicoId} value={categoriaId} onValueChange={setCategoriaId}>
               <SelectTrigger className={erroClasses("categoria_id")}>
                 <SelectValue placeholder="Selecione a categoria" />
               </SelectTrigger>
               <SelectContent>
-                {opcoesDeCategoria.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
+                {opcoesNaLista.map((c) => (
+                  <SelectItem
+                    key={c.id}
+                    value={c.id}
+                    disabled={c.em_breve}
+                    className={
+                      c.em_breve
+                        ? "text-muted-foreground/80 data-[disabled]:opacity-100"
+                        : undefined
+                    }
+                  >
                     {c.nome}
+                    {c.em_breve && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-px align-[1px] text-[10.5px] font-semibold text-muted-foreground">
+                        <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+                        Em breve
+                      </span>
+                    )}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {categoriasEmBreve.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {categoriasEmBreve.map((c) => c.nome).join(" e ")} ainda não pode
+              ser escolhida: a planilha própria está em construção.
+            </p>
           )}
         </Field>
 

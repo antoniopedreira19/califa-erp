@@ -147,8 +147,9 @@ export default async function JobNoFinanceiroPage({
     supabase
       .from("categorias_dominio")
       // `modelo_planilha`: o combo só oferece categorias do modelo do
-      // orçamento (decisões 072 e 105), como a abertura.
-      .select("id, nome, modelo_planilha")
+      // orçamento (decisões 072 e 105), como a abertura. `em_breve`: a
+      // Mídia Off aparece travada no combo (decisão 131).
+      .select("id, nome, modelo_planilha, em_breve")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)

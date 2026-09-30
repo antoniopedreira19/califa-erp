@@ -4844,3 +4844,22 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Testado no TES-P001/26 (modal fechado, substituir, nova versão, rascunho
   cancelado e salvo). Ficaram de dado de teste a v1/v2 do "Teste novo" e o
   "Teste 129 descarte". Ver decisão 129, §5.
+
+## ⚠️ Nota de 2026-09-29 (7) — serviço Mídia, com Mídia On e Mídia Off (decisão 131)
+
+- **Serviço novo: Mídia.** Categorias exclusivas dele (mecanismo da 078):
+  Mídia On (planilha nacional) e Mídia Off. Nenhuma aparece em outro
+  serviço, e o Interno não aceita nenhuma das duas.
+- **Mídia Off é "em breve"** (`categorias_dominio.em_breve`): aparece no
+  fim da lista da Categoria, travada, com o selo "Em breve" e o aviso
+  abaixo do campo. A Categoria do Mídia começa em branco.
+- **Cadastro de Categorias:** Mídia Off com status âmbar "Em breve" e linha
+  travada; Mídia On é linha comum.
+- **Agregada:** sai da lista só o serviço com categoria de planilha mensal
+  (Fee, Always On); o Mídia pode ser criado por lá.
+- **Correção junto:** o Select da Categoria remonta por serviço
+  (`key={servicoId}`) — no editar, Mídia → Ativação → Mídia zerava a
+  categoria.
+- Migrations `20260929996001` (estrutura e travas, linhas inativas) e
+  `20260929996002` (ativa). Dado de teste: "Teste Mídia On 131" no
+  TES-P001/26. Ver decisão 131.

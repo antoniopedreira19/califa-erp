@@ -22,6 +22,8 @@ function mapDbError(msg: string): string {
   // a frase pronta e o nome da categoria dentro. Repassá-la é melhor do
   // que traduzi-la para um genérico.
   if (msg.includes("modelo de planilha")) return msg;
+  // As travas da decisão 131 (vínculo com o serviço e "em breve") também.
+  if (msg.includes("por migration")) return msg;
   return "Não foi possível salvar a categoria.";
 }
 
@@ -44,12 +46,21 @@ async function bloqueioDeModeloProprio(
   const supabase = createClient();
   const { data } = await supabase
     .from("categorias_dominio")
-    .select("nome, modelo_planilha")
+    .select("nome, modelo_planilha, em_breve")
     .eq("id", id)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ nome: string; modelo_planilha: string }>();
+    .maybeSingle<{ nome: string; modelo_planilha: string; em_breve: boolean }>();
 
-  if (!data || data.modelo_planilha === "nacional") return null;
+  if (!data) return null;
+  // Decisão 131: a categoria em breve é liberada por migration, junto com
+  // o modelo de planilha dela.
+  if (data.em_breve) {
+    return {
+      ok: false,
+      message: `A categoria "${data.nome}" ainda está em construção e só pode ser alterada por migration. Você ainda pode ativá-la ou desativá-la.`,
+    };
+  }
+  if (data.modelo_planilha === "nacional") return null;
 
   return {
     ok: false,

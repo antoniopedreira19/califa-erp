@@ -10,11 +10,16 @@
  * categoria Always On — marcada `aceita_servico_interno` —, para o
  * investimento recorrente sair na planilha mensal.
  *
- * As relações são os campos `servico_exclusivo_id`, `investimento_interno`
- * e `aceita_servico_interno`, nunca o nome. Sem "use client" e sem banco: o
- * formulário usa para filtrar o Select, a server action usa para recusar o
- * que o formulário não deixaria passar — a MESMA função, para as duas
- * pontas não divergirem. O banco confere o mesmo par no gatilho
+ * Decisão 131 (29/09/2026): o serviço Mídia tem duas categorias
+ * exclusivas, Mídia On e Mídia Off. A Mídia Off é `em_breve`: aparece na
+ * lista, travada, e não pode ser escolhida enquanto o modelo de planilha
+ * dela não fica pronto.
+ *
+ * As relações são os campos `servico_exclusivo_id`, `investimento_interno`,
+ * `aceita_servico_interno` e `em_breve`, nunca o nome. Sem "use client" e
+ * sem banco: o formulário usa para filtrar o Select, a server action usa
+ * para recusar o que o formulário não deixaria passar — a MESMA função,
+ * para as duas pontas não divergirem. O banco confere o mesmo par no gatilho
  * `orcamento_servico_e_categoria_coerentes`.
  */
 
@@ -27,6 +32,7 @@ export type CategoriaParaServico = Pick<
   | "modelo_planilha"
   | "servico_exclusivo_id"
   | "aceita_servico_interno"
+  | "em_breve"
 >;
 
 /** O que as regras precisam saber do serviço escolhido. */
@@ -69,20 +75,27 @@ export function servicoTemCategoriaExclusiva(
 }
 
 /** A frase de recusa para um par serviço × categoria, ou `null` quando o
- *  par é válido. */
+ *  par é válido. Categoria em breve (decisão 131) é recusada com qualquer
+ *  serviço: ela está na lista só para ser vista. */
 export function erroDoParServicoCategoria(
   servico: ServicoParaCategoria,
   categoria: CategoriaParaServico,
   categorias: CategoriaParaServico[],
   nomeDoServico: string,
 ): string | null {
+  if (categoria.em_breve) {
+    return `A categoria ${categoria.nome} ainda não está disponível.`;
+  }
   const permitidas = categoriasDoServico(servico, categorias);
   if (permitidas.some((c) => c.id === categoria.id)) return null;
   if (servico.investimento_interno && categoria.modelo_planilha === "internacional") {
     return `O serviço ${nomeDoServico} não aceita a categoria ${categoria.nome}.`;
   }
   if (servicoTemCategoriaExclusiva(servico, categorias)) {
-    const nomes = permitidas.map((c) => c.nome).join(" ou ");
+    const nomes = permitidas
+      .filter((c) => !c.em_breve)
+      .map((c) => c.nome)
+      .join(" ou ");
     return `Com o serviço ${nomeDoServico}, a categoria é ${nomes}.`;
   }
   return `A categoria ${categoria.nome} é só para o serviço dela.`;

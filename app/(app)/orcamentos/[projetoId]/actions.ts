@@ -100,7 +100,7 @@ async function conferirServicoECategoria(
   const [catRes, servRes] = await Promise.all([
     supabase
       .from("categorias_dominio")
-      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno, em_breve")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .returns<CategoriaParaServico[]>(),

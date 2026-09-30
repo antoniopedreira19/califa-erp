@@ -115,9 +115,10 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("categorias_dominio")
       // `modelo_planilha` vem junto: é ele que diz como o orçamento criado
-      // aqui vai fechar (decisão 072). `servico_exclusivo_id` separa as
-      // categorias do Fee e do Always On, que não nascem por aqui (078).
-      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
+      // aqui vai fechar (decisão 072). `servico_exclusivo_id` e o modelo
+      // separam as categorias do Fee e do Always On, que não nascem por
+      // aqui (078); `em_breve` é a Mídia Off, travada na lista (131).
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno, em_breve")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -529,12 +530,17 @@ export default async function OrcamentosAgregadoPage({
   >[];
 
   // Fee e Always On não nascem pela agregada (decisão 078): o editor daqui
-  // não conhece meses. Saem da lista as categorias exclusivas de um serviço
-  // E os serviços que têm categoria exclusiva — sobrar o serviço Fee com a
-  // categoria Evento seria abrir de novo a porta que a trava fechou.
+  // não conhece meses. Saem da lista as categorias exclusivas de planilha
+  // mensal E os serviços donos delas — sobrar o serviço Fee com a categoria
+  // Evento seria abrir de novo a porta que a trava fechou. O Mídia fica
+  // (decisão 131): as categorias dele são da planilha nacional, e o
+  // formulário mostra só as dele, como na tela do orçamento.
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as CategoriaParaServico[];
+  const soNaTelaDoOrcamento = (c: CategoriaParaServico) =>
+    c.servico_exclusivo_id !== null && c.modelo_planilha === "mensal";
   const servicosComCategoriaPropria = new Set(
     categoriasOrcamento
+      .filter(soNaTelaDoOrcamento)
       .map((c) => c.servico_exclusivo_id)
       .filter((id): id is string => id !== null),
   );
@@ -577,9 +583,7 @@ export default async function OrcamentosAgregadoPage({
       )}
       inicial={inicial}
       exportaveis={exportaveis}
-      categorias={categoriasOrcamento.filter(
-        (c) => c.servico_exclusivo_id === null,
-      )}
+      categorias={categoriasOrcamento.filter((c) => !soNaTelaDoOrcamento(c))}
       nomesDeCategoria={categoriasOrcamento}
       regionaisDoProjeto={regionaisDoProjeto}
       cidadesIniciais={cidadesIniciais}

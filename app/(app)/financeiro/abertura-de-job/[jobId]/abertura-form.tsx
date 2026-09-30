@@ -103,6 +103,8 @@ import { useIrParaAbaDoJob } from "../../jobs/[jobId]/job-financeiro-tabs";
 interface CategoriaOption {
   id: string;
   nome: string;
+  /** Aparece travada no combo, com o selo "Em breve" (decisão 131). */
+  em_breve: boolean;
 }
 
 /** O valor do campo Projeto quando o escolhido é o projeto novo do "+",
@@ -1848,11 +1850,30 @@ export function AberturaForm({
                     <SelectValue placeholder="Selecione a categoria" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categorias.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.nome}
-                      </SelectItem>
-                    ))}
+                    {/* Em breve no fim, travada — como no formulário do
+                        orçamento (decisão 131). */}
+                    {[...categorias]
+                      .sort((a, b) => Number(a.em_breve) - Number(b.em_breve))
+                      .map((c) => (
+                        <SelectItem
+                          key={c.id}
+                          value={c.id}
+                          disabled={c.em_breve}
+                          className={
+                            c.em_breve
+                              ? "text-muted-foreground/80 data-[disabled]:opacity-100"
+                              : undefined
+                          }
+                        >
+                          {c.nome}
+                          {c.em_breve && (
+                            <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-px align-[1px] text-[10.5px] font-semibold text-muted-foreground">
+                              <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+                              Em breve
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <span className="text-[11px] text-muted-foreground">

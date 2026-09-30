@@ -144,8 +144,9 @@ export default async function AbrirJobNoFinanceiroPage({
       // `modelo_planilha` entra para o filtro logo abaixo — a categoria do
       // job tem que usar o mesmo modelo do orçamento (decisão 072). Vem no
       // select, e não numa query própria, porque esta roda em paralelo com
-      // o job e ainda não se sabe qual é o modelo aqui.
-      .select("id, nome, modelo_planilha")
+      // o job e ainda não se sabe qual é o modelo aqui. `em_breve`: a
+      // Mídia Off aparece travada no combo (decisão 131).
+      .select("id, nome, modelo_planilha, em_breve")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
