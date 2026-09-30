@@ -27,14 +27,31 @@ export const gerarFolhaSchema = z.object({
  * Alocações vêm como array — a UI já valida soma=100 no cliente, o
  * banco também tem constraint trigger deferred (2ª camada).
  */
+/**
+ * O valor chega em dois formatos, e os dois precisam dar o mesmo número:
+ *
+ * - o painel do RH manda o texto do campo de moeda, em pt-BR: "5.248,48";
+ * - o painel de aprovação do financeiro manda o decimal: "5248.48" (é o
+ *   que o banco devolve e o que o campo de moeda produz em centavos).
+ *
+ * Com vírgula, é pt-BR (ponto é milhar). Sem vírgula, o ponto é o decimal.
+ * Até 30/09/2026 todo ponto era tratado como milhar: "5248.48" virava
+ * 524848 — foi assim que nasceu o título de R$ 524.848,00 de 29/09
+ * (decisão 132).
+ */
+export function valorDaFolhaParaNumero(v: string): number {
+  const t = v.trim();
+  const norm = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t;
+  return Number(norm);
+}
+
 export const linhaFolhaSchema = z.object({
   salario_base: z
     .string()
     .trim()
     .min(1, "Informe o valor da folha.")
     .transform((v, ctx) => {
-      const norm = v.replace(/\./g, "").replace(",", ".");
-      const n = Number(norm);
+      const n = valorDaFolhaParaNumero(v);
       if (!Number.isFinite(n) || n <= 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

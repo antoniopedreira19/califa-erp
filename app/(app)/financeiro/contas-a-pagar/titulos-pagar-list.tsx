@@ -38,8 +38,10 @@ import {
   Pencil,
   Plus,
   Search,
+  Undo2,
   Wallet,
 } from "lucide-react";
+import { DevolverFolhaDialog } from "./devolver-folha-dialog";
 import { verbaAguardaProducao } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { cn } from "@/lib/utils";
@@ -390,6 +392,9 @@ interface Props {
    *  renderizado ao lado do "+ Lançamento Avulso" na toolbar. Módulo
    *  pgto-remessa. */
   exportarRemessaBotao?: React.ReactNode;
+  /** Quem aprova folha pode devolver o título de folha para a aprovação
+   *  (decisão 132). Obrigatório: a página decide, a lista não adivinha. */
+  podeDevolverFolha: boolean;
 }
 
 export function TitulosPagarList({
@@ -405,6 +410,7 @@ export function TitulosPagarList({
   cartoes = [],
   ultimasRetencoes,
   exportarRemessaBotao,
+  podeDevolverFolha,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -433,6 +439,7 @@ export function TitulosPagarList({
   );
 
   const [baixando, setBaixando] = React.useState<TituloRow | null>(null);
+  const [devolvendo, setDevolvendo] = React.useState<TituloRow | null>(null);
   /** Título JÁ PAGO aberto para conferência — e para estornar, se for o
    *  caso. Clicar na linha paga é o que o abre (18/08/2026). */
   const [conferindo, setConferindo] = React.useState<TituloRow | null>(null);
@@ -1090,6 +1097,21 @@ export function TitulosPagarList({
                           Baixar
                         </button>
                       )}
+                      {podeDevolverFolha && r.origem === "folha" && !pago && !parcial && (
+                        <button
+                          type="button"
+                          title="Devolver para a aprovação — para corrigir valor ou pagamento"
+                          aria-label="Devolver para a aprovação"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setErroAcao(null);
+                            setDevolvendo(r);
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                        >
+                          <Undo2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {(pago || parcial) && (
                         <button
                           type="button"
@@ -1120,6 +1142,18 @@ export function TitulosPagarList({
         Pedidos de Produção. Clique num título pago ou parcial para conferir
         as baixas e, se preciso, estornar ou cancelar.
       </p>
+
+      {devolvendo && (
+        <DevolverFolhaDialog
+          contaAvulsaId={devolvendo.id}
+          descricao={devolvendo.descricao}
+          valor={devolvendo.valor}
+          open={devolvendo !== null}
+          onOpenChange={(o) => {
+            if (!o) setDevolvendo(null);
+          }}
+        />
+      )}
 
       <BaixaTituloDialog
         open={baixando !== null}

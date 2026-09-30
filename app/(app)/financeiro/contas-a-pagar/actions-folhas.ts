@@ -6,6 +6,13 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { linhaFolhaSchema } from "@/lib/validations/rh-folhas";
+import {
+  dadosBancariosColaboradorSchema,
+  TIPOS_CHAVE_PIX,
+  TIPOS_CONTA_BANCARIA,
+} from "@/lib/validations/rh-colaboradores";
+import { normalizarChavePix } from "@/lib/pix";
+import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import type { TipoContratacao } from "@/lib/types";
 
 type ActionResult<T = Record<string, unknown>> =
@@ -31,6 +38,190 @@ function subtipoCodigoParaContratacao(tipo: TipoContratacao): string {
     case "socio":
       return "011"; // ProLabore
   }
+}
+
+/**
+ * Valor em centavos inteiros. Compara-se valor como número, nunca como
+ * texto: o banco devolve `12000` e o formulário manda `"12000.00"`, e a
+ * comparação de texto via edição onde não houve nenhuma (decisão 132).
+ */
+function centavos(v: string | number): number {
+  return Math.round(Number(v) * 100);
+}
+
+/** A mesma alocação, venha do banco (`100`) ou da tela (`"100.00"`). */
+function chaveAlocacao(a: {
+  empresa_id: string;
+  regional_id: string;
+  percentual: string | number;
+}): string {
+  return `${a.empresa_id}|${a.regional_id}|${centavos(a.percentual)}`;
+}
+
+function competenciaLabel(ano: number, mes: number): string {
+  return `${String(mes).padStart(2, "0")}/${ano}`;
+}
+
+function chaveCompetencia(ano: number, mes: number): string {
+  return `${ano}-${String(mes).padStart(2, "0")}`;
+}
+
+function revalidarFolha(ano: number, mes: number) {
+  revalidatePath("/rh");
+  revalidatePath("/rh/folhas");
+  revalidatePath(`/rh/folhas/${chaveCompetencia(ano, mes)}`);
+  revalidatePath("/financeiro/contas-a-pagar");
+}
+
+// ---------------------------------------------------------------------
+// Pagamento do colaborador, informado na aprovação (decisão 132)
+// ---------------------------------------------------------------------
+
+/** O que a tela manda: os campos do card de dados bancários do RH. */
+export type PagamentoDaFolhaInput = {
+  banco_codigo: string;
+  banco_nome: string;
+  agencia: string;
+  agencia_dv: string;
+  conta: string;
+  conta_dv: string;
+  tipo_conta: string;
+  pix_tipo: string;
+  pix_chave: string;
+};
+
+type PagamentoValidado = {
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  agencia_dv: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: string | null;
+  pix_tipo: string | null;
+  pix_chave: string | null;
+};
+
+/**
+ * A mesma régua do cadastro do RH (`dadosBancariosColaboradorSchema`,
+ * decisão 101): chave no formato do banco e conta começada tem de estar
+ * completa. O que não sairia certo no arquivo não se grava.
+ */
+function validarPagamento(
+  p: PagamentoDaFolhaInput,
+):
+  | { ok: true; data: PagamentoValidado }
+  | { ok: false; fieldErrors: Record<string, string[]> } {
+  const tipoConta = (TIPOS_CONTA_BANCARIA as readonly string[]).includes(p.tipo_conta)
+    ? (p.tipo_conta as (typeof TIPOS_CONTA_BANCARIA)[number])
+    : undefined;
+  const pixTipo = (TIPOS_CHAVE_PIX as readonly string[]).includes(p.pix_tipo)
+    ? (p.pix_tipo as (typeof TIPOS_CHAVE_PIX)[number])
+    : undefined;
+  const parsed = dadosBancariosColaboradorSchema.safeParse({
+    banco_codigo: p.banco_codigo ?? "",
+    banco_nome: p.banco_nome ?? "",
+    agencia: p.agencia ?? "",
+    agencia_dv: p.agencia_dv ?? "",
+    conta: p.conta ?? "",
+    conta_dv: p.conta_dv ?? "",
+    tipo_conta: tipoConta,
+    pix_tipo: pixTipo,
+    pix_chave: p.pix_chave ?? "",
+  });
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  return {
+    ok: true,
+    data: {
+      ...parsed.data,
+      // A chave grava no formato do banco (decisão 090), como no RH.
+      pix_chave:
+        normalizarChavePix(parsed.data.pix_tipo, parsed.data.pix_chave) ?? null,
+    },
+  };
+}
+
+/** Grava pelo RPC (o financeiro não escreve direto em `colaboradores`). */
+async function gravarPagamento(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  colaboradorId: string,
+  folhaId: string,
+  dados: PagamentoValidado,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { error } = await supabase.rpc("atualizar_pagamento_colaborador", {
+    p_colaborador_id: colaboradorId,
+    p_dados: dados,
+  });
+  if (error) {
+    console.error("[folha.pagamento]", error.message);
+    return {
+      ok: false,
+      message: error.message.includes("check constraint")
+        ? "Dados de pagamento fora do formato da remessa. Confira a chave e a conta."
+        : "Não foi possível gravar os dados de pagamento.",
+    };
+  }
+  await logAuditEvent({
+    acao: "colaborador.dados_bancarios_editados",
+    tenantId,
+    entidadeTipo: "colaborador",
+    entidadeId: colaboradorId,
+    metadata: {
+      origem: "aprovacao_folha",
+      folha_id: folhaId,
+      tem_banco: dados.banco_codigo !== null,
+      tem_pix: dados.pix_chave !== null,
+    },
+  });
+  return { ok: true };
+}
+
+/**
+ * Grava só o pagamento do colaborador, sem aprovar a linha — para quem
+ * quer deixar a chave certa antes de decidir o valor.
+ */
+export async function salvarPagamentoDaFolha(
+  folhaId: string,
+  pagamento: PagamentoDaFolhaInput,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.aprovar_financeiro");
+  if (!gate.ok) return gate;
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: folha } = await supabase
+    .from("folhas_pagamento")
+    .select("id, colaborador_id, competencia_ano, competencia_mes")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!folha) return { ok: false, message: "Linha da folha não encontrada." };
+
+  const validado = validarPagamento(pagamento);
+  if (!validado.ok) {
+    return {
+      ok: false,
+      message: "Verifique os dados de pagamento.",
+      fieldErrors: validado.fieldErrors,
+    };
+  }
+
+  const gravado = await gravarPagamento(
+    supabase,
+    tenantId,
+    folha.colaborador_id,
+    folhaId,
+    validado.data,
+  );
+  if (!gravado.ok) return gravado;
+
+  revalidarFolha(folha.competencia_ano, folha.competencia_mes);
+  return { ok: true, id: folhaId };
 }
 
 /**
@@ -93,35 +284,31 @@ export async function reprovarLinhaFolha(
     entidadeId: folhaId,
     metadata: {
       colaborador_id: folha.colaborador_id,
-      competencia: `${folha.competencia_ano}-${String(folha.competencia_mes).padStart(2, "0")}`,
+      competencia: chaveCompetencia(folha.competencia_ano, folha.competencia_mes),
       motivo: motivoLimpo,
     },
   });
 
-  const chave = `${folha.competencia_ano}-${String(folha.competencia_mes).padStart(2, "0")}`;
-  revalidatePath("/rh");
-  revalidatePath("/rh/folhas");
-  revalidatePath(`/rh/folhas/${chave}`);
-  revalidatePath("/financeiro/contas-a-pagar");
+  revalidarFolha(folha.competencia_ano, folha.competencia_mes);
   return { ok: true, id: folhaId };
 }
 
 /**
- * Aprova uma linha de folha. Se `edicoes` for informado, aplica antes
- * de aprovar (financeiro pode ajustar valor e alocação NO SNAPSHOT).
- * Ao aprovar:
+ * Aprova uma linha de folha. O financeiro pode ajustar, antes de aprovar,
+ * o valor a pagar e a alocação (no snapshot da folha) e o pagamento do
+ * colaborador. Ao aprovar:
  *
- *   1. Aplica edições (valor + alocações no snapshot da folha)
- *   2. Cria N contas_avulsas rateadas pelo % de cada alocação do snapshot
- *   3. Propaga só o SALÁRIO pra Camada 1 (histórico salarial), se mudou
- *   4. Muda status para 'aprovada'
+ *   1. Aplica as edições na linha (valor e alocação)
+ *   2. Grava o pagamento no cadastro do colaborador, se veio
+ *   3. Cria UM título por empresa da alocação — na folha de hoje, um por
+ *      pessoa —, com o rateio de regional dentro (decisão 132). Antes era
+ *      um título por regional: quem tinha rateio recebia 2 ou 4 PIX.
+ *   4. Muda o status para 'aprovada'
  *
- * Novo modelo (2026-09-23): alocação NÃO propaga mais pra Camada 1 —
- * ela agora é regional específica ou toggle "todas as regionais", não
- * mais rateio %. Ajuste de rateio no financeiro fica só no snapshot,
- * que é imutável. Ver tasks/active/006-alocacao-com-rateio-regional-na-folha.md.
- *
- * Ver docs/decisions/097-folha-mensal-em-duas-camadas.md.
+ * O salário do cadastro não muda mais aqui (decisão 132, que revoga a D5
+ * da decisão 097): o valor da folha é o que se paga no mês — líquido,
+ * proporcional, com ISS descontado —, e salário é assunto do RH, na tela
+ * do colaborador.
  */
 export async function aprovarLinhaFolha(
   folhaId: string,
@@ -133,9 +320,8 @@ export async function aprovarLinhaFolha(
       percentual: string;
     }[];
   },
-): Promise<
-  ActionResult<{ contas_criadas: number; propagou_camada_1: boolean }>
-> {
+  pagamento?: PagamentoDaFolhaInput,
+): Promise<ActionResult<{ contas_criadas: number }>> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "rh.folhas.aprovar_financeiro");
   if (!gate.ok) return gate;
@@ -162,68 +348,72 @@ export async function aprovarLinhaFolha(
     };
   }
 
-  // 2) Aplica edições (se houve)
-  let houveEdicao = false;
-  let salarioFinal = String(folha.salario_base);
-  let alocacoesFinal: {
+  // 2) Valida tudo antes de gravar qualquer coisa
+  const parsedEdicoes = edicoes ? linhaFolhaSchema.safeParse(edicoes) : null;
+  if (parsedEdicoes && !parsedEdicoes.success) {
+    return {
+      ok: false,
+      message: "Edições inválidas.",
+      fieldErrors: parsedEdicoes.error.flatten().fieldErrors,
+    };
+  }
+  const pagamentoValidado = pagamento ? validarPagamento(pagamento) : null;
+  if (pagamentoValidado && !pagamentoValidado.ok) {
+    return {
+      ok: false,
+      message: "Verifique os dados de pagamento.",
+      fieldErrors: pagamentoValidado.fieldErrors,
+    };
+  }
+
+  const colaboradores = await carregarColaboradoresPagamento(supabase, tenantId, [
+    folha.colaborador_id,
+  ]);
+  const colab = colaboradores.get(folha.colaborador_id);
+  if (!colab) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+
+  // 3) Alocações atuais do snapshot
+  const { data: alocAtuaisRaw } = await supabase
+    .from("folhas_pagamento_alocacoes")
+    .select("empresa_id, regional_id, percentual")
+    .eq("folha_id", folhaId);
+  const alocAtuais = ((alocAtuaisRaw ?? []) as {
     empresa_id: string;
     regional_id: string;
-    percentual: string;
-  }[] = [];
+    percentual: string | number;
+  }[]).map((a) => ({
+    empresa_id: a.empresa_id,
+    regional_id: a.regional_id,
+    percentual: (centavos(a.percentual) / 100).toFixed(2),
+  }));
 
-  if (edicoes) {
-    const parsed = linhaFolhaSchema.safeParse(edicoes);
-    if (!parsed.success) {
-      return {
-        ok: false,
-        message: "Edições inválidas.",
-        fieldErrors: parsed.error.flatten().fieldErrors,
-      };
-    }
+  let salarioFinal = (centavos(folha.salario_base) / 100).toFixed(2);
+  let alocacoesFinal = alocAtuais;
 
-    // Detecta mudança de valor
-    if (parsed.data.salario_base !== String(folha.salario_base)) {
-      houveEdicao = true;
-    }
+  // 4) Aplica edições (se houve de verdade — comparação numérica)
+  if (parsedEdicoes?.success) {
+    const novo = parsedEdicoes.data;
+    const valorMudou = centavos(novo.salario_base) !== centavos(folha.salario_base);
+    const setAtual = new Set(alocAtuais.map(chaveAlocacao));
+    const setNovo = new Set(novo.alocacoes.map(chaveAlocacao));
+    const alocMudou =
+      setAtual.size !== setNovo.size || [...setAtual].some((k) => !setNovo.has(k));
 
-    // Compara alocações existentes com as novas
-    const { data: alocAtuais } = await supabase
-      .from("folhas_pagamento_alocacoes")
-      .select("empresa_id, regional_id, percentual")
-      .eq("folha_id", folhaId);
-
-    const setAtual = new Set(
-      ((alocAtuais ?? []) as any[]).map(
-        (a) => `${a.empresa_id}|${a.regional_id}|${String(a.percentual)}`,
-      ),
-    );
-    const setNovo = new Set(
-      parsed.data.alocacoes.map(
-        (a) => `${a.empresa_id}|${a.regional_id}|${a.percentual}`,
-      ),
-    );
-    if (
-      setAtual.size !== setNovo.size ||
-      [...setAtual].some((k) => !setNovo.has(k))
-    ) {
-      houveEdicao = true;
-    }
-
-    salarioFinal = parsed.data.salario_base;
-    alocacoesFinal = parsed.data.alocacoes;
-
-    if (houveEdicao) {
-      // Aplica edições na folha
+    if (valorMudou) {
       const { error: upFolhaError } = await supabase
         .from("folhas_pagamento")
-        .update({ salario_base: parsed.data.salario_base })
+        .update({ salario_base: novo.salario_base })
         .eq("id", folhaId);
       if (upFolhaError) {
         console.error("[folha.aprovar.up_folha]", upFolhaError.message);
-        return { ok: false, message: "Falha ao aplicar edição." };
+        return { ok: false, message: "Falha ao aplicar o valor." };
       }
+      salarioFinal = novo.salario_base;
+    }
 
-      // Swap das alocações
+    if (alocMudou) {
       const { error: delAlocError } = await supabase
         .from("folhas_pagamento_alocacoes")
         .delete()
@@ -232,30 +422,31 @@ export async function aprovarLinhaFolha(
         console.error("[folha.aprovar.del_aloc]", delAlocError.message);
         return { ok: false, message: "Falha ao substituir alocações." };
       }
-
-      const linhasAloc = parsed.data.alocacoes.map((a) => ({
-        tenant_id: tenantId,
-        folha_id: folhaId,
-        empresa_id: a.empresa_id,
-        regional_id: a.regional_id,
-        percentual: a.percentual,
-      }));
-
       const { error: insAlocError } = await supabase
         .from("folhas_pagamento_alocacoes")
-        .insert(linhasAloc);
+        .insert(
+          novo.alocacoes.map((a) => ({
+            tenant_id: tenantId,
+            folha_id: folhaId,
+            empresa_id: a.empresa_id,
+            regional_id: a.regional_id,
+            percentual: a.percentual,
+          })),
+        );
       if (insAlocError) {
         console.error("[folha.aprovar.ins_aloc]", insAlocError.message);
         if (insAlocError.message.includes("Rateio de alocacoes")) {
           return {
             ok: false,
-            message:
-              "A soma dos percentuais das alocações precisa dar 100.",
+            message: "A soma dos percentuais das alocações precisa dar 100.",
           };
         }
         return { ok: false, message: "Falha ao gravar alocações." };
       }
+      alocacoesFinal = novo.alocacoes;
+    }
 
+    if (valorMudou || alocMudou) {
       await logAuditEvent({
         acao: "folha.linha.editada_financeiro",
         tenantId,
@@ -263,45 +454,32 @@ export async function aprovarLinhaFolha(
         entidadeId: folhaId,
         metadata: {
           colaborador_id: folha.colaborador_id,
-          salario_anterior: String(folha.salario_base),
-          salario_novo: parsed.data.salario_base,
-          alocacoes_novas: parsed.data.alocacoes,
+          salario_anterior: (centavos(folha.salario_base) / 100).toFixed(2),
+          salario_novo: salarioFinal,
+          ...(alocMudou ? { alocacoes_novas: novo.alocacoes } : {}),
         },
       });
-    } else {
-      alocacoesFinal = parsed.data.alocacoes;
     }
   }
 
-  // 3) Se não teve edições, carrega as alocações do snapshot
   if (alocacoesFinal.length === 0) {
-    const { data } = await supabase
-      .from("folhas_pagamento_alocacoes")
-      .select("empresa_id, regional_id, percentual")
-      .eq("folha_id", folhaId);
-    alocacoesFinal = ((data ?? []) as any[]).map((a) => ({
-      empresa_id: a.empresa_id,
-      regional_id: a.regional_id,
-      percentual: String(a.percentual),
-    }));
+    return { ok: false, message: "A linha está sem alocação." };
   }
 
-  // 4) Carrega colaborador (nome + tipo_contratacao) pra gerar contas_avulsas.
-  // O destinatário do pagamento é o próprio colaborador (contas_avulsas.colaborador_id),
-  // não mais um fornecedor sombra — ver ADR 001/002 do módulo pgto-remessa.
-  const { data: colab, error: colabError } = await supabase
-    .from("colaboradores")
-    .select("id, nome, tipo_contratacao")
-    .eq("id", folha.colaborador_id)
-    .maybeSingle();
-  if (colabError || !colab) {
-    return { ok: false, message: "Colaborador não encontrado." };
+  // 5) Pagamento do colaborador, se veio
+  if (pagamentoValidado?.ok) {
+    const gravado = await gravarPagamento(
+      supabase,
+      tenantId,
+      colab.id,
+      folhaId,
+      pagamentoValidado.data,
+    );
+    if (!gravado.ok) return gravado;
   }
 
-  // 5) Descobre o plano_conta certo
-  const codigoSubtipo = subtipoCodigoParaContratacao(
-    colab.tipo_contratacao as TipoContratacao,
-  );
+  // 6) Plano de contas
+  const codigoSubtipo = subtipoCodigoParaContratacao(colab.tipo_contratacao);
   const { data: tipoRow } = await supabase
     .from("plano_contas_tipos")
     .select("id")
@@ -327,7 +505,7 @@ export async function aprovarLinhaFolha(
     };
   }
 
-  // 6) Idempotência: se já existem contas_avulsas pra essa folha, não recria
+  // 7) Idempotência: se já existem contas_avulsas pra essa folha, não recria
   const { data: contasExistentes } = await supabase
     .from("contas_avulsas")
     .select("id")
@@ -336,53 +514,85 @@ export async function aprovarLinhaFolha(
     return {
       ok: false,
       message:
-        "Esta linha já tem contas a pagar geradas. Estorne antes de reaprovar.",
+        "Esta linha já tem título em Títulos a Pagar. Devolva o título para a aprovação antes de aprovar de novo.",
     };
   }
 
-  // 7) Gera contas_avulsas — uma por alocação, valor rateado
+  // 8) Um título por empresa, com o rateio de regional dentro.
+  //
+  // A conta e o rateio nascem juntos pela RPC do lançamento avulso
+  // (decisão 069): o banco recusa conta avulsa sem rateio e exige que o
+  // rateio some 100. Os centavos que o arredondamento deixa sobram no
+  // último título e na última regional, para o total fechar exato.
+  const porEmpresa = new Map<string, { regional_id: string; percentual: number }[]>();
+  for (const a of alocacoesFinal) {
+    const lista = porEmpresa.get(a.empresa_id) ?? [];
+    lista.push({ regional_id: a.regional_id, percentual: Number(a.percentual) });
+    porEmpresa.set(a.empresa_id, lista);
+  }
+  const grupos = [...porEmpresa.entries()];
+  const totalCentavos = centavos(salarioFinal);
   const dataPrevistaPagamento = ultimoDiaDoMes(
     folha.competencia_ano,
     folha.competencia_mes,
   );
-  const valorTotal = Number(salarioFinal);
+  const competencia = competenciaLabel(folha.competencia_ano, folha.competencia_mes);
+  const { data: empresasRows } = grupos.length > 1
+    ? await supabase
+        .from("empresas")
+        .select("id, nome_fantasia")
+        .in("id", grupos.map(([id]) => id))
+    : { data: [] as { id: string; nome_fantasia: string | null }[] };
+  const nomeEmpresa = new Map(
+    ((empresasRows ?? []) as { id: string; nome_fantasia: string | null }[]).map(
+      (e) => [e.id, e.nome_fantasia ?? ""],
+    ),
+  );
+
   const contasCriadas: string[] = [];
+  let restanteCentavos = totalCentavos;
+  for (let i = 0; i < grupos.length; i++) {
+    const [empresaId, regionais] = grupos[i];
+    const ultimoGrupo = i === grupos.length - 1;
+    const pctEmpresa = regionais.reduce((acc, r) => acc + r.percentual, 0);
+    const valorCentavos = ultimoGrupo
+      ? restanteCentavos
+      : Math.round((totalCentavos * pctEmpresa) / 100);
+    restanteCentavos -= valorCentavos;
 
-  for (const aloc of alocacoesFinal) {
-    const pct = Number(aloc.percentual);
-    // Arredonda para 2 casas
-    const valor = (Math.round(valorTotal * pct) / 100).toFixed(2);
+    // Rateio dentro da empresa, reescalado para somar 100.
+    let restantePct = 10000;
+    const rateio = regionais.map((r, j) => {
+      const pct =
+        j === regionais.length - 1
+          ? restantePct
+          : Math.round((r.percentual * 10000) / pctEmpresa);
+      restantePct -= pct;
+      return { regional_id: r.regional_id, percentual: pct / 100 };
+    });
 
-    // Gera código sequencial
     const { data: codigo, error: errCodigo } = await supabase.rpc(
       "gerar_codigo_avulsa",
       { p_tenant_id: tenantId },
     );
     if (errCodigo) {
       console.error("[folha.aprovar.codigo]", errCodigo.message);
-      return { ok: false, message: "Falha ao gerar código da conta." };
     }
 
-    const competenciaLabel = `${String(folha.competencia_mes).padStart(2, "0")}/${folha.competencia_ano}`;
-    // A conta e o rateio nascem juntos, pela mesma RPC do lançamento
-    // avulso (decisão 069): o banco recusa conta avulsa sem rateio de
-    // regional, e só aceita se os dois chegarem na mesma transação. O
-    // insert direto que estava aqui falhava sempre desde 15/09/2026
-    // ("Toda conta avulsa precisa de rateio de regional") — achado em
-    // 23/09/2026 ao aprovar a folha de teste da remessa PIX. Cada título
-    // é de uma alocação, então o rateio é 100% na regional dela.
     const { data: contaCriadaId, error: insContaError } = await supabase.rpc(
       "criar_conta_avulsa",
       {
         p_dados: {
           tenant_id: tenantId,
-          empresa_id: aloc.empresa_id,
-          regional_id: aloc.regional_id,
-          codigo,
-          descricao: `Folha ${competenciaLabel} · ${colab.nome} · ${subtipoRow.nome}${
-            alocacoesFinal.length > 1 ? ` · ${pct.toFixed(2)}%` : ""
+          empresa_id: empresaId,
+          // Com uma regional só, o título fica com ela, como antes. Com
+          // rateio, quem diz as regionais é contas_avulsas_regionais.
+          regional_id: rateio.length === 1 ? rateio[0].regional_id : null,
+          codigo: (codigo as string | null) ?? null,
+          descricao: `Folha ${competencia} · ${colab.nome} · ${subtipoRow.nome}${
+            grupos.length > 1 ? ` · ${nomeEmpresa.get(empresaId) ?? ""}` : ""
           }`,
-          valor,
+          valor: (valorCentavos / 100).toFixed(2),
           natureza: "saida",
           status: "aprovada",
           data_prevista_pagamento: dataPrevistaPagamento,
@@ -398,73 +608,30 @@ export async function aprovarLinhaFolha(
           aprovada_por: session.profile.id,
           criado_por: session.profile.id,
         },
-        p_rateio: [{ regional_id: aloc.regional_id, percentual: 100 }],
+        p_rateio: rateio,
       },
     );
-    const contaCriada = contaCriadaId ? { id: contaCriadaId as string } : null;
-    if (insContaError || !contaCriada) {
+    if (insContaError || !contaCriadaId) {
       console.error(
         "[folha.aprovar.ins_conta]",
         insContaError?.message ?? "sem retorno",
       );
-      // Rollback: apaga contas já criadas nesta chamada
       if (contasCriadas.length > 0) {
         const service = createServiceClient();
         await service.from("contas_avulsas").delete().in("id", contasCriadas);
       }
-      return {
-        ok: false,
-        message: "Falha ao criar título a pagar.",
-      };
-    }
-    contasCriadas.push(contaCriada.id);
-  }
-
-  // 8) Propaga edição pra Camada 1 — apenas SALÁRIO (D5, decisão 097).
-  //
-  // Alocação NÃO propaga mais no novo modelo (2026-09-23): a Camada 1
-  // guarda só regional específica OU rateio da empresa (toggle), sem %
-  // por colaborador. Se o financeiro ajustou o rateio no snapshot da
-  // folha, esse ajuste fica só na folha (que é imutável) e não volta
-  // pra Camada 1. Se a alocação vigente do colaborador estiver errada,
-  // o RH ajusta direto no cadastro.
-  if (houveEdicao) {
-    const hoje = new Date().toISOString().slice(0, 10);
-    const dataInicioNovo = new Date();
-    dataInicioNovo.setDate(dataInicioNovo.getDate() + 1);
-    const dataInicioNovoISO = dataInicioNovo.toISOString().slice(0, 10);
-
-    const { data: salVigente } = await supabase
-      .from("colaboradores_salarios")
-      .select("id, valor")
-      .eq("colaborador_id", colab.id)
-      .is("data_fim", null)
-      .maybeSingle();
-
-    // Só reabre o histórico salarial se o valor mudou de verdade.
-    const salarioMudou = salVigente
-      ? String(salVigente.valor) !== salarioFinal
-      : true;
-
-    if (salarioMudou) {
-      if (salVigente) {
-        await supabase
-          .from("colaboradores_salarios")
-          .update({ data_fim: hoje })
-          .eq("id", salVigente.id);
+      // A RLS de contas_avulsas pede acesso à empresa do título: em 30/09
+      // ninguém do financeiro tinha acesso à Ventura.
+      if (insContaError?.code === "42501") {
+        return {
+          ok: false,
+          message:
+            "Você não tem acesso a uma das empresas desta linha. Peça a um administrador para aprovar ou para liberar o acesso.",
+        };
       }
-
-      const competenciaLabel = `${String(folha.competencia_mes).padStart(2, "0")}/${folha.competencia_ano}`;
-      await supabase.from("colaboradores_salarios").insert({
-        tenant_id: tenantId,
-        colaborador_id: colab.id,
-        valor: salarioFinal,
-        data_inicio: dataInicioNovoISO,
-        motivo: `Ajuste em folha ${competenciaLabel}`,
-        aprovado_por: session.profile.id,
-        created_by: session.profile.id,
-      });
+      return { ok: false, message: "Falha ao criar título a pagar." };
     }
+    contasCriadas.push(contaCriadaId as string);
   }
 
   // 9) Marca folha como aprovada
@@ -489,21 +656,165 @@ export async function aprovarLinhaFolha(
     entidadeId: folhaId,
     metadata: {
       colaborador_id: colab.id,
-      competencia: `${folha.competencia_ano}-${String(folha.competencia_mes).padStart(2, "0")}`,
+      competencia: chaveCompetencia(folha.competencia_ano, folha.competencia_mes),
       valor_final: salarioFinal,
       contas_criadas: contasCriadas.length,
-      propagou_camada_1: houveEdicao,
+      regionais: alocacoesFinal.length,
+      pagamento_informado: !!pagamentoValidado?.ok,
     },
   });
 
-  const chave = `${folha.competencia_ano}-${String(folha.competencia_mes).padStart(2, "0")}`;
-  revalidatePath("/rh");
-  revalidatePath("/rh/folhas");
-  revalidatePath(`/rh/folhas/${chave}`);
-  revalidatePath("/financeiro/contas-a-pagar");
-  return {
-    ok: true,
-    contas_criadas: contasCriadas.length,
-    propagou_camada_1: houveEdicao,
-  };
+  revalidarFolha(folha.competencia_ano, folha.competencia_mes);
+  return { ok: true, contas_criadas: contasCriadas.length };
+}
+
+/**
+ * Devolve uma linha aprovada para "Aguardando aprovação" (decisão 132):
+ * apaga o(s) título(s) que a aprovação criou e reabre a linha para o
+ * financeiro corrigir o valor, a alocação ou o pagamento e aprovar de novo.
+ * É o caminho para erro de digitação como o do AV-00005 — editar o valor
+ * direto no título deixaria a folha dizendo uma coisa e o título outra.
+ *
+ * Só vale enquanto nenhum título tem baixa e nenhum está num arquivo de
+ * remessa que não foi cancelado.
+ */
+export async function devolverFolhaParaAprovacao(input: {
+  contaAvulsaId?: string;
+  folhaId?: string;
+  motivo: string;
+}): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.aprovar_financeiro");
+  if (!gate.ok) return gate;
+
+  const motivo = (input.motivo ?? "").trim();
+  if (motivo.length < 3) {
+    return {
+      ok: false,
+      message: "Escreva o motivo da devolução (mínimo 3 caracteres).",
+    };
+  }
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  let folhaId = input.folhaId ?? null;
+  if (!folhaId && input.contaAvulsaId) {
+    const { data: conta } = await supabase
+      .from("contas_avulsas")
+      .select("folha_id")
+      .eq("id", input.contaAvulsaId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    folhaId = (conta?.folha_id as string | null) ?? null;
+  }
+  if (!folhaId) {
+    return { ok: false, message: "Este título não veio da folha de pagamento." };
+  }
+
+  const { data: folha } = await supabase
+    .from("folhas_pagamento")
+    .select("id, status, colaborador_id, competencia_ano, competencia_mes, salario_base")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!folha) return { ok: false, message: "Linha da folha não encontrada." };
+  if (folha.status !== "aprovada") {
+    return {
+      ok: false,
+      message: `Linha em status "${folha.status}" não pode ser devolvida.`,
+    };
+  }
+
+  const { data: contasRaw } = await supabase
+    .from("contas_avulsas")
+    .select("id, codigo, valor, status")
+    .eq("folha_id", folhaId)
+    .eq("tenant_id", tenantId);
+  const contas = (contasRaw ?? []) as {
+    id: string;
+    codigo: string | null;
+    valor: string | number;
+    status: string;
+  }[];
+  const ids = contas.map((c) => c.id);
+
+  if (contas.some((c) => c.status !== "aprovada")) {
+    return {
+      ok: false,
+      message: "O título já foi baixado. Cancele a baixa antes de devolver.",
+    };
+  }
+  if (ids.length > 0) {
+    const { data: baixas } = await supabase
+      .from("lancamentos_financeiros")
+      .select("id")
+      .in("conta_avulsa_id", ids)
+      .limit(1);
+    if ((baixas ?? []).length > 0) {
+      return {
+        ok: false,
+        message: "O título já tem baixa. Cancele a baixa antes de devolver.",
+      };
+    }
+
+    const { data: itensRemessa } = await supabase
+      .from("cnab_remessas_itens")
+      .select("origem_id, remessa:cnab_remessas!inner(sequencial_arquivo, status)")
+      .in("origem_id", ids)
+      .neq("remessa.status", "cancelado");
+    const naRemessa = ((itensRemessa ?? []) as unknown as {
+      remessa: { sequencial_arquivo: number; status: string } | null;
+    }[]).find((i) => i.remessa);
+    if (naRemessa?.remessa) {
+      const arquivo = `PE${String(naRemessa.remessa.sequencial_arquivo).padStart(6, "0")}`;
+      return {
+        ok: false,
+        message: `O título está no arquivo de remessa ${arquivo}. Se o arquivo não foi para o banco, ele precisa ser cancelado antes da devolução.`,
+      };
+    }
+
+    const { error: delError } = await supabase
+      .from("contas_avulsas")
+      .delete()
+      .in("id", ids)
+      .eq("tenant_id", tenantId);
+    if (delError) {
+      console.error("[folha.devolver.del_contas]", delError.message);
+      return { ok: false, message: "Não foi possível tirar o título de Títulos a Pagar." };
+    }
+  }
+
+  const { error: upError } = await supabase
+    .from("folhas_pagamento")
+    .update({
+      status: "enviada",
+      aprovada_em: null,
+      aprovada_por: null,
+      data_pagamento: null,
+    })
+    .eq("id", folhaId);
+  if (upError) {
+    console.error("[folha.devolver.up_folha]", upError.message);
+    return { ok: false, message: "Não foi possível devolver a linha para a aprovação." };
+  }
+
+  await logAuditEvent({
+    acao: "folha.linha.aprovacao_desfeita",
+    tenantId,
+    entidadeTipo: "folha",
+    entidadeId: folhaId,
+    metadata: {
+      colaborador_id: folha.colaborador_id,
+      competencia: chaveCompetencia(folha.competencia_ano, folha.competencia_mes),
+      motivo,
+      titulos_removidos: contas.map((c) => ({
+        codigo: c.codigo,
+        valor: (centavos(c.valor) / 100).toFixed(2),
+      })),
+    },
+  });
+
+  revalidarFolha(folha.competencia_ano, folha.competencia_mes);
+  return { ok: true, id: folhaId };
 }

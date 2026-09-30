@@ -74,6 +74,16 @@ export interface TituloElegivelParaRemessa {
 // Helpers
 // ---------------------------------------------------------------------
 
+const ORDEM_ORIGEM: CnabOrigemTipo[] = ["folha", "pp", "avulsa", "recorrente", "desembolso"];
+
+const ROTULO_ORIGEM: Record<CnabOrigemTipo, string> = {
+  folha: "Folha",
+  pp: "PP",
+  avulsa: "Avulsos",
+  recorrente: "Recorrências",
+  desembolso: "Desembolsos",
+};
+
 function formatBRL(v: number): string {
   return v.toLocaleString("pt-BR", {
     style: "currency",
@@ -137,7 +147,21 @@ export function ExportarRemessaCnabDialog({
     Map<string, CnabFormaEscolhida>
   >(new Map());
 
+  /** Filtro por origem (decisão 132): a folha sai num arquivo só dela, sem
+   *  levar junto PP e avulso que estiverem abertos. */
+  const [origemFiltro, setOrigemFiltro] = React.useState<"todas" | CnabOrigemTipo>(
+    "todas",
+  );
+
   const podeAbrir = canGerar && contasSantander.length > 0;
+
+  const origensPresentes = ORDEM_ORIGEM.filter((o) =>
+    titulos.some((t) => t.origemTipo === o),
+  );
+  const visiveis =
+    origemFiltro === "todas"
+      ? titulos
+      : titulos.filter((t) => t.origemTipo === origemFiltro);
 
   function reset() {
     setError(null);
@@ -147,6 +171,21 @@ export function ExportarRemessaCnabDialog({
     setDataPagamento(hoje());
     setSelecionados(new Set());
     setFormaPorTitulo(new Map());
+    setOrigemFiltro("todas");
+  }
+
+  /** Trocar o filtro desmarca o que ficou escondido: o arquivo leva só o
+   *  que está na tela. */
+  function trocarOrigem(nova: "todas" | CnabOrigemTipo) {
+    setOrigemFiltro(nova);
+    setSelecionados((prev) => {
+      const s = new Set<string>();
+      for (const t of titulos) {
+        const chave = `${t.origemTipo}:${t.origemId}`;
+        if (prev.has(chave) && (nova === "todas" || t.origemTipo === nova)) s.add(chave);
+      }
+      return s;
+    });
   }
 
   function handleOpenChange(next: boolean) {
@@ -163,9 +202,14 @@ export function ExportarRemessaCnabDialog({
     });
   }
 
+  /** Marca os visíveis que têm como ser pagos (PIX ou conta). */
   function marcarTodos() {
     setSelecionados(
-      new Set(titulos.map((t) => `${t.origemTipo}:${t.origemId}`)),
+      new Set(
+        visiveis
+          .filter((t) => t.temPix || t.temBanco)
+          .map((t) => `${t.origemTipo}:${t.origemId}`),
+      ),
     );
   }
   function desmarcarTodos() {
@@ -347,8 +391,35 @@ export function ExportarRemessaCnabDialog({
               </div>
 
               <div className="space-y-2">
+                {origensPresentes.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(["todas", ...origensPresentes] as const).map((o) => {
+                      const ativo = origemFiltro === o;
+                      const qtd =
+                        o === "todas"
+                          ? titulos.length
+                          : titulos.filter((t) => t.origemTipo === o).length;
+                      return (
+                        <button
+                          key={o}
+                          type="button"
+                          onClick={() => trocarOrigem(o)}
+                          aria-pressed={ativo}
+                          className={
+                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
+                            (ativo
+                              ? "border-california-red bg-california-red text-white"
+                              : "border-border text-muted-foreground hover:bg-muted")
+                          }
+                        >
+                          {o === "todas" ? "Todas" : ROTULO_ORIGEM[o]} ({qtd})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
-                  <Label>Títulos disponíveis ({titulos.length})</Label>
+                  <Label>Títulos disponíveis ({visiveis.length})</Label>
                   <div className="flex items-center gap-2 text-xs">
                     <button
                       type="button"
@@ -368,7 +439,7 @@ export function ExportarRemessaCnabDialog({
                   </div>
                 </div>
 
-                {titulos.length === 0 ? (
+                {visiveis.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
                     Nenhum título a pagar disponível pra remessa nesta conta.
                   </div>
@@ -393,7 +464,7 @@ export function ExportarRemessaCnabDialog({
                         </tr>
                       </thead>
                       <tbody>
-                        {titulos.map((t) => {
+                        {visiveis.map((t) => {
                           const chave = `${t.origemTipo}:${t.origemId}`;
                           const marcado = selecionados.has(chave);
                           const disponivel = t.temPix || t.temBanco;

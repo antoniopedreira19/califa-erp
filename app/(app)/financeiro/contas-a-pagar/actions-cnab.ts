@@ -27,6 +27,7 @@ import { checarPermissao } from "@/lib/permissoes-server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarChavePix, problemaDaChavePix } from "@/lib/pix";
+import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import {
   gerarArquivo,
   type FormaLancamento,
@@ -632,15 +633,11 @@ async function buscarDadosDestinatario(
     };
   }
   if (tipo === "colaborador") {
-    const { data, error } = await supabase
-      .from("colaboradores")
-      .select(
-        "nome, cpf, cnpj, banco_codigo, agencia, agencia_dv, conta, conta_dv, tipo_conta, pix_tipo, pix_chave",
-      )
-      .eq("id", id)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-    if (error || !data) return { ok: false, message: "Colaborador não encontrado." };
+    // Pelo RPC (decisão 132): o papel financeiro não lê `colaboradores`
+    // direto, e sem isso todo título de folha voltava recusado.
+    const colaboradores = await carregarColaboradoresPagamento(supabase, tenantId, [id]);
+    const data = colaboradores.get(id);
+    if (!data) return { ok: false, message: "Colaborador não encontrado." };
     // CNAB usa CNPJ quando existe (colaborador PJ paga na conta jurídica);
     // senão CPF (CLT/estágio/sócio paga na conta pessoa física).
     const documento = data.cnpj ?? data.cpf;
