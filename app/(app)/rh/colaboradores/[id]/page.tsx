@@ -55,7 +55,14 @@ export default async function ColaboradorDetalhePage({
     supabase
       .from("colaboradores_alocacoes")
       .select(
-        "*, empresa:empresas(id, nome_fantasia), regional:regionais(id, nome)",
+        // regional:regionais precisa desambiguar o FK — colaboradores_alocacoes
+        // tem 2 FKs pra regionais: a simples `regional_id` e uma composta
+        // (regional_id, empresa_id) que garante que a regional pertence à
+        // empresa. Sem o `!nome_da_fk` o PostgREST não sabe qual usar e
+        // devolve o embed como null/erro silencioso — o que fazia a página
+        // do detalhe achar que não havia alocação e disparava a pendência
+        // crítica "Alocação vigente" mesmo com alocação real no banco.
+        "*, empresa:empresas(id, nome_fantasia), regional:regionais!colaboradores_alocacoes_regional_id_fkey(id, nome)",
       )
       .eq("colaborador_id", params.id)
       .eq("tenant_id", session.activeTenant.id)
