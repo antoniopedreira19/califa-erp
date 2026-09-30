@@ -124,9 +124,9 @@ interface Props {
    *  vigente e o valor que a aba imprime, calculados sobre o que está no
    *  banco. A exportação lê o banco, não o rascunho da tela. */
   exportaveis: OrcamentoExportavel[];
-  /** Só as categorias que se criam por aqui: as exclusivas de um serviço
-   *  (Fee, Always On) ficam de fora — orçamento mensal nasce na tela do
-   *  orçamento (decisão 078). */
+  /** Só as categorias que se criam por aqui: as exclusivas de planilha
+   *  mensal (Fee, Always On) ficam de fora — orçamento mensal nasce na
+   *  tela do orçamento (decisão 078). As do Mídia ficam (decisão 131). */
   categorias: CategoriaParaServico[];
   /** TODAS as categorias de orçamento, só para o rótulo dos cards: o
    *  orçamento de Fee aparece aqui em consulta e precisa do nome dela. */

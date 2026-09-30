@@ -236,10 +236,11 @@ export default async function OrcamentoDetailPage({
       .order("numero_versao", { ascending: false })
       .returns<VersaoOrcamento[]>(),
     // Com modelo e serviço exclusivo: é por eles que o editor trava a
-    // categoria do Fee e do Always On (decisão 078).
+    // categoria do Fee e do Always On (decisão 078). `em_breve` é a Mídia
+    // Off, que aparece travada na lista (decisão 131).
     supabase
       .from("categorias_dominio")
-      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno")
+      .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno, em_breve")
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "orcamento")
       .eq("ativo", true)

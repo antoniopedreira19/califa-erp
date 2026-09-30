@@ -150,7 +150,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 128 | [O job devolvido se corrige no orçamento e volta com o mesmo código](128-job-devolvido-se-corrige-e-volta-com-o-mesmo-codigo.md) | 2026-09-29 |
 | 129 | [A planilha importada é descartada depois da importação](129-planilha-importada-e-descartada.md) | 2026-09-29 |
 | 130 | [Recebimento antes da NF: vira a parcela 1 da nota, já quitada](130-recebimento-antes-da-nf.md) | 2026-09-29 |
-| 131 | *Reservada* — serviço Mídia e a categoria "em breve" (outra frente, ainda não publicada) | 2026-09-29 |
+| 131 | [Serviço Mídia, com Mídia On e Mídia Off, e a categoria "em breve"](131-servico-midia-e-categoria-em-breve.md) | 2026-09-29 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a

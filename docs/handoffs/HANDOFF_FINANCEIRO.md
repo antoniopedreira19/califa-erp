@@ -6322,3 +6322,11 @@ estendido a Contas a Receber em 31/08.**
   apagar BV ou job com recebimento esperando a nota dá o erro cru da FK.
 - **Conferido no navegador (29/09/2026)** no TES-1013/26 (NF TESTE-130,
   emitida e cancelada) e no BV do TES-1001/26; nada ficou esperando a nota.
+
+## ⚠️ Nota de 2026-09-29 (9) — categoria "em breve" no combo da abertura (decisão 131)
+
+- O combo "Categoria do job" (abertura e revisão) segue oferecendo as
+  categorias do mesmo modelo de planilha do orçamento — resposta do Tiago:
+  manter. Com o serviço Mídia, Mídia On entra entre as nacionais.
+- **Mídia Off** (`em_breve`) aparece no fim do combo, travada, com o selo
+  "Em breve"; `conferirCategoriaDoJob` recusa se ela chegar ao servidor.

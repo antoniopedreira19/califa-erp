@@ -748,6 +748,10 @@ export interface CategoriaDominio {
   /** Categoria exclusiva de outro serviço que TAMBÉM vale para o serviço
    *  de investimento interno (decisão 105). Hoje só a Always On. */
   aceita_servico_interno: boolean;
+  /** Categoria que aparece nas listas, travada, e não pode ser escolhida:
+   *  o modelo de planilha dela ainda está em construção (decisão 131). Hoje
+   *  só a Mídia Off. Escrita só por migration. */
+  em_breve: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;

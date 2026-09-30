@@ -146,15 +146,13 @@ export function CategoriasDominioList({
               {filtered.map((c) => (
                 <tr
                   key={c.id}
-                  // Categoria com modelo de planilha próprio não abre o
-                  // formulário: nome e escopo são contrato de código, e a
-                  // regra também está no banco (decisão 072). Ativar e
-                  // desativar seguem no botão da direita.
-                  onClick={
-                    temModeloProprio(c) ? undefined : () => setEditando(c)
-                  }
+                  // Categoria com modelo de planilha próprio, ou em breve,
+                  // não abre o formulário: nome e escopo são contrato de
+                  // código, e a regra também está no banco (decisões 072 e
+                  // 131). Ativar e desativar seguem no botão da direita.
+                  onClick={travada(c) ? undefined : () => setEditando(c)}
                   className={`border-b border-border last:border-0 transition-colors ${
-                    temModeloProprio(c)
+                    travada(c)
                       ? "bg-muted/20"
                       : "cursor-pointer hover:bg-muted/50"
                   }`}
@@ -162,16 +160,18 @@ export function CategoriasDominioList({
                   <td className="px-4 py-3 font-medium">
                     <span className="inline-flex items-center gap-1.5">
                       {c.nome}
-                      {temModeloProprio(c) && (
+                      {travada(c) && (
                         <Lock
                           className="h-3 w-3 text-muted-foreground"
                           aria-label="Categoria travada"
                         />
                       )}
                     </span>
-                    {temModeloProprio(c) && (
+                    {travada(c) && (
                       <p className="mt-0.5 text-xs font-normal text-muted-foreground">
-                        Planilha própria · nome e escopo só mudam por migration
+                        {c.em_breve
+                          ? "Planilha própria em construção · liberada quando ela ficar pronta"
+                          : "Planilha própria · nome e escopo só mudam por migration"}
                       </p>
                     )}
                   </td>
@@ -181,17 +181,23 @@ export function CategoriasDominioList({
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-                        c.ativo
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-muted text-muted-foreground"
+                        c.em_breve && c.ativo
+                          ? "bg-amber-50 text-amber-700"
+                          : c.ativo
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-muted text-muted-foreground"
                       }`}
                     >
                       <span
                         className={`h-1.5 w-1.5 rounded-full ${
-                          c.ativo ? "bg-emerald-500" : "bg-muted-foreground"
+                          c.em_breve && c.ativo
+                            ? "bg-amber-500"
+                            : c.ativo
+                              ? "bg-emerald-500"
+                              : "bg-muted-foreground"
                         }`}
                       />
-                      {c.ativo ? "Ativa" : "Inativa"}
+                      {c.em_breve && c.ativo ? "Em breve" : c.ativo ? "Ativa" : "Inativa"}
                     </span>
                   </td>
                   <td
@@ -268,4 +274,11 @@ export function CategoriasDominioList({
  *  existe para evitar. */
 function temModeloProprio(c: CategoriaDominio): boolean {
   return c.modelo_planilha !== "nacional";
+}
+
+/** Linha que não abre o formulário: a de planilha própria e a que ainda
+ *  está em construção (decisão 131) — esta é liberada por migration, junto
+ *  com o modelo dela. */
+function travada(c: CategoriaDominio): boolean {
+  return temModeloProprio(c) || c.em_breve;
 }

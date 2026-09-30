@@ -126,7 +126,7 @@ async function conferirCategoriaDoJob(
 ): Promise<string | null> {
   const { data: categoria } = await supabase
     .from("categorias_dominio")
-    .select("id, nome, escopo, ativo, modelo_planilha")
+    .select("id, nome, escopo, ativo, modelo_planilha, em_breve")
     .eq("id", categoriaId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
@@ -135,6 +135,7 @@ async function conferirCategoriaDoJob(
       escopo: string;
       ativo: boolean;
       modelo_planilha: string;
+      em_breve: boolean;
     }>();
 
   if (!categoria || categoria.escopo !== "orcamento") {
@@ -142,6 +143,11 @@ async function conferirCategoriaDoJob(
   }
   if (!categoria.ativo) {
     return "Esta categoria foi inativada. Escolha outra para abrir o job.";
+  }
+  // Decisão 131: a Mídia Off aparece no combo, travada, até o modelo de
+  // planilha dela ficar pronto.
+  if (categoria.em_breve) {
+    return `A categoria "${categoria.nome}" ainda não está disponível.`;
   }
 
   // `!categoria_id` é obrigatório: `orcamentos` tem duas FKs para
