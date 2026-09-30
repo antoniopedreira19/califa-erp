@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MaskedInput } from "@/components/ui/masked-input";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -246,23 +247,17 @@ export function EditarDadosDrawer({
 
               <div className="space-y-2">
                 <Label htmlFor="lider_id">Líder direto</Label>
-                <Select value={liderSel} onValueChange={setLiderSel}>
-                  <SelectTrigger id="lider_id">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent
-                    side="bottom"
-                    avoidCollisions={false}
-                    className="max-h-[min(20rem,var(--radix-select-content-available-height))]"
-                  >
-                    <SelectItem value={NONE_SENTINEL}>Sem líder</SelectItem>
-                    {lideres.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  id="lider_id"
+                  ariaLabel="Líder direto"
+                  className={COMBOBOX_COMO_SELECT}
+                  items={lideres.map((l) => ({ value: l.id, label: l.nome }))}
+                  value={liderSel === NONE_SENTINEL ? null : liderSel}
+                  onChange={(v) => setLiderSel(v ?? NONE_SENTINEL)}
+                  placeholder="Sem líder"
+                  buscaPlaceholder="Buscar por nome..."
+                  limpavel
+                />
               </div>
 
               <div className="space-y-2">

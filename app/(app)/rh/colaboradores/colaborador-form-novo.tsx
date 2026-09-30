@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { MaskedInput } from "@/components/ui/masked-input";
 import { MoedaInput } from "@/components/ui/moeda-input";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -22,6 +23,7 @@ import { criarColaborador } from "./actions";
 type RegionalOption = { id: string; nome: string; empresa_id: string };
 type NivelOption = Pick<Nivel, "id" | "codigo" | "descricao">;
 type EmpresaOption = Pick<Empresa, "id" | "nome_fantasia">;
+type LiderOption = { id: string; nome: string };
 
 const NONE_SENTINEL = "__none__";
 
@@ -29,10 +31,12 @@ export function ColaboradorFormNovo({
   empresas,
   regionais,
   niveis,
+  lideres,
 }: {
   empresas: EmpresaOption[];
   regionais: RegionalOption[];
   niveis: NivelOption[];
+  lideres: LiderOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -47,6 +51,7 @@ export function ColaboradorFormNovo({
   const [empresaId, setEmpresaId] = React.useState<string>("");
   const [regionalId, setRegionalId] = React.useState<string>("");
   const [nivelSel, setNivelSel] = React.useState<string>(NONE_SENTINEL);
+  const [liderSel, setLiderSel] = React.useState<string>(NONE_SENTINEL);
   const [cpf, setCpf] = React.useState<string>("");
   const [cnpj, setCnpj] = React.useState<string>("");
   const [telefone, setTelefone] = React.useState<string>("");
@@ -78,6 +83,8 @@ export function ColaboradorFormNovo({
     const formData = new FormData(e.currentTarget);
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
+    if (liderSel === NONE_SENTINEL) formData.delete("lider_id");
+    else formData.set("lider_id", liderSel);
     formData.set("tipo_contratacao", tipoContratacao);
     formData.set("empresa_id", empresaId);
     formData.set("regional_id", regionalId);
@@ -225,6 +232,21 @@ export function ColaboradorFormNovo({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lider_id">Líder direto</Label>
+            <Combobox
+              id="lider_id"
+              ariaLabel="Líder direto"
+              className={COMBOBOX_COMO_SELECT}
+              items={lideres.map((l) => ({ value: l.id, label: l.nome }))}
+              value={liderSel === NONE_SENTINEL ? null : liderSel}
+              onChange={(v) => setLiderSel(v ?? NONE_SENTINEL)}
+              placeholder="Sem líder definido"
+              buscaPlaceholder="Buscar por nome..."
+              limpavel
+            />
           </div>
 
           <div className="space-y-2">

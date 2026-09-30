@@ -15,7 +15,7 @@ export default async function NovoColaboradorPage() {
 
   const supabase = createClient();
 
-  const [empresasRes, regionaisRes, niveisRes] = await Promise.all([
+  const [empresasRes, regionaisRes, niveisRes, lideresRes] = await Promise.all([
     supabase
       .from("empresas")
       .select("id, nome_fantasia")
@@ -33,6 +33,12 @@ export default async function NovoColaboradorPage() {
       .select("id, codigo, descricao")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    // Membros ativos do tenant pro Combobox de líder direto.
+    supabase
+      .from("tenant_members")
+      .select("user_id, profile:profiles(id, nome)")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo"),
   ]);
 
   const empresas = (empresasRes.data ?? []) as Pick<
@@ -50,6 +56,13 @@ export default async function NovoColaboradorPage() {
   >[])
     .slice()
     .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
+
+  const lideres = ((lideresRes.data ?? []) as unknown as Array<{
+    user_id: string;
+    profile: { id: string; nome: string } | null;
+  }>)
+    .flatMap((tm) => (tm.profile ? [tm.profile] : []))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -70,6 +83,7 @@ export default async function NovoColaboradorPage() {
           empresas={empresas}
           regionais={regionais}
           niveis={niveis}
+          lideres={lideres}
         />
       </div>
     </div>
