@@ -20,8 +20,10 @@ import {
 import { chavePixParaExibir } from "@/lib/pix";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 import {
-  descreverConta,
+  descreverBanco,
   descreverPix,
+  documentoNoArquivo,
+  rotuloTipoConta,
   temConta,
   temPix,
   type ColaboradorPagamento,
@@ -49,6 +51,24 @@ export function completarNomeDoBanco(p: PagamentoDaFolhaInput): PagamentoDaFolha
   const codigo = p.banco_codigo.replace(/\D/g, "");
   if (!codigo || p.banco_nome.trim()) return p;
   return { ...p, banco_nome: getBancoByCodigo(codigo.padStart(3, "0"))?.nome ?? "" };
+}
+
+/**
+ * O que a remessa faz com este cadastro, na regra de `montarPagamento`: PIX
+ * sempre que há chave; sem chave, a conta — crédito em conta no Santander,
+ * TED nos outros bancos, com o documento do favorecido no arquivo.
+ */
+function legendaDaRemessa(c: ColaboradorPagamento, pix: boolean, conta: boolean): string {
+  if (pix) {
+    return conta
+      ? "A remessa paga por PIX. A conta fica de reserva: dá para escolher TED ao gerar o arquivo."
+      : "A remessa paga por PIX nesta chave.";
+  }
+  const forma = c.banco_codigo === "033" ? "crédito em conta no Santander" : "TED";
+  const documento = documentoNoArquivo(c);
+  return documento
+    ? `A remessa paga por ${forma}, em nome do ${documento}: a conta precisa ser desse titular.`
+    : `A remessa paga por ${forma}.`;
 }
 
 function Erros({ erros, campos }: { erros: Record<string, string[]>; campos: string[] }) {
@@ -113,17 +133,31 @@ export function PagamentoDaFolha({
       </div>
 
       {!editando && (
-        <div className="rounded-lg border border-border p-3 text-sm">
+        <div className="space-y-2 rounded-lg border border-border p-3 text-sm">
           {pix && (
-            <p>
-              <span className="text-muted-foreground">PIX · </span>
-              {descreverPix(colaborador)}
-            </p>
+            <div>
+              <p className="text-xs text-muted-foreground">Chave PIX</p>
+              <p className="font-medium">{descreverPix(colaborador)}</p>
+            </div>
           )}
           {conta && (
-            <p>
-              <span className="text-muted-foreground">Conta · </span>
-              {descreverConta(colaborador)}
+            <div>
+              <p className="text-xs text-muted-foreground">
+                {rotuloTipoConta(colaborador.tipo_conta)}
+              </p>
+              <p className="font-medium">{descreverBanco(colaborador)}</p>
+              <p>
+                Agência{" "}
+                {colaborador.agencia_dv
+                  ? `${colaborador.agencia}-${colaborador.agencia_dv}`
+                  : colaborador.agencia}{" "}
+                · Conta {colaborador.conta}-{colaborador.conta_dv}
+              </p>
+            </div>
+          )}
+          {(pix || conta) && (
+            <p className="border-t border-border pt-2 text-xs text-muted-foreground">
+              {legendaDaRemessa(colaborador, pix, conta)}
             </p>
           )}
           {!pix && !conta && (

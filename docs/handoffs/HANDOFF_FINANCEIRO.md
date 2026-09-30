@@ -6354,6 +6354,16 @@ estendido a Contas a Receber em 31/08.**
 - **Valor com centavos ×100 na aprovação** (`linhaFolhaSchema` tratava o
   ponto decimal como milhar): o AV-00005 de R$ 524.848,00 veio daí, não de
   digitação. Corrigido e testado no navegador; `npm run test:folha`.
+- **Aba Folhas de Pagamento, revista no mesmo dia:** nome de A a Z por
+  padrão (cabeçalhos Colaborador e Valor ordenam), filtro de regionais igual
+  ao da aba de PPs, com as linhas de mais de uma regional num grupo só,
+  "Hub · várias regionais" (nome da lista de colaboradores do RH); o painel
+  mostra banco, tipo de conta e a forma que a remessa vai usar. Decisão 132,
+  §10.
+- **Aba aberta antes da publicação fica na versão antiga:** a Vercel mantém
+  a aba na publicação em que ela abriu, e as ações dela rodam o código
+  antigo. Em 30/09 o Tiago viu a aba de folha sem a seção Pagamento às 03:17,
+  dez minutos depois da publicação. Antes de aprovar, recarregar a página.
 - **Financeiro sem acesso à Ventura — resolvido:** o "todas" da tela de
   usuários não vale para empresa criada depois. A migration
   `20260930100005` deu a Ventura aos cinco usuários do financeiro. Gerentes

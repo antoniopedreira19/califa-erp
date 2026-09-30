@@ -63,6 +63,7 @@ digita o valor final na aprovação.
   número nos dois formatos (§7). Teste em `npm run test:folha`.
 - Aprovação sem acesso à empresa da linha: mensagem própria, em vez de
   "Falha ao criar título a pagar." (§8).
+- Lista da aba e painel de pagamento, revistos no mesmo dia (§10).
 
 ## 4. Achado no caminho: o financeiro não enxergava o colaborador
 
@@ -175,3 +176,13 @@ O SQL de cada uma fica registrado no próprio banco
 (`supabase_migrations.schema_migrations`) e os arquivos, na pasta `tmp/`
 (ignorada pelo git) da máquina do Tiago. Carga de dado com informação pessoal
 não entra em migration versionada enquanto o repositório for público.
+
+## 10. A lista da aba: ordem, regional e "Hub" (30/09, pedido do Tiago)
+
+| Pergunta | Resposta |
+|---|---|
+| Em que ordem as linhas aparecem? | **Nome de A a Z**, sem distinguir acento ("Álvaro" fica entre os A). Clicar em "Colaborador" inverte; clicar em "Valor" ordena do maior para o menor e, de novo, do menor para o maior. Até aqui a ordem dentro do mês era a do banco, ao acaso. |
+| Filtro por regional | O mesmo seletor da aba de PPs (várias regionais; nenhuma marcada = todas), só com as regionais que têm linha e a contagem de cada uma. Ele recorta a lista antes das contagens de status e contratação, como na aba de PPs. |
+| Linha com mais de uma regional | Fica num grupo só, **"Hub · várias regionais"**, e não aparece em cada regional do rateio. Na coluna Alocação: "Empresa · Hub" e o rateio numa linha ("SP 30% · NE 25% · …"). |
+| Por que "Hub"? | O Tiago pediu "TDs", como na Planilha Unificada ("TD"). O sistema nunca usou "TD": a lista de colaboradores do RH chama de **Hub** quem é alocado em todas as regionais pelo rateio anual, e em setembro as 25 linhas com mais de uma regional eram exatamente os 25 Hub (18 da Agência California, 7 da CCH). "Todas as regionais" ficou de fora porque, nos filtros, quer dizer "sem filtro". |
+| Pagamento no painel | A chave PIX com o tipo; a conta com o tipo (corrente, poupança), o banco pelo nome, agência e conta; e o que a remessa vai fazer: PIX, TED ou crédito em conta no Santander, com o documento que o arquivo leva ("a conta precisa ser desse titular"). Na lista, a coluna Pagamento mostra o tipo da chave ("PIX · Telefone"). |

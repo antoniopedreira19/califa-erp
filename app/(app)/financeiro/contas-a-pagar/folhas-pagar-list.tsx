@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { MultiSelectRegionais } from "@/components/ui/multi-select-regionais";
 import {
   Select,
   SelectContent,
@@ -14,8 +15,10 @@ import type { Empresa, FolhaLinhaStatus, TipoContratacao } from "@/lib/types";
 import { folhaLinhaStatusLabel, tipoContratacaoLabel } from "@/lib/types";
 import {
   formaDePagamento,
+  rotuloTipoPix,
   type ColaboradorPagamento,
 } from "@/lib/financeiro/colaboradores-pagamento";
+import { cn } from "@/lib/utils";
 import { RevisarFolhaDrawer } from "./revisar-folha-drawer";
 
 const NOMES_MES = [
@@ -61,6 +64,25 @@ type TipoFiltro = "todos" | TipoContratacao;
 
 const ORDEM_TIPO: TipoContratacao[] = ["pj", "mei", "clt_recibo", "clt", "estagio", "socio"];
 
+/**
+ * Linha com mais de uma regional no rateio. No filtro de regionais ela fica
+ * num grupo só, e não em cada regional do rateio (pedido do Tiago em
+ * 30/09/2026). O nome é o da lista de colaboradores do RH, que chama de
+ * "Hub" quem é alocado em todas as regionais pelo rateio anual — em
+ * setembro, as 25 linhas com mais de uma regional eram exatamente os 25 Hub.
+ */
+const HUB = "__hub__";
+
+type Ordenacao = { campo: "nome" | "valor"; direcao: "asc" | "desc" };
+
+function regionaisDaLinha(l: FolhaLinhaFinanceiro): string[] {
+  return [...new Set(l.alocacoes.map((a) => a.regional_id))];
+}
+
+function percentualCurto(p: string): string {
+  return Number(p).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
 function formatBRL(v: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -80,10 +102,63 @@ export function FolhasPagarList({
   const [busca, setBusca] = React.useState("");
   const [status, setStatus] = React.useState<StatusFiltro>("todos");
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
+  // Vazio = todas as regionais, como no filtro da aba de PPs.
+  const [regionaisFiltro, setRegionaisFiltro] = React.useState<string[]>([]);
+  const [ordenacao, setOrdenacao] = React.useState<Ordenacao>({
+    campo: "nome",
+    direcao: "asc",
+  });
   // Pelo id, e não pelo objeto: depois de um refresh (salvar o pagamento,
   // por exemplo) o painel mostra a linha atualizada.
   const [revisandoId, setRevisandoId] = React.useState<string | null>(null);
   const linhaRevisando = linhas.find((l) => l.id === revisandoId) ?? null;
+
+  // Só as regionais que têm linha, cada uma com a contagem; o Hub primeiro,
+  // como na lista de colaboradores do RH.
+  const opcoesRegional = React.useMemo(() => {
+    const porRegional = new Map<string, { nome: string; n: number }>();
+    let hub = 0;
+    for (const l of linhas) {
+      const regionais = regionaisDaLinha(l);
+      if (regionais.length > 1) {
+        hub += 1;
+        continue;
+      }
+      const a = l.alocacoes[0];
+      if (!a) continue;
+      const atual = porRegional.get(a.regional_id) ?? { nome: a.regional_nome, n: 0 };
+      atual.n += 1;
+      porRegional.set(a.regional_id, atual);
+    }
+    const lista = [...porRegional.entries()]
+      .sort((x, y) => x[1].nome.localeCompare(y[1].nome, "pt-BR"))
+      .map(([id, v]) => ({ id, nome: `${v.nome} (${v.n})` }));
+    return hub > 0
+      ? [{ id: HUB, nome: `Hub · várias regionais (${hub})` }, ...lista]
+      : lista;
+  }, [linhas]);
+
+  // Regional que some da lista (a última linha dela foi aprovada) sai da
+  // seleção, senão o filtro fica preso a ela sem aparecer no seletor.
+  React.useEffect(() => {
+    setRegionaisFiltro((sel) => {
+      const validas = sel.filter((id) => opcoesRegional.some((o) => o.id === id));
+      return validas.length === sel.length ? sel : validas;
+    });
+  }, [opcoesRegional]);
+
+  // A regional recorta o universo antes das contagens, como na aba de PPs:
+  // senão os números dos seletores não batem com a tabela.
+  const linhasPorRegional = React.useMemo(() => {
+    if (regionaisFiltro.length === 0 || regionaisFiltro.length === opcoesRegional.length) {
+      return linhas;
+    }
+    const sel = new Set(regionaisFiltro);
+    return linhas.filter((l) => {
+      const regionais = regionaisDaLinha(l);
+      return regionais.length > 1 ? sel.has(HUB) : sel.has(regionais[0]);
+    });
+  }, [linhas, regionaisFiltro, opcoesRegional.length]);
 
   const tiposPresentes = React.useMemo(() => {
     const presentes = new Set(linhas.map((l) => l.colaborador.tipo_contratacao));
@@ -92,7 +167,7 @@ export function FolhasPagarList({
 
   const filtradas = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return linhas.filter((l) => {
+    return linhasPorRegional.filter((l) => {
       if (status !== "todos" && l.status !== status) return false;
       if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo) return false;
       if (!q) return true;
@@ -101,16 +176,44 @@ export function FolhasPagarList({
         l.colaborador.funcao.toLowerCase().includes(q)
       );
     });
-  }, [linhas, busca, status, tipo]);
+  }, [linhasPorRegional, busca, status, tipo]);
+
+  // Competência mais recente primeiro, como vem do servidor; dentro dela, a
+  // ordem escolhida. Nome sem distinguir acento: "Álvaro" fica entre os A.
+  const ordenadas = React.useMemo(() => {
+    const fator = ordenacao.direcao === "asc" ? 1 : -1;
+    return [...filtradas].sort((a, b) => {
+      const competencia =
+        b.competencia_ano * 100 + b.competencia_mes - (a.competencia_ano * 100 + a.competencia_mes);
+      if (competencia !== 0) return competencia;
+      const nome = a.colaborador.nome.localeCompare(b.colaborador.nome, "pt-BR", {
+        sensitivity: "base",
+      });
+      if (ordenacao.campo === "valor") {
+        const valor = Number(a.salario_base) - Number(b.salario_base);
+        return valor !== 0 ? valor * fator : nome;
+      }
+      return nome * fator;
+    });
+  }, [filtradas, ordenacao]);
+
+  function trocarOrdenacao(campo: Ordenacao["campo"]) {
+    setOrdenacao((o) =>
+      o.campo === campo
+        ? { campo, direcao: o.direcao === "asc" ? "desc" : "asc" }
+        : // Nome começa de A a Z; valor, do maior para o menor.
+          { campo, direcao: campo === "nome" ? "asc" : "desc" },
+    );
+  }
 
   const contagem = React.useMemo(() => {
     const c = { enviada: 0, pendente_correcao: 0 };
-    for (const l of linhas) {
+    for (const l of linhasPorRegional) {
       if (l.status === "enviada") c.enviada += 1;
       if (l.status === "pendente_correcao") c.pendente_correcao += 1;
     }
     return c;
-  }, [linhas]);
+  }, [linhasPorRegional]);
 
   const totalFiltrado = filtradas.reduce(
     (acc, l) => acc + Math.round(Number(l.salario_base) * 100),
@@ -148,7 +251,7 @@ export function FolhasPagarList({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos ({linhas.length})</SelectItem>
+            <SelectItem value="todos">Todos ({linhasPorRegional.length})</SelectItem>
             <SelectItem value="enviada">
               Aguardando aprovação ({contagem.enviada})
             </SelectItem>
@@ -166,11 +269,17 @@ export function FolhasPagarList({
             {tiposPresentes.map((t) => (
               <SelectItem key={t} value={t}>
                 {tipoContratacaoLabel(t)} (
-                {linhas.filter((l) => l.colaborador.tipo_contratacao === t).length})
+                {linhasPorRegional.filter((l) => l.colaborador.tipo_contratacao === t).length})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <MultiSelectRegionais
+          regionais={opcoesRegional}
+          selecionadas={regionaisFiltro}
+          onSelectionChange={setRegionaisFiltro}
+          className="h-11 w-56 justify-between rounded-lg px-3.5 text-sm font-normal"
+        />
         <p className="ml-auto text-sm text-muted-foreground">
           {filtradas.length} {filtradas.length === 1 ? "linha" : "linhas"} ·{" "}
           <span className="font-semibold text-foreground tabular-nums">
@@ -189,25 +298,33 @@ export function FolhasPagarList({
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
                 Competência
               </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Colaborador
-              </th>
+              <CabecalhoOrdenavel
+                rotulo="Colaborador"
+                campo="nome"
+                ordenacao={ordenacao}
+                onTrocar={trocarOrdenacao}
+              />
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                 Alocação
               </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-36">
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">
                 Pagamento
               </th>
-              <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">
-                Valor
-              </th>
+              <CabecalhoOrdenavel
+                rotulo="Valor"
+                campo="valor"
+                ordenacao={ordenacao}
+                onTrocar={trocarOrdenacao}
+                align="right"
+                className="w-40"
+              />
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">
                 Status
               </th>
             </tr>
           </thead>
           <tbody>
-            {filtradas.map((l) => (
+            {ordenadas.map((l) => (
               <tr
                 key={l.id}
                 onClick={() => setRevisandoId(l.id)}
@@ -234,14 +351,7 @@ export function FolhasPagarList({
                   </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {l.alocacoes.map((a) => (
-                    <div key={a.id}>
-                      {a.empresa_nome} · {a.regional_nome} ·{" "}
-                      <span className="tabular-nums font-medium">
-                        {Number(a.percentual).toFixed(2).replace(".", ",")}%
-                      </span>
-                    </div>
-                  ))}
+                  <AlocacaoDaLinha linha={l} />
                 </td>
                 <td className="px-4 py-3">
                   <SeloPagamento colaborador={l.colaborador} />
@@ -289,6 +399,87 @@ export function FolhasPagarList({
   );
 }
 
+/** Cabeçalho que ordena ao clicar, no desenho do relatório de Faturamento. */
+function CabecalhoOrdenavel({
+  rotulo,
+  campo,
+  ordenacao,
+  onTrocar,
+  align = "left",
+  className,
+}: {
+  rotulo: string;
+  campo: Ordenacao["campo"];
+  ordenacao: Ordenacao;
+  onTrocar: (campo: Ordenacao["campo"]) => void;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const ativo = ordenacao.campo === campo;
+  return (
+    <th
+      aria-sort={ativo ? (ordenacao.direcao === "asc" ? "ascending" : "descending") : "none"}
+      className={cn(
+        "px-4 py-3 font-medium text-muted-foreground",
+        align === "right" ? "text-right" : "text-left",
+        className,
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onTrocar(campo)}
+        className={cn(
+          "inline-flex items-center gap-1.5 transition-colors hover:text-foreground",
+          ativo && "text-foreground",
+        )}
+      >
+        {rotulo}
+        {ativo ? (
+          ordenacao.direcao === "asc" ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+}
+
+/**
+ * Uma regional: "Agência California · SP · 100%". Mais de uma: a empresa com
+ * "Hub" e o rateio numa linha só, em vez de uma linha por regional.
+ */
+function AlocacaoDaLinha({ linha }: { linha: FolhaLinhaFinanceiro }) {
+  if (regionaisDaLinha(linha).length > 1) {
+    const empresas = [...new Set(linha.alocacoes.map((a) => a.empresa_nome))].join(" + ");
+    return (
+      <div>
+        <div>
+          {empresas} · <span className="font-semibold text-foreground">Hub</span>
+        </div>
+        <div className="tabular-nums">
+          {linha.alocacoes
+            .map((a) => `${a.regional_nome} ${percentualCurto(a.percentual)}%`)
+            .join(" · ")}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      {linha.alocacoes.map((a) => (
+        <div key={a.id}>
+          {a.empresa_nome} · {a.regional_nome} ·{" "}
+          <span className="tabular-nums font-medium">{percentualCurto(a.percentual)}%</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** CLT e estágio em âmbar: esperam o líquido da contabilidade. */
 function SeloContratacao({ tipo }: { tipo: TipoContratacao }) {
   const clt = tipo === "clt" || tipo === "estagio";
@@ -307,10 +498,10 @@ function SeloContratacao({ tipo }: { tipo: TipoContratacao }) {
 
 function SeloPagamento({ colaborador }: { colaborador: ColaboradorPagamento }) {
   const forma = formaDePagamento(colaborador);
-  if (forma === "pix") {
+  if (forma === "pix" && colaborador.pix_tipo) {
     return (
-      <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-        PIX
+      <span className="inline-flex whitespace-nowrap rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+        PIX · {rotuloTipoPix(colaborador.pix_tipo)}
       </span>
     );
   }
