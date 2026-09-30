@@ -4899,3 +4899,22 @@ aplicada na hora combinada com a frente do Antonio, junto da
   para a conferência do financeiro.
 - O formulário "Enviar job para abertura" não mudou: segue com o campo
   travado "Código do projeto".
+
+## ⚠️ Nota de 2026-09-30 (3) — regional só de folha: a AMBEV some da produção (decisão 134)
+
+- A regional **AMBEV** (Agência California) é o centro de custo da equipe
+  que o cliente AMBEV indica e reembolsa, contratada na nossa folha. Ela
+  aparecia como opção no campo Regionais do "Novo projeto".
+- **`regionais.disponivel_em_projetos`** (padrão `true`; só a AMBEV com
+  `false`). Deixam de oferecê-la o formulário do projeto (novo e edição), o
+  editor do job e os filtros dos relatórios de Rentabilidade e Faturamento.
+  A action do projeto recusa, e o banco também:
+  `ck_regional_disponivel_em_projetos` em `projetos`, `projeto_regionais`,
+  `orcamentos` e `jobs`, só quando a regional muda.
+- RH, folha e financeiro continuam vendo a AMBEV (11 alocações e 10 linhas
+  da folha 09/2026). Não foi desativada por isso.
+- Migration `20260930300001`. A trava foi testada no banco com as quatro
+  tabelas num bloco desfeito, sem gravar nada. O formulário foi conferido
+  no navegador.
+- O modelo definitivo (conta dedicada como dimensão da alocação) é a
+  etapa 2, em aberto. Ver decisão 134, §5.

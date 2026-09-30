@@ -778,6 +778,12 @@ export interface Regional {
   empresa_id: string;
   nome: string;
   ativo: boolean;
+  /**
+   * Falso = regional só de folha (a AMBEV, centro de custo da equipe que o
+   * cliente reembolsa): vale no RH, na folha e no financeiro, mas nunca é
+   * opção em projeto, orçamento ou job. O banco recusa. Decisão 134.
+   */
+  disponivel_em_projetos: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;

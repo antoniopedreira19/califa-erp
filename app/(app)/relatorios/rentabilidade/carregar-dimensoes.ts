@@ -49,7 +49,10 @@ async function buscarDimensoes(tenantId: string): Promise<DimensoesRelatorio> {
       .from("regionais")
       .select("id, nome")
       .eq("tenant_id", tenantId)
-      .eq("ativo", true),
+      .eq("ativo", true)
+      // Os dois relatórios são de job, e regional só de folha nunca tem
+      // job (decisão 134): no filtro ela seria uma opção sempre vazia.
+      .eq("disponivel_em_projetos", true),
   ]);
 
   const nomeCliente = (c: {

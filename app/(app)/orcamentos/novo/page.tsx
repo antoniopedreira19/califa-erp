@@ -26,6 +26,8 @@ export default async function NovoProjetoPage() {
       .select("id, nome, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
+      // Regional só de folha (AMBEV) não é opção de projeto — decisão 134.
+      .eq("disponivel_em_projetos", true)
       .order("nome"),
     // Cadastro pequeno (por cliente): vem inteiro e o formulário filtra
     // pelo cliente escolhido, sem ida extra ao servidor a cada troca.
