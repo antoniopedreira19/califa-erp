@@ -6354,7 +6354,9 @@ estendido a Contas a Receber em 31/08.**
 - **Valor com centavos ×100 na aprovação** (`linhaFolhaSchema` tratava o
   ponto decimal como milhar): o AV-00005 de R$ 524.848,00 veio daí, não de
   digitação. Corrigido e testado no navegador; `npm run test:folha`.
-- **Ninguém do financeiro tem acesso à Ventura:** as 3 linhas dela só aprova
-  um administrador, e os títulos não aparecem para o financeiro. Decisão 132,
-  §8.
+- **Financeiro sem acesso à Ventura — resolvido:** o "todas" da tela de
+  usuários não vale para empresa criada depois. A migration
+  `20260930100005` deu a Ventura aos cinco usuários do financeiro. Gerentes
+  de produção e produtores seguem sem ela, e empresa nova repete o problema
+  (decisão 132, §8).
 - Dados da folha de setembro e dos pagamentos: decisão 132, §5.

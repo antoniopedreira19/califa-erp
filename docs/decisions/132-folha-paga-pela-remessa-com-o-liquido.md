@@ -4,8 +4,9 @@
 **Decidido por:** Tiago
 **Escopo:** folha mensal (aprovação no financeiro) e remessa Santander
 **Migrations:** `20260930100001_pagamento_do_colaborador_para_o_financeiro.sql`
-(estrutura). As cargas de dado de setembro — 100002, 100003 e 100004 — ficam
-fora do repositório (§9).
+(estrutura) e `20260930100005_financeiro_acessa_todas_as_empresas.sql` (§8).
+As cargas de dado de setembro — 100002, 100003 e 100004 — ficam fora do
+repositório (§9).
 
 Revoga a D5 da [097](097-folha-mensal-em-duas-camadas.md) (aprovar propaga o
 valor para o salário do cadastro) e muda a geração de títulos da mesma
@@ -105,7 +106,8 @@ bancários) contra o cadastro, em 30/09. Autorizado pelo Tiago:
 - Cancelar um arquivo de remessa pela tela.
 - A numeração dos títulos avulsos reaproveita código apagado (os títulos dos
   testes de 30/09 nasceram todos AV-00005).
-- Acesso do financeiro à Ventura (§8): decisão do Tiago.
+- Gerentes de produção e produtores sem a Ventura, e empresas criadas daqui
+  em diante (§8).
 
 ## 7. Achado no teste: valor com centavos multiplicado por 100
 
@@ -139,7 +141,23 @@ por simulação com o papel financeiro (recusa 42501). Três linhas da folha de
 setembro são 100% Ventura (R$ 26.180,47). Aprovadas por alguém do
 financeiro, falham com "Você não tem acesso a uma das empresas desta linha…";
 aprovadas por um administrador, os títulos não aparecem para o financeiro em
-Títulos a Pagar nem na remessa. Liberar o acesso é decisão do Tiago.
+Títulos a Pagar nem na remessa.
+
+**A causa:** em 16/09 o acesso foi marcado como "todas" na tela de usuários,
+que grava uma linha por empresa existente naquele momento. A Ventura nasceu em
+24/09 e ninguém marcado como "todas" ganhou acesso a ela.
+
+**Resolvido em 30/09** (Tiago: "tanto os usuários do financeiro quanto
+administradores deverão ter acesso a todas as empresas"): a migration
+`20260930100005` deu aos cinco usuários do financeiro acesso amplo à Ventura,
+com registro em `audit_events` como a tela faz. Conferido por simulação: com o
+papel financeiro, o título da Ventura é criado e aparece. Administrador não
+precisa de linha: o papel já libera todas as empresas, inclusive as futuras.
+
+**Ficou para decidir:** cinco gerentes de produção e três produtores também
+foram marcados como "todas" em 16/09 e estão sem a Ventura; e a próxima
+empresa criada vai repetir o problema para quem não é administrador, porque o
+"todas" da tela não vale para empresa nova.
 
 ## 9. Dado pessoal fica fora do repositório
 
