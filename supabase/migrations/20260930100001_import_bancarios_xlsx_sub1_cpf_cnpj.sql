@@ -1,0 +1,29 @@
+-- Import dos dados bancários do xlsx do RH (30/09/2026), Sub-passo 1:
+-- UPDATE dos 145 colaboradores com CPF ou CNPJ válido no xlsx. Match
+-- por CPF OU CNPJ (aba "Califórnia", STATUS=ATIVO).
+--
+-- Regras aplicadas:
+--   - Linhas "PARA VERBAS" (Felipe Bispo, Julia Simas, Lucas Mano)
+--     descartadas — usamos só as "PARA SALARIO" que representam o
+--     pagamento recorrente principal.
+--   - COALESCE preserva dado existente no banco — só preenche onde
+--     tá NULL.
+--   - Sanitizações:
+--       agência > 5 dígitos → null (banco vira modo fintech ou null)
+--       conta > 12 dígitos → null
+--       pix "[object Object]", "Pix:...", "LANÇAR COMO..." → null
+--       pix cpf com !=11 dígitos → null
+--       pix cnpj com !=14 dígitos → null
+--   - Constraint colaboradores_banco_formato aceita 3 formatos:
+--     tudo NULL, banco tradicional completo, ou fintech (só código
+--     + tipo_conta).
+--
+-- Efeito: colaboradores com conta bancária completa passou de 4 para
+-- 105. Colaboradores sem nenhum dado bancário caiu de 53 para 42.
+--
+-- SQL aplicado via MCP execute_sql (14KB de VALUES). O conteúdo bruto
+-- está em tmp/bancarios-sub1.sql — não replicado aqui pra manter
+-- migration legível. Reproduzível via tmp/bancarios-sub1-gerar.mjs
+-- e tmp/bancarios-sub1-sql.mjs sobre tmp/dados-bancarios.xlsx.
+
+-- (UPDATE em bloco via CTE VALUES; ver tmp/bancarios-sub1.sql)
