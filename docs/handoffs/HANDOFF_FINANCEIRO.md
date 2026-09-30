@@ -6370,3 +6370,13 @@ estendido a Contas a Receber em 31/08.**
   de produção e produtores seguem sem ela, e empresa nova repete o problema
   (decisão 132, §8).
 - Dados da folha de setembro e dos pagamentos: decisão 132, §5.
+
+## ⚠️ Nota de 2026-09-30 (2) — a conferência da abertura mostra só o código do job
+
+- No pop-up "Conferir o job antes de abrir", a linha **Projeto** passou a
+  mostrar só o nome do projeto (antes, "nome · código"). O único código do
+  pop-up é o do job, na linha **Código**. Pedido do Tiago; o mesmo vale
+  para o pop-up do orçamento (ver `HANDOFF_ORCAMENTO.md`, nota de
+  2026-09-30 (2)).
+- O painel "Dados da produção" da tela de abertura
+  (`abertura-form.tsx`) não mudou: continua com "nome · código".

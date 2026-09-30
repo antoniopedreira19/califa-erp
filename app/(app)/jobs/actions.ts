@@ -38,6 +38,10 @@ function mapJobDbError(msg: string): string {
   if (msg.includes("uniq_jobs_codigo_por_tenant")) return "Já existe um job com este código.";
   if (msg.includes("uniq_jobs_por_orcamento_ativo")) return "Este orçamento já tem um job ativo.";
   if (msg.includes("jobs_datas_ordem")) return "Data fim precisa ser igual ou posterior à data início.";
+  // Trava do banco da decisão 134: o editor não confere a regional.
+  if (msg.includes("regional_nao_disponivel_em_projetos")) {
+    return "Esta regional é só de folha de pagamento e não pode ser usada em jobs.";
+  }
   return "Não foi possível salvar o job.";
 }
 
