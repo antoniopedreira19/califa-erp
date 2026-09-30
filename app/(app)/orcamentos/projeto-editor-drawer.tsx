@@ -31,6 +31,8 @@ interface Props {
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisSelecionadas: string[];
   responsaveisSelecionados: string[];
+  /** Marcas gravadas no projeto (`projeto_marcas`, decisão 133). */
+  marcasSelecionadas: string[];
   /** Acréscimos manuais à Equipe já gravados (papel `equipe`). */
   equipeSelecionada?: string[];
   /** Produtores dos orçamentos do projeto — entram na Equipe travados. */
@@ -53,6 +55,7 @@ export function ProjetoEditorDrawer({
   categorias,
   regionaisSelecionadas,
   responsaveisSelecionados,
+  marcasSelecionadas,
   equipeSelecionada,
   produtoresDosOrcamentos,
   clienteTravado,
@@ -166,6 +169,7 @@ export function ProjetoEditorDrawer({
             categorias={categorias}
             regionaisSelecionadas={regionaisSelecionadas}
             responsaveisSelecionados={responsaveisSelecionados}
+            marcasSelecionadas={marcasSelecionadas}
             equipeSelecionada={equipeSelecionada}
             produtoresDosOrcamentos={produtoresDosOrcamentos}
             criadorId={projeto.created_by ?? undefined}

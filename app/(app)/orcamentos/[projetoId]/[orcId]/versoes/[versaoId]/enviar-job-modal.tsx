@@ -98,6 +98,10 @@ export interface HerdadosJob {
    * exatamente estes três ids em `enviarJobParaAbertura`.
    */
   produtoId: string | null;
+  /** O projeto tem mais de uma marca (decisão 133). Nesse caso a Marca
+   *  acima é a geral do cliente (PRD-01), e não uma das escolhidas — o
+   *  modal diz isso embaixo do campo. Obrigatório, pelo mesmo motivo. */
+  projetoComVariasMarcas: boolean;
   gpId: string | null;
   produtorId: string | null;
 }
@@ -380,7 +384,14 @@ export function EnviarJobModal({
               Separar Cidade de Regional é seguro: as opções de regional
               saem do PROJETO (`regionaisDoProjeto`), não da cidade
               escolhida — uma nunca dependeu da outra. */}
-          <Campo rotulo="Marca" apoio="Cadastrada no projeto.">
+          <Campo
+            rotulo="Marca"
+            apoio={
+              herdados.projetoComVariasMarcas
+                ? "O projeto tem mais de uma marca: o job segue com a marca geral do cliente."
+                : "Cadastrada no projeto."
+            }
+          >
             <Travado valor={herdados.produtoNome ?? "— não informado"} />
           </Campo>
 

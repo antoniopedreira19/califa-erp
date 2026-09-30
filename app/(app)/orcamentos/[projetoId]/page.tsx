@@ -61,11 +61,11 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos!produto_id(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -106,7 +106,7 @@ export default async function ProjetoDetailPage({
     listEmpresasAtivas(session.activeTenant.id),
     supabase
       .from("cliente_produtos")
-      .select("id, nome, codigo, cliente_id")
+      .select("id, nome, codigo, cliente_id, padrao")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("codigo"),
@@ -118,6 +118,14 @@ export default async function ProjetoDetailPage({
     supabase
       .from("projeto_responsaveis")
       .select("profile_id, papel, profile:profiles(id, nome)")
+      .eq("projeto_id", params.projetoId)
+      .eq("tenant_id", session.activeTenant.id),
+    // Marcas escolhidas no projeto (decisão 133). O embed `produto` do
+    // projeto, acima, é a marca que o JOB leva — com mais de uma
+    // escolhida, é a geral do cliente, e não uma delas.
+    supabase
+      .from("projeto_marcas")
+      .select("produto_id, produto:cliente_produtos(id, nome, codigo)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
   ]);
@@ -148,7 +156,26 @@ export default async function ProjetoDetailPage({
     updated_at: raw.updated_at,
   };
   const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
-  const produtoNome: string | null = raw.produto?.nome ?? null;
+  if (vinculosMarcasRes.error) {
+    console.error("[projeto.detail.marcas]", vinculosMarcasRes.error.message);
+  }
+  // Marcas do projeto, na ordem do código (PRD-01 primeiro). Sem vínculo
+  // gravado — projeto salvo pela versão anterior do app —, vale a marca
+  // do projeto.
+  const marcasDoVinculo = ((vinculosMarcasRes.data ?? []) as any[])
+    .filter((v) => v.produto)
+    .map((v) => ({
+      id: v.produto.id as string,
+      nome: v.produto.nome as string,
+      codigo: v.produto.codigo as string,
+    }))
+    .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
+  const marcasDoProjeto: { id: string; nome: string }[] =
+    marcasDoVinculo.length > 0
+      ? marcasDoVinculo
+      : raw.produto
+        ? [{ id: raw.produto.id as string, nome: raw.produto.nome as string }]
+        : [];
   const empresaNome: string | null = raw.empresa?.nome_fantasia ?? raw.empresa?.razao_social ?? null;
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
@@ -431,6 +458,7 @@ export default async function ProjetoDetailPage({
               categorias={categoriasProjeto}
               regionaisSelecionadas={regionaisDoProjeto.map((r) => r.id)}
               responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
+              marcasSelecionadas={marcasDoProjeto.map((m) => m.id)}
               equipeSelecionada={equipeManualDoProjeto}
               produtoresDosOrcamentos={produtoresDosOrcamentos}
               clienteTravado={clienteTravado}
@@ -449,12 +477,16 @@ export default async function ProjetoDetailPage({
               <span className="text-foreground/60">Cliente:</span>{" "}
               <span className="text-foreground font-medium">{clienteNome ?? "—"}</span>
             </span>
-            {produtoNome && (
+            {marcasDoProjeto.length > 0 && (
               <>
                 <span aria-hidden className="text-border">·</span>
                 <span>
-                  <span className="text-foreground/60">Marca:</span>{" "}
-                  <span className="text-foreground font-medium">{produtoNome}</span>
+                  <span className="text-foreground/60">
+                    {marcasDoProjeto.length > 1 ? "Marcas:" : "Marca:"}
+                  </span>{" "}
+                  <span className="text-foreground font-medium">
+                    {marcasDoProjeto.map((m) => m.nome).join(", ")}
+                  </span>
                 </span>
               </>
             )}

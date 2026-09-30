@@ -39,8 +39,9 @@ export interface ProjetoRow {
   status: ProjetoStatus;
   cliente_id: string;
   cliente_nome: string | null;
-  produto_id: string | null;
-  produto_nome: string | null;
+  /** Marcas escolhidas no projeto, na ordem do código (decisão 133). Uma
+   *  ou mais; vazia só nos projetos anteriores ao campo. */
+  marcas: { id: string; nome: string }[];
   /** Regionais do projeto, já ordenadas por nome. */
   regionais: { id: string; nome: string }[];
   data_inicio_prevista: string;
@@ -122,7 +123,7 @@ export function ProjetosList({
   const produtosOpcoes = React.useMemo(() => {
     const mapa = new Map<string, string>();
     for (const p of projetos) {
-      if (p.produto_id && p.produto_nome) mapa.set(p.produto_id, p.produto_nome);
+      for (const m of p.marcas) mapa.set(m.id, m.nome);
     }
     return [...mapa.entries()]
       .map(([id, nome]) => ({ id, nome }))
@@ -154,7 +155,12 @@ export function ProjetosList({
     return projetos.filter((p) => {
       if (meus && !meusIds.has(p.id)) return false;
       if (clienteFiltro !== "todos" && p.cliente_id !== clienteFiltro) return false;
-      if (produtoFiltro !== "todos" && p.produto_id !== produtoFiltro) return false;
+      if (
+        produtoFiltro !== "todos" &&
+        !p.marcas.some((m) => m.id === produtoFiltro)
+      ) {
+        return false;
+      }
       if (
         regionalFiltro !== "todas" &&
         !p.regionais.some((r) => r.id === regionalFiltro)
@@ -330,7 +336,25 @@ export function ProjetosList({
                   </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{p.cliente_nome ?? "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground">{p.produto_nome ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {p.marcas.length === 0 ? (
+                    "—"
+                  ) : (
+                    // Mesmo tratamento das regionais: a primeira inteira, e
+                    // um contador a partir da segunda (decisão 133).
+                    <span className="inline-flex items-center gap-1">
+                      <span>{p.marcas[0].nome}</span>
+                      {p.marcas.length > 1 && (
+                        <span
+                          title={p.marcas.map((m) => m.nome).join(", ")}
+                          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                        >
+                          +{p.marcas.length - 1}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   {p.regionais.length === 0 ? (
                     <span className="text-muted-foreground">—</span>

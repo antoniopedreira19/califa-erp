@@ -9,6 +9,10 @@ import { cn } from "@/lib/utils";
 export interface MultiSelectItem {
   value: string;
   label: string;
+  /** Texto de apoio ao lado do rótulo, em fonte mono — o código da marca
+   *  ("PRD-02") no campo Marcas do projeto. Aparece só na lista: o chip
+   *  fica com o rótulo. */
+  detalhe?: string;
 }
 
 interface MultiSelectProps {
@@ -66,7 +70,11 @@ export function MultiSelect({
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
-    return items.filter((i) => i.label.toLowerCase().includes(q));
+    return items.filter(
+      (i) =>
+        i.label.toLowerCase().includes(q) ||
+        Boolean(i.detalhe?.toLowerCase().includes(q)),
+    );
   }, [items, query]);
 
   const selecionados = React.useMemo(
@@ -203,6 +211,11 @@ export function MultiSelect({
                   )}
                 />
                 <span className="truncate">{item.label}</span>
+                {item.detalhe && (
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {item.detalhe}
+                  </span>
+                )}
               </button>
             );
           })}

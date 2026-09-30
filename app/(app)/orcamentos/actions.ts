@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { projetoSchema } from "@/lib/validations/projetos";
 import { gerarCodigoProjeto } from "@/lib/codigos/projetos";
+import { marcaDoJob } from "@/lib/marcas-do-projeto";
 import { FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA } from "@/lib/types";
 
 export type ActionResult =
@@ -19,7 +20,8 @@ function extractInput(formData: FormData) {
     empresa_id: formData.get("empresa_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     cliente_id: formData.get("cliente_id")?.toString() ?? "",
-    produto_id: formData.get("produto_id")?.toString() ?? "",
+    // Marcas do projeto (decisão 133): uma ou mais.
+    produto_ids: formData.getAll("produto_ids").map((v) => v.toString()),
     // `getAll` preserva a ordem de envio, e a ordem importa: o primeiro
     // item alimenta as colunas de compatibilidade em `projetos`.
     responsavel_ids: formData.getAll("responsavel_ids").map((v) => v.toString()),
@@ -58,8 +60,11 @@ function mapDbError(msg: string): string {
   if (msg.includes("projeto_responsaveis_profile_id_fkey")) {
     return "Responsável inválido.";
   }
-  if (msg.includes("projetos_produto_id_fkey")) {
-    return "Produto inválido.";
+  if (
+    msg.includes("projetos_produto_id_fkey") ||
+    msg.includes("projeto_marcas_produto_id_fkey")
+  ) {
+    return "Marca inválida.";
   }
   if (msg.includes("projetos_fim_apos_inicio")) {
     return "A data final não pode ser anterior à data de início.";
@@ -73,28 +78,34 @@ function mapDbError(msg: string): string {
 }
 
 /**
- * O produto é cadastrado por cliente e o banco não consegue garantir que
- * o escolhido pertence ao cliente do projeto — a FK só aponta para
+ * A marca é cadastrada por cliente e o banco não consegue garantir que as
+ * escolhidas pertencem ao cliente do projeto — a FK só aponta para
  * `cliente_produtos`. A checagem é aqui, como já acontece na abertura de
  * job. Mesma ideia para as regionais: confirma que existem e estão ativas
  * no tenant antes de gravar os vínculos.
+ *
+ * Devolve também a MARCA DO JOB (decisão 133), que vai para
+ * `projetos.produto_id`: a única escolhida ou, com mais de uma, a marca
+ * geral do cliente (`padrao`, PRD-01). O cadastro do cliente é pequeno e
+ * vem inteiro numa leitura só — a geral nem sempre está entre as
+ * escolhidas.
  */
-async function validarProdutoERegionais(
+async function validarMarcasERegionais(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   clienteId: string,
-  produtoId: string,
+  produtoIds: string[],
   regionalIds: string[],
-): Promise<{ ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string[]> }> {
-  const [produtoRes, regionaisRes] = await Promise.all([
+): Promise<
+  | { ok: true; marcaDoJobId: string }
+  | { ok: false; message: string; fieldErrors?: Record<string, string[]> }
+> {
+  const [marcasRes, regionaisRes] = await Promise.all([
     supabase
       .from("cliente_produtos")
-      .select("id")
-      .eq("id", produtoId)
+      .select("id, ativo, padrao")
       .eq("cliente_id", clienteId)
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true)
-      .maybeSingle(),
+      .eq("tenant_id", tenantId),
     supabase
       .from("regionais")
       .select("id")
@@ -103,13 +114,41 @@ async function validarProdutoERegionais(
       .eq("ativo", true),
   ]);
 
-  if (!produtoRes.data) {
+  if (marcasRes.error) {
+    console.error("[projetos.marcas.listar]", marcasRes.error.message);
+  }
+  const marcasDoCliente = (marcasRes.data ?? []) as {
+    id: string;
+    ativo: boolean;
+    padrao: boolean;
+  }[];
+  const ativas = new Set(marcasDoCliente.filter((m) => m.ativo).map((m) => m.id));
+
+  if (produtoIds.some((id) => !ativas.has(id))) {
     return {
       ok: false,
-      message: "Produto inválido para este cliente.",
-      fieldErrors: { produto_id: ["Selecione uma marca do cadastro do cliente."] },
+      message: "Marca inválida para este cliente.",
+      fieldErrors: { produto_ids: ["Selecione marcas ativas do cadastro do cliente."] },
     };
   }
+
+  const marcaDoJobId = marcaDoJob(
+    produtoIds,
+    marcasDoCliente.find((m) => m.padrao && m.ativo)?.id ?? null,
+  );
+  if (!marcaDoJobId) {
+    // Só acontece com mais de uma marca num cliente sem a marca geral —
+    // nenhum dos 157 clientes está assim (30/09/2026), e o banco cria a
+    // geral junto do cliente. A mensagem existe para não gravar um projeto
+    // sem a marca que o job leva.
+    return {
+      ok: false,
+      message:
+        "Este cliente não tem a marca geral (PRD-01), que é a que o job leva quando o projeto tem mais de uma marca. Avise o suporte.",
+      fieldErrors: { produto_ids: ["Cliente sem a marca geral (PRD-01)."] },
+    };
+  }
+
   if ((regionaisRes.data ?? []).length !== regionalIds.length) {
     return {
       ok: false,
@@ -117,7 +156,7 @@ async function validarProdutoERegionais(
       fieldErrors: { regional_ids: ["Selecione regionais ativas do cadastro."] },
     };
   }
-  return { ok: true };
+  return { ok: true, marcaDoJobId };
 }
 
 /** Regrava os vínculos N:N do projeto. Apaga e reinsere: o conjunto é
@@ -128,23 +167,29 @@ async function sincronizarVinculos(
   projetoId: string,
   regionalIds: string[],
   responsavelIds: string[],
+  /** Marcas escolhidas no projeto (decisão 133). */
+  produtoIds: string[],
   /** Acréscimos MANUAIS à Equipe (papel `equipe`). Criador, GPs e
    *  produtores dos orçamentos NÃO entram aqui: são derivados na leitura,
    *  e gravá-los exigiria re-sincronizar a cada troca de GP ou orçamento
    *  novo (decisão 037). */
   equipeIds: string[] = [],
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const [delReg, delResp] = await Promise.all([
+  const [delReg, delResp, delMarcas] = await Promise.all([
     supabase.from("projeto_regionais").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
     supabase.from("projeto_responsaveis").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
+    supabase.from("projeto_marcas").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
   ]);
 
-  if (delReg.error || delResp.error) {
-    console.error("[projetos.vinculos.delete]", delReg.error?.message ?? delResp.error?.message);
-    return { ok: false, message: "Não foi possível gravar regionais e responsáveis." };
+  if (delReg.error || delResp.error || delMarcas.error) {
+    console.error(
+      "[projetos.vinculos.delete]",
+      delReg.error?.message ?? delResp.error?.message ?? delMarcas.error?.message,
+    );
+    return { ok: false, message: "Não foi possível gravar regionais, responsáveis e marcas." };
   }
 
-  const [insReg, insResp] = await Promise.all([
+  const [insReg, insResp, insMarcas] = await Promise.all([
     supabase.from("projeto_regionais").insert(
       regionalIds.map((regional_id) => ({
         projeto_id: projetoId,
@@ -170,10 +215,18 @@ async function sincronizarVinculos(
           papel: "equipe" as const,
         })),
     ]),
+    supabase.from("projeto_marcas").insert(
+      produtoIds.map((produto_id) => ({
+        projeto_id: projetoId,
+        produto_id,
+        tenant_id: tenantId,
+      })),
+    ),
   ]);
 
-  if (insReg.error || insResp.error) {
-    const msg = insReg.error?.message ?? insResp.error?.message ?? "";
+  if (insReg.error || insResp.error || insMarcas.error) {
+    const msg =
+      insReg.error?.message ?? insResp.error?.message ?? insMarcas.error?.message ?? "";
     console.error("[projetos.vinculos.insert]", msg);
     return { ok: false, message: mapDbError(msg) };
   }
@@ -198,13 +251,14 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
 
   const supabase = createClient();
 
-  const { regional_ids, responsavel_ids, equipe_ids, ...campos } = parsed.data;
+  const { regional_ids, responsavel_ids, equipe_ids, produto_ids, ...campos } =
+    parsed.data;
 
-  const check = await validarProdutoERegionais(
+  const check = await validarMarcasERegionais(
     supabase,
     session.activeTenant.id,
     campos.cliente_id,
-    campos.produto_id,
+    produto_ids,
     regional_ids,
   );
   if (!check.ok) return check;
@@ -229,6 +283,9 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
       // A fonte-verdade são `projeto_regionais` e `projeto_responsaveis`.
       responsavel_id: responsavel_ids[0],
       regional_id: regional_ids[0],
+      // A marca que o job leva (decisão 133). As escolhidas vão para
+      // `projeto_marcas`, logo abaixo.
+      produto_id: check.marcaDoJobId,
       codigo,
       tenant_id: session.activeTenant.id,
       // `created_by` registra quem cadastrou — pode não ser o responsável.
@@ -248,6 +305,7 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
     data.id,
     regional_ids,
     responsavel_ids,
+    produto_ids,
     equipe_ids,
   );
   if (!vinculos.ok) return vinculos;
@@ -257,7 +315,13 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
     tenantId: session.activeTenant.id,
     entidadeTipo: "projeto",
     entidadeId: data.id,
-    metadata: { codigo, nome: parsed.data.nome, cliente_id: parsed.data.cliente_id },
+    metadata: {
+      codigo,
+      nome: parsed.data.nome,
+      cliente_id: parsed.data.cliente_id,
+      marcas: produto_ids,
+      marca_do_job: check.marcaDoJobId,
+    },
   });
 
   revalidatePath("/orcamentos");
@@ -453,13 +517,14 @@ export async function atualizarProjeto(
     };
   }
 
-  const { regional_ids, responsavel_ids, equipe_ids, ...campos } = parsed.data;
+  const { regional_ids, responsavel_ids, equipe_ids, produto_ids, ...campos } =
+    parsed.data;
 
-  const check = await validarProdutoERegionais(
+  const check = await validarMarcasERegionais(
     supabase,
     session.activeTenant.id,
     campos.cliente_id,
-    campos.produto_id,
+    produto_ids,
     regional_ids,
   );
   if (!check.ok) return check;
@@ -474,6 +539,9 @@ export async function atualizarProjeto(
     ...base,
     responsavel_id: responsavel_ids[0],
     regional_id: regional_ids[0],
+    // A marca que o job leva (decisão 133): a única escolhida ou, com mais
+    // de uma, a geral do cliente.
+    produto_id: check.marcaDoJobId,
   };
 
   // Decisão 122: o cliente só muda antes de algum orçamento ser aprovado,
@@ -487,7 +555,7 @@ export async function atualizarProjeto(
       codigoAtual: atual.codigo,
       clienteAnteriorId: atual.cliente_id,
       clienteId: campos.cliente_id,
-      produtoId: campos.produto_id,
+      produtoId: check.marcaDoJobId,
       dataInicio: campos.data_inicio_prevista,
     });
     if (!troca.ok) return troca;
@@ -512,6 +580,7 @@ export async function atualizarProjeto(
     id,
     regional_ids,
     responsavel_ids,
+    produto_ids,
     equipe_ids,
   );
   if (!vinculos.ok) return vinculos;
@@ -521,6 +590,9 @@ export async function atualizarProjeto(
     tenantId: session.activeTenant.id,
     entidadeTipo: "projeto",
     entidadeId: id,
+    // As marcas e a marca que o job leva (decisão 133): é o que muda o
+    // que chega ao financeiro na abertura.
+    metadata: { marcas: produto_ids, marca_do_job: check.marcaDoJobId },
   });
 
   revalidatePath("/orcamentos");

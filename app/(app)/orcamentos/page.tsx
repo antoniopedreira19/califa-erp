@@ -48,7 +48,9 @@ export default async function ProjetosPage({
             // 02/09/2026): designado OU criador.
             "responsavel_id, created_by, " +
             "cliente:clientes(id, nome_fantasia), " +
-            "produto:cliente_produtos(id, nome), " +
+            // `!produto_id` deixa o caminho dito (decisão 133). É a marca
+            // que o JOB leva; as escolhidas vêm de `projeto_marcas`, abaixo.
+            "produto:cliente_produtos!produto_id(id, nome), " +
             "categoria:categorias_dominio(nome)",
         )
         .eq("tenant_id", session.activeTenant.id);
@@ -81,6 +83,8 @@ export default async function ProjetosPage({
   // Regionais do projeto: N:N, então vêm numa query própria em vez de
   // embed na listagem (o embed devolveria a linha do projeto repetida).
   const regionaisMap = new Map<string, { id: string; nome: string }[]>();
+  // Marcas do projeto (decisão 133): N:N também, mesma saída.
+  const marcasMap = new Map<string, { id: string; nome: string; codigo: string }[]>();
   /**
    * Projetos do recorte "Meus" — decisão 036, ampliada pelo Tiago em
    * 02/09/2026: **qualquer usuário associado ao projeto ou a um orçamento
@@ -110,7 +114,7 @@ export default async function ProjetosPage({
   }
 
   if (projetoIds.length > 0) {
-    const [orcsRes, jobsRes, vinculosRes, responsaveisRes, versoesMinhasRes] =
+    const [orcsRes, jobsRes, vinculosRes, responsaveisRes, versoesMinhasRes, marcasRes] =
       await Promise.all([
       (() => {
         // Filtro de aterrissagem da home: orcamentos por status/data
@@ -166,7 +170,15 @@ export default async function ProjetosPage({
         .select("orcamento_id")
         .eq("created_by", session.profile.id)
         .eq("tenant_id", session.activeTenant.id),
+      // Marcas de cada projeto (decisão 133): uma linha por par, poucas
+      // por projeto. Alimenta a coluna e o filtro de Marca.
+      supabase
+        .from("projeto_marcas")
+        .select("projeto_id, produto:cliente_produtos(id, nome, codigo)")
+        .in("projeto_id", projetoIds)
+        .eq("tenant_id", session.activeTenant.id),
     ]);
+    if (marcasRes.error) console.error("[projetos.marcas]", marcasRes.error.message);
     if (jobsRes.error) console.error("[projetos.jobs]", jobsRes.error.message);
 
     // Jobs por orçamento — quase sempre 1; com mais de um, o funil olha o
@@ -236,6 +248,17 @@ export default async function ProjetosPage({
     for (const lista of regionaisMap.values()) {
       lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     }
+
+    for (const v of ((marcasRes.data ?? []) as any[])) {
+      if (!v.produto) continue;
+      const atuais = marcasMap.get(v.projeto_id) ?? [];
+      atuais.push({ id: v.produto.id, nome: v.produto.nome, codigo: v.produto.codigo });
+      marcasMap.set(v.projeto_id, atuais);
+    }
+    // Na ordem do código: a geral (PRD-01) primeiro, quando está entre elas.
+    for (const lista of marcasMap.values()) {
+      lista.sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
+    }
   }
 
   // Quando há filtro de aterrissagem, mostrar só projetos com orçamentos
@@ -257,8 +280,11 @@ export default async function ProjetosPage({
     status: p.status as Projeto["status"],
     cliente_id: p.cliente_id,
     cliente_nome: p.cliente?.nome_fantasia ?? null,
-    produto_id: p.produto_id,
-    produto_nome: p.produto?.nome ?? null,
+    // Sem vínculo gravado — projeto salvo pela versão anterior do app —,
+    // vale a marca do projeto.
+    marcas:
+      marcasMap.get(p.id)?.map((m) => ({ id: m.id, nome: m.nome })) ??
+      (p.produto ? [{ id: p.produto.id, nome: p.produto.nome }] : []),
     regionais: regionaisMap.get(p.id) ?? [],
     data_inicio_prevista: p.data_inicio_prevista,
     orcamentos_count: orcamentosCountMap.get(p.id) ?? 0,
