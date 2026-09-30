@@ -6330,3 +6330,31 @@ estendido a Contas a Receber em 31/08.**
   manter. Com o serviço Mídia, Mídia On entra entre as nacionais.
 - **Mídia Off** (`em_breve`) aparece no fim do combo, travada, com o selo
   "Em breve"; `conferirCategoriaDoJob` recusa se ela chegar ao servidor.
+
+## ⚠️ Nota de 2026-09-30 (1) — folha de setembro paga pela remessa (decisão 132)
+
+- **Aprovar folha não mexe mais no salário do cadastro.** A comparação de
+  texto (`"12000"` × `"12000.00"`) fazia toda aprovação reabrir o salário com
+  o valor da folha; agora compara como número e não propaga nada.
+- **Um título por pessoa**, com o rateio de regional dentro (antes, um por
+  regional: 2 ou 4 PIX para a mesma pessoa).
+- **Pagamento na aprovação:** a seção "Pagamento" do painel mostra a chave e
+  a conta que a remessa vai usar e deixa informar ou corrigir; grava no
+  cadastro do colaborador.
+- **"Devolver para a aprovação"** no título de folha (Títulos a Pagar e página
+  do título): apaga o título e reabre a linha. Na página do título, substitui
+  "Editar" e "Excluir".
+- **Aba Folhas de Pagamento:** selo e filtro de contratação (CLT e estágio em
+  âmbar), coluna Pagamento, total do filtrado.
+- **Remessa:** filtro por origem; "Marcar todos" marca só o visível com dado.
+- **Papel financeiro:** lia o colaborador pela tabela, que a RLS só abre a
+  administrador e RH — nome "—", aprovação e remessa falhando. Agora lê e
+  grava pelas funções `colaboradores_pagamento` e
+  `atualizar_pagamento_colaborador`.
+- **Valor com centavos ×100 na aprovação** (`linhaFolhaSchema` tratava o
+  ponto decimal como milhar): o AV-00005 de R$ 524.848,00 veio daí, não de
+  digitação. Corrigido e testado no navegador; `npm run test:folha`.
+- **Ninguém do financeiro tem acesso à Ventura:** as 3 linhas dela só aprova
+  um administrador, e os títulos não aparecem para o financeiro. Decisão 132,
+  §8.
+- Dados da folha de setembro e dos pagamentos: decisão 132, §5.

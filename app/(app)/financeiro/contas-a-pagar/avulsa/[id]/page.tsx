@@ -26,6 +26,8 @@ import {
 import { HistoricoMudancas } from "./historico-mudancas";
 import { RateioCard } from "../../rateio-card";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { pode } from "@/lib/permissoes";
+import { DevolverFolhaButton } from "../../devolver-folha-dialog";
 import {
   SELECT_BAIXA_DO_DOCUMENTO,
   agruparBaixasPorDocumento,
@@ -343,7 +345,27 @@ export default async function AvulsaDetalhesPage({
 
           {/* Botões de ação dependem do status */}
           <div className="flex items-center gap-2">
-            {c.status === "aprovada" && !parcial && (
+            {c.status === "aprovada" && !parcial && !!c.folha_id && (
+              // Título de folha (decisão 132): não se edita nem se exclui
+              // aqui — a folha diria um valor e o título outro. Corrige-se
+              // devolvendo a linha para a aprovação.
+              <>
+                <BaixarAvulsaModalClient
+                  contaId={c.id}
+                  descricao={c.descricao}
+                  valor={Number(c.valor)}
+                  contas={contasBancarias}
+                />
+                {pode(session.activeRole, "rh.folhas.aprovar_financeiro") && (
+                  <DevolverFolhaButton
+                    contaAvulsaId={c.id}
+                    descricao={c.descricao}
+                    valor={Number(c.valor)}
+                  />
+                )}
+              </>
+            )}
+            {c.status === "aprovada" && !parcial && !c.folha_id && (
               <>
                 <EditarAvulsaButton
                   conta={contaParaDrawer}

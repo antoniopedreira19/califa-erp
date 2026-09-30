@@ -4,6 +4,10 @@
 **Status:** aceita
 **Escopo:** módulo RH · subsistema Folha Mensal
 
+> ⚠️ **2026-09-30:** a D5 (aprovar propaga o valor para o salário do cadastro)
+> foi revogada pela [132](132-folha-paga-pela-remessa-com-o-liquido.md), e a
+> aprovação passou a criar um título por pessoa com o rateio de regional dentro.
+
 ## Contexto
 
 O módulo RH nasceu (2026-09-16) com colaboradores + alocação múltipla + histórico salarial e um esqueleto de tabelas para a folha (`folhas_pagamento`, `folhas_pagamento_alocacoes`) sem UI. A ideia era destravar o cadastro primeiro e voltar depois para o motor da folha.

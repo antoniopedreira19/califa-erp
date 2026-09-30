@@ -213,6 +213,8 @@ export type AuditAction =
   | "conta_bancaria.reativada"
   | "conta_bancaria.config_cnab_editada"
   | "cnab.remessa_gerada"
+  // Arquivo de remessa cancelado antes de ir ao banco (decisão 132)
+  | "cnab.remessa_cancelada"
   | "plano_conta_tipo.criado"
   | "plano_conta_tipo.atualizado"
   | "plano_conta_tipo.inativado"
@@ -292,6 +294,8 @@ export type AuditAction =
   | "folha.linha.aprovada"
   | "folha.linha.reprovada"
   | "folha.linha.paga"
+  // Aprovação desfeita: o título sai e a linha volta a aguardar (decisão 132)
+  | "folha.linha.aprovacao_desfeita"
   // Rateio anual por regional (2026-09-23)
   | "rateio.regional.salvo"
   | "rateio.regional.copiado"

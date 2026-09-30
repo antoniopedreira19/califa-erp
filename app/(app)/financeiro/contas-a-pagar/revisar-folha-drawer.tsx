@@ -21,12 +21,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Empresa } from "@/lib/types";
-import { folhaLinhaStatusLabel } from "@/lib/types";
+import { folhaLinhaStatusLabel, tipoContratacaoLabel } from "@/lib/types";
 import {
   aprovarLinhaFolha,
   reprovarLinhaFolha,
+  salvarPagamentoDaFolha,
+  type PagamentoDaFolhaInput,
 } from "./actions-folhas";
 import type { FolhaLinhaFinanceiro } from "./folhas-pagar-list";
+import {
+  PagamentoDaFolha,
+  completarNomeDoBanco,
+  pagamentoInicial,
+} from "./pagamento-da-folha";
 
 type AlocEdit = {
   key: string;
@@ -34,6 +41,13 @@ type AlocEdit = {
   regional_id: string;
   percentual: string;
 };
+
+function formatBRL(v: string | number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(Number(v));
+}
 
 export function RevisarFolhaDrawer({
   linha,
@@ -50,12 +64,25 @@ export function RevisarFolhaDrawer({
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+  // Salvar o pagamento não é aprovar: estado próprio, para o botão de
+  // aprovar não dizer "Aprovando..." enquanto grava a chave.
+  const [salvandoPagamento, startSalvarPagamento] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [alocacoes, setAlocacoes] = React.useState<AlocEdit[]>([]);
   const [modoReprova, setModoReprova] = React.useState(false);
   const [motivoReprova, setMotivoReprova] = React.useState("");
   const [salarioBase, setSalarioBase] = React.useState<string>("");
+  const [editandoPagamento, setEditandoPagamento] = React.useState(false);
+  const [pagamento, setPagamento] = React.useState<PagamentoDaFolhaInput>(() =>
+    pagamentoInicial(linha.colaborador),
+  );
+  const [errosPagamento, setErrosPagamento] = React.useState<
+    Record<string, string[]>
+  >({});
 
+  // Reinicia só quando abre ou troca de linha. Depender do objeto `linha`
+  // apagaria o que foi digitado a cada router.refresh() — e salvar o
+  // pagamento faz refresh.
   React.useEffect(() => {
     if (!open) return;
     setError(null);
@@ -70,7 +97,11 @@ export function RevisarFolhaDrawer({
         percentual: String(a.percentual),
       })),
     );
-  }, [open, linha]);
+    setEditandoPagamento(false);
+    setPagamento(pagamentoInicial(linha.colaborador));
+    setErrosPagamento({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, linha.id]);
 
   const podeAgir = linha.status === "enviada";
 
@@ -79,6 +110,10 @@ export function RevisarFolhaDrawer({
     0,
   );
   const somaOk = Math.abs(soma - 100) < 0.01;
+  const valorMudou =
+    salarioBase !== "" &&
+    Math.round(Number(salarioBase) * 100) !==
+      Math.round(Number(linha.salario_base) * 100);
 
   function atualizar(index: number, patch: Partial<AlocEdit>) {
     setAlocacoes((prev) =>
@@ -100,8 +135,27 @@ export function RevisarFolhaDrawer({
     setAlocacoes((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function handleSalvarPagamento() {
+    setError(null);
+    setErrosPagamento({});
+    startSalvarPagamento(async () => {
+      const res = await salvarPagamentoDaFolha(
+        linha.id,
+        completarNomeDoBanco(pagamento),
+      );
+      if (!res.ok) {
+        setError(res.message);
+        if (res.fieldErrors) setErrosPagamento(res.fieldErrors);
+        return;
+      }
+      setEditandoPagamento(false);
+      router.refresh();
+    });
+  }
+
   function handleAprovar() {
     setError(null);
+    setErrosPagamento({});
     if (!podeAgir) return;
     if (!somaOk) {
       setError(`Soma precisa dar 100 (atual: ${soma.toFixed(2)}).`);
@@ -112,24 +166,30 @@ export function RevisarFolhaDrawer({
       return;
     }
     if (!salarioBase) {
-      setError("Valor obrigatório.");
+      setError("Informe o valor a pagar.");
       return;
     }
 
     startTransition(async () => {
-      const res = await aprovarLinhaFolha(linha.id, {
-        salario_base: salarioBase,
-        alocacoes: alocacoes.map((a) => ({
-          empresa_id: a.empresa_id,
-          regional_id: a.regional_id,
-          percentual: (
-            Math.round(Number(String(a.percentual).replace(",", ".")) * 100) /
-            100
-          ).toFixed(2),
-        })),
-      });
+      const res = await aprovarLinhaFolha(
+        linha.id,
+        {
+          salario_base: salarioBase,
+          alocacoes: alocacoes.map((a) => ({
+            empresa_id: a.empresa_id,
+            regional_id: a.regional_id,
+            percentual: (
+              Math.round(Number(String(a.percentual).replace(",", ".")) * 100) /
+              100
+            ).toFixed(2),
+          })),
+        },
+        // Pagamento aberto para edição vai junto: aprovar grava os dois.
+        editandoPagamento ? completarNomeDoBanco(pagamento) : undefined,
+      );
       if (!res.ok) {
         setError(res.message);
+        if (res.fieldErrors) setErrosPagamento(res.fieldErrors);
         return;
       }
       onOpenChange(false);
@@ -160,7 +220,12 @@ export function RevisarFolhaDrawer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DialogHeader className="border-b border-border p-6">
-          <DialogTitle>{linha.colaborador.nome}</DialogTitle>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            {linha.colaborador.nome}
+            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+              {tipoContratacaoLabel(linha.colaborador.tipo_contratacao)}
+            </span>
+          </DialogTitle>
           <DialogDescription>
             {linha.colaborador.funcao} · Status atual:{" "}
             <span className="font-semibold text-foreground">
@@ -187,7 +252,7 @@ export function RevisarFolhaDrawer({
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="salario_base">Valor da folha</Label>
+              <Label htmlFor="salario_base">Valor a pagar</Label>
               <MoedaInput
                 key={linha.id + linha.salario_base}
                 id="salario_base"
@@ -204,10 +269,30 @@ export function RevisarFolhaDrawer({
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                Se você mudar o valor, a próxima folha do colaborador vai
-                nascer com este valor (propaga pra Camada 1).
+                {valorMudou
+                  ? `Enviado pelo RH: ${formatBRL(linha.salario_base)}. `
+                  : ""}
+                O salário do cadastro não muda.
               </p>
             </div>
+
+            <PagamentoDaFolha
+              colaborador={linha.colaborador}
+              podeEditar={podeAgir && !modoReprova}
+              editando={editandoPagamento}
+              onEditandoChange={(v) => {
+                setEditandoPagamento(v);
+                if (!v) {
+                  setPagamento(pagamentoInicial(linha.colaborador));
+                  setErrosPagamento({});
+                }
+              }}
+              valores={pagamento}
+              onValoresChange={setPagamento}
+              fieldErrors={errosPagamento}
+              salvando={salvandoPagamento}
+              onSalvar={handleSalvarPagamento}
+            />
 
             <div className="space-y-2">
               <Label>Alocação da folha</Label>
@@ -304,8 +389,9 @@ export function RevisarFolhaDrawer({
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Ao aprovar, cada linha de alocação vira um título em{" "}
-                &ldquo;Títulos a Pagar&rdquo; com o valor rateado.
+                Ao aprovar, a linha vira um título em &ldquo;Títulos a
+                Pagar&rdquo;, com o valor rateado entre as regionais — um
+                pagamento só.
               </p>
             </div>
 
@@ -379,11 +465,15 @@ export function RevisarFolhaDrawer({
                     <button
                       type="button"
                       onClick={handleAprovar}
-                      disabled={pending || !somaOk}
+                      disabled={pending || salvandoPagamento || !somaOk}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      {pending ? "Aprovando..." : "Aprovar"}
+                      {pending
+                        ? "Aprovando..."
+                        : salarioBase
+                          ? `Aprovar ${formatBRL(salarioBase)}`
+                          : "Aprovar"}
                     </button>
                   </>
                 )}

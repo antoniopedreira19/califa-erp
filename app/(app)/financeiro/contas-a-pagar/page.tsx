@@ -50,6 +50,11 @@ import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
 import { FolhasPagarList, type FolhaLinhaFinanceiro } from "./folhas-pagar-list";
 import {
+  carregarColaboradoresPagamento,
+  temConta,
+  temPix,
+} from "@/lib/financeiro/colaboradores-pagamento";
+import {
   ExportarRemessaCnabDialog,
   type ContaSantanderElegivel,
   type TituloElegivelParaRemessa,
@@ -398,11 +403,13 @@ export default async function PedidosCompraFinanceiroPage({
     listarConversasPPs(supabase, session.activeTenant.id),
     // Folhas de pagamento: só as que precisam da atenção do financeiro
     // (enviada + pendente_correcao). Aprovadas já viraram contas_avulsas
-    // e aparecem em Títulos a Pagar.
+    // e aparecem em Títulos a Pagar. O colaborador vem do RPC abaixo
+    // (decisão 132): o embed em `colaboradores` volta nulo para o papel
+    // financeiro, que não passa na RLS da tabela.
     supabase
       .from("folhas_pagamento")
       .select(
-        "id, competencia_ano, competencia_mes, salario_base, status, motivo_pendencia, colaborador:colaboradores(id, nome, funcao, tipo_contratacao), alocacoes:folhas_pagamento_alocacoes(id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome))",
+        "id, competencia_ano, competencia_mes, salario_base, status, motivo_pendencia, colaborador_id, alocacoes:folhas_pagamento_alocacoes(id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome))",
       )
       .eq("tenant_id", session.activeTenant.id)
       .in("status", ["enviada", "pendente_correcao"])
@@ -425,12 +432,11 @@ export default async function PedidosCompraFinanceiroPage({
       .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("natureza", "saida"),
-    // CNAB: colaboradores ativos com dados bancários — enriquecimento do Dialog.
-    supabase
-      .from("colaboradores")
-      .select("id, nome, banco_codigo, agencia, conta, pix_chave")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo"),
+    // Colaboradores como o financeiro enxerga (decisão 132): nome,
+    // contratação e pagamento, pelo RPC — serve à aba de folha e ao
+    // diálogo da remessa. Inclui inativos: a última folha de quem saiu
+    // também se paga.
+    carregarColaboradoresPagamento(supabase, session.activeTenant.id),
     // O que já foi para uma remessa CNAB: só aceita a baixa do que falta,
     // sem retenção (interino da D15, decisão 125). Tabela pequena.
     supabase
@@ -1540,11 +1546,26 @@ export default async function PedidosCompraFinanceiroPage({
       salario_base: String(l.salario_base),
       status: l.status,
       motivo_pendencia: l.motivo_pendencia,
-      colaborador: {
-        id: l.colaborador?.id ?? "",
-        nome: l.colaborador?.nome ?? "—",
-        funcao: l.colaborador?.funcao ?? "—",
-        tipo_contratacao: l.colaborador?.tipo_contratacao ?? "clt",
+      // Sem o colaborador no RPC, a linha aparece com travessão e sem
+      // pagamento — nunca com dado inventado.
+      colaborador: cnabColaboradoresRes.get(l.colaborador_id) ?? {
+        id: l.colaborador_id,
+        nome: "—",
+        funcao: "—",
+        tipo_contratacao: "pj",
+        status: "ativo",
+        cpf: null,
+        cnpj: null,
+        razao_social: null,
+        pix_tipo: null,
+        pix_chave: null,
+        banco_codigo: null,
+        banco_nome: null,
+        agencia: null,
+        agencia_dv: null,
+        conta: null,
+        conta_dv: null,
+        tipo_conta: null,
       },
       alocacoes: ((l.alocacoes ?? []) as any[]).map((a) => ({
         id: a.id,
@@ -1682,18 +1703,11 @@ export default async function PedidosCompraFinanceiroPage({
     string,
     { nome: string; temPix: boolean; temBanco: boolean }
   >();
-  for (const c of (cnabColaboradoresRes.data ?? []) as Array<{
-    id: string;
-    nome: string;
-    banco_codigo: string | null;
-    agencia: string | null;
-    conta: string | null;
-    pix_chave: string | null;
-  }>) {
+  for (const c of cnabColaboradoresRes.values()) {
     colaboradorBancoMap.set(c.id, {
       nome: c.nome,
-      temPix: !!c.pix_chave,
-      temBanco: !!(c.banco_codigo && c.agencia && c.conta),
+      temPix: temPix(c),
+      temBanco: temConta(c),
     });
   }
 
@@ -1787,6 +1801,7 @@ export default async function PedidosCompraFinanceiroPage({
               regionais={regionaisList}
               cartoes={cartoesList}
               ultimasRetencoes={ultimasRetencoes}
+              podeDevolverFolha={pode(session.activeRole, "rh.folhas.aprovar_financeiro")}
               exportarRemessaBotao={
                 <ExportarRemessaCnabDialog
                   contasSantander={contasSantander}
