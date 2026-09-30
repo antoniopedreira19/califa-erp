@@ -6379,4 +6379,15 @@ estendido a Contas a Receber em 31/08.**
   para o pop-up do orçamento (ver `HANDOFF_ORCAMENTO.md`, nota de
   2026-09-30 (2)).
 - O painel "Dados da produção" da tela de abertura
-  (`abertura-form.tsx`) não mudou: continua com "nome · código".
+  (`abertura-form.tsx`) seguiu com "nome · código" até a nota (3) abaixo,
+  que o igualou (decisão 135).
+
+## ⚠️ Nota de 2026-09-30 (3) — "Dados da produção" só com o nome do projeto; GP e produtor escolhidos no envio (decisão 135)
+
+- O painel **Dados da produção** da tela de abertura mostra o projeto só
+  pelo nome, como os pop-ups de conferência. O único código do painel é o
+  do job.
+- O **GP e o produtor** que chegam na abertura passam a ser os que a
+  produção escolheu no formulário de envio, que agora deixa trocá-los. A
+  troca vai também para o orçamento. Detalhes no `HANDOFF_ORCAMENTO.md`,
+  nota de 2026-09-30 (4), e na decisão 135.

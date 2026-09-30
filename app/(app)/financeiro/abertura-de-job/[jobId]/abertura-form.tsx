@@ -1414,12 +1414,8 @@ export function AberturaForm({
   const dadosProducao: { rotulo: string; valor: string; mono?: boolean }[] = [
     { rotulo: "Job", valor: job.nome },
     { rotulo: "Código", valor: job.codigo, mono: true },
-    {
-      rotulo: "Projeto",
-      valor:
-        [job.projeto_nome, job.projeto_codigo].filter(Boolean).join(" · ") ||
-        "—",
-    },
+    // Só o nome: o único código do painel é o do job (decisão 135).
+    { rotulo: "Projeto", valor: job.projeto_nome ?? "—" },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
     { rotulo: "Marca", valor: job.produto ?? "—" },
     // A que veio do orçamento — fixa. O que o financeiro escolher no

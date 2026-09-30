@@ -45,6 +45,8 @@ function extractInput(formData: FormData) {
     nome: formData.get("nome")?.toString() ?? "",
     cidade_id: formData.get("cidade_id")?.toString() ?? "",
     regional_id: formData.get("regional_id")?.toString() ?? "",
+    gp_responsavel_id: formData.get("gp_responsavel_id")?.toString() ?? "",
+    produtor_id: formData.get("produtor_id")?.toString() ?? "",
     data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
     data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
     data_evento: formData.get("data_evento")?.toString() ?? "",
@@ -294,14 +296,14 @@ export async function enviarJobParaAbertura(
     };
   }
 
-  // 3. Produto vem do projeto; GP e produtor vêm do orçamento.
-  //    `projetos.produto_id` é a marca que o job leva (decisão 133): a
-  //    única escolhida no projeto ou, com mais de uma, a geral do cliente
-  //    (PRD-01). Quem a grava é a action do projeto. O
-  //    formulário só exibe esses três — reler do banco é o que garante
+  // 3. Produto vem do projeto. `projetos.produto_id` é a marca que o job
+  //    leva (decisão 133): a única escolhida no projeto ou, com mais de
+  //    uma, a geral do cliente (PRD-01). Quem a grava é a action do
+  //    projeto. O formulário só a exibe — reler do banco é o que garante
   //    que o job grave o que está cadastrado, e não o que chegou no
-  //    payload. Cidade e regional, ao contrário, o modal deixa trocar:
-  //    vêm do formulário e são conferidas logo abaixo.
+  //    payload. Cidade, regional, GP e produtor, ao contrário, o modal
+  //    deixa trocar (os dois últimos desde a decisão 135): vêm do
+  //    formulário e são conferidos logo abaixo.
   const { data: projeto } = await supabase
     .from("projetos")
     .select("id, cliente_id, produto_id")
@@ -311,22 +313,25 @@ export async function enviarJobParaAbertura(
 
   if (!projeto) return { ok: false, message: "Projeto não encontrado." };
 
-  const faltando: string[] = [];
-  if (!projeto.produto_id) faltando.push("Marca (no projeto)");
-  if (!orc.gp_responsavel_id) faltando.push("GP responsável (no orçamento)");
-  if (!orc.produtor_id) faltando.push("Produtor responsável (no orçamento)");
-
-  if (faltando.length > 0) {
+  if (!projeto.produto_id) {
     return {
       ok: false,
-      message: `Complete o cadastro antes de abrir o job: ${faltando.join(", ")}.`,
+      message: "Complete o cadastro antes de abrir o job: Marca (no projeto).",
     };
   }
 
   // A regional escolhida precisa estar entre as do projeto — a mesma
   // regra do formulário do orçamento. A lista do modal já filtra, mas
   // quem manda o payload não é obrigado a respeitá-la.
-  const [produtoRes, cidadeRes, regionalDoProjetoRes] = await Promise.all([
+  //
+  // GP e produtor (decisão 135) seguem as listas do formulário do
+  // orçamento: o GP sai dos responsáveis do projeto, o produtor dos
+  // membros ativos. O que já está no orçamento passa sem conferência —
+  // até aqui o envio o copiava sem olhar, e um GP que saiu da equipe do
+  // projeto depois não pode travar um envio que ninguém mexeu.
+  const gpMudou = parsed.data.gp_responsavel_id !== orc.gp_responsavel_id;
+  const produtorMudou = parsed.data.produtor_id !== orc.produtor_id;
+  const [produtoRes, cidadeRes, regionalDoProjetoRes, gpDoProjetoRes, membrosRes] = await Promise.all([
     supabase
       .from("cliente_produtos")
       .select("id, nome")
@@ -347,6 +352,21 @@ export async function enviarJobParaAbertura(
       .eq("regional_id", parsed.data.regional_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ regional_id: string }>(),
+    gpMudou
+      ? supabase
+          .from("projeto_responsaveis")
+          .select("profile_id")
+          .eq("projeto_id", orc.projeto_id)
+          .eq("profile_id", parsed.data.gp_responsavel_id)
+          .eq("tenant_id", session.activeTenant.id)
+          .maybeSingle<{ profile_id: string }>()
+      : Promise.resolve({ data: { profile_id: parsed.data.gp_responsavel_id }, error: null }),
+    // A mesma fonte da lista do modal (`listActiveMembers`): ler
+    // `tenant_members` direto mostraria só a própria linha para quem não
+    // é administrador.
+    produtorMudou
+      ? supabase.rpc("membros_ativos_do_tenant", { p_tenant_id: session.activeTenant.id })
+      : Promise.resolve({ data: [{ id: parsed.data.produtor_id }], error: null }),
   ]);
 
   if (!produtoRes.data) {
@@ -367,6 +387,28 @@ export async function enviarJobParaAbertura(
       ok: false,
       message: "A regional escolhida não está cadastrada neste projeto. Selecione outra.",
       fieldErrors: { regional_id: ["Regional não cadastrada no projeto."] },
+    };
+  }
+  if (!gpDoProjetoRes.data) {
+    return {
+      ok: false,
+      message: "O GP escolhido não é um dos responsáveis do projeto. Selecione outro.",
+      fieldErrors: { gp_responsavel_id: ["Escolha um dos responsáveis do projeto."] },
+    };
+  }
+  if (membrosRes.error) {
+    console.error("[abertura.membros]", membrosRes.error.message);
+    return { ok: false, message: "Não foi possível conferir o produtor responsável." };
+  }
+  if (
+    !((membrosRes.data ?? []) as { id: string }[]).some(
+      (m) => m.id === parsed.data.produtor_id,
+    )
+  ) {
+    return {
+      ok: false,
+      message: "O produtor escolhido não está entre os usuários ativos. Selecione outro.",
+      fieldErrors: { produtor_id: ["Escolha um usuário ativo."] },
     };
   }
 
@@ -485,14 +527,17 @@ export async function enviarJobParaAbertura(
     return { ok: false, message: (e as Error).message };
   }
 
-  // 5. Nome, datas, cidade e regional voltam para o orçamento, como
-  //    avisa o modal — orçamento e job nunca divergem nesses campos.
+  // 5. Nome, datas, cidade, regional, GP e produtor voltam para o
+  //    orçamento, como avisa o modal — orçamento e job nunca divergem
+  //    nesses campos.
   const { error: errOrcDados } = await supabase
     .from("orcamentos")
     .update({
       nome: parsed.data.nome,
       cidade_id: parsed.data.cidade_id,
       regional_id: parsed.data.regional_id,
+      gp_responsavel_id: parsed.data.gp_responsavel_id,
+      produtor_id: parsed.data.produtor_id,
       data_inicio_prevista: parsed.data.data_inicio_prevista,
       data_fim_prevista: parsed.data.data_fim_prevista,
     })
@@ -577,8 +622,8 @@ export async function enviarJobParaAbertura(
         data_evento: parsed.data.data_evento,
         data_prevista_faturamento: parsed.data.data_prevista_faturamento,
         observacoes: parsed.data.observacoes,
-        responsavel_id: orc.gp_responsavel_id,
-        produtor_id: orc.produtor_id,
+        responsavel_id: parsed.data.gp_responsavel_id,
+        produtor_id: parsed.data.produtor_id,
         status: "aguardando_abertura",
         motivo_rejeicao: null,
         // Os números do financeiro pela cópia (decisão 099, §11), e a base
@@ -608,6 +653,8 @@ export async function enviarJobParaAbertura(
         versao_id: versaoId,
         cidade_id: parsed.data.cidade_id,
         regional_id: parsed.data.regional_id,
+        gp_responsavel_id: parsed.data.gp_responsavel_id,
+        produtor_id: parsed.data.produtor_id,
         data_evento: parsed.data.data_evento,
         data_prevista_faturamento: parsed.data.data_prevista_faturamento,
         qtd_contatos_cobranca: parsed.data.contatos_cobranca.length,
@@ -652,9 +699,10 @@ export async function enviarJobParaAbertura(
       // fila de abertura e no detalhe do job.
       observacoes: parsed.data.observacoes,
       // Os dois responsáveis vêm do orçamento desde 06/08/2026 — antes o
-      // job herdava `projetos.responsavel_id`.
-      responsavel_id: orc.gp_responsavel_id,
-      produtor_id: orc.produtor_id,
+      // job herdava `projetos.responsavel_id`. Desde a decisão 135 o
+      // modal deixa trocá-los, e o passo 5 já levou a troca ao orçamento.
+      responsavel_id: parsed.data.gp_responsavel_id,
+      produtor_id: parsed.data.produtor_id,
       valor_total: Number(totais.valorJob.toFixed(2)),
       // A coluna VIVA do faturamento previsto — sem ela o job nasceria
       // nulo e a listagem do financeiro leria "—" até a primeira errata.
@@ -972,6 +1020,9 @@ export async function enviarJobParaAbertura(
       // Editáveis no modal desde 12/08/2026 — registrar o que foi escolhido.
       cidade_id: parsed.data.cidade_id,
       regional_id: parsed.data.regional_id,
+      // Editáveis desde a decisão 135.
+      gp_responsavel_id: parsed.data.gp_responsavel_id,
+      produtor_id: parsed.data.produtor_id,
       valor_total: Number(totais.valorJob.toFixed(2)),
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       data_evento: parsed.data.data_evento,
