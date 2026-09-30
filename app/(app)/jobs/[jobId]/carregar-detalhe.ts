@@ -124,6 +124,8 @@ export async function carregarDetalheDoJob(
       .select("id, nome, empresa_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
+      // Regional só de folha (AMBEV) não é opção de job — decisão 134.
+      .eq("disponivel_em_projetos", true)
       .order("nome"),
     listActiveMembers(session.activeTenant.id),
     // Contatos que a produção informou no envio para abertura. Uma query

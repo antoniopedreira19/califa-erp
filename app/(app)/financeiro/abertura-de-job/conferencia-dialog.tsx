@@ -42,10 +42,8 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
   const dados: { rotulo: string; valor: string; mono?: boolean }[] = [
     { rotulo: "Job", valor: job.nome },
     { rotulo: "Código", valor: job.codigo, mono: true },
-    {
-      rotulo: "Projeto",
-      valor: [job.projeto_nome, job.projeto_codigo].filter(Boolean).join(" · ") || "—",
-    },
+    // Só o nome: o único código da conferência é o do job (30/09/2026).
+    { rotulo: "Projeto", valor: job.projeto_nome ?? "—" },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
     { rotulo: "Marca", valor: job.produto ?? "—" },
     // Vem do orçamento: é a categoria que a produção deu ao job e a que a
