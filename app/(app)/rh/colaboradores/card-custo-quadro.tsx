@@ -17,7 +17,8 @@ export function CardCustoQuadro({
   colaboradoresComSalario: number;
   colaboradoresSemSalario: number;
 }) {
-  const [oculto, setOculto] = React.useState(false);
+  // Oculto por padrão — mesma regra da coluna Valor da listagem.
+  const [oculto, setOculto] = React.useState(true);
 
   const brl = new Intl.NumberFormat("pt-BR", {
     style: "currency",
