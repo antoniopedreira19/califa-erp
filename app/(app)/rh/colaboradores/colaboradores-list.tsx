@@ -95,7 +95,10 @@ export function ColaboradoresList({
   const [regionalFiltro, setRegionalFiltro] = React.useState<string>(TODAS);
   const [pendenciaFiltro, setPendenciaFiltro] =
     React.useState<PendenciaFiltro>("todos");
-  const [salariosOcultos, setSalariosOcultos] = React.useState(false);
+  // Ocultos por padrão — decisão de UI pra evitar exposição acidental de
+  // salários em telas compartilhadas. O RH clica no ícone da coluna Valor
+  // pra revelar.
+  const [salariosOcultos, setSalariosOcultos] = React.useState(true);
 
   // Regionais disponíveis no dropdown: quando uma empresa está selecionada,
   // só as regionais dela; senão, todas do tenant. Hub aparece sempre.
