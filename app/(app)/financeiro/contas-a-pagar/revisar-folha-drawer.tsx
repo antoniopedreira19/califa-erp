@@ -389,9 +389,15 @@ export function RevisarFolhaDrawer({
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Ao aprovar, a linha vira um título em &ldquo;Títulos a
-                Pagar&rdquo;, com o valor rateado entre as regionais — um
-                pagamento só.
+                {new Set(alocacoes.map((a) => a.regional_id).filter(Boolean)).size > 1 ? (
+                  <>
+                    Ao aprovar, a linha vira um título em &ldquo;Títulos a
+                    Pagar&rdquo;, com o valor rateado entre as regionais — um
+                    pagamento só.
+                  </>
+                ) : (
+                  <>Ao aprovar, a linha vira um título em &ldquo;Títulos a Pagar&rdquo;.</>
+                )}
               </p>
             </div>
 

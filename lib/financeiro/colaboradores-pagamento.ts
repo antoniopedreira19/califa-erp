@@ -12,6 +12,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import type { TipoContratacao } from "@/lib/types";
 import { chavePixParaExibir, type PixTipo } from "@/lib/pix";
+import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 import { formatCnpj, formatCpf } from "@/lib/utils";
 
 export type TipoContaBancaria = "corrente" | "poupanca" | "pagamento";
@@ -80,6 +81,45 @@ const ROTULO_PIX: Record<PixTipo, string> = {
   aleatoria: "Aleatória",
 };
 
+/** O tipo da chave como aparece na tela: "CPF", "Telefone", "Aleatória". */
+export function rotuloTipoPix(tipo: PixTipo): string {
+  return ROTULO_PIX[tipo];
+}
+
+const ROTULO_TIPO_CONTA: Record<TipoContaBancaria, string> = {
+  corrente: "Conta corrente",
+  poupanca: "Conta poupança",
+  pagamento: "Conta de pagamento",
+};
+
+/** Sem tipo gravado, a remessa manda conta corrente — a tela diz o mesmo. */
+export function rotuloTipoConta(tipo: TipoContaBancaria | null): string {
+  return ROTULO_TIPO_CONTA[tipo ?? "corrente"];
+}
+
+/** "260 · NU PAGAMENTOS S.A. …": o nome gravado ou o da lista da Febraban. */
+export function descreverBanco(
+  c: Pick<ColaboradorPagamento, "banco_codigo" | "banco_nome">,
+): string {
+  if (!c.banco_codigo) return "";
+  const codigo = c.banco_codigo.padStart(3, "0");
+  const nome = c.banco_nome?.trim() || getBancoByCodigo(codigo)?.nome || "";
+  return nome ? `${codigo} · ${nome}` : codigo;
+}
+
+/**
+ * O documento que o arquivo da remessa leva para o favorecido: o CNPJ quando
+ * há, senão o CPF (é o que `buscarDadosDestinatario` manda). Na TED, a conta
+ * precisa ser desse titular.
+ */
+export function documentoNoArquivo(
+  c: Pick<ColaboradorPagamento, "cpf" | "cnpj">,
+): string {
+  if (c.cnpj) return `CNPJ ${formatCnpj(c.cnpj)}`;
+  if (c.cpf) return `CPF ${formatCpf(c.cpf)}`;
+  return "";
+}
+
 /** "CPF 123.456.789-00", "Telefone 11999999999", "E-mail a@b.com". */
 export function descreverPix(
   c: Pick<ColaboradorPagamento, "pix_tipo" | "pix_chave">,
@@ -92,15 +132,6 @@ export function descreverPix(
         ? formatCnpj(c.pix_chave)
         : chavePixParaExibir(c.pix_tipo, c.pix_chave);
   return `${ROTULO_PIX[c.pix_tipo]} ${chave}`;
-}
-
-/** "260 · ag. 0001 · cc 12345-6" */
-export function descreverConta(
-  c: Pick<ColaboradorPagamento, "banco_codigo" | "agencia" | "agencia_dv" | "conta" | "conta_dv">,
-): string {
-  if (!temConta(c)) return "";
-  const ag = c.agencia_dv ? `${c.agencia}-${c.agencia_dv}` : c.agencia;
-  return `${c.banco_codigo} · ag. ${ag} · cc ${c.conta}-${c.conta_dv}`;
 }
 
 /**
