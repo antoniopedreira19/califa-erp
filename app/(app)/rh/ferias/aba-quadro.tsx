@@ -8,7 +8,7 @@ import type {
 } from "@/lib/types";
 import { QuadroFiltros } from "./quadro-filtros";
 import { LinhaQuadro } from "./linha-quadro";
-import { DrawerDetalheColaborador } from "./drawer-detalhe-colaborador";
+import { ModalDetalheColaborador } from "./modal-detalhe-colaborador";
 
 type Props = {
   tenantId: string;
@@ -253,12 +253,13 @@ export async function AbaQuadro({
       )}
 
       {colabSelecionado && (
-        <DrawerDetalheColaborador
+        <ModalDetalheColaborador
           colaborador={{
             id: colabSelecionado.id,
             nome: colabSelecionado.nome,
             tipo_contratacao: colabSelecionado.tipo_contratacao,
             funcao: colabSelecionado.funcao,
+            data_admissao: colabSelecionado.data_admissao,
           }}
           periodos={periodosSelecionado}
           lancamentos={lancamentosDoColab}
