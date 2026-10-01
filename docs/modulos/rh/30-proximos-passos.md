@@ -59,6 +59,8 @@ Catálogo (Total Pass, SulAmérica Titular/Dep, Bradesco Ondo, Amil coparticipa�
 
 **Esforço:** 2-3 sessões. **Ganho:** benefícios saem do cálculo mental da Kika.
 
+> **Nota de integração com Férias (decidido 2026-10-01, F9 em [`25-ferias.md`](25-ferias.md))**: TotalPass e planos de saúde ficam **zerados no MVP do subsistema Férias/Rescisão**. Quando o subsistema de Benefícios for implementado, o cálculo de rescisão (feito dentro do fluxo de férias/desligamento) passa a puxar automaticamente os descontos recorrentes do colaborador. Até lá, o RH preenche o desconto manualmente na tela de rescisão.
+
 ### 4. Notificação de pendência
 
 Hoje Kika só descobre reprovação abrindo a tela. Duas variantes:
