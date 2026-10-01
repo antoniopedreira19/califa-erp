@@ -157,6 +157,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 135 | [Envio para abertura: GP e produtor editáveis, Serviço no formulário e só o código do job](135-envio-com-gp-produtor-e-servico.md) | 2026-09-30 |
 | 136 | [Qualquer GP age em qualquer job, e quem fez cada envio fica registrado](136-qualquer-gp-age-e-o-autor-fica-registrado.md) | 2026-10-01 |
 | 137 | [Pagamento fora do cadastro: visível ao financeiro e pago pela remessa](137-fora-do-cadastro-visivel-e-pago-pela-remessa.md) | 2026-10-01 |
+| 138 | [O percentual de cada parcela da PP, com a última fechando os 100%](138-percentual-de-cada-parcela-da-pp.md) | 2026-10-01 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -169,4 +170,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 138.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 139.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

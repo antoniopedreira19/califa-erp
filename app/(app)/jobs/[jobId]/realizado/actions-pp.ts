@@ -27,7 +27,7 @@ import {
   exigeSomaIgualAoOrcado,
   faltaParaFecharOOrcado,
   parcelasFecham,
-  dividirEmParcelas,
+  redividirPelaProporcao,
 } from "@/lib/calculos/pps-item";
 import { aplicarConclusaoDoItem } from "./conclusao-item";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
@@ -1656,10 +1656,10 @@ export async function prefixoAnexosPedidoCompra(
  *
  * O PARCELAMENTO não se refaz aqui — a quantidade de parcelas e os
  * vencimentos foram combinados com o fornecedor na emissão. O que a
- * correção pode mudar é o valor total, e nesse caso as parcelas são
- * redivididas pela mesma regra do formulário (parte igual, sobra na
- * última), mantendo número e datas. Quem quiser outro parcelamento
- * cancela a PP e emite outra.
+ * correção pode mudar é o valor total, e nesse caso cada parcela mantém
+ * a sua PROPORÇÃO do valor (decisão 138; até ela, tudo voltava a ser
+ * dividido igual e um 30/70 virava 50/50), com número e datas mantidos.
+ * Quem quiser outro parcelamento cancela a PP e emite outra.
  */
 export async function reenviarPedidoCompra(
   pp_id: string,
@@ -1860,12 +1860,12 @@ export async function reenviarPedidoCompra(
   );
   if (pedidoDeConfirmacao) return pedidoDeConfirmacao;
 
-  // ---- Parcelas: valores redivididos, datas conforme a 1ª ----
+  // ---- Parcelas: mesma proporção, datas conforme a 1ª ----
   // Precisa vir ANTES do PDF: o documento carrega o vencimento e o valor
   // de cada parcela, então os números têm que estar decididos.
   const { data: parcelasAtuais } = await supabase
     .from("pedidos_compra_parcelas")
-    .select("id, numero, data_vencimento, pdf_path")
+    .select("id, numero, data_vencimento, valor, pdf_path")
     .eq("pedido_compra_id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .order("numero", { ascending: true });
@@ -1887,7 +1887,11 @@ export async function reenviarPedidoCompra(
   );
   if (!urgencia.ok) return urgencia;
 
-  const valores = dividirEmParcelas(valor, Math.max(parcelas.length, 1));
+  // Cada parcela mantém o seu % do valor (decisão 138).
+  const valores = redividirPelaProporcao(
+    parcelas.map((p) => Number(p.valor)),
+    valor,
+  );
   const primeiraMudou =
     parcelas.length > 0 &&
     parcelas[0].data_vencimento.slice(0, 10) !== d.prazo_pagamento;

@@ -189,6 +189,33 @@ export function dividirEmParcelas(valor: number, quantidade: number): number[] {
   return parcelas;
 }
 
+/**
+ * O valor da PP mudou e as parcelas mantêm a PROPORÇÃO de cada uma
+ * (decisão 138): um 30/70 de R$ 10.000 corrigido para R$ 12.000 vira
+ * 3.600 + 8.400. A sobra de centavo vai para a última, como na divisão
+ * igual. Divisão que já era igual continua igual (senão 1.666,66 +
+ * 1.666,66 + 1.666,68 levado a R$ 6.000 dava 1.999,99 + 1.999,99 +
+ * 2.000,02), e sem valores anteriores que somem algo também.
+ */
+export function redividirPelaProporcao(
+  valoresAtuais: number[],
+  valorNovo: number,
+): number[] {
+  const n = valoresAtuais.length;
+  if (n === 0) return [];
+  const somaAtual = arredondar(valoresAtuais.reduce((s, v) => s + v, 0));
+  if (somaAtual <= 0) return dividirEmParcelas(valorNovo, n);
+  if (Math.abs(somaAtual - valorNovo) < 0.005) return valoresAtuais.map(arredondar);
+  const iguais = dividirEmParcelas(somaAtual, n);
+  if (valoresAtuais.every((v, i) => Math.abs(v - iguais[i]) < 0.005)) {
+    return dividirEmParcelas(valorNovo, n);
+  }
+  const novos = valoresAtuais.map((v) => arredondar((v / somaAtual) * valorNovo));
+  const anteriores = arredondar(novos.slice(0, -1).reduce((s, v) => s + v, 0));
+  novos[n - 1] = arredondar(valorNovo - anteriores);
+  return novos;
+}
+
 /** A soma das parcelas fecha com o valor da PP? (tolerância de 1 centavo) */
 export function parcelasFecham(parcelas: number[], valor: number): boolean {
   const soma = arredondar(parcelas.reduce((s, v) => s + v, 0));

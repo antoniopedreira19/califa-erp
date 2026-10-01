@@ -709,7 +709,7 @@ export function EditarPPDrawer({
                 {(pp.parcelas ?? []).length > 1 && (
                   <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
                     Trocar o prazo refaz as {(pp.parcelas ?? []).length} parcelas na
-                    mesma janela, mês a mês.
+                    mesma janela, mês a mês. Mudar o valor mantém o % de cada uma.
                   </p>
                 )}
               </div>
