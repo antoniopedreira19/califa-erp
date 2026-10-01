@@ -345,6 +345,7 @@ export default async function AbrirJobNoFinanceiroPage({
           <div className="space-y-4">
             <FichaJob
               descritivo={jobDoDetalhe.observacoes}
+              etapas={detalhe.etapasDoJob}
               antesDaAbertura
               job={{
                 codigo: jobDoDetalhe.codigo,

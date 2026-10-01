@@ -277,7 +277,7 @@ export default async function OrcamentoDetailPage({
         // por eles que a tela sabe que o financeiro devolveu o job.
         // `*_abertura`: os números congelados no envio/reenvio — o "Ver
         // dados do job" mostra o que foi gravado (decisão 099).
-        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao, valor_job_abertura, faturamento_previsto_abertura, " +
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao, devolvido_em, valor_job_abertura, faturamento_previsto_abertura, " +
           // GP e produtor gravados no job: o "Ver dados do job" os mostra
           // (decisão 135).
           "responsavel:profiles!responsavel_id(nome), produtor:profiles!produtor_id(nome)",

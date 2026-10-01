@@ -18,6 +18,33 @@ function formatData(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
+/** "28/09/2026 10:41", no horário de Brasília. Coluna só de data (sem
+ *  hora) sai só com a data. */
+function formatDataHora(iso: string | null): string {
+  if (!iso) return "—";
+  if (iso.length <= 10) return formatData(iso);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const fmt = (o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", ...o }).format(d);
+  return `${fmt({ day: "2-digit", month: "2-digit", year: "numeric" })} ${fmt({ hour: "2-digit", minute: "2-digit" })}`;
+}
+
+/**
+ * As etapas do job, cada uma com quando e quem (decisão 136): qualquer GP
+ * pode enviar, então o nome é o que diz quem fez. Envio para abertura é o
+ * ÚLTIMO (no reenvio, o reenvio); envio para faturamento é o mais recente
+ * (no mensal há um por mês).
+ */
+export interface EtapasDaFicha {
+  enviadoAberturaEm: string | null;
+  enviadoAberturaPorNome: string | null;
+  envioFaturamentoEm: string | null;
+  envioFaturamentoPorNome: string | null;
+  encerradoEm: string | null;
+  encerradoPorNome: string | null;
+}
+
 /** "17/08/2026 → 31/08/2026". Travessão quando as duas pontas faltam. */
 function formatPeriodo(inicio: string | null, fim: string | null): string {
   if (!inicio && !fim) return "—";
@@ -89,6 +116,9 @@ interface Props {
   /** `jobs.observacoes`, rotulado "Descritivo do job" desde 17/08/2026. */
   descritivo: string | null;
   job: JobDaFicha;
+  /** Obrigatório: as três telas que mostram a ficha passam as etapas
+   *  (decisão 136). */
+  etapas: EtapasDaFicha;
   projeto: ProjetoDaFicha;
   /** Todos os jobs do projeto, o desta tela incluído. */
   jobsDoProjeto: JobIrmao[];
@@ -134,6 +164,7 @@ interface Props {
 export function FichaJob({
   descritivo,
   job,
+  etapas,
   projeto,
   jobsDoProjeto,
   jobAtualId,
@@ -226,11 +257,16 @@ export function FichaJob({
               <Campo rotulo="Período" mono>
                 {formatPeriodo(job.dataInicio, job.dataFim)}
               </Campo>
+              <Etapa
+                rotulo="Envio para abertura"
+                em={etapas.enviadoAberturaEm}
+                quem={etapas.enviadoAberturaPorNome}
+              />
               <Campo rotulo="Abertura">
                 {job.dataAbertura ? (
                   <>
                     <span className="font-mono text-[13px]">
-                      {formatData(job.dataAbertura)}
+                      {formatDataHora(job.dataAbertura)}
                     </span>
                     {job.abertoPorNome && (
                       <span className="text-muted-foreground">
@@ -247,6 +283,20 @@ export function FichaJob({
                   "—"
                 )}
               </Campo>
+              {etapas.envioFaturamentoEm && (
+                <Etapa
+                  rotulo="Envio para faturamento"
+                  em={etapas.envioFaturamentoEm}
+                  quem={etapas.envioFaturamentoPorNome}
+                />
+              )}
+              {etapas.encerradoEm && (
+                <Etapa
+                  rotulo="Encerramento"
+                  em={etapas.encerradoEm}
+                  quem={etapas.encerradoPorNome}
+                />
+              )}
               <Campo rotulo="Prev. recebimento" mono ultimo>
                 {job.semFaturamento
                   ? "Sem faturamento"
@@ -545,5 +595,29 @@ function CampoLateral({
         {children}
       </p>
     </div>
+  );
+}
+
+/** Uma etapa da ficha com data, hora e autor (decisão 136). */
+function Etapa({
+  rotulo,
+  em,
+  quem,
+}: {
+  rotulo: string;
+  em: string | null;
+  quem: string | null;
+}) {
+  return (
+    <Campo rotulo={rotulo}>
+      {em ? (
+        <>
+          <span className="font-mono text-[13px]">{formatDataHora(em)}</span>
+          {quem && <span className="text-muted-foreground"> · {quem}</span>}
+        </>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      )}
+    </Campo>
   );
 }

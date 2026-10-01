@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatCurrency } from "@/lib/utils";
+import { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
 import type { JobStatus } from "@/lib/types";
 import {
   bloqueioAprovacaoVersao,
@@ -46,6 +47,8 @@ export interface JobExistente {
   status: JobStatus;
   /** O que o financeiro escreveu ao devolver (decisão 057). */
   motivo_rejeicao: string | null;
+  /** Quando o financeiro devolveu (decisão 136). */
+  devolvido_em: string | null;
   data_prevista_faturamento: string | null;
   produto: string | null;
   cidade: string | null;
@@ -769,6 +772,11 @@ export function BannersEstado({
             <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-california-red">
               Motivo da rejeição
             </p>
+            {job.devolvido_em && (
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Devolvido pelo Financeiro em {formatDataAsHoraBr(job.devolvido_em)}
+              </p>
+            )}
             <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
               {job.motivo_rejeicao?.trim() || "— sem motivo informado"}
             </p>

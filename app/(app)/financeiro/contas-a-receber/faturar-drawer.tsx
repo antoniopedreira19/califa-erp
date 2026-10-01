@@ -40,6 +40,7 @@ import {
   Plus,
   Trash2,
   X,
+  Send,
 } from "lucide-react";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -55,6 +56,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MoneyInput } from "@/components/ui/money-input";
 import { cn, formatCnpj } from "@/lib/utils";
+import { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
 import {
   repartirEmJobESave,
   rotuloDaQuebra,
@@ -183,6 +185,25 @@ export function FaturarDrawer({
   const chaveNota = (l: FaturamentoPendenteRow) =>
     l.envio_nota_id ?? l.envio_parcela_id ?? l.origem_id;
   const umaNotaSo = new Set(linhas.map(chaveNota)).size === 1;
+  // Quem mandou cada job ou BV desta nota (decisão 136): o envio para
+  // faturamento é de qualquer GP, e o financeiro precisa saber com quem
+  // falar. Uma entrada por job (as parcelas de um envio têm o mesmo autor).
+  const autores = [
+    ...new Map(
+      linhas
+        .filter((l) => l.autor_nome)
+        .map((l) => [
+          `${l.origem_tipo}:${l.codigo ?? l.origem_id}`,
+          {
+            codigo: l.codigo,
+            nome: l.autor_nome as string,
+            em: l.autor_em,
+            bv: l.origem_tipo === "bv",
+          },
+        ]),
+    ).values(),
+  ];
+  const autorDoDescritivo = linhas.find((l) => l.origem_tipo === "job" && l.autor_nome)?.autor_nome ?? null;
   const cnaeSugerido = (() => {
     const sugestoes = new Set(
       linhas.map((l) => l.cnae_sugerido?.trim()).filter((c): c is string => Boolean(c)),
@@ -691,6 +712,27 @@ export function FaturarDrawer({
             )}
           </DialogTitle>
           <p className="text-xs text-muted-foreground">{subtitulo}</p>
+          {autores.length > 0 && (
+            <div className="mt-2 flex items-start gap-2.5 rounded-xl border border-california-red/15 bg-california-red/5 px-3.5 py-2.5 text-[12.5px] leading-relaxed">
+              <Send className="mt-0.5 h-4 w-4 shrink-0 text-california-red" />
+              <div className="min-w-0">
+                {autores.map((a) => (
+                  <div key={`${a.bv}:${a.codigo}:${a.nome}`}>
+                    {autores.length > 1 && a.codigo && (
+                      <span className="font-mono text-[11.5px] text-muted-foreground">{a.codigo} · </span>
+                    )}
+                    <span className="text-muted-foreground">
+                      {a.bv ? "BV confirmado por" : "Enviado para faturamento por"}
+                    </span>{" "}
+                    <strong className="font-semibold text-foreground">{a.nome}</strong>
+                    {a.em && (
+                      <span className="text-muted-foreground"> em {formatDataAsHoraBr(a.em)}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="flex-1 space-y-4 overflow-y-auto p-6">
@@ -1156,7 +1198,7 @@ export function FaturarDrawer({
             <p className="text-[11.5px] text-muted-foreground text-pretty">
               {!umaNotaSo
                 ? "Cada job traz a instrução do seu gerente de projetos — leia uma a uma no botão de informações da linha e escreva aqui o texto da nota."
-                : "Texto que vai na nota fiscal. Vem sugerido pelo descritivo que o gerente de projetos mandou no envio."}
+                : `Texto que vai na nota fiscal. Vem sugerido pelo descritivo que ${autorDoDescritivo ?? "o gerente de projetos"} mandou no envio.`}
             </p>
           </div>
 

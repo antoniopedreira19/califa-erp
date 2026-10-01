@@ -625,7 +625,12 @@ export async function enviarJobParaAbertura(
         responsavel_id: parsed.data.gp_responsavel_id,
         produtor_id: parsed.data.produtor_id,
         status: "aguardando_abertura",
-        motivo_rejeicao: null,
+        // Quem reenviou e quando (decisão 136). A justificativa da devolução
+        // (`motivo_rejeicao`) e `devolvido_em` ficam: é o que a conferência
+        // do reenvio mostra ao financeiro. Até 01/10/2026 o motivo era
+        // apagado aqui.
+        enviado_abertura_por: session.profile.id,
+        enviado_abertura_em: new Date().toISOString(),
         // Os números do financeiro pela cópia (decisão 099, §11), e a base
         // de comparação do card de Erratas junto: o job ainda não foi
         // aberto, então a abertura que vale é esta.
@@ -719,6 +724,10 @@ export async function enviarJobParaAbertura(
       ),
       // status default do banco = 'aguardando_abertura' — não sobrescreva
       created_by: session.profile.id,
+      // O último envio (decisão 136): aqui é o primeiro, igual a
+      // `created_by`; o reenvio do job devolvido sobrescreve.
+      enviado_abertura_por: session.profile.id,
+      enviado_abertura_em: new Date().toISOString(),
     })
     .select("id")
     .single();

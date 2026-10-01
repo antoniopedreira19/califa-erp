@@ -122,6 +122,10 @@ export interface FaturamentoPendenteRow {
   cnae_sugerido: string | null;
   /** O descritivo que o GP escreveu para esta nota. */
   descritivo_nota: string | null;
+  /** Quem mandou e quando (decisão 136): na linha de job, quem enviou o job
+   *  para faturamento; na de BV, quem confirmou o BV. */
+  autor_nome: string | null;
+  autor_em: string | null;
 }
 
 /**
@@ -169,6 +173,9 @@ export interface FaturadoRow {
   /** Jobs DISTINTOS que a nota cobre, na ordem dos itens — o botão `i`
    *  mostra a PO de cada um. Vazio no avulso. */
   jobs_cobertos: Array<{ job_id: string; codigo: string }>;
+  /** Quem mandou o que a nota cobre (decisão 136): quem enviou cada job
+   *  para faturamento, ou confirmou cada BV. Vazio no avulso. */
+  autores: Array<{ codigo: string; nome: string; em: string | null; bv: boolean }>;
   itens: Array<{
     // `save` só aparece no ITEM: é a fatia da nota que virou crédito do
     // cliente em vez de faturamento deste job.
@@ -923,6 +930,15 @@ export function FaturamentoList({
                           {rotuloMes(p.mes_referencia)}
                         </span>
                       )}
+                      {/* Quem mandou (decisão 136): quem enviou o job para
+                          faturamento, ou quem confirmou o BV. */}
+                      {p.autor_nome && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {p.origem_tipo === "bv" ? "BV confirmado por" : "Enviado por"}{" "}
+                          <span className="font-semibold text-foreground">{p.autor_nome}</span>
+                          {p.autor_em ? ` · ${formatDataHoraCurta(p.autor_em)}` : ""}
+                        </span>
+                      )}
                       {alvoAntes && recebidoAntes > 0 && (
                         <button
                           type="button"
@@ -1092,6 +1108,16 @@ export function FaturamentoList({
                           código duas vezes lê como erro. */}
                       {[...new Set(f.itens.map((i) => i.codigo))].join(", ")}
                     </span>
+                    {/* Quem mandou (decisão 136). Com mais de um job, o
+                        código antes do nome. */}
+                    {f.autores.map((a) => (
+                      <span key={`${a.bv}:${a.codigo}:${a.nome}`} className="text-[11px] text-muted-foreground">
+                        {f.autores.length > 1 && a.codigo ? `${a.codigo} · ` : ""}
+                        {a.bv ? "BV confirmado por" : "Enviado por"}{" "}
+                        <span className="font-semibold text-foreground">{a.nome}</span>
+                        {a.em ? ` · ${formatDataHoraCurta(a.em)}` : ""}
+                      </span>
+                    ))}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -1363,4 +1389,13 @@ function ChipOrigem({ tipo }: { tipo: "job" | "bv" }) {
       {tipo === "bv" ? "BV" : "Job"}
     </span>
   );
+}
+
+/** "29/09/2026 01:26", no horário de Brasília (decisão 136). */
+function formatDataHoraCurta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const fmt = (o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", ...o }).format(d);
+  return `${fmt({ day: "2-digit", month: "2-digit", year: "numeric" })} ${fmt({ hour: "2-digit", minute: "2-digit" })}`;
 }

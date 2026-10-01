@@ -65,9 +65,51 @@ Respostas do Tiago às perguntas do protótipo:
 
 Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
 
-## 3. Registro e telas (partes 2 a 4)
+## 3. Registro e telas
 
-A preencher a cada parte entregue.
+### 3.1 Ciclo do job (parte 2, entregue em 01/10/2026)
+
+**Banco** (migration `20261001400002`, só aditiva):
+
+- `jobs.enviado_abertura_por` / `enviado_abertura_em`: o ÚLTIMO envio para
+  abertura — o primeiro ou o reenvio. O primeiro continua em
+  `created_by`/`created_at`. Preenchido nos 37 jobs: o reenvio sai da
+  auditoria (`job.reenviado_para_aprovacao`, 5 jobs), o resto do
+  `created_by`.
+- `jobs.devolvido_em`: quando o financeiro devolveu. Preenchido em 10 jobs a
+  partir de `job.abertura_rejeitada`. A justificativa (`motivo_rejeicao`)
+  **deixou de ser apagada no reenvio** — é o que a conferência do reenvio
+  mostra.
+- `itens_bv.confirmado_por` / `confirmado_em`: quem confirmou o BV. Os 3
+  confirmados foram preenchidos pela auditoria (`item_bv.confirmado`).
+- `vw_faturamento_pendente` ganhou, no fim, `autor_nome` e `autor_em`: quem
+  enviou o job para faturamento, ou quem confirmou o BV.
+- O preenchimento desligou o gatilho de `updated_at` de `jobs` e `itens_bv`
+  durante o update: nenhuma data de atualização mudou.
+- O levantamento apontava que o envio para faturamento aceitava o autor que
+  vinha da tela. Não aceita: o gatilho `envio_faturamento_autor` já gravava o
+  usuário logado. Só não aparecia em tela nenhuma.
+
+**Telas:**
+
+| Tela | O que mostra agora |
+|---|---|
+| Fila de abertura | Coluna "Enviado por": nome e quando. Na linha de errata, o autor e a data da errata mais recente (antes a coluna mostrava a criação do job). Na de save, quem pediu. Selo "Reenvio" quando o job voltou depois da devolução. |
+| Conferência (pop-up) | Faixa "Enviado por X em data às hora". No reenvio, "Reenviado por X…, depois da devolução", o primeiro envio e uma caixa "Devolvido pelo Financeiro em …" com a justificativa. |
+| Reprovar (pop-up) | Diz quem enviou e que qualquer GP corrige; GP responsável e produtor ficam como referência. |
+| Tela de abertura | "Enviado por" com data e hora; no reenvio, "Reenviado por" e "Primeiro envio". |
+| Recusar save (pop-up) | "Pedido por X em …" no lugar do GP responsável. |
+| Job devolvido (produção) e aviso do orçamento | "Devolvido pelo Financeiro em …", sem o nome de quem devolveu. |
+| Faturamento (Contas a Receber) | Na linha do job, "Enviado por X · data"; no BV, "BV confirmado por X · data"; na nota já faturada, quem enviou cada job. |
+| Faturar (painel) | Faixa "Enviado para faturamento por X em …"; o apoio da descrição cita o nome. |
+| Ficha do job (produção e financeiro) | Etapas com data, hora e autor: envio para abertura, abertura, envio para faturamento, encerramento. No topo da página do financeiro, "para faturamento por X em …". |
+
+- `jobJaFoiDevolvido` (`aprovacao-save.ts`) lê `jobs.devolvido_em` em vez
+  de depender só da auditoria, que o financeiro não lê inteira.
+- O primeiro envio e o "último envio" nascem com milissegundos de
+  diferença (um vem do banco, o outro da aplicação). "Reenviado" só vale
+  com mais de um minuto entre os dois — um reenvio exige a devolução no
+  meio.
 
 ## 4. Como foi testado
 
@@ -83,6 +125,24 @@ A preencher a cada parte entregue.
   (`sidebar.rh`). O teste novo do `jobs.enviar_pp` passa.
 - O produtor não foi testado logado (não há usuário de teste com esse papel
   que entre); a regra dele foi conferida pelo código e pela matriz.
+
+**Parte 2 (01/10/2026)**, no TES-P001/26, com o "Orçamento de Teste":
+- Envio como administrador (TES-1019/26): conferência com "Enviado por
+  Tiago Mendonça em 01/10/2026 às 12:47"; reprovação com o texto novo.
+- Página do job e aviso do orçamento: "Devolvido pelo Financeiro em
+  01/10/2026 às 12:47".
+- Reenvio como "GP Teste Claude": fila com "GP Teste Claude" e o selo
+  "Reenvio"; conferência com o reenvio, o primeiro envio e a devolução com a
+  justificativa; tela de abertura com "Reenviado por" e "Primeiro envio";
+  ficha com o envio do GP. Envio cancelado no fim (TES-1019/26 queimado).
+- Faturamento: TES-1013/26 "Enviado por GP Teste Claude · 29/09/2026
+  01:26" (dado real de um teste anterior), BVs confirmados com o autor da
+  auditoria, nota faturada do TES-1001/26 com quem enviou; painel Faturar.
+- Ficha: TES-1013/26 (envio, abertura, faturamento) e TES-1009/26
+  (encerramento).
+- O log da API não teve erro de embed ambíguo depois das FKs novas.
+- Recusar save: só pelo código — não há pedido de save pendente nos
+  projetos de teste.
 
 ## 5. Arquivos (parte 1)
 
@@ -100,6 +160,6 @@ A preencher a cada parte entregue.
 
 1. Permissões — entregue em 01/10/2026.
 2. Envio, reenvio e devolução do job; envio para faturamento e BV; ficha do
-   job no financeiro — a fazer.
+   job — entregue em 01/10/2026.
 3. PPs: histórico completo, lista, aprovar PP e aprovar prestação — a fazer.
 4. Chats: cargo de quem escreveu — a fazer.
