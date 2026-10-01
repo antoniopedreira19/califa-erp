@@ -9,7 +9,8 @@ export type AppRole =
   | "financeiro"
   | "produtor"
   | "freelancer"
-  | "rh";
+  | "rh"
+  | "colaborador";
 
 export type TenantStatus = "ativo" | "inativo";
 
@@ -101,6 +102,8 @@ export function roleLabel(role: AppRole): string {
       return "Freelancer";
     case "rh":
       return "RH";
+    case "colaborador":
+      return "Colaborador";
   }
 }
 
@@ -3404,6 +3407,10 @@ export interface Colaborador {
   /** Líder direto — qualquer profile do sistema. Opcional. Adicionado
    *  em 2026-09-29 (task 007). */
   lider_id: string | null;
+  /** Vínculo opcional com auth.users. Populado quando o colaborador
+   *  recebe acesso ao sistema (role colaborador). Adicionado em
+   *  2026-10-02 pelo subsistema de Férias (S1). */
+  user_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -3720,3 +3727,40 @@ export interface CnabRemessaItem {
   ocorrencia_data: string | null;
   created_at: string;
 }
+
+// ---------- Subsistema Férias (S1 2026-10-02) ----------
+// Ver docs/modulos/rh/25-ferias.md e 26-ferias-modelo-de-dados.md.
+
+/** Status derivado de cada período aquisitivo. Armazenado para performance;
+ *  recalculado por fn_recalcular_status_periodo e por job diário. */
+export type FeriasPeriodoStatus =
+  | "incompleto"
+  | "apto"
+  | "em_alerta"
+  | "vencido"
+  | "regularizado"
+  | "nao_habilitado"
+  | "pago_rescisao";
+
+/** Período aquisitivo + concessivo de um colaborador. Gerado automaticamente
+ *  pelo trigger trg_colaboradores_gerar_ferias_periodos a partir da
+ *  data_admissao, de admissão até current_date + 2 anos. */
+export interface ColaboradorFeriasPeriodo {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  /** Ordem cronológica: 1 = primeiro período, 2 = segundo etc. */
+  numero: number;
+  aquisitivo_inicio: string;
+  aquisitivo_fim: string;
+  concessivo_inicio: string;
+  concessivo_fim: string;
+  /** Padrão 30. Campo existe pra casos excepcionais (ex: proporcional ao sair,
+   *  redução por falta — não usado no MVP). */
+  dias_direito: number;
+  status: FeriasPeriodoStatus;
+  observacao: string | null;
+  created_at: string;
+  updated_at: string;
+}
+

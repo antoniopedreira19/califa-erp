@@ -22,6 +22,11 @@ O RH da California é hoje uma planilha Excel com múltiplas abas (Colaboradores
 ### Subsistema Folha Mensal (Rodadas 1, 2 e 3 entregues em 2026-09-18)
 - [`20-folha-mensal.md`](20-folha-mensal.md) — geração da folha mensal, revisão pelo RH, envio, aprovação/reprovação pelo financeiro, propagação para Camada 1. Rodadas 3 e 4 fundidas: aprovar já gera títulos em Contas a Pagar (via `contas_avulsas`).
 
+### Subsistema Férias (descoberta fechada 2026-10-01, modelagem fechada 2026-10-01, implementação pendente)
+- [`25-ferias.md`](25-ferias.md) — spec viva do ciclo completo de férias (CLT + PJ), inclui role `colaborador` nova, autoserviço em `/perfil`, aprovação pelo RH, recibo PJ, rescisão, notificações granulares. Decisões travadas em §14; pendências não-bloqueantes em §12.
+- [`26-ferias-modelo-de-dados.md`](26-ferias-modelo-de-dados.md) — modelagem detalhada: 3 tabelas (`_periodos`, `_lancamentos`, `_notificacoes`), 4 enums novos, role `colaborador`, RLS por `is_colaborador_proprio`, triggers de geração automática de períodos e validação de saldo, função `fn_calcular_meses_rescisao` (regra dos avós), ordem de migration em 6 passos.
+- [`27-ferias-plano-de-execucao.md`](27-ferias-plano-de-execucao.md) — plano de execução em 8 sessões (banco → autoserviço → painel RH → recibo PJ → rescisão + cron + import), com entregáveis, verificações, checkpoints de validação humana (CP1–CP5), riscos e métricas de sucesso.
+
 ### Backlog vivo (atualizado a cada fechamento de rodada)
 - [`30-proximos-passos.md`](30-proximos-passos.md) — estado atual + P0 (**Design & UX**, decisões já travadas) + P1 (import, estorno, benefícios, notificação) + P2 (férias, turnover, holerite PDF, autoserviço, encargos CLT).
 
