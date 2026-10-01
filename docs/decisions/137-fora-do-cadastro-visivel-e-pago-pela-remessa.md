@@ -95,7 +95,8 @@ As outras PPs seguem pagando pelo cadastro ao vivo, e não pela foto da 067
   `lib/formatar-data-hora.ts` (`formatDataEHoraBr`), `lib/types.ts`
   (`PedidoForaDoCadastro`).
 
-Sem migration.
+Sem migration na entrega. A `20261001400005` (§6) veio depois, no
+cancelamento do arquivo de teste.
 
 ## 5. Como foi testado
 
@@ -124,4 +125,25 @@ Sem migration.
   cadastro; trailers com 4 registros no lote, 6 no arquivo e a soma certa.
   É o primeiro arquivo com chave aleatória: o Santander ainda não a
   homologou. A remessa 29 ficou registrada como "gerado", e a parcela da
-  PP-00102, como "em remessa".
+  PP-00102, como "em remessa" — até o cancelamento do §6.
+
+## 6. Cancelamento da PE000029 e a remessa cancelada que travava (01/10/2026)
+
+O arquivo não foi ao banco, e o Tiago autorizou cancelá-lo ("Pode
+cancelar"). Migration `20261001400005_cancela_remessa_29_e_cancelada_nao_trava.sql`:
+
+- a PE000029 passa a `cancelado`, identificada pelo hash, com observação e
+  um registro `cnab.remessa_cancelada` na auditoria;
+- **`_documento_em_remessa` passa a ignorar a remessa cancelada.** Ela é a
+  trava de `baixar_parcela_pp` e `baixar_conta_avulsa` (só a baixa do
+  valor cheio, sem retenção, interino da D15), e olhava qualquer item de
+  remessa, sem ver o status. A devolução da folha já ignorava a cancelada.
+- `page.tsx` do Contas a Pagar faz a mesma conta ao marcar `em_remessa`.
+
+Conferido: a remessa 29 cancelada e com uma linha de auditoria, a função
+com os mesmos grants, e a baixa da PP-00102 voltou a oferecer a baixa
+parcial (diálogo fechado sem baixar).
+
+O título de um arquivo que **foi** ao banco e teve o pagamento recusado
+(registros 11 e 43 da PE000028) ainda não tem saída: a devolução segue
+travada. Proposta em desenho, a aprovar.

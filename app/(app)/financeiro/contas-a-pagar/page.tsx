@@ -459,8 +459,11 @@ export default async function PedidosCompraFinanceiroPage({
     // sem retenção (interino da D15, decisão 125). Tabela pequena.
     supabase
       .from("cnab_remessas_itens")
-      .select("origem_id")
-      .eq("tenant_id", session.activeTenant.id),
+      // Remessa cancelada não trava mais o título (01/10/2026, como a
+      // `_documento_em_remessa` do banco).
+      .select("origem_id, remessa:cnab_remessas!inner(status)")
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("remessa.status", "cancelado"),
     // As alíquotas da última retenção de cada fornecedor, para o "Repetir
     // as alíquotas" da baixa (decisão 125, D6 2a).
     supabase
