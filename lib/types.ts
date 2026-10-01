@@ -3764,3 +3764,94 @@ export interface ColaboradorFeriasPeriodo {
   updated_at: string;
 }
 
+/** Tipo de lançamento de férias.
+ *  - `usufruto`: dias de folga tirados.
+ *  - `abono_combinado`: venda dentro do bloco (CLT clássico, até 10 dias).
+ *  - `abono_avulso`: venda sem gozar (modelo PJ California, até 10 dias).
+ *  - `abono_excepcional`: venda > 10 dias por acordo. */
+export type FeriasLancamentoTipo =
+  | "usufruto"
+  | "abono_combinado"
+  | "abono_avulso"
+  | "abono_excepcional";
+
+/** Status do lançamento. Fluxo típico: pendente_aprovacao → em_analise (op.)
+ *  → aprovado → concluido. Alternativas: reprovado, cancelado. */
+export type FeriasLancamentoStatus =
+  | "pendente_aprovacao"
+  | "em_analise"
+  | "aprovado"
+  | "reprovado"
+  | "cancelado"
+  | "concluido";
+
+/** Lançamento de usufruto de férias ou abono.
+ *  Valores (valor_ferias, valor_um_terco, valor_abono, valor_total) só são
+ *  preenchidos pra PJ e calculados na aprovação (S7). CLT recebe recibo da
+ *  contabilidade e esses campos ficam null. */
+export interface ColaboradorFeriasLancamento {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  /** FK pro período aquisitivo. Null apenas quando tipo = abono_avulso. */
+  periodo_id: string | null;
+  tipo: FeriasLancamentoTipo;
+  data_inicio: string;
+  data_fim: string;
+  dias: number;
+  status: FeriasLancamentoStatus;
+  solicitado_por: string;
+  aprovado_por: string | null;
+  aprovado_em: string | null;
+  motivo_reprovacao: string | null;
+  observacao: string | null;
+  /** True quando RH lança sem passar pelo fluxo de solicitação do colaborador
+   *  (ex: histórico, excepcionalidade). Rastro de auditoria. */
+  lancado_direto_por_rh: boolean;
+  /** PJ: salário mensal usado como base de cálculo. */
+  valor_base_remuneracao: string | null;
+  valor_ferias: string | null;
+  valor_um_terco: string | null;
+  valor_abono: string | null;
+  valor_total: string | null;
+  recibo_url: string | null;
+  recibo_gerado_em: string | null;
+  /** FK pro título em contas_avulsas gerado na aprovação (PJ) ou rescisão. */
+  conta_avulsa_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Tipos de notificação in-app do subsistema de Férias. */
+export type FeriasNotificacaoTipo =
+  | "concessivo_liberado"
+  | "concessivo_em_alerta"
+  | "ferias_vencidas"
+  | "solicitacao"
+  | "em_analise"
+  | "aprovada"
+  | "reprovada"
+  | "alteracao"
+  | "cancelamento"
+  | "lembrete"
+  | "inicio"
+  | "retorno"
+  | "emitir_nf";
+
+/** Notificação in-app do subsistema de férias. Uma linha por destinatário —
+ *  ex: concessivo liberado gera 3 linhas (colaborador, líder, RH). */
+export interface ColaboradorFeriasNotificacao {
+  id: string;
+  tenant_id: string;
+  tipo: FeriasNotificacaoTipo;
+  colaborador_id: string;
+  lancamento_id: string | null;
+  periodo_id: string | null;
+  destinatario_user_id: string;
+  titulo: string;
+  mensagem: string;
+  payload: Record<string, unknown>;
+  lida_em: string | null;
+  criada_em: string;
+}
+
