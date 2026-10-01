@@ -112,7 +112,16 @@ Sem migration.
   Diálogo fechado **sem gerar arquivo**.
 - Gerador: `npm run test:cnab-fora` (4 testes: outro PIX, outra conta,
   favorecido do cadastro, cadastro intacto), `test:cnab` (22) e
-  `test:foto-pp` (8) passando. **Não foi gerada remessa de verdade**: gerar
-  consome o próximo sequencial da conta Santander e marca os títulos como
-  "em remessa". O arquivo com a PP fora do cadastro fica para o próximo
-  teste de remessa com o banco.
+  `test:foto-pp` (8) passando.
+- **Arquivo gerado pela tela** (autorizado pelo Tiago, sem transmitir ao
+  banco): `PE000029.TXT`, conta California Santander, só a PP-00102,
+  pagamento em 01/10/2026. Hash igual ao de `cnab_remessas.hash_arquivo`.
+  Conferido campo a campo: lote PIX (serviço 20, forma 45); segmento A com
+  câmara 009, banco, agência e conta zerados, favorecido "Fornecedor Teste",
+  R$ 300,00 e o "seu número" da parcela da PP-00102; segmento B com forma
+  de iniciação **04 (chave aleatória)**, o CNPJ do fornecedor do cadastro em
+  019–032 e, na informação 12, **a chave da PP** — não a chave e-mail do
+  cadastro; trailers com 4 registros no lote, 6 no arquivo e a soma certa.
+  É o primeiro arquivo com chave aleatória: o Santander ainda não a
+  homologou. A remessa 29 ficou registrada como "gerado", e a parcela da
+  PP-00102, como "em remessa".
