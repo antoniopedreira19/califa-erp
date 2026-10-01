@@ -132,10 +132,25 @@ export function CardMinhasFerias({
             </SelogStatus>
             {proximoVencimento && diasAteProximo !== null && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Próximo vencimento:{" "}
-                {proximoVencimento.toLocaleDateString("pt-BR")} (
-                {diasAteProximo >= 0 ? `em ${diasAteProximo}` : "há " + -diasAteProximo}{" "}
-                dias)
+                Precisa agendar até:{" "}
+                <span className="font-medium text-foreground">
+                  {proximoVencimento.toLocaleDateString("pt-BR")}
+                </span>{" "}
+                <span
+                  className={
+                    diasAteProximo < 0
+                      ? "text-red-700 font-medium"
+                      : diasAteProximo <= 60
+                        ? "text-amber-700 font-medium"
+                        : ""
+                  }
+                >
+                  (
+                  {diasAteProximo >= 0
+                    ? `em ${diasAteProximo} dias`
+                    : `há ${-diasAteProximo} dias`}
+                  )
+                </span>
               </p>
             )}
           </div>
@@ -172,11 +187,14 @@ export function CardMinhasFerias({
                       {new Date(
                         p.aquisitivo_fim + "T00:00:00",
                       ).toLocaleDateString("pt-BR")}
-                      {" · "}
-                      Limite p/ gozar:{" "}
-                      {new Date(
-                        p.data_limite_gozo + "T00:00:00",
-                      ).toLocaleDateString("pt-BR")}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Precisa agendar até:{" "}
+                      <span className="font-medium text-foreground">
+                        {new Date(
+                          p.data_limite_gozo + "T00:00:00",
+                        ).toLocaleDateString("pt-BR")}
+                      </span>
                     </p>
                   </div>
                   <BadgeStatusPeriodo status={p.status} />
