@@ -4,7 +4,7 @@ import type {
   PedidoCompra,
   PrestacaoDaVerba,
 } from "@/lib/types";
-import { nomeContraparteBRPP } from "@/lib/types";
+import { nomeContraparteBRPP, roleLabel } from "@/lib/types";
 
 /**
  * O recorte da PP que a thread realmente lê.
@@ -293,6 +293,7 @@ export function montarThreadChatPPs(
       tipo: "pessoa",
       id: m.id,
       autor: m.autor_nome ?? "—",
+      cargo: m.autor_papel ? roleLabel(m.autor_papel) : null,
       area: m.area,
       quando: dataHoraCurta(m.created_at),
       texto: m.texto,

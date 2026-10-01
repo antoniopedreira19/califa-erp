@@ -6447,3 +6447,12 @@ estendido a Contas a Receber em 31/08.**
   o prazo por eles); o último sai de `ultimoEnvioDaPP`
   (`lib/data/eventos-da-pp.ts`).
 - Migration `20261001400003`. Ver decisão 136, §3.2.
+
+## ⚠️ Nota de 2026-10-01 (4) — cargo de quem escreveu nos chats (decisão 136, parte 4)
+
+- O balão das mensagens mostra "Nome · Cargo" na Comunicação do job e no
+  chat das PPs. A área ("Produção"/"Financeiro") continua ao lado da hora.
+- O cargo é gravado no envio por gatilho (`jobs_mensagens.autor_papel`,
+  migration `20261001400004`); quem muda de papel depois não reescreve o que
+  já escreveu. As mensagens antigas receberam o cargo atual do autor.
+- Ver decisão 136, §3.3. Com esta parte a decisão 136 está entregue.
