@@ -1421,7 +1421,8 @@ item inteiro a um fornecedor só.
 
 **5. Parcelas.** "Prazo de pagamento" e "Parcelas" dividem a linha; com
 2+ aparecem as linhas com vencimento (+1 mês, editável) e valor (divisão
-igual com sobra na última, editável). A soma tem que fechar com o valor
+igual com sobra na última, editável; desde 01/10/2026 também com o % de
+cada parcela, e a última fecha os 100% — decisão 138). A soma tem que fechar com o valor
 da PP — no cliente e na action. Na aba de PPs do job, **uma linha por
 parcela** (`PP-00008 · 2/3`); Editar/Ver PDF/Cancelar só na linha da 1ª,
 porque são da PP inteira.
@@ -4648,3 +4649,20 @@ código publicado logo depois (`3305751`).
 - Urgência e pagamento fora do cadastro não entram nessa linha do tempo.
 - `PedidoCompraNaLista.eventos` vem de `carregar-detalhe.ts`. Ver decisão
   136, §3.4.
+
+## ⚠️ Nota de 2026-10-01 (6) — o percentual de cada parcela da PP (decisão 138)
+
+- No "Gerar Pedido de Produção" (e na edição da PP gerada), cada parcela
+  mostra **Vencimento · % do total · Valor (R$)**. Digitar o % refaz o
+  R$ e vice-versa. A **última parcela é travada** e é sempre o que falta
+  das anteriores, então a soma não sai de 100%; se as anteriores passam
+  de 100%, o "Gerar" é barrado. Link "Dividir igualmente" no rodapé.
+- Mudar R$ Unit., QT ou D/M mantém o % de cada parcela; mudar o prazo
+  mantém a divisão. Antes, os dois voltavam à divisão igual.
+- A PP grava só o R$; ao reabrir, o % se refaz do valor gravado. PDF e
+  financeiro não mostram o %.
+- **Reenvio da PP rejeitada:** se a correção muda o total, cada parcela
+  mantém a sua proporção (30/70 de R$ 1.000 → R$ 1.200 grava 360 + 840).
+  Antes redividia em partes iguais.
+- Componente novo: `realizado/parcelas-da-pp.tsx`. Ver decisão 138.
+

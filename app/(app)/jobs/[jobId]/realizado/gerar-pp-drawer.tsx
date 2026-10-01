@@ -11,7 +11,6 @@ import {
   AlertTriangle,
   Pencil,
   Plus,
-  Lock,
   Send,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -40,11 +39,19 @@ import {
 } from "@/lib/types";
 import {
   valorDaPPPorUnidade,
-  dividirEmParcelas,
   parcelasFecham,
   passaDoPlanejado,
   faltaParaFecharOOrcado,
 } from "@/lib/calculos/pps-item";
+import {
+  ParcelasDaPPField,
+  montarParcelas,
+  parcelasDaPPGravada,
+  problemaDasParcelas,
+  redividirParcelas,
+  trocarDatas,
+  type ParcelaLocal,
+} from "./parcelas-da-pp";
 import {
   ehJanelaDePagamento,
   hojeEmSaoPauloIso,
@@ -137,13 +144,6 @@ interface Props {
   ) => void;
 }
 
-/** Uma linha do parcelamento no formulário. */
-interface ParcelaLocal {
-  data_vencimento: string;
-  /** Texto cru: o usuário pode estar no meio da digitação. */
-  valor: string;
-}
-
 interface AnexoLocal {
   anexo_id: string;
   file: File;
@@ -180,10 +180,6 @@ function defaultPrazoPagamento(): string {
 
 function dateToIso(date: Date | null): string {
   return date ? format(date, "yyyy-MM-dd") : "";
-}
-
-function isoParaBr(iso: string): string {
-  return iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—";
 }
 
 /** Fator (QT, D/M) sem zeros à direita: "2", não "2,000". */
@@ -445,12 +441,10 @@ export function GerarPPDrawer({
       setDm(formatFator(ppEditando.dias_meses));
       setEspecificacoes(ppEditando.especificacoes ?? "");
       const parcelasDaPP = ppEditando.parcelas ?? [];
+      // O % de cada parcela se refaz do R$ gravado (decisão 138).
       setParcelas(
         parcelasDaPP.length > 1
-          ? parcelasDaPP.map((p) => ({
-              data_vencimento: p.data_vencimento.slice(0, 10),
-              valor: Number(p.valor).toFixed(2).replace(".", ","),
-            }))
+          ? parcelasDaPPGravada(parcelasDaPP, Number(ppEditando.valor ?? 0))
           : [],
       );
       setPpId(ppEditando.id);
@@ -643,24 +637,14 @@ export function GerarPPDrawer({
     (a) => !removidos.has(a.id),
   );
 
-  /**
-   * Refaz as parcelas: datas derivadas da janela do 1º vencimento, mês a
-   * mês, e valor dividido igualmente (decisão 077, pergunta 5a). As datas
-   * não se editam mais uma a uma — o que move a escada é o prazo.
-   */
-  const montarParcelas = React.useCallback(
-    (n: number, primeiraData: string, valor: number) => {
-      const valores = dividirEmParcelas(valor, n);
-      return vencimentosNasJanelas(primeiraData, n).map((data, i) => ({
-        data_vencimento: data,
-        valor: valores[i].toFixed(2).replace(".", ","),
-      }));
-    },
-    [],
-  );
-
   const numeroDeParcelas = Math.max(parcelas.length, 1);
 
+  /**
+   * Trocar o número de parcelas refaz a escada: datas derivadas da janela
+   * do 1º vencimento, mês a mês (decisão 077, pergunta 5a), e divisão
+   * igual. As datas não se editam uma a uma — o que move a escada é o
+   * prazo.
+   */
   function mudarNumeroDeParcelas(bruto: number) {
     const n = Math.max(1, Math.min(MAX_PARCELAS, Math.floor(bruto) || 1));
     if (n === 1) {
@@ -669,45 +653,39 @@ export function GerarPPDrawer({
     }
     // Mesmo número: nada muda, e os valores já ajustados ficam.
     if (n === parcelas.length) return;
-    setParcelas(montarParcelas(n, prazoPagamento, valorPP));
+    setParcelas(montarParcelas(vencimentosNasJanelas(prazoPagamento, n), valorPP));
   }
 
   function mudarPrazo(iso: string) {
     setPrazoPagamento(iso);
     if (parcelas.length > 0) {
-      // Mover a 1ª data reconstrói a escada: as seguintes acompanham.
-      setParcelas(montarParcelas(parcelas.length, iso, valorPP));
+      // Mover a 1ª data reconstrói a escada: as seguintes acompanham. A
+      // divisão fica (decisão 138) — antes ela voltava a ser igual.
+      setParcelas((prev) => trocarDatas(prev, vencimentosNasJanelas(iso, prev.length)));
     }
-  }
-
-  /** Valor da PP mudou: redivide as parcelas preservando as datas. */
-  function redividirParcelas(valor: number) {
-    if (parcelas.length === 0) return;
-    const valores = dividirEmParcelas(valor, parcelas.length);
-    setParcelas((prev) =>
-      prev.map((p, i) => ({
-        ...p,
-        valor: valores[i].toFixed(2).replace(".", ","),
-      })),
-    );
   }
 
   // Um handler por campo do trio: cada um refaz a conta com o valor novo
   // do seu campo e os dois já digitados nos outros. `unitNum`/`qtdNum`/
-  // `dmNum` são do render atual, então não há estado atrasado aqui.
+  // `dmNum` são do render atual, então não há estado atrasado aqui. As
+  // parcelas mantêm o % de cada uma (decisão 138); `valorPP` ainda é o
+  // valor de antes da mudança.
   function mudarUnitario(bruto: string) {
     setUnitario(bruto);
-    redividirParcelas(valorDaPPPorUnidade(parseNumeroLocal(bruto), qtdNum, dmNum));
+    const novo = valorDaPPPorUnidade(parseNumeroLocal(bruto), qtdNum, dmNum);
+    setParcelas((prev) => redividirParcelas(prev, valorPP, novo));
   }
 
   function mudarQuantidade(bruto: string) {
     setQuantidade(bruto);
-    redividirParcelas(valorDaPPPorUnidade(unitNum, parseNumeroLocal(bruto), dmNum));
+    const novo = valorDaPPPorUnidade(unitNum, parseNumeroLocal(bruto), dmNum);
+    setParcelas((prev) => redividirParcelas(prev, valorPP, novo));
   }
 
   function mudarDm(bruto: string) {
     setDm(bruto);
-    redividirParcelas(valorDaPPPorUnidade(unitNum, qtdNum, parseNumeroLocal(bruto)));
+    const novo = valorDaPPPorUnidade(unitNum, qtdNum, parseNumeroLocal(bruto));
+    setParcelas((prev) => redividirParcelas(prev, valorPP, novo));
   }
 
   /** O que vai para a action: PP sem parcelamento manda 1 parcela. */
@@ -819,6 +797,11 @@ export function GerarPPDrawer({
     const parcelasEnvio = parcelasParaEnvio();
     if (parcelasEnvio.some((p) => !p.data_vencimento)) {
       setErro("Toda parcela precisa de uma data de vencimento.");
+      return false;
+    }
+    const problemaParcelas = problemaDasParcelas(parcelas);
+    if (problemaParcelas) {
+      setErro(problemaParcelas);
       return false;
     }
     if (!parcelasFecham(parcelasEnvio.map((p) => p.valor), valorPP)) {
@@ -1412,57 +1395,12 @@ export function GerarPPDrawer({
               <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} />
 
               {parcelas.length > 1 && (
-                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-                  {parcelas.map((p, i) => (
-                    <div key={i} className="grid grid-cols-[36px_1fr_1fr] items-center gap-2">
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        {i + 1}/{parcelas.length}
-                      </span>
-                      {/* Data travada (pergunta 5a): ela é a janela do prazo
-                          no mês da parcela, e muda junto com ele. */}
-                      <div
-                        title="A data acompanha a janela do prazo de pagamento."
-                        className="flex h-10 items-center justify-between rounded-lg border border-border bg-muted/40 px-3 font-mono text-[13px]"
-                      >
-                        {isoParaBr(p.data_vencimento)}
-                        <Lock className="h-3.5 w-3.5 text-muted-foreground/70" />
-                      </div>
-                      <Input
-                        aria-label={`Valor da parcela ${i + 1}`}
-                        value={p.valor}
-                        onChange={(e) =>
-                          setParcelas((prev) =>
-                            prev.map((q, j) =>
-                              j === i ? { ...q, valor: e.target.value } : q,
-                            ),
-                          )
-                        }
-                        className="no-spinner text-right font-mono"
-                        inputMode="decimal"
-                      />
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between border-t border-border pt-2 text-[11px]">
-                    <span className="text-muted-foreground">
-                      Mesma janela, mês a mês · soma das parcelas
-                    </span>
-                    <span
-                      className={cn(
-                        "font-mono font-semibold",
-                        !parcelasFecham(
-                          parcelas.map((p) => parseNumeroLocal(p.valor)),
-                          valorPP,
-                        ) && "text-california-red",
-                      )}
-                    >
-                      {formatCurrency(
-                        parcelas.reduce((s, p) => s + parseNumeroLocal(p.valor), 0),
-                        "BRL",
-                      )}{" "}
-                      / {formatCurrency(valorPP, "BRL")}
-                    </span>
-                  </div>
-                </div>
+                <ParcelasDaPPField
+                  parcelas={parcelas}
+                  setParcelas={setParcelas}
+                  valorPP={valorPP}
+                  disabled={pending}
+                />
               )}
 
               <UrgenciaPPField

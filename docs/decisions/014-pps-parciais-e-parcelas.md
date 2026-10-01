@@ -100,8 +100,9 @@ existem, esperando a 3.2.
 
 - **Reenvio não redefine o parcelamento.** Corrigir uma PP rejeitada
   mantém o número de parcelas e as datas (a 1ª acompanha o "Prazo de
-  pagamento"); só os valores são redivididos se o total mudou. Quem
-  quiser outro parcelamento cancela e emite outra PP.
+  pagamento"); só os valores são redivididos se o total mudou, cada
+  parcela mantendo a sua proporção (decisão 138). Quem quiser outro
+  parcelamento cancela e emite outra PP.
 - **Baixar o realizado do item para menos que a soma das PPs** continua
   possível. O design trata o realizado como mestre ("acima disso é
   preciso alterar o realizado"); travar a edição dele não foi decidido.
@@ -141,3 +142,13 @@ virou o ORÇADO") deixaram de valer: não há mais teto por PP. A PP também
 deixou de nascer em avaliação — nasce **gerada** e é enviada ao financeiro
 por uma ação própria, no painel do item. Ver
 [039](039-pp-nasce-gerada-e-o-envio-ao-financeiro-e-uma-acao.md).
+
+## ⚠️ Nota de 2026-10-01 — o percentual de cada parcela (decisão 138)
+
+O §5 ("valor em divisão igual com a sobra na última (editável)") continua
+sendo o ponto de partida, mas cada parcela agora tem também o **% do
+valor da PP**, e a **última fecha os 100%** (travada, é o que falta das
+anteriores). Mudar o valor da PP ou o prazo mantém a divisão. No reenvio
+da PP rejeitada, os valores eram redivididos em partes iguais; agora cada
+parcela mantém a sua proporção. Ver
+[138](138-percentual-de-cada-parcela-da-pp.md).
