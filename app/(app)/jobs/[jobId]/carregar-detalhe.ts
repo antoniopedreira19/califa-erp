@@ -9,6 +9,7 @@ import {
   recusasDeSaveNaoLidas,
 } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
+import { SELECT_EVENTOS_DA_PP, eventosDaPP } from "@/lib/data/eventos-da-pp";
 import {
   SELECT_PRESTACAO_DA_VERBA,
   devolucaoDaVerba,
@@ -200,7 +201,10 @@ export async function carregarDetalheDoJob(
       .select(
         "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, data_pagamento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by), " +
           // Prestação de contas da verba e estorno do saldo (decisão 081).
-          SELECT_PRESTACAO_DA_VERBA,
+          SELECT_PRESTACAO_DA_VERBA +
+          // Histórico de eventos (decisão 136): a linha do tempo do "Ver PP".
+          ", " +
+          SELECT_EVENTOS_DA_PP,
       )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -533,6 +537,7 @@ export async function carregarDetalheDoJob(
     // Decisão 127: só o meio trocado, lido da foto. A ficha mostra; o
     // formulário de edição volta preenchido com ele.
     pagamento_fora_do_cadastro: lerPagamentoForaDoCadastro(pp),
+    eventos: eventosDaPP(pp.eventos),
   }));
 
   // Um item pode ter VÁRIAS PPs desde 17/08/2026 (PPs parciais), então o

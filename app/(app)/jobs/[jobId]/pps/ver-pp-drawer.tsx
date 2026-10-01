@@ -44,7 +44,14 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
-import { podeCancelarPP, type PedidoCompraNaLista, situacaoDaVerba, situacaoVerbaLabel } from "@/lib/types";
+import {
+  podeCancelarPP,
+  type PedidoCompraNaLista,
+  type PPEvento,
+  type PPEventoTipo,
+  situacaoDaVerba,
+  situacaoVerbaLabel,
+} from "@/lib/types";
 import { PPStatusChip } from "./pp-status-chip";
 import {
   signedUrlPdf,
@@ -113,19 +120,188 @@ interface Passo {
   chave: string;
   titulo: string;
   detalhe?: string | null;
+  /** Justificativa do financeiro, entre aspas, numa linha própria. */
+  motivo?: string | null;
   quando?: string | null;
-  estado: "feito" | "agora" | "futuro";
+  /** `negado`: rejeição ou reprovação que já passou (decisão 136). */
+  estado: "feito" | "agora" | "futuro" | "negado";
 }
 
 /**
- * A linha do tempo da PP, montada do que o registro tem.
+ * A linha do tempo da PP, a partir do histórico de eventos (decisão 136,
+ * desenho aprovado em 01/10/2026): um passo por evento, na ordem em que
+ * aconteceu, e depois o passo de agora e os que ainda vêm, como antes.
+ *
+ * - O que a produção fez leva o nome de quem fez (gerou, enviou,
+ *   reenviou, cancelou, prestou contas). O que o financeiro fez aparece
+ *   "pelo financeiro", sem o nome — a mesma regra da devolução do job.
+ * - Rejeição e reprovação ficam com a justificativa e o ponto vermelho, e
+ *   não somem mais quando a PP é reenviada.
+ * - Urgência e pagamento fora do cadastro ficam de fora (Tiago): quem os
+ *   vê é o financeiro, no Contas a Pagar.
+ *
+ * PP sem nenhum evento (não deveria existir: o histórico foi preenchido e
+ * os gatilhos gravam tudo) cai na montagem antiga, pelas colunas.
+ */
+function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
+  const eventos = pp.eventos.filter((e) => !EVENTOS_FORA_DA_PRODUCAO.has(e.evento));
+  if (eventos.length === 0) return passosDasColunas(pp);
+
+  const situacaoVerba = situacaoDaVerba(pp);
+  const quando = (e: PPEvento) => (e.so_data ? formatData(e.em) : formatDataHora(e.em));
+  const ultimo = (tipos: PPEventoTipo[]) => {
+    for (let i = eventos.length - 1; i >= 0; i--) {
+      if (tipos.includes(eventos[i].evento)) return i;
+    }
+    return -1;
+  };
+  const ultimaAprovacao = ultimo(["aprovada"]);
+  const ultimaPrestacao = ultimo([
+    "prestacao_enviada",
+    "prestacao_reenviada",
+    "prestacao_reprovada",
+    "prestacao_aprovada",
+  ]);
+
+  const passos: Passo[] = eventos.map((e, i) => {
+    const base = { chave: `${e.evento}-${i}`, quando: quando(e) };
+    switch (e.evento) {
+      case "emitida":
+        return { ...base, titulo: "Gerada", detalhe: e.por_nome, estado: "feito" };
+      case "enviada":
+        return { ...base, titulo: "Enviada ao financeiro", detalhe: e.por_nome, estado: "feito" };
+      case "reenviada":
+        return { ...base, titulo: "Reenviada ao financeiro", detalhe: e.por_nome, estado: "feito" };
+      case "envio_desfeito":
+        return { ...base, titulo: "Envio desfeito", estado: "feito" };
+      case "rejeitada":
+        return { ...base, titulo: "Rejeitada pelo financeiro", motivo: e.motivo, estado: "negado" };
+      case "reprovada":
+        return { ...base, titulo: "Reprovada pelo financeiro", motivo: e.motivo, estado: "negado" };
+      case "aprovacao_desfeita":
+        return { ...base, titulo: "Aprovação desfeita pelo financeiro", motivo: e.motivo, estado: "feito" };
+      case "aprovada":
+        return {
+          ...base,
+          titulo: "Aprovada pelo financeiro",
+          detalhe:
+            i !== ultimaAprovacao
+              ? null
+              : pp.prazo_pagamento_financeiro
+                ? `pagamento programado para ${formatData(pp.prazo_pagamento_financeiro)}`
+                : "virou título a pagar",
+          estado: "feito",
+        };
+      case "paga":
+        return { ...base, titulo: "Paga", estado: "feito" };
+      case "baixa_desfeita":
+        return { ...base, titulo: "Baixa desfeita pelo financeiro", estado: "feito" };
+      case "cancelada":
+        return {
+          ...base,
+          titulo: "Cancelada",
+          detalhe: [e.por_nome, "o PDF e os anexos ficam guardados no histórico"]
+            .filter(Boolean)
+            .join(" · "),
+          estado: "feito",
+        };
+      case "prestacao_enviada":
+        return { ...base, titulo: "Prestação de contas enviada", detalhe: e.por_nome, estado: "feito" };
+      case "prestacao_reenviada":
+        return { ...base, titulo: "Prestação de contas reenviada", detalhe: e.por_nome, estado: "feito" };
+      case "prestacao_reprovada":
+        return { ...base, titulo: "Prestação reprovada pelo financeiro", motivo: e.motivo, estado: "negado" };
+      case "prestacao_aprovada":
+        return i === ultimaPrestacao && situacaoVerba === "concluida"
+          ? { ...base, titulo: "Concluída", detalhe: "prestação aprovada pelo financeiro", estado: "feito" }
+          : { ...base, titulo: "Prestação aprovada pelo financeiro", estado: "feito" };
+      default:
+        return { ...base, titulo: e.evento, estado: "feito" };
+    }
+  });
+
+  // O passo de agora: o último evento que descreve o estado da PP, ou um
+  // passo novo quando o estado ainda não é um evento ("em avaliação").
+  const acender = (i: number, extra?: string) => {
+    if (i < 0) return;
+    passos[i] = {
+      ...passos[i],
+      estado: "agora",
+      detalhe: [passos[i].detalhe, extra].filter(Boolean).join(" — ") || null,
+    };
+  };
+
+  if (pp.status === "em_avaliacao") {
+    passos.push(
+      {
+        chave: "avaliacao",
+        titulo: "Em avaliação no financeiro",
+        detalhe: "aguardando a data de pagamento e a aprovação",
+        quando: "agora",
+        estado: "agora",
+      },
+      { chave: "aprovacao", titulo: "Aprovação", quando: null, estado: "futuro" },
+      { chave: "pagamento", titulo: "Pagamento", quando: null, estado: "futuro" },
+    );
+  } else if (pp.status === "rejeitada") {
+    acender(ultimo(["rejeitada", "reprovada"]));
+  } else if (pp.status === "aprovada") {
+    acender(ultimaAprovacao);
+    passos.push({ chave: "pagamento", titulo: "Pagamento", quando: null, estado: "futuro" });
+  } else if (pp.status === "cancelada") {
+    acender(ultimo(["cancelada"]));
+  } else if (pp.status === "pago") {
+    if (!situacaoVerba) {
+      acender(ultimo(["paga"]));
+    } else if (situacaoVerba === "aguardando_prestacao") {
+      passos.push({
+        chave: "prestacao",
+        titulo: "Prestação de contas",
+        detalhe: "preste contas na aba de PPs",
+        quando: null,
+        estado: "agora",
+      });
+    } else if (situacaoVerba === "prestacao_em_avaliacao") {
+      passos.push({
+        chave: "prestacao",
+        titulo: situacaoVerbaLabel(situacaoVerba),
+        detalhe: "com o financeiro",
+        quando: "agora",
+        estado: "agora",
+      });
+    } else if (situacaoVerba === "prestacao_reprovada") {
+      acender(ultimo(["prestacao_reprovada"]), "corrija na aba de PPs");
+    } else if (situacaoVerba === "devolucao_pendente") {
+      passos.push({
+        chave: "devolucao",
+        titulo: situacaoVerbaLabel(situacaoVerba),
+        detalhe: `estorno de verba de ${formatCurrency(pp.prestacao?.valor_devolvido ?? 0, "BRL")} aguardando a devolução`,
+        quando: null,
+        estado: "agora",
+      });
+    }
+  }
+
+  return passos;
+}
+
+/** Ficam no histórico do financeiro, não na linha do tempo da produção. */
+const EVENTOS_FORA_DA_PRODUCAO = new Set<PPEventoTipo>([
+  "urgente",
+  "urgencia_retirada",
+  "fora_do_cadastro",
+]);
+
+/**
+ * A linha do tempo da PP, montada do que o registro tem — a de antes do
+ * histórico de eventos, que ficou só como reserva.
  *
  * Só entra passo que aconteceu de verdade (tem data) ou que ainda vai
  * acontecer no caminho normal. Rejeição, aprovação, pagamento e
  * cancelamento aparecem quando existem — e a rejeição carrega o motivo,
  * que é o que faz o GP corrigir a PP.
  */
-function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
+function passosDasColunas(pp: PedidoCompraNaLista): Passo[] {
   const passos: Passo[] = [];
 
   passos.push({
@@ -502,6 +678,7 @@ export function VerPPDrawer({
               {pp.pagamento_fora_do_cadastro && (
                 <PagamentoForaDoCadastroCartao
                   pagamento={pp.pagamento_fora_do_cadastro}
+                  pedido={null}
                   className="mt-1.5"
                 />
               )}
@@ -659,10 +836,13 @@ export function VerPPDrawer({
                       passo.estado === "agora" &&
                         "border-amber-600 bg-amber-50 text-amber-700",
                       passo.estado === "futuro" && "border-border",
+                      passo.estado === "negado" &&
+                        "border-california-red bg-california-red text-white",
                     )}
                   >
                     {passo.estado === "feito" && <Check className="h-2.5 w-2.5" />}
                     {passo.estado === "agora" && <Clock className="h-2.5 w-2.5" />}
+                    {passo.estado === "negado" && <X className="h-2.5 w-2.5" strokeWidth={3} />}
                   </span>
                   <span className={cn("flex flex-col pb-3.5")}>
                     <span
@@ -677,6 +857,11 @@ export function VerPPDrawer({
                     {passo.detalhe && (
                       <span className="text-[11.5px] leading-snug text-muted-foreground">
                         {passo.detalhe}
+                      </span>
+                    )}
+                    {passo.motivo && (
+                      <span className="text-[11.5px] leading-snug text-muted-foreground">
+                        “{passo.motivo}”
                       </span>
                     )}
                   </span>

@@ -38,7 +38,11 @@ import { useChatPPs } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
 import { abrirThreadPPs, marcarConversaPPsLida } from "./chat/actions";
 import type { ThreadPPsDoJob } from "@/lib/data/chat-pps-conversas";
-import { eventoPPMostraMotivo, rotuloDoEventoPP } from "@/lib/data/eventos-da-pp";
+import {
+  eventoPPMostraMotivo,
+  pedidoForaDoCadastro,
+  rotuloDoEventoPP,
+} from "@/lib/data/eventos-da-pp";
 import { formatDiaHoraCurtoBr } from "@/lib/formatar-data-hora";
 
 function formatDate(iso: string | null): string {
@@ -164,6 +168,7 @@ export function PPDossie({
             {pp.pagamento_fora_do_cadastro && (
               <PagamentoForaDoCadastroCartao
                 pagamento={pp.pagamento_fora_do_cadastro}
+                pedido={pedidoForaDoCadastro(pp.eventos)}
                 className="mt-1.5"
               />
             )}

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:permissoes": "node --import tsx --test lib/permissoes.test.ts",
     "test:cnab": "node --import tsx --test lib/cnab/santander/gerador.test.ts",
+    "test:cnab-fora": "node --import tsx --test lib/cnab/fora-do-cadastro.test.ts",
     "test:foto-pp": "node --import tsx --test lib/data/foto-pagamento-da-pp.test.ts",
     "test:folha": "node --import tsx --test lib/validations/rh-folhas.test.ts",
     "atualizar:bancos": "tsx scripts/atualizar-bancos-febraban.ts"

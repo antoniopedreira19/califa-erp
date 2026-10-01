@@ -4,7 +4,11 @@ import {
   devolucaoDaVerba,
   prestacaoDaVerba,
 } from "@/lib/data/prestacao-da-verba";
-import { SELECT_EVENTOS_DA_PP, eventosDaPP } from "@/lib/data/eventos-da-pp";
+import {
+  SELECT_EVENTOS_DA_PP,
+  eventosDaPP,
+  pedidoForaDoCadastro,
+} from "@/lib/data/eventos-da-pp";
 import { situacaoDaVerba } from "@/lib/types";
 import { redirect } from "next/navigation";
 import { Wallet } from "lucide-react";
@@ -60,7 +64,18 @@ import {
   type ContaSantanderElegivel,
   type TituloElegivelParaRemessa,
 } from "./remessa-cnab-dialog";
-import type { PPStatus, PlanoContaTipo, PlanoContaSubtipo, ContaBancaria, FormaPagamento, BandeiraCartao, DesembolsoStatus } from "@/lib/types";
+import type {
+  PPStatus,
+  PlanoContaTipo,
+  PlanoContaSubtipo,
+  ContaBancaria,
+  FormaPagamento,
+  BandeiraCartao,
+  DesembolsoStatus,
+  PagamentoForaDoCadastroDaPP,
+  PixTipoChave,
+  TipoContaBancariaFornecedor,
+} from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
@@ -293,9 +308,9 @@ export default async function PedidosCompraFinanceiroPage({
     supabase
       .from("fornecedores")
       // Os nove campos de pagamento entram para o asterisco da decisão
-      // 067: comparar a foto da PP com o cadastro de hoje. Eles NÃO são
-      // enviados ao cliente — o `select` alimenta o cálculo aqui no
-      // servidor, e para a tela vai só um booleano.
+      // 067 (comparar a foto da PP com o cadastro de hoje) e, desde a
+      // decisão 137, para a coluna "Dados de pagamento" da remessa — o
+      // único lugar em que chave e conta vão ao cliente.
       .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
@@ -853,6 +868,13 @@ export default async function PedidosCompraFinanceiroPage({
         verba_situacao: situacaoDaVerba(pp),
         urgente: pp.urgente,
         urgente_justificativa: pp.urgente_justificativa,
+        // Decisão 137: para onde mandar o dinheiro, e quem pediu, na baixa.
+        fora_do_cadastro: pp.pagamento_fora_do_cadastro
+          ? {
+              pagamento: pp.pagamento_fora_do_cadastro,
+              pedido: pedidoForaDoCadastro(pp.eventos),
+            }
+          : null,
         estorno_de_avulsa_id: null,
         compra_id: "",
         compra_total: 0,
@@ -952,6 +974,7 @@ export default async function PedidosCompraFinanceiroPage({
       verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
+      fora_do_cadastro: null,
       estorno_de_avulsa_id: a.estorno_de_avulsa_id,
       // A parcela do meio pertence à cabeça; a cabeça e a compra à vista
       // pertencem a si mesmas.
@@ -1083,6 +1106,7 @@ export default async function PedidosCompraFinanceiroPage({
         verba_situacao: null,
         urgente: false,
         urgente_justificativa: null,
+      fora_do_cadastro: null,
         estorno_de_avulsa_id: null,
         compra_id: "",
         compra_total: 0,
@@ -1165,6 +1189,7 @@ export default async function PedidosCompraFinanceiroPage({
       verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
+      fora_do_cadastro: null,
       estorno_de_avulsa_id: null,
       compra_id: "",
       compra_total: 0,
@@ -1384,6 +1409,7 @@ export default async function PedidosCompraFinanceiroPage({
       verba_situacao: null,
       urgente: false,
       urgente_justificativa: null,
+      fora_do_cadastro: null,
       estorno_de_avulsa_id: null,
       compra_id: "",
       compra_total: 0,
@@ -1691,35 +1717,71 @@ export default async function PedidosCompraFinanceiroPage({
       numero_conta_dv: c.numero_conta_dv!,
     }));
 
-  const fornecedorBancoMap = new Map<
-    string,
-    { nome: string; temPix: boolean; temBanco: boolean }
-  >();
+  // Decisão 137: chave e conta vão ao diálogo, para a coluna "Dados de
+  // pagamento". `temPix`/`temBanco` seguem as mesmas regras do gerador.
+  type DestinoNaRemessa = {
+    nome: string;
+    temPix: boolean;
+    temBanco: boolean;
+    pix: TituloElegivelParaRemessa["pix"];
+    conta: TituloElegivelParaRemessa["conta"];
+  };
+  const pixDe = (tipo: string | null, chave: string | null): DestinoNaRemessa["pix"] =>
+    tipo && chave ? { tipo: tipo as PixTipoChave, chave } : null;
+  const contaDe = (d: {
+    banco_codigo: string | null;
+    banco_nome: string | null;
+    agencia: string | null;
+    agencia_dv: string | null;
+    conta: string | null;
+    conta_dv: string | null;
+    tipo_conta: string | null;
+  }): DestinoNaRemessa["conta"] =>
+    d.banco_codigo && d.agencia && d.conta && d.conta_dv
+      ? {
+          banco_codigo: d.banco_codigo,
+          banco_nome: d.banco_nome,
+          agencia: d.agencia,
+          agencia_dv: d.agencia_dv,
+          conta: d.conta,
+          conta_dv: d.conta_dv,
+          tipo_conta: (d.tipo_conta as TipoContaBancariaFornecedor | null) ?? null,
+        }
+      : null;
+  const fornecedorBancoMap = new Map<string, DestinoNaRemessa>();
   for (const f of (fornecedoresRes.data ?? []) as Array<{
     id: string;
     nome: string;
     banco_codigo: string | null;
+    banco_nome: string | null;
     agencia: string | null;
+    agencia_dv: string | null;
     conta: string | null;
     conta_dv: string | null;
+    tipo_conta: string | null;
+    pix_tipo: string | null;
     pix_chave: string | null;
   }>) {
-    fornecedorBancoMap.set(f.id, {
-      nome: f.nome,
-      temPix: !!f.pix_chave,
-      temBanco: !!(f.banco_codigo && f.agencia && f.conta && f.conta_dv),
-    });
+    const pix = pixDe(f.pix_tipo, f.pix_chave);
+    const conta = contaDe(f);
+    fornecedorBancoMap.set(f.id, { nome: f.nome, temPix: !!pix, temBanco: !!conta, pix, conta });
   }
-  const colaboradorBancoMap = new Map<
-    string,
-    { nome: string; temPix: boolean; temBanco: boolean }
-  >();
+  const colaboradorBancoMap = new Map<string, DestinoNaRemessa>();
   for (const c of cnabColaboradoresRes.values()) {
     colaboradorBancoMap.set(c.id, {
       nome: c.nome,
       temPix: temPix(c),
       temBanco: temConta(c),
+      pix: temPix(c) ? pixDe(c.pix_tipo, c.pix_chave) : null,
+      conta: temConta(c) ? contaDe(c) : null,
     });
+  }
+  // A PP fora do cadastro paga pela chave ou conta dela (decisão 137): o
+  // título da remessa é a parcela, então o mapa vai da parcela à PP.
+  const foraPorParcela = new Map<string, PagamentoForaDoCadastroDaPP>();
+  for (const pp of rows) {
+    if (!pp.pagamento_fora_do_cadastro) continue;
+    for (const par of pp.parcelas) foraPorParcela.set(par.id, pp.pagamento_fora_do_cadastro);
   }
 
   const titulosCnab: TituloElegivelParaRemessa[] = ((cnabAPagarRes.data ?? []) as Array<{
@@ -1731,8 +1793,7 @@ export default async function PedidosCompraFinanceiroPage({
     colaborador_id: string | null;
   }>)
     .map((row) => {
-      let destinatario: { nome: string; temPix: boolean; temBanco: boolean } | null =
-        null;
+      let destinatario: DestinoNaRemessa | null = null;
       let destinatarioTipo: "fornecedor" | "colaborador" | null = null;
       if (row.colaborador_id) {
         destinatario = colaboradorBancoMap.get(row.colaborador_id) ?? null;
@@ -1749,6 +1810,9 @@ export default async function PedidosCompraFinanceiroPage({
         | "folha"
         | "recorrente"
         | "desembolso";
+      const fora = origemTipo === "pp" ? (foraPorParcela.get(row.origem_id) ?? null) : null;
+      const pixFora = fora?.meio === "pix" ? pixDe(fora.pix_tipo, fora.pix_chave) : null;
+      const contaFora = fora?.meio === "conta" ? contaDe(fora) : null;
       const linha: TituloElegivelParaRemessa = {
         origemTipo,
         origemId: row.origem_id,
@@ -1756,8 +1820,12 @@ export default async function PedidosCompraFinanceiroPage({
         valor: Number(row.valor),
         destinatarioNome: destinatario.nome,
         destinatarioTipo,
-        temPix: destinatario.temPix,
-        temBanco: destinatario.temBanco,
+        // Fora do cadastro, só o meio da PP vale: a forma fica fixa.
+        temPix: fora ? !!pixFora : destinatario.temPix,
+        temBanco: fora ? !!contaFora : destinatario.temBanco,
+        pix: fora ? pixFora : destinatario.pix,
+        conta: fora ? contaFora : destinatario.conta,
+        foraDoCadastro: fora,
       };
       return linha;
     })

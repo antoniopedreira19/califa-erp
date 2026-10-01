@@ -1,4 +1,4 @@
-import type { PPEvento, PPEventoTipo } from "@/lib/types";
+import type { PedidoForaDoCadastro, PPEvento, PPEventoTipo } from "@/lib/types";
 
 /**
  * O histórico da PP embutido na consulta de `pedidos_compra` (decisão 136).
@@ -108,6 +108,16 @@ function ultimo(
     if (e.evento === envio || e.evento === reenvio) {
       return { por_nome: e.por_nome, em: e.em, reenviada: e.evento === reenvio };
     }
+  }
+  return null;
+}
+
+/** Quem pediu o pagamento fora do cadastro e quando (decisão 137): o
+ *  último pedido, porque a PP corrigida pode trocar a chave. */
+export function pedidoForaDoCadastro(eventos: PPEvento[]): PedidoForaDoCadastro | null {
+  for (let i = eventos.length - 1; i >= 0; i--) {
+    const e = eventos[i];
+    if (e.evento === "fora_do_cadastro") return { por_nome: e.por_nome, em: e.em };
   }
   return null;
 }

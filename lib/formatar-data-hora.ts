@@ -47,3 +47,12 @@ export function formatDiaHoraCurtoBr(
   if (!p) return "—";
   return soData ? `${p.dia}/${p.mes}` : `${p.dia}/${p.mes} ${p.hora}:${p.minuto}`;
 }
+
+/** "01/10/2026 16:14", no horário de Brasília — a linha "Pedido por …"
+ *  do cartão do pagamento fora do cadastro (decisão 137), no formato do
+ *  "Marcado por" da urgência. */
+export function formatDataEHoraBr(iso: string | Date | null | undefined): string {
+  const p = partes(iso);
+  if (!p) return "—";
+  return `${p.dia}/${p.mes}/${p.ano} ${p.hora}:${p.minuto}`;
+}
