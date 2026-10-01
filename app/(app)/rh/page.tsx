@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Receipt,
   FileSignature,
+  Palmtree,
   type LucideIcon,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -25,36 +26,46 @@ export default async function CentralRHPage() {
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth() + 1;
 
-  const [colaboradoresAtivosRes, pendenciasRes, contratacoesEmAndamentoRes] =
-    await Promise.all([
-      supabase
-        .from("colaboradores")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("status", "ativo"),
-      supabase
-        .from("folhas_pagamento")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("competencia_ano", anoAtual)
-        .eq("competencia_mes", mesAtual)
-        .eq("status", "pendente_correcao"),
-      supabase
-        .from("contratacoes")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", session.activeTenant.id)
-        .in("status", [
-          "rascunho",
-          "proposta_enviada",
-          "aceite_recebido",
-          "dados_completos",
-          "contrato_gerado",
-          "contrato_assinado",
-        ]),
-    ]);
+  const [
+    colaboradoresAtivosRes,
+    pendenciasRes,
+    contratacoesEmAndamentoRes,
+    feriasAguardandoRes,
+  ] = await Promise.all([
+    supabase
+      .from("colaboradores")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo"),
+    supabase
+      .from("folhas_pagamento")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("competencia_ano", anoAtual)
+      .eq("competencia_mes", mesAtual)
+      .eq("status", "pendente_correcao"),
+    supabase
+      .from("contratacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", [
+        "rascunho",
+        "proposta_enviada",
+        "aceite_recebido",
+        "dados_completos",
+        "contrato_gerado",
+        "contrato_assinado",
+      ]),
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", ["pendente_aprovacao", "em_analise"]),
+  ]);
   const colaboradoresAtivos = colaboradoresAtivosRes.count ?? 0;
   const pendenciasNoMes = pendenciasRes.count ?? 0;
   const contratacoesEmAndamento = contratacoesEmAndamentoRes.count ?? 0;
+  const feriasAguardando = feriasAguardandoRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -98,7 +109,19 @@ export default async function CentralRHPage() {
               : "pendências no mês atual"
           }
         />
-        {/* Próximos cards: Benefícios, Férias, Turnover */}
+        <RhCard
+          href="/rh/ferias"
+          icon={Palmtree}
+          title="Férias"
+          description="Autoserviço do colaborador em /perfil, aprovação pelo RH, concessivos em alerta, rescisão com cálculo automático (regra dos avós)."
+          count={feriasAguardando}
+          countLabel={
+            feriasAguardando === 1
+              ? "solicitação aguardando"
+              : "solicitações aguardando"
+          }
+        />
+        {/* Próximos cards: Benefícios, Turnover */}
       </div>
     </div>
   );
