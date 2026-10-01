@@ -3,18 +3,43 @@ import type {
   ColaboradorFeriasPeriodo,
   ColaboradorFeriasLancamento,
   FeriasPeriodoStatus,
-  FeriasLancamentoTipo,
-  FeriasLancamentoStatus,
+  TipoContratacao,
 } from "@/lib/types";
+import { SolicitarFeriasDrawer } from "./solicitar-ferias-drawer";
+import { LinhaHistoricoLancamento } from "./linha-historico-lancamento";
 
 type Props = {
   periodos: ColaboradorFeriasPeriodo[];
   lancamentos: ColaboradorFeriasLancamento[];
+  tipoContratacao: TipoContratacao;
 };
 
-export function CardMinhasFerias({ periodos, lancamentos }: Props) {
-  // Saldo = soma dos dias pendentes (direito - usufruído) de todos os
-  // períodos aptos ou em alerta.
+export function CardMinhasFerias({
+  periodos,
+  lancamentos,
+  tipoContratacao,
+}: Props) {
+  // Dias ocupados por período (aprovado + concluído + pendente + em análise).
+  // Pra UI do colaborador, "saldo" é o que ele PODE pedir — então também
+  // desconta solicitações pendentes/em análise, senão pedia duas vezes a mesma coisa.
+  const diasOcupadosPorPeriodo = new Map<string, number>();
+  for (const l of lancamentos) {
+    if (!l.periodo_id) continue;
+    if (
+      l.status !== "aprovado" &&
+      l.status !== "concluido" &&
+      l.status !== "pendente_aprovacao" &&
+      l.status !== "em_analise"
+    )
+      continue;
+    diasOcupadosPorPeriodo.set(
+      l.periodo_id,
+      (diasOcupadosPorPeriodo.get(l.periodo_id) ?? 0) + l.dias,
+    );
+  }
+
+  // "Usados" para a barra de progresso = só aprovado/concluído (pendentes não
+  // devem parecer "já tirados" na timeline visual).
   const diasUsadosPorPeriodo = new Map<string, number>();
   for (const l of lancamentos) {
     if (!l.periodo_id) continue;
@@ -25,12 +50,19 @@ export function CardMinhasFerias({ periodos, lancamentos }: Props) {
     );
   }
 
-  const saldoDisponivel = periodos
+  // Saldo exibido no hero = dias que o colaborador ainda pode solicitar
+  // em períodos aptos ou em alerta.
+  const periodosComSaldo = periodos
     .filter((p) => p.status === "apto" || p.status === "em_alerta")
-    .reduce((acc, p) => {
-      const usados = diasUsadosPorPeriodo.get(p.id) ?? 0;
-      return acc + Math.max(p.dias_direito - usados, 0);
-    }, 0);
+    .map((p) => ({
+      ...p,
+      saldo: Math.max(
+        p.dias_direito - (diasOcupadosPorPeriodo.get(p.id) ?? 0),
+        0,
+      ),
+    }));
+
+  const saldoDisponivel = periodosComSaldo.reduce((a, p) => a + p.saldo, 0);
 
   // Status principal: pega o pior entre "vencido", "em_alerta", "apto".
   const temVencido = periodos.some((p) => p.status === "vencido");
@@ -64,11 +96,17 @@ export function CardMinhasFerias({ periodos, lancamentos }: Props) {
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="rounded-lg bg-california-red/10 p-2">
-          <Palmtree className="h-4 w-4 text-california-red" />
+      <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-california-red/10 p-2">
+            <Palmtree className="h-4 w-4 text-california-red" />
+          </div>
+          <h2 className="text-lg font-semibold">Minhas férias</h2>
         </div>
-        <h2 className="text-lg font-semibold">Minhas férias</h2>
+        <SolicitarFeriasDrawer
+          periodos={periodosComSaldo}
+          tipoContratacao={tipoContratacao}
+        />
       </div>
 
       {/* Hero: saldo + status + próximo vencimento */}
@@ -168,27 +206,7 @@ export function CardMinhasFerias({ periodos, lancamentos }: Props) {
           </p>
           <ul className="divide-y divide-border rounded-lg border border-border">
             {lancamentos.map((l) => (
-              <li
-                key={l.id}
-                className="flex items-center justify-between gap-3 p-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    {new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
-                      "pt-BR",
-                    )}{" "}
-                    a{" "}
-                    {new Date(l.data_fim + "T00:00:00").toLocaleDateString(
-                      "pt-BR",
-                    )}{" "}
-                    · {l.dias} {l.dias === 1 ? "dia" : "dias"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {tipoLabel(l.tipo)}
-                  </p>
-                </div>
-                <BadgeStatusLancamento status={l.status} />
-              </li>
+              <LinhaHistoricoLancamento key={l.id} lancamento={l} />
             ))}
           </ul>
         </div>
@@ -206,19 +224,6 @@ export function CardMinhasFerias({ periodos, lancamentos }: Props) {
 function anoCurto(d: string): string {
   // "2025-07-01" → "2025"
   return d.slice(0, 4);
-}
-
-function tipoLabel(t: FeriasLancamentoTipo): string {
-  switch (t) {
-    case "usufruto":
-      return "Férias (dias de folga)";
-    case "abono_combinado":
-      return "Abono combinado";
-    case "abono_avulso":
-      return "Abono avulso";
-    case "abono_excepcional":
-      return "Abono excepcional";
-  }
 }
 
 function SelogStatus({
@@ -272,30 +277,3 @@ function BadgeStatusPeriodo({ status }: { status: FeriasPeriodoStatus }) {
   );
 }
 
-function BadgeStatusLancamento({ status }: { status: FeriasLancamentoStatus }) {
-  const map: Record<FeriasLancamentoStatus, { label: string; cls: string }> = {
-    pendente_aprovacao: {
-      label: "Aguardando aprovação",
-      cls: "bg-amber-100 text-amber-900",
-    },
-    em_analise: { label: "Em análise", cls: "bg-sky-100 text-sky-800" },
-    aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
-    reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800" },
-    cancelado: {
-      label: "Cancelado",
-      cls: "bg-muted text-muted-foreground",
-    },
-    concluido: {
-      label: "Concluído",
-      cls: "bg-slate-200 text-slate-700",
-    },
-  };
-  const info = map[status];
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${info.cls}`}
-    >
-      {info.label}
-    </span>
-  );
-}

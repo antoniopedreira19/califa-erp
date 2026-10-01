@@ -311,6 +311,9 @@ export type AuditAction =
   | "contratacao.efetivada"
   | "contratacao.desistiu"
   | "contratacao.expirada"
+  // Férias — subsistema RH (2026-10-02, S4)
+  | "ferias.solicitacao.criada"
+  | "ferias.solicitacao.cancelada_pelo_colaborador"
   | "acao_negada";
 
 export interface AuditPayload {
