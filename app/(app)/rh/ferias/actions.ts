@@ -299,6 +299,134 @@ export async function moverEmAnalise(
   return { ok: true, id: lanc.id };
 }
 
+// ---------- Lançamento direto pelo RH ----------
+
+const lancamentoDiretoSchema = z
+  .object({
+    colaborador_id: z.string().uuid(),
+    periodo_id: z.string().uuid().nullable(),
+    tipo: z.enum([
+      "usufruto",
+      "abono_combinado",
+      "abono_avulso",
+      "abono_excepcional",
+    ]),
+    data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    observacao: z.string().max(500).optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tipo === "abono_avulso" && data.periodo_id !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodo_id"],
+        message: "Abono avulso não vincula a período.",
+      });
+    }
+    if (data.tipo !== "abono_avulso" && !data.periodo_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["periodo_id"],
+        message: "Escolha o período aquisitivo.",
+      });
+    }
+  });
+
+export async function lancarDiretoPeloRh(
+  input: unknown,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = lancamentoDiretoSchema.safeParse(input);
+  if (!parsed.success) {
+    const flat = parsed.error.flatten().fieldErrors;
+    const primeiro = Object.values(flat).flat()[0];
+    return {
+      ok: false,
+      message: primeiro ?? "Dados inválidos.",
+    };
+  }
+  const dados = parsed.data;
+
+  const ini = new Date(dados.data_inicio + "T00:00:00");
+  const fim = new Date(dados.data_fim + "T00:00:00");
+  if (fim < ini) {
+    return { ok: false, message: "Data de fim antes do início." };
+  }
+  const dias =
+    Math.floor((fim.getTime() - ini.getTime()) / 86_400_000) + 1;
+  if (dias <= 0 || dias > 30) {
+    return { ok: false, message: "Período deve ter entre 1 e 30 dias." };
+  }
+
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: lanc, error: insErr } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .insert({
+      tenant_id: tenantId,
+      colaborador_id: dados.colaborador_id,
+      periodo_id: dados.periodo_id,
+      tipo: dados.tipo,
+      data_inicio: dados.data_inicio,
+      data_fim: dados.data_fim,
+      dias,
+      status: "aprovado",
+      solicitado_por: session.profile.id,
+      aprovado_por: session.profile.id,
+      aprovado_em: new Date().toISOString(),
+      observacao: dados.observacao || null,
+      lancado_direto_por_rh: true,
+    })
+    .select("id")
+    .single();
+
+  if (insErr || !lanc) {
+    console.error("[rh.ferias.lancamento_direto]", insErr?.message);
+    return {
+      ok: false,
+      message: "Falha ao lançar: " + (insErr?.message ?? ""),
+    };
+  }
+
+  const destinatarios = await destinatariosDoColaborador(
+    tenantId,
+    dados.colaborador_id,
+  );
+  if (destinatarios.length > 0) {
+    await supabase.rpc("fn_criar_notificacao_ferias", {
+      p_tenant_id: tenantId,
+      p_tipo: "aprovada",
+      p_colaborador_id: dados.colaborador_id,
+      p_destinatarios: destinatarios,
+      p_titulo: "Férias lançadas pelo RH",
+      p_mensagem: `O RH lançou ${dias} dia${dias > 1 ? "s" : ""} de ${dados.tipo === "abono_avulso" ? "abono avulso" : "férias"} entre ${dados.data_inicio} e ${dados.data_fim}.`,
+      p_payload: { dias, tipo: dados.tipo, lancado_direto: true },
+      p_lancamento_id: lanc.id,
+      p_periodo_id: dados.periodo_id,
+    });
+  }
+
+  await logAuditEvent({
+    acao: "ferias.lancamento.lancado_direto_pelo_rh",
+    tenantId,
+    entidadeTipo: "ferias_lancamento",
+    entidadeId: lanc.id,
+    metadata: {
+      colaborador_id: dados.colaborador_id,
+      tipo: dados.tipo,
+      dias,
+    },
+  });
+
+  revalidatePath("/rh/ferias");
+  revalidatePath("/perfil");
+  return { ok: true, id: lanc.id };
+}
+
 // ---------- Marcar notificação como lida ----------
 
 export async function marcarNotificacaoLida(
