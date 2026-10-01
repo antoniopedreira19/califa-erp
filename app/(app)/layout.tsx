@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { Sidebar } from "@/components/sidebar";
 import { RastroDeNavegacao } from "@/components/voltar/rastro-de-navegacao";
@@ -9,6 +11,27 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await requireSession();
+
+  // Role `colaborador`: acesso restrito só a /perfil. Sem sidebar.
+  // Qualquer rota ≠ /perfil redireciona pra lá. Fluxo: colaborador recebe
+  // acesso via convite com role inicial colaborador (ver docs/modulos/rh/
+  // 25-ferias.md §9).
+  if (session.activeRole === "colaborador") {
+    const pathname = headers().get("x-pathname") ?? "";
+    if (pathname && pathname !== "/perfil" && !pathname.startsWith("/perfil/")) {
+      redirect("/perfil");
+    }
+
+    return (
+      <div className="min-h-screen bg-background">
+        <main>
+          <div className="px-5 py-6 md:px-8 md:py-8 max-w-[1680px] mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
