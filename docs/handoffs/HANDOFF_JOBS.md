@@ -4591,3 +4591,19 @@ código publicado logo depois (`3305751`).
 - **O asterisco da 067** passa a ignorar o meio trocado.
 - `PedidoCompraNaLista.pagamento_fora_do_cadastro` (obrigatório) e as quatro
   colunas novas em `PedidoCompra`. Migration `20260929980001`.
+
+## ⚠️ Nota de 2026-10-01 — qualquer GP mexe em qualquer job; o produtor gera PP e não envia (decisão 136, parte 1)
+
+- A planilha do job (errata, BV, confirmar BV, concluir PPs) deixa de ser
+  só do GP responsável: vale para **qualquer GP** e o administrador. O
+  produtor continua fora de errata e BV, como na prática já era.
+- **PP:** gerar, editar e cancelar a PP ainda não enviada vale também para o
+  **produtor**; enviar e reenviar ao financeiro é de GP e administrador
+  (recurso novo `jobs.enviar_pp`). O produtor vê o envio fechado no painel
+  do item com "Só o GP envia PP ao financeiro", e cancela só a PP gerada.
+- **Prestação de contas da verba:** o responsável pela verba, qualquer GP
+  ou o administrador (migration `20261001400001`).
+- O que diz "Apenas o responsável do job ou admin pode gerar PP" saiu do
+  servidor; a trava agora é de papel, nas mesmas actions.
+- Substitui o §5 da decisão 135. Registro de quem fez cada envio e as telas
+  do financeiro vêm nas partes 2 a 4 da decisão 136.
