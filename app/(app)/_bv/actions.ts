@@ -569,7 +569,13 @@ export async function confirmarBv(bvId: string): Promise<ActionResult> {
 
   const { error } = await supabase
     .from("itens_bv")
-    .update({ situacao: "confirmado" })
+    // Quem confirmou e quando (decisão 136): aparecem para o financeiro na
+    // fila de faturamento.
+    .update({
+      situacao: "confirmado",
+      confirmado_por: session.profile.id,
+      confirmado_em: new Date().toISOString(),
+    })
     .eq("id", atual.id)
     .eq("tenant_id", session.activeTenant.id)
     .eq("situacao", "a_negociar");

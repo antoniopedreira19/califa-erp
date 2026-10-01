@@ -102,6 +102,23 @@ export interface JobNaFila {
    *  California de fato desembolsa. Vira o custo previsto na abertura
    *  (docs/decisions/004). */
   planilha_desembolso: number;
+  /**
+   * Quem fez o ÚLTIMO envio para abertura e quando (decisão 136): o primeiro
+   * envio ou o reenvio depois da devolução. Qualquer GP pode enviar, então
+   * pode não ser o GP responsável.
+   */
+  enviado_por_nome: string | null;
+  enviado_em: string;
+  /** O primeiro envio (`jobs.created_by`/`created_at`). Só difere do
+   *  último quando o job foi devolvido e reenviado — `reenviado`. */
+  primeiro_envio_por_nome: string | null;
+  primeiro_envio_em: string;
+  reenviado: boolean;
+  /** Quando o financeiro devolveu o job e com qual justificativa. A
+   *  justificativa não é mais apagada no reenvio (decisão 136): é o que a
+   *  conferência do reenvio mostra. */
+  devolvido_em: string | null;
+  motivo_devolucao: string | null;
   /** Quem o financeiro procura para receber. A produção informa no envio
    *  (docs/decisions/012); job anterior a 17/08/2026 vem com lista
    *  vazia, que é estado legítimo. */
@@ -271,6 +288,11 @@ export interface TotaisPlanilhaJob {
 const SELECT_JOB_FILA =
   "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
+  // Quem enviou (decisão 136). `created_by` aponta para `auth.users`, e o
+  // nome dele sai em query própria; `enviado_abertura_por` aponta para
+  // `profiles` e vem no embed.
+  "created_by, enviado_abertura_em, devolvido_em, motivo_rejeicao, " +
+  "enviado_abertura:profiles!enviado_abertura_por(nome), " +
   "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, conta_impostos_id, " +
   // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
   // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
@@ -355,7 +377,11 @@ function montarJobNaFila(
    *  não mostra o bloco: opcional, ele já tinha sumido de uma chamada sem
    *  ninguém notar (decisão 099, revisão de 22/09/2026). */
   saves: SaveDaConferencia[],
+  /** Nome de quem fez o PRIMEIRO envio (`jobs.created_by`), lido à parte
+   *  porque a coluna aponta para `auth.users`. */
+  primeiroEnvioPorNome: string | null,
 ): JobNaFila {
+  const enviadoEm: string = j.enviado_abertura_em ?? j.created_at;
   return {
     id: j.id,
     codigo: j.codigo,
@@ -407,10 +433,38 @@ function montarJobNaFila(
     planilha_orcado: totais?.orcado ?? 0,
     planilha_planejado: totais?.planejado ?? 0,
     planilha_desembolso: totais?.desembolso ?? 0,
+    enviado_por_nome: j.enviado_abertura?.nome ?? primeiroEnvioPorNome,
+    enviado_em: enviadoEm,
+    primeiro_envio_por_nome: primeiroEnvioPorNome,
+    primeiro_envio_em: j.created_at,
+    // Com folga de um minuto: no primeiro envio as duas datas nascem no
+    // mesmo instante, mas uma vem do servidor da aplicação e a outra do
+    // banco. Um reenvio de verdade exige a devolução no meio.
+    reenviado:
+      new Date(enviadoEm).getTime() - new Date(j.created_at).getTime() > 60_000,
+    devolvido_em: j.devolvido_em ?? null,
+    motivo_devolucao: j.motivo_rejeicao ?? null,
     contatos: contatos ?? [],
     revisao,
     saves,
   };
+}
+
+/** Nome das pessoas por id, numa query só — para colunas que apontam para
+ *  `auth.users` e não têm embed de `profiles`. */
+async function nomesDasPessoas(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids.filter((x): x is string => Boolean(x)))];
+  const mapa = new Map<string, string>();
+  if (unicos.length === 0) return mapa;
+  const { data, error } = await createClient().from("profiles").select("id, nome").in("id", unicos);
+  if (error) {
+    console.error("[abertura-job.nomes]", error.message);
+    return mapa;
+  }
+  for (const p of (data ?? []) as { id: string; nome: string | null }[]) {
+    if (p.nome) mapa.set(p.id, p.nome);
+  }
+  return mapa;
 }
 
 /**
@@ -436,7 +490,7 @@ export async function carregarJobParaAbertura(
 
   const { data, error } = await supabase
     .from("jobs")
-    .select(`${SELECT_JOB_FILA}, status, created_by`)
+    .select(`${SELECT_JOB_FILA}, status`)
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -469,9 +523,20 @@ export async function carregarJobParaAbertura(
     // Sem revisão e sem o bloco "Saves deste job": os dois são da FILA —
     // a revisão pendente a página do job lê por conta própria, e o bloco
     // de saves mora no pop-up de conferência (decisão 099).
-    job: montarJobNaFila(data, totais.get(jobId), contatos.get(jobId), null, []),
+    job: montarJobNaFila(
+      data,
+      totais.get(jobId),
+      contatos.get(jobId),
+      null,
+      [],
+      autorRes.data?.nome ?? null,
+    ),
     status: (data as any).status,
-    enviadoPorNome: autorRes.data?.nome ?? null,
+    // Quem fez o ÚLTIMO envio (decisão 136) — no reenvio, quem reenviou.
+    enviadoPorNome:
+      ((data as any).enviado_abertura?.nome as string | undefined) ??
+      autorRes.data?.nome ??
+      null,
   };
 }
 
@@ -508,7 +573,7 @@ export async function listarFilaDeAbertura(
   const idsAguardando = linhas
     .filter((j) => j.status === "aguardando_abertura")
     .map((j) => j.id as string);
-  const [totais, contatos, revisoes, saves] = await Promise.all([
+  const [totais, contatos, revisoes, saves, primeiros] = await Promise.all([
     totaisDasPlanilhas(ids),
     contatosDeCobrancaPorJob(ids, tenantId),
     revisoesPendentes(
@@ -522,6 +587,7 @@ export async function listarFilaDeAbertura(
       tenantId,
     ),
     savesDaConferencia(idsAguardando, tenantId),
+    nomesDasPessoas(linhas.map((j) => j.created_by as string | null)),
   ]);
 
   return linhas.map((j) =>
@@ -536,6 +602,7 @@ export async function listarFilaDeAbertura(
         ? (revisoes.get(j.id) ?? resumirRevisao([], false))
         : null,
       saves.get(j.id) ?? [],
+      primeiros.get(j.created_by) ?? null,
     ),
   );
 }

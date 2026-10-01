@@ -197,6 +197,9 @@ export async function rejeitarAberturaJob(
     .update({
       status: "rejeitado_financeiro",
       motivo_rejeicao: parsed.data.motivo,
+      // Quando o financeiro devolveu (decisão 136). A produção vê
+      // "Devolvido pelo Financeiro em …"; quem devolveu fica na auditoria.
+      devolvido_em: new Date().toISOString(),
     })
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id);

@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import { cn } from "@/lib/utils";
+import { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
 import {
   calcularTotaisVersao,
   calcularTotaisPlanejados,
@@ -134,6 +135,7 @@ export default async function JobDetailPage({
     podeEditarFornecedor,
     podeEnviarPP,
     papelEnviaPP,
+    etapasDoJob,
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
   } = detalhe;
@@ -230,6 +232,13 @@ export default async function JobDetailPage({
           <p className="text-xs font-semibold uppercase tracking-wider text-california-red mb-2">
             Motivo da rejeição pelo financeiro
           </p>
+          {/* Quando, sem o nome de quem devolveu (decisão 136, pedido do
+              Tiago): a produção fala com o financeiro, não com a pessoa. */}
+          {job.devolvido_em && (
+            <p className="mb-2 text-[13px] text-muted-foreground">
+              Devolvido pelo Financeiro em {formatDataAsHoraBr(job.devolvido_em)}
+            </p>
+          )}
           <p className="text-sm text-foreground whitespace-pre-wrap">
             {job.motivo_rejeicao?.trim() || "— sem motivo informado"}
           </p>
@@ -258,6 +267,7 @@ export default async function JobDetailPage({
           <div className="space-y-4">
             <FichaJob
               descritivo={job.observacoes}
+              etapas={etapasDoJob}
               job={{
                 codigo: job.codigo,
                 nome: job.nome,

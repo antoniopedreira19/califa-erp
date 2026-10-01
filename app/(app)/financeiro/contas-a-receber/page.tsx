@@ -225,7 +225,7 @@ export default async function ContasReceberPage({
     supabase
       .from("jobs_envio_faturamento")
       .select(
-        "job_id, mes, numero_po, descricao_nf, anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
+        "job_id, mes, numero_po, descricao_nf, enviado_por, enviado_em, anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
       )
       .eq("tenant_id", tenantId),
     // As regionais do rateio da nota avulsa (decisão 086). O drawer oferece
@@ -333,6 +333,8 @@ export default async function ContasReceberPage({
     mes: string | null;
     numero_po: string | null;
     descricao_nf: string | null;
+    enviado_por: string | null;
+    enviado_em: string | null;
     anexos: Array<{
       id: string;
       nome_arquivo: string;
@@ -419,6 +421,8 @@ export default async function ContasReceberPage({
       cnpj_tomador: (r.cnpj_tomador as string | null) ?? null,
       cnae_sugerido: (r.cnae_sugerido as string | null) ?? null,
       descritivo_nota: (r.descritivo_nota as string | null) ?? null,
+      autor_nome: (r.autor_nome as string | null) ?? null,
+      autor_em: (r.autor_em as string | null) ?? null,
     };
   });
 
@@ -518,6 +522,45 @@ export default async function ContasReceberPage({
     p.parcelas.sort((a, b) => a.numero - b.numero);
   }
 
+  // Quem mandou o que a nota cobre (decisão 136): o envio para faturamento
+  // mais recente de cada job, e quem confirmou cada BV. Os envios já vieram
+  // acima; os BVs e os nomes saem daqui (dependem das notas).
+  const ultimoEnvioPorJob = new Map<string, { por: string | null; em: string | null }>();
+  for (const e of envios) {
+    const atual = ultimoEnvioPorJob.get(e.job_id);
+    if (!atual || String(e.enviado_em ?? "") > String(atual.em ?? "")) {
+      ultimoEnvioPorJob.set(e.job_id, { por: e.enviado_por, em: e.enviado_em });
+    }
+  }
+  const idsBvFaturados = [
+    ...new Set(
+      faturadosBrutos.flatMap((f) =>
+        f.itens.filter((i) => i.origem_tipo === "bv" && i.origem_id).map((i) => i.origem_id as string),
+      ),
+    ),
+  ];
+  const bvsFaturadosRes = idsBvFaturados.length
+    ? await supabase.from("itens_bv").select("id, confirmado_por, confirmado_em").in("id", idsBvFaturados)
+    : { data: [] as Array<{ id: string; confirmado_por: string | null; confirmado_em: string | null }> };
+  const confirmacaoPorBv = new Map(
+    ((bvsFaturadosRes.data ?? []) as Array<{ id: string; confirmado_por: string | null; confirmado_em: string | null }>).map(
+      (b) => [b.id, { por: b.confirmado_por, em: b.confirmado_em }],
+    ),
+  );
+  const idsAutores = [
+    ...new Set(
+      [...ultimoEnvioPorJob.values(), ...confirmacaoPorBv.values()]
+        .map((x) => x.por)
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ];
+  const nomesAutoresRes = idsAutores.length
+    ? await supabase.from("profiles").select("id, nome").in("id", idsAutores)
+    : { data: [] as Array<{ id: string; nome: string | null }> };
+  const nomeDoAutor = new Map(
+    ((nomesAutoresRes.data ?? []) as Array<{ id: string; nome: string | null }>).map((p) => [p.id, p.nome ?? "—"]),
+  );
+
   const faturados: FaturadoRow[] = faturadosBrutos.map((f) => {
     const parc = parcelasPorNota.get(f.id);
     return {
@@ -557,6 +600,26 @@ export default async function ContasReceberPage({
           if (!job) continue;
           vistos.add(i.origem_id);
           lista.push({ job_id: i.origem_id, codigo: job.codigo });
+        }
+        return lista;
+      })(),
+      autores: (() => {
+        const vistos = new Set<string>();
+        const lista: Array<{ codigo: string; nome: string; em: string | null; bv: boolean }> = [];
+        for (const i of f.itens) {
+          if (!i.origem_id || i.origem_tipo === "save" || i.origem_tipo === "avulso") continue;
+          const bv = i.origem_tipo === "bv";
+          const chave = `${i.origem_tipo}:${i.origem_id}`;
+          if (vistos.has(chave)) continue;
+          vistos.add(chave);
+          const quem = bv ? confirmacaoPorBv.get(i.origem_id) : ultimoEnvioPorJob.get(i.origem_id);
+          if (!quem?.por) continue;
+          lista.push({
+            codigo: bv ? "BV" : (jobPorId.get(i.origem_id)?.codigo ?? ""),
+            nome: nomeDoAutor.get(quem.por) ?? "—",
+            em: quem.em,
+            bv,
+          });
         }
         return lista;
       })(),

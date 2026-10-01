@@ -4607,3 +4607,14 @@ código publicado logo depois (`3305751`).
   servidor; a trava agora é de papel, nas mesmas actions.
 - Substitui o §5 da decisão 135. Registro de quem fez cada envio e as telas
   do financeiro vêm nas partes 2 a 4 da decisão 136.
+
+## ⚠️ Nota de 2026-10-01 (2) — job devolvido com data e ficha com as etapas (decisão 136, parte 2)
+
+- O aviso do job devolvido mostra "Devolvido pelo Financeiro em …" acima da
+  justificativa (`jobs.devolvido_em`).
+- A ficha "Informações do Job" lista as etapas com data, hora e autor: envio
+  para abertura (o último, no reenvio), abertura, envio para faturamento e
+  encerramento. A mesma ficha aparece no financeiro.
+- Confirmar o BV grava quem confirmou (`itens_bv.confirmado_por/em`), que o
+  financeiro vê no Faturamento.
+- Ver decisão 136, §3.1.

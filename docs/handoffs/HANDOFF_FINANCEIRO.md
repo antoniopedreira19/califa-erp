@@ -6409,3 +6409,25 @@ estendido a Contas a Receber em 31/08.**
   inexistente, diálogo aberto numa linha real sem confirmar, e a trava do
   cartão num bloco SQL desfeito no fim. Detalhes na decisão 125, "Revisão de
   2026-10-01".
+
+## ⚠️ Nota de 2026-10-01 (2) — quem enviou cada coisa aparece para o financeiro (decisão 136, parte 2)
+
+- **Fila de abertura:** a coluna "Enviado" virou "Enviado por" — nome e
+  quando. Na linha de errata, o autor e a data da errata mais recente (antes
+  era a data de criação do job); na de save, quem pediu; selo "Reenvio"
+  quando o job voltou depois da devolução.
+- **Conferência:** faixa "Enviado por X em data às hora". No reenvio, quem
+  reenviou, o primeiro envio e a caixa "Devolvido pelo Financeiro em …" com
+  a justificativa, que não é mais apagada no reenvio.
+- **Reprovar** diz quem enviou e que qualquer GP corrige; **recusar save**
+  diz quem pediu o save.
+- **Tela de abertura:** "Enviado por" com data e hora; no reenvio,
+  "Reenviado por" e "Primeiro envio".
+- **Faturamento:** a linha do job diz quem enviou para faturamento; a do
+  BV, quem confirmou; a nota já faturada, quem enviou cada job. O painel
+  Faturar ganhou a faixa do envio, e o apoio da descrição da NF cita o nome.
+- **Página do job:** a ficha mostra as etapas com data, hora e autor (envio
+  para abertura, abertura, envio para faturamento, encerramento), e o topo
+  diz quem enviou para faturamento.
+- Migration `20261001400002` (colunas novas em `jobs` e `itens_bv`, coluna
+  nova no fim da `vw_faturamento_pendente`). Ver decisão 136, §3.1.

@@ -66,7 +66,7 @@ import {
 } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { distribuirDelta } from "@/lib/calculos/alteracao-financeiro";
-import { formatDataBr, formatPeriodo } from "../formatos";
+import { formatDataAsHoraBr, formatDataBr, formatPeriodo } from "../formatos";
 import {
   curvaFecha,
   dividirEmParcelas,
@@ -3194,12 +3194,34 @@ export function AberturaForm({
             <p className="text-[12.5px] leading-relaxed text-muted-foreground">
               {job.observacoes?.trim() || "Sem descritivo do job."}
             </p>
+            {/* Quem mandou e quando (decisão 136). No reenvio, quem reenviou
+                e, na linha de baixo, o primeiro envio. */}
             <div className="mt-0.5 flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
-              <span className="text-xs text-muted-foreground">Enviado por</span>
-              <span className="text-right text-xs font-semibold">
-                {enviadoPorNome ?? "—"}
+              <span className="text-xs text-muted-foreground">
+                {job.reenviado ? "Reenviado por" : "Enviado por"}
+              </span>
+              <span className="text-right">
+                <span className="block text-xs font-semibold">
+                  {enviadoPorNome ?? "—"}
+                </span>
+                <span className="block text-[11px] text-muted-foreground">
+                  {formatDataAsHoraBr(job.enviado_em)}
+                </span>
               </span>
             </div>
+            {job.reenviado && (
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xs text-muted-foreground">Primeiro envio</span>
+                <span className="text-right">
+                  <span className="block text-xs font-semibold">
+                    {job.primeiro_envio_por_nome ?? "—"}
+                  </span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    {formatDataAsHoraBr(job.primeiro_envio_em)}
+                  </span>
+                </span>
+              </div>
+            )}
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-xs text-muted-foreground">
                 Orçamento de origem
@@ -3581,6 +3603,8 @@ export function AberturaForm({
         jobCodigo={job.codigo}
         gpNome={job.responsavel_nome}
         produtorNome={job.produtor_nome}
+        enviadoPorNome={job.enviado_por_nome}
+        enviadoEm={job.enviado_em}
         redirecionarPara="/financeiro/abertura-de-job?aba=aguardando"
       />
     </div>

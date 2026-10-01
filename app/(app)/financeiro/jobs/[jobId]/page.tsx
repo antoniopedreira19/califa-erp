@@ -55,7 +55,7 @@ import {
 } from "../../abertura-de-job/consumo";
 import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { trimestreDe } from "../../abertura-de-job/curva";
-import { formatDataHoraBr } from "../../abertura-de-job/formatos";
+import { formatDataAsHoraBr, formatDataHoraBr } from "../../abertura-de-job/formatos";
 import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
 import { carregarLinhasDeFluxo, carregarPrazosDosJobs } from "./fluxo-do-job";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
@@ -447,6 +447,16 @@ export default async function JobNoFinanceiroPage({
               <Badge className={cn("border", situacaoMeta.classes)}>
                 {situacaoMeta.rotulo}
               </Badge>
+              {/* Quem mandou para faturamento, e quando (decisão 136). */}
+              {detalhe.etapasDoJob.envioFaturamentoEm && (
+                <span className="text-[12px] text-muted-foreground">
+                  para faturamento por{" "}
+                  <span className="font-semibold text-foreground">
+                    {detalhe.etapasDoJob.envioFaturamentoPorNome ?? "—"}
+                  </span>{" "}
+                  em {formatDataAsHoraBr(detalhe.etapasDoJob.envioFaturamentoEm)}
+                </span>
+              )}
               {aguardandoEncerramento && (
                 <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
                   Aguardando encerramento
@@ -581,6 +591,7 @@ export default async function JobNoFinanceiroPage({
           <div className="space-y-4">
             <FichaJob
               descritivo={job.observacoes}
+              etapas={detalhe.etapasDoJob}
               job={{
                 codigo: job.codigo,
                 nome: jobNaFila.nome,

@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { recusarPedidoDeSave } from "./save-actions";
 import type { SaveFilaLinha } from "./fila-list";
+import { formatDataAsHoraBr } from "./formatos";
 
 const MAX_MOTIVO = 500;
 const MIN_MOTIVO = 10;
@@ -125,21 +126,24 @@ export function RecusarSaveDialog({
         <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3">
           <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Quem precisa corrigir:{" "}
+            {/* Decisão 136: quem pediu pode não ser o GP responsável, e
+                qualquer GP corrige. */}
+            Pedido por{" "}
             <strong className="text-foreground">
-              {save.responsavelNome ?? "GP do job"}
+              {save.enviadoPorNome ?? "—"}
             </strong>{" "}
-            (GP)
+            em {formatDataAsHoraBr(save.enviadoEm)}. A recusa aparece no pop-up
+            de save da linha, e qualquer GP pode corrigir. GP responsável:{" "}
+            <strong className="text-foreground">
+              {save.responsavelNome ?? "—"}
+            </strong>
             {save.produtorNome && (
               <>
-                {" "}
-                e{" "}
-                <strong className="text-foreground">{save.produtorNome}</strong>{" "}
-                (produtor)
+                ; produtor:{" "}
+                <strong className="text-foreground">{save.produtorNome}</strong>
               </>
             )}
-            . O save sai desta fila e fica marcado como recusado no pop-up de
-            save da linha.
+            . O save sai desta fila e fica marcado como recusado.
           </p>
         </div>
 

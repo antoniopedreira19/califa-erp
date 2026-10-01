@@ -4951,3 +4951,13 @@ aplicada na hora combinada com a frente do Antonio, junto da
   `aprovarVersao` deixou de contar os zerados; a page e o `FluxoAbertura`
   deixaram de passar a contagem. Sem migration: o banco nunca teve essa
   trava, e o teto do orçado por PP já tinha saído em 02/09 (decisão 039).
+
+## ⚠️ Nota de 2026-10-01 (2) — devolução com data e reenvio registrado (decisão 136, parte 2)
+
+- O aviso "Abertura devolvida pelo financeiro" da versão mostra "Devolvido
+  pelo Financeiro em …", sem o nome de quem devolveu (pedido do Tiago).
+- O envio e o reenvio para abertura gravam quem enviou e quando
+  (`jobs.enviado_abertura_por/em`). O reenvio **não apaga mais** a
+  justificativa da devolução: o financeiro a vê na conferência do reenvio,
+  ao lado de quem reenviou e do primeiro envio.
+- Ver decisão 136, §3.1.

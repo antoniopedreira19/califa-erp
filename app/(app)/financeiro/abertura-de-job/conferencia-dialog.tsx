@@ -8,6 +8,8 @@ import {
   Check,
   ClipboardCheck,
   CornerUpLeft,
+  MessageSquare,
+  Send,
   Table2,
 } from "lucide-react";
 import {
@@ -20,7 +22,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { ContatosCobrancaCaixa } from "@/components/financeiro/contatos-cobranca";
 import type { JobNaFila } from "./dados";
-import { formatDataBr, formatPeriodo } from "./formatos";
+import { formatDataAsHoraBr, formatDataBr, formatPeriodo } from "./formatos";
 import { IconeSave } from "./icone-save";
 
 interface Props {
@@ -102,6 +104,8 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
             </div>
           </div>
         </DialogHeader>
+
+        <FaixaDoEnvio job={job} />
 
         <div className="flex flex-col gap-2.5 rounded-xl border border-border px-4 py-4">
           {dados.map((d) => (
@@ -235,3 +239,66 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
     </Dialog>
   );
 }
+
+/**
+ * Quem mandou o job e quando (decisão 136): qualquer GP pode enviar, então
+ * quem enviou pode não ser o GP responsável da lista abaixo. No reenvio,
+ * também o primeiro envio e a devolução — o que foi pedido, para conferir
+ * se foi corrigido. A devolução sai sem o nome de quem devolveu (pedido do
+ * Tiago): "Devolvido pelo Financeiro".
+ */
+function FaixaDoEnvio({ job }: { job: JobNaFila }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-start gap-2.5 rounded-xl border border-california-red/15 bg-california-red/5 px-4 py-3 text-[13px] leading-relaxed">
+        <Send className="mt-0.5 h-4 w-4 shrink-0 text-california-red" />
+        <div className="min-w-0">
+          {job.reenviado ? (
+            <>
+              <div>
+                <span className="text-muted-foreground">Reenviado por</span>{" "}
+                <strong className="font-semibold text-foreground">
+                  {job.enviado_por_nome ?? "—"}
+                </strong>{" "}
+                <span className="text-muted-foreground">
+                  em {formatDataAsHoraBr(job.enviado_em)}
+                  {job.devolvido_em ? ", depois da devolução" : ""}
+                </span>
+              </div>
+              <div className="text-[12px] text-muted-foreground">
+                Primeiro envio por {job.primeiro_envio_por_nome ?? "—"} em{" "}
+                {formatDataAsHoraBr(job.primeiro_envio_em)}
+              </div>
+            </>
+          ) : (
+            <div>
+              <span className="text-muted-foreground">Enviado por</span>{" "}
+              <strong className="font-semibold text-foreground">
+                {job.enviado_por_nome ?? "—"}
+              </strong>{" "}
+              <span className="text-muted-foreground">
+                em {formatDataAsHoraBr(job.enviado_em)}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+      {job.reenviado && job.devolvido_em && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-4 py-3 text-[13px] leading-relaxed">
+          <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <div className="text-muted-foreground">
+              Devolvido pelo Financeiro em {formatDataAsHoraBr(job.devolvido_em)}
+            </div>
+            {job.motivo_devolucao?.trim() && (
+              <div className="mt-0.5 whitespace-pre-wrap text-[12.5px] text-foreground">
+                “{job.motivo_devolucao.trim()}”
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
