@@ -319,24 +319,27 @@ export function Sidebar({
             style={{ ...transitionStyle, width: `${itemBgWidth}px` }}
             className="flex items-center h-11 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0"
           >
-            {/* Slot do avatar (44px fixos, centralizado quando colapsado) */}
-            <div className="flex h-full w-11 shrink-0 items-center justify-center">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-california-red text-white text-[11px] font-semibold"
-                title={`${nome} · ${roleLabel(role)}`}
-              >
-                {initials(nome)}
-              </div>
-            </div>
-            {/* Nome + role + logout: opacidade transiciona */}
-            <div
-              style={transitionStyle}
-              className={cn(
-                "flex flex-1 items-center gap-2 pr-1 min-w-0",
-                expanded ? "opacity-100" : "opacity-0 pointer-events-none",
-              )}
+            {/* Avatar + nome: clicável, leva pro /perfil. Quando colapsado,
+                só o avatar; quando expandido, o avatar + nome. */}
+            <Link
+              href="/perfil"
+              onClick={() => setMobileOpen(false)}
+              title={`${nome} · ${roleLabel(role)} · Meu perfil`}
+              className="flex items-center min-w-0 flex-1 h-full hover:bg-white/5 transition-colors"
             >
-              <div className="min-w-0 flex-1">
+              {/* Slot do avatar (44px fixos, centralizado quando colapsado) */}
+              <div className="flex h-full w-11 shrink-0 items-center justify-center">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-california-red text-white text-[11px] font-semibold">
+                  {initials(nome)}
+                </div>
+              </div>
+              <div
+                style={transitionStyle}
+                className={cn(
+                  "min-w-0 flex-1 pr-2",
+                  expanded ? "opacity-100" : "opacity-0 pointer-events-none",
+                )}
+              >
                 <p className="text-sm font-medium text-white truncate whitespace-nowrap">
                   {nome}
                 </p>
@@ -344,6 +347,15 @@ export function Sidebar({
                   {roleLabel(role)}
                 </p>
               </div>
+            </Link>
+            {/* Settings + logout: só visíveis quando expandido. */}
+            <div
+              style={transitionStyle}
+              className={cn(
+                "flex items-center gap-1 pr-1 shrink-0",
+                expanded ? "opacity-100" : "opacity-0 pointer-events-none",
+              )}
+            >
               {podeConfiguracoes && (
                 <Link
                   href="/configuracoes"

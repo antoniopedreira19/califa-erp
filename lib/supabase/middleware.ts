@@ -62,5 +62,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Expõe o pathname atual pros layouts/server components (Next 14 não
+  // tem forma oficial de ler pathname no server fora do middleware).
+  // Usado pelo app/(app)/layout.tsx pra decidir redirect da role colaborador.
+  supabaseResponse.headers.set("x-pathname", path);
+
   return supabaseResponse;
 }
