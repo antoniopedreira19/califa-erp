@@ -4618,3 +4618,14 @@ código publicado logo depois (`3305751`).
 - Confirmar o BV grava quem confirmou (`itens_bv.confirmado_por/em`), que o
   financeiro vê no Faturamento.
 - Ver decisão 136, §3.1.
+
+## ⚠️ Nota de 2026-10-01 (3) — cada envio e reenvio de PP fica registrado (decisão 136, parte 3)
+
+- Enviar, reenviar, cancelar e prestar contas de uma PP passam a gravar um
+  evento em `pedidos_compra_eventos` (por gatilho, sem mudar as actions). O
+  financeiro vê quem mandou e quando, e a rejeição não some mais no
+  reenvio.
+- No chat das PPs, o card da PP dizia "Emitida por" com o nome de quem
+  ENVIOU; o rótulo virou "Enviada por".
+- A ficha da PP no job (Ver PP) não mudou: continua montada das colunas.
+- Ver decisão 136, §3.2.

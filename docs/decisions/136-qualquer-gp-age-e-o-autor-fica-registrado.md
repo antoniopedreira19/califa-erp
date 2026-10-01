@@ -111,6 +111,53 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
   com mais de um minuto entre os dois — um reenvio exige a devolução no
   meio.
 
+### 3.2 PPs (parte 3, entregue em 01/10/2026)
+
+**Banco** (migration `20261001400003`, só aditiva):
+
+- Tabela nova `pedidos_compra_eventos`: um registro por evento da PP —
+  emitida, marcada como urgente, urgência retirada, pagamento fora do
+  cadastro pedido, enviada, envio desfeito, rejeitada, reenviada, aprovada,
+  aprovação desfeita, reprovada depois de aprovada, paga, baixa desfeita,
+  cancelada — e da prestação de contas da verba (enviada, reenviada,
+  reprovada, aprovada). Cada um com quem (`por`), quando (`em`) e, onde há,
+  a justificativa (`motivo`).
+- Quem escreve são dois gatilhos (`trg_pp_registra_evento` em
+  `pedidos_compra`, `trg_prestacao_verba_registra_evento` em
+  `pp_verba_prestacoes`), nas mudanças de status, na urgência e no meio de
+  pagamento fora do cadastro. A aplicação só lê: `authenticated` tem
+  `select`, sem policy de escrita; `anon`, nada. A RLS repete a da PP (quem
+  vê a PP vê o histórico).
+- **Por que tabela, e não colunas:** as colunas da PP guardam um evento por
+  tipo. O reenvio apaga `rejeitada_*` e `motivo_rejeicao`; a reprovação de
+  PP aprovada apaga `aprovada_*`; o reenvio da prestação sobrescreve
+  `fechada_*`. O histórico perdia exatamente o que o financeiro precisava
+  ver: quem rejeitou, por quê, e quem mandou de volta.
+- `enviada_financeiro_em/por` **continuam sendo o primeiro envio**: o chat
+  das PPs conta o prazo de pagamento a partir dele. O último envio sai da
+  tabela de eventos.
+- Preenchimento das 51 PPs (143 eventos): das colunas da PP e, quando a
+  auditoria tem o evento daquela PP, da auditoria — que guarda reenvios,
+  reprovações e envios desfeitos que as colunas perderam. Muitos eventos da
+  auditoria são de PPs de teste já apagadas e ficam de fora. A baixa usa a
+  hora da última baixa registrada na auditoria; sem ela, só o dia
+  (`so_data`) — as 10 PPs pagas tinham a hora.
+- Não havia prestação de contas no banco: o preenchimento dela não gerou
+  nada.
+
+**Telas:**
+
+| Tela | O que mostra agora |
+|---|---|
+| Lista de PPs (Contas a Pagar) | Coluna "Enviada por": nome, data e hora do último envio, e o selo "Reenviada" quando a PP voltou depois de rejeitada. No filtro "Prestações", quem enviou a prestação. "Emissão" continua sendo a geração. |
+| Tela da PP · Histórico | Um evento por linha, com dia e hora, na ordem em que aconteceram. A rejeição e a reprovação ficam com a justificativa entre aspas, e continuam lá depois do reenvio. Os eventos da prestação de contas entram no mesmo histórico. |
+| Aprovar PP (pop-up) | Faixa "Enviada por X em data às hora" ("Reenviada por" no reenvio) e, embaixo, quem emitiu e o GP responsável do job. |
+| Aprovar prestação (pop-up) | Faixa "Prestação enviada por X em …" ("reenviada" no reenvio) e, embaixo, o responsável pela verba e o GP responsável do job. |
+| Chat das PPs (card da PP) | O rótulo "Emitida por" virou "Enviada por": o nome ali sempre foi o de quem enviou. |
+
+- Quem pediu o pagamento fora do cadastro aparece no histórico ("Pagamento
+  fora do cadastro pedido · X"); o cartão do fora do cadastro não mudou.
+
 ## 4. Como foi testado
 
 **Parte 1 (01/10/2026):**
@@ -144,6 +191,23 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
 - Recusar save: só pelo código — não há pedido de save pendente nos
   projetos de teste.
 
+**Parte 3 (01/10/2026)**, na PP-00080 (TES-1001/26, TES-P001/26):
+- Rejeitada pelo administrador com "Teste da decisão 136: conferir o
+  histórico do reenvio." — o gatilho gravou a rejeição com autor e motivo.
+- Reenviada pelo "GP Teste Claude" pela tela do job ("Salvar e reenviar
+  para avaliação").
+- Como administrador: lista com "GP Teste Claude · Reenviada · 01/10/2026 ·
+  13:11"; histórico com emissão, envio, rejeição (com a justificativa) e
+  reenvio; "Aprovar" com "Reenviada por GP Teste Claude em 01/10/2026 às
+  13:11" e "Emitida por Tiago Mendonça · GP responsável do job: Tiago
+  Mendonça" (fechado sem aprovar; a PP ficou em avaliação, como estava); o
+  card do chat com "Enviada por".
+- Pop-up de aprovar prestação: por uma rota de prévia temporária, com dado
+  fictício — não há prestação de contas no banco, e criar uma exigiria
+  pagar uma verba. O gatilho da prestação foi conferido só pelo código.
+- O log da API ficou sem erro (todas as respostas 2xx) depois da tabela
+  nova.
+
 ## 5. Arquivos (parte 1)
 
 - `lib/permissoes.ts`, `lib/permissoes.test.ts`
@@ -161,5 +225,6 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
 1. Permissões — entregue em 01/10/2026.
 2. Envio, reenvio e devolução do job; envio para faturamento e BV; ficha do
    job — entregue em 01/10/2026.
-3. PPs: histórico completo, lista, aprovar PP e aprovar prestação — a fazer.
+3. PPs: histórico completo, lista, aprovar PP e aprovar prestação —
+   entregue em 01/10/2026.
 4. Chats: cargo de quem escreveu — a fazer.
