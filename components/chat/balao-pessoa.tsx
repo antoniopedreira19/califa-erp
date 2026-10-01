@@ -45,7 +45,12 @@ export function BalaoPessoa({
             direita && "flex-row-reverse",
           )}
         >
-          <span className="text-[11.5px] font-semibold">{item.autor}</span>
+          <span className="text-[11.5px] font-semibold">
+            {item.autor}
+            {item.cargo ? (
+              <span className="font-normal text-muted-foreground"> · {item.cargo}</span>
+            ) : null}
+          </span>
           <span className="text-[10.5px] text-muted-foreground">
             {chatAreaLabel(item.area)} · {item.quando}
           </span>

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  roleLabel,
   tipoCustoLabel,
   type ChatLinha,
   type ItemChat,
@@ -462,6 +463,7 @@ export function montarThreadChat(
       tipo: "pessoa",
       id: m.id,
       autor: m.autor_nome ?? "—",
+      cargo: m.autor_papel ? roleLabel(m.autor_papel) : null,
       area: m.area,
       quando: dataHoraCurta(m.created_at),
       texto: m.texto,

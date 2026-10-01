@@ -2178,6 +2178,9 @@ export interface JobMensagem {
   tenant_id: string;
   job_id: string;
   autor_id: string;
+  /** Cargo do autor no momento do envio, gravado por gatilho (decisão
+   *  136). Null só se o autor não tinha vínculo com o tenant. */
+  autor_papel: AppRole | null;
   area: ChatArea;
   escopo: ChatEscopo;
   texto: string;
@@ -2247,6 +2250,9 @@ export type ItemChat =
       tipo: "pessoa";
       id: string;
       autor: string;
+      /** "Gerente de Projeto", "Administrador"… ao lado do nome (decisão
+       *  136). A área, ao lado da hora, é o lado de onde a mensagem saiu. */
+      cargo: string | null;
       area: ChatArea;
       quando: string;
       texto: string;

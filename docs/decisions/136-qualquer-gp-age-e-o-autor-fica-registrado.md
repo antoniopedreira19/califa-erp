@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-01
 **Decidido por:** Tiago
-**Status:** aceita — em entrega por partes (ver §6)
+**Status:** aceita — entregue em 01/10/2026, em quatro partes (ver §6)
 **Protótipo aprovado:** artifact "Autoria no financeiro" (30/09 e 01/10/2026)
 
 ---
@@ -158,6 +158,22 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
 - Quem pediu o pagamento fora do cadastro aparece no histórico ("Pagamento
   fora do cadastro pedido · X"); o cartão do fora do cadastro não mudou.
 
+### 3.3 Chats (parte 4, entregue em 01/10/2026)
+
+- **Banco** (migration `20261001400004`, só aditiva): `jobs_mensagens`
+  ganhou `autor_papel` (o enum `app_role`), o cargo do autor **no momento
+  do envio**. Um gatilho BEFORE INSERT (`trg_jobs_mensagens_autor_papel`)
+  preenche pelo vínculo do autor com o tenant e ignora o que vier da
+  aplicação — ninguém escolhe o próprio cargo. As 3 mensagens que já
+  existiam receberam o cargo atual do autor, como combinado no protótipo.
+- **Tela:** o balão das mensagens mostra "Nome · Cargo" ("GP Teste Claude ·
+  Gerente de Projeto"). "Produção" ou "Financeiro" continua ao lado da hora:
+  é o lado de onde a mensagem saiu e define o lado do balão. Vale para a
+  Comunicação do job (produção e financeiro) e para o chat das PPs, que usam
+  o mesmo balão (`components/chat/balao-pessoa.tsx`).
+- O rótulo do cargo é o de `roleLabel` (`gerente_producao` aparece como
+  "Gerente de Projeto").
+
 ## 4. Como foi testado
 
 **Parte 1 (01/10/2026):**
@@ -208,6 +224,17 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
 - O log da API ficou sem erro (todas as respostas 2xx) depois da tabela
   nova.
 
+**Parte 4 (01/10/2026)**, no TES-1001/26:
+- Como "GP Teste Claude", mensagem na Comunicação do job ("Teste da decisão
+  136: cargo de quem escreveu no chat.") — o gatilho gravou
+  `gerente_producao`, e o balão mostrou "GP Teste Claude · Gerente de
+  Projeto".
+- Como administrador, na Comunicação do job pelo financeiro: o mesmo balão,
+  com "Produção · 01/10 13:18" ao lado da hora. A mensagem de teste ficou no
+  chat do TES-1001/26 (não há exclusão de mensagem).
+- O chat das PPs não tem mensagem em nenhum job; ele usa o mesmo balão e a
+  mesma montagem, conferidos pelo código e pelo verificador de tipos.
+
 ## 5. Arquivos (parte 1)
 
 - `lib/permissoes.ts`, `lib/permissoes.test.ts`
@@ -227,4 +254,4 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
    job — entregue em 01/10/2026.
 3. PPs: histórico completo, lista, aprovar PP e aprovar prestação —
    entregue em 01/10/2026.
-4. Chats: cargo de quem escreveu — a fazer.
+4. Chats: cargo de quem escreveu — entregue em 01/10/2026.
