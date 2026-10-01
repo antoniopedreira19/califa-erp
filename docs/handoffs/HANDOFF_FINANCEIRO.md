@@ -6391,3 +6391,21 @@ estendido a Contas a Receber em 31/08.**
   produção escolheu no formulário de envio, que agora deixa trocá-los. A
   troca vai também para o orçamento. Detalhes no `HANDOFF_ORCAMENTO.md`,
   nota de 2026-09-30 (4), e na decisão 135.
+
+## ⚠️ Nota de 2026-10-01 — a folha volta a ter baixa pela lista, e não vai para o cartão (revisão da decisão 125)
+
+- **"Baixar" e lápis de data das linhas de folha em Títulos a Pagar voltaram
+  a funcionar.** De 21/09 a 01/10 a action recusava a origem "folha" e a tela
+  mostrava a mensagem do zod, em inglês. Até 01/10 nenhuma baixa de folha
+  tinha sido registrada (17 títulos "A pagar").
+- **Folha não se paga com cartão de crédito** (Tiago): na folha, o diálogo
+  oferece só PIX, Transferência e Boleto, e `baixar_conta_avulsa` recusa o
+  cartão (migration `20261001100001`).
+- Os diálogos de baixa e de baixas registradas chamam o título de "Folha de
+  pagamento"; a auditoria grava `origem: "folha"`; origem desconhecida
+  responde em português.
+- Código: `origemSchema` de `actions-titulos.ts` e `titulos-pagar-list.tsx`.
+  Conferido sem gravar nada (não existe folha de teste): console com id
+  inexistente, diálogo aberto numa linha real sem confirmar, e a trava do
+  cartão num bloco SQL desfeito no fim. Detalhes na decisão 125, "Revisão de
+  2026-10-01".

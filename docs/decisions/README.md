@@ -144,7 +144,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 122 | [O cliente do projeto só muda antes da aprovação, e os códigos acompanham](122-cliente-do-projeto-so-muda-antes-da-aprovacao.md) | 2026-09-29 |
 | 123 | [O envio para faturamento vira notas fiscais](123-o-envio-para-faturamento-vira-notas-fiscais.md) | 2026-09-29 |
 | 124 | [Recebimento avulso, transferência entre contas e rendimento de aplicação viram títulos a receber](124-recebimento-avulso-transferencia-e-rendimento.md) | 2026-09-28 |
-| 125 | [Baixa parcial e impostos retidos na baixa, nas duas pontas](125-baixa-parcial-e-impostos-retidos.md) | 2026-09-28 |
+| 125 | [Baixa parcial e impostos retidos na baixa, nas duas pontas — revisada em 2026-10-01: folha baixa pela lista, sem cartão](125-baixa-parcial-e-impostos-retidos.md) | 2026-09-28 |
 | 126 | [O código antigo sai do sistema, e a PP mostra só o código do job](126-o-codigo-antigo-sai-do-sistema.md) | 2026-09-29 |
 | 127 | [A PP pode pagar por outra chave PIX ou outra conta, sem mexer no cadastro do fornecedor](127-pp-com-pagamento-fora-do-cadastro.md) | 2026-09-29 |
 | 128 | [O job devolvido se corrige no orçamento e volta com o mesmo código](128-job-devolvido-se-corrige-e-volta-com-o-mesmo-codigo.md) | 2026-09-29 |
