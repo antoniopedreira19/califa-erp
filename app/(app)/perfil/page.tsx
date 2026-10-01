@@ -227,6 +227,7 @@ export default async function PerfilPage() {
       <CardMinhasFerias
         periodos={periodos}
         lancamentos={lancamentos}
+        tipoContratacao={colab.tipo_contratacao}
       />
     </div>
   );
