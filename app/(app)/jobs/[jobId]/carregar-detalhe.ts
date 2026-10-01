@@ -1090,16 +1090,15 @@ export async function carregarDetalheDoJob(
   // BV e PP continuam presos ao job ja aberto pelo financeiro. As duas
   // regras moram em `lib/types.ts`, que e de onde as server actions leem.
   //
-  // Dupla barreira desde 03/09/2026 (Task 3 do projeto de permissoes):
-  // (a) o PAPEL precisa poder editar job — barra Financeiro/Freelancer
-  //     antes de entrar na regra operacional;
-  // (b) dentro dos papeis que podem, seguimos com a regra "admin OU
-  //     responsavel do job", que protege operacionalmente contra GP/PROD
-  //     mexerem em job alheio.
+  // Desde a decisão 136 (01/10/2026) qualquer GP age em qualquer job — um
+  // GP de férias passa os jobs a outro, e quem fez cada envio fica gravado.
+  // Até ali valia "administrador OU o GP responsável deste job". Errata e
+  // BV continuam fora do produtor, como já eram na prática (a regra de dono
+  // o deixava de fora, porque ele nunca é o `responsavel_id`).
   const quemPodeMexer =
     pode(session.activeRole, "jobs.editar") &&
     (session.activeRole === "administrador" ||
-      job.responsavel_id === session.profile.id);
+      session.activeRole === "gerente_producao");
 
   const podeEditarRealizado = quemPodeMexer && jobAceitaRealizado(job.status);
   const podeAcoesPlanilha = quemPodeMexer && jobAceitaAcoesPlanilha(job.status);
@@ -1107,7 +1106,10 @@ export async function carregarDetalheDoJob(
   // pré-abertura, ENVIAR ao financeiro continua esperando a abertura — e
   // a marca `abertura_em_revisao` fecha o envio sem mexer no status
   // (decisão 040). Errata e BV seguem em `podeAcoesPlanilha`.
-  const podeGerarPP = quemPodeMexer && jobAceitaGerarPP(job.status);
+  // Gerar PP também é do produtor (decisão 136); enviar não — ver
+  // `podeEnviarPP`.
+  const podeGerarPP =
+    pode(session.activeRole, "jobs.emitir_pp") && jobAceitaGerarPP(job.status);
   /**
    * O "+" e o lápis do campo Fornecedor da PP são DUAS permissões, e não
    * uma (18/09/2026):
@@ -1130,16 +1132,17 @@ export async function carregarDetalheDoJob(
     session.activeRole,
     "cadastros.fornecedores.editar",
   );
-  // Quem presta contas de cada verba (decisão 081, pergunta 6a): o
-  // responsável por ela, o responsável do job ou um administrador. A função
-  // do banco checa de novo; aqui é só para mostrar o botão a quem pode.
+  // Quem presta contas de cada verba: o responsável por ela, qualquer GP
+  // ou um administrador (decisão 136; até 01/10/2026 era o GP responsável
+  // do job, decisão 081). A função do banco checa de novo; aqui é só para
+  // mostrar o botão a quem pode.
   const ppsQuePossoPrestarContas = ppsDoJob
     .filter(
       (pp) =>
         pp.verba_producao &&
         (session.activeRole === "administrador" ||
-          pp.responsavel_verba_id === session.profile.id ||
-          job.responsavel_id === session.profile.id),
+          session.activeRole === "gerente_producao" ||
+          pp.responsavel_verba_id === session.profile.id),
     )
     .map((pp) => pp.id);
   // Confirmar o BV é do GP e do administrador (decisão 080). Lançar e
@@ -1147,7 +1150,7 @@ export async function carregarDetalheDoJob(
   const podeConfirmarBv =
     podeAcoesPlanilha && pode(session.activeRole, "jobs.confirmar_bv");
   const podeEnviarPP =
-    quemPodeMexer &&
+    pode(session.activeRole, "jobs.enviar_pp") &&
     jobAceitaEnvioDePP(job.status) &&
     job.abertura_em_revisao !== true;
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
@@ -1237,14 +1240,17 @@ export async function carregarDetalheDoJob(
     podeEditarRealizado,
     podeAcoesPlanilha,
     // Save (decisão 099, revista em 24/09/2026): gerar, consumir, retirar e
-    // cancelar pedido é do administrador ou de QUALQUER GP — não segue a
-    // regra "admin ou responsável" de errata e PP, e o produtor fica de
-    // fora. O banco confere de novo (`save_pode_mexer_no_job`).
+    // cancelar pedido é do administrador ou de QUALQUER GP, e o produtor
+    // fica de fora. O banco confere de novo (`save_pode_mexer_no_job`).
     podeMexerNoSave: pode(session.activeRole, "jobs.consumir_save"),
     podeGerarPP,
     podeCadastrarFornecedor,
     podeEditarFornecedor,
     podeEnviarPP,
+    // O PAPEL que envia PP (decisão 136), sem olhar o estado do job: é o
+    // que separa o produtor (gera, não envia, cancela só a não enviada) do
+    // GP. `podeEnviarPP` acima soma a isso a abertura do job.
+    papelEnviaPP: pode(session.activeRole, "jobs.enviar_pp"),
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
   };

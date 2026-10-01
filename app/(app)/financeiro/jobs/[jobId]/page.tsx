@@ -722,6 +722,8 @@ export default async function JobNoFinanceiroPage({
               </div>
             )}
             <JobRealizadoSection
+              // Tela do financeiro: só leitura, não gera nem envia PP.
+              papelEnviaPP={false}
               confirmarSaidaParaOrcamento
               edicaoDoFinanceiro={edicaoDoFinanceiro}
               interno={detalhe.interno}

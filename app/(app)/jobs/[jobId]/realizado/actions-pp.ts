@@ -16,6 +16,7 @@ import {
 } from "@/lib/data/foto-pagamento-da-pp";
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { pode } from "@/lib/permissoes";
 import { DOCUMENTO_TIPOS, PP_URGENTE_JUSTIFICATIVA_MIN } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { listActiveMembers } from "@/lib/data/members";
@@ -308,7 +309,31 @@ const anexoUploadedSchema = z.object({
 type AnexoUploaded = z.infer<typeof anexoUploadedSchema>;
 
 /**
- * Gates comuns: sessao, tenant, job existe, status editavel, ownership.
+ * Enviar (e reenviar) PP ao financeiro é do GP e do administrador (decisão
+ * 136): o produtor gera, mas não envia. As actions de envio chamam este
+ * DEPOIS de `checarGatesRealizado`.
+ */
+async function barrarEnvioPeloPapel(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  ppId: string,
+): Promise<{ ok: false; message: string } | null> {
+  if (pode(session.activeRole, "jobs.enviar_pp")) return null;
+  await logAuditEvent({
+    acao: "acao_negada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: ppId,
+    metadata: {
+      acao_tentada: "pedido_compra.enviada_financeiro",
+      motivo: "papel_sem_permissao",
+      papel: session.activeRole,
+    },
+  });
+  return { ok: false, message: "Só o GP envia PP ao financeiro." };
+}
+
+/**
+ * Gates comuns: sessao, tenant, job existe, status editavel e papel.
  * Retorna { ok, session, job, item, supabase } ou { ok:false, message }.
  */
 async function checarGatesRealizado(itemRealizadoId: string): Promise<
@@ -460,11 +485,13 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     };
   }
 
-  const podeEditar =
-    session.activeRole === "administrador" ||
-    job.responsavel_id === session.profile.id;
-
-  if (!podeEditar) {
+  // Até 01/10/2026 só o GP responsável do job (ou o administrador) passava
+  // daqui. Desde a decisão 136 qualquer GP age em qualquer job, e o
+  // produtor GERA, edita e cancela a PP — o ENVIO ao financeiro é que fica
+  // com o GP (`barrarEnvioPeloPapel`, nas actions de envio e reenvio).
+  // Conferir o papel aqui também fecha a porta das três actions que não
+  // chamavam `checarPermissao` e dependiam só da checagem de dono.
+  if (!pode(session.activeRole, "jobs.emitir_pp")) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -472,12 +499,13 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
       entidadeId: null,
       metadata: {
         acao_tentada: "pedido_compra.gerada",
-        motivo: "usuario_nao_e_responsavel_nem_admin",
+        motivo: "papel_sem_permissao",
+        papel: session.activeRole,
       },
     });
     return {
       ok: false,
-      message: "Apenas o responsável do job ou admin pode gerar PP.",
+      message: "Você não tem permissão para gerar PP.",
     };
   }
 
@@ -1514,9 +1542,11 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
     return { ok: false, message: "Job não está em estado editável." };
   }
 
+  // Decisão 136: qualquer GP (e o administrador) cancela — antes era só o
+  // GP responsável do job. O produtor gera PP mas não a envia ao
+  // financeiro; por isso cancela só a que ainda não foi enviada.
   const podeCancelar =
-    session.activeRole === "administrador" ||
-    job.responsavel_id === session.profile.id;
+    pode(session.activeRole, "jobs.enviar_pp") || pp.status === "gerada";
   if (!podeCancelar) {
     await logAuditEvent({
       acao: "acao_negada",
@@ -1525,10 +1555,14 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
       entidadeId: pp_id,
       metadata: {
         acao_tentada: "pedido_compra.cancelada",
-        motivo: "sem_permissao",
+        motivo: "produtor_so_cancela_pp_nao_enviada",
+        status_atual: pp.status,
       },
     });
-    return { ok: false, message: "Sem permissão pra cancelar esta PP." };
+    return {
+      ok: false,
+      message: "O produtor só cancela PP que ainda não foi enviada ao financeiro. Peça a um GP.",
+    };
   }
 
   // Soft delete: marca como cancelada. PDF e anexos ficam no bucket.
@@ -1661,9 +1695,12 @@ export async function reenviarPedidoCompra(
   // formulário troca fornecedor por responsável, e o resto do caminho é o
   // mesmo. O MODO não muda aqui — quem nasceu verba continua verba.
 
-  // Reusa os mesmos gates da emissão: job editável + responsável ou admin.
+  // Reusa os mesmos gates da emissão (job editável, papel que gera PP) e,
+  // por ser envio, o do papel que envia (decisão 136).
   const gate = await checarGatesRealizado(ppRow.item_realizado_id);
   if (!gate.ok) return gate;
+  const barradoNoReenvio = await barrarEnvioPeloPapel(gate.session, ppRow.id);
+  if (barradoNoReenvio) return barradoNoReenvio;
   const { item, job } = gate;
 
   // Reenviar É enviar ao financeiro: vale a mesma porta do envio —
@@ -2215,6 +2252,8 @@ export async function enviarPedidoCompraAoFinanceiro(
 
   const gate = await checarGatesRealizado(ppRow.item_realizado_id);
   if (!gate.ok) return gate;
+  const barradoNoEnvio = await barrarEnvioPeloPapel(gate.session, ppRow.id);
+  if (barradoNoEnvio) return barradoNoEnvio;
   const { item, job } = gate;
 
   const bloqueioEnvio = await barrarEnvioDePP(

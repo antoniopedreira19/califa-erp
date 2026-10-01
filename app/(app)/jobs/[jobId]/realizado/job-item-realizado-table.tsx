@@ -153,6 +153,10 @@ interface Props {
    *  `podeAcoes`; o ENVIO ao financeiro é a outra metade, e ela aparece
    *  como `envioBloqueadoPor` no painel do item. */
   podeGerarPP?: boolean;
+  /** O papel envia PP ao financeiro (`jobs.enviar_pp`, decisão 136). Sem
+   *  ele o painel do item fecha o envio com o motivo, e o "Ver PP" só
+   *  cancela a PP ainda não enviada. */
+  papelEnviaPP: boolean;
   /** `cadastros.fornecedores.editar` — o "+" do campo Fornecedor. */
   podeCadastrarFornecedor?: boolean;
   podeEditarFornecedor?: boolean;
@@ -640,6 +644,7 @@ export function JobItemRealizadoTable({
   onAlternarGrupo,
   podeAcoes,
   podeGerarPP = false,
+  papelEnviaPP,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   podeConfirmarBv,
@@ -2077,7 +2082,9 @@ export function JobItemRealizadoTable({
           ? "O financeiro ainda não abriu este job. O envio de PPs volta com a abertura — gerar, editar e cancelar continuam liberados."
           : aberturaEmRevisao
             ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
-            : null;
+            : !papelEnviaPP
+              ? "Só o GP envia PP ao financeiro. Gere a PP e peça a um GP para enviá-la."
+              : null;
 
         return (
           <>
@@ -2256,7 +2263,10 @@ export function JobItemRealizadoTable({
               // Cancelar daqui segue o mesmo gate de gerar e enviar: o
               // servidor confere de novo, mas o botão não aparece para
               // quem só lê o job.
-              podeCancelar={podeGerarPP}
+              // O produtor cancela só a PP ainda não enviada (decisão 136).
+              podeCancelar={
+                podeGerarPP && (papelEnviaPP || ppVendo?.status === "gerada")
+              }
               onMensagem={setToast}
             />
           </>

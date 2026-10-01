@@ -158,6 +158,8 @@ export function PlanilhaConferencia({
           é a mesma da tela do job e não pode divergir dela. */}
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <JobItemRealizadoTable
+          // Tela do financeiro: só leitura, não gera nem envia PP.
+          papelEnviaPP={false}
           jobId={jobId}
           grupos={gruposDaPlanilha}
           realizadosMap={realizadosMap}

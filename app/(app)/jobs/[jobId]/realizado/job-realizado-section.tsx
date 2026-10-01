@@ -238,6 +238,10 @@ interface Props {
    *  enquanto errata e BV continuam esperando a abertura. O envio ao
    *  financeiro é a outra metade, e ela mora no painel do item. */
   podeGerarPP?: boolean;
+  /** O papel envia PP ao financeiro (`jobs.enviar_pp`, decisão 136)?
+   *  Obrigatório: é ele que tira do produtor o "Enviar" e o cancelamento
+   *  de PP já enviada. Repassado à tabela. */
+  papelEnviaPP: boolean;
   /** `cadastros.fornecedores.editar` — repassado à tabela. */
   podeCadastrarFornecedor?: boolean;
   podeEditarFornecedor?: boolean;
@@ -301,6 +305,7 @@ export function JobRealizadoSection({
   podeMexerNoSave,
   podeExportarInterna = false,
   podeGerarPP = false,
+  papelEnviaPP,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   podeConfirmarBv,
@@ -952,6 +957,7 @@ export function JobRealizadoSection({
           onAlternarGrupo={recolher.alternar}
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
+          papelEnviaPP={papelEnviaPP}
           podeCadastrarFornecedor={podeCadastrarFornecedor}
           podeEditarFornecedor={podeEditarFornecedor}
           podeConfirmarBv={podeConfirmarBv}

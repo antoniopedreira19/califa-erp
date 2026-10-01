@@ -133,6 +133,7 @@ export default async function JobDetailPage({
     podeCadastrarFornecedor,
     podeEditarFornecedor,
     podeEnviarPP,
+    papelEnviaPP,
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
   } = detalhe;
@@ -407,6 +408,7 @@ export default async function JobDetailPage({
             podeMexerNoSave={podeMexerNoSave}
             podeExportarInterna={podeExportarInterna}
             podeGerarPP={podeGerarPP}
+            papelEnviaPP={papelEnviaPP}
             podeConfirmarBv={podeConfirmarBv}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             aberturaEmRevisao={job.abertura_em_revisao}
@@ -427,6 +429,7 @@ export default async function JobDetailPage({
             responsaveis={responsaveis}
             editable={podeGerarPP}
             podeEnviar={podeEnviarPP}
+            papelEnviaPP={papelEnviaPP}
             podePrestarContas={ppsQuePossoPrestarContas}
           />
         }

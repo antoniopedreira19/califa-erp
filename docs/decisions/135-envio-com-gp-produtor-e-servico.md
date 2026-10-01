@@ -81,10 +81,10 @@ passou a registrar `gp_responsavel_id` e `produtor_id`.
 
 ## 5. Consequências
 
-- **GP que troca o GP perde a edição do job.** Para quem não é
-  administrador, mexer no job exige ser o `responsavel_id` dele
-  (`quemPodeMexer`). É o mesmo efeito de trocar o GP no editor do
-  orçamento.
+- ~~**GP que troca o GP perde a edição do job.**~~ Não vale mais desde a
+  decisão 136 (01/10/2026): qualquer GP mexe em qualquer job, e quem fez
+  cada envio fica registrado. Até ali, para quem não era administrador,
+  mexer no job exigia ser o `responsavel_id` dele (`quemPodeMexer`).
 - **Cancelar o envio não desfaz a troca no orçamento**, como já acontecia
   com nome, cidade, regional e datas.
 
