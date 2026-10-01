@@ -8,6 +8,7 @@ import type {
   ColaboradorFeriasLancamento,
   Nivel,
 } from "@/lib/types";
+import { CardNotificacoesFerias } from "@/components/notificacoes-ferias/card";
 import { CardMinhasFerias } from "./card-minhas-ferias";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function PerfilPage() {
     | null;
 
   // Se o perfil não está vinculado a um colaborador, mostra uma mensagem
-  // amigável mas ainda renderiza info do profile.
+  // amigável mas ainda renderiza info do profile + notificações.
   if (!colab) {
     return (
       <div className="space-y-6 max-w-3xl mx-auto">
@@ -43,6 +44,12 @@ export default async function PerfilPage() {
             Seus dados no sistema California.
           </p>
         </header>
+
+        <CardNotificacoesFerias
+          tenantId={session.activeTenant.id}
+          userId={session.profile.id}
+          verTodasHref="/perfil"
+        />
 
         <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
           <div className="flex items-start gap-4">
@@ -106,6 +113,13 @@ export default async function PerfilPage() {
           Seus dados no sistema California.
         </p>
       </header>
+
+      {/* Notificações pessoais (férias e outros) */}
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
+        verTodasHref="/perfil"
+      />
 
       {/* Card: Dados pessoais */}
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">

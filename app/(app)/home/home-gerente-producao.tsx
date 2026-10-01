@@ -4,6 +4,7 @@ import { CabecalhoHome } from "./_componentes/cabecalho-home";
 import { CardPendenciaLink } from "./_componentes/card-pendencia";
 import { CardKpiLink } from "./_componentes/card-kpi";
 import { EstadoVazio } from "./_componentes/estado-vazio";
+import { CardNotificacoesFerias } from "@/components/notificacoes-ferias/card";
 
 export async function HomeGerenteProducao({
   session,
@@ -18,6 +19,11 @@ export async function HomeGerenteProducao({
       <CabecalhoHome
         nome={session.profile.nome}
         subtitulo="Aprovações que dependem de você e o volume do seu time."
+      />
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
       />
 
       <section className="space-y-3">
