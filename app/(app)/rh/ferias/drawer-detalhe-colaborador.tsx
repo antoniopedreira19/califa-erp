@@ -148,9 +148,9 @@ export function DrawerDetalheColaborador({
                           {p.aquisitivo_fim.slice(0, 4)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Limite:{" "}
+                          Limite p/ gozo:{" "}
                           {new Date(
-                            p.concessivo_fim + "T00:00:00",
+                            p.data_limite_gozo + "T00:00:00",
                           ).toLocaleDateString("pt-BR")}
                         </p>
                       </div>
