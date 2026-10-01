@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-import type { FeriasPeriodoStatus, TipoContratacao } from "@/lib/types";
+import type { FeriasPeriodoStatus } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
 import type { QuadroColaboradorRow } from "./aba-quadro";
 
@@ -15,7 +15,7 @@ export function LinhaQuadro({ row }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  function abrirDrawer() {
+  function abrirDetalhe() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("colab", row.id);
     router.push(`/rh/ferias?${params.toString()}`);
@@ -24,84 +24,165 @@ export function LinhaQuadro({ row }: Props) {
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      abrirDrawer();
+      abrirDetalhe();
     }
   }
 
-  const proximoFmt = row.proximoVencimento
-    ? new Date(row.proximoVencimento + "T00:00:00").toLocaleDateString("pt-BR")
-    : null;
+  const admissaoFmt = row.data_admissao
+    ? new Date(row.data_admissao + "T00:00:00").toLocaleDateString("pt-BR")
+    : "—";
+
+  const limiteFmt = row.periodoAtivo?.data_limite_gozo
+    ? new Date(
+        row.periodoAtivo.data_limite_gozo + "T00:00:00",
+      ).toLocaleDateString("pt-BR")
+    : "—";
 
   return (
     <li
       role="button"
       tabIndex={0}
-      onClick={abrirDrawer}
+      onClick={abrirDetalhe}
       onKeyDown={onKeyDown}
-      className="grid md:grid-cols-[1.5fr_0.6fr_1fr_0.8fr_1.1fr] gap-x-4 gap-y-1 px-5 py-3 transition-colors cursor-pointer hover:bg-muted/30"
+      className="grid md:grid-cols-[2fr_0.9fr_0.9fr_1fr_1fr_1fr_0.3fr] gap-x-4 gap-y-1 px-5 py-3 cursor-pointer transition-colors hover:bg-muted/30"
     >
+      {/* Colaborador: nome + função + tipo */}
       <div className="min-w-0">
         <p className="text-sm font-medium truncate">{row.nome}</p>
-        <p className="text-xs text-muted-foreground truncate md:hidden">
-          {row.funcao}
-        </p>
-      </div>
-
-      <p className="hidden md:block text-xs text-muted-foreground uppercase tracking-wider self-center">
-        {tipoContratacaoLabel(row.tipo_contratacao).split(" ")[0]}
-      </p>
-
-      <div className="self-center">
-        <StatusBadge status={row.statusPrincipal} />
-      </div>
-
-      <div className="self-center">
-        <p className="text-sm font-semibold">
-          {row.saldoTotal}{" "}
-          <span className="text-xs font-normal text-muted-foreground">
-            {row.saldoTotal === 1 ? "dia" : "dias"}
+        <p className="text-xs text-muted-foreground truncate">
+          {row.funcao} ·{" "}
+          <span className="uppercase tracking-wider">
+            {tipoContratacaoLabel(row.tipo_contratacao).split(" ")[0]}
           </span>
         </p>
       </div>
 
-      <div className="self-center flex items-center justify-between gap-2">
-        {proximoFmt ? (
+      {/* Admissão */}
+      <p className="hidden md:block self-center text-sm text-foreground">
+        {admissaoFmt}
+      </p>
+
+      {/* Aquisitivo */}
+      <p className="hidden md:block self-center text-sm font-medium">
+        {row.periodoAtivo?.rotulo ?? "—"}
+      </p>
+
+      {/* Dias pendentes */}
+      <div className="hidden md:block self-center">
+        {row.periodoAtivo ? (
+          <p className="text-sm">
+            <span className="font-semibold">
+              {row.periodoAtivo.dias_pendentes}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {" "}de {row.periodoAtivo.dias_direito}
+            </span>
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">—</p>
+        )}
+      </div>
+
+      {/* Situação */}
+      <div className="hidden md:block self-center">
+        {row.periodoAtivo ? (
+          <BadgeSituacao
+            status={row.periodoAtivo.status}
+            diasAteLimite={row.periodoAtivo.diasAteLimite}
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">Sem período</span>
+        )}
+      </div>
+
+      {/* Data limite */}
+      <div className="hidden md:block self-center">
+        {row.periodoAtivo ? (
           <div>
-            <p className="text-sm">{proximoFmt}</p>
-            {row.diasProximoVencimento !== null && (
-              <p className={`text-xs ${tomVencimento(row.diasProximoVencimento)}`}>
-                {row.diasProximoVencimento > 0
-                  ? `em ${row.diasProximoVencimento} dias`
-                  : `há ${-row.diasProximoVencimento} dias`}
-              </p>
-            )}
+            <p className="text-sm">{limiteFmt}</p>
+            <p
+              className={`text-xs ${tomDiasAteLimite(row.periodoAtivo.diasAteLimite)}`}
+            >
+              {row.periodoAtivo.diasAteLimite > 0
+                ? `em ${row.periodoAtivo.diasAteLimite} dias`
+                : `há ${-row.periodoAtivo.diasAteLimite} dias`}
+            </p>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">—</p>
         )}
-        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+      </div>
+
+      {/* Chevron de ação */}
+      <div className="hidden md:flex self-center justify-end">
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </div>
+
+      {/* MOBILE: card compacto com resumo */}
+      <div className="md:hidden mt-2 flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground">
+            Aquisitivo <span className="font-medium">{row.periodoAtivo?.rotulo ?? "—"}</span>
+            {row.periodoAtivo &&
+              ` · ${row.periodoAtivo.dias_pendentes}/${row.periodoAtivo.dias_direito} dias pend.`}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Limite:{" "}
+            <span className="font-medium">{limiteFmt}</span>
+            {row.periodoAtivo && (
+              <span
+                className={`ml-1 ${tomDiasAteLimite(row.periodoAtivo.diasAteLimite)}`}
+              >
+                ({row.periodoAtivo.diasAteLimite > 0
+                  ? `em ${row.periodoAtivo.diasAteLimite}d`
+                  : `há ${-row.periodoAtivo.diasAteLimite}d`})
+              </span>
+            )}
+          </p>
+        </div>
+        {row.periodoAtivo && (
+          <BadgeSituacao
+            status={row.periodoAtivo.status}
+            diasAteLimite={row.periodoAtivo.diasAteLimite}
+          />
+        )}
       </div>
     </li>
   );
 }
 
-function tomVencimento(dias: number): string {
+function tomDiasAteLimite(dias: number): string {
   if (dias < 0) return "text-red-700 font-medium";
   if (dias <= 60) return "text-amber-700 font-medium";
   return "text-muted-foreground";
 }
 
-function StatusBadge({
+function BadgeSituacao({
   status,
+  diasAteLimite,
 }: {
-  status: FeriasPeriodoStatus | "sem_direito";
+  status: FeriasPeriodoStatus;
+  diasAteLimite: number;
 }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    incompleto: { label: "Em curso", cls: "bg-muted text-muted-foreground" },
-    apto: { label: "Apto", cls: "bg-emerald-100 text-emerald-800" },
+  // Rótulos alinhados com os da aba "Acompanhamento" da planilha
+  const map: Record<FeriasPeriodoStatus, { label: string; cls: string }> = {
+    incompleto: {
+      label: "Período incompleto",
+      cls: "bg-muted text-muted-foreground",
+    },
+    apto: {
+      label: diasAteLimite <= 60 ? "Em alerta" : "Dentro do prazo",
+      cls:
+        diasAteLimite <= 60
+          ? "bg-amber-100 text-amber-900"
+          : "bg-emerald-100 text-emerald-800",
+    },
     em_alerta: { label: "Em alerta", cls: "bg-amber-100 text-amber-900" },
     vencido: { label: "Vencido", cls: "bg-red-100 text-red-800" },
-    regularizado: { label: "Regularizado", cls: "bg-sky-100 text-sky-800" },
+    regularizado: {
+      label: "Regularizado",
+      cls: "bg-sky-100 text-sky-800",
+    },
     nao_habilitado: {
       label: "Não habilitado",
       cls: "bg-muted text-muted-foreground",
@@ -110,12 +191,8 @@ function StatusBadge({
       label: "Pago em rescisão",
       cls: "bg-slate-200 text-slate-700",
     },
-    sem_direito: {
-      label: "Sem direito ainda",
-      cls: "bg-muted text-muted-foreground",
-    },
   };
-  const info = map[status] ?? map.sem_direito;
+  const info = map[status];
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${info.cls}`}
