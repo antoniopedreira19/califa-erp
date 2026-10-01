@@ -47,10 +47,13 @@ import { proximaFatura } from "@/lib/cartoes/proxima-fatura";
 import type {
   ContaBancaria,
   FormaPagamento,
+  PagamentoForaDoCadastroDaPP,
+  PedidoForaDoCadastro,
   PlanoContaTipo,
   PlanoContaSubtipo,
   RetencaoDaBaixa,
 } from "@/lib/types";
+import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import {
   BlocoValorDaBaixa,
   useValorDaBaixa,
@@ -87,6 +90,13 @@ export interface BaixaTituloAlvo {
   empresaId: string;
   planoContaTipoId: string | null;
   planoContaSubtipoId: string | null;
+  /** Decisão 137: a PP de origem paga por outra chave ou conta. A baixa
+   *  mostra para onde mandar o dinheiro e quem pediu. Null em toda outra
+   *  origem e na PP paga pelo cadastro. */
+  foraDoCadastro: {
+    pagamento: PagamentoForaDoCadastroDaPP;
+    pedido: PedidoForaDoCadastro | null;
+  } | null;
   /**
    * `true` quando o título é uma devolução de verba de produção. Nesse
    * caso: (a) o campo Forma de pagamento é escondido — a RPC de baixa da
@@ -336,6 +346,14 @@ function FormularioDaBaixa({
           {alvo.vencimento ? formatarData(alvo.vencimento) : "—"}
         </span>
       </div>
+
+      {alvo.foraDoCadastro && (
+        <PagamentoForaDoCadastroCartao
+          pagamento={alvo.foraDoCadastro.pagamento}
+          pedido={alvo.foraDoCadastro.pedido}
+          rotulo="Pagar fora do cadastro"
+        />
+      )}
 
       {mensagemErro && (
         <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">

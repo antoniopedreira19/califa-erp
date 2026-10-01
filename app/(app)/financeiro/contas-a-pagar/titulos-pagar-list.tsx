@@ -203,6 +203,12 @@ export interface TituloRow {
    */
   urgente: boolean;
   urgente_justificativa: string | null;
+  /**
+   * Decisão 137: a PP de origem paga por outra chave ou conta, e quem
+   * pediu. Aparece só na baixa — a lista não muda (Tiago, 01/10/2026). Só
+   * PP tem; toda outra origem manda `null` explícito.
+   */
+  fora_do_cadastro: BaixaTituloAlvo["foraDoCadastro"];
   estorno_de_avulsa_id: string | null;
   /**
    * A COMPRA a que esta linha pertence — ela mesma, se for compra à vista
@@ -630,6 +636,7 @@ export function TitulosPagarList({
         empresaId: baixando.empresa_id,
         planoContaTipoId: baixando.plano_conta_tipo_id,
         planoContaSubtipoId: baixando.plano_conta_subtipo_id,
+        foraDoCadastro: baixando.fora_do_cadastro,
         isDevolucao: baixando.origem === "pp_devolucao_verba",
         // Fatura não se paga com cartão, folha também não (Tiago,
         // 01/10/2026; o banco recusa), e o restante de uma parcial não vai

@@ -4638,3 +4638,13 @@ código publicado logo depois (`3305751`).
   migration `20261001400004`); quem muda de papel depois não reescreve o que
   já escreveu. As mensagens antigas receberam o cargo atual do autor.
 - Ver decisão 136, §3.3. Com esta parte a decisão 136 está entregue.
+
+## ⚠️ Nota de 2026-10-01 (5) — linha do tempo do "Ver PP" pelos eventos (decisão 136, parte 5)
+
+- A ficha "Ver PP" (planilha → PPs do item → Ver formulário) mostra um
+  passo por evento: rejeições e reenvios ficam, com a justificativa e o
+  ponto vermelho. O que o financeiro fez aparece sem o nome; o que a
+  produção fez, com o nome.
+- Urgência e pagamento fora do cadastro não entram nessa linha do tempo.
+- `PedidoCompraNaLista.eventos` vem de `carregar-detalhe.ts`. Ver decisão
+  136, §3.4.

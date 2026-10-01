@@ -45,6 +45,17 @@ import {
   type CnabItemRejeitado,
   type CnabFormaEscolhida,
 } from "./actions-cnab";
+import {
+  PagamentoForaDoCadastroCartao,
+  ROTULO_CONTA,
+  ROTULO_PIX,
+} from "@/components/financeiro/pagamento-fora-do-cadastro";
+import { chavePixLegivel, nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
+import type {
+  PagamentoForaDoCadastroDaPP,
+  PixTipoChave,
+  TipoContaBancariaFornecedor,
+} from "@/lib/types";
 
 // ---------------------------------------------------------------------
 // Tipos (dados vindos do server component)
@@ -68,6 +79,26 @@ export interface TituloElegivelParaRemessa {
   /** Indicação visual — o gerador vai revalidar. */
   temPix: boolean;
   temBanco: boolean;
+  /**
+   * Decisão 137: para onde o arquivo paga, na coluna "Dados de
+   * pagamento" — a chave e a conta do cadastro do destinatário, que é o
+   * que o gerador lê. Na PP fora do cadastro, a chave ou a conta da PP.
+   */
+  pix: { tipo: PixTipoChave; chave: string } | null;
+  conta: ContaDoTituloNaRemessa | null;
+  /** A PP paga por outra chave ou conta (decisão 127): o arquivo usa a
+   *  da PP, e a forma vem dela — sem o seletor PIX/TED. */
+  foraDoCadastro: PagamentoForaDoCadastroDaPP | null;
+}
+
+export interface ContaDoTituloNaRemessa {
+  banco_codigo: string;
+  banco_nome: string | null;
+  agencia: string;
+  agencia_dv: string | null;
+  conta: string;
+  conta_dv: string;
+  tipo_conta: TipoContaBancariaFornecedor | null;
 }
 
 // ---------------------------------------------------------------------
@@ -83,6 +114,66 @@ const ROTULO_ORIGEM: Record<CnabOrigemTipo, string> = {
   recorrente: "Recorrências",
   desembolso: "Desembolsos",
 };
+
+/** A coluna "Dados de pagamento": acompanha o seletor PIX/TED. */
+function DadosDePagamento({
+  titulo,
+  forma,
+}: {
+  titulo: TituloElegivelParaRemessa;
+  forma: CnabFormaEscolhida | null;
+}) {
+  if (titulo.foraDoCadastro) {
+    return (
+      <PagamentoForaDoCadastroCartao
+        pagamento={titulo.foraDoCadastro}
+        pedido={null}
+        semMotivo
+        className="py-1.5"
+      />
+    );
+  }
+  if (forma === "pix" && titulo.pix) {
+    return (
+      <>
+        <div className="text-[11px] text-muted-foreground">
+          PIX · {ROTULO_PIX[titulo.pix.tipo]}
+        </div>
+        <div className="break-all font-mono text-xs font-semibold">
+          {chavePixLegivel(titulo.pix.tipo, titulo.pix.chave)}
+        </div>
+      </>
+    );
+  }
+  if (forma === "banco" && titulo.conta) {
+    const c = titulo.conta;
+    return (
+      <>
+        <div className="text-[11px] text-muted-foreground">
+          TED · {nomeCurtoDoBanco(c.banco_codigo, c.banco_nome)} ({c.banco_codigo})
+        </div>
+        <div className="font-mono text-xs font-semibold">
+          Ag. {c.agencia}
+          {c.agencia_dv ? `-${c.agencia_dv}` : ""} · {c.tipo_conta ? ROTULO_CONTA[c.tipo_conta] : "Conta"}{" "}
+          {c.conta}-{c.conta_dv}
+        </div>
+      </>
+    );
+  }
+  return <span className="text-xs text-muted-foreground">—</span>;
+}
+
+/** A forma que vale para o título: a escolhida no seletor, ou a padrão
+ *  do gerador (PIX se houver chave, senão conta). */
+function formaDoTitulo(
+  t: TituloElegivelParaRemessa,
+  escolhida: CnabFormaEscolhida | undefined,
+): CnabFormaEscolhida | null {
+  if (t.temPix && t.temBanco) return escolhida ?? "pix";
+  if (t.temPix) return "pix";
+  if (t.temBanco) return "banco";
+  return null;
+}
 
 function formatBRL(v: number): string {
   return v.toLocaleString("pt-BR", {
@@ -458,6 +549,9 @@ export function ExportarRemessaCnabDialog({
                           <th className="w-40 px-3 py-2 text-left font-medium text-muted-foreground">
                             Forma
                           </th>
+                          <th className="w-72 px-3 py-2 text-left font-medium text-muted-foreground">
+                            Dados de pagamento
+                          </th>
                           <th className="w-32 px-3 py-2 text-right font-medium text-muted-foreground">
                             Valor
                           </th>
@@ -516,6 +610,12 @@ export function ExportarRemessaCnabDialog({
                                       return m;
                                     });
                                   }}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <DadosDePagamento
+                                  titulo={t}
+                                  forma={formaDoTitulo(t, formaPorTitulo.get(chave))}
                                 />
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums">

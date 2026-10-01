@@ -28,6 +28,9 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarChavePix, problemaDaChavePix } from "@/lib/pix";
 import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
+import { aplicarForaDoCadastroNaRemessa } from "@/lib/cnab/fora-do-cadastro";
+import { lerPagamentoForaDoCadastro } from "@/lib/data/foto-pagamento-da-pp";
+import type { PagamentoForaDoCadastroDaPP } from "@/lib/types";
 import {
   gerarArquivo,
   type FormaLancamento,
@@ -113,6 +116,9 @@ interface OrigemResolvida {
   /** UUID do destinatário resolvido (fornecedor ou colaborador). */
   destinatarioId: string;
   destinatarioTipo: "fornecedor" | "colaborador" | "cliente";
+  /** Decisão 137: a PP paga por outra chave ou conta. O arquivo usa a da
+   *  PP no lugar da do cadastro, e a forma vem dela. Null no resto. */
+  foraDoCadastro: PagamentoForaDoCadastroDaPP | null;
 }
 
 interface DadosBancariosDestinatario {
@@ -270,11 +276,17 @@ export async function gerarRemessaCnab(
       });
       continue;
     }
+    // Decisão 137: a PP fora do cadastro paga pela chave ou conta dela,
+    // na forma dela; o favorecido continua o do cadastro.
+    const fora = resolvido.data.foraDoCadastro
+      ? aplicarForaDoCadastroNaRemessa(dados.data, resolvido.data.foraDoCadastro)
+      : null;
+    const dadosDoPagamento = fora ? fora.dados : dados.data;
     const pgto = montarPagamento(
       resolvido.data,
-      dados.data,
+      dadosDoPagamento,
       input.dataPagamento,
-      item.formaEscolhida,
+      fora ? fora.forma : item.formaEscolhida,
     );
     if (!pgto.ok) {
       rejeitados.push({
@@ -284,7 +296,7 @@ export async function gerarRemessaCnab(
       });
       continue;
     }
-    elegiveis.push({ origem: resolvido.data, dados: dados.data, pagamento: pgto.data });
+    elegiveis.push({ origem: resolvido.data, dados: dadosDoPagamento, pagamento: pgto.data });
   }
 
   if (elegiveis.length === 0) {
@@ -481,6 +493,7 @@ async function resolverOrigem(
         descricao: data.descricao,
         destinatarioId: dest.id,
         destinatarioTipo: dest.tipo,
+        foraDoCadastro: null,
       },
     };
   }
@@ -488,7 +501,8 @@ async function resolverOrigem(
     const { data, error } = await supabase
       .from("pedidos_compra_parcelas")
       .select(
-        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id, pagamento_fora_do_cadastro_meio)",
+        // Decisão 137: o meio fora do cadastro e a foto em que ele está.
+        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id, pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo, pagamento_fora_do_cadastro_aprovado_em, fornecedor_banco_codigo, fornecedor_banco_nome, fornecedor_agencia, fornecedor_agencia_dv, fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta, fornecedor_pix_tipo, fornecedor_pix_chave)",
       )
       .eq("id", item.origemId)
       .eq("tenant_id", tenantId)
@@ -503,14 +517,31 @@ async function resolverOrigem(
           servico: string;
           fornecedor_id: string | null;
           pagamento_fora_do_cadastro_meio: string | null;
+          pagamento_fora_do_cadastro_motivo: string | null;
+          pagamento_fora_do_cadastro_aprovado_em: string | null;
+          fornecedor_banco_codigo: string | null;
+          fornecedor_banco_nome: string | null;
+          fornecedor_agencia: string | null;
+          fornecedor_agencia_dv: string | null;
+          fornecedor_conta: string | null;
+          fornecedor_conta_dv: string | null;
+          fornecedor_tipo_conta: "corrente" | "poupanca" | "pagamento" | null;
+          fornecedor_pix_tipo: "cpf" | "cnpj" | "email" | "telefone" | "aleatoria" | null;
+          fornecedor_pix_chave: string | null;
         }
       | null;
     if (!pp) return { ok: false, message: "PP não encontrada." };
-    // Decisão 127: a remessa lê o cadastro ao vivo, e a PP fora do cadastro
-    // paga por outra chave ou conta. Até a remessa ler os dados da PP, ela
-    // fica fora do arquivo e é paga pelo PDF (Tiago, 29/09/2026).
-    if (pp.pagamento_fora_do_cadastro_meio) {
-      return { ok: false, message: "Pagamento fora do cadastro: pague pelo PDF." };
+    // Decisão 127 (29/09/2026): a PP fora do cadastro ficava de fora do
+    // arquivo ("pague pelo PDF"). Decisão 137 (01/10/2026, Tiago): ela
+    // entra, paga pela chave ou pela conta da PP. A marcação da aprovação
+    // é a trava: sem ela, a PP nem chega a "aprovada" (CHECK do banco),
+    // e aqui ela é conferida de novo.
+    const foraDoCadastro = lerPagamentoForaDoCadastro(pp);
+    if (foraDoCadastro && !pp.pagamento_fora_do_cadastro_aprovado_em) {
+      return {
+        ok: false,
+        message: "Pagamento fora do cadastro sem a aprovação do financeiro.",
+      };
     }
     if (data.pago_em) return { ok: false, message: "Parcela já baixada." };
     if (pp.status !== "aprovada" && pp.status !== "pago") {
@@ -535,6 +566,7 @@ async function resolverOrigem(
         descricao: `PP ${pp.servico.slice(0, 100)}`,
         destinatarioId: pp.fornecedor_id,
         destinatarioTipo: "fornecedor",
+        foraDoCadastro,
       },
     };
   }
@@ -578,6 +610,7 @@ async function resolverOrigem(
       descricao: `Desembolso ${d.descricao.slice(0, 100)}`,
       destinatarioId: dest.id,
       destinatarioTipo: dest.tipo,
+      foraDoCadastro: null,
     },
   };
 }

@@ -6456,3 +6456,18 @@ estendido a Contas a Receber em 31/08.**
   migration `20261001400004`); quem muda de papel depois não reescreve o que
   já escreveu. As mensagens antigas receberam o cargo atual do autor.
 - Ver decisão 136, §3.3. Com esta parte a decisão 136 está entregue.
+
+## ⚠️ Nota de 2026-10-01 (5) — pagamento fora do cadastro na baixa e na remessa (decisão 137)
+
+- **Tela da PP:** o cartão "Fora do cadastro" diz "Pedido por X · data hora".
+- **Dar baixa:** na PP fora do cadastro, o cartão "Pagar fora do cadastro"
+  logo abaixo do título (meio, chave ou conta, motivo, quem pediu).
+- **Exportar remessa Santander:** coluna "Dados de pagamento" em todas as
+  linhas (chave no PIX; banco, agência e conta no TED, acompanhando o
+  seletor). A PP fora do cadastro pode ser marcada e o arquivo paga pela
+  chave ou conta da PP, com o fornecedor do cadastro como favorecido —
+  revisão da 127, que a recusava.
+- Lista de PPs e Títulos a Pagar não mudaram (o Tiago recusou os selos).
+- Remessa de verdade com a PP fora do cadastro ainda não foi gerada; a troca
+  tem teste (`npm run test:cnab-fora`). PP de teste: PP-00102 (TES-1001/26),
+  aprovada e a pagar.

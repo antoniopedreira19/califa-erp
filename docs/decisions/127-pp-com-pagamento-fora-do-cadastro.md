@@ -6,6 +6,13 @@
 **Protótipo aprovado:** artifact "Pagamento da PP" (variante A), em três
 rodadas no mesmo dia.
 
+> ⚠️ **Revisão de 2026-10-01 ([137](137-fora-do-cadastro-visivel-e-pago-pela-remessa.md)):**
+> a remessa CNAB deixou de recusar a PP fora do cadastro — ela entra no
+> arquivo, paga pela chave ou conta da PP, com o fornecedor do cadastro como
+> favorecido. A linha "Remessa CNAB" do §2 e o item "Remessa" do §4 valem
+> só até essa data. O cartão ganhou "Pedido por" (tela da PP) e aparece
+> também na baixa.
+
 Continua a [067](067-o-campo-de-fornecedor-busca-limpa-e-edita.md), que criou a
 foto dos dados de pagamento na PP, e usa as réguas de formato da
 [101](101-dados-de-pagamento-no-formato-da-remessa.md).

@@ -174,6 +174,32 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
 - O rótulo do cargo é o de `roleLabel` (`gerente_producao` aparece como
   "Gerente de Projeto").
 
+### 3.4 Linha do tempo do "Ver PP" na produção (parte 5, entregue em 01/10/2026)
+
+Protótipo aprovado: artifact "Ver PP na produção" (versões 1 a 3).
+
+A ficha da PP no job (planilha → chip "PPs" do item → "Ver formulário",
+`app/(app)/jobs/[jobId]/pps/ver-pp-drawer.tsx`) tinha a própria linha do
+tempo, montada das colunas da PP: a rejeição sumia no reenvio e o reenvio
+não aparecia. Agora ela lê `pedidos_compra_eventos`:
+
+- um passo por evento, na ordem, com data e hora; depois o passo de agora e
+  os que ainda vêm, como antes;
+- o que a produção fez leva o nome de quem fez (gerou, enviou, reenviou,
+  cancelou, prestou contas); o que o financeiro fez aparece "pelo
+  financeiro", **sem o nome** — a mesma regra da devolução do job (Tiago);
+- rejeição, reprovação e prestação reprovada com a justificativa entre aspas
+  e o **ponto vermelho com X**;
+- **urgência e pagamento fora do cadastro ficam de fora** (Tiago): quem os
+  vê é o financeiro, no Contas a Pagar — ver a
+  [137](137-fora-do-cadastro-visivel-e-pago-pela-remessa.md);
+- a verba mostra a prestação passo a passo (envio, reprovação, reenvio,
+  aprovação) e termina em "Concluída" quando a prestação foi aprovada sem
+  saldo a devolver.
+
+`PedidoCompraNaLista` ganhou `eventos` (obrigatório), carregado em
+`carregar-detalhe.ts`. PP sem evento nenhum cai na montagem antiga.
+
 ## 4. Como foi testado
 
 **Parte 1 (01/10/2026):**
@@ -250,6 +276,16 @@ Agrupamento 3 · Item 1, R$ 500,00, emissora Empresa Teste):
 - O log da API ficou sem erro (todas as respostas 2xx) depois da tabela
   nova.
 
+**Parte 5 (01/10/2026)**, como "GP Teste Claude", na planilha do TES-1001/26:
+- PP-00080: Gerada, Enviada, "Rejeitada pelo financeiro" com a justificativa
+  e o ponto vermelho, "Reenviada ao financeiro · GP Teste Claude", Em
+  avaliação (agora), Aprovação e Pagamento.
+- PP-00099 (verba): Gerada pelo produtor, Enviada pelo GP, Aprovada com o
+  pagamento programado, Paga com a hora, a prestação enviada, reprovada,
+  reenviada e "Concluída · prestação aprovada pelo financeiro".
+- PP-00102 (fora do cadastro): sem o passo do fora do cadastro e sem o
+  "Pedido por" no cartão; "Aprovada pelo financeiro" aceso.
+
 **Parte 4 (01/10/2026)**, no TES-1001/26:
 - Como "GP Teste Claude", mensagem na Comunicação do job ("Teste da decisão
   136: cargo de quem escreveu no chat.") — o gatilho gravou
@@ -281,3 +317,4 @@ Agrupamento 3 · Item 1, R$ 500,00, emissora Empresa Teste):
 3. PPs: histórico completo, lista, aprovar PP e aprovar prestação —
    entregue em 01/10/2026.
 4. Chats: cargo de quem escreveu — entregue em 01/10/2026.
+5. Linha do tempo do "Ver PP" na produção — entregue em 01/10/2026.

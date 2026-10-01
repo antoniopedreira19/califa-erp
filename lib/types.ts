@@ -126,6 +126,13 @@ export type MeioForaDoCadastro = "pix" | "conta";
  * continua o do cadastro, no documento e na foto. Montado no servidor por
  * `lerPagamentoForaDoCadastro` (`lib/data/foto-pagamento-da-pp.ts`).
  */
+/** Quem pediu o pagamento fora do cadastro e quando (decisão 137): o
+ *  último evento `fora_do_cadastro` do histórico da PP. */
+export interface PedidoForaDoCadastro {
+  por_nome: string | null;
+  em: string;
+}
+
 export interface PagamentoForaDoCadastroDaPP {
   meio: MeioForaDoCadastro;
   motivo: string;
@@ -2347,6 +2354,9 @@ export interface PedidoCompraNaLista extends PedidoCompra {
   prestacao: PrestacaoDaVerba | null;
   /** Estorno de verba criado na aprovação, quando sobrou saldo. */
   devolucao: DevolucaoDaVerba | null;
+  /** Histórico de eventos da PP (decisão 136): a linha do tempo do "Ver
+   *  PP". Obrigatório pelo mesmo motivo da prestação acima. */
+  eventos: PPEvento[];
 }
 
 /**

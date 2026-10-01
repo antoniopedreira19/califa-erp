@@ -20,9 +20,15 @@
 import { AlertTriangle, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { chavePixLegivel, nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
-import type { PagamentoForaDoCadastroDaPP, PixTipoChave, TipoContaBancariaFornecedor } from "@/lib/types";
+import { formatDataEHoraBr } from "@/lib/formatar-data-hora";
+import type {
+  PagamentoForaDoCadastroDaPP,
+  PedidoForaDoCadastro,
+  PixTipoChave,
+  TipoContaBancariaFornecedor,
+} from "@/lib/types";
 
-const ROTULO_PIX: Record<PixTipoChave, string> = {
+export const ROTULO_PIX: Record<PixTipoChave, string> = {
   cnpj: "CNPJ",
   cpf: "CPF",
   email: "E-mail",
@@ -30,14 +36,14 @@ const ROTULO_PIX: Record<PixTipoChave, string> = {
   aleatoria: "Aleatória",
 };
 
-const ROTULO_CONTA: Record<TipoContaBancariaFornecedor, string> = {
+export const ROTULO_CONTA: Record<TipoContaBancariaFornecedor, string> = {
   corrente: "Corrente",
   poupanca: "Poupança",
   pagamento: "Pagamento",
 };
 
 /** "PIX · Aleatória" ou "ITAÚ UNIBANCO". */
-function meioLegivel(p: PagamentoForaDoCadastroDaPP): string {
+export function meioLegivel(p: PagamentoForaDoCadastroDaPP): string {
   if (p.meio === "pix") return p.pix_tipo ? `PIX · ${ROTULO_PIX[p.pix_tipo]}` : "PIX";
   return p.banco_codigo ? nomeCurtoDoBanco(p.banco_codigo, p.banco_nome) : "Conta";
 }
@@ -51,9 +57,20 @@ export function destinoLegivel(p: PagamentoForaDoCadastroDaPP): string {
 
 export function PagamentoForaDoCadastroCartao({
   pagamento,
+  pedido,
+  rotulo = "Fora do cadastro",
+  semMotivo = false,
   className,
 }: {
   pagamento: PagamentoForaDoCadastroDaPP;
+  /** Decisão 137: "Pedido por X · data hora" na última linha, para o
+   *  financeiro (tela da PP e baixa). Null esconde a linha — a ficha da
+   *  produção e a remessa não a mostram. */
+  pedido: PedidoForaDoCadastro | null;
+  /** "Pagar fora do cadastro" na baixa (decisão 137). */
+  rotulo?: string;
+  /** A remessa mostra só o meio e a chave ou conta (decisão 137). */
+  semMotivo?: boolean;
   className?: string;
 }) {
   return (
@@ -61,14 +78,21 @@ export function PagamentoForaDoCadastroCartao({
       <p className="flex items-center justify-between gap-2 text-[11px]">
         <span className="flex items-center gap-1.5 font-semibold text-amber-800">
           <AlertTriangle className="h-3.5 w-3.5 flex-none" />
-          Fora do cadastro
+          {rotulo}
         </span>
         <span className="text-muted-foreground">{meioLegivel(pagamento)}</span>
       </p>
       <p className="mt-1 break-words font-mono text-[12.5px] font-semibold leading-snug tracking-[-0.01em]">
         {destinoLegivel(pagamento)}
       </p>
-      <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{pagamento.motivo}</p>
+      {!semMotivo && (
+        <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{pagamento.motivo}</p>
+      )}
+      {pedido && (
+        <p className="mt-1 text-[10.5px] text-muted-foreground">
+          Pedido por {pedido.por_nome ?? "—"} · {formatDataEHoraBr(pedido.em)}
+        </p>
+      )}
     </div>
   );
 }
