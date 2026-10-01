@@ -3358,7 +3358,8 @@ o subtotal de ESTRUTURA no modelo sai R$ 400,00 em vez de R$ 100,00.
 ⚠️ **Item sem R$ entra com R$ 0,00** (decisão do Tiago). Importar não
 barra; **aprovar barra**. `bloqueioAprovacaoVersao` já recusava versão
 com qualquer item de orçado zerado, na tela e no servidor, e isso não
-mudou — foi só confirmado ao vivo.
+mudou — foi só confirmado ao vivo. ⚠️ *Desde 01/10/2026 aprovar não barra
+mais* — ver a nota dessa data no fim do arquivo.
 
 ### Textos de tela atualizados junto
 
@@ -4936,3 +4937,17 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Testado no TES-P001/26 com envio real trocando o produtor (TES-1018/26,
   cancelado em seguida). O "Orçamento de Teste" ficou com "Produtor
   Teste". Ver decisão 135, §6.
+
+## ⚠️ Nota de 2026-10-01 — item com orçado zerado aprova (revisão da decisão 011)
+
+- **"Aprovar versão" aceita item com R$ unitário orçado zerado.** Pedido do
+  Tiago: são itens da casa, registrados e mostrados ao cliente sem
+  cobrança. A mensagem "N itens com R$ unitário orçado zerado. Preencha o
+  orçado de todos os itens antes de aprovar a versão." saiu da tela e do
+  servidor.
+- **Versão com todos os itens zerados continua sem aprovar** ("Nenhum item
+  da planilha tem valor.").
+- Código: `bloqueioAprovacaoVersao` perdeu `qtdItensOrcadoZerado`;
+  `aprovarVersao` deixou de contar os zerados; a page e o `FluxoAbertura`
+  deixaram de passar a contagem. Sem migration: o banco nunca teve essa
+  trava, e o teto do orçado por PP já tinha saído em 02/09 (decisão 039).

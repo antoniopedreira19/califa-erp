@@ -34,7 +34,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 008 | [Encerramento do job](008-encerramento-do-job.md) | 2026-08-13 |
 | 009 | [A esteira do faturamento do job](009-esteira-do-faturamento.md) | 2026-08-14 |
 | 010 | [O funil comercial do orçamento](010-funil-comercial-do-orcamento.md) | 2026-08-17 |
-| 011 | [Orçado zerado não salva lote nem aprova versão](011-orcado-obrigatorio-para-salvar-e-aprovar.md) | 2026-08-17 |
+| 011 | [Orçado zerado não salva lote nem aprova versão — revogada em 2026-10-01: salva e aprova](011-orcado-obrigatorio-para-salvar-e-aprovar.md) | 2026-08-17 |
 | 012 | [Contato de cobrança é obrigatório para enviar o job à abertura](012-contato-de-cobranca-do-job.md) | 2026-08-17 |
 | 013 | [Planilha do job visível e realizado editável antes da abertura](013-realizado-antes-da-abertura.md) | 2026-08-17 |
 | 014 | [PPs parciais por item e parcelas de pagamento](014-pps-parciais-e-parcelas.md) | 2026-08-17 |
