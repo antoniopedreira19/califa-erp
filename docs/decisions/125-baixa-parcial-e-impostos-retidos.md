@@ -1,9 +1,12 @@
 # 125 — Baixa parcial e impostos retidos na baixa, nas duas pontas
 
 **Data:** 2026-09-28 (decisões) · 2026-09-29 (implementação)
+**Revisada em 2026-10-01:** a folha volta a ter baixa pela lista de Títulos
+a Pagar e nunca vai para o cartão (ver "Revisão" no fim).
 **Decidido por:** Tiago
 **Migrations:** `20260929800001_baixa_parcial_e_retencoes.sql` e
-`20260929800002_views_projetam_o_que_falta.sql`
+`20260929800002_views_projetam_o_que_falta.sql`; na revisão,
+`20261001100001_folha_nao_vai_para_o_cartao.sql`
 **Protótipo aprovado:** seções 3 e 4 de https://claude.ai/artifact/AXDeLzhBNzNWyvao8S9gZ7 (versão 4)
 
 ---
@@ -30,7 +33,7 @@ entrega foi dividida em duas:
 | Pagou a mais (D13) | A baixa vai **até o que falta**; a diferença entra como **recebimento avulso** (decisão 124), e a devolução é o estorno dele. |
 | Título pago pela remessa (D15) | **Pendente** (ele ainda vai definir como a retenção entra no título antes da remessa). **Interino (a):** documento que já foi para uma remessa CNAB só aceita a baixa do que falta, sem retenção — "Pago pela remessa com o valor cheio". |
 | Estrutura (D17.1) | Autorizado: baixas em estrutura própria, sem a trava de uma baixa por título. **Revisto em 29/09** (abaixo, "todas como recomendado"). |
-| Folha (P1) | **Só o valor inteiro, sem retenção**, como o desembolso: INSS e IR já saem no cálculo da folha. |
+| Folha (P1) | **Só o valor inteiro, sem retenção**, como o desembolso: INSS e IR já saem no cálculo da folha. **Nunca no cartão** (revisão de 2026-10-01). |
 | Devolução de verba (P2) | **Só o valor inteiro, sem retenção**: é dinheiro voltando, não é serviço. |
 | PP de verba de produção (P3) | **Só o valor inteiro, sem retenção**: a prestação de contas começa quando a verba está paga. |
 | Recebimento avulso (P4) | **Parcial e retenção**, como o avulso do pagar. Rendimento e transferência ficam sempre no valor inteiro, sem retenção. |
@@ -183,3 +186,50 @@ Estorno não entra na conta: é transação nova, não desfaz a baixa
 - **Esteira de faturamento**: `valor_recebido` (`lib/calculos/esteira-faturamento.ts`)
   ainda soma só título pago pelo valor cheio. Hoje não aparece em tela.
 - **Guia do imposto retido no pagar (P6)**: fica para o módulo fiscal.
+
+## Revisão de 2026-10-01 — a folha baixa pela lista, e nunca no cartão
+
+**O defeito.** De 21/09 a 01/10/2026, o "Baixar" e o lápis de data das
+linhas de folha em Títulos a Pagar não funcionavam: a action recusava a
+origem "folha", e a tela mostrava a mensagem do zod, em inglês (*"Invalid
+enum value. Expected 'pp' | 'avulso' | … received 'folha'"*). O commit que
+separou a origem "folha" de "avulso" (`a670387f`, 21/09) mudou a view, o tipo
+e o filtro, mas não o `origemSchema` de `actions-titulos.ts`. Era o único
+caminho da tela para registrar o pagamento da folha — a baixa pela remessa
+ficou fora da decisão 132 (§6). Até 01/10 nenhuma baixa de folha tinha sido
+registrada: os 17 títulos estavam "A pagar".
+
+**A correção** (opção A, escolhida pelo Tiago):
+- A action aceita "folha" na baixa e na data. A folha baixa por
+  `baixar_conta_avulsa`, com as regras de sempre: valor inteiro, sem
+  retenção (P1), e o interino da remessa (D15).
+- Os diálogos de baixa e de baixas registradas chamam o título de **"Folha
+  de pagamento"** (antes, "Lançamento avulso"), e a auditoria grava
+  `origem: "folha"` (antes, "avulso"), lida do título e não da tela.
+- Origem que a action não conhece responde *"Não foi possível identificar o
+  tipo deste título. Recarregue a página e tente de novo."*, no lugar da
+  mensagem do zod.
+
+**Folha não se paga com cartão de crédito** (Tiago, 01/10/2026). O diálogo
+oferecia "Cartão de crédito" na folha, e o banco aceitava: o salário entraria
+na fatura do cartão. Agora:
+- na folha, o diálogo oferece só PIX, Transferência e Boleto;
+- `baixar_conta_avulsa` recusa com *"Folha não se paga com cartão de
+  crédito."* (migration `20261001100001`: o corpo de 20260929800001,
+  conferido contra o banco vivo pelo md5, com um bloco a mais, antes de
+  qualquer escrita). Vale também para `dar_baixa_avulsa` e
+  `dar_baixa_avulsa_com_plano`, que delegam para ela.
+
+**Conferência.** Não existe título de folha de teste, e folha não se gera
+para teste. Nada foi gravado.
+- Console, com id inexistente: baixa e data de folha chegam a "Lançamento
+  não encontrado." (antes, a mensagem em inglês); origem desconhecida
+  devolve a frase nova.
+- Diálogo aberto numa linha real de folha, sem confirmar: "Folha de
+  pagamento", parcial desligada com "Folha só aceita a baixa do valor
+  inteiro.", sem retenção, formas PIX, Transferência e Boleto.
+- Banco, num bloco desfeito no fim: cartão num título de folha → "Folha não
+  se paga com cartão de crédito."; PIX sem conta passa pela trava nova e
+  para em "Conta bancária não encontrada.". Depois do teste, os 17 títulos
+  continuam "A pagar", sem baixa.
+- `tsc`, lint e build limpos.

@@ -104,6 +104,9 @@ bancários) contra o cadastro, em 30/09. Autorizado pelo Tiago:
   chaves CPF vieram da planilha de bancos —, mas precisam de correção. É dado
   da frente do RH: fica para o Tiago combinar com o Antonio.
 - Baixa em lote pela remessa e leitura do arquivo de retorno.
+  ⚠️ *01/10/2026:* até lá, cada título de folha se baixa à mão, em Títulos a
+  Pagar, pelo valor inteiro e nunca no cartão. Pela lista, isso não
+  funcionava até 01/10 — ver a revisão da decisão 125.
 - Cancelar um arquivo de remessa pela tela.
 - A numeração dos títulos avulsos reaproveita código apagado (os títulos dos
   testes de 30/09 nasceram todos AV-00005).
