@@ -3815,6 +3815,11 @@ export interface ColaboradorFeriasPeriodo {
   aquisitivo_fim: string;
   concessivo_inicio: string;
   concessivo_fim: string;
+  /** Última data em que o colaborador pode COMEÇAR o gozo e ainda caberem
+   *  30 dias dentro do concessivo. Fórmula: aquisitivo_fim + 11 meses
+   *  (equivalente a concessivo_fim − 1 mês). É o campo que RH/contabilidade
+   *  usam na prática como "data limite". Adicionado 2026-10-02. */
+  data_limite_gozo: string;
   /** Padrão 30. Campo existe pra casos excepcionais (ex: proporcional ao sair,
    *  redução por falta — não usado no MVP). */
   dias_direito: number;

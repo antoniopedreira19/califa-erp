@@ -211,9 +211,9 @@ export function SolicitarFeriasDrawer({
               )}
               {periodoAtivo && (
                 <p className="text-xs text-muted-foreground">
-                  Prazo para gozar:{" "}
+                  Precisa começar até:{" "}
                   {new Date(
-                    periodoAtivo.concessivo_fim + "T00:00:00",
+                    periodoAtivo.data_limite_gozo + "T00:00:00",
                   ).toLocaleDateString("pt-BR")}
                 </p>
               )}

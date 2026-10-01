@@ -50,11 +50,11 @@ export async function AbaPainel({ tenantId }: Props) {
     supabase
       .from("colaboradores_ferias_periodos")
       .select(
-        "id, numero, aquisitivo_inicio, aquisitivo_fim, concessivo_fim, status, colaborador:colaboradores!colaborador_id(id, nome)",
+        "id, numero, aquisitivo_inicio, aquisitivo_fim, concessivo_fim, data_limite_gozo, status, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
       .in("status", ["em_alerta", "apto"])
-      .order("concessivo_fim", { ascending: true })
+      .order("data_limite_gozo", { ascending: true })
       .limit(5),
     // Em férias hoje
     supabase
@@ -205,7 +205,7 @@ export async function AbaPainel({ tenantId }: Props) {
         ) : (
           <ul className="divide-y divide-border">
             {vencendo.map((p) => {
-              const fim = new Date(p.concessivo_fim + "T00:00:00");
+              const fim = new Date(p.data_limite_gozo + "T00:00:00");
               const diasRest = Math.ceil(
                 (fim.getTime() - new Date().getTime()) / 86_400_000,
               );
@@ -234,7 +234,7 @@ export async function AbaPainel({ tenantId }: Props) {
                         : `vencido há ${-diasRest} dias`}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatarDataCurta(p.concessivo_fim)}
+                      {formatarDataCurta(p.data_limite_gozo)}
                     </p>
                   </div>
                 </li>

@@ -80,12 +80,15 @@ export function CardMinhasFerias({
         ? { label: "Apto a tirar férias", tom: "bom" }
         : { label: "Ainda não há direito", tom: "neutro" };
 
-  // Próximo vencimento = o concessivo_fim mais próximo entre os apto/em_alerta.
+  // Próximo vencimento = o data_limite_gozo mais próximo entre os apto/em_alerta.
+  // Usamos data_limite_gozo (= aquisitivo_fim + 11 meses) e não concessivo_fim
+  // porque é a data em que o colaborador precisa ter COMEÇADO as férias — é
+  // o deadline operacional, não o legal.
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   const proximosVencimentos = periodos
     .filter((p) => p.status === "apto" || p.status === "em_alerta")
-    .map((p) => new Date(p.concessivo_fim + "T00:00:00"))
+    .map((p) => new Date(p.data_limite_gozo + "T00:00:00"))
     .sort((a, b) => a.getTime() - b.getTime());
   const proximoVencimento = proximosVencimentos[0];
   const diasAteProximo = proximoVencimento
@@ -172,7 +175,7 @@ export function CardMinhasFerias({
                       {" · "}
                       Limite p/ gozar:{" "}
                       {new Date(
-                        p.concessivo_fim + "T00:00:00",
+                        p.data_limite_gozo + "T00:00:00",
                       ).toLocaleDateString("pt-BR")}
                     </p>
                   </div>

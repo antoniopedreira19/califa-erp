@@ -152,7 +152,7 @@ export async function AbaQuadro({
     // Próximo vencimento
     const proximos = periodosDoColab
       .filter((p) => p.status === "apto" || p.status === "em_alerta")
-      .map((p) => new Date(p.concessivo_fim + "T00:00:00"))
+      .map((p) => new Date(p.data_limite_gozo + "T00:00:00"))
       .sort((a, b) => a.getTime() - b.getTime());
     const proximoDate = proximos[0];
     const proximoVencimento = proximoDate
