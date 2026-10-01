@@ -3358,7 +3358,8 @@ o subtotal de ESTRUTURA no modelo sai R$ 400,00 em vez de R$ 100,00.
 ⚠️ **Item sem R$ entra com R$ 0,00** (decisão do Tiago). Importar não
 barra; **aprovar barra**. `bloqueioAprovacaoVersao` já recusava versão
 com qualquer item de orçado zerado, na tela e no servidor, e isso não
-mudou — foi só confirmado ao vivo.
+mudou — foi só confirmado ao vivo. ⚠️ *Desde 01/10/2026 aprovar não barra
+mais* — ver a nota dessa data no fim do arquivo.
 
 ### Textos de tela atualizados junto
 
@@ -4897,8 +4898,8 @@ aplicada na hora combinada com a frente do Antonio, junto da
   mostrar só o nome do projeto (antes, "nome · código"). O único código do
   pop-up é o do job, na linha **Código**. Pedido do Tiago; o mesmo vale
   para a conferência do financeiro.
-- O formulário "Enviar job para abertura" não mudou: segue com o campo
-  travado "Código do projeto".
+- O formulário "Enviar job para abertura" seguiu com o campo travado
+  "Código do projeto" até a nota (4) abaixo, que o tirou (decisão 135).
 
 ## ⚠️ Nota de 2026-09-30 (3) — regional só de folha: a AMBEV some da produção (decisão 134)
 
@@ -4918,3 +4919,45 @@ aplicada na hora combinada com a frente do Antonio, junto da
   no navegador.
 - O modelo definitivo (conta dedicada como dimensão da alocação) é a
   etapa 2, em aberto. Ver decisão 134, §5.
+
+## ⚠️ Nota de 2026-09-30 (4) — envio para abertura com GP e produtor editáveis e o Serviço (decisão 135)
+
+- **Campos reorganizados** no formulário "Enviar job para abertura":
+  Projeto · Código do job · Cliente / Nome do Job (duas colunas) · Marca /
+  Serviço · Categoria · GP Responsável / Regional · Cidade · Produtor
+  Responsável. O campo "Código do projeto" saiu. O resto não mudou.
+- **Serviço** entrou travado, vindo do orçamento ("Cadastrado no
+  orçamento.").
+- **GP e produtor são editáveis e obrigatórios**, com as listas do editor
+  do orçamento: responsáveis do projeto e usuários ativos. A troca vai
+  para o job e para o orçamento, como nome, cidade, regional e datas. O
+  servidor confere só o que mudou; quem já estava no orçamento passa.
+- A trava "Complete o cadastro: GP/Produtor (no orçamento)" saiu; a da
+  Marca ficou. A auditoria do envio e do reenvio registra os dois ids.
+- Testado no TES-P001/26 com envio real trocando o produtor (TES-1018/26,
+  cancelado em seguida). O "Orçamento de Teste" ficou com "Produtor
+  Teste". Ver decisão 135, §6.
+
+## ⚠️ Nota de 2026-10-01 — item com orçado zerado aprova (revisão da decisão 011)
+
+- **"Aprovar versão" aceita item com R$ unitário orçado zerado.** Pedido do
+  Tiago: são itens da casa, registrados e mostrados ao cliente sem
+  cobrança. A mensagem "N itens com R$ unitário orçado zerado. Preencha o
+  orçado de todos os itens antes de aprovar a versão." saiu da tela e do
+  servidor.
+- **Versão com todos os itens zerados continua sem aprovar** ("Nenhum item
+  da planilha tem valor.").
+- Código: `bloqueioAprovacaoVersao` perdeu `qtdItensOrcadoZerado`;
+  `aprovarVersao` deixou de contar os zerados; a page e o `FluxoAbertura`
+  deixaram de passar a contagem. Sem migration: o banco nunca teve essa
+  trava, e o teto do orçado por PP já tinha saído em 02/09 (decisão 039).
+
+## ⚠️ Nota de 2026-10-01 (2) — devolução com data e reenvio registrado (decisão 136, parte 2)
+
+- O aviso "Abertura devolvida pelo financeiro" da versão mostra "Devolvido
+  pelo Financeiro em …", sem o nome de quem devolveu (pedido do Tiago).
+- O envio e o reenvio para abertura gravam quem enviou e quando
+  (`jobs.enviado_abertura_por/em`). O reenvio **não apaga mais** a
+  justificativa da devolução: o financeiro a vê na conferência do reenvio,
+  ao lado de quem reenviou e do primeiro envio.
+- Ver decisão 136, §3.1.

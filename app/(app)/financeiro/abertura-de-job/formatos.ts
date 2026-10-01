@@ -37,6 +37,10 @@ export function formatDataHoraBr(iso: string | Date | null | undefined): string 
   return `${data} · ${hora}`;
 }
 
+/** "25/09/2026 às 17:59" (decisão 136) — mora em `lib/formatar-data-hora`
+ *  porque a produção também usa. */
+export { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
+
 /**
  * "há 20 minutos", "há 5 horas", "ontem · 18:42", "05/08/2026 · 14:05".
  * Quem envia o job é a produção, e o financeiro precisa perceber o que

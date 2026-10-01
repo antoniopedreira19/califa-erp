@@ -54,6 +54,9 @@ interface Props {
    *  segue `editable`: fica fechado na pré-abertura e enquanto a abertura
    *  está em revisão (decisões 056 e 040). */
   podeEnviar?: boolean;
+  /** O papel envia PP (`jobs.enviar_pp`, decisão 136): sem ele, o
+   *  cancelamento vale só para a PP ainda não enviada. */
+  papelEnviaPP: boolean;
   /** PPs de verba em que quem está logado presta contas (decisão 081):
    *  responsável pela verba, responsável do job ou administrador. */
   podePrestarContas: string[];
@@ -151,6 +154,7 @@ export function JobPPsSection({
   responsaveis,
   editable,
   podeEnviar = false,
+  papelEnviaPP,
   podePrestarContas,
 }: Props) {
   const router = useRouter();
@@ -657,7 +661,11 @@ export function JobPPsSection({
                 indice === 0 &&
                 podePrestarContas.includes(pp.id) &&
                 verbaAguardaProducao(situacaoDaLinha);
-              const cancelar = editable && indice === 0 && podeCancelarPP(pp.status);
+              const cancelar =
+                editable &&
+                indice === 0 &&
+                podeCancelarPP(pp.status) &&
+                (papelEnviaPP || pp.status === "gerada");
               if (!pos || (!prestar && !cancelar)) return null;
               return (
                 <div

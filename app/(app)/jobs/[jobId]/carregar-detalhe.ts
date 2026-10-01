@@ -71,6 +71,7 @@ import {
   type ItemDeNotaDaParcela,
   type MesDeFaturamento,
 } from "@/lib/calculos/faturamento-por-mes";
+import type { EtapasDaFicha } from "./ficha-job";
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -114,7 +115,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -295,7 +296,7 @@ export async function carregarDetalheDoJob(
         // Notas e anexos pela FK do envio (decisão 123): a parcela é uma
         // tabela de junção entre envio e nota, e sem o hint o PostgREST
         // acharia dois caminhos e recusaria a consulta.
-        "id, mes, valor_faturado, valor_save, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em, parcelas:jobs_envio_faturamento_parcelas(id, ordem, valor, data_vencimento, nota_id), notas:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_envio_id_fkey(id, ordem, cnpj, cnae_sugerido, descritivo), anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
+        "id, mes, valor_faturado, valor_save, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em, enviado_por, parcelas:jobs_envio_faturamento_parcelas(id, ordem, valor, data_vencimento, nota_id), notas:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_envio_id_fkey(id, ordem, cnpj, cnae_sugerido, descritivo), anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -709,6 +710,9 @@ export async function carregarDetalheDoJob(
     finalizado_em: raw.finalizado_em ?? null,
     faturamento_enviado_em: raw.faturamento_enviado_em ?? null,
     motivo_rejeicao: raw.motivo_rejeicao ?? null,
+    devolvido_em: raw.devolvido_em ?? null,
+    enviado_abertura_por: raw.enviado_abertura_por ?? null,
+    enviado_abertura_em: raw.enviado_abertura_em ?? null,
     codigo_reservado: raw.codigo_reservado === true,
     // Registro financeiro da abertura. A página de Jobs não exibe estes
     // campos, mas a tela do job no financeiro exibe — e o formulário de
@@ -934,6 +938,33 @@ export async function carregarDetalheDoJob(
   const abertoPorNome =
     (abertoPorRes.data as { nome: string } | null)?.nome ?? null;
 
+  // As etapas da ficha com quando e quem (decisão 136). O envio para
+  // faturamento mais recente — no mensal há um por mês. `enviado_por`
+  // aponta para `auth.users`: o nome sai em query própria, e só quando há
+  // envio (depende da leitura dos envios, por isso não entra no lote acima).
+  const ultimoEnvioFat =
+    [...envios].sort((a, b) =>
+      String((b as any).enviado_em ?? "").localeCompare(String((a as any).enviado_em ?? "")),
+    )[0] ?? null;
+  const idAutorEnvioFat = ((ultimoEnvioFat as any)?.enviado_por as string | null) ?? null;
+  const autorEnvioFatRes = idAutorEnvioFat
+    ? await supabase
+        .from("profiles")
+        .select("nome")
+        .eq("id", idAutorEnvioFat)
+        .maybeSingle<{ nome: string | null }>()
+    : { data: null };
+  const etapasDoJob: EtapasDaFicha = {
+    enviadoAberturaEm: raw.enviado_abertura_em ?? raw.created_at ?? null,
+    enviadoAberturaPorNome:
+      (raw.enviado_abertura_perfil as { nome: string } | null)?.nome ?? null,
+    envioFaturamentoEm: ((ultimoEnvioFat as any)?.enviado_em as string | null) ?? null,
+    envioFaturamentoPorNome: autorEnvioFatRes.data?.nome ?? null,
+    encerradoEm: raw.encerrado_em ?? null,
+    encerradoPorNome:
+      (raw.encerrado_por_perfil as { nome: string } | null)?.nome ?? null,
+  };
+
   if (competenciasRes.error) {
     console.error("[job.competencias]", competenciasRes.error.message);
   }
@@ -1090,16 +1121,15 @@ export async function carregarDetalheDoJob(
   // BV e PP continuam presos ao job ja aberto pelo financeiro. As duas
   // regras moram em `lib/types.ts`, que e de onde as server actions leem.
   //
-  // Dupla barreira desde 03/09/2026 (Task 3 do projeto de permissoes):
-  // (a) o PAPEL precisa poder editar job — barra Financeiro/Freelancer
-  //     antes de entrar na regra operacional;
-  // (b) dentro dos papeis que podem, seguimos com a regra "admin OU
-  //     responsavel do job", que protege operacionalmente contra GP/PROD
-  //     mexerem em job alheio.
+  // Desde a decisão 136 (01/10/2026) qualquer GP age em qualquer job — um
+  // GP de férias passa os jobs a outro, e quem fez cada envio fica gravado.
+  // Até ali valia "administrador OU o GP responsável deste job". Errata e
+  // BV continuam fora do produtor, como já eram na prática (a regra de dono
+  // o deixava de fora, porque ele nunca é o `responsavel_id`).
   const quemPodeMexer =
     pode(session.activeRole, "jobs.editar") &&
     (session.activeRole === "administrador" ||
-      job.responsavel_id === session.profile.id);
+      session.activeRole === "gerente_producao");
 
   const podeEditarRealizado = quemPodeMexer && jobAceitaRealizado(job.status);
   const podeAcoesPlanilha = quemPodeMexer && jobAceitaAcoesPlanilha(job.status);
@@ -1107,7 +1137,10 @@ export async function carregarDetalheDoJob(
   // pré-abertura, ENVIAR ao financeiro continua esperando a abertura — e
   // a marca `abertura_em_revisao` fecha o envio sem mexer no status
   // (decisão 040). Errata e BV seguem em `podeAcoesPlanilha`.
-  const podeGerarPP = quemPodeMexer && jobAceitaGerarPP(job.status);
+  // Gerar PP também é do produtor (decisão 136); enviar não — ver
+  // `podeEnviarPP`.
+  const podeGerarPP =
+    pode(session.activeRole, "jobs.emitir_pp") && jobAceitaGerarPP(job.status);
   /**
    * O "+" e o lápis do campo Fornecedor da PP são DUAS permissões, e não
    * uma (18/09/2026):
@@ -1130,16 +1163,17 @@ export async function carregarDetalheDoJob(
     session.activeRole,
     "cadastros.fornecedores.editar",
   );
-  // Quem presta contas de cada verba (decisão 081, pergunta 6a): o
-  // responsável por ela, o responsável do job ou um administrador. A função
-  // do banco checa de novo; aqui é só para mostrar o botão a quem pode.
+  // Quem presta contas de cada verba: o responsável por ela, qualquer GP
+  // ou um administrador (decisão 136; até 01/10/2026 era o GP responsável
+  // do job, decisão 081). A função do banco checa de novo; aqui é só para
+  // mostrar o botão a quem pode.
   const ppsQuePossoPrestarContas = ppsDoJob
     .filter(
       (pp) =>
         pp.verba_producao &&
         (session.activeRole === "administrador" ||
-          pp.responsavel_verba_id === session.profile.id ||
-          job.responsavel_id === session.profile.id),
+          session.activeRole === "gerente_producao" ||
+          pp.responsavel_verba_id === session.profile.id),
     )
     .map((pp) => pp.id);
   // Confirmar o BV é do GP e do administrador (decisão 080). Lançar e
@@ -1147,7 +1181,7 @@ export async function carregarDetalheDoJob(
   const podeConfirmarBv =
     podeAcoesPlanilha && pode(session.activeRole, "jobs.confirmar_bv");
   const podeEnviarPP =
-    quemPodeMexer &&
+    pode(session.activeRole, "jobs.enviar_pp") &&
     jobAceitaEnvioDePP(job.status) &&
     job.abertura_em_revisao !== true;
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
@@ -1209,6 +1243,7 @@ export async function carregarDetalheDoJob(
     portaisDoCliente,
     jobsDoProjeto,
     abertoPorNome,
+    etapasDoJob,
     competencias,
     // Qual fechamento este job usa — as telas que montam `versao` à mão
     // precisam dele para o card de Totais e para a barra de errata
@@ -1237,14 +1272,17 @@ export async function carregarDetalheDoJob(
     podeEditarRealizado,
     podeAcoesPlanilha,
     // Save (decisão 099, revista em 24/09/2026): gerar, consumir, retirar e
-    // cancelar pedido é do administrador ou de QUALQUER GP — não segue a
-    // regra "admin ou responsável" de errata e PP, e o produtor fica de
-    // fora. O banco confere de novo (`save_pode_mexer_no_job`).
+    // cancelar pedido é do administrador ou de QUALQUER GP, e o produtor
+    // fica de fora. O banco confere de novo (`save_pode_mexer_no_job`).
     podeMexerNoSave: pode(session.activeRole, "jobs.consumir_save"),
     podeGerarPP,
     podeCadastrarFornecedor,
     podeEditarFornecedor,
     podeEnviarPP,
+    // O PAPEL que envia PP (decisão 136), sem olhar o estado do job: é o
+    // que separa o produtor (gera, não envia, cancela só a não enviada) do
+    // GP. `podeEnviarPP` acima soma a isso a abertura do job.
+    papelEnviaPP: pode(session.activeRole, "jobs.enviar_pp"),
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
   };

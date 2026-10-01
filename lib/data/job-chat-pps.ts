@@ -4,7 +4,7 @@ import type {
   PedidoCompra,
   PrestacaoDaVerba,
 } from "@/lib/types";
-import { nomeContraparteBRPP } from "@/lib/types";
+import { nomeContraparteBRPP, roleLabel } from "@/lib/types";
 
 /**
  * O recorte da PP que a thread realmente lê.
@@ -141,7 +141,10 @@ export function montarThreadChatPPs(
         ...(enviadaPorNome
           ? ([
               {
-                texto: "Emitida por",
+                // O valor é quem ENVIOU ao financeiro (com a emissão como
+                // reserva para a PP anterior ao envio separado); o rótulo
+                // dizia "Emitida por" (decisão 136).
+                texto: "Enviada por",
                 valor: enviadaPorNome,
                 tom: "texto",
               },
@@ -290,6 +293,7 @@ export function montarThreadChatPPs(
       tipo: "pessoa",
       id: m.id,
       autor: m.autor_nome ?? "—",
+      cargo: m.autor_papel ? roleLabel(m.autor_papel) : null,
       area: m.area,
       quando: dataHoraCurta(m.created_at),
       texto: m.texto,

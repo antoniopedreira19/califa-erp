@@ -4591,3 +4591,50 @@ código publicado logo depois (`3305751`).
 - **O asterisco da 067** passa a ignorar o meio trocado.
 - `PedidoCompraNaLista.pagamento_fora_do_cadastro` (obrigatório) e as quatro
   colunas novas em `PedidoCompra`. Migration `20260929980001`.
+
+## ⚠️ Nota de 2026-10-01 — qualquer GP mexe em qualquer job; o produtor gera PP e não envia (decisão 136, parte 1)
+
+- A planilha do job (errata, BV, confirmar BV, concluir PPs) deixa de ser
+  só do GP responsável: vale para **qualquer GP** e o administrador. O
+  produtor continua fora de errata e BV, como na prática já era.
+- **PP:** gerar, editar e cancelar a PP ainda não enviada vale também para o
+  **produtor**; enviar e reenviar ao financeiro é de GP e administrador
+  (recurso novo `jobs.enviar_pp`). O produtor vê o envio fechado no painel
+  do item com "Só o GP envia PP ao financeiro", e cancela só a PP gerada.
+- **Prestação de contas da verba:** o responsável pela verba, qualquer GP
+  ou o administrador (migration `20261001400001`).
+- O que diz "Apenas o responsável do job ou admin pode gerar PP" saiu do
+  servidor; a trava agora é de papel, nas mesmas actions.
+- Substitui o §5 da decisão 135. Registro de quem fez cada envio e as telas
+  do financeiro vêm nas partes 2 a 4 da decisão 136.
+
+## ⚠️ Nota de 2026-10-01 (2) — job devolvido com data e ficha com as etapas (decisão 136, parte 2)
+
+- O aviso do job devolvido mostra "Devolvido pelo Financeiro em …" acima da
+  justificativa (`jobs.devolvido_em`).
+- A ficha "Informações do Job" lista as etapas com data, hora e autor: envio
+  para abertura (o último, no reenvio), abertura, envio para faturamento e
+  encerramento. A mesma ficha aparece no financeiro.
+- Confirmar o BV grava quem confirmou (`itens_bv.confirmado_por/em`), que o
+  financeiro vê no Faturamento.
+- Ver decisão 136, §3.1.
+
+## ⚠️ Nota de 2026-10-01 (3) — cada envio e reenvio de PP fica registrado (decisão 136, parte 3)
+
+- Enviar, reenviar, cancelar e prestar contas de uma PP passam a gravar um
+  evento em `pedidos_compra_eventos` (por gatilho, sem mudar as actions). O
+  financeiro vê quem mandou e quando, e a rejeição não some mais no
+  reenvio.
+- No chat das PPs, o card da PP dizia "Emitida por" com o nome de quem
+  ENVIOU; o rótulo virou "Enviada por".
+- A ficha da PP no job (Ver PP) não mudou: continua montada das colunas.
+- Ver decisão 136, §3.2.
+
+## ⚠️ Nota de 2026-10-01 (4) — cargo de quem escreveu nos chats (decisão 136, parte 4)
+
+- O balão das mensagens mostra "Nome · Cargo" na Comunicação do job e no
+  chat das PPs. A área ("Produção"/"Financeiro") continua ao lado da hora.
+- O cargo é gravado no envio por gatilho (`jobs_mensagens.autor_papel`,
+  migration `20261001400004`); quem muda de papel depois não reescreve o que
+  já escreveu. As mensagens antigas receberam o cargo atual do autor.
+- Ver decisão 136, §3.3. Com esta parte a decisão 136 está entregue.

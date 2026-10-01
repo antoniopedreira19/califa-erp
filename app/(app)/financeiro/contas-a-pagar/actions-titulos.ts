@@ -53,15 +53,29 @@ const dataSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD.");
 
-/** Origem do título — ver `OrigemTitulo` em `lib/types.ts`. */
-const origemSchema = z.enum([
-  "pp",
-  "avulso",
-  "recorrencia",
-  "desembolso",
-  "pp_devolucao_verba",
-  "fatura_cartao",
-]);
+/**
+ * Origem do título — ver `OrigemTitulo` em `lib/types.ts`. As duas listas
+ * andam juntas: de 21/09 a 01/10/2026 a tela já mostrava "folha" e esta
+ * não, e o "Baixar" e o lápis da folha devolviam a mensagem do zod, em
+ * inglês (revisão da decisão 125).
+ */
+const origemSchema = z.enum(
+  [
+    "pp",
+    "avulso",
+    "folha",
+    "recorrencia",
+    "desembolso",
+    "pp_devolucao_verba",
+    "fatura_cartao",
+  ],
+  {
+    errorMap: () => ({
+      message:
+        "Não foi possível identificar o tipo deste título. Recarregue a página e tente de novo.",
+    }),
+  },
+);
 
 /**
  * A mensagem do Postgres não é para o usuário.
@@ -498,8 +512,8 @@ const baixaSchema = z
  * Baixa um título e o envia para a conciliação.
  *
  * Origem `pp` baixa UMA parcela (a PP só vira paga quando a última cai);
- * `avulso` e `recorrencia` baixam a `contas_avulsas`. Nos dois casos o
- * centro de custo — o par tipo/subtipo do plano de contas — é
+ * `avulso`, `recorrencia` e `folha` baixam a `contas_avulsas`. Nos dois
+ * casos o centro de custo — o par tipo/subtipo do plano de contas — é
  * obrigatório e vai gravado no lançamento.
  */
 export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
@@ -763,7 +777,7 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
 
   const { data: avulsa } = await supabase
     .from("contas_avulsas")
-    .select("id, status, descricao, valor, recorrente_id")
+    .select("id, status, descricao, valor, recorrente_id, folha_id")
     .eq("id", d.id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -777,7 +791,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
   }
 
   // O banco confere o que falta, os retidos e onde só cabe o valor
-  // inteiro — folha, cartão, remessa (decisão 125).
+  // inteiro — folha, cartão, remessa (decisão 125) — e recusa a folha no
+  // cartão (revisão de 01/10/2026).
   const { data: lancId, error } = await supabase.rpc("baixar_conta_avulsa", {
     p_conta_avulsa_id: d.id,
     p_pago_em: d.pago_em,
@@ -805,7 +820,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
       valor_baixa: d.valor_baixa ?? null,
       retencoes: d.retencoes,
       pago_em: d.pago_em,
-      origem: avulsa.recorrente_id ? "recorrencia" : "avulso",
+      // Lida do título, não da `origem` que a tela mandou.
+      origem: avulsa.folha_id ? "folha" : avulsa.recorrente_id ? "recorrencia" : "avulso",
       conta_bancaria_id: d.conta_bancaria_id,
       lancamento_id: lancId,
       forma_pagamento: d.forma_pagamento,

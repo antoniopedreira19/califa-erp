@@ -259,18 +259,26 @@ export async function custoPrevistoDoFinanceiro(
  * Houve devolução deste job antes (rejeitado pelo financeiro e reenviado)?
  * Decide o `momento` do pedido na abertura: 'reenvio' ou 'abertura'.
  *
- * ⚠️ Melhor esforço. O job não guarda a devolução: `motivo_rejeicao` é
- * apagado no reenvio. O que sobra é a auditoria, que o administrador lê
- * inteira mas o financeiro só lê nos PRÓPRIOS eventos (policy
- * `audit_events_select_self`). Um financeiro que abre job devolvido por
- * outra pessoa grava 'abertura'. O momento é só rótulo do histórico: os
- * dois contam igual para o financeiro e se decidem igual.
+ * Desde a decisão 136 (01/10/2026) o job guarda `devolvido_em`, preenchido
+ * também para as devoluções antigas a partir da auditoria. A consulta à
+ * auditoria fica como reserva: o financeiro só lê os PRÓPRIOS eventos
+ * (policy `audit_events_select_self`), e era só com ela que esta função
+ * contava. O momento é só rótulo do histórico: os dois contam igual para o
+ * financeiro e se decidem igual.
  */
 export async function jobJaFoiDevolvido(
   supabase: SupabaseClient,
   tenantId: string,
   jobId: string,
 ): Promise<boolean> {
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("devolvido_em")
+    .eq("id", jobId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ devolvido_em: string | null }>();
+  if (job?.devolvido_em) return true;
+
   const { data, error } = await supabase
     .from("audit_events")
     .select("id")

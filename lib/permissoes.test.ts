@@ -283,6 +283,8 @@ test("Produtor faz TUDO em job/orcamento menos aprovar/enviar_faturamento/encerr
   assert.equal(pode("produtor", "orcamentos.marcar_em_save"), false);
   assert.equal(pode("produtor", "jobs.consumir_save"), false);
   assert.equal(pode("produtor", "jobs.enviar_faturamento"), false);
+  // Gera PP, mas não envia ao financeiro (decisão 136, 01/10/2026)
+  assert.equal(pode("produtor", "jobs.enviar_pp"), false);
   assert.equal(pode("produtor", "jobs.encerrar"), false);
 });
 
@@ -414,4 +416,11 @@ test("Editar orçado pelo financeiro: administrador e financeiro; a produção c
   assert.equal(pode("gerente_producao", "jobs.editar_orcado_financeiro"), false);
   assert.equal(pode("produtor", "jobs.editar_orcado_financeiro"), false);
   assert.equal(pode("freelancer", "jobs.editar_orcado_financeiro"), false);
+});
+
+test("Enviar PP ao financeiro é do GP e do administrador (decisão 136)", () => {
+  const envia = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.enviar_pp")));
+  assert.deepEqual(envia, new Set<AppRole>(["administrador", "gerente_producao"]));
+  // Gerar continua com o produtor.
+  assert.equal(pode("produtor", "jobs.emitir_pp"), true);
 });

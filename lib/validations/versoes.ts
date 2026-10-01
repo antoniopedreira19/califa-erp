@@ -83,11 +83,11 @@ export function bloqueioAprovacaoVersao(input: {
    *  default não pode liberar a aprovação em silêncio. */
   cambioInternacional: CambioParaAprovar | null;
   qtdItens: number;
-  /** Itens com total_orcado > 0 — linha começada e não preenchida dá 0. */
+  /** Itens com total_orcado > 0 — linha começada e não preenchida dá 0.
+   *  Item com orçado zerado aprova desde 01/10/2026 (revisão da decisão
+   *  011): é o item da casa, mostrado ao cliente e não cobrado. Só a
+   *  versão inteira zerada continua barrada. */
   qtdItensComValor: number;
-  /** Itens com valor_unitario_orcado = 0 — aprovar exige orçado em todos;
-   *  o planejado pode ficar zerado (docs/decisions/011). */
-  qtdItensOrcadoZerado: number;
   /** Modelo mensal (decisão 078): os meses sem item, pelo nome
    *  ("dezembro"). Obrigatório e anulável como o câmbio: `null` fora do
    *  mensal, e quem chama tem que dizer qual é o caso. */
@@ -129,9 +129,6 @@ export function bloqueioAprovacaoVersao(input: {
     return input.mesesSemItens.length === 1
       ? `${texto} não tem itens. Preencha o mês ou apague-o em "Editar meses" antes de aprovar a versão.`
       : `${texto} não têm itens. Preencha os meses ou apague-os em "Editar meses" antes de aprovar a versão.`;
-  }
-  if (input.qtdItensOrcadoZerado > 0) {
-    return `${input.qtdItensOrcadoZerado} ${input.qtdItensOrcadoZerado === 1 ? "item" : "itens"} com R$ unitário orçado zerado. Preencha o orçado de todos os itens antes de aprovar a versão.`;
   }
   return null;
 }

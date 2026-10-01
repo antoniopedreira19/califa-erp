@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatCurrency } from "@/lib/utils";
+import { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
 import type { JobStatus } from "@/lib/types";
 import {
   bloqueioAprovacaoVersao,
@@ -32,6 +33,7 @@ import {
   contatoEmBranco,
   type DadosJob,
   type HerdadosJob,
+  type PessoaOpcao,
 } from "./enviar-job-modal";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
 
@@ -45,6 +47,8 @@ export interface JobExistente {
   status: JobStatus;
   /** O que o financeiro escreveu ao devolver (decisão 057). */
   motivo_rejeicao: string | null;
+  /** Quando o financeiro devolveu (decisão 136). */
+  devolvido_em: string | null;
   data_prevista_faturamento: string | null;
   produto: string | null;
   cidade: string | null;
@@ -54,6 +58,11 @@ export interface JobExistente {
   data_evento: string | null;
   observacoes: string | null;
   nome: string;
+  /** GP e produtor que o envio gravou no job — o "Ver dados do job" os
+   *  mostra (decisão 135). Obrigatórios: linha montada à mão com campo
+   *  opcional descarta o dado em silêncio (CLAUDE.md). */
+  responsavel: { nome: string } | null;
+  produtor: { nome: string } | null;
   /** O que o envio (ou o reenvio) gravou — `numeric` chega como texto. É o
    *  que o "Ver dados do job" mostra depois do envio (decisão 099). */
   valor_job_abertura: number | string | null;
@@ -71,11 +80,9 @@ interface Props {
 
   qtdGrupos: number;
   qtdItens: number;
-  /** Itens com total orçado > 0 — linha começada e vazia não conta. */
+  /** Itens com total orçado > 0 — linha começada e vazia não conta. Item
+   *  com orçado zerado não bloqueia (revisão da decisão 011, 01/10/2026). */
   qtdItensComValor: number;
-  /** Itens com R$ unitário orçado = 0 — qualquer um bloqueia a aprovação
-   *  (docs/decisions/011); planejado zerado não bloqueia. */
-  qtdItensOrcadoZerado: number;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
   /** Câmbio da versão internacional — aprovar exige todos os campos
@@ -109,14 +116,16 @@ interface Props {
    *  a sigla do cliente mudou e ele não serve mais. */
   codigoReservado: string | null;
   projetoNome: string;
-  projetoCodigo: string;
 
-  /** Produto, GP e produtor: só exibidos. O servidor relê os três do
-   *  projeto/orçamento na hora de gravar o job. */
+  /** Produto, categoria e serviço: só exibidos. O servidor relê o produto
+   *  do projeto na hora de gravar o job. */
   herdados: HerdadosJob;
 
-  /** Opções de cidade e regional do modal — ver <EnviarJobModal>. */
+  /** Opções de cidade, regional, GP e produtor do modal — ver
+   *  <EnviarJobModal>. */
   regionaisDoProjeto: { id: string; nome: string }[];
+  gpsDoProjeto: PessoaOpcao[];
+  produtores: PessoaOpcao[];
   cidadesIniciais: { id: string; nome: string; uf: string | null }[];
 
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
@@ -148,7 +157,6 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   qtdItensComValor,
-  qtdItensOrcadoZerado,
   percentualImposto,
   cambioInternacional,
   mesesSemItens,
@@ -163,9 +171,10 @@ export function FluxoAbertura({
   proximoCodigoJob,
   codigoReservado,
   projetoNome,
-  projetoCodigo,
   herdados,
   regionaisDoProjeto,
+  gpsDoProjeto,
+  produtores,
   cidadesIniciais,
   inicial,
   job,
@@ -191,7 +200,6 @@ export function FluxoAbertura({
     cambioInternacional,
     qtdItens,
     qtdItensComValor,
-    qtdItensOrcadoZerado,
     mesesSemItens,
   });
   const aprovada = versaoStatus === "aprovada";
@@ -295,13 +303,15 @@ export function FluxoAbertura({
     setErroGeral(null);
     setFieldErrors({});
 
-    // Produto, GP e produtor não vão no payload: o servidor lê os três
-    // do projeto e do orçamento. Cidade e regional vão, porque o modal
-    // deixa trocá-los — e o servidor confere os dois antes de gravar.
+    // Produto não vai no payload: o servidor o lê do projeto. Cidade,
+    // regional, GP e produtor vão, porque o modal deixa trocá-los (os dois
+    // últimos desde a decisão 135) — e o servidor confere antes de gravar.
     const formData = new FormData();
     formData.set("nome", dados.nome);
     formData.set("cidade_id", dados.cidadeId);
     formData.set("regional_id", dados.regionalId);
+    formData.set("gp_responsavel_id", dados.gpId);
+    formData.set("produtor_id", dados.produtorId);
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
     formData.set("data_evento", dados.dataEvento);
@@ -383,10 +393,23 @@ export function FluxoAbertura({
               "—"
             }`,
     },
-    { rotulo: "GP Responsável", valor: herdados.gpNome ?? "— não informado" },
+    // GP e produtor, desde a decisão 135, seguem a mesma regra: o que o
+    // formulário escolheu antes do envio, o que o job gravou depois.
+    {
+      rotulo: "GP Responsável",
+      valor:
+        (etapa === "enviada"
+          ? herdados.gpNome
+          : gpsDoProjeto.find((p) => p.id === dados.gpId)?.nome) ??
+        "— não informado",
+    },
     {
       rotulo: "Produtor Responsável",
-      valor: herdados.produtorNome ?? "— não informado",
+      valor:
+        (etapa === "enviada"
+          ? herdados.produtorNome
+          : produtores.find((p) => p.id === dados.produtorId)?.nome) ??
+        "— não informado",
     },
     {
       rotulo: "Início · fim",
@@ -634,7 +657,6 @@ export function FluxoAbertura({
         onChange={(patch) => setDados((d) => ({ ...d, ...patch }))}
         orcamentoNome={orcamentoNome}
         projetoNome={projetoNome}
-        projetoCodigo={projetoCodigo}
         clienteNome={clienteNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
         codigoReaproveitado={!job && codigoReservado !== null}
@@ -646,6 +668,8 @@ export function FluxoAbertura({
         moeda={moeda}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
+        gpsDoProjeto={gpsDoProjeto}
+        produtores={produtores}
         cidadesIniciais={cidadesIniciais}
         periodoTravado={periodoTravado}
         fieldErrors={fieldErrors}
@@ -748,6 +772,11 @@ export function BannersEstado({
             <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-california-red">
               Motivo da rejeição
             </p>
+            {job.devolvido_em && (
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Devolvido pelo Financeiro em {formatDataAsHoraBr(job.devolvido_em)}
+              </p>
+            )}
             <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
               {job.motivo_rejeicao?.trim() || "— sem motivo informado"}
             </p>

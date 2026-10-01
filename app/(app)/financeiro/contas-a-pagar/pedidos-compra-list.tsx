@@ -25,11 +25,18 @@ import type {
   PlanoContaTipo,
   PlanoContaSubtipo,
   PagamentoForaDoCadastroDaPP,
+  PPEvento,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PPTela } from "./pp-tela";
+import {
+  ultimoEnvioDaPP,
+  ultimoEnvioDaPrestacao,
+  type EnvioDaPP,
+} from "@/lib/data/eventos-da-pp";
+import { formatDataHoraListaBr } from "@/lib/formatar-data-hora";
 
 export interface PPRow {
   id: string;
@@ -98,6 +105,9 @@ export interface PPRow {
   job_id: string;
   job_codigo: string;
   job_nome: string;
+  /** GP responsável do job — referência nos pop-ups de aprovação
+   *  (decisão 136). Obrigatório pelo mesmo motivo do histórico. */
+  job_responsavel_nome: string | null;
   regional_id: string | null;
   projeto_codigo: string | null;
   projeto_nome: string | null;
@@ -135,6 +145,12 @@ export interface PPRow {
   prestacao: PrestacaoDaVerba | null;
   /** Estorno de verba criado na aprovação, quando sobrou saldo. */
   devolucao: DevolucaoDaVerba | null;
+  /**
+   * Histórico de eventos da PP e da prestação, em ordem (decisão 136).
+   * As colunas acima guardam só o último evento de cada tipo — o reenvio
+   * apaga a rejeição. Obrigatório pelo mesmo motivo do histórico.
+   */
+  eventos: PPEvento[];
   anexos: Array<{
     id: string;
     arquivo_nome_original: string;
@@ -187,6 +203,26 @@ function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}/${y}`;
+}
+
+/** Nome, selo de reenvio e, embaixo, data e hora do último envio. */
+function QuemEnviou({ envio }: { envio: EnvioDaPP | null }) {
+  if (!envio) return <span className="text-muted-foreground">—</span>;
+  return (
+    <>
+      <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+        <span className="whitespace-nowrap">{envio.por_nome ?? "—"}</span>
+        {envio.reenviada && (
+          <span className="rounded-md border border-california-red/30 bg-california-red/5 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-california-red">
+            Reenviada
+          </span>
+        )}
+      </div>
+      <div className="mt-0.5 whitespace-nowrap text-[12px] text-muted-foreground">
+        {formatDataHoraListaBr(envio.em)}
+      </div>
+    </>
+  );
 }
 
 function formatMoney(n: number): string {
@@ -353,6 +389,10 @@ export function PedidosCompraList({
               {/* No filtro de prestações as colunas contam a prestação:
                   quando chegou, a verba, o gasto e o saldo (decisão 081). */}
               <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Enviada em" : "Emissão"}</th>
+              {/* Decisão 136: qualquer GP envia, então o financeiro vê
+                  quem enviou — e, no reenvio, quem mandou de volta. No
+                  filtro de prestações, quem enviou a prestação. */}
+              <th className="px-4 py-3 font-semibold">Enviada por</th>
               <th className="px-4 py-3 font-semibold text-right">{filtro === "prestacoes" ? "Verba" : "Valor"}</th>
               <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Gasto" : "Prazo original"}</th>
               <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Saldo" : "Parcela"}</th>
@@ -362,7 +402,7 @@ export function PedidosCompraList({
           <tbody>
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0
                     ? "Nenhum Pedido de Produção emitido ainda."
                     : "Nenhum Pedido de Produção encontrado com esses filtros."}
@@ -374,7 +414,7 @@ export function PedidosCompraList({
               {i === urgentes.length && urgentes.length > 0 && (
                 <tr className="border-b border-border bg-muted/30">
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
                   >
                     Demais PPs
@@ -449,6 +489,15 @@ export function PedidosCompraList({
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {formatDate(filtro === "prestacoes" ? (r.prestacao?.enviada_em ?? null) : r.created_at)}
+                </td>
+                <td className="px-4 py-3">
+                  <QuemEnviou
+                    envio={
+                      filtro === "prestacoes"
+                        ? ultimoEnvioDaPrestacao(r.eventos)
+                        : ultimoEnvioDaPP(r.eventos)
+                    }
+                  />
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-semibold">
                   {formatMoney(r.valor)}

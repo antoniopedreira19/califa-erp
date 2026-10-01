@@ -46,6 +46,8 @@ import type {
 } from "@/lib/types";
 import { AprovarForaDoCadastro } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { aprovarPPComData } from "./actions-titulos";
+import { FaixaQuemEnviou } from "./faixa-quem-enviou";
+import type { EnvioDaPP } from "@/lib/data/eventos-da-pp";
 
 /** Radix não aceita `value=""` num item; este é o rótulo da ausência de
  *  escolha ("decidir na baixa"), traduzido para "" no estado. */
@@ -61,6 +63,11 @@ interface PPParaAprovar {
   /** Decisão 127: a PP paga fora do cadastro. Aprovar exige a marcação,
    *  e o servidor e o banco conferem de novo. */
   pagamentoForaDoCadastro: PagamentoForaDoCadastroDaPP | null;
+  /** Decisão 136: o último envio — qualquer GP envia, e o financeiro vê
+   *  quem mandou. Null só na PP sem envio registrado. */
+  envio: EnvioDaPP | null;
+  emitidaPorNome: string | null;
+  gpResponsavelNome: string | null;
 }
 
 function formatDate(iso: string | null): string {
@@ -175,6 +182,14 @@ export function AprovarPPDialog({
               {formatCurrency(pp.valor, "BRL")}
             </span>
           </DialogTitle>
+          {pp.envio && (
+            <FaixaQuemEnviou
+              rotulo={pp.envio.reenviada ? "Reenviada por" : "Enviada por"}
+              nome={pp.envio.por_nome}
+              em={pp.envio.em}
+              referencia={`Emitida por ${pp.emitidaPorNome ?? "—"} · GP responsável do job: ${pp.gpResponsavelNome ?? "—"}`}
+            />
+          )}
           <DialogDescription>
             Vencimento negociado pela produção:{" "}
             <strong className="font-semibold text-foreground">

@@ -21,6 +21,9 @@ import { IconeSave, rotuloDoSave } from "./icone-save";
 export interface FilaLinha extends JobNaFila {
   /** "há 2 horas" — calculado no server para não divergir na hidratação. */
   enviado_em_label: string;
+  /** Quem mandou (decisão 136): na abertura, quem fez o último envio; na
+   *  errata, quem a registrou. */
+  enviado_por_label: string | null;
 }
 
 /** Um pedido da faixa Saves, com o rótulo relativo pronto (decisão 099). */
@@ -161,8 +164,12 @@ export function FilaAbertura({
         <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums">
           {formatCurrency(l.valor_total)}
         </td>
-        <td className="px-4 py-3.5 text-[12.5px] text-muted-foreground">
-          {l.enviado_em_label}
+        <td className="px-4 py-3.5">
+          <QuemEnviou
+            nome={l.enviado_por_label}
+            quando={l.enviado_em_label}
+            reenvio={l.reenviado && l.revisao === null}
+          />
         </td>
         <td className="px-4 py-3.5">
           <div className="flex items-center justify-end">
@@ -241,8 +248,8 @@ export function FilaAbertura({
         <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums">
           {formatCurrency(s.valor)}
         </td>
-        <td className="px-4 py-3.5 text-[12.5px] text-muted-foreground">
-          {s.enviado_em_label}
+        <td className="px-4 py-3.5">
+          <QuemEnviou nome={s.enviadoPorNome} quando={s.enviado_em_label} reenvio={false} />
         </td>
         <td className="px-4 py-3.5">
           <div className="flex items-center justify-end">
@@ -326,7 +333,7 @@ export function FilaAbertura({
                 <th className="px-4 py-3 text-right font-semibold">
                   Valor total
                 </th>
-                <th className="px-4 py-3 font-semibold">Enviado</th>
+                <th className="px-4 py-3 font-semibold">Enviado por</th>
                 <th className="px-4 py-3 text-right font-semibold">Abertura</th>
               </tr>
             </thead>
@@ -420,11 +427,38 @@ export function FilaAbertura({
             }
           }}
           jobId={reprovando.id}
+          enviadoPorNome={reprovando.enviado_por_nome}
+          enviadoEm={reprovando.enviado_em}
           jobCodigo={reprovando.codigo}
           gpNome={reprovando.responsavel_nome}
           produtorNome={reprovando.produtor_nome}
         />
       )}
+    </div>
+  );
+}
+
+/** Coluna "Enviado por" da fila (decisão 136): quem mandou, e quando. */
+function QuemEnviou({
+  nome,
+  quando,
+  reenvio,
+}: {
+  nome: string | null;
+  quando: string;
+  reenvio: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium text-foreground">
+        {nome ?? "—"}
+        {reenvio && (
+          <span className="rounded-md border border-california-red/30 bg-california-red/5 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-california-red">
+            Reenvio
+          </span>
+        )}
+      </span>
+      <span className="text-[12px] text-muted-foreground">{quando}</span>
     </div>
   );
 }

@@ -46,10 +46,17 @@ export default async function AberturaDeJobPage({
   const comSaveNaFila = new Set(saves.map((s) => s.jobId));
   const linhas: FilaLinha[] = fila
     .filter((j) => !(j.revisao?.soDeSave && comSaveNaFila.has(j.id)))
-    .map((j) => ({
-      ...j,
-      enviado_em_label: formatEnviadoEm(j.created_at, agora),
-    }));
+    .map((j) => {
+      // Quem mandou e quando (decisão 136). Na linha de errata, a errata
+      // mais recente — antes a coluna mostrava a criação do job, que nada
+      // dizia da errata. Na abertura, o último envio (o reenvio, se houve).
+      const ultimaErrata = j.revisao?.erratas.at(-1) ?? null;
+      return {
+        ...j,
+        enviado_por_label: ultimaErrata ? ultimaErrata.autorNome : j.enviado_por_nome,
+        enviado_em_label: formatEnviadoEm(ultimaErrata?.em ?? j.enviado_em, agora),
+      };
+    });
 
   // O "hoje" do calendário sai daqui, no fuso de Brasília, pelo mesmo
   // motivo do rótulo acima: calculado dentro do client component, o
