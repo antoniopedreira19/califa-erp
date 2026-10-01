@@ -4,6 +4,7 @@ import { CabecalhoHome } from "./_componentes/cabecalho-home";
 import { CardPendenciaLink } from "./_componentes/card-pendencia";
 import { CardKpiLink } from "./_componentes/card-kpi";
 import { EstadoVazio } from "./_componentes/estado-vazio";
+import { CardNotificacoesFerias } from "@/components/notificacoes-ferias/card";
 
 export async function HomeProdutor({
   session,
@@ -18,6 +19,11 @@ export async function HomeProdutor({
       <CabecalhoHome
         nome={session.profile.nome}
         subtitulo="O que precisa de você nos jobs em andamento e o seu volume."
+      />
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
       />
 
       <section className="space-y-3">

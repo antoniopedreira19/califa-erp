@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Sparkles, Users, Receipt } from "lucide-react";
 import type { SessionContext } from "@/lib/types";
 import { CabecalhoHome } from "./_componentes/cabecalho-home";
+import { CardNotificacoesFerias } from "@/components/notificacoes-ferias/card";
 
 /**
  * Placeholder da home do RH. O dashboard próprio (pendências da folha,
@@ -15,6 +16,11 @@ export function HomeRh({ session }: { session: SessionContext }) {
       <CabecalhoHome
         nome={session.profile.nome}
         subtitulo="Seu módulo é o RH. O dashboard com pendências e comparativos do quadro tá em construção — abaixo, atalhos pras telas que já funcionam."
+      />
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
       />
 
       <section className="rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center">

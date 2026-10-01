@@ -4,6 +4,7 @@ import { CabecalhoHome } from "./_componentes/cabecalho-home";
 import { CardPendenciaLink } from "./_componentes/card-pendencia";
 import { CardKpiLink } from "./_componentes/card-kpi";
 import { EstadoVazio } from "./_componentes/estado-vazio";
+import { CardNotificacoesFerias } from "@/components/notificacoes-ferias/card";
 
 export async function HomeFreelancer({
   session,
@@ -19,6 +20,11 @@ export async function HomeFreelancer({
       <CabecalhoHome
         nome={session.profile.nome}
         subtitulo="Seus jobs, seu realizado e seu chat — o que precisa da sua atenção."
+      />
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
       />
 
       {jobsAtivos === 0 ? (

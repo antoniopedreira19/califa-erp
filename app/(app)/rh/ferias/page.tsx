@@ -16,15 +16,25 @@ import { AbaPainel } from "./aba-painel";
 import { AbaSolicitacoes } from "./aba-solicitacoes";
 import { AbaQuadro } from "./aba-quadro";
 import { AbaCalendario } from "./aba-calendario";
+import { AbaNotificacoes } from "./aba-notificacoes";
+import { AbaRescisoes } from "./aba-rescisoes";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "painel" | "solicitacoes" | "quadro" | "calendario";
+type Tab =
+  | "painel"
+  | "solicitacoes"
+  | "quadro"
+  | "calendario"
+  | "rescisoes"
+  | "notificacoes";
 const TABS: { key: Tab; label: string }[] = [
   { key: "painel", label: "Painel" },
   { key: "solicitacoes", label: "Solicitações" },
   { key: "quadro", label: "Quadro" },
   { key: "calendario", label: "Calendário" },
+  { key: "rescisoes", label: "Rescisões" },
+  { key: "notificacoes", label: "Notificações" },
 ];
 
 export default async function FeriasPage({
@@ -38,6 +48,8 @@ export default async function FeriasPage({
     status_periodo?: string;
     mes?: string;
     colab?: string;
+    notif_tipo?: string;
+    nao_lidas?: string;
   };
 }) {
   const session = await requireSession();
@@ -180,12 +192,33 @@ export default async function FeriasPage({
           mesParam={searchParams.mes}
         />
       )}
+      {tab === "notificacoes" && (
+        <AbaNotificacoes
+          tenantId={tenantId}
+          userId={session.profile.id}
+          tipoFiltro={searchParams.notif_tipo}
+          somenteNaoLidas={searchParams.nao_lidas === "1"}
+        />
+      )}
+      {tab === "rescisoes" && (
+        <AbaRescisoes
+          tenantId={tenantId}
+          colaboradorSelecionadoId={searchParams.colab}
+        />
+      )}
     </div>
   );
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = ["painel", "solicitacoes", "quadro", "calendario"];
+  const vals: Tab[] = [
+    "painel",
+    "solicitacoes",
+    "quadro",
+    "calendario",
+    "rescisoes",
+    "notificacoes",
+  ];
   return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
 }
 
