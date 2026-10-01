@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Trash2, Download } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type {
   ColaboradorFeriasLancamento,
@@ -10,6 +10,7 @@ import type {
   FeriasLancamentoTipo,
 } from "@/lib/types";
 import { cancelarMinhaSolicitacao } from "./actions";
+import { obterUrlRecibo } from "../rh/ferias/actions";
 
 type Props = {
   lancamento: ColaboradorFeriasLancamento;
@@ -27,6 +28,21 @@ export function LinhaHistoricoLancamento({ lancamento: l }: Props) {
   const podeCancelar =
     l.status === "pendente_aprovacao" ||
     (l.status === "aprovado" && dataInicio > hoje);
+  const temRecibo =
+    !!l.recibo_url &&
+    (l.status === "aprovado" || l.status === "concluido");
+
+  function baixarRecibo() {
+    setErro(null);
+    startTransition(async () => {
+      const res = await obterUrlRecibo(l.id);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      window.open(res.url, "_blank");
+    });
+  }
 
   function handleCancelar() {
     setErro(null);
@@ -53,6 +69,18 @@ export function LinhaHistoricoLancamento({ lancamento: l }: Props) {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <BadgeStatusLancamento status={l.status} />
+        {temRecibo && (
+          <button
+            type="button"
+            onClick={baixarRecibo}
+            title="Baixar recibo"
+            disabled={pending}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Recibo
+          </button>
+        )}
         {podeCancelar && (
           <button
             type="button"

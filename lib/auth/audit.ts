@@ -319,6 +319,7 @@ export type AuditAction =
   | "ferias.lancamento.movido_em_analise"
   | "ferias.lancamento.cancelado_pelo_rh"
   | "ferias.lancamento.lancado_direto_pelo_rh"
+  | "ferias.recibo.gerado"
   | "acao_negada";
 
 export interface AuditPayload {

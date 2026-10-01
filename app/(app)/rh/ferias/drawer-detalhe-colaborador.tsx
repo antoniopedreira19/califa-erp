@@ -20,6 +20,7 @@ import type {
 } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
 import { LancarDiretoForm } from "./lancar-direto-form";
+import { BotaoRecibo } from "./botao-recibo";
 
 type Props = {
   colaborador: {
@@ -186,35 +187,61 @@ export function DrawerDetalheColaborador({
               </p>
             ) : (
               <ul className="divide-y divide-border rounded-lg border border-border">
-                {lancamentos.map((l) => (
-                  <li
-                    key={l.id}
-                    className="flex items-center justify-between gap-3 p-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">
-                        {new Date(
-                          l.data_inicio + "T00:00:00",
-                        ).toLocaleDateString("pt-BR")}{" "}
-                        a{" "}
-                        {new Date(
-                          l.data_fim + "T00:00:00",
-                        ).toLocaleDateString("pt-BR")}{" "}
-                        · {l.dias} {l.dias === 1 ? "dia" : "dias"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {tipoLabel(l.tipo)}
-                        {l.lancado_direto_por_rh && " · lançado pelo RH"}
-                      </p>
-                      {l.motivo_reprovacao && (
-                        <p className="mt-0.5 text-xs text-red-700">
-                          Motivo: {l.motivo_reprovacao}
+                {lancamentos.map((l) => {
+                  const temValor =
+                    l.valor_total !== null && Number(l.valor_total) > 0;
+                  const podeMostrarRecibo =
+                    (l.status === "aprovado" || l.status === "concluido") &&
+                    colaborador.tipo_contratacao !== "clt" &&
+                    temValor;
+                  return (
+                    <li
+                      key={l.id}
+                      className="flex items-center justify-between gap-3 p-3 flex-wrap"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">
+                          {new Date(
+                            l.data_inicio + "T00:00:00",
+                          ).toLocaleDateString("pt-BR")}{" "}
+                          a{" "}
+                          {new Date(
+                            l.data_fim + "T00:00:00",
+                          ).toLocaleDateString("pt-BR")}{" "}
+                          · {l.dias} {l.dias === 1 ? "dia" : "dias"}
                         </p>
-                      )}
-                    </div>
-                    <BadgeLancamento status={l.status} />
-                  </li>
-                ))}
+                        <p className="text-xs text-muted-foreground">
+                          {tipoLabel(l.tipo)}
+                          {l.lancado_direto_por_rh && " · lançado pelo RH"}
+                        </p>
+                        {temValor && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Total: R${" "}
+                            {Number(l.valor_total).toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </p>
+                        )}
+                        {l.motivo_reprovacao && (
+                          <p className="mt-0.5 text-xs text-red-700">
+                            Motivo: {l.motivo_reprovacao}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <BadgeLancamento status={l.status} />
+                        {podeMostrarRecibo && (
+                          <BotaoRecibo
+                            lancamentoId={l.id}
+                            temRecibo={!!l.recibo_url}
+                            tipoLancamento={l.tipo}
+                          />
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>

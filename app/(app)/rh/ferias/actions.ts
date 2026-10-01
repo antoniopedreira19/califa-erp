@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { calcularValoresLancamentoPJ } from "@/lib/ferias/calcular-valores";
+import {
+  gerarReciboFeriasPdf,
+  type FormatoRecibo,
+} from "@/lib/pdf/recibo-ferias";
+import type { FeriasLancamentoTipo } from "@/lib/types";
 
 type ActionResult =
   | { ok: true; id: string }
@@ -71,14 +77,32 @@ export async function aprovarLancamento(
   }
 
   const supabase = createClient();
+
+  // Calcula valores de PJ (CLT retorna null = fica tudo em branco).
+  const valores = await calcularValoresLancamentoPJ(
+    lanc.colaborador_id,
+    lanc.data_inicio,
+    lanc.tipo as FeriasLancamentoTipo,
+    lanc.dias,
+  );
+
+  const updatePayload: Record<string, unknown> = {
+    status: "aprovado",
+    aprovado_por: session.profile.id,
+    aprovado_em: new Date().toISOString(),
+    motivo_reprovacao: null,
+  };
+  if (valores) {
+    updatePayload.valor_base_remuneracao = valores.valor_base_remuneracao;
+    updatePayload.valor_ferias = valores.valor_ferias;
+    updatePayload.valor_um_terco = valores.valor_um_terco;
+    updatePayload.valor_abono = valores.valor_abono;
+    updatePayload.valor_total = valores.valor_total;
+  }
+
   const { error: updErr } = await supabase
     .from("colaboradores_ferias_lancamentos")
-    .update({
-      status: "aprovado",
-      aprovado_por: session.profile.id,
-      aprovado_em: new Date().toISOString(),
-      motivo_reprovacao: null,
-    })
+    .update(updatePayload)
     .eq("id", lancamentoId);
 
   if (updErr) {
@@ -364,6 +388,14 @@ export async function lancarDiretoPeloRh(
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
+  // Valores PJ (CLT fica null)
+  const valores = await calcularValoresLancamentoPJ(
+    dados.colaborador_id,
+    dados.data_inicio,
+    dados.tipo,
+    dias,
+  );
+
   const { data: lanc, error: insErr } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .insert({
@@ -380,6 +412,11 @@ export async function lancarDiretoPeloRh(
       aprovado_em: new Date().toISOString(),
       observacao: dados.observacao || null,
       lancado_direto_por_rh: true,
+      valor_base_remuneracao: valores?.valor_base_remuneracao ?? null,
+      valor_ferias: valores?.valor_ferias ?? null,
+      valor_um_terco: valores?.valor_um_terco ?? null,
+      valor_abono: valores?.valor_abono ?? null,
+      valor_total: valores?.valor_total ?? null,
     })
     .select("id")
     .single();
@@ -425,6 +462,200 @@ export async function lancarDiretoPeloRh(
   revalidatePath("/rh/ferias");
   revalidatePath("/perfil");
   return { ok: true, id: lanc.id };
+}
+
+// ---------- Gerar recibo PDF (só PJ) ----------
+
+const gerarReciboSchema = z.object({
+  lancamento_id: z.string().uuid(),
+  formato: z.enum(["ferias", "abono", "combinado"]),
+});
+
+export async function gerarRecibo(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+
+  const parsed = gerarReciboSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Formato de recibo inválido." };
+  }
+  const { lancamento_id: lancId, formato } = parsed.data;
+
+  const supabase = createClient();
+  const service = createServiceClient();
+
+  // Busca lançamento + colaborador
+  const { data: lanc } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .select(
+      "id, tenant_id, colaborador_id, periodo_id, tipo, dias, data_inicio, data_fim, status, valor_base_remuneracao, valor_ferias, valor_um_terco, valor_abono, valor_total",
+    )
+    .eq("id", lancId)
+    .maybeSingle();
+  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
+  if (lanc.status !== "aprovado" && lanc.status !== "concluido") {
+    return {
+      ok: false,
+      message: "Só é possível gerar recibo de lançamentos aprovados.",
+    };
+  }
+
+  // Permissão: RH/admin lê qualquer; colaborador só o próprio
+  const isRh =
+    session.activeRole === "administrador" || session.activeRole === "rh";
+  if (!isRh) {
+    const { data: colab } = await supabase
+      .from("colaboradores")
+      .select("id")
+      .eq("user_id", session.profile.id)
+      .maybeSingle();
+    if (!colab || colab.id !== lanc.colaborador_id) {
+      return { ok: false, message: "Sem permissão." };
+    }
+  }
+
+  // Precisa dos valores calculados (CLT não tem)
+  if (
+    lanc.valor_total === null ||
+    lanc.valor_total === undefined ||
+    Number(lanc.valor_total) <= 0
+  ) {
+    return {
+      ok: false,
+      message:
+        "Este lançamento não tem valor calculado — CLT recebe recibo da contabilidade.",
+    };
+  }
+
+  // Busca nome do colaborador + período aquisitivo
+  const [{ data: colab }, { data: periodo }] = await Promise.all([
+    supabase
+      .from("colaboradores")
+      .select("nome, tipo_contratacao")
+      .eq("id", lanc.colaborador_id)
+      .maybeSingle(),
+    lanc.periodo_id
+      ? supabase
+          .from("colaboradores_ferias_periodos")
+          .select("aquisitivo_inicio, aquisitivo_fim")
+          .eq("id", lanc.periodo_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  if (!colab) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+  if (colab.tipo_contratacao === "clt") {
+    return {
+      ok: false,
+      message:
+        "CLT não gera recibo pelo sistema — a contabilidade cuida.",
+    };
+  }
+
+  const periodoAquisitivo = periodo
+    ? `${(periodo as { aquisitivo_inicio: string }).aquisitivo_inicio.slice(0, 4)}/${(periodo as { aquisitivo_fim: string }).aquisitivo_fim.slice(0, 4)}`
+    : "";
+
+  // Gera PDF
+  const pdfBuffer = await gerarReciboFeriasPdf(formato as FormatoRecibo, {
+    prestadorNome: colab.nome,
+    periodoAquisitivo,
+    dataInicio: lanc.data_inicio,
+    dataFim: lanc.data_fim,
+    dias: lanc.dias,
+    valorBase: Number(lanc.valor_base_remuneracao ?? 0),
+    valorFerias: Number(lanc.valor_ferias ?? 0),
+    valorAbono: Number(lanc.valor_abono ?? 0),
+    valorUmTerco: Number(lanc.valor_um_terco ?? 0),
+    valorTotal: Number(lanc.valor_total ?? 0),
+  });
+
+  // Upload no Storage via service role (bypassa RLS pra garantir sucesso).
+  const path = `${lanc.colaborador_id}/${lanc.id}-${formato}.pdf`;
+  const { error: upErr } = await service.storage
+    .from("recibos-ferias")
+    .upload(path, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (upErr) {
+    console.error("[rh.ferias.recibo.upload]", upErr.message);
+    return { ok: false, message: "Falha no upload: " + upErr.message };
+  }
+
+  // Grava URL (caminho relativo) e timestamp no lançamento
+  const { error: updErr } = await service
+    .from("colaboradores_ferias_lancamentos")
+    .update({
+      recibo_url: path,
+      recibo_gerado_em: new Date().toISOString(),
+    })
+    .eq("id", lanc.id);
+
+  if (updErr) {
+    console.error("[rh.ferias.recibo.update]", updErr.message);
+    return { ok: false, message: "Falha ao gravar: " + updErr.message };
+  }
+
+  await logAuditEvent({
+    acao: "ferias.recibo.gerado",
+    tenantId: lanc.tenant_id,
+    entidadeTipo: "ferias_lancamento",
+    entidadeId: lanc.id,
+    metadata: { formato, colaborador_id: lanc.colaborador_id },
+  });
+
+  revalidatePath("/rh/ferias");
+  revalidatePath("/perfil");
+  return { ok: true, id: lanc.id };
+}
+
+// Gera signed URL temporária pra baixar o recibo (10 min).
+export async function obterUrlRecibo(
+  lancamentoId: string,
+): Promise<
+  { ok: true; url: string } | { ok: false; message: string }
+> {
+  const session = await requireSession();
+  const supabase = createClient();
+  const service = createServiceClient();
+
+  const { data: lanc } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .select("id, colaborador_id, recibo_url")
+    .eq("id", lancamentoId)
+    .maybeSingle();
+
+  if (!lanc || !lanc.recibo_url) {
+    return { ok: false, message: "Recibo ainda não foi gerado." };
+  }
+
+  const isRh =
+    session.activeRole === "administrador" || session.activeRole === "rh";
+  if (!isRh) {
+    const { data: colab } = await supabase
+      .from("colaboradores")
+      .select("id")
+      .eq("user_id", session.profile.id)
+      .maybeSingle();
+    if (!colab || colab.id !== lanc.colaborador_id) {
+      return { ok: false, message: "Sem permissão." };
+    }
+  }
+
+  const { data, error } = await service.storage
+    .from("recibos-ferias")
+    .createSignedUrl(lanc.recibo_url, 600);
+
+  if (error || !data?.signedUrl) {
+    return {
+      ok: false,
+      message: "Falha ao gerar URL: " + (error?.message ?? ""),
+    };
+  }
+  return { ok: true, url: data.signedUrl };
 }
 
 // ---------- Marcar notificação como lida ----------
