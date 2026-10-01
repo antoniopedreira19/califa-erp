@@ -186,8 +186,7 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
   Nada foi gravado.
 - `npm run test:permissoes`: 37 de 39, com as duas falhas antigas do RH
   (`sidebar.rh`). O teste novo do `jobs.enviar_pp` passa.
-- O produtor não foi testado logado (não há usuário de teste com esse papel
-  que entre); a regra dele foi conferida pelo código e pela matriz.
+- O produtor foi testado logado na conferência da parte 3 (ver abaixo).
 
 **Parte 2 (01/10/2026)**, no TES-P001/26, com o "Orçamento de Teste":
 - Envio como administrador (TES-1019/26): conferência com "Enviado por
@@ -218,9 +217,36 @@ Substitui o §5 da decisão 135 ("GP que troca o GP perde a edição do job").
   13:11" e "Emitida por Tiago Mendonça · GP responsável do job: Tiago
   Mendonça" (fechado sem aprovar; a PP ficou em avaliação, como estava); o
   card do chat com "Enviada por".
-- Pop-up de aprovar prestação: por uma rota de prévia temporária, com dado
-  fictício — não há prestação de contas no banco, e criar uma exigiria
-  pagar uma verba. O gatilho da prestação foi conferido só pelo código.
+- Pop-up de aprovar prestação: primeiro por uma rota de prévia temporária;
+  depois com verba de verdade (abaixo).
+
+**Verba e prestação de ponta a ponta (01/10/2026)**, na PP-00099 (TES-1001/26,
+Agrupamento 3 · Item 1, R$ 500,00, emissora Empresa Teste):
+- Usuário de teste novo, "Produtor Teste Claude"
+  (`claude.produtor.teste@califa-erp.local`, papel Produtor), criado pela
+  Admin API com o mesmo pacote do convite da tela de usuários, sem e-mail e
+  sem senha. O "Produtor Teste" antigo não serve: foi inserido por SQL, sem
+  identidade de login.
+- Como produtor: gerou a PP de verba; "Gerar e enviar" e "Enviar ao
+  financeiro" vieram travados com "Só o GP envia PP ao financeiro"; chamada
+  direta da action pelo console devolveu a mesma recusa do servidor.
+- Como "GP Teste Claude": enviou a PP.
+- Como administrador: lista com "GP Teste Claude"; histórico com a emissão
+  pelo produtor; "Aprovar" com "Enviada por GP Teste Claude … Emitida por
+  Produtor Teste Claude"; aprovou e deu baixa pela "Conta Teste" (Empresa
+  Teste), PIX.
+- Como produtor (responsável pela verba): prestou contas com um recibo de
+  R$ 500,00 (sem saldo, sem estorno).
+- Como administrador: filtro "Prestações" com "Produtor Teste Claude";
+  "Aprovar prestação" com "Prestação enviada por Produtor Teste Claude …
+  Responsável pela verba: Produtor Teste Claude · GP responsável do job:
+  Tiago Mendonça"; reprovou com justificativa.
+- Como "GP Teste Claude", que não é o responsável pela verba: reenviou a
+  prestação (regra "qualquer GP" da migration `20261001400001`).
+- Como administrador: lista com "GP Teste Claude · Reenviada"; histórico com
+  a reprovação e a justificativa mantidas; pop-up com "Prestação reenviada
+  por GP Teste Claude"; aprovou. Os 8 eventos ficaram gravados, do
+  "emitida" ao "prestacao_aprovada".
 - O log da API ficou sem erro (todas as respostas 2xx) depois da tabela
   nova.
 
