@@ -51,9 +51,9 @@ import { acharColunaDeMarcas, RECUSA_INTERNA_DO_JOB } from "./coluna-marcas";
  *      subtotal com intervalo errado (ESTRUTURA soma F5:F14, mas os itens
  *      vão até a 18), então nada é lido delas além do nome.
  *   2. Item sem valor unitário ENTRA, com R$ 0,00 — o modelo é um gabarito
- *      em branco, e o nome do item é o que interessa preservar. Quem barra
- *      orçado zerado é a aprovação da versão, não o parser (desde 28/09/2026
- *      o salvar do rascunho também deixa passar — revisão da decisão 011).
+ *      em branco, e o nome do item é o que interessa preservar. Item com
+ *      orçado zerado salva e aprova (revisão da decisão 011: o salvar desde
+ *      28/09/2026, a aprovação desde 01/10/2026 — é o item da casa).
  *   3. A coluna A só agrupa: `categoria_id` continua nascendo vazia.
  *   4. O % de honorários vem da coluna E da linha HONORÁRIOS (0,12 → 12).
  *
@@ -925,7 +925,7 @@ export async function parseOficial(
     }
 
     // Valor unitário (coluna C). Vazio entra como zero — decisão do Tiago
-    // em 08/09/2026. Quem barra orçado zerado é a aprovação da versão.
+    // em 08/09/2026. Desde 01/10/2026 o item zerado também aprova.
     let valorUnitario = valorC.ok ? valorC.n : 0;
     if (!valorC.ok && colC !== "") {
       warnings.push({

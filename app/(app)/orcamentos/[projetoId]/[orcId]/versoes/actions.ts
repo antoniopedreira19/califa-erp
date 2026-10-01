@@ -1712,7 +1712,6 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   const [
     { count: itensCount },
     { count: comValorCount },
-    { count: orcadoZeradoCount },
     consumosRes,
   ] =
     await Promise.all([
@@ -1727,14 +1726,8 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
         .eq("versao_orcamento_id", versaoId)
         .eq("tenant_id", session.activeTenant.id)
         .gt("total_orcado", 0),
-      // Orçado zerado em qualquer item bloqueia (docs/decisions/011);
-      // planejado zerado não entra na conta.
-      supabase
-        .from("versoes_orcamento_itens")
-        .select("id", { count: "exact", head: true })
-        .eq("versao_orcamento_id", versaoId)
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("valor_unitario_orcado", 0),
+      // Item com orçado zerado NÃO bloqueia desde 01/10/2026 (revisão da
+      // decisão 011): é o item da casa, mostrado ao cliente sem cobrança.
       // O consumo de save da versão (decisão 099): a aprovação passa a
       // segurar saldo, e só save APROVADO conta. O `!inner` é filtro, não
       // embed: uma FK só entre as duas tabelas.
@@ -1776,7 +1769,6 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
         : null,
     qtdItens: itensCount ?? 0,
     qtdItensComValor: comValorCount ?? 0,
-    qtdItensOrcadoZerado: orcadoZeradoCount ?? 0,
     mesesSemItens: mesesVazios,
   });
 

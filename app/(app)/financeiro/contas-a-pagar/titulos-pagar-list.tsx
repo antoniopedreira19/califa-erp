@@ -602,7 +602,9 @@ export function TitulosPagarList({
                   ? `Estorno de verba ${baixando.origem_label.replace(/^ESTORNO /, "")}`
                   : baixando.origem === "fatura_cartao"
                     ? `Fatura de cartão ${baixando.origem_label}`
-                    : "Lançamento avulso",
+                    : baixando.origem === "folha"
+                      ? "Folha de pagamento"
+                      : "Lançamento avulso",
         parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
         vencimento: baixando.data_pagamento,
         chave: `${baixando.origem}-${baixando.id}-${baixando.baixas.length}`,
@@ -629,9 +631,13 @@ export function TitulosPagarList({
         planoContaTipoId: baixando.plano_conta_tipo_id,
         planoContaSubtipoId: baixando.plano_conta_subtipo_id,
         isDevolucao: baixando.origem === "pp_devolucao_verba",
-        // Fatura não se paga com cartão, e o restante de uma parcial não
-        // vai para a fatura.
-        semCartao: baixando.origem === "fatura_cartao" || baixando.baixas.length > 0,
+        // Fatura não se paga com cartão, folha também não (Tiago,
+        // 01/10/2026; o banco recusa), e o restante de uma parcial não vai
+        // para a fatura.
+        semCartao:
+          baixando.origem === "fatura_cartao" ||
+          baixando.origem === "folha" ||
+          baixando.baixas.length > 0,
       }
     : null;
 
@@ -649,7 +655,9 @@ export function TitulosPagarList({
                   ? `Estorno de verba ${conferindo.origem_label.replace(/^ESTORNO /, "")}`
                   : conferindo.origem === "fatura_cartao"
                     ? `Fatura de cartão ${conferindo.origem_label}`
-                    : "Lançamento avulso",
+                    : conferindo.origem === "folha"
+                      ? "Folha de pagamento"
+                      : "Lançamento avulso",
         parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
         valor: conferindo.valor,
         vencOriginal: conferindo.venc_original,

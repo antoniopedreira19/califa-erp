@@ -6379,4 +6379,80 @@ estendido a Contas a Receber em 31/08.**
   para o pop-up do orçamento (ver `HANDOFF_ORCAMENTO.md`, nota de
   2026-09-30 (2)).
 - O painel "Dados da produção" da tela de abertura
-  (`abertura-form.tsx`) não mudou: continua com "nome · código".
+  (`abertura-form.tsx`) seguiu com "nome · código" até a nota (3) abaixo,
+  que o igualou (decisão 135).
+
+## ⚠️ Nota de 2026-09-30 (3) — "Dados da produção" só com o nome do projeto; GP e produtor escolhidos no envio (decisão 135)
+
+- O painel **Dados da produção** da tela de abertura mostra o projeto só
+  pelo nome, como os pop-ups de conferência. O único código do painel é o
+  do job.
+- O **GP e o produtor** que chegam na abertura passam a ser os que a
+  produção escolheu no formulário de envio, que agora deixa trocá-los. A
+  troca vai também para o orçamento. Detalhes no `HANDOFF_ORCAMENTO.md`,
+  nota de 2026-09-30 (4), e na decisão 135.
+
+## ⚠️ Nota de 2026-10-01 — a folha volta a ter baixa pela lista, e não vai para o cartão (revisão da decisão 125)
+
+- **"Baixar" e lápis de data das linhas de folha em Títulos a Pagar voltaram
+  a funcionar.** De 21/09 a 01/10 a action recusava a origem "folha" e a tela
+  mostrava a mensagem do zod, em inglês. Até 01/10 nenhuma baixa de folha
+  tinha sido registrada (17 títulos "A pagar").
+- **Folha não se paga com cartão de crédito** (Tiago): na folha, o diálogo
+  oferece só PIX, Transferência e Boleto, e `baixar_conta_avulsa` recusa o
+  cartão (migration `20261001100001`).
+- Os diálogos de baixa e de baixas registradas chamam o título de "Folha de
+  pagamento"; a auditoria grava `origem: "folha"`; origem desconhecida
+  responde em português.
+- Código: `origemSchema` de `actions-titulos.ts` e `titulos-pagar-list.tsx`.
+  Conferido sem gravar nada (não existe folha de teste): console com id
+  inexistente, diálogo aberto numa linha real sem confirmar, e a trava do
+  cartão num bloco SQL desfeito no fim. Detalhes na decisão 125, "Revisão de
+  2026-10-01".
+
+## ⚠️ Nota de 2026-10-01 (2) — quem enviou cada coisa aparece para o financeiro (decisão 136, parte 2)
+
+- **Fila de abertura:** a coluna "Enviado" virou "Enviado por" — nome e
+  quando. Na linha de errata, o autor e a data da errata mais recente (antes
+  era a data de criação do job); na de save, quem pediu; selo "Reenvio"
+  quando o job voltou depois da devolução.
+- **Conferência:** faixa "Enviado por X em data às hora". No reenvio, quem
+  reenviou, o primeiro envio e a caixa "Devolvido pelo Financeiro em …" com
+  a justificativa, que não é mais apagada no reenvio.
+- **Reprovar** diz quem enviou e que qualquer GP corrige; **recusar save**
+  diz quem pediu o save.
+- **Tela de abertura:** "Enviado por" com data e hora; no reenvio,
+  "Reenviado por" e "Primeiro envio".
+- **Faturamento:** a linha do job diz quem enviou para faturamento; a do
+  BV, quem confirmou; a nota já faturada, quem enviou cada job. O painel
+  Faturar ganhou a faixa do envio, e o apoio da descrição da NF cita o nome.
+- **Página do job:** a ficha mostra as etapas com data, hora e autor (envio
+  para abertura, abertura, envio para faturamento, encerramento), e o topo
+  diz quem enviou para faturamento.
+- Migration `20261001400002` (colunas novas em `jobs` e `itens_bv`, coluna
+  nova no fim da `vw_faturamento_pendente`). Ver decisão 136, §3.1.
+
+## ⚠️ Nota de 2026-10-01 (3) — histórico de eventos da PP e quem enviou cada uma (decisão 136, parte 3)
+
+- **Lista de PPs:** coluna nova "Enviada por" — nome, data e hora do último
+  envio, e o selo "Reenviada" quando a PP voltou depois de rejeitada. No
+  filtro "Prestações", quem enviou a prestação.
+- **Histórico da PP:** um evento por linha, com hora, vindo da tabela nova
+  `pedidos_compra_eventos` (escrita só por gatilho). A rejeição fica com a
+  justificativa e não some mais no reenvio.
+- **Aprovar PP** e **aprovar prestação:** faixa com quem enviou (ou
+  reenviou) e quando; embaixo, quem emitiu / o responsável pela verba e o GP
+  responsável do job.
+- `enviada_financeiro_em/por` continuam sendo o PRIMEIRO envio (o chat conta
+  o prazo por eles); o último sai de `ultimoEnvioDaPP`
+  (`lib/data/eventos-da-pp.ts`).
+- Migration `20261001400003`. Ver decisão 136, §3.2.
+
+## ⚠️ Nota de 2026-10-01 (4) — cargo de quem escreveu nos chats (decisão 136, parte 4)
+
+- O balão das mensagens mostra "Nome · Cargo" na Comunicação do job e no
+  chat das PPs. A área ("Produção"/"Financeiro") continua ao lado da hora.
+- O cargo é gravado no envio por gatilho (`jobs_mensagens.autor_papel`,
+  migration `20261001400004`); quem muda de papel depois não reescreve o que
+  já escreveu. As mensagens antigas receberam o cargo atual do autor.
+- Ver decisão 136, §3.3. Com esta parte a decisão 136 está entregue.

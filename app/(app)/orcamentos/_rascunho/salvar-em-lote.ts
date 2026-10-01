@@ -207,9 +207,9 @@ export async function salvarOrcamentosDoProjeto(
           };
         }
         // Orçado zerado SALVA desde 28/09/2026 (revisão da decisão 011, pedido
-        // do Tiago): como dentro do orçamento, a trava é só a aprovação da
-        // versão (`bloqueioAprovacaoVersao`). A planilha da agência traz item
-        // "Resp. Cliente" e bonificado com R$ 0, e ela precisa entrar.
+        // do Tiago): como dentro do orçamento. A planilha da agência traz item
+        // "Resp. Cliente" e bonificado com R$ 0, e ela precisa entrar. Desde
+        // 01/10/2026 a aprovação da versão também aceita o item zerado.
         if (item.bv) {
           if (!aceitaBV(itemOk.data.tipo_custo)) {
             return {

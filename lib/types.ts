@@ -947,6 +947,13 @@ export interface Job {
    *  "Em faturamento" (`jobStatusExibido`, decisão 094). */
   faturamento_enviado_em: string | null;
   motivo_rejeicao: string | null;
+  /** Quando o financeiro devolveu o job (decisão 136). Não é apagado no
+   *  reenvio: a conferência do reenvio mostra a devolução. */
+  devolvido_em: string | null;
+  /** Quem fez o último envio para abertura, e quando (decisão 136) — o
+   *  primeiro ou o reenvio. O primeiro envio é `created_by`/`created_at`. */
+  enviado_abertura_por: string | null;
+  enviado_abertura_em: string | null;
   /** Job cancelado pelo "Cancelar aprovação" da devolução (decisão 128): o
    *  código dele volta no próximo envio do mesmo orçamento. */
   codigo_reservado: boolean;
@@ -1793,6 +1800,43 @@ export function podeCancelarPP(s: PPStatus): boolean {
   return s === "gerada" || s === "em_avaliacao" || s === "rejeitada";
 }
 
+/** Os eventos de `pedidos_compra_eventos` (decisão 136) — o check da
+ *  tabela, na mesma ordem. */
+export type PPEventoTipo =
+  | "emitida"
+  | "urgente"
+  | "urgencia_retirada"
+  | "fora_do_cadastro"
+  | "enviada"
+  | "envio_desfeito"
+  | "rejeitada"
+  | "reenviada"
+  | "aprovada"
+  | "aprovacao_desfeita"
+  | "reprovada"
+  | "paga"
+  | "baixa_desfeita"
+  | "cancelada"
+  | "prestacao_enviada"
+  | "prestacao_reenviada"
+  | "prestacao_reprovada"
+  | "prestacao_aprovada";
+
+/**
+ * Um evento do histórico da PP (decisão 136): quem fez o quê e quando.
+ * Escrito só pelos gatilhos do banco; a aplicação lê. Montado por
+ * `lib/data/eventos-da-pp.ts`.
+ */
+export interface PPEvento {
+  evento: PPEventoTipo;
+  por_nome: string | null;
+  em: string;
+  /** Veio de uma coluna de data, sem hora (baixa anterior ao histórico):
+   *  a tela mostra só o dia. */
+  so_data: boolean;
+  motivo: string | null;
+}
+
 // ---------- Erratas: orçado próprio do job ----------
 
 /**
@@ -2137,6 +2181,9 @@ export interface JobMensagem {
   tenant_id: string;
   job_id: string;
   autor_id: string;
+  /** Cargo do autor no momento do envio, gravado por gatilho (decisão
+   *  136). Null só se o autor não tinha vínculo com o tenant. */
+  autor_papel: AppRole | null;
   area: ChatArea;
   escopo: ChatEscopo;
   texto: string;
@@ -2206,6 +2253,9 @@ export type ItemChat =
       tipo: "pessoa";
       id: string;
       autor: string;
+      /** "Gerente de Projeto", "Administrador"… ao lado do nome (decisão
+       *  136). A área, ao lado da hora, é o lado de onde a mensagem saiu. */
+      cargo: string | null;
       area: ChatArea;
       quando: string;
       texto: string;

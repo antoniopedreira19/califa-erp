@@ -38,7 +38,9 @@ seja importada com zero, a versão poderá ser aprovada normalmente"*, e
 ## 3. O que não mudou
 
 - **R$ unitário orçado zerado continua travando** o "Salvar orçamentos" do
-  editor e a aprovação da versão (decisão 011).
+  editor e a aprovação da versão (decisão 011). ⚠️ *Não vale mais:* o
+  salvar aceita desde 28/09/2026 e a aprovação desde 01/10/2026 (revisões
+  da decisão 011).
 - O **planejado** já aceitava QT e D/M zero.
 - A **PP** continua exigindo QT e D/M maiores que zero
   (`pp_quantidade_positiva`, `pedidos_compra_dias_meses_positivo`): os

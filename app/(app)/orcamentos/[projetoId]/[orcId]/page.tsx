@@ -114,6 +114,25 @@ interface JobReservado {
   motivo_rejeicao: string | null;
 }
 
+/**
+ * Lista de pessoas do envio para abertura (decisão 135) com quem está
+ * gravado hoje no orçamento, mesmo que essa pessoa tenha saído da lista
+ * (um GP tirado da equipe do projeto, um produtor desativado). Antes da
+ * 135 o envio copiava os dois do orçamento sem conferir; sem isto, o
+ * campo abriria em branco num formulário que ninguém mexeu, e o servidor
+ * aceita quem já estava lá.
+ */
+function comQuemEstaNoOrcamento(
+  lista: Pick<Profile, "id" | "nome">[],
+  id: string | null | undefined,
+  nome: string | null | undefined,
+): Pick<Profile, "id" | "nome">[] {
+  if (!id || lista.some((p) => p.id === id)) return lista;
+  return [...lista, { id, nome: nome ?? "—" }].sort((a, b) =>
+    a.nome.localeCompare(b.nome, "pt-BR"),
+  );
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -210,7 +229,7 @@ export default async function OrcamentoDetailPage({
           // O serviço Interno muda a planilha (decisão 105). Lido pelo
           // embed, e não pela lista de serviços ativos: um serviço
           // desativado continua valendo para o orçamento que o usa.
-          "servico:categorias_dominio!servico_id(investimento_interno), " +
+          "servico:categorias_dominio!servico_id(nome, investimento_interno), " +
           "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("id", params.orcId)
@@ -258,7 +277,10 @@ export default async function OrcamentoDetailPage({
         // por eles que a tela sabe que o financeiro devolveu o job.
         // `*_abertura`: os números congelados no envio/reenvio — o "Ver
         // dados do job" mostra o que foi gravado (decisão 099).
-        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao, valor_job_abertura, faturamento_previsto_abertura",
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao, devolvido_em, valor_job_abertura, faturamento_previsto_abertura, " +
+          // GP e produtor gravados no job: o "Ver dados do job" os mostra
+          // (decisão 135).
+          "responsavel:profiles!responsavel_id(nome), produtor:profiles!produtor_id(nome)",
       )
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
@@ -400,6 +422,19 @@ export default async function OrcamentoDetailPage({
     Profile,
     "id" | "nome"
   >[];
+
+  // As mesmas listas do editor do orçamento, para o envio para abertura
+  // (decisão 135), com quem já está gravado no orçamento.
+  const gpsDoEnvio = comQuemEstaNoOrcamento(
+    gpsDoProjeto,
+    orcamentoRaw?.gp_responsavel_id,
+    orcamentoRaw?.gp?.nome,
+  );
+  const produtoresDoEnvio = comQuemEstaNoOrcamento(
+    produtores,
+    orcamentoRaw?.produtor_id,
+    orcamentoRaw?.produtor?.nome,
+  );
 
   const versoesTodas = (versoesRes.data ?? []) as VersaoOrcamento[];
   const versaoAtiva = escolherVersaoAtiva(versoesTodas, versaoPedida);
@@ -799,6 +834,8 @@ export default async function OrcamentoDetailPage({
           fornecedores={fornecedores}
           regionais={regionais}
           regionaisDoProjeto={regionaisDoProjeto}
+          gpsDoEnvio={gpsDoEnvio}
+          produtoresDoEnvio={produtoresDoEnvio}
           cidadesIniciais={cidadesIniciais}
           clienteNome={clienteNome ?? "—"}
           savePorItem={savePorItem}
@@ -871,6 +908,8 @@ function VersaoSelecionada({
   fornecedores,
   regionais,
   regionaisDoProjeto,
+  gpsDoEnvio,
+  produtoresDoEnvio,
   cidadesIniciais,
   clienteNome,
   savePorItem,
@@ -902,6 +941,9 @@ function VersaoSelecionada({
   fornecedores: { id: string; nome: string; cpf_cnpj: string | null }[];
   regionais: { id: string; nome: string }[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
+  /** Listas do envio para abertura (decisão 135). */
+  gpsDoEnvio: Pick<Profile, "id" | "nome">[];
+  produtoresDoEnvio: Pick<Profile, "id" | "nome">[];
   cidadesIniciais: CidadeOpcao[];
   clienteNome: string;
   /** Estado do save por id do item, e os saldos que este cliente tem para
@@ -1052,6 +1094,10 @@ function VersaoSelecionada({
     cidadeId: orcamento.cidade_id ?? "",
     cidadeNome: orcamentoRaw.cidade?.nome ?? "",
     regionalId: orcamento.regional_id ?? "",
+    // GP e produtor também (decisão 135): partem do orçamento, que o envio
+    // atualiza junto com o job.
+    gpId: orcamento.gp_responsavel_id ?? "",
+    produtorId: orcamento.produtor_id ?? "",
     dataInicio:
       (devolvido ? null : job?.data_inicio_prevista) ??
       orcamento.data_inicio_prevista ??
@@ -1085,19 +1131,21 @@ function VersaoSelecionada({
     regionalNome: job
       ? regionais.find((r) => r.id === job.regional_id)?.nome ?? null
       : orcamentoRaw.regional?.nome ?? null,
-    gpNome: orcamentoRaw.gp?.nome ?? null,
-    produtorNome: orcamentoRaw.produtor?.nome ?? null,
-    // Categoria do job = a do orçamento, sempre.
+    // Só o resumo do job já enviado lê estes dois: antes do envio GP e
+    // produtor são campos do formulário (decisão 135).
+    gpNome: job ? job.responsavel?.nome ?? null : orcamentoRaw.gp?.nome ?? null,
+    produtorNome: job
+      ? job.produtor?.nome ?? null
+      : orcamentoRaw.produtor?.nome ?? null,
+    // Categoria e serviço do job = os do orçamento, sempre.
     categoriaNome: orcamentoRaw.categoria?.nome ?? null,
-    // Ids: são eles que travam o envio no modal, nunca os nomes acima —
-    // nome depende da RLS de `profiles` e já deixou GP sem conseguir
-    // enviar job (ver `HerdadosJob`). Vêm sempre do cadastro de hoje,
-    // que é o que o servidor relê na hora de gravar.
+    servicoNome: orcamentoRaw.servico?.nome ?? null,
+    // Id: é ele que trava o envio no modal, nunca o nome acima (ver
+    // `HerdadosJob`). Vem sempre do cadastro de hoje, que é o que o
+    // servidor relê na hora de gravar.
     produtoId: (projetoRaw?.produto_id as string | null) ?? null,
     projetoComVariasMarcas:
       ((projetoRaw?.marcas as { produto_id: string }[] | null) ?? []).length > 1,
-    gpId: (orcamentoRaw.gp_responsavel_id as string | null) ?? null,
-    produtorId: (orcamentoRaw.produtor_id as string | null) ?? null,
   };
 
   return (
@@ -1317,9 +1365,6 @@ function VersaoSelecionada({
         qtdGrupos={grupos.length}
         qtdItens={itens.length}
         qtdItensComValor={itens.filter((i) => i.total_orcado > 0).length}
-        qtdItensOrcadoZerado={
-          itens.filter((i) => Number(i.valor_unitario_orcado) === 0).length
-        }
         percentualImposto={Number(versao.percentual_imposto)}
         cambioInternacional={
           planilha.modeloPlanilha === "internacional"
@@ -1344,9 +1389,10 @@ function VersaoSelecionada({
         proximoCodigoJob={proximoCodigoJob}
         codigoReservado={reservado?.codigo ?? null}
         projetoNome={projetoRaw?.nome ?? "—"}
-        projetoCodigo={projetoRaw?.codigo ?? "—"}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
+        gpsDoProjeto={gpsDoEnvio}
+        produtores={produtoresDoEnvio}
         // Já vêm limitadas de `listarCidadesIniciais`; o resto do Brasil
         // vem do servidor a cada digitação.
         cidadesIniciais={cidadesIniciais}

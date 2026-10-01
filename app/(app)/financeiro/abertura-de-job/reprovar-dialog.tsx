@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { rejeitarAberturaJob } from "@/app/(app)/jobs/actions";
 import { cn } from "@/lib/utils";
+import { formatDataAsHoraBr } from "./formatos";
 
 const MAX_MOTIVO = 500;
 const MIN_MOTIVO = 10;
@@ -23,6 +24,10 @@ interface Props {
   jobCodigo: string;
   gpNome: string | null;
   produtorNome: string | null;
+  /** Quem fez o último envio, e quando (decisão 136). Obrigatórios: é por
+   *  eles que o financeiro sabe com quem falar, já que qualquer GP envia. */
+  enviadoPorNome: string | null;
+  enviadoEm: string;
   /** Para onde ir depois de reprovar. Da fila, fica onde está. */
   redirecionarPara?: string;
 }
@@ -39,6 +44,8 @@ export function ReprovarDialog({
   jobCodigo,
   gpNome,
   produtorNome,
+  enviadoPorNome,
+  enviadoEm,
   redirecionarPara,
 }: Props) {
   const router = useRouter();
@@ -134,15 +141,17 @@ export function ReprovarDialog({
         <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3">
           <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Quem precisa corrigir:{" "}
-            <strong className="text-foreground">{gpNome ?? "GP do job"}</strong>{" "}
-            (GP)
+            {/* Decisão 136: qualquer GP corrige e reenvia — quem enviou pode
+                não ser o GP responsável, e os dois ficam à vista. */}
+            Enviado por{" "}
+            <strong className="text-foreground">{enviadoPorNome ?? "—"}</strong>{" "}
+            em {formatDataAsHoraBr(enviadoEm)}. A devolução aparece na página
+            do job, e qualquer GP pode corrigir e reenviar. GP responsável:{" "}
+            <strong className="text-foreground">{gpNome ?? "—"}</strong>
             {produtorNome && (
               <>
-                {" "}
-                e{" "}
-                <strong className="text-foreground">{produtorNome}</strong>{" "}
-                (produtor)
+                ; produtor:{" "}
+                <strong className="text-foreground">{produtorNome}</strong>
               </>
             )}
             . O job sai da fila de abertura com status{" "}

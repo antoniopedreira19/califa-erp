@@ -345,6 +345,7 @@ export default async function AbrirJobNoFinanceiroPage({
           <div className="space-y-4">
             <FichaJob
               descritivo={jobDoDetalhe.observacoes}
+              etapas={detalhe.etapasDoJob}
               antesDaAbertura
               job={{
                 codigo: jobDoDetalhe.codigo,
@@ -412,6 +413,8 @@ export default async function AbrirJobNoFinanceiroPage({
              115): ainda sem previsão, envio ou nota, o que acompanha é o
              formulário da aba Abertura do Job. */
           <JobRealizadoSection
+            // Tela do financeiro: só leitura, não gera nem envia PP.
+            papelEnviaPP={false}
             confirmarSaidaParaOrcamento
             edicaoDoFinanceiro={
               pode(session.activeRole, "jobs.editar_orcado_financeiro")

@@ -127,6 +127,10 @@ export const permissoes = {
   "jobs.criar_errata":            ["administrador", "gerente_producao", "produtor"],
   "jobs.emitir_pp":               ["administrador", "gerente_producao", "produtor"],
   "jobs.cancelar_pp":             ["administrador", "gerente_producao", "produtor"],
+  /** Enviar (e reenviar) PP ao financeiro (decisão 136, 01/10/2026): o
+   *  produtor gera, edita e cancela a PP ainda não enviada; enviar é do GP.
+   *  Antes não havia recurso próprio — valia a checagem de dono do job. */
+  "jobs.enviar_pp":               ["administrador", "gerente_producao"],
   /** Enviar (e reenviar, se devolvido) o job para abertura no financeiro.
    *  Só o GP (Tiago, 22/09/2026): até aqui a action não tinha gate e o
    *  produtor enviava. */

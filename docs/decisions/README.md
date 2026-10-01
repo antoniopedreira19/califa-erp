@@ -34,7 +34,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 008 | [Encerramento do job](008-encerramento-do-job.md) | 2026-08-13 |
 | 009 | [A esteira do faturamento do job](009-esteira-do-faturamento.md) | 2026-08-14 |
 | 010 | [O funil comercial do orçamento](010-funil-comercial-do-orcamento.md) | 2026-08-17 |
-| 011 | [Orçado zerado não salva lote nem aprova versão](011-orcado-obrigatorio-para-salvar-e-aprovar.md) | 2026-08-17 |
+| 011 | [Orçado zerado não salva lote nem aprova versão — revogada em 2026-10-01: salva e aprova](011-orcado-obrigatorio-para-salvar-e-aprovar.md) | 2026-08-17 |
 | 012 | [Contato de cobrança é obrigatório para enviar o job à abertura](012-contato-de-cobranca-do-job.md) | 2026-08-17 |
 | 013 | [Planilha do job visível e realizado editável antes da abertura](013-realizado-antes-da-abertura.md) | 2026-08-17 |
 | 014 | [PPs parciais por item e parcelas de pagamento](014-pps-parciais-e-parcelas.md) | 2026-08-17 |
@@ -144,7 +144,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 122 | [O cliente do projeto só muda antes da aprovação, e os códigos acompanham](122-cliente-do-projeto-so-muda-antes-da-aprovacao.md) | 2026-09-29 |
 | 123 | [O envio para faturamento vira notas fiscais](123-o-envio-para-faturamento-vira-notas-fiscais.md) | 2026-09-29 |
 | 124 | [Recebimento avulso, transferência entre contas e rendimento de aplicação viram títulos a receber](124-recebimento-avulso-transferencia-e-rendimento.md) | 2026-09-28 |
-| 125 | [Baixa parcial e impostos retidos na baixa, nas duas pontas](125-baixa-parcial-e-impostos-retidos.md) | 2026-09-28 |
+| 125 | [Baixa parcial e impostos retidos na baixa, nas duas pontas — revisada em 2026-10-01: folha baixa pela lista, sem cartão](125-baixa-parcial-e-impostos-retidos.md) | 2026-09-28 |
 | 126 | [O código antigo sai do sistema, e a PP mostra só o código do job](126-o-codigo-antigo-sai-do-sistema.md) | 2026-09-29 |
 | 127 | [A PP pode pagar por outra chave PIX ou outra conta, sem mexer no cadastro do fornecedor](127-pp-com-pagamento-fora-do-cadastro.md) | 2026-09-29 |
 | 128 | [O job devolvido se corrige no orçamento e volta com o mesmo código](128-job-devolvido-se-corrige-e-volta-com-o-mesmo-codigo.md) | 2026-09-29 |
@@ -154,6 +154,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 132 | [A folha paga pela remessa com o líquido, sem mexer no salário do cadastro](132-folha-paga-pela-remessa-com-o-liquido.md) | 2026-09-30 |
 | 133 | [O projeto aceita mais de uma marca, e o job leva a marca geral do cliente](133-projeto-com-mais-de-uma-marca.md) | 2026-09-30 |
 | 134 | [Regional só de folha: a AMBEV some da produção](134-regional-so-de-folha.md) | 2026-09-30 |
+| 135 | [Envio para abertura: GP e produtor editáveis, Serviço no formulário e só o código do job](135-envio-com-gp-produtor-e-servico.md) | 2026-09-30 |
+| 136 | [Qualquer GP age em qualquer job, e quem fez cada envio fica registrado](136-qualquer-gp-age-e-o-autor-fica-registrado.md) | 2026-10-01 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -166,4 +168,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 135.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 137.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
