@@ -14,19 +14,31 @@ import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import type { FeriasLancamentoStatus } from "@/lib/types";
 import { AbaPainel } from "./aba-painel";
 import { AbaSolicitacoes } from "./aba-solicitacoes";
+import { AbaQuadro } from "./aba-quadro";
+import { AbaCalendario } from "./aba-calendario";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "painel" | "solicitacoes";
+type Tab = "painel" | "solicitacoes" | "quadro" | "calendario";
 const TABS: { key: Tab; label: string }[] = [
   { key: "painel", label: "Painel" },
   { key: "solicitacoes", label: "Solicitações" },
+  { key: "quadro", label: "Quadro" },
+  { key: "calendario", label: "Calendário" },
 ];
 
 export default async function FeriasPage({
   searchParams,
 }: {
-  searchParams: { tab?: string; status?: string };
+  searchParams: {
+    tab?: string;
+    status?: string;
+    busca?: string;
+    tipo_contr?: string;
+    status_periodo?: string;
+    mes?: string;
+    colab?: string;
+  };
 }) {
   const session = await requireSession();
   if (session.activeRole !== "administrador" && session.activeRole !== "rh") {
@@ -35,7 +47,7 @@ export default async function FeriasPage({
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
-  const tab: Tab = searchParams.tab === "solicitacoes" ? "solicitacoes" : "painel";
+  const tab: Tab = normalizarTab(searchParams.tab);
 
   const hojeISO = new Date().toISOString().slice(0, 10);
   const em30 = new Date();
@@ -153,8 +165,28 @@ export default async function FeriasPage({
           statusFiltro={normalizarStatus(searchParams.status)}
         />
       )}
+      {tab === "quadro" && (
+        <AbaQuadro
+          tenantId={tenantId}
+          busca={searchParams.busca ?? ""}
+          tipoContratacao={searchParams.tipo_contr ?? ""}
+          statusPeriodo={searchParams.status_periodo ?? ""}
+          colaboradorSelecionadoId={searchParams.colab}
+        />
+      )}
+      {tab === "calendario" && (
+        <AbaCalendario
+          tenantId={tenantId}
+          mesParam={searchParams.mes}
+        />
+      )}
     </div>
   );
+}
+
+function normalizarTab(t: string | undefined): Tab {
+  const vals: Tab[] = ["painel", "solicitacoes", "quadro", "calendario"];
+  return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
 }
 
 function normalizarStatus(s: string | undefined): FeriasLancamentoStatus | "todos" {
