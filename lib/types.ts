@@ -1797,6 +1797,43 @@ export function podeCancelarPP(s: PPStatus): boolean {
   return s === "gerada" || s === "em_avaliacao" || s === "rejeitada";
 }
 
+/** Os eventos de `pedidos_compra_eventos` (decisão 136) — o check da
+ *  tabela, na mesma ordem. */
+export type PPEventoTipo =
+  | "emitida"
+  | "urgente"
+  | "urgencia_retirada"
+  | "fora_do_cadastro"
+  | "enviada"
+  | "envio_desfeito"
+  | "rejeitada"
+  | "reenviada"
+  | "aprovada"
+  | "aprovacao_desfeita"
+  | "reprovada"
+  | "paga"
+  | "baixa_desfeita"
+  | "cancelada"
+  | "prestacao_enviada"
+  | "prestacao_reenviada"
+  | "prestacao_reprovada"
+  | "prestacao_aprovada";
+
+/**
+ * Um evento do histórico da PP (decisão 136): quem fez o quê e quando.
+ * Escrito só pelos gatilhos do banco; a aplicação lê. Montado por
+ * `lib/data/eventos-da-pp.ts`.
+ */
+export interface PPEvento {
+  evento: PPEventoTipo;
+  por_nome: string | null;
+  em: string;
+  /** Veio de uma coluna de data, sem hora (baixa anterior ao histórico):
+   *  a tela mostra só o dia. */
+  so_data: boolean;
+  motivo: string | null;
+}
+
 // ---------- Erratas: orçado próprio do job ----------
 
 /**

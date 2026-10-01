@@ -141,7 +141,10 @@ export function montarThreadChatPPs(
         ...(enviadaPorNome
           ? ([
               {
-                texto: "Emitida por",
+                // O valor é quem ENVIOU ao financeiro (com a emissão como
+                // reserva para a PP anterior ao envio separado); o rótulo
+                // dizia "Emitida por" (decisão 136).
+                texto: "Enviada por",
                 valor: enviadaPorNome,
                 tom: "texto",
               },

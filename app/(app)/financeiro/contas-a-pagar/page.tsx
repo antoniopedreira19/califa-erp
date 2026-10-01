@@ -4,6 +4,7 @@ import {
   devolucaoDaVerba,
   prestacaoDaVerba,
 } from "@/lib/data/prestacao-da-verba";
+import { SELECT_EVENTOS_DA_PP, eventosDaPP } from "@/lib/data/eventos-da-pp";
 import { situacaoDaVerba } from "@/lib/types";
 import { redirect } from "next/navigation";
 import { Wallet } from "lucide-react";
@@ -173,9 +174,11 @@ export default async function PedidosCompraFinanceiroPage({
         urgente_por_profile:profiles!urgente_por(nome),
         job:jobs(
           id, codigo, nome, regional_id,
+          responsavel:profiles!responsavel_id(nome),
           projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
         ),
         ${SELECT_PRESTACAO_DA_VERBA},
+        ${SELECT_EVENTOS_DA_PP},
         anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, created_at),
         parcelas:pedidos_compra_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
@@ -523,6 +526,7 @@ export default async function PedidosCompraFinanceiroPage({
     aprovada_em: string | null;
     prestacao: unknown;
     devolucao: unknown;
+    eventos: unknown;
     anexos_na_aprovacao: Array<{
       id: string;
       nome: string;
@@ -540,6 +544,7 @@ export default async function PedidosCompraFinanceiroPage({
       codigo: string;
       nome: string;
       regional_id: string | null;
+      responsavel: { nome: string } | null;
       projeto: {
         codigo: string;
         nome: string;
@@ -621,6 +626,9 @@ export default async function PedidosCompraFinanceiroPage({
     job_codigo: r.job?.codigo ?? "",
     job_nome: r.job?.nome ?? "",
     regional_id: r.job?.regional_id ?? null,
+    // Decisão 136: o GP responsável do job vai como referência nos pop-ups
+    // de aprovação — quem age é quem enviou, e qualquer GP envia.
+    job_responsavel_nome: r.job?.responsavel?.nome ?? null,
     projeto_codigo: r.job?.projeto?.codigo ?? null,
     projeto_nome: r.job?.projeto?.nome ?? null,
     cliente_nome: r.job?.projeto?.cliente?.nome_fantasia ?? null,
@@ -637,6 +645,9 @@ export default async function PedidosCompraFinanceiroPage({
     // Prestação da verba e estorno do saldo, no formato único (decisão 081).
     prestacao: prestacaoDaVerba(r.prestacao),
     devolucao: devolucaoDaVerba(r.devolucao),
+    // Histórico de eventos (decisão 136): rejeições, reenvios e quem fez
+    // cada um — as colunas acima guardam só o último de cada tipo.
+    eventos: eventosDaPP(r.eventos),
     // Ordenados aqui, como as parcelas e pelo mesmo motivo: o embed do
     // PostgREST não garante ordem, e a conferência de documentos numera
     // os anexos 1, 2, 3 — a numeração precisa ser a ordem em que a

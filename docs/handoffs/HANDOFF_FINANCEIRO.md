@@ -6431,3 +6431,19 @@ estendido a Contas a Receber em 31/08.**
   diz quem enviou para faturamento.
 - Migration `20261001400002` (colunas novas em `jobs` e `itens_bv`, coluna
   nova no fim da `vw_faturamento_pendente`). Ver decisão 136, §3.1.
+
+## ⚠️ Nota de 2026-10-01 (3) — histórico de eventos da PP e quem enviou cada uma (decisão 136, parte 3)
+
+- **Lista de PPs:** coluna nova "Enviada por" — nome, data e hora do último
+  envio, e o selo "Reenviada" quando a PP voltou depois de rejeitada. No
+  filtro "Prestações", quem enviou a prestação.
+- **Histórico da PP:** um evento por linha, com hora, vindo da tabela nova
+  `pedidos_compra_eventos` (escrita só por gatilho). A rejeição fica com a
+  justificativa e não some mais no reenvio.
+- **Aprovar PP** e **aprovar prestação:** faixa com quem enviou (ou
+  reenviou) e quando; embaixo, quem emitiu / o responsável pela verba e o GP
+  responsável do job.
+- `enviada_financeiro_em/por` continuam sendo o PRIMEIRO envio (o chat conta
+  o prazo por eles); o último sai de `ultimoEnvioDaPP`
+  (`lib/data/eventos-da-pp.ts`).
+- Migration `20261001400003`. Ver decisão 136, §3.2.

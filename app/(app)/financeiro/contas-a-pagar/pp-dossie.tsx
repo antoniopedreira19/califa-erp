@@ -38,6 +38,8 @@ import { useChatPPs } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
 import { abrirThreadPPs, marcarConversaPPsLida } from "./chat/actions";
 import type { ThreadPPsDoJob } from "@/lib/data/chat-pps-conversas";
+import { eventoPPMostraMotivo, rotuloDoEventoPP } from "@/lib/data/eventos-da-pp";
+import { formatDiaHoraCurtoBr } from "@/lib/formatar-data-hora";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -328,21 +330,12 @@ export function PPDossie({
  * anexado" é informação, e é diferente de "não registrado" — que é o que
  * as 8 PPs aprovadas antes desta data mostram, porque inventar a lista
  * atual para elas seria fabricar uma prova.
+ *
+ * Desde a decisão 136 (01/10/2026) as linhas vêm de
+ * `pedidos_compra_eventos`, com a hora e um registro por evento: antes
+ * eram as colunas da PP, uma por tipo, e o reenvio apagava a rejeição.
  */
 function Historico({ pp }: { pp: PPRow }) {
-  const linhas: Array<{ quando: string | null; o_que: string; quem: string | null }> = [
-    { quando: pp.created_at, o_que: "Emitida", quem: pp.emitida_por_nome },
-    {
-      quando: pp.enviada_financeiro_em,
-      o_que: "Enviada ao financeiro",
-      quem: pp.enviada_financeiro_por_nome,
-    },
-    { quando: pp.rejeitada_em, o_que: "Rejeitada", quem: pp.rejeitada_por_nome },
-    { quando: pp.aprovada_em, o_que: "Aprovada", quem: pp.aprovada_por_nome },
-    { quando: pp.pago_em, o_que: "Paga", quem: pp.pago_por_nome },
-    { quando: pp.cancelada_em, o_que: "Cancelada", quem: pp.cancelada_por_nome },
-  ].filter((l) => l.quando != null);
-
   const conferidos = pp.anexos_na_aprovacao;
 
   return (
@@ -351,14 +344,19 @@ function Historico({ pp }: { pp: PPRow }) {
         Histórico
       </p>
       <ul className="space-y-1.5">
-        {linhas.map((l) => (
-          <li key={l.o_que} className="flex gap-2 text-[11px] leading-snug">
+        {pp.eventos.map((e, i) => (
+          <li key={i} className="flex gap-2 text-[11px] leading-snug">
             <span className="flex-none font-mono text-muted-foreground">
-              {formatDate(l.quando)}
+              {formatDiaHoraCurtoBr(e.em, e.so_data)}
             </span>
             <span className="min-w-0">
-              <span className="font-semibold">{l.o_que}</span>
-              {l.quem ? <span className="text-muted-foreground"> · {l.quem}</span> : null}
+              <span className="font-semibold">{rotuloDoEventoPP(e.evento)}</span>
+              {e.por_nome ? <span className="text-muted-foreground"> · {e.por_nome}</span> : null}
+              {e.motivo && eventoPPMostraMotivo(e.evento) ? (
+                <span className="mt-0.5 block break-words text-muted-foreground">
+                  “{e.motivo}”
+                </span>
+              ) : null}
             </span>
           </li>
         ))}

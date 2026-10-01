@@ -21,6 +21,8 @@ import {
 import { DatePicker } from "@/components/ui/date-picker";
 import { formatCurrency } from "@/lib/utils";
 import { aprovarPrestacaoVerba } from "./prestacao-verba-actions";
+import { FaixaQuemEnviou } from "./faixa-quem-enviou";
+import type { EnvioDaPP } from "@/lib/data/eventos-da-pp";
 
 export interface PrestacaoParaAprovar {
   /** Id da PP de verba. */
@@ -32,6 +34,11 @@ export interface PrestacaoParaAprovar {
   documentos: number;
   /** Nome do tipo do plano de contas da PP — o do estorno. */
   centroDeCusto: string;
+  /** Decisão 136: o último envio da prestação. Quem presta contas é o
+   *  responsável pela verba, qualquer GP ou um administrador. */
+  envio: EnvioDaPP | null;
+  responsavelVerbaNome: string | null;
+  gpResponsavelNome: string | null;
 }
 
 function formatDate(iso: string): string {
@@ -106,6 +113,15 @@ export function AprovarPrestacaoDialog({
               </>
             )}
           </DialogDescription>
+          {alvo.envio && (
+            <FaixaQuemEnviou
+              className="mt-2"
+              rotulo={alvo.envio.reenviada ? "Prestação reenviada por" : "Prestação enviada por"}
+              nome={alvo.envio.por_nome}
+              em={alvo.envio.em}
+              referencia={`Responsável pela verba: ${alvo.responsavelVerbaNome ?? "—"} · GP responsável do job: ${alvo.gpResponsavelNome ?? "—"}`}
+            />
+          )}
         </DialogHeader>
 
         <div className="space-y-4">

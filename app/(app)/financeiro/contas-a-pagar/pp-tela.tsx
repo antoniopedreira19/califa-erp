@@ -58,6 +58,7 @@ import type { PPRow } from "./pedidos-compra-list";
 import { PPDossie, type AbaDossie } from "./pp-dossie";
 import { AprovarPPDialog } from "./aprovar-pp-dialog";
 import { AprovarPrestacaoDialog } from "./aprovar-prestacao-dialog";
+import { ultimoEnvioDaPP, ultimoEnvioDaPrestacao } from "@/lib/data/eventos-da-pp";
 import {
   reprovarPrestacaoVerba,
   signedUrlAnexoPrestacao,
@@ -570,6 +571,9 @@ export function PPTela({
           vencimentoOriginal: pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento,
           parcelas: Math.max(pp.parcelas.length, 1),
           pagamentoForaDoCadastro: pp.pagamento_fora_do_cadastro,
+          envio: ultimoEnvioDaPP(pp.eventos),
+          emitidaPorNome: pp.emitida_por_nome,
+          gpResponsavelNome: pp.job_responsavel_nome,
         }}
         cartoes={cartoes}
         tipos={tipos}
@@ -636,6 +640,15 @@ export function PPTela({
                 centroDeCusto:
                   tipos.find((t) => t.id === pp.plano_conta_tipo_id)?.nome ??
                   "Custo Operacional",
+                // Sem evento (prestação anterior ao histórico), a coluna
+                // da prestação ainda diz quem fechou e quando.
+                envio: ultimoEnvioDaPrestacao(pp.eventos) ?? {
+                  por_nome: pp.prestacao.enviada_por_nome,
+                  em: pp.prestacao.enviada_em,
+                  reenviada: false,
+                },
+                responsavelVerbaNome: pp.responsavel_nome,
+                gpResponsavelNome: pp.job_responsavel_nome,
               }
             : null
         }
