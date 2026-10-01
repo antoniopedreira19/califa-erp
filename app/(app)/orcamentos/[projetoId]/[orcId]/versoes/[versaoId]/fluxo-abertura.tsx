@@ -77,11 +77,9 @@ interface Props {
 
   qtdGrupos: number;
   qtdItens: number;
-  /** Itens com total orçado > 0 — linha começada e vazia não conta. */
+  /** Itens com total orçado > 0 — linha começada e vazia não conta. Item
+   *  com orçado zerado não bloqueia (revisão da decisão 011, 01/10/2026). */
   qtdItensComValor: number;
-  /** Itens com R$ unitário orçado = 0 — qualquer um bloqueia a aprovação
-   *  (docs/decisions/011); planejado zerado não bloqueia. */
-  qtdItensOrcadoZerado: number;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
   /** Câmbio da versão internacional — aprovar exige todos os campos
@@ -156,7 +154,6 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   qtdItensComValor,
-  qtdItensOrcadoZerado,
   percentualImposto,
   cambioInternacional,
   mesesSemItens,
@@ -200,7 +197,6 @@ export function FluxoAbertura({
     cambioInternacional,
     qtdItens,
     qtdItensComValor,
-    qtdItensOrcadoZerado,
     mesesSemItens,
   });
   const aprovada = versaoStatus === "aprovada";

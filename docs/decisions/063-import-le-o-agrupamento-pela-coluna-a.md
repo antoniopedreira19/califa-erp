@@ -106,6 +106,12 @@ As duas coisas convivem, e é de propósito:
 
 O import é o rascunho; a aprovação é a trava.
 
+⚠️ **Revogado em 2026-10-01** (revisão da decisão 011): a aprovação passou
+a aceitar item de R$ 0,00 — é o item da casa, mostrado ao cliente sem
+cobrança —, e o Salvar em lote já aceitava desde 28/09. A tabela acima é o
+registro de 08/09. Só a versão com **todos** os itens zerados continua
+sem aprovar.
+
 ## Verificado
 
 Parse do modelo, por linha de comando e no navegador (dev server, sessão
