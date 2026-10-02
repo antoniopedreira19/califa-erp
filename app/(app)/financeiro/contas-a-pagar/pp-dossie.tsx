@@ -11,6 +11,14 @@
  * Duas abas dividem o mesmo espaço — **Dados** e **Chat** — para o fio do
  * job não pedir largura nova, que é justamente o que faltava aos
  * documentos. A coluna inteira recolhe; quem recolhe é a tela.
+ *
+ * Módulo fiscal (02/10/2026), duas coisas novas na aba Dados — o resto da
+ * coluna não muda:
+ *  • no grupo "Fornecedor", embaixo do nome, o regime tributário do
+ *    cadastro do fornecedor;
+ *  • o grupo "Nota fiscal do fornecedor", logo depois de "Anexos": o
+ *    número que a produção informou no anexo, e a data de emissão, o valor
+ *    e o CNPJ tomador, que o financeiro registra conferindo a nota ao lado.
  */
 
 import * as React from "react";
@@ -29,7 +37,24 @@ import {
   nomeContraparteBRPP,
   ppStatusLabel,
   situacaoDaVerba,
+  type FiscalEstabelecimento,
 } from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
+import { MoneyInput } from "@/components/ui/money-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { formatarCnpj } from "@/lib/fiscal/cadastro";
+import {
+  nfIncompleta,
+  textoDoRegime,
+  type NfEmConferencia,
+} from "@/lib/fiscal/nf-da-pp";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { qualJanela } from "@/lib/calculos/janelas-pagamento";
@@ -70,6 +95,9 @@ export function PPDossie({
   anexoAtivo,
   onAnexo,
   onErro,
+  nf,
+  onNf,
+  estabelecimentos,
 }: {
   pp: PPRow;
   aba: AbaDossie;
@@ -78,6 +106,12 @@ export function PPDossie({
   anexoAtivo: number;
   onAnexo: (i: number) => void;
   onErro: (mensagem: string) => void;
+  /** Módulo fiscal: a NF em conferência (a tela guarda; aqui se edita).
+   *  Null quando a PP não tem NF anexada. */
+  nf: NfEmConferencia | null;
+  onNf: (nf: NfEmConferencia) => void;
+  /** Os CNPJs do cadastro de impostos — o CNPJ tomador da NF. */
+  estabelecimentos: FiscalEstabelecimento[];
 }) {
   const { conversas, zerarNaoLidas, recarregar, podeEnviar } = useChatPPs();
   const [thread, setThread] = React.useState<ThreadPPsDoJob | null>(null);
@@ -157,6 +191,14 @@ export function PPDossie({
                 responsavel: pp.responsavel_nome ? { nome: pp.responsavel_nome } : null,
               })}
             </p>
+            {/* Módulo fiscal: o regime tributário, como o cadastro guarda.
+                Discreto — é referência para a retenção, que se decide na
+                aprovação. Sem regime informado, nada. */}
+            {pp.regime_do_fornecedor && (
+              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                {textoDoRegime(pp.regime_do_fornecedor)}
+              </p>
+            )}
             {pp.cadastro_do_fornecedor_mudou && (
               <p className="mt-1 text-[11px] text-amber-800">
                 * O cadastro do fornecedor mudou depois que esta PP tirou a foto dos
@@ -302,6 +344,14 @@ export function PPDossie({
             )}
           </Grupo>
           )}
+
+          {/* Módulo fiscal: a NF do fornecedor, conferida aqui, ao lado da nota. */}
+          <NotaFiscalDoFornecedor
+            pp={pp}
+            nf={nf}
+            onNf={onNf}
+            estabelecimentos={estabelecimentos}
+          />
 
           <Historico pp={pp} />
 
@@ -666,6 +716,204 @@ function Prestacao({
         </div>
       )}
     </section>
+  );
+}
+
+/** A data do calendário em "AAAA-MM-DD", no dia local escolhido. */
+function isoDoDia(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Módulo fiscal: a nota fiscal do fornecedor (02/10/2026).
+ *
+ * O número vem do anexo do tipo NF, que a produção preenche ao gerar a PP.
+ * A data de emissão, o valor e o CNPJ tomador, quem registra é o
+ * financeiro, aqui, olhando a nota no painel do meio — decisão do Tiago: a
+ * produção continua informando só o número. A data de emissão decide o mês
+ * do crédito de PIS/COFINS; o valor é a base das retenções do pop-up de
+ * aprovação. Tudo grava junto com a aprovação (`aprovarPPComNotaFiscal`).
+ *
+ * Editável só em avaliação. Nos outros status, o que ficou registrado — e
+ * nada na PP que saiu da avaliação sem registro (aprovada antes do módulo
+ * fiscal). Grade de 2 × 2 nos 310 px da coluna: a coluna da esquerda
+ * (número e valor) é a estreita; a da direita (data e CNPJ), a que precisa
+ * de largura.
+ */
+function NotaFiscalDoFornecedor({
+  pp,
+  nf,
+  onNf,
+  estabelecimentos,
+}: {
+  pp: PPRow;
+  nf: NfEmConferencia | null;
+  onNf: (nf: NfEmConferencia) => void;
+  estabelecimentos: FiscalEstabelecimento[];
+}) {
+  const registro = pp.nota_fiscal;
+  if (!registro) return null;
+
+  const editavel = pp.status === "em_avaliacao" && nf !== null;
+  let atual: NfEmConferencia;
+  if (editavel && nf) {
+    atual = nf;
+  } else if (registro.registrada) {
+    atual = {
+      numero: registro.registrada.numero,
+      emissao: registro.registrada.data_emissao,
+      valor: registro.registrada.valor,
+      tomador: registro.registrada.tomador_estabelecimento_id,
+    };
+  } else {
+    return null;
+  }
+
+  // A data e o valor são do financeiro: enquanto faltarem, a aprovação não
+  // tem base de retenção nem mês de crédito.
+  const falta = editavel && nfIncompleta(atual);
+  const difereDaPP = atual.valor > 0 && Math.abs(atual.valor - pp.valor) > 0.004;
+  // O CNPJ é o que se confere com a nota; o nome fica na lista.
+  const cnpjDoTomador = (id: string) => {
+    const e = estabelecimentos.find((x) => x.id === id);
+    return e ? formatarCnpj(e.cnpj) : "—";
+  };
+  const ativos = estabelecimentos.filter((e) => e.ativo && e.cnpj);
+
+  return (
+    <div>
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        Nota fiscal do fornecedor
+      </p>
+
+      {editavel && nf ? (
+        <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-2 gap-y-2">
+          <CampoDaNF rotulo="Número" htmlFor="pp-nf-numero">
+            <Input
+              id="pp-nf-numero"
+              value={nf.numero}
+              onChange={(e) => onNf({ ...nf, numero: e.target.value })}
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={20}
+              className="h-8 px-2 py-1 font-mono text-xs"
+            />
+          </CampoDaNF>
+          <CampoDaNF rotulo="Data de emissão" htmlFor="pp-nf-emissao">
+            {/* O DatePicker só lê o valor quando monta: a aba Dados remonta
+                com o que está na conferência, e a tela zera a conferência
+                ao fechar. */}
+            <DatePicker
+              key={pp.id}
+              id="pp-nf-emissao"
+              name="pp_nf_emissao"
+              defaultValue={nf.emissao || undefined}
+              placeholder="Selecione"
+              onDateChange={(d) => onNf({ ...nf, emissao: d ? isoDoDia(d) : "" })}
+              className="h-8 px-2 text-xs"
+            />
+          </CampoDaNF>
+          <CampoDaNF rotulo="Valor da NF" htmlFor="pp-nf-valor">
+            <MoneyInput
+              id="pp-nf-valor"
+              value={nf.valor}
+              onValueChange={(v) => onNf({ ...nf, valor: v })}
+              aria-label="Valor da NF"
+              className="h-8 px-2 text-[11.5px]"
+            />
+          </CampoDaNF>
+          <CampoDaNF rotulo="CNPJ tomador" htmlFor="pp-nf-tomador">
+            <Select
+              value={nf.tomador || undefined}
+              onValueChange={(v) => onNf({ ...nf, tomador: v })}
+            >
+              <SelectTrigger
+                id="pp-nf-tomador"
+                aria-label="CNPJ tomador"
+                className="h-8 px-2 font-mono text-[11px]"
+              >
+                <SelectValue placeholder="Selecione">{cnpjDoTomador(nf.tomador)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {ativos.map((e) => (
+                  <SelectItem key={e.id} value={e.id} className="text-xs">
+                    {e.nome} · <span className="font-mono">{formatarCnpj(e.cnpj)}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CampoDaNF>
+        </div>
+      ) : (
+        <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-2 gap-y-1.5">
+          <LeituraDaNF
+            rotulo="Número"
+            valor={<span className="font-mono">{atual.numero || "—"}</span>}
+          />
+          <LeituraDaNF rotulo="Data de emissão" valor={formatDate(atual.emissao || null)} />
+          <LeituraDaNF
+            rotulo="Valor da NF"
+            valor={<span className="font-mono">{formatCurrency(atual.valor, "BRL")}</span>}
+          />
+          <LeituraDaNF
+            rotulo="CNPJ tomador"
+            valor={<span className="font-mono">{cnpjDoTomador(atual.tomador)}</span>}
+          />
+        </dl>
+      )}
+
+      {falta ? (
+        <p className="mt-2 text-[11px] font-semibold leading-snug text-amber-800">
+          Preencha a data de emissão e o valor com os da nota ao lado.
+        </p>
+      ) : (
+        !editavel && (
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+            Registrado pelo financeiro na aprovação.
+          </p>
+        )
+      )}
+      {difereDaPP && (
+        <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-800">
+          A NF é de {formatCurrency(atual.valor, "BRL")}; a PP, de{" "}
+          {formatCurrency(pp.valor, "BRL")}.
+        </p>
+      )}
+      {editavel && (
+        <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground text-pretty">
+          O número vem do anexo da produção. A data de emissão define o mês do crédito de
+          PIS/COFINS; o valor é a base das retenções.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CampoDaNF({
+  rotulo,
+  htmlFor,
+  children,
+}: {
+  rotulo: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <label htmlFor={htmlFor} className="block text-[11px] font-medium text-muted-foreground">
+        {rotulo}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function LeituraDaNF({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] text-muted-foreground">{rotulo}</dt>
+      <dd className="truncate text-[12.5px] font-semibold">{valor}</dd>
+    </div>
   );
 }
 
