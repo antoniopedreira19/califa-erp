@@ -6471,3 +6471,54 @@ estendido a Contas a Receber em 31/08.**
 - Remessa de verdade com a PP fora do cadastro ainda não foi gerada; a troca
   tem teste (`npm run test:cnab-fora`). PP de teste: PP-00102 (TES-1001/26),
   aprovada e a pagar.
+
+## ⚠️ Nota de 2026-10-02 — baixa em lote e a aba Títulos na conciliação (decisão 140)
+
+- **Títulos a Pagar e Títulos a Receber:** coluna de seleção, barra escura
+  ("N títulos selecionados · Saem/Entram R$ X") e o diálogo "Dar baixa em N
+  títulos" (`components/financeiro/baixa-em-lote.tsx`). Uma data, uma conta e
+  uma forma para todos; cada título é baixado pela Server Action de sempre
+  (`app/(app)/financeiro/actions-baixa-em-lote.ts`), pelo valor em aberto.
+- Fora do lote, com o motivo na caixa: folha, fatura, devolução de verba,
+  previsto no cartão, PP fora do cadastro (137), **desembolso** (o tipo dele
+  se escolhe na baixa), rendimento e transferência. O servidor recusa as
+  origens fora da lista (`ORIGENS_PAGAR_NO_LOTE` / `ORIGENS_RECEBER_NO_LOTE`).
+- **Conciliação de uma conta:** abas Extrato | Títulos (`&aba=titulos`). A
+  aba Títulos é igual para qualquer conta; "Baixar" e o lote abrem com a
+  conta da conciliação escolhida (`contaInicial` / `contaPadrao`).
+- As consultas de Contas a Pagar e a Receber moraram nas páginas até hoje;
+  agora estão em `contas-a-pagar/dados-dos-titulos.ts` e
+  `contas-a-receber/dados-dos-titulos.ts`, usadas também pela aba.
+  `conciliacao/alvos-da-baixa.ts` repete a regra de quem entra no lote —
+  mudou numa lista, muda lá.
+- Testado no TES-P001/26 (NF 1, parcelas 1/2 e 2/2) com a Conta Teste: lote
+  pela lista, baixa e lote pela aba, cancelamento pelo olho.
+
+## ⚠️ Nota de 2026-10-02 (2) — módulo fiscal, entrega 1: cadastro de impostos, Faturar, envio, aprovação da PP e fornecedor (decisão 139)
+
+- **Banco:** `fiscal_regimes`, `fiscal_estabelecimentos`, `fiscal_cnaes`,
+  `fiscal_feriados`, `fiscal_parametros` (carregadas com a planilha de
+  impostos), `pedidos_compra_retencoes`; colunas novas em `faturamentos`
+  (`estabelecimento_id`, `fiscal_cnae_id`), `pedidos_compra` (`nf_*`,
+  `credito_pis_cofins_*`) e `fornecedores` (`regime_tributario` e
+  companhia). Funções `registrar_nf_da_pp` e `registrar_fiscal_da_nota`
+  (admin/financeiro). Leitura do cadastro: `lib/fiscal/cadastro.ts`;
+  cálculos e datas: `lib/fiscal/calculos.ts` e `lib/fiscal/datas.ts`.
+- **Faturar:** "Empresa (gerencial)" + **CNPJ emissor** + Nº NF por CNPJ +
+  CNAE em lista do CNPJ + "Impostos desta nota". A emissão faz duas
+  chamadas: `emitir_faturamento` e depois `registrar_fiscal_da_nota` — se a
+  segunda falhar, a nota já saiu e o formulário só deixa fechar.
+- **Envio para faturamento:** CNAE sugerido vira lista (grava o texto com o
+  subitem em `cnae_sugerido`).
+- **Aprovação da PP:** a NF do fornecedor (data, valor, CNPJ tomador) é
+  registrada pelo financeiro na coluna "Dados da PP"; o pop-up ganhou
+  Retenções na fonte e Crédito de PIS/COFINS. `aprovarPPComData` recusa PP
+  com anexo de tipo NF sem a NF registrada.
+- **Baixa:** a parcela de PP abre com as alíquotas da aprovação
+  (`lerRetencaoDaAprovacao`).
+- **Cuidados:** os 38 fornecedores estão sem regime (retenção abre ligada
+  para todos); a remessa CNAB continua pagando o bruto; o modal
+  `cancelar-faturamento-modal.tsx` não está ligado a nenhuma tela (a NF de
+  teste TESTE-139 foi cancelada pela action, no console).
+- Testado no TES-P001/26: NF TESTE-139 (emitida e cancelada), PP-00110
+  aprovada com NF 602 e retenções (deixada A pagar, para a demonstração).
