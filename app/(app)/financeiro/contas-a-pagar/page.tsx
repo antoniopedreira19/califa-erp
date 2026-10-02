@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
 import { COLUNAS_DE_PAGAMENTO } from "@/lib/data/foto-pagamento-da-pp";
+import { carregarFiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
 import { ChatPPsProvider } from "./chat/chat-pps-provider";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
@@ -403,6 +404,16 @@ export default async function PedidosCompraFinanceiroPage({
   // mora em `dados-dos-titulos.ts` desde 02/10/2026, junto com a montagem
   // dos títulos, que parte dele.
   const rows: PPRow[] = mapearPPsDoFinanceiro(data, fornecedoresRes.data);
+
+  // As PPs em avaliação com NF anexada abrem as seções novas da aprovação
+  // (módulo fiscal). O que elas leem — cadastro de impostos, notas de
+  // saída dos jobs, última retenção do fornecedor — sai agora e corre
+  // junto das leituras do cartão abaixo; a página só espera no fim.
+  const fiscalDaAprovacaoPromise = carregarFiscalDaAprovacaoPP(
+    supabase,
+    session.activeTenant.id,
+    rows.filter((r) => r.status === "em_avaliacao" && r.nota_fiscal !== null),
+  );
 
   // As alíquotas da última retenção de cada fornecedor, para o "Repetir
   // as alíquotas" da baixa (decisão 125, D6 2a).
@@ -962,6 +973,9 @@ export default async function PedidosCompraFinanceiroPage({
 
   const canGerarRemessa = pode(session.activeRole, "financeiro.contas_pagar");
 
+  // Disparada junto das linhas das PPs (ver acima); nunca rejeita.
+  const fiscalDaAprovacao = await fiscalDaAprovacaoPromise;
+
   return (
     <div className="space-y-8">
       <BotaoVoltar reserva="/financeiro" />
@@ -988,6 +1002,7 @@ export default async function PedidosCompraFinanceiroPage({
               cartoes={cartoesList}
               tipos={tiposRes.data ?? []}
               subtipos={subtiposRes.data ?? []}
+              fiscal={fiscalDaAprovacao}
             />
           }
           ppsPendentesCount={ppsPendentesCountRes.count ?? 0}

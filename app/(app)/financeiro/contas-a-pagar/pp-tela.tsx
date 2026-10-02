@@ -23,6 +23,11 @@
  * decoração — o modal põe `pointer-events: none` no `<body>` e devolve
  * `auto` só ao layer dele. E o `z` é explícito: 55 aqui, 60 nos diálogos
  * que esta tela abre. Ver `components/ui/dialog.tsx`.
+ *
+ * Módulo fiscal (02/10/2026): o desenho não muda. A tela passa a guardar a
+ * NF do fornecedor em conferência — a coluna "Dados da PP" edita, ao lado
+ * da nota, e o pop-up de aprovação usa (base das retenções e mês do
+ * crédito de PIS/COFINS).
  */
 
 import * as React from "react";
@@ -54,6 +59,8 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { ppStatusLabel, situacaoDaVerba, type PPStatus } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
+import { nfInicial, SEM_NOTAS_DO_JOB, type NfEmConferencia } from "@/lib/fiscal/nf-da-pp";
 import type { PPRow } from "./pedidos-compra-list";
 import { PPDossie, type AbaDossie } from "./pp-dossie";
 import { AprovarPPDialog } from "./aprovar-pp-dialog";
@@ -111,6 +118,7 @@ export function PPTela({
   cartoes,
   tipos,
   subtipos,
+  fiscal,
 }: {
   pp: PPRow | null;
   open: boolean;
@@ -119,6 +127,8 @@ export function PPTela({
   cartoes: CartaoOption[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
+  /** Módulo fiscal: cadastro de impostos, notas dos jobs e últimas retenções. */
+  fiscal: FiscalDaAprovacaoPP;
 }) {
   const router = useRouter();
   const [urlPdf, setUrlPdf] = React.useState<string | null>(null);
@@ -141,6 +151,14 @@ export function PPTela({
   const [askReprovarPP, setAskReprovarPP] = React.useState(false);
   const [motivoPP, setMotivoPP] = React.useState("");
   const [pending, startTransition] = React.useTransition();
+  // Módulo fiscal: a NF do fornecedor em conferência. Mora aqui, e não no
+  // dossiê nem no pop-up, porque os dois a usam: o dossiê edita, ao lado
+  // da nota; o pop-up tira dela a base das retenções e o mês do crédito.
+  // Enquanto ninguém editou vale o que está na PP (o registrado, ou o
+  // número do anexo); o `ppId` impede que a NF de uma PP apareça na outra.
+  const [nfEditada, setNfEditada] = React.useState<
+    (NfEmConferencia & { ppId: string }) | null
+  >(null);
 
   const ppId = pp?.id ?? null;
   // Na verba com prestação, o painel do meio mostra os documentos da
@@ -160,6 +178,14 @@ export function PPTela({
     setErro(null);
     setMotivo("");
   }, [open, ppId]);
+
+  // Fechar a tela descarta a NF que não foi aprovada: a próxima abertura
+  // volta ao que está na PP. Zera ao FECHAR, e não ao abrir, porque o
+  // DatePicker da emissão só lê o valor quando monta — zerado depois de
+  // abrir, ele ficaria com a data da abertura anterior.
+  React.useEffect(() => {
+    if (!open) setNfEditada(null);
+  }, [open]);
 
   React.useEffect(() => {
     if (!toast) return;
@@ -220,6 +246,16 @@ export function PPTela({
     pp.verba_producao && pp.prestacao?.status === "em_avaliacao";
   const anexoEhImagem =
     anexo != null && /\.(png|jpe?g|webp|gif)$/i.test(anexo.arquivo_nome_original);
+  // Módulo fiscal: a NF desta PP como está na conferência (null = a PP não
+  // tem NF anexada, ou é verba de produção).
+  const nfDaTela: NfEmConferencia | null = !pp.nota_fiscal
+    ? null
+    : nfEditada && nfEditada.ppId === pp.id
+      ? nfEditada
+      : nfInicial(
+          pp.nota_fiscal,
+          fiscal.tomadorPadraoPorEmpresa[pp.empresa_id] ?? fiscal.tomadorPadraoGeral,
+        );
 
   function handleAprovada(mensagem: string) {
     setAprovarAberto(false);
@@ -462,6 +498,9 @@ export function PPTela({
                     anexoAtivo={anexoAtivo}
                     onAnexo={setAnexoAtivo}
                     onErro={setErro}
+                    nf={nfDaTela}
+                    onNf={(x) => setNfEditada({ ...x, ppId: pp.id })}
+                    estabelecimentos={fiscal.cadastro.estabelecimentos}
                   />
                 </div>
               ) : (
@@ -574,7 +613,14 @@ export function PPTela({
           envio: ultimoEnvioDaPP(pp.eventos),
           emitidaPorNome: pp.emitida_por_nome,
           gpResponsavelNome: pp.job_responsavel_nome,
+          // Módulo fiscal: o que as retenções e o crédito precisam.
+          fornecedorNome: pp.fornecedor_nome,
+          regimeDoFornecedor: pp.regime_do_fornecedor?.regime ?? null,
+          nf: nfDaTela,
+          notasDoJob: fiscal.notasDosJobs[pp.job_id] ?? SEM_NOTAS_DO_JOB,
+          ultimaRetencao: fiscal.ultimasRetencoes[pp.fornecedor_id] ?? null,
         }}
+        cadastro={fiscal.cadastro}
         cartoes={cartoes}
         tipos={tipos}
         subtipos={subtipos}

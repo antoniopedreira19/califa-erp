@@ -13,7 +13,8 @@
  */
 
 import { situacaoDaVerba } from "@/lib/types";
-import type { FormaPagamento, PlanoContaTipo, PPStatus } from "@/lib/types";
+import type { DocumentoTipo, FormaPagamento, PlanoContaTipo, PPStatus } from "@/lib/types";
+import { notaFiscalDaLinhaPP, regimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
 import {
   SELECT_PRESTACAO_DA_VERBA,
   devolucaoDaVerba,
@@ -61,7 +62,12 @@ export const SELECT_PP_DO_FINANCEIRO = `
         urgente, urgente_justificativa, urgente_em,
         forma_pagamento, cartao_credito_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
-        fornecedor:fornecedores(id, nome, razao_social),
+        nf_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id,
+        nf_registrada_em, credito_pis_cofins_retirado, credito_pis_cofins_motivo,
+        fornecedor:fornecedores(
+          id, nome, razao_social,
+          regime_tributario, regime_consultado_em, declaracao_simples_recebida
+        ),
         responsavel:profiles!responsavel_verba_id(id, nome),
         empresa:empresas(id, razao_social, nome_fantasia),
         cancelada_por_profile:profiles!cancelada_por(nome),
@@ -78,7 +84,10 @@ export const SELECT_PP_DO_FINANCEIRO = `
         ),
         ${SELECT_PRESTACAO_DA_VERBA},
         ${SELECT_EVENTOS_DA_PP},
-        anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, created_at),
+        anexos:pedidos_compra_anexos(
+          id, arquivo_nome_original, arquivo_tamanho_bytes, created_at,
+          documento_tipo, documento_numero
+        ),
         parcelas:pedidos_compra_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
           valor, pago_em, fatura_cartao_id
@@ -221,7 +230,21 @@ export function mapearPPsDoFinanceiro(
     cartao_credito_id: string | null;
     plano_conta_tipo_id: string | null;
     plano_conta_subtipo_id: string | null;
-    fornecedor: { id: string; nome: string; razao_social: string | null } | null;
+    nf_numero: string | null;
+    nf_data_emissao: string | null;
+    nf_valor: string | number | null;
+    nf_tomador_estabelecimento_id: string | null;
+    nf_registrada_em: string | null;
+    credito_pis_cofins_retirado: boolean | null;
+    credito_pis_cofins_motivo: string | null;
+    fornecedor: {
+      id: string;
+      nome: string;
+      razao_social: string | null;
+      regime_tributario: string | null;
+      regime_consultado_em: string | null;
+      declaracao_simples_recebida: boolean | null;
+    } | null;
     responsavel: { id: string; nome: string } | null;
     empresa: { id: string; razao_social: string; nome_fantasia: string | null } | null;
     cancelada_por_profile: { nome: string } | null;
@@ -261,6 +284,8 @@ export function mapearPPsDoFinanceiro(
       arquivo_nome_original: string;
       arquivo_tamanho_bytes: number;
       created_at: string;
+      documento_tipo: DocumentoTipo | null;
+      documento_numero: string | null;
     }>;
     parcelas: Array<{
       id: string;
@@ -380,6 +405,12 @@ export function mapearPPsDoFinanceiro(
         fatura_cartao_id: p.fatura_cartao_id ?? null,
       }))
       .sort((a, b) => a.numero - b.numero),
+    // Módulo fiscal (02/10/2026): o regime do cadastro do fornecedor, que
+    // a coluna "Dados da PP" mostra e a retenção usa, e a NF do fornecedor
+    // — o número do anexo do tipo NF e o que o financeiro registrou na
+    // aprovação. Null fora da PP com NF anexada (verba, recibo, boleto).
+    regime_do_fornecedor: regimeDoFornecedorDaPP(r.verba_producao ?? false, r.fornecedor),
+    nota_fiscal: notaFiscalDaLinhaPP(r),
   }));
 }
 
