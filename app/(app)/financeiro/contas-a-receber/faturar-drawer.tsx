@@ -86,6 +86,7 @@ import {
 } from "@/lib/fiscal/cadastro";
 import { codigoDoCnae, rotuloDoCnae } from "@/lib/fiscal/calculos";
 import {
+  avisoDaApuracao,
   cnaesQueBatemComASugestao,
   diaDoPisCofins,
   rotuloDoEstabelecimento,
@@ -104,7 +105,12 @@ type Parcela = { valor: number; data_vencimento: string };
 interface Props {
   state: DrawerState;
   onClose: () => void;
-  onEmitida: (mensagem: string) => void;
+  /**
+   * A nota saiu. `mensagem`: a NF, o CNPJ emissor, o valor e o job.
+   * `apuracao`: em que Apuração os impostos dela entraram (módulo fiscal);
+   * nulo quando o registro fiscal da nota falhou.
+   */
+  onEmitida: (mensagem: string, apuracao: string | null) => void;
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
   empresas: Array<{ id: string; nome: string }>;
@@ -391,7 +397,7 @@ export function FaturarDrawer({
     mensagem: string;
   } | null>(null);
   function fechar() {
-    if (emitidaComAviso) onEmitida(emitidaComAviso.mensagem);
+    if (emitidaComAviso) onEmitida(emitidaComAviso.mensagem, null);
     else onClose();
   }
 
@@ -790,13 +796,27 @@ export function FaturarDrawer({
           ? ` · ${parciais.length} saldo(s) remanescente(s) de volta em Faturamento`
           : "";
 
-      const mensagem = `NF ${numeroNf.trim()} emitida · ${formatMoney(totalNf)}${detalhe}${sobra}`;
+      const resumo = `${formatMoney(totalNf)}${detalhe}${sobra}`;
       router.refresh();
       if (res.avisoFiscal) {
-        setEmitidaComAviso({ aviso: res.avisoFiscal, mensagem });
+        // Sem o registro fiscal a nota não guarda o CNPJ emissor e fica fora
+        // da Apuração: o aviso de antes, sem o CNPJ e sem a segunda linha.
+        setEmitidaComAviso({ aviso: res.avisoFiscal, mensagem: `NF ${numeroNf.trim()} emitida · ${resumo}` });
         return;
       }
-      onEmitida(mensagem);
+      // Módulo fiscal (protótipo aprovado): o aviso diz o CNPJ emissor e, na
+      // segunda linha, em que Apuração os impostos da nota entraram — ou que
+      // a guia já aprovada da competência passa a mostrar a diferença.
+      onEmitida(
+        `NF ${numeroNf.trim()} emitida pela ${estabEscolhido.nome} · ${resumo}`,
+        res.apuracao && estabDoCalculo
+          ? avisoDaApuracao({
+              emissao: dataEmissao,
+              presumido: estabDoCalculo.regime === "lucro_presumido",
+              apuracao: res.apuracao,
+            })
+          : null,
+      );
     });
   }
 
