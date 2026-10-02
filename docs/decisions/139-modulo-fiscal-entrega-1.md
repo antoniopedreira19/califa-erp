@@ -30,6 +30,7 @@ de hoje, cada nota e cada PP já entrem com o dado que a Apuração vai usar.
 | Envio para faturamento | **CNAE sugerido em lista**, na mesma linha do CNPJ, do valor e do vencimento: o campo mostra o código com o subitem ("82.30-0-01 · 12.08") e a lista abre larga, com a atividade. |
 | Aprovação da PP | Na coluna "Dados da PP": o **regime do fornecedor** e o grupo **Nota fiscal do fornecedor** (número do anexo de tipo NF; data de emissão, valor e CNPJ tomador **registrados pelo financeiro**). No pop-up: **Retenções na fonte** (com DARF 5952/1708 e vencimento) e **Crédito de PIS/COFINS**. A Server Action grava a NF (`registrar_nf_da_pp`) e só então aprova; o servidor recusa aprovar PP com anexo de NF sem a NF registrada. |
 | Baixa da PP | As retenções decididas na aprovação já chegam preenchidas (editáveis), com "Retenções informadas na aprovação da PP (dd/mm/aaaa)". A baixa em lote aplica as mesmas (decisão 140). |
+| Títulos a Pagar e aba Títulos | A parcela de PP com NF registrada mostra **"NF 602"** embaixo do título (o `nf_numero` da aprovação); no diálogo da baixa em lote e na aba Títulos da conciliação, a referência vira **"PP-00110 · NF 602"** (com mais de uma parcela, a parcela vem depois: "PP-00110 · NF 602 · 1/2"). |
 | Fornecedor | **Regime tributário** (Normal / Simples / MEI) pela consulta do CNPJ, com a declaração do Simples (só a caixa; o arquivo fica para depois). |
 
 ## 3. Regras (todas aprovadas pelo Tiago)
