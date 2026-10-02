@@ -12,9 +12,9 @@
  * Apuração os impostos da nota entraram.
  */
 import type { FiscalCnae, FiscalEstabelecimento, RegimeTributarioPJ } from "@/lib/types";
-import { formatarCnpj, type CadastroFiscal } from "./cadastro";
+import { formatarCnpj, parametroVigente, type CadastroFiscal } from "./cadastro";
 import { codigoDoCnae } from "./calculos";
-import { dataBr, mesDe, nomeDoMes } from "./datas";
+import { dataBr, mesDe, nomeDoMes, ultimoDiaDoMes } from "./datas";
 
 const soDigitos = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
 
@@ -234,9 +234,13 @@ export function mesesDasCotas(data: string): string {
   return `${meses[0]}, ${meses[1]} e ${meses[2]} de ${anoSeguinte}`;
 }
 
-/** O dia do PIS e da COFINS (parâmetro `pis_cofins_dia`; 25 sem cadastro). */
-export function diaDoPisCofins(cad: CadastroFiscal): number {
-  const v = cad.parametros.find((p) => p.chave === "pis_cofins_dia")?.valor;
+/**
+ * O dia do PIS e da COFINS da competência da emissão: o parâmetro
+ * `pis_cofins_dia` vigente no último dia do mês, como no motor da Apuração
+ * (o dia é editável no cadastro, com vigência); 25 sem cadastro.
+ */
+export function diaDoPisCofins(cad: CadastroFiscal, emissao: string): number {
+  const v = parametroVigente(cad, "pis_cofins_dia", ultimoDiaDoMes(mesDe(emissao)))?.valor;
   return v && v >= 1 && v <= 31 ? v : 25;
 }
 

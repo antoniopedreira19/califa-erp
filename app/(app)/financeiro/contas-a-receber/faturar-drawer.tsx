@@ -1422,7 +1422,7 @@ export function FaturarDrawer({
                 valor={centavos(totalNf)}
                 emissao={dataEmissao}
                 feriados={feriadosDoCalculo(cad)}
-                diaPisCofins={diaDoPisCofins(cad)}
+                diaPisCofins={diaDoPisCofins(cad, dataEmissao)}
               />
             ) : (
               <ImpostosDestaNotaVazio />

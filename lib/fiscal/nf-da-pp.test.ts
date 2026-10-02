@@ -262,6 +262,12 @@ test("as guias: DARF no dia 20 do mês seguinte ao pagamento; ISS retido pelo mu
   assert.equal(vencimentoDasGuiasFederais(CADASTRO, "ssa", "2026-11-20")?.data, "2026-12-18");
   assert.equal(vencimentoDasGuiasFederais(CADASTRO, "ssa", ""), null);
   assert.equal(vencimentoDasGuiasFederais(CADASTRO, "nenhum", "2026-11-20"), null);
+  // Dia trocado no cadastro para 15 a partir de 01/12/2026: o pagamento de
+  // novembro vence no dia de antes; o de dezembro, no novo — o dia vigente no
+  // fim do mês do pagamento, como no motor (não o de hoje).
+  const trocado = { ...CADASTRO, parametros: [...CADASTRO.parametros, parametro("retencoes_dia", 15, "2026-12-01")] };
+  assert.equal(vencimentoDasGuiasFederais(trocado, "ssa", "2026-11-20")?.data, "2026-12-18");
+  assert.equal(vencimentoDasGuiasFederais(trocado, "ssa", "2026-12-10")?.data, "2027-01-15");
   // NF de 03/11/2026 em Salvador: 05/12 é sábado → prorroga para 07/12.
   const iss = guiaDoIssRetido(CADASTRO, "ssa", "2026-11-03");
   assert.equal(iss?.municipio, "Salvador");

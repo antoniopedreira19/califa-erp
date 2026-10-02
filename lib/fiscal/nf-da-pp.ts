@@ -36,7 +36,7 @@ import {
   type EntradaDoCredito,
   type SituacaoDoCredito,
 } from "./calculos";
-import { dataBr, mesDe, vencimentoNoMesSeguinte, type Vencimento } from "./datas";
+import { dataBr, mesDe, ultimoDiaDoMes, vencimentoNoMesSeguinte, type Vencimento } from "./datas";
 
 // ---------------------------------------------------------------------------
 // A linha da PP
@@ -272,7 +272,8 @@ export function vencimentoDasGuiasFederais(
     dataPagamento,
     feriadosDoCalculo(cad),
     calculo.municipio_da_matriz,
-    parametrosDeRetencao(cad).retencoes_dia,
+    // O dia vigente no fim do mês do pagamento, como no motor da Apuração.
+    parametrosDeRetencao(cad, ultimoDiaDoMes(mesDe(dataPagamento))).retencoes_dia,
   );
 }
 
