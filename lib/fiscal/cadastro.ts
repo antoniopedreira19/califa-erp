@@ -32,7 +32,7 @@ export async function carregarCadastroFiscal(supabase: SupabaseClient, tenantId:
     supabase.from("fiscal_estabelecimentos").select("*").eq("tenant_id", tenantId).order("ordem").order("nome"),
     supabase.from("fiscal_cnaes").select("*").eq("tenant_id", tenantId).order("codigo").order("subitem", { nullsFirst: true }),
     supabase.from("fiscal_feriados").select("*").eq("tenant_id", tenantId).order("data"),
-    supabase.from("fiscal_parametros").select("*").eq("tenant_id", tenantId).order("chave"),
+    supabase.from("fiscal_parametros").select("*").eq("tenant_id", tenantId).order("chave").order("vigencia_inicio"),
   ]);
   for (const r of [regimes, estabelecimentos, cnaes, feriados, parametros]) {
     if (r.error) console.error("[fiscal.cadastro]", r.error.message);
@@ -106,8 +106,22 @@ export function feriadosDoCalculo(cad: CadastroFiscal): FeriadoDoVencimento[] {
   return cad.feriados.map((f) => ({ data: f.data, nome: f.nome, municipio: f.municipio }));
 }
 
-export function parametrosDeRetencao(cad: CadastroFiscal): ParametrosDeRetencao {
-  const v = (chave: keyof ParametrosDeRetencao) => cad.parametros.find((p) => p.chave === chave)?.valor;
+/**
+ * O valor de um parâmetro numa data: a linha mais recente que já começou.
+ * O parâmetro muda por linha nova com vigência (tela Cadastros do
+ * Financeiro › Impostos), então a mesma chave pode ter várias linhas.
+ */
+export function parametroVigente(cad: CadastroFiscal, chave: string, data: string): FiscalParametro | undefined {
+  return cad.parametros
+    .filter((p) => p.chave === chave && p.vigencia_inicio <= data)
+    .sort((a, b) => b.vigencia_inicio.localeCompare(a.vigencia_inicio))[0];
+}
+
+/** Hoje no fuso da casa (o servidor roda em UTC). */
+const hojeEmSaoPaulo = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+
+export function parametrosDeRetencao(cad: CadastroFiscal, data: string = hojeEmSaoPaulo()): ParametrosDeRetencao {
+  const v = (chave: keyof ParametrosDeRetencao) => parametroVigente(cad, chave, data)?.valor;
   return {
     csrf_pis: v("csrf_pis") ?? PARAMETROS_DE_RETENCAO_PADRAO.csrf_pis,
     csrf_cofins: v("csrf_cofins") ?? PARAMETROS_DE_RETENCAO_PADRAO.csrf_cofins,
