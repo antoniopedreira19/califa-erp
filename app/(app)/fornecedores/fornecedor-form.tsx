@@ -21,6 +21,15 @@
  * O que NÃO mudou: as regras vivem em `lib/validations/fornecedores.ts` e
  * no servidor. O resumo do rodapé é a mesma conta feita na tela, para
  * dizer o que falta antes do clique; quem recusa de verdade é a action.
+ *
+ * Módulo fiscal (02/10/2026): a pessoa jurídica ganha o **regime
+ * tributário** — Normal (Lucro Real ou Presumido), Simples Nacional ou MEI
+ * —, ao lado da razão social. A consulta do CNPJ que o cadastro novo já faz
+ * (BrasilAPI) preenche o regime pelos campos de opção pelo Simples e pelo
+ * MEI, e a origem fica embaixo do campo; trocado à mão para outro, o texto
+ * fica âmbar e diz o que a consulta indicou. No Simples entra a declaração
+ * de optante (IN SRF 459, anexo I), e a nota azul diz o que o regime faz na
+ * aprovação da PP. Regras em `lib/fiscal/regime-do-fornecedor.ts`.
  */
 
 import * as React from "react";
@@ -59,8 +68,22 @@ import type {
   Fornecedor,
   TipoPessoa,
   PixTipoChave,
+  RegimeTributarioFornecedor,
   UF,
 } from "@/lib/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import {
+  NOTA_DO_REGIME,
+  REGIMES_DO_FORNECEDOR,
+  ROTULO_DO_REGIME,
+  consultaDoCadastro,
+  origemDoRegime,
+  regimeConsultadoEmParaGravar,
+  regimeDaConsultaDoCnpj,
+  regimeDepoisDaConsulta,
+  type ConsultaDoRegime,
+} from "@/lib/fiscal/regime-do-fornecedor";
 import {
   atualizarFornecedor,
   criarFornecedor,
@@ -377,6 +400,21 @@ export function FornecedorForm({
   );
   const [pixWarning, setPixWarning] = React.useState<string | null>(null);
 
+  /** Módulo fiscal: o regime tributário da pessoa jurídica. Controlado,
+   *  como o tipo de conta: entra no envio pelo `formData.set` do
+   *  `handleSubmit`. */
+  const [regime, setRegime] = React.useState<RegimeTributarioFornecedor | null>(
+    fornecedor?.regime_tributario ?? null,
+  );
+  /** O que a consulta do CNPJ disse do regime, e de qual CNPJ. Muda só com
+   *  uma consulta nova; na edição, abre com a que o cadastro gravou. */
+  const [consultaRegime, setConsultaRegime] = React.useState<ConsultaDoRegime | null>(
+    () => consultaDoCadastro(fornecedor),
+  );
+  const [declaracaoRecebida, setDeclaracaoRecebida] = React.useState<boolean>(
+    fornecedor?.declaracao_simples_recebida ?? false,
+  );
+
   /** Qual aba do pagamento está à vista. Abre no PIX quando é só o que o
    *  fornecedor tem — senão o cadastro pareceria vazio. */
   const [aba, setAba] = React.useState<"banco" | "pix">(
@@ -592,6 +630,16 @@ export function FornecedorForm({
         cidadeRef.current.value = data.municipio ?? "";
       if (data.uf) setUf((atual) => atual || String(data.uf).toUpperCase());
 
+      // Módulo fiscal: o regime tributário sai da mesma consulta (opção pelo
+      // Simples e pelo MEI). Entra no campo vazio ou no lugar do que veio de
+      // uma consulta anterior; o escolhido à mão fica, e o aviso âmbar diz o
+      // que a consulta indicou.
+      const regimeDaConsulta = regimeDaConsultaDoCnpj(data);
+      if (regimeDaConsulta) {
+        setRegime((atual) => regimeDepoisDaConsulta(atual, consultaRegime, regimeDaConsulta));
+        setConsultaRegime({ cnpj: cnpjDigits, em: hojeEmSaoPauloIso(), regime: regimeDaConsulta });
+      }
+
       relerCampos();
     } catch {
       setCnpjError(
@@ -702,6 +750,11 @@ export function FornecedorForm({
         : "Pronto para criar. Endereço e observações podem ser completados depois."
       : `Falta ${listar(pendencias)}.`;
 
+  // Módulo fiscal: de onde veio o regime à vista, para o texto embaixo do
+  // campo. A consulta só vale para o CNPJ que foi consultado.
+  const cnpjAtual = onlyDigits(campos.cpf_cnpj ?? initialDoc);
+  const origemRegime = ehPj ? origemDoRegime(regime, consultaRegime, cnpjAtual) : null;
+
   /** Grava e trata a resposta. Separado do `onSubmit` porque o "tem
    *  certeza?" dos dados de pagamento (decisão 067) reenvia o MESMO
    *  FormData com o flag ligado — e a essa altura o `<form>` do evento já
@@ -759,6 +812,20 @@ export function FornecedorForm({
     formData.set("cpf_cnpj", onlyDigits(formData.get("cpf_cnpj")?.toString() ?? ""));
     formData.set("telefone", onlyDigits(formData.get("telefone")?.toString() ?? ""));
     formData.set("cep", onlyDigits(formData.get("cep")?.toString() ?? ""));
+    // Módulo fiscal: o regime vai com o resto do cadastro; pessoa física não
+    // tem. A data da consulta só vai quando o regime é o que ela indicou, e
+    // a declaração de optante só no Simples (o servidor confere de novo).
+    formData.set("regime_tributario", ehPj ? regime ?? "" : "");
+    formData.set(
+      "regime_consultado_em",
+      ehPj
+        ? regimeConsultadoEmParaGravar(regime, consultaRegime, formData.get("cpf_cnpj")?.toString() ?? "") ?? ""
+        : "",
+    );
+    formData.set(
+      "declaracao_simples_recebida",
+      ehPj && regime === "simples" && declaracaoRecebida ? "true" : "false",
+    );
 
     if (duplicado && !isEdit) {
       setError(
@@ -984,7 +1051,9 @@ export function FornecedorForm({
                   name="razao_social"
                   hint="Opcional"
                   errors={fieldErrors}
-                  className="col-span-12"
+                  // Módulo fiscal: divide a linha com o regime tributário
+                  // (era col-span-12).
+                  className="col-span-12 sm:col-span-7"
                 >
                   <Input
                     name="razao_social"
@@ -993,6 +1062,73 @@ export function FornecedorForm({
                     placeholder="Nome jurídico, como na nota fiscal"
                   />
                 </Campo>
+              )}
+
+              {/* Módulo fiscal: o regime tributário, logo abaixo do CNPJ de
+                  onde ele vem. Preenchido pela consulta do CNPJ e editável;
+                  a origem fica embaixo da lista. Só pessoa jurídica. */}
+              {ehPj && (
+                <Campo
+                  label="Regime tributário"
+                  name="regime_tributario"
+                  errors={fieldErrors}
+                  className="col-span-12 sm:col-span-5"
+                >
+                  <Select
+                    value={regime ?? ""}
+                    onValueChange={(v) => setRegime(v as RegimeTributarioFornecedor)}
+                  >
+                    <SelectTrigger
+                      id="regime_tributario"
+                      aria-label="Regime tributário"
+                      className={erroClasses("regime_tributario")}
+                    >
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REGIMES_DO_FORNECEDOR.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {ROTULO_DO_REGIME[r]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {origemRegime && (
+                    <span
+                      className={cn(
+                        "text-[11px] leading-snug",
+                        origemRegime.alterado ? "text-amber-700" : "text-muted-foreground",
+                      )}
+                    >
+                      {origemRegime.texto}
+                    </span>
+                  )}
+                </Campo>
+              )}
+
+              {/* Módulo fiscal: no Simples, a declaração de optante. */}
+              {ehPj && regime === "simples" && (
+                <label className="col-span-12 flex cursor-pointer items-center gap-2.5">
+                  <Checkbox
+                    id="declaracao_simples_recebida"
+                    checked={declaracaoRecebida}
+                    onCheckedChange={(c) => setDeclaracaoRecebida(c === true)}
+                  />
+                  <span className="text-[12.5px] font-semibold">
+                    Declaração de optante recebida (IN SRF 459, anexo I)
+                  </span>
+                </label>
+              )}
+
+              {/* Módulo fiscal: o que o regime faz com as retenções e o
+                  crédito, na aprovação da PP. */}
+              {ehPj && regime && (
+                <div className="col-span-12 flex gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-sky-900">
+                  <span className="mt-0.5 shrink-0">
+                    <Info className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0">{NOTA_DO_REGIME[regime]}</div>
+                </div>
               )}
 
               <Campo

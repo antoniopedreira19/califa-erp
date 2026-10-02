@@ -63,6 +63,11 @@ import {
   type UltimaRetencao,
 } from "@/components/financeiro/valor-da-baixa";
 import {
+  BUSCANDO_RETENCAO_DA_APROVACAO,
+  useRetencaoDaAprovacao,
+} from "@/components/financeiro/retencao-da-aprovacao";
+import { parcelaDePPDaChave } from "@/lib/fiscal/retencao-da-aprovacao";
+import {
   FormaPagamentoField,
   type CartaoOption,
   type FormaPagamentoValue,
@@ -70,7 +75,13 @@ import {
 
 export interface BaixaTituloAlvo {
   /** Identifica o título e as baixas dele: o formulário recomeça quando
-   *  ela muda (o objeto `alvo` é remontado a cada renderização). */
+   *  ela muda (o objeto `alvo` é remontado a cada renderização).
+   *
+   *  Formato `${origem}-${id}-${nº de baixas}`, como a lista de Títulos a
+   *  Pagar a monta: na parcela de PP (`pp-<id da parcela>-<n>`) é dela que
+   *  a baixa tira a parcela para buscar as retenções da aprovação
+   *  (módulo fiscal). Quem montar o `alvo` de uma parcela de PP em outra
+   *  tela segue o mesmo formato. */
   chave: string;
   titulo: string;
   origem: string;
@@ -248,7 +259,18 @@ function FormularioDaBaixa({
     forma_pagamento: formaPlanejada,
     cartao_credito_id: cartaoPlanejadoId,
   });
-  const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao);
+  // Módulo fiscal (02/10/2026): na parcela de PP, a baixa abre com as
+  // retenções que o financeiro informou na APROVAÇÃO — chave ligada,
+  // alíquotas editáveis e a ajuda "Retenções informadas na aprovação da PP
+  // (data) · editáveis". Buscadas ao abrir, pela parcela da `chave`; só com
+  // a retenção liberada (não na que foi para remessa). Sem alíquota
+  // gravada, a baixa abre como antes.
+  const aprovacao = useRetencaoDaAprovacao(
+    alvo.retencao.mostra && alvo.retencao.motivo === null
+      ? parcelaDePPDaChave(alvo.chave)
+      : null,
+  );
+  const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao, aprovacao.retencao);
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão do Tiago em
@@ -292,7 +314,13 @@ function FormularioDaBaixa({
 
   // O cartão desliga a parcial e a retenção na hora (decisão 125).
   const motivoSemParcial = noCartao ? MOTIVO_CARTAO : alvo.motivoSemParcial;
-  const retencao: BaixaTituloAlvo["retencao"] = noCartao ? { mostra: false } : alvo.retencao;
+  // Módulo fiscal: enquanto as retenções da aprovação não chegam, a chave
+  // fica travada, com o "Buscando…" no lugar da ajuda.
+  const retencao: BaixaTituloAlvo["retencao"] = noCartao
+    ? { mostra: false }
+    : aprovacao.buscando
+      ? { mostra: true, motivo: BUSCANDO_RETENCAO_DA_APROVACAO }
+      : alvo.retencao;
   const retencaoLiberada = retencao.mostra && retencao.motivo === null;
   React.useEffect(() => {
     if (motivoSemParcial !== null && v.parcial) v.setParcial(false);
@@ -303,6 +331,12 @@ function FormularioDaBaixa({
 
   function handleSubmit() {
     setErroLocal(null);
+    // Módulo fiscal: a parcela não sai sem a retenção que a aprovação da PP
+    // decidiu — espera a busca voltar.
+    if (aprovacao.buscando) {
+      setErroLocal("Aguarde: buscando as retenções informadas na aprovação da PP.");
+      return;
+    }
     if (!pagoEm || (!noCartao && !contaId)) {
       setErroLocal(
         noCartao
@@ -479,6 +513,7 @@ function FormularioDaBaixa({
               : { aceita: false, motivo: motivoSemParcial }
           }
           retencao={retencao}
+          ajudaDaRetencao={aprovacao.ajuda}
         />
 
         {v.retem && v.retido > 0 && (
