@@ -170,11 +170,13 @@ test("dois rateios + multa viram UMA linha com a soma e três sublinhas", () => 
   );
 
   // O highlight que a baixa devolve é o id de UM lançamento qualquer dela.
-  assert.deepEqual(linhaDoLancamento, {
+  assert.deepEqual(Object.fromEntries(linhaDoLancamento), {
     "lanc-multa": "lanc-multa",
     "lanc-ne": "lanc-multa",
     "lanc-sp": "lanc-multa",
   });
+  // A chave vem da URL: nada do protótipo de Object responde por ela.
+  assert.equal(linhaDoLancamento.get("constructor"), undefined);
 });
 
 test("o saldo acumulado, os totais e o saldo final não mudam", () => {
@@ -271,7 +273,7 @@ test("sem a leitura das guias, o extrato fica como estava", () => {
   const { linhas, detalhes, linhaDoLancamento } = agruparGuiasDeImposto(original, new Map());
   assert.deepEqual(linhas, original);
   assert.deepEqual(detalhes, {});
-  assert.deepEqual(linhaDoLancamento, {});
+  assert.equal(linhaDoLancamento.size, 0);
 });
 
 test("duas guias pagas no mesmo instante, intercaladas: uma linha cada, somas certas", () => {

@@ -246,8 +246,10 @@ export type ExtratoComGuias = {
    * devolve o id de UM lançamento dela para o `highlight`, e os lançamentos
    * de uma baixa nascem na mesma transação (mesmo `created_at`): a ordem
    * entre eles no extrato não é garantida, e a linha pode ter o id de outro.
+   * `Map`, e não objeto: a chave procurada vem da URL, e `?highlight=
+   * constructor` num objeto comum devolveria o que está no protótipo.
    */
-  linhaDoLancamento: Record<string, string>;
+  linhaDoLancamento: Map<string, string>;
 };
 
 /**
@@ -273,7 +275,7 @@ export function agruparGuiasDeImposto(
 
   const saida: LinhaSemSaldo[] = [];
   const detalhes: Record<string, DetalheDoImposto> = {};
-  const linhaDoLancamento: Record<string, string> = {};
+  const linhaDoLancamento = new Map<string, string>();
   for (const l of linhas) {
     const g = guiaDaLinha(l);
     if (!g) {
@@ -281,12 +283,12 @@ export function agruparGuiasDeImposto(
       continue;
     }
     // Os demais lançamentos da guia já entraram na linha do primeiro.
-    if (linhaDoLancamento[l.id]) continue;
+    if (linhaDoLancamento.has(l.id)) continue;
     const membros = porImposto.get(g.imposto_a_pagar_id) ?? [l];
     const { linha, detalhe } = linhaDaGuia(membros, daGuia);
     saida.push(linha);
     detalhes[linha.id] = detalhe;
-    for (const m of membros) linhaDoLancamento[m.id] = linha.id;
+    for (const m of membros) linhaDoLancamento.set(m.id, linha.id);
   }
   return { linhas: saida, detalhes, linhaDoLancamento };
 }
