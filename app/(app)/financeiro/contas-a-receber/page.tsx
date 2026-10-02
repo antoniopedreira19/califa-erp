@@ -9,7 +9,7 @@ import {
   type FaturamentoPendenteRow,
   type FaturadoRow,
 } from "./faturamento-list";
-import { TitulosList, type TituloRow } from "./titulos-list";
+import { TitulosList } from "./titulos-list";
 import type { InfoJob } from "./faturar-drawer";
 import {
   contatosDeCobrancaPorJob,
@@ -19,21 +19,25 @@ import type {
   ContaBancaria,
   PlanoContaTipo,
   PlanoContaSubtipo,
-  TituloReceberStatus,
 } from "@/lib/types";
 import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
 import type { RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { SELECT_ESTORNO_DE_BAIXA } from "@/lib/data/estornos-de-baixa";
+import { mapearUltimasRetencoes } from "@/lib/data/baixas-do-documento";
 import {
-  SELECT_ESTORNO_DE_BAIXA,
-  agruparEstornosPorBaixa,
-} from "@/lib/data/estornos-de-baixa";
-import {
-  SELECT_BAIXA_DO_DOCUMENTO,
-  agruparBaixasPorDocumento,
-  mapearUltimasRetencoes,
-  totalBaixado,
-} from "@/lib/data/baixas-do-documento";
+  ORIGENS_DO_ESTORNO_A_RECEBER,
+  SELECT_AVULSA_A_RECEBER,
+  SELECT_BAIXA_DA_AVULSA_A_RECEBER,
+  SELECT_BAIXA_DA_NOTA,
+  SELECT_TITULO_A_RECEBER,
+  SELECT_TRANSFERENCIA,
+  consultarJobsDasNotas,
+  listaDeClientes,
+  listaDeFornecedores,
+  montarTitulosAReceber,
+  parcelasDasNotas,
+} from "./dados-dos-titulos";
 
 export const dynamic = "force-dynamic";
 
@@ -96,18 +100,7 @@ export default async function ContasReceberPage({
       // Filtro de aterrissagem da home
       let q = supabase
         .from("titulos_receber")
-        .select(`
-          id, numero_parcela, valor, data_vencimento, status,
-          data_previsao_recebimento, data_previsao_recebimento_primeira,
-          inadimplente_desde, pago_em, empresa_id, faturamento_id,
-          faturamento:faturamentos!inner(
-            id, numero_nf, data_emissao, descricao, status, origem_tipo,
-            cliente_id, fornecedor_id,
-            cliente:clientes(id, nome_fantasia, razao_social),
-            fornecedor:fornecedores(id, nome, razao_social),
-            itens:faturamento_itens(origem_tipo, origem_id, envio_parcela_id, valor)
-          )
-        `)
+        .select(SELECT_TITULO_A_RECEBER)
         .eq("tenant_id", tenantId)
         .order("data_vencimento", { ascending: true });
       if (searchParams?.filtro === "vencidas") {
@@ -122,7 +115,7 @@ export default async function ContasReceberPage({
     // olho e o "falta R$ X" da linha.
     supabase
       .from("lancamentos_financeiros")
-      .select(`titulo_receber_id, ${SELECT_BAIXA_DO_DOCUMENTO}`)
+      .select(SELECT_BAIXA_DA_NOTA)
       .eq("tenant_id", tenantId)
       .eq("origem", "titulo_baixa")
       .not("titulo_receber_id", "is", null),
@@ -132,26 +125,21 @@ export default async function ContasReceberPage({
       .from("lancamentos_financeiros")
       .select(SELECT_ESTORNO_DE_BAIXA)
       .eq("tenant_id", tenantId)
-      .in("origem", ["titulo_estorno", "avulsa_estorno"])
+      .in("origem", ORIGENS_DO_ESTORNO_A_RECEBER)
       .not("estorno_de_lancamento_id", "is", null),
     // Recebimento avulso e rendimento (decisão 124): contas avulsas de
     // natureza entrada, marcadas por `tipo_entrada`. Entram na mesma lista
     // dos títulos das notas.
     supabase
       .from("contas_avulsas")
-      .select(`
-        id, codigo, descricao, valor, status, tipo_entrada, empresa_id,
-        data_prevista_pagamento, data_pagamento, pago_em,
-        plano_conta_tipo_id, plano_conta_subtipo_id,
-        conta_bancaria_prevista_id, competencia, cliente_id, fornecedor_id
-      `)
+      .select(SELECT_AVULSA_A_RECEBER)
       .eq("tenant_id", tenantId)
       .not("tipo_entrada", "is", null)
       .order("data_pagamento", { ascending: true }),
     // As baixas desses títulos, do mesmo jeito que as das notas.
     supabase
       .from("lancamentos_financeiros")
-      .select(`conta_avulsa_id, ${SELECT_BAIXA_DO_DOCUMENTO}`)
+      .select(SELECT_BAIXA_DA_AVULSA_A_RECEBER)
       .eq("tenant_id", tenantId)
       .eq("origem", "avulsa_baixa")
       .eq("natureza", "entrada")
@@ -160,11 +148,7 @@ export default async function ContasReceberPage({
     // contas_bancarias: o embed precisa dizer qual é qual.
     supabase
       .from("transferencias_contas")
-      .select(`
-        id, codigo, valor, data_prevista, descricao, status, transferida_em,
-        origem:contas_bancarias!conta_origem_id(nome, banco),
-        destino:contas_bancarias!conta_destino_id(nome, banco)
-      `)
+      .select(SELECT_TRANSFERENCIA)
       .eq("tenant_id", tenantId)
       .order("data_prevista", { ascending: true }),
     supabase
@@ -208,14 +192,7 @@ export default async function ContasReceberPage({
       .order("nome"),
     // Códigos dos jobs cobertos pelas notas. Limite alto o bastante para o
     // histórico e baixo o bastante para não virar varredura.
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome")
-      .eq("tenant_id", tenantId)
-      // Ordem de criação, e não a do código: desde a decisão 114 o código
-      // começa pela sigla do cliente, e o texto não diz mais a ordem.
-      .order("created_at", { ascending: false })
-      .limit(500),
+    consultarJobsDasNotas(supabase, tenantId),
     // O que a produção mandou no envio para faturamento: a PO e a instrução
     // do GP sobre como a nota deve ser descrita. É o conteúdo do botão `i`
     // (31/08/2026). Um registro por job, tabela pequena — entra na mesma
@@ -277,18 +254,8 @@ export default async function ContasReceberPage({
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
 
-  const clientesList = (clientesRes.data ?? []).map(
-    (c: { id: string; nome_fantasia: string | null; razao_social: string | null }) => ({
-      id: c.id,
-      nome: c.razao_social ?? c.nome_fantasia ?? "",
-    }),
-  );
-  const fornecedoresList = (fornecedoresRes.data ?? []).map(
-    (f: { id: string; nome: string; razao_social: string | null }) => ({
-      id: f.id,
-      nome: f.razao_social ?? f.nome,
-    }),
-  );
+  const clientesList = listaDeClientes(clientesRes.data);
+  const fornecedoresList = listaDeFornecedores(fornecedoresRes.data);
   const empresasList = (empresasRes.data ?? []).map(
     (e: { id: string; razao_social: string | null; nome_fantasia: string | null }) => ({
       id: e.id,
@@ -484,43 +451,10 @@ export default async function ContasReceberPage({
   const faturadosBrutos = (faturadosRes.data ?? []) as unknown as FaturamentoBruto[];
 
   // Quantas parcelas de recebimento cada nota tem, e qual a 1ª a vencer —
-  // as duas colunas que a linha verde mostra.
-  // Guardamos as parcelas em si, e não só a contagem: o formulário em
-  // modo leitura precisa listar valor e vencimento de cada uma
-  // (18/08/2026 — antes ele inventava uma parcela com o total da nota).
-  const parcelasPorNota = new Map<
-    string,
-    {
-      qtd: number;
-      primeiroVenc: string | null;
-      parcelas: Array<{ numero: number; valor: number; data_vencimento: string }>;
-    }
-  >();
-  for (const t of (titulosRes.data ?? []) as unknown as Array<{
-    faturamento_id: string;
-    numero_parcela: number;
-    valor: string | number;
-    data_vencimento: string;
-    status: TituloReceberStatus;
-  }>) {
-    if (t.status === "cancelado") continue;
-    const atual =
-      parcelasPorNota.get(t.faturamento_id) ??
-      { qtd: 0, primeiroVenc: null, parcelas: [] };
-    atual.qtd += 1;
-    if (!atual.primeiroVenc || t.data_vencimento < atual.primeiroVenc) {
-      atual.primeiroVenc = t.data_vencimento;
-    }
-    atual.parcelas.push({
-      numero: t.numero_parcela,
-      valor: Number(t.valor),
-      data_vencimento: t.data_vencimento,
-    });
-    parcelasPorNota.set(t.faturamento_id, atual);
-  }
-  for (const p of parcelasPorNota.values()) {
-    p.parcelas.sort((a, b) => a.numero - b.numero);
-  }
+  // as duas colunas que a linha verde mostra (e a lista das parcelas, para
+  // o formulário em modo leitura). Em `dados-dos-titulos.ts`: os títulos
+  // a receber usam a mesma contagem.
+  const parcelasPorNota = parcelasDasNotas(titulosRes.data);
 
   // Quem mandou o que a nota cobre (decisão 136): o envio para faturamento
   // mais recente de cada job, e quem confirmou cada BV. Os envios já vieram
@@ -643,260 +577,35 @@ export default async function ContasReceberPage({
 
   // --- Aba Títulos a Receber ----------------------------------------------
 
-  // Centro de custo e subtipo saem SEPARADOS (08/09/2026). Concatenados,
-  // viravam "01 · Geral (provisório)" — o código do TIPO colado no nome do
-  // SUBTIPO, com "Receita" fora da tela. Quem conferia a baixa lia só o
-  // subtipo e achava que era o centro de custo inteiro.
-  const estornosPorBaixa = agruparEstornosPorBaixa(estornosRes.data);
-  const baixasPorTitulo = agruparBaixasPorDocumento(
-    baixasRes.data,
-    "titulo_receber_id",
-    estornosPorBaixa,
-  );
   const ultimasRetencoes = mapearUltimasRetencoes(ultimasRetencoesRes.data);
 
-  const titulosRows: TituloRow[] = ((titulosRes.data ?? []) as unknown as Array<{
-    id: string;
-    numero_parcela: number;
-    valor: string | number;
-    data_vencimento: string;
-    data_previsao_recebimento: string | null;
-    data_previsao_recebimento_primeira: string | null;
-    inadimplente_desde: string | null;
-    status: TituloReceberStatus;
-    pago_em: string | null;
-    empresa_id: string;
-    faturamento_id: string;
-    faturamento: {
-      numero_nf: string;
-      data_emissao: string;
-      descricao: string;
-      status: "emitido" | "cancelado";
-      origem_tipo: "job" | "bv" | "avulso";
-      cliente_id: string | null;
-      fornecedor_id: string | null;
-      cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
-      fornecedor: { nome: string | null; razao_social: string | null } | null;
-      itens: Array<{
-        origem_tipo: "job" | "bv" | "avulso" | "save";
-        origem_id: string | null;
-        envio_parcela_id: string | null;
-        valor: string | number;
-      }>;
-    };
-  }>).map((r) => {
-    const baixas = baixasPorTitulo.get(r.id) ?? [];
-    const itens = r.faturamento.itens ?? [];
-    // Um job por vez, na ordem em que aparece nos itens. O Set é o que
-    // impede o job de sair duas vezes quando a nota tem item de save ou
-    // dois faturamentos parciais dele.
-    const vistos = new Set<string>();
-    const jobsDaNota: Array<{ id: string; codigo: string; nome: string }> = [];
-    for (const i of itens) {
-      if (!i.origem_id || vistos.has(i.origem_id)) continue;
-      const job = jobPorId.get(i.origem_id);
-      if (!job) continue;
-      vistos.add(i.origem_id);
-      jobsDaNota.push(job);
-    }
-    return {
-      id: r.id,
-      numero_parcela: r.numero_parcela,
-      total_parcelas: parcelasPorNota.get(r.faturamento_id)?.qtd ?? 1,
-      valor: Number(r.valor),
-      data_vencimento: r.data_vencimento,
-      data_previsao_recebimento: r.data_previsao_recebimento ?? r.data_vencimento,
-      data_previsao_recebimento_primeira:
-        r.data_previsao_recebimento_primeira ?? r.data_vencimento,
-      status: r.status,
-      pago_em: r.pago_em,
-      empresa_id: r.empresa_id,
-      faturamento_id: r.faturamento_id,
-      fat_numero_nf: r.faturamento.numero_nf,
-      fat_data_emissao: r.faturamento.data_emissao,
-      fat_descricao: r.faturamento.descricao,
-      contraparte_nome:
-        r.faturamento.fornecedor?.razao_social ??
-        r.faturamento.fornecedor?.nome ??
-        r.faturamento.cliente?.razao_social ??
-        r.faturamento.cliente?.nome_fantasia ??
-        "—",
-      // Os jobs DISTINTOS da nota, uma vez cada. A nota com save e a com
-      // dois faturamentos parciais têm mais de um item do MESMO job, e
-      // listá-lo duas vezes lia como erro na tela (31/08/2026). A parte que
-      // virou crédito do cliente aparece no botão `i`, em "Composição do
-      // valor" — não mais nesta coluna.
-      jobs_cobertos: jobsDaNota.length
-        ? jobsDaNota.map((j) => `${j.codigo} ${j.nome}`)
-        : [
-            itens.length === 0 || itens[0]?.origem_tipo === "avulso"
-              ? `Avulso · ${r.faturamento.descricao}`
-              : `BV · ${r.faturamento.descricao}`,
-          ],
-      jobs: jobsDaNota.map((j) => ({ job_id: j.id, codigo: j.codigo })),
-      inadimplente_desde: r.inadimplente_desde ?? null,
-      baixas,
-      baixado: totalBaixado(baixas),
-      // Quem paga a nota: o cliente, ou o fornecedor na nota de BV.
-      parte_id: r.faturamento.cliente_id ?? r.faturamento.fornecedor_id ?? null,
-      origem: "nf" as const,
-      conta_avulsa_id: null,
-      codigo_avulsa: null,
-      plano_conta_tipo_id: null,
-      plano_conta_subtipo_id: null,
-      conta_prevista_id: null,
-    };
+  // Nota, recebimento avulso, rendimento e transferência, por vencimento.
+  // A montagem mora em `dados-dos-titulos.ts` desde 02/10/2026: a aba
+  // Títulos da conciliação monta os mesmos títulos com ela.
+  const linhasTitulos = montarTitulosAReceber({
+    titulos: titulosRes.data,
+    parcelasPorNota,
+    baixas: baixasRes.data,
+    estornos: estornosRes.data,
+    avulsas: avulsasReceberRes.data,
+    baixasAvulsas: baixasAvulsasRes.data,
+    transferencias: transferenciasRes.data,
+    contas: contasRes.data ?? [],
+    clientes: clientesList,
+    fornecedores: fornecedoresList,
+    jobs: jobsList,
+    apenasVencidas: searchParams?.filtro === "vencidas",
+    hoje,
   });
-
-  // Recebimento avulso e rendimento (decisão 124), na mesma lista. Não têm
-  // nota: a coluna Nota fiscal mostra o código AV, e a de jobs, a
-  // descrição — eles não se vinculam a job.
-  const baixasPorAvulsa = agruparBaixasPorDocumento(
-    baixasAvulsasRes.data,
-    "conta_avulsa_id",
-    estornosPorBaixa,
-  );
-  const contaPorId = new Map((contasRes.data ?? []).map((c) => [c.id, c]));
-  const todasAvulsasReceber = (avulsasReceberRes.data ?? []) as unknown as Array<{
-    id: string;
-    codigo: string | null;
-    descricao: string;
-    valor: string | number;
-    status: "aprovada" | "baixada";
-    tipo_entrada: "recebimento_avulso" | "rendimento";
-    empresa_id: string;
-    data_prevista_pagamento: string | null;
-    data_pagamento: string | null;
-    pago_em: string | null;
-    plano_conta_tipo_id: string;
-    plano_conta_subtipo_id: string;
-    conta_bancaria_prevista_id: string | null;
-    competencia: string | null;
-    cliente_id: string | null;
-    fornecedor_id: string | null;
-  }>;
-  const avulsasReceber = todasAvulsasReceber.filter(
-    // O atalho "vencidas" da Home vale para eles também.
-    (a) =>
-      searchParams?.filtro !== "vencidas" ||
-      (a.status === "aprovada" && (a.data_pagamento ?? a.data_prevista_pagamento ?? "") < hoje),
-  );
-  const linhasAvulsas: TituloRow[] = avulsasReceber.map((a) => {
-    const baixas = baixasPorAvulsa.get(a.id) ?? [];
-    const data = a.data_pagamento ?? a.data_prevista_pagamento ?? hoje;
-    const contaPrevista = a.conta_bancaria_prevista_id
-      ? contaPorId.get(a.conta_bancaria_prevista_id)
-      : undefined;
-    return {
-      id: a.id,
-      numero_parcela: 1,
-      total_parcelas: 1,
-      valor: Number(a.valor),
-      data_vencimento: a.data_prevista_pagamento ?? data,
-      data_previsao_recebimento: data,
-      data_previsao_recebimento_primeira: data,
-      status: a.status === "baixada" ? "pago" : "em_aberto",
-      pago_em: a.pago_em,
-      empresa_id: a.empresa_id,
-      faturamento_id: "",
-      fat_numero_nf: "",
-      fat_data_emissao: "",
-      fat_descricao: a.descricao,
-      contraparte_nome:
-        (a.cliente_id ? nomeCliente.get(a.cliente_id) : undefined) ??
-        (a.fornecedor_id ? nomeFornecedor.get(a.fornecedor_id) : undefined) ??
-        (contaPrevista ? `${contaPrevista.nome} · ${contaPrevista.banco}` : "—"),
-      jobs_cobertos: [a.descricao],
-      jobs: [],
-      inadimplente_desde: null,
-      baixas,
-      baixado: totalBaixado(baixas),
-      parte_id: a.cliente_id ?? a.fornecedor_id ?? null,
-      origem: a.tipo_entrada,
-      conta_avulsa_id: a.id,
-      codigo_avulsa: a.codigo,
-      plano_conta_tipo_id: a.plano_conta_tipo_id,
-      plano_conta_subtipo_id: a.plano_conta_subtipo_id,
-      conta_prevista_id: a.conta_bancaria_prevista_id,
-    };
-  });
-  // A transferência é título (D16), mas sem empresa, sem plano e sem
-  // estorno: o olho só mostra as duas contas e o cancelamento.
-  const linhasTransferencias: TituloRow[] = ((transferenciasRes.data ?? []) as unknown as Array<{
-    id: string;
-    codigo: string;
-    valor: string | number;
-    data_prevista: string;
-    descricao: string | null;
-    status: "a_transferir" | "transferida";
-    transferida_em: string | null;
-    origem: { nome: string; banco: string } | null;
-    destino: { nome: string; banco: string } | null;
-  }>)
-    .filter(
-      (t) =>
-        searchParams?.filtro !== "vencidas" ||
-        (t.status === "a_transferir" && t.data_prevista < hoje),
-    )
-    .map((t) => {
-      const contas = `${t.origem ? `${t.origem.nome} · ${t.origem.banco}` : "—"} → ${
-        t.destino ? `${t.destino.nome} · ${t.destino.banco}` : "—"
-      }`;
-      const descricao = t.descricao?.trim() || "Transferência entre contas";
-      return {
-        id: t.id,
-        numero_parcela: 1,
-        total_parcelas: 1,
-        valor: Number(t.valor),
-        data_vencimento: t.data_prevista,
-        data_previsao_recebimento: t.data_prevista,
-        data_previsao_recebimento_primeira: t.data_prevista,
-        status: t.status === "transferida" ? "pago" : "em_aberto",
-        pago_em: t.transferida_em,
-        empresa_id: "",
-        faturamento_id: "",
-        fat_numero_nf: "",
-        fat_data_emissao: "",
-        fat_descricao: descricao,
-        contraparte_nome: contas,
-        jobs_cobertos: [descricao],
-        jobs: [],
-        inadimplente_desde: null,
-        // Uma baixa só, sem lançamento único (duas pernas): o popup cancela
-        // pela transferência.
-        baixas:
-          t.status === "transferida"
-            ? [
-                {
-                  lancamentoId: null,
-                  data: t.transferida_em,
-                  contaNome: contas,
-                  contaBancariaId: null,
-                  centroNome: "Transferência entre contas",
-                  subtipoNome: "fora do DRE",
-                  movimentado: Number(t.valor),
-                  retencoes: [],
-                  estornos: [],
-                  antesDaNf: false,
-                },
-              ]
-            : [],
-        baixado: t.status === "transferida" ? Number(t.valor) : 0,
-        parte_id: null,
-        origem: "transferencia" as const,
-        conta_avulsa_id: null,
-        codigo_avulsa: t.codigo,
-        plano_conta_tipo_id: null,
-        plano_conta_subtipo_id: null,
-        conta_prevista_id: null,
-      };
-    });
-  const linhasTitulos = [...titulosRows, ...linhasAvulsas, ...linhasTransferencias].sort((a, b) =>
-    a.data_vencimento.localeCompare(b.data_vencimento),
-  );
   // Um rendimento por conta e por mês: o diálogo avisa antes de o banco
   // recusar.
-  const rendimentosLancados = todasAvulsasReceber
+  const rendimentosLancados = ((avulsasReceberRes.data ?? []) as unknown as Array<{
+    codigo: string | null;
+    valor: string | number;
+    tipo_entrada: "recebimento_avulso" | "rendimento";
+    conta_bancaria_prevista_id: string | null;
+    competencia: string | null;
+  }>)
     .filter((a) => a.tipo_entrada === "rendimento" && a.conta_bancaria_prevista_id && a.competencia)
     .map((a) => ({
       conta_bancaria_id: a.conta_bancaria_prevista_id as string,
