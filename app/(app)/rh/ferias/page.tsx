@@ -177,14 +177,7 @@ export default async function FeriasPage({
           statusFiltro={normalizarStatus(searchParams.status)}
         />
       )}
-      {tab === "quadro" && (
-        <AbaQuadro
-          tenantId={tenantId}
-          busca={searchParams.busca ?? ""}
-          tipoContratacao={searchParams.tipo_contr ?? ""}
-          statusPeriodo={searchParams.status_periodo ?? ""}
-        />
-      )}
+      {tab === "quadro" && <AbaQuadro tenantId={tenantId} />}
       {tab === "calendario" && (
         <AbaCalendario
           tenantId={tenantId}

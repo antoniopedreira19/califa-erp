@@ -6,14 +6,10 @@ import type {
   FeriasPeriodoStatus,
   TipoContratacao,
 } from "@/lib/types";
-import { QuadroFiltros } from "./quadro-filtros";
 import { QuadroListaCliente } from "./quadro-lista-cliente";
 
 type Props = {
   tenantId: string;
-  busca: string;
-  tipoContratacao: string;
-  statusPeriodo: string;
 };
 
 /**
@@ -37,35 +33,30 @@ export type QuadroColaboradorRow = {
   } | null;
 };
 
-// Payload mínimo — só os campos usados no cálculo das rows do Quadro.
 const PERIODO_SELECT =
   "id, colaborador_id, numero, aquisitivo_inicio, aquisitivo_fim, data_limite_gozo, dias_direito, status";
 
-export async function AbaQuadro({
-  tenantId,
-  busca,
-  tipoContratacao,
-  statusPeriodo,
-}: Props) {
+/**
+ * Server component que puxa TODAS as rows do Quadro UMA VEZ.
+ *
+ * Antes (até Onda 3): aceitava busca/tipo_contratacao/status_periodo como
+ * props vindas de searchParams. Cada mudança de filtro no chip de status
+ * disparava nova request RSC + 3 queries + re-render → 1,5-6s por clique.
+ *
+ * Agora (Onda 3.5): server só puxa todas as 210 rows. Os filtros vivem no
+ * QuadroListaCliente (client), aplicados em memória sobre o array já
+ * carregado. Resultado: filtros instantâneos (<10ms).
+ */
+export async function AbaQuadro({ tenantId }: Props) {
   const supabase = createClient();
 
-  let colabQuery = supabase
-    .from("colaboradores")
-    .select("id, nome, tipo_contratacao, funcao, data_admissao")
-    .eq("tenant_id", tenantId)
-    .eq("status", "ativo")
-    .order("nome", { ascending: true });
-
-  if (busca.trim()) {
-    colabQuery = colabQuery.ilike("nome", `%${busca.trim()}%`);
-  }
-  if (tipoContratacao) {
-    colabQuery = colabQuery.eq("tipo_contratacao", tipoContratacao);
-  }
-
-  // 3 queries em paralelo — SEM query do modal (modal fica client-side).
   const [colaboradoresRes, periodosRes, lancamentosRes] = await Promise.all([
-    colabQuery,
+    supabase
+      .from("colaboradores")
+      .select("id, nome, tipo_contratacao, funcao, data_admissao")
+      .eq("tenant_id", tenantId)
+      .eq("status", "ativo")
+      .order("nome", { ascending: true }),
     supabase
       .from("colaboradores_ferias_periodos")
       .select(PERIODO_SELECT)
@@ -86,24 +77,6 @@ export async function AbaQuadro({
     Colaborador,
     "id" | "nome" | "tipo_contratacao" | "funcao" | "data_admissao"
   >[];
-
-  if (colaboradores.length === 0) {
-    return (
-      <>
-        <QuadroFiltros
-          busca={busca}
-          tipoContratacao={tipoContratacao}
-          statusPeriodo={statusPeriodo}
-          totalColaboradores={0}
-        />
-        <div className="rounded-2xl border border-border bg-card p-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            Nenhum colaborador encontrado com esses filtros.
-          </p>
-        </div>
-      </>
-    );
-  }
 
   type PeriodoLite = Pick<
     ColaboradorFeriasPeriodo,
@@ -193,28 +166,5 @@ export async function AbaQuadro({
     };
   });
 
-  const rowsFiltradas = statusPeriodo
-    ? rows.filter((r) => r.periodoAtivo?.status === statusPeriodo)
-    : rows;
-
-  return (
-    <>
-      <QuadroFiltros
-        busca={busca}
-        tipoContratacao={tipoContratacao}
-        statusPeriodo={statusPeriodo}
-        totalColaboradores={rowsFiltradas.length}
-      />
-
-      {rowsFiltradas.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            Nenhum colaborador neste filtro.
-          </p>
-        </div>
-      ) : (
-        <QuadroListaCliente rows={rowsFiltradas} />
-      )}
-    </>
-  );
+  return <QuadroListaCliente rows={rows} />;
 }
