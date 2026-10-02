@@ -1,12 +1,21 @@
 /**
  * As linhas da aba Títulos da conciliação: os títulos a pagar e a receber
- * (no tipo das listas reais) num formato só, para a tabela, a busca e os
- * filtros. Módulo puro — vale no servidor, no cliente e no teste.
+ * (no tipo das listas reais) e os impostos a pagar em aberto (módulo
+ * fiscal, entrega 2) num formato só, para a tabela, a busca e os filtros.
+ * Módulo puro — vale no servidor, no cliente e no teste.
  */
 
 import type { TituloParaLote } from "@/components/financeiro/baixa-em-lote";
 import type { TituloRow as TituloAPagar } from "../contas-a-pagar/titulos-pagar-list";
 import type { TituloRow as TituloAReceber } from "../contas-a-receber/titulos-list";
+import type { ImpostoDaLista } from "../fiscal/impostos/dados";
+import {
+  chaveDoLoteImposto,
+  orgaoDoImposto,
+  paraOLoteImposto,
+  referenciaDoImposto,
+  tituloDoImposto,
+} from "../fiscal/impostos/lote";
 import {
   chaveDoLoteAPagar,
   chaveDoLoteAReceber,
@@ -22,7 +31,7 @@ import {
 // A linha da aba
 // ---------------------------------------------------------------------------
 
-export type Lado = "pagar" | "receber";
+export type Lado = "pagar" | "receber" | "imposto";
 
 interface LinhaBase {
   /** Única entre os dois lados — a mesma chave da baixa em lote das
@@ -54,7 +63,8 @@ interface LinhaBase {
 
 export type Linha =
   | (LinhaBase & { lado: "pagar"; t: TituloAPagar })
-  | (LinhaBase & { lado: "receber"; t: TituloAReceber });
+  | (LinhaBase & { lado: "receber"; t: TituloAReceber })
+  | (LinhaBase & { lado: "imposto"; t: ImpostoDaLista });
 
 /** "PP-00127", "Lançamento avulso"… e a parcela, quando há mais de uma. */
 function referenciaAPagar(t: TituloAPagar): string {
@@ -145,16 +155,50 @@ export function linhaAReceber(t: TituloAReceber, empresas: Record<string, string
   };
 }
 
+/**
+ * O imposto a pagar em aberto (módulo fiscal): o nome com a cota, o DARF ou
+ * a guia municipal, o órgão que recebe e a PJ da guia na coluna Empresa —
+ * como no protótipo aprovado. Sempre sai da conta, pelo valor inteiro.
+ */
+export function linhaDeImposto(t: ImpostoDaLista): Linha {
+  const titulo = tituloDoImposto(t);
+  const referencia = referenciaDoImposto(t);
+  const contraparte = orgaoDoImposto(t);
+  return {
+    lado: "imposto",
+    t,
+    chave: chaveDoLoteImposto(t),
+    vencimento: t.vencimento,
+    titulo,
+    referencia,
+    contraparte,
+    empresa: t.pj,
+    job: null,
+    aberto: t.valor,
+    valor: t.valor,
+    baixado: 0,
+    parcial: false,
+    entra: false,
+    busca: [titulo, referencia, contraparte, t.pj, t.local, t.cnpj, t.rotulo_competencia, t.descricao]
+      .join(" ")
+      .toLowerCase(),
+    motivoForaDoLote: null,
+    lote: paraOLoteImposto(t),
+  };
+}
+
 /** Todas as linhas, por vencimento (sem data por último); no mesmo dia, o
- *  a pagar antes do a receber, e depois o título. */
+ *  imposto, o a pagar e o a receber, e depois o título. */
 export function montarLinhas(
   aPagar: TituloAPagar[],
   aReceber: TituloAReceber[],
   empresas: Record<string, string>,
+  impostos: ImpostoDaLista[],
 ): Linha[] {
   return [
     ...aPagar.map((t) => linhaAPagar(t, empresas)),
     ...aReceber.map((t) => linhaAReceber(t, empresas)),
+    ...impostos.filter((t) => t.status === "a_pagar").map(linhaDeImposto),
   ].sort(
     (a, b) =>
       (a.vencimento ?? "9999-12-31").localeCompare(b.vencimento ?? "9999-12-31") ||
