@@ -1,7 +1,8 @@
 /**
  * Montagem pura das abas do cadastro de impostos (módulo fiscal, 02/10/2026):
  * as linhas de CNAE com vigência, os parâmetros vigentes e os programados, e
- * os textos de valor da aba Parâmetros. Sem React e sem banco, para testar.
+ * os textos de valor da aba Parâmetros e dos dias federais da aba
+ * Vencimentos. Sem React e sem banco, para testar.
  */
 import type { FiscalCnae, FiscalParametro } from "@/lib/types";
 
@@ -72,7 +73,8 @@ export function ultimaVersao(parametros: readonly FiscalParametro[], chave: stri
 export const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`;
 export const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-export type FormatoDoCampo = "pct" | "moeda";
+/** "dia": dia do mês de 1 a 31 (os vencimentos dos federais). */
+export type FormatoDoCampo = "pct" | "moeda" | "dia";
 
 export interface CampoDeParametro {
   chave: string;
@@ -176,12 +178,63 @@ export function linhasDeParametro(nomesNoPresumido: string): LinhaDeParametro[] 
   ];
 }
 
+/**
+ * Os dias de vencimento dos federais: o lápis das linhas de PIS/COFINS e das
+ * DARF de retenção, na aba Vencimentos, abre a edição de parâmetro com estas
+ * linhas. Não entram na aba Parâmetros (como no protótipo aprovado). A regra
+ * de dia não útil (antecipa) é da lei e não é parâmetro.
+ */
+export const LINHA_DIA_PIS_COFINS: LinhaDeParametro = {
+  id: "pis_cofins_dia",
+  rotulo: "Vencimento do PIS e da COFINS",
+  campos: [{ chave: "pis_cofins_dia", rotulo: "Dia do vencimento", formato: "dia" }],
+  valor: (v) => `dia ${v.pis_cofins_dia} do mês seguinte`,
+  observacao: () => "Em dia não útil, antecipa (regra da lei).",
+};
+
+export const LINHA_DIA_RETENCOES: LinhaDeParametro = {
+  id: "retencoes_dia",
+  rotulo: "Vencimento das retenções federais",
+  campos: [{ chave: "retencoes_dia", rotulo: "Dia do vencimento", formato: "dia" }],
+  valor: (v) => `dia ${v.retencoes_dia} do mês seguinte ao pagamento`,
+  observacao: () => "DARF 5952 e DARF 1708. Em dia não útil, antecipa (regra da lei).",
+};
+
 export interface ParametroNaTela {
   linha: LinhaDeParametro;
   /** Valores de hoje, por chave. */
   hoje: Record<string, number>;
   /** Datas futuras em que algum valor da linha muda, com os valores dali em diante. */
   programados: Array<{ data: string; valores: Record<string, number> }>;
+}
+
+/**
+ * Uma linha com os valores de hoje e os programados; nula quando falta
+ * alguma das chaves dela no banco.
+ */
+export function parametroNaTela(
+  parametros: readonly FiscalParametro[],
+  hoje: string,
+  linha: LinhaDeParametro,
+): ParametroNaTela | null {
+  const chaves = linha.campos.map((c) => c.chave);
+  if (!chaves.every((k) => parametros.some((p) => p.chave === k))) return null;
+  const valoresEm = (data: string) => {
+    const v: Record<string, number> = {};
+    for (const k of chaves) {
+      // Se a chave só começa depois da data, mostra a primeira versão.
+      v[k] = valorNaData(parametros, k, data) ?? primeiraVersao(parametros, k);
+    }
+    return v;
+  };
+  const datasFuturas = Array.from(
+    new Set(parametros.filter((p) => chaves.includes(p.chave) && p.vigencia_inicio > hoje).map((p) => p.vigencia_inicio)),
+  ).sort();
+  return {
+    linha,
+    hoje: valoresEm(hoje),
+    programados: datasFuturas.map((d) => ({ data: d, valores: valoresEm(d) })),
+  };
 }
 
 /** As linhas da aba que têm todas as chaves no banco, com os valores de hoje e os programados. */
@@ -192,24 +245,8 @@ export function parametrosNaTela(
 ): ParametroNaTela[] {
   const out: ParametroNaTela[] = [];
   for (const linha of linhasDeParametro(nomesNoPresumido)) {
-    const chaves = linha.campos.map((c) => c.chave);
-    if (!chaves.every((k) => parametros.some((p) => p.chave === k))) continue;
-    const valoresEm = (data: string) => {
-      const v: Record<string, number> = {};
-      for (const k of chaves) {
-        // Se a chave só começa depois da data, mostra a primeira versão.
-        v[k] = valorNaData(parametros, k, data) ?? primeiraVersao(parametros, k);
-      }
-      return v;
-    };
-    const datasFuturas = Array.from(
-      new Set(parametros.filter((p) => chaves.includes(p.chave) && p.vigencia_inicio > hoje).map((p) => p.vigencia_inicio)),
-    ).sort();
-    out.push({
-      linha,
-      hoje: valoresEm(hoje),
-      programados: datasFuturas.map((d) => ({ data: d, valores: valoresEm(d) })),
-    });
+    const item = parametroNaTela(parametros, hoje, linha);
+    if (item) out.push(item);
   }
   return out;
 }
