@@ -6516,6 +6516,11 @@ estendido a Contas a Receber em 31/08.**
   com anexo de tipo NF sem a NF registrada.
 - **Baixa:** a parcela de PP abre com as alíquotas da aprovação
   (`lerRetencaoDaAprovacao`).
+- **NF do fornecedor nos títulos:** campo obrigatório `nf_numero` no
+  `TituloRow` de Títulos a Pagar (só a PP preenche, com o número registrado
+  na aprovação; as outras origens mandam `null`). A linha mostra "NF 602"
+  embaixo do título; o lote (`paraOLote` e a cópia `paraOLoteAPagar`) e a
+  aba Títulos (`linhas-da-aba.ts`) mostram "PP-00110 · NF 602".
 - **Cuidados:** os 38 fornecedores estão sem regime (retenção abre ligada
   para todos); a remessa CNAB continua pagando o bruto; o modal
   `cancelar-faturamento-modal.tsx` não está ligado a nenhuma tela (a NF de

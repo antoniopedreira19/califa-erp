@@ -56,11 +56,15 @@ export type Linha =
   | (LinhaBase & { lado: "pagar"; t: TituloAPagar })
   | (LinhaBase & { lado: "receber"; t: TituloAReceber });
 
-/** "PP-00127", "Lançamento avulso"… e a parcela, quando há mais de uma. */
+/** "PP-00127", "PP-00110 · NF 602", "Lançamento avulso"… e a parcela,
+ *  quando há mais de uma. */
 function referenciaAPagar(t: TituloAPagar): string {
   const origem =
     t.origem === "pp"
-      ? t.origem_label
+      ? // Módulo fiscal: a NF do fornecedor registrada na aprovação da PP.
+        t.nf_numero
+        ? `${t.origem_label} · NF ${t.nf_numero}`
+        : t.origem_label
       : t.origem === "recorrencia"
         ? "Recorrência"
         : t.origem === "desembolso"

@@ -627,6 +627,11 @@ export function montarTitulosAPagar(e: {
               pedido: pedidoForaDoCadastro(pp.eventos),
             }
           : null,
+        // Módulo fiscal: o `nf_numero` que o financeiro registrou na
+        // aprovação (vem da `SELECT_PP_DO_FINANCEIRO`, em `nota_fiscal`).
+        // Sem NF registrada — PP sem anexo de NF, verba, aprovada antes do
+        // módulo —, null.
+        nf_numero: pp.nota_fiscal?.registrada?.numero.trim() || null,
         estorno_de_avulsa_id: null,
         compra_id: "",
         compra_total: 0,
@@ -727,6 +732,8 @@ export function montarTitulosAPagar(e: {
       urgente: false,
       urgente_justificativa: null,
       fora_do_cadastro: null,
+      // NF do fornecedor registrada na aprovação: só PP tem.
+      nf_numero: null,
       estorno_de_avulsa_id: a.estorno_de_avulsa_id,
       // A parcela do meio pertence à cabeça; a cabeça e a compra à vista
       // pertencem a si mesmas.
@@ -859,6 +866,8 @@ export function montarTitulosAPagar(e: {
         urgente: false,
         urgente_justificativa: null,
       fora_do_cadastro: null,
+        // NF do fornecedor registrada na aprovação: só PP tem.
+        nf_numero: null,
         estorno_de_avulsa_id: null,
         compra_id: "",
         compra_total: 0,
@@ -942,6 +951,8 @@ export function montarTitulosAPagar(e: {
       urgente: false,
       urgente_justificativa: null,
       fora_do_cadastro: null,
+      // NF do fornecedor registrada na aprovação: só PP tem.
+      nf_numero: null,
       estorno_de_avulsa_id: null,
       compra_id: "",
       compra_total: 0,
@@ -1032,6 +1043,8 @@ export function montarTitulosAPagar(e: {
       urgente: false,
       urgente_justificativa: null,
       fora_do_cadastro: null,
+      // NF do fornecedor registrada na aprovação: só PP tem.
+      nf_numero: null,
       estorno_de_avulsa_id: null,
       compra_id: "",
       compra_total: 0,
