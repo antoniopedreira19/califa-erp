@@ -89,6 +89,14 @@ import {
   RecebimentoAvulsoDialog,
   type RendimentoLancado,
 } from "./recebimento-avulso-dialog";
+import {
+  BaixaEmLoteDialog,
+  BarraDeSelecao,
+  CaixaDaLinha,
+  CaixaDoCabecalho,
+  useSelecao,
+  type TituloParaLote,
+} from "@/components/financeiro/baixa-em-lote";
 
 export interface TituloRow {
   id: string;
@@ -200,6 +208,74 @@ function faltaReceber(r: TituloRow): number {
 
 function ehParcial(r: TituloRow): boolean {
   return r.status === "em_aberto" && r.baixas.length > 0 && faltaReceber(r) > 0.004;
+}
+
+// ---------------------------------------------------------------------------
+// Baixa em lote (pedido do Tiago, 02/10/2026)
+// ---------------------------------------------------------------------------
+
+/** A chave do título na seleção e no lote — única entre as origens. */
+function chaveDoLote(r: TituloRow): string {
+  return `receber|${r.origem}|${r.id}`;
+}
+
+/**
+ * Por que a caixa da baixa em lote fica desligada; `null` entra. Entram a
+ * nota fiscal e o recebimento avulso em aberto — inadimplente e parcial
+ * também, pelo que falta receber (decisão aprovada pelo Tiago em
+ * 02/10/2026). O rendimento (conta de aplicação travada) e a
+ * transferência entre contas têm baixa própria.
+ */
+function motivoForaDoLote(r: TituloRow): string | null {
+  if (r.status === "cancelado") return "Título cancelado: não há baixa a dar.";
+  if (r.status === "pago") {
+    return r.origem === "transferencia" ? "Transferência já feita." : "Título já recebido.";
+  }
+  if (r.origem === "rendimento") return "Rendimento tem baixa própria: dê baixa nele sozinho.";
+  if (r.origem === "transferencia") {
+    return "Transferência tem baixa própria: dê baixa nela sozinha.";
+  }
+  if (r.origem === "recebimento_avulso" && !r.conta_avulsa_id) {
+    return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
+  }
+  if (faltaReceber(r) <= 0.004) return "Título sem valor em aberto.";
+  return null;
+}
+
+/** O título no formato do lote. `null` na origem que não entra nele. */
+function paraOLote(r: TituloRow): TituloParaLote | null {
+  if (r.origem === "nf") {
+    return {
+      chave: chaveDoLote(r),
+      tipo: "receber",
+      alvo: { modulo: "receber", origem: "nf", id: r.id },
+      titulo: `NF ${r.fat_numero_nf}${r.total_parcelas > 1 ? ` · parcela ${r.numero_parcela}/${r.total_parcelas}` : ""}`,
+      referencia: `NF ${r.fat_numero_nf}`,
+      contraparte: r.contraparte_nome,
+      vencimento: r.data_vencimento,
+      aberto: faltaReceber(r),
+      // A nota não tem centro de custo: usa o do lote.
+      centroDeCusto: null,
+    };
+  }
+  if (r.origem === "recebimento_avulso" && r.conta_avulsa_id) {
+    return {
+      chave: chaveDoLote(r),
+      tipo: "receber",
+      alvo: { modulo: "receber", origem: "recebimento_avulso", id: r.conta_avulsa_id },
+      titulo: r.fat_descricao,
+      referencia: r.codigo_avulsa ?? "Recebimento avulso",
+      contraparte: r.contraparte_nome,
+      vencimento: r.data_vencimento,
+      aberto: faltaReceber(r),
+      // O recebimento avulso nasce com o centro de custo (decisão 124).
+      centroDeCusto:
+        r.plano_conta_tipo_id && r.plano_conta_subtipo_id
+          ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
+          : null,
+    };
+  }
+  return null;
 }
 
 /** NF agrupada junta os contatos de todos os jobs — sem repetir o mesmo. */
@@ -329,6 +405,17 @@ export function TitulosList({
       }),
     [rows, filtroStatus, estaInadimplente],
   );
+
+  // Baixa em lote (pedido do Tiago, 02/10/2026). A caixa do cabeçalho marca
+  // só os visíveis (o filtro de status vale), e quem sai da lista sai da
+  // seleção.
+  const elegiveis = visiveis.filter((r) => motivoForaDoLote(r) === null).map(chaveDoLote);
+  const selecao = useSelecao(elegiveis);
+  const [loteAberto, setLoteAberto] = React.useState(false);
+  const selecionados = visiveis
+    .filter((r) => selecao.marcado(chaveDoLote(r)))
+    .map(paraOLote)
+    .filter((t): t is TituloParaLote => t !== null);
 
   /** O conteúdo do botão `i` de um título. */
   function infoDoTitulo(r: TituloRow): InfoFaturamento {
@@ -522,6 +609,17 @@ export function TitulosList({
         <table className="w-full min-w-[1400px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+              {/* A seleção da baixa em lote (02/10/2026), com a caixa da
+                  remessa CNAB. A do cabeçalho marca os visíveis que aceitam
+                  baixa. */}
+              <th className="w-10 px-3 py-3 text-center">
+                <CaixaDoCabecalho
+                  todos={selecao.todos}
+                  alguns={selecao.alguns}
+                  onAlternar={selecao.alternarTodos}
+                  disponivel={elegiveis.length > 0}
+                />
+              </th>
               <th className="w-[150px] px-3.5 py-3 font-semibold">Vencimento</th>
               <th className="w-[150px] px-3.5 py-3 font-semibold">
                 Previsão de recebimento
@@ -543,7 +641,7 @@ export function TitulosList({
             {visiveis.length === 0 && (
               <tr>
                 <td
-                  colSpan={11}
+                  colSpan={12}
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   {rows.length === 0
@@ -565,6 +663,9 @@ export function TitulosList({
               const adiada = r.data_previsao_recebimento !== r.data_vencimento;
               const inadimplente = estaInadimplente(r);
               const agrupada = r.jobs_cobertos.length > 1;
+              // Baixa em lote: entra ou não, e por quê.
+              const motivoLote = motivoForaDoLote(r);
+              const chaveLote = chaveDoLote(r);
               return (
                 <tr
                   key={r.id}
@@ -581,6 +682,21 @@ export function TitulosList({
                     !cancelado && "cursor-pointer",
                   )}
                 >
+                  {/* A caixa da baixa em lote. A linha continua abrindo a
+                      baixa (ou as baixas registradas); a seleção é só pela
+                      caixa, e o clique na célula dela não abre nada. */}
+                  <td
+                    className="px-3 py-3 text-center"
+                    title={motivoLote ?? undefined}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <CaixaDaLinha
+                      marcado={selecao.marcado(chaveLote)}
+                      onAlternar={() => selecao.alternar(chaveLote)}
+                      disponivel={motivoLote === null}
+                      motivo={motivoLote ?? undefined}
+                    />
+                  </td>
                   <td className="px-3.5 py-3">
                     <div className="flex items-center gap-2">
                       {!recebido && !cancelado && r.origem === "nf" && (
@@ -820,6 +936,27 @@ export function TitulosList({
         </table>
       </div>
       </div>
+
+      {/* Baixa em lote: a barra da seleção, logo abaixo da tabela (ela gruda
+          no pé da tela enquanto a lista rola), e o diálogo — a data e a
+          conta uma vez, uma baixa por título. */}
+      <BarraDeSelecao
+        itens={selecionados}
+        onLimpar={selecao.limpar}
+        onBaixar={() => setLoteAberto(true)}
+      />
+      <BaixaEmLoteDialog
+        open={loteAberto}
+        onOpenChange={setLoteAberto}
+        itens={selecionados}
+        contas={contas}
+        tipos={tipos}
+        subtipos={subtipos}
+        onConcluido={(mensagem) => {
+          selecao.limpar();
+          setToast(mensagem);
+        }}
+      />
 
       <BaixaRecebimentoDialog
         open={baixando !== null}
