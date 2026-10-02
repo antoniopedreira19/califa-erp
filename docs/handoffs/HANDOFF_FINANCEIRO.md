@@ -6561,3 +6561,11 @@ estendido a Contas a Receber em 31/08.**
   títulos e a PJ nos impostos — documentado, pergunta aberta (141 §5.8).
 - **Número da aba Apuração** sempre visível: `contarGuiasAAprovarNoBanco`
   num `Suspense` quando a aba Impostos a Pagar está aberta.
+- **Aviso depois de emitir a NF:** `emitirFaturamento` devolve `apuracao`
+  (`ApuracaoDaEmissao`) e o texto sai de `avisoDaApuracao`
+  (`lib/fiscal/faturar.ts`, com testes). A leitura de `fiscal_aprovacoes`
+  só roda em mês encerrado.
+- **Dias federais editáveis** (`pis_cofins_dia`, `retencoes_dia`) pela aba
+  Vencimentos. Quem lê o dia lê pela vigência no último dia da competência:
+  o motor, o "No fiscal", `diaDoPisCofins(cad, emissao)` e
+  `vencimentoDasGuiasFederais`. Não leia o parâmetro pela primeira linha.

@@ -61,6 +61,11 @@ mesma edição da aba Parâmetros (`pis_cofins_dia`, `retencoes_dia`): dia de
 para todas as matrizes (nas retenções, o mesmo para as duas DARF). A
 antecipação em dia não útil é da lei e fica fixa; o lápis das linhas de ISS
 abre o CNPJ emissor, e o IRPJ/CSLL (último dia útil) não tem lápis.
+Com o dia editável, o Faturar ("Impostos desta nota") e o Aprovar PP (o
+vencimento das DARF de retenção) passaram a ler o dia como o motor da
+Apuração: o vigente no último dia do mês da competência (da emissão, no
+Faturar; do pagamento, na PP). Antes, o Faturar pegava a linha mais antiga e
+a PP, o dia de hoje.
 
 ## 4. Verificação (02/10/2026, no TES-P001/26)
 

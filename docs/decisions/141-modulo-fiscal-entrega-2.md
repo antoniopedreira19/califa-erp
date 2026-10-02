@@ -110,7 +110,9 @@ Pedidos pelo Tiago depois de comparar o sistema com o protótipo.
 | O quê | Como ficou |
 |---|---|
 | "No fiscal" na baixa em lote | Voltou ao diálogo (tinha saído em `a992f19a`). O diálogo que parecia não fechar depois de confirmar já estava fechado (`data-state="closed"`): o painel do navegador de teste estava escondido e não roda a animação de saída, então o elemento ficava na tela. Não era o bloco nem o lote. |
+| Aviso depois de emitir a NF (Faturar) | O aviso do canto diz a NF, o CNPJ emissor, o valor e o job e, numa segunda linha, em que Apuração os impostos entraram: "(em curso)" no mês corrente, "(a aprovar)" em mês encerrado, ": a guia já aprovada passa a mostrar a diferença." quando a guia de ISS, PIS ou COFINS do mês já foi aprovada (no presumido, só a de ISS conta, e o texto lembra que PIS, COFINS, IRPJ e CSLL entram no recebimento). A consulta às aprovações é uma só e só acontece em mês encerrado. Diferenças do protótipo: um aviso só, em vez de dois; a nota com data futura no mês corrente já aparece "em curso" (o motor conta a nota desde o registro); a nota de antes de outubro/2026 avisa que fica fora da Apuração. |
 | "CNPJ emissor" na baixa da NF pela aba Títulos | O resumo da baixa ganhou a linha "CNPJ emissor" (estabelecimento · CNPJ), como no protótipo, quando a nota saiu por um CNPJ do cadastro fiscal. As notas de antes do módulo fiscal não o têm, e a linha não aparece. |
+| Vencimentos federais no cadastro | O lápis das linhas de PIS/COFINS e das DARF 5952 e 1708 da aba Vencimentos abre a edição de parâmetro (decisão 139, nota de 02/10); o Faturar e o Aprovar PP passaram a ler o dia pela vigência, como o motor. |
 | Número da aba Apuração | Aparece também com a aba Impostos a Pagar aberta: o cálculo chega num `Suspense` depois da página, sem segurar a lista de impostos (como o cartão "Fiscal" da Central). |
 | Coluna Empresa da aba Títulos | Fica como estava, agora documentada: os títulos a pagar e a receber mostram a empresa gerencial (a das listas deles); os impostos, a PJ da guia. A empresa gerencial não aponta para uma PJ (a ligação com a contábil existe só na conta bancária). Pergunta 8 do §5. |
 | Textos da estimativa | Voltaram as frases do protótipo: a competência em curso "entra no fluxo de caixa como estimativa" (Apuração) e, na memória de cálculo, "enquanto isso, a estimativa entra no fluxo de caixa no vencimento". |
@@ -124,3 +126,17 @@ canceladas depois pela tela (Títulos a Pagar e Impostos a Pagar). A aba
 Impostos a Pagar com o número cinza e a aba ativa em vermelho; as duas frases
 da estimativa na Apuração e na memória de cálculo. O número da Apuração não
 aparece hoje porque nenhuma guia está a aprovar (nenhuma competência fechou).
+
+Também em modo produção: a NF de teste TESTE-141T (TES-1013/26, R$ 1.000,00,
+California · Salvador, CNAE 74.90-1-04 sugerido pelo GP) saiu com o aviso
+"NF TESTE-141T emitida pela California · Salvador · R$ 1.000,00 ·
+TES-1013/26" e "Os impostos dela já estão na Apuração de outubro/2026 (em
+curso)."; o bloco "Impostos desta nota" com o PIS e a COFINS no dia 25 (lido
+pela vigência). Na aba Títulos, a baixa dela mostrou "CNPJ emissor California
+· Salvador · 19.437.976/0001-54" e o "No fiscal" do recebimento (sem
+retenção: "Nada muda na apuração"; com ISS 2% e IRRF 1,5%: o ISS sai da
+apuração de outubro e o IRRF abate o IRPJ do 4º trimestre, só os 15%). A
+baixa não foi confirmada e a NF foi cancelada pela action (a tela não tem o
+botão); a parcela voltou para Faturar. No cadastro, o lápis do PIS e COFINS
+abriu o dia 25 com "Antecipa" fixo; 32, 0 e vazio foram recusados, e salvar o
+mesmo 25 respondeu "Nenhum valor mudou." sem gravar.

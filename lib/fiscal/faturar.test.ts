@@ -160,11 +160,16 @@ test("textos: CNPJ, regime, trimestre e cotas de IRPJ/CSLL", () => {
   assert.equal(textoDoTrimestre("2026-11-11"), "4º trimestre/2026");
   assert.equal(mesesDasCotas("2026-11-11"), "janeiro, fevereiro e março de 2027");
   assert.equal(mesesDasCotas("2026-02-03"), "abril, maio e junho de 2026");
-  assert.equal(diaDoPisCofins(CAD), 25);
-  assert.equal(
-    diaDoPisCofins({ ...CAD, parametros: [{ id: "p", tenant_id: "t", chave: "pis_cofins_dia", valor: 20, descricao: "", vigencia_inicio: "2026-01-01", created_at: "", updated_at: "" }] }),
-    20,
-  );
+  assert.equal(diaDoPisCofins(CAD, "2026-11-11"), 25);
+  const dia = (valor: number, vigencia_inicio: string) => ({ id: `p${valor}`, tenant_id: "t", chave: "pis_cofins_dia", valor, descricao: "", vigencia_inicio, created_at: "", updated_at: "" });
+  assert.equal(diaDoPisCofins({ ...CAD, parametros: [dia(20, "2026-01-01")] }, "2026-11-11"), 20);
+  // Dia trocado a partir de 01/12: a nota de novembro fica com o de antes; a de
+  // dezembro, com o novo — o dia vigente no último dia da competência, como no motor.
+  const trocado = { ...CAD, parametros: [dia(25, "2026-01-01"), dia(20, "2026-12-01")] };
+  assert.equal(diaDoPisCofins(trocado, "2026-11-30"), 25);
+  assert.equal(diaDoPisCofins(trocado, "2026-12-01"), 20);
+  // Vigência no meio do mês vale para o mês inteiro (o vencimento é da competência).
+  assert.equal(diaDoPisCofins({ ...CAD, parametros: [dia(25, "2026-01-01"), dia(18, "2026-11-15")] }, "2026-11-02"), 18);
 });
 
 // ---------------------------------------------------------------------------
