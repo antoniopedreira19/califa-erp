@@ -54,6 +54,14 @@ de hoje, cada nota e cada PP já entrem com o dado que a Apuração vai usar.
   não está no banco nem na planilha. O financeiro informa no cadastro e
   ativa.
 
+⚠️ **Dias dos federais editáveis (2026-10-02).** Na aba Vencimentos do
+cadastro, o lápis das linhas de PIS/COFINS e das DARF 5952 e 1708 abre a
+mesma edição da aba Parâmetros (`pis_cofins_dia`, `retencoes_dia`): dia de
+1 a 31, valor novo a partir de uma data, só admin ou financeiro. É um dia só
+para todas as matrizes (nas retenções, o mesmo para as duas DARF). A
+antecipação em dia não útil é da lei e fica fixa; o lápis das linhas de ISS
+abre o CNPJ emissor, e o IRPJ/CSLL (último dia útil) não tem lápis.
+
 ## 4. Verificação (02/10/2026, no TES-P001/26)
 
 - **Faturar** (TES-1013/26): CNPJ California · Salvador → 21 CNAEs com os
