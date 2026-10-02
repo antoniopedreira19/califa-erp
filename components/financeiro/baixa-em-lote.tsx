@@ -450,7 +450,8 @@ function FormularioDoLote({
           : null,
       itens: itens.map((t) => ({
         chave: t.chave,
-        rotulo: t.titulo,
+        // Só para a mensagem de erro: o nome inteiro não precisa ir.
+        rotulo: t.titulo.slice(0, 200),
         alvo: t.alvo,
         aberto: r2(t.aberto),
         centro: t.centroDeCusto,
@@ -460,7 +461,20 @@ function FormularioDoLote({
     const total = itens.length;
 
     startTransition(async () => {
-      const res = await darBaixaEmLote(entrada);
+      let res: Awaited<ReturnType<typeof darBaixaEmLote>>;
+      try {
+        res = await darBaixaEmLote(entrada);
+      } catch (e) {
+        // A resposta não chegou (conexão, tempo do servidor): parte do lote
+        // pode ter sido baixada. A tela é recarregada para mostrar o que
+        // ficou, e nada é reenviado sozinho.
+        console.error("[baixa_em_lote]", e);
+        router.refresh();
+        setErro(
+          "Não foi possível confirmar o lote até o fim. Feche esta janela e confira na lista o que já foi baixado antes de tentar de novo.",
+        );
+        return;
+      }
       if (res.feitas.length > 0) router.refresh();
       if (res.ok) {
         const n = res.feitas.length;
