@@ -26,6 +26,12 @@
  * valor inteiro. O formulário é um filho com `key` do título: o estado
  * recomeça a cada título (antes o efeito de abertura rodava a cada
  * renderização da tela, porque o `alvo` é remontado sempre).
+ *
+ * Módulo fiscal (entrega 2, 02/10/2026): na parcela de PP com a NF do
+ * fornecedor registrada na aprovação, o aviso genérico dos impostos retidos
+ * dá lugar ao bloco "No fiscal" (`components/financeiro/no-fiscal.tsx`):
+ * as guias que a baixa faz nascer na Apuração, refeitas pela data e pelos
+ * retidos do formulário.
  */
 
 import * as React from "react";
@@ -67,6 +73,7 @@ import {
   useRetencaoDaAprovacao,
 } from "@/components/financeiro/retencao-da-aprovacao";
 import { parcelaDePPDaChave } from "@/lib/fiscal/retencao-da-aprovacao";
+import { NoFiscalDoPagamento, useFiscalDaParcela } from "@/components/financeiro/no-fiscal";
 import {
   FormaPagamentoField,
   type CartaoOption,
@@ -271,6 +278,11 @@ function FormularioDaBaixa({
       : null,
   );
   const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao, aprovacao.retencao);
+  // Módulo fiscal (entrega 2): o bloco "No fiscal" — as guias que esta baixa
+  // faz nascer na Apuração. A NF da PP é lida ao abrir, DEPOIS das retenções
+  // da aprovação (as Server Actions vão uma de cada vez, e é aquela leitura
+  // que trava o Confirmar).
+  const fiscal = useFiscalDaParcela(parcelaDePPDaChave(alvo.chave));
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão do Tiago em
@@ -322,6 +334,10 @@ function FormularioDaBaixa({
       ? { mostra: true, motivo: BUSCANDO_RETENCAO_DA_APROVACAO }
       : alvo.retencao;
   const retencaoLiberada = retencao.mostra && retencao.motivo === null;
+  // O bloco "No fiscal" ocupa o lugar do aviso genérico (e, enquanto a NF
+  // da PP é buscada, o aviso espera, para não piscar).
+  const blocoNoFiscal =
+    fiscal.estado === "buscando" || (fiscal.estado === "pronto" && fiscal.fiscal !== null);
   React.useEffect(() => {
     if (motivoSemParcial !== null && v.parcial) v.setParcial(false);
     if (!retencaoLiberada && v.retem) v.setRetem(false);
@@ -516,7 +532,21 @@ function FormularioDaBaixa({
           ajudaDaRetencao={aprovacao.ajuda}
         />
 
-        {v.retem && v.retido > 0 && (
+        {/* Módulo fiscal (entrega 2): na PP com a NF registrada, no lugar do
+            aviso genérico, as guias que esta baixa faz nascer — com valor,
+            mês e vencimento, refeitas pela data e pelos retidos do
+            formulário. No cartão, a baixa não retém nada: o bloco some. */}
+        {!noCartao && (
+          <NoFiscalDoPagamento
+            leitura={fiscal}
+            pagoEm={pagoEm}
+            retidos={v.retem && retencaoLiberada ? v.valores : null}
+          />
+        )}
+
+        {/* O aviso genérico continua onde a baixa não chega à Apuração
+            (avulso, recorrência, PP sem NF registrada). */}
+        {!blocoNoFiscal && v.retem && v.retido > 0 && (
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
