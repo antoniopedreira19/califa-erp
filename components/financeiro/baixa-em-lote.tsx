@@ -19,9 +19,12 @@
  * Server Action `darBaixaEmLote`, que baixa um por um pela action da baixa
  * individual — as regras moram em `lib/financeiro/baixa-em-lote.ts`.
  *
- * No lote não entram retenção, baixa parcial nem cartão: cada título é
- * baixado pelo que falta, inteiro, pela conta escolhida. O título com
- * retenção a fazer se baixa sozinho.
+ * No lote não entram baixa parcial nem cartão: cada título é baixado pelo
+ * que falta, inteiro, pela conta escolhida. A parcela de PP sai com as
+ * retenções na fonte que o financeiro decidiu na APROVAÇÃO da PP (módulo
+ * fiscal): o diálogo as busca ao abrir e mostra na coluna Ajuste, e o
+ * servidor relê na hora de baixar. Retenção diferente da aprovação, só na
+ * baixa de um título sozinho.
  */
 
 import * as React from "react";
@@ -46,12 +49,17 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaSubtipo, PlanoContaTipo } from "@/lib/types";
-import type {
-  AlvoDaBaixaEmLote,
-  CentroDeCusto,
-  EntradaDaBaixaEmLote,
+import {
+  retencoesPelaAprovacao,
+  type AliquotasDaAprovacao,
+  type AlvoDaBaixaEmLote,
+  type CentroDeCusto,
+  type EntradaDaBaixaEmLote,
 } from "@/lib/financeiro/baixa-em-lote";
-import { darBaixaEmLote } from "@/app/(app)/financeiro/actions-baixa-em-lote";
+import {
+  darBaixaEmLote,
+  lerRetencoesDoLote,
+} from "@/app/(app)/financeiro/actions-baixa-em-lote";
 
 // ---------------------------------------------------------------------------
 // O título, no formato do lote
@@ -299,6 +307,20 @@ export function ChipTipo({ tipo }: { tipo: TituloParaLote["tipo"] }) {
 
 const COMBO = "h-9 w-full rounded-lg border-border px-3 text-sm";
 
+/** A parcela de PP: a única que retém na fonte no lote (as alíquotas da
+ *  aprovação da PP). */
+function ehParcelaDePP(t: TituloParaLote): boolean {
+  return t.alvo.modulo === "pagar" && t.alvo.origem === "pp";
+}
+
+const ERRO_DAS_RETENCOES =
+  "Não foi possível buscar as retenções informadas na aprovação das PPs. Feche e abra o lote de novo, ou dê baixa nas PPs uma a uma.";
+
+type RetencoesDoLote =
+  | { estado: "buscando" }
+  | { estado: "pronto"; aliquotas: Record<string, AliquotasDaAprovacao | null> }
+  | { estado: "erro"; mensagem: string };
+
 type ContaDoLote = Pick<ContaBancaria, "id" | "nome" | "banco" | "ativo">;
 type TipoDoLote = Pick<PlanoContaTipo, "id" | "codigo" | "nome" | "ativo">;
 type SubtipoDoLote = Pick<PlanoContaSubtipo, "id" | "tipo_id" | "nome" | "ativo">;
@@ -409,6 +431,55 @@ function FormularioDoLote({
   const receber = itens.filter((t) => t.tipo === "receber");
   const misto = pagar.length > 0 && receber.length > 0;
 
+  // Retenção na fonte (módulo fiscal, 02/10/2026): as parcelas de PP saem
+  // com as alíquotas da aprovação. Buscadas uma vez, ao abrir; enquanto não
+  // chegam, a confirmação espera — o lote não pode pagar o bruto.
+  const parcelasDePP = React.useMemo(
+    () => lista.flatMap((t) => (ehParcelaDePP(t) ? [t.alvo.id] : [])),
+    [lista],
+  );
+  const [aprovacao, setAprovacao] = React.useState<RetencoesDoLote>(() =>
+    parcelasDePP.length > 0 ? { estado: "buscando" } : { estado: "pronto", aliquotas: {} },
+  );
+  React.useEffect(() => {
+    if (parcelasDePP.length === 0) return;
+    let vivo = true;
+    lerRetencoesDoLote(parcelasDePP)
+      .then((res) => {
+        if (!vivo) return;
+        if (!res.ok) {
+          setAprovacao({ estado: "erro", mensagem: res.message });
+          return;
+        }
+        // Parcela que não voltou (PP cancelada com a tela aberta): sem
+        // saber a retenção dela, o lote não confirma.
+        const faltou = parcelasDePP.some((id) => !(id in res.aliquotas));
+        setAprovacao(
+          faltou
+            ? { estado: "erro", mensagem: ERRO_DAS_RETENCOES }
+            : { estado: "pronto", aliquotas: res.aliquotas },
+        );
+      })
+      .catch(() => {
+        if (vivo) setAprovacao({ estado: "erro", mensagem: ERRO_DAS_RETENCOES });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [parcelasDePP]);
+  const comPP = pagar.some(ehParcelaDePP);
+  const buscandoRetencoes = comPP && aprovacao.estado === "buscando";
+  const erroDasRetencoes = comPP && aprovacao.estado === "erro" ? aprovacao.mensagem : null;
+
+  /** O que sai da conta (ou entra) por título; `null` enquanto a retenção
+   *  da PP não chegou. */
+  function naContaDe(t: TituloParaLote): { retido: number; liquido: number } | null {
+    if (!ehParcelaDePP(t)) return { retido: 0, liquido: r2(t.aberto) };
+    if (aprovacao.estado !== "pronto") return null;
+    const r = retencoesPelaAprovacao(r2(t.aberto), aprovacao.aliquotas[t.alvo.id] ?? null);
+    return { retido: r.retido, liquido: r.liquido };
+  }
+
   const contasAtivas = contas.filter((c) => c.ativo);
   const contaEscolhida = contasAtivas.find((c) => c.id === conta) ?? null;
 
@@ -425,10 +496,21 @@ function FormularioDoLote({
   const pagarSemCentro = pagar.filter((t) => !t.centroDeCusto);
   const receberSemCentro = receber.filter((t) => !t.centroDeCusto);
 
-  const saidas = r2(pagar.reduce((s, t) => s + t.aberto, 0));
+  // "Saem da conta" é o líquido: o retido fica para recolher.
+  const saidas = buscandoRetencoes || erroDasRetencoes
+    ? null
+    : r2(pagar.reduce((s, t) => s + (naContaDe(t)?.liquido ?? 0), 0));
   const entradas = r2(receber.reduce((s, t) => s + t.aberto, 0));
 
   function confirmar() {
+    if (buscandoRetencoes) {
+      setErro("Aguarde: buscando as retenções informadas na aprovação das PPs.");
+      return;
+    }
+    if (erroDasRetencoes) {
+      setErro(erroDasRetencoes);
+      return;
+    }
     const falta = new Set<string>();
     if (!data) falta.add("data");
     if (!contaEscolhida) falta.add("conta");
@@ -533,6 +615,13 @@ function FormularioDoLote({
         </DialogDescription>
       </DialogHeader>
 
+      {erroDasRetencoes && erro !== erroDasRetencoes && (
+        <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{erroDasRetencoes}</span>
+        </div>
+      )}
+
       {erro && (
         <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -624,7 +713,9 @@ function FormularioDoLote({
                 </tr>
               </thead>
               <tbody>
-                {itens.map((t) => (
+                {itens.map((t) => {
+                  const naConta = naContaDe(t);
+                  return (
                   <tr key={t.chave} className="border-t border-border/70 align-top">
                     {misto && (
                       <td className="px-3 py-2">
@@ -658,10 +749,26 @@ function FormularioDoLote({
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {moeda(t.aberto)}
                     </td>
-                    {/* Sem retenção nem multa no lote: o ajuste fica para a
-                        baixa de um título sozinho. */}
+                    {/* A retenção na fonte da aprovação da PP. Nos outros
+                        títulos o lote não tem ajuste. */}
                     <td className="px-3 py-2 text-right">
-                      <span className="text-muted-foreground">—</span>
+                      {naConta === null ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          {buscandoRetencoes ? "buscando…" : "—"}
+                        </span>
+                      ) : naConta.retido > 0 ? (
+                        <span
+                          className="font-mono text-[11.5px] text-california-red"
+                          title="Retenções informadas na aprovação da PP"
+                        >
+                          − {moeda(naConta.retido)}
+                          <span className="block font-sans text-[10.5px] text-muted-foreground">
+                            retido na fonte
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td
                       className={cn(
@@ -669,19 +776,28 @@ function FormularioDoLote({
                         t.tipo === "receber" ? "text-emerald-700" : "text-foreground",
                       )}
                     >
-                      {t.tipo === "receber" ? "+ " : "− "}
-                      {moeda(t.aberto)}
+                      {naConta === null ? (
+                        <span className="font-sans text-[11px] font-normal text-muted-foreground">…</span>
+                      ) : (
+                        <>
+                          {t.tipo === "receber" ? "+ " : "− "}
+                          {moeda(naConta.liquido)}
+                        </>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 border-t border-border bg-muted/30 px-3 py-2 text-[12.5px]">
-            {saidas > 0 && (
+            {pagar.length > 0 && (saidas === null || saidas > 0) && (
               <span className="text-muted-foreground">
                 Saem da conta{" "}
-                <strong className="font-mono font-semibold text-foreground">{moeda(saidas)}</strong>
+                <strong className="font-mono font-semibold text-foreground">
+                  {saidas === null ? "…" : moeda(saidas)}
+                </strong>
               </span>
             )}
             {entradas > 0 && (
@@ -817,13 +933,15 @@ function FormularioDoLote({
         <button
           type="button"
           onClick={confirmar}
-          disabled={pending || itens.length === 0}
+          disabled={pending || itens.length === 0 || buscandoRetencoes || erroDasRetencoes !== null}
           className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           <CreditCard className="h-4 w-4" />
           {pending
             ? "Confirmando..."
-            : itens.length === 1
+            : buscandoRetencoes
+              ? "Buscando as retenções…"
+              : itens.length === 1
               ? "Confirmar baixa"
               : `Confirmar ${itens.length} baixas`}
         </button>
