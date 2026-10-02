@@ -132,10 +132,11 @@ function useEnvio(onClose: () => void) {
 // CNPJ emissor
 // ---------------------------------------------------------------------------
 
+// Os mesmos nomes da coluna "Dia não útil" da aba Vencimentos.
 const REGRAS: Array<{ valor: RegraDeVencimentoFiscal; rotulo: string }> = [
-  { valor: "prorroga", rotulo: "Prorroga para o dia útil seguinte" },
-  { valor: "antecipa", rotulo: "Antecipa para o dia útil anterior" },
-  { valor: "ultimo_util", rotulo: "Último dia útil do mês" },
+  { valor: "prorroga", rotulo: "Prorroga" },
+  { valor: "antecipa", rotulo: "Antecipa" },
+  { valor: "ultimo_util", rotulo: "Último dia útil" },
 ];
 
 export function EstabelecimentoDialog({
@@ -216,13 +217,15 @@ export function EstabelecimentoDialog({
                   disabled={!cnpjCompleto}
                   onChange={(ev) => setAtivo(ev.target.checked)}
                 />
-                Ativo: aparece no Faturar e na aprovação da PP
+                Ativo
               </label>
             </div>
           </div>
-          {!cnpjCompleto && (
-            <p className="-mt-2 text-[11.5px] text-muted-foreground">Sem o CNPJ completo, o estabelecimento fica inativo.</p>
-          )}
+          <p className="-mt-2 text-[11.5px] text-muted-foreground">
+            {cnpjCompleto
+              ? "Ativo aparece na lista de CNPJs do Faturar e da aprovação da PP."
+              : "Sem o CNPJ completo, o estabelecimento fica inativo."}
+          </p>
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <Rotulo htmlFor="fiscal-iss-dia" obrigatorio>
@@ -395,7 +398,7 @@ export function EditarCnaeDialog({
           </Nota>
           {vigencia !== "" && vigencia < hoje && (
             <Nota tom="ambar">
-              A data é anterior a hoje: a alíquota nova vale também para as notas emitidas de {dataBr(vigencia)} até hoje.
+              A data é anterior a hoje: a alíquota nova vale desde {dataBr(vigencia)}. Confira se já há nota emitida nesse período.
             </Nota>
           )}
           <Erro mensagem={erro} />
@@ -690,7 +693,7 @@ export function ParametroDialog({
             O valor novo vale a partir da data; o atual fica no histórico. As apurações de antes da data continuam com o valor da época.
           </Nota>
           {vigencia !== "" && vigencia < hoje && (
-            <Nota tom="ambar">A data é anterior a hoje: o valor novo vale também de {dataBr(vigencia)} até hoje.</Nota>
+            <Nota tom="ambar">A data é anterior a hoje: o valor novo vale desde {dataBr(vigencia)}.</Nota>
           )}
           <Erro mensagem={erro} />
           <Rodape pendente={pendente} onCancelar={onClose} />
