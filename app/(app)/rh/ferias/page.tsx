@@ -15,25 +15,16 @@ import type { FeriasLancamentoStatus } from "@/lib/types";
 import { AbaPainel } from "./aba-painel";
 import { AbaSolicitacoes } from "./aba-solicitacoes";
 import { AbaQuadro } from "./aba-quadro";
-import { AbaCalendario } from "./aba-calendario";
 import { AbaNotificacoes } from "./aba-notificacoes";
-import { AbaRescisoes } from "./aba-rescisoes";
 
 export const dynamic = "force-dynamic";
 
-type Tab =
-  | "painel"
-  | "solicitacoes"
-  | "quadro"
-  | "calendario"
-  | "rescisoes"
-  | "notificacoes";
+type Tab = "painel" | "solicitacoes" | "quadro" | "notificacoes";
+
 const TABS: { key: Tab; label: string }[] = [
   { key: "painel", label: "Painel" },
   { key: "solicitacoes", label: "Solicitações" },
   { key: "quadro", label: "Quadro" },
-  { key: "calendario", label: "Calendário" },
-  { key: "rescisoes", label: "Rescisões" },
   { key: "notificacoes", label: "Notificações" },
 ];
 
@@ -43,11 +34,6 @@ export default async function FeriasPage({
   searchParams: {
     tab?: string;
     status?: string;
-    busca?: string;
-    tipo_contr?: string;
-    status_periodo?: string;
-    mes?: string;
-    colab?: string;
     notif_tipo?: string;
     nao_lidas?: string;
   };
@@ -62,40 +48,33 @@ export default async function FeriasPage({
   const tab: Tab = normalizarTab(searchParams.tab);
 
   const hojeISO = new Date().toISOString().slice(0, 10);
-  const em30 = new Date();
-  em30.setDate(em30.getDate() + 60);
-  const em60ISO = em30.toISOString().slice(0, 10);
 
   // KPIs — queries agregadas, não embeds pesados
-  const [
-    aguardandoRes,
-    emAlertaRes,
-    vencidasRes,
-    emFeriasHojeRes,
-  ] = await Promise.all([
-    supabase
-      .from("colaboradores_ferias_lancamentos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .in("status", ["pendente_aprovacao", "em_analise"]),
-    supabase
-      .from("colaboradores_ferias_periodos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("status", "em_alerta"),
-    supabase
-      .from("colaboradores_ferias_periodos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("status", "vencido"),
-    supabase
-      .from("colaboradores_ferias_lancamentos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("status", "aprovado")
-      .lte("data_inicio", hojeISO)
-      .gte("data_fim", hojeISO),
-  ]);
+  const [aguardandoRes, emAlertaRes, vencidasRes, emFeriasHojeRes] =
+    await Promise.all([
+      supabase
+        .from("colaboradores_ferias_lancamentos")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .in("status", ["pendente_aprovacao", "em_analise"]),
+      supabase
+        .from("colaboradores_ferias_periodos")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("status", "em_alerta"),
+      supabase
+        .from("colaboradores_ferias_periodos")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("status", "vencido"),
+      supabase
+        .from("colaboradores_ferias_lancamentos")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("status", "aprovado")
+        .lte("data_inicio", hojeISO)
+        .gte("data_fim", hojeISO),
+    ]);
 
   const kpis = {
     aguardando: aguardandoRes.count ?? 0,
@@ -110,7 +89,7 @@ export default async function FeriasPage({
       <PageHeader
         eyebrow="RH"
         title="Gestão de Férias"
-        description="Painel de solicitações, concessivos vencendo, calendário de ausências e rescisões."
+        description="Painel de solicitações, concessivos vencendo e acompanhamento do quadro."
         icon={Palmtree}
       />
 
@@ -178,12 +157,6 @@ export default async function FeriasPage({
         />
       )}
       {tab === "quadro" && <AbaQuadro tenantId={tenantId} />}
-      {tab === "calendario" && (
-        <AbaCalendario
-          tenantId={tenantId}
-          mesParam={searchParams.mes}
-        />
-      )}
       {tab === "notificacoes" && (
         <AbaNotificacoes
           tenantId={tenantId}
@@ -192,25 +165,12 @@ export default async function FeriasPage({
           somenteNaoLidas={searchParams.nao_lidas === "1"}
         />
       )}
-      {tab === "rescisoes" && (
-        <AbaRescisoes
-          tenantId={tenantId}
-          colaboradorSelecionadoId={searchParams.colab}
-        />
-      )}
     </div>
   );
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = [
-    "painel",
-    "solicitacoes",
-    "quadro",
-    "calendario",
-    "rescisoes",
-    "notificacoes",
-  ];
+  const vals: Tab[] = ["painel", "solicitacoes", "quadro", "notificacoes"];
   return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
 }
 
