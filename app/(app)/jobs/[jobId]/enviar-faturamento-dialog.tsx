@@ -1433,7 +1433,7 @@ function CartaoNota({
       </div>
 
       <div className="space-y-4 p-4">
-        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-start gap-3">
+        <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] items-start gap-3">
           <div className="space-y-1.5">
             <Label>
               CNPJ do cliente <span className="text-california-red">*</span>
@@ -1491,7 +1491,10 @@ function CartaoNota({
               CNPJ, do valor e do vencimento, mas deixa de ser texto livre:
               lista com busca dos CNAEs cadastrados, com "Nenhum" (o ✕ também
               limpa). O campo mostra só o código; a lista abre mais larga,
-              para a esquerda, com a atividade por extenso. Segue opcional. */}
+              para a esquerda, com a atividade por extenso. Segue opcional.
+              A coluna é a mais larga das quatro (1,4fr) para o código caber
+              inteiro com o subitem ("82.30-0-01 · 12.08"); com 1fr o
+              subitem saía cortado, e é ele que o Tiago pediu para ver. */}
           <div className="space-y-1.5">
             <Label>
               CNAE sugerido{" "}
@@ -1506,7 +1509,7 @@ function CartaoNota({
               buscaPlaceholder="Escreva o código ou a atividade"
               ariaLabel={`CNAE sugerido da nota ${indice + 1}`}
               limpavel
-              className={cn(COMBOBOX_COMO_SELECT, "font-mono")}
+              className={cn(COMBOBOX_COMO_SELECT, "font-mono text-[13px]")}
               larguraLista="w-[520px]"
               alinharLista="end"
               cabecalhoLista={CABECALHO_CNAES}
