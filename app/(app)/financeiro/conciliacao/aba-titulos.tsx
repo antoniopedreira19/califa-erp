@@ -22,6 +22,11 @@
  * A seleção é a da baixa em lote (`components/financeiro/baixa-em-lote.tsx`),
  * com as mesmas regras de quem entra nas listas e a conta aberta já
  * escolhida no diálogo.
+ *
+ * Impostos a Pagar (módulo fiscal, entrega 2): os impostos em aberto entram
+ * como no protótipo aprovado — o chip "Imposto", o valor com "−", o filtro
+ * "Impostos" —, e "Baixar" abre a MESMA baixa da aba Impostos a Pagar
+ * (`BaixaImpostoDialog`), com a conta da conciliação já escolhida.
  */
 
 import * as React from "react";
@@ -43,6 +48,7 @@ import { BaixaRecebimentoDialog } from "../contas-a-receber/baixa-recebimento-di
 import { darBaixaTitulo as darBaixaTituloAPagar } from "../contas-a-pagar/actions-titulos";
 import { darBaixaTitulo as darBaixaTituloAReceber } from "../contas-a-receber/actions";
 import { darBaixaRecebimentoAvulso } from "../contas-a-receber/actions-recebimento-avulso";
+import { BaixaImpostoDialog } from "../fiscal/impostos/dialogos";
 import type { DadosDaAbaTitulos } from "./titulos-dados";
 import {
   alvoDaBaixaAPagar,
@@ -88,6 +94,7 @@ const CHIPS_TIPO: Array<{ key: FiltroTipo; label: string }> = [
   { key: "todos", label: "Todos" },
   { key: "pagar", label: "A pagar" },
   { key: "receber", label: "A receber" },
+  { key: "imposto", label: "Impostos" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -126,7 +133,7 @@ export function AbaTitulos({
   const hoje = hojeIso();
 
   const linhas = React.useMemo(
-    () => montarLinhas(dados.aPagar, dados.aReceber, dados.empresas),
+    () => montarLinhas(dados.aPagar, dados.aReceber, dados.empresas, dados.impostos),
     [dados],
   );
 
@@ -144,6 +151,7 @@ export function AbaTitulos({
     todos: base.length,
     pagar: base.filter((l) => l.lado === "pagar").length,
     receber: base.filter((l) => l.lado === "receber").length,
+    imposto: base.filter((l) => l.lado === "imposto").length,
   };
   const filtrados = tipo === "todos" ? base : base.filter((l) => l.lado === tipo);
 
@@ -162,6 +170,18 @@ export function AbaTitulos({
 
   const baixandoPagar = baixando?.lado === "pagar" ? baixando.t : null;
   const baixandoReceber = baixando?.lado === "receber" ? baixando.t : null;
+  const baixandoImposto = baixando?.lado === "imposto" ? baixando.t : null;
+  // As contas da baixa do imposto (as da aba, que já vêm sem cartão).
+  const contasDoImposto = React.useMemo(
+    () =>
+      dados.contas.map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        banco: c.banco,
+        empresa_contabil_id: c.empresa_contabil_id,
+      })),
+    [dados.contas],
+  );
 
   /** Onde o movimento foi parar, para o aviso depois da baixa. */
   function avisoDaBaixa(contaEscolhidaId: string | null, data: string): string {
@@ -392,6 +412,8 @@ export function AbaTitulos({
         // A conta-espelho do cartão, aberta por link direto, não é conta
         // de baixa: aí o lote abre sem conta, como as baixas de um título.
         contaPadrao={dados.contas.some((c) => c.id === contaId) ? contaId : null}
+        tenantId={dados.tenantId}
+        nomesDasPJs={dados.nomesDasPJs}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);
@@ -489,6 +511,23 @@ export function AbaTitulos({
           });
         }}
       />
+
+      {/* Imposto: a baixa de Impostos a Pagar, com a conta aberta. */}
+      {baixandoImposto && (
+        <BaixaImpostoDialog
+          imposto={baixandoImposto}
+          contas={contasDoImposto}
+          nomesDasPJs={dados.nomesDasPJs}
+          tenantId={dados.tenantId}
+          contaInicial={contaId}
+          onClose={fechar}
+          onBaixado={({ pago_em, conta_bancaria_id }) => {
+            fechar();
+            setToast(avisoDaBaixa(conta_bancaria_id, pago_em));
+            router.refresh();
+          }}
+        />
+      )}
 
       {toast && (
         <div

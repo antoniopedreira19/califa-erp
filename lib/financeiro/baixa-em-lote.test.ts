@@ -15,10 +15,17 @@ import {
   montarChamadas,
   retencoesPelaAprovacao,
   type AliquotasDaAprovacao,
+  type ChamadaDaBaixa,
   type EntradaDaBaixaEmLote,
 } from "./baixa-em-lote";
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
+/** A entrada de uma baixa de título (a pagar ou a receber) — não de imposto. */
+function deTitulo(c: ChamadaDaBaixa) {
+  if (c.acao === "imposto") throw new Error("esperava a baixa de um título, veio a de um imposto");
+  return c.entrada;
+}
 
 const CONTA = U(1);
 const TIPO_02 = U(2);
@@ -138,7 +145,7 @@ test("o valor da baixa é o que falta, em centavos", () => {
   const m = montarChamadas(d, SEM_RETENCAO);
   assert.ok(m.ok);
   if (!m.ok) return;
-  assert.equal(m.chamadas[1].entrada.valor_baixa, 800.56);
+  assert.equal(deTitulo(m.chamadas[1]).valor_baixa, 800.56);
 });
 
 test("sem cartão, e sem retenção fora da PP com retenção na aprovação", () => {
@@ -147,7 +154,7 @@ test("sem cartão, e sem retenção fora da PP com retenção na aprovação", (
   assert.ok(m.ok);
   if (!m.ok) return;
   for (const c of m.chamadas) {
-    assert.deepEqual(c.entrada.retencoes, []);
+    assert.deepEqual(deTitulo(c).retencoes, []);
     if (c.acao === "pagar") assert.equal(c.entrada.cartao_credito_id, null);
   }
   // E a forma "cartão" nem passa pelo schema.
@@ -293,8 +300,8 @@ test("PP sem retenção na aprovação: valor cheio, retenções vazias", () => 
   const m = montarChamadas(d, new Map([[U(10), null]]));
   assert.ok(m.ok);
   if (!m.ok) return;
-  assert.deepEqual(m.chamadas[0].entrada.retencoes, []);
-  assert.equal(m.chamadas[0].entrada.valor_baixa, 1500);
+  assert.deepEqual(deTitulo(m.chamadas[0]).retencoes, []);
+  assert.equal(deTitulo(m.chamadas[0]).valor_baixa, 1500);
 });
 
 test("parcela de PP sem a leitura das retenções barra o lote inteiro", () => {
@@ -318,7 +325,106 @@ test("avulso, recorrência e recebimento não retêm no lote, mesmo com alíquot
   );
   assert.ok(m.ok);
   if (!m.ok) return;
-  assert.deepEqual(m.chamadas[1].entrada.retencoes, []);
-  assert.deepEqual(m.chamadas[2].entrada.retencoes, []);
-  assert.deepEqual(m.chamadas[3].entrada.retencoes, []);
+  assert.deepEqual(deTitulo(m.chamadas[1]).retencoes, []);
+  assert.deepEqual(deTitulo(m.chamadas[2]).retencoes, []);
+  assert.deepEqual(deTitulo(m.chamadas[3]).retencoes, []);
+});
+
+// ---------------------------------------------------------------------------
+// Impostos a Pagar (módulo fiscal, entrega 2)
+// ---------------------------------------------------------------------------
+
+const IMPOSTO = U(20);
+const IMPOSTO_SEM_GUIA = U(21);
+
+function itemImposto(over: Partial<EntradaDaBaixaEmLote["itens"][number]> = {}): EntradaDaBaixaEmLote["itens"][number] {
+  return {
+    chave: `imposto|${IMPOSTO}`,
+    rotulo: "PIS",
+    alvo: { modulo: "imposto", id: IMPOSTO },
+    aberto: 1234.565,
+    centro: null,
+    imposto: { multa_juros: 12.345, guia_path: null, comprovante_path: `${U(99)}/comprovantes/x.pdf` },
+    ...over,
+  };
+}
+
+test("imposto: vira a baixa de imposto, sem centro de custo do lote nem forma de pagamento", () => {
+  const d = baixaEmLoteSchema.parse(
+    entrada({ forma_pagamento: null, centro_pagar: null, centro_receber: null, itens: [itemImposto()] }),
+  );
+  assert.equal(centroDoItem(d.itens[0], d), null);
+  const m = montarChamadas(d, new Map());
+  assert.ok(m.ok);
+  if (!m.ok) return;
+  assert.equal(m.chamadas.length, 1);
+  assert.deepEqual(m.chamadas[0], {
+    acao: "imposto",
+    chave: `imposto|${IMPOSTO}`,
+    rotulo: "PIS",
+    entrada: {
+      imposto_id: IMPOSTO,
+      pago_em: "2026-10-02",
+      conta_bancaria_id: CONTA,
+      multa_juros: 12.35,
+      guia_path: null,
+      comprovante_path: `${U(99)}/comprovantes/x.pdf`,
+      valor_confirmado: 1234.57,
+    },
+  });
+});
+
+test("imposto sem guia leva a guia anexada no lote", () => {
+  const d = baixaEmLoteSchema.parse(
+    entrada({
+      itens: [
+        itemImposto({
+          chave: `imposto|${IMPOSTO_SEM_GUIA}`,
+          alvo: { modulo: "imposto", id: IMPOSTO_SEM_GUIA },
+          imposto: { multa_juros: 0, guia_path: `${U(99)}/guias/g.pdf`, comprovante_path: `${U(99)}/comprovantes/c.pdf` },
+        }),
+      ],
+    }),
+  );
+  const m = montarChamadas(d, new Map());
+  assert.ok(m.ok);
+  if (!m.ok) return;
+  const c = m.chamadas[0];
+  assert.equal(c.acao, "imposto");
+  if (c.acao !== "imposto") return;
+  assert.equal(c.entrada.guia_path, `${U(99)}/guias/g.pdf`);
+  assert.equal(c.entrada.multa_juros, 0);
+});
+
+test("imposto sem comprovante não entra: o schema barra antes de qualquer baixa", () => {
+  const semComprovante = baixaEmLoteSchema.safeParse(
+    entrada({ itens: [itemImposto({ imposto: { multa_juros: 0, guia_path: null, comprovante_path: "" } })] }),
+  );
+  assert.equal(semComprovante.success, false);
+  if (semComprovante.success) return;
+  assert.match(semComprovante.error.issues[0].message, /Anexe o comprovante de pagamento de “PIS”/);
+
+  const semNada = baixaEmLoteSchema.safeParse(entrada({ itens: [itemImposto({ imposto: null })] }));
+  assert.equal(semNada.success, false);
+});
+
+test("só o imposto leva multa e anexos: título a pagar com `imposto` é recusado", () => {
+  const base = entrada();
+  const r = baixaEmLoteSchema.safeParse({
+    ...base,
+    itens: [{ ...base.itens[0], imposto: { multa_juros: 0, guia_path: null, comprovante_path: "x" } }],
+  });
+  assert.equal(r.success, false);
+});
+
+test("lote misto: a pagar, a receber e imposto, na ordem, cada um pela sua action", () => {
+  const base = entrada();
+  const d = baixaEmLoteSchema.parse({ ...base, itens: [base.itens[0], itemImposto(), base.itens[2]] });
+  const m = montarChamadas(d, SEM_RETENCAO);
+  assert.ok(m.ok);
+  if (!m.ok) return;
+  assert.deepEqual(
+    m.chamadas.map((c) => c.acao),
+    ["pagar", "imposto", "receber_nf"],
+  );
 });

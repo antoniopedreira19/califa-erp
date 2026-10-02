@@ -241,7 +241,9 @@ export default async function ConciliacaoPage({
         <AbasDaConta
           aba={aba}
           totalTitulos={
-            dadosTitulos ? dadosTitulos.aPagar.length + dadosTitulos.aReceber.length : null
+            dadosTitulos
+              ? dadosTitulos.aPagar.length + dadosTitulos.aReceber.length + dadosTitulos.impostos.length
+              : null
           }
         >
           {dadosTitulos ? (
