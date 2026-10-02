@@ -18,11 +18,6 @@ export function HomeRh({ session }: { session: SessionContext }) {
         subtitulo="Seu módulo é o RH. O dashboard com pendências e comparativos do quadro tá em construção — abaixo, atalhos pras telas que já funcionam."
       />
 
-      <CardNotificacoesFerias
-        tenantId={session.activeTenant.id}
-        userId={session.profile.id}
-      />
-
       <section className="rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-california-red/10 text-california-red">
           <Sparkles className="h-6 w-6" />
@@ -49,6 +44,11 @@ export function HomeRh({ session }: { session: SessionContext }) {
           description="Geração e revisão da folha mensal. RH edita e envia; financeiro aprova, reprova ou paga cada linha."
         />
       </section>
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
+      />
     </div>
   );
 }

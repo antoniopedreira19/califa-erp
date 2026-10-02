@@ -22,11 +22,6 @@ export async function HomeFreelancer({
         subtitulo="Seus jobs, seu realizado e seu chat — o que precisa da sua atenção."
       />
 
-      <CardNotificacoesFerias
-        tenantId={session.activeTenant.id}
-        userId={session.profile.id}
-      />
-
       {jobsAtivos === 0 ? (
         <EstadoVazio mensagem="Nenhum job atribuído a você ainda. Fale com o gestor do projeto." />
       ) : (
@@ -58,6 +53,11 @@ export async function HomeFreelancer({
           </section>
         </>
       )}
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
+      />
     </div>
   );
 }
