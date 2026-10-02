@@ -21,6 +21,13 @@ import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
  * travava o cadastro de quem só tinha os dados de pagamento à mão; segue
  * validado quando preenchido (CEP com 8 dígitos, UF da lista), e o
  * formulário o mantém recolhido até alguém pedir.
+ *
+ * Módulo fiscal (02/10/2026): o **regime tributário** da pessoa jurídica
+ * (normal, Simples ou MEI), opcional, com a data da consulta do CNPJ que o
+ * deu e, no Simples, a declaração de optante (IN SRF 459). Pessoa física
+ * não tem regime; a declaração só vale no Simples; a data da consulta só
+ * acompanha um regime — o `transform` do fim acerta isso no servidor,
+ * venha o que vier da tela.
  */
 
 const UFS_BRASIL = [
@@ -115,6 +122,29 @@ export const fornecedorSchema = z
       z.enum(["cpf", "cnpj", "email", "telefone", "aleatoria"]).nullable().optional(),
     ),
     pix_chave: z.preprocess(nullIfEmpty, z.string().nullable().optional()),
+
+    // === módulo fiscal (02/10/2026): regime tributário da pessoa jurídica ===
+    regime_tributario: z.preprocess(
+      nullIfEmpty,
+      z.enum(["normal", "simples", "mei"], {
+        errorMap: () => ({ message: "Regime tributário inválido." }),
+      })
+        .nullable()
+        .optional(),
+    ),
+    regime_consultado_em: z.preprocess(
+      nullIfEmpty,
+      z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "Data da consulta do CNPJ inválida.")
+        .nullable()
+        .optional(),
+    ),
+    // O formulário manda "true"/"false"; ausente vale como não recebida.
+    declaracao_simples_recebida: z.preprocess(
+      (v) => v === true || v === "true",
+      z.boolean(),
+    ),
   })
   .superRefine((data, ctx) => {
     // --- Documento do fornecedor (CPF/CNPJ) ---
@@ -187,6 +217,18 @@ export const fornecedorSchema = z
         message: "Preencha os dados bancários OU o PIX (pelo menos um).",
       });
     }
+  })
+  .transform((data) => {
+    // Módulo fiscal: pessoa física não tem regime; a data da consulta do
+    // CNPJ só acompanha um regime; a declaração de optante só vale no
+    // Simples (marcada e depois trocada de regime, não fica gravada).
+    const regime = data.tipo_pessoa === "juridica" ? data.regime_tributario ?? null : null;
+    return {
+      ...data,
+      regime_tributario: regime,
+      regime_consultado_em: regime ? data.regime_consultado_em ?? null : null,
+      declaracao_simples_recebida: regime === "simples" && data.declaracao_simples_recebida,
+    };
   });
 
 export type FornecedorInput = z.infer<typeof fornecedorSchema>;
