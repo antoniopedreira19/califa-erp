@@ -6527,3 +6527,23 @@ estendido a Contas a Receber em 31/08.**
   teste TESTE-139 foi cancelada pela action, no console).
 - Testado no TES-P001/26: NF TESTE-139 (emitida e cancelada), PP-00110
   aprovada com NF 602 e retenções (deixada A pagar, para a demonstração).
+
+## ⚠️ Nota de 2026-10-02 (3) — módulo fiscal, entrega 2: Apuração, Impostos a Pagar e a guia na conciliação (decisão 141)
+
+- **Seção Fiscal** em `/financeiro/fiscal` (abas Apuração e Impostos a
+  Pagar; `app/(app)/financeiro/fiscal/`). A guia é calculada por
+  `lib/fiscal/apuracao.ts` sobre os fatos de `lib/fiscal/apuracao-fatos.ts`;
+  a aprovação grava `fiscal_aprovacoes` e cria `impostos_a_pagar` (+ rateio)
+  pela função `aprovar_guia_fiscal`.
+- **Baixa da guia** (`baixar_imposto`): um lançamento por parte do rateio
+  + um de multa e juros, origem `imposto_baixa`, com `imposto_a_pagar_id`.
+  O Extrato agrupa (`lib/data/imposto-extrato.ts`); quem listar lançamentos
+  um a um vê N linhas por guia. Cancelar (`cancelar_baixa_imposto`) apaga
+  os lançamentos.
+- **Anexos** no bucket `impostos` (`<tenant>/guias|comprovantes|correcoes/`).
+- **Fluxo de caixa** (`lib/fiscal/fluxo-fiscal.ts`) passa a mostrar o
+  cronograma de impostos da abertura (decisão 100) nos jobs reais; previsão
+  vencida cai no dia seguinte (a confirmar com o Tiago).
+- **Imposto de teste:** "TESTE do sistema (02/10) — não pagar" (PIS,
+  setembro/2026, R$ 10,00, Empresa Teste · Teste), A pagar, deixado para a
+  demonstração; apagar só com o OK do Tiago (não há cancelamento de título).
