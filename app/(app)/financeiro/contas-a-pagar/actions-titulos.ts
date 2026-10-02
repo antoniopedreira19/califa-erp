@@ -21,6 +21,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { nfDaPPSchema } from "@/lib/validations/nf-da-pp";
 
 type Ok = { ok: true };
 type Err = { ok: false; message: string };
@@ -261,10 +262,29 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
 
   const { data: pp } = await supabase
     .from("pedidos_compra")
-    .select("id, status, codigo, valor, job_id, pagamento_fora_do_cadastro_meio")
+    .select(
+      "id, status, codigo, valor, job_id, pagamento_fora_do_cadastro_meio, verba_producao, " +
+        "nf_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_registrada_em, " +
+        "credito_pis_cofins_retirado, credito_pis_cofins_motivo",
+    )
     .eq("id", parsed.data.pp_id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
+    .maybeSingle<{
+      id: string;
+      status: string;
+      codigo: string;
+      valor: string | number;
+      job_id: string | null;
+      pagamento_fora_do_cadastro_meio: string | null;
+      verba_producao: boolean | null;
+      nf_numero: string | null;
+      nf_data_emissao: string | null;
+      nf_valor: string | number | null;
+      nf_tomador_estabelecimento_id: string | null;
+      nf_registrada_em: string | null;
+      credito_pis_cofins_retirado: boolean | null;
+      credito_pis_cofins_motivo: string | null;
+    }>();
 
   if (!pp) return { ok: false, message: "PP não encontrada." };
   if (pp.status !== "em_avaliacao") {
@@ -291,7 +311,7 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
    */
   const { data: anexosAgora } = await supabase
     .from("pedidos_compra_anexos")
-    .select("id, arquivo_nome_original, arquivo_tamanho_bytes, created_at")
+    .select("id, arquivo_nome_original, arquivo_tamanho_bytes, created_at, documento_tipo")
     .eq("pedido_compra_id", parsed.data.pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .order("created_at", { ascending: true });
@@ -301,6 +321,24 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
     nome: a.arquivo_nome_original,
     tamanho_bytes: Number(a.arquivo_tamanho_bytes),
   }));
+
+  /**
+   * Módulo fiscal (02/10/2026): PP com NF anexada só se aprova com a NF
+   * registrada pelo financeiro — data de emissão e valor, conferidos na
+   * coluna "Dados da PP". O pop-up já cobra, e `aprovarPPComNotaFiscal`
+   * registra antes de chamar esta; aqui é a trava do servidor, antes de
+   * qualquer escrita.
+   */
+  const temNotaFiscal =
+    !pp.verba_producao &&
+    (anexosAgora ?? []).some((a) => a.documento_tipo === "nota_fiscal");
+  if (temNotaFiscal && !pp.nf_registrada_em) {
+    return {
+      ok: false,
+      message:
+        "Preencha a nota fiscal do fornecedor em “Dados da PP”, olhando a nota ao lado: número, data de emissão e valor são obrigatórios para aprovar.",
+    };
+  }
 
   /**
    * Pagamento fora do cadastro (decisão 127): a PP paga por uma chave ou
@@ -407,11 +445,138 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
       anexos: anexosNaAprovacao,
       // Decisão 127: aprovou pagamento para fora do cadastro do fornecedor.
       pagamento_fora_do_cadastro: pp.pagamento_fora_do_cadastro_meio ?? null,
+      // Módulo fiscal (02/10/2026): a NF do fornecedor com que a PP foi
+      // aprovada. As retenções previstas ficam em `pedidos_compra_retencoes`.
+      nota_fiscal: pp.nf_registrada_em
+        ? {
+            numero: pp.nf_numero,
+            data_emissao: pp.nf_data_emissao,
+            valor: pp.nf_valor === null ? null : Number(pp.nf_valor),
+            tomador_estabelecimento_id: pp.nf_tomador_estabelecimento_id,
+            credito_pis_cofins_retirado: pp.credito_pis_cofins_retirado === true,
+            credito_pis_cofins_motivo: pp.credito_pis_cofins_motivo,
+          }
+        : null,
     },
   });
 
   revalidarFinanceiro(pp.job_id);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------
+// Aprovar PP com a NF do fornecedor (módulo fiscal, 02/10/2026)
+// ---------------------------------------------------------------------
+
+/**
+ * As exceções de `registrar_nf_da_pp` já falam português; violação de
+ * constraint sobe crua e vira uma frase genérica (o original vai ao log).
+ */
+function mensagemDaNotaFiscal(msg: string): string {
+  const limpa = msg.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
+  if (limpa && !/[_"]/.test(limpa)) return limpa;
+  return "Não foi possível registrar a nota fiscal do fornecedor. Tente novamente.";
+}
+
+/**
+ * Aprova a PP que tem NF anexada: registra a NF do fornecedor —
+ * `registrar_nf_da_pp`, com número, emissão, valor, CNPJ tomador, as
+ * retenções previstas e o crédito de PIS/COFINS — e, só se der certo,
+ * aprova pela `aprovarPPComData` de sempre. Mesmo gate da aprovação.
+ *
+ * As travas que dependem só do pedido (status, pagamento fora do cadastro,
+ * a NF anexada) vêm antes de gravar a NF. Se a aprovação ainda assim
+ * falhar, a PP continua em avaliação com a NF registrada: a próxima
+ * tentativa grava de novo por cima, e a coluna "Dados da PP" abre com ela.
+ */
+export async function aprovarPPComNotaFiscal(input: unknown): Promise<Result> {
+  const { nf, ...aprovacao } = (input ?? {}) as { nf?: unknown } & Record<string, unknown>;
+
+  const parsedAprovacao = aprovarSchema.safeParse(aprovacao);
+  if (!parsedAprovacao.success) {
+    return {
+      ok: false,
+      message:
+        parsedAprovacao.error.issues[0]?.message ??
+        "Escolha a data de pagamento antes de aprovar.",
+    };
+  }
+  const parsedNf = nfDaPPSchema.safeParse(nf);
+  if (!parsedNf.success) {
+    return {
+      ok: false,
+      message:
+        parsedNf.error.issues[0]?.message ??
+        "Preencha a nota fiscal do fornecedor em “Dados da PP” antes de aprovar.",
+    };
+  }
+
+  const ppId = parsedAprovacao.data.pp_id;
+  const gate = await checarGateFinanceiro("pedido_compra", ppId, "pedido_compra.aprovada");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const [{ data: pp }, { data: anexosNf }] = await Promise.all([
+    supabase
+      .from("pedidos_compra")
+      .select("id, status, verba_producao, pagamento_fora_do_cadastro_meio")
+      .eq("id", ppId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        id: string;
+        status: string;
+        verba_producao: boolean | null;
+        pagamento_fora_do_cadastro_meio: string | null;
+      }>(),
+    supabase
+      .from("pedidos_compra_anexos")
+      .select("id")
+      .eq("pedido_compra_id", ppId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("documento_tipo", "nota_fiscal")
+      .limit(1),
+  ]);
+
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+  if (pp.status !== "em_avaliacao") {
+    return {
+      ok: false,
+      message:
+        pp.status === "aprovada"
+          ? "PP já está aprovada."
+          : "Só PP em avaliação pode ser aprovada.",
+    };
+  }
+  if (pp.verba_producao || (anexosNf ?? []).length === 0) {
+    return {
+      ok: false,
+      message: "Esta PP não tem nota fiscal anexada. Recarregue a página e tente de novo.",
+    };
+  }
+  if (pp.pagamento_fora_do_cadastro_meio && !parsedAprovacao.data.aprovar_pagamento_fora_do_cadastro) {
+    return {
+      ok: false,
+      message: "Marque “Aprovar pagamento fora do cadastro” antes de aprovar.",
+    };
+  }
+
+  const d = parsedNf.data;
+  const { error } = await supabase.rpc("registrar_nf_da_pp", {
+    p_pp_id: ppId,
+    p_numero: d.numero,
+    p_data_emissao: d.data_emissao,
+    p_valor: d.valor,
+    p_tomador_estabelecimento_id: d.tomador_estabelecimento_id,
+    p_retencoes: d.retencoes,
+    p_credito_retirado: d.credito_retirado,
+    p_credito_motivo: d.credito_retirado ? d.credito_motivo : null,
+  });
+  if (error) {
+    console.error("[pp.registrar_nf]", error.message);
+    return { ok: false, message: mensagemDaNotaFiscal(error.message) };
+  }
+
+  return aprovarPPComData(parsedAprovacao.data);
 }
 
 // ---------------------------------------------------------------------
