@@ -243,6 +243,12 @@ export interface Fornecedor {
   // PIX
   pix_tipo: PixTipoChave | null;
   pix_chave: string | null;
+
+  // Módulo fiscal (02/10/2026): regime tributário, da consulta do CNPJ.
+  regime_tributario: RegimeTributarioFornecedor | null;
+  regime_consultado_em: string | null;
+  declaracao_simples_recebida: boolean;
+  declaracao_simples_path: string | null;
 }
 
 // ---------- Task 007: projetos ----------
@@ -2891,6 +2897,10 @@ export interface Faturamento {
    * saíram para o CNPJ do cadastro — e nas de BV.
    */
   cnpj_tomador: string | null;
+  /** Módulo fiscal (02/10/2026): o CNPJ emissor e o CNAE escolhidos na
+   *  lista do cadastro de impostos. Nulos nas notas anteriores. */
+  estabelecimento_id: string | null;
+  fiscal_cnae_id: string | null;
   anexo_nf_path: string;
   /**
    * Preenchido só no faturamento avulso (campo "Centro de custo" do
@@ -3920,3 +3930,116 @@ export interface ColaboradorFeriasNotificacao {
   criada_em: string;
 }
 
+
+
+// ---------- Módulo fiscal · entrega 1 (02/10/2026) ----------
+// Cadastro de impostos (tabelas fiscal_*) e os dados que o Faturar, a
+// aprovação da PP e o fornecedor passam a registrar. Migration
+// 20261002100001_fiscal_cadastro_e_dados_da_nf.sql.
+
+export type RegimeTributarioFornecedor = "normal" | "simples" | "mei";
+
+export type RegimeTributarioPJ = "lucro_real" | "lucro_presumido";
+
+export type RegraDeVencimentoFiscal = "antecipa" | "prorroga" | "ultimo_util";
+
+export interface FiscalRegime {
+  id: string;
+  tenant_id: string;
+  empresa_contabil_id: string;
+  regime: RegimeTributarioPJ;
+  /** Lucro presumido pelo caixa: os tributos nascem no recebimento. */
+  regime_caixa: boolean;
+  vigencia_inicio: string;
+  vigencia_fim: string | null;
+  observacao: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Um CNPJ que emite nota (matriz ou filial). */
+export interface FiscalEstabelecimento {
+  id: string;
+  tenant_id: string;
+  empresa_contabil_id: string;
+  nome: string;
+  /** 14 dígitos; nulo enquanto a filial não foi informada (fica inativa). */
+  cnpj: string | null;
+  papel: "matriz" | "filial";
+  municipio: string;
+  uf: string;
+  iss_dia: number;
+  iss_retido_dia: number;
+  iss_regra: RegraDeVencimentoFiscal;
+  ativo: boolean;
+  ordem: number;
+  observacao: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Um CNAE de um CNPJ, com as alíquotas e a vigência. */
+export interface FiscalCnae {
+  id: string;
+  tenant_id: string;
+  estabelecimento_id: string;
+  /** "82.30-0-01" */
+  codigo: string;
+  /** Subitem da LC 116 quando o CNAE se divide ("12.08", "17.10"). */
+  subitem: string | null;
+  descricao: string;
+  aliquota_iss: number | null;
+  aliquota_pis: number;
+  aliquota_cofins: number;
+  /** PIS/COFINS reduzidos e sem crédito (12.08; lucro presumido). */
+  cumulativo: boolean;
+  vigencia_inicio: string;
+  vigencia_fim: string | null;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FiscalFeriado {
+  id: string;
+  tenant_id: string;
+  data: string;
+  nome: string;
+  /** Nulo = nacional. */
+  municipio: string | null;
+  created_at: string;
+}
+
+export interface FiscalParametro {
+  id: string;
+  tenant_id: string;
+  chave: string;
+  valor: number;
+  descricao: string;
+  vigencia_inicio: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Retenção na fonte prevista na aprovação da PP (alíquota por imposto). */
+export interface PedidoCompraRetencao {
+  id: string;
+  tenant_id: string;
+  pedido_compra_id: string;
+  imposto: ImpostoRetido;
+  aliquota: number;
+  criado_por: string;
+  created_at: string;
+}
+
+/** A NF do fornecedor registrada pelo financeiro na aprovação da PP. */
+export interface NotaFiscalDaPP {
+  nf_numero: string | null;
+  nf_data_emissao: string | null;
+  nf_valor: number | null;
+  nf_tomador_estabelecimento_id: string | null;
+  nf_registrada_por: string | null;
+  nf_registrada_em: string | null;
+  credito_pis_cofins_retirado: boolean;
+  credito_pis_cofins_motivo: string | null;
+}
