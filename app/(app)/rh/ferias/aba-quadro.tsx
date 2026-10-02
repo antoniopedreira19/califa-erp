@@ -56,6 +56,7 @@ export async function AbaQuadro({ tenantId }: Props) {
       .select("id, nome, tipo_contratacao, funcao, data_admissao")
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
+      .neq("tipo_contratacao", "socio")
       .order("nome", { ascending: true }),
     supabase
       .from("colaboradores_ferias_periodos")

@@ -83,22 +83,26 @@ export default async function PerfilPage() {
     );
   }
 
-  // Períodos aquisitivos do colaborador
-  const { data: periodosData } = await supabase
-    .from("colaboradores_ferias_periodos")
-    .select("*")
-    .eq("colaborador_id", colab.id)
-    .order("numero", { ascending: true });
+  // Sócios não têm direito a férias — pula consulta e render do card.
+  const ehSocio = colab.tipo_contratacao === "socio";
+
+  // Períodos aquisitivos + lançamentos do colaborador. Pula pra sócio.
+  const [{ data: periodosData }, { data: lancamentosData }] = ehSocio
+    ? [{ data: [] }, { data: [] }]
+    : await Promise.all([
+        supabase
+          .from("colaboradores_ferias_periodos")
+          .select("*")
+          .eq("colaborador_id", colab.id)
+          .order("numero", { ascending: true }),
+        supabase
+          .from("colaboradores_ferias_lancamentos")
+          .select("*")
+          .eq("colaborador_id", colab.id)
+          .order("data_inicio", { ascending: false }),
+      ]);
 
   const periodos = (periodosData ?? []) as ColaboradorFeriasPeriodo[];
-
-  // Histórico de lançamentos (todos — passados, pendentes, aprovados)
-  const { data: lancamentosData } = await supabase
-    .from("colaboradores_ferias_lancamentos")
-    .select("*")
-    .eq("colaborador_id", colab.id)
-    .order("data_inicio", { ascending: false });
-
   const lancamentos = (lancamentosData ?? []) as ColaboradorFeriasLancamento[];
 
   const dataAdmissaoFmt = colab.data_admissao
@@ -237,12 +241,14 @@ export default async function PerfilPage() {
         </p>
       </div>
 
-      {/* Card: Minhas férias */}
-      <CardMinhasFerias
-        periodos={periodos}
-        lancamentos={lancamentos}
-        tipoContratacao={colab.tipo_contratacao}
-      />
+      {/* Card: Minhas férias — sócios não têm direito a férias */}
+      {!ehSocio && (
+        <CardMinhasFerias
+          periodos={periodos}
+          lancamentos={lancamentos}
+          tipoContratacao={colab.tipo_contratacao}
+        />
+      )}
     </div>
   );
 }
