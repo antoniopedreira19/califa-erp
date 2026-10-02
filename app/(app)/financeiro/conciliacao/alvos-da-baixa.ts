@@ -209,10 +209,11 @@ export function chaveDoLoteAPagar(r: TituloAPagar): string {
 /**
  * Por que o título não entra na baixa em lote; `null` entra. O lote paga
  * pela conta escolhida, uma baixa por título, sempre pelo que falta (a
- * parcial entra pelo restante). Entram PP, avulso, recorrência e
- * desembolso em aberto (decisão aprovada pelo Tiago em 02/10/2026); folha,
- * fatura de cartão e devolução de verba têm baixa própria, e o previsto no
- * cartão vira item da fatura na baixa (decisão 093), um de cada vez.
+ * parcial entra pelo restante). Entram PP, avulso e recorrência em
+ * aberto (decisão aprovada pelo Tiago em 02/10/2026); folha, fatura de
+ * cartão e devolução de verba têm baixa própria, o previsto no cartão vira
+ * item da fatura na baixa (decisão 093), e o desembolso tem o centro de
+ * custo escolhido na baixa — todos um de cada vez.
  */
 export function motivoForaDoLoteAPagar(r: TituloAPagar): string | null {
   if (r.status === "pago") return "Título já pago.";
@@ -223,6 +224,8 @@ export function motivoForaDoLoteAPagar(r: TituloAPagar): string | null {
       return "Fatura de cartão tem baixa própria: dê baixa nela sozinha.";
     case "pp_devolucao_verba":
       return "Devolução de verba tem baixa própria: dê baixa nela sozinha.";
+    case "desembolso":
+      return "Desembolso: dê baixa nele sozinho, para escolher o centro de custo.";
   }
   if (!origemNoLote(r.origem)) return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
   if (r.forma_pagamento === "cartao_credito" || r.forma_prevista === "cartao_credito") {
@@ -252,7 +255,7 @@ export function paraOLoteAPagar(r: TituloAPagar): TituloParaLote | null {
     vencimento: r.data_pagamento,
     aberto: faltaPagar(r),
     // Avulso e recorrência já têm o par; a PP tem só o tipo (decisão 068)
-    // e o desembolso, nada — os dois usam o do lote.
+    // e usa o subtipo do lote.
     centroDeCusto:
       r.plano_conta_tipo_id && r.plano_conta_subtipo_id
         ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
