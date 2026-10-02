@@ -242,6 +242,9 @@ export function motivoForaDoLoteAPagar(r: TituloAPagar): string | null {
 /** O título no formato do lote. `null` na origem que não entra nele. */
 export function paraOLoteAPagar(r: TituloAPagar): TituloParaLote | null {
   if (!origemNoLote(r.origem)) return null;
+  // A PP com NF registrada leva o número junto do código (módulo fiscal):
+  // "PP-00110 · NF 602".
+  const origem = r.nf_numero ? `${r.origem_label} · NF ${r.nf_numero}` : r.origem_label;
   return {
     chave: chaveDoLoteAPagar(r),
     tipo: "pagar",
@@ -249,8 +252,8 @@ export function paraOLoteAPagar(r: TituloAPagar): TituloParaLote | null {
     titulo: r.descricao,
     referencia:
       r.parcela_total > 1
-        ? `${r.origem_label} · ${r.parcela_numero}/${r.parcela_total}`
-        : r.origem_label,
+        ? `${origem} · ${r.parcela_numero}/${r.parcela_total}`
+        : origem,
     contraparte: r.fornecedor_nome || "—",
     vencimento: r.data_pagamento,
     aberto: faltaPagar(r),
