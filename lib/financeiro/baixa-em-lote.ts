@@ -17,16 +17,24 @@
  * Server Action é `app/(app)/financeiro/actions-baixa-em-lote.ts`; as
  * peças de tela, `components/financeiro/baixa-em-lote.tsx`.
  *
+ * Retenção na fonte (módulo fiscal, 02/10/2026): a parcela de PP sai com
+ * as alíquotas que o financeiro decidiu na APROVAÇÃO da PP — exatamente o
+ * que a baixa de um título grava com elas pré-preenchidas. O servidor
+ * relê as alíquotas na hora de baixar; a PP de verba e a parcela que já
+ * foi para uma remessa CNAB saem pelo valor cheio, sem retenção, como na
+ * baixa de um título.
+ *
  * O que fica de fora do lote, e por quê:
- * - **Retenção de imposto.** O título com retenção a fazer se baixa
- *   sozinho, para informar imposto a imposto. O lote baixa sempre o que
- *   falta, inteiro e sem retenção.
- * - **Baixa parcial.** Idem: uma por vez, no pop-up de um título.
+ * - **Retenção escolhida na hora.** O lote não edita alíquota: o título com
+ *   retenção diferente da aprovação (e o recebimento com imposto retido
+ *   pelo cliente) se baixa sozinho, imposto a imposto.
+ * - **Baixa parcial.** Uma por vez, no pop-up de um título.
  * - **Cartão de crédito.** No cartão a baixa é a entrada do item na fatura
  *   (decisão 093), um de cada vez; o lote paga pela conta bancária.
  */
 
 import { z } from "zod";
+import { IMPOSTOS_RETIDOS, type ImpostoRetido, type RetencaoDaBaixa } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // O alvo de cada título
@@ -171,8 +179,9 @@ export type ItemDaBaixaEmLote = DadosDaBaixaEmLote["itens"][number];
 
 /**
  * Uma baixa do lote, já no formato da action da baixa de um por um. O lote
- * nunca leva cartão, retenção ou baixa parcial: `cartao_credito_id` vai
- * nulo, `retencoes` vazio, e `valor_baixa` é o que falta.
+ * nunca leva cartão nem baixa parcial: `cartao_credito_id` vai nulo e
+ * `valor_baixa` é o que falta (líquido + retidos). `retencoes` só existe na
+ * parcela de PP com retenção na aprovação; no resto, vai vazio.
  */
 export type ChamadaDaBaixa =
   | {
@@ -190,7 +199,7 @@ export type ChamadaDaBaixa =
         forma_pagamento: "pix" | "transferencia" | "boleto";
         cartao_credito_id: null;
         valor_baixa: number;
-        retencoes: [];
+        retencoes: RetencaoDaBaixa[];
       };
     }
   | {
@@ -226,6 +235,54 @@ export type ChamadaDaBaixa =
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
+// ---------------------------------------------------------------------------
+// Retenção na fonte da aprovação da PP
+// ---------------------------------------------------------------------------
+
+/** As alíquotas retidas que a aprovação da PP gravou, em % (só as > 0). */
+export type AliquotasDaAprovacao = Partial<Record<ImpostoRetido, number>>;
+
+/**
+ * A retenção que a baixa de uma parcela de PP aplica, pela mesma regra da
+ * baixa de um título: a PP de verba e a parcela que já foi para uma
+ * remessa CNAB saem pelo valor cheio, sem retenção (decisão 125, interino
+ * da D15); as outras, com as alíquotas da aprovação. `null`: sem retenção.
+ */
+export function aliquotasDaParcela(p: {
+  verba: boolean;
+  emRemessa: boolean;
+  aliquotas: AliquotasDaAprovacao | null;
+}): AliquotasDaAprovacao | null {
+  if (p.verba || p.emRemessa || !p.aliquotas) return null;
+  const algumas = IMPOSTOS_RETIDOS.some(({ imposto }) => (p.aliquotas?.[imposto] ?? 0) > 0);
+  return algumas ? p.aliquotas : null;
+}
+
+/**
+ * O que a baixa grava com as alíquotas da aprovação sobre a base (o que
+ * falta) — o MESMO cálculo de `useValorDaBaixa`
+ * (`components/financeiro/valor-da-baixa.tsx`) com as alíquotas
+ * pré-preenchidas: cada imposto arredondado em centavos sobre a base, só os
+ * com valor, na ordem de `IMPOSTOS_RETIDOS`; o retido é a soma, e o líquido
+ * (o que sai da conta), a base menos o retido.
+ */
+export function retencoesPelaAprovacao(
+  base: number,
+  aliquotas: AliquotasDaAprovacao | null,
+): { retencoes: RetencaoDaBaixa[]; retido: number; liquido: number } {
+  const retencoes: RetencaoDaBaixa[] = [];
+  if (aliquotas) {
+    for (const { imposto } of IMPOSTOS_RETIDOS) {
+      const aliquota = aliquotas[imposto];
+      if (typeof aliquota !== "number" || !(aliquota > 0)) continue;
+      const valor = r2((base * aliquota) / 100);
+      if (valor > 0) retencoes.push({ imposto, aliquota, valor });
+    }
+  }
+  const retido = r2(retencoes.reduce((s, r) => s + r.valor, 0));
+  return { retencoes, retido, liquido: r2(base - retido) };
+}
+
 /**
  * O centro de custo que cada título usa: o que ele já tem; se não tem, o do
  * lote (o dos pagamentos ou o dos recebimentos). `null` só quando falta o
@@ -242,9 +299,15 @@ export function centroDoItem(
 /**
  * Monta, na ordem dos títulos, a entrada da action de cada baixa. Devolve
  * a mensagem do primeiro problema em vez de montar um lote pela metade.
+ *
+ * `aliquotasPorParcela`: as alíquotas que valem para cada parcela de PP do
+ * lote, lidas no servidor (`aliquotasDaParcela`; `null` = sem retenção).
+ * Toda parcela de PP do lote tem de estar nele: a que faltar barra o lote
+ * inteiro — sem saber a retenção, a PP sairia pelo bruto.
  */
 export function montarChamadas(
   dados: DadosDaBaixaEmLote,
+  aliquotasPorParcela: ReadonlyMap<string, AliquotasDaAprovacao | null>,
 ): { ok: true; chamadas: ChamadaDaBaixa[] } | { ok: false; mensagem: string } {
   const chamadas: ChamadaDaBaixa[] = [];
   for (const item of dados.itens) {
@@ -270,6 +333,19 @@ export function montarChamadas(
       if (!dados.forma_pagamento) {
         return { ok: false, mensagem: "Escolha a forma de pagamento." };
       }
+      let retencoes: RetencaoDaBaixa[] = [];
+      if (item.alvo.origem === "pp") {
+        if (!aliquotasPorParcela.has(item.alvo.id)) {
+          return {
+            ok: false,
+            mensagem: `Não foi possível conferir as retenções da aprovação de “${item.rotulo}”. Nenhuma baixa foi feita.`,
+          };
+        }
+        retencoes = retencoesPelaAprovacao(
+          comum.valor_baixa,
+          aliquotasPorParcela.get(item.alvo.id) ?? null,
+        ).retencoes;
+      }
       chamadas.push({
         acao: "pagar",
         chave: item.chave,
@@ -280,6 +356,7 @@ export function montarChamadas(
           ...comum,
           forma_pagamento: dados.forma_pagamento,
           cartao_credito_id: null,
+          retencoes,
         },
       });
     } else if (item.alvo.origem === "nf") {

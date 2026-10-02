@@ -24,15 +24,28 @@
  * verdade, conferida e auditada), e a resposta diz o que foi feito e onde
  * parou, com a mensagem. A formação da entrada (e o teste dela) mora em
  * `lib/financeiro/baixa-em-lote.ts`.
+ *
+ * Retenção na fonte (módulo fiscal, 02/10/2026): a parcela de PP sai com as
+ * alíquotas da APROVAÇÃO da PP (`pedidos_compra_retencoes`), relidas aqui,
+ * numa leitura só para o lote inteiro, antes da primeira baixa — o que a
+ * tela mostrou não decide o que se retém. Se a leitura falhar, nenhuma
+ * baixa é feita: sem saber a retenção, a PP sairia pelo bruto.
  */
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { requireSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
+import { logAuditEvent } from "@/lib/auth/audit";
 import {
+  aliquotasDaParcela,
   baixaEmLoteSchema,
   montarChamadas,
+  type AliquotasDaAprovacao,
   type ChamadaDaBaixa,
   type ResultadoDaBaixaEmLote,
 } from "@/lib/financeiro/baixa-em-lote";
+import { montarRetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
 import { darBaixaTitulo as darBaixaTituloPagar } from "./contas-a-pagar/actions-titulos";
 import { darBaixaTitulo as darBaixaTituloReceber } from "./contas-a-receber/actions";
 import { darBaixaRecebimentoAvulso } from "./contas-a-receber/actions-recebimento-avulso";
@@ -52,6 +65,128 @@ function revalidarListas() {
 function ehDesvioDoNext(e: unknown): boolean {
   const digest = (e as { digest?: unknown } | null)?.digest;
   return typeof digest === "string" && (digest.startsWith("NEXT_REDIRECT") || digest === "NEXT_NOT_FOUND");
+}
+
+const SEM_PERMISSAO = "Apenas admin ou financeiro pode executar esta ação.";
+const ERRO_DA_LEITURA = "Não foi possível buscar as retenções da aprovação das PPs.";
+
+/**
+ * A trava das baixas (`darBaixaTitulo`) e da leitura das retenções da
+ * aprovação (`lerRetencaoDaAprovacao`): só admin ou financeiro, com
+ * `acao_negada` no audit.
+ */
+async function travaDoFinanceiro(acaoTentada: string) {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "titulo_pagar",
+      entidadeId: null,
+      metadata: { acao_tentada: acaoTentada, motivo: "sem_permissao_financeira" },
+    });
+    return { ok: false as const };
+  }
+  return { ok: true as const, session, supabase: createClient() };
+}
+
+/** Lote de ids por consulta: a lista vai na URL do PostgREST. */
+const POR_CONSULTA = 50;
+
+interface ParcelaComRetencao {
+  id: string;
+  pp: {
+    verba_producao: boolean | null;
+    retencoes: Array<{ imposto: string; aliquota: number | string | null }> | null;
+  } | null;
+}
+
+/**
+ * As alíquotas que valem na baixa de cada parcela de PP: as da aprovação,
+ * menos na PP de verba e na parcela que já foi para uma remessa CNAB não
+ * cancelada (`aliquotasDaParcela`). Uma entrada por parcela encontrada;
+ * `null` se a leitura falhou.
+ */
+async function aliquotasDasParcelas(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  parcelaIds: string[],
+): Promise<Map<string, AliquotasDaAprovacao | null> | null> {
+  const mapa = new Map<string, AliquotasDaAprovacao | null>();
+  const ids = Array.from(new Set(parcelaIds));
+  const fatias: string[][] = [];
+  for (let i = 0; i < ids.length; i += POR_CONSULTA) fatias.push(ids.slice(i, i + POR_CONSULTA));
+
+  const respostas = await Promise.all(
+    fatias.map((fatia) =>
+      Promise.all([
+        supabase
+          .from("pedidos_compra_parcelas")
+          .select(
+            "id, pp:pedidos_compra!pedido_compra_id(verba_producao, retencoes:pedidos_compra_retencoes(imposto, aliquota))",
+          )
+          .in("id", fatia)
+          .eq("tenant_id", tenantId)
+          .returns<ParcelaComRetencao[]>(),
+        // O mesmo critério da `_documento_em_remessa` do banco: remessa
+        // cancelada não conta.
+        supabase
+          .from("cnab_remessas_itens")
+          .select("origem_id, remessa:cnab_remessas!inner(status)")
+          .in("origem_id", fatia)
+          .eq("tenant_id", tenantId)
+          .neq("remessa.status", "cancelado"),
+      ]),
+    ),
+  );
+
+  for (const [parcelas, remessas] of respostas) {
+    if (parcelas.error || remessas.error) {
+      console.error(
+        "[baixa_em_lote.retencoes]",
+        parcelas.error?.message ?? remessas.error?.message,
+      );
+      return null;
+    }
+    const emRemessa = new Set(
+      ((remessas.data ?? []) as Array<{ origem_id: string }>).map((i) => i.origem_id),
+    );
+    for (const p of parcelas.data ?? []) {
+      const daAprovacao = montarRetencaoDaAprovacao(p.pp?.retencoes ?? [], null);
+      mapa.set(
+        p.id,
+        aliquotasDaParcela({
+          verba: p.pp?.verba_producao === true,
+          emRemessa: emRemessa.has(p.id),
+          aliquotas: daAprovacao?.aliquotas ?? null,
+        }),
+      );
+    }
+  }
+  return mapa;
+}
+
+/**
+ * Para o diálogo do lote: as alíquotas que cada parcela de PP selecionada
+ * vai reter (`null` = sem retenção). Só leitura; o lote relê na hora de
+ * baixar. Parcela que não volta (PP cancelada com a tela aberta) fica de
+ * fora do resultado.
+ */
+export async function lerRetencoesDoLote(
+  parcelaIds: unknown,
+): Promise<
+  | { ok: true; aliquotas: Record<string, AliquotasDaAprovacao | null> }
+  | { ok: false; message: string }
+> {
+  const ids = z.array(z.string().uuid()).max(200).safeParse(parcelaIds);
+  if (!ids.success) return { ok: false, message: ERRO_DA_LEITURA };
+
+  const trava = await travaDoFinanceiro("pedido_compra.retencoes_da_aprovacao_lidas");
+  if (!trava.ok) return { ok: false, message: SEM_PERMISSAO };
+
+  const mapa = await aliquotasDasParcelas(trava.supabase, trava.session.activeTenant.id, ids.data);
+  if (!mapa) return { ok: false, message: ERRO_DA_LEITURA };
+  return { ok: true, aliquotas: Object.fromEntries(mapa) };
 }
 
 async function executar(c: ChamadaDaBaixa): Promise<{ ok: true } | { ok: false; message: string }> {
@@ -79,7 +214,29 @@ export async function darBaixaEmLote(input: unknown): Promise<ResultadoDaBaixaEm
     };
   }
 
-  const montagem = montarChamadas(parsed.data);
+  const trava = await travaDoFinanceiro("titulos.baixa_em_lote");
+  if (!trava.ok) {
+    return { ok: false, feitas: [], falha: { chave: null, rotulo: null, mensagem: SEM_PERMISSAO } };
+  }
+
+  // A retenção de cada parcela de PP, relida aqui (não vem da tela).
+  const parcelasDePP = parsed.data.itens.flatMap((i) =>
+    i.alvo.modulo === "pagar" && i.alvo.origem === "pp" ? [i.alvo.id] : [],
+  );
+  const aliquotas = await aliquotasDasParcelas(
+    trava.supabase,
+    trava.session.activeTenant.id,
+    parcelasDePP,
+  );
+  if (!aliquotas) {
+    return {
+      ok: false,
+      feitas: [],
+      falha: { chave: null, rotulo: null, mensagem: `${ERRO_DA_LEITURA} Nenhuma baixa foi feita.` },
+    };
+  }
+
+  const montagem = montarChamadas(parsed.data, aliquotas);
   if (!montagem.ok) {
     return { ok: false, feitas: [], falha: { chave: null, rotulo: null, mensagem: montagem.mensagem } };
   }
