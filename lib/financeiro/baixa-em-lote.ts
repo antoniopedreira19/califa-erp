@@ -31,6 +31,13 @@
  * - **Baixa parcial.** Uma por vez, no pop-up de um título.
  * - **Cartão de crédito.** No cartão a baixa é a entrada do item na fatura
  *   (decisão 093), um de cada vez; o lote paga pela conta bancária.
+ *
+ * Impostos a Pagar (módulo fiscal, entrega 2): o imposto em aberto entra no
+ * lote como no protótipo aprovado — pelo valor inteiro, com a multa e os
+ * juros e o comprovante de cada guia (a guia é a da aprovação; o imposto
+ * sem guia pede a dele no lote). Cada um vira a baixa de um por um,
+ * `darBaixaImposto` (`fiscal/impostos/actions.ts`); o centro de custo vem
+ * do imposto, não do lote.
  */
 
 import { z } from "zod";
@@ -62,10 +69,12 @@ export type OrigemReceberNoLote = (typeof ORIGENS_RECEBER_NO_LOTE)[number];
  *   e recorrência) — o mesmo `{ origem, id }` de `darBaixaTitulo`.
  * - `receber` + `nf`: o id do título (`titulos_receber`).
  * - `receber` + `recebimento_avulso`: o id da conta avulsa de entrada.
+ * - `imposto`: o id do imposto a pagar (`impostos_a_pagar`).
  */
 export type AlvoDaBaixaEmLote =
   | { modulo: "pagar"; origem: OrigemPagarNoLote; id: string }
-  | { modulo: "receber"; origem: OrigemReceberNoLote; id: string };
+  | { modulo: "receber"; origem: OrigemReceberNoLote; id: string }
+  | { modulo: "imposto"; id: string };
 
 /** O par do plano de contas — o "centro de custo" das telas. */
 export interface CentroDeCusto {
@@ -99,7 +108,19 @@ const alvoSchema = z.discriminatedUnion("modulo", [
     }),
     id: z.string().uuid(),
   }),
+  z.object({
+    modulo: z.literal("imposto"),
+    id: z.string().uuid(),
+  }),
 ]);
+
+/** O que só a baixa de um imposto leva (como na baixa de um por um). */
+const impostoDoItemSchema = z.object({
+  multa_juros: z.number().min(0, "Multa e juros não podem ser negativos.").max(1e10),
+  /** A guia nova; nula = a que o imposto já tem (a da aprovação). */
+  guia_path: z.string().trim().min(1).max(500).nullable(),
+  comprovante_path: z.string().trim().max(500),
+});
 
 const itemSchema = z.object({
   /** A chave da seleção, devolvida no resultado para a tela saber quais
@@ -117,6 +138,8 @@ const itemSchema = z.object({
   /** O centro de custo que o título já tem (o par completo). `null`: usa o
    *  do lote. */
   centro: centroSchema.nullable(),
+  /** Só no imposto: a multa e os juros, a guia e o comprovante. */
+  imposto: impostoDoItemSchema.nullish(),
 });
 
 /** Os títulos e o que se escolhe uma vez para todos. */
@@ -159,6 +182,25 @@ export const baixaEmLoteSchema = z
         message: "Escolha o subtipo do centro de custo dos recebimentos.",
         path: ["centro_receber"],
       });
+    }
+    for (const [n, i] of d.itens.entries()) {
+      if (i.alvo.modulo !== "imposto") {
+        if (i.imposto) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Este título não entra na baixa em lote: dê baixa nele sozinho.",
+            path: ["itens", n, "imposto"],
+          });
+        }
+        continue;
+      }
+      if (!i.imposto || !i.imposto.comprovante_path) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Anexe o comprovante de pagamento de “${i.rotulo}”.`,
+          path: ["itens", n, "imposto"],
+        });
+      }
     }
     if (new Set(d.itens.map((i) => i.chave)).size !== d.itens.length) {
       ctx.addIssue({
@@ -231,6 +273,22 @@ export type ChamadaDaBaixa =
         valor_baixa: number;
         retencoes: [];
       };
+    }
+  | {
+      acao: "imposto";
+      chave: string;
+      rotulo: string;
+      /** `darBaixaImposto` de `fiscal/impostos/actions.ts`. */
+      entrada: {
+        imposto_id: string;
+        pago_em: string;
+        conta_bancaria_id: string;
+        multa_juros: number;
+        guia_path: string | null;
+        comprovante_path: string;
+        /** O valor que a tela mostrou: se mudou, a baixa não sai. */
+        valor_confirmado: number;
+      };
     };
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -285,13 +343,15 @@ export function retencoesPelaAprovacao(
 
 /**
  * O centro de custo que cada título usa: o que ele já tem; se não tem, o do
- * lote (o dos pagamentos ou o dos recebimentos). `null` só quando falta o
- * do lote — o schema já barra esse caso antes.
+ * lote (o dos pagamentos ou o dos recebimentos). `null` quando falta o do
+ * lote — o schema já barra esse caso antes — e no imposto, que não usa.
  */
 export function centroDoItem(
   item: Pick<ItemDaBaixaEmLote, "alvo" | "centro">,
   dados: Pick<DadosDaBaixaEmLote, "centro_pagar" | "centro_receber">,
 ): CentroDeCusto | null {
+  // O imposto não usa o centro do lote: o banco grava o do próprio imposto.
+  if (item.alvo.modulo === "imposto") return null;
   if (item.centro) return item.centro;
   return item.alvo.modulo === "pagar" ? dados.centro_pagar : dados.centro_receber;
 }
@@ -311,6 +371,28 @@ export function montarChamadas(
 ): { ok: true; chamadas: ChamadaDaBaixa[] } | { ok: false; mensagem: string } {
   const chamadas: ChamadaDaBaixa[] = [];
   for (const item of dados.itens) {
+    // O imposto: o centro de custo vem dele (o banco escolhe), e a baixa é
+    // pelo valor inteiro, com a multa e os juros e os anexos.
+    if (item.alvo.modulo === "imposto") {
+      if (!item.imposto || !item.imposto.comprovante_path) {
+        return { ok: false, mensagem: `Anexe o comprovante de pagamento de “${item.rotulo}”.` };
+      }
+      chamadas.push({
+        acao: "imposto",
+        chave: item.chave,
+        rotulo: item.rotulo,
+        entrada: {
+          imposto_id: item.alvo.id,
+          pago_em: dados.pago_em,
+          conta_bancaria_id: dados.conta_bancaria_id,
+          multa_juros: r2(item.imposto.multa_juros),
+          guia_path: item.imposto.guia_path,
+          comprovante_path: item.imposto.comprovante_path,
+          valor_confirmado: r2(item.aberto),
+        },
+      });
+      continue;
+    }
     const centro = centroDoItem(item, dados);
     if (!centro) {
       return {

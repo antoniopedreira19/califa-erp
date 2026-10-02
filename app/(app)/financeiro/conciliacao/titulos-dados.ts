@@ -24,6 +24,10 @@
  *   fora de aprovada/paga, avulsa baixada, estorno de verba pago, fatura
  *   paga), porque daqui só sai o que está em aberto.
  *
+ * Impostos a Pagar (módulo fiscal, entrega 2): os impostos em aberto entram
+ * também, lidos pela MESMA leitura da aba Impostos a Pagar da seção Fiscal
+ * (`fiscal/impostos/dados.ts`), e a baixa é a mesma de lá.
+ *
  * Carregado SÓ quando a aba Títulos está aberta: o Extrato não paga nada.
  */
 
@@ -66,6 +70,7 @@ import {
   parcelasDasNotas,
 } from "../contas-a-receber/dados-dos-titulos";
 import type { TituloRow as TituloAReceber } from "../contas-a-receber/titulos-list";
+import { lerImpostos, type ImpostoDaLista } from "../fiscal/impostos/dados";
 
 export interface DadosDaAbaTitulos {
   /** Os títulos a pagar em aberto (não cartão), no tipo da lista real. */
@@ -73,6 +78,14 @@ export interface DadosDaAbaTitulos {
   /** Os títulos a receber em aberto (sem transferência), no tipo da lista
    *  real. */
   aReceber: TituloAReceber[];
+  /** Os impostos a pagar em aberto (módulo fiscal), como a aba Impostos a
+   *  Pagar os lê. */
+  impostos: ImpostoDaLista[];
+  /** PJ (empresa contábil) → nome: o aviso da guia paga por conta de outra
+   *  PJ. */
+  nomesDasPJs: Record<string, string>;
+  /** O tenant: o caminho do comprovante da guia no bucket `impostos`. */
+  tenantId: string;
   /** Empresa → nome curto, para a coluna Empresa. */
   empresas: Record<string, string>;
   /** O que as duas baixas reais pedem — as mesmas listas que as páginas de
@@ -116,6 +129,7 @@ export async function carregarTitulosDaConciliacao(
     subtiposRes,
     cartoesRes,
     empresasRes,
+    impostosLidos,
   ] = await Promise.all([
     // ---- A pagar ----
     // Só aprovada e paga viram título; a paga entra porque uma parcela
@@ -250,6 +264,8 @@ export async function carregarTitulosDaConciliacao(
       .from("empresas")
       .select("id, razao_social, nome_fantasia")
       .eq("tenant_id", tenantId),
+    // ---- Impostos a pagar em aberto (módulo fiscal) ----
+    lerImpostos(supabase, tenantId, { soEmAberto: true }),
   ]);
 
   // ⚠️ O erro é LIDO: uma consulta quebrada faria a aba dizer "nenhum
@@ -349,6 +365,9 @@ export async function carregarTitulosDaConciliacao(
   return {
     aPagar,
     aReceber,
+    impostos: impostosLidos.impostos,
+    nomesDasPJs: Object.fromEntries(impostosLidos.pjs.map((p) => [p.id, p.nome])),
+    tenantId,
     empresas,
     contas,
     tipos,
