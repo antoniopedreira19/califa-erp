@@ -269,3 +269,21 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
 export function contarGuiasAAprovar(dados: DadosDaApuracao): number {
   return dados.guias.filter((g) => g.estado === "a_aprovar" || g.estado === "diferenca").length;
 }
+
+/**
+ * O mesmo número sem montar a tela, para a aba Apuração fechada: só os fatos
+ * e o motor. `null` quando o cálculo falha (a aba fica sem número).
+ */
+export async function contarGuiasAAprovarNoBanco(supabase: SupabaseClient, tenantId: string): Promise<number | null> {
+  try {
+    const hoje = hojeEmSaoPaulo();
+    const { cadastro, fatos, aprovacoes } = await carregarFatosFiscais(supabase, tenantId);
+    return calcularApuracao(cadastro, fatos, hoje, aprovacoes).filter((g) => {
+      const { estado } = estadoDaGuia(g, hoje, aprovacoes);
+      return estado === "a_aprovar" || estado === "diferenca";
+    }).length;
+  } catch (e) {
+    console.error("[fiscal.apuracao.contagem]", e instanceof Error ? e.message : e);
+    return null;
+  }
+}

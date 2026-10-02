@@ -1,11 +1,12 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Scale } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { AbasFiscal, type AbaFiscal } from "./abas-fiscal";
-import { carregarApuracao, contarGuiasAAprovar } from "./apuracao/dados";
+import { AbasFiscal, ContagemDaAba, type AbaFiscal } from "./abas-fiscal";
+import { carregarApuracao, contarGuiasAAprovar, contarGuiasAAprovarNoBanco } from "./apuracao/dados";
 import { AbaApuracao } from "./apuracao/aba-apuracao";
 import { carregarImpostos, contarImpostosAPagar } from "./impostos/dados";
 import { AbaImpostos } from "./impostos/aba-impostos";
@@ -21,8 +22,10 @@ export const dynamic = "force-dynamic";
  * vai para a conciliação).
  *
  * Cada aba lê só o que é dela (`?aba=impostos`; a Apuração é a URL sem
- * `aba`). O número da aba Impostos a Pagar sai de uma contagem; o da
- * Apuração exige o cálculo inteiro, então só aparece com ela aberta.
+ * `aba`). O número da aba Impostos a Pagar sai de uma contagem. O da
+ * Apuração exige o cálculo inteiro: com ela aberta, sai do cálculo da tela;
+ * com a outra aba aberta, chega num `Suspense` depois da página (como o
+ * cartão "Fiscal" da Central), sem segurar a lista de impostos.
  */
 export default async function FiscalPage({
   searchParams,
@@ -57,7 +60,15 @@ export default async function FiscalPage({
       />
       <AbasFiscal
         aba={aba}
-        totalAAprovar={apuracao ? contarGuiasAAprovar(apuracao) : null}
+        seloApuracao={
+          apuracao ? (
+            <ContagemDaAba total={contarGuiasAAprovar(apuracao)} />
+          ) : (
+            <Suspense fallback={null}>
+              <SeloDaApuracao tenantId={tenantId} />
+            </Suspense>
+          )
+        }
         totalAPagar={totalAPagar}
       >
         {apuracao && <AbaApuracao dados={apuracao} />}
@@ -65,4 +76,10 @@ export default async function FiscalPage({
       </AbasFiscal>
     </div>
   );
+}
+
+/** O número da aba Apuração com a aba Impostos a Pagar aberta. */
+async function SeloDaApuracao({ tenantId }: { tenantId: string }) {
+  const total = await contarGuiasAAprovarNoBanco(createClient(), tenantId);
+  return total === null ? null : <ContagemDaAba total={total} />;
 }

@@ -340,7 +340,7 @@ export function MemoriaDialog({
                   Competência em curso
                 </p>
                 <p className="text-[12.5px] text-muted-foreground">
-                  O valor muda a cada nota, custo ou recebimento até {dataBr(fim)}. A aprovação abre depois do fechamento.
+                  O valor muda a cada nota, custo ou recebimento até {dataBr(fim)}. A aprovação abre depois do fechamento; enquanto isso, a estimativa entra no fluxo de caixa no vencimento.
                 </p>
                 {g.cotas && g.cotas.length > 0 && <CotasTabela cotas={g.cotas} />}
               </>

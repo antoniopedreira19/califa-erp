@@ -139,6 +139,11 @@ export function alvoDaBaixaAReceber(
         chave: baixando.id,
         resumo: [
           { rotulo: "Nota fiscal", valor: `NF ${baixando.fat_numero_nf}`, estilo: "mono_negrito" },
+          // Módulo fiscal (protótipo de 02/10/2026): a nota guarda o CNPJ que
+          // a emitiu. As notas de antes do módulo não têm, e a linha não vem.
+          ...(baixando.fat_cnpj_emissor
+            ? [{ rotulo: "CNPJ emissor", valor: baixando.fat_cnpj_emissor, estilo: "negrito" as const }]
+            : []),
           { rotulo: "Cliente", valor: baixando.contraparte_nome, estilo: "negrito" },
           { rotulo: "Jobs cobertos", valor: baixando.jobs_cobertos.join("  ·  "), estilo: "mono_pequeno" },
           { rotulo: "Parcela", valor: `${baixando.numero_parcela}/${baixando.total_parcelas}`, estilo: "mono" },
