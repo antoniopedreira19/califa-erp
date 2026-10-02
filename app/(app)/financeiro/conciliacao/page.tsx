@@ -22,6 +22,9 @@ import { ConciliacaoList } from "./conciliacao-list";
 import { HubConciliacao } from "./hub";
 import { lerPeriodo } from "./hub-periodo";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { AbasDaConta, type AbaDaConta } from "./abas-da-conta";
+import { AbaTitulos } from "./aba-titulos";
+import { carregarTitulosDaConciliacao } from "./titulos-dados";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +37,8 @@ export default async function ConciliacaoPage({
     ate?: string;
     highlight?: string;
     periodo?: string;
+    /** A aba da conta: `titulos`, ou nada para o Extrato. */
+    aba?: string;
   };
 }) {
   const session = await requireSession();
@@ -73,19 +78,30 @@ export default async function ConciliacaoPage({
     );
   }
 
-  const { data: contas } = await supabase
-    .from("contas_bancarias")
-    .select("*")
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("ativo", true)
-    // A conta-espelho do cartão saiu da conciliação (decisão 091): fatura
-    // é passivo, não saldo em banco — as outras telas do financeiro já a
-    // filtram assim. Ela continua abrindo por link direto, e nesse caso
-    // precisa aparecer no seletor, senão o campo fica vazio.
-    .or(`tipo.neq.cartao_credito,id.eq.${contaId}`)
-    .order("ordem")
-    .order("nome")
-    .returns<ContaBancaria[]>();
+  // As abas da conta (pedido do Tiago em 02/10/2026): o Extrato, de
+  // sempre, e os Títulos — tudo que aguarda baixa, igual para todas as
+  // contas. Cada aba é lida só quando está aberta: no Extrato os títulos
+  // nem são consultados, e na aba Títulos o extrato também não.
+  const aba: AbaDaConta = searchParams.aba === "titulos" ? "titulos" : "extrato";
+
+  const [{ data: contas }, dadosTitulos] = await Promise.all([
+    supabase
+      .from("contas_bancarias")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      // A conta-espelho do cartão saiu da conciliação (decisão 091): fatura
+      // é passivo, não saldo em banco — as outras telas do financeiro já a
+      // filtram assim. Ela continua abrindo por link direto, e nesse caso
+      // precisa aparecer no seletor, senão o campo fica vazio.
+      .or(`tipo.neq.cartao_credito,id.eq.${contaId}`)
+      .order("ordem")
+      .order("nome")
+      .returns<ContaBancaria[]>(),
+    aba === "titulos"
+      ? carregarTitulosDaConciliacao(supabase, session.activeTenant.id)
+      : Promise.resolve(null),
+  ]);
 
   const listaContas = contas ?? [];
 
@@ -108,7 +124,7 @@ export default async function ConciliacaoPage({
   let creditos = 0;
   let debitos = 0;
 
-  if (contaId) {
+  if (contaId && aba === "extrato") {
     const s = await calcularSaldoAnterior(supabase, {
       tenantId: session.activeTenant.id,
       contaId,
@@ -193,28 +209,44 @@ export default async function ConciliacaoPage({
       />
 
       {contaId && (
-        <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SaldoCard label="Saldo anterior" valor={saldoAnterior} muted />
-            <SaldoCard
-              label="Créditos no período"
-              valor={creditos}
-              tone="entrada"
+        <AbasDaConta
+          aba={aba}
+          totalTitulos={
+            dadosTitulos ? dadosTitulos.aPagar.length + dadosTitulos.aReceber.length : null
+          }
+        >
+          {dadosTitulos ? (
+            <AbaTitulos
+              dados={dadosTitulos}
+              contaId={contaId}
+              dataDe={dataDe}
+              dataAte={dataAte}
             />
-            <SaldoCard
-              label="Débitos no período"
-              valor={debitos}
-              tone="saida"
-            />
-            <SaldoCard label="Saldo final" valor={saldoFinal} destaque />
-          </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <SaldoCard label="Saldo anterior" valor={saldoAnterior} muted />
+                <SaldoCard
+                  label="Créditos no período"
+                  valor={creditos}
+                  tone="entrada"
+                />
+                <SaldoCard
+                  label="Débitos no período"
+                  valor={debitos}
+                  tone="saida"
+                />
+                <SaldoCard label="Saldo final" valor={saldoFinal} destaque />
+              </div>
 
-          <ConciliacaoList
-            linhas={linhas}
-            highlight={searchParams.highlight}
-            detalhesFatura={detalhesFatura}
-          />
-        </>
+              <ConciliacaoList
+                linhas={linhas}
+                highlight={searchParams.highlight}
+                detalhesFatura={detalhesFatura}
+              />
+            </>
+          )}
+        </AbasDaConta>
       )}
 
     </div>
