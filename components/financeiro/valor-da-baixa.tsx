@@ -17,6 +17,11 @@
  * As alíquotas começam em branco; o "Repetir as alíquotas" traz as da
  * última baixa com retenção do mesmo cliente ou fornecedor (D6 2a).
  *
+ * Módulo fiscal (02/10/2026): na parcela de PP aprovada com retenção, as
+ * alíquotas começam nas da APROVAÇÃO (`daAprovacao`), com a chave ligada e
+ * tudo editável. Elas podem chegar depois de o formulário abrir — a baixa
+ * as busca no servidor —, e entram quando chegam.
+ *
  * O estado mora em `useValorDaBaixa`, e o componente que o usa deve ser
  * montado com `key` do título: trocar de título recomeça do zero.
  */
@@ -30,6 +35,7 @@ import {
   type ImpostoRetido,
   type RetencaoDaBaixa,
 } from "@/lib/types";
+import type { RetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
 
 export type LadoDaBaixa = "receber" | "pagar";
 
@@ -91,14 +97,54 @@ function formatarPercentual(n: number): string {
   return `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
-export function useValorDaBaixa(aberto: number, ultima: UltimaRetencao | null) {
+/** Módulo fiscal: o ponto de partida das retenções — em branco, ou as
+ *  alíquotas da aprovação da PP, já calculadas sobre a base. */
+function retencaoInicial(base: number, daAprovacao: RetencaoDaAprovacao | null) {
+  const aliquotas = { ...SEM_ALIQUOTA };
+  const valores = { ...SEM_VALOR };
+  let alguma = false;
+  for (const { imposto } of IMPOSTOS_RETIDOS) {
+    const a = daAprovacao?.aliquotas[imposto];
+    if (typeof a === "number" && a > 0) {
+      aliquotas[imposto] = a;
+      valores[imposto] = valorDaAliquota(base, a);
+      alguma = true;
+    }
+  }
+  return { retem: alguma, aliquotas, valores };
+}
+
+export function useValorDaBaixa(
+  aberto: number,
+  ultima: UltimaRetencao | null,
+  /** Módulo fiscal: as alíquotas da aprovação da PP. `null` (o padrão)
+   *  começa em branco, como sempre. */
+  daAprovacao: RetencaoDaAprovacao | null = null,
+) {
   const [parcial, setParcialBruto] = React.useState(false);
   const [editado, setEditado] = React.useState(aberto);
-  const [retem, setRetemBruto] = React.useState(false);
-  const [aliquotas, setAliquotas] = React.useState(SEM_ALIQUOTA);
-  const [valores, setValores] = React.useState(SEM_VALOR);
+  const [partida] = React.useState(() => retencaoInicial(aberto, daAprovacao));
+  const [retem, setRetemBruto] = React.useState(partida.retem);
+  const [aliquotas, setAliquotas] = React.useState(partida.aliquotas);
+  const [valores, setValores] = React.useState(partida.valores);
 
   const valor = parcial ? editado : aberto;
+
+  // Módulo fiscal: as alíquotas da aprovação que chegam depois de o
+  // formulário abrir ligam a chave, uma vez. Enquanto elas não chegam, a
+  // baixa deixa a chave travada ("Buscando…"): não há o que atropelar.
+  const aprovacaoAplicada = React.useRef(daAprovacao);
+  React.useEffect(() => {
+    if (!daAprovacao || aprovacaoAplicada.current === daAprovacao) return;
+    aprovacaoAplicada.current = daAprovacao;
+    const p = retencaoInicial(valor, daAprovacao);
+    if (!p.retem) return;
+    setRetemBruto(true);
+    setAliquotas(p.aliquotas);
+    setValores(p.valores);
+    // Só a chegada decide; a base é o valor a dar baixa de agora.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daAprovacao]);
 
   // A base dos impostos é o valor a dar baixa: mudou o valor, o imposto
   // informado por alíquota acompanha.
@@ -146,6 +192,12 @@ export function useValorDaBaixa(aberto: number, ultima: UltimaRetencao | null) {
       if (!x) {
         setAliquotas(SEM_ALIQUOTA);
         setValores(SEM_VALOR);
+      } else if (daAprovacao) {
+        // Módulo fiscal: religar a chave traz de volta as alíquotas da
+        // aprovação da PP, e não a tabela em branco.
+        const p = retencaoInicial(valor, daAprovacao);
+        setAliquotas(p.aliquotas);
+        setValores(p.valores);
       }
     },
     porAliquota(imposto: ImpostoRetido, aliquota: number | null) {
@@ -350,6 +402,7 @@ export function BlocoValorDaBaixa({
   restoTexto,
   parcial,
   retencao,
+  ajudaDaRetencao = null,
 }: {
   v: EstadoDoValorDaBaixa;
   lado: LadoDaBaixa;
@@ -361,6 +414,10 @@ export function BlocoValorDaBaixa({
   restoTexto: string | null;
   parcial: { aceita: true } | { aceita: false; motivo: string };
   retencao: { mostra: false } | { mostra: true; motivo: string | null };
+  /** Módulo fiscal: a ajuda ao lado da chave de retenção quando ela está
+   *  liberada ("Retenções informadas na aprovação da PP (20/10/2026) ·
+   *  editáveis"). Com a chave travada, vale o motivo. */
+  ajudaDaRetencao?: string | null;
 }) {
   const t = TEXTOS[lado];
   const jaBaixado = arredondar(valorDoTitulo - v.aberto);
@@ -417,7 +474,7 @@ export function BlocoValorDaBaixa({
           ligada={v.retem}
           onChange={v.setRetem}
           rotulo={t.retem}
-          ajuda={retencao.motivo}
+          ajuda={retencao.motivo ?? ajudaDaRetencao}
           desligada={!retencaoLiberada}
           direita={
             v.retem && v.ultima ? (
