@@ -98,3 +98,29 @@ se abre em sublinhas), o bloco **"No fiscal"** nas baixas, e o fiscal no
 7. **Contagens que veem N lançamentos por guia:** o detalhe "Já
    movimentado" do fluxo (agrupado nesta entrega) e o número de
    lançamentos da lista de contas da conciliação.
+8. **Coluna Empresa da aba Títulos** (§6): empresa gerencial nos títulos a
+   pagar e a receber, PJ nos impostos. Para mostrar a PJ em todas as
+   linhas, a nota com CNPJ emissor e a PP com a NF registrada já a têm; as
+   de antes do módulo fiscal ficariam com "—".
+
+## 6. Ajustes de 02/10/2026 (tarde)
+
+Pedidos pelo Tiago depois de comparar o sistema com o protótipo.
+
+| O quê | Como ficou |
+|---|---|
+| "No fiscal" na baixa em lote | Voltou ao diálogo (tinha saído em `a992f19a`). O diálogo que parecia não fechar depois de confirmar já estava fechado (`data-state="closed"`): o painel do navegador de teste estava escondido e não roda a animação de saída, então o elemento ficava na tela. Não era o bloco nem o lote. |
+| "CNPJ emissor" na baixa da NF pela aba Títulos | O resumo da baixa ganhou a linha "CNPJ emissor" (estabelecimento · CNPJ), como no protótipo, quando a nota saiu por um CNPJ do cadastro fiscal. As notas de antes do módulo fiscal não o têm, e a linha não aparece. |
+| Número da aba Apuração | Aparece também com a aba Impostos a Pagar aberta: o cálculo chega num `Suspense` depois da página, sem segurar a lista de impostos (como o cartão "Fiscal" da Central). |
+| Coluna Empresa da aba Títulos | Fica como estava, agora documentada: os títulos a pagar e a receber mostram a empresa gerencial (a das listas deles); os impostos, a PJ da guia. A empresa gerencial não aponta para uma PJ (a ligação com a contábil existe só na conta bancária). Pergunta 8 do §5. |
+| Textos da estimativa | Voltaram as frases do protótipo: a competência em curso "entra no fluxo de caixa como estimativa" (Apuração) e, na memória de cálculo, "enquanto isso, a estimativa entra no fluxo de caixa no vencimento". |
+
+Verificação, em modo produção (`next build` + `next start`), no TES e na
+Conta Teste: o lote da PP-00110 com o imposto de teste mostrou o "No fiscal"
+(DARF 5952 R$ 372,00 e DARF 1708 R$ 120,00, vencendo em 19/11/2026), pediu o
+comprovante da guia, gravou as duas baixas (R$ 7.508,00 e R$ 10,00), fechou
+em 1,3 s com o aviso, e a lista atualizou em 2,8 s; as baixas foram
+canceladas depois pela tela (Títulos a Pagar e Impostos a Pagar). A aba
+Impostos a Pagar com o número cinza e a aba ativa em vermelho; as duas frases
+da estimativa na Apuração e na memória de cálculo. O número da Apuração não
+aparece hoje porque nenhuma guia está a aprovar (nenhuma competência fechou).

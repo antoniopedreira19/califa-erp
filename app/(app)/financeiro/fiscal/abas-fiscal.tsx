@@ -6,6 +6,11 @@
  * URL sem `aba`) e cada uma é lida no servidor só quando está aberta; a aba
  * clicada acende na hora e o conteúdo fica esmaecido até o servidor
  * responder, como nas abas da conciliação de uma conta.
+ *
+ * O número de cada aba chega pronto do servidor (`<ContagemDaAba>`): o da
+ * Apuração, com a outra aba aberta, vem num `Suspense` da página, porque
+ * exige o cálculo inteiro. A cor do número (aba ativa ou não) sai do
+ * contexto do botão, que o servidor não conhece.
  */
 
 import * as React from "react";
@@ -14,15 +19,34 @@ import { cn } from "@/lib/utils";
 
 export type AbaFiscal = "apuracao" | "impostos";
 
+/** A aba do botão em que o número está: a cor dele muda com ela. */
+const AbaAtiva = React.createContext(false);
+
+/** O número de uma aba (some quando é zero). */
+export function ContagemDaAba({ total }: { total: number }) {
+  const ativa = React.useContext(AbaAtiva);
+  if (total <= 0) return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold",
+        ativa ? "bg-california-red text-white" : "bg-muted text-muted-foreground",
+      )}
+    >
+      {total}
+    </span>
+  );
+}
+
 export function AbasFiscal({
   aba,
-  totalAAprovar,
+  seloApuracao,
   totalAPagar,
   children,
 }: {
   aba: AbaFiscal;
-  /** Guias a aprovar (ou com diferença) — só com a Apuração aberta. */
-  totalAAprovar: number | null;
+  /** As guias a aprovar (ou com diferença): um `<ContagemDaAba>`, direto ou num `Suspense`. */
+  seloApuracao: React.ReactNode;
   /** Impostos em aberto. */
   totalAPagar: number;
   children: React.ReactNode;
@@ -48,14 +72,14 @@ export function AbasFiscal({
   return (
     <div className="space-y-6">
       <div role="tablist" aria-label="Seções do fiscal" className="flex items-center gap-1 border-b border-border">
-        <TabButton
-          active={pedida === "apuracao"}
-          onClick={() => irPara("apuracao")}
-          count={totalAAprovar ?? undefined}
-        >
+        <TabButton active={pedida === "apuracao"} onClick={() => irPara("apuracao")} selo={seloApuracao}>
           Apuração
         </TabButton>
-        <TabButton active={pedida === "impostos"} onClick={() => irPara("impostos")} count={totalAPagar}>
+        <TabButton
+          active={pedida === "impostos"}
+          onClick={() => irPara("impostos")}
+          selo={<ContagemDaAba total={totalAPagar} />}
+        >
           Impostos a Pagar
         </TabButton>
       </div>
@@ -74,12 +98,12 @@ export function AbasFiscal({
 function TabButton({
   active,
   onClick,
-  count,
+  selo,
   children,
 }: {
   active: boolean;
   onClick: () => void;
-  count?: number;
+  selo: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -96,16 +120,7 @@ function TabButton({
       )}
     >
       {children}
-      {count !== undefined && count > 0 && (
-        <span
-          className={cn(
-            "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold",
-            active ? "bg-california-red text-white" : "bg-muted text-muted-foreground",
-          )}
-        >
-          {count}
-        </span>
-      )}
+      <AbaAtiva.Provider value={active}>{selo}</AbaAtiva.Provider>
     </button>
   );
 }

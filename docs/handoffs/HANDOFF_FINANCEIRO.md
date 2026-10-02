@@ -6547,3 +6547,17 @@ estendido a Contas a Receber em 31/08.**
 - **Imposto de teste:** "TESTE do sistema (02/10) — não pagar" (PIS,
   setembro/2026, R$ 10,00, Empresa Teste · Teste), A pagar, deixado para a
   demonstração; apagar só com o OK do Tiago (não há cancelamento de título).
+
+## ⚠️ Nota de 2026-10-02 (4) — fiscal: ajustes da tarde (decisão 141 §6)
+
+- **"No fiscal" voltou à baixa em lote** (`components/financeiro/baixa-em-lote.tsx`).
+  O diálogo que parecia travar já estava fechado: com o painel do navegador
+  de teste escondido, a animação de saída do Radix não roda e o elemento
+  fica na tela com `data-state="closed"`. Em teste de diálogo, olhe o
+  `data-state`.
+- **Aba Títulos da conciliação:** a baixa de NF mostra "CNPJ emissor"
+  (`fat_cnpj_emissor` em `TituloRow`, obrigatório; `null` nas avulsas e nas
+  notas de antes do módulo fiscal). A coluna Empresa é gerencial nos
+  títulos e a PJ nos impostos — documentado, pergunta aberta (141 §5.8).
+- **Número da aba Apuração** sempre visível: `contarGuiasAAprovarNoBanco`
+  num `Suspense` quando a aba Impostos a Pagar está aberta.

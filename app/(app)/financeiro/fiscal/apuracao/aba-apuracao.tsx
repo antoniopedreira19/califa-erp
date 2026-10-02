@@ -261,7 +261,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
             <div className="h-5 w-px bg-border" />
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <Hourglass className="h-3.5 w-3.5" />
-              Em curso até {dataBr(fim)}: os valores mudam a cada nota, custo ou recebimento.
+              Em curso até {dataBr(fim)}: os valores mudam a cada nota, custo ou recebimento, e entram no fluxo de caixa como estimativa.
             </span>
           </>
         )}
