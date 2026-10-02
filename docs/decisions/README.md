@@ -160,6 +160,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 138 | [O percentual de cada parcela da PP, com a última fechando os 100%](138-percentual-de-cada-parcela-da-pp.md) | 2026-10-01 |
 | 139 | [Módulo fiscal, entrega 1: o cadastro de impostos e os dados que alimentam a apuração](139-modulo-fiscal-entrega-1.md) | 2026-10-02 |
 | 140 | [Baixa em lote e a aba Títulos na conciliação](140-baixa-em-lote-e-aba-titulos.md) | 2026-10-02 |
+| 141 | [Módulo fiscal, entrega 2: Apuração, Impostos a Pagar e a guia na conciliação](141-modulo-fiscal-entrega-2.md) | 2026-10-02 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -172,4 +173,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 141.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 142.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
