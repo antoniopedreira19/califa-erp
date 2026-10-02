@@ -83,6 +83,11 @@ function extractInput(formData: FormData) {
     // PIX
     pix_tipo: formData.get("pix_tipo"),
     pix_chave: formData.get("pix_chave"),
+
+    // Módulo fiscal (02/10/2026): regime tributário da pessoa jurídica
+    regime_tributario: formData.get("regime_tributario"),
+    regime_consultado_em: formData.get("regime_consultado_em"),
+    declaracao_simples_recebida: formData.get("declaracao_simples_recebida"),
   };
 }
 
@@ -194,6 +199,8 @@ async function inserirFornecedor(
       nome: parsed.data.nome,
       tipo_pessoa: parsed.data.tipo_pessoa,
       origem,
+      // Módulo fiscal: o regime decide a retenção na aprovação da PP.
+      regime_tributario: parsed.data.regime_tributario,
     },
   });
 
@@ -434,7 +441,11 @@ export async function atualizarFornecedor(
     tenantId: session.activeTenant.id,
     entidadeTipo: "fornecedor",
     entidadeId: id,
-    metadata: { confirmado_com_pps_no_financeiro: confirmarComPPsNoFinanceiro },
+    metadata: {
+      confirmado_com_pps_no_financeiro: confirmarComPPsNoFinanceiro,
+      // Módulo fiscal: o regime decide a retenção na aprovação da PP.
+      regime_tributario: parsed.data.regime_tributario,
+    },
   });
 
   revalidatePath("/fornecedores");
