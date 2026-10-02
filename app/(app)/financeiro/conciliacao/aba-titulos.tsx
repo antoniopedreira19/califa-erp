@@ -389,7 +389,9 @@ export function AbaTitulos({
         contas={dados.contas}
         tipos={dados.tipos}
         subtipos={dados.subtipos}
-        contaPadrao={contaId}
+        // A conta-espelho do cartão, aberta por link direto, não é conta
+        // de baixa: aí o lote abre sem conta, como as baixas de um título.
+        contaPadrao={dados.contas.some((c) => c.id === contaId) ? contaId : null}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);
