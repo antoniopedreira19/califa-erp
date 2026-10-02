@@ -17,8 +17,11 @@ import {
   dataCurta,
   diaDaSemana,
   juntarNomes,
+  LINHA_DIA_PIS_COFINS,
+  LINHA_DIA_RETENCOES,
   linhasDeCnae,
   moeda,
+  parametroNaTela,
   parametrosNaTela,
   pct,
   valorNaData,
@@ -102,7 +105,7 @@ export function CadastroImpostos({ cadastro, empresas, hoje }: Props) {
       </div>
       {aba === "cnpjs" && <Cnpjs cadastro={cadastro} hoje={hoje} pjDoEstab={pjDoEstab} />}
       {aba === "cnaes" && <Cnaes cadastro={cadastro} hoje={hoje} pjDoEstab={pjDoEstab} />}
-      {aba === "vencimentos" && <Vencimentos cadastro={cadastro} hoje={hoje} pjs={pjs} />}
+      {aba === "vencimentos" && <Vencimentos cadastro={cadastro} hoje={hoje} pjs={pjs} pjDoEstab={pjDoEstab} />}
       {aba === "feriados" && <Feriados cadastro={cadastro} pjs={pjs} />}
       {aba === "parametros" && <Parametros cadastro={cadastro} hoje={hoje} pjs={pjs} />}
     </div>
@@ -443,14 +446,23 @@ function Cnaes({
 // Aba Vencimentos
 // ---------------------------------------------------------------------------
 
+/** O que o lápis de uma linha abre: o CNPJ emissor (ISS) ou o dia de um federal. */
+type EdicaoDoVencimento = { tipo: "cnpj"; estab: FiscalEstabelecimento } | { tipo: "dia"; dia: DiaFederal };
+
+type DiaFederal = "pis_cofins" | "retencoes";
+
 interface LinhaDeVencimento {
   chave: string;
   tributo: string;
   quem: string;
   dia: string;
+  /** Dias novos com vigência futura (só os federais têm; nas outras linhas, vazio). */
+  programados: Array<{ data: string; dia: number }>;
   base: string;
   regra: RegraDeVencimentoFiscal;
   obs?: string | null;
+  /** Nulo no IRPJ e na CSLL: o último dia útil é da lei. */
+  edicao: EdicaoDoVencimento | null;
 }
 
 /** Sem CNPJ, a linha só avisa que falta informar; com CNPJ, vale a observação do cadastro. */
@@ -459,62 +471,110 @@ function observacaoDoVencimento(e: FiscalEstabelecimento) {
   return e.observacao;
 }
 
-function Vencimentos({ cadastro, hoje, pjs }: { cadastro: CadastroFiscal; hoje: string; pjs: PJ[] }) {
+function Vencimentos({
+  cadastro,
+  hoje,
+  pjs,
+  pjDoEstab,
+}: {
+  cadastro: CadastroFiscal;
+  hoje: string;
+  pjs: PJ[];
+  pjDoEstab: (e: FiscalEstabelecimento) => PJ;
+}) {
+  const [editando, setEditando] = React.useState<EdicaoDoVencimento | null>(null);
   const diaPisCofins = parametro(cadastro, "pis_cofins_dia", hoje, 25);
   const diaRetencoes = parametro(cadastro, "retencoes_dia", hoje, 20);
   const matrizes = juntarNomes(pjs.map((p) => p.empresa.nome));
+  const deTodas = matrizes ? `de todas as matrizes (${matrizes})` : "de todas as matrizes";
+  const historico = "O dia novo vale a partir da data; o atual fica no histórico, e as apurações de antes da data continuam com o dia da época.";
+
+  // Os dois dias são parâmetros com vigência, um só para o grupo (não por PJ):
+  // o lápis abre a mesma edição da aba Parâmetros. Sem a linha no banco, sem lápis.
+  const diasFederais: Record<DiaFederal, { item: ParametroNaTela | null; nota: string }> = {
+    pis_cofins: {
+      item: parametroNaTela(cadastro.parametros, hoje, LINHA_DIA_PIS_COFINS),
+      nota: `O mesmo dia vale para o PIS e a COFINS ${deTodas}. ${historico}`,
+    },
+    retencoes: {
+      item: parametroNaTela(cadastro.parametros, hoje, LINHA_DIA_RETENCOES),
+      nota: `O mesmo dia vale para as duas guias de retenção (DARF 5952, de PIS/COFINS/CSLL, e DARF 1708, de IRRF) ${deTodas}. ${historico}`,
+    },
+  };
+  const programados = (dia: DiaFederal) => {
+    const item = diasFederais[dia].item;
+    if (!item) return [];
+    const chave = item.linha.campos[0].chave;
+    return item.programados.map((p) => ({ data: p.data, dia: p.valores[chave] }));
+  };
+  const edicaoDoDia = (dia: DiaFederal): EdicaoDoVencimento | null => (diasFederais[dia].item ? { tipo: "dia", dia } : null);
+
   const linhas: LinhaDeVencimento[] = [
     ...cadastro.estabelecimentos.map((e) => ({
       chave: `iss-${e.id}`,
       tributo: "ISS próprio",
       quem: e.nome,
       dia: String(e.iss_dia),
+      programados: [],
       base: "mês seguinte à emissão da nota",
       regra: e.iss_regra,
       obs: observacaoDoVencimento(e),
+      edicao: { tipo: "cnpj" as const, estab: e },
     })),
     ...cadastro.estabelecimentos.map((e) => ({
       chave: `iss-retido-${e.id}`,
       tributo: "ISS retido de fornecedores",
       quem: e.nome,
       dia: String(e.iss_retido_dia),
+      programados: [],
       base: "mês seguinte à emissão da NF do fornecedor",
       regra: e.iss_regra,
       obs: observacaoDoVencimento(e),
+      edicao: { tipo: "cnpj" as const, estab: e },
     })),
     ...pjs.map((p) => ({
       chave: `pis-cofins-${p.empresa.id}`,
       tributo: "PIS e COFINS",
       quem: `${p.empresa.nome} (matriz)`,
       dia: String(diaPisCofins),
+      programados: programados("pis_cofins"),
       base: p.regimeCaixa ? "mês seguinte ao recebimento" : "mês seguinte à emissão da nota",
       regra: "antecipa" as const,
+      edicao: edicaoDoDia("pis_cofins"),
     })),
     ...pjs.map((p) => ({
       chave: `irpj-csll-${p.empresa.id}`,
       tributo: "IRPJ e CSLL (3 cotas)",
       quem: `${p.empresa.nome} (matriz)`,
       dia: "último dia útil",
+      programados: [],
       base: p.regimeCaixa ? "cada mês do trimestre seguinte ao recebimento" : "cada mês do trimestre seguinte",
       regra: "ultimo_util" as const,
+      edicao: null,
     })),
     {
       chave: "csrf",
       tributo: "PIS/COFINS/CSLL retidos (DARF 5952)",
       quem: `${matrizes} (matriz)`,
       dia: String(diaRetencoes),
+      programados: programados("retencoes"),
       base: "mês seguinte ao pagamento do fornecedor",
       regra: "antecipa",
+      edicao: edicaoDoDia("retencoes"),
     },
     {
       chave: "irrf",
       tributo: "IRRF retido (DARF 1708)",
       quem: `${matrizes} (matriz)`,
       dia: String(diaRetencoes),
+      programados: programados("retencoes"),
       base: "mês seguinte ao pagamento do fornecedor",
       regra: "antecipa",
+      edicao: edicaoDoDia("retencoes"),
     },
   ];
+  const diaEmEdicao = editando?.tipo === "dia" ? diasFederais[editando.dia] : null;
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -524,9 +584,10 @@ function Vencimentos({ cadastro, hoje, pjs }: { cadastro: CadastroFiscal; hoje: 
               <th className={cn(th, "w-[24%]")}>Imposto</th>
               <th className={cn(th, "w-[20%]")}>Quem paga</th>
               <th className={cn(th, "w-[10%] text-center")}>Dia</th>
-              <th className={cn(th, "w-[24%]")}>A partir de</th>
+              <th className={cn(th, "w-[21%]")}>A partir de</th>
               <th className={cn(th, "w-[11%] text-center")}>Dia não útil</th>
               <th className={cn(th, "w-[11%]")}>Observação</th>
+              <th className={cn(th, "w-[3%]")} />
             </tr>
           </thead>
           <tbody>
@@ -534,12 +595,27 @@ function Vencimentos({ cadastro, hoje, pjs }: { cadastro: CadastroFiscal; hoje: 
               <tr key={l.chave} className="border-b border-border last:border-0 hover:bg-accent/40">
                 <td className="px-3 py-2.5 font-semibold">{l.tributo}</td>
                 <td className="px-3 py-2.5 text-xs">{l.quem}</td>
-                <td className="px-3 py-2.5 text-center font-mono text-xs">{l.dia}</td>
+                <td className="px-3 py-2.5 text-center font-mono text-xs">
+                  {l.dia}
+                  {l.programados.map((p) => (
+                    <span key={p.data} className="mt-0.5 block font-sans text-[10.5px] font-semibold text-sky-700">
+                      a partir de {dataBr(p.data)}: {p.dia}
+                    </span>
+                  ))}
+                </td>
                 <td className="px-3 py-2.5 text-xs text-muted-foreground">{l.base}</td>
                 <td className="px-3 py-2.5 text-center">
                   <Pilula tom={TOM_REGRA[l.regra]}>{ROTULO_REGRA[l.regra]}</Pilula>
                 </td>
                 <td className="px-3 py-2.5 text-[11.5px] text-amber-700">{l.obs ?? ""}</td>
+                <td className="px-2 py-2.5 text-center">
+                  {l.edicao && (
+                    <BotaoLapis
+                      rotulo={l.edicao.tipo === "cnpj" ? "Editar CNPJ emissor" : "Alterar dia do vencimento"}
+                      onClick={() => setEditando(l.edicao)}
+                    />
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -548,9 +624,27 @@ function Vencimentos({ cadastro, hoje, pjs }: { cadastro: CadastroFiscal; hoje: 
       <Nota tom="ambar">
         Em dia não útil, os impostos federais <b>antecipam</b> para o dia útil anterior (PIS/COFINS no dia {diaPisCofins}, retenções no dia{" "}
         {diaRetencoes}); pagar no dia seguinte gera multa de 0,33% ao dia. O ISS de Salvador, São Paulo e Fortaleza <b>prorroga</b> para o dia útil
-        seguinte. IRPJ e CSLL vencem no último dia útil de cada mês. O dia e a regra do ISS de cada CNPJ se trocam na aba CNPJs emissores, se a
-        contabilidade orientar diferente.
+        seguinte. IRPJ e CSLL vencem no último dia útil de cada mês. Dá para trocar o dia pelo lápis da linha, se a contabilidade orientar
+        diferente: no ISS, o dia e a regra ficam no CNPJ emissor; no PIS/COFINS e nas retenções, o dia novo vale a partir de uma data, e a
+        antecipação, que é da lei, não muda.
       </Nota>
+      {editando?.tipo === "cnpj" && (
+        <EstabelecimentoDialog
+          estab={editando.estab}
+          razaoSocial={pjDoEstab(editando.estab).empresa.razao_social}
+          onClose={() => setEditando(null)}
+        />
+      )}
+      {diaEmEdicao?.item && (
+        <ParametroDialog
+          item={diaEmEdicao.item}
+          parametros={cadastro.parametros}
+          hoje={hoje}
+          nota={diaEmEdicao.nota}
+          diaNaoUtil={ROTULO_REGRA.antecipa}
+          onClose={() => setEditando(null)}
+        />
+      )}
     </div>
   );
 }

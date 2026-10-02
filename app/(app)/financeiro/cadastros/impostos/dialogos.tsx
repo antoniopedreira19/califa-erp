@@ -23,7 +23,10 @@ import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import type { FiscalCnae, FiscalEstabelecimento, FiscalFeriado, FiscalParametro, RegraDeVencimentoFiscal } from "@/lib/types";
 import {
   aliquotasPisCofins,
+  diaDoMesValido,
   formatarCodigoCnae,
+  lerDiaDoMes,
+  mensagemDoDia,
   percentualParaCampo,
   lerPercentual,
   primeiroDiaDoMesSeguinte,
@@ -608,11 +611,17 @@ export function ParametroDialog({
   parametros,
   hoje,
   onClose,
+  nota,
+  diaNaoUtil,
 }: {
   item: ParametroNaTela;
   parametros: FiscalParametro[];
   hoje: string;
   onClose: () => void;
+  /** Nota no lugar da geral (os dias dos federais dizem para quem o dia vale). */
+  nota?: React.ReactNode;
+  /** A regra de dia não útil, só mostrada: nos federais, antecipa pela lei. */
+  diaNaoUtil?: string;
 }) {
   const { pendente, erro, setErro, enviar } = useEnvio(onClose);
   const ultimas = item.linha.campos.map((c) => ultimaVersao(parametros, c.chave));
@@ -623,10 +632,11 @@ export function ParametroDialog({
     const v: Record<string, string | number> = {};
     item.linha.campos.forEach((c, i) => {
       const valor = ultimas[i]?.valor ?? 0;
-      v[c.chave] = c.formato === "pct" ? percentualParaCampo(valor) : valor;
+      v[c.chave] = c.formato === "pct" ? percentualParaCampo(valor) : c.formato === "dia" ? String(valor) : valor;
     });
     return v;
   });
+  const colunas = item.linha.campos.length + (diaNaoUtil ? 1 : 0);
 
   function handleSubmit(ev: React.FormEvent<HTMLFormElement>) {
     ev.preventDefault();
@@ -634,6 +644,15 @@ export function ParametroDialog({
     const lidos: { chave: string; valor: number }[] = [];
     for (const c of item.linha.campos) {
       const bruto = valores[c.chave];
+      if (c.formato === "dia") {
+        const d = lerDiaDoMes(bruto);
+        if (!diaDoMesValido(d)) {
+          setErro(mensagemDoDia(c.rotulo));
+          return;
+        }
+        lidos.push({ chave: c.chave, valor: d });
+        continue;
+      }
       const n = c.formato === "pct" ? lerPercentual(bruto) : Number(bruto);
       if (n === null || Number.isNaN(n)) {
         setErro(`${c.rotulo}: use só números, como 1,5.`);
@@ -655,7 +674,7 @@ export function ParametroDialog({
           <DialogDescription>Hoje: {item.linha.valor(item.hoje)}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className={cn("grid gap-3", item.linha.campos.length >= 3 ? "grid-cols-3" : "grid-cols-2")}>
+          <div className={cn("grid gap-3", colunas >= 3 ? "grid-cols-3" : "grid-cols-2")}>
             {item.linha.campos.map((c) => (
               <div key={c.chave} className="space-y-1">
                 <Rotulo htmlFor={`fiscal-par-${c.chave}`} obrigatorio>
@@ -668,6 +687,18 @@ export function ParametroDialog({
                     value={String(valores[c.chave] ?? "")}
                     onChange={(ev) => setValores((v) => ({ ...v, [c.chave]: ev.target.value }))}
                   />
+                ) : c.formato === "dia" ? (
+                  <Input
+                    id={`fiscal-par-${c.chave}`}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={31}
+                    step={1}
+                    required
+                    value={String(valores[c.chave] ?? "")}
+                    onChange={(ev) => setValores((v) => ({ ...v, [c.chave]: ev.target.value }))}
+                  />
                 ) : (
                   <MoneyInput
                     id={`fiscal-par-${c.chave}`}
@@ -677,6 +708,13 @@ export function ParametroDialog({
                 )}
               </div>
             ))}
+            {diaNaoUtil && (
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-par-dia-nao-util">Dia não útil</Rotulo>
+                <Input id="fiscal-par-dia-nao-util" value={diaNaoUtil} readOnly tabIndex={-1} className="bg-muted/40" />
+                <p className="text-[11px] text-muted-foreground">Regra da lei para os federais; não muda.</p>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -690,7 +728,8 @@ export function ParametroDialog({
             </div>
           </div>
           <Nota>
-            O valor novo vale a partir da data; o atual fica no histórico. As apurações de antes da data continuam com o valor da época.
+            {nota ??
+              "O valor novo vale a partir da data; o atual fica no histórico. As apurações de antes da data continuam com o valor da época."}
           </Nota>
           {vigencia !== "" && vigencia < hoje && (
             <Nota tom="ambar">A data é anterior a hoje: o valor novo vale desde {dataBr(vigencia)}.</Nota>

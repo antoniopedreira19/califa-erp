@@ -2,7 +2,8 @@
  * Cadastro de impostos (módulo fiscal, entrega 1 — 02/10/2026): validação
  * das edições da tela Cadastros do Financeiro › Impostos e as contas puras
  * que ela faz (máscara do CNAE, percentual digitado com vírgula, véspera da
- * vigência nova, PIS/COFINS pela opção de crédito).
+ * vigência nova, PIS/COFINS pela opção de crédito, dia de vencimento dos
+ * federais).
  *
  * Usado pelas Server Actions de `app/(app)/financeiro/cadastros/impostos`
  * e pelos diálogos da tela (o cliente mostra o mesmo que o servidor aceita).
@@ -48,6 +49,33 @@ export function lerPercentual(v: unknown): number | null {
 export function percentualParaCampo(v: number | null | undefined): string {
   if (v === null || v === undefined) return "";
   return String(v).replace(".", ",");
+}
+
+/**
+ * Os parâmetros que são dia do mês: o vencimento do PIS/COFINS e o das
+ * retenções federais (lápis da aba Vencimentos). Vão de 1 a 31, como o dia
+ * do ISS; no mês mais curto, vale o último dia (`vencimentoNoMesSeguinte`).
+ */
+export const CHAVES_DE_DIA: ReadonlySet<string> = new Set(["pis_cofins_dia", "retencoes_dia"]);
+
+/** "Dia do ISS: informe um dia de 1 a 31." — a mesma frase para todo dia do cadastro. */
+export function mensagemDoDia(rotulo: string): string {
+  return `${rotulo}: informe um dia de 1 a 31.`;
+}
+
+/** Dia do mês digitado ("25", " 7 ") em número. Vazio = nulo; o resto ("2,5", texto) = NaN. */
+export function lerDiaDoMes(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return v;
+  const s = String(v).trim();
+  if (s === "") return null;
+  if (!/^[0-9]+$/.test(s)) return Number.NaN;
+  return Number(s);
+}
+
+/** Dia inteiro de 1 a 31. */
+export function diaDoMesValido(n: number | null | undefined): n is number {
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 31;
 }
 
 /** A véspera da vigência nova: é onde a linha atual fecha. */
@@ -103,10 +131,10 @@ const aliquotaIss = z.preprocess(
 
 const dia = (rotulo: string) =>
   z.coerce
-    .number({ invalid_type_error: `${rotulo}: informe um dia de 1 a 31.` })
-    .int(`${rotulo}: informe um dia de 1 a 31.`)
-    .min(1, `${rotulo}: informe um dia de 1 a 31.`)
-    .max(31, `${rotulo}: informe um dia de 1 a 31.`);
+    .number({ invalid_type_error: mensagemDoDia(rotulo) })
+    .int(mensagemDoDia(rotulo))
+    .min(1, mensagemDoDia(rotulo))
+    .max(31, mensagemDoDia(rotulo));
 
 /** CNPJ emissor: informar o CNPJ e ativar; vencimento do ISS; observação. */
 export const estabelecimentoSchema = z
@@ -200,20 +228,36 @@ export type NovoFeriadoInput = z.input<typeof novoFeriadoSchema>;
 
 export const idSchema = z.object({ id: z.string().uuid() });
 
-/** Parâmetros: valores novos a partir de uma data (linha nova por chave). */
-export const novaVigenciaParametrosSchema = z.object({
-  vigencia_inicio: dataIso,
-  valores: z
-    .array(
-      z.object({
-        chave: z.string().min(1).max(80),
-        valor: z
-          .number({ invalid_type_error: "Use só números." })
-          .refine((v) => Number.isFinite(v), "Use só números.")
-          .refine((v) => v >= 0, "O valor não pode ser negativo."),
-      }),
-    )
-    .min(1, "Nada para salvar."),
-});
+/**
+ * Parâmetros: valores novos a partir de uma data (linha nova por chave). Os
+ * dias de vencimento dos federais (`CHAVES_DE_DIA`) só aceitam dia de 1 a 31:
+ * a coluna `valor` é numérica e não tem CHECK, então a trava é esta.
+ */
+export const novaVigenciaParametrosSchema = z
+  .object({
+    vigencia_inicio: dataIso,
+    valores: z
+      .array(
+        z.object({
+          chave: z.string().min(1).max(80),
+          valor: z
+            .number({ invalid_type_error: "Use só números." })
+            .refine((v) => Number.isFinite(v), "Use só números.")
+            .refine((v) => v >= 0, "O valor não pode ser negativo."),
+        }),
+      )
+      .min(1, "Nada para salvar."),
+  })
+  .superRefine((v, ctx) => {
+    v.valores.forEach((x, i) => {
+      if (CHAVES_DE_DIA.has(x.chave) && !diaDoMesValido(x.valor)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["valores", i, "valor"],
+          message: mensagemDoDia("Dia do vencimento"),
+        });
+      }
+    });
+  });
 
 export type NovaVigenciaParametrosInput = z.input<typeof novaVigenciaParametrosSchema>;
