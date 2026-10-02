@@ -21,11 +21,6 @@ export async function HomeProdutor({
         subtitulo="O que precisa de você nos jobs em andamento e o seu volume."
       />
 
-      <CardNotificacoesFerias
-        tenantId={session.activeTenant.id}
-        userId={session.profile.id}
-      />
-
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">
           Precisa da sua atenção
@@ -51,6 +46,11 @@ export async function HomeProdutor({
           ))}
         </div>
       </section>
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
+      />
     </div>
   );
 }

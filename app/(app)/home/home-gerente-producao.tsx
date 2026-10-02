@@ -21,11 +21,6 @@ export async function HomeGerenteProducao({
         subtitulo="Aprovações que dependem de você e o volume do seu time."
       />
 
-      <CardNotificacoesFerias
-        tenantId={session.activeTenant.id}
-        userId={session.profile.id}
-      />
-
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">
           Aguardando você
@@ -49,6 +44,11 @@ export async function HomeGerenteProducao({
           ))}
         </div>
       </section>
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
+      />
     </div>
   );
 }

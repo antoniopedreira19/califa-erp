@@ -17,11 +17,6 @@ export async function HomeAdmin({ session }: { session: SessionContext }) {
         subtitulo="O que precisa da sua atenção hoje, e como estão os números do mês."
       />
 
-      <CardNotificacoesFerias
-        tenantId={session.activeTenant.id}
-        userId={session.profile.id}
-      />
-
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">
           Precisa da sua atenção
@@ -45,6 +40,11 @@ export async function HomeAdmin({ session }: { session: SessionContext }) {
           ))}
         </div>
       </section>
+
+      <CardNotificacoesFerias
+        tenantId={session.activeTenant.id}
+        userId={session.profile.id}
+      />
     </div>
   );
 }
