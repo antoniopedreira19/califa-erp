@@ -221,6 +221,15 @@ export interface TituloRow {
    * PP tem; toda outra origem manda `null` explícito.
    */
   fora_do_cadastro: BaixaTituloAlvo["foraDoCadastro"];
+  /**
+   * Módulo fiscal (decisão 139): o número da NF do fornecedor, que o
+   * financeiro registrou na aprovação da PP (`pedidos_compra.nf_numero`).
+   * A linha mostra "NF 602" embaixo do título, e o lote e a aba Títulos da
+   * conciliação levam na referência ("PP-00110 · NF 602"). Null na PP sem
+   * NF registrada; toda outra origem manda `null` explícito. Obrigatório
+   * pelo mesmo motivo do asterisco acima.
+   */
+  nf_numero: string | null;
   estorno_de_avulsa_id: string | null;
   /**
    * A COMPRA a que esta linha pertence — ela mesma, se for compra à vista
@@ -434,6 +443,9 @@ function motivoForaDoLote(r: TituloRow): string | null {
 /** O título no formato do lote. `null` na origem que não entra nele. */
 function paraOLote(r: TituloRow): TituloParaLote | null {
   if (!origemNoLote(r.origem)) return null;
+  // A PP com NF registrada leva o número junto do código (módulo fiscal):
+  // "PP-00110 · NF 602".
+  const origem = r.nf_numero ? `${r.origem_label} · NF ${r.nf_numero}` : r.origem_label;
   return {
     chave: chaveDoLote(r),
     tipo: "pagar",
@@ -441,8 +453,8 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
     titulo: r.descricao,
     referencia:
       r.parcela_total > 1
-        ? `${r.origem_label} · ${r.parcela_numero}/${r.parcela_total}`
-        : r.origem_label,
+        ? `${origem} · ${r.parcela_numero}/${r.parcela_total}`
+        : origem,
     contraparte: r.fornecedor_nome || "—",
     vencimento: r.data_pagamento,
     aberto: faltaPagar(r),
@@ -1124,6 +1136,13 @@ export function TitulosPagarList({
                           className="line-clamp-2 text-[11px] leading-snug text-california-red"
                         >
                           “{r.urgente_justificativa}”
+                        </span>
+                      )}
+                      {/* Módulo fiscal: o número da NF do fornecedor,
+                          registrado pelo financeiro na aprovação da PP. */}
+                      {r.nf_numero && (
+                        <span className="self-start text-[11px] text-muted-foreground">
+                          NF {r.nf_numero}
                         </span>
                       )}
                     </div>
