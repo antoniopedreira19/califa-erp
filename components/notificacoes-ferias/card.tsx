@@ -37,7 +37,8 @@ export async function CardNotificacoesFerias({
 }: Props) {
   const supabase = createClient();
 
-  let query = supabase
+  // Monta a query de listagem com os filtros opcionais
+  let listaQuery = supabase
     .from("colaboradores_ferias_notificacoes")
     .select(
       "id, tipo, colaborador_id, lancamento_id, periodo_id, titulo, mensagem, criada_em, lida_em",
@@ -49,21 +50,22 @@ export async function CardNotificacoesFerias({
     .limit(limite);
 
   if (somenteNaoLidas) {
-    query = query.is("lida_em", null);
+    listaQuery = listaQuery.is("lida_em", null);
   }
 
-  const { data, count } = await query;
-  const notificacoes = (data ?? []) as NotifRow[];
+  // Dispara LISTAGEM + CONTAGEM em paralelo (Onda 2 — antes era série).
+  const [listaRes, contagemRes] = await Promise.all([
+    listaQuery,
+    supabase
+      .from("colaboradores_ferias_notificacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("destinatario_user_id", userId)
+      .is("lida_em", null),
+  ]);
 
-  // Conta total não-lidas separadamente (query leve head:true)
-  const { count: naoLidasCount } = await supabase
-    .from("colaboradores_ferias_notificacoes")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenantId)
-    .eq("destinatario_user_id", userId)
-    .is("lida_em", null);
-
-  const total = naoLidasCount ?? 0;
+  const notificacoes = (listaRes.data ?? []) as NotifRow[];
+  const total = contagemRes.count ?? 0;
 
   if (notificacoes.length === 0) {
     return (
