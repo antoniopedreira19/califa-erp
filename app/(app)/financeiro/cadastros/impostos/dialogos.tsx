@@ -162,7 +162,8 @@ export function EstabelecimentoDialog({
       setAtivo(true);
       if (observacao === (estab.observacao ?? "") && /^CNPJ da filial a informar/.test(observacao)) setObservacao("");
     }
-    if (d.length !== 14) setAtivo(false);
+    // CNPJ incompleto só desliga a caixa na tela (e no envio); a escolha
+    // volta sozinha quando o número fica completo de novo.
   }
 
   function handleSubmit(ev: React.FormEvent<HTMLFormElement>) {

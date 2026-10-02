@@ -107,6 +107,12 @@ export async function atualizarEstabelecimento(input: unknown): Promise<Result> 
     .maybeSingle<FiscalEstabelecimento>();
   if (errAtual) return { ok: false, message: `Falha ao carregar o CNPJ emissor: ${errAtual.message}` };
   if (!atual) return { ok: false, message: "CNPJ emissor não encontrado." };
+  if (atual.cnpj && !v.cnpj) {
+    return {
+      ok: false,
+      message: "O CNPJ já informado não se apaga. Para tirar o estabelecimento do Faturar, desmarque Ativo.",
+    };
+  }
 
   // A raiz do CNPJ (8 primeiros dígitos) é a da empresa: matriz e filiais
   // de uma PJ dividem a mesma raiz.
