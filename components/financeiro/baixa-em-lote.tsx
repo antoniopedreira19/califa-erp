@@ -329,8 +329,20 @@ export function BaixaEmLoteDialog({
    *  seleção e mostra o toast; a página já foi atualizada. */
   onConcluido?: (mensagem: string) => void;
 }) {
+  // Enquanto o lote grava, o diálogo não fecha (X, Esc ou clique fora): é
+  // nele que aparece onde o lote parou, se parar.
+  const ocupado = React.useRef(false);
+  const marcarOcupado = React.useCallback((sim: boolean) => {
+    ocupado.current = sim;
+  }, []);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(aberto) => {
+        if (!aberto && ocupado.current) return;
+        onOpenChange(aberto);
+      }}
+    >
       <DialogContent className="sm:max-w-[960px]">
         {/* O conteúdo do Radix desmonta ao fechar (depois da animação): o
             formulário remonta a cada abertura, com o estado do zero e a
@@ -341,8 +353,10 @@ export function BaixaEmLoteDialog({
           tipos={tipos}
           subtipos={subtipos}
           contaPadrao={contaPadrao ?? null}
+          onOcupado={marcarOcupado}
           onCancelar={() => onOpenChange(false)}
           onConcluido={(mensagem) => {
+            ocupado.current = false;
             onOpenChange(false);
             onConcluido?.(mensagem);
           }}
@@ -358,6 +372,7 @@ function FormularioDoLote({
   tipos,
   subtipos,
   contaPadrao,
+  onOcupado,
   onCancelar,
   onConcluido,
 }: {
@@ -366,11 +381,17 @@ function FormularioDoLote({
   tipos: TipoDoLote[];
   subtipos: SubtipoDoLote[];
   contaPadrao: string | null;
+  onOcupado: (ocupado: boolean) => void;
   onCancelar: () => void;
   onConcluido: (mensagem: string) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+  React.useEffect(() => {
+    onOcupado(pending);
+  }, [pending, onOcupado]);
+  // Desmontou (fechou): nada mais segura o diálogo.
+  React.useEffect(() => () => onOcupado(false), [onOcupado]);
   const [lista] = React.useState(itensIniciais);
   /** As que já viraram baixa num envio que parou no meio: saem da tabela
    *  e não vão de novo. */
@@ -788,7 +809,8 @@ function FormularioDoLote({
         <button
           type="button"
           onClick={onCancelar}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+          disabled={pending}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
         >
           Cancelar
         </button>
