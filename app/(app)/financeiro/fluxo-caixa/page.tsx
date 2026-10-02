@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { FluxoCaixaView, type FluxoItem, type ContaOpcao } from "./fluxo-caixa-view";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { carregarFiscalDoFluxo } from "@/lib/fiscal/fluxo-fiscal-dados";
+import { parcelaSemIssRetido } from "@/lib/fiscal/fluxo-fiscal";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +71,7 @@ export default async function FluxoCaixaPage({
     let q = supabase
       .from("vw_fluxo_caixa")
       .select(
-        "classe, situacao, origem_tipo, origem_id, conta_bancaria_id, regional_id, data_evento, valor, natureza, descricao, job_id",
+        "classe, situacao, origem_tipo, origem_id, conta_bancaria_id, regional_id, data_evento, valor, natureza, descricao, job_id, origem_lancamento",
       )
       .eq("tenant_id", session.activeTenant.id)
       .gte("data_evento", ancora)
@@ -97,7 +99,7 @@ export default async function FluxoCaixaPage({
     return qr;
   })();
 
-  const [fluxoRes, contasRes, regionaisRes, saldosRes] = await Promise.all([
+  const [fluxoRes, contasRes, regionaisRes, saldosRes, fiscal] = await Promise.all([
     queryFluxo,
     supabase
       .from("contas_bancarias")
@@ -109,23 +111,66 @@ export default async function FluxoCaixaPage({
     // Saldo de cada conta na véspera da âncora — o ponto de partida do
     // razão. Função da migration 20260817000006.
     supabase.rpc("fc_saldos_por_conta", { p_data: vespera }),
+    // Módulo fiscal (entrega 2): imposto a pagar, guia da Apuração ainda
+    // não aprovada e o cronograma de impostos da abertura do job.
+    carregarFiscalDoFluxo(supabase, session.activeTenant.id, hoje, { inicio: ancora, fim }).catch((e: unknown) => {
+      // Sem o fiscal, o fluxo abre como antes — nunca quebrado.
+      console.error("[fluxo-caixa] fiscal", e instanceof Error ? e.message : e);
+      return {
+        saidas: [],
+        issRetidoPorParcela: new Map<string, number>(),
+        baixaDoLancamento: new Map<string, { impostoId: string; descricao: string }>(),
+      };
+    }),
   ]);
 
   if (fluxoRes.error) console.error("[fluxo-caixa] view", fluxoRes.error.message);
   if (saldosRes.error) console.error("[fluxo-caixa] saldos", saldosRes.error.message);
 
-  const itens: FluxoItem[] = (fluxoRes.data ?? []).map((r) => ({
-    classe: r.classe as FluxoItem["classe"],
-    origem_tipo: r.origem_tipo as string,
-    origem_id: r.origem_id as string,
-    conta_bancaria_id: (r.conta_bancaria_id as string | null) ?? null,
-    regional_id: (r.regional_id as string | null) ?? null,
-    data_evento: r.data_evento as string,
-    valor: Number(r.valor),
-    natureza: r.natureza as "entrada" | "saida",
-    descricao: r.descricao as string,
-    job_id: (r.job_id as string | null) ?? null,
-  }));
+  const itensDaView: FluxoItem[] = (fluxoRes.data ?? []).map((r) => {
+    const item: FluxoItem = {
+      classe: r.classe as FluxoItem["classe"],
+      origem_tipo: r.origem_tipo as string,
+      origem_id: r.origem_id as string,
+      conta_bancaria_id: (r.conta_bancaria_id as string | null) ?? null,
+      regional_id: (r.regional_id as string | null) ?? null,
+      data_evento: r.data_evento as string,
+      valor: Number(r.valor),
+      natureza: r.natureza as "entrada" | "saida",
+      descricao: r.descricao as string,
+      job_id: (r.job_id as string | null) ?? null,
+    };
+    // A baixa do imposto grava um lançamento por parte do rateio (e um de
+    // multa e juros): no detalhe, as partes voltam a ser uma linha só, com
+    // o nome do imposto — o mesmo que ele tinha como título.
+    const baixa =
+      r.origem_lancamento === "imposto_baixa" ? fiscal.baixaDoLancamento.get(item.origem_id) : undefined;
+    if (baixa) return { ...item, origem_id: `imposto:${baixa.impostoId}`, descricao: baixa.descricao };
+    // A parcela de PP em aberto sai sem o ISS retido, que desde a emissão
+    // da NF do fornecedor está na guia de ISS retido (cada real numa etapa só).
+    const iss = item.origem_tipo === "pp" ? fiscal.issRetidoPorParcela.get(item.origem_id) : undefined;
+    if (iss) return { ...item, valor: parcelaSemIssRetido(item.valor, iss) };
+    return item;
+  });
+
+  // As saídas fiscais seguem o filtro de empresa que a view recebe no
+  // servidor (sem empresa no rateio, só entram sem filtro).
+  const itensFiscais: FluxoItem[] = fiscal.saidas
+    .filter((s) => empresaFiltroIds.length === 0 || (s.empresa_id !== null && empresaFiltroIds.includes(s.empresa_id)))
+    .map((s) => ({
+      classe: s.classe,
+      origem_tipo: s.origem_tipo,
+      origem_id: s.origem_id,
+      conta_bancaria_id: s.conta_bancaria_id,
+      regional_id: s.regional_id,
+      data_evento: s.data_evento,
+      valor: s.valor,
+      natureza: s.natureza,
+      descricao: s.descricao,
+      job_id: s.job_id,
+    }));
+
+  const itens: FluxoItem[] = [...itensDaView, ...itensFiscais];
 
   // A conta-espelho do cartão não é dinheiro em banco: fica fora do
   // seletor e do escopo "todas" (decisão 093, entrega 3). Os lançamentos
