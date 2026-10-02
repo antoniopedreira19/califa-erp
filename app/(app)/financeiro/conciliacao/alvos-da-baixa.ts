@@ -158,6 +158,8 @@ export function alvoDaBaixaAReceber(
         subtipoInicialId: null,
         centroTravado: false,
         dataInicial: hoje,
+        // Módulo fiscal: a nota do título, para o bloco "No fiscal" da baixa.
+        notaId: baixando.faturamento_id,
       }
     : {
         chave: baixando.id,
@@ -190,6 +192,8 @@ export function alvoDaBaixaAReceber(
         subtipoInicialId: baixando.plano_conta_subtipo_id,
         centroTravado: baixando.origem === "rendimento",
         dataInicial: baixando.origem === "rendimento" ? baixando.data_previsao_recebimento : hoje,
+        // Sem nota: a baixa não tem o bloco "No fiscal".
+        notaId: null,
       };
 }
 

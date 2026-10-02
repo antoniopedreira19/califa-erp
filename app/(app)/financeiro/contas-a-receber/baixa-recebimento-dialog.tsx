@@ -28,6 +28,12 @@
  * "Valor a dar baixa" (`BlocoValorDaBaixa`), com a baixa parcial e os
  * impostos retidos pelo cliente. O formulário é um filho com `key` do
  * título, para o estado do bloco recomeçar a cada título.
+ *
+ * Módulo fiscal (entrega 2, 02/10/2026): na nota emitida com CNPJ emissor,
+ * o bloco "No fiscal" (`components/financeiro/no-fiscal.tsx`) mostra o
+ * efeito da baixa na Apuração — o que o cliente reteve abate qual imposto
+ * e em qual período, e o presumido pelo caixa —, refeito pela data, pelo
+ * valor e pelos retidos.
  */
 
 import * as React from "react";
@@ -59,6 +65,7 @@ import {
   useValorDaBaixa,
   type UltimaRetencao,
 } from "@/components/financeiro/valor-da-baixa";
+import { NoFiscalDoRecebimento, useFiscalDaNota } from "@/components/financeiro/no-fiscal";
 
 export type EstiloDoResumo = "mono" | "mono_negrito" | "mono_pequeno" | "negrito";
 
@@ -102,6 +109,14 @@ export interface BaixaRecebimentoAlvo {
   /** Data do recebimento que vem sugerida: hoje, ou a data do lançamento
    *  do rendimento (o último dia do mês dele). */
   dataInicial: string;
+  /**
+   * Módulo fiscal (entrega 2): a nota fiscal do título (`faturamentos.id`),
+   * para o bloco "No fiscal" — o efeito da baixa na Apuração. `null` no
+   * recebimento avulso e no rendimento, que não têm nota. Obrigatório no
+   * tipo, e não opcional: o `alvo` é montado à mão, e campo opcional some
+   * em silêncio (CLAUDE.md).
+   */
+  notaId: string | null;
 }
 
 export interface BaixaRecebimentoPayload {
@@ -209,6 +224,9 @@ function FormularioDaBaixa({
   const [tipoId, setTipoId] = React.useState(alvo.tipoInicialId ?? "");
   const [subtipoId, setSubtipoId] = React.useState(alvo.subtipoInicialId ?? "");
   const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao);
+  // Módulo fiscal (entrega 2): a nota do título, para o bloco "No fiscal",
+  // lida ao abrir (à parte: o diálogo não espera por ela).
+  const fiscal = useFiscalDaNota(alvo.notaId);
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão de 29/08/2026):
@@ -338,6 +356,17 @@ function FormularioDaBaixa({
               : { aceita: false, motivo: "Rendimento só aceita a baixa do valor inteiro." }
           }
           retencao={alvo.aceitaRetencao ? { mostra: true, motivo: null } : { mostra: false }}
+        />
+
+        {/* Módulo fiscal (entrega 2): o efeito desta baixa na Apuração. Lê a
+            data, o valor a dar baixa e os retidos do bloco acima, e se refaz
+            a cada mudança. Some na nota de antes do módulo (sem CNPJ
+            emissor), no avulso e no rendimento. */}
+        <NoFiscalDoRecebimento
+          leitura={fiscal}
+          data={pagoEm}
+          valor={v.valor}
+          retidos={v.retem ? v.valores : null}
         />
 
         <div className="space-y-1">
