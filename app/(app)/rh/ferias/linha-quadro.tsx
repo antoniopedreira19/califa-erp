@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import type { FeriasPeriodoStatus } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
@@ -9,16 +8,14 @@ import type { QuadroColaboradorRow } from "./aba-quadro";
 
 type Props = {
   row: QuadroColaboradorRow;
+  /** Callback de abertura do modal — gerenciado por state local no
+   *  QuadroListaCliente pra evitar round-trip RSC (Onda 3). */
+  onAbrir: () => void;
 };
 
-export function LinhaQuadro({ row }: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
+export function LinhaQuadro({ row, onAbrir }: Props) {
   function abrirDetalhe() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("colab", row.id);
-    router.push(`/rh/ferias?${params.toString()}`);
+    onAbrir();
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
