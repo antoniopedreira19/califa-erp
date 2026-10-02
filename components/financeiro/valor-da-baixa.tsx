@@ -133,10 +133,13 @@ export function useValorDaBaixa(
   // Módulo fiscal: as alíquotas da aprovação que chegam depois de o
   // formulário abrir ligam a chave, uma vez. Enquanto elas não chegam, a
   // baixa deixa a chave travada ("Buscando…"): não há o que atropelar.
-  const aprovacaoAplicada = React.useRef(daAprovacao);
+  // Compara pelo conteúdo: um objeto igual remontado a cada renderização
+  // não pode passar por cima do que a pessoa editou.
+  const conteudoDaAprovacao = daAprovacao ? JSON.stringify(daAprovacao) : null;
+  const aprovacaoAplicada = React.useRef(conteudoDaAprovacao);
   React.useEffect(() => {
-    if (!daAprovacao || aprovacaoAplicada.current === daAprovacao) return;
-    aprovacaoAplicada.current = daAprovacao;
+    if (!daAprovacao || aprovacaoAplicada.current === conteudoDaAprovacao) return;
+    aprovacaoAplicada.current = conteudoDaAprovacao;
     const p = retencaoInicial(valor, daAprovacao);
     if (!p.retem) return;
     setRetemBruto(true);
@@ -144,7 +147,7 @@ export function useValorDaBaixa(
     setValores(p.valores);
     // Só a chegada decide; a base é o valor a dar baixa de agora.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daAprovacao]);
+  }, [conteudoDaAprovacao]);
 
   // A base dos impostos é o valor a dar baixa: mudou o valor, o imposto
   // informado por alíquota acompanha.
