@@ -343,7 +343,7 @@ function regimeDaGuia(cad: CadastroFiscal, pj: string, data: string): RegimeDaGu
 }
 
 /** Municípios que permitem compensar o ISS pago a mais (pesquisa de 01/10/2026). */
-const MUNICIPIOS_QUE_COMPENSAM_ISS = new Set(["Salvador"]);
+export const MUNICIPIOS_QUE_COMPENSAM_ISS = new Set(["Salvador"]);
 
 // ---------------------------------------------------------------------------
 // Contexto de um cálculo: índices montados uma vez por chamada
