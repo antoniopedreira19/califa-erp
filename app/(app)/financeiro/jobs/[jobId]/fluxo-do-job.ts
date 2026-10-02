@@ -7,6 +7,8 @@ import {
 import type { PrazosDoJob } from "@/components/financeiro/fluxo-caixa-jobs";
 import { calcularPrazosDoJob } from "@/lib/calculos/prazos-do-job";
 import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
+import { carregarCronogramaDeImpostos } from "@/lib/fiscal/fluxo-fiscal-dados";
+import { saidasDoCronogramaDeImpostos } from "@/lib/fiscal/fluxo-fiscal";
 
 /**
  * As linhas de fluxo de caixa de um conjunto de jobs.
@@ -31,22 +33,48 @@ export async function carregarLinhasDeFluxo(
 
   const supabase = createClient();
 
-  const { data, error } = await supabase
-    .from("vw_fluxo_caixa")
-    .select(
-      "job_id, conta_bancaria_id, classe, origem_tipo, origem_lancamento, " +
-        "data_evento, valor, natureza, descricao",
-    )
-    .eq("tenant_id", tenantId)
-    .in("job_id", jobIds)
-    .order("data_evento", { ascending: true });
+  const [{ data, error }, cronograma] = await Promise.all([
+    supabase
+      .from("vw_fluxo_caixa")
+      .select(
+        "job_id, conta_bancaria_id, classe, origem_tipo, origem_lancamento, " +
+          "data_evento, valor, natureza, descricao",
+      )
+      .eq("tenant_id", tenantId)
+      .in("job_id", jobIds)
+      .order("data_evento", { ascending: true }),
+    // Módulo fiscal (entrega 2): o que sobra do cronograma de impostos da
+    // abertura (decisão 100), abatido pelo faturamento, entra como
+    // previsão de saída. Não está na view: é a mesma conta do Fluxo de
+    // caixa geral (`lib/fiscal/fluxo-fiscal.ts`).
+    carregarCronogramaDeImpostos(supabase, tenantId, jobIds).catch((e: unknown) => {
+      console.error("[fluxo-do-job.impostos]", e instanceof Error ? e.message : e);
+      return [];
+    }),
+  ]);
 
   if (error) {
     console.error("[fluxo-do-job]", error.message);
     return [];
   }
 
-  return ((data ?? []) as any[])
+  // Vencida, a previsão é lida em hoje + 1, como a de recebimento da view
+  // (`CURRENT_DATE + 1`, em UTC).
+  const hoje = new Date().toISOString().slice(0, 10);
+  const impostos = saidasDoCronogramaDeImpostos(cronograma, hoje).map((s) => ({
+    job_id: s.job_id,
+    conta_bancaria_id: s.conta_bancaria_id,
+    classe: s.classe,
+    origem_tipo: s.origem_tipo,
+    origem_lancamento: null,
+    data_evento: s.data_evento,
+    valor: s.valor,
+    natureza: s.natureza,
+    descricao: s.descricao,
+  }));
+
+  return [...((data ?? []) as any[]), ...impostos]
+    .sort((a, b) => String(a.data_evento).localeCompare(String(b.data_evento)))
     .filter((l) => !soDepoisDaBaixa(l.classe, l.origem_tipo))
     .map((l) => {
       const { codigo, descricao } = repartirDescricao(
@@ -163,6 +191,7 @@ function rotuloDaOrigem(origem: string): string {
   if (origem === "desembolso") return "Desembolso";
   if (origem === "lancamento") return "Movimento na conta";
   if (origem === "previsao_custo") return "Cronograma de desembolsos";
+  if (origem === "previsao_imposto") return "Recolhimento de impostos";
   if (origem === "previsao_recebimento") return "Previsão de recebimento";
   if (origem === "envio_parcela") return "Faturamento previsto";
   return origem;

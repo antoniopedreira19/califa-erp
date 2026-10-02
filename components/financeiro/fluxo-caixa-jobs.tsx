@@ -181,10 +181,12 @@ export function FluxoCaixaJobs({
       {
         classe: "previsao" as ClasseFluxo,
         rotulo: "Só previsão (abertura do job)",
+        // Com o módulo fiscal (entrega 2), a previsão de saída tem também o
+        // cronograma de impostos da abertura, abatido pelo faturamento.
         sub:
           tom === "entrada"
             ? "parcelas de recebimento"
-            : "cronograma de desembolsos",
+            : "cronograma de desembolsos e de impostos",
         valores: valores.previsao,
         detalhes: [] as DetalheFluxo[],
         detalheTitulo: "",
