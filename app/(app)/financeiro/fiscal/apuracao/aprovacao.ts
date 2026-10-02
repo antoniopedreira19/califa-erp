@@ -46,7 +46,7 @@ export interface EntradaDaAprovacao {
   /** IRPJ/CSLL: pagar em cota única. */
   cota_unica: boolean;
   /** IRPJ/CSLL: os juros (%) de cada cota, pelo índice; a 1ª é sempre sem juros. */
-  juros_pct: number[] | null;
+  juros_pct: Array<number | null> | null;
 }
 
 /** Um título como `aprovar_guia_fiscal` recebe em `p_titulos`. */
@@ -118,7 +118,7 @@ export function cotasDaAprovacao(
   cidadeDaMatriz: string,
   cad: CadastroFiscal,
   cotaUnica: boolean,
-  jurosPct: number[] | null,
+  jurosPct: Array<number | null> | null,
 ): Cota[] {
   if (valorGuia <= 0) return [];
   const base = cotasDe(valorGuia, competencia, cidadeDaMatriz, cad);
