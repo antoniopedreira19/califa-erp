@@ -23,13 +23,6 @@
  * valor inteiro. O formulário é um filho com `key` do título: o estado
  * recomeça a cada título (antes o efeito de abertura rodava a cada
  * renderização da tela, porque o `alvo` é remontado sempre).
- *
- * Módulo fiscal (02/10/2026): na parcela de PP, a baixa abre com as
- * retenções que o financeiro informou na APROVAÇÃO da PP — a chave "Reter
- * impostos na fonte" ligada, as alíquotas preenchidas e editáveis, e a
- * ajuda "Retenções informadas na aprovação da PP (data) · editáveis". Elas
- * são buscadas ao abrir (`useRetencaoDaAprovacao`), pela parcela da
- * `chave`; sem alíquota gravada, a baixa abre como antes.
  */
 
 import * as React from "react";
@@ -247,8 +240,12 @@ function FormularioDaBaixa({
     forma_pagamento: formaPlanejada,
     cartao_credito_id: cartaoPlanejadoId,
   });
-  // Módulo fiscal: as retenções da aprovação da PP, buscadas ao abrir. Só
-  // na parcela de PP com a retenção liberada (não a que foi para remessa).
+  // Módulo fiscal (02/10/2026): na parcela de PP, a baixa abre com as
+  // retenções que o financeiro informou na APROVAÇÃO — chave ligada,
+  // alíquotas editáveis e a ajuda "Retenções informadas na aprovação da PP
+  // (data) · editáveis". Buscadas ao abrir, pela parcela da `chave`; só com
+  // a retenção liberada (não na que foi para remessa). Sem alíquota
+  // gravada, a baixa abre como antes.
   const aprovacao = useRetencaoDaAprovacao(
     alvo.retencao.mostra && alvo.retencao.motivo === null
       ? parcelaDePPDaChave(alvo.chave)
