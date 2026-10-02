@@ -34,8 +34,10 @@ import { z } from "zod";
 
 /** As origens a pagar que entram no lote (decisão aprovada pelo Tiago em
  *  02/10/2026). Folha, fatura de cartão e devolução de verba têm baixa
- *  própria e ficam de fora. */
-export const ORIGENS_PAGAR_NO_LOTE = ["pp", "avulso", "recorrencia", "desembolso"] as const;
+ *  própria e ficam de fora. O desembolso também: o centro de custo dele é
+ *  escolhido na baixa, um a um, e o lote não tem regra para escolhê-lo
+ *  (o protótipo não o tinha; pergunta levada ao Tiago em 02/10/2026). */
+export const ORIGENS_PAGAR_NO_LOTE = ["pp", "avulso", "recorrencia"] as const;
 export type OrigemPagarNoLote = (typeof ORIGENS_PAGAR_NO_LOTE)[number];
 
 /** As origens a receber que entram no lote: a nota fiscal e o recebimento
@@ -48,7 +50,7 @@ export type OrigemReceberNoLote = (typeof ORIGENS_RECEBER_NO_LOTE)[number];
  * Por onde cada título se baixa: a action da baixa de um por um e o id que
  * ela recebe.
  *
- * - `pagar`: o id da parcela (PP e desembolso) ou da conta avulsa (avulso
+ * - `pagar`: o id da parcela (PP) ou da conta avulsa (avulso
  *   e recorrência) — o mesmo `{ origem, id }` de `darBaixaTitulo`.
  * - `receber` + `nf`: o id do título (`titulos_receber`).
  * - `receber` + `recebimento_avulso`: o id da conta avulsa de entrada.
