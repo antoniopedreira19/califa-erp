@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Receipt,
   FileSignature,
+  FileX,
   Palmtree,
   type LucideIcon,
 } from "lucide-react";
@@ -26,11 +27,17 @@ export default async function CentralRHPage() {
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth() + 1;
 
+  // Rescisões recentes = desligados nos últimos 90 dias
+  const noventaDiasAtras = new Date();
+  noventaDiasAtras.setDate(noventaDiasAtras.getDate() - 90);
+  const corteRescisoesISO = noventaDiasAtras.toISOString().slice(0, 10);
+
   const [
     colaboradoresAtivosRes,
     pendenciasRes,
     contratacoesEmAndamentoRes,
     feriasAguardandoRes,
+    rescisoesRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -61,11 +68,19 @@ export default async function CentralRHPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .in("status", ["pendente_aprovacao", "em_analise"]),
+    supabase
+      .from("colaboradores")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "inativo")
+      .not("data_encerramento", "is", null)
+      .gte("data_encerramento", corteRescisoesISO),
   ]);
   const colaboradoresAtivos = colaboradoresAtivosRes.count ?? 0;
   const pendenciasNoMes = pendenciasRes.count ?? 0;
   const contratacoesEmAndamento = contratacoesEmAndamentoRes.count ?? 0;
   const feriasAguardando = feriasAguardandoRes.count ?? 0;
+  const rescisoesRecentes = rescisoesRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -113,12 +128,24 @@ export default async function CentralRHPage() {
           href="/rh/ferias"
           icon={Palmtree}
           title="Férias"
-          description="Autoserviço do colaborador em /perfil, aprovação pelo RH, concessivos em alerta, rescisão com cálculo automático (regra dos avós)."
+          description="Autoserviço do colaborador em /perfil, aprovação pelo RH, concessivos em alerta e acompanhamento do quadro pela regra dos avós."
           count={feriasAguardando}
           countLabel={
             feriasAguardando === 1
               ? "solicitação aguardando"
               : "solicitações aguardando"
+          }
+        />
+        <RhCard
+          href="/rh/rescisoes"
+          icon={FileX}
+          title="Rescisões"
+          description="Cálculo das verbas rescisórias (saldo de salário, férias, 1/3 e 13º proporcionais) para desligados. Base pra lançar o título em Contas a Pagar."
+          count={rescisoesRecentes}
+          countLabel={
+            rescisoesRecentes === 1
+              ? "nos últimos 90 dias"
+              : "nos últimos 90 dias"
           }
         />
         {/* Próximos cards: Benefícios, Turnover */}

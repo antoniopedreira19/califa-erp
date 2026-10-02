@@ -1,23 +1,35 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Calculator, UserX } from "lucide-react";
+import { Calculator, UserX, FileSignature } from "lucide-react";
+import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Colaborador, TipoContratacao } from "@/lib/types";
+import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import type { Colaborador } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
 
-type Props = {
-  tenantId: string;
-  colaboradorSelecionadoId?: string;
-};
+export const dynamic = "force-dynamic";
 
 type ColabRow = Pick<
   Colaborador,
   "id" | "nome" | "tipo_contratacao" | "data_admissao" | "data_encerramento"
 >;
 
-export async function AbaRescisoes({ tenantId, colaboradorSelecionadoId }: Props) {
-  const supabase = createClient();
+export default async function RescisoesPage({
+  searchParams,
+}: {
+  searchParams: { colab?: string };
+}) {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "rh") {
+    redirect("/home?reason=sem_permissao_rh");
+  }
 
-  // Lista colaboradores encerrados nos últimos 90 dias + os ainda com saldo
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+  const colaboradorSelecionadoId = searchParams.colab;
+
+  // Lista colaboradores encerrados nos últimos 90 dias
   const noventaDiasAtras = new Date();
   noventaDiasAtras.setDate(noventaDiasAtras.getDate() - 90);
   const corteISO = noventaDiasAtras.toISOString().slice(0, 10);
@@ -34,7 +46,7 @@ export async function AbaRescisoes({ tenantId, colaboradorSelecionadoId }: Props
 
   const desligados = (desligadosData ?? []) as ColabRow[];
 
-  // Se tem colaborador selecionado, calcula a rescisão dele
+  // Se tem colaborador selecionado, calcula a rescisão
   let calculo: CalculoRescisao | null = null;
   let selecionado: ColabRow | null = null;
   if (colaboradorSelecionadoId) {
@@ -62,65 +74,75 @@ export async function AbaRescisoes({ tenantId, colaboradorSelecionadoId }: Props
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-      {/* Lista de desligados recentes */}
-      <section className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden self-start">
-        <header className="flex items-center gap-3 px-5 py-4 border-b border-border">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <UserX className="h-4 w-4 text-california-red" />
-          </div>
-          <h3 className="text-base font-semibold">Desligados recentes</h3>
-        </header>
-        {desligados.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-10">
-            Nenhum desligamento nos últimos 90 dias.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border max-h-[500px] overflow-y-auto">
-            {desligados.map((c) => {
-              const ativo = c.id === colaboradorSelecionadoId;
-              return (
-                <li key={c.id}>
-                  <Link
-                    href={`/rh/ferias?tab=rescisoes&colab=${c.id}`}
-                    prefetch={false}
-                    className={`block px-5 py-3 transition-colors ${
-                      ativo
-                        ? "bg-california-red/5 border-l-2 border-california-red"
-                        : "hover:bg-muted/40"
-                    }`}
-                  >
-                    <p className="text-sm font-medium truncate">{c.nome}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Desligado em{" "}
-                      {c.data_encerramento
-                        ? new Date(
-                            c.data_encerramento + "T00:00:00",
-                          ).toLocaleDateString("pt-BR")
-                        : "—"}{" "}
-                      · {tipoContratacaoLabel(c.tipo_contratacao)}
-                    </p>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+    <div className="space-y-6 max-w-[1480px] mx-auto">
+      <BotaoVoltar reserva="/rh" />
+      <PageHeader
+        eyebrow="RH"
+        title="Rescisões"
+        description="Cálculo de verbas rescisórias (saldo de salário, férias proporcionais pela regra dos avós, 1/3 constitucional, 13º proporcional). Base para gerar o título em Contas a Pagar."
+        icon={FileSignature}
+      />
 
-      {/* Cálculo */}
-      <section className="rounded-2xl border border-border bg-card shadow-soft p-6">
-        {!selecionado || !calculo ? (
-          <div className="text-center py-16">
-            <Calculator className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">
-              Escolha um desligado na lista pra ver o cálculo da rescisão.
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
+        {/* Lista de desligados recentes */}
+        <section className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden self-start">
+          <header className="flex items-center gap-3 px-5 py-4 border-b border-border">
+            <div className="rounded-lg bg-california-red/10 p-2">
+              <UserX className="h-4 w-4 text-california-red" />
+            </div>
+            <h3 className="text-base font-semibold">Desligados recentes</h3>
+          </header>
+          {desligados.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-10">
+              Nenhum desligamento nos últimos 90 dias.
             </p>
-          </div>
-        ) : (
-          <RescisaoCalculo colab={selecionado} calculo={calculo} />
-        )}
-      </section>
+          ) : (
+            <ul className="divide-y divide-border max-h-[500px] overflow-y-auto">
+              {desligados.map((c) => {
+                const ativo = c.id === colaboradorSelecionadoId;
+                return (
+                  <li key={c.id}>
+                    <Link
+                      href={`/rh/rescisoes?colab=${c.id}`}
+                      prefetch={false}
+                      className={`block px-5 py-3 transition-colors ${
+                        ativo
+                          ? "bg-california-red/5 border-l-2 border-california-red"
+                          : "hover:bg-muted/40"
+                      }`}
+                    >
+                      <p className="text-sm font-medium truncate">{c.nome}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Desligado em{" "}
+                        {c.data_encerramento
+                          ? new Date(
+                              c.data_encerramento + "T00:00:00",
+                            ).toLocaleDateString("pt-BR")
+                          : "—"}{" "}
+                        · {tipoContratacaoLabel(c.tipo_contratacao)}
+                      </p>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        {/* Cálculo */}
+        <section className="rounded-2xl border border-border bg-card shadow-soft p-6">
+          {!selecionado || !calculo ? (
+            <div className="text-center py-16">
+              <Calculator className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">
+                Escolha um desligado na lista pra ver o cálculo da rescisão.
+              </p>
+            </div>
+          ) : (
+            <RescisaoCalculo colab={selecionado} calculo={calculo} />
+          )}
+        </section>
+      </div>
     </div>
   );
 }
