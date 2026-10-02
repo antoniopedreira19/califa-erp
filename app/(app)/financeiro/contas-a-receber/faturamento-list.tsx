@@ -47,6 +47,7 @@ import {
 import { useRouter } from "next/navigation";
 import { cn, formatCnpj } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
+import type { FiscalDoFaturar } from "@/lib/fiscal/faturar";
 import {
   FaturarDrawer,
   type DrawerState,
@@ -155,6 +156,10 @@ export interface FaturadoRow {
   /** CNPJ para o qual a nota saiu (decisão 123). Nulo nas notas antigas,
    *  que saíram para o CNPJ do cadastro, e nas de BV. */
   cnpj_tomador: string | null;
+  /** Módulo fiscal (02/10/2026): o CNPJ que emitiu a nota e o CNAE da
+   *  lista dele. Nulos nas notas de antes, que só têm o texto `cnae`. */
+  estabelecimento_id: string | null;
+  fiscal_cnae_id: string | null;
   anexo_nf_path: string;
   empresa_id: string;
   origem_tipo: "job" | "bv" | "avulso";
@@ -279,6 +284,9 @@ interface Props {
   /** O recebido antes da NF que ainda espera a nota (decisão 130), pela
    *  chave da linha: `nota:<id>` ou `bv:<id>`. */
   recebidosAntes: Record<string, RecebidoAntesDaNf[]>;
+  /** Módulo fiscal (02/10/2026): o que o Faturar usa do cadastro de
+   *  impostos — CNPJ emissor, CNAEs e as sugestões. */
+  fiscal: FiscalDoFaturar;
 }
 
 /** A chave do recebimento antes da NF desta parcela: a nota ou o BV. */
@@ -299,6 +307,7 @@ export function FaturamentoList({
   infoPorJob,
   contas,
   recebidosAntes,
+  fiscal,
 }: Props) {
   const router = useRouter();
   const [drawer, setDrawer] = React.useState<DrawerState | null>(null);
@@ -1279,6 +1288,7 @@ export function FaturamentoList({
           infoPorJob={infoPorJob}
           proximoNf={proximoNf}
           recebidosAntes={recebidosAntes}
+          fiscal={fiscal}
         />
       )}
 

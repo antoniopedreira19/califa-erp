@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { codigoDoCnae } from "@/lib/fiscal/calculos";
 
 type Ok<T extends object = object> = { ok: true } & T;
 type Err = { ok: false; message: string };
@@ -111,7 +112,12 @@ const itemSchema = z.object({
 });
 
 const emitirSchema = z.object({
-  empresa_id: z.string().uuid("Selecione a empresa emissora."),
+  empresa_id: z.string().uuid("Selecione a empresa (gerencial)."),
+  // Módulo fiscal (02/10/2026): o CNPJ que emite a nota e o CNAE da lista
+  // dele. Os dois se gravam pela `registrar_fiscal_da_nota`, logo depois da
+  // emissão; o texto `cnae` continua indo junto, tirado do CNAE da lista.
+  estabelecimento_id: z.string().uuid("Escolha o CNPJ emissor."),
+  fiscal_cnae_id: z.string().uuid("Escolha o CNAE a ser utilizado na nota."),
   origem_tipo: z.enum(["job", "bv", "avulso"]),
   origem_id: z.string().uuid().nullable(),
   cliente_id: z.string().uuid().nullable(),
@@ -122,7 +128,9 @@ const emitirSchema = z.object({
   descricao: z.string().trim().min(3, "Escreva a descrição que vai na nota fiscal."),
   // Classificação fiscal da nota. Até 31/08/2026 era pedida à produção no
   // envio para faturamento; virou responsabilidade de quem emite a nota.
-  // Texto livre — não existe cadastro de CNAE no projeto.
+  // Desde o módulo fiscal (02/10/2026) vem da lista do CNPJ emissor: o
+  // texto gravado é o código do CNAE da lista (`fiscal_cnae_id`), relido
+  // abaixo — este campo só confirma que o formulário mandou algum.
   cnae: z
     .string()
     .trim()
@@ -145,7 +153,14 @@ const emitirSchema = z.object({
 
 export async function emitirFaturamento(
   input: unknown,
-): Promise<Result<{ faturamento_id: string }>> {
+): Promise<
+  Result<{
+    faturamento_id: string;
+    /** A nota saiu, mas o CNPJ emissor e o CNAE não se registraram nela:
+     *  o formulário mostra isto e não deixa emitir de novo. */
+    avisoFiscal: string | null;
+  }>
+> {
   const parsed = emitirSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
@@ -217,6 +232,53 @@ export async function emitirFaturamento(
     };
   }
 
+  // Módulo fiscal: o CNPJ emissor ativo, e o CNAE dele, ativo e vigente na
+  // data de emissão — conferidos ANTES de emitir, porque o registro fiscal
+  // é uma segunda chamada e a nota emitida não volta atrás se ela recusar.
+  // O texto `cnae` da nota sai do cadastro, e não do que o navegador mandou.
+  const [estabRes, cnaeRes] = await Promise.all([
+    supabase
+      .from("fiscal_estabelecimentos")
+      .select("id, ativo")
+      .eq("id", d.estabelecimento_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{ id: string; ativo: boolean }>(),
+    supabase
+      .from("fiscal_cnaes")
+      .select("id, estabelecimento_id, codigo, subitem, ativo, vigencia_inicio, vigencia_fim")
+      .eq("id", d.fiscal_cnae_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<{
+        id: string;
+        estabelecimento_id: string;
+        codigo: string;
+        subitem: string | null;
+        ativo: boolean;
+        vigencia_inicio: string;
+        vigencia_fim: string | null;
+      }>(),
+  ]);
+  if (estabRes.error || cnaeRes.error) {
+    return {
+      ok: false,
+      message: `Falha ao conferir o CNPJ emissor e o CNAE: ${(estabRes.error ?? cnaeRes.error)?.message}`,
+    };
+  }
+  if (!estabRes.data?.ativo) {
+    return { ok: false, message: "Escolha um CNPJ emissor ativo do cadastro de impostos." };
+  }
+  const cnaeDaLista = cnaeRes.data;
+  if (!cnaeDaLista || !cnaeDaLista.ativo || cnaeDaLista.estabelecimento_id !== d.estabelecimento_id) {
+    return { ok: false, message: "O CNAE escolhido não é do CNPJ emissor." };
+  }
+  if (
+    cnaeDaLista.vigencia_inicio > d.data_emissao ||
+    (cnaeDaLista.vigencia_fim !== null && cnaeDaLista.vigencia_fim < d.data_emissao)
+  ) {
+    return { ok: false, message: "O CNAE escolhido não está vigente na data de emissão." };
+  }
+  const cnaeTexto = codigoDoCnae(cnaeDaLista);
+
   const { data: fatId, error } = await supabase.rpc("emitir_faturamento", {
     payload: {
       tenant_id: session.activeTenant.id,
@@ -231,7 +293,7 @@ export async function emitirFaturamento(
       data_emissao: d.data_emissao,
       valor_total: d.valor_total,
       descricao: d.descricao,
-      cnae: d.cnae,
+      cnae: cnaeTexto,
       anexo_nf_path: d.anexo_nf_path,
       plano_conta_tipo_id: d.plano_conta_tipo_id,
       plano_conta_subtipo_id: d.plano_conta_subtipo_id,
@@ -243,6 +305,18 @@ export async function emitirFaturamento(
   });
 
   if (error) return { ok: false, message: `Falha ao emitir: ${error.message}` };
+
+  // O CNPJ emissor e o CNAE da lista, na nota que acabou de sair. Se esta
+  // chamada falhar a nota JÁ está emitida: a tela avisa e não deixa emitir
+  // de novo (duplicaria a nota).
+  const { error: erroFiscal } = await supabase.rpc("registrar_fiscal_da_nota", {
+    p_faturamento_id: fatId as string,
+    p_estabelecimento_id: d.estabelecimento_id,
+    p_fiscal_cnae_id: d.fiscal_cnae_id,
+  });
+  if (erroFiscal) {
+    console.error("[faturamento.registrar_fiscal_da_nota]", fatId, erroFiscal.message);
+  }
 
   await logAuditEvent({
     acao: "faturamento.emitido",
@@ -257,13 +331,24 @@ export async function emitirFaturamento(
       qtd_parcelas: d.parcelas.length,
       agrupada: d.itens.length > 1,
       regionais_no_rateio: d.rateio.length,
+      estabelecimento_id: d.estabelecimento_id,
+      fiscal_cnae_id: d.fiscal_cnae_id,
+      cnae: cnaeTexto,
+      fiscal_registrado: !erroFiscal,
+      ...(erroFiscal ? { erro_fiscal: erroFiscal.message } : {}),
     },
   });
 
   revalidatePath("/financeiro/contas-a-receber");
   revalidatePath("/financeiro/fluxo-caixa");
   revalidatePath("/financeiro");
-  return { ok: true, faturamento_id: fatId as string };
+  return {
+    ok: true,
+    faturamento_id: fatId as string,
+    avisoFiscal: erroFiscal
+      ? `A NF ${d.numero_nf} foi emitida, mas o CNPJ emissor e o CNAE não foram registrados nela (${erroFiscal.message}). Não emita a nota de novo: avise o administrador do sistema para completar o registro.`
+      : null,
+  };
 }
 
 // ---------------------------------------------------------------------------
