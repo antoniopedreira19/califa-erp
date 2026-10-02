@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight, CreditCard, ExternalLink, Info } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
 import type { DetalheDaFatura } from "@/lib/data/fatura-cartao-extrato";
+import type { DetalheDoImposto } from "@/lib/data/imposto-extrato";
 import { limparDescricaoDaFatura } from "@/lib/cartoes/descricao-fatura";
 import {
   Popover,
@@ -17,12 +18,18 @@ export function ConciliacaoList({
   linhas,
   highlight,
   detalhesFatura = {},
+  detalhesImposto = {},
 }: {
   linhas: LancamentoLinha[];
   highlight?: string;
   /** Por id do lançamento: o que o pagamento de uma fatura de cartão abre
    *  — centro de custo → itens (decisão 093, entrega 3). */
   detalhesFatura?: Record<string, DetalheDaFatura>;
+  /** Por id da linha: o que o pagamento de uma guia de imposto abre —
+   *  empresa · regional, e a multa e os juros (módulo fiscal, entrega 2).
+   *  A guia é UMA linha, o débito do banco: a soma dos lançamentos que a
+   *  baixa grava, um por parte do rateio (`lib/data/imposto-extrato.ts`). */
+  detalhesImposto?: Record<string, DetalheDoImposto>;
 }) {
   const rowRefs = React.useRef<Record<string, HTMLTableRowElement | null>>({});
   // Duas camadas de abertura: a linha do pagamento, e cada centro dentro
@@ -91,7 +98,9 @@ export function ConciliacaoList({
             const temOrigensMultiplas = l.origens.length > 1;
             const jobParaColuna = derivarJobParaColuna(l);
             const detalhe = detalhesFatura[l.id];
-            const aberta = !!detalhe && abertos.has(l.id);
+            // A guia de imposto abre pelo mesmo mecanismo da fatura.
+            const detalheImposto = detalhesImposto[l.id];
+            const aberta = (!!detalhe || !!detalheImposto) && abertos.has(l.id);
             return (
               <React.Fragment key={l.id}>
               <tr
@@ -141,6 +150,33 @@ export function ConciliacaoList({
                         {detalhe.centros.length === 1 ? "centro de custo" : "centros de custo"}
                       </span>
                     </button>
+                  ) : detalheImposto ? (
+                    // A seta da guia de imposto: o mesmo botão da fatura,
+                    // com o rateio no lugar dos centros de custo.
+                    <button
+                      type="button"
+                      onClick={() => alternar(l.id)}
+                      aria-expanded={aberta}
+                      aria-label={
+                        aberta
+                          ? "Recolher o rateio da guia"
+                          : "Ver o rateio da guia por empresa e regional"
+                      }
+                      className="inline-flex items-center gap-1.5 text-left hover:text-california-red"
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 text-california-red transition-transform",
+                          aberta && "rotate-90",
+                        )}
+                      />
+                      <span>{limparPrefixoDescricao(l.descricao, l.origem)}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        · {detalheImposto.regionais}{" "}
+                        {detalheImposto.regionais === 1 ? "regional" : "regionais"}
+                        {detalheImposto.multaJuros > 0 && " + multa e juros"}
+                      </span>
+                    </button>
                   ) : (
                     limparPrefixoDescricao(l.descricao, l.origem)
                   )}
@@ -178,9 +214,16 @@ export function ConciliacaoList({
                   {trimestreDe(l.data_movimento)}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-xs">
-                  {l.empresa_nome ?? (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                  {l.empresa_nome ??
+                    // A guia rateada entre empresas diz "Múltiplas", como a
+                    // coluna Job diz "Múltiplos"; as sublinhas abrem.
+                    (detalheImposto && detalheImposto.empresas > 1 ? (
+                      <span className="italic text-muted-foreground/70 font-sans">
+                        Múltiplas
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    ))}
                 </td>
                 <td className="w-10 px-3 py-2 text-center">
                   <DetalhesPopover
@@ -202,6 +245,7 @@ export function ConciliacaoList({
                   alternar={alternar}
                 />
               )}
+              {aberta && detalheImposto && <LinhasDoImposto detalhe={detalheImposto} />}
               </React.Fragment>
             );
           })}
@@ -322,6 +366,62 @@ function LinhasDaFatura({
         <td colSpan={7} className="px-3 py-1.5 pl-7 text-muted-foreground">
           Total da fatura {detalhe.codigo} · fecha {formatDate(detalhe.competencia_fechamento)} ·{" "}
           {detalhe.centros.reduce((s, c) => s + c.itens.length, 0)} itens
+        </td>
+      </tr>
+    </>
+  );
+}
+
+/**
+ * O pagamento da guia de imposto aberto (módulo fiscal, entrega 2 —
+ * protótipo aprovado em 02/10/2026). Uma sublinha por empresa · regional do
+ * rateio do título, com o valor sob DÉBITO e o centro de custo do imposto
+ * sob CENTRO DE CUSTO; a multa e os juros numa sublinha própria, em Despesa
+ * com Juros. O rodapé confere: a soma das sublinhas é o débito da linha do
+ * pagamento — o mesmo desenho das linhas da fatura, um nível só.
+ */
+function LinhasDoImposto({ detalhe }: { detalhe: DetalheDoImposto }) {
+  return (
+    <>
+      {detalhe.partes.map((p) => (
+        <tr key={p.chave} className="border-b border-border/60 bg-muted/10 text-xs">
+          <td colSpan={2} />
+          <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-semibold">
+            {formatMoney(p.valor)}
+          </td>
+          <td />
+          <td className="px-3 py-1.5 pl-8">
+            {p.rotulo}
+            {p.percentual !== null && (
+              <span className="ml-1.5 text-[10px] text-muted-foreground">
+                {p.percentual.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% do imposto
+              </span>
+            )}
+          </td>
+          <td />
+          <td />
+          <td className="px-3 py-1.5">
+            <span className="text-foreground">{p.tipo_nome}</span>
+            {p.subtipo_nome && (
+              <>
+                <span className="text-muted-foreground"> · </span>
+                <span className="text-muted-foreground">{p.subtipo_nome}</span>
+              </>
+            )}
+          </td>
+          <td colSpan={3} />
+        </tr>
+      ))}
+      <tr className="border-b border-border bg-muted/10 text-xs">
+        <td colSpan={2} />
+        <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-bold">
+          {formatMoney(detalhe.total)}
+        </td>
+        <td />
+        <td colSpan={7} className="px-3 py-1.5 pl-7 text-muted-foreground">
+          Total da {detalhe.guia}
+          {detalhe.competencia && ` · ${detalhe.competencia}`}
+          {detalhe.vencimento && ` · vence ${formatDate(detalhe.vencimento)}`}
         </td>
       </tr>
     </>
