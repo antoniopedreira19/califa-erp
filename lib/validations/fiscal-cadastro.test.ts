@@ -7,10 +7,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   aliquotasPisCofins,
+  diaDoMesValido,
   estabelecimentoSchema,
   formatarCodigoCnae,
+  lerDiaDoMes,
   lerPercentual,
   novaVigenciaCnaeSchema,
+  novaVigenciaParametrosSchema,
   novoCnaeSchema,
   novoFeriadoSchema,
   percentualParaCampo,
@@ -148,4 +151,51 @@ test("Feriado: nacional sem cidade, local com cidade", () => {
   assert.equal(l.data.nome, "São João");
   assert.equal(l.data.municipio, "Salvador");
   assert.ok(!novoFeriadoSchema.safeParse({ data: "2027-06-24", nome: "", municipio: null }).success);
+});
+
+test("dia do vencimento digitado: inteiro de 1 a 31, vazio é nulo", () => {
+  assert.equal(lerDiaDoMes("25"), 25);
+  assert.equal(lerDiaDoMes(" 7 "), 7);
+  assert.equal(lerDiaDoMes(20), 20);
+  assert.equal(lerDiaDoMes(""), null);
+  assert.equal(lerDiaDoMes(null), null);
+  assert.ok(Number.isNaN(lerDiaDoMes("2,5") as number));
+  assert.ok(Number.isNaN(lerDiaDoMes("vinte") as number));
+  assert.ok(diaDoMesValido(1));
+  assert.ok(diaDoMesValido(31));
+  assert.ok(!diaDoMesValido(0));
+  assert.ok(!diaDoMesValido(32));
+  assert.ok(!diaDoMesValido(24.5));
+  assert.ok(!diaDoMesValido(Number.NaN));
+  assert.ok(!diaDoMesValido(null));
+});
+
+test("Parâmetros: os dias dos federais só aceitam dia de 1 a 31; os demais seguem como antes", () => {
+  const um = (chave: string, valor: number) =>
+    novaVigenciaParametrosSchema.safeParse({ vigencia_inicio: "2026-11-01", valores: [{ chave, valor }] });
+  assert.ok(um("pis_cofins_dia", 24).success);
+  assert.ok(um("retencoes_dia", 31).success);
+  for (const [chave, valor] of [
+    ["pis_cofins_dia", 0],
+    ["pis_cofins_dia", 32],
+    ["retencoes_dia", 19.5],
+  ] as const) {
+    const r = um(chave, valor);
+    assert.ok(!r.success);
+    assert.equal(r.error.issues[0].message, "Dia do vencimento: informe um dia de 1 a 31.");
+    assert.deepEqual(r.error.issues[0].path, ["valores", 0, "valor"]);
+  }
+  // Alíquota e valor em reais não são dia: nada muda para eles.
+  assert.ok(um("irpj", 15.5).success);
+  assert.ok(um("darf_minimo", 0).success);
+  // Com mais de um valor, o erro aponta o dia.
+  const varios = novaVigenciaParametrosSchema.safeParse({
+    vigencia_inicio: "2026-11-01",
+    valores: [
+      { chave: "csll", valor: 9 },
+      { chave: "retencoes_dia", valor: 40 },
+    ],
+  });
+  assert.ok(!varios.success);
+  assert.deepEqual(varios.error.issues[0].path, ["valores", 1, "valor"]);
 });
