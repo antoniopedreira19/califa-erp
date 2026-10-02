@@ -183,7 +183,6 @@ export default async function FeriasPage({
           busca={searchParams.busca ?? ""}
           tipoContratacao={searchParams.tipo_contr ?? ""}
           statusPeriodo={searchParams.status_periodo ?? ""}
-          colaboradorSelecionadoId={searchParams.colab}
         />
       )}
       {tab === "calendario" && (

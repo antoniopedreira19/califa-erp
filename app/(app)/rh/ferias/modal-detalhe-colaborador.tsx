@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import {
   Dialog,
@@ -31,6 +31,9 @@ type Props = {
   };
   periodos: ColaboradorFeriasPeriodo[];
   lancamentos: ColaboradorFeriasLancamento[];
+  /** Callback de fechar — passado pelo ModalDetalheWrapper. Fecha o modal
+   *  via state local em vez de router.push, evitando round-trip RSC. */
+  onFechar: () => void;
 };
 
 /**
@@ -49,16 +52,12 @@ export function ModalDetalheColaborador({
   colaborador,
   periodos,
   lancamentos,
+  onFechar,
 }: Props) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [formAberto, setFormAberto] = React.useState(false);
 
-  function fechar() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("colab");
-    router.push(`/rh/ferias?${params.toString()}`);
-  }
+  const fechar = onFechar;
 
   // Dias usados (aprovado + concluído) por período — pra barra visual
   const diasUsadosPorPeriodo = new Map<string, number>();

@@ -7,21 +7,18 @@ import type {
   TipoContratacao,
 } from "@/lib/types";
 import { QuadroFiltros } from "./quadro-filtros";
-import { LinhaQuadro } from "./linha-quadro";
-import { ModalDetalheColaborador } from "./modal-detalhe-colaborador";
+import { QuadroListaCliente } from "./quadro-lista-cliente";
 
 type Props = {
   tenantId: string;
   busca: string;
   tipoContratacao: string;
   statusPeriodo: string;
-  colaboradorSelecionadoId?: string;
 };
 
 /**
  * Linha do quadro — estilo aba "Acompanhamento" da planilha da California.
- * Mostra UMA linha por colaborador com o PERÍODO ATIVO (o mais crítico):
- * vencido > em_alerta > apto > incompleto.
+ * Mostra UMA linha por colaborador com o PERÍODO ATIVO (mais crítico).
  */
 export type QuadroColaboradorRow = {
   id: string;
@@ -40,8 +37,7 @@ export type QuadroColaboradorRow = {
   } | null;
 };
 
-// Campos específicos pro Quadro — payload mínimo. Não puxa concessivo_inicio/fim,
-// observacao, created_at, updated_at que a UI não usa.
+// Payload mínimo — só os campos usados no cálculo das rows do Quadro.
 const PERIODO_SELECT =
   "id, colaborador_id, numero, aquisitivo_inicio, aquisitivo_fim, data_limite_gozo, dias_direito, status";
 
@@ -50,12 +46,9 @@ export async function AbaQuadro({
   busca,
   tipoContratacao,
   statusPeriodo,
-  colaboradorSelecionadoId,
 }: Props) {
   const supabase = createClient();
 
-  // Query de colaboradores com filtros opcionais, montada antes do Promise.all
-  // (precisa dos filtros aplicados pra condicionar as rows do grid).
   let colabQuery = supabase
     .from("colaboradores")
     .select("id, nome, tipo_contratacao, funcao, data_admissao")
@@ -70,16 +63,8 @@ export async function AbaQuadro({
     colabQuery = colabQuery.eq("tipo_contratacao", tipoContratacao);
   }
 
-  // PARALELIZAÇÃO MÁXIMA (Onda 2): 3 queries do Quadro + até 1 do modal
-  // em paralelo. Antes rodava colaboradores em série antes de periodos+lancs.
-  // Agora as 4 queries disparam juntas via tenant_id direto; os cálculos
-  // acontecem depois quando todas chegaram.
-  const [
-    colaboradoresRes,
-    periodosRes,
-    lancamentosRes,
-    lancamentosDoColabRes,
-  ] = await Promise.all([
+  // 3 queries em paralelo — SEM query do modal (modal fica client-side).
+  const [colaboradoresRes, periodosRes, lancamentosRes] = await Promise.all([
     colabQuery,
     supabase
       .from("colaboradores_ferias_periodos")
@@ -95,18 +80,9 @@ export async function AbaQuadro({
         "pendente_aprovacao",
         "em_analise",
       ]),
-    // Query do modal só se há colab selecionado. Em paralelo com as demais.
-    colaboradorSelecionadoId
-      ? supabase
-          .from("colaboradores_ferias_lancamentos")
-          .select("*")
-          .eq("colaborador_id", colaboradorSelecionadoId)
-          .order("data_inicio", { ascending: false })
-      : Promise.resolve({ data: null as ColaboradorFeriasLancamento[] | null }),
   ]);
 
-  const colaboradoresData = colaboradoresRes.data;
-  const colaboradores = (colaboradoresData ?? []) as Pick<
+  const colaboradores = (colaboradoresRes.data ?? []) as Pick<
     Colaborador,
     "id" | "nome" | "tipo_contratacao" | "funcao" | "data_admissao"
   >[];
@@ -148,7 +124,6 @@ export async function AbaQuadro({
     >
   >;
 
-  // Agrupa períodos por colaborador
   const periodosPorColab = new Map<string, PeriodoLite[]>();
   for (const p of periodos) {
     const arr = periodosPorColab.get(p.colaborador_id) ?? [];
@@ -156,7 +131,6 @@ export async function AbaQuadro({
     periodosPorColab.set(p.colaborador_id, arr);
   }
 
-  // Dias "usados" = aprovado + concluído
   const diasUsadosPorPeriodo = new Map<string, number>();
   for (const l of lancamentos) {
     if (!l.periodo_id) continue;
@@ -223,28 +197,6 @@ export async function AbaQuadro({
     ? rows.filter((r) => r.periodoAtivo?.status === statusPeriodo)
     : rows;
 
-  // Dados do colaborador selecionado pro modal
-  const colabSelecionado = colaboradoresData?.find(
-    (c) => c.id === colaboradorSelecionadoId,
-  );
-
-  // Períodos completos do modal — como a UI do modal precisa de concessivo_inicio/
-  // concessivo_fim/observacao (campos NÃO incluídos no PERIODO_SELECT), fazemos
-  // uma query extra APENAS pros períodos desse colaborador quando há modal aberto.
-  // Essa query é pequena (~6 linhas) e só roda com modal.
-  let periodosSelecionado: ColaboradorFeriasPeriodo[] = [];
-  if (colabSelecionado) {
-    const { data: periodosFullRes } = await supabase
-      .from("colaboradores_ferias_periodos")
-      .select("*")
-      .eq("colaborador_id", colabSelecionado.id)
-      .order("numero", { ascending: true });
-    periodosSelecionado = (periodosFullRes ?? []) as ColaboradorFeriasPeriodo[];
-  }
-
-  const lancamentosDoColab = (lancamentosDoColabRes?.data ??
-    []) as ColaboradorFeriasLancamento[];
-
   return (
     <>
       <QuadroFiltros
@@ -261,36 +213,7 @@ export async function AbaQuadro({
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-          <div className="hidden md:grid grid-cols-[2fr_0.9fr_0.9fr_1fr_1fr_1fr_0.3fr] gap-4 bg-muted/40 px-5 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <span>Colaborador</span>
-            <span>Admissão</span>
-            <span>Aquisitivo</span>
-            <span>Dias pend.</span>
-            <span>Situação</span>
-            <span>Data limite</span>
-            <span className="sr-only">Ação</span>
-          </div>
-          <ul className="divide-y divide-border">
-            {rowsFiltradas.map((row) => (
-              <LinhaQuadro key={row.id} row={row} />
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {colabSelecionado && (
-        <ModalDetalheColaborador
-          colaborador={{
-            id: colabSelecionado.id,
-            nome: colabSelecionado.nome,
-            tipo_contratacao: colabSelecionado.tipo_contratacao,
-            funcao: colabSelecionado.funcao,
-            data_admissao: colabSelecionado.data_admissao,
-          }}
-          periodos={periodosSelecionado}
-          lancamentos={lancamentosDoColab}
-        />
+        <QuadroListaCliente rows={rowsFiltradas} />
       )}
     </>
   );

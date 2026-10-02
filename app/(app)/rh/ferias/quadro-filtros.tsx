@@ -65,7 +65,7 @@ export function QuadroFiltros({
     } else {
       params.set(key, valor);
     }
-    params.delete("colab"); // fecha drawer ao mudar filtro
+    // Modal agora é state local (Onda 3), não via URL — nada a limpar aqui.
     router.push(`/rh/ferias?${params.toString()}`);
   }
 
