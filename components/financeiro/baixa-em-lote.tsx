@@ -67,6 +67,7 @@ import {
   lerRetencoesDoLote,
 } from "@/app/(app)/financeiro/actions-baixa-em-lote";
 import { AnexoCompacto, descartarAnexoImposto, nomeDoAnexo } from "@/components/financeiro/anexo-de-imposto";
+import { NoFiscalDoLote } from "@/components/financeiro/no-fiscal";
 
 // ---------------------------------------------------------------------------
 // O título, no formato do lote
@@ -1093,6 +1094,21 @@ function FormularioDoLote({
             </span>
           </div>
         )}
+
+        {/* Módulo fiscal (entrega 2): o efeito do lote na apuração — as
+            guias de retenção das PPs e o que os recebimentos mudam. Busca
+            os dados sozinho, depois da leitura das retenções. */}
+        <NoFiscalDoLote
+          data={data}
+          pagamentos={pagar.filter(ehParcelaDePP).map((t) => ({
+            parcelaId: t.alvo.id,
+            retencoes:
+              aprovacao.estado === "pronto"
+                ? retencoesPelaAprovacao(r2(t.aberto), aprovacao.aliquotas[t.alvo.id] ?? null).retencoes
+                : [],
+          }))}
+          titulosDeNota={receber.flatMap((t) => (t.alvo.modulo === "receber" && t.alvo.origem === "nf" ? [t.alvo.id] : []))}
+        />
 
         <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
           <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
