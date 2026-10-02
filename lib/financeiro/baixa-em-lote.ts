@@ -96,7 +96,7 @@ const itemSchema = z.object({
    *  títulos já foram baixados. */
   chave: z.string().min(1).max(200),
   /** O nome do título como a tela mostra — vai na mensagem de erro. */
-  rotulo: z.string().max(300),
+  rotulo: z.string().max(1000),
   alvo: alvoSchema,
   /**
    * O que falta, como a tela mostrou. A baixa é por este valor: se alguém
