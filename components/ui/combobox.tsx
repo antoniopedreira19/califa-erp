@@ -22,6 +22,13 @@ export interface ComboboxItem {
    * de um CNPJ tem mais de um código, e a linha mentiria.
    */
   busca?: string;
+  /**
+   * O que aparece NO CAMPO quando o item está escolhido, se for diferente
+   * do rótulo da lista. No CNAE sugerido do envio para faturamento o campo
+   * é estreito (4ª coluna) e mostra só o código; a lista mostra a
+   * atividade (módulo fiscal, 02/10/2026). Sem ele, o campo mostra o rótulo.
+   */
+  curto?: string;
 }
 
 /**
@@ -64,6 +71,15 @@ interface ComboboxProps {
     rotulo: (busca: string) => string;
     onClick: (busca: string) => void;
   };
+  /**
+   * Largura da lista quando ela precisa ser maior que o campo (classe
+   * Tailwind, ex. "w-[520px]"). Sem ela, a lista tem a largura do campo.
+   */
+  larguraLista?: string;
+  /** De que lado a lista mais larga se alinha ao campo. Padrão: início. */
+  alinharLista?: "start" | "end";
+  /** Uma linha de explicação no topo da lista, acima da busca. */
+  cabecalhoLista?: React.ReactNode;
 }
 
 export function Combobox({
@@ -79,6 +95,9 @@ export function Combobox({
   buscaPlaceholder = "Buscar...",
   limpavel,
   acaoSemResultado,
+  larguraLista,
+  alinharLista = "start",
+  cabecalhoLista,
 }: ComboboxProps) {
   const listaId = React.useId();
   const [open, setOpen] = React.useState(false);
@@ -160,7 +179,7 @@ export function Combobox({
                 !selected && "text-muted-foreground",
               )}
             >
-              {selected ? selected.label : placeholder}
+              {selected ? (selected.curto ?? selected.label) : placeholder}
             </span>
             {/* Os dois ícones andam JUNTOS, colados na direita. Soltos como
                 irmãos do texto, o `justify-between` do gatilho espalhava os
@@ -200,9 +219,14 @@ export function Combobox({
         <PopoverContent
           side="bottom"
           avoidCollisions={false}
-          align="start"
-          className="w-[var(--radix-popover-trigger-width)] p-0"
+          align={alinharLista}
+          className={cn(larguraLista ?? "w-[var(--radix-popover-trigger-width)]", "p-0")}
         >
+          {cabecalhoLista && (
+            <div className="border-b border-border px-3 py-2 text-[11.5px] leading-snug text-muted-foreground">
+              {cabecalhoLista}
+            </div>
+          )}
           <div className="border-b border-border p-2">
             <Input
               autoFocus

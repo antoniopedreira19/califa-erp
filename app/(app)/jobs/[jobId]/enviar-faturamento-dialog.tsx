@@ -38,6 +38,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MoneyInput } from "@/components/ui/money-input";
+import { Combobox, COMBOBOX_COMO_SELECT, type ComboboxItem } from "@/components/ui/combobox";
+import { codigoDoCnae, rotuloDoCnae } from "@/lib/fiscal/calculos";
 import { createClient } from "@/lib/supabase/client";
 import { cn, formatCnpj, formatCurrency, isValidCnpj, onlyDigits } from "@/lib/utils";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
@@ -49,9 +51,46 @@ import {
   cadastrarPortalDoClienteDoJob,
   enviarJobParaFaturamento,
 } from "./actions-faturamento";
+import { listarCnaesDoGrupo, type CnaeDoGrupo } from "./actions-cnae-sugerido";
 
 const SEM_PORTAL = "__sem_portal__";
 const BUCKET_ANEXOS = "envios-faturamento";
+
+/* ------------------------------------------------------------------ */
+/* CNAE sugerido (módulo fiscal, 02/10/2026)                           */
+/* ------------------------------------------------------------------ */
+
+/** O item "Nenhum": escolher ele deixa o campo vazio, como o ✕. */
+const CNAE_NENHUM = "__nenhum__";
+
+const CABECALHO_CNAES =
+  "Os CNAEs cadastrados nos CNPJs do grupo. O financeiro escolhe o CNPJ que emite e confirma o CNAE no Faturar.";
+
+/**
+ * Um item por CNAE cadastrado em algum CNPJ do grupo, sem repetir. Na
+ * lista, a atividade e, embaixo, o código (com o subitem da LC 116 quando o
+ * CNAE se divide: 82.30-0-01 · 12.08 e · 17.10 saem separados); no campo,
+ * que é a 4ª coluna e estreito, só o código. O valor gravado em
+ * `cnae_sugerido` é esse código (`codigoDoCnae`), que o Faturar compara com
+ * a lista do CNPJ emissor. A busca também acha o código só com números
+ * ("7319099") e no formato que o campo de texto pedia ("7319-0/99").
+ */
+function itensDoCnaeSugerido(cnaes: readonly CnaeDoGrupo[]): ComboboxItem[] {
+  return [
+    { value: CNAE_NENHUM, label: "Nenhum" },
+    ...cnaes.map((c) => {
+      const codigo = codigoDoCnae(c);
+      const digitos = c.codigo.replace(/\D/g, "");
+      return {
+        value: codigo,
+        label: c.descricao,
+        descricao: codigo,
+        curto: codigo,
+        busca: `${rotuloDoCnae(c)} ${digitos} ${digitos.slice(0, 4)}-${digitos.slice(4, 5)}/${digitos.slice(5)}`,
+      };
+    }),
+  ];
+}
 
 export interface PortalOption {
   id: string;
@@ -323,6 +362,30 @@ export function EnviarFaturamentoDialog({
   const [anexos, setAnexos] = React.useState<AnexoForm[]>([]);
   const [erroAnexo, setErroAnexo] = React.useState<string | null>(null);
   const [portalId, setPortalId] = React.useState(SEM_PORTAL);
+
+  // A lista do CNAE sugerido (módulo fiscal) vem do cadastro de impostos e
+  // é lida quando o pop-up abre, e uma vez só: a página do job não carrega
+  // nada a mais por ela. Se a leitura falhar, abrir de novo tenta outra vez.
+  const [cnaesDoGrupo, setCnaesDoGrupo] = React.useState<CnaeDoGrupo[] | null>(null);
+  const [erroCnaes, setErroCnaes] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!open || cnaesDoGrupo !== null) return;
+    let vivo = true;
+    setErroCnaes(null);
+    listarCnaesDoGrupo()
+      .then((res) => {
+        if (!vivo) return;
+        if (res.ok) setCnaesDoGrupo(res.cnaes);
+        else setErroCnaes(res.message);
+      })
+      .catch(() => {
+        if (vivo) setErroCnaes("Não foi possível carregar a lista de CNAEs. Feche e abra o envio de novo.");
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [open, cnaesDoGrupo]);
+  const itensCnae = React.useMemo(() => itensDoCnaeSugerido(cnaesDoGrupo ?? []), [cnaesDoGrupo]);
 
   // Rola até a nota nova depois que o React a desenha.
   const fimDasNotas = React.useRef<HTMLDivElement>(null);
@@ -698,6 +761,9 @@ export function EnviarFaturamentoDialog({
                   indice={i}
                   multi={multi}
                   moeda={moeda}
+                  itensCnae={itensCnae}
+                  carregandoCnaes={cnaesDoGrupo === null && !erroCnaes}
+                  erroCnaes={erroCnaes}
                   onMexer={(f) => mexerNota(n.id, f)}
                   onRemover={() => setNotas((ns) => ns.filter((x) => x.id !== n.id))}
                   onParcelas={(k) => definirParcelas(n.id, k)}
@@ -1284,6 +1350,9 @@ function CartaoNota({
   indice,
   multi,
   moeda,
+  itensCnae,
+  carregandoCnaes,
+  erroCnaes,
   onMexer,
   onRemover,
   onParcelas,
@@ -1295,6 +1364,10 @@ function CartaoNota({
   indice: number;
   multi: boolean;
   moeda: string;
+  /** A lista do CNAE sugerido ("Nenhum" e os CNAEs do grupo). */
+  itensCnae: ComboboxItem[];
+  carregandoCnaes: boolean;
+  erroCnaes: string | null;
   onMexer: (f: (n: NotaForm) => NotaForm) => void;
   onRemover: () => void;
   onParcelas: (k: number) => void;
@@ -1307,6 +1380,12 @@ function CartaoNota({
   const cnpjErrado = cnpjTocado && nota.cnpj.length > 0 && !isValidCnpj(nota.cnpj);
   const somaParcelas = (nota.parcelas ?? []).reduce((s, p) => s + p.valor, 0);
   const parcelasFecham = centavos(somaParcelas) === centavos(nota.valor);
+  // Valor que não está na lista (texto livre de antes dela) aparece como
+  // está, para não sumir do campo.
+  const itensDaNota =
+    nota.cnae && !itensCnae.some((i) => i.value === nota.cnae)
+      ? [{ value: nota.cnae, label: nota.cnae, curto: nota.cnae }, ...itensCnae]
+      : itensCnae;
 
   return (
     <div className="rounded-xl border border-border bg-white">
@@ -1408,19 +1487,31 @@ function CartaoNota({
             )}
           </div>
 
+          {/* Módulo fiscal (02/10/2026): continua na 4ª coluna, na linha do
+              CNPJ, do valor e do vencimento, mas deixa de ser texto livre:
+              lista com busca dos CNAEs cadastrados, com "Nenhum" (o ✕ também
+              limpa). O campo mostra só o código; a lista abre mais larga,
+              para a esquerda, com a atividade por extenso. Segue opcional. */}
           <div className="space-y-1.5">
             <Label>
               CNAE sugerido{" "}
               <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
             </Label>
-            <Input
-              value={nota.cnae}
-              onChange={(e) => onMexer((n) => ({ ...n, cnae: e.target.value }))}
-              maxLength={60}
-              placeholder="Ex.: 7311-4/00"
-              aria-label={`CNAE sugerido da nota ${indice + 1}`}
-              className="font-mono"
+            <Combobox
+              items={itensDaNota}
+              value={nota.cnae || null}
+              onChange={(v) => onMexer((n) => ({ ...n, cnae: v && v !== CNAE_NENHUM ? v : "" }))}
+              disabled={carregandoCnaes}
+              placeholder={carregandoCnaes ? "Carregando…" : "Opcional"}
+              buscaPlaceholder="Escreva o código ou a atividade"
+              ariaLabel={`CNAE sugerido da nota ${indice + 1}`}
+              limpavel
+              className={cn(COMBOBOX_COMO_SELECT, "font-mono")}
+              larguraLista="w-[520px]"
+              alinharLista="end"
+              cabecalhoLista={CABECALHO_CNAES}
             />
+            {erroCnaes && <p className="text-[11px] text-california-red">{erroCnaes}</p>}
           </div>
         </div>
 

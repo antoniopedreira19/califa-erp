@@ -79,6 +79,20 @@ import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
 import { somaDosRecebidos, type RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import type { AnexoDaPo } from "@/components/envio/anexos-da-po";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
+import {
+  cnaesVigentes,
+  estabelecimentoDoCalculo,
+  feriadosDoCalculo,
+} from "@/lib/fiscal/cadastro";
+import { codigoDoCnae, rotuloDoCnae } from "@/lib/fiscal/calculos";
+import {
+  cnaesQueBatemComASugestao,
+  diaDoPisCofins,
+  rotuloDoEstabelecimento,
+  sugestaoDoCnpj,
+  type FiscalDoFaturar,
+} from "@/lib/fiscal/faturar";
+import { ImpostosDestaNota, ImpostosDestaNotaVazio } from "./impostos-desta-nota";
 
 export type DrawerState =
   | { modo: "origem"; linhas: FaturamentoPendenteRow[] }
@@ -115,6 +129,12 @@ interface Props {
   /** O recebido antes da NF que espera a nota, pela chave da linha
    *  (`nota:<id>` ou `bv:<id>`) — decisão 130. */
   recebidosAntes: Record<string, RecebidoAntesDaNf[]>;
+  /**
+   * Módulo fiscal (02/10/2026): o cadastro de impostos (CNPJs emissores,
+   * CNAEs de cada um, regimes, feriados) e as sugestões do CNPJ emissor e
+   * do Nº NF de cada CNPJ, montadas pela página.
+   */
+  fiscal: FiscalDoFaturar;
 }
 
 /** O recebido antes da NF das notas (ou do BV) destas linhas, do mais
@@ -166,8 +186,10 @@ export function FaturarDrawer({
   proximoNf,
   infoPorJob,
   recebidosAntes,
+  fiscal,
 }: Props) {
   const router = useRouter();
+  const cad = fiscal.cadastro;
 
   const leitura = state.modo === "leitura";
   const avulso = state.modo === "avulso";
@@ -284,14 +306,94 @@ export function FaturarDrawer({
   const [empresaId, setEmpresaId] = React.useState(
     nota?.empresa_id ?? primeira?.empresa_id ?? "",
   );
-  const [numeroNf, setNumeroNf] = React.useState(nota?.numero_nf ?? proximoNf);
+  // Módulo fiscal (02/10/2026): o CNPJ que emite a nota (matriz ou filial),
+  // obrigatório. Vem escolhido pela regra aprovada — job da Hitlab vem com a
+  // Hitlab; senão, o último usado para o mesmo CNPJ de cliente — e a frase
+  // de ajuda diz por quê. Na nota já emitida, o CNPJ gravado nela.
+  const [sugestaoCnpj] = React.useState(() => sugestaoDoCnpj(fiscal, primeira));
+  const [estabId, setEstabId] = React.useState(
+    nota ? (nota.estabelecimento_id ?? "") : (sugestaoCnpj.estabelecimentoId ?? ""),
+  );
+  // O Nº NF sugerido é o da numeração do CNPJ emissor (o maior emitido por
+  // ele + 1; sem nota anterior, vazio para digitar). Sem CNPJ escolhido,
+  // fica a sugestão de antes, até a escolha.
+  const [numeroNf, setNumeroNf] = React.useState(
+    nota?.numero_nf ??
+      (sugestaoCnpj.estabelecimentoId
+        ? (fiscal.proximaNfPorEstab[sugestaoCnpj.estabelecimentoId] ?? "")
+        : proximoNf),
+  );
   const [dataEmissao, setDataEmissao] = React.useState(
     nota?.data_emissao ?? format(new Date(), "yyyy-MM-dd"),
   );
   // Classificação fiscal da nota. Saiu do envio para faturamento em
   // 31/08/2026 — lá era pedida ao GP, que não tem como saber. Quem emite a
   // nota é quem responde por ela.
-  const [cnae, setCnae] = React.useState(nota?.cnae ?? "");
+  // Módulo fiscal: deixa de ser texto livre — é o id de um CNAE da lista do
+  // CNPJ emissor (`fiscal_cnaes`); o texto `cnae` da nota sai dele.
+  const [cnaeId, setCnaeId] = React.useState(nota?.fiscal_cnae_id ?? "");
+
+  // As listas do CNPJ escolhido. Data de emissão apagada no meio do
+  // preenchimento não some com a lista: vale a de hoje até a nova data.
+  const dataDasListas = dataEmissao || format(new Date(), "yyyy-MM-dd");
+  const estabsAtivos = cad.estabelecimentos.filter((e) => e.ativo);
+  const estabEscolhido = leitura ? null : (estabsAtivos.find((e) => e.id === estabId) ?? null);
+  const estabDoCalculo = estabEscolhido
+    ? estabelecimentoDoCalculo(cad, estabEscolhido, dataDasListas)
+    : null;
+  const cnaesDoEstab = estabEscolhido ? cnaesVigentes(cad, estabEscolhido.id, dataDasListas) : [];
+  const cnaeEscolhido = cnaesDoEstab.find((c) => c.id === cnaeId) ?? null;
+
+  // Trocar o CNPJ refaz a sugestão do Nº NF e procura no CNPJ novo o mesmo
+  // CNAE (código e subitem); se ele não tiver, o CNAE volta a ser escolhido.
+  function trocarCnpj(novo: string) {
+    setEstabId(novo);
+    setNumeroNf(fiscal.proximaNfPorEstab[novo] ?? "");
+    const codigoAtual = cnaeEscolhido ? codigoDoCnae(cnaeEscolhido) : null;
+    const mesmo = codigoAtual
+      ? cnaesVigentes(cad, novo, dataDasListas).find((c) => codigoDoCnae(c) === codigoAtual)
+      : undefined;
+    setCnaeId(mesmo?.id ?? "");
+    setErro(null);
+  }
+
+  // A lista de CNAEs do CNPJ emissor. O 82.30-0-01 aparece duas vezes
+  // (subitens 12.08 e 17.10); o sugerido pelo GP vem marcado, sem vir
+  // escolhido (D3, decisão 123: quem emite confere o CNAE certo).
+  const sugeridos = cnaesQueBatemComASugestao(cnaesDoEstab, cnaeSugerido);
+  const itensCnae = cnaesDoEstab.map((c) => {
+    const marcas = [
+      c.cumulativo && estabDoCalculo?.regime === "lucro_real" ? "alíquota reduzida, sem crédito" : null,
+      sugeridos.has(c.id) ? "sugerido pelo GP" : null,
+    ].filter((m): m is string => m !== null);
+    return {
+      value: c.id,
+      label: rotuloDoCnae(c),
+      descricao: marcas.length > 0 ? marcas.join(" · ") : undefined,
+    };
+  });
+  const sugeridoForaDoCnpj = Boolean(estabEscolhido && cnaeSugerido && sugeridos.size === 0);
+
+  // Na nota já emitida: o CNPJ e o CNAE gravados nas colunas novas; nas
+  // notas de antes do módulo fiscal, o texto do CNAE que houver.
+  const estabDaNota = nota?.estabelecimento_id
+    ? (cad.estabelecimentos.find((e) => e.id === nota.estabelecimento_id) ?? null)
+    : null;
+  const cnaeDaNota = nota?.fiscal_cnae_id
+    ? (cad.cnaes.find((c) => c.id === nota.fiscal_cnae_id) ?? null)
+    : null;
+
+  // A nota saiu, mas o registro do CNPJ emissor e do CNAE falhou: o
+  // formulário fica aberto com o aviso, e só fecha — emitir de novo
+  // duplicaria a nota.
+  const [emitidaComAviso, setEmitidaComAviso] = React.useState<{
+    aviso: string;
+    mensagem: string;
+  } | null>(null);
+  function fechar() {
+    if (emitidaComAviso) onEmitida(emitidaComAviso.mensagem);
+    else onClose();
+  }
 
   const [descricao, setDescricao] = React.useState(() => {
     if (nota) return nota.descricao;
@@ -525,8 +627,9 @@ export function FaturarDrawer({
   function handleEmitir() {
     setErro(null);
 
-    if (!empresaId || !numeroNf.trim() || !dataEmissao) {
-      setErro("Informe a empresa emissora, o número da NF e a data de emissão.");
+    if (emitidaComAviso) return;
+    if (!empresaId || !estabEscolhido || !numeroNf.trim() || !dataEmissao) {
+      setErro("Informe a empresa (gerencial), o CNPJ emissor, o número da NF e a data de emissão.");
       return;
     }
     if (avulso && (!avClienteId || !avTipoId || !avSubtipoId)) {
@@ -567,8 +670,8 @@ export function FaturarDrawer({
       setErro("Escreva a descrição que vai na nota fiscal.");
       return;
     }
-    if (cnae.trim().length === 0) {
-      setErro("Informe o CNAE a ser utilizado na nota.");
+    if (!cnaeEscolhido) {
+      setErro("Escolha o CNAE a ser utilizado na nota.");
       return;
     }
     if (!anexoPath) {
@@ -646,7 +749,12 @@ export function FaturarDrawer({
         data_emissao: dataEmissao,
         valor_total: totalNf,
         descricao: descricao.trim(),
-        cnae: cnae.trim(),
+        // O texto da nota continua gravado ("82.30-0-01 · 12.08"), agora
+        // tirado do CNAE da lista; o CNPJ emissor e o id do CNAE são
+        // registrados logo depois da emissão (`registrar_fiscal_da_nota`).
+        cnae: codigoDoCnae(cnaeEscolhido),
+        estabelecimento_id: estabEscolhido.id,
+        fiscal_cnae_id: cnaeEscolhido.id,
         anexo_nf_path: anexoPath,
         plano_conta_tipo_id: avulso ? avTipoId : null,
         plano_conta_subtipo_id: avulso ? avSubtipoId : null,
@@ -682,10 +790,13 @@ export function FaturarDrawer({
           ? ` · ${parciais.length} saldo(s) remanescente(s) de volta em Faturamento`
           : "";
 
+      const mensagem = `NF ${numeroNf.trim()} emitida · ${formatMoney(totalNf)}${detalhe}${sobra}`;
       router.refresh();
-      onEmitida(
-        `NF ${numeroNf.trim()} emitida · ${formatMoney(totalNf)}${detalhe}${sobra}`,
-      );
+      if (res.avisoFiscal) {
+        setEmitidaComAviso({ aviso: res.avisoFiscal, mensagem });
+        return;
+      }
+      onEmitida(mensagem);
     });
   }
 
@@ -696,7 +807,7 @@ export function FaturarDrawer({
       <Dialog
       open
       onOpenChange={(o) => {
-        if (!o) onClose();
+        if (!o) fechar();
       }}
     >
       <DrawerContent className="sm:max-w-[620px]">
@@ -1038,7 +1149,10 @@ export function FaturarDrawer({
           {/* Empresa e contraparte */}
           <div className="grid grid-cols-2 gap-3.5">
             <div className="space-y-1.5">
-              <Label>Empresa emissora {obrigatorio}</Label>
+              {/* Módulo fiscal (02/10/2026): era "Empresa emissora". É a
+                  classificação gerencial do job; quem emite é o CNPJ, logo
+                  abaixo. */}
+              <Label>Empresa (gerencial) {obrigatorio}</Label>
               <Select value={empresaId} onValueChange={setEmpresaId} disabled={leitura}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a empresa" />
@@ -1051,6 +1165,11 @@ export function FaturarDrawer({
                   ))}
                 </SelectContent>
               </Select>
+              {!leitura && (
+                <p className="text-[11.5px] text-muted-foreground text-pretty">
+                  Classificação gerencial do job. O CNPJ que emite a nota vem no campo abaixo.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>{ehBv ? "Fornecedor" : "Cliente"}</Label>
@@ -1079,6 +1198,45 @@ export function FaturarDrawer({
             </div>
           </div>
 
+          {/* Módulo fiscal (02/10/2026): o CNPJ que emite a nota (matriz ou
+              filial). A nota guarda o CNPJ; a numeração, a lista de CNAEs e
+              os impostos saem dele. Linha inteira para o CNPJ caber. */}
+          <div className="space-y-1.5">
+            <Label>CNPJ emissor {obrigatorio}</Label>
+            {leitura ? (
+              <div className="flex h-9 items-center rounded-lg border border-border px-3 text-[13px]">
+                {estabDaNota ? (
+                  <span className="truncate">{rotuloDoEstabelecimento(estabDaNota)}</span>
+                ) : (
+                  <span className="truncate text-muted-foreground">Não registrado nesta nota.</span>
+                )}
+              </div>
+            ) : (
+              <Select
+                value={estabEscolhido?.id ?? ""}
+                // O Radix devolve "" quando o valor e a opção se desencontram:
+                // não é escolha, e apagaria o Nº NF sugerido.
+                onValueChange={(v) => {
+                  if (v) trocarCnpj(v);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o CNPJ que emite a nota" />
+                </SelectTrigger>
+                <SelectContent>
+                  {estabsAtivos.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {rotuloDoEstabelecimento(e)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!leitura && sugestaoCnpj.ajuda && (
+              <p className="text-[11.5px] text-muted-foreground text-pretty">{sugestaoCnpj.ajuda}</p>
+            )}
+          </div>
+
           {/* Rateio de regional da nota avulsa (decisão 086). Fica depois da
               empresa emissora porque depende dela: só as regionais da empresa
               entram. A nota de job não tem — a receita fica na regional do
@@ -1096,7 +1254,7 @@ export function FaturarDrawer({
                 <>
                   <Label>Rateio de regional {obrigatorio}</Label>
                   <p className="rounded-lg border border-dashed border-border bg-muted/50 px-3 py-2.5 text-[12.5px] text-muted-foreground">
-                    Escolha a empresa emissora para ver as regionais dela.
+                    Escolha a empresa (gerencial) para ver as regionais dela.
                   </p>
                 </>
               )}
@@ -1141,6 +1299,12 @@ export function FaturarDrawer({
                 placeholder="Ex: 12345"
                 className="font-mono"
               />
+              {/* Módulo fiscal: a sugestão vem da numeração do CNPJ emissor. */}
+              {!leitura && (
+                <p className="text-[11.5px] text-muted-foreground">
+                  Numeração própria de cada CNPJ.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Emissão {obrigatorio}</Label>
@@ -1163,23 +1327,47 @@ export function FaturarDrawer({
           {/* CNAE — entre o número da nota e a descrição, a pedido do
               Tiago (31/08/2026). Antes era pedido à produção no envio; é
               classificação fiscal da nota, então é de quem a emite. */}
+          {/* Módulo fiscal (02/10/2026): o texto livre vira lista (com busca)
+              dos CNAEs vigentes do CNPJ emissor, com o subitem da LC 116. */}
           <div className="space-y-1.5">
             <Label htmlFor="cnae-nf">CNAE a ser utilizado {obrigatorio}</Label>
-            <Input
-              id="cnae-nf"
-              type="text"
-              value={cnae}
-              readOnly={leitura}
-              onChange={(e) => setCnae(e.target.value)}
-              maxLength={120}
-              // D3 (decisão 123): a sugestão do GP vem de FUNDO, sem
-              // preencher — quem emite escolhe e confere o CNAE certo.
-              placeholder={
-                !leitura && cnaeSugerido
-                  ? `Sugerido pelo GP: ${cnaeSugerido}`
-                  : "Ex: 7311-4/00 — Agências de publicidade"
-              }
-            />
+            {leitura ? (
+              // Na nota emitida, o CNAE da lista por extenso; na nota de
+              // antes do módulo fiscal, o texto que foi gravado.
+              <Input
+                id="cnae-nf"
+                type="text"
+                value={cnaeDaNota ? rotuloDoCnae(cnaeDaNota) : (nota?.cnae ?? "")}
+                readOnly
+              />
+            ) : (
+              <Combobox
+                id="cnae-nf"
+                items={itensCnae}
+                value={cnaeEscolhido?.id ?? null}
+                onChange={(v) => {
+                  setCnaeId(v ?? "");
+                  setErro(null);
+                }}
+                disabled={!estabEscolhido}
+                // D3 (decisão 123): a sugestão do GP vem de FUNDO, sem
+                // preencher — quem emite escolhe e confere o CNAE certo.
+                placeholder={
+                  !estabEscolhido
+                    ? "Escolha o CNPJ emissor primeiro"
+                    : cnaeSugerido
+                      ? `Sugerido pelo GP: ${cnaeSugerido}`
+                      : "Selecione o CNAE"
+                }
+                buscaPlaceholder="Escreva o código ou a atividade"
+                className={COMBOBOX_COMO_SELECT}
+              />
+            )}
+            {!leitura && sugeridoForaDoCnpj && (
+              <p className="text-[11.5px] font-medium text-amber-800">
+                O CNAE sugerido não está cadastrado neste CNPJ.
+              </p>
+            )}
           </div>
 
           {/* Descrição */}
@@ -1201,6 +1389,24 @@ export function FaturarDrawer({
                 : `Texto que vai na nota fiscal. Vem sugerido pelo descritivo que ${autorDoDescritivo ?? "o gerente de projetos"} mandou no envio.`}
             </p>
           </div>
+
+          {/* Módulo fiscal (02/10/2026): os impostos que esta nota gera, só
+              leitura. Aparece com CNPJ, CNAE, valor e data preenchidos;
+              antes disso, a caixa que diz onde ele vai aparecer. */}
+          {!leitura &&
+            (estabEscolhido && estabDoCalculo && cnaeEscolhido && totalNf > 0 && dataEmissao ? (
+              <ImpostosDestaNota
+                estab={estabDoCalculo}
+                nomeDaPJ={fiscal.nomeDaPJ[estabEscolhido.empresa_contabil_id] || estabEscolhido.nome}
+                cnae={cnaeEscolhido}
+                valor={centavos(totalNf)}
+                emissao={dataEmissao}
+                feriados={feriadosDoCalculo(cad)}
+                diaPisCofins={diaDoPisCofins(cad)}
+              />
+            ) : (
+              <ImpostosDestaNotaVazio />
+            ))}
 
           {/* Anexo */}
           <div className="space-y-1.5">
@@ -1424,6 +1630,16 @@ export function FaturarDrawer({
               <span>{erro}</span>
             </div>
           )}
+
+          {emitidaComAviso && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-california-red/35 bg-california-red/[0.06] px-3 py-2.5 text-[12.5px] text-california-red"
+            >
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{emitidaComAviso.aviso}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2.5 border-t border-border px-6 py-3.5">
@@ -1441,10 +1657,10 @@ export function FaturarDrawer({
                   }`}
           </p>
           <div className="flex items-center justify-end gap-2.5">
-            {leitura ? (
+            {leitura || emitidaComAviso ? (
               <button
                 type="button"
-                onClick={onClose}
+                onClick={fechar}
                 className="rounded-lg border border-border bg-white px-3.5 py-2 text-sm font-semibold transition-colors hover:bg-muted"
               >
                 Fechar
@@ -1453,7 +1669,7 @@ export function FaturarDrawer({
               <>
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={fechar}
                   className="rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   Cancelar
