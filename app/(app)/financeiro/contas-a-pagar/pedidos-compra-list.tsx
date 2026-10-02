@@ -30,6 +30,8 @@ import type {
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
+import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
+import type { NotaFiscalDaLinhaPP, RegimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
 import { PPTela } from "./pp-tela";
 import {
   ultimoEnvioDaPP,
@@ -178,6 +180,20 @@ export interface PPRow {
      */
     fatura_cartao_id: string | null;
   }>;
+  /**
+   * Módulo fiscal (02/10/2026): o regime tributário do fornecedor, como o
+   * cadastro guarda hoje — a coluna "Dados da PP" mostra e a retenção da
+   * aprovação parte dele. Obrigatório pelo mesmo motivo do histórico: null
+   * explícito na verba e no fornecedor sem regime informado.
+   */
+  regime_do_fornecedor: RegimeDoFornecedorDaPP | null;
+  /**
+   * Módulo fiscal: a NF do fornecedor — o número do anexo do tipo NF e o
+   * que o financeiro registrou na aprovação. Null na PP sem anexo de NF e
+   * na verba de produção: o grupo "Nota fiscal do fornecedor" não aparece
+   * e a aprovação segue sem as seções de retenção e crédito.
+   */
+  nota_fiscal: NotaFiscalDaLinhaPP | null;
 }
 
 function statusBadgeClasses(status: PPStatus): string {
@@ -252,6 +268,9 @@ interface PedidosCompraListProps {
   cartoes: CartaoOption[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
+  /** Módulo fiscal: o que a NF do fornecedor e a aprovação leem do
+   *  cadastro de impostos, das notas dos jobs e das PPs anteriores. */
+  fiscal: FiscalDaAprovacaoPP;
 }
 
 export function PedidosCompraList({
@@ -261,6 +280,7 @@ export function PedidosCompraList({
   cartoes,
   tipos,
   subtipos,
+  fiscal,
 }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   // Vazio = todas as regionais (16/09/2026: o filtro virou múltiplo).
@@ -555,6 +575,7 @@ export function PedidosCompraList({
         cartoes={cartoes}
         tipos={tipos}
         subtipos={subtipos}
+        fiscal={fiscal}
       />
     </div>
   );

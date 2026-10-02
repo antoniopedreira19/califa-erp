@@ -17,6 +17,23 @@
  * tela de trás — repeti-los transformaria este diálogo num segundo drawer,
  * que é exatamente a redundância que ele veio desfazer (Tiago, 10/09/2026).
  * Do pedido ficam o código e o valor, para ninguém aprovar a PP errada.
+ *
+ * Módulo fiscal (02/10/2026): duas seções novas entre "Como vai ser pago"
+ * e o rodapé, no mesmo ritmo dela — a largura do pop-up não muda, e o
+ * resto fica como está. Só na PP com NF anexada; recibo, boleto e verba de
+ * produção aprovam como antes.
+ *
+ * - **Retenções na fonte** — decididas aqui, sobre o valor da NF. Ligadas
+ *   por padrão no regime normal e no fornecedor sem regime informado
+ *   (PIS 0,65%, COFINS 3%, CSLL 1%, IRRF 1,5%, do cadastro de impostos);
+ *   desligadas e travadas no Simples e no MEI (IN 459); sem retenção no
+ *   cartão, como na baixa.
+ * - **Crédito de PIS/COFINS** — automático pela regra, no mês da emissão
+ *   da NF. Só o financeiro tira, e com motivo.
+ *
+ * A NF (número, emissão, valor e CNPJ tomador) é conferida na tela de
+ * trás, ao lado da nota — aqui só se usa o resultado. Aprovar grava a NF
+ * (`registrar_nf_da_pp`) e só então aprova (`aprovarPPComNotaFiscal`).
  */
 
 import * as React from "react";
@@ -37,15 +54,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { MoneyInput } from "@/components/ui/money-input";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
-import type {
-  PagamentoForaDoCadastroDaPP,
-  PlanoContaTipo,
-  PlanoContaSubtipo,
+import {
+  IMPOSTOS_RETIDOS,
+  type PagamentoForaDoCadastroDaPP,
+  type PlanoContaTipo,
+  type PlanoContaSubtipo,
+  type RegimeTributarioFornecedor,
 } from "@/lib/types";
 import { AprovarForaDoCadastro } from "@/components/financeiro/pagamento-fora-do-cadastro";
-import { aprovarPPComData } from "./actions-titulos";
+import {
+  arredondar,
+  useValorDaBaixa,
+  type EstadoDoValorDaBaixa,
+  type UltimaRetencao,
+} from "@/components/financeiro/valor-da-baixa";
+import { parametrosDeRetencao, type CadastroFiscal } from "@/lib/fiscal/cadastro";
+import {
+  MOTIVOS_SEM_CREDITO,
+  retencoesPadrao,
+  valoresRetidos,
+  type AliquotasRetidas,
+} from "@/lib/fiscal/calculos";
+import { dataBr, mesDe, nomeDoMes } from "@/lib/fiscal/datas";
+import {
+  aliquotaEfetiva,
+  creditoDaNf,
+  faltaNaNfParaAprovar,
+  guiaDoIssRetido,
+  nfIncompleta,
+  percentual,
+  retencoesParaRegistrar,
+  rotuloCurtoDoRegime,
+  vencimentoDasGuiasFederais,
+  type NfEmConferencia,
+  type NotasDoJobParaCredito,
+} from "@/lib/fiscal/nf-da-pp";
+import { aprovarPPComData, aprovarPPComNotaFiscal } from "./actions-titulos";
 import { FaixaQuemEnviou } from "./faixa-quem-enviou";
 import type { EnvioDaPP } from "@/lib/data/eventos-da-pp";
 
@@ -68,6 +116,16 @@ interface PPParaAprovar {
   envio: EnvioDaPP | null;
   emitidaPorNome: string | null;
   gpResponsavelNome: string | null;
+  /** Módulo fiscal: o fornecedor e o regime do cadastro (null = não informado). */
+  fornecedorNome: string;
+  regimeDoFornecedor: RegimeTributarioFornecedor | null;
+  /** Módulo fiscal: a NF em conferência na coluna "Dados da PP". Null na PP
+   *  sem NF anexada (recibo, boleto, verba): sem as seções novas. */
+  nf: NfEmConferencia | null;
+  /** Módulo fiscal: as notas de saída do job — o crédito olha. */
+  notasDoJob: NotasDoJobParaCredito;
+  /** Módulo fiscal: a última PP aprovada com retenção do mesmo fornecedor. */
+  ultimaRetencao: UltimaRetencao | null;
 }
 
 function formatDate(iso: string | null): string {
@@ -76,10 +134,25 @@ function formatDate(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Módulo fiscal: o que as seções novas dizem enquanto a NF não tem data e valor. */
+const TEXTO_SEM_NF =
+  "Preencha a data de emissão e o valor da NF em “Dados da PP”, olhando a nota ao lado: o valor é a base das retenções e a data, o mês do crédito.";
+
+/** Módulo fiscal: a pílula do crédito, por estado. */
+const PILULA_DO_CREDITO: Record<"sim" | "confirmar" | "nao", { texto: string; tom: string }> = {
+  sim: { texto: "Gera crédito", tom: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  confirmar: {
+    texto: "Gera crédito · a confirmar",
+    tom: "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
+  },
+  nao: { texto: "Não gera crédito", tom: "border-border bg-muted text-muted-foreground" },
+};
+
 export function AprovarPPDialog({
   open,
   onOpenChange,
   pp,
+  cadastro,
   cartoes,
   tipos,
   subtipos,
@@ -88,6 +161,9 @@ export function AprovarPPDialog({
   open: boolean;
   onOpenChange: (aberto: boolean) => void;
   pp: PPParaAprovar | null;
+  /** Módulo fiscal: o cadastro de impostos (alíquotas padrão, regime do
+   *  CNPJ tomador, feriados dos vencimentos). */
+  cadastro: CadastroFiscal;
   cartoes: CartaoOption[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
@@ -115,6 +191,36 @@ export function AprovarPPDialog({
     return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
   }, []);
 
+  // Módulo fiscal: as retenções, sobre o valor da NF conferido na coluna
+  // "Dados da PP" — o mesmo estado da baixa (decisão 125).
+  const nf = pp?.nf ?? null;
+  const base = nf?.valor ?? 0;
+  const v = useValorDaBaixa(base, pp?.ultimaRetencao ?? null);
+  const [ajustando, setAjustando] = React.useState(false);
+  // Módulo fiscal: a troca manual do crédito, sempre com motivo.
+  const [semCredito, setSemCredito] = React.useState(false);
+  const [motivoSemCredito, setMotivoSemCredito] = React.useState("");
+  const regime = pp?.regimeDoFornecedor ?? null;
+  // Simples e MEI não sofrem retenção de PIS/COFINS/CSLL e IRRF (IN 459).
+  // Sem regime informado, segue o normal.
+  const optanteDoSimples = regime === "simples" || regime === "mei";
+  const padraoDoRegime: AliquotasRetidas = React.useMemo(
+    () => retencoesPadrao(regime, parametrosDeRetencao(cadastro)),
+    [regime, cadastro],
+  );
+
+  /** A retenção no padrão do regime: ligada, com as alíquotas do cadastro
+   *  de impostos, no regime normal; desligada no Simples e no MEI. */
+  function aplicarRetencaoPadrao() {
+    v.setRetem(false);
+    if (!nf || optanteDoSimples) return;
+    v.setRetem(true);
+    for (const { imposto } of IMPOSTOS_RETIDOS) {
+      const aliquota = padraoDoRegime[imposto];
+      if (aliquota) v.porAliquota(imposto, aliquota);
+    }
+  }
+
   // Cada abertura começa limpa: o diálogo é a decisão de UMA aprovação, e
   // herdar a data escolhida na PP anterior é como se erra a data.
   React.useEffect(() => {
@@ -127,9 +233,82 @@ export function AprovarPPDialog({
     setForaAprovado(false);
     setFaltaForaAprovado(false);
     setErro(null);
+    // Módulo fiscal: as retenções voltam ao padrão do regime, e o crédito
+    // ao automático.
+    setAjustando(false);
+    setSemCredito(false);
+    setMotivoSemCredito("");
+    aplicarRetencaoPadrao();
+    // `v` muda a cada renderização; o que decide é abrir outra vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pp?.id]);
 
+  // Módulo fiscal: no cartão não há retenção — o item entra inteiro na
+  // fatura, como na baixa (decisão 125). Saindo do cartão, a retenção volta
+  // ao padrão do regime.
+  const estavaNoCartao = React.useRef(false);
+  React.useEffect(() => {
+    if (noCartao === estavaNoCartao.current) return;
+    estavaNoCartao.current = noCartao;
+    if (noCartao) {
+      v.setRetem(false);
+      setAjustando(false);
+    } else {
+      aplicarRetencaoPadrao();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noCartao]);
+
   if (!pp) return null;
+
+  // ---------------------------------------------------------------------
+  // Módulo fiscal: o que a NF conferida decide.
+  // ---------------------------------------------------------------------
+  const incompleta = nf ? nfIncompleta(nf) : false;
+  const retencaoTravada = optanteDoSimples || noCartao;
+  const motivoSemRetencao = noCartao
+    ? "No cartão de crédito não há retenção: o item entra inteiro na fatura, como na baixa."
+    : optanteDoSimples
+      ? "Optante do Simples: sem retenção de PIS/COFINS/CSLL e IRRF (IN 459)."
+      : null;
+  const resumo = IMPOSTOS_RETIDOS.filter(({ imposto }) => v.valores[imposto] > 0)
+    .map(
+      ({ imposto }) =>
+        `${imposto} ${percentual(aliquotaEfetiva(imposto, v.aliquotas, v.valores, base))}`,
+    )
+    .join(" · ");
+  // As guias que as retenções geram: CSRF (PIS + COFINS + CSLL) na DARF
+  // 5952, IRRF na 1708, e o ISS retido na guia do município. As alíquotas
+  // saem dos valores da tela, para a guia bater centavo a centavo com eles.
+  const guias = valoresRetidos(
+    base,
+    Object.fromEntries(
+      IMPOSTOS_RETIDOS.map(({ imposto }) => [
+        imposto,
+        v.retem && base > 0 ? (v.valores[imposto] / base) * 100 : 0,
+      ]),
+    ) as AliquotasRetidas,
+  );
+  const darfs = [
+    guias.darf5952 > 0 ? { codigo: "5952", valor: guias.darf5952 } : null,
+    guias.darf1708 > 0 ? { codigo: "1708", valor: guias.darf1708 } : null,
+  ].filter((x): x is { codigo: string; valor: number } => x !== null);
+  const mesDoPagamento = dataPagamento ? mesDe(dataPagamento) : null;
+  const vencFederal =
+    nf && dataPagamento ? vencimentoDasGuiasFederais(cadastro, nf.tomador, dataPagamento) : null;
+  const guiaIss = nf && guias.iss > 0 ? guiaDoIssRetido(cadastro, nf.tomador, nf.emissao) : null;
+  // O crédito — automático pela regra; o financeiro só tira, e com motivo.
+  const credito =
+    nf && !incompleta
+      ? creditoDaNf({
+          nf,
+          cadastro,
+          notasDoJob: pp.notasDoJob,
+          semCredito,
+          motivoSemCredito,
+          hoje: hoje.split("/").reverse().join("-"),
+        })
+      : null;
 
   function handleAprovar() {
     if (!pp) return;
@@ -142,16 +321,57 @@ export function AprovarPPDialog({
       setErro("Marque “Aprovar pagamento fora do cadastro” antes de aprovar.");
       return;
     }
+    if (nf) {
+      // Módulo fiscal: sem a NF conferida não há mês de crédito nem base
+      // de retenção.
+      const falta = faltaNaNfParaAprovar(nf);
+      if (falta) {
+        setErro(falta);
+        return;
+      }
+      // As mesmas travas da retenção na baixa.
+      if (v.retem && v.retido <= 0) {
+        setErro("Informe ao menos um imposto retido, ou desligue a retenção.");
+        return;
+      }
+      if (v.retem && v.retido >= base) {
+        setErro("Os impostos retidos não podem ser maiores que o valor da NF.");
+        return;
+      }
+      // Tirar o crédito pede o motivo.
+      if (credito?.tirado && !motivoSemCredito) {
+        setErro("Escolha o motivo de a nota não gerar crédito de PIS/COFINS.");
+        return;
+      }
+    }
+    const aprovacao = {
+      pp_id: pp.id,
+      data_pagamento: dataPagamento,
+      forma_pagamento: formaPagamento || null,
+      cartao_credito_id: noCartao ? cartaoId || null : null,
+      plano_conta_tipo_id: noCartao ? tipoId || null : null,
+      plano_conta_subtipo_id: noCartao ? subtipoId || null : null,
+      aprovar_pagamento_fora_do_cadastro: pp.pagamentoForaDoCadastro ? foraAprovado : false,
+    };
+    // Com NF, a NF é gravada primeiro e a aprovação só acontece se ela
+    // gravar (`aprovarPPComNotaFiscal`); sem NF, a aprovação de sempre.
+    const notaFiscal = nf
+      ? {
+          numero: nf.numero.trim(),
+          data_emissao: nf.emissao,
+          valor: nf.valor,
+          tomador_estabelecimento_id: nf.tomador,
+          retencoes: noCartao
+            ? []
+            : retencoesParaRegistrar(v.retem, v.aliquotas, v.valores, base),
+          credito_retirado: credito?.tirado ?? false,
+          credito_motivo: credito?.tirado ? motivoSemCredito : null,
+        }
+      : null;
     startTransition(async () => {
-      const res = await aprovarPPComData({
-        pp_id: pp.id,
-        data_pagamento: dataPagamento,
-        forma_pagamento: formaPagamento || null,
-        cartao_credito_id: noCartao ? cartaoId || null : null,
-        plano_conta_tipo_id: noCartao ? tipoId || null : null,
-        plano_conta_subtipo_id: noCartao ? subtipoId || null : null,
-        aprovar_pagamento_fora_do_cadastro: pp.pagamentoForaDoCadastro ? foraAprovado : false,
-      });
+      const res = notaFiscal
+        ? await aprovarPPComNotaFiscal({ ...aprovacao, nf: notaFiscal })
+        : await aprovarPPComData(aprovacao);
       if (!res.ok) {
         setErro(res.message);
         return;
@@ -360,6 +580,256 @@ export function AprovarPPDialog({
               </div>
             )}
           </div>
+
+          {/* Módulo fiscal: as retenções na fonte, decididas na aprovação
+              sobre o valor da NF. */}
+          {nf && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <p className="text-sm font-bold">Retenções na fonte</p>
+              {incompleta ? (
+                <p className="flex items-start gap-1.5 text-[12px] leading-snug text-amber-800">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+                  <span>{TEXTO_SEM_NF}</span>
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 text-xs leading-snug text-muted-foreground">
+                      {pp.fornecedorNome} · {rotuloCurtoDoRegime(regime)}
+                    </span>
+                    <div
+                      className={cn(
+                        "flex flex-none items-center gap-2",
+                        retencaoTravada && "opacity-60",
+                      )}
+                    >
+                      <Chave
+                        id="aprovar-pp-reter"
+                        ligada={v.retem}
+                        desligada={retencaoTravada || pending}
+                        onChange={(x) => {
+                          if (x) aplicarRetencaoPadrao();
+                          else {
+                            v.setRetem(false);
+                            setAjustando(false);
+                          }
+                          setErro(null);
+                        }}
+                        rotulo="Reter na fonte"
+                      />
+                      <label
+                        htmlFor="aprovar-pp-reter"
+                        className={cn(
+                          "text-[13px] font-semibold",
+                          retencaoTravada ? "cursor-not-allowed" : "cursor-pointer",
+                        )}
+                      >
+                        Reter na fonte
+                      </label>
+                    </div>
+                  </div>
+
+                  {motivoSemRetencao && (
+                    <p className="text-[11.5px] leading-snug text-muted-foreground text-pretty">
+                      {motivoSemRetencao}
+                    </p>
+                  )}
+
+                  {v.retem && (
+                    <>
+                      {v.retido > 0 ? (
+                        <p className="text-[12px] leading-relaxed tabular-nums">
+                          <span>
+                            {resumo} ={" "}
+                            <b className="font-mono font-semibold">
+                              {formatCurrency(v.retido, "BRL")}
+                            </b>{" "}
+                            ·
+                          </span>{" "}
+                          <span className="whitespace-nowrap">
+                            líquido{" "}
+                            <b className="font-mono font-semibold">
+                              {formatCurrency(v.liquido, "BRL")}
+                            </b>
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-[12px] text-muted-foreground">
+                          Nenhum imposto informado: ajuste as alíquotas ou desligue a retenção.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setAjustando((a) => !a)}
+                          aria-expanded={ajustando}
+                          disabled={pending}
+                          className="text-california-red underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          {ajustando ? "Ocultar alíquotas" : "Ajustar alíquotas"}
+                        </button>
+                        {pp.ultimaRetencao && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              v.repetir();
+                              setErro(null);
+                            }}
+                            disabled={pending}
+                            className="text-california-red underline-offset-2 hover:underline disabled:opacity-50"
+                          >
+                            Repetir as da {pp.ultimaRetencao.referencia} (mesmo fornecedor)
+                          </button>
+                        )}
+                      </div>
+                      {ajustando && <GradeDeAliquotas v={v} />}
+                      {(darfs.length > 0 || guias.iss > 0) && (
+                        <p className="text-[11px] leading-snug text-muted-foreground text-pretty">
+                          {darfs.length > 0 && (
+                            <>
+                              Geram{" "}
+                              {darfs.map((d, i) => (
+                                <React.Fragment key={d.codigo}>
+                                  {i > 0 && " e "}
+                                  DARF {d.codigo}{" "}
+                                  <b className="font-mono font-semibold">
+                                    {formatCurrency(d.valor, "BRL")}
+                                  </b>
+                                </React.Fragment>
+                              ))}
+                              , na apuração do mês do pagamento
+                              {mesDoPagamento ? ` (${nomeDoMes(mesDoPagamento)})` : ""}
+                              {vencFederal && (
+                                <>
+                                  , com vencimento em{" "}
+                                  <b className="font-semibold">{dataBr(vencFederal.data)}</b>
+                                </>
+                              )}
+                              .
+                            </>
+                          )}
+                          {guiaIss && (
+                            <>
+                              {darfs.length > 0 ? " E a" : "Gera a"} guia municipal do ISS
+                              retido,{" "}
+                              <b className="font-mono font-semibold">
+                                {formatCurrency(guias.iss, "BRL")}
+                              </b>
+                              , de {guiaIss.municipio}-{guiaIss.uf}, na apuração do mês da
+                              emissão da NF ({nomeDoMes(mesDe(nf.emissao))}), com vencimento em{" "}
+                              <b className="font-semibold">{dataBr(guiaIss.vencimento.data)}</b>.
+                            </>
+                          )}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Módulo fiscal: o crédito de PIS/COFINS desta NF. Automático
+              pela regra (fornecedor PJ com NF, em custo de job), no mês da
+              emissão; o estorno do 12.08 acontece no mês da nota de saída.
+              O financeiro só tira o crédito, e com motivo. */}
+          {nf && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <p className="text-sm font-bold">Crédito de PIS/COFINS</p>
+              {!credito ? (
+                <p className="text-[12px] leading-snug text-muted-foreground">
+                  Aparece quando a data de emissão e o valor da NF estiverem preenchidos.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[12.5px] leading-relaxed">
+                    <span
+                      className={cn(
+                        "mr-2 inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 align-[1px] text-[10px] font-bold uppercase tracking-wide",
+                        PILULA_DO_CREDITO[credito.final.estado].tom,
+                      )}
+                    >
+                      {PILULA_DO_CREDITO[credito.final.estado].texto}
+                    </span>
+                    {/* Sem crédito, o valor continua à vista, riscado: quem
+                        tira o crédito vê quanto está deixando de tomar. */}
+                    <b
+                      title={`PIS ${percentual(credito.aliquotaPis)} ${formatCurrency(credito.final.pis, "BRL")} + COFINS ${percentual(credito.aliquotaCofins)} ${formatCurrency(credito.final.cofins, "BRL")}`}
+                      className={cn(
+                        "font-mono font-semibold",
+                        !credito.final.gera &&
+                          "text-muted-foreground line-through decoration-muted-foreground/60",
+                      )}
+                    >
+                      {formatCurrency(credito.final.total, "BRL")}
+                    </b>{" "}
+                    <span className={cn(!credito.final.gera && "text-muted-foreground")}>
+                      {credito.final.mes
+                        ? `na apuração de ${credito.final.mes} (mês da emissão da NF)`
+                        : "na apuração do mês da emissão da NF"}
+                    </span>
+                  </p>
+                  <p className="text-[11.5px] leading-snug text-muted-foreground text-pretty">
+                    {credito.final.motivo}
+                  </p>
+                  {credito.automatico.gera && (
+                    <>
+                      <label className="flex w-fit cursor-pointer items-center gap-2 text-[13px] font-semibold">
+                        <Checkbox
+                          checked={semCredito}
+                          disabled={pending}
+                          onCheckedChange={(c) => {
+                            setSemCredito(c === true);
+                            if (c !== true) setMotivoSemCredito("");
+                            setErro(null);
+                          }}
+                          aria-label="Não gera crédito"
+                          className="rounded-[4px]"
+                        />
+                        Não gera crédito
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          só o financeiro altera
+                        </span>
+                      </label>
+                      {semCredito && (
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="aprovar-pp-motivo-credito"
+                            className="text-xs font-semibold"
+                          >
+                            Motivo <span className="text-california-red">*</span>
+                          </label>
+                          <Select
+                            value={motivoSemCredito === "" ? undefined : motivoSemCredito}
+                            disabled={pending}
+                            onValueChange={(x) => {
+                              setMotivoSemCredito(x);
+                              setErro(null);
+                            }}
+                          >
+                            <SelectTrigger
+                              id="aprovar-pp-motivo-credito"
+                              aria-label="Motivo"
+                              className="h-9 w-full text-xs"
+                            >
+                              <SelectValue placeholder="Escolha o motivo…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {MOTIVOS_SEM_CREDITO.map((m) => (
+                                <SelectItem key={m} value={m} className="text-xs">
+                                  {m}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2.5 border-t border-border pt-4">
@@ -388,5 +858,140 @@ export function AprovarPPDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Módulo fiscal: a chave liga/desliga, com o desenho da chave da baixa
+ *  (`components/financeiro/valor-da-baixa.tsx`). */
+function Chave({
+  id,
+  ligada,
+  onChange,
+  rotulo,
+  desligada,
+}: {
+  id: string;
+  ligada: boolean;
+  onChange: (x: boolean) => void;
+  rotulo: string;
+  desligada: boolean;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={ligada}
+      aria-label={rotulo}
+      disabled={desligada}
+      onClick={() => onChange(!ligada)}
+      className={cn(
+        "relative inline-flex h-5 w-9 flex-none items-center rounded-full border-2 border-transparent transition-colors disabled:cursor-not-allowed",
+        ligada ? "bg-california-red" : "bg-muted-foreground/30",
+        desligada && !ligada && "bg-[#e5e5e5]",
+      )}
+    >
+      <span
+        className={cn(
+          "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+          ligada ? "translate-x-4" : "translate-x-0",
+        )}
+      />
+    </button>
+  );
+}
+
+/**
+ * Módulo fiscal: a grade compacta do "Ajustar alíquotas" — imposto,
+ * alíquota e valor, um calcula o outro (como na baixa, decisão 125), sobre
+ * o valor da NF.
+ */
+function GradeDeAliquotas({ v }: { v: EstadoDoValorDaBaixa }) {
+  return (
+    <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-2.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_88px_128px] gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        <span>Imposto</span>
+        <span className="text-right">Alíquota</span>
+        <span className="text-right">Valor</span>
+      </div>
+      {IMPOSTOS_RETIDOS.map(({ imposto, dica }) => (
+        <div
+          key={imposto}
+          className="grid grid-cols-[minmax(0,1fr)_88px_128px] items-center gap-2"
+        >
+          <span className="text-[12.5px] font-semibold" title={dica}>
+            {imposto}
+          </span>
+          <PercentualCompacto
+            valor={v.aliquotas[imposto]}
+            onChange={(x) => v.porAliquota(imposto, x)}
+            rotulo={`Alíquota de ${imposto}`}
+          />
+          <MoneyInput
+            value={v.valores[imposto]}
+            onValueChange={(x) => v.porValor(imposto, arredondar(x))}
+            aria-label={`Valor retido de ${imposto}`}
+            className="h-8 px-2 text-right text-xs"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Módulo fiscal: percentual pt-BR controlado ("0,65"), o mesmo
+ * comportamento do campo de alíquota da baixa, na altura compacta. O texto
+ * é do campo enquanto se digita; só se reescreve quando o número muda por
+ * fora (o "Repetir", ou o valor informado à mão recalculando a alíquota).
+ */
+function PercentualCompacto({
+  valor,
+  onChange,
+  rotulo,
+}: {
+  valor: number | null;
+  onChange: (x: number | null) => void;
+  rotulo: string;
+}) {
+  const paraTexto = (n: number | null) =>
+    n === null ? "" : n.toLocaleString("pt-BR", { maximumFractionDigits: 4 });
+  const [texto, setTexto] = React.useState(paraTexto(valor));
+
+  React.useEffect(() => {
+    // "0," a meio caminho de "0,65" vale nulo, como o `onChange` mandou:
+    // não pode reescrever o que a pessoa ainda está digitando.
+    const n = Number(texto.replace(",", "."));
+    const digitado = texto.trim() === "" || !Number.isFinite(n) || n <= 0 ? null : n;
+    if (digitado !== valor) setTexto(paraTexto(valor));
+    // Só o número de fora reescreve o texto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valor]);
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        aria-label={rotulo}
+        value={texto}
+        placeholder="0,00"
+        onChange={(e) => {
+          const limpo = e.target.value.replace(/[^\d,]/g, "");
+          setTexto(limpo);
+          if (limpo.trim() === "") {
+            onChange(null);
+            return;
+          }
+          const n = Number(limpo.replace(",", "."));
+          if (Number.isFinite(n)) onChange(n > 0 ? n : null);
+        }}
+        className="flex h-8 w-full rounded-lg border border-border bg-white py-1 pl-2 pr-6 text-right font-mono text-xs tabular-nums transition-colors placeholder:text-muted-foreground/60 hover:border-california-red/40 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15"
+      />
+      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+        %
+      </span>
+    </div>
   );
 }
