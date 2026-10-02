@@ -514,6 +514,7 @@ export async function obterDetalheColaboradorFerias(
       .select("id, nome, tipo_contratacao, funcao, data_admissao")
       .eq("id", colaboradorId)
       .eq("tenant_id", tenantId)
+      .neq("tipo_contratacao", "socio")
       .maybeSingle(),
     supabase
       .from("colaboradores_ferias_periodos")
