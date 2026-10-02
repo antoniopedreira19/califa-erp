@@ -13,7 +13,10 @@
  *    "define onde o custo entra no DRE". Vem sugerido quando a origem já
  *    tem plano (avulsa/recorrência) e é editável.
  * 2. **Nenhuma conta bancária padrão.** A conta é escolhida na mão em
- *    toda baixa, de propósito.
+ *    toda baixa, de propósito. A exceção é quem abre a baixa já sabendo a
+ *    conta: a aba Títulos da conciliação (pedido do Tiago em 02/10/2026)
+ *    manda a conta em tela em `contaInicial`, e ela vem escolhida — e
+ *    trocável.
  *
  * Decisão 125 (29/09/2026): o valor sai do quadro do topo e vira o bloco
  * "Valor a dar baixa" (`BlocoValorDaBaixa`, o mesmo de Títulos a Receber),
@@ -143,6 +146,7 @@ export function BaixaTituloDialog({
   pending,
   erro,
   onConfirm,
+  contaInicial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -159,6 +163,12 @@ export function BaixaTituloDialog({
   pending: boolean;
   erro: string | null;
   onConfirm: (payload: BaixaTituloPayload) => void;
+  /**
+   * A conta que já vem escolhida (o `id`): a aba Títulos da conciliação
+   * manda a conta em tela. Sem ela — ou com uma conta que não está entre
+   * as ativas de `contas` —, a conta abre em branco, como sempre.
+   */
+  contaInicial?: string;
 }) {
   if (!alvo) return null;
   return (
@@ -186,6 +196,7 @@ export function BaixaTituloDialog({
           erro={erro}
           onCancelar={() => onOpenChange(false)}
           onConfirm={onConfirm}
+          contaInicial={contaInicial ?? null}
         />
       </DialogContent>
     </Dialog>
@@ -204,6 +215,7 @@ function FormularioDaBaixa({
   erro,
   onCancelar,
   onConfirm,
+  contaInicial,
 }: {
   alvo: BaixaTituloAlvo;
   contas: ContaBancaria[];
@@ -216,13 +228,20 @@ function FormularioDaBaixa({
   erro: string | null;
   onCancelar: () => void;
   onConfirm: (payload: BaixaTituloPayload) => void;
+  /** A conta que abre escolhida; `null` abre em branco. */
+  contaInicial: string | null;
 }) {
-  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão),
+  // Ao abrir: hoje como data, conta em branco (sem padrão, por decisão —
+  // salvo a `contaInicial` de quem já sabe a conta, se ela for ativa),
   // centro de custo sugerido pela origem quando existe, e forma de
   // pagamento pré-preenchida quando a origem já definiu.
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
   const [pagoEm, setPagoEm] = React.useState(format(new Date(), "yyyy-MM-dd"));
-  const [contaId, setContaId] = React.useState("");
+  const [contaId, setContaId] = React.useState(() =>
+    contaInicial && contas.some((c) => c.id === contaInicial && c.ativo)
+      ? contaInicial
+      : "",
+  );
   const [tipoId, setTipoId] = React.useState(alvo.planoContaTipoId ?? "");
   const [subtipoId, setSubtipoId] = React.useState(alvo.planoContaSubtipoId ?? "");
   const [formaPagamento, setFormaPagamento] = React.useState<FormaPagamentoValue>({

@@ -9,7 +9,10 @@
  *    SEMPRE tem data. Validada aqui, no schema da action e de novo dentro
  *    da RPC, que recusa `null`.
  * 2. **Conta bancária que recebeu** — sem padrão, escolhida a cada baixa
- *    (mesma decisão da 016 §7 do lado do pagamento).
+ *    (mesma decisão da 016 §7 do lado do pagamento). A exceção é quem abre
+ *    a baixa já sabendo a conta: a aba Títulos da conciliação (pedido do
+ *    Tiago em 02/10/2026) manda a conta em tela em `contaInicial`, e ela
+ *    vem escolhida — e trocável.
  * 3. **Centro de custo do recebimento** — que é o par Tipo + Subtipo do
  *    plano de contas (decisão 016 §6). Desde a Tela 3.3 é AQUI que a
  *    receita é classificada: o formulário de emissão da NF não pergunta
@@ -121,6 +124,7 @@ export function BaixaRecebimentoDialog({
   pending,
   erro,
   onConfirm,
+  contaInicial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -131,6 +135,13 @@ export function BaixaRecebimentoDialog({
   pending: boolean;
   erro: string | null;
   onConfirm: (payload: BaixaRecebimentoPayload) => void;
+  /**
+   * A conta que já vem escolhida (o `id`): a aba Títulos da conciliação
+   * manda a conta em tela. A conta travada do rendimento vale antes dela.
+   * Sem ela — ou com uma conta que não está entre as ativas de `contas` —,
+   * a conta abre em branco, como sempre.
+   */
+  contaInicial?: string;
 }) {
   if (!alvo) return null;
   return (
@@ -155,6 +166,7 @@ export function BaixaRecebimentoDialog({
           erro={erro}
           onCancelar={() => onOpenChange(false)}
           onConfirm={onConfirm}
+          contaInicial={contaInicial ?? null}
         />
       </DialogContent>
     </Dialog>
@@ -170,6 +182,7 @@ function FormularioDaBaixa({
   erro,
   onCancelar,
   onConfirm,
+  contaInicial,
 }: {
   alvo: BaixaRecebimentoAlvo;
   contas: ContaBancaria[];
@@ -179,10 +192,20 @@ function FormularioDaBaixa({
   erro: string | null;
   onCancelar: () => void;
   onConfirm: (payload: BaixaRecebimentoPayload) => void;
+  /** A conta que abre escolhida; `null` abre em branco. */
+  contaInicial: string | null;
 }) {
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
   const [pagoEm, setPagoEm] = React.useState(alvo.dataInicial);
-  const [contaId, setContaId] = React.useState(alvo.contaTravadaId ?? "");
+  // A conta travada (rendimento) vence; depois, a de quem abriu a baixa já
+  // sabendo a conta, se ela for ativa; senão, em branco.
+  const [contaId, setContaId] = React.useState(
+    () =>
+      alvo.contaTravadaId ??
+      (contaInicial && contas.some((c) => c.id === contaInicial && c.ativo)
+        ? contaInicial
+        : ""),
+  );
   const [tipoId, setTipoId] = React.useState(alvo.tipoInicialId ?? "");
   const [subtipoId, setSubtipoId] = React.useState(alvo.subtipoInicialId ?? "");
   const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao);
