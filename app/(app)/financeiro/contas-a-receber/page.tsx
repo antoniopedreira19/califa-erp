@@ -38,6 +38,8 @@ import {
   montarTitulosAReceber,
   parcelasDasNotas,
 } from "./dados-dos-titulos";
+import { carregarCadastroFiscal } from "@/lib/fiscal/cadastro";
+import { montarFiscalDoFaturar } from "@/lib/fiscal/faturar";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +78,8 @@ export default async function ContasReceberPage({
     regionaisRes,
     ultimasRetencoesRes,
     recebidosAntesRes,
+    cadastroFiscal,
+    pjsRes,
   ] = await Promise.all([
     supabase
       .from("vw_faturamento_pendente")
@@ -87,7 +91,7 @@ export default async function ContasReceberPage({
       .from("faturamentos")
       .select(`
         id, numero_nf, data_emissao, valor_total, descricao, cnae, anexo_nf_path,
-        cnpj_tomador,
+        cnpj_tomador, estabelecimento_id, fiscal_cnae_id,
         empresa_id, origem_tipo, cliente_id, fornecedor_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
         itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor),
@@ -174,7 +178,9 @@ export default async function ContasReceberPage({
       .returns<PlanoContaSubtipo[]>(),
     supabase
       .from("empresas")
-      .select("id, razao_social, nome_fantasia")
+      // `cnpj`: a empresa gerencial que é a PJ de um CNPJ só (a Hitlab) já
+      // traz o CNPJ emissor dela no Faturar (módulo fiscal, 02/10/2026).
+      .select("id, razao_social, nome_fantasia, cnpj")
       .eq("tenant_id", tenantId)
       .eq("ativo", true)
       .order("razao_social"),
@@ -235,6 +241,15 @@ export default async function ContasReceberPage({
       .eq("status", "aguardando")
       .order("data", { ascending: true })
       .order("created_at", { ascending: true }),
+    // Módulo fiscal (02/10/2026): o cadastro de impostos — CNPJs emissores,
+    // CNAEs de cada um, regimes e feriados — para o CNPJ emissor, a lista
+    // de CNAEs e o bloco "Impostos desta nota" do Faturar.
+    carregarCadastroFiscal(supabase, tenantId),
+    // O nome curto de cada PJ ("DARF da California pela matriz").
+    supabase
+      .from("empresas_contabeis")
+      .select("id, nome_fantasia, razao_social")
+      .eq("tenant_id", tenantId),
   ]);
 
   for (const [nome, res] of [
@@ -250,6 +265,7 @@ export default async function ContasReceberPage({
     ["baixas", baixasRes],
     ["ultimas_retencoes", ultimasRetencoesRes],
     ["recebidos_antes", recebidosAntesRes],
+    ["pjs", pjsRes],
   ] as const) {
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
@@ -432,6 +448,8 @@ export default async function ContasReceberPage({
     cnae: string;
     anexo_nf_path: string;
     cnpj_tomador: string | null;
+    estabelecimento_id: string | null;
+    fiscal_cnae_id: string | null;
     empresa_id: string;
     origem_tipo: "job" | "bv" | "avulso";
     cliente_id: string | null;
@@ -522,6 +540,8 @@ export default async function ContasReceberPage({
         .sort((a, b) => b.percentual - a.percentual),
       cnae: f.cnae,
       cnpj_tomador: f.cnpj_tomador,
+      estabelecimento_id: f.estabelecimento_id ?? null,
+      fiscal_cnae_id: f.fiscal_cnae_id ?? null,
       // Jobs DISTINTOS da nota, na ordem dos itens. O item de save aponta o
       // mesmo job do item próprio, então o Set é o que impede a PO de
       // aparecer duas vezes no botão `i`.
@@ -622,6 +642,26 @@ export default async function ContasReceberPage({
   }, 0);
   const proximoNf = maiorNf > 0 ? String(maiorNf + 1) : "";
 
+  // Módulo fiscal (02/10/2026): com o CNPJ emissor, a numeração passa a ser
+  // de cada CNPJ, e o Faturar já traz escolhido o CNPJ da Hitlab (job da
+  // empresa gerencial Hitlab) ou o último usado para o CNPJ do cliente. Sai
+  // das notas emitidas que a tela já leu — nenhuma consulta a mais.
+  const fiscal = montarFiscalDoFaturar({
+    cadastro: cadastroFiscal,
+    pjs: (pjsRes.data ?? []) as Array<{
+      id: string;
+      nome_fantasia: string | null;
+      razao_social: string | null;
+    }>,
+    empresas: (empresasRes.data ?? []) as Array<{
+      id: string;
+      cnpj: string | null;
+      nome_fantasia: string | null;
+      razao_social: string | null;
+    }>,
+    notas: faturadosBrutos,
+  });
+
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   // A tabela de Titulos a Receber pede 1426px e a de Faturamento 1371px:
   // as duas cabem inteiras a partir de ~1570px de viewport. Abaixo disso
@@ -654,6 +694,7 @@ export default async function ContasReceberPage({
             infoPorJob={infoPorJob}
             contas={contasRes.data ?? []}
             recebidosAntes={recebidosAntes}
+            fiscal={fiscal}
           />
         }
         faturamentoCount={pendentes.length}
