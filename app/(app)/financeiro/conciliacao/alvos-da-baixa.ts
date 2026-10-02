@@ -6,9 +6,19 @@
  * motivoSemParcialDa, faltaPagar) e de `titulos-list.tsx` (alvoBaixa,
  * faltaReceber). As listas ainda montam o delas: quando passarem a importar
  * daqui, a cópia some. Até lá, mudou uma, mude a outra.
+ *
+ * O mesmo vale para a baixa em lote: quem entra no lote, por que não, e o
+ * título no formato do lote são cópias de `chaveDoLote`, `motivoForaDoLote`
+ * e `paraOLote` das duas listas.
  */
 
 import type { BaixaTituloAlvo } from "@/components/financeiro/baixa-titulo-dialog";
+import type { TituloParaLote } from "@/components/financeiro/baixa-em-lote";
+import {
+  ORIGENS_PAGAR_NO_LOTE,
+  type OrigemPagarNoLote,
+} from "@/lib/financeiro/baixa-em-lote";
+import type { OrigemTitulo } from "@/lib/types";
 import type { UltimaRetencao } from "@/components/financeiro/valor-da-baixa";
 import type { BaixaRecebimentoAlvo } from "../contas-a-receber/baixa-recebimento-dialog";
 import type { TituloRow as TituloAPagar } from "../contas-a-pagar/titulos-pagar-list";
@@ -181,4 +191,139 @@ export function alvoDaBaixaAReceber(
         centroTravado: baixando.origem === "rendimento",
         dataInicial: baixando.origem === "rendimento" ? baixando.data_previsao_recebimento : hoje,
       };
+}
+
+// ---------------------------------------------------------------------------
+// Baixa em lote — a pagar (cópia de `titulos-pagar-list.tsx`)
+// ---------------------------------------------------------------------------
+
+function origemNoLote(o: OrigemTitulo): o is OrigemPagarNoLote {
+  return (ORIGENS_PAGAR_NO_LOTE as readonly string[]).includes(o);
+}
+
+/** A chave do título na seleção e no lote — única entre as origens. */
+export function chaveDoLoteAPagar(r: TituloAPagar): string {
+  return `pagar|${r.origem}|${r.id}`;
+}
+
+/**
+ * Por que o título não entra na baixa em lote; `null` entra. O lote paga
+ * pela conta escolhida, uma baixa por título, sempre pelo que falta (a
+ * parcial entra pelo restante). Entram PP, avulso, recorrência e
+ * desembolso em aberto (decisão aprovada pelo Tiago em 02/10/2026); folha,
+ * fatura de cartão e devolução de verba têm baixa própria, e o previsto no
+ * cartão vira item da fatura na baixa (decisão 093), um de cada vez.
+ */
+export function motivoForaDoLoteAPagar(r: TituloAPagar): string | null {
+  if (r.status === "pago") return "Título já pago.";
+  switch (r.origem) {
+    case "folha":
+      return "Folha tem baixa própria: dê baixa nela sozinha.";
+    case "fatura_cartao":
+      return "Fatura de cartão tem baixa própria: dê baixa nela sozinha.";
+    case "pp_devolucao_verba":
+      return "Devolução de verba tem baixa própria: dê baixa nela sozinha.";
+  }
+  if (!origemNoLote(r.origem)) return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
+  if (r.forma_pagamento === "cartao_credito" || r.forma_prevista === "cartao_credito") {
+    return "Previsto no cartão de crédito: dê baixa nele sozinho, para o item entrar na fatura.";
+  }
+  // Decisão 137: para onde vai o dinheiro aparece só na baixa do título.
+  if (r.fora_do_cadastro) {
+    return "Pagamento fora do cadastro: dê baixa nele sozinho, para ver para onde vai o dinheiro.";
+  }
+  if (faltaPagar(r) <= 0.004) return "Título sem valor em aberto.";
+  return null;
+}
+
+/** O título no formato do lote. `null` na origem que não entra nele. */
+export function paraOLoteAPagar(r: TituloAPagar): TituloParaLote | null {
+  if (!origemNoLote(r.origem)) return null;
+  return {
+    chave: chaveDoLoteAPagar(r),
+    tipo: "pagar",
+    alvo: { modulo: "pagar", origem: r.origem, id: r.id },
+    titulo: r.descricao,
+    referencia:
+      r.parcela_total > 1
+        ? `${r.origem_label} · ${r.parcela_numero}/${r.parcela_total}`
+        : r.origem_label,
+    contraparte: r.fornecedor_nome || "—",
+    vencimento: r.data_pagamento,
+    aberto: faltaPagar(r),
+    // Avulso e recorrência já têm o par; a PP tem só o tipo (decisão 068)
+    // e o desembolso, nada — os dois usam o do lote.
+    centroDeCusto:
+      r.plano_conta_tipo_id && r.plano_conta_subtipo_id
+        ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
+        : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Baixa em lote — a receber (cópia de `titulos-list.tsx`)
+// ---------------------------------------------------------------------------
+
+/** A chave do título na seleção e no lote — única entre as origens. */
+export function chaveDoLoteAReceber(r: TituloAReceber): string {
+  return `receber|${r.origem}|${r.id}`;
+}
+
+/**
+ * Por que a caixa da baixa em lote fica desligada; `null` entra. Entram a
+ * nota fiscal e o recebimento avulso em aberto — inadimplente e parcial
+ * também, pelo que falta receber (decisão aprovada pelo Tiago em
+ * 02/10/2026). O rendimento (conta de aplicação travada) e a
+ * transferência entre contas têm baixa própria.
+ */
+export function motivoForaDoLoteAReceber(r: TituloAReceber): string | null {
+  if (r.status === "cancelado") return "Título cancelado: não há baixa a dar.";
+  if (r.status === "pago") {
+    return r.origem === "transferencia" ? "Transferência já feita." : "Título já recebido.";
+  }
+  if (r.origem === "rendimento") return "Rendimento tem baixa própria: dê baixa nele sozinho.";
+  if (r.origem === "transferencia") {
+    return "Transferência tem baixa própria: dê baixa nela sozinha.";
+  }
+  if (r.origem === "recebimento_avulso" && !r.conta_avulsa_id) {
+    return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
+  }
+  if (faltaReceber(r) <= 0.004) return "Título sem valor em aberto.";
+  return null;
+}
+
+/** O título no formato do lote. `null` na origem que não entra nele. */
+export function paraOLoteAReceber(r: TituloAReceber): TituloParaLote | null {
+  if (r.origem === "nf") {
+    return {
+      chave: chaveDoLoteAReceber(r),
+      tipo: "receber",
+      alvo: { modulo: "receber", origem: "nf", id: r.id },
+      titulo: `NF ${r.fat_numero_nf}${r.total_parcelas > 1 ? ` · parcela ${r.numero_parcela}/${r.total_parcelas}` : ""}`,
+      referencia: `NF ${r.fat_numero_nf}`,
+      contraparte: r.contraparte_nome,
+      vencimento: r.data_vencimento,
+      aberto: faltaReceber(r),
+      // A nota não tem centro de custo: usa o do lote.
+      centroDeCusto: null,
+    };
+  }
+  if (r.origem === "recebimento_avulso" && r.conta_avulsa_id) {
+    return {
+      chave: chaveDoLoteAReceber(r),
+      tipo: "receber",
+      alvo: { modulo: "receber", origem: "recebimento_avulso", id: r.conta_avulsa_id },
+      titulo: r.fat_descricao,
+      referencia: r.codigo_avulsa ?? "Recebimento avulso",
+      contraparte: r.contraparte_nome,
+      vencimento: r.data_vencimento,
+      aberto: faltaReceber(r),
+      // O recebimento avulso nasce com o centro de custo (decisão 124).
+      centroDeCusto:
+        r.plano_conta_tipo_id && r.plano_conta_subtipo_id
+          ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
+          : null,
+    };
+  }
+  return null;
 }
