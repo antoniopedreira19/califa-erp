@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, type LucideIcon } from "lucide-react";
+import { ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, Scale, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -11,7 +11,7 @@ export default async function CadastrosFinanceiroPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [contasBancariasRes, tiposPlanoRes, cartoesCreditoRes] = await Promise.all([
+  const [contasBancariasRes, tiposPlanoRes, cartoesCreditoRes, cnpjsEmissoresRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*", { count: "exact", head: true })
@@ -27,11 +27,19 @@ export default async function CadastrosFinanceiroPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    // Cadastro de impostos (módulo fiscal, 02/10/2026): conta os CNPJs
+    // emissores ativos.
+    supabase
+      .from("fiscal_estabelecimentos")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true),
   ]);
 
   if (contasBancariasRes.error) console.error("[fin-cadastros.contas_bancarias]", contasBancariasRes.error.message);
   if (tiposPlanoRes.error) console.error("[fin-cadastros.plano_contas_tipos]", tiposPlanoRes.error.message);
   if (cartoesCreditoRes.error) console.error("[fin-cadastros.cartoes_credito]", cartoesCreditoRes.error.message);
+  if (cnpjsEmissoresRes.error) console.error("[fin-cadastros.fiscal_estabelecimentos]", cnpjsEmissoresRes.error.message);
 
   return (
     <div className="space-y-6">
@@ -66,6 +74,13 @@ export default async function CadastrosFinanceiroPage() {
           title="Cartões de crédito"
           description="Cartões usados como forma de pagamento. O dia da fatura preenche a data de pagamento dos títulos automaticamente."
           count={cartoesCreditoRes.count ?? 0}
+        />
+        <CadastroCard
+          href="/financeiro/cadastros/impostos"
+          icon={Scale}
+          title="Impostos"
+          description="Os CNPJs que emitem nota, os CNAEs e as alíquotas de cada um, os vencimentos e os feriados. O Faturar e a Apuração leem daqui."
+          count={cnpjsEmissoresRes.count ?? 0}
         />
       </div>
     </div>

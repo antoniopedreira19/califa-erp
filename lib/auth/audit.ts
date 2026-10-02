@@ -223,6 +223,15 @@ export type AuditAction =
   | "plano_conta_subtipo.atualizado"
   | "plano_conta_subtipo.inativado"
   | "plano_conta_subtipo.reativado"
+  // Cadastro de impostos (módulo fiscal, 02/10/2026): CNPJ emissor, CNAE
+  // e parâmetro mudam por linha nova com vigência; o feriado removido
+  // deixa de existir, então o metadata guarda o que ele era.
+  | "fiscal_estabelecimento.atualizado"
+  | "fiscal_cnae.criado"
+  | "fiscal_cnae.nova_vigencia"
+  | "fiscal_feriado.criado"
+  | "fiscal_feriado.removido"
+  | "fiscal_parametro.nova_vigencia"
   | "lancamento_financeiro.criado"
   | "lancamento_financeiro.estornado"
   | "pedido_compra.baixa_estornada"
