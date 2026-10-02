@@ -476,12 +476,12 @@ function AvisoDosFatos({ dados }: { dados: DadosDaApuracao }) {
   }
   return (
     <Nota tom="ambar" icone={<Info className="h-3.5 w-3.5" />}>
-      Ainda não há nota de saída com CNPJ emissor: o ISS, o PIS e a COFINS das vendas (e a base do IRPJ e da CSLL) aparecem a partir da
+      Ainda não há nota de saída com CNPJ emissor: o ISS, o PIS e a COFINS das vendas (e a receita na base do IRPJ e da CSLL) aparecem a partir da
       primeira nota emitida pelo Faturar com o CNPJ e o CNAE.{fora}{" "}
       {dados.nfsDeFornecedor > 0
         ? `Por enquanto, a apuração só tem ${
             dados.nfsDeFornecedor === 1 ? "a NF de fornecedor registrada" : `as ${dados.nfsDeFornecedor} NFs de fornecedor registradas`
-          } na aprovação das PPs (crédito de PIS e COFINS, custo do trimestre e retenções).`
+          } na aprovação das PPs: o crédito de PIS e COFINS e o custo do trimestre. As retenções de CSRF e IRRF entram no mês em que a PP é paga.`
         : "Também não há NF de fornecedor registrada na aprovação das PPs."}
     </Nota>
   );
