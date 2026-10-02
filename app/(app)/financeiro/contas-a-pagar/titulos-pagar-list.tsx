@@ -82,6 +82,18 @@ import {
   darBaixaTitulo,
   repactuarDataPagamento,
 } from "./actions-titulos";
+import {
+  BaixaEmLoteDialog,
+  BarraDeSelecao,
+  CaixaDaLinha,
+  CaixaDoCabecalho,
+  useSelecao,
+  type TituloParaLote,
+} from "@/components/financeiro/baixa-em-lote";
+import {
+  ORIGENS_PAGAR_NO_LOTE,
+  type OrigemPagarNoLote,
+} from "@/lib/financeiro/baixa-em-lote";
 
 // ---------------------------------------------------------------------------
 // Tipo da linha
@@ -373,6 +385,73 @@ function motivoSemParcialDa(r: TituloRow): string | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Baixa em lote (pedido do Tiago, 02/10/2026)
+// ---------------------------------------------------------------------------
+
+function origemNoLote(o: OrigemTitulo): o is OrigemPagarNoLote {
+  return (ORIGENS_PAGAR_NO_LOTE as readonly string[]).includes(o);
+}
+
+/** A chave do título na seleção e no lote — única entre as origens. */
+function chaveDoLote(r: TituloRow): string {
+  return `pagar|${r.origem}|${r.id}`;
+}
+
+/**
+ * Por que o título não entra na baixa em lote; `null` entra. O lote paga
+ * pela conta escolhida, uma baixa por título, sempre pelo que falta (a
+ * parcial entra pelo restante). Entram PP, avulso, recorrência e
+ * desembolso em aberto (decisão aprovada pelo Tiago em 02/10/2026); folha,
+ * fatura de cartão e devolução de verba têm baixa própria, e o previsto no
+ * cartão vira item da fatura na baixa (decisão 093), um de cada vez.
+ */
+function motivoForaDoLote(r: TituloRow): string | null {
+  if (r.status === "pago") return "Título já pago.";
+  switch (r.origem) {
+    case "folha":
+      return "Folha tem baixa própria: dê baixa nela sozinha.";
+    case "fatura_cartao":
+      return "Fatura de cartão tem baixa própria: dê baixa nela sozinha.";
+    case "pp_devolucao_verba":
+      return "Devolução de verba tem baixa própria: dê baixa nela sozinha.";
+  }
+  if (!origemNoLote(r.origem)) return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
+  if (r.forma_pagamento === "cartao_credito" || r.forma_prevista === "cartao_credito") {
+    return "Previsto no cartão de crédito: dê baixa nele sozinho, para o item entrar na fatura.";
+  }
+  // Decisão 137: para onde vai o dinheiro aparece só na baixa do título.
+  if (r.fora_do_cadastro) {
+    return "Pagamento fora do cadastro: dê baixa nele sozinho, para ver para onde vai o dinheiro.";
+  }
+  if (faltaPagar(r) <= 0.004) return "Título sem valor em aberto.";
+  return null;
+}
+
+/** O título no formato do lote. `null` na origem que não entra nele. */
+function paraOLote(r: TituloRow): TituloParaLote | null {
+  if (!origemNoLote(r.origem)) return null;
+  return {
+    chave: chaveDoLote(r),
+    tipo: "pagar",
+    alvo: { modulo: "pagar", origem: r.origem, id: r.id },
+    titulo: r.descricao,
+    referencia:
+      r.parcela_total > 1
+        ? `${r.origem_label} · ${r.parcela_numero}/${r.parcela_total}`
+        : r.origem_label,
+    contraparte: r.fornecedor_nome || "—",
+    vencimento: r.data_pagamento,
+    aberto: faltaPagar(r),
+    // Avulso e recorrência já têm o par; a PP tem só o tipo (decisão 068)
+    // e o desembolso, nada — os dois usam o do lote.
+    centroDeCusto:
+      r.plano_conta_tipo_id && r.plano_conta_subtipo_id
+        ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
+        : null,
+  };
+}
+
 interface Props {
   /** Base bruta — inclui a_pagar e pago (não cartão). Filtro é interno. */
   rows: TituloRow[];
@@ -558,6 +637,17 @@ export function TitulosPagarList({
         );
       });
   }, [rows, filtroOrigem, busca, casaBusca, casaPeriodo, statusFiltro]);
+
+  // Baixa em lote (pedido do Tiago, 02/10/2026): marcar vários títulos da
+  // lista e dar baixa de uma vez. A seleção vale para o que está na tela:
+  // o título que some do filtro, ou que foi pago, sai dela sozinho.
+  const elegiveis = filtrados.filter((r) => motivoForaDoLote(r) === null).map(chaveDoLote);
+  const selecao = useSelecao(elegiveis);
+  const [loteAberto, setLoteAberto] = React.useState(false);
+  const selecionados = filtrados
+    .filter((r) => selecao.marcado(chaveDoLote(r)))
+    .map(paraOLote)
+    .filter((t): t is TituloParaLote => t !== null);
 
   // Faixa de resumo — sobre a base bruta (todos os status), não sobre o
   // recorte do chip: é panorama do caixa. O corte de "mês" segue o mês
@@ -872,15 +962,30 @@ export function TitulosPagarList({
           aba Cartão: texto (Título, Fornecedor, Job) à esquerda, dinheiro à
           direita, o resto centralizado. Até 16/09/2026 todos os cabeçalhos
           eram centralizados, e com a página mais larga o "Título" ficava
-          visivelmente solto do texto embaixo dele. */}
+          visivelmente solto do texto embaixo dele.
+
+          A 1ª coluna é a seleção da baixa em lote (02/10/2026), da largura
+          da coluna de caixas da remessa CNAB (`w-10`). Título e Fornecedor
+          cederam 5% para ela: com as porcentagens somando 100% e mais 40px
+          fixos, a tabela passaria da largura da página. */}
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
+              {/* A caixa do cabeçalho marca todos os que a lista mostra e
+                  aceitam a baixa em lote. */}
+              <th className="w-10 py-3 pl-4 pr-2 font-semibold">
+                <CaixaDoCabecalho
+                  todos={selecao.todos}
+                  alguns={selecao.alguns}
+                  onAlternar={selecao.alternarTodos}
+                  disponivel={elegiveis.length > 0}
+                />
+              </th>
               <th className="w-[9%] px-2 py-3 font-semibold">Data Pgto.</th>
               <th className="w-[8%] px-2 py-3 font-semibold">Venc. Orig.</th>
-              <th className="w-[19%] px-3 py-3 text-left font-semibold">Título</th>
-              <th className="w-[15%] px-3 py-3 text-left font-semibold">Fornecedor</th>
+              <th className="w-[16%] px-3 py-3 text-left font-semibold">Título</th>
+              <th className="w-[13%] px-3 py-3 text-left font-semibold">Fornecedor</th>
               <th className="w-[12%] px-2 py-3 text-left font-semibold">Job</th>
               <th className="w-[9%] px-2 py-3 font-semibold">Origem</th>
               <th className="w-[9%] px-3 py-3 text-right font-semibold">Valor</th>
@@ -892,7 +997,7 @@ export function TitulosPagarList({
           <tbody>
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0
                     ? statusFiltro === "a_pagar"
                       ? "Nenhum título a pagar. Aprove um Pedido de Produção ou crie um lançamento avulso."
@@ -913,23 +1018,52 @@ export function TitulosPagarList({
               const retido = totalRetido(r.baixas);
               const estornos =
                 r.baixas.length > 0 ? r.baixas.flatMap((b) => b.estornos) : r.estornos_da_baixa;
+              // Baixa em lote: `null` = a linha entra na seleção.
+              const motivoLote = motivoForaDoLote(r);
+              const noLote = motivoLote === null;
+              const chaveLote = chaveDoLote(r);
+              const marcado = selecao.marcado(chaveLote);
               return (
                 <tr
                   key={`${r.origem}-${r.id}`}
                   // Título pago (ou parcial, decisão 125) abre as baixas
                   // registradas ao clique, como o Tiago pediu em
-                  // 18/08/2026. Em aberto a linha não é clicável: as ações
-                  // dele são os botões próprios (lápis e "Baixar"), e um
-                  // clique solto não pode disparar pagamento.
+                  // 18/08/2026. Em aberto o clique não dispara pagamento:
+                  // as ações dele são os botões próprios (lápis e
+                  // "Baixar"). Desde 02/10/2026 (baixa em lote) o clique no
+                  // título em aberto marca e desmarca a linha, como na
+                  // remessa CNAB — marcar não paga nada. No parcial, que
+                  // segue abrindo as baixas, a seleção é só pela caixa.
                   onClick={pago || parcial ? () => {
                     setErroAcao(null);
                     setConferindo(r);
-                  } : undefined}
+                  } : noLote ? () => selecao.alternar(chaveLote) : undefined}
                   className={cn(
                     "border-b border-border transition-colors last:border-0 hover:bg-accent/40",
-                    (pago || parcial) && "cursor-pointer",
+                    (pago || parcial || noLote) && "cursor-pointer",
+                    marcado && "bg-california-red/[0.04]",
                   )}
                 >
+                  {/* A caixa da baixa em lote. Desligada, com o motivo no
+                      título, no que não entra no lote (o título vai também
+                      na célula: caixa desligada nem sempre mostra o
+                      próprio). A célula é só da seleção: clicar nela não
+                      abre as baixas registradas do parcial. */}
+                  <td
+                    className="py-3 pl-4 pr-2 text-center"
+                    title={motivoLote ?? undefined}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (noLote) selecao.alternar(chaveLote);
+                    }}
+                  >
+                    <CaixaDaLinha
+                      marcado={marcado}
+                      onAlternar={() => selecao.alternar(chaveLote)}
+                      disponivel={noLote}
+                      motivo={motivoLote ?? undefined}
+                    />
+                  </td>
                   <td className="px-2 py-3">
                     <div className="flex items-center justify-center gap-1.5">
                       {!pago && r.origem !== "pp_devolucao_verba" && (
@@ -1151,6 +1285,15 @@ export function TitulosPagarList({
         </table>
       </div>
 
+      {/* Baixa em lote: a barra da seleção — quantos títulos, o que sai da
+          conta e "Dar baixa". Gruda no pé da tela enquanto a lista rola, e
+          some sem seleção. */}
+      <BarraDeSelecao
+        itens={selecionados}
+        onLimpar={selecao.limpar}
+        onBaixar={() => setLoteAberto(true)}
+      />
+
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" />
         Baixa é feita aqui. A aprovação e a rejeição continuam na aba de
@@ -1337,6 +1480,20 @@ export function TitulosPagarList({
             setToast(`Data de pagamento atualizada para ${formatDate(novaData)}.`);
             router.refresh();
           });
+        }}
+      />
+
+      {/* Baixa em lote: a data e a conta uma vez, uma baixa por título. */}
+      <BaixaEmLoteDialog
+        open={loteAberto}
+        onOpenChange={setLoteAberto}
+        itens={selecionados}
+        contas={contas}
+        tipos={tipos}
+        subtipos={subtipos}
+        onConcluido={(mensagem) => {
+          selecao.limpar();
+          setToast(mensagem);
         }}
       />
 
