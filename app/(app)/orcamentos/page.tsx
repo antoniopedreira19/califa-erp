@@ -296,6 +296,14 @@ export default async function ProjetosPage({
 
   const clientes = (clientesRes.data ?? []) as Pick<Cliente, "id" | "nome_fantasia">[];
 
+  // O servidor já barra a criação (`criarProjeto`); aqui o botão some para
+  // não oferecer o que vai ser recusado.
+  const podeCriar = pode(session.activeRole, "orcamentos.criar");
+  // Quem não tem a chave "Meus/Todos" (o freelancer) só recebe da RLS os
+  // projetos em que está na Equipe — lista vazia quer dizer "sem equipe",
+  // não "sem projeto".
+  const soDaEquipe = !pode(session.activeRole, "listas.chave_meus_todos");
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -316,32 +324,42 @@ export default async function ProjetosPage({
               <Tags className="h-4 w-4" />
               Categorias
             </Link>
-            <Link
-              href="/orcamentos/novo"
-              prefetch={false}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Novo projeto
-            </Link>
+            {podeCriar && (
+              <Link
+                href="/orcamentos/novo"
+                prefetch={false}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                Novo projeto
+              </Link>
+            )}
           </>
         }
       />
 
-      {projetos.length === 0 ? (
+      {projetos.length === 0 && soDaEquipe ? (
+        <EmptyState
+          icon={FolderKanban}
+          title="Nenhum projeto na sua equipe"
+          description="Você vê os projetos em que está na Equipe. Peça ao GP responsável para incluir você na Equipe do projeto."
+        />
+      ) : projetos.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
           title="Nenhum projeto ainda"
           description="Crie um projeto para começar a organizar seus orçamentos por iniciativa."
           action={
-            <Link
-              href="/orcamentos/novo"
-              prefetch={false}
-              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Criar projeto
-            </Link>
+            podeCriar ? (
+              <Link
+                href="/orcamentos/novo"
+                prefetch={false}
+                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Criar projeto
+              </Link>
+            ) : undefined
           }
         />
       ) : (

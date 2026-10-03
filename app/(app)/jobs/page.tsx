@@ -211,6 +211,19 @@ export default async function JobsPage({
             nem save aguardando o financeiro.
           </p>
         </div>
+      ) : rows.length === 0 && !podeAlternarMeusTodos ? (
+        // Sem a chave "Meus/Todos" (o freelancer), a RLS só entrega os jobs
+        // dos projetos em que ele está na Equipe: vazio é "sem equipe".
+        <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-california-red/10 text-california-red">
+            <Briefcase className="h-6 w-6" />
+          </div>
+          <h2 className="mt-6 text-xl font-semibold">Nenhum job nos projetos da sua equipe</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Você vê os jobs dos projetos em que está na Equipe. Peça ao GP
+            responsável para incluir você na Equipe do projeto.
+          </p>
+        </div>
       ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-california-red/10 text-california-red">

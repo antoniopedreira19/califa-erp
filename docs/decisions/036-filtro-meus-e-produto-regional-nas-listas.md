@@ -135,3 +135,37 @@ abria a lista com `meus=1` e a lista mostrava zero.
 Código: `app/(app)/jobs/page.tsx` (lê `produtor_id`) e
 `app/(app)/jobs/jobs-list.tsx` (`JobRow.produtor_id`, filtro e texto do
 estado vazio).
+
+## ⚠️ Freelancer: o "Meus" é a Equipe do projeto (2026-10-03)
+
+Regra do Tiago: para o freelancer, o "Meus" não sai de GP nem de
+produtor — sai da **Equipe do projeto**, e todos os orçamentos (e jobs)
+do projeto aparecem para todos que estão na Equipe.
+
+O freelancer não tem a chave "Meus/Todos": as duas listas abrem sem
+filtro na tela e mostram o que a RLS entrega. Então a regra mora no
+banco, em `is_freelancer_do_projeto`, e foi lá que ela foi ajustada:
+
+- **A Equipe agora é a mesma da tela** (decisão 037): linha em
+  `projeto_responsaveis` (GP ou equipe), **criador do projeto** ou
+  **produtor de algum orçamento** do projeto. Antes, só a primeira —
+  um freelancer escolhido como produtor aparecia na Equipe como chip
+  travado e não via o projeto. Migration `20261003200001`.
+- **O recorte não estava valendo.** Desde a `20260909000003`
+  (empresa_members), as policies `projetos_modify`, `orcamentos_modify` e
+  `jobs_modify` eram FOR ALL sem a cláusula do freelancer — e FOR ALL vale
+  também para leitura. A `pp_select` tinha perdido a cláusula. Simulando
+  a RLS como um freelancer sem equipe nenhuma: 31 projetos, 61
+  orçamentos, 32 jobs e 71 PPs visíveis (versões e itens vinham
+  zerados). As cinco policies ganharam a cláusula — migrations
+  `20261003200002` e `20261003200003` (a segunda só troca `auth.uid()`
+  por `(select auth.uid())`). Autorizado pelo Tiago em 03/10/2026.
+- Conferido depois: administrador, GP, produtor e financeiro seguem com
+  31/61/45/71 (projetos/orçamentos/jobs/PPs); o freelancer sem equipe
+  ficou em 0; logado como o freelancer de teste na Equipe do TES-P001/26,
+  `/orcamentos` mostra só esse projeto com os 18 orçamentos, a versão abre
+  com os itens, e `/jobs` mostra os 8 jobs dele.
+- **Os 4 freelancers reais ativos não estão na Equipe de nenhum
+  projeto** — passaram a ver as listas vazias, com o
+  texto "Nenhum projeto na sua equipe" / "Nenhum job nos projetos da sua
+  equipe". Entram na Equipe pelo "Editar projeto".

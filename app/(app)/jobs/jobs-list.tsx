@@ -112,8 +112,9 @@ export function JobsList({
    * Se `false`, a chave "Meus/Todos" nao aparece e o filtro `meus`
    * comeca em `false` (mostra todos os jobs que o RLS deixou passar).
    * Usado pro Freelancer, que so ve jobs onde participa da equipe do
-   * projeto — RLS ja fez esse recorte, entao filtrar por
-   * `responsavel_id` na tela retornaria zero. Fonte-verdade da regra:
+   * projeto — RLS ja fez esse recorte (`is_freelancer_do_projeto`), entao
+   * filtrar por GP/produtor na tela esconderia jobs da equipe dele. O
+   * "Meus" do freelancer E a equipe (03/10/2026). Fonte-verdade da regra:
    * `lib/permissoes.ts`, recurso `listas.chave_meus_todos`.
    */
   podeAlternarMeusTodos?: boolean;

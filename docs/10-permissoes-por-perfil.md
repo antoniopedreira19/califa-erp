@@ -55,6 +55,15 @@ Legenda: ✓ = item visível · — = item oculto · RO = read-only (vê mas nã
 
 **Definição de "Meus":** qualquer entrada em `projeto_responsaveis` (papel `gp` OU `equipe`) OU derivados (criador do projeto, produtor de algum orçamento do projeto).
 
+⚠️ **03/10/2026 — o "Meus" do freelancer é a Equipe, e agora vale no
+banco.** A frase acima descrevia a intenção, mas a RLS só contava
+`projeto_responsaveis` e, desde 09/09, as policies FOR ALL de projetos,
+orçamentos, jobs e PPs deixavam o freelancer ler tudo das empresas dele.
+`is_freelancer_do_projeto` passou a contar criador e produtor dos
+orçamentos, e as cinco policies ganharam a cláusula do freelancer
+(migrations `20261003200001` a `200003`). Freelancer sem Equipe vê as
+listas vazias, com texto próprio. Ver decisão 036.
+
 ⚠️ **18/09/2026 — o papel `gerente_producao` passou a se chamar "Gerente
 de Projeto" na tela.** O identificador no banco continua `gerente_producao`
 (é valor de enum em uso, e renomeá-lo mexeria em dado de todas as frentes);
@@ -184,6 +193,12 @@ Criados via SQL direto em 03/09/2026 — todos vivem no tenant `agencia-californ
 | `produtor_teste@califa-erp.local` | `produtor` | — |
 | `freelancer_teste@califa-erp.local` | `freelancer` | Equipe do projeto `NOV-0004/26` (SEBRAE NOSSO CANTO 2026) |
 | `financeiro_teste@califa-erp.local` | `financeiro` | — |
+
+⚠️ **03/10/2026 — freelancer de teste que entra:** `claude.freelancer.teste@califa-erp.local`
+("Freelancer Teste Claude", `99b71b93-780a-40d5-9e37-62d563e696b6`), criado
+pela Admin API sem senha, com as 5 empresas. Não está em Equipe nenhuma:
+para testar, inclua-o na Equipe do `TES-P001/26` pelo "Editar projeto" e
+tire no fim. Os `*_teste@` da tabela acima não têm identidade no Auth.
 
 **Validação de RLS via SQL** (rodado em 03/09/2026, resultado esperado):
 
