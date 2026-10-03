@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { BlocoAApurar } from "@/lib/fiscal/a-apurar";
+import { carregarBlocosAApurar } from "@/lib/fiscal/a-apurar-dados";
 import { carregarFatosFiscais } from "@/lib/fiscal/apuracao-fatos";
 import {
   PRIMEIRA_COMPETENCIA,
@@ -75,6 +77,13 @@ export interface DadosDaApuracao {
   hoje: string;
   guias: GuiaDaTela[];
   aRecuperar: ARecuperarDaTela[];
+  /**
+   * "<PJ> · a apurar no recebimento": as PJs do lucro presumido pelo caixa
+   * com título a receber em aberto (sem nenhum, o bloco não aparece).
+   */
+  aApurar: BlocoAApurar[];
+  /** Falha ao ler os títulos em aberto: o bloco não aparece e a aba diz por quê. */
+  aApurarErro: string | null;
   /** As PJs na ordem do cadastro de impostos. */
   pjs: PJDaTela[];
   estabelecimentos: EstabelecimentoDaTela[];
@@ -140,6 +149,8 @@ function vazio(tenantId: string, hoje: string, erro: string | null): DadosDaApur
     hoje,
     guias: [],
     aRecuperar: [],
+    aApurar: [],
+    aApurarErro: null,
     pjs: [],
     estabelecimentos: [],
     notasNaApuracao: 0,
@@ -231,11 +242,17 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       ]),
     );
 
+    // Depende dos fatos (quais notas da PJ do caixa ainda têm o que receber);
+    // sem nenhuma, não consulta nada.
+    const aApurar = await carregarBlocosAApurar(supabase, tenantId, cadastro, fatos, hoje);
+
     return {
       tenantId,
       hoje,
       guias,
       aRecuperar,
+      aApurar: aApurar.blocos,
+      aApurarErro: aApurar.erro,
       pjs: pjsDaTela(cadastro, nomesDasPJs, hoje),
       estabelecimentos: [...cadastro.estabelecimentos]
         .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome))
