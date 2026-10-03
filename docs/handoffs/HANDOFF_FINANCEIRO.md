@@ -6569,3 +6569,21 @@ estendido a Contas a Receber em 31/08.**
   Vencimentos. Quem lê o dia lê pela vigência no último dia da competência:
   o motor, o "No fiscal", `diaDoPisCofins(cad, emissao)` e
   `vencimentoDasGuiasFederais`. Não leia o parâmetro pela primeira linha.
+
+## ⚠️ Nota de 2026-10-03 — "Novo CNPJ emissor" no cadastro de impostos (decisão 139 §6)
+
+- **Botão** na aba CNPJs (`cadastro-impostos.tsx`): abre o
+  `EstabelecimentoDialog` com `estab={null}` — os campos da edição,
+  precedidos de Empresa contábil, Tipo, Município, UF e Nome do
+  estabelecimento. O lápis continua abrindo o mesmo diálogo, sem mudança.
+- **Server Action** `criarEstabelecimento` (`actions.ts`): trava
+  admin/financeiro, `novoEstabelecimentoSchema` e
+  `problemaDoNovoEstabelecimento` (`lib/validations/fiscal-cadastro.ts`, com
+  testes); o diálogo roda os dois antes de enviar. Auditoria
+  `fiscal_estabelecimento.criado` com a linha criada; `ordem` = maior + 1.
+- **`EmpresaDoCadastro` ganhou `ativo`** (obrigatório): a página lê
+  `empresas_contabeis.ativo`, e só as ativas entram na lista do diálogo.
+- **Sem migration.** O banco trava nome e CNPJ repetidos, mas não uma
+  matriz por PJ (não há índice único no papel): essa trava é só do
+  servidor, e duas pessoas cadastrando a matriz ao mesmo tempo ainda
+  passariam.
