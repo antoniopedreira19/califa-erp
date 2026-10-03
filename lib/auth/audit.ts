@@ -227,6 +227,8 @@ export type AuditAction =
   // e parâmetro mudam por linha nova com vigência; o feriado removido
   // deixa de existir, então o metadata guarda o que ele era.
   | "fiscal_estabelecimento.atualizado"
+  // Botão "Novo CNPJ emissor" (03/10/2026): o metadata guarda a linha criada.
+  | "fiscal_estabelecimento.criado"
   | "fiscal_cnae.criado"
   | "fiscal_cnae.nova_vigencia"
   | "fiscal_feriado.criado"

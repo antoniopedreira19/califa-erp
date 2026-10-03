@@ -29,9 +29,9 @@ export default async function ImpostosPage() {
     carregarCadastroFiscal(supabase, session.activeTenant.id),
     supabase
       .from("empresas_contabeis")
-      .select("id, razao_social, nome_fantasia, cnpj")
+      .select("id, razao_social, nome_fantasia, cnpj, ativo")
       .eq("tenant_id", session.activeTenant.id)
-      .returns<Pick<EmpresaContabil, "id" | "razao_social" | "nome_fantasia" | "cnpj">[]>(),
+      .returns<Pick<EmpresaContabil, "id" | "razao_social" | "nome_fantasia" | "cnpj" | "ativo">[]>(),
   ]);
   if (empresasRes.error) console.error("[fiscal.impostos.empresas]", empresasRes.error.message);
 
@@ -40,6 +40,7 @@ export default async function ImpostosPage() {
     razao_social: e.razao_social,
     nome: e.nome_fantasia ?? e.razao_social,
     cnpj: e.cnpj,
+    ativo: e.ativo,
   }));
 
   return (
