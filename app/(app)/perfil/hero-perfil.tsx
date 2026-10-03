@@ -54,7 +54,8 @@ export function HeroPerfil({
 
   return (
     <section
-      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-neutral-900 via-neutral-900 to-california-red/20 text-white shadow-elevated"
+      className="relative overflow-hidden rounded-2xl text-white shadow-elevated"
+      style={{ backgroundColor: "#171717" }}
       aria-label="Cabeçalho do perfil"
     >
       {/* Textura sutil (points) pra o fundo não ficar flat */}
