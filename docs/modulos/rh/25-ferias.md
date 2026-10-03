@@ -1,10 +1,15 @@
 # Subsistema Férias — Spec viva
 
-> **Status**: Descoberta **fechada** em 2026-10-01 com validação da Kika, Mari e Maria (RH). Todas as pendências bloqueantes resolvidas. Pronto pra passar à modelagem (`03-modelo-de-dados.md`) e planejamento de execução.
+> **Status**: **IMPLEMENTADO** e em produção desde 2026-10-02 (S1-S8 completos + histórico real importado + task 009 de performance + redesign da UI). Ver handoff [`2026-10-02-rh-ferias-usavel.md`](../../handoffs/2026-10-02-rh-ferias-usavel.md) pra estado operacional atual.
+>
+> Descoberta fechada em 2026-10-01 com validação da Kika, Mari e Maria (RH).
 >
 > Este documento é a fonte-verdade do subsistema — toda decisão nova entra aqui, não em commit ou chat.
 >
-> **Precede implementação.** As únicas pendências que restam (modelo combinado de recibo + empresa emissora) são não-bloqueantes e podem ser resolvidas durante a implementação do gerador de PDF.
+> **Evoluções pós-implementação:**
+> - Notificações de férias removidas em 2026-10-03 (ver [handoff](../../handoffs/2026-10-03-perfil-redesign-e-cleanup-notificacoes.md)). Vão renascer no [hub central de notificações](../../pendencias/hub-central-notificacoes.md).
+> - Sócios excluídos do subsistema por migration `20261002000012`.
+> - Import histórico documentado em [`40-historico-ferias-importado.md`](40-historico-ferias-importado.md).
 
 ## 1. Contexto
 

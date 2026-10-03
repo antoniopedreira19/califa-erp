@@ -75,9 +75,22 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20260923120001  rateio_regional_write_admin_only
 20260923140001  rh_socio_e_campos_pessoais
 20260923150001  rh_cpf_cnpj_flexivel
+20261002000001  ferias_role_colaborador                    (adiciona 'colaborador' ao enum app_role)
+20261002000002  ferias_fundacao                            (periodos + user_id em colaboradores)
+20261002000003  ferias_backfill_periodos
+20261002000004  ferias_lancamentos
+20261002000005  ferias_notificacoes_e_funcoes              (REMOVIDA por 20261003000001)
+20261002000006  ferias_bucket_recibos
+20261002000007  ferias_cron_alertas_automaticos            (REMOVIDA por 20261003000001)
+20261002000008  ferias_data_limite_gozo                    (aquisitivo_fim + 11 meses)
+20261002000009  ferias_cron_usa_data_limite_gozo           (REMOVIDA por 20261003000001)
+20261002000010  rh_perf_consolida_policies                 (task 009 Onda 1a)
+20261002000011  rh_perf_indices_fks                        (task 009 Onda 1b)
+20261002000012  ferias_exclui_socios                       (sócios saem do subsistema)
+20261003000001  drop_ferias_notificacoes                   (drop tabela/enum/funções/cron)
 ```
 
-Última: `20260923150001`.
+Última: `20261003000001`.
 
 Migration removida do repo em 2026-09-23 (regionais GERAL aposentadas): `20260916000004_rh_regional_geral.sql`.
 
@@ -87,6 +100,9 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-10-03 | /perfil redesign (hero + 9 cards) + cleanup total das notificações de férias | [2026-10-03-perfil-redesign-e-cleanup-notificacoes.md](handoffs/2026-10-03-perfil-redesign-e-cleanup-notificacoes.md) |
+| 2026-10-02 | RH · Vínculo colaborador ↔ usuário (task 010) — convidar + vincular + alterar role + desvincular | [2026-10-02-rh-vinculo-colab-usuario.md](handoffs/2026-10-02-rh-vinculo-colab-usuario.md) |
+| 2026-10-02 | RH · Subsistema de Férias usável de ponta a ponta (S1-S8, import histórico, task 009 perf, redesign UI) | [2026-10-02-rh-ferias-usavel.md](handoffs/2026-10-02-rh-ferias-usavel.md) |
 | 2026-09-30 | RH · Quadro real (209 ativos) + dados bancários + fluxo de contratação com Combobox de líder | [2026-09-30-rh-quadro-real-e-contratacao.md](handoffs/2026-09-30-rh-quadro-real-e-contratacao.md) |
 | 2026-09-24 | RH · Import dos 193 colaboradores do quadro real da Kika (socio no enum, CPF em PJ) | [2026-09-24-rh-import-colaboradores.md](handoffs/2026-09-24-rh-import-colaboradores.md) |
 | 2026-09-23 | RH · Alocação por empresa + toggle "todas as regionais" + rateio anual (task 006) | [2026-09-23-rh-alocacao-com-rateio-regional.md](handoffs/2026-09-23-rh-alocacao-com-rateio-regional.md) |
