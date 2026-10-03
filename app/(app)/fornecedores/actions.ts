@@ -19,6 +19,12 @@ import {
 import { onlyDigits } from "@/lib/utils";
 import { normalizarChavePix } from "@/lib/pix";
 import type { PixTipoChave } from "@/lib/types";
+import {
+  BUCKET_DO_FORNECEDOR,
+  caminhoDaDeclaracao,
+  declaracaoDoTenant,
+  recusaDoArquivoDaDeclaracao,
+} from "@/lib/fiscal/regime-do-fornecedor";
 
 /** O que o combo de fornecedor precisa saber de um cadastro — é o que o
  *  cadastro rápido devolve para a PP selecionar sem esperar o refresh. */
@@ -88,7 +94,73 @@ function extractInput(formData: FormData) {
     regime_tributario: formData.get("regime_tributario"),
     regime_consultado_em: formData.get("regime_consultado_em"),
     declaracao_simples_recebida: formData.get("declaracao_simples_recebida"),
+    // Decisão 142: a consulta do CNPJ inteira e o arquivo da declaração
+    // (ausente = `null` do FormData = não mexe no arquivo).
+    regime_consulta: formData.get("regime_consulta"),
+    regime_desde: formData.get("regime_desde"),
+    declaracao_simples_path: formData.get("declaracao_simples_path"),
   };
+}
+
+/** O arquivo da declaração que veio da tela é da pasta do tenant da sessão?
+ *  (O bucket já barra o resto pela RLS; aqui é o que vai para a coluna.) */
+function arquivoDaDeclaracaoInvalido(
+  path: string | null | undefined,
+  tenantId: string,
+): ActionResult | null {
+  if (!path || declaracaoDoTenant(path, tenantId)) return null;
+  return {
+    ok: false,
+    message: "Arquivo da declaração inválido. Anexe o arquivo de novo.",
+    fieldErrors: { declaracao_simples_path: ["Anexe o arquivo de novo."] },
+  };
+}
+
+/**
+ * Tira do bucket os arquivos de declaração que subiram e não foram gravados
+ * (formulário fechado sem salvar, arquivo trocado ou tirado antes de
+ * salvar). O que algum cadastro aponta nunca sai daqui, nem se a tela pedir
+ * — a tela pode achar que não gravou quando gravou. Melhor esforço: a falha
+ * só vai ao log.
+ */
+async function removerDeclaracoesSoltas(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  paths: unknown[],
+): Promise<void> {
+  const candidatos = Array.from(
+    new Set(
+      paths.filter(
+        (p): p is string => typeof p === "string" && declaracaoDoTenant(p, tenantId),
+      ),
+    ),
+  ).slice(0, 20);
+  if (candidatos.length === 0) return;
+
+  const { data, error } = await supabase
+    .from("fornecedores")
+    .select("declaracao_simples_path")
+    .eq("tenant_id", tenantId)
+    .in("declaracao_simples_path", candidatos);
+  if (error) {
+    // Na dúvida, não apaga.
+    console.error("[fornecedores.declaracao.conferir]", error.message);
+    return;
+  }
+  const apontados = new Set(
+    ((data ?? []) as Array<{ declaracao_simples_path: string | null }>).map(
+      (r) => r.declaracao_simples_path,
+    ),
+  );
+  const soltos = candidatos.filter((p) => !apontados.has(p));
+  if (soltos.length === 0) return;
+
+  const { error: erroAoRemover } = await supabase.storage
+    .from(BUCKET_DO_FORNECEDOR)
+    .remove(soltos);
+  if (erroAoRemover) {
+    console.error("[fornecedores.declaracao.remover]", erroAoRemover.message);
+  }
 }
 
 function deriveBancoNome(
@@ -142,6 +214,12 @@ async function inserirFornecedor(
   if (!bancoResult.ok) {
     return { ok: false, message: bancoResult.message };
   }
+
+  const arquivoInvalido = arquivoDaDeclaracaoInvalido(
+    parsed.data.declaracao_simples_path,
+    session.activeTenant.id,
+  );
+  if (arquivoInvalido) return arquivoInvalido;
 
   const pix_chave_normalizada = normalizarChavePix(
     parsed.data.pix_tipo,
@@ -201,6 +279,8 @@ async function inserirFornecedor(
       origem,
       // Módulo fiscal: o regime decide a retenção na aprovação da PP.
       regime_tributario: parsed.data.regime_tributario,
+      regime_consulta: parsed.data.regime_consulta,
+      declaracao_simples_anexada: Boolean(parsed.data.declaracao_simples_path),
     },
   });
 
@@ -362,6 +442,21 @@ async function avisarSePagamentoMudouComPPsNoFinanceiro(
   };
 }
 
+/** O arquivo da declaração que o cadastro aponta hoje. */
+async function arquivoDaDeclaracaoGravado(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  fornecedorId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("declaracao_simples_path")
+    .eq("id", fornecedorId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ declaracao_simples_path: string | null }>();
+  return data?.declaracao_simples_path ?? null;
+}
+
 export async function atualizarFornecedor(
   id: string,
   formData: FormData,
@@ -386,6 +481,13 @@ export async function atualizarFornecedor(
     return { ok: false, message: bancoResult.message };
   }
 
+  const tenantId = session.activeTenant.id;
+  const arquivoInvalido = arquivoDaDeclaracaoInvalido(
+    parsed.data.declaracao_simples_path,
+    tenantId,
+  );
+  if (arquivoInvalido) return arquivoInvalido;
+
   const pix_chave_normalizada = normalizarChavePix(
     parsed.data.pix_tipo,
     parsed.data.pix_chave,
@@ -401,25 +503,29 @@ export async function atualizarFornecedor(
   // existe: quem edita costuma estar tentando corrigir a conta de uma PP
   // que está prestes a ser paga, e precisa saber que o conserto vale só
   // para as próximas.
-  if (!confirmarComPPsNoFinanceiro) {
-    const aviso = await avisarSePagamentoMudouComPPsNoFinanceiro(
-      supabase,
-      session.activeTenant.id,
-      id,
-      {
-        banco_codigo: parsed.data.banco_codigo ?? null,
-        banco_nome: bancoResult.banco_nome ?? null,
-        agencia: parsed.data.agencia ?? null,
-        agencia_dv: parsed.data.agencia_dv ?? null,
-        conta: parsed.data.conta ?? null,
-        conta_dv: parsed.data.conta_dv ?? null,
-        tipo_conta: parsed.data.tipo_conta ?? null,
-        pix_tipo: parsed.data.pix_tipo ?? null,
-        pix_chave: pix_chave_normalizada ?? null,
-      },
-    );
-    if (aviso) return aviso;
-  }
+  //
+  // Junto, o arquivo da declaração gravado até aqui (decisão 142), para o
+  // audit dizer se ele foi anexado, trocado ou tirado.
+  const arquivoDepois = parsed.data.declaracao_simples_path;
+  const [aviso, arquivoAntes] = await Promise.all([
+    confirmarComPPsNoFinanceiro
+      ? Promise.resolve(null)
+      : avisarSePagamentoMudouComPPsNoFinanceiro(supabase, tenantId, id, {
+          banco_codigo: parsed.data.banco_codigo ?? null,
+          banco_nome: bancoResult.banco_nome ?? null,
+          agencia: parsed.data.agencia ?? null,
+          agencia_dv: parsed.data.agencia_dv ?? null,
+          conta: parsed.data.conta ?? null,
+          conta_dv: parsed.data.conta_dv ?? null,
+          tipo_conta: parsed.data.tipo_conta ?? null,
+          pix_tipo: parsed.data.pix_tipo ?? null,
+          pix_chave: pix_chave_normalizada ?? null,
+        }),
+    arquivoDepois === undefined
+      ? Promise.resolve(null)
+      : arquivoDaDeclaracaoGravado(supabase, tenantId, id),
+  ]);
+  if (aviso) return aviso;
 
   const { error } = await supabase
     .from("fornecedores")
@@ -436,6 +542,12 @@ export async function atualizarFornecedor(
     return { ok: false, message: mapDbError(error.message) };
   }
 
+  // O arquivo da declaração trocado ou tirado sai do cadastro e FICA no
+  // bucket, como a guia gravada nos impostos: o que foi gravado não se
+  // apaga daqui — a declaração é o comprovante da falta de retenção nas
+  // PPs pagas enquanto ela valia. O caminho antigo vai para o audit.
+  const arquivoMudou = arquivoDepois !== undefined && arquivoDepois !== arquivoAntes;
+
   await logAuditEvent({
     acao: "fornecedor.editado",
     tenantId: session.activeTenant.id,
@@ -445,6 +557,15 @@ export async function atualizarFornecedor(
       confirmado_com_pps_no_financeiro: confirmarComPPsNoFinanceiro,
       // Módulo fiscal: o regime decide a retenção na aprovação da PP.
       regime_tributario: parsed.data.regime_tributario,
+      regime_consulta: parsed.data.regime_consulta,
+      ...(arquivoMudou && {
+        declaracao_simples_arquivo: !arquivoDepois
+          ? "retirado"
+          : arquivoAntes
+            ? "trocado"
+            : "anexado",
+        declaracao_simples_path_anterior: arquivoAntes,
+      }),
     },
   });
 
@@ -537,4 +658,71 @@ export async function reativarFornecedor(id: string): Promise<ActionResult> {
 
   revalidatePath("/fornecedores");
   return { ok: true, id };
+}
+
+// ---------------------------------------------------------------------------
+// O arquivo da declaração de optante do Simples (decisão 142)
+// ---------------------------------------------------------------------------
+//
+// O arquivo sobe do navegador direto para o bucket privado `fornecedores`
+// (10 MB; PDF, PNG ou JPEG), no padrão da planilha importada (decisão 110):
+// o caminho nasce aqui, com o tenant da sessão — é a pasta que a policy de
+// INSERT libera —, e o arquivo não passa pelo corpo da Server Action (o
+// Next corta em 1 MB). Quem grava o caminho no cadastro é `criar…`/
+// `atualizarFornecedor`, que conferem de novo que ele é da pasta do tenant.
+
+/** Reserva o caminho `<tenant>/declaracoes/<uuid>-<nome>` para o navegador
+ *  subir o arquivo. O gate é o mais amplo do cadastro: quem cria (o "+" da
+ *  PP) ou edita fornecedor. */
+export async function reservarArquivoDaDeclaracao(input: {
+  nome: string;
+  tamanho: number;
+  tipo: string;
+}): Promise<{ ok: true; path: string } | { ok: false; message: string }> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.fornecedores.inline");
+  if (!gate.ok) return gate;
+  const nome = String(input?.nome ?? "");
+  const recusa = recusaDoArquivoDaDeclaracao(
+    nome,
+    Number(input?.tamanho ?? 0),
+    String(input?.tipo ?? ""),
+  );
+  if (recusa) return { ok: false, message: recusa };
+  return {
+    ok: true,
+    path: caminhoDaDeclaracao(session.activeTenant.id, crypto.randomUUID(), nome),
+  };
+}
+
+/** URL assinada (10 minutos) para abrir o arquivo da declaração. Lê com a
+ *  sessão de quem pede: a policy do bucket é a de `fornecedores` (qualquer
+ *  membro do tenant). */
+export async function urlDaDeclaracaoSimples(
+  path: string,
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  const session = await requireSession();
+  if (typeof path !== "string" || !declaracaoDoTenant(path, session.activeTenant.id)) {
+    return { ok: false, message: "Arquivo não encontrado." };
+  }
+  const { data, error } = await createClient()
+    .storage.from(BUCKET_DO_FORNECEDOR)
+    .createSignedUrl(path, 60 * 10);
+  if (error || !data) {
+    console.error("[fornecedores.declaracao.url]", error?.message);
+    return { ok: false, message: "Não foi possível abrir o arquivo." };
+  }
+  return { ok: true, url: data.signedUrl };
+}
+
+/** O formulário fechou sem salvar, ou trocou/tirou um arquivo que subiu e
+ *  ainda não foi gravado: ele sai do bucket. Só sai o que nenhum cadastro
+ *  aponta (`removerDeclaracoesSoltas`). */
+export async function descartarArquivosDaDeclaracao(paths: string[]): Promise<void> {
+  const session = await requireSession();
+  await removerDeclaracoesSoltas(
+    createClient(),
+    session.activeTenant.id,
+    Array.isArray(paths) ? paths : [],
+  );
 }

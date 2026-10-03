@@ -28,6 +28,12 @@ import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
  * não tem regime; a declaração só vale no Simples; a data da consulta só
  * acompanha um regime — o `transform` do fim acerta isso no servidor,
  * venha o que vier da tela.
+ *
+ * Decisão 142 (02/10/2026): a consulta do CNPJ vai inteira — o regime que
+ * ela indicou, desde quando (Simples e MEI) e o dia —, valha ou não o
+ * regime escolhido. E o arquivo da declaração: o caminho no bucket
+ * `fornecedores`, que a action confere ser da pasta do tenant. Trocar o
+ * regime não tira o arquivo do cadastro; só o ✕ do formulário tira.
  */
 
 const UFS_BRASIL = [
@@ -140,10 +146,34 @@ export const fornecedorSchema = z
         .nullable()
         .optional(),
     ),
+    // Decisão 142: o que a consulta do CNPJ indicou, e desde quando.
+    regime_consulta: z.preprocess(
+      nullIfEmpty,
+      z.enum(["normal", "simples", "mei"], {
+        errorMap: () => ({ message: "Regime indicado pela consulta do CNPJ inválido." }),
+      })
+        .nullable()
+        .optional(),
+    ),
+    regime_desde: z.preprocess(
+      nullIfEmpty,
+      z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de opção pelo Simples ou pelo MEI inválida.")
+        .nullable()
+        .optional(),
+    ),
     // O formulário manda "true"/"false"; ausente vale como não recebida.
     declaracao_simples_recebida: z.preprocess(
       (v) => v === true || v === "true",
       z.boolean(),
+    ),
+    // O arquivo da declaração (decisão 142): "" tira o arquivo; AUSENTE não
+    // mexe nele (`undefined` some do update) — quem não manda o campo não
+    // tira o arquivo de ninguém.
+    declaracao_simples_path: z.preprocess(
+      (v) => (v === null || v === undefined ? undefined : nullIfEmpty(v)),
+      z.string().trim().min(1).max(500).nullable().optional(),
     ),
   })
   .superRefine((data, ctx) => {
@@ -219,15 +249,25 @@ export const fornecedorSchema = z
     }
   })
   .transform((data) => {
-    // Módulo fiscal: pessoa física não tem regime; a data da consulta do
-    // CNPJ só acompanha um regime; a declaração de optante só vale no
-    // Simples (marcada e depois trocada de regime, não fica gravada).
+    // Módulo fiscal: pessoa física não tem regime; a consulta do CNPJ só
+    // acompanha um regime; a declaração de optante só vale no Simples
+    // (marcada e depois trocada de regime, não fica gravada).
     const regime = data.tipo_pessoa === "juridica" ? data.regime_tributario ?? null : null;
+    // Decisão 142: a consulta vai inteira — o regime indicado, o dia e, no
+    // Simples e no MEI, desde quando — ou não vai. Vale com o regime
+    // escolhido sendo o indicado ou não: é o que mantém o aviso de
+    // "alterado manualmente" depois de salvar.
+    const indicou = regime && data.regime_consultado_em ? data.regime_consulta ?? null : null;
     return {
       ...data,
       regime_tributario: regime,
-      regime_consultado_em: regime ? data.regime_consultado_em ?? null : null,
+      regime_consulta: indicou,
+      regime_consultado_em: indicou ? data.regime_consultado_em ?? null : null,
+      regime_desde: indicou === "simples" || indicou === "mei" ? data.regime_desde ?? null : null,
       declaracao_simples_recebida: regime === "simples" && data.declaracao_simples_recebida,
+      // O arquivo fica com o cadastro mesmo fora do Simples: trocar o
+      // regime não o tira; só o ✕ do formulário tira.
+      declaracao_simples_path: data.declaracao_simples_path,
     };
   });
 
