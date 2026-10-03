@@ -10,11 +10,14 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
+import { blocosAApurar, irpjCsllAApurar, type TituloAApurar } from "./a-apurar";
+import { carregarTitulosAApurar } from "./a-apurar-dados";
 import { calcularApuracao, estadoDaGuia } from "./apuracao";
 import { carregarFatosFiscais } from "./apuracao-fatos";
 import {
   descricaoDoImposto,
   ppsComIssNaGuia,
+  saidasAApurar,
   saidasDaApuracao,
   saidasDoCronogramaDeImpostos,
   saidasDosImpostosAPagar,
@@ -95,7 +98,7 @@ export async function carregarCronogramaDeImpostos(
 }
 
 export interface FiscalDoFluxo {
-  /** Os itens novos: imposto a pagar, guia da Apuração e cronograma da abertura. */
+  /** Os itens novos: imposto a pagar, guia da Apuração, "a apurar no recebimento" e cronograma da abertura. */
   saidas: SaidaFiscalDoFluxo[];
   /** Parcela de PP em aberto → alíquota do ISS retido que já está numa guia. */
   issRetidoPorParcela: Map<string, number>;
@@ -150,6 +153,7 @@ export async function carregarFiscalDoFluxo(
 
   let guias: GuiaComEstado[] = [];
   let issRetidoPorParcela = new Map<string, number>();
+  let aApurar: SaidaFiscalDoFluxo[] = [];
   if (fatos) {
     try {
       guias = calcularApuracao(fatos.cadastro, fatos.fatos, hoje, fatos.aprovacoes).map((g) => {
@@ -163,16 +167,32 @@ export async function carregarFiscalDoFluxo(
       guias = [];
     }
     const pps = ppsComIssNaGuia(guias, fatos.fatos.notasFornecedor);
-    if (pps.size > 0) {
-      const { data, error } = await supabase
-        .from("pedidos_compra_parcelas")
-        .select("id, pedido_compra_id")
-        .in("pedido_compra_id", [...pps.keys()])
-        .is("pago_em", null);
-      if (error) console.error("[fluxo-fiscal.parcelas]", error.message);
+    const [parcelasRes, titulosAApurar] = await Promise.all([
+      pps.size > 0
+        ? supabase
+            .from("pedidos_compra_parcelas")
+            .select("id, pedido_compra_id")
+            .in("pedido_compra_id", [...pps.keys()])
+            .is("pago_em", null)
+        : Promise.resolve(null),
+      // A PJ do lucro presumido pelo caixa: os títulos em aberto das notas dela.
+      carregarTitulosAApurar(supabase, tenantId, fatos.cadastro, fatos.fatos, hoje).catch((e: unknown) => {
+        console.error("[fluxo-fiscal.a-apurar]", e instanceof Error ? e.message : e);
+        return [] as TituloAApurar[];
+      }),
+    ]);
+    if (parcelasRes) {
+      if (parcelasRes.error) console.error("[fluxo-fiscal.parcelas]", parcelasRes.error.message);
       issRetidoPorParcela = new Map(
-        ((data ?? []) as Array<{ id: string; pedido_compra_id: string }>).map((p) => [p.id, pps.get(p.pedido_compra_id) ?? 0]),
+        ((parcelasRes.data ?? []) as Array<{ id: string; pedido_compra_id: string }>).map((p) => [p.id, pps.get(p.pedido_compra_id) ?? 0]),
       );
+    }
+    try {
+      const blocos = blocosAApurar(fatos.cadastro, fatos.fatos, titulosAApurar, hoje);
+      aApurar = saidasAApurar(blocos, irpjCsllAApurar(fatos.cadastro, fatos.fatos, blocos, hoje), hoje);
+    } catch (e) {
+      console.error("[fluxo-fiscal.a-apurar]", e instanceof Error ? e.message : e);
+      aApurar = [];
     }
   }
 
@@ -191,6 +211,7 @@ export async function carregarFiscalDoFluxo(
     saidas: [
       ...saidasDosImpostosAPagar(impostos),
       ...saidasDaApuracao(guias, hoje),
+      ...aApurar,
       ...saidasDoCronogramaDeImpostos(cronograma, hoje),
     ].filter(dentro),
     issRetidoPorParcela,
