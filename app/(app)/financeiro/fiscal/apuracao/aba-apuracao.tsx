@@ -117,6 +117,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           </p>
         </div>
         {avisoDosFatos}
+        <BlocosAApurar dados={dados} pjPorId={pjPorId} />
       </div>
     );
   }
@@ -345,6 +346,8 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
         </div>
       )}
 
+      <BlocosAApurar dados={dados} pjPorId={pjPorId} />
+
       <p className="flex items-start gap-2 text-xs text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
@@ -446,6 +449,70 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "<PJ> · a apurar no recebimento" (protótipo `telas/apuracao.tsx`): no lucro
+ * presumido pelo caixa, PIS, COFINS, IRPJ e CSLL só nascem no recebimento.
+ * Até lá, os títulos em aberto das notas da PJ são projetados pela previsão
+ * de recebimento (`lib/fiscal/a-apurar.ts`), e a projeção entra no fluxo de
+ * caixa como estimativa. Vale para todas as competências; sem título em
+ * aberto, o bloco não aparece.
+ */
+function BlocosAApurar({ dados, pjPorId }: { dados: DadosDaApuracao; pjPorId: Map<string, PJDaTela> }) {
+  return (
+    <>
+      {dados.aApurarErro && (
+        <Nota tom="ambar" icone={<AlertTriangle className="h-3.5 w-3.5" />}>
+          Não foi possível projetar o que falta apurar no recebimento: {dados.aApurarErro}
+        </Nota>
+      )}
+      {dados.aApurar.map((b) => (
+        <div key={b.pj} className="rounded-2xl border border-border bg-card px-5 py-4 shadow-soft">
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <Hourglass className="h-4 w-4 text-muted-foreground" />
+            {pjPorId.get(b.pj)?.nome ?? b.pj_nome} · a apurar no recebimento
+          </p>
+          <p className="mt-1 text-[12.5px] text-muted-foreground">
+            No regime de caixa, PIS, COFINS, IRPJ e CSLL só nascem quando o cliente paga. Enquanto isso, o sistema projeta pela previsão de
+            recebimento dos títulos em aberto, e a projeção entra no fluxo de caixa como estimativa.
+          </p>
+          <table className="mt-3 w-full text-[12.5px]">
+            <thead>
+              <tr className="text-left text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                <th className="py-1 font-semibold">Nota</th>
+                <th className="py-1 font-semibold">Recebimento previsto</th>
+                <th className="py-1 text-right font-semibold">A receber</th>
+                <th className="py-1 text-right font-semibold">PIS + COFINS</th>
+                <th className="py-1 text-right font-semibold">Vencem em</th>
+                <th className="py-1 font-semibold">IRPJ e CSLL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {b.linhas.map((l) => (
+                <tr key={l.titulo_id} className="border-t border-border">
+                  <td className="py-1.5">{l.rotulo}</td>
+                  <td className="py-1.5 font-mono">
+                    {dataBr(l.previsao)}
+                    {/* Previsão que já passou: a projeção conta o recebimento a partir de amanhã. */}
+                    {l.recebimento !== l.previsao && (
+                      <span className="block font-sans text-[10.5px] text-muted-foreground">
+                        vencida · projetada para {dataBr(l.recebimento)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-1.5 text-right font-mono">{moeda(l.a_receber)}</td>
+                  <td className="py-1.5 text-right font-mono">{moeda(l.pis_cofins)}</td>
+                  <td className="py-1.5 text-right font-mono">{dataBr(l.vencimento)}</td>
+                  <td className="py-1.5 pl-4 text-muted-foreground">entra na base do {l.rotulo_trimestre}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </>
   );
 }
 
