@@ -171,7 +171,6 @@ export default async function PerfilPage() {
             />
           )}
           <CardNotaFiscal tipoContratacao={colab.tipo_contratacao} />
-          <CardBeneficios />
         </div>
 
         {/* Coluna lateral (direita, 320px fixo em desktop) */}
@@ -187,6 +186,7 @@ export default async function PerfilPage() {
             area={colab.area}
             nivel={colab.nivel}
           />
+          <CardBeneficios />
           <CardDocumentos />
         </div>
       </div>
