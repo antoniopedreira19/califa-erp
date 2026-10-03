@@ -92,7 +92,8 @@ se abre em sublinhas), o bloco **"No fiscal"** nas baixas, e o fiscal no
 4. **Diferença complementar:** a justificativa é escrita pelo sistema
    ("Complementar: o calculado subiu de R$ X para R$ Y").
 5. **Hitlab "a apurar no recebimento"** no fluxo e na Apuração: fica para a
-   próxima entrega (nenhuma nota tem CNPJ emissor ainda).
+   próxima entrega (nenhuma nota tem CNPJ emissor ainda). ⚠️ Feito em
+   03/10/2026 — decisão 142.
 6. **As 5 dúvidas do motor** (presumido sem caixa, DARF mínimo, vencimento
    da complementar, compensação só em Salvador, guia aprovada que some).
 7. **Contagens que veem N lançamentos por guia:** o detalhe "Já

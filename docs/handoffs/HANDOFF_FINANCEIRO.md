@@ -6598,3 +6598,21 @@ estendido a Contas a Receber em 31/08.**
   a retenção da aprovação (a remessa paga o bruto, pergunta 139 §5.2).
 - **Para testes:** gerar remessa com PP de teste trava o TES do mesmo jeito;
   se for preciso, cancelar logo depois.
+
+## ⚠️ Nota de 2026-10-03 (3) — pontos remanescentes do protótipo fiscal (decisão 142)
+
+- **"<PJ> · a apurar no recebimento":** `lib/fiscal/a-apurar.ts` (funções
+  puras, com testes) + `a-apurar-dados.ts` (os títulos em aberto das notas
+  das PJs no presumido pelo caixa e o já baixado, por
+  `vw_baixado_por_documento`). Entra na aba Apuração (`dados.ts`) e no fluxo
+  (`saidasAApurar`, origem `a_apurar`). O IRPJ/CSLL projetado chama o motor
+  (`guiasIrpjCsllDoTrimestre`) com e sem os recebimentos previstos; o motor
+  passou a exportar as regras que a projeção usa, sem mudar o cálculo.
+- **Novo CNPJ emissor:** ver a nota (1) de hoje.
+- **Fornecedor:** `regime_consulta`, `regime_desde` e `regime_consultado_em`
+  gravados a cada consulta do CNPJ (migration `20261002100800`);
+  `declaracao_simples_path` ganhou tela e o bucket privado `fornecedores`
+  (`<tenant>/declaracoes/`). O arquivo gravado nunca sai do bucket pela
+  tela; o que subiu e não foi salvo sai.
+- **Arquivos de teste que ficaram:** 1 PDF em `fornecedores/<tenant>/declaracoes/`
+  e os comprovantes de 02/10 em `impostos` (o Tiago preferiu deixar).
