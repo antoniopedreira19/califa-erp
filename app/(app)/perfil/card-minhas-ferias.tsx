@@ -6,7 +6,6 @@ import type {
   TipoContratacao,
 } from "@/lib/types";
 import { SolicitarFeriasDrawer } from "./solicitar-ferias-drawer";
-import { LinhaHistoricoLancamento } from "./linha-historico-lancamento";
 
 type Props = {
   periodos: ColaboradorFeriasPeriodo[];
@@ -49,6 +48,17 @@ export function CardMinhasFerias({
       (diasUsadosPorPeriodo.get(l.periodo_id) ?? 0) + l.dias,
     );
   }
+
+  // Períodos "ativos pra ação" exibidos no card do /perfil: apto,
+  // em_alerta e vencido. Passados regularizados e futuros em curso
+  // ficam escondidos — o colaborador só precisa ver o que pode
+  // agendar ou o que já estourou prazo.
+  const periodosAtivos = periodos.filter(
+    (p) =>
+      p.status === "apto" ||
+      p.status === "em_alerta" ||
+      p.status === "vencido",
+  );
 
   // Saldo exibido no hero = dias que o colaborador ainda pode solicitar
   // em períodos aptos ou em alerta.
@@ -157,87 +167,77 @@ export function CardMinhasFerias({
         </div>
       </div>
 
-      {/* Timeline de períodos */}
+      {/* Períodos ATIVOS pra ação (apto / em_alerta / vencido).
+       *  Passados regularizados e futuros em curso são escondidos no
+       *  /perfil — o colaborador só precisa ver o que pode agendar
+       *  agora. O histórico completo fica no modal de RH, não aqui. */}
       <div>
         <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Períodos aquisitivos
+          {periodosAtivos.length <= 1
+            ? "Período em aberto"
+            : "Períodos em aberto"}
         </p>
-        <ul className="space-y-3">
-          {periodos.map((p) => {
-            const usados = diasUsadosPorPeriodo.get(p.id) ?? 0;
-            const pct = Math.min((usados / p.dias_direito) * 100, 100);
-            return (
-              <li
-                key={p.id}
-                className="rounded-lg border border-border p-3 bg-background"
-              >
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
-                    <p className="text-sm font-medium">
-                      Período #{p.numero} ·{" "}
-                      {anoCurto(p.aquisitivo_inicio)}/
-                      {anoCurto(p.aquisitivo_fim)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Aquisitivo:{" "}
-                      {new Date(
-                        p.aquisitivo_inicio + "T00:00:00",
-                      ).toLocaleDateString("pt-BR")}{" "}
-                      a{" "}
-                      {new Date(
-                        p.aquisitivo_fim + "T00:00:00",
-                      ).toLocaleDateString("pt-BR")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Precisa agendar até:{" "}
-                      <span className="font-medium text-foreground">
+        {periodosAtivos.length === 0 ? (
+          <p className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground text-center">
+            Nenhum período com saldo disponível no momento.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {periodosAtivos.map((p) => {
+              const usados = diasUsadosPorPeriodo.get(p.id) ?? 0;
+              const pct = Math.min((usados / p.dias_direito) * 100, 100);
+              return (
+                <li
+                  key={p.id}
+                  className="rounded-lg border border-border p-3 bg-background"
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-medium">
+                        Período {anoCurto(p.aquisitivo_inicio)}/
+                        {anoCurto(p.aquisitivo_fim)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Aquisitivo:{" "}
                         {new Date(
-                          p.data_limite_gozo + "T00:00:00",
+                          p.aquisitivo_inicio + "T00:00:00",
+                        ).toLocaleDateString("pt-BR")}{" "}
+                        a{" "}
+                        {new Date(
+                          p.aquisitivo_fim + "T00:00:00",
                         ).toLocaleDateString("pt-BR")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Precisa agendar até:{" "}
+                        <span className="font-medium text-foreground">
+                          {new Date(
+                            p.data_limite_gozo + "T00:00:00",
+                          ).toLocaleDateString("pt-BR")}
+                        </span>
+                      </p>
+                    </div>
+                    <BadgeStatusPeriodo status={p.status} />
+                  </div>
+                  <div className="mt-3">
+                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-california-red transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      {usados} de {p.dias_direito} dias usufruídos ·{" "}
+                      <span className="font-medium text-foreground">
+                        {Math.max(p.dias_direito - usados, 0)} dias pendentes
                       </span>
                     </p>
                   </div>
-                  <BadgeStatusPeriodo status={p.status} />
-                </div>
-                <div className="mt-3">
-                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-california-red transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    {usados} de {p.dias_direito} dias usufruídos ·{" "}
-                    <span className="font-medium text-foreground">
-                      {Math.max(p.dias_direito - usados, 0)} dias pendentes
-                    </span>
-                  </p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      {/* Histórico de lançamentos */}
-      {lancamentos.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Histórico
-          </p>
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {lancamentos.map((l) => (
-              <LinhaHistoricoLancamento key={l.id} lancamento={l} />
-            ))}
+                </li>
+              );
+            })}
           </ul>
-        </div>
-      )}
-
-      {lancamentos.length === 0 && (
-        <p className="mt-6 text-sm text-muted-foreground text-center py-4">
-          Nenhum lançamento de férias ainda.
-        </p>
-      )}
+        )}
+      </div>
     </div>
   );
 }
