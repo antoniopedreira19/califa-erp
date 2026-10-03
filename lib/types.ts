@@ -246,8 +246,18 @@ export interface Fornecedor {
 
   // Módulo fiscal (02/10/2026): regime tributário, da consulta do CNPJ.
   regime_tributario: RegimeTributarioFornecedor | null;
+  /** O regime que a consulta do CNPJ indicou (decisão 142). Diferente de
+   *  `regime_tributario` = alterado manualmente. */
+  regime_consulta: RegimeTributarioFornecedor | null;
+  /** A data de opção pelo Simples ou pelo MEI que a consulta trouxe
+   *  ("AAAA-MM-DD"); nula no regime normal ou sem a data (decisão 142). */
+  regime_desde: string | null;
+  /** O dia da consulta que deu `regime_consulta`, valha ou não o regime
+   *  gravado (até a decisão 142, só quando o gravado era o indicado). */
   regime_consultado_em: string | null;
   declaracao_simples_recebida: boolean;
+  /** O arquivo da declaração de optante do Simples, no bucket privado
+   *  `fornecedores` (`<tenant>/declaracoes/<uuid>-<nome>`, decisão 142). */
   declaracao_simples_path: string | null;
 }
 
