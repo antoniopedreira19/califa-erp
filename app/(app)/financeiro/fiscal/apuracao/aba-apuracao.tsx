@@ -486,7 +486,7 @@ function BlocosAApurar({ dados, pjPorId }: { dados: DadosDaApuracao; pjPorId: Ma
                 <th className="py-1 text-right font-semibold">A receber</th>
                 <th className="py-1 text-right font-semibold">PIS + COFINS</th>
                 <th className="py-1 text-right font-semibold">Vencem em</th>
-                <th className="py-1 font-semibold">IRPJ e CSLL</th>
+                <th className="py-1 pl-4 font-semibold">IRPJ e CSLL</th>
               </tr>
             </thead>
             <tbody>
