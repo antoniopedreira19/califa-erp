@@ -7,18 +7,27 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   aliquotasPisCofins,
+  cidadeDoCadastro,
   diaDoMesValido,
   estabelecimentoSchema,
   formatarCodigoCnae,
   lerDiaDoMes,
   lerPercentual,
+  matrizDaEmpresa,
+  mensagemDaRaiz,
+  nomeSugerido,
   novaVigenciaCnaeSchema,
   novaVigenciaParametrosSchema,
   novoCnaeSchema,
+  novoEstabelecimentoSchema,
   novoFeriadoSchema,
+  ordemDoNovo,
   percentualParaCampo,
   primeiroDiaDoMesSeguinte,
+  problemaDoNovoEstabelecimento,
+  raizDoCnpjFormatada,
   vesperaDaVigencia,
+  type EmpresaDoNovoCnpj,
 } from "./fiscal-cadastro";
 
 const ID = "304039bd-509d-4536-aa26-44e7091ee718";
@@ -198,4 +207,162 @@ test("Parâmetros: os dias dos federais só aceitam dia de 1 a 31; os demais seg
   });
   assert.ok(!varios.success);
   assert.deepEqual(varios.error.issues[0].path, ["valores", 1, "valor"]);
+});
+
+// ---------------------------------------------------------------------------
+// Novo CNPJ emissor (03/10/2026)
+// ---------------------------------------------------------------------------
+
+const EMPRESA = "4eae2860-b7c7-4c20-b3f9-6482cf3a7bf7";
+
+const novoEstab = (o: Record<string, unknown>) =>
+  novoEstabelecimentoSchema.safeParse({
+    empresa_contabil_id: EMPRESA,
+    papel: "filial",
+    municipio: "Recife",
+    uf: "PE",
+    nome: "California · Recife",
+    cnpj: "",
+    ativo: false,
+    iss_dia: "10",
+    iss_retido_dia: "10",
+    iss_regra: "prorroga",
+    observacao: "",
+    ...o,
+  });
+
+test("Novo CNPJ emissor: campos da edição e os da criação, com máscara e espaços limpos", () => {
+  const ok = novoEstab({
+    cnpj: "19.437.976/0001-54",
+    ativo: true,
+    municipio: "  Rio   de Janeiro ",
+    nome: " California ·  Rio ",
+  });
+  assert.ok(ok.success);
+  assert.equal(ok.data.cnpj, "19437976000154");
+  assert.equal(ok.data.municipio, "Rio de Janeiro");
+  assert.equal(ok.data.nome, "California · Rio");
+  assert.equal(ok.data.iss_dia, 10);
+  assert.equal(ok.data.observacao, null);
+
+  // Sem CNPJ, nasce inativo (como as filiais da carga): "CNPJ a informar".
+  const semCnpj = novoEstab({});
+  assert.ok(semCnpj.success);
+  assert.equal(semCnpj.data.cnpj, null);
+  assert.equal(semCnpj.data.ativo, false);
+});
+
+test("Novo CNPJ emissor: cada campo obrigatório com a sua mensagem, na ordem da tela", () => {
+  const msg = (o: Record<string, unknown>) => {
+    const r = novoEstab(o);
+    assert.ok(!r.success);
+    return r.error.issues[0].message;
+  };
+  assert.equal(msg({ empresa_contabil_id: "" }), "Escolha a empresa contábil.");
+  assert.equal(msg({ empresa_contabil_id: undefined }), "Escolha a empresa contábil.");
+  assert.equal(msg({ papel: "" }), "Escolha se o CNPJ é da matriz ou de uma filial.");
+  assert.equal(msg({ municipio: "   " }), "Informe o município.");
+  assert.equal(msg({ uf: "" }), "Escolha a UF.");
+  assert.equal(msg({ uf: "XX" }), "Escolha a UF.");
+  assert.equal(msg({ nome: "" }), "Informe o nome do estabelecimento.");
+  assert.equal(msg({ nome: "x".repeat(81) }), "Nome: até 80 caracteres.");
+  assert.equal(msg({ cnpj: "19.437.976/0001-55" }), "CNPJ inválido: confira os dígitos.");
+  assert.equal(msg({ cnpj: "19.437.976/0001" }), "O CNPJ tem 14 dígitos.");
+  assert.equal(msg({ cnpj: "11.111.111/1111-11" }), "CNPJ inválido: confira os dígitos.");
+  assert.equal(msg({ ativo: true }), "Para ativar, informe o CNPJ.");
+  assert.equal(msg({ iss_dia: "" }), "Dia do ISS: informe um dia de 1 a 31.");
+  assert.equal(msg({ iss_retido_dia: "32" }), "Dia do ISS retido: informe um dia de 1 a 31.");
+  assert.equal(msg({ iss_regra: "" }), "Escolha o que acontece em dia não útil.");
+  assert.equal(msg({ observacao: "x".repeat(501) }), "Observação: até 500 caracteres.");
+  // Com mais de um campo vazio, vale o primeiro da tela.
+  assert.equal(msg({ empresa_contabil_id: "", nome: "", iss_dia: "" }), "Escolha a empresa contábil.");
+});
+
+test("município com a grafia do cadastro; nome sugerido; raiz do CNPJ", () => {
+  const cidades = ["Salvador", "São Paulo", "Santo André"];
+  assert.equal(cidadeDoCadastro("salvador", cidades), "Salvador");
+  assert.equal(cidadeDoCadastro("  sao   paulo ", cidades), "São Paulo");
+  assert.equal(cidadeDoCadastro("SANTO ANDRE", cidades), "Santo André");
+  assert.equal(cidadeDoCadastro(" Recife ", cidades), "Recife");
+  assert.equal(cidadeDoCadastro("", cidades), "");
+
+  assert.equal(nomeSugerido("California", "Recife"), "California · Recife");
+  assert.equal(nomeSugerido("California", "  "), "");
+  assert.equal(nomeSugerido("", "Recife"), "");
+
+  assert.equal(raizDoCnpjFormatada("19437976000154"), "19.437.976");
+  assert.equal(raizDoCnpjFormatada(null), "");
+  const california = { razao_social: "CALIFÓRNIA FILMES E PUBLICIDADE LTDA", cnpj: "19437976000154" };
+  assert.equal(mensagemDaRaiz("19437976000235", california), null);
+  assert.equal(
+    mensagemDaRaiz("29943648000183", california),
+    "Esse CNPJ não é da CALIFÓRNIA FILMES E PUBLICIDADE LTDA: os CNPJs dela começam com 19.437.976.",
+  );
+  assert.equal(mensagemDaRaiz("29943648000183", { razao_social: "Sem CNPJ", cnpj: null }), null);
+});
+
+// O cadastro de hoje (03/10/2026): California com matriz e duas filiais sem
+// CNPJ, GoCrazy e Hitlab só com a matriz.
+const CADASTRO = [
+  { empresa_contabil_id: EMPRESA, nome: "California · Salvador", cnpj: "19437976000154", papel: "matriz", ordem: 1 },
+  { empresa_contabil_id: EMPRESA, nome: "California · São Paulo", cnpj: null, papel: "filial", ordem: 2 },
+  { empresa_contabil_id: EMPRESA, nome: "California · Fortaleza", cnpj: null, papel: "filial", ordem: 3 },
+  { empresa_contabil_id: "gocrazy", nome: "GoCrazy · Santo André", cnpj: "29943648000183", papel: "matriz", ordem: 4 },
+  { empresa_contabil_id: "hitlab", nome: "Hitlab · Salvador", cnpj: "04409741000181", papel: "matriz", ordem: 5 },
+];
+
+const CALIFORNIA: EmpresaDoNovoCnpj = {
+  id: EMPRESA,
+  nome: "California",
+  razao_social: "CALIFÓRNIA FILMES E PUBLICIDADE LTDA",
+  cnpj: "19437976000154",
+  ativo: true,
+};
+const NOVA: EmpresaDoNovoCnpj = { id: "nova", nome: "Exemplo", razao_social: "EXEMPLO SERVIÇOS LTDA", cnpj: "11222333000181", ativo: true };
+
+test("Novo CNPJ emissor: uma matriz por empresa, filial só depois da matriz", () => {
+  assert.equal(matrizDaEmpresa(CADASTRO, EMPRESA)?.nome, "California · Salvador");
+  assert.equal(matrizDaEmpresa(CADASTRO, "nova"), null);
+
+  const filial = { papel: "filial" as const, nome: "California · Recife", cnpj: null };
+  assert.equal(problemaDoNovoEstabelecimento(filial, CALIFORNIA, CADASTRO), null);
+  assert.equal(
+    problemaDoNovoEstabelecimento({ ...filial, papel: "matriz" }, CALIFORNIA, CADASTRO),
+    "A California já tem matriz: California · Salvador. Cadastre este CNPJ como filial.",
+  );
+
+  const daNova = { papel: "matriz" as const, nome: "Exemplo · Salvador", cnpj: "11222333000181" };
+  assert.equal(problemaDoNovoEstabelecimento(daNova, NOVA, CADASTRO), null);
+  assert.equal(
+    problemaDoNovoEstabelecimento({ ...daNova, papel: "filial" }, NOVA, CADASTRO),
+    "A Exemplo ainda não tem matriz no cadastro. Cadastre a matriz primeiro: os impostos federais se apuram por ela.",
+  );
+  assert.equal(
+    problemaDoNovoEstabelecimento(daNova, { ...NOVA, ativo: false }, CADASTRO),
+    "A Exemplo está inativa nas empresas contábeis.",
+  );
+});
+
+test("Novo CNPJ emissor: nome e CNPJ repetidos, CNPJ de outra empresa", () => {
+  const filial = { papel: "filial" as const, nome: "California · Recife", cnpj: null };
+  // O nome repete mesmo com outra caixa e sem acento.
+  assert.equal(
+    problemaDoNovoEstabelecimento({ ...filial, nome: "california · sao paulo" }, CALIFORNIA, CADASTRO),
+    "Já existe um CNPJ emissor com o nome California · São Paulo.",
+  );
+  // CNPJ da filial: a raiz da California e um número que não está no cadastro.
+  assert.equal(problemaDoNovoEstabelecimento({ ...filial, cnpj: "19437976000235" }, CALIFORNIA, CADASTRO), null);
+  assert.equal(
+    problemaDoNovoEstabelecimento({ ...filial, cnpj: "29943648000183" }, CALIFORNIA, CADASTRO),
+    "Esse CNPJ não é da CALIFÓRNIA FILMES E PUBLICIDADE LTDA: os CNPJs dela começam com 19.437.976.",
+  );
+  assert.equal(
+    problemaDoNovoEstabelecimento({ ...filial, cnpj: "19437976000154" }, CALIFORNIA, CADASTRO),
+    "Esse CNPJ já está no cadastro: California · Salvador.",
+  );
+});
+
+test("Novo CNPJ emissor entra no fim da lista", () => {
+  assert.equal(ordemDoNovo(CADASTRO), 6);
+  assert.equal(ordemDoNovo([]), 1);
 });

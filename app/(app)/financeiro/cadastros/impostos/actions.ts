@@ -22,12 +22,17 @@ import { dataBr } from "@/lib/fiscal/datas";
 import type { FiscalCnae, FiscalEstabelecimento } from "@/lib/types";
 import {
   aliquotasPisCofins,
+  cidadeDoCadastro,
   estabelecimentoSchema,
   idSchema,
+  mensagemDaRaiz,
   novaVigenciaCnaeSchema,
   novaVigenciaParametrosSchema,
   novoCnaeSchema,
+  novoEstabelecimentoSchema,
   novoFeriadoSchema,
+  ordemDoNovo,
+  problemaDoNovoEstabelecimento,
   vesperaDaVigencia,
 } from "@/lib/validations/fiscal-cadastro";
 
@@ -88,7 +93,7 @@ async function regimeNaData(
 const MSG_PRESUMIDO = "No Lucro Presumido o PIS e a COFINS são sempre cumulativos, sem crédito.";
 
 // ---------------------------------------------------------------------------
-// CNPJ emissor: informar o CNPJ e ativar; vencimento do ISS
+// CNPJ emissor: informar o CNPJ e ativar; vencimento do ISS (lápis da aba CNPJs)
 // ---------------------------------------------------------------------------
 
 export async function atualizarEstabelecimento(input: unknown): Promise<Result> {
@@ -123,14 +128,8 @@ export async function atualizarEstabelecimento(input: unknown): Promise<Result> 
       .eq("id", atual.empresa_contabil_id)
       .eq("tenant_id", tenantId)
       .maybeSingle<{ razao_social: string; cnpj: string }>();
-    const raiz = empresa?.cnpj?.replace(/\D/g, "").slice(0, 8) ?? "";
-    if (raiz.length === 8 && v.cnpj.slice(0, 8) !== raiz) {
-      const raizFmt = `${raiz.slice(0, 2)}.${raiz.slice(2, 5)}.${raiz.slice(5, 8)}`;
-      return {
-        ok: false,
-        message: `Esse CNPJ não é da ${empresa!.razao_social}: os CNPJs dela começam com ${raizFmt}.`,
-      };
-    }
+    const raiz = empresa ? mensagemDaRaiz(v.cnpj, empresa) : null;
+    if (raiz) return { ok: false, message: raiz };
   }
 
   const patch = {
@@ -166,6 +165,115 @@ export async function atualizarEstabelecimento(input: unknown): Promise<Result> 
     entidadeTipo: "fiscal_estabelecimento",
     entidadeId: v.id,
     metadata: { nome: atual.nome, antes, depois },
+  });
+
+  revalidar();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// CNPJ emissor novo (botão "Novo CNPJ emissor" da aba CNPJs)
+// ---------------------------------------------------------------------------
+
+export async function criarEstabelecimento(input: unknown): Promise<Result> {
+  const parsed = novoEstabelecimentoSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: primeiraMensagem(parsed.error.issues) };
+  const gate = await checarGate("fiscal_estabelecimento.criado");
+  if (!gate.ok) return gate;
+  const tenantId = gate.session.activeTenant.id;
+  const v = parsed.data;
+
+  // As três leituras em paralelo: a empresa contábil; os CNPJs do cadastro
+  // (matriz, nome e CNPJ repetidos, a ordem); e as cidades dos feriados
+  // (o município entra com a grafia que o cadastro já usa).
+  const [empresaRes, estabsRes, feriadosRes] = await Promise.all([
+    gate.supabase
+      .from("empresas_contabeis")
+      .select("id, razao_social, nome_fantasia, cnpj, ativo")
+      .eq("id", v.empresa_contabil_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ id: string; razao_social: string; nome_fantasia: string | null; cnpj: string; ativo: boolean }>(),
+    gate.supabase
+      .from("fiscal_estabelecimentos")
+      .select("empresa_contabil_id, nome, cnpj, papel, municipio, ordem")
+      .eq("tenant_id", tenantId)
+      .returns<
+        Array<Pick<FiscalEstabelecimento, "empresa_contabil_id" | "nome" | "cnpj" | "papel" | "municipio" | "ordem">>
+      >(),
+    gate.supabase
+      .from("fiscal_feriados")
+      .select("municipio")
+      .eq("tenant_id", tenantId)
+      .not("municipio", "is", null)
+      .returns<Array<{ municipio: string }>>(),
+  ]);
+  if (empresaRes.error) return { ok: false, message: `Falha ao carregar a empresa contábil: ${empresaRes.error.message}` };
+  if (estabsRes.error) return { ok: false, message: `Falha ao carregar os CNPJs emissores: ${estabsRes.error.message}` };
+  if (feriadosRes.error) return { ok: false, message: `Falha ao carregar os feriados: ${feriadosRes.error.message}` };
+  const e = empresaRes.data;
+  if (!e) return { ok: false, message: "Empresa contábil não encontrada. Recarregue a página." };
+  const empresa = { id: e.id, nome: e.nome_fantasia ?? e.razao_social, razao_social: e.razao_social, cnpj: e.cnpj, ativo: e.ativo };
+  const existentes = estabsRes.data ?? [];
+
+  const problema = problemaDoNovoEstabelecimento(v, empresa, existentes);
+  if (problema) return { ok: false, message: problema };
+
+  const cidades = [...existentes.map((x) => x.municipio), ...(feriadosRes.data ?? []).map((f) => f.municipio)];
+  const linha = {
+    tenant_id: tenantId,
+    empresa_contabil_id: empresa.id,
+    nome: v.nome,
+    cnpj: v.cnpj,
+    papel: v.papel,
+    municipio: cidadeDoCadastro(v.municipio, cidades),
+    uf: v.uf,
+    iss_dia: v.iss_dia,
+    iss_retido_dia: v.iss_retido_dia,
+    iss_regra: v.iss_regra,
+    ativo: v.ativo,
+    ordem: ordemDoNovo(existentes),
+    observacao: v.observacao,
+  };
+
+  const { data: novo, error } = await gate.supabase
+    .from("fiscal_estabelecimentos")
+    .insert(linha)
+    .select("id")
+    .single<{ id: string }>();
+  if (error || !novo) {
+    // Dois índices únicos: o nome (`uq_fiscal_estab_nome`) e o CNPJ
+    // (`uq_fiscal_estab_cnpj`). A conferência acima pega os dois; aqui fica
+    // a corrida com outra pessoa cadastrando ao mesmo tempo.
+    if (error?.code === "23505") {
+      return {
+        ok: false,
+        message: error.message.includes("uq_fiscal_estab_nome")
+          ? "Já existe um CNPJ emissor com esse nome."
+          : "Esse CNPJ já está em outro estabelecimento do cadastro.",
+      };
+    }
+    return { ok: false, message: `Falha ao cadastrar o CNPJ emissor: ${error?.message ?? "sem retorno"}` };
+  }
+
+  await logAuditEvent({
+    acao: "fiscal_estabelecimento.criado",
+    tenantId,
+    entidadeTipo: "fiscal_estabelecimento",
+    entidadeId: novo.id,
+    metadata: {
+      nome: linha.nome,
+      empresa_contabil: empresa.razao_social,
+      papel: linha.papel,
+      cnpj: linha.cnpj,
+      municipio: linha.municipio,
+      uf: linha.uf,
+      iss_dia: linha.iss_dia,
+      iss_retido_dia: linha.iss_retido_dia,
+      iss_regra: linha.iss_regra,
+      ativo: linha.ativo,
+      ordem: linha.ordem,
+      observacao: linha.observacao,
+    },
   });
 
   revalidar();

@@ -4,6 +4,7 @@
  * Diálogos de edição do cadastro de impostos (módulo fiscal, 02/10/2026).
  * "Editar alíquotas" segue o desenho do protótipo aprovado; os demais usam
  * o mesmo molde (rótulo pequeno, Nota explicando o efeito, Cancelar/Salvar).
+ * O do CNPJ emissor também cadastra ("Novo CNPJ emissor", 03/10/2026).
  */
 
 import * as React from "react";
@@ -17,28 +18,45 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
+import { UFS } from "@/lib/utils/formato-fiscal";
 import { dataBr } from "@/lib/fiscal/datas";
-import { formatarCnpj } from "@/lib/fiscal/cadastro";
-import type { FiscalCnae, FiscalEstabelecimento, FiscalFeriado, FiscalParametro, RegraDeVencimentoFiscal } from "@/lib/types";
+import { formatarCnpj, type CadastroFiscal } from "@/lib/fiscal/cadastro";
+import type {
+  FiscalCnae,
+  FiscalEstabelecimento,
+  FiscalFeriado,
+  FiscalParametro,
+  RegraDeVencimentoFiscal,
+  UF,
+} from "@/lib/types";
 import {
   aliquotasPisCofins,
+  cidadeDoCadastro,
   diaDoMesValido,
   formatarCodigoCnae,
   lerDiaDoMes,
+  matrizDaEmpresa,
   mensagemDoDia,
+  nomeSugerido,
+  novoEstabelecimentoSchema,
   percentualParaCampo,
   lerPercentual,
   primeiroDiaDoMesSeguinte,
+  problemaDoNovoEstabelecimento,
+  raizDoCnpjFormatada,
 } from "@/lib/validations/fiscal-cadastro";
 import {
   atualizarEstabelecimento,
   criarCnae,
+  criarEstabelecimento,
   criarFeriado,
   novaVigenciaCnae,
   novaVigenciaParametros,
   removerFeriado,
 } from "./actions";
+import type { EmpresaDoCadastro } from "./cadastro-impostos";
 import { ultimaVersao, type ParametroNaTela } from "./montagem";
 
 // ---------------------------------------------------------------------------
@@ -132,7 +150,7 @@ function useEnvio(onClose: () => void) {
 }
 
 // ---------------------------------------------------------------------------
-// CNPJ emissor
+// CNPJ emissor: o mesmo formulário edita (lápis) e cadastra ("Novo CNPJ emissor")
 // ---------------------------------------------------------------------------
 
 // Os mesmos nomes da coluna "Dia não útil" da aba Vencimentos.
@@ -142,25 +160,69 @@ const REGRAS: Array<{ valor: RegraDeVencimentoFiscal; rotulo: string }> = [
   { valor: "ultimo_util", rotulo: "Último dia útil" },
 ];
 
-export function EstabelecimentoDialog({
-  estab,
-  razaoSocial,
-  onClose,
-}: {
-  estab: FiscalEstabelecimento;
-  razaoSocial: string;
-  onClose: () => void;
-}) {
-  const { pendente, erro, enviar } = useEnvio(onClose);
-  const [digitos, setDigitos] = React.useState(estab.cnpj ?? "");
-  const [ativo, setAtivo] = React.useState(estab.ativo);
-  const [regra, setRegra] = React.useState<RegraDeVencimentoFiscal>(estab.iss_regra);
-  const [observacao, setObservacao] = React.useState(estab.observacao ?? "");
+const ITENS_UF = UFS.map((u) => ({ value: u, label: u }));
+
+type Papel = "matriz" | "filial";
+
+/**
+ * Edição (`estab` preenchido): o CNPJ, a situação, o vencimento do ISS e a
+ * observação; a empresa, o município e matriz/filial ficam no cabeçalho.
+ * Criação (`estab` nulo): os mesmos campos, precedidos do que o cabeçalho
+ * da edição mostra — a empresa contábil, matriz ou filial, o município e a
+ * UF, e o nome. Cadastro e edição são o mesmo formulário.
+ */
+type PropsDoEstabelecimento =
+  | { estab: FiscalEstabelecimento; razaoSocial: string; onClose: () => void }
+  | { estab: null; empresas: readonly EmpresaDoCadastro[]; cadastro: CadastroFiscal; onClose: () => void };
+
+export function EstabelecimentoDialog(props: PropsDoEstabelecimento) {
+  const { estab, onClose } = props;
+  const criacao = props.estab === null ? props : null;
+  const razaoSocial = props.estab !== null ? props.razaoSocial : "";
+  const { pendente, erro, setErro, enviar } = useEnvio(onClose);
+  const [digitos, setDigitos] = React.useState(estab?.cnpj ?? "");
+  const [ativo, setAtivo] = React.useState(estab?.ativo ?? true);
+  const [regra, setRegra] = React.useState<RegraDeVencimentoFiscal>(estab?.iss_regra ?? "prorroga");
+  const [observacao, setObservacao] = React.useState(estab?.observacao ?? "");
   const cnpjCompleto = digitos.length === 14;
+
+  // Só na criação: quem é o estabelecimento.
+  const [empresaId, setEmpresaId] = React.useState("");
+  const [papel, setPapel] = React.useState<Papel | "">("");
+  const [municipio, setMunicipio] = React.useState("");
+  const [uf, setUf] = React.useState<UF | "">("");
+  // O nome acompanha a sugestão (empresa · município) até a pessoa mexer nele.
+  const [nome, setNome] = React.useState("");
+  const [nomeEditado, setNomeEditado] = React.useState(false);
+
+  const empresasAtivas = (criacao?.empresas ?? [])
+    .filter((x) => x.ativo)
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const empresa = criacao?.empresas.find((x) => x.id === empresaId) ?? null;
+  const matriz = criacao && empresa ? matrizDaEmpresa(criacao.cadastro.estabelecimentos, empresa.id) : null;
+  const semRegime = criacao && empresa ? !criacao.cadastro.regimes.some((r) => r.empresa_contabil_id === empresa.id) : false;
+  // As cidades do cadastro (CNPJs e feriados): "salvador" entra como "Salvador".
+  const cidades = criacao
+    ? Array.from(
+        new Set([
+          ...criacao.cadastro.estabelecimentos.map((x) => x.municipio),
+          ...criacao.cadastro.feriados.flatMap((f) => (f.municipio ? [f.municipio] : [])),
+        ]),
+      )
+    : [];
+  const municipioDoCadastro = cidadeDoCadastro(municipio, cidades);
+  const nomeNaTela = nomeEditado ? nome : empresa ? nomeSugerido(empresa.nome, municipioDoCadastro) : "";
+  const raiz = empresa ? raizDoCnpjFormatada(empresa.cnpj) : "";
+
+  function escolherEmpresa(id: string) {
+    setEmpresaId(id);
+    // A primeira da PJ é a matriz; com a matriz no cadastro, o CNPJ novo é filial.
+    if (criacao) setPapel(matrizDaEmpresa(criacao.cadastro.estabelecimentos, id) ? "filial" : "matriz");
+  }
 
   function aoDigitar(d: string) {
     setDigitos(d);
-    if (!estab.cnpj && d.length === 14 && digitos.length !== 14) {
+    if (estab && !estab.cnpj && d.length === 14 && digitos.length !== 14) {
       // Informar o CNPJ de quem ainda não tinha já marca "Ativo" (dá para desmarcar)
       // e tira o aviso da carga inicial de que o CNPJ faltava — à vista, antes de salvar.
       setAtivo(true);
@@ -174,17 +236,38 @@ export function EstabelecimentoDialog({
     ev.preventDefault();
     ev.stopPropagation();
     const fd = new FormData(ev.currentTarget);
-    enviar(() =>
-      atualizarEstabelecimento({
-        id: estab.id,
-        cnpj: digitos,
-        ativo: ativo && cnpjCompleto,
-        iss_dia: fd.get("iss_dia")?.toString() ?? "",
-        iss_retido_dia: fd.get("iss_retido_dia")?.toString() ?? "",
-        iss_regra: regra,
-        observacao,
-      }),
-    );
+    const comuns = {
+      cnpj: digitos,
+      ativo: ativo && cnpjCompleto,
+      iss_dia: fd.get("iss_dia")?.toString() ?? "",
+      iss_retido_dia: fd.get("iss_retido_dia")?.toString() ?? "",
+      iss_regra: regra,
+      observacao,
+    };
+    if (estab) {
+      const id = estab.id;
+      enviar(() => atualizarEstabelecimento({ id, ...comuns }));
+      return;
+    }
+    if (!criacao) return;
+    const entrada = { empresa_contabil_id: empresaId, papel, municipio: municipioDoCadastro, uf, nome: nomeNaTela, ...comuns };
+    // Antes de enviar, o mesmo que o servidor confere: o formato e os campos
+    // obrigatórios pelo schema, e o que o cadastro exige com o que a tela tem.
+    const lido = novoEstabelecimentoSchema.safeParse(entrada);
+    if (!lido.success) {
+      setErro(lido.error.issues[0]?.message ?? "Confira os campos.");
+      return;
+    }
+    if (!empresa) {
+      setErro("Escolha a empresa contábil.");
+      return;
+    }
+    const problema = problemaDoNovoEstabelecimento(lido.data, empresa, criacao.cadastro.estabelecimentos);
+    if (problema) {
+      setErro(problema);
+      return;
+    }
+    enviar(() => criarEstabelecimento(entrada));
   }
 
   return (
@@ -193,17 +276,126 @@ export function EstabelecimentoDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-california-red" />
-            {estab.nome}
+            {estab ? estab.nome : "Novo CNPJ emissor"}
           </DialogTitle>
           <DialogDescription>
-            {razaoSocial} · {estab.municipio}-{estab.uf} · {estab.papel === "matriz" ? "Matriz" : "Filial"}
+            {estab ? (
+              <>
+                {razaoSocial} · {estab.municipio}-{estab.uf} · {estab.papel === "matriz" ? "Matriz" : "Filial"}
+              </>
+            ) : (
+              "Um CNPJ por estabelecimento que emite nota: a matriz ou uma filial."
+            )}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {criacao && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Rotulo htmlFor="fiscal-estab-empresa" obrigatorio>
+                    Empresa contábil
+                  </Rotulo>
+                  <Select value={empresaId} onValueChange={escolherEmpresa}>
+                    <SelectTrigger id="fiscal-estab-empresa">
+                      <SelectValue placeholder="Selecione a empresa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {empresasAtivas.map((x) => (
+                        <SelectItem key={x.id} value={x.id}>
+                          {x.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Rotulo htmlFor="fiscal-estab-papel" obrigatorio>
+                    Tipo
+                  </Rotulo>
+                  <Select value={papel} onValueChange={(v) => setPapel(v as Papel)} disabled={!empresa}>
+                    <SelectTrigger id="fiscal-estab-papel">
+                      <SelectValue placeholder="Escolha a empresa antes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="matriz" disabled={matriz !== null}>
+                        Matriz
+                      </SelectItem>
+                      <SelectItem value="filial" disabled={matriz === null}>
+                        Filial
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {empresa && (
+                <p className="-mt-2 text-[11.5px] text-muted-foreground">
+                  {matriz
+                    ? `A matriz da ${empresa.nome} é ${matriz.nome}: o CNPJ novo entra como filial, e os impostos federais seguem pela matriz.`
+                    : `Primeiro CNPJ da ${empresa.nome} no cadastro: entra como matriz, e os impostos federais da empresa se apuram por ele.`}
+                </p>
+              )}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <Rotulo htmlFor="fiscal-estab-municipio" obrigatorio>
+                    Município
+                  </Rotulo>
+                  <Input
+                    id="fiscal-estab-municipio"
+                    value={municipio}
+                    onChange={(ev) => setMunicipio(ev.target.value)}
+                    onBlur={() => setMunicipio(municipioDoCadastro)}
+                    maxLength={80}
+                    required
+                    placeholder="Ex.: Recife"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Rotulo htmlFor="fiscal-estab-uf" obrigatorio>
+                    UF
+                  </Rotulo>
+                  <Combobox
+                    id="fiscal-estab-uf"
+                    ariaLabel="UF"
+                    items={ITENS_UF}
+                    value={uf || null}
+                    onChange={(v) => setUf((v ?? "") as UF | "")}
+                    placeholder="Selecione"
+                    buscaPlaceholder="UF"
+                    className={COMBOBOX_COMO_SELECT}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-estab-nome" obrigatorio>
+                  Nome do estabelecimento
+                </Rotulo>
+                <Input
+                  id="fiscal-estab-nome"
+                  value={nomeNaTela}
+                  onChange={(ev) => {
+                    setNome(ev.target.value);
+                    setNomeEditado(true);
+                  }}
+                  maxLength={80}
+                  required
+                  placeholder="Ex.: California · Recife"
+                />
+              </div>
+            </>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Rotulo htmlFor="fiscal-cnpj">CNPJ</Rotulo>
-              <MaskedInput id="fiscal-cnpj" mask="cnpj" defaultValue={estab.cnpj ?? ""} onDigitsChange={aoDigitar} autoFocus={!estab.cnpj} />
+              <MaskedInput
+                id="fiscal-cnpj"
+                mask="cnpj"
+                defaultValue={estab?.cnpj ?? ""}
+                onDigitsChange={aoDigitar}
+                autoFocus={estab !== null && !estab.cnpj}
+                // Na criação, a raiz da empresa escolhida como dica do número.
+                {...(raiz ? { placeholder: `${raiz}/0000-00` } : {})}
+              />
             </div>
             <div className="space-y-1">
               <span className="text-xs font-semibold">Situação</span>
@@ -234,13 +426,13 @@ export function EstabelecimentoDialog({
               <Rotulo htmlFor="fiscal-iss-dia" obrigatorio>
                 Dia do ISS
               </Rotulo>
-              <Input id="fiscal-iss-dia" name="iss_dia" type="number" min={1} max={31} required defaultValue={estab.iss_dia} />
+              <Input id="fiscal-iss-dia" name="iss_dia" type="number" min={1} max={31} required defaultValue={estab?.iss_dia} />
             </div>
             <div className="space-y-1">
               <Rotulo htmlFor="fiscal-iss-retido-dia" obrigatorio>
                 Dia do ISS retido
               </Rotulo>
-              <Input id="fiscal-iss-retido-dia" name="iss_retido_dia" type="number" min={1} max={31} required defaultValue={estab.iss_retido_dia} />
+              <Input id="fiscal-iss-retido-dia" name="iss_retido_dia" type="number" min={1} max={31} required defaultValue={estab?.iss_retido_dia} />
             </div>
             <div className="space-y-1">
               <span className="text-xs font-semibold">Dia não útil</span>
@@ -272,9 +464,15 @@ export function EstabelecimentoDialog({
           <Nota>
             O ISS vence no dia informado do mês seguinte à emissão da nota (o retido, à emissão da NF do fornecedor). A observação aparece na aba
             Vencimentos.
+            {criacao && " Depois de cadastrar, inclua os CNAEs do CNPJ na aba CNAEs e alíquotas."}
           </Nota>
+          {empresa && semRegime && (
+            <Nota tom="ambar">
+              A {empresa.nome} ainda não tem regime tributário no cadastro de impostos: enquanto isso, o sistema a trata como Lucro Real.
+            </Nota>
+          )}
           <Erro mensagem={erro} />
-          <Rodape pendente={pendente} onCancelar={onClose} />
+          <Rodape pendente={pendente} onCancelar={onClose} rotulo={criacao ? "Cadastrar" : undefined} />
         </form>
       </DialogContent>
     </Dialog>

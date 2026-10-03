@@ -43,6 +43,8 @@ export interface EmpresaDoCadastro {
   /** Nome fantasia ou, sem ele, a razão social. */
   nome: string;
   cnpj: string;
+  /** Só as ativas entram na lista do "Novo CNPJ emissor". */
+  ativo: boolean;
 }
 
 type Aba = "cnpjs" | "cnaes" | "vencimentos" | "feriados" | "parametros";
@@ -78,6 +80,7 @@ export function CadastroImpostos({ cadastro, empresas, hoje }: Props) {
           razao_social: e.nome,
           nome: e.nome,
           cnpj: "",
+          ativo: false,
         };
         const { regime, regime_caixa } = regimeDaPJ(cadastro, e.empresa_contabil_id, hoje);
         pj = { empresa, matriz: null, estabelecimentos: [], regime, regimeCaixa: regime_caixa };
@@ -103,7 +106,7 @@ export function CadastroImpostos({ cadastro, empresas, hoje }: Props) {
         <TabButton active={aba === "feriados"} onClick={() => setAba("feriados")}>Feriados</TabButton>
         <TabButton active={aba === "parametros"} onClick={() => setAba("parametros")}>Parâmetros</TabButton>
       </div>
-      {aba === "cnpjs" && <Cnpjs cadastro={cadastro} hoje={hoje} pjDoEstab={pjDoEstab} />}
+      {aba === "cnpjs" && <Cnpjs cadastro={cadastro} empresas={empresas} hoje={hoje} pjDoEstab={pjDoEstab} />}
       {aba === "cnaes" && <Cnaes cadastro={cadastro} hoje={hoje} pjDoEstab={pjDoEstab} />}
       {aba === "vencimentos" && <Vencimentos cadastro={cadastro} hoje={hoje} pjs={pjs} pjDoEstab={pjDoEstab} />}
       {aba === "feriados" && <Feriados cadastro={cadastro} pjs={pjs} />}
@@ -219,20 +222,24 @@ function parametro(cadastro: CadastroFiscal, chave: string, hoje: string, padrao
 
 function Cnpjs({
   cadastro,
+  empresas,
   hoje,
   pjDoEstab,
 }: {
   cadastro: CadastroFiscal;
+  empresas: EmpresaDoCadastro[];
   hoje: string;
   pjDoEstab: (e: FiscalEstabelecimento) => PJ;
 }) {
   const [editando, setEditando] = React.useState<FiscalEstabelecimento | null>(null);
+  const [criando, setCriando] = React.useState(false);
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">
           Um CNPJ por estabelecimento que emite nota. A filial fica ligada à empresa contábil da matriz e usa as contas bancárias dela.
         </p>
+        <BotaoNovo rotulo="Novo CNPJ emissor" onClick={() => setCriando(true)} />
       </div>
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full table-fixed text-sm">
@@ -297,6 +304,7 @@ function Cnpjs({
           onClose={() => setEditando(null)}
         />
       )}
+      {criando && <EstabelecimentoDialog estab={null} empresas={empresas} cadastro={cadastro} onClose={() => setCriando(false)} />}
     </div>
   );
 }
