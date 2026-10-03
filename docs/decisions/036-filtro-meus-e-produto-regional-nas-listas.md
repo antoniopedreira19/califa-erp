@@ -21,7 +21,7 @@ primeiro item da barra — em `/orcamentos` e `/jobs`.
 
 | Tela | Regra | Hoje |
 |---|---|---|
-| Jobs | `jobs.responsavel_id` é o usuário | 12 de 29 |
+| Jobs | o usuário é o GP (`jobs.responsavel_id`) **ou o produtor** (`jobs.produtor_id`) do job — ver nota de 03/10/2026 | 12 de 29 |
 | Projetos | o usuário está **associado ao projeto ou a um orçamento dentro dele** | 12 de 18 ativos |
 
 ### A regra dos projetos
@@ -99,7 +99,39 @@ colunas adicionais; desconsidere o resto".
 - A barra de `/orcamentos` seguiu igual fora da chave nova — o mock do
   design mostra um filtro de "empresas" ali que **não** foi adicionado, e
   mantém o de **Ano**, que o mock não mostra.
-- O recorte "Meus" de **Jobs** não mudou na ampliação de 02/09: continua
+- O recorte "Meus" de **Jobs** não mudou na ampliação de 02/09: continuou
   sendo `jobs.responsavel_id`. A ampliação foi pedida para a lista de
-  projetos, onde a associação tem mais de uma porta de entrada.
+  projetos, onde a associação tem mais de uma porta de entrada. O produtor
+  entrou depois, em 03/10/2026 (nota abaixo).
 - Nenhuma mudança de layout, cor ou tipografia das duas tabelas.
+
+## ⚠️ O produtor também é dono do job no "Meus" de Jobs (2026-10-03)
+
+Notificação recebida pelo Tiago: no acesso de produtor, o "Meus" da lista
+de jobs não funcionava. A regra era só `jobs.responsavel_id` — o GP —, e o
+produtor quase nunca é o GP do job: medido em 03/10/2026, 8 produtores
+(7 pessoas e o "Produtor Teste") eram `produtor_id` de 1 a 3 jobs e
+responsáveis por nenhum, então abriam a lista em "Meus" (o padrão) e viam
+"Nenhum job com esse recorte".
+
+**Regra agora:** o job é "meu" se sou o GP **ou** o produtor dele. É a
+mesma régua que a lista de projetos já usava para o vínculo por job (§2) e
+que o card "Realizado a preencher" da home do produtor já contava — o card
+abria a lista com `meus=1` e a lista mostrava zero.
+
+- GP e administrador: nada muda hoje. Nenhum deles é produtor de um job em
+  que não seja também o GP (medido em 03/10/2026, 32 jobs).
+- "Quem criou" o job (`jobs.created_by`) continua fora do recorte de Jobs,
+  como em 02/09. Hoje só 1 job tem criador fora de GP e produtor.
+- "Todos" não mudou e foi conferido logado: administrador, GP e produtor
+  veem os mesmos 32 jobs. A RLS de `jobs` só recorta por empresa/regional
+  (e Equipe do projeto para o freelancer), e todo produtor ativo tem acesso
+  às empresas dos 32.
+- Os cards de AÇÃO da home do GP ("pendentes de envio para faturamento",
+  "prontos pra encerrar") continuam contando só `responsavel_id`. Enquanto
+  nenhum GP for produtor de job de outro GP, o número do card e o da lista
+  em "Meus" coincidem.
+
+Código: `app/(app)/jobs/page.tsx` (lê `produtor_id`) e
+`app/(app)/jobs/jobs-list.tsx` (`JobRow.produtor_id`, filtro e texto do
+estado vazio).

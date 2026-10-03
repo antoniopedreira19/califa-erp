@@ -44,6 +44,8 @@ export interface JobRow {
   regional_id: string | null;
   regional_nome: string | null;
   responsavel_id: string | null;
+  /** Produtor do job — conta como "meu" junto com o GP responsável. */
+  produtor_id: string | null;
   /** Descritivo do job (coluna `jobs.observacoes`) — obrigatório no envio
    *  para abertura desde a decisão 043. Nulo nos 27 jobs anteriores à
    *  regra, e nesses o ícone da linha fica apagado. */
@@ -184,7 +186,11 @@ export function JobsList({
       empresaFiltro !== "todas";
 
     function combina(r: JobRow): boolean {
-      if (meus && r.responsavel_id !== usuarioId) return false;
+      // "Meu" é o job em que sou o GP responsável OU o produtor. Só com o
+      // GP, o produtor abria a lista em "Meus" e não via nenhum job seu
+      // (corrigido em 03/10/2026).
+      if (meus && r.responsavel_id !== usuarioId && r.produtor_id !== usuarioId)
+        return false;
       if (statusFiltro !== "todos" && r.status !== statusFiltro) return false;
       if (produtoFiltro !== "todos" && (r.produto?.trim() ?? "") !== produtoFiltro)
         return false;
@@ -610,7 +616,7 @@ export function JobsList({
             <p className="text-sm font-semibold">Nenhum job com esse recorte</p>
             <p className="text-xs text-muted-foreground">
               {meus
-                ? "Você não é responsável por nenhum job que combine com os filtros."
+                ? "Você não é GP nem produtor de nenhum job que combine com os filtros."
                 : "Nenhum job combina com os filtros escolhidos."}
             </p>
             <button

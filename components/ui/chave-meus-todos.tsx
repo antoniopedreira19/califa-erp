@@ -10,7 +10,8 @@
  * "Todos" fica a um clique.
  *
  * Quem é "meu" muda por tela e mora em quem chama:
- * - Jobs — `jobs.responsavel_id` é o usuário.
+ * - Jobs — o usuário é o GP (`jobs.responsavel_id`) OU o produtor
+ *   (`jobs.produtor_id`) do job. O produtor entrou em 03/10/2026.
  * - Projetos — o usuário é responsável OU produtor de algum job do projeto
  *   (decisão do Tiago, 01/09/2026). Desde a matriz de permissões (03/09/2026),
  *   entrar como Equipe do projeto também conta como "meu".

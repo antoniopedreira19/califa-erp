@@ -4666,3 +4666,13 @@ código publicado logo depois (`3305751`).
   Antes redividia em partes iguais.
 - Componente novo: `realizado/parcelas-da-pp.tsx`. Ver decisão 138.
 
+## ⚠️ Nota de 2026-10-03 — "Meus" da lista de jobs inclui o produtor (decisão 036)
+
+- O "Meus" de `/jobs` era só `jobs.responsavel_id` (o GP), e o produtor
+  abria a lista vazia. Agora o job é "meu" se sou o GP **ou** o produtor.
+- `page.tsx` passou a ler `produtor_id`; `JobRow.produtor_id` é obrigatório.
+- Estado vazio em "Meus": "Você não é GP nem produtor de nenhum job que
+  combine com os filtros."
+- "Todos" conferido logado como administrador, GP e produtor: os mesmos 32
+  jobs. Ver a nota de 03/10/2026 na decisão 036.
+
