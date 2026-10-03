@@ -3913,40 +3913,6 @@ export interface ColaboradorFeriasLancamento {
   updated_at: string;
 }
 
-/** Tipos de notificação in-app do subsistema de Férias. */
-export type FeriasNotificacaoTipo =
-  | "concessivo_liberado"
-  | "concessivo_em_alerta"
-  | "ferias_vencidas"
-  | "solicitacao"
-  | "em_analise"
-  | "aprovada"
-  | "reprovada"
-  | "alteracao"
-  | "cancelamento"
-  | "lembrete"
-  | "inicio"
-  | "retorno"
-  | "emitir_nf";
-
-/** Notificação in-app do subsistema de férias. Uma linha por destinatário —
- *  ex: concessivo liberado gera 3 linhas (colaborador, líder, RH). */
-export interface ColaboradorFeriasNotificacao {
-  id: string;
-  tenant_id: string;
-  tipo: FeriasNotificacaoTipo;
-  colaborador_id: string;
-  lancamento_id: string | null;
-  periodo_id: string | null;
-  destinatario_user_id: string;
-  titulo: string;
-  mensagem: string;
-  payload: Record<string, unknown>;
-  lida_em: string | null;
-  criada_em: string;
-}
-
-
 
 // ---------- Módulo fiscal · entrega 1 (02/10/2026) ----------
 // Cadastro de impostos (tabelas fiscal_*) e os dados que o Faturar, a
