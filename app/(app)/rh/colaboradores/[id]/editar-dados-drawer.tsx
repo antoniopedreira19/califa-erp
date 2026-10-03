@@ -268,7 +268,16 @@ export function EditarDadosDrawer({
                   type="email"
                   maxLength={200}
                   defaultValue={colaborador.email ?? ""}
+                  readOnly={!!colaborador.user_id}
+                  className={colaborador.user_id ? "bg-muted/40 cursor-not-allowed" : ""}
                 />
+                {colaborador.user_id && (
+                  <p className="text-xs text-muted-foreground">
+                    Esse email vem do login do colaborador. Para alterar,
+                    desvincule o usuário no card &ldquo;Acesso ao sistema&rdquo;
+                    primeiro.
+                  </p>
+                )}
                 {fieldErrors.email?.map((msg, i) => (
                   <p key={i} className="text-xs text-california-red">
                     {msg}

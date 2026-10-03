@@ -297,6 +297,11 @@ export type AuditAction =
   | "colaborador.salario_mudou"
   | "colaborador.salario_corrigido"
   | "colaborador.dados_bancarios_editados"
+  // Vínculo colaborador ↔ usuário (task 010, 2026-10-03)
+  | "colaborador.convite_enviado"
+  | "colaborador.vinculado_a_usuario"
+  | "colaborador.desvinculado"
+  | "colaborador.role_alterada"
   // Folha mensal (subsistema RH, 2026-09-18)
   | "folha.gerada"
   | "folha.linha.editada_rh"
