@@ -323,7 +323,8 @@ export async function vincularColaboradorAProfileExistente(input: {
     return { ok: false, message: "Usuário não encontrado." };
   }
 
-  // Garante membership
+  // Garante membership. Preserva role existente se o profile já é membro
+  // (ex: vincular colaborador a um admin não rebaixa o admin).
   const membership = await garantirMembershipTenant({
     userId: input.profile_id,
     tenantId,
@@ -357,7 +358,9 @@ export async function vincularColaboradorAProfileExistente(input: {
     entidadeId: colaborador.id,
     metadata: {
       user_id: input.profile_id,
-      role: roleParsed.data,
+      role_solicitada: roleParsed.data,
+      role_final: membership.role_final,
+      role_preservada: membership.role_preservada,
       email_colaborador_anterior: colaborador.email,
       email_sincronizado: profile.email,
       actor_user_id: session.profile.id,
@@ -367,7 +370,11 @@ export async function vincularColaboradorAProfileExistente(input: {
   revalidatePath(`/rh/colaboradores/${colaborador.id}`);
   revalidatePath("/rh/colaboradores");
 
-  return { ok: true, message: "Colaborador vinculado ao usuário." };
+  const msg = membership.role_preservada
+    ? `Colaborador vinculado. Papel existente (${membership.role_final}) foi preservado.`
+    : "Colaborador vinculado ao usuário.";
+
+  return { ok: true, message: msg };
 }
 
 // -------------------------------------------------------------------------

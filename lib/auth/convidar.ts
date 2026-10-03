@@ -193,7 +193,12 @@ export async function enviarConviteNovoUsuario(opts: {
 // ---------------------------------------------------------------------------
 
 export type GarantirMembershipResult =
-  | { ok: true; ja_era_membro_ativo: boolean }
+  | {
+      ok: true;
+      ja_era_membro_ativo: boolean;
+      role_preservada: boolean;
+      role_final: AppRole;
+    }
   | {
       ok: false;
       codigo: "service_role_missing" | "falha_db";
@@ -201,15 +206,20 @@ export type GarantirMembershipResult =
     };
 
 /**
- * Garante que (user_id, tenant_id) existe em `tenant_members` com role
- * especificada e status `ativo`. Idempotente:
- *  - se não existe membership → cria.
- *  - se existe inativo → reativa + atualiza role.
- *  - se existe ativo com a mesma role → no-op.
- *  - se existe ativo com role diferente → atualiza role.
+ * Garante que (user_id, tenant_id) existe em `tenant_members` com status
+ * `ativo`. **Preserva a role existente** se o membership já existe — isso é
+ * crucial pro fluxo de vinculação de colaborador a profile existente: o
+ * profile pode ser um administrador do tenant que agora também vai ser
+ * cadastrado como colaborador no RH, e NÃO podemos rebaixar a role dele.
  *
- * Também sincroniza `profiles.role` (MVP tem 1 tenant por usuário, mesma
- * política dos fluxos de /admin/usuarios).
+ * Comportamento:
+ *  - Não existe membership → cria com `opts.role` + sincroniza profiles.role.
+ *  - Existe inativo → reativa, mantém role existente, NÃO sincroniza.
+ *  - Existe ativo → no-op (preserva tudo).
+ *
+ * Para alterar role de um membership existente, use função dedicada
+ * (`alterarRoleColaborador` ou similar) com validação de last-admin lockout.
+ * Esta função nunca rebaixa role.
  */
 export async function garantirMembershipTenant(opts: {
   userId: string;
@@ -245,41 +255,49 @@ export async function garantirMembershipTenant(opts: {
 
   if (existente) {
     const jaEraMembroAtivo = existente.status === "ativo";
-    const precisaAtualizar =
-      existente.role !== opts.role || existente.status !== "ativo";
+    const roleExistente = existente.role as AppRole;
 
-    if (precisaAtualizar) {
+    // Só reativa status se estava inativo. Nunca mexe na role existente.
+    if (!jaEraMembroAtivo) {
       const { error: updErr } = await service
         .from("tenant_members")
-        .update({ role: opts.role, status: "ativo" })
+        .update({ status: "ativo" })
         .eq("id", existente.id);
       if (updErr) {
-        console.error("[convidar.garantirMembership.update]", updErr.message);
+        console.error("[convidar.garantirMembership.reativar]", updErr.message);
         return {
           ok: false,
           codigo: "falha_db",
-          mensagem: "Falha ao atualizar o vínculo existente.",
+          mensagem: "Falha ao reativar o vínculo existente.",
         };
       }
     }
-  } else {
-    const { error: insErr } = await service.from("tenant_members").insert({
-      tenant_id: opts.tenantId,
-      user_id: opts.userId,
-      role: opts.role,
-      status: "ativo",
-    });
-    if (insErr) {
-      console.error("[convidar.garantirMembership.insert]", insErr.message);
-      return {
-        ok: false,
-        codigo: "falha_db",
-        mensagem: "Falha ao criar o vínculo com o tenant.",
-      };
-    }
+
+    return {
+      ok: true,
+      ja_era_membro_ativo: jaEraMembroAtivo,
+      role_preservada: true,
+      role_final: roleExistente,
+    };
   }
 
-  // Sincroniza profiles.role (MVP 1-tenant).
+  // Novo membership: cria com role solicitada e sincroniza profiles.role.
+  const { error: insErr } = await service.from("tenant_members").insert({
+    tenant_id: opts.tenantId,
+    user_id: opts.userId,
+    role: opts.role,
+    status: "ativo",
+  });
+  if (insErr) {
+    console.error("[convidar.garantirMembership.insert]", insErr.message);
+    return {
+      ok: false,
+      codigo: "falha_db",
+      mensagem: "Falha ao criar o vínculo com o tenant.",
+    };
+  }
+
+  // Sincroniza profiles.role apenas quando membership é novo (MVP 1-tenant).
   const { error: profErr } = await service
     .from("profiles")
     .update({ role: opts.role })
@@ -288,5 +306,10 @@ export async function garantirMembershipTenant(opts: {
     console.warn("[convidar.garantirMembership.sync-profile]", profErr.message);
   }
 
-  return { ok: true, ja_era_membro_ativo: !!existente && existente.status === "ativo" };
+  return {
+    ok: true,
+    ja_era_membro_ativo: false,
+    role_preservada: false,
+    role_final: opts.role,
+  };
 }
