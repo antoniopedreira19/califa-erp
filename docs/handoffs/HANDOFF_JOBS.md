@@ -4676,3 +4676,10 @@ código publicado logo depois (`3305751`).
 - "Todos" conferido logado como administrador, GP e produtor: os mesmos 32
   jobs. Ver a nota de 03/10/2026 na decisão 036.
 
+## ⚠️ Nota de 2026-10-03 (2) — o freelancer vê só os jobs da Equipe (decisão 036)
+
+- A RLS de `jobs` e `pedidos_compra` deixava o freelancer ler tudo das
+  empresas dele; agora só os jobs e PPs dos projetos em que está na
+  Equipe. Ver a nota de 03/10/2026 na decisão 036.
+- `/jobs`: freelancer sem Equipe vê "Nenhum job nos projetos da sua
+  equipe" no lugar de "Nenhum job criado ainda".

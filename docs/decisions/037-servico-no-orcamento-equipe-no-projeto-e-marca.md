@@ -153,3 +153,11 @@ Instrução do Tiago: usar só o que o design traz.
 - A grade de 2 colunas, as cores e a tipografia dos dois formulários.
 - O restante dos campos do orçamento (Regional, Cidade, GP, Produtor,
   datas) segue na mesma ordem.
+
+## ⚠️ A Equipe é o que o freelancer enxerga (2026-10-03)
+
+`is_freelancer_do_projeto` — o gate row-level do freelancer — passou a
+contar os mesmos três grupos automáticos do §2 (criador, GPs e produtores
+dos orçamentos), além dos acréscimos manuais. Antes contava só as linhas
+de `projeto_responsaveis`. Ver a nota de 03/10/2026 na
+[036](036-filtro-meus-e-produto-regional-nas-listas.md).

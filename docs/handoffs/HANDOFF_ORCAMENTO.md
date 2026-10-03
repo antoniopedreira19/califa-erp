@@ -4961,3 +4961,16 @@ aplicada na hora combinada com a frente do Antonio, junto da
   justificativa da devolução: o financeiro a vê na conferência do reenvio,
   ao lado de quem reenviou e do primeiro envio.
 - Ver decisão 136, §3.1.
+
+## ⚠️ Nota de 2026-10-03 — o freelancer vê só os projetos da Equipe (decisão 036)
+
+- O freelancer lia todos os projetos e orçamentos das empresas dele
+  (policies FOR ALL da 20260909000003 sem a cláusula do freelancer).
+  Agora lê só os projetos em que está na Equipe — a mesma Equipe da tela:
+  criador, GPs, produtores dos orçamentos e acréscimos manuais.
+- Migrations `20261003200001` (Equipe em `is_freelancer_do_projeto`),
+  `200002` (cláusula nas policies de projetos, orçamentos, jobs e PPs) e
+  `200003` (`(select auth.uid())` nessas policies).
+- `/orcamentos`: "Novo projeto" e "Criar projeto" só para quem tem
+  `orcamentos.criar`; freelancer sem Equipe vê "Nenhum projeto na sua
+  equipe".
