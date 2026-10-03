@@ -7,11 +7,14 @@
  * (`montarFiscalDoFaturar`, com as notas emitidas que ela já lê) e o
  * formulário só consulta. Testes: node --import tsx --test
  * lib/fiscal/faturar.test.ts
+ *
+ * No fim do arquivo, o aviso depois de emitir (`avisoDaApuracao`): em que
+ * Apuração os impostos da nota entraram.
  */
 import type { FiscalCnae, FiscalEstabelecimento, RegimeTributarioPJ } from "@/lib/types";
-import { formatarCnpj, type CadastroFiscal } from "./cadastro";
+import { formatarCnpj, parametroVigente, type CadastroFiscal } from "./cadastro";
 import { codigoDoCnae } from "./calculos";
-import { dataBr, nomeDoMes } from "./datas";
+import { dataBr, mesDe, nomeDoMes, ultimoDiaDoMes } from "./datas";
 
 const soDigitos = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
 
@@ -231,8 +234,110 @@ export function mesesDasCotas(data: string): string {
   return `${meses[0]}, ${meses[1]} e ${meses[2]} de ${anoSeguinte}`;
 }
 
-/** O dia do PIS e da COFINS (parâmetro `pis_cofins_dia`; 25 sem cadastro). */
-export function diaDoPisCofins(cad: CadastroFiscal): number {
-  const v = cad.parametros.find((p) => p.chave === "pis_cofins_dia")?.valor;
+/**
+ * O dia do PIS e da COFINS da competência da emissão: o parâmetro
+ * `pis_cofins_dia` vigente no último dia do mês, como no motor da Apuração
+ * (o dia é editável no cadastro, com vigência); 25 sem cadastro.
+ */
+export function diaDoPisCofins(cad: CadastroFiscal, emissao: string): number {
+  const v = parametroVigente(cad, "pis_cofins_dia", ultimoDiaDoMes(mesDe(emissao)))?.valor;
   return v && v >= 1 && v <= 31 ? v : 25;
+}
+
+// ---------------------------------------------------------------------------
+// O aviso depois de emitir: em que Apuração os impostos da nota entraram
+// ---------------------------------------------------------------------------
+
+/**
+ * O que a emissão (`emitirFaturamento`) devolve para o aviso, lido no
+ * servidor logo depois de a nota sair.
+ */
+export interface ApuracaoDaEmissao {
+  /** Hoje em São Paulo ("AAAA-MM-DD"): o mesmo dia da aba Apuração. */
+  hoje: string;
+  /** A primeira competência apurada pelo módulo ("2026-10"). */
+  primeira_competencia: string;
+  /**
+   * As guias da competência da emissão que já tinham aprovação: a de ISS
+   * próprio do CNPJ emissor e as de PIS e COFINS da PJ. Fora de mês
+   * encerrado dentro da Apuração nenhuma pode ter, e a emissão nem consulta
+   * (as duas vêm `false`). Nulo quando a leitura falhou: o aviso não diz se
+   * a guia está aprovada.
+   */
+  aprovadas: { iss: boolean; pis_cofins: boolean } | null;
+}
+
+/** As chaves, em `fiscal_aprovacoes`, das guias da competência de uma nota. */
+export interface GuiasDaEmissao {
+  /** `iss|<CNPJ emissor>|AAAA-MM`. */
+  iss: string;
+  /** `pis|<PJ>|AAAA-MM` e `cofins|<PJ>|AAAA-MM`. */
+  pisCofins: [string, string];
+}
+
+/**
+ * As guias da competência da emissão que podem já estar aprovadas, com as
+ * chaves do motor (`lib/fiscal/apuracao.ts`). Nulo quando nenhuma pode: a
+ * competência não encerrou (em curso ou futura — estimativa não se aprova)
+ * ou é anterior ao início da Apuração.
+ */
+export function guiasDaEmissaoParaConferir(e: {
+  estabelecimentoId: string;
+  empresaContabilId: string;
+  emissao: string;
+  hoje: string;
+  primeiraCompetencia: string;
+}): GuiasDaEmissao | null {
+  const competencia = mesDe(e.emissao);
+  if (competencia < e.primeiraCompetencia || competencia >= mesDe(e.hoje)) return null;
+  return {
+    iss: `iss|${e.estabelecimentoId}|${competencia}`,
+    pisCofins: [`pis|${e.empresaContabilId}|${competencia}`, `cofins|${e.empresaContabilId}|${competencia}`],
+  };
+}
+
+/**
+ * A segunda linha do aviso depois de emitir a nota (a primeira diz a NF, o
+ * CNPJ emissor, o valor e o job): em que Apuração os impostos dela entraram
+ * — a da competência da EMISSÃO —, ou que a guia já aprovada daquele mês
+ * passa a mostrar a diferença. É o aviso do protótipo aprovado do módulo
+ * fiscal (02/10/2026).
+ *
+ * No lucro presumido só o ISS nasce na emissão; PIS, COFINS, IRPJ e CSLL
+ * entram no recebimento (o motor segue o recebimento em todo presumido). No
+ * lucro real, basta uma das três guias do mês (ISS, PIS ou COFINS) estar
+ * aprovada, como no protótipo.
+ *
+ * Diferenças do protótipo, pelo que o motor do sistema faz:
+ * - a nota com data futura no mês corrente já está na Apuração em curso (o
+ *   motor conhece a nota desde o registro, não desde a data de emissão); a
+ *   de um mês seguinte entra quando a Apuração daquele mês abrir;
+ * - a nota anterior ao início da Apuração fica de fora (o protótipo não
+ *   tinha esse caso).
+ */
+export function avisoDaApuracao(e: {
+  emissao: string;
+  /** A PJ do CNPJ emissor está no lucro presumido na data da emissão. */
+  presumido: boolean;
+  apuracao: ApuracaoDaEmissao;
+}): string {
+  const { hoje, primeira_competencia: primeira, aprovadas } = e.apuracao;
+  const competencia = mesDe(e.emissao);
+  const mes = nomeDoMes(competencia);
+  const p = e.presumido;
+  const fim = p ? " PIS, COFINS, IRPJ e CSLL entram quando o cliente pagar." : "";
+
+  if (competencia < primeira) {
+    return `A nota é de ${mes}, antes do início da Apuração (${nomeDoMes(primeira)}): ${
+      p ? "o ISS dela fica" : "os impostos dela ficam"
+    } de fora.${fim}`;
+  }
+  if (competencia > mesDe(hoje)) {
+    return `${p ? "O ISS dela entra" : "Os impostos dela entram"} na Apuração de ${mes}, o mês da emissão.${fim}`;
+  }
+  const jaEsta = `${p ? "O ISS dela já está" : "Os impostos dela já estão"} na Apuração de ${mes}`;
+  if (competencia === mesDe(hoje)) return `${jaEsta} (em curso).${fim}`;
+  if (!aprovadas) return `${jaEsta}.${fim}`;
+  const aprovada = aprovadas.iss || (!p && aprovadas.pis_cofins);
+  return `${jaEsta}${aprovada ? ": a guia já aprovada passa a mostrar a diferença." : " (a aprovar)."}${fim}`;
 }

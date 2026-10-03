@@ -19,6 +19,11 @@
  * Server Action `darBaixaEmLote`, que baixa um por um pela action da baixa
  * individual — as regras moram em `lib/financeiro/baixa-em-lote.ts`.
  *
+ * Impostos a Pagar (módulo fiscal, entrega 2) entram também, como no
+ * protótipo aprovado: o imposto em aberto, pelo valor inteiro, com a multa e
+ * os juros e o comprovante de cada guia na linha (a guia é a da aprovação;
+ * o imposto sem guia pede a dele ali). O centro de custo vem do imposto.
+ *
  * No lote não entram baixa parcial nem cartão: cada título é baixado pelo
  * que falta, inteiro, pela conta escolhida. A parcela de PP sai com as
  * retenções na fonte que o financeiro decidiu na APROVAÇÃO da PP (módulo
@@ -30,7 +35,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { AlertCircle, AlertTriangle, ArrowRightLeft, CreditCard } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowRightLeft, CreditCard, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Combobox } from "@/components/ui/combobox";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -60,23 +66,21 @@ import {
   darBaixaEmLote,
   lerRetencoesDoLote,
 } from "@/app/(app)/financeiro/actions-baixa-em-lote";
+import { AnexoCompacto, descartarAnexoImposto, nomeDoAnexo } from "@/components/financeiro/anexo-de-imposto";
+import { NoFiscalDoLote } from "@/components/financeiro/no-fiscal";
 
 // ---------------------------------------------------------------------------
 // O título, no formato do lote
 // ---------------------------------------------------------------------------
 
 /** O que cada lista entrega ao lote, um por título. */
-export interface TituloParaLote {
+interface TituloParaLoteBase {
   /**
-   * Única entre as listas: `pagar|pp|<id>`, `receber|nf|<id>`… É também o
-   * id da seleção (`useSelecao`) e o que a Server Action devolve em
-   * `feitas`.
+   * Única entre as listas: `pagar|pp|<id>`, `receber|nf|<id>`,
+   * `imposto|<id>`… É também o id da seleção (`useSelecao`) e o que a
+   * Server Action devolve em `feitas`.
    */
   chave: string;
-  tipo: "pagar" | "receber";
-  /** Por onde a Server Action baixa o título: a origem e o id que a baixa
-   *  de um por um recebe. */
-  alvo: AlvoDaBaixaEmLote;
   /** O nome do título, como a lista mostra. */
   titulo: string;
   /** A referência curta: "PP-00127 · 1/2", "NF 2054", "AV-00012". */
@@ -89,9 +93,32 @@ export interface TituloParaLote {
    *  ele que o título é baixado. */
   aberto: number;
   /** O centro de custo que o título já tem — o par completo, tipo e
-   *  subtipo. `null`: usa o do lote. */
+   *  subtipo. `null`: usa o do lote (o imposto usa o dele, do banco). */
   centroDeCusto: CentroDeCusto | null;
 }
+
+/** O que só o imposto a pagar leva ao lote. */
+export interface ImpostoNoLote {
+  /** A guia anexada na aprovação (ou no avulso); nula pede a guia no lote. */
+  guiaPath: string | null;
+  /** A PJ da guia — o aviso "guia da X, conta da Y". */
+  empresaContabilId: string;
+  pj: string;
+}
+
+export type TituloParaLote =
+  | (TituloParaLoteBase & {
+      tipo: "pagar" | "receber";
+      /** Por onde a Server Action baixa o título: a origem e o id que a
+       *  baixa de um por um recebe. */
+      alvo: Exclude<AlvoDaBaixaEmLote, { modulo: "imposto" }>;
+      imposto?: undefined;
+    })
+  | (TituloParaLoteBase & {
+      tipo: "imposto";
+      alvo: Extract<AlvoDaBaixaEmLote, { modulo: "imposto" }>;
+      imposto: ImpostoNoLote;
+    });
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -219,7 +246,8 @@ export function BarraDeSelecao({
   onBaixar: () => void;
 }) {
   if (itens.length === 0) return null;
-  const saidas = r2(itens.filter((t) => t.tipo === "pagar").reduce((s, t) => s + t.aberto, 0));
+  // Sai o que se paga (títulos a pagar e impostos); entra o que se recebe.
+  const saidas = r2(itens.filter((t) => t.tipo !== "receber").reduce((s, t) => s + t.aberto, 0));
   const entradas = r2(itens.filter((t) => t.tipo === "receber").reduce((s, t) => s + t.aberto, 0));
   return (
     <div className="pointer-events-none sticky bottom-4 z-20 flex justify-center">
@@ -284,14 +312,17 @@ const CODIGO_TIPO_RECEBER = "01";
 const ROTULO_TIPO: Record<TituloParaLote["tipo"], string> = {
   pagar: "A pagar",
   receber: "A receber",
+  imposto: "Imposto",
 };
 
 const CHIP_TIPO: Record<TituloParaLote["tipo"], string> = {
   pagar: "bg-rose-50 text-rose-700",
   receber: "bg-emerald-50 text-emerald-700",
+  imposto: "bg-amber-50 text-amber-800",
 };
 
-/** O chip "A pagar"/"A receber" da coluna Tipo, quando o lote mistura os dois. */
+/** O chip "A pagar"/"A receber"/"Imposto" da coluna Tipo, quando o lote
+ *  mistura os tipos. */
 export function ChipTipo({ tipo }: { tipo: TituloParaLote["tipo"] }) {
   return (
     <span
@@ -321,7 +352,10 @@ type RetencoesDoLote =
   | { estado: "pronto"; aliquotas: Record<string, AliquotasDaAprovacao | null> }
   | { estado: "erro"; mensagem: string };
 
-type ContaDoLote = Pick<ContaBancaria, "id" | "nome" | "banco" | "ativo">;
+type ContaDoLote = Pick<ContaBancaria, "id" | "nome" | "banco" | "ativo"> & {
+  /** A PJ dona da conta — o aviso da guia de imposto de outra PJ. */
+  empresa_contabil_id?: string | null;
+};
 type TipoDoLote = Pick<PlanoContaTipo, "id" | "codigo" | "nome" | "ativo">;
 type SubtipoDoLote = Pick<PlanoContaSubtipo, "id" | "tipo_id" | "nome" | "ativo">;
 
@@ -333,6 +367,8 @@ export function BaixaEmLoteDialog({
   tipos,
   subtipos,
   contaPadrao,
+  tenantId,
+  nomesDasPJs,
   onConcluido,
 }: {
   open: boolean;
@@ -347,6 +383,10 @@ export function BaixaEmLoteDialog({
   subtipos: SubtipoDoLote[];
   /** Id da conta já escolhida (a da conciliação aberta). */
   contaPadrao?: string | null;
+  /** Só com imposto no lote: o tenant (o caminho do comprovante no bucket). */
+  tenantId?: string | null;
+  /** Só com imposto no lote: PJ → nome, para o aviso de conta de outra PJ. */
+  nomesDasPJs?: Record<string, string>;
   /** Todas as baixas feitas: recebe a mensagem do toast. A lista limpa a
    *  seleção e mostra o toast; a página já foi atualizada. */
   onConcluido?: (mensagem: string) => void;
@@ -375,6 +415,8 @@ export function BaixaEmLoteDialog({
           tipos={tipos}
           subtipos={subtipos}
           contaPadrao={contaPadrao ?? null}
+          tenantId={tenantId ?? null}
+          nomesDasPJs={nomesDasPJs ?? {}}
           onOcupado={marcarOcupado}
           onCancelar={() => onOpenChange(false)}
           onConcluido={(mensagem) => {
@@ -394,6 +436,8 @@ function FormularioDoLote({
   tipos,
   subtipos,
   contaPadrao,
+  tenantId,
+  nomesDasPJs,
   onOcupado,
   onCancelar,
   onConcluido,
@@ -403,6 +447,8 @@ function FormularioDoLote({
   tipos: TipoDoLote[];
   subtipos: SubtipoDoLote[];
   contaPadrao: string | null;
+  tenantId: string | null;
+  nomesDasPJs: Record<string, string>;
   onOcupado: (ocupado: boolean) => void;
   onCancelar: () => void;
   onConcluido: (mensagem: string) => void;
@@ -429,7 +475,41 @@ function FormularioDoLote({
   const itens = lista.filter((t) => !concluidas.has(t.chave));
   const pagar = itens.filter((t) => t.tipo === "pagar");
   const receber = itens.filter((t) => t.tipo === "receber");
-  const misto = pagar.length > 0 && receber.length > 0;
+  const impostos = itens.filter((t) => t.tipo === "imposto");
+  const misto = new Set(itens.map((t) => t.tipo)).size > 1;
+
+  // Impostos (módulo fiscal): a multa e os juros, o comprovante e — no
+  // imposto sem guia — a guia, um por linha. O arquivo sobe na hora; o que
+  // subiu e não virou baixa sai do bucket quando o diálogo fecha.
+  const [multa, setMulta] = React.useState<Record<string, number>>({});
+  const [comprovante, setComprovante] = React.useState<Record<string, string | null>>({});
+  const [guia, setGuia] = React.useState<Record<string, string | null>>({});
+  const enviados = React.useRef<Set<string>>(new Set());
+  React.useEffect(() => {
+    const doDialogo = enviados.current;
+    return () => {
+      for (const p of doDialogo) descartarAnexoImposto(p);
+      doDialogo.clear();
+    };
+  }, []);
+  function trocarAnexo(
+    set: React.Dispatch<React.SetStateAction<Record<string, string | null>>>,
+    atual: Record<string, string | null>,
+    chave: string,
+    novo: string | null,
+    enviadoAgora: boolean,
+  ) {
+    const antigo = atual[chave];
+    if (antigo && antigo !== novo && enviados.current.has(antigo)) {
+      enviados.current.delete(antigo);
+      descartarAnexoImposto(antigo);
+    }
+    if (novo && enviadoAgora) enviados.current.add(novo);
+    set((m) => ({ ...m, [chave]: novo }));
+    setErro(null);
+  }
+  /** A guia que vai na baixa: a do imposto, ou a anexada aqui. */
+  const guiaDe = (t: TituloParaLote) => (t.tipo === "imposto" ? t.imposto.guiaPath ?? guia[t.chave] ?? null : null);
 
   // Retenção na fonte (módulo fiscal, 02/10/2026): as parcelas de PP saem
   // com as alíquotas da aprovação. Buscadas uma vez, ao abrir; enquanto não
@@ -474,6 +554,7 @@ function FormularioDoLote({
   /** O que sai da conta (ou entra) por título; `null` enquanto a retenção
    *  da PP não chegou. */
   function naContaDe(t: TituloParaLote): { retido: number; liquido: number } | null {
+    if (t.tipo === "imposto") return { retido: 0, liquido: r2(t.aberto + (multa[t.chave] ?? 0)) };
     if (!ehParcelaDePP(t)) return { retido: 0, liquido: r2(t.aberto) };
     if (aprovacao.estado !== "pronto") return null;
     const r = retencoesPelaAprovacao(r2(t.aberto), aprovacao.aliquotas[t.alvo.id] ?? null);
@@ -496,10 +577,11 @@ function FormularioDoLote({
   const pagarSemCentro = pagar.filter((t) => !t.centroDeCusto);
   const receberSemCentro = receber.filter((t) => !t.centroDeCusto);
 
-  // "Saem da conta" é o líquido: o retido fica para recolher.
+  // "Saem da conta" é o líquido: o retido fica para recolher. O imposto sai
+  // com a multa e os juros.
   const saidas = buscandoRetencoes || erroDasRetencoes
     ? null
-    : r2(pagar.reduce((s, t) => s + (naContaDe(t)?.liquido ?? 0), 0));
+    : r2([...pagar, ...impostos].reduce((s, t) => s + (naContaDe(t)?.liquido ?? 0), 0));
   const entradas = r2(receber.reduce((s, t) => s + t.aberto, 0));
 
   function confirmar() {
@@ -517,15 +599,29 @@ function FormularioDoLote({
     if (pagar.length > 0 && !forma) falta.add("forma");
     if (pagarSemCentro.length > 0 && !subtipoSaida) falta.add("subtipo-saida");
     if (receberSemCentro.length > 0 && !subtipoEntrada) falta.add("subtipo-entrada");
+    for (const t of impostos) {
+      if (!comprovante[t.chave]) falta.add(`comprovante|${t.chave}`);
+      if (!guiaDe(t)) falta.add(`guia|${t.chave}`);
+    }
     setFaltando(falta);
     if (falta.size) {
+      const semComprovante = impostos.filter((t) => falta.has(`comprovante|${t.chave}`)).length;
+      const semGuia = impostos.filter((t) => falta.has(`guia|${t.chave}`)).length;
       setErro(
         falta.has("data") || falta.has("conta")
           ? "Escolha a data e a conta do movimento."
           : falta.has("forma")
             ? "Escolha a forma de pagamento e o subtipo do centro de custo."
-            : "Escolha o subtipo do centro de custo.",
+            : falta.has("subtipo-saida") || falta.has("subtipo-entrada")
+              ? "Escolha o subtipo do centro de custo."
+              : semComprovante > 0
+                ? `Anexe o comprovante de ${semComprovante === 1 ? "1 guia" : `${semComprovante} guias`}.`
+                : `Anexe a guia (DARF ou guia municipal) de ${semGuia === 1 ? "1 imposto" : `${semGuia} impostos`}.`,
       );
+      return;
+    }
+    if (impostos.length > 0 && !tenantId) {
+      setErro("Não foi possível anexar os comprovantes aqui. Dê baixa nos impostos um a um.");
       return;
     }
     if (
@@ -558,6 +654,15 @@ function FormularioDoLote({
         alvo: t.alvo,
         aberto: r2(t.aberto),
         centro: t.centroDeCusto,
+        imposto:
+          t.tipo === "imposto"
+            ? {
+                multa_juros: r2(multa[t.chave] ?? 0),
+                // A da aprovação vai nula: o banco usa a que o imposto tem.
+                guia_path: t.imposto.guiaPath ? null : guia[t.chave] ?? null,
+                comprovante_path: comprovante[t.chave] ?? "",
+              }
+            : null,
       })),
     };
     const nomeDaConta = contaEscolhida?.nome ?? "";
@@ -579,6 +684,13 @@ function FormularioDoLote({
         return;
       }
       if (res.feitas.length > 0) router.refresh();
+      // Os anexos das baixas feitas passam a ser dos impostos: ficam.
+      for (const chave of res.feitas) {
+        const c = comprovante[chave];
+        const g = guia[chave];
+        if (c) enviados.current.delete(c);
+        if (g) enviados.current.delete(g);
+      }
       if (res.ok) {
         const n = res.feitas.length;
         onConcluido(
@@ -634,7 +746,11 @@ function FormularioDoLote({
           <div className="space-y-1">
             <label className="text-xs font-semibold">
               Data do{" "}
-              {pagar.length ? (receber.length ? "movimento" : "pagamento") : "recebimento"}{" "}
+              {pagar.length + impostos.length
+                ? receber.length
+                  ? "movimento"
+                  : "pagamento"
+                : "recebimento"}{" "}
               <span className="text-california-red">*</span>
             </label>
             <DatePicker
@@ -710,11 +826,17 @@ function FormularioDoLote({
                   <th className="w-[112px] px-3 py-2 text-right font-semibold">Em aberto</th>
                   <th className="w-[150px] px-3 py-2 text-right font-semibold">Ajuste</th>
                   <th className="w-[132px] px-3 py-2 text-right font-semibold">Na conta</th>
+                  {impostos.length > 0 && (
+                    <th className="w-[170px] px-3 py-2 text-left font-semibold">Comprovante</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {itens.map((t) => {
                   const naConta = naContaDe(t);
+                  const pjDaConta = contaEscolhida?.empresa_contabil_id ?? null;
+                  const outraPJ =
+                    t.tipo === "imposto" && pjDaConta && pjDaConta !== t.imposto.empresaContabilId;
                   return (
                   <tr key={t.chave} className="border-t border-border/70 align-top">
                     {misto && (
@@ -732,6 +854,12 @@ function FormularioDoLote({
                       >
                         {t.referencia} · {t.contraparte}
                       </span>
+                      {outraPJ && t.tipo === "imposto" && (
+                        <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                          <AlertTriangle className="h-3 w-3 flex-none" />
+                          Guia da {t.imposto.pj}, conta da {nomesDasPJs[pjDaConta ?? ""] ?? "outra empresa"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-2 text-center">
                       <span
@@ -752,7 +880,17 @@ function FormularioDoLote({
                     {/* A retenção na fonte da aprovação da PP. Nos outros
                         títulos o lote não tem ajuste. */}
                     <td className="px-3 py-2 text-right">
-                      {naConta === null ? (
+                      {t.tipo === "imposto" ? (
+                        <div className="ml-auto w-[128px]">
+                          <MoneyInput
+                            value={multa[t.chave] ?? 0}
+                            onValueChange={(v) => setMulta((m) => ({ ...m, [t.chave]: v }))}
+                            className="h-8 text-right text-[12px]"
+                            aria-label="Multa e juros"
+                          />
+                          <span className="block text-[10.5px] text-muted-foreground">multa e juros</span>
+                        </div>
+                      ) : naConta === null ? (
                         <span className="text-[11px] text-muted-foreground">
                           {buscandoRetencoes ? "buscando…" : "—"}
                         </span>
@@ -785,6 +923,43 @@ function FormularioDoLote({
                         </>
                       )}
                     </td>
+                    {impostos.length > 0 && (
+                      <td className="px-3 py-2">
+                        {t.tipo === "imposto" ? (
+                          <div className="space-y-1">
+                            <AnexoCompacto
+                              rotulo="Anexar comprovante"
+                              path={comprovante[t.chave] ?? null}
+                              onChange={(novo, agora) =>
+                                trocarAnexo(setComprovante, comprovante, t.chave, novo, agora)
+                              }
+                              tenantId={tenantId ?? ""}
+                              pasta="comprovantes"
+                              destacar={faltando.has(`comprovante|${t.chave}`) && !comprovante[t.chave]}
+                            />
+                            {t.imposto.guiaPath ? (
+                              <span
+                                className="block truncate text-[10.5px] text-muted-foreground"
+                                title={nomeDoAnexo(t.imposto.guiaPath)}
+                              >
+                                guia: {nomeDoAnexo(t.imposto.guiaPath)}
+                              </span>
+                            ) : (
+                              <AnexoCompacto
+                                rotulo="Anexar guia"
+                                path={guia[t.chave] ?? null}
+                                onChange={(novo, agora) => trocarAnexo(setGuia, guia, t.chave, novo, agora)}
+                                tenantId={tenantId ?? ""}
+                                pasta="guias"
+                                destacar={faltando.has(`guia|${t.chave}`) && !guia[t.chave]}
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                   );
                 })}
@@ -792,7 +967,7 @@ function FormularioDoLote({
             </table>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 border-t border-border bg-muted/30 px-3 py-2 text-[12.5px]">
-            {pagar.length > 0 && (saidas === null || saidas > 0) && (
+            {pagar.length + impostos.length > 0 && (saidas === null || saidas > 0) && (
               <span className="text-muted-foreground">
                 Saem da conta{" "}
                 <strong className="font-mono font-semibold text-foreground">
@@ -900,6 +1075,16 @@ function FormularioDoLote({
           </div>
         )}
 
+        {impostos.length > 0 && (
+          <p className="flex items-start gap-2 text-[11.5px] text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 flex-none" />
+            <span>
+              Os impostos entram no centro de custo do próprio imposto (03 · Custo Tributário, ou o repasse da
+              retenção em Custo Operacional), rateados entre as empresas e regionais como na baixa de um por um.
+            </span>
+          </p>
+        )}
+
         {receber.length > 0 && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-900">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
@@ -909,6 +1094,21 @@ function FormularioDoLote({
             </span>
           </div>
         )}
+
+        {/* Módulo fiscal (entrega 2): o efeito do lote na apuração — as
+            guias de retenção das PPs e o que os recebimentos mudam. Busca
+            os dados sozinho, depois da leitura das retenções. */}
+        <NoFiscalDoLote
+          data={data}
+          pagamentos={pagar.filter(ehParcelaDePP).map((t) => ({
+            parcelaId: t.alvo.id,
+            retencoes:
+              aprovacao.estado === "pronto"
+                ? retencoesPelaAprovacao(r2(t.aberto), aprovacao.aliquotas[t.alvo.id] ?? null).retencoes
+                : [],
+          }))}
+          titulosDeNota={receber.flatMap((t) => (t.alvo.modulo === "receber" && t.alvo.origem === "nf" ? [t.alvo.id] : []))}
+        />
 
         <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
           <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />

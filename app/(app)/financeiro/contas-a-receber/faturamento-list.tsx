@@ -326,7 +326,11 @@ export function FaturamentoList({
     "todos" | "pendentes" | "faturados"
   >("todos");
   const [busca, setBusca] = React.useState("");
-  const [toast, setToast] = React.useState<string | null>(null);
+  // O aviso do canto. `apuracao` é a segunda linha do aviso da NF emitida
+  // (módulo fiscal): em que Apuração os impostos dela entraram.
+  const [toast, setToast] = React.useState<{ texto: string; apuracao: string | null } | null>(
+    null,
+  );
   const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
   // Recebimento antes da NF (decisão 130): o registro abre pela linha; o
   // selo abre a lista, pela chave — depois do cancelamento a lista se
@@ -340,7 +344,8 @@ export function FaturamentoList({
 
   React.useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 5000);
+    // Com a segunda linha há mais para ler: o aviso fica mais tempo.
+    const t = setTimeout(() => setToast(null), toast.apuracao ? 9000 : 5000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -1273,11 +1278,11 @@ export function FaturamentoList({
         <FaturarDrawer
           state={drawer}
           onClose={() => setDrawer(null)}
-          onEmitida={(msg) => {
+          onEmitida={(msg, apuracao) => {
             setDrawer(null);
             setSel({});
             setModoSelecao(false);
-            setToast(msg);
+            setToast({ texto: msg, apuracao });
           }}
           tipos={tipos}
           subtipos={subtipos}
@@ -1320,10 +1325,12 @@ export function FaturamentoList({
               return;
             }
             setRegistrarAntes(null);
-            setToast(
-              `${formatMoney(dados.valor)} recebidos antes da NF em ${alvo.titulo}. ` +
+            setToast({
+              texto:
+                `${formatMoney(dados.valor)} recebidos antes da NF em ${alvo.titulo}. ` +
                 "Na emissão da nota, o valor entra como a parcela 1, já recebida.",
-            );
+              apuracao: null,
+            });
             router.refresh();
           });
         }}
@@ -1347,9 +1354,10 @@ export function FaturamentoList({
               setErroAntes(res.message);
               return;
             }
-            setToast(
-              `Recebimento de ${formatMoney(recebido.valor)} cancelado: o lançamento saiu do extrato.`,
-            );
+            setToast({
+              texto: `Recebimento de ${formatMoney(recebido.valor)} cancelado: o lançamento saiu do extrato.`,
+              apuracao: null,
+            });
             router.refresh();
           });
         }}
@@ -1365,10 +1373,21 @@ export function FaturamentoList({
       {toast && (
         <div
           role="status"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated"
+          className={cn(
+            "fixed bottom-6 right-6 z-50 flex gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated",
+            // Com a segunda linha o aviso quebra em linhas, alinhado pelo topo.
+            toast.apuracao ? "max-w-[560px] items-start" : "items-center",
+          )}
         >
-          <FileCheck2 className="h-4 w-4 shrink-0 text-emerald-700" />
-          <span className="text-sm font-semibold text-emerald-900">{toast}</span>
+          <FileCheck2
+            className={cn("h-4 w-4 shrink-0 text-emerald-700", toast.apuracao && "mt-0.5")}
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-emerald-900">{toast.texto}</p>
+            {toast.apuracao && (
+              <p className="mt-1 text-[13px] leading-snug text-emerald-900">{toast.apuracao}</p>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setToast(null)}

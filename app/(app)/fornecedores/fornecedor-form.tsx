@@ -30,6 +30,12 @@
  * fica âmbar e diz o que a consulta indicou. No Simples entra a declaração
  * de optante (IN SRF 459, anexo I), e a nota azul diz o que o regime faz na
  * aprovação da PP. Regras em `lib/fiscal/regime-do-fornecedor.ts`.
+ *
+ * Decisão 142 (02/10/2026): a consulta fica gravada inteira — com o
+ * "desde" da opção pelo Simples ou pelo MEI —, e o texto embaixo do regime
+ * (inclusive o âmbar de "alterado manualmente") vale ao reabrir. No Simples,
+ * ao lado da caixa da declaração, o **arquivo** dela
+ * (`declaracao-simples.tsx`).
  */
 
 import * as React from "react";
@@ -77,10 +83,10 @@ import {
   NOTA_DO_REGIME,
   REGIMES_DO_FORNECEDOR,
   ROTULO_DO_REGIME,
+  consultaDaRespostaDoCnpj,
   consultaDoCadastro,
+  consultaParaGravar,
   origemDoRegime,
-  regimeConsultadoEmParaGravar,
-  regimeDaConsultaDoCnpj,
   regimeDepoisDaConsulta,
   type ConsultaDoRegime,
 } from "@/lib/fiscal/regime-do-fornecedor";
@@ -93,6 +99,7 @@ import {
   type ActionResult,
   type FornecedorResumo,
 } from "./actions";
+import { CampoArquivoDaDeclaracao, useArquivoDaDeclaracao } from "./declaracao-simples";
 
 const UFS: UF[] = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
@@ -414,6 +421,11 @@ export function FornecedorForm({
   const [declaracaoRecebida, setDeclaracaoRecebida] = React.useState<boolean>(
     fornecedor?.declaracao_simples_recebida ?? false,
   );
+  /** O arquivo da declaração de optante (decisão 142). Fica com o cadastro
+   *  mesmo quando o regime deixa de ser Simples: só o ✕ o tira. */
+  const declaracaoArquivo = useArquivoDaDeclaracao(
+    fornecedor?.declaracao_simples_path ?? null,
+  );
 
   /** Qual aba do pagamento está à vista. Abre no PIX quando é só o que o
    *  fornecedor tem — senão o cadastro pareceria vazio. */
@@ -631,13 +643,13 @@ export function FornecedorForm({
       if (data.uf) setUf((atual) => atual || String(data.uf).toUpperCase());
 
       // Módulo fiscal: o regime tributário sai da mesma consulta (opção pelo
-      // Simples e pelo MEI). Entra no campo vazio ou no lugar do que veio de
-      // uma consulta anterior; o escolhido à mão fica, e o aviso âmbar diz o
-      // que a consulta indicou.
-      const regimeDaConsulta = regimeDaConsultaDoCnpj(data);
-      if (regimeDaConsulta) {
-        setRegime((atual) => regimeDepoisDaConsulta(atual, consultaRegime, regimeDaConsulta));
-        setConsultaRegime({ cnpj: cnpjDigits, em: hojeEmSaoPauloIso(), regime: regimeDaConsulta });
+      // Simples e pelo MEI, e desde quando). Entra no campo vazio ou no
+      // lugar do que veio de uma consulta anterior; o escolhido à mão fica,
+      // e o aviso âmbar diz o que a consulta indicou.
+      const consulta = consultaDaRespostaDoCnpj(data, cnpjDigits, hojeEmSaoPauloIso());
+      if (consulta) {
+        setRegime((atual) => regimeDepoisDaConsulta(atual, consultaRegime, consulta.regime));
+        setConsultaRegime(consulta);
       }
 
       relerCampos();
@@ -760,14 +772,28 @@ export function FornecedorForm({
    *  FormData com o flag ligado — e a essa altura o `<form>` do evento já
    *  não está mais ao alcance. */
   function gravar(formData: FormData, confirmarPagamento: boolean) {
+    // O arquivo da declaração que vai junto passa a ser do cadastro já: a
+    // página de cadastro redireciona e o formulário fecha sem voltar aqui.
+    const arquivoIndo = declaracaoArquivo.gravando(
+      formData.get("declaracao_simples_path")?.toString() || null,
+    );
     startTransition(async () => {
-      const res: ActionResult = isEdit
-        ? await atualizarFornecedor(fornecedor!.id, formData, confirmarPagamento)
+      const res: ActionResult | undefined = await (isEdit
+        ? atualizarFornecedor(fornecedor!.id, formData, confirmarPagamento)
         : emDialog
-          ? await criarFornecedorRapido(formData)
-          : await criarFornecedor(formData);
+          ? criarFornecedorRapido(formData)
+          : criarFornecedor(formData)
+      ).catch(() => ({
+        ok: false as const,
+        message: "Não foi possível salvar. Tente novamente.",
+      }));
+
+      // `criarFornecedor` gravou e redirecionou para a lista: a promessa
+      // da action volta vazia, e a página já está saindo.
+      if (!res) return;
 
       if (!res.ok) {
+        arquivoIndo.naoGravou();
         if (res.pedeConfirmacaoPagamento) {
           setAvisoPagamento({ formData, ...res.pedeConfirmacaoPagamento });
           return;
@@ -800,6 +826,9 @@ export function FornecedorForm({
     // `</form>` da PP e escapa por sorte — mudar isso de lugar bastaria
     // para o cadastro do fornecedor passar a emitir a PP junto.
     e.stopPropagation();
+    // O arquivo da declaração ainda subindo: o botão está travado, e o
+    // Enter num campo também não grava.
+    if (declaracaoArquivo.enviando) return;
     setError(null);
     setFieldErrors({});
 
@@ -813,19 +842,23 @@ export function FornecedorForm({
     formData.set("telefone", onlyDigits(formData.get("telefone")?.toString() ?? ""));
     formData.set("cep", onlyDigits(formData.get("cep")?.toString() ?? ""));
     // Módulo fiscal: o regime vai com o resto do cadastro; pessoa física não
-    // tem. A data da consulta só vai quando o regime é o que ela indicou, e
-    // a declaração de optante só no Simples (o servidor confere de novo).
+    // tem. A consulta do CNPJ vai inteira (decisão 142) — a deste CNPJ,
+    // valha ou não o regime escolhido —, e a declaração de optante só no
+    // Simples (o servidor confere de novo). O arquivo da declaração vai
+    // sempre: trocar o regime não o tira do cadastro, só o ✕.
     formData.set("regime_tributario", ehPj ? regime ?? "" : "");
-    formData.set(
-      "regime_consultado_em",
-      ehPj
-        ? regimeConsultadoEmParaGravar(regime, consultaRegime, formData.get("cpf_cnpj")?.toString() ?? "") ?? ""
-        : "",
+    const consulta = consultaParaGravar(
+      ehPj ? consultaRegime : null,
+      formData.get("cpf_cnpj")?.toString() ?? "",
     );
+    formData.set("regime_consulta", consulta.regime_consulta ?? "");
+    formData.set("regime_desde", consulta.regime_desde ?? "");
+    formData.set("regime_consultado_em", consulta.regime_consultado_em ?? "");
     formData.set(
       "declaracao_simples_recebida",
       ehPj && regime === "simples" && declaracaoRecebida ? "true" : "false",
     );
+    formData.set("declaracao_simples_path", declaracaoArquivo.path ?? "");
 
     if (duplicado && !isEdit) {
       setError(
@@ -1106,18 +1139,29 @@ export function FornecedorForm({
                 </Campo>
               )}
 
-              {/* Módulo fiscal: no Simples, a declaração de optante. */}
+              {/* Módulo fiscal: no Simples, a declaração de optante e o
+                  arquivo dela (decisão 142). A caixa fica na altura do
+                  botão do arquivo. Fora do Simples os dois somem, mas o
+                  arquivo continua com o cadastro. */}
               {ehPj && regime === "simples" && (
-                <label className="col-span-12 flex cursor-pointer items-center gap-2.5">
-                  <Checkbox
-                    id="declaracao_simples_recebida"
-                    checked={declaracaoRecebida}
-                    onCheckedChange={(c) => setDeclaracaoRecebida(c === true)}
+                <>
+                  <label className="col-span-12 flex cursor-pointer items-center gap-2.5 self-end sm:col-span-7 sm:h-11">
+                    <Checkbox
+                      id="declaracao_simples_recebida"
+                      checked={declaracaoRecebida}
+                      onCheckedChange={(c) => setDeclaracaoRecebida(c === true)}
+                    />
+                    <span className="text-[12.5px] font-semibold">
+                      Declaração de optante recebida (IN SRF 459, anexo I)
+                    </span>
+                  </label>
+                  <CampoArquivoDaDeclaracao
+                    arquivo={declaracaoArquivo}
+                    disabled={pending}
+                    errosDoServidor={fieldErrors.declaracao_simples_path}
+                    className="col-span-12 min-w-0 sm:col-span-5"
                   />
-                  <span className="text-[12.5px] font-semibold">
-                    Declaração de optante recebida (IN SRF 459, anexo I)
-                  </span>
-                </label>
+                </>
               )}
 
               {/* Módulo fiscal: o que o regime faz com as retenções e o
@@ -1602,11 +1646,13 @@ export function FornecedorForm({
             )}
             <button
               type="submit"
-              disabled={pending || !pronto}
+              // Com o arquivo da declaração subindo, espera: gravar antes
+              // deixaria o arquivo fora do cadastro.
+              disabled={pending || !pronto || Boolean(declaracaoArquivo.enviando)}
               title={pronto ? undefined : textoValidacao}
               className={cn(
                 "inline-flex items-center gap-2 rounded-lg bg-california-red px-[18px] py-2.5 text-[13.5px] font-semibold text-white transition-all",
-                pronto && !pending
+                pronto && !pending && !declaracaoArquivo.enviando
                   ? "shadow-brand hover:bg-california-red-hover"
                   : "cursor-not-allowed opacity-45",
               )}

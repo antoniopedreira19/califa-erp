@@ -113,6 +113,9 @@ export interface TituloRow {
   fat_numero_nf: string;
   fat_data_emissao: string;
   fat_descricao: string;
+  /** "California · Salvador · 19.437.976/0001-54": o CNPJ que emitiu a nota
+   *  (módulo fiscal, 02/10/2026). Nulo nas notas de antes e fora de nota. */
+  fat_cnpj_emissor: string | null;
   contraparte_nome: string;
   /** Rótulos dos jobs DISTINTOS que a nota cobre, sem repetição. A nota com
    *  save e a com dois faturamentos parciais têm mais de um item do mesmo
@@ -467,6 +470,8 @@ export function TitulosList({
           subtipoInicialId: null,
           centroTravado: false,
           dataInicial: hoje,
+          // Módulo fiscal: a nota do título, para o bloco "No fiscal" da baixa.
+          notaId: baixando.faturamento_id,
         }
       : {
           chave: baixando.id,
@@ -499,6 +504,8 @@ export function TitulosList({
           subtipoInicialId: baixando.plano_conta_subtipo_id,
           centroTravado: baixando.origem === "rendimento",
           dataInicial: baixando.origem === "rendimento" ? baixando.data_previsao_recebimento : hoje,
+          // Sem nota: a baixa não tem o bloco "No fiscal".
+          notaId: null,
         }
     : null;
 

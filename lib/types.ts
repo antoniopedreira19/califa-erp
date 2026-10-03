@@ -246,8 +246,18 @@ export interface Fornecedor {
 
   // Módulo fiscal (02/10/2026): regime tributário, da consulta do CNPJ.
   regime_tributario: RegimeTributarioFornecedor | null;
+  /** O regime que a consulta do CNPJ indicou (decisão 142). Diferente de
+   *  `regime_tributario` = alterado manualmente. */
+  regime_consulta: RegimeTributarioFornecedor | null;
+  /** A data de opção pelo Simples ou pelo MEI que a consulta trouxe
+   *  ("AAAA-MM-DD"); nula no regime normal ou sem a data (decisão 142). */
+  regime_desde: string | null;
+  /** O dia da consulta que deu `regime_consulta`, valha ou não o regime
+   *  gravado (até a decisão 142, só quando o gravado era o indicado). */
   regime_consultado_em: string | null;
   declaracao_simples_recebida: boolean;
+  /** O arquivo da declaração de optante do Simples, no bucket privado
+   *  `fornecedores` (`<tenant>/declaracoes/<uuid>-<nome>`, decisão 142). */
   declaracao_simples_path: string | null;
 }
 
@@ -2775,7 +2785,11 @@ export type OrigemLancamento =
   | "transferencia_entrada"
   // O recebimento antes da NF (decisão 130), enquanto a nota não sai. Na
   // emissão ele vira `titulo_baixa` da parcela 1.
-  | "recebimento_antes_nf";
+  | "recebimento_antes_nf"
+  // A baixa de uma guia de imposto (módulo fiscal, entrega 2): uma linha
+  // por parte do rateio, mais a multa e os juros, todas com
+  // `imposto_a_pagar_id`. A conciliação as mostra como uma linha só.
+  | "imposto_baixa";
 
 export interface LancamentoFinanceiro {
   id: string;
@@ -2831,6 +2845,8 @@ export interface LancamentoFinanceiro {
   motivo_estorno: string | null;
   /** A transferência entre contas de que esta linha é uma perna. */
   transferencia_id: string | null;
+  /** O imposto a pagar que esta linha paga (origem `imposto_baixa`). */
+  imposto_a_pagar_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
   created_at: string;
@@ -4042,4 +4058,100 @@ export interface NotaFiscalDaPP {
   nf_registrada_em: string | null;
   credito_pis_cofins_retirado: boolean;
   credito_pis_cofins_motivo: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Módulo fiscal · entrega 2 (02/10/2026): aprovações da apuração e Impostos a
+// Pagar. Migration 20261002100701. A guia em si é calculada
+// (`lib/fiscal/apuracao.ts`); o banco guarda a aprovação e os títulos.
+// ---------------------------------------------------------------------------
+
+export type TributoFiscal = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "ISS_RET" | "CSRF" | "IRRF";
+
+export interface FiscalAprovacao {
+  id: string;
+  tenant_id: string;
+  /** `${prefixo}|${estabelecimento ou empresa contábil}|${competência}`. */
+  chave: string;
+  tributo: TributoFiscal;
+  empresa_contabil_id: string;
+  estabelecimento_id: string | null;
+  /** "2026-10" ou "2026-T4". */
+  competencia: string;
+  periodo: "mensal" | "trimestral";
+  data: string;
+  valor_calculado: number;
+  valor_guia: number;
+  justificativa: string | null;
+  /** Aprovação complementar, depois que o cálculo mudou. */
+  diferenca: boolean;
+  compensacoes_usadas: string[];
+  cotas: unknown;
+  memoria: unknown;
+  rateio: unknown;
+  guia_path: string | null;
+  aprovada_por: string;
+  aprovada_em: string;
+}
+
+export type OrigemImpostoAPagar = "apuracao" | "diferenca" | "avulso";
+export type StatusImpostoAPagar = "a_pagar" | "pago";
+
+export interface ImpostoAPagar {
+  id: string;
+  tenant_id: string;
+  aprovacao_id: string | null;
+  origem: OrigemImpostoAPagar;
+  tributo: TributoFiscal | "OUTRO";
+  /** "ISS próprio", "PIS", "IRPJ (com adicional)"… */
+  titulo: string;
+  /** Código do DARF; nulo na guia municipal. */
+  codigo_receita: string | null;
+  empresa_contabil_id: string;
+  estabelecimento_id: string | null;
+  competencia: string;
+  rotulo_competencia: string;
+  cota_numero: number | null;
+  cota_total: number | null;
+  juros_pct: number | null;
+  descricao: string;
+  vencimento: string;
+  principal: number;
+  juros: number;
+  /** principal + juros (o que a guia cobra; corrigível). */
+  valor: number;
+  status: StatusImpostoAPagar;
+  guia_path: string | null;
+  pago_em: string | null;
+  conta_bancaria_id: string | null;
+  multa_juros: number;
+  comprovante_path: string | null;
+  baixado_por: string | null;
+  baixado_em: string | null;
+  criado_por: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImpostoAPagarRateio {
+  id: string;
+  tenant_id: string;
+  imposto_a_pagar_id: string;
+  empresa_id: string;
+  regional_id: string | null;
+  valor: number;
+  percentual: number;
+  ordem: number;
+}
+
+export interface ImpostoAPagarCorrecao {
+  id: string;
+  tenant_id: string;
+  imposto_a_pagar_id: string;
+  de: number;
+  para: number;
+  justificativa: string;
+  anexo_path: string | null;
+  criado_por: string;
+  created_at: string;
 }

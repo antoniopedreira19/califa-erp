@@ -186,11 +186,12 @@ test("o registro do financeiro vem das colunas nf_* (numeric chega como texto)",
 });
 
 test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
-  assert.equal(regimeDoFornecedorDaPP(true, { regime_tributario: "normal", regime_consultado_em: null, declaracao_simples_recebida: false }), null);
-  assert.equal(regimeDoFornecedorDaPP(false, { regime_tributario: null, regime_consultado_em: null, declaracao_simples_recebida: false }), null);
+  assert.equal(regimeDoFornecedorDaPP(true, { regime_tributario: "normal", regime_consulta: null, regime_consultado_em: null, declaracao_simples_recebida: false }), null);
+  assert.equal(regimeDoFornecedorDaPP(false, { regime_tributario: null, regime_consulta: null, regime_consultado_em: null, declaracao_simples_recebida: false }), null);
   assert.equal(regimeDoFornecedorDaPP(false, null), null);
   const normal = regimeDoFornecedorDaPP(false, {
     regime_tributario: "normal",
+    regime_consulta: "normal",
     regime_consultado_em: "2026-10-01",
     declaracao_simples_recebida: null,
   });
@@ -209,6 +210,35 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
   assert.equal(rotuloCurtoDoRegime("simples"), "optante do Simples");
   assert.equal(rotuloCurtoDoRegime("mei"), "MEI");
   assert.equal(rotuloCurtoDoRegime(null), "regime não informado");
+});
+
+test("regime do fornecedor: a data da consulta só acompanha o regime que ela indicou (decisão 142)", () => {
+  // Trocado à mão: a consulta disse normal e o cadastro diz Simples.
+  const trocado = regimeDoFornecedorDaPP(false, {
+    regime_tributario: "simples",
+    regime_consulta: "normal",
+    regime_consultado_em: "2026-10-02",
+    declaracao_simples_recebida: true,
+  });
+  assert.ok(trocado);
+  assert.equal(trocado.consultado_em, null);
+  assert.equal(textoDoRegime(trocado), "Optante do Simples Nacional · declaração recebida");
+  // A consulta indicou o regime gravado.
+  const indicado = regimeDoFornecedorDaPP(false, {
+    regime_tributario: "mei",
+    regime_consulta: "mei",
+    regime_consultado_em: "2026-10-02",
+    declaracao_simples_recebida: false,
+  });
+  assert.equal(indicado?.consultado_em, "2026-10-02");
+  // Gravado antes da 142: só a data, e só quando o regime era o indicado.
+  const antigo = regimeDoFornecedorDaPP(false, {
+    regime_tributario: "simples",
+    regime_consulta: null,
+    regime_consultado_em: "2026-09-21",
+    declaracao_simples_recebida: false,
+  });
+  assert.equal(antigo?.consultado_em, "2026-09-21");
 });
 
 test("a NF em conferência começa no registro ou no anexo, e a aprovação cobra data e valor", () => {
@@ -262,6 +292,12 @@ test("as guias: DARF no dia 20 do mês seguinte ao pagamento; ISS retido pelo mu
   assert.equal(vencimentoDasGuiasFederais(CADASTRO, "ssa", "2026-11-20")?.data, "2026-12-18");
   assert.equal(vencimentoDasGuiasFederais(CADASTRO, "ssa", ""), null);
   assert.equal(vencimentoDasGuiasFederais(CADASTRO, "nenhum", "2026-11-20"), null);
+  // Dia trocado no cadastro para 15 a partir de 01/12/2026: o pagamento de
+  // novembro vence no dia de antes; o de dezembro, no novo — o dia vigente no
+  // fim do mês do pagamento, como no motor (não o de hoje).
+  const trocado = { ...CADASTRO, parametros: [...CADASTRO.parametros, parametro("retencoes_dia", 15, "2026-12-01")] };
+  assert.equal(vencimentoDasGuiasFederais(trocado, "ssa", "2026-11-20")?.data, "2026-12-18");
+  assert.equal(vencimentoDasGuiasFederais(trocado, "ssa", "2026-12-10")?.data, "2027-01-15");
   // NF de 03/11/2026 em Salvador: 05/12 é sábado → prorroga para 07/12.
   const iss = guiaDoIssRetido(CADASTRO, "ssa", "2026-11-03");
   assert.equal(iss?.municipio, "Salvador");

@@ -21,6 +21,7 @@ import {
 import type { createClient } from "@/lib/supabase/server";
 import type { ContaBancaria, TituloReceberStatus } from "@/lib/types";
 import type { TituloRow } from "./titulos-list";
+import { formatarCnpj } from "@/lib/fiscal/cadastro";
 
 // ---------------------------------------------------------------------------
 // As consultas — o `select` de cada uma. Os filtros ficam com quem consulta:
@@ -37,7 +38,8 @@ export const SELECT_TITULO_A_RECEBER = `
             cliente_id, fornecedor_id,
             cliente:clientes(id, nome_fantasia, razao_social),
             fornecedor:fornecedores(id, nome, razao_social),
-            itens:faturamento_itens(origem_tipo, origem_id, envio_parcela_id, valor)
+            itens:faturamento_itens(origem_tipo, origem_id, envio_parcela_id, valor),
+            estabelecimento:fiscal_estabelecimentos(nome, cnpj)
           )
 `;
 
@@ -235,6 +237,8 @@ export function montarTitulosAReceber(e: {
       fornecedor_id: string | null;
       cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
       fornecedor: { nome: string | null; razao_social: string | null } | null;
+      /** O CNPJ que emitiu a nota (módulo fiscal); nulo nas notas de antes. */
+      estabelecimento: { nome: string; cnpj: string | null } | null;
       itens: Array<{
         origem_tipo: "job" | "bv" | "avulso" | "save";
         origem_id: string | null;
@@ -273,6 +277,9 @@ export function montarTitulosAReceber(e: {
       fat_numero_nf: r.faturamento.numero_nf,
       fat_data_emissao: r.faturamento.data_emissao,
       fat_descricao: r.faturamento.descricao,
+      fat_cnpj_emissor: r.faturamento.estabelecimento
+        ? `${r.faturamento.estabelecimento.nome} · ${formatarCnpj(r.faturamento.estabelecimento.cnpj)}`
+        : null,
       contraparte_nome:
         r.faturamento.fornecedor?.razao_social ??
         r.faturamento.fornecedor?.nome ??
@@ -360,6 +367,7 @@ export function montarTitulosAReceber(e: {
       fat_numero_nf: "",
       fat_data_emissao: "",
       fat_descricao: a.descricao,
+      fat_cnpj_emissor: null,
       contraparte_nome:
         (a.cliente_id ? nomeCliente.get(a.cliente_id) : undefined) ??
         (a.fornecedor_id ? nomeFornecedor.get(a.fornecedor_id) : undefined) ??
@@ -416,6 +424,7 @@ export function montarTitulosAReceber(e: {
         fat_numero_nf: "",
         fat_data_emissao: "",
         fat_descricao: descricao,
+        fat_cnpj_emissor: null,
         contraparte_nome: contas,
         jobs_cobertos: [descricao],
         jobs: [],

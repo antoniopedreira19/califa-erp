@@ -36,7 +36,7 @@ import {
   type EntradaDoCredito,
   type SituacaoDoCredito,
 } from "./calculos";
-import { dataBr, mesDe, vencimentoNoMesSeguinte, type Vencimento } from "./datas";
+import { dataBr, mesDe, ultimoDiaDoMes, vencimentoNoMesSeguinte, type Vencimento } from "./datas";
 
 // ---------------------------------------------------------------------------
 // A linha da PP
@@ -45,7 +45,7 @@ import { dataBr, mesDe, vencimentoNoMesSeguinte, type Vencimento } from "./datas
 /** O regime tributário do fornecedor, como o cadastro guarda hoje. */
 export interface RegimeDoFornecedorDaPP {
   regime: RegimeTributarioFornecedor;
-  /** Data da última consulta do CNPJ. */
+  /** Data da última consulta do CNPJ — só quando ela indicou este regime. */
   consultado_em: string | null;
   /** Simples: a declaração da IN 459 foi recebida. */
   declaracao_simples_recebida: boolean;
@@ -58,6 +58,8 @@ export function regimeDoFornecedorDaPP(
   verbaProducao: boolean,
   fornecedor: {
     regime_tributario: string | null;
+    /** O regime que a consulta do CNPJ indicou (decisão 142). */
+    regime_consulta: string | null;
     regime_consultado_em: string | null;
     declaracao_simples_recebida: boolean | null;
   } | null,
@@ -65,9 +67,14 @@ export function regimeDoFornecedorDaPP(
   if (verbaProducao || !fornecedor) return null;
   const regime = REGIMES.find((r) => r === fornecedor.regime_tributario);
   if (!regime) return null;
+  // Desde a decisão 142 o cadastro guarda a consulta mesmo quando o regime
+  // foi trocado à mão; "· consulta do CNPJ em" só acompanha o regime que
+  // ela indicou. Sem `regime_consulta` (gravado antes da 142), a data só
+  // existia com o regime indicado.
+  const indicou = fornecedor.regime_consulta ?? fornecedor.regime_tributario;
   return {
     regime,
-    consultado_em: fornecedor.regime_consultado_em ?? null,
+    consultado_em: indicou === regime ? fornecedor.regime_consultado_em ?? null : null,
     declaracao_simples_recebida: fornecedor.declaracao_simples_recebida === true,
   };
 }
@@ -272,7 +279,8 @@ export function vencimentoDasGuiasFederais(
     dataPagamento,
     feriadosDoCalculo(cad),
     calculo.municipio_da_matriz,
-    parametrosDeRetencao(cad).retencoes_dia,
+    // O dia vigente no fim do mês do pagamento, como no motor da Apuração.
+    parametrosDeRetencao(cad, ultimoDiaDoMes(mesDe(dataPagamento))).retencoes_dia,
   );
 }
 

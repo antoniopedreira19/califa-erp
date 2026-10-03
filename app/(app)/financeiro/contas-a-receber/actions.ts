@@ -7,7 +7,9 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { PRIMEIRA_COMPETENCIA } from "@/lib/fiscal/apuracao";
 import { codigoDoCnae } from "@/lib/fiscal/calculos";
+import { guiasDaEmissaoParaConferir, type ApuracaoDaEmissao } from "@/lib/fiscal/faturar";
 
 type Ok<T extends object = object> = { ok: true } & T;
 type Err = { ok: false; message: string };
@@ -151,6 +153,9 @@ const emitirSchema = z.object({
     .default([]),
 });
 
+/** Hoje no fuso da casa (o servidor roda em UTC): o mesmo dia da aba Apuração. */
+const hojeEmSaoPaulo = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+
 export async function emitirFaturamento(
   input: unknown,
 ): Promise<
@@ -159,6 +164,10 @@ export async function emitirFaturamento(
     /** A nota saiu, mas o CNPJ emissor e o CNAE não se registraram nela:
      *  o formulário mostra isto e não deixa emitir de novo. */
     avisoFiscal: string | null;
+    /** O que o aviso depois de emitir precisa para dizer em que Apuração os
+     *  impostos da nota entraram (`avisoDaApuracao`). Nulo sem o registro
+     *  fiscal: a nota não entra na Apuração. */
+    apuracao: ApuracaoDaEmissao | null;
   }>
 > {
   const parsed = emitirSchema.safeParse(input);
@@ -239,10 +248,10 @@ export async function emitirFaturamento(
   const [estabRes, cnaeRes] = await Promise.all([
     supabase
       .from("fiscal_estabelecimentos")
-      .select("id, ativo")
+      .select("id, ativo, empresa_contabil_id")
       .eq("id", d.estabelecimento_id)
       .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle<{ id: string; ativo: boolean }>(),
+      .maybeSingle<{ id: string; ativo: boolean; empresa_contabil_id: string }>(),
     supabase
       .from("fiscal_cnaes")
       .select("id, estabelecimento_id, codigo, subitem, ativo, vigencia_inicio, vigencia_fim")
@@ -267,6 +276,7 @@ export async function emitirFaturamento(
   if (!estabRes.data?.ativo) {
     return { ok: false, message: "Escolha um CNPJ emissor ativo do cadastro de impostos." };
   }
+  const empresaContabilId = estabRes.data.empresa_contabil_id;
   const cnaeDaLista = cnaeRes.data;
   if (!cnaeDaLista || !cnaeDaLista.ativo || cnaeDaLista.estabelecimento_id !== d.estabelecimento_id) {
     return { ok: false, message: "O CNAE escolhido não é do CNPJ emissor." };
@@ -318,26 +328,69 @@ export async function emitirFaturamento(
     console.error("[faturamento.registrar_fiscal_da_nota]", fatId, erroFiscal.message);
   }
 
-  await logAuditEvent({
-    acao: "faturamento.emitido",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "faturamento",
-    entidadeId: fatId as string,
-    metadata: {
-      origem_tipo: d.origem_tipo,
-      numero_nf: d.numero_nf,
-      valor_total: d.valor_total,
-      qtd_itens: d.itens.length,
-      qtd_parcelas: d.parcelas.length,
-      agrupada: d.itens.length > 1,
-      regionais_no_rateio: d.rateio.length,
-      estabelecimento_id: d.estabelecimento_id,
-      fiscal_cnae_id: d.fiscal_cnae_id,
-      cnae: cnaeTexto,
-      fiscal_registrado: !erroFiscal,
-      ...(erroFiscal ? { erro_fiscal: erroFiscal.message } : {}),
-    },
-  });
+  // O aviso depois de emitir diz em que Apuração os impostos da nota
+  // entraram (`avisoDaApuracao`, protótipo aprovado do módulo fiscal) ou
+  // que a guia já aprovada da competência passa a mostrar a diferença. A
+  // guia só pode estar aprovada em mês encerrado dentro da Apuração: só aí
+  // há a consulta, uma só, e junto com o audit — a emissão não fica mais
+  // lenta. Sem o registro fiscal a nota não entra na Apuração: sem aviso.
+  const hoje = hojeEmSaoPaulo();
+  const guias = erroFiscal
+    ? null
+    : guiasDaEmissaoParaConferir({
+        estabelecimentoId: d.estabelecimento_id,
+        empresaContabilId,
+        emissao: d.data_emissao,
+        hoje,
+        primeiraCompetencia: PRIMEIRA_COMPETENCIA,
+      });
+
+  const [aprovacoesRes] = await Promise.all([
+    guias
+      ? supabase
+          .from("fiscal_aprovacoes")
+          .select("chave")
+          .eq("tenant_id", session.activeTenant.id)
+          .in("chave", [guias.iss, ...guias.pisCofins])
+      : Promise.resolve(null),
+    logAuditEvent({
+      acao: "faturamento.emitido",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "faturamento",
+      entidadeId: fatId as string,
+      metadata: {
+        origem_tipo: d.origem_tipo,
+        numero_nf: d.numero_nf,
+        valor_total: d.valor_total,
+        qtd_itens: d.itens.length,
+        qtd_parcelas: d.parcelas.length,
+        agrupada: d.itens.length > 1,
+        regionais_no_rateio: d.rateio.length,
+        estabelecimento_id: d.estabelecimento_id,
+        fiscal_cnae_id: d.fiscal_cnae_id,
+        cnae: cnaeTexto,
+        fiscal_registrado: !erroFiscal,
+        ...(erroFiscal ? { erro_fiscal: erroFiscal.message } : {}),
+      },
+    }),
+  ]);
+
+  // Sem consulta (mês em curso, futuro ou antes da Apuração), nenhuma guia
+  // pode estar aprovada. Leitura que falhou não impede nada: o aviso só
+  // deixa de dizer se a guia está aprovada.
+  let aprovadas: ApuracaoDaEmissao["aprovadas"] = { iss: false, pis_cofins: false };
+  if (guias && aprovacoesRes) {
+    if (aprovacoesRes.error) {
+      console.error("[faturamento.aprovacoes_da_competencia]", fatId, aprovacoesRes.error.message);
+      aprovadas = null;
+    } else {
+      const chaves = new Set(((aprovacoesRes.data ?? []) as Array<{ chave: string }>).map((a) => a.chave));
+      aprovadas = {
+        iss: chaves.has(guias.iss),
+        pis_cofins: guias.pisCofins.some((c) => chaves.has(c)),
+      };
+    }
+  }
 
   revalidatePath("/financeiro/contas-a-receber");
   revalidatePath("/financeiro/fluxo-caixa");
@@ -348,6 +401,7 @@ export async function emitirFaturamento(
     avisoFiscal: erroFiscal
       ? `A NF ${d.numero_nf} foi emitida, mas o CNPJ emissor e o CNAE não foram registrados nela (${erroFiscal.message}). Não emita a nota de novo: avise o administrador do sistema para completar o registro.`
       : null,
+    apuracao: erroFiscal ? null : { hoje, primeira_competencia: PRIMEIRA_COMPETENCIA, aprovadas },
   };
 }
 

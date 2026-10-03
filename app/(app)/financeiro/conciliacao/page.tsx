@@ -14,6 +14,11 @@ import {
   type DetalheDaFatura,
 } from "@/lib/data/fatura-cartao-extrato";
 import {
+  agruparGuiasDeImposto,
+  carregarLancamentosDasGuias,
+  type DetalheDoImposto,
+} from "@/lib/data/imposto-extrato";
+import {
   calcularSaldoAnterior,
   derivarSaldo,
 } from "@/lib/calculos/saldo-conta";
@@ -121,6 +126,9 @@ export default async function ConciliacaoPage({
   let saldoAnterior = 0;
   let linhas: ReturnType<typeof derivarSaldo> = [];
   const detalhesFatura: Record<string, DetalheDaFatura> = {};
+  let detalhesImposto: Record<string, DetalheDoImposto> = {};
+  /** De cada lançamento de uma guia de imposto para a linha que o mostra. */
+  let linhaDoLancamento = new Map<string, string>();
   let creditos = 0;
   let debitos = 0;
 
@@ -155,11 +163,26 @@ export default async function ConciliacaoPage({
     // A tradução de linha crua para linha do extrato mora em
     // `lib/data/lancamento-linha.ts` desde 20/09/2026: a fatura do cartão
     // (aba Cartão, decisão 093) usa a MESMA, porque é o mesmo extrato.
-    const semSaldo = await montarLinhasDeLancamentos(
-      supabase,
-      session.activeTenant.id,
-      data ?? [],
-    );
+    //
+    // A baixa de uma guia de imposto é UM débito no banco gravado como N
+    // lançamentos — um por parte do rateio, mais a multa e os juros (módulo
+    // fiscal, entrega 2). A leitura das guias só consulta o banco quando há
+    // lançamento `imposto_baixa` no período, e corre junto com a montagem
+    // das linhas: as duas só dependem da consulta acima.
+    const brutos: unknown[] = data ?? [];
+    const idsDasGuias = (brutos as Array<{ id: string; origem: string }>)
+      .filter((r) => r.origem === "imposto_baixa")
+      .map((r) => r.id);
+    const [montadas, lancamentosDasGuias] = await Promise.all([
+      montarLinhasDeLancamentos(supabase, session.activeTenant.id, brutos),
+      carregarLancamentosDasGuias(supabase, session.activeTenant.id, idsDasGuias),
+    ]);
+    // Uma linha por guia, na posição do primeiro lançamento dela e com a
+    // soma de todos: o saldo acumulado e os totais do período não mudam.
+    const comGuias = agruparGuiasDeImposto(montadas, lancamentosDasGuias);
+    const semSaldo = comGuias.linhas;
+    detalhesImposto = comGuias.detalhes;
+    linhaDoLancamento = comGuias.linhaDoLancamento;
     linhas = derivarSaldo(semSaldo, saldoAnterior);
 
     // O pagamento de uma fatura de cartão abre em dois níveis — centro de
@@ -189,6 +212,12 @@ export default async function ConciliacaoPage({
 
   const saldoFinal = saldoAnterior + creditos - debitos;
 
+  // A baixa de um imposto devolve o id de UM dos lançamentos dela para o
+  // `&highlight=`; na tela, a guia é uma linha só, com o id de outro.
+  const highlight = searchParams.highlight
+    ? (linhaDoLancamento.get(searchParams.highlight) ?? searchParams.highlight)
+    : undefined;
+
   return (
     <div className="space-y-6">
       <div>
@@ -212,7 +241,9 @@ export default async function ConciliacaoPage({
         <AbasDaConta
           aba={aba}
           totalTitulos={
-            dadosTitulos ? dadosTitulos.aPagar.length + dadosTitulos.aReceber.length : null
+            dadosTitulos
+              ? dadosTitulos.aPagar.length + dadosTitulos.aReceber.length + dadosTitulos.impostos.length
+              : null
           }
         >
           {dadosTitulos ? (
@@ -241,8 +272,9 @@ export default async function ConciliacaoPage({
 
               <ConciliacaoList
                 linhas={linhas}
-                highlight={searchParams.highlight}
+                highlight={highlight}
                 detalhesFatura={detalhesFatura}
+                detalhesImposto={detalhesImposto}
               />
             </>
           )}

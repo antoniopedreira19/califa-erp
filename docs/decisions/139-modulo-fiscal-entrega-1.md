@@ -54,6 +54,19 @@ de hoje, cada nota e cada PP já entrem com o dado que a Apuração vai usar.
   não está no banco nem na planilha. O financeiro informa no cadastro e
   ativa.
 
+⚠️ **Dias dos federais editáveis (2026-10-02).** Na aba Vencimentos do
+cadastro, o lápis das linhas de PIS/COFINS e das DARF 5952 e 1708 abre a
+mesma edição da aba Parâmetros (`pis_cofins_dia`, `retencoes_dia`): dia de
+1 a 31, valor novo a partir de uma data, só admin ou financeiro. É um dia só
+para todas as matrizes (nas retenções, o mesmo para as duas DARF). A
+antecipação em dia não útil é da lei e fica fixa; o lápis das linhas de ISS
+abre o CNPJ emissor, e o IRPJ/CSLL (último dia útil) não tem lápis.
+Com o dia editável, o Faturar ("Impostos desta nota") e o Aprovar PP (o
+vencimento das DARF de retenção) passaram a ler o dia como o motor da
+Apuração: o vigente no último dia do mês da competência (da emissão, no
+Faturar; do pagamento, na PP). Antes, o Faturar pegava a linha mais antiga e
+a PP, o dia de hoje.
+
 ## 4. Verificação (02/10/2026, no TES-P001/26)
 
 - **Faturar** (TES-1013/26): CNPJ California · Salvador → 21 CNAEs com os
@@ -101,6 +114,24 @@ Apuração e Impostos a Pagar (com baixa, multa e juros, guia e comprovante,
 rateio por empresa e regional e as sublinhas na conciliação); IRPJ/CSLL
 trimestral; Hitlab pelo recebimento; o bloco "No fiscal" nas baixas; o
 fluxo de caixa e o card da Central; o que o fiscal muda no formulário de
-abertura do job (pendência pedida pelo Tiago); o botão "Novo CNPJ
-emissor"; o arquivo da declaração do Simples. As 14 perguntas para a
-contabilidade seguem como pendência.
+abertura do job (pendência pedida pelo Tiago); o arquivo da declaração do
+Simples. As 14 perguntas para a contabilidade seguem como pendência.
+
+⚠️ **Botão "Novo CNPJ emissor" (2026-10-03).** Saiu desta lista: o botão
+da aba CNPJs abre o mesmo diálogo do lápis (cadastro e edição são o mesmo
+formulário), com o que só a criação precisa antes dos campos da edição —
+empresa contábil (só as ativas), tipo (matriz ou filial), município e UF, e
+o nome, sugerido como "Empresa · Município" ("California · Recife"). O CNPJ
+é opcional, como na edição: sem ele, o estabelecimento nasce inativo, com
+"CNPJ a informar". O servidor (`criarEstabelecimento`) confere o mesmo que
+o diálogo confere antes de enviar: campos obrigatórios, 14 dígitos e
+dígitos verificadores do CNPJ, a raiz da empresa, CNPJ e nome repetidos
+(nome sem contar acento e maiúscula). O CNPJ novo entra no fim da lista, e o
+município entra com a grafia que o cadastro já usa ("salvador" vira
+"Salvador"), porque os feriados da cidade chegam ao CNPJ pelo nome. Duas
+conferências **não vêm do banco nem do protótipo e ficam a confirmar com o
+Tiago**: uma matriz por empresa contábil, e a filial só depois da matriz —
+os federais se apuram pela matriz, e a Apuração e o Faturar acham a matriz
+pela primeira linha com esse papel. Empresa sem linha em `fiscal_regimes`
+aparece como Lucro Real (o padrão de `regimeDaPJ`); o diálogo avisa, mas
+ainda não há tela para informar o regime.
