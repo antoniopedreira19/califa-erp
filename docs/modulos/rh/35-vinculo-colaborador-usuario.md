@@ -1,8 +1,13 @@
 # Vínculo Colaborador ↔ Usuário — Spec
 
-> **Status**: Pronto pra implementação. Decisões travadas em 2026-10-03 com o PO.
+> **Status**: **IMPLEMENTADO** e em produção desde 2026-10-02 (task 010). Ver handoff [`2026-10-02-rh-vinculo-colab-usuario.md`](../../handoffs/2026-10-02-rh-vinculo-colab-usuario.md) pra estado operacional atual.
+>
+> Decisões travadas em 2026-10-02 com o PO.
 >
 > Fonte-verdade do subsistema. Toda decisão nova entra aqui, não em commit nem em chat.
+>
+> **Correções pós-release:**
+> - 2026-10-03: `garantirMembershipTenant` passou a **preservar role existente** ao vincular colaborador a profile que já é membro. Antes rebaixava admin pra colaborador (bug mordeu o próprio Antonio). Ver commit `251c108`.
 
 ## 1. Contexto
 
