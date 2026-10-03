@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import {
+  Plus,
+  ChevronDown,
+  AlertOctagon,
+  AlertTriangle,
+  CheckCircle2,
+  CalendarClock,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -31,22 +38,22 @@ type Props = {
   };
   periodos: ColaboradorFeriasPeriodo[];
   lancamentos: ColaboradorFeriasLancamento[];
-  /** Callback de fechar — passado pelo ModalDetalheWrapper. Fecha o modal
-   *  via state local em vez de router.push, evitando round-trip RSC. */
+  /** Fecha o modal via state local do wrapper (evita round-trip RSC). */
   onFechar: () => void;
 };
 
 /**
- * Modal centralizado grande com visão operacional do colaborador.
+ * Modal de detalhe do colaborador — foco único na SITUAÇÃO ATUAL.
  *
- * Layout:
- *   - Header: nome, função, tipo, admissão.
- *   - Ações rápidas: lançar direto, calcular rescisão.
- *   - Timeline HORIZONTAL dos períodos aquisitivos (scroll lateral se >5).
- *     Cada card compacto mostra: aquisitivo, status, usados/direito, limite.
- *   - Histórico cronológico de lançamentos.
+ * Hierarquia visual:
+ *   1. Hero(s) do(s) período(s) acionável(is) — apto/alerta/vencido.
+ *      Se tiver 2+ (regra dos avós), lista todos como heros grandes.
+ *   2. Colapsável acima: períodos anteriores (regularizados).
+ *   3. Colapsável abaixo: períodos futuros (em curso, aquisitivo rolando).
+ *   4. Lançamentos: agendados/pendentes separados do histórico concluído.
  *
- * Substitui o drawer lateral apertado que estourava vertical.
+ * Substituiu a timeline horizontal que achatava passado/presente/futuro
+ * no mesmo peso visual — o RH tinha que caçar o período acionável.
  */
 export function ModalDetalheColaborador({
   colaborador,
@@ -57,9 +64,7 @@ export function ModalDetalheColaborador({
   const router = useRouter();
   const [formAberto, setFormAberto] = React.useState(false);
 
-  const fechar = onFechar;
-
-  // Dias usados (aprovado + concluído) por período — pra barra visual
+  // Dias usados (aprovado + concluído) por período
   const diasUsadosPorPeriodo = new Map<string, number>();
   for (const l of lancamentos) {
     if (!l.periodo_id) continue;
@@ -70,7 +75,7 @@ export function ModalDetalheColaborador({
     );
   }
 
-  // Dias ocupados (inclui pendentes) por período — pra form de lançar direto
+  // Dias ocupados (inclui pendentes) por período — pro form
   const diasOcupadosPorPeriodo = new Map<string, number>();
   for (const l of lancamentos) {
     if (!l.periodo_id) continue;
@@ -95,13 +100,37 @@ export function ModalDetalheColaborador({
     ),
   }));
 
-  // Saldo total disponível (pra hero)
-  const saldoTotal = periodos
-    .filter((p) => p.status === "apto" || p.status === "em_alerta")
-    .reduce((acc, p) => {
-      const ocupados = diasOcupadosPorPeriodo.get(p.id) ?? 0;
-      return acc + Math.max(p.dias_direito - ocupados, 0);
-    }, 0);
+  // Categoriza períodos pela ação possível HOJE
+  const periodosAtivos = periodos.filter(
+    (p) =>
+      p.status === "apto" ||
+      p.status === "em_alerta" ||
+      p.status === "vencido",
+  );
+  const periodosPassados = periodos.filter(
+    (p) => p.status === "regularizado" || p.status === "pago_rescisao",
+  );
+  const periodosFuturos = periodos.filter(
+    (p) => p.status === "incompleto" || p.status === "nao_habilitado",
+  );
+
+  // Lançamentos — divididos entre acionáveis (agendados/pendentes/em curso)
+  // e histórico (concluído, reprovado, cancelado).
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const lancamentosAgendados = lancamentos.filter(
+    (l) =>
+      l.status === "pendente_aprovacao" ||
+      l.status === "em_analise" ||
+      (l.status === "aprovado" && l.data_fim >= hojeISO),
+  );
+  const lancamentosHistorico = lancamentos.filter(
+    (l) => !lancamentosAgendados.includes(l),
+  );
+
+  const saldoTotal = periodosAtivos.reduce((acc, p) => {
+    const ocupados = diasOcupadosPorPeriodo.get(p.id) ?? 0;
+    return acc + Math.max(p.dias_direito - ocupados, 0);
+  }, 0);
 
   const admissaoFmt = colaborador.data_admissao
     ? new Date(colaborador.data_admissao + "T00:00:00").toLocaleDateString(
@@ -110,13 +139,11 @@ export function ModalDetalheColaborador({
     : "—";
 
   return (
-    <Dialog open onOpenChange={(o) => !o && fechar()}>
-      <DialogContent
-        className="max-w-5xl w-[95vw] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
-      >
-        {/* Header fixo */}
+    <Dialog open onOpenChange={(o) => !o && onFechar()}>
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+        {/* Header */}
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4 pr-8">
             <div className="min-w-0">
               <DialogTitle className="text-xl truncate">
                 {colaborador.nome}
@@ -127,46 +154,23 @@ export function ModalDetalheColaborador({
                 {admissaoFmt}
               </p>
             </div>
-            <div className="flex items-center gap-6 shrink-0">
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Saldo disponível
-                </p>
-                <p className="text-2xl font-bold tracking-tight">
-                  {saldoTotal}
-                  <span className="text-sm font-medium text-muted-foreground ml-1">
-                    dias
-                  </span>
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={fechar}
-                className="rounded-lg p-2 text-muted-foreground hover:bg-muted transition-colors"
-                aria-label="Fechar"
-              >
-                <X className="h-5 w-5" />
-              </button>
+            <div className="text-right shrink-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Saldo disponível
+              </p>
+              <p className="text-2xl font-bold tracking-tight leading-none mt-1">
+                {saldoTotal}
+                <span className="text-sm font-medium text-muted-foreground ml-1">
+                  dias
+                </span>
+              </p>
             </div>
           </div>
         </DialogHeader>
 
         {/* Corpo rolável */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-          {/* Ações do RH */}
-          {!formAberto && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setFormAberto(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-3 py-1.5 text-sm font-medium text-white hover:bg-california-red/90 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Lançar férias direto
-              </button>
-            </div>
-          )}
-
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Form de lançar direto (quando aberto) */}
           {formAberto && (
             <LancarDiretoForm
               colaboradorId={colaborador.id}
@@ -180,160 +184,422 @@ export function ModalDetalheColaborador({
             />
           )}
 
-          {/* Timeline HORIZONTAL dos períodos */}
-          <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Períodos aquisitivos ({periodos.length})
-            </h3>
-            {periodos.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhum período gerado.
-              </p>
-            ) : (
-              <div className="overflow-x-auto -mx-6 px-6 pb-2">
-                <div className="flex gap-3 min-w-min">
-                  {periodos.map((p) => {
-                    const usados = diasUsadosPorPeriodo.get(p.id) ?? 0;
-                    const pct = Math.min(
-                      (usados / p.dias_direito) * 100,
-                      100,
-                    );
-                    return (
-                      <CardPeriodo
+          {!formAberto && (
+            <>
+              {/* Períodos anteriores (colapsado por default) */}
+              {periodosPassados.length > 0 && (
+                <GrupoColapsavel
+                  titulo="Períodos anteriores"
+                  contagem={periodosPassados.length}
+                  tom="passado"
+                >
+                  <ul className="divide-y divide-border">
+                    {periodosPassados.map((p) => (
+                      <LinhaPeriodoCompacta
                         key={p.id}
                         periodo={p}
-                        usados={usados}
-                        pct={pct}
+                        usados={diasUsadosPorPeriodo.get(p.id) ?? 0}
                       />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </section>
+                    ))}
+                  </ul>
+                </GrupoColapsavel>
+              )}
 
-          {/* Histórico de lançamentos */}
-          <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Lançamentos ({lancamentos.length})
-            </h3>
-            {lancamentos.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Nenhum lançamento ainda.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border rounded-lg border border-border">
-                {lancamentos.map((l) => {
-                  const temValor =
-                    l.valor_total !== null && Number(l.valor_total) > 0;
-                  const podeMostrarRecibo =
-                    (l.status === "aprovado" || l.status === "concluido") &&
-                    colaborador.tipo_contratacao !== "clt" &&
-                    temValor;
-                  return (
-                    <li
-                      key={l.id}
-                      className="flex items-center justify-between gap-3 p-3 flex-wrap"
+              {/* Hero: período(s) atual(is) */}
+              {periodosAtivos.length === 0 ? (
+                <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum período disponível pra lançar férias no momento.
+                  </p>
+                </div>
+              ) : (
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {periodosAtivos.length === 1
+                        ? "Situação atual"
+                        : `Períodos pra tirar (${periodosAtivos.length})`}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setFormAberto(true)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-california-red px-3 py-1.5 text-sm font-medium text-white hover:bg-california-red/90 transition-colors"
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">
-                          {new Date(
-                            l.data_inicio + "T00:00:00",
-                          ).toLocaleDateString("pt-BR")}{" "}
-                          a{" "}
-                          {new Date(
-                            l.data_fim + "T00:00:00",
-                          ).toLocaleDateString("pt-BR")}{" "}
-                          · {l.dias} {l.dias === 1 ? "dia" : "dias"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {tipoLabel(l.tipo)}
-                          {l.lancado_direto_por_rh && " · lançado pelo RH"}
-                        </p>
-                        {temValor && (
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            Total: R${" "}
-                            {Number(l.valor_total).toLocaleString("pt-BR", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </p>
-                        )}
-                        {l.motivo_reprovacao && (
-                          <p className="mt-0.5 text-xs text-red-700">
-                            Motivo: {l.motivo_reprovacao}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <BadgeLancamento status={l.status} />
-                        {podeMostrarRecibo && (
-                          <BotaoRecibo
-                            lancamentoId={l.id}
-                            temRecibo={!!l.recibo_url}
-                            tipoLancamento={l.tipo}
-                          />
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+                      <Plus className="h-4 w-4" />
+                      Lançar férias
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {periodosAtivos.map((p) => {
+                      const usados = diasUsadosPorPeriodo.get(p.id) ?? 0;
+                      const ocupados = diasOcupadosPorPeriodo.get(p.id) ?? 0;
+                      const lancsDoPeriodo = lancamentos.filter(
+                        (l) => l.periodo_id === p.id,
+                      );
+                      return (
+                        <HeroPeriodo
+                          key={p.id}
+                          periodo={p}
+                          usados={usados}
+                          saldo={Math.max(p.dias_direito - ocupados, 0)}
+                          lancamentos={lancsDoPeriodo}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* Períodos futuros (colapsado por default) */}
+              {periodosFuturos.length > 0 && (
+                <GrupoColapsavel
+                  titulo="Períodos futuros"
+                  contagem={periodosFuturos.length}
+                  tom="futuro"
+                >
+                  <ul className="divide-y divide-border">
+                    {periodosFuturos.map((p) => (
+                      <LinhaPeriodoCompacta
+                        key={p.id}
+                        periodo={p}
+                        usados={diasUsadosPorPeriodo.get(p.id) ?? 0}
+                      />
+                    ))}
+                  </ul>
+                </GrupoColapsavel>
+              )}
+
+              {/* Lançamentos agendados */}
+              {lancamentosAgendados.length > 0 && (
+                <section>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Agendadas e pendentes ({lancamentosAgendados.length})
+                  </h3>
+                  <ul className="divide-y divide-border rounded-lg border border-border">
+                    {lancamentosAgendados.map((l) => (
+                      <LinhaLancamento
+                        key={l.id}
+                        lancamento={l}
+                        tipoContratacao={colaborador.tipo_contratacao}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* Histórico */}
+              {lancamentosHistorico.length > 0 && (
+                <GrupoColapsavel
+                  titulo="Histórico de lançamentos"
+                  contagem={lancamentosHistorico.length}
+                  tom="passado"
+                >
+                  <ul className="divide-y divide-border">
+                    {lancamentosHistorico.map((l) => (
+                      <LinhaLancamento
+                        key={l.id}
+                        lancamento={l}
+                        tipoContratacao={colaborador.tipo_contratacao}
+                      />
+                    ))}
+                  </ul>
+                </GrupoColapsavel>
+              )}
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function CardPeriodo({
+/* ----------------------- Hero do período atual ----------------------- */
+
+function HeroPeriodo({
   periodo: p,
   usados,
-  pct,
+  saldo,
+  lancamentos,
 }: {
   periodo: ColaboradorFeriasPeriodo;
   usados: number;
-  pct: number;
+  saldo: number;
+  lancamentos: ColaboradorFeriasLancamento[];
 }) {
-  const pendentes = Math.max(p.dias_direito - usados, 0);
-  const limiteFmt = new Date(
-    p.data_limite_gozo + "T00:00:00",
-  ).toLocaleDateString("pt-BR");
+  const pct = Math.min((usados / p.dias_direito) * 100, 100);
   const aquisitivoRotulo = `${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`;
 
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const limite = new Date(p.data_limite_gozo + "T00:00:00");
+  const diasAteLimite = Math.ceil(
+    (limite.getTime() - hoje.getTime()) / 86_400_000,
+  );
+  const limiteFmt = limite.toLocaleDateString("pt-BR");
+
+  // Tom visual por status
+  const tom: Record<
+    "vencido" | "em_alerta" | "apto",
+    {
+      borda: string;
+      bg: string;
+      icone: React.ReactNode;
+      labelPrazo: string;
+      textoPrazo: string;
+    }
+  > = {
+    vencido: {
+      borda: "border-red-300",
+      bg: "bg-red-50/60",
+      icone: <AlertOctagon className="h-5 w-5 text-red-700" />,
+      labelPrazo: "Vencido",
+      textoPrazo: `há ${-diasAteLimite} dias`,
+    },
+    em_alerta: {
+      borda: "border-amber-300",
+      bg: "bg-amber-50/60",
+      icone: <AlertTriangle className="h-5 w-5 text-amber-700" />,
+      labelPrazo: "Prazo final",
+      textoPrazo: `em ${diasAteLimite} dias`,
+    },
+    apto: {
+      borda: "border-emerald-300",
+      bg: "bg-emerald-50/40",
+      icone: <CheckCircle2 className="h-5 w-5 text-emerald-700" />,
+      labelPrazo: "Prazo final",
+      textoPrazo: `em ${diasAteLimite} dias`,
+    },
+  };
+  const t = tom[p.status as "vencido" | "em_alerta" | "apto"] ?? tom.apto;
+
+  const agendados = lancamentos.filter(
+    (l) =>
+      l.status === "aprovado" ||
+      l.status === "pendente_aprovacao" ||
+      l.status === "em_analise",
+  );
+
   return (
-    <div className="w-[180px] shrink-0 rounded-lg border border-border bg-card p-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-muted-foreground">#{p.numero}</p>
+    <div className={`rounded-xl border-2 ${t.borda} ${t.bg} p-5`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          {t.icone}
+          <div>
+            <p className="text-sm font-semibold">
+              Período aquisitivo {aquisitivoRotulo}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              De{" "}
+              {new Date(p.aquisitivo_inicio + "T00:00:00").toLocaleDateString(
+                "pt-BR",
+              )}{" "}
+              a{" "}
+              {new Date(p.aquisitivo_fim + "T00:00:00").toLocaleDateString(
+                "pt-BR",
+              )}
+            </p>
+          </div>
+        </div>
         <BadgePeriodo status={p.status} />
       </div>
-      <p className="mt-1 text-sm font-semibold">{aquisitivoRotulo}</p>
-      <div className="mt-3">
-        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-          <div
-            className="h-full bg-california-red"
-            style={{ width: `${pct}%` }}
-          />
+
+      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Saldo pra tirar
+          </p>
+          <p className="mt-1 text-3xl font-bold tracking-tight leading-none">
+            {saldo}
+            <span className="text-sm font-medium text-muted-foreground ml-1">
+              dias
+            </span>
+          </p>
+          <div className="mt-3 h-1.5 w-full rounded-full bg-white/80 overflow-hidden">
+            <div
+              className="h-full bg-california-red"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {usados}/{p.dias_direito} dias já gozados
+          </p>
         </div>
-        <p className="mt-1.5 text-xs">
-          <span className="font-semibold">{usados}</span>
-          <span className="text-muted-foreground">/{p.dias_direito} usados</span>
-        </p>
-        <p className="text-xs">
-          <span className="font-medium text-foreground">{pendentes}</span>
-          <span className="text-muted-foreground"> pendentes</span>
-        </p>
+
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {t.labelPrazo}
+          </p>
+          <p className="mt-1 text-lg font-semibold">{limiteFmt}</p>
+          <p className="text-xs text-muted-foreground">{t.textoPrazo}</p>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Concessivo
+          </p>
+          <p className="mt-1 text-sm">
+            até{" "}
+            {new Date(p.concessivo_fim + "T00:00:00").toLocaleDateString(
+              "pt-BR",
+            )}
+          </p>
+        </div>
       </div>
-      <div className="mt-2 pt-2 border-t border-border">
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Limite p/ gozo
-        </p>
-        <p className="text-xs font-medium">{limiteFmt}</p>
-      </div>
+
+      {agendados.length > 0 && (
+        <div className="mt-5 pt-4 border-t border-black/5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Agendados nesse período
+          </p>
+          <ul className="space-y-1.5">
+            {agendados.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate">
+                    {new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
+                      "pt-BR",
+                    )}{" "}
+                    a{" "}
+                    {new Date(l.data_fim + "T00:00:00").toLocaleDateString(
+                      "pt-BR",
+                    )}{" "}
+                    · {l.dias}d
+                  </span>
+                </div>
+                <BadgeLancamento status={l.status} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
+
+/* ------------------- Grupo colapsável (passado/futuro) ------------------ */
+
+function GrupoColapsavel({
+  titulo,
+  contagem,
+  tom,
+  children,
+}: {
+  titulo: string;
+  contagem: number;
+  tom: "passado" | "futuro";
+  children: React.ReactNode;
+}) {
+  const [aberto, setAberto] = React.useState(false);
+  const tomCls =
+    tom === "passado"
+      ? "bg-muted/40 border-border"
+      : "bg-sky-50/50 border-sky-200";
+  return (
+    <section className={`rounded-xl border ${tomCls} overflow-hidden`}>
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{titulo}</span>
+          <span className="text-xs text-muted-foreground">({contagem})</span>
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`}
+        />
+      </button>
+      {aberto && (
+        <div className="border-t border-border bg-card">{children}</div>
+      )}
+    </section>
+  );
+}
+
+/* ----------------------- Linha compacta de período ---------------------- */
+
+function LinhaPeriodoCompacta({
+  periodo: p,
+  usados,
+}: {
+  periodo: ColaboradorFeriasPeriodo;
+  usados: number;
+}) {
+  const aquisitivoRotulo = `${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`;
+  return (
+    <li className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="font-medium">{aquisitivoRotulo}</span>
+        <span className="text-xs text-muted-foreground">
+          {usados}/{p.dias_direito} dias
+        </span>
+      </div>
+      <BadgePeriodo status={p.status} />
+    </li>
+  );
+}
+
+/* ----------------------- Linha de lançamento ---------------------------- */
+
+function LinhaLancamento({
+  lancamento: l,
+  tipoContratacao,
+}: {
+  lancamento: ColaboradorFeriasLancamento;
+  tipoContratacao: TipoContratacao;
+}) {
+  const temValor = l.valor_total !== null && Number(l.valor_total) > 0;
+  const podeMostrarRecibo =
+    (l.status === "aprovado" || l.status === "concluido") &&
+    tipoContratacao !== "clt" &&
+    temValor;
+
+  return (
+    <li className="flex items-center justify-between gap-3 p-3 flex-wrap">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">
+          {new Date(l.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")} a{" "}
+          {new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR")} ·{" "}
+          {l.dias} {l.dias === 1 ? "dia" : "dias"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {tipoLabel(l.tipo)}
+          {l.lancado_direto_por_rh && " · lançado pelo RH"}
+        </p>
+        {temValor && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Total: R${" "}
+            {Number(l.valor_total).toLocaleString("pt-BR", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </p>
+        )}
+        {l.motivo_reprovacao && (
+          <p className="mt-0.5 text-xs text-red-700">
+            Motivo: {l.motivo_reprovacao}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <BadgeLancamento status={l.status} />
+        {podeMostrarRecibo && (
+          <BotaoRecibo
+            lancamentoId={l.id}
+            temRecibo={!!l.recibo_url}
+            tipoLancamento={l.tipo}
+          />
+        )}
+      </div>
+    </li>
+  );
+}
+
+/* --------------------------- Badges ------------------------------------ */
 
 function tipoLabel(t: FeriasLancamentoTipo): string {
   switch (t) {
@@ -367,7 +633,7 @@ function BadgePeriodo({ status }: { status: FeriasPeriodoStatus }) {
   const info = map[status];
   return (
     <span
-      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${info.cls}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0 ${info.cls}`}
     >
       {info.label}
     </span>
