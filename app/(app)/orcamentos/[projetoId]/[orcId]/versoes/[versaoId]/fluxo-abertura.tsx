@@ -36,6 +36,7 @@ import {
   type PessoaOpcao,
 } from "./enviar-job-modal";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
+import { PPsQueTravam, type PPQueTravaOEnvio } from "./pps-que-travam";
 
 type Modal = "aprovar" | "form" | "envio" | "cancelar_envio" | null;
 
@@ -131,6 +132,10 @@ interface Props {
   /** Valores que pré-preenchem o modal, vindos do orçamento. */
   inicial: DadosJob;
   job: JobExistente | null;
+  /** PPs do job aguardando abertura fora de `cancelada`: travam o "Cancelar
+   *  envio à abertura", e o pop-up as lista com o botão que as cancela
+   *  (decisão 143). Vazia em qualquer outro caso. */
+  ppsQueTravam: PPQueTravaOEnvio[];
   /** `jobs.enviar_abertura`: só o GP envia e reenvia (Tiago, 22/09/2026).
    *  Sem ela a barra mostra a etapa, mas não o botão. */
   podeEnviarAbertura: boolean;
@@ -178,6 +183,7 @@ export function FluxoAbertura({
   cidadesIniciais,
   inicial,
   job,
+  ppsQueTravam,
   podeEnviarAbertura,
   abrirRevisao = false,
 }: Props) {
@@ -591,8 +597,14 @@ export function FluxoAbertura({
             <strong className="font-mono text-foreground">{job?.codigo}</strong>{" "}
             é cancelado e o orçamento volta a{" "}
             <strong className="text-foreground">Aprovado</strong>, com o envio
-            disponível de novo. Saves e BVs voltam para a versão. Se houver PP
-            gerada no job, cancele-a antes.
+            disponível de novo. Saves e BVs voltam para a versão.
+            {job && (
+              <PPsQueTravam
+                jobId={job.id}
+                pps={ppsQueTravam}
+                depois="cancelar o envio"
+              />
+            )}
             {erroGeral && (
               <span className="mt-3 block text-xs text-california-red">
                 {erroGeral}
@@ -603,6 +615,9 @@ export function FluxoAbertura({
         confirmLabel="Sim, cancelar envio"
         cancelLabel="Voltar"
         pending={pending}
+        // Com PP gerada o servidor recusaria; a lista acima diz o porquê e
+        // traz o botão que as cancela (decisão 143).
+        confirmDisabled={ppsQueTravam.length > 0}
         onConfirm={handleCancelarEnvio}
       />
 

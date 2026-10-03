@@ -19,6 +19,7 @@ import {
 } from "@/lib/data/espelhos-do-job";
 import { formatCurrency } from "@/lib/utils";
 import { cancelarAprovacaoVersao } from "../actions";
+import { cancelarPedidoCompra } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
 
 export type AberturaResult =
   | { ok: true; jobId: string; codigo: string }
@@ -1154,6 +1155,119 @@ export async function cancelarAprovacaoDoJobDevolvido(
     };
   }
 
+  return { ok: true };
+}
+
+/**
+ * Cancela, de dentro do pop-up, as PPs que travam o "Cancelar aprovação"
+ * do job devolvido (128) e o "Cancelar envio à abertura" (057) — decisão
+ * 143. Até 03/10/2026 a pessoa tinha de ir à aba de PPs do job e cancelar
+ * uma a uma.
+ *
+ * A trava continua em `cancelarEnvio`: aqui só se encurta o caminho. Cada
+ * PP passa por `cancelarPedidoCompra`, com as regras, as permissões e a
+ * auditoria de sempre — não há segundo jeito de cancelar PP.
+ *
+ * `ppIds` é a lista que a pessoa viu e confirmou. Se as PPs do job mudaram
+ * desde que o pop-up abriu (uma gerada, outra cancelada noutra aba), nada
+ * é cancelado: confirmar uma lista e cancelar outra é o que não pode.
+ */
+export async function cancelarPPsQueTravamOEnvio(
+  jobId: string,
+  ppIds: string[],
+): Promise<CancelarEnvioResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.cancelar_pp");
+  if (!gate.ok) return { ok: false, message: gate.message };
+
+  const supabase = createClient();
+
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, codigo, status, projeto_id, orcamento_id")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      codigo: string;
+      status: string;
+      projeto_id: string;
+      orcamento_id: string;
+    }>();
+
+  if (!job) return { ok: false, message: "Job não encontrado." };
+  if (
+    job.status !== "aguardando_abertura" &&
+    job.status !== "rejeitado_financeiro"
+  ) {
+    return {
+      ok: false,
+      message:
+        "O financeiro já abriu este job. As PPs se cancelam pela aba de Pedidos de Produção do job.",
+    };
+  }
+
+  const { data: pps, error: errPps } = await supabase
+    .from("pedidos_compra")
+    .select("id, codigo")
+    .eq("job_id", job.id)
+    .eq("tenant_id", session.activeTenant.id)
+    .neq("status", "cancelada")
+    .order("codigo", { ascending: true })
+    .returns<{ id: string; codigo: string }[]>();
+
+  if (errPps) {
+    console.error("[cancelar_pps_do_envio.select]", errPps.message);
+    return { ok: false, message: "Não foi possível ler as PPs do job." };
+  }
+
+  const atuais = pps ?? [];
+  const confirmadas = new Set(ppIds);
+  const mesmaLista =
+    atuais.length === confirmadas.size &&
+    atuais.every((pp) => confirmadas.has(pp.id));
+  if (!mesmaLista) {
+    return {
+      ok: false,
+      message:
+        // O pop-up recarrega a lista depois da recusa: a pessoa confere a
+        // lista nova e confirma de novo, sem fechar nada.
+        "As PPs do job mudaram desde que o pop-up abriu, e nenhuma foi cancelada. Confira a lista atualizada e confirme de novo.",
+    };
+  }
+  if (atuais.length === 0) return { ok: true };
+
+  // Uma por vez: são poucas (o normal é uma ou duas), e a mensagem de
+  // falha diz exatamente qual ficou.
+  const canceladas: string[] = [];
+  const falhas: string[] = [];
+  for (const pp of atuais) {
+    const res = await cancelarPedidoCompra(pp.id);
+    if (res.ok) canceladas.push(pp.codigo);
+    else falhas.push(`${pp.codigo}: ${res.message}`);
+  }
+
+  if (canceladas.length > 0) {
+    await logAuditEvent({
+      acao: "job.pps_canceladas_no_cancelamento_do_envio",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: job.id,
+      metadata: { codigo: job.codigo, pps: canceladas, decisao: "143" },
+    });
+  }
+
+  revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
+
+  if (falhas.length > 0) {
+    return {
+      ok: false,
+      message:
+        canceladas.length > 0
+          ? `Canceladas: ${canceladas.join(", ")}. Não canceladas — ${falhas.join("; ")}`
+          : `Nenhuma PP foi cancelada — ${falhas.join("; ")}`,
+    };
+  }
   return { ok: true };
 }
 

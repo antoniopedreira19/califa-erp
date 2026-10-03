@@ -6,6 +6,7 @@ import { Undo2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cancelarAprovacaoVersao } from "../actions";
 import { cancelarAprovacaoDoJobDevolvido } from "./abertura-actions";
+import { PPsQueTravam, type PPQueTravaOEnvio } from "./pps-que-travam";
 
 interface Props {
   versaoId: string;
@@ -17,6 +18,12 @@ interface Props {
    *  em qualquer outro caso. Com ele, o cancelamento da aprovação cancela
    *  o job e guarda o código para o próximo envio (decisão 128). */
   jobDevolvidoCodigo: string | null;
+  /** Id do mesmo job devolvido — é nele que as PPs se cancelam. */
+  jobDevolvidoId: string | null;
+  /** PPs do job devolvido fora de `cancelada`: travam o cancelamento, e o
+   *  pop-up as lista com o botão que as cancela (decisão 143). Vazia em
+   *  qualquer outro caso. */
+  ppsQueTravam: PPQueTravaOEnvio[];
 }
 
 /**
@@ -33,6 +40,8 @@ export function AprovacaoActions({
   status,
   temJobAtivo,
   jobDevolvidoCodigo,
+  jobDevolvidoId,
+  ppsQueTravam,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -96,9 +105,13 @@ export function AprovacaoActions({
                 com o mesmo código,{" "}
                 <strong className="font-mono text-foreground">{jobDevolvidoCodigo}</strong>.
               </span>
-              <span className="mt-3 block">
-                Se houver PP gerada no job, cancele-a antes.
-              </span>
+              {jobDevolvidoId && (
+                <PPsQueTravam
+                  jobId={jobDevolvidoId}
+                  pps={ppsQueTravam}
+                  depois="cancelar a aprovação"
+                />
+              )}
               {error && (
                 <span className="mt-3 block text-xs text-california-red">{error}</span>
               )}
@@ -114,6 +127,9 @@ export function AprovacaoActions({
         }
         confirmLabel={devolvido ? "Sim, cancelar aprovação" : "Cancelar aprovação"}
         cancelLabel={devolvido ? "Voltar" : undefined}
+        // Com PP gerada o servidor recusaria; a lista acima diz o porquê e
+        // traz o botão que as cancela (decisão 143).
+        confirmDisabled={devolvido && ppsQueTravam.length > 0}
         onConfirm={handleCancelar}
         pending={pending}
       />

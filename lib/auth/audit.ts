@@ -156,6 +156,10 @@ export type AuditAction =
   // Cancelar o envio pelo orçamento, antes de o financeiro abrir: o job
   // vai a `cancelado` e o orçamento volta a `aprovado` (decisão 057).
   | "job.envio_abertura_cancelado"
+  // Decisão 143: as PPs que travavam esse cancelamento (ou o "Cancelar
+  // aprovação" do job devolvido), canceladas de dentro do pop-up. Cada PP
+  // tem também o seu `pedido_compra.cancelada`.
+  | "job.pps_canceladas_no_cancelamento_do_envio"
   // Decisão 128: o envio depois do "Cancelar aprovação" da devolução volta
   // com o código do job cancelado; e o planejado da versão aprovada se
   // corrige com o job devolvido, na versão e na cópia do job.

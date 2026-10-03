@@ -58,6 +58,7 @@ import {
   type FechamentoDaCopia,
   type JobExistente,
 } from "./versoes/[versaoId]/fluxo-abertura";
+import type { PPQueTravaOEnvio } from "./versoes/[versaoId]/pps-que-travam";
 import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
 import { lerBaseDosEspelhos, totaisDoFinanceiro } from "@/lib/data/espelhos-do-job";
 
@@ -477,7 +478,7 @@ export default async function OrcamentoDetailPage({
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
   // submenu "copiar uma versão existente" mostra para cada aba.
   const versaoIds = versoesTodas.map((v) => v.id);
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes] = await Promise.all([
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -542,7 +543,34 @@ export default async function OrcamentoDetailPage({
     job?.status === "rejeitado_financeiro" || job?.status === "aguardando_abertura"
       ? lerBaseDosEspelhos(supabase, session.activeTenant.id, job.id, { comMeses: false })
       : Promise.resolve(null),
+    // PPs que travam o "Cancelar aprovação" do job devolvido e o "Cancelar
+    // envio à abertura": os dois pop-ups as listam e cancelam (decisão 143).
+    job?.status === "rejeitado_financeiro" || job?.status === "aguardando_abertura"
+      ? supabase
+          .from("pedidos_compra")
+          .select("id, codigo, valor, fornecedor:fornecedores(nome)")
+          .eq("job_id", job.id)
+          .eq("tenant_id", session.activeTenant.id)
+          .neq("status", "cancelada")
+          .order("codigo", { ascending: true })
+          .returns<
+            {
+              id: string;
+              codigo: string;
+              valor: number | string | null;
+              fornecedor: { nome: string } | null;
+            }[]
+          >()
+      : Promise.resolve({ data: [], error: null }),
   ]);
+
+  if (ppsRes.error) console.error("[versao.pps_do_job]", (ppsRes.error as any).message);
+  const ppsQueTravam: PPQueTravaOEnvio[] = (ppsRes.data ?? []).map((pp) => ({
+    id: pp.id,
+    codigo: pp.codigo,
+    fornecedorNome: pp.fornecedor?.nome ?? "— fornecedor não informado",
+    valor: Number(pp.valor ?? 0),
+  }));
 
   let fechamentoDaCopia: FechamentoDaCopia | null = null;
   if (reenvioRes && reenvioRes.ok) {
@@ -866,6 +894,7 @@ export default async function OrcamentoDetailPage({
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
+          ppsQueTravam={ppsQueTravam}
         />
       ) : (
         <SemVersoes
@@ -926,6 +955,7 @@ function VersaoSelecionada({
   meses,
   mesPedido,
   fechamentoDaCopia,
+  ppsQueTravam,
 }: {
   params: { projetoId: string; orcId: string };
   session: Awaited<ReturnType<typeof requireSession>>;
@@ -971,6 +1001,8 @@ function VersaoSelecionada({
   mesPedido: string | undefined;
   /** Job devolvido ou aguardando abertura: o fechamento da cópia do job. */
   fechamentoDaCopia: FechamentoDaCopia | null;
+  /** PPs do job vivo de pré-abertura fora de `cancelada` (decisão 143). */
+  ppsQueTravam: PPQueTravaOEnvio[];
 }) {
   // Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
   // planejado igual ao orçado e sem save.
@@ -1205,6 +1237,8 @@ function VersaoSelecionada({
               status={versao.status}
               temJobAtivo={temJobAtivo}
               jobDevolvidoCodigo={devolvido && job ? job.codigo : null}
+              jobDevolvidoId={devolvido && job ? job.id : null}
+              ppsQueTravam={devolvido ? ppsQueTravam : []}
             />
           )}
         </div>
@@ -1398,6 +1432,7 @@ function VersaoSelecionada({
         cidadesIniciais={cidadesIniciais}
         inicial={inicialModal}
         job={job}
+        ppsQueTravam={job?.status === "aguardando_abertura" ? ppsQueTravam : []}
         podeEnviarAbertura={pode(session.activeRole, "jobs.enviar_abertura")}
         abrirRevisao={abrirRevisao}
       />

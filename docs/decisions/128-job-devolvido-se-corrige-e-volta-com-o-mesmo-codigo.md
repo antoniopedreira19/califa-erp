@@ -10,6 +10,8 @@
 **Protótipo:** https://claude.ai/artifact/R4g9sjrnCSEh6j4swueJLT
 **Revisa:** 057 (o "Cancelar envio" sai do job devolvido), 078 (sair do
 mensal junta os meses) e 114 (o código do job devolvido volta).
+**Revisada por:** 143 (03/10/2026) — o pop-up do "Cancelar aprovação"
+lista as PPs geradas e as cancela, com um "Tem certeza?"; a trava continua.
 
 ---
 

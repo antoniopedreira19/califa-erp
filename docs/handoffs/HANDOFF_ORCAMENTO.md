@@ -4974,3 +4974,19 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - `/orcamentos`: "Novo projeto" e "Criar projeto" só para quem tem
   `orcamentos.criar`; freelancer sem Equipe vê "Nenhum projeto na sua
   equipe".
+
+## ⚠️ Nota de 2026-10-03 (2) — PPs canceladas pelo pop-up do cancelamento (decisão 143)
+
+- "Cancelar aprovação" (job devolvido) e "Cancelar envio à abertura" (job
+  esperando o financeiro) listam as PPs geradas que travam o cancelamento,
+  com o botão "Cancelar as N PPs". Ele abre um "Tem certeza?" com os
+  códigos; confirmado, as PPs se cancelam e o pop-up de baixo libera o
+  próprio botão (dois passos, variante A). Antes era preciso ir à aba de
+  PPs do job e cancelar uma a uma.
+- A trava do servidor continua (057 §4). A action nova,
+  `cancelarPPsQueTravamOEnvio`, recusa se a lista confirmada mudou e
+  cancela cada PP por `cancelarPedidoCompra`, com as regras e a auditoria
+  de sempre; o job ganha `job.pps_canceladas_no_cancelamento_do_envio`.
+- Sem migration e sem permissão nova. Testado no "Orçamento de Teste"
+  (TES-1020/26, TES-1021/26 e TES-1021/26-C1, todos cancelados no fim).
+- Ver decisão 143.

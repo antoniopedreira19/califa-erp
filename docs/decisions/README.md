@@ -162,6 +162,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 140 | [Baixa em lote e a aba Títulos na conciliação](140-baixa-em-lote-e-aba-titulos.md) | 2026-10-02 |
 | 141 | [Módulo fiscal, entrega 2: Apuração, Impostos a Pagar e a guia na conciliação](141-modulo-fiscal-entrega-2.md) | 2026-10-02 |
 | 142 | [Módulo fiscal: os pontos remanescentes do protótipo](142-modulo-fiscal-pontos-remanescentes.md) | 2026-10-03 |
+| 143 | [As PPs que travam o cancelamento se cancelam pelo próprio pop-up](143-pps-se-cancelam-pelo-pop-up-do-cancelamento.md) | 2026-10-03 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -174,4 +175,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 143.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 144.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

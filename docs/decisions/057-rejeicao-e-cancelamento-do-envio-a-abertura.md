@@ -1,7 +1,7 @@
 # 057 — A rejeição volta ao orçamento, e o envio à abertura se cancela de lá
 
 **Data:** 2026-09-08
-**Status:** aceita · **revisada em 2026-09-29** pela 128: no job devolvido, o "Cancelar envio" saiu; a correção se faz com o job vivo, e o que muda o orçado passa pelo "Cancelar aprovação", que guarda o código.
+**Status:** aceita · **revisada em 2026-09-29** pela 128: no job devolvido, o "Cancelar envio" saiu; a correção se faz com o job vivo, e o que muda o orçado passa pelo "Cancelar aprovação", que guarda o código. · **revisada em 2026-10-03** pela 143: a trava de PP gerada (§4) continua, mas as PPs se cancelam de dentro do pop-up do cancelamento, com um "Tem certeza?", em vez de uma a uma na aba do job.
 **Contexto:** página do job (`/jobs/[jobId]`), tela do orçamento na versão
 aprovada (`/orcamentos/[projetoId]/[orcId]`) e a action
 `enviarJobParaAbertura`. Pedido do Tiago em 08/09/2026, com as seis
@@ -44,7 +44,7 @@ TESTE-0005/26-01 e o JOB-0019.
 | 1 | Reenvio: mesmo job ou job novo? | **Mesmo job.** O rejeitado guarda a cópia da planilha, o consumo de save, os BVs e as PPs já geradas (056). Job novo obrigaria a mover tudo isso. |
 | 2 | Orçamento volta a `aprovado` no banco com o job rejeitado? | **Não: fica `job_criado`.** A regra 3 continua verdadeira, "Nova versão" segue travada (a planilha já foi copiada para o job) e nenhuma migration é preciso. A tela é que muda: banner com o motivo e o botão de envio de volta, decididos pelo status do **job**. |
 | 3 | Cancelar envio: o que acontece com o job? | **`cancelado`**, orçamento de volta a `aprovado`, saves e BVs devolvidos à versão. É o inverso exato do envio, com histórico e auditoria. O código JOB-NNNN fica queimado, como em qualquer job cancelado. Apagar a linha reaproveitaria o código, mas sumiria com o rastro. |
-| 4 | Cancelar envio com PP gerada ou realizado lançado? | **Bloqueia com PP gerada, sem cascata.** A PP gerada é contratação fechada com fornecedor; quem desfaz é o usuário, uma a uma, na aba de PPs. A mensagem diz o que falta: "Antes de cancelar o envio, cancele a PP gerada na aba de Pedidos de Produção do job." **O realizado saiu da conta** — ver a nota logo abaixo. |
+| 4 | Cancelar envio com PP gerada ou realizado lançado? | ⚠️ *03/10/2026 (decisão 143): a trava fica, e o pop-up lista as PPs e as cancela depois de um "Tem certeza?".* **Bloqueia com PP gerada, sem cascata.** A PP gerada é contratação fechada com fornecedor; quem desfaz é o usuário, uma a uma, na aba de PPs. A mensagem diz o que falta: "Antes de cancelar o envio, cancele a PP gerada na aba de Pedidos de Produção do job." **O realizado saiu da conta** — ver a nota logo abaixo. |
 | 5 | "Cancelar job" na página do job, antes da abertura? | **Sai.** Dois botões em dois módulos fazendo quase a mesma coisa foi o que prendeu o TESTE-0005/26-01. A barra passa a apontar para o orçamento. A action `atualizarStatusJob` continua aceitando o cancelamento (020) — nenhuma superfície do módulo de Jobs a oferece. ⚠️ A action saiu em 28/09/2026 (revisão da 020). |
 | 6 | TESTE-0005/26-01 preso | **Corrigido na migration** `20260908100001`, com `update` restrito a `job_criado` sem job vivo. Uma linha, idempotente. |
 
