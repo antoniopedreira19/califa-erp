@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowRight, Sparkles, Users, Receipt } from "lucide-react";
 import type { SessionContext } from "@/lib/types";
 import { CabecalhoHome } from "./_componentes/cabecalho-home";
-import { CardNotificacoesFerias } from "@/components/notificacoes-ferias/card";
 
 /**
  * Placeholder da home do RH. O dashboard próprio (pendências da folha,
@@ -45,10 +44,6 @@ export function HomeRh({ session }: { session: SessionContext }) {
         />
       </section>
 
-      <CardNotificacoesFerias
-        tenantId={session.activeTenant.id}
-        userId={session.profile.id}
-      />
     </div>
   );
 }

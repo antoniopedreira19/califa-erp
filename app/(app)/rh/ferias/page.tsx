@@ -68,9 +68,7 @@ export default async function FeriasPage({
         </nav>
       </div>
 
-      {tab === "painel" && (
-        <AbaPainel tenantId={tenantId} userId={session.profile.id} />
-      )}
+      {tab === "painel" && <AbaPainel tenantId={tenantId} />}
       {tab === "quadro" && <AbaQuadro tenantId={tenantId} />}
       {tab === "solicitacoes" && (
         <AbaSolicitacoes

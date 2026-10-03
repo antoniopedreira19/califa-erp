@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   AlertOctagon,
   Users,
-  Bell,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -15,16 +14,13 @@ import type {
   ColaboradorFeriasPeriodo,
   FeriasLancamentoStatus,
   FeriasLancamentoTipo,
-  FeriasNotificacaoTipo,
 } from "@/lib/types";
-import { LinhaNotificacao } from "@/components/notificacoes-ferias/linha-notificacao";
 
 type Props = {
   tenantId: string;
-  userId: string;
 };
 
-export async function AbaPainel({ tenantId, userId }: Props) {
+export async function AbaPainel({ tenantId }: Props) {
   const supabase = createClient();
 
   const hoje = new Date();
@@ -44,8 +40,6 @@ export async function AbaPainel({ tenantId, userId }: Props) {
     retornosRes,
     vencendoRes,
     emFeriasRes,
-    notificacoesRes,
-    notificacoesNaoLidasRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores_ferias_lancamentos")
@@ -108,22 +102,6 @@ export async function AbaPainel({ tenantId, userId }: Props) {
       .lte("data_inicio", hojeISO)
       .gte("data_fim", hojeISO)
       .limit(10),
-    supabase
-      .from("colaboradores_ferias_notificacoes")
-      .select(
-        "id, tipo, colaborador_id, lancamento_id, periodo_id, titulo, mensagem, criada_em, lida_em",
-      )
-      .eq("tenant_id", tenantId)
-      .eq("destinatario_user_id", userId)
-      .is("lida_em", null)
-      .order("criada_em", { ascending: false })
-      .limit(5),
-    supabase
-      .from("colaboradores_ferias_notificacoes")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("destinatario_user_id", userId)
-      .is("lida_em", null),
   ]);
 
   const kpis = {
@@ -144,18 +122,6 @@ export async function AbaPainel({ tenantId, userId }: Props) {
   const retornos = (retornosRes.data ?? []) as unknown as Lanc[];
   const vencendo = (vencendoRes.data ?? []) as unknown as Periodo[];
   const emFerias = (emFeriasRes.data ?? []) as unknown as Lanc[];
-  const notificacoes = (notificacoesRes.data ?? []) as Array<{
-    id: string;
-    tipo: FeriasNotificacaoTipo;
-    colaborador_id: string;
-    lancamento_id: string | null;
-    periodo_id: string | null;
-    titulo: string;
-    mensagem: string;
-    criada_em: string;
-    lida_em: string | null;
-  }>;
-  const totalNaoLidas = notificacoesNaoLidasRes.count ?? 0;
 
   return (
     <div className="space-y-6">
@@ -355,31 +321,6 @@ export async function AbaPainel({ tenantId, userId }: Props) {
         </section>
       </div>
 
-      {/* Notificações recentes */}
-      <section className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-base font-semibold flex items-center gap-2">
-            <Bell className="h-4 w-4 text-california-red" />
-            Notificações recentes
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            {totalNaoLidas === 0
-              ? "nenhuma não lida"
-              : `${totalNaoLidas} não ${totalNaoLidas === 1 ? "lida" : "lidas"}`}
-          </span>
-        </header>
-        {notificacoes.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            Nenhuma notificação não lida.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {notificacoes.map((n) => (
-              <LinhaNotificacao key={n.id} notificacao={n} />
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

@@ -36,26 +36,6 @@ async function carregarLancamento(id: string, tenantId: string) {
   return data;
 }
 
-async function destinatariosDoColaborador(
-  tenantId: string,
-  colaboradorId: string,
-): Promise<string[]> {
-  const supabase = createClient();
-  const [{ data: colab }, { data: solicitante }] = await Promise.all([
-    supabase
-      .from("colaboradores")
-      .select("user_id, lider_id, nome")
-      .eq("id", colaboradorId)
-      .maybeSingle(),
-    Promise.resolve({ data: null }),
-  ]);
-
-  const set = new Set<string>();
-  if (colab?.user_id) set.add(colab.user_id);
-  if (colab?.lider_id) set.add(colab.lider_id);
-  return Array.from(set);
-}
-
 // ---------- Aprovar ----------
 
 export async function aprovarLancamento(
@@ -108,31 +88,6 @@ export async function aprovarLancamento(
   if (updErr) {
     console.error("[rh.ferias.aprovar]", updErr.message);
     return { ok: false, message: "Falha ao aprovar: " + updErr.message };
-  }
-
-  // Notifica o colaborador + líder
-  const destinatarios = await destinatariosDoColaborador(
-    tenantId,
-    lanc.colaborador_id,
-  );
-  if (destinatarios.length > 0) {
-    const diasStr = `${lanc.dias} dia${lanc.dias > 1 ? "s" : ""}`;
-    await supabase.rpc("fn_criar_notificacao_ferias", {
-      p_tenant_id: tenantId,
-      p_tipo: "aprovada",
-      p_colaborador_id: lanc.colaborador_id,
-      p_destinatarios: destinatarios,
-      p_titulo: "Férias aprovadas",
-      p_mensagem: `Sua solicitação de ${diasStr} entre ${lanc.data_inicio} e ${lanc.data_fim} foi aprovada.`,
-      p_payload: {
-        dias: lanc.dias,
-        tipo: lanc.tipo,
-        data_inicio: lanc.data_inicio,
-        data_fim: lanc.data_fim,
-      },
-      p_lancamento_id: lanc.id,
-      p_periodo_id: lanc.periodo_id,
-    });
   }
 
   await logAuditEvent({
@@ -211,24 +166,6 @@ export async function reprovarLancamento(
     return { ok: false, message: "Falha ao reprovar: " + updErr.message };
   }
 
-  const destinatarios = await destinatariosDoColaborador(
-    tenantId,
-    lanc.colaborador_id,
-  );
-  if (destinatarios.length > 0) {
-    await supabase.rpc("fn_criar_notificacao_ferias", {
-      p_tenant_id: tenantId,
-      p_tipo: "reprovada",
-      p_colaborador_id: lanc.colaborador_id,
-      p_destinatarios: destinatarios,
-      p_titulo: "Férias reprovadas",
-      p_mensagem: `Sua solicitação entre ${lanc.data_inicio} e ${lanc.data_fim} foi reprovada. Motivo: ${motivo}`,
-      p_payload: { motivo, dias: lanc.dias },
-      p_lancamento_id: lanc.id,
-      p_periodo_id: lanc.periodo_id,
-    });
-  }
-
   await logAuditEvent({
     acao: "ferias.lancamento.reprovado",
     tenantId,
@@ -288,26 +225,6 @@ export async function moverEmAnalise(
   if (updErr) {
     console.error("[rh.ferias.em_analise]", updErr.message);
     return { ok: false, message: "Falha: " + updErr.message };
-  }
-
-  const destinatarios = await destinatariosDoColaborador(
-    tenantId,
-    lanc.colaborador_id,
-  );
-  if (destinatarios.length > 0) {
-    await supabase.rpc("fn_criar_notificacao_ferias", {
-      p_tenant_id: tenantId,
-      p_tipo: "em_analise",
-      p_colaborador_id: lanc.colaborador_id,
-      p_destinatarios: destinatarios,
-      p_titulo: "Férias em análise",
-      p_mensagem: observacao
-        ? `Sua solicitação está em análise. Observação do RH: ${observacao}`
-        : "Sua solicitação está em análise pelo RH.",
-      p_payload: { observacao },
-      p_lancamento_id: lanc.id,
-      p_periodo_id: lanc.periodo_id,
-    });
   }
 
   await logAuditEvent({
@@ -427,24 +344,6 @@ export async function lancarDiretoPeloRh(
       ok: false,
       message: "Falha ao lançar: " + (insErr?.message ?? ""),
     };
-  }
-
-  const destinatarios = await destinatariosDoColaborador(
-    tenantId,
-    dados.colaborador_id,
-  );
-  if (destinatarios.length > 0) {
-    await supabase.rpc("fn_criar_notificacao_ferias", {
-      p_tenant_id: tenantId,
-      p_tipo: "aprovada",
-      p_colaborador_id: dados.colaborador_id,
-      p_destinatarios: destinatarios,
-      p_titulo: "Férias lançadas pelo RH",
-      p_mensagem: `O RH lançou ${dias} dia${dias > 1 ? "s" : ""} de ${dados.tipo === "abono_avulso" ? "abono avulso" : "férias"} entre ${dados.data_inicio} e ${dados.data_fim}.`,
-      p_payload: { dias, tipo: dados.tipo, lancado_direto: true },
-      p_lancamento_id: lanc.id,
-      p_periodo_id: dados.periodo_id,
-    });
   }
 
   await logAuditEvent({
@@ -740,19 +639,3 @@ export async function obterUrlRecibo(
   return { ok: true, url: data.signedUrl };
 }
 
-// ---------- Marcar notificação como lida ----------
-
-export async function marcarNotificacaoLida(
-  id: string,
-): Promise<ActionResult> {
-  await requireSession();
-  const supabase = createClient();
-  const { error } = await supabase
-    .from("colaboradores_ferias_notificacoes")
-    .update({ lida_em: new Date().toISOString() })
-    .eq("id", id);
-  if (error) return { ok: false, message: error.message };
-  revalidatePath("/rh/ferias");
-  revalidatePath("/perfil");
-  return { ok: true, id };
-}

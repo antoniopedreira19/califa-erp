@@ -4,7 +4,6 @@ import { CabecalhoHome } from "./_componentes/cabecalho-home";
 import { CardPendenciaLink } from "./_componentes/card-pendencia";
 import { CardKpiLink } from "./_componentes/card-kpi";
 import { EstadoVazio } from "./_componentes/estado-vazio";
-import { CardNotificacoesFerias } from "@/components/notificacoes-ferias/card";
 
 export async function HomeAdmin({ session }: { session: SessionContext }) {
   const { pendencias, kpis } = await carregarHomeAdmin(session);
@@ -41,10 +40,6 @@ export async function HomeAdmin({ session }: { session: SessionContext }) {
         </div>
       </section>
 
-      <CardNotificacoesFerias
-        tenantId={session.activeTenant.id}
-        userId={session.profile.id}
-      />
     </div>
   );
 }
