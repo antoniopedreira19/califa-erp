@@ -6527,3 +6527,92 @@ estendido a Contas a Receber em 31/08.**
   teste TESTE-139 foi cancelada pela action, no console).
 - Testado no TES-P001/26: NF TESTE-139 (emitida e cancelada), PP-00110
   aprovada com NF 602 e retenções (deixada A pagar, para a demonstração).
+
+## ⚠️ Nota de 2026-10-02 (3) — módulo fiscal, entrega 2: Apuração, Impostos a Pagar e a guia na conciliação (decisão 141)
+
+- **Seção Fiscal** em `/financeiro/fiscal` (abas Apuração e Impostos a
+  Pagar; `app/(app)/financeiro/fiscal/`). A guia é calculada por
+  `lib/fiscal/apuracao.ts` sobre os fatos de `lib/fiscal/apuracao-fatos.ts`;
+  a aprovação grava `fiscal_aprovacoes` e cria `impostos_a_pagar` (+ rateio)
+  pela função `aprovar_guia_fiscal`.
+- **Baixa da guia** (`baixar_imposto`): um lançamento por parte do rateio
+  + um de multa e juros, origem `imposto_baixa`, com `imposto_a_pagar_id`.
+  O Extrato agrupa (`lib/data/imposto-extrato.ts`); quem listar lançamentos
+  um a um vê N linhas por guia. Cancelar (`cancelar_baixa_imposto`) apaga
+  os lançamentos.
+- **Anexos** no bucket `impostos` (`<tenant>/guias|comprovantes|correcoes/`).
+- **Fluxo de caixa** (`lib/fiscal/fluxo-fiscal.ts`) passa a mostrar o
+  cronograma de impostos da abertura (decisão 100) nos jobs reais; previsão
+  vencida cai no dia seguinte (a confirmar com o Tiago).
+- **Imposto de teste:** "TESTE do sistema (02/10) — não pagar" (PIS,
+  setembro/2026, R$ 10,00, Empresa Teste · Teste), A pagar, deixado para a
+  demonstração; apagar só com o OK do Tiago (não há cancelamento de título).
+
+## ⚠️ Nota de 2026-10-02 (4) — fiscal: ajustes da tarde (decisão 141 §6)
+
+- **"No fiscal" voltou à baixa em lote** (`components/financeiro/baixa-em-lote.tsx`).
+  O diálogo que parecia travar já estava fechado: com o painel do navegador
+  de teste escondido, a animação de saída do Radix não roda e o elemento
+  fica na tela com `data-state="closed"`. Em teste de diálogo, olhe o
+  `data-state`.
+- **Aba Títulos da conciliação:** a baixa de NF mostra "CNPJ emissor"
+  (`fat_cnpj_emissor` em `TituloRow`, obrigatório; `null` nas avulsas e nas
+  notas de antes do módulo fiscal). A coluna Empresa é gerencial nos
+  títulos e a PJ nos impostos — documentado, pergunta aberta (141 §5.8).
+- **Número da aba Apuração** sempre visível: `contarGuiasAAprovarNoBanco`
+  num `Suspense` quando a aba Impostos a Pagar está aberta.
+- **Aviso depois de emitir a NF:** `emitirFaturamento` devolve `apuracao`
+  (`ApuracaoDaEmissao`) e o texto sai de `avisoDaApuracao`
+  (`lib/fiscal/faturar.ts`, com testes). A leitura de `fiscal_aprovacoes`
+  só roda em mês encerrado.
+- **Dias federais editáveis** (`pis_cofins_dia`, `retencoes_dia`) pela aba
+  Vencimentos. Quem lê o dia lê pela vigência no último dia da competência:
+  o motor, o "No fiscal", `diaDoPisCofins(cad, emissao)` e
+  `vencimentoDasGuiasFederais`. Não leia o parâmetro pela primeira linha.
+
+## ⚠️ Nota de 2026-10-03 — "Novo CNPJ emissor" no cadastro de impostos (decisão 139 §6)
+
+- **Botão** na aba CNPJs (`cadastro-impostos.tsx`): abre o
+  `EstabelecimentoDialog` com `estab={null}` — os campos da edição,
+  precedidos de Empresa contábil, Tipo, Município, UF e Nome do
+  estabelecimento. O lápis continua abrindo o mesmo diálogo, sem mudança.
+- **Server Action** `criarEstabelecimento` (`actions.ts`): trava
+  admin/financeiro, `novoEstabelecimentoSchema` e
+  `problemaDoNovoEstabelecimento` (`lib/validations/fiscal-cadastro.ts`, com
+  testes); o diálogo roda os dois antes de enviar. Auditoria
+  `fiscal_estabelecimento.criado` com a linha criada; `ordem` = maior + 1.
+- **`EmpresaDoCadastro` ganhou `ativo`** (obrigatório): a página lê
+  `empresas_contabeis.ativo`, e só as ativas entram na lista do diálogo.
+- **Sem migration.** O banco trava nome e CNPJ repetidos, mas não uma
+  matriz por PJ (não há índice único no papel): essa trava é só do
+  servidor, e duas pessoas cadastrando a matriz ao mesmo tempo ainda
+  passariam.
+
+## ⚠️ Nota de 2026-10-03 (2) — remessa de teste PE000031 cancelada
+
+- A PE000031 (02/10, 17:04, conta California Santander, R$ 15.300,00) tinha
+  só as 4 PPs de teste do TES (PP-00079, PP-00102, PP-00110, PP-00111) e não
+  foi transmitida. Cancelada com o OK do Tiago pela migration
+  `20261003100001_cancela_remessa_31_de_teste.sql` (status + auditoria, como
+  a PE000029). Enquanto ativa, ela travava a baixa dessas PPs e tirava delas
+  a retenção da aprovação (a remessa paga o bruto, pergunta 139 §5.2).
+- **Para testes:** gerar remessa com PP de teste trava o TES do mesmo jeito;
+  se for preciso, cancelar logo depois.
+
+## ⚠️ Nota de 2026-10-03 (3) — pontos remanescentes do protótipo fiscal (decisão 142)
+
+- **"<PJ> · a apurar no recebimento":** `lib/fiscal/a-apurar.ts` (funções
+  puras, com testes) + `a-apurar-dados.ts` (os títulos em aberto das notas
+  das PJs no presumido pelo caixa e o já baixado, por
+  `vw_baixado_por_documento`). Entra na aba Apuração (`dados.ts`) e no fluxo
+  (`saidasAApurar`, origem `a_apurar`). O IRPJ/CSLL projetado chama o motor
+  (`guiasIrpjCsllDoTrimestre`) com e sem os recebimentos previstos; o motor
+  passou a exportar as regras que a projeção usa, sem mudar o cálculo.
+- **Novo CNPJ emissor:** ver a nota (1) de hoje.
+- **Fornecedor:** `regime_consulta`, `regime_desde` e `regime_consultado_em`
+  gravados a cada consulta do CNPJ (migration `20261002100800`);
+  `declaracao_simples_path` ganhou tela e o bucket privado `fornecedores`
+  (`<tenant>/declaracoes/`). O arquivo gravado nunca sai do bucket pela
+  tela; o que subiu e não foi salvo sai.
+- **Arquivos de teste que ficaram:** 1 PDF em `fornecedores/<tenant>/declaracoes/`
+  e os comprovantes de 02/10 em `impostos` (o Tiago preferiu deixar).

@@ -1,0 +1,143 @@
+# 141 — Módulo fiscal, entrega 2: Apuração, Impostos a Pagar e a guia na conciliação
+
+**Data:** 2026-10-02
+**Decidido por:** Tiago
+**Status:** aceita — entregue em 02/10/2026
+**Migrations:** `20261002100700_fiscal_origem_imposto_baixa.sql` e
+`20261002100701_fiscal_apuracao_e_impostos_a_pagar.sql` (aditivas; aplicadas
+com o OK explícito do Tiago, porque recriam as travas de origem de
+`lancamentos_financeiros`)
+
+---
+
+## 1. O pedido
+
+A segunda parte do módulo fiscal desenhado nas cinco rodadas de protótipo
+(decisão 139): a **Apuração** (as guias de cada mês e trimestre calculadas
+das notas, dos custos e das retenções, aprovadas com o valor da guia da
+contabilidade), os **Impostos a Pagar** (os títulos, com baixa, correção,
+lançamento avulso e baixa em lote), a guia na **conciliação** (uma linha que
+se abre em sublinhas), o bloco **"No fiscal"** nas baixas, e o fiscal no
+**fluxo de caixa**, na **Central Financeira** e no **cronograma do job**.
+
+## 2. Como ficou guardado
+
+- **A guia não se grava: se calcula.** `lib/fiscal/apuracao.ts` é o motor do
+  protótipo portado, conferido guia a guia (as 73 guias das três datas
+  simuladas saem idênticas). Os fatos vêm do banco
+  (`lib/fiscal/apuracao-fatos.ts`): notas emitidas com CNPJ emissor e CNAE,
+  as baixas dos títulos a receber com o que o cliente reteve, as PPs com a
+  NF registrada na aprovação e os pagamentos delas com o que a agência
+  reteve.
+- **A aprovação se grava** (`fiscal_aprovacoes`): o calculado, o valor da
+  guia (com justificativa quando difere), a memória e o rateio congelados,
+  as cotas e as compensações. A diferença que aparecer depois (nota
+  registrada atrasada) se aprova como complementar.
+- **Impostos a Pagar** (`impostos_a_pagar` + rateio + correções): um título
+  por guia aprovada, um por cota no IRPJ/CSLL, o complementar, e os lançados
+  à mão.
+- **A baixa da guia** grava um lançamento por parte do rateio (empresa ·
+  regional) e um de multa e juros, todos com `imposto_a_pagar_id` e a
+  origem `imposto_baixa`: toda saída precisa de uma empresa e um centro de
+  custo. A conciliação mostra tudo como UMA linha (o débito do banco) que se
+  abre em sublinhas, como a fatura do cartão. Centros: 03 · Custo
+  Tributário · <imposto> (subtipos novos 001–006); 02 · Custo Operacional
+  no repasse das retenções de fornecedor; 11 · Despesa com Juros na multa e
+  nos juros (na maior parte do rateio).
+- Só admin e financeiro leem e mexem; anexos (guia, comprovante) no bucket
+  privado `impostos`.
+
+## 3. O que entrou
+
+| Tela | O que muda |
+|---|---|
+| Fiscal › Apuração (`/financeiro/fiscal`) | As guias por competência (mês e trimestre) e por PJ, com Em curso · A aprovar · Aprovada · Diferença; a memória de cálculo; a aprovação com o valor da guia da contabilidade (justificativa quando difere), o anexo da guia, a compensação do ISS a recuperar, as cotas do IRPJ/CSLL sobre o valor da guia; a diferença complementar. A Server Action recalcula a guia no servidor. A competência em curso é estimativa e não se aprova. |
+| Fiscal › Impostos a Pagar (`?aba=impostos`) | A lista (A pagar · Vencidos · Pagos · Todos, por PJ, busca), a baixa (data, conta, multa e juros, guia e comprovante, a prévia das sublinhas), a baixa registrada com cancelamento, a correção do valor com justificativa, o lançamento avulso (com "Criar e dar baixa") e a seleção para a baixa em lote. |
+| Conciliação | No Extrato, a guia é UMA linha (o débito do banco) que se abre em sublinhas: empresa · regional com o percentual, multa e juros, o total da guia. Na aba Títulos, os impostos em aberto entram com o chip "Imposto" e o filtro "Impostos"; "Baixar" abre a baixa do imposto com a conta da conciliação. |
+| Baixas | O bloco "No fiscal": na PP com NF, as guias de retenção que a baixa gera (DARF 5952 e 1708, mês e vencimento); no recebimento de nota com CNPJ emissor, o que o cliente reteve abate em qual imposto e mês; no lote, a mesma leitura somada. |
+| Central Financeira | O cartão "Fiscal", com guias a aprovar e impostos a vencer ou vencidos. |
+| Fluxo de caixa | As saídas de imposto: o cronograma de recolhimento da abertura (decisão 100), menos o que já foi faturado; as guias calculadas ainda não aprovadas; os impostos a pagar pelo vencimento; a baixa como uma linha só em "Já movimentado". A previsão vencida cai no dia seguinte — o Tiago autorizou publicar assim e conferir depois. |
+| Job no financeiro | "Cronograma de impostos" na composição das células da aba Fluxo de Caixa. O formulário de abertura não muda (continua pendência). |
+
+## 4. Verificação (02/10/2026)
+
+- **Banco, numa transação desfeita:** lançar avulso, corrigir (R$ 100 →
+  R$ 110, rateio reescalado), dar baixa com multa (3 lançamentos: duas
+  partes em 03 · 001 e a multa em 11 · 999), cancelar, aprovar uma guia,
+  recusar a aprovação repetida e a sem justificativa. Nada ficou gravado.
+- **Leitura dos fatos + motor no banco real:** o crédito de PIS/COFINS de
+  outubro da PP-00110 (R$ 132 + R$ 608 = R$ 740), a PP-00111 sem crédito,
+  o IRPJ/CSLL do 4º trimestre zerado (lucro negativo, ainda sem nota).
+- **Navegador, no TES e na Conta Teste:** imposto avulso de teste (PIS,
+  setembro/2026, R$ 10,00, rateio Empresa Teste · Teste) criado com a guia;
+  baixa pela aba Títulos com a conta já escolhida, multa de R$ 1,00 e
+  comprovante; no Extrato, uma linha de R$ 11,00 que abre em R$ 10,00 +
+  R$ 1,00, com os saldos certos; baixa cancelada pela aba Impostos a Pagar.
+  A Apuração com a memória do PIS de outubro; o "No fiscal" da PP-00110
+  (DARF 5952 R$ 372,00 e 1708 R$ 120,00, vencendo em 19/11/2026); o cartão
+  da Central; o fluxo de caixa abrindo sem erro.
+- **Não exercido no navegador:** a aprovação de uma guia (nenhuma
+  competência encerrou; coberta pelo teste no banco e pelos testes
+  automatizados), a baixa em lote de imposto, o "No fiscal" do recebimento
+  (nenhuma nota tem CNPJ emissor) e o cronograma no job.
+
+## 5. Perguntas que ficaram para o Tiago
+
+1. **Previsão vencida do cronograma de impostos** cai no dia seguinte
+   (~R$ 120 mil em 7 jobs no dia da entrega): confirmar a regra.
+2. **Guia na baixa em lote:** o imposto sem guia ganha "Anexar guia" na
+   linha do lote (o banco exige a guia).
+3. **Motivos e justificativas com 10 caracteres** (o banco exige; o
+   protótipo pedia 5).
+4. **Diferença complementar:** a justificativa é escrita pelo sistema
+   ("Complementar: o calculado subiu de R$ X para R$ Y").
+5. **Hitlab "a apurar no recebimento"** no fluxo e na Apuração: fica para a
+   próxima entrega (nenhuma nota tem CNPJ emissor ainda). ⚠️ Feito em
+   03/10/2026 — decisão 142.
+6. **As 5 dúvidas do motor** (presumido sem caixa, DARF mínimo, vencimento
+   da complementar, compensação só em Salvador, guia aprovada que some).
+7. **Contagens que veem N lançamentos por guia:** o detalhe "Já
+   movimentado" do fluxo (agrupado nesta entrega) e o número de
+   lançamentos da lista de contas da conciliação.
+8. **Coluna Empresa da aba Títulos** (§6): empresa gerencial nos títulos a
+   pagar e a receber, PJ nos impostos. Para mostrar a PJ em todas as
+   linhas, a nota com CNPJ emissor e a PP com a NF registrada já a têm; as
+   de antes do módulo fiscal ficariam com "—".
+
+## 6. Ajustes de 02/10/2026 (tarde)
+
+Pedidos pelo Tiago depois de comparar o sistema com o protótipo.
+
+| O quê | Como ficou |
+|---|---|
+| "No fiscal" na baixa em lote | Voltou ao diálogo (tinha saído em `a992f19a`). O diálogo que parecia não fechar depois de confirmar já estava fechado (`data-state="closed"`): o painel do navegador de teste estava escondido e não roda a animação de saída, então o elemento ficava na tela. Não era o bloco nem o lote. |
+| Aviso depois de emitir a NF (Faturar) | O aviso do canto diz a NF, o CNPJ emissor, o valor e o job e, numa segunda linha, em que Apuração os impostos entraram: "(em curso)" no mês corrente, "(a aprovar)" em mês encerrado, ": a guia já aprovada passa a mostrar a diferença." quando a guia de ISS, PIS ou COFINS do mês já foi aprovada (no presumido, só a de ISS conta, e o texto lembra que PIS, COFINS, IRPJ e CSLL entram no recebimento). A consulta às aprovações é uma só e só acontece em mês encerrado. Diferenças do protótipo: um aviso só, em vez de dois; a nota com data futura no mês corrente já aparece "em curso" (o motor conta a nota desde o registro); a nota de antes de outubro/2026 avisa que fica fora da Apuração. |
+| "CNPJ emissor" na baixa da NF pela aba Títulos | O resumo da baixa ganhou a linha "CNPJ emissor" (estabelecimento · CNPJ), como no protótipo, quando a nota saiu por um CNPJ do cadastro fiscal. As notas de antes do módulo fiscal não o têm, e a linha não aparece. |
+| Vencimentos federais no cadastro | O lápis das linhas de PIS/COFINS e das DARF 5952 e 1708 da aba Vencimentos abre a edição de parâmetro (decisão 139, nota de 02/10); o Faturar e o Aprovar PP passaram a ler o dia pela vigência, como o motor. |
+| Número da aba Apuração | Aparece também com a aba Impostos a Pagar aberta: o cálculo chega num `Suspense` depois da página, sem segurar a lista de impostos (como o cartão "Fiscal" da Central). |
+| Coluna Empresa da aba Títulos | Fica como estava, agora documentada: os títulos a pagar e a receber mostram a empresa gerencial (a das listas deles); os impostos, a PJ da guia. A empresa gerencial não aponta para uma PJ (a ligação com a contábil existe só na conta bancária). Pergunta 8 do §5. |
+| Textos da estimativa | Voltaram as frases do protótipo: a competência em curso "entra no fluxo de caixa como estimativa" (Apuração) e, na memória de cálculo, "enquanto isso, a estimativa entra no fluxo de caixa no vencimento". |
+
+Verificação, em modo produção (`next build` + `next start`), no TES e na
+Conta Teste: o lote da PP-00110 com o imposto de teste mostrou o "No fiscal"
+(DARF 5952 R$ 372,00 e DARF 1708 R$ 120,00, vencendo em 19/11/2026), pediu o
+comprovante da guia, gravou as duas baixas (R$ 7.508,00 e R$ 10,00), fechou
+em 1,3 s com o aviso, e a lista atualizou em 2,8 s; as baixas foram
+canceladas depois pela tela (Títulos a Pagar e Impostos a Pagar). A aba
+Impostos a Pagar com o número cinza e a aba ativa em vermelho; as duas frases
+da estimativa na Apuração e na memória de cálculo. O número da Apuração não
+aparece hoje porque nenhuma guia está a aprovar (nenhuma competência fechou).
+
+Também em modo produção: a NF de teste TESTE-141T (TES-1013/26, R$ 1.000,00,
+California · Salvador, CNAE 74.90-1-04 sugerido pelo GP) saiu com o aviso
+"NF TESTE-141T emitida pela California · Salvador · R$ 1.000,00 ·
+TES-1013/26" e "Os impostos dela já estão na Apuração de outubro/2026 (em
+curso)."; o bloco "Impostos desta nota" com o PIS e a COFINS no dia 25 (lido
+pela vigência). Na aba Títulos, a baixa dela mostrou "CNPJ emissor California
+· Salvador · 19.437.976/0001-54" e o "No fiscal" do recebimento (sem
+retenção: "Nada muda na apuração"; com ISS 2% e IRRF 1,5%: o ISS sai da
+apuração de outubro e o IRRF abate o IRPJ do 4º trimestre, só os 15%). A
+baixa não foi confirmada e a NF foi cancelada pela action (a tela não tem o
+botão); a parcela voltou para Faturar. No cadastro, o lápis do PIS e COFINS
+abriu o dia 25 com "Antecipa" fixo; 32, 0 e vazio foram recusados, e salvar o
+mesmo 25 respondeu "Nenhum valor mudou." sem gravar.

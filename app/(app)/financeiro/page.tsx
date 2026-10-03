@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, Receipt, TrendingUp, Wallet, BookOpen, FolderKanban, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Receipt, Scale, TrendingUp, Wallet, BookOpen, FolderKanban, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
+import { carregarPendenciasFiscais, detalheFiscal } from "./pendencias-fiscais";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +75,11 @@ export default async function CentralFinanceiraPage() {
           description="Emitir NF a partir de jobs e BVs, acompanhar títulos até o recebimento."
           count={aFaturarCount + inadimplentesCount}
         />
+        {/* Módulo fiscal (entrega 2): as guias a aprovar pedem o cálculo da
+            Apuração — o cartão chega por streaming, sem segurar a Central. */}
+        <Suspense fallback={<FinanceiroCard {...CARTAO_FISCAL} />}>
+          <CartaoFiscal tenantId={session.activeTenant.id} />
+        </Suspense>
         <FinanceiroCard
           href="/financeiro/fluxo-caixa"
           icon={TrendingUp}
@@ -97,18 +104,41 @@ export default async function CentralFinanceiraPage() {
   );
 }
 
+const CARTAO_FISCAL = {
+  href: "/financeiro/fiscal",
+  icon: Scale,
+  title: "Fiscal",
+  description:
+    "Apurar os impostos de cada mês e trimestre, aprovar as guias com a contabilidade e dar baixa nos impostos a pagar.",
+};
+
+/** O cartão Fiscal: guias a aprovar + impostos que vencem em 7 dias + vencidos. */
+async function CartaoFiscal({ tenantId }: { tenantId: string }) {
+  const p = await carregarPendenciasFiscais(tenantId);
+  return (
+    <FinanceiroCard
+      {...CARTAO_FISCAL}
+      count={(p.guiasAAprovar ?? 0) + p.vencendo + p.vencidos}
+      detalhe={detalheFiscal(p)}
+    />
+  );
+}
+
 function FinanceiroCard({
   href,
   icon: Icon,
   title,
   description,
   count,
+  detalhe,
 }: {
   href: string;
   icon: LucideIcon;
   title: string;
   description: string;
   count?: number;
+  /** O detalhe da contagem, ao lado de "N pendentes" (só o Fiscal). */
+  detalhe?: string;
 }) {
   return (
     <Link
@@ -128,6 +158,7 @@ function FinanceiroCard({
           <p className="text-xs text-muted-foreground">
             <span className="font-semibold text-foreground">{count}</span>{" "}
             {count === 1 ? "pendente" : "pendentes"}
+            {detalhe ? ` · ${detalhe}` : null}
           </p>
           <span className="inline-flex items-center gap-1 text-xs font-semibold text-california-red">
             Abrir

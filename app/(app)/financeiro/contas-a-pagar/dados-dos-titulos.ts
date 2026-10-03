@@ -66,7 +66,8 @@ export const SELECT_PP_DO_FINANCEIRO = `
         nf_registrada_em, credito_pis_cofins_retirado, credito_pis_cofins_motivo,
         fornecedor:fornecedores(
           id, nome, razao_social,
-          regime_tributario, regime_consultado_em, declaracao_simples_recebida
+          regime_tributario, regime_consulta, regime_consultado_em,
+          declaracao_simples_recebida
         ),
         responsavel:profiles!responsavel_verba_id(id, nome),
         empresa:empresas(id, razao_social, nome_fantasia),
@@ -242,6 +243,7 @@ export function mapearPPsDoFinanceiro(
       nome: string;
       razao_social: string | null;
       regime_tributario: string | null;
+      regime_consulta: string | null;
       regime_consultado_em: string | null;
       declaracao_simples_recebida: boolean | null;
     } | null;

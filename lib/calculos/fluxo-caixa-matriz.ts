@@ -116,6 +116,10 @@ const ROTULO_ORIGEM: Record<string, string> = {
   desembolso: "Desembolso",
   titulo: "Título a receber",
   previsao_custo: "Cronograma de desembolsos",
+  // O cronograma de recolhimento de impostos da abertura (decisão 100),
+  // que entra no fluxo com o módulo fiscal (entrega 2) — já abatido pelo
+  // faturamento.
+  previsao_imposto: "Cronograma de impostos",
   previsao_recebimento: "Previsão de recebimento",
   envio_parcela: "Faturamento previsto",
   // A ocorrência da recorrência que ainda não virou título (15/09/2026).

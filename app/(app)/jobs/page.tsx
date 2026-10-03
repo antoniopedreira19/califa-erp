@@ -76,6 +76,9 @@ export default async function JobsPage({
         // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
         // "Ativação de marca" num projeto "Pevetech".
         "produto, regional_id, responsavel_id, " +
+        // O produtor também é dono do job no recorte "Meus" (03/10/2026):
+        // quem entra como produtor quase nunca é o GP do job.
+        "produtor_id, " +
         // Os dois descritivos que a lista mostra em cartão (handoff
         // "Descritivos nas Listas", 04/09/2026): o do job na linha e o
         // do projeto na faixa do grupo. Texto curto — tetos de 500 e
@@ -168,6 +171,7 @@ export default async function JobsPage({
     regional_id: r.regional_id ?? null,
     regional_nome: r.regional?.nome ?? null,
     responsavel_id: r.responsavel_id ?? null,
+    produtor_id: r.produtor_id ?? null,
     observacoes: r.observacoes ?? null,
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,

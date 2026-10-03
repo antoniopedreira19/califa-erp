@@ -6,8 +6,9 @@
  * ⚠️ A action recebe o **id do lançamento**, e não bucket + caminho. O
  * caminho e o bucket são re-derivados aqui, no servidor.
  *
- * Parece rodeio e não é: a coluna Documento cobre quatro origens em três
- * buckets diferentes, e a versão óbvia — o cliente manda `{bucket, path}`
+ * Parece rodeio e não é: a coluna Documento cobre cinco origens em quatro
+ * buckets diferentes (a guia de imposto, no `impostos`, desde a entrega 2
+ * do módulo fiscal), e a versão óbvia — o cliente manda `{bucket, path}`
  * e o servidor assina — deixaria qualquer pessoa logada pedir uma URL
  * assinada para *qualquer* arquivo de *qualquer* tenant. O id do
  * lançamento já passa pelo filtro de tenant, e o resto sai dele.
@@ -48,7 +49,7 @@ export async function abrirDocumentoDoLancamento(
   const { data: lancamento, error } = await supabase
     .from("lancamentos_financeiros")
     .select(
-      `id,
+      `id, origem,
        pedido_compra:pedidos_compra(
          anexos:pedidos_compra_anexos(arquivo_path, documento_tipo)
        ),
@@ -90,6 +91,24 @@ export async function abrirDocumentoDoLancamento(
       path: lancamento.titulo?.faturamento?.anexo_nf_path ?? null,
     },
   ];
+
+  // A guia de um imposto (módulo fiscal, entrega 2) mora no bucket
+  // `impostos`, e o caminho está no título que o lançamento paga. Lida à
+  // parte e só na baixa de imposto: a consulta de cima, que serve às outras
+  // origens, fica como era. A RLS do título e do bucket deixam só admin e
+  // financeiro chegarem ao arquivo.
+  if (lancamento.origem === "imposto_baixa") {
+    const { data: daGuia } = await supabase
+      .from("lancamentos_financeiros")
+      .select("imposto:impostos_a_pagar!imposto_a_pagar_id(guia_path)")
+      .eq("id", lancamentoId)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<any>();
+    candidatos.push({
+      bucket: "impostos",
+      path: daGuia?.imposto?.guia_path ?? null,
+    });
+  }
 
   const alvo = candidatos.find((c) => c.path);
   if (!alvo?.path) {

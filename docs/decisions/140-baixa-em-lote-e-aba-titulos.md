@@ -70,6 +70,10 @@ quando a Apuração e os Impostos a Pagar forem entregues (decisão 139, §4).
 - A transferência entre contas "A transferir" fica fora da aba (as duas
   contas já estão no título); o filtro de empresa de Contas a Pagar não vale
   aqui (a conta não pertence a empresa, decisão 064).
+- A coluna **Empresa** mostra a empresa gerencial do título, a mesma das
+  listas de Contas a Pagar e a Receber. O protótipo do fiscal mostrava a PJ
+  (empresa contábil) em todas as linhas; os impostos, que entraram na aba
+  com a decisão 141, mostram a PJ da guia (ver 141 §6).
 - Para a aba, as consultas de Contas a Pagar e de Contas a Receber saíram
   das páginas para `dados-dos-titulos.ts` (o mesmo código, movido); a
   decisão de quem entra no lote está copiada em

@@ -1,5 +1,6 @@
 /**
- * Testes das sugestões do Faturar (módulo fiscal, entrega 1 — 02/10/2026).
+ * Testes das sugestões do Faturar (módulo fiscal, entrega 1 — 02/10/2026) e
+ * do aviso depois de emitir (em que Apuração os impostos da nota entraram).
  * Rodar: node --import tsx --test lib/fiscal/faturar.test.ts
  */
 import { test } from "node:test";
@@ -7,14 +8,17 @@ import assert from "node:assert/strict";
 import type { FiscalCnae, FiscalEstabelecimento } from "@/lib/types";
 import type { CadastroFiscal } from "./cadastro";
 import {
+  avisoDaApuracao,
   cnaesQueBatemComASugestao,
   diaDoPisCofins,
+  guiasDaEmissaoParaConferir,
   mesesDasCotas,
   montarFiscalDoFaturar,
   rotuloDoEstabelecimento,
   sugestaoDoCnpj,
   textoDoRegime,
   textoDoTrimestre,
+  type ApuracaoDaEmissao,
 } from "./faturar";
 
 const estab = (
@@ -156,9 +160,122 @@ test("textos: CNPJ, regime, trimestre e cotas de IRPJ/CSLL", () => {
   assert.equal(textoDoTrimestre("2026-11-11"), "4º trimestre/2026");
   assert.equal(mesesDasCotas("2026-11-11"), "janeiro, fevereiro e março de 2027");
   assert.equal(mesesDasCotas("2026-02-03"), "abril, maio e junho de 2026");
-  assert.equal(diaDoPisCofins(CAD), 25);
+  assert.equal(diaDoPisCofins(CAD, "2026-11-11"), 25);
+  const dia = (valor: number, vigencia_inicio: string) => ({ id: `p${valor}`, tenant_id: "t", chave: "pis_cofins_dia", valor, descricao: "", vigencia_inicio, created_at: "", updated_at: "" });
+  assert.equal(diaDoPisCofins({ ...CAD, parametros: [dia(20, "2026-01-01")] }, "2026-11-11"), 20);
+  // Dia trocado a partir de 01/12: a nota de novembro fica com o de antes; a de
+  // dezembro, com o novo — o dia vigente no último dia da competência, como no motor.
+  const trocado = { ...CAD, parametros: [dia(25, "2026-01-01"), dia(20, "2026-12-01")] };
+  assert.equal(diaDoPisCofins(trocado, "2026-11-30"), 25);
+  assert.equal(diaDoPisCofins(trocado, "2026-12-01"), 20);
+  // Vigência no meio do mês vale para o mês inteiro (o vencimento é da competência).
+  assert.equal(diaDoPisCofins({ ...CAD, parametros: [dia(25, "2026-01-01"), dia(18, "2026-11-15")] }, "2026-11-02"), 18);
+});
+
+// ---------------------------------------------------------------------------
+// O aviso depois de emitir
+// ---------------------------------------------------------------------------
+
+const PRIMEIRA = "2026-10";
+const NENHUMA = { iss: false, pis_cofins: false };
+const apuracao = (hoje: string, aprovadas: ApuracaoDaEmissao["aprovadas"] = NENHUMA): ApuracaoDaEmissao => ({
+  hoje,
+  primeira_competencia: PRIMEIRA,
+  aprovadas,
+});
+
+test("aviso: a competência é o mês da emissão; no mês corrente, a Apuração em curso", () => {
   assert.equal(
-    diaDoPisCofins({ ...CAD, parametros: [{ id: "p", tenant_id: "t", chave: "pis_cofins_dia", valor: 20, descricao: "", vigencia_inicio: "2026-01-01", created_at: "", updated_at: "" }] }),
-    20,
+    avisoDaApuracao({ emissao: "2026-10-02", presumido: false, apuracao: apuracao("2026-10-02") }),
+    "Os impostos dela já estão na Apuração de outubro/2026 (em curso).",
   );
+  // Data futura no mesmo mês: o motor conhece a nota desde o registro.
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-10-28", presumido: false, apuracao: apuracao("2026-10-02") }),
+    "Os impostos dela já estão na Apuração de outubro/2026 (em curso).",
+  );
+  // Lucro presumido: só o ISS nasce na emissão.
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-10-02", presumido: true, apuracao: apuracao("2026-10-02") }),
+    "O ISS dela já está na Apuração de outubro/2026 (em curso). PIS, COFINS, IRPJ e CSLL entram quando o cliente pagar.",
+  );
+});
+
+test("aviso: mês encerrado sem guia aprovada — a aprovar", () => {
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-10-30", presumido: false, apuracao: apuracao("2026-11-10") }),
+    "Os impostos dela já estão na Apuração de outubro/2026 (a aprovar).",
+  );
+  // Virada de ano.
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-12-30", presumido: false, apuracao: apuracao("2027-01-05") }),
+    "Os impostos dela já estão na Apuração de dezembro/2026 (a aprovar).",
+  );
+  // No presumido, a guia de PIS/COFINS aprovada não é da nota (vem dos recebimentos).
+  assert.equal(
+    avisoDaApuracao({
+      emissao: "2026-10-30",
+      presumido: true,
+      apuracao: apuracao("2026-11-10", { iss: false, pis_cofins: true }),
+    }),
+    "O ISS dela já está na Apuração de outubro/2026 (a aprovar). PIS, COFINS, IRPJ e CSLL entram quando o cliente pagar.",
+  );
+});
+
+test("aviso: mês encerrado com guia aprovada — a guia passa a mostrar a diferença", () => {
+  const diferenca = "Os impostos dela já estão na Apuração de outubro/2026: a guia já aprovada passa a mostrar a diferença.";
+  for (const aprovadas of [
+    { iss: true, pis_cofins: false },
+    { iss: false, pis_cofins: true },
+    { iss: true, pis_cofins: true },
+  ]) {
+    assert.equal(
+      avisoDaApuracao({ emissao: "2026-10-30", presumido: false, apuracao: apuracao("2026-11-10", aprovadas) }),
+      diferenca,
+    );
+  }
+  assert.equal(
+    avisoDaApuracao({
+      emissao: "2026-10-30",
+      presumido: true,
+      apuracao: apuracao("2026-11-10", { iss: true, pis_cofins: false }),
+    }),
+    "O ISS dela já está na Apuração de outubro/2026: a guia já aprovada passa a mostrar a diferença. PIS, COFINS, IRPJ e CSLL entram quando o cliente pagar.",
+  );
+  // A leitura das aprovações falhou: o aviso não diz se a guia está aprovada.
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-10-30", presumido: false, apuracao: apuracao("2026-11-10", null) }),
+    "Os impostos dela já estão na Apuração de outubro/2026.",
+  );
+});
+
+test("aviso: mês futuro e nota anterior ao início da Apuração", () => {
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-11-05", presumido: false, apuracao: apuracao("2026-10-02") }),
+    "Os impostos dela entram na Apuração de novembro/2026, o mês da emissão.",
+  );
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-11-05", presumido: true, apuracao: apuracao("2026-10-02") }),
+    "O ISS dela entra na Apuração de novembro/2026, o mês da emissão. PIS, COFINS, IRPJ e CSLL entram quando o cliente pagar.",
+  );
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-09-28", presumido: false, apuracao: apuracao("2026-10-02") }),
+    "A nota é de setembro/2026, antes do início da Apuração (outubro/2026): os impostos dela ficam de fora.",
+  );
+  assert.equal(
+    avisoDaApuracao({ emissao: "2026-09-28", presumido: true, apuracao: apuracao("2026-10-02") }),
+    "A nota é de setembro/2026, antes do início da Apuração (outubro/2026): o ISS dela fica de fora. PIS, COFINS, IRPJ e CSLL entram quando o cliente pagar.",
+  );
+});
+
+test("guias a conferir na emissão: só mês encerrado dentro da Apuração, com as chaves do motor", () => {
+  const base = { estabelecimentoId: "ca-ssa", empresaContabilId: "pj-ca", primeiraCompetencia: PRIMEIRA };
+  assert.deepEqual(guiasDaEmissaoParaConferir({ ...base, emissao: "2026-10-30", hoje: "2026-11-10" }), {
+    iss: "iss|ca-ssa|2026-10",
+    pisCofins: ["pis|pj-ca|2026-10", "cofins|pj-ca|2026-10"],
+  });
+  // Mês corrente, futuro e anterior à Apuração: nenhuma guia pode estar aprovada.
+  assert.equal(guiasDaEmissaoParaConferir({ ...base, emissao: "2026-11-02", hoje: "2026-11-10" }), null);
+  assert.equal(guiasDaEmissaoParaConferir({ ...base, emissao: "2026-12-01", hoje: "2026-11-10" }), null);
+  assert.equal(guiasDaEmissaoParaConferir({ ...base, emissao: "2026-09-28", hoje: "2026-11-10" }), null);
 });

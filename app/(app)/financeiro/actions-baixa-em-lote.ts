@@ -13,7 +13,10 @@
  * - a pagar → `darBaixaTitulo` (`contas-a-pagar/actions-titulos.ts`);
  * - nota fiscal → `darBaixaTitulo` (`contas-a-receber/actions.ts`);
  * - recebimento avulso → `darBaixaRecebimentoAvulso`
- *   (`contas-a-receber/actions-recebimento-avulso.ts`).
+ *   (`contas-a-receber/actions-recebimento-avulso.ts`);
+ * - imposto a pagar → `darBaixaImposto` (`fiscal/impostos/actions.ts`,
+ *   módulo fiscal, entrega 2), com a multa e os juros e os anexos de cada
+ *   guia.
  *
  * Cada uma confere a sessão e o papel (admin ou financeiro, com
  * `acao_negada` no audit), valida a entrada, chama a RPC — que confere de
@@ -49,6 +52,7 @@ import { montarRetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
 import { darBaixaTitulo as darBaixaTituloPagar } from "./contas-a-pagar/actions-titulos";
 import { darBaixaTitulo as darBaixaTituloReceber } from "./contas-a-receber/actions";
 import { darBaixaRecebimentoAvulso } from "./contas-a-receber/actions-recebimento-avulso";
+import { darBaixaImposto } from "./fiscal/impostos/actions";
 
 /** As telas que mostram título, saldo ou extrato. Cada action individual
  *  já revalida as suas; aqui vale para o lote inteiro, inclusive quando
@@ -58,6 +62,7 @@ function revalidarListas() {
   revalidatePath("/financeiro/contas-a-receber");
   revalidatePath("/financeiro/conciliacao");
   revalidatePath("/financeiro/fluxo-caixa");
+  revalidatePath("/financeiro/fiscal");
   revalidatePath("/financeiro");
 }
 
@@ -197,6 +202,8 @@ async function executar(c: ChamadaDaBaixa): Promise<{ ok: true } | { ok: false; 
       return darBaixaTituloReceber(c.entrada);
     case "receber_avulso":
       return darBaixaRecebimentoAvulso(c.entrada);
+    case "imposto":
+      return darBaixaImposto(c.entrada);
   }
 }
 
