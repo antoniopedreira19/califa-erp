@@ -6616,3 +6616,28 @@ estendido a Contas a Receber em 31/08.**
   tela; o que subiu e não foi salvo sai.
 - **Arquivos de teste que ficaram:** 1 PDF em `fornecedores/<tenant>/declaracoes/`
   e os comprovantes de 02/10 em `impostos` (o Tiago preferiu deixar).
+
+## ⚠️ Nota de 2026-10-03 (4) — abertura do ANI-1001/26 desfeita
+
+- O orçamento ANI-P002/26-01 (Always On) foi aprovado e enviado com um mês
+  só (outubro), quando deveria cobrir o trimestre, e o job ANI-1001/26 foi
+  aberto no financeiro em 02/10. A pedido do Tiago, a migration
+  `20261003300001_desfaz_abertura_ani_1001.sql` o devolveu à produção
+  (`rejeitado_financeiro`, sem motivo escrito: já combinado com a GP).
+- **Saiu o que a abertura gravou:** nome financeiro, projeto do financeiro,
+  contas, competência, custo previsto, data e autor da abertura; as três
+  previsões (desembolso, recebimento, impostos), o rateio e o registro nº 1
+  da aba Abertura. O projeto do financeiro ANI-F001/26 só tinha este job e
+  foi apagado pelo gatilho da 119 (`projeto_financeiro.apagado_sem_job`).
+  Tudo o que saiu está no metadata do evento `job.abertura_desfeita`.
+- **Ficou:** código, planilha do job, as 2 PPs geradas (PP-00100 e
+  PP-00101, não enviadas ao financeiro), contato de cobrança, orçamento em
+  `job_criado` e a v1 aprovada.
+- **Próximo passo é da GP, pela tela (decisão 128):** mudar os meses é
+  mudar o orçado, então passa pelo "Cancelar aprovação", que exige cancelar
+  antes as 2 PPs. O job volta com o mesmo código no envio, e o financeiro
+  abre de novo (e recria o projeto do financeiro).
+- Nenhuma tela desfaz abertura (116/117); a guarda do banco barra
+  `aberto → rejeitado_financeiro` para quem está logado. Se acontecer de
+  novo, o mesmo padrão serve, com as mesmas travas (sem lançamento, nota,
+  envio ao faturamento, errata, save ou PP enviada).
