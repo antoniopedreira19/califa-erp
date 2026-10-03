@@ -6587,3 +6587,14 @@ estendido a Contas a Receber em 31/08.**
   matriz por PJ (não há índice único no papel): essa trava é só do
   servidor, e duas pessoas cadastrando a matriz ao mesmo tempo ainda
   passariam.
+
+## ⚠️ Nota de 2026-10-03 (2) — remessa de teste PE000031 cancelada
+
+- A PE000031 (02/10, 17:04, conta California Santander, R$ 15.300,00) tinha
+  só as 4 PPs de teste do TES (PP-00079, PP-00102, PP-00110, PP-00111) e não
+  foi transmitida. Cancelada com o OK do Tiago pela migration
+  `20261003100001_cancela_remessa_31_de_teste.sql` (status + auditoria, como
+  a PE000029). Enquanto ativa, ela travava a baixa dessas PPs e tirava delas
+  a retenção da aprovação (a remessa paga o bruto, pergunta 139 §5.2).
+- **Para testes:** gerar remessa com PP de teste trava o TES do mesmo jeito;
+  se for preciso, cancelar logo depois.
