@@ -6633,10 +6633,14 @@ estendido a Contas a Receber em 31/08.**
 - **Ficou:** código, planilha do job, as 2 PPs geradas (PP-00100 e
   PP-00101, não enviadas ao financeiro), contato de cobrança, orçamento em
   `job_criado` e a v1 aprovada.
-- **Próximo passo é da GP, pela tela (decisão 128):** mudar os meses é
-  mudar o orçado, então passa pelo "Cancelar aprovação", que exige cancelar
-  antes as 2 PPs. O job volta com o mesmo código no envio, e o financeiro
-  abre de novo (e recria o projeto do financeiro).
+- **Depois, pela tela (decisão 128), também a pedido do Tiago:** mudar os
+  meses é mudar o orçado. Por isso as 2 PPs foram canceladas na aba de PPs
+  e a v1 teve a aprovação cancelada. O orçamento e a v1 estão em
+  `em_revisao`, e o job está `cancelado` com `codigo_reservado`. Falta só a
+  GP: incluir novembro e dezembro ("Editar meses" / "Copiar itens de outro
+  mês"), aprovar e enviar. O job volta como ANI-1001/26, o cancelado vira
+  ANI-1001/26-C1, e a produtora gera as PPs de novo, com número novo.
+  Depois o financeiro abre de novo e recria o projeto do financeiro.
 - Nenhuma tela desfaz abertura (116/117); a guarda do banco barra
   `aberto → rejeitado_financeiro` para quem está logado. Se acontecer de
   novo, o mesmo padrão serve, com as mesmas travas (sem lançamento, nota,
