@@ -1,13 +1,21 @@
-import { User, Landmark, CalendarDays } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
-import { roleLabel, tipoContratacaoLabel } from "@/lib/types";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type {
   Colaborador,
   ColaboradorFeriasPeriodo,
   ColaboradorFeriasLancamento,
   Nivel,
+  AppRole,
 } from "@/lib/types";
+import { carregarAcessoColaborador } from "@/lib/auth/acesso-colaborador";
+import { HeroPerfil } from "./hero-perfil";
+import { CardDadosPessoais } from "./card-dados-pessoais";
+import { CardDadosBancarios } from "./card-dados-bancarios";
+import { CardAcessoUsuario } from "./card-acesso-usuario";
+import { CardAlocacaoAtual } from "./card-alocacao-atual";
+import { CardBeneficios } from "./card-beneficios";
+import { CardNotaFiscal } from "./card-nota-fiscal";
+import { CardDocumentos } from "./card-documentos";
 import { CardMinhasFerias } from "./card-minhas-ferias";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +24,14 @@ export default async function PerfilPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  // Busca o colaborador vinculado ao usuário logado. Pode não existir
-  // (admin que nunca foi colaborador, usuário fora do RH, etc.).
+  // Carrega colab vinculado ao usuário logado. Pode ser null pra admin/rh
+  // que ainda não tem cadastro de colaborador — mostramos uma versão
+  // enxuta do perfil só com o hero + acesso ao sistema.
   const { data: colabData } = await supabase
     .from("colaboradores")
-    .select("*, nivel:niveis(id, codigo, descricao), lider:profiles!lider_id(id, nome)")
+    .select(
+      "*, nivel:niveis(id, codigo, descricao), lider:profiles!lider_id(id, nome)",
+    )
     .eq("user_id", session.profile.id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -32,232 +43,152 @@ export default async function PerfilPage() {
       })
     | null;
 
-  // Se o perfil não está vinculado a um colaborador, mostra uma mensagem
-  // amigável mas ainda renderiza info do profile + notificações.
+  // Dados de acesso (auth.users) só precisam de service client.
+  const acesso = await carregarAcessoColaborador(session.profile.id);
+
+  const podeEditar =
+    session.activeRole === "administrador" || session.activeRole === "rh";
+
+  // Branch: usuário SEM colaborador vinculado — perfil enxuto.
   if (!colab) {
     return (
-      <div className="space-y-6 max-w-3xl mx-auto">
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight">Meu perfil</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Seus dados no sistema California.
-          </p>
-        </header>
+      <div className="space-y-6 max-w-6xl mx-auto">
+        <HeroPerfil
+          nome={session.profile.nome}
+          email={session.profile.email ?? ""}
+          role={session.activeRole as AppRole}
+          podeEditar={false}
+        />
 
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <div className="flex items-start gap-4">
-            <div className="rounded-full bg-california-red/10 p-3">
-              <User className="h-6 w-6 text-california-red" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold">{session.profile.nome}</h2>
-              <p className="text-sm text-muted-foreground">
-                {session.profile.email}
-              </p>
-              <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">
-                {roleLabel(session.activeRole)}
-              </p>
-            </div>
+        <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+            <h2 className="text-sm font-semibold text-amber-900">
+              Seu login ainda não está vinculado a um cadastro de colaborador.
+            </h2>
+            <p className="mt-2 text-sm text-amber-800">
+              Por isso, dados pessoais, bancários, férias e documentos não
+              aparecem aqui. Se você acredita que isso é um erro, procure o
+              RH para fazer o vínculo.
+            </p>
           </div>
-        </div>
 
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
-          <p className="text-sm text-amber-900">
-            Seu login ainda não está vinculado a um cadastro de colaborador.
-            Por isso, não é possível mostrar seus dados pessoais, bancários ou
-            de férias.
-          </p>
-          <p className="mt-2 text-sm text-amber-800">
-            Se você acredita que isso é um erro, procure o RH para fazer o
-            vínculo.
-          </p>
+          <div className="space-y-5">
+            <CardAcessoUsuario
+              role={session.activeRole as AppRole}
+              statusMembership="ativo"
+              lastSignIn={acesso?.last_sign_in_at ?? null}
+            />
+          </div>
         </div>
       </div>
     );
   }
 
-  // Sócios não têm direito a férias — pula consulta e render do card.
+  // Dados específicos do colaborador — rodam em paralelo quando possível.
   const ehSocio = colab.tipo_contratacao === "socio";
+  const service = createServiceClient();
 
-  // Períodos aquisitivos + lançamentos do colaborador. Pula pra sócio.
-  const [{ data: periodosData }, { data: lancamentosData }] = ehSocio
-    ? [{ data: [] }, { data: [] }]
-    : await Promise.all([
-        supabase
+  const [
+    { data: periodosData },
+    { data: lancamentosData },
+    { data: alocacoesData },
+    membershipRes,
+  ] = await Promise.all([
+    ehSocio
+      ? Promise.resolve({ data: [] })
+      : supabase
           .from("colaboradores_ferias_periodos")
           .select("*")
           .eq("colaborador_id", colab.id)
           .order("numero", { ascending: true }),
-        supabase
+    ehSocio
+      ? Promise.resolve({ data: [] })
+      : supabase
           .from("colaboradores_ferias_lancamentos")
           .select("*")
           .eq("colaborador_id", colab.id)
           .order("data_inicio", { ascending: false }),
-      ]);
+    supabase
+      .from("colaboradores_alocacoes")
+      .select(
+        "percentual, empresa:empresas(id, nome_fantasia), regional:regionais!colaboradores_alocacoes_regional_id_fkey(id, nome)",
+      )
+      .eq("colaborador_id", colab.id)
+      .is("data_fim", null),
+    service
+      .from("tenant_members")
+      .select("role, status")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("user_id", session.profile.id)
+      .maybeSingle(),
+  ]);
 
   const periodos = (periodosData ?? []) as ColaboradorFeriasPeriodo[];
   const lancamentos = (lancamentosData ?? []) as ColaboradorFeriasLancamento[];
+  const alocacoes = (alocacoesData ?? []).map((a) => {
+    const emp = a.empresa as unknown as { nome_fantasia: string } | null;
+    const reg = a.regional as unknown as { nome: string } | null;
+    return {
+      empresa_nome: emp?.nome_fantasia ?? "—",
+      regional_nome: reg?.nome ?? null,
+      percentual: a.percentual ? Number(a.percentual) : null,
+    };
+  });
 
-  const dataAdmissaoFmt = colab.data_admissao
-    ? new Date(colab.data_admissao + "T00:00:00").toLocaleDateString("pt-BR")
-    : "—";
+  const membership = membershipRes.data as
+    | { role: AppRole; status: "ativo" | "inativo" }
+    | null;
+  const roleReal = membership?.role ?? (session.activeRole as AppRole);
+  const statusMembership = membership?.status ?? "ativo";
+
+  const empresaPrincipal =
+    alocacoes[0]?.empresa_nome ?? null;
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight">Meu perfil</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Seus dados no sistema California.
-        </p>
-      </header>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <HeroPerfil
+        nome={colab.nome}
+        email={colab.email ?? session.profile.email ?? ""}
+        role={roleReal}
+        tipoContratacao={colab.tipo_contratacao}
+        funcao={colab.funcao}
+        dataAdmissao={colab.data_admissao}
+        empresaPrincipal={empresaPrincipal}
+        colaboradorId={colab.id}
+        podeEditar={podeEditar}
+      />
 
-      {/* Card: Dados pessoais */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <User className="h-4 w-4 text-california-red" />
-          </div>
-          <h2 className="text-lg font-semibold">Dados pessoais</h2>
+      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+        {/* Coluna principal (esquerda) */}
+        <div className="space-y-5 min-w-0">
+          <CardDadosPessoais colaborador={colab} />
+          <CardDadosBancarios colaborador={colab} />
+          {!ehSocio && (
+            <CardMinhasFerias
+              periodos={periodos}
+              lancamentos={lancamentos}
+              tipoContratacao={colab.tipo_contratacao}
+            />
+          )}
+          <CardNotaFiscal tipoContratacao={colab.tipo_contratacao} />
+          <CardBeneficios />
         </div>
 
-        <div className="flex items-start gap-4 mb-6">
-          <div>
-            <h3 className="text-xl font-semibold">{colab.nome}</h3>
-            <p className="text-sm text-muted-foreground">
-              {colab.funcao}
-              {colab.nivel ? ` · ${colab.nivel.codigo}` : ""}
-            </p>
-            <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">
-              {tipoContratacaoLabel(colab.tipo_contratacao)}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-x-8 gap-y-4 md:grid-cols-2 text-sm">
-          <Campo rotulo="E-mail (corporativo)" valor={colab.email} />
-          <Campo rotulo="E-mail pessoal" valor={colab.email_pessoal} />
-          <Campo rotulo="Telefone" valor={colab.telefone} />
-          <Campo
-            rotulo="Admissão"
-            valor={dataAdmissaoFmt}
-            icon={<CalendarDays className="h-3.5 w-3.5" />}
+        {/* Coluna lateral (direita, 320px fixo em desktop) */}
+        <div className="space-y-5">
+          <CardAcessoUsuario
+            role={roleReal}
+            statusMembership={statusMembership}
+            lastSignIn={acesso?.last_sign_in_at ?? null}
           />
-          <Campo rotulo="Área" valor={colab.area} />
-          <Campo
-            rotulo="Líder direto"
-            valor={colab.lider?.nome ?? null}
+          <CardAlocacaoAtual
+            alocacoes={alocacoes}
+            liderNome={colab.lider?.nome ?? null}
+            area={colab.area}
+            nivel={colab.nivel}
           />
+          <CardDocumentos />
         </div>
-      </div>
-
-      {/* Card: Dados bancários (read-only) */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-california-red/10 p-2">
-            <Landmark className="h-4 w-4 text-california-red" />
-          </div>
-          <h2 className="text-lg font-semibold">Dados bancários</h2>
-        </div>
-
-        <div className="grid gap-x-8 gap-y-4 md:grid-cols-2 text-sm">
-          <div>
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Conta bancária
-            </p>
-            {colab.banco_codigo &&
-            (colab.agencia || colab.tipo_conta) &&
-            (colab.conta || colab.tipo_conta) ? (
-              <div className="space-y-0.5">
-                <p className="font-medium">
-                  {colab.banco_codigo}
-                  {colab.banco_nome ? ` — ${colab.banco_nome}` : ""}
-                </p>
-                {colab.agencia && colab.conta && (
-                  <p className="text-muted-foreground">
-                    Ag. {colab.agencia}
-                    {colab.agencia_dv ? `-${colab.agencia_dv}` : ""}
-                    {" · "}
-                    Cc. {colab.conta}
-                    {colab.conta_dv ? `-${colab.conta_dv}` : ""}
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {colab.tipo_conta === "corrente"
-                    ? "Conta corrente"
-                    : colab.tipo_conta === "poupanca"
-                      ? "Conta poupança"
-                      : colab.tipo_conta === "pagamento"
-                        ? "Conta de pagamento"
-                        : "—"}
-                </p>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">Não cadastrado.</p>
-            )}
-          </div>
-
-          <div>
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Chave PIX
-            </p>
-            {colab.pix_tipo && colab.pix_chave ? (
-              <div className="space-y-0.5">
-                <p className="font-medium">{colab.pix_chave}</p>
-                <p className="text-xs text-muted-foreground">
-                  Tipo:{" "}
-                  {colab.pix_tipo === "cpf"
-                    ? "CPF"
-                    : colab.pix_tipo === "cnpj"
-                      ? "CNPJ"
-                      : colab.pix_tipo === "email"
-                        ? "E-mail"
-                        : colab.pix_tipo === "telefone"
-                          ? "Telefone"
-                          : "Chave aleatória"}
-                </p>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">Não cadastrado.</p>
-            )}
-          </div>
-        </div>
-
-        <p className="mt-5 text-xs text-muted-foreground">
-          Para atualizar seus dados bancários, procure o RH.
-        </p>
-      </div>
-
-      {/* Card: Minhas férias — sócios não têm direito a férias */}
-      {!ehSocio && (
-        <CardMinhasFerias
-          periodos={periodos}
-          lancamentos={lancamentos}
-          tipoContratacao={colab.tipo_contratacao}
-        />
-      )}
-    </div>
-  );
-}
-
-function Campo({
-  rotulo,
-  valor,
-  icon,
-}: {
-  rotulo: string;
-  valor: string | null | undefined;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {rotulo}
-      </p>
-      <div className="flex items-center gap-1.5 text-sm">
-        {icon}
-        <span className={valor ? "font-medium" : "text-muted-foreground"}>
-          {valor ?? "—"}
-        </span>
       </div>
     </div>
   );
