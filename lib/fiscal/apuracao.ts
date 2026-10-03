@@ -42,6 +42,7 @@ import {
   vencimentoNoMesSeguinte,
   type FeriadoDoVencimento,
   type RegraDoVencimento,
+  type Vencimento,
 } from "./datas";
 
 export type { ImpostoRetido } from "@/lib/types";
@@ -241,7 +242,7 @@ export const nomeGuia = (g: Pick<Guia, "titulo" | "codigo">) => `${g.titulo}${g.
 const dia = (s: string) => s.slice(0, 10);
 
 /** "2026-11" ou "2026-11-04" → "2026-T4". */
-function trimestreDe(s: string) {
+export function trimestreDe(s: string) {
   const [y, m] = s.split("-").map(Number);
   return `${y}-T${Math.ceil(m / 3)}`;
 }
@@ -251,7 +252,8 @@ function mesesDoTrimestre(t: string) {
   return [1, 2, 3].map((i) => `${y}-${String((q - 1) * 3 + i).padStart(2, "0")}`);
 }
 
-const fimDoTrimestre = (t: string) => ultimoDiaDoMes(mesesDoTrimestre(t)[2]);
+/** "2026-T4" → "2026-12-31". */
+export const fimDoTrimestre = (t: string) => ultimoDiaDoMes(mesesDoTrimestre(t)[2]);
 
 function proximoTrimestre(t: string) {
   const [y, q] = t.split("-T").map(Number);
@@ -264,7 +266,7 @@ function mesAnterior(c: string) {
 }
 
 /** "2026-T4" → "4º trimestre/2026". */
-function nomeDoTrimestre(t: string) {
+export function nomeDoTrimestre(t: string) {
   const [y, q] = t.split("-T");
   return `${q}º trimestre/${y}`;
 }
@@ -378,9 +380,49 @@ interface Contexto {
 const vigenteEm = (c: Pick<FiscalCnae, "vigencia_inicio" | "vigencia_fim">, data: string) =>
   c.vigencia_inicio <= data && (c.vigencia_fim === null || c.vigencia_fim >= data);
 
+/** Os CNPJs na ordem do cadastro (ordem, nome). */
+const ordenarEstabelecimentos = (lista: readonly FiscalEstabelecimento[]) =>
+  [...lista].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
+
+/** A matriz da PJ; sem matriz no cadastro, o primeiro CNPJ dela na ordem. */
+function matrizEntre(estabelecimentos: readonly FiscalEstabelecimento[], pj: string): FiscalEstabelecimento {
+  const e =
+    estabelecimentos.find((x) => x.empresa_contabil_id === pj && x.papel === "matriz") ??
+    estabelecimentos.find((x) => x.empresa_contabil_id === pj);
+  if (!e) throw new Error(`A PJ ${pj} não tem CNPJ no cadastro de impostos.`);
+  return e;
+}
+
+/** A matriz da PJ: é o município dela que vale nos vencimentos federais. */
+export const matrizDaPJ = (cad: CadastroFiscal, pj: string) => matrizEntre(ordenarEstabelecimentos(cad.estabelecimentos), pj);
+
+/**
+ * O CNAE da nota na versão vigente na emissão: a alíquota que muda ganha
+ * linha nova com vigência, e a nota guarda a linha escolhida no Faturar.
+ */
+function cnaeVigenteNaEmissao(cad: CadastroFiscal, escolhido: FiscalCnae, emissao: string): FiscalCnae {
+  const vigente = cad.cnaes
+    .filter(
+      (c) =>
+        c.estabelecimento_id === escolhido.estabelecimento_id &&
+        c.codigo === escolhido.codigo &&
+        (c.subitem ?? "") === (escolhido.subitem ?? "") &&
+        vigenteEm(c, emissao),
+    )
+    .sort((a, b) => Number(b.ativo) - Number(a.ativo) || b.vigencia_inicio.localeCompare(a.vigencia_inicio))[0];
+  return vigente ?? escolhido;
+}
+
+/** O CNAE de uma nota com as alíquotas vigentes na emissão: o mesmo que as guias usam. */
+export function cnaeNaEmissao(cad: CadastroFiscal, n: Pick<NotaSaidaFiscal, "numero" | "cnae_id" | "emissao">): FiscalCnae {
+  const escolhido = cad.cnaes.find((c) => c.id === n.cnae_id);
+  if (!escolhido) throw new Error(`O CNAE da NF ${n.numero} não está no cadastro de impostos.`);
+  return cnaeVigenteNaEmissao(cad, escolhido, dia(n.emissao));
+}
+
 function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: string): Contexto {
   const asOf = dia(asOfInformado);
-  const estabelecimentos = [...cad.estabelecimentos].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
+  const estabelecimentos = ordenarEstabelecimentos(cad.estabelecimentos);
   const estabPorId = new Map(estabelecimentos.map((e) => [e.id, e]));
   const pjs = [...new Set(estabelecimentos.map((e) => e.empresa_contabil_id))];
   const estab = (id: string) => {
@@ -388,19 +430,11 @@ function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: 
     if (!e) throw new Error(`O CNPJ ${id} não está no cadastro de impostos.`);
     return e;
   };
-  const matriz = (pj: string) => {
-    const e =
-      estabelecimentos.find((x) => x.empresa_contabil_id === pj && x.papel === "matriz") ??
-      estabelecimentos.find((x) => x.empresa_contabil_id === pj);
-    if (!e) throw new Error(`A PJ ${pj} não tem CNPJ no cadastro de impostos.`);
-    return e;
-  };
+  const matriz = (pj: string) => matrizEntre(estabelecimentos, pj);
 
   const conhecidas = fatos.notas.filter((n) => dia(n.conhecida_em) <= asOf);
   const notaPorId = new Map(conhecidas.map((n) => [n.id, n]));
 
-  // O CNAE da nota na versão vigente na emissão: a alíquota que muda ganha
-  // linha nova com vigência, e a nota guarda a linha escolhida no Faturar.
   const cnaePorId = new Map(cad.cnaes.map((c) => [c.id, c]));
   const cnaeDaNota = new Map<string, FiscalCnae>();
   const cnae = (n: NotaSaidaFiscal) => {
@@ -408,17 +442,7 @@ function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: 
     if (pronto) return pronto;
     const escolhido = cnaePorId.get(n.cnae_id);
     if (!escolhido) throw new Error(`O CNAE da NF ${n.numero} não está no cadastro de impostos.`);
-    const emissao = dia(n.emissao);
-    const vigente = cad.cnaes
-      .filter(
-        (c) =>
-          c.estabelecimento_id === escolhido.estabelecimento_id &&
-          c.codigo === escolhido.codigo &&
-          (c.subitem ?? "") === (escolhido.subitem ?? "") &&
-          vigenteEm(c, emissao),
-      )
-      .sort((a, b) => Number(b.ativo) - Number(a.ativo) || b.vigencia_inicio.localeCompare(a.vigencia_inicio))[0];
-    const c = vigente ?? escolhido;
+    const c = cnaeVigenteNaEmissao(cad, escolhido, dia(n.emissao));
     cnaeDaNota.set(n.id, c);
     return c;
   };
@@ -628,7 +652,7 @@ function juntar(itens: string[]) {
 }
 
 /** "NF 2051 · TES-1101/26 Lançamento Verão"; com vários jobs, só os códigos. */
-function comJobs(prefixo: string, n: NotaSaidaFiscal) {
+export function comJobs(prefixo: string, n: Pick<NotaSaidaFiscal, "jobs">) {
   if (!n.jobs.length) return prefixo;
   if (n.jobs.length === 1) return `${prefixo} · ${n.jobs[0].codigo} ${n.jobs[0].nome}`;
   return `${prefixo} · ${juntar(n.jobs.map((j) => j.codigo))}`;
@@ -652,18 +676,18 @@ function valorCurto(v: number) {
   return formatBRL(v);
 }
 
+/** "California · Salvador" → "California". */
+const nomeDaMatriz = (m: FiscalEstabelecimento) => m.nome.split(" · ")[0].trim() || m.nome;
+
 /**
  * O nome da PJ, tirado do nome da matriz ("California · Salvador" →
  * "California"): o cadastro de impostos não traz `empresas_contabeis`.
  */
-function nomeDaPJ(ctx: Contexto, pj: string) {
-  const m = ctx.matriz(pj);
-  return m.nome.split(" · ")[0].trim() || m.nome;
-}
+export const nomeDaPJ = (cad: CadastroFiscal, pj: string) => nomeDaMatriz(matrizDaPJ(cad, pj));
 
 /** "Federal · California (matriz, soma São Paulo e Fortaleza)". */
 function localFederal(ctx: Contexto, pj: string, comFiliais: boolean) {
-  const nome = nomeDaPJ(ctx, pj);
+  const nome = nomeDaMatriz(ctx.matriz(pj));
   const filiais = comFiliais
     ? ctx.estabelecimentos.filter((e) => e.empresa_contabil_id === pj && e.papel === "filial" && e.ativo).map((e) => e.municipio)
     : [];
@@ -763,6 +787,34 @@ function guiaIss(
 // PIS e COFINS, por PJ e mês (pela matriz, somando as filiais)
 // ---------------------------------------------------------------------------
 
+/**
+ * PIS ou COFINS de um recebimento no lucro presumido pelo caixa: o bruto
+ * recebido na alíquota do CNAE da nota (`cnaeNaEmissao`).
+ */
+export function debitoNoCaixa(c: Pick<FiscalCnae, "aliquota_pis" | "aliquota_cofins">, tributo: "PIS" | "COFINS", bruto: number) {
+  return r2((bruto * (tributo === "PIS" ? c.aliquota_pis : c.aliquota_cofins)) / 100);
+}
+
+/** O dia `pis_cofins_dia` vigente no último dia do mês, no mês seguinte, antecipando o dia não útil. */
+function vencimentoPisCofins(
+  cad: CadastroFiscal,
+  comp: string,
+  municipio: string,
+  feriados: readonly FeriadoDoVencimento[],
+): Vencimento & { dia: number } {
+  const diaDoVencimento = parametro(cad, "pis_cofins_dia", ultimoDiaDoMes(comp));
+  return { ...vencimentoNoMesSeguinte(comp, diaDoVencimento, "antecipa", feriados, municipio), dia: diaDoVencimento };
+}
+
+/**
+ * O vencimento do PIS e da COFINS de uma PJ numa competência, o mesmo da
+ * guia: o dia `pis_cofins_dia` vigente no último dia do mês, no mês
+ * seguinte, antecipando o dia não útil, no município da matriz e com os
+ * feriados do cadastro.
+ */
+export const vencimentoDoPisCofins = (cad: CadastroFiscal, pj: string, comp: string) =>
+  vencimentoPisCofins(cad, comp, matrizDaPJ(cad, pj).municipio, feriadosDoCalculo(cad));
+
 function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" | "COFINS", saldoAnterior: number): Guia | null {
   const fim = ultimoDiaDoMes(comp);
   const reg = regimeDaGuia(ctx.cad, pj, fim);
@@ -838,15 +890,15 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
       if (mesDe(r.data) !== comp || dia(r.data) > ctx.asOf) continue;
       const n = ctx.nota(r.nota_id);
       if (!n || ctx.pjDoEstab(n.estabelecimento_id) !== pj) continue;
-      const a = aliquotaDaNota(ctx.cnae(n));
+      const c = ctx.cnae(n);
       base += r.bruto;
       memoria.push({
         grupo: "debito",
         rotulo: comJobs(`Recebimento da NF ${n.numero}`, n),
         detalhe: `recebido em ${dataBr(r.data)} · regime de caixa`,
         base: r.bruto,
-        aliquota: a,
-        valor: r2((r.bruto * a) / 100),
+        aliquota: aliquotaDaNota(c),
+        valor: debitoNoCaixa(c, tributo, r.bruto),
         ...jobDaNota(n),
         nota_id: n.id,
       });
@@ -879,8 +931,7 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
   if (!memoria.length) return null;
 
   const soma = somaDaMemoria(memoria);
-  const diaDoVencimento = parametro(ctx.cad, "pis_cofins_dia", fim);
-  const v = vencimentoNoMesSeguinte(comp, diaDoVencimento, "antecipa", ctx.feriados, ctx.matriz(pj).municipio);
+  const v = vencimentoPisCofins(ctx.cad, comp, ctx.matriz(pj).municipio, ctx.feriados);
   const avisos = [...reg.avisos];
   if (soma < 0) avisos.push(`Crédito maior que o débito: ${formatBRL(-soma)} passam para ${nomeDoMes(proximoMes(comp))}.`);
   return {
@@ -896,7 +947,7 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
     periodo: "mensal",
     vencimento: v.data,
     vencimento_motivo: v.motivo,
-    regra_vencimento: `dia ${diaDoVencimento} do mês seguinte · em dia não útil, antecipa`,
+    regra_vencimento: `dia ${v.dia} do mês seguinte · em dia não útil, antecipa`,
     memoria,
     apurado: Math.max(0, soma),
     saldo_credor_gerado: soma < 0 ? -soma : 0,
@@ -1421,4 +1472,24 @@ export function titulosDaAprovacao(g: Guia, a: AprovacaoFiscal): TituloDaAprovac
       });
   }
   return a.valor_guia > 0 ? [simples("apuracao", g.vencimento, a.valor_guia, descricao)] : [];
+}
+
+// ---------------------------------------------------------------------------
+// Peças da projeção do que falta receber (`./a-apurar.ts`)
+// ---------------------------------------------------------------------------
+
+/**
+ * As guias de IRPJ e CSLL de uma PJ num trimestre, calculadas em `asOf` com
+ * os fatos dados: a mesma conta de `calcularApuracao`. A projeção do "a
+ * apurar no recebimento" chama duas vezes — com os fatos de hoje (a guia em
+ * curso) e com os recebimentos previstos somados aos fatos (a guia que o
+ * trimestre vai ter).
+ */
+export function guiasIrpjCsllDoTrimestre(cad: CadastroFiscal, fatos: FatosFiscais, pj: string, trimestre: string, asOf: string): Guia[] {
+  return guiasIrpjCsll(criarContexto(cad, fatos, asOf), pj, trimestre);
+}
+
+/** O rateio de um total pelos jobs das notas, cada nota pesando pelo valor dado (como nas guias do caixa). */
+export function rateioPelasNotas(itens: ReadonlyArray<{ nota: NotaSaidaFiscal; valor: number }>, total: number): RateioDaGuia[] {
+  return rateioPor(itens.flatMap((i) => pesosDaNota(i.nota, i.valor)), total);
 }
