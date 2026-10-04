@@ -46,9 +46,6 @@ export default async function PerfilPage() {
   // Dados de acesso (auth.users) só precisam de service client.
   const acesso = await carregarAcessoColaborador(session.profile.id);
 
-  const podeEditar =
-    session.activeRole === "administrador" || session.activeRole === "rh";
-
   // Branch: usuário SEM colaborador vinculado — perfil enxuto.
   if (!colab) {
     return (
@@ -57,7 +54,7 @@ export default async function PerfilPage() {
           nome={session.profile.nome}
           email={session.profile.email ?? ""}
           role={session.activeRole as AppRole}
-          podeEditar={false}
+          colaboradorEditavel={null}
         />
 
         <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
@@ -154,8 +151,26 @@ export default async function PerfilPage() {
         funcao={colab.funcao}
         dataAdmissao={colab.data_admissao}
         empresaPrincipal={empresaPrincipal}
-        colaboradorId={colab.id}
-        podeEditar={podeEditar}
+        colaboradorEditavel={{
+          telefone: colab.telefone,
+          email_pessoal: colab.email_pessoal,
+          cep: colab.cep,
+          logradouro: colab.logradouro,
+          numero: colab.numero,
+          complemento: colab.complemento,
+          bairro: colab.bairro,
+          cidade: colab.cidade,
+          uf: colab.uf,
+          banco_codigo: colab.banco_codigo,
+          banco_nome: colab.banco_nome,
+          agencia: colab.agencia,
+          agencia_dv: colab.agencia_dv,
+          conta: colab.conta,
+          conta_dv: colab.conta_dv,
+          tipo_conta: colab.tipo_conta,
+          pix_tipo: colab.pix_tipo,
+          pix_chave: colab.pix_chave,
+        }}
       />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">

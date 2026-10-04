@@ -213,45 +213,9 @@ export async function solicitarFerias(input: unknown): Promise<ActionResult> {
     };
   }
 
-  // Monta destinatários: todos os RH do tenant + líder direto (se houver).
-  const destinatarios = new Set<string>();
-
-  const { data: rhMembers } = await supabase
-    .from("tenant_members")
-    .select("user_id")
-    .eq("tenant_id", colab.tenant_id)
-    .eq("status", "ativo")
-    .in("role", ["administrador", "rh"]);
-
-  for (const m of (rhMembers ?? []) as { user_id: string }[]) {
-    destinatarios.add(m.user_id);
-  }
-  if (colab.lider_id) {
-    destinatarios.add(colab.lider_id);
-  }
-
-  if (destinatarios.size > 0) {
-    const tituloCurto =
-      dados.tipo === "abono_avulso" ? "Nova solicitação de abono" : "Nova solicitação de férias";
-    const mensagem = `${session.profile.nome} solicitou ${dias} dia${dias > 1 ? "s" : ""} de ${dados.tipo === "abono_avulso" ? "abono avulso" : "férias"} entre ${dados.data_inicio} e ${dados.data_fim}.`;
-
-    await supabase.rpc("fn_criar_notificacao_ferias", {
-      p_tenant_id: colab.tenant_id,
-      p_tipo: "solicitacao",
-      p_colaborador_id: colab.id,
-      p_destinatarios: Array.from(destinatarios),
-      p_titulo: tituloCurto,
-      p_mensagem: mensagem,
-      p_payload: {
-        dias,
-        tipo: dados.tipo,
-        data_inicio: dados.data_inicio,
-        data_fim: dados.data_fim,
-      },
-      p_lancamento_id: lanc.id,
-      p_periodo_id: dados.periodo_id,
-    });
-  }
+  // Notificação ao RH removida com a limpeza das notificações de férias
+  // em 2026-10-03 (migration 20261003000001). Vai renascer no hub central
+  // de notificações multi-módulo — ver docs/pendencias/hub-central-notificacoes.md.
 
   await logAuditEvent({
     acao: "ferias.solicitacao.criada",
@@ -269,6 +233,144 @@ export async function solicitarFerias(input: unknown): Promise<ActionResult> {
 
   revalidatePath("/perfil");
   return { ok: true, id: lanc.id };
+}
+
+// ---------- Server action: editar meus próprios dados ----------
+
+/**
+ * Permite que qualquer usuário logado edite os campos "do perfil" do
+ * COLABORADOR vinculado ao próprio login. Admin/RH que precisam editar
+ * dados estruturais (CPF, admissão, cargo, alocação) usam a tela
+ * `/rh/colaboradores/[id]` — essa action não cobre esses campos.
+ *
+ * Campos permitidos (alinhado com o PO em 2026-10-03):
+ *  - Contato: telefone, email_pessoal
+ *  - Endereço: cep, logradouro, numero, complemento, bairro, cidade, uf
+ *  - Banco: banco_codigo, banco_nome, agencia, agencia_dv, conta,
+ *    conta_dv, tipo_conta
+ *  - PIX: pix_tipo, pix_chave
+ *
+ * Qualquer outro campo passado é ignorado.
+ */
+
+const UF_SCHEMA = z
+  .string()
+  .trim()
+  .regex(/^[A-Z]{2}$/, "UF inválida (use 2 letras maiúsculas).");
+
+const editarMeuPerfilSchema = z.object({
+  // Contato
+  telefone: z.string().trim().max(20).optional().nullable(),
+  email_pessoal: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Email pessoal inválido.")
+    .optional()
+    .nullable()
+    .or(z.literal("")),
+
+  // Endereço
+  cep: z.string().trim().max(10).optional().nullable(),
+  logradouro: z.string().trim().max(200).optional().nullable(),
+  numero: z.string().trim().max(20).optional().nullable(),
+  complemento: z.string().trim().max(100).optional().nullable(),
+  bairro: z.string().trim().max(100).optional().nullable(),
+  cidade: z.string().trim().max(100).optional().nullable(),
+  uf: UF_SCHEMA.optional().nullable().or(z.literal("")),
+
+  // Banco
+  banco_codigo: z.string().trim().max(10).optional().nullable(),
+  banco_nome: z.string().trim().max(100).optional().nullable(),
+  agencia: z.string().trim().max(10).optional().nullable(),
+  agencia_dv: z.string().trim().max(2).optional().nullable(),
+  conta: z.string().trim().max(20).optional().nullable(),
+  conta_dv: z.string().trim().max(2).optional().nullable(),
+  tipo_conta: z
+    .enum(["corrente", "poupanca", "pagamento"])
+    .optional()
+    .nullable()
+    .or(z.literal("")),
+
+  // PIX
+  pix_tipo: z
+    .enum(["cpf", "cnpj", "email", "telefone", "aleatoria"])
+    .optional()
+    .nullable()
+    .or(z.literal("")),
+  pix_chave: z.string().trim().max(200).optional().nullable(),
+});
+
+function normalizarVazios<T extends Record<string, unknown>>(obj: T): T {
+  // Converte strings vazias em null — simplifica o update no banco.
+  const out = {} as Record<string, unknown>;
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    out[k] = v === "" ? null : v;
+  }
+  return out as T;
+}
+
+export async function editarMeuPerfil(
+  input: unknown,
+): Promise<ActionResult> {
+  const session = await requireSession();
+
+  const parsed = editarMeuPerfilSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const dados = normalizarVazios(parsed.data);
+
+  const supabase = createClient();
+
+  // Carrega o colaborador vinculado ao próprio profile. Essa é a única
+  // garantia de autorização: user só edita o próprio.
+  const { data: colab } = await supabase
+    .from("colaboradores")
+    .select("id, tenant_id")
+    .eq("user_id", session.profile.id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!colab) {
+    return {
+      ok: false,
+      message:
+        "Seu login não está vinculado a um colaborador. Procure o RH para fazer o vínculo.",
+    };
+  }
+
+  const { error: updErr } = await supabase
+    .from("colaboradores")
+    .update(dados)
+    .eq("id", colab.id)
+    .eq("tenant_id", colab.tenant_id);
+
+  if (updErr) {
+    console.error("[perfil.editar.update]", updErr.message);
+    return {
+      ok: false,
+      message: "Não foi possível salvar: " + updErr.message,
+    };
+  }
+
+  await logAuditEvent({
+    acao: "colaborador.editado_pelo_proprio",
+    tenantId: colab.tenant_id,
+    entidadeTipo: "colaborador",
+    entidadeId: colab.id,
+    metadata: {
+      campos_alterados: Object.keys(dados),
+    },
+  });
+
+  revalidatePath("/perfil");
+  return { ok: true, id: colab.id };
 }
 
 // ---------- Server action: cancelar o próprio lançamento ----------
