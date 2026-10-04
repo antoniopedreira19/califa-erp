@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
-  ChevronDown,
   AlertOctagon,
   AlertTriangle,
   CheckCircle2,
@@ -42,18 +41,20 @@ type Props = {
   onFechar: () => void;
 };
 
+type TabKey = "anteriores" | "futuros" | "historico";
+
 /**
- * Modal de detalhe do colaborador — foco único na SITUAÇÃO ATUAL.
+ * Modal de detalhe do colaborador — hero fixo + abas pra contexto.
  *
  * Hierarquia visual:
- *   1. Hero(s) do(s) período(s) acionável(is) — apto/alerta/vencido.
- *      Se tiver 2+ (regra dos avós), lista todos como heros grandes.
- *   2. Colapsável acima: períodos anteriores (regularizados).
- *   3. Colapsável abaixo: períodos futuros (em curso, aquisitivo rolando).
- *   4. Lançamentos: agendados/pendentes separados do histórico concluído.
+ *   1. Hero(s) do(s) período(s) acionável(is) — SEMPRE fixo no topo
+ *      do corpo. Se tiver 2+ (regra dos avós), lista todos como heros.
+ *   2. Abas abaixo (3): Anteriores · Futuros · Histórico. Cada aba tem
+ *      badge com contagem. Default = aba com conteúdo (prioriza
+ *      Histórico se tiver, senão Anteriores, senão Futuros).
  *
- * Substituiu a timeline horizontal que achatava passado/presente/futuro
- * no mesmo peso visual — o RH tinha que caçar o período acionável.
+ * Substituiu os 3 colapsáveis (anteriores/futuros/histórico empilhados)
+ * — ficava muita rolagem. Com abas o modal tem altura previsível.
  */
 export function ModalDetalheColaborador({
   colaborador,
@@ -185,131 +186,282 @@ export function ModalDetalheColaborador({
           )}
 
           {!formAberto && (
-            <>
-              {/* Períodos anteriores (colapsado por default) */}
-              {periodosPassados.length > 0 && (
-                <GrupoColapsavel
-                  titulo="Períodos anteriores"
-                  contagem={periodosPassados.length}
-                  tom="passado"
-                >
-                  <ul className="divide-y divide-border">
-                    {periodosPassados.map((p) => (
-                      <LinhaPeriodoCompacta
-                        key={p.id}
-                        periodo={p}
-                        usados={diasUsadosPorPeriodo.get(p.id) ?? 0}
-                      />
-                    ))}
-                  </ul>
-                </GrupoColapsavel>
-              )}
-
-              {/* Hero: período(s) atual(is) */}
-              {periodosAtivos.length === 0 ? (
-                <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Nenhum período disponível pra lançar férias no momento.
-                  </p>
-                </div>
-              ) : (
-                <section className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      {periodosAtivos.length === 1
-                        ? "Situação atual"
-                        : `Períodos pra tirar (${periodosAtivos.length})`}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setFormAberto(true)}
-                      className="inline-flex items-center gap-2 rounded-lg bg-california-red px-3 py-1.5 text-sm font-medium text-white hover:bg-california-red/90 transition-colors"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Lançar férias
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {periodosAtivos.map((p) => {
-                      const usados = diasUsadosPorPeriodo.get(p.id) ?? 0;
-                      const ocupados = diasOcupadosPorPeriodo.get(p.id) ?? 0;
-                      const lancsDoPeriodo = lancamentos.filter(
-                        (l) => l.periodo_id === p.id,
-                      );
-                      return (
-                        <HeroPeriodo
-                          key={p.id}
-                          periodo={p}
-                          usados={usados}
-                          saldo={Math.max(p.dias_direito - ocupados, 0)}
-                          lancamentos={lancsDoPeriodo}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* Períodos futuros (colapsado por default) */}
-              {periodosFuturos.length > 0 && (
-                <GrupoColapsavel
-                  titulo="Períodos futuros"
-                  contagem={periodosFuturos.length}
-                  tom="futuro"
-                >
-                  <ul className="divide-y divide-border">
-                    {periodosFuturos.map((p) => (
-                      <LinhaPeriodoCompacta
-                        key={p.id}
-                        periodo={p}
-                        usados={diasUsadosPorPeriodo.get(p.id) ?? 0}
-                      />
-                    ))}
-                  </ul>
-                </GrupoColapsavel>
-              )}
-
-              {/* Lançamentos agendados */}
-              {lancamentosAgendados.length > 0 && (
-                <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                    Agendadas e pendentes ({lancamentosAgendados.length})
-                  </h3>
-                  <ul className="divide-y divide-border rounded-lg border border-border">
-                    {lancamentosAgendados.map((l) => (
-                      <LinhaLancamento
-                        key={l.id}
-                        lancamento={l}
-                        tipoContratacao={colaborador.tipo_contratacao}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {/* Histórico */}
-              {lancamentosHistorico.length > 0 && (
-                <GrupoColapsavel
-                  titulo="Histórico de lançamentos"
-                  contagem={lancamentosHistorico.length}
-                  tom="passado"
-                >
-                  <ul className="divide-y divide-border">
-                    {lancamentosHistorico.map((l) => (
-                      <LinhaLancamento
-                        key={l.id}
-                        lancamento={l}
-                        tipoContratacao={colaborador.tipo_contratacao}
-                      />
-                    ))}
-                  </ul>
-                </GrupoColapsavel>
-              )}
-            </>
+            <ModalCorpoComTabs
+              periodosAtivos={periodosAtivos}
+              periodosPassados={periodosPassados}
+              periodosFuturos={periodosFuturos}
+              lancamentosAgendados={lancamentosAgendados}
+              lancamentosHistorico={lancamentosHistorico}
+              lancamentosTodos={lancamentos}
+              diasUsadosPorPeriodo={diasUsadosPorPeriodo}
+              diasOcupadosPorPeriodo={diasOcupadosPorPeriodo}
+              tipoContratacao={colaborador.tipo_contratacao}
+              onAbrirForm={() => setFormAberto(true)}
+            />
           )}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ----------------- Corpo do modal (hero fixo + tabs) ----------------- */
+
+function ModalCorpoComTabs({
+  periodosAtivos,
+  periodosPassados,
+  periodosFuturos,
+  lancamentosAgendados,
+  lancamentosHistorico,
+  lancamentosTodos,
+  diasUsadosPorPeriodo,
+  diasOcupadosPorPeriodo,
+  tipoContratacao,
+  onAbrirForm,
+}: {
+  periodosAtivos: ColaboradorFeriasPeriodo[];
+  periodosPassados: ColaboradorFeriasPeriodo[];
+  periodosFuturos: ColaboradorFeriasPeriodo[];
+  lancamentosAgendados: ColaboradorFeriasLancamento[];
+  lancamentosHistorico: ColaboradorFeriasLancamento[];
+  lancamentosTodos: ColaboradorFeriasLancamento[];
+  diasUsadosPorPeriodo: Map<string, number>;
+  diasOcupadosPorPeriodo: Map<string, number>;
+  tipoContratacao: TipoContratacao;
+  onAbrirForm: () => void;
+}) {
+  // Default da aba: prioriza o que o RH mais vai consultar. Histórico se
+  // existir, senão Anteriores, senão Futuros. Se nenhum tem conteúdo, cai
+  // em Anteriores (visualmente neutro).
+  const tabInicial: TabKey =
+    lancamentosAgendados.length + lancamentosHistorico.length > 0
+      ? "historico"
+      : periodosPassados.length > 0
+        ? "anteriores"
+        : "futuros";
+  const [tab, setTab] = React.useState<TabKey>(tabInicial);
+
+  const totalHistorico = lancamentosAgendados.length + lancamentosHistorico.length;
+
+  return (
+    <>
+      {/* Hero fixo — período(s) atual(is) */}
+      {periodosAtivos.length === 0 ? (
+        <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nenhum período disponível pra lançar férias no momento.
+          </p>
+        </div>
+      ) : (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {periodosAtivos.length === 1
+                ? "Situação atual"
+                : `Períodos pra tirar (${periodosAtivos.length})`}
+            </h3>
+            <button
+              type="button"
+              onClick={onAbrirForm}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-3 py-1.5 text-sm font-medium text-white hover:bg-california-red/90 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Lançar férias
+            </button>
+          </div>
+          <div className="space-y-3">
+            {periodosAtivos.map((p) => {
+              const usados = diasUsadosPorPeriodo.get(p.id) ?? 0;
+              const ocupados = diasOcupadosPorPeriodo.get(p.id) ?? 0;
+              const lancsDoPeriodo = lancamentosTodos.filter(
+                (l) => l.periodo_id === p.id,
+              );
+              return (
+                <HeroPeriodo
+                  key={p.id}
+                  periodo={p}
+                  usados={usados}
+                  saldo={Math.max(p.dias_direito - ocupados, 0)}
+                  lancamentos={lancsDoPeriodo}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Tabs: contexto adicional (anteriores · futuros · histórico) */}
+      {(periodosPassados.length > 0 ||
+        periodosFuturos.length > 0 ||
+        totalHistorico > 0) && (
+        <section className="pt-2">
+          <div className="border-b border-border">
+            <nav className="flex gap-4" role="tablist">
+              <AbaBotao
+                ativo={tab === "anteriores"}
+                onClick={() => setTab("anteriores")}
+                contagem={periodosPassados.length}
+                label="Anteriores"
+              />
+              <AbaBotao
+                ativo={tab === "futuros"}
+                onClick={() => setTab("futuros")}
+                contagem={periodosFuturos.length}
+                label="Futuros"
+              />
+              <AbaBotao
+                ativo={tab === "historico"}
+                onClick={() => setTab("historico")}
+                contagem={totalHistorico}
+                label="Histórico"
+              />
+            </nav>
+          </div>
+
+          <div className="pt-4">
+            {tab === "anteriores" && (
+              <AbaConteudoPeriodos
+                periodos={periodosPassados}
+                diasUsadosPorPeriodo={diasUsadosPorPeriodo}
+                vazio="Nenhum período anterior regularizado."
+              />
+            )}
+            {tab === "futuros" && (
+              <AbaConteudoPeriodos
+                periodos={periodosFuturos}
+                diasUsadosPorPeriodo={diasUsadosPorPeriodo}
+                vazio="Nenhum período futuro em curso."
+              />
+            )}
+            {tab === "historico" && (
+              <AbaConteudoHistorico
+                agendados={lancamentosAgendados}
+                historico={lancamentosHistorico}
+                tipoContratacao={tipoContratacao}
+              />
+            )}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+function AbaBotao({
+  ativo,
+  onClick,
+  label,
+  contagem,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  label: string;
+  contagem: number;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={ativo}
+      onClick={onClick}
+      className={`px-1 pb-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
+        ativo
+          ? "border-california-red text-california-red"
+          : "border-transparent text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+      <span
+        className={`inline-flex items-center justify-center min-w-[20px] rounded-full px-1.5 py-0 text-[10px] font-semibold ${
+          ativo
+            ? "bg-california-red/10 text-california-red"
+            : "bg-muted text-muted-foreground"
+        }`}
+      >
+        {contagem}
+      </span>
+    </button>
+  );
+}
+
+function AbaConteudoPeriodos({
+  periodos,
+  diasUsadosPorPeriodo,
+  vazio,
+}: {
+  periodos: ColaboradorFeriasPeriodo[];
+  diasUsadosPorPeriodo: Map<string, number>;
+  vazio: string;
+}) {
+  if (periodos.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground text-center py-6">{vazio}</p>
+    );
+  }
+  return (
+    <ul className="divide-y divide-border rounded-lg border border-border">
+      {periodos.map((p) => (
+        <LinhaPeriodoCompacta
+          key={p.id}
+          periodo={p}
+          usados={diasUsadosPorPeriodo.get(p.id) ?? 0}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function AbaConteudoHistorico({
+  agendados,
+  historico,
+  tipoContratacao,
+}: {
+  agendados: ColaboradorFeriasLancamento[];
+  historico: ColaboradorFeriasLancamento[];
+  tipoContratacao: TipoContratacao;
+}) {
+  if (agendados.length === 0 && historico.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground text-center py-6">
+        Nenhum lançamento registrado.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-5">
+      {agendados.length > 0 && (
+        <div>
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Agendadas e pendentes ({agendados.length})
+          </h4>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {agendados.map((l) => (
+              <LinhaLancamento
+                key={l.id}
+                lancamento={l}
+                tipoContratacao={tipoContratacao}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+      {historico.length > 0 && (
+        <div>
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Concluídas ({historico.length})
+          </h4>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {historico.map((l) => (
+              <LinhaLancamento
+                key={l.id}
+                lancamento={l}
+                tipoContratacao={tipoContratacao}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -477,46 +629,6 @@ function HeroPeriodo({
         </div>
       )}
     </div>
-  );
-}
-
-/* ------------------- Grupo colapsável (passado/futuro) ------------------ */
-
-function GrupoColapsavel({
-  titulo,
-  contagem,
-  tom,
-  children,
-}: {
-  titulo: string;
-  contagem: number;
-  tom: "passado" | "futuro";
-  children: React.ReactNode;
-}) {
-  const [aberto, setAberto] = React.useState(false);
-  const tomCls =
-    tom === "passado"
-      ? "bg-muted/40 border-border"
-      : "bg-sky-50/50 border-sky-200";
-  return (
-    <section className={`rounded-xl border ${tomCls} overflow-hidden`}>
-      <button
-        type="button"
-        onClick={() => setAberto((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{titulo}</span>
-          <span className="text-xs text-muted-foreground">({contagem})</span>
-        </div>
-        <ChevronDown
-          className={`h-4 w-4 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`}
-        />
-      </button>
-      {aberto && (
-        <div className="border-t border-border bg-card">{children}</div>
-      )}
-    </section>
   );
 }
 
