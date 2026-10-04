@@ -504,6 +504,15 @@ interface TituloEsperado {
   rateio: LinhaDoRateio[];
 }
 
+/**
+ * Diferença do protótipo (decisão 144, 04/10/2026): no lucro real, o 12.08
+ * sai em guia própria (`pis_cum|…` e `cofins_cum|…`, DARF 8109 e 2172), e o
+ * crédito não o abate mais. Mudaram, só por isso, as guias de PIS/COFINS da
+ * California de novembro (o débito da NF 2057 saiu; o saldo credor sobe
+ * R$ 357,50 e R$ 1.650,00) e de dezembro (o saldo que chega é maior), e
+ * entraram as duas guias cumulativas de novembro, as aprovações e os
+ * títulos delas.
+ */
 const ESPERADO: Record<DataSimulada, GuiaEsperada[]> = {
   "2026-11-04": [
     { chave: "iss|ca-ssa|2026-10", apurado: 3500, vencimento: "2026-11-05", saldo: 0, itens: 2, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 2900, 82.86], ["CCH", "Agency", 600, 17.14]] },
@@ -534,16 +543,18 @@ const ESPERADO: Record<DataSimulada, GuiaEsperada[]> = {
     { chave: "cofins|gocrazy|2026-10", apurado: 2964, vencimento: "2026-11-25", saldo: 0, itens: 2, estado: "aprovada", delta: 0, rateio: [["Agência California", "SS", 2964, 100]] },
     { chave: "iss|ca-ssa|2026-11", apurado: 500, vencimento: "2026-12-07", saldo: 0, itens: 2, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 500, 100]], compensacoes: ["rec-rc4"] },
     { chave: "iss|hit|2026-11", apurado: 2000, vencimento: "2026-12-07", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Hitlab", "Hitlab", 2000, 100]] },
-    { chave: "pis|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 730, itens: 8, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
-    { chave: "cofins|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 3362, itens: 8, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
+    { chave: "pis|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 1087.5, itens: 7, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
+    { chave: "pis_cum|california|2026-11", apurado: 357.5, vencimento: "2026-12-24", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 357.5, 100]] },
+    { chave: "cofins|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 5012, itens: 7, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
+    { chave: "cofins_cum|california|2026-11", apurado: 1650, vencimento: "2026-12-24", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 1650, 100]] },
     { chave: "csrf|california|2026-11", apurado: 558, vencimento: "2026-12-18", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 558, 100]] },
     { chave: "irrf|california|2026-11", apurado: 180, vencimento: "2026-12-18", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 180, 100]] },
     { chave: "issret|ca-ssa|2026-11", apurado: 1500, vencimento: "2026-12-07", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 1500, 100]] },
     { chave: "pis|hitlab|2026-11", apurado: 5460, vencimento: "2026-12-24", saldo: 0, itens: 2, estado: "a_aprovar", delta: 0, rateio: [["Hitlab", "Hitlab", 5460, 100]] },
     { chave: "cofins|hitlab|2026-11", apurado: 25200, vencimento: "2026-12-24", saldo: 0, itens: 2, estado: "a_aprovar", delta: 0, rateio: [["Hitlab", "Hitlab", 25200, 100]] },
     { chave: "iss|ca-ssa|2026-12", apurado: 0, vencimento: "2027-01-05", saldo: 0, itens: 2, estado: "em_curso", delta: 0, rateio: [["Agência California", "RJ", 0, 100]], compensacoes: ["rec-rc4"] },
-    { chave: "pis|california|2026-12", apurado: 0, vencimento: "2027-01-25", saldo: 515.5, itens: 3, estado: "em_curso", delta: 0, rateio: [["Agência California", "RJ", 0, 100]] },
-    { chave: "cofins|california|2026-12", apurado: 0, vencimento: "2027-01-25", saldo: 2374, itens: 3, estado: "em_curso", delta: 0, rateio: [["Agência California", "RJ", 0, 100]] },
+    { chave: "pis|california|2026-12", apurado: 0, vencimento: "2027-01-25", saldo: 873, itens: 3, estado: "em_curso", delta: 0, rateio: [["Agência California", "RJ", 0, 100]] },
+    { chave: "cofins|california|2026-12", apurado: 0, vencimento: "2027-01-25", saldo: 4024, itens: 3, estado: "em_curso", delta: 0, rateio: [["Agência California", "RJ", 0, 100]] },
     { chave: "irpj|california|2026-T4", apurado: 17056.88, vencimento: "2027-01-29", saldo: 0, itens: 11, estado: "em_curso", delta: 0, rateio: [["Agência California", "NE", 11220.44, 65.78], ["Agência California", "SP", 2805.11, 16.45], ["CCH", "Agency", 1357.31, 7.96], ["Agência California", "RJ", 1131.09, 6.63], ["CCH", "Doca", 542.93, 3.18]], cotas: [[1, "2027-01-29", 5685.63, 0, 0], [2, "2027-02-26", 5685.63, 1, 56.86], [3, "2027-03-31", 5685.62, 2.1, 119.4]] },
     { chave: "csll|california|2026-T4", apurado: 9024.67, vencimento: "2027-01-29", saldo: 0, itens: 8, estado: "em_curso", delta: 0, rateio: [["Agência California", "NE", 5936.65, 65.78], ["Agência California", "SP", 1484.16, 16.45], ["CCH", "Agency", 718.14, 7.96], ["Agência California", "RJ", 598.45, 6.63], ["CCH", "Doca", 287.27, 3.18]], cotas: [[1, "2027-01-29", 3008.22, 0, 0], [2, "2027-02-26", 3008.22, 1, 30.08], [3, "2027-03-31", 3008.23, 2.1, 63.17]] },
     { chave: "irpj|gocrazy|2026-T4", apurado: 3868.88, vencimento: "2027-01-29", saldo: 0, itens: 9, estado: "em_curso", delta: 0, rateio: [["Agência California", "SS", 3868.88, 100]], cotas: [[1, "2027-01-29", 1289.63, 0, 0], [2, "2027-02-26", 1289.63, 1, 12.9], [3, "2027-03-31", 1289.62, 2.1, 27.08]] },
@@ -563,16 +574,18 @@ const ESPERADO: Record<DataSimulada, GuiaEsperada[]> = {
     { chave: "cofins|gocrazy|2026-10", apurado: 2964, vencimento: "2026-11-25", saldo: 0, itens: 2, estado: "aprovada", delta: 0, rateio: [["Agência California", "SS", 2964, 100]] },
     { chave: "iss|ca-ssa|2026-11", apurado: 500, vencimento: "2026-12-07", saldo: 0, itens: 2, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 500, 100]], compensacoes: ["rec-rc4"] },
     { chave: "iss|hit|2026-11", apurado: 2000, vencimento: "2026-12-07", saldo: 0, itens: 1, estado: "aprovada", delta: 0, rateio: [["Hitlab", "Hitlab", 2000, 100]] },
-    { chave: "pis|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 730, itens: 8, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
-    { chave: "cofins|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 3362, itens: 8, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
+    { chave: "pis|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 1087.5, itens: 7, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
+    { chave: "pis_cum|california|2026-11", apurado: 357.5, vencimento: "2026-12-24", saldo: 0, itens: 1, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 357.5, 100]] },
+    { chave: "cofins|california|2026-11", apurado: 0, vencimento: "2026-12-24", saldo: 5012, itens: 7, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 0, 100]] },
+    { chave: "cofins_cum|california|2026-11", apurado: 1650, vencimento: "2026-12-24", saldo: 0, itens: 1, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 1650, 100]] },
     { chave: "csrf|california|2026-11", apurado: 558, vencimento: "2026-12-18", saldo: 0, itens: 1, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 558, 100]] },
     { chave: "irrf|california|2026-11", apurado: 180, vencimento: "2026-12-18", saldo: 0, itens: 1, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 180, 100]] },
     { chave: "issret|ca-ssa|2026-11", apurado: 1500, vencimento: "2026-12-07", saldo: 0, itens: 1, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 1500, 100]] },
     { chave: "pis|hitlab|2026-11", apurado: 5460, vencimento: "2026-12-24", saldo: 0, itens: 2, estado: "aprovada", delta: 0, rateio: [["Hitlab", "Hitlab", 5460, 100]] },
     { chave: "cofins|hitlab|2026-11", apurado: 25200, vencimento: "2026-12-24", saldo: 0, itens: 2, estado: "aprovada", delta: 0, rateio: [["Hitlab", "Hitlab", 25200, 100]] },
     { chave: "iss|ca-ssa|2026-12", apurado: 2900, vencimento: "2027-01-05", saldo: 0, itens: 2, estado: "aprovada", delta: 0, rateio: [["Agência California", "NE", 2400, 82.76], ["Agência California", "RJ", 500, 17.24]] },
-    { chave: "pis|california|2026-12", apurado: 804.5, vencimento: "2027-01-25", saldo: 0, itens: 5, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 665.79, 82.76], ["Agência California", "RJ", 138.71, 17.24]] },
-    { chave: "cofins|california|2026-12", apurado: 3706, vencimento: "2027-01-25", saldo: 0, itens: 5, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 3067.03, 82.76], ["Agência California", "RJ", 638.97, 17.24]] },
+    { chave: "pis|california|2026-12", apurado: 447, vencimento: "2027-01-25", saldo: 0, itens: 5, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 369.93, 82.76], ["Agência California", "RJ", 77.07, 17.24]] },
+    { chave: "cofins|california|2026-12", apurado: 2056, vencimento: "2027-01-25", saldo: 0, itens: 5, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 1701.52, 82.76], ["Agência California", "RJ", 354.48, 17.24]] },
     { chave: "csrf|california|2026-12", apurado: 558, vencimento: "2027-01-20", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 558, 100]] },
     { chave: "irrf|california|2026-12", apurado: 180, vencimento: "2027-01-20", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Agência California", "NE", 180, 100]] },
     { chave: "pis|hitlab|2026-12", apurado: 5200, vencimento: "2027-01-25", saldo: 0, itens: 1, estado: "a_aprovar", delta: 0, rateio: [["Hitlab", "Hitlab", 5200, 100]] },
@@ -606,8 +619,10 @@ const APROVACOES_DO_PROTOTIPO: AprovacaoFiscal[] = [
   { chave: "issret|ca-ssa|2026-11", data: "2026-12-05", valor_calculado: 1500, valor_guia: 1500, diferenca: false, compensacoes_usadas: [], cotas: null },
   { chave: "csrf|california|2026-11", data: "2026-12-16", valor_calculado: 558, valor_guia: 558, diferenca: false, compensacoes_usadas: [], cotas: null },
   { chave: "irrf|california|2026-11", data: "2026-12-16", valor_calculado: 180, valor_guia: 180, diferenca: false, compensacoes_usadas: [], cotas: null },
+  { chave: "cofins_cum|california|2026-11", data: "2026-12-22", valor_calculado: 1650, valor_guia: 1650, diferenca: false, compensacoes_usadas: [], cotas: null },
   { chave: "cofins|california|2026-11", data: "2026-12-22", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null },
   { chave: "cofins|hitlab|2026-11", data: "2026-12-22", valor_calculado: 25200, valor_guia: 25200, diferenca: false, compensacoes_usadas: [], cotas: null },
+  { chave: "pis_cum|california|2026-11", data: "2026-12-22", valor_calculado: 357.5, valor_guia: 357.5, diferenca: false, compensacoes_usadas: [], cotas: null },
   { chave: "pis|california|2026-11", data: "2026-12-22", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null },
   { chave: "pis|hitlab|2026-11", data: "2026-12-22", valor_calculado: 5460, valor_guia: 5460, diferenca: false, compensacoes_usadas: [], cotas: null },
   { chave: "iss|ca-ssa|2026-12", data: "2027-01-03", valor_calculado: 2900, valor_guia: 2900, diferenca: false, compensacoes_usadas: [], cotas: null },
@@ -631,7 +646,9 @@ const TITULOS_DO_PROTOTIPO: TituloEsperado[] = [
   { chave: "issret|ca-ssa|2026-11", origem: "apuracao", vencimento: "2026-12-07", principal: 1500, juros: 0, valor: 1500, rateio: [["Agência California", "NE", 1500, 100]] },
   { chave: "csrf|california|2026-11", origem: "apuracao", vencimento: "2026-12-18", principal: 558, juros: 0, valor: 558, rateio: [["Agência California", "NE", 558, 100]] },
   { chave: "irrf|california|2026-11", origem: "apuracao", vencimento: "2026-12-18", principal: 180, juros: 0, valor: 180, rateio: [["Agência California", "NE", 180, 100]] },
+  { chave: "cofins_cum|california|2026-11", origem: "apuracao", vencimento: "2026-12-24", principal: 1650, juros: 0, valor: 1650, rateio: [["Agência California", "NE", 1650, 100]] },
   { chave: "cofins|hitlab|2026-11", origem: "apuracao", vencimento: "2026-12-24", principal: 25200, juros: 0, valor: 25200, rateio: [["Hitlab", "Hitlab", 25200, 100]] },
+  { chave: "pis_cum|california|2026-11", origem: "apuracao", vencimento: "2026-12-24", principal: 357.5, juros: 0, valor: 357.5, rateio: [["Agência California", "NE", 357.5, 100]] },
   { chave: "pis|hitlab|2026-11", origem: "apuracao", vencimento: "2026-12-24", principal: 5460, juros: 0, valor: 5460, rateio: [["Hitlab", "Hitlab", 5460, 100]] },
   { chave: "iss|ca-ssa|2026-12", origem: "apuracao", vencimento: "2027-01-05", principal: 2900, juros: 0, valor: 2900, rateio: [["Agência California", "NE", 2400, 82.76], ["Agência California", "RJ", 500, 17.24]] },
   { chave: "iss|ca-ssa|2026-10", origem: "diferenca", vencimento: "2026-12-10", principal: 240, juros: 0, valor: 240, rateio: [["Agência California", "NE", 186.1, 77.54], ["CCH", "Agency", 38.5, 16.04], ["CCH", "Doca", 15.4, 6.42]] },
@@ -725,25 +742,26 @@ describe("equivalência com o protótipo aprovado em 02/10/2026", () => {
       "ISS a compensar · NF 2054",
       "o cliente reteve em 18/11/2026, depois de paga a guia de outubro/2026",
     ]);
-    assert.deepEqual(item("pis|california|2026-11", 0), [
+    // O 12.08 vai na guia própria (decisão 144); a não cumulativa fica com créditos e estorno.
+    assert.deepEqual(item("pis_cum|california|2026-11", 0), [
       "debito",
       "NF 2057 · TES-1102/26 Convenção de Vendas",
-      "California · Salvador · 82.30-0-01 · 12.08 · alíquota reduzida, sem crédito",
+      "California · Salvador · 82.30-0-01 · 12.08 · regime cumulativo, sem crédito",
     ]);
-    assert.deepEqual(item("pis|california|2026-11", 2), ["info", "PP-00132 · NF 931 · TES-1102/26", "Job faturado no 82.30-0-01 · 12.08 (NF 2057): custo sem crédito."]);
-    assert.deepEqual(item("pis|california|2026-11", 3), [
+    assert.deepEqual(item("pis|california|2026-11", 1), ["info", "PP-00132 · NF 931 · TES-1102/26", "Job faturado no 82.30-0-01 · 12.08 (NF 2057): custo sem crédito."]);
+    assert.deepEqual(item("pis|california|2026-11", 2), [
       "credito",
       "PP-00133 · NF 1202 · TES-1110/26 Evento de Fim de Ano",
       "crédito sobre custo · emitida em 18/11/2026 · job ainda sem nota (a confirmar)",
     ]);
-    assert.deepEqual(item("pis|california|2026-11", 6), [
+    assert.deepEqual(item("pis|california|2026-11", 5), [
       "estorno",
       "Estorno do crédito · PP-00122 · NF 1187",
       "TES-1102/26 faturado no 12.08 (NF 2057); o crédito entrou em outubro/2026",
     ]);
-    assert.deepEqual(item("pis|california|2026-11", 7), ["retido", "PIS retido pelo cliente · NF 318", "recebida em 10/11/2026 · antecipação do imposto"]);
+    assert.deepEqual(item("pis|california|2026-11", 6), ["retido", "PIS retido pelo cliente · NF 318", "recebida em 10/11/2026 · antecipação do imposto"]);
     // COFINS é feminino: "retida" (no protótipo, "retido").
-    assert.deepEqual(item("cofins|california|2026-11", 7), ["retido", "COFINS retida pelo cliente · NF 318", "recebida em 10/11/2026 · antecipação do imposto"]);
+    assert.deepEqual(item("cofins|california|2026-11", 6), ["retido", "COFINS retida pelo cliente · NF 318", "recebida em 10/11/2026 · antecipação do imposto"]);
     assert.deepEqual(item("pis|california|2026-12", 2), ["saldo", "Saldo credor de novembro/2026", "crédito que passou do mês anterior"]);
     assert.deepEqual(item("csrf|california|2026-11", 0), [
       "debito",
@@ -764,7 +782,7 @@ describe("equivalência com o protótipo aprovado em 02/10/2026", () => {
     assert.deepEqual(item("irpj|gocrazy|2026-T4", 3), ["base", "(−) Custo dos jobs", "1 NF de fornecedor emitida no trimestre"]);
     assert.deepEqual(
       guiaDe(guias, "pis|california|2026-11").avisos.map(semNbsp),
-      ["Crédito maior que o débito: R$ 730,00 passam para dezembro/2026."],
+      ["Crédito maior que o débito: R$ 1.087,50 passam para dezembro/2026."],
     );
 
     const emJaneiro = calcularApuracao(CAD, FATOS, "2027-01-06", aprovacoesEm("2027-01-06"));
@@ -813,6 +831,16 @@ describe("equivalência com o protótipo aprovado em 02/10/2026", () => {
       "california",
     ]);
     assert.deepEqual(resumo("cofins|hitlab|2026-12").slice(0, 2), ["COFINS · DARF 2172", "Federal · Hitlab"]);
+    // A parte cumulativa do lucro real (o 12.08) tem DARF próprio (decisão 144).
+    assert.deepEqual(resumo("pis_cum|california|2026-11"), [
+      "PIS cumulativo · DARF 8109",
+      "Federal · California (matriz, soma São Paulo e Fortaleza)",
+      "novembro/2026",
+      "dia 25 do mês seguinte · em dia não útil, antecipa",
+      null,
+      "california",
+    ]);
+    assert.equal(nomeGuia(guiaDe(guias, "cofins_cum|california|2026-11")), "COFINS cumulativa · DARF 2172");
     assert.deepEqual(resumo("csrf|california|2026-12").slice(0, 4), [
       "PIS/COFINS/CSLL retidos de fornecedores · DARF 5952",
       "Federal · California",
@@ -832,7 +860,8 @@ describe("equivalência com o protótipo aprovado em 02/10/2026", () => {
       "4º trimestre/2026",
       "último dia útil de cada mês do trimestre seguinte · 2ª cota com 1% e 3ª com Selic + 1%",
     ]);
-    assert.equal(nomeGuia(guiaDe(guias, "csll|california|2026-T4")), "CSLL · DARF 6773");
+    // 6012 é a CSLL do lucro real trimestral; 6773 é o ajuste anual (decisão 144).
+    assert.equal(nomeGuia(guiaDe(guias, "csll|california|2026-T4")), "CSLL · DARF 6012");
     assert.equal(nomeGuia(guiaDe(guias, "irpj|hitlab|2026-T4")), "IRPJ (com adicional) · DARF 2089");
     assert.equal(nomeGuia(guiaDe(guias, "csll|hitlab|2026-T4")), "CSLL · DARF 2372");
   });
@@ -1105,7 +1134,13 @@ describe("casos de borda", () => {
     const estornos = (chave: string) => guiaDe(guias, chave).memoria.filter((m) => m.grupo === "estorno").map((m) => [m.pp, m.valor]);
     assert.deepEqual(estornos("pis|california|2026-11"), [["PP-c-out", 412.5]]);
     assert.deepEqual(estornos("cofins|california|2026-11"), [["PP-c-out", 1900]]);
-    assert.deepEqual(estornos("pis|california|2026-12"), []);
+    // Dezembro só tem a segunda nota do 12.08: nenhum estorno, e a guia não cumulativa nem sai.
+    assert.equal(guias.find((g) => g.chave === "pis|california|2026-12"), undefined);
+    assert.deepEqual(estornos("pis_cum|california|2026-12"), []);
+    // Novembro: o saldo credor de outubro (o crédito estornado) zera a guia não cumulativa,
+    // e o débito do 12.08 sai inteiro na cumulativa.
+    assert.equal(guiaDe(guias, "pis|california|2026-11").apurado, 0);
+    assert.equal(guiaDe(guias, "pis_cum|california|2026-11").apurado, 357.5);
     // O custo de novembro já nasce sem crédito.
     const info = guiaDe(guias, "pis|california|2026-11").memoria.find((m) => m.pp === "PP-c-nov");
     assert.equal(info?.grupo, "info");
@@ -1113,6 +1148,43 @@ describe("casos de borda", () => {
     // IRPJ: o crédito estornado no trimestre sai dos créditos (25.000 × 9,25% − 25.000 × 9,25% = 0).
     const creditos = guiaDe(guias, "irpj|california|2026-T4").memoria.find((m) => m.rotulo.startsWith("(+) Créditos"));
     assert.equal(creditos?.valor, 0);
+  });
+
+  test("12.08 no lucro real: guia própria (8109/2172), o crédito não a abate, e a retenção da nota do 12.08 sim", () => {
+    const fatos: FatosFiscais = {
+      notas: [
+        notaDeTeste({ id: "n-normal", emissao: "2026-11-03", valor: 100000, jobs: [{ ...J.j1101, valor: 100000 }] }),
+        notaDeTeste({ id: "n-1208", cnae_id: "ca-ssa:82.30-0-01-12.08", emissao: "2026-11-05", valor: 50000, jobs: [{ ...J.j1102, valor: 50000 }] }),
+        notaDeTeste({ id: "n-1208b", cnae_id: "ca-ssa:82.30-0-01-12.08", emissao: "2026-12-07", valor: 10000, jobs: [{ ...J.j1102, valor: 10000 }] }),
+      ],
+      recebimentos: [
+        { id: "r1", nota_id: "n-1208", data: "2026-11-20", bruto: 50000, retido: { PIS: 100 } },
+        { id: "r2", nota_id: "n-1208b", data: "2026-12-15", bruto: 10000, retido: { PIS: 100 } },
+      ],
+      notasFornecedor: [nfDeTeste({ id: "c1", job: J.j1101, emissao: "2026-11-10", valor: 120000 })],
+    };
+    const guias = calcularApuracao(CAD, fatos, "2027-01-06", []);
+    const pis = guiaDe(guias, "pis|california|2026-11");
+    const pisCum = guiaDe(guias, "pis_cum|california|2026-11");
+    const cofinsCum = guiaDe(guias, "cofins_cum|california|2026-11");
+    // Não cumulativo: 1.650,00 de débito contra 1.980,00 de crédito; sobram 330,00 de saldo credor.
+    assert.deepEqual([pis.codigo, pis.apurado, pis.saldo_credor_gerado], ["6912", 0, 330]);
+    assert.ok(pis.memoria.every((m) => m.nota_id !== "n-1208"));
+    // Cumulativo: 50.000,00 × 0,65% = 325,00, menos os 100,00 retidos na nota do 12.08. Antes da
+    // decisão 144, o crédito abatia este débito e nada se pagava em novembro.
+    assert.deepEqual([pisCum.titulo, pisCum.codigo, pisCum.apurado], ["PIS cumulativo", "8109", 225]);
+    assert.deepEqual(pisCum.memoria.map((m) => [m.grupo, m.valor]), [["debito", 325], ["retido", -100]]);
+    assert.deepEqual([cofinsCum.titulo, cofinsCum.codigo, cofinsCum.apurado], ["COFINS cumulativa", "2172", 1500]);
+    // Dezembro: retenção maior que o débito do 12.08 passa de mês, sem virar crédito.
+    const dezembro = guiaDe(guias, "pis_cum|california|2026-12");
+    assert.deepEqual([dezembro.apurado, dezembro.saldo_credor_gerado], [0, 35]);
+    assert.deepEqual(dezembro.avisos.map(semNbsp), ["Retenção maior que o débito: R$ 35,00 passam para janeiro/2027."]);
+    assert.deepEqual(
+      guiaDe(guias, "pis_cum|california|2027-01").memoria.map((m) => [semNbsp(m.rotulo), m.detalhe, m.valor]),
+      [["Saldo de dezembro/2026", "retenção que passou do mês anterior", -35]],
+    );
+    // O saldo credor do não cumulativo segue na guia não cumulativa.
+    assert.equal(guiaDe(guias, "pis|california|2026-12").memoria.at(-1)?.rotulo, "Saldo credor de novembro/2026");
   });
 
   test("crédito de PIS/COFINS da NF do fornecedor: presumido, tirado, 12.08, a confirmar e sim", () => {

@@ -271,8 +271,13 @@ export interface ApuracaoDaEmissao {
 export interface GuiasDaEmissao {
   /** `iss|<CNPJ emissor>|AAAA-MM`. */
   iss: string;
-  /** `pis|<PJ>|AAAA-MM` e `cofins|<PJ>|AAAA-MM`. */
-  pisCofins: [string, string];
+  /**
+   * `pis|<PJ>|AAAA-MM` e `cofins|<PJ>|AAAA-MM`; na nota de CNAE cumulativo
+   * (o 12.08), também `pis_cum|…` e `cofins_cum|…`, a guia própria dela no
+   * lucro real (decisão 144) — a não cumulativa fica, porque o 12.08 pode
+   * estornar crédito nela.
+   */
+  pisCofins: string[];
 }
 
 /**
@@ -287,12 +292,15 @@ export function guiasDaEmissaoParaConferir(e: {
   emissao: string;
   hoje: string;
   primeiraCompetencia: string;
+  /** O CNAE da nota é do regime cumulativo (o 12.08). */
+  cnaeCumulativo: boolean;
 }): GuiasDaEmissao | null {
   const competencia = mesDe(e.emissao);
   if (competencia < e.primeiraCompetencia || competencia >= mesDe(e.hoje)) return null;
+  const chaves = (prefixos: string[]) => prefixos.map((p) => `${p}|${e.empresaContabilId}|${competencia}`);
   return {
     iss: `iss|${e.estabelecimentoId}|${competencia}`,
-    pisCofins: [`pis|${e.empresaContabilId}|${competencia}`, `cofins|${e.empresaContabilId}|${competencia}`],
+    pisCofins: chaves(e.cnaeCumulativo ? ["pis_cum", "cofins_cum", "pis", "cofins"] : ["pis", "cofins"]),
   };
 }
 

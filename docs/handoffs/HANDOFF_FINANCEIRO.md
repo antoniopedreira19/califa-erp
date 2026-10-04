@@ -6645,3 +6645,15 @@ estendido a Contas a Receber em 31/08.**
   `aberto → rejeitado_financeiro` para quem está logado. Se acontecer de
   novo, o mesmo padrão serve, com as mesmas travas (sem lançamento, nota,
   envio ao faturamento, errata, save ou PP enviada).
+
+## ⚠️ Nota de 2026-10-04 — guia própria do 12.08 e CSLL 6012 (decisão 144)
+
+- **12.08 no lucro real:** o PIS e a COFINS das notas no 12.08 saem em guias
+  próprias, "PIS cumulativo · DARF 8109" e "COFINS cumulativa · DARF 2172"
+  (chaves `pis_cum|<PJ>|AAAA-MM` e `cofins_cum|…`), sem crédito. Antes, o
+  débito delas entrava na guia 6912/5856 e o crédito o abatia. A guia não
+  cumulativa ficou com o resto (notas fora do 12.08, créditos, estornos,
+  saldo credor), com a mesma chave de antes. Presumido (Hitlab) não mudou.
+- **CSLL do lucro real trimestral:** DARF 6012 (era 6773, o do ajuste anual).
+- Sem migration e sem dado a corrigir: nenhuma nota real no 12.08 e nenhuma
+  guia aprovada até 04/10.
