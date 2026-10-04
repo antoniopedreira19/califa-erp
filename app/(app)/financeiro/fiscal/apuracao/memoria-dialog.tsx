@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
-import type { Cota, ItemMemoria } from "@/lib/fiscal/apuracao";
+import { vencimentoDaComplementar, type Cota, type ItemMemoria } from "@/lib/fiscal/apuracao";
 import { dataBr, r2 } from "@/lib/fiscal/datas";
 import { aprovarGuia, urlDaGuiaAprovada } from "./actions";
 import { JUSTIFICATIVA_MINIMA, calculadoParaAGuia, cotasDaAprovacao } from "./aprovacao";
@@ -62,6 +62,7 @@ export function MemoriaDialog({
   cidadeDaMatriz,
   cnpjDaMatriz,
   cadastroDasCotas,
+  hoje,
   onClose,
   onAprovada,
 }: {
@@ -73,6 +74,8 @@ export function MemoriaDialog({
   cnpjDaMatriz: string;
   /** Só os feriados e os parâmetros: o que as cotas precisam. */
   cadastroDasCotas: CadastroFiscal;
+  /** Hoje em São Paulo ("AAAA-MM-DD"): diz se a complementar já nasce vencida. */
+  hoje: string;
   onClose: () => void;
   onAprovada: (mensagem: string) => void;
 }) {
@@ -405,6 +408,17 @@ export function MemoriaDialog({
                         }: ${g.delta > 0 ? "a diferença vira uma guia complementar" : "a diferença fica como saldo a compensar"}.`
                       : "Confira com a guia que a contabilidade mandou. Vale o valor da guia; o calculado fica guardado ao lado."}
                   </p>
+                  {diferenca && g.delta > 0 && (
+                    <p className="mt-1 text-[12px] text-muted-foreground">
+                      A complementar vence em {dataBr(vencimentoDaComplementar(g))}, a data da guia original.
+                      {vencimentoDaComplementar(g) < hoje && (
+                        <span className="font-semibold text-amber-700">
+                          {" "}
+                          Essa data já passou: a guia sai com multa e juros, que entram na baixa.
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 {temComp && (
