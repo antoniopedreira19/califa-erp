@@ -254,7 +254,7 @@ export async function emitirFaturamento(
       .maybeSingle<{ id: string; ativo: boolean; empresa_contabil_id: string }>(),
     supabase
       .from("fiscal_cnaes")
-      .select("id, estabelecimento_id, codigo, subitem, ativo, vigencia_inicio, vigencia_fim")
+      .select("id, estabelecimento_id, codigo, subitem, cumulativo, ativo, vigencia_inicio, vigencia_fim")
       .eq("id", d.fiscal_cnae_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{
@@ -262,6 +262,7 @@ export async function emitirFaturamento(
         estabelecimento_id: string;
         codigo: string;
         subitem: string | null;
+        cumulativo: boolean;
         ativo: boolean;
         vigencia_inicio: string;
         vigencia_fim: string | null;
@@ -343,6 +344,7 @@ export async function emitirFaturamento(
         emissao: d.data_emissao,
         hoje,
         primeiraCompetencia: PRIMEIRA_COMPETENCIA,
+        cnaeCumulativo: cnaeDaLista.cumulativo,
       });
 
   const [aprovacoesRes] = await Promise.all([

@@ -14,8 +14,10 @@
  *   cliente reteve e o ISS a compensar (Salvador);
  * - PIS e COFINS, por PJ e mês, pela matriz. Lucro real: débito pela emissão,
  *   crédito sobre o custo (NF do fornecedor emitida no mês), estorno do
- *   crédito do job faturado no 12.08 e saldo credor que passa de mês. Lucro
- *   presumido pelo caixa: débito pelo RECEBIMENTO, sem crédito;
+ *   crédito do job faturado no 12.08 e saldo credor que passa de mês; a
+ *   receita do 12.08 (regime cumulativo) vai em guia própria, DARF 8109 e
+ *   2172, sem crédito (decisão 144). Lucro presumido pelo caixa: débito pelo
+ *   RECEBIMENTO, sem crédito;
  * - IRPJ e CSLL, por PJ e trimestre, em até 3 cotas (lucro real: estimativa
  *   pelo lucro bruto; presumido: presunção sobre o recebido, com a LC 224/2025);
  * - retenções feitas ao pagar fornecedores: CSRF (DARF 5952) e IRRF (DARF
@@ -815,26 +817,51 @@ function vencimentoPisCofins(
 export const vencimentoDoPisCofins = (cad: CadastroFiscal, pj: string, comp: string) =>
   vencimentoPisCofins(cad, comp, matrizDaPJ(cad, pj).municipio, feriadosDoCalculo(cad));
 
-function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" | "COFINS", saldoAnterior: number): Guia | null {
+/**
+ * A parte do PIS/COFINS de uma PJ que a guia cobre. No lucro real, a receita
+ * do regime cumulativo (o 12.08) se recolhe em DARF próprio (8109 e 2172), e
+ * o crédito só se desconta do valor apurado no não cumulativo (Lei
+ * 10.833/2003, art. 3º, caput: "do valor apurado na forma do art. 2º"):
+ * duas guias (decisão 144). No presumido tudo é cumulativo: uma guia só.
+ */
+export type ParteDoPisCofins = "toda" | "nao_cumulativa" | "cumulativa";
+
+/** A chave da guia de PIS/COFINS: a parte cumulativa do lucro real é `pis_cum|…` e `cofins_cum|…`. */
+export const chaveDoPisCofins = (tributo: "PIS" | "COFINS", pj: string, comp: string, parte: ParteDoPisCofins = "toda") =>
+  `${tributo.toLowerCase()}${parte === "cumulativa" ? "_cum" : ""}|${pj}|${comp}`;
+
+function guiaPisCofins(
+  ctx: Contexto,
+  pj: string,
+  comp: string,
+  tributo: "PIS" | "COFINS",
+  parte: ParteDoPisCofins,
+  saldoAnterior: number,
+): Guia | null {
   const fim = ultimoDiaDoMes(comp);
   const reg = regimeDaGuia(ctx.cad, pj, fim);
+  const cumulativa = parte === "cumulativa";
   const aliquotaDaNota = (c: FiscalCnae) => (tributo === "PIS" ? c.aliquota_pis : c.aliquota_cofins);
   const aliquotaDoCreditoDoTributo = (nf: NotaFornecedorFiscal) =>
     parametro(ctx.cad, tributo === "PIS" ? "credito_pis" : "credito_cofins", nf.emissao);
+  /** A nota é desta guia: na parte cumulativa só o CNAE cumulativo; na não cumulativa, o resto. */
+  const daParte = (n: NotaSaidaFiscal) => parte === "toda" || ctx.cnae(n).cumulativo === cumulativa;
   const memoria: ItemMemoria[] = [];
   const pesos: Peso[] = [];
+  // Guia não cumulativa sem nota no mês (só estorno): o rateio vai pelos jobs estornados.
+  const pesosDoEstorno: Peso[] = [];
   let base = 0;
 
   if (reg.ramo === "real") {
     for (const n of ctx.conhecidas) {
-      if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || mesDe(n.emissao) !== comp) continue;
+      if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || mesDe(n.emissao) !== comp || !daParte(n)) continue;
       const c = ctx.cnae(n);
       const a = aliquotaDaNota(c);
       base += n.valor;
       memoria.push({
         grupo: "debito",
         rotulo: comJobs(`NF ${n.numero}`, n),
-        detalhe: `${ctx.estab(n.estabelecimento_id).nome} · ${codigoDoCnae(c)}${c.cumulativo ? " · alíquota reduzida, sem crédito" : ""}`,
+        detalhe: `${ctx.estab(n.estabelecimento_id).nome} · ${codigoDoCnae(c)}${c.cumulativo ? " · regime cumulativo, sem crédito" : ""}`,
         base: n.valor,
         aliquota: a,
         valor: r2((n.valor * a) / 100),
@@ -843,6 +870,8 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
       });
       pesos.push(...pesosDaNota(n, n.valor));
     }
+  }
+  if (reg.ramo === "real" && !cumulativa) {
     // Créditos: custos de job com NF de fornecedor emitida no mês.
     for (const nf of ctx.fatos.notasFornecedor) {
       if (ctx.pjDoEstab(nf.tomador_estabelecimento_id) !== pj || mesDe(nf.emissao) !== comp || dia(nf.emissao) > ctx.asOf) continue;
@@ -873,18 +902,20 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
     );
     for (const { nota, nf } of estornos) {
       const a = aliquotaDoCreditoDoTributo(nf);
+      const valor = r2((nf.valor * a) / 100);
       memoria.push({
         grupo: "estorno",
         rotulo: `Estorno do crédito · ${nf.pp} · NF ${nf.numero}`,
         detalhe: `${nf.job.codigo} faturado no 12.08 (NF ${nota.numero}); o crédito entrou em ${nomeDoMes(mesDe(nf.emissao))}`,
         base: nf.valor,
         aliquota: a,
-        valor: r2((nf.valor * a) / 100),
+        valor,
         job_id: nf.job.job_id,
         pp: nf.pp,
       });
+      pesosDoEstorno.push({ job: nf.job, peso: valor });
     }
-  } else {
+  } else if (reg.ramo !== "real") {
     // Presumido pelo caixa: o que entrou no mês, pelo bruto, na alíquota do CNAE da nota.
     for (const r of ctx.fatos.recebimentos) {
       if (mesDe(r.data) !== comp || dia(r.data) > ctx.asOf) continue;
@@ -906,11 +937,12 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
     }
   }
 
-  // Retenções sofridas no mês (o cliente reteve ao pagar).
+  // Retenções sofridas no mês (o cliente reteve ao pagar): abatem a guia da
+  // parte da nota retida (no lucro real, a do 12.08 abate a cumulativa).
   for (const r of ctx.fatos.recebimentos) {
     if (mesDe(r.data) !== comp || dia(r.data) > ctx.asOf) continue;
     const n = ctx.nota(r.nota_id);
-    if (!n || ctx.pjDoEstab(n.estabelecimento_id) !== pj) continue;
+    if (!n || ctx.pjDoEstab(n.estabelecimento_id) !== pj || !daParte(n)) continue;
     const v = r.retido[tributo];
     if (!v) continue;
     memoria.push({
@@ -921,11 +953,12 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
       nota_id: n.id,
     });
   }
+  // Na parte cumulativa não há crédito: o saldo que passa de mês é retenção não usada.
   if (saldoAnterior > 0)
     memoria.push({
       grupo: "saldo",
-      rotulo: `Saldo credor de ${nomeDoMes(mesAnterior(comp))}`,
-      detalhe: "crédito que passou do mês anterior",
+      rotulo: `${cumulativa ? "Saldo" : "Saldo credor"} de ${nomeDoMes(mesAnterior(comp))}`,
+      detalhe: cumulativa ? "retenção que passou do mês anterior" : "crédito que passou do mês anterior",
       valor: -saldoAnterior,
     });
   if (!memoria.length) return null;
@@ -933,12 +966,15 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
   const soma = somaDaMemoria(memoria);
   const v = vencimentoPisCofins(ctx.cad, comp, ctx.matriz(pj).municipio, ctx.feriados);
   const avisos = [...reg.avisos];
-  if (soma < 0) avisos.push(`Crédito maior que o débito: ${formatBRL(-soma)} passam para ${nomeDoMes(proximoMes(comp))}.`);
+  if (soma < 0)
+    avisos.push(
+      `${cumulativa ? "Retenção maior" : "Crédito maior"} que o débito: ${formatBRL(-soma)} passam para ${nomeDoMes(proximoMes(comp))}.`,
+    );
   return {
-    chave: `${tributo.toLowerCase()}|${pj}|${comp}`,
+    chave: chaveDoPisCofins(tributo, pj, comp, parte),
     tributo,
-    titulo: tributo,
-    codigo: codigoDarf(tributo, reg.regime),
+    titulo: cumulativa ? (tributo === "PIS" ? "PIS cumulativo" : "COFINS cumulativa") : tributo,
+    codigo: codigoDarf(tributo, reg.regime, { cumulativo: cumulativa }),
     empresa_contabil_id: pj,
     estabelecimento_id: null,
     local: localFederal(ctx, pj, true),
@@ -952,7 +988,7 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
     apurado: Math.max(0, soma),
     saldo_credor_gerado: soma < 0 ? -soma : 0,
     base: r2(base),
-    rateio: rateioPor(pesos, Math.max(0, soma)),
+    rateio: rateioPor(pesos.length ? pesos : pesosDoEstorno, Math.max(0, soma)),
     avisos,
   };
 }
@@ -1389,11 +1425,16 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
       if (g) out.push(g);
     }
     for (const pj of ctx.pjs) {
+      // Lucro real: a parte não cumulativa e, em guia própria, a cumulativa (o 12.08).
+      const partes: readonly ParteDoPisCofins[] =
+        regimeDaGuia(ctx.cad, pj, ultimoDiaDoMes(comp)).ramo === "real" ? ["nao_cumulativa", "cumulativa"] : ["toda"];
       for (const tributo of ["PIS", "COFINS"] as const) {
-        const k = `${tributo}|${pj}`;
-        const g = guiaPisCofins(ctx, pj, comp, tributo, saldo.get(k) ?? 0);
-        saldo.set(k, g ? g.saldo_credor_gerado : 0);
-        if (g) out.push(g);
+        for (const parte of partes) {
+          const k = `${tributo}|${pj}|${parte}`;
+          const g = guiaPisCofins(ctx, pj, comp, tributo, parte, saldo.get(k) ?? 0);
+          saldo.set(k, g ? g.saldo_credor_gerado : 0);
+          if (g) out.push(g);
+        }
       }
       out.push(...guiasRetencoes(ctx, pj, comp));
     }
