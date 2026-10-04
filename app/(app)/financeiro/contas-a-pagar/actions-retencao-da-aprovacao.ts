@@ -24,6 +24,7 @@ import {
   montarRetencaoDaAprovacao,
   type RetencaoDaAprovacao,
 } from "@/lib/fiscal/retencao-da-aprovacao";
+import { aliquotasDaRemessa } from "@/lib/financeiro/baixa-em-lote";
 
 type Resultado =
   | { ok: true; retencao: RetencaoDaAprovacao | null }
@@ -67,18 +68,45 @@ export async function lerRetencaoDaAprovacao(parcelaId: unknown): Promise<Result
   }
 
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("pedidos_compra_parcelas")
-    .select(
-      "pp:pedidos_compra!pedido_compra_id(aprovada_em, nf_registrada_em, retencoes:pedidos_compra_retencoes(imposto, aliquota))",
-    )
-    .eq("id", id.data)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<LinhaDaParcela>();
+  const [{ data, error }, remessaRes] = await Promise.all([
+    supabase
+      .from("pedidos_compra_parcelas")
+      .select(
+        "pp:pedidos_compra!pedido_compra_id(aprovada_em, nf_registrada_em, retencoes:pedidos_compra_retencoes(imposto, aliquota))",
+      )
+      .eq("id", id.data)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle<LinhaDaParcela>(),
+    // Decisão 145: a parcela numa remessa ativa que pagou o líquido repete
+    // a retenção dela (o mesmo item que `_item_da_remessa` do banco lê).
+    supabase
+      .from("cnab_remessas_itens")
+      .select("valor, retido, retencoes, created_at, remessa:cnab_remessas!inner(status)")
+      .eq("origem_id", id.data)
+      .eq("tenant_id", session.activeTenant.id)
+      .neq("remessa.status", "cancelado")
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
 
-  if (error) {
-    console.error("[contas-a-pagar.retencoes-da-aprovacao]", error.message);
+  if (error || remessaRes.error) {
+    console.error("[contas-a-pagar.retencoes-da-aprovacao]", (error ?? remessaRes.error)?.message);
     return { ok: false, message: ERRO_DA_LEITURA };
+  }
+  const item = ((remessaRes.data ?? []) as Array<{
+    valor: number | string;
+    retido: number | string;
+    retencoes: unknown;
+    created_at: string;
+  }>)[0];
+  if (item && Number(item.retido) > 0) {
+    const aliquotas = aliquotasDaRemessa(item.retencoes);
+    if (aliquotas) {
+      return {
+        ok: true,
+        retencao: { data: diaEmSaoPaulo(item.created_at), aliquotas, remessa: { liquido: Number(item.valor) } },
+      };
+    }
   }
   // A parcela some quando a PP é cancelada com a lista aberta: sem PP, não
   // há retenção a trazer — a baixa em si é que vai recusar.

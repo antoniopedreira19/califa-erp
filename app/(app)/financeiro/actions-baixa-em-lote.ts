@@ -42,6 +42,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
   aliquotasDaParcela,
+  aliquotasDaRemessa,
   baixaEmLoteSchema,
   montarChamadas,
   type AliquotasDaAprovacao,
@@ -107,10 +108,10 @@ interface ParcelaComRetencao {
 }
 
 /**
- * As alíquotas que valem na baixa de cada parcela de PP: as da aprovação,
- * menos na PP de verba e na parcela que já foi para uma remessa CNAB não
- * cancelada (`aliquotasDaParcela`). Uma entrada por parcela encontrada;
- * `null` se a leitura falhou.
+ * As alíquotas que valem na baixa de cada parcela de PP: as da aprovação;
+ * nenhuma na PP de verba; na parcela numa remessa CNAB não cancelada, as
+ * que a remessa descontou (`aliquotasDaParcela`, decisão 145). Uma entrada
+ * por parcela encontrada; `null` se a leitura falhou.
  */
 async function aliquotasDasParcelas(
   supabase: ReturnType<typeof createClient>,
@@ -133,14 +134,15 @@ async function aliquotasDasParcelas(
           .in("id", fatia)
           .eq("tenant_id", tenantId)
           .returns<ParcelaComRetencao[]>(),
-        // O mesmo critério da `_documento_em_remessa` do banco: remessa
-        // cancelada não conta.
+        // O mesmo critério da `_item_da_remessa` do banco: remessa
+        // cancelada não conta; a mais recente vale.
         supabase
           .from("cnab_remessas_itens")
-          .select("origem_id, remessa:cnab_remessas!inner(status)")
+          .select("origem_id, retencoes, created_at, remessa:cnab_remessas!inner(status)")
           .in("origem_id", fatia)
           .eq("tenant_id", tenantId)
-          .neq("remessa.status", "cancelado"),
+          .neq("remessa.status", "cancelado")
+          .order("created_at", { ascending: false }),
       ]),
     ),
   );
@@ -153,16 +155,18 @@ async function aliquotasDasParcelas(
       );
       return null;
     }
-    const emRemessa = new Set(
-      ((remessas.data ?? []) as Array<{ origem_id: string }>).map((i) => i.origem_id),
-    );
+    // A parcela numa remessa ativa repete o que ela descontou (decisão 145).
+    const daRemessa = new Map<string, { aliquotas: AliquotasDaAprovacao | null }>();
+    for (const i of (remessas.data ?? []) as Array<{ origem_id: string; retencoes: unknown }>) {
+      if (!daRemessa.has(i.origem_id)) daRemessa.set(i.origem_id, { aliquotas: aliquotasDaRemessa(i.retencoes) });
+    }
     for (const p of parcelas.data ?? []) {
       const daAprovacao = montarRetencaoDaAprovacao(p.pp?.retencoes ?? [], null);
       mapa.set(
         p.id,
         aliquotasDaParcela({
           verba: p.pp?.verba_producao === true,
-          emRemessa: emRemessa.has(p.id),
+          remessa: daRemessa.get(p.id) ?? null,
           aliquotas: daAprovacao?.aliquotas ?? null,
         }),
       );
