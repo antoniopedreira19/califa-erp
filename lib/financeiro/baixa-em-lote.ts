@@ -302,18 +302,39 @@ export type AliquotasDaAprovacao = Partial<Record<ImpostoRetido, number>>;
 
 /**
  * A retenção que a baixa de uma parcela de PP aplica, pela mesma regra da
- * baixa de um título: a PP de verba e a parcela que já foi para uma
- * remessa CNAB saem pelo valor cheio, sem retenção (decisão 125, interino
- * da D15); as outras, com as alíquotas da aprovação. `null`: sem retenção.
+ * baixa de um título: a PP de verba sai pelo valor cheio, sem retenção; a
+ * parcela numa remessa CNAB ativa repete o que a remessa descontou — nada,
+ * se ela pagou o valor cheio (decisão 145); as outras, com as alíquotas da
+ * aprovação. `null`: sem retenção.
  */
 export function aliquotasDaParcela(p: {
   verba: boolean;
-  emRemessa: boolean;
+  /** A parcela está numa remessa ativa, com as alíquotas que ela descontou
+   *  (`aliquotasDaRemessa`); `null` = fora de remessa. */
+  remessa: { aliquotas: AliquotasDaAprovacao | null } | null;
   aliquotas: AliquotasDaAprovacao | null;
 }): AliquotasDaAprovacao | null {
-  if (p.verba || p.emRemessa || !p.aliquotas) return null;
-  const algumas = IMPOSTOS_RETIDOS.some(({ imposto }) => (p.aliquotas?.[imposto] ?? 0) > 0);
-  return algumas ? p.aliquotas : null;
+  if (p.verba) return null;
+  const fonte = p.remessa ? p.remessa.aliquotas : p.aliquotas;
+  if (!fonte) return null;
+  const algumas = IMPOSTOS_RETIDOS.some(({ imposto }) => (fonte[imposto] ?? 0) > 0);
+  return algumas ? fonte : null;
+}
+
+/**
+ * As alíquotas que uma remessa descontou, a partir do que o item dela
+ * guarda (`cnab_remessas_itens.retencoes`: [{imposto, aliquota, valor}];
+ * decisão 145). Sem nenhuma, `null`: a remessa pagou o valor cheio.
+ */
+export function aliquotasDaRemessa(retencoes: unknown): AliquotasDaAprovacao | null {
+  if (!Array.isArray(retencoes)) return null;
+  const aliquotas: AliquotasDaAprovacao = {};
+  for (const r of retencoes as Array<{ imposto?: unknown; aliquota?: unknown }>) {
+    const imposto = IMPOSTOS_RETIDOS.find((i) => i.imposto === r?.imposto)?.imposto;
+    const aliquota = Number(r?.aliquota);
+    if (imposto && Number.isFinite(aliquota) && aliquota > 0) aliquotas[imposto] = aliquota;
+  }
+  return Object.keys(aliquotas).length ? aliquotas : null;
 }
 
 /**

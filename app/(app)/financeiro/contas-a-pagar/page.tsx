@@ -8,6 +8,8 @@ import { pode } from "@/lib/permissoes";
 import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
 import { COLUNAS_DE_PAGAMENTO } from "@/lib/data/foto-pagamento-da-pp";
 import { carregarFiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
+import { montarRetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
+import { aliquotasDaParcela, retencoesPelaAprovacao } from "@/lib/financeiro/baixa-em-lote";
 import { ChatPPsProvider } from "./chat/chat-pps-provider";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
@@ -144,6 +146,7 @@ export default async function PedidosCompraFinanceiroPage({
     cnabColaboradoresRes,
     remessasItensRes,
     ultimasRetencoesRes,
+    retencoesDaAprovacaoRes,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -386,6 +389,12 @@ export default async function PedidosCompraFinanceiroPage({
       .select("natureza, parte_id, referencia, data_movimento, aliquotas")
       .eq("tenant_id", session.activeTenant.id)
       .eq("natureza", "saida"),
+    // As retenções da aprovação das PPs (decisão 145): o diálogo da remessa
+    // mostra o líquido que o arquivo paga. Tabela pequena.
+    supabase
+      .from("pedidos_compra_retencoes")
+      .select("pedido_compra_id, imposto, aliquota")
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -393,6 +402,7 @@ export default async function PedidosCompraFinanceiroPage({
   if (baixasRes.error) console.error("[financeiro.baixas.list]", baixasRes.error.message);
   if (remessasItensRes.error) console.error("[financeiro.remessas_itens]", remessasItensRes.error.message);
   if (ultimasRetencoesRes.error) console.error("[financeiro.ultimas_retencoes]", ultimasRetencoesRes.error.message);
+  if (retencoesDaAprovacaoRes.error) console.error("[financeiro.retencoes_da_aprovacao]", retencoesDaAprovacaoRes.error.message);
   if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
@@ -920,6 +930,28 @@ export default async function PedidosCompraFinanceiroPage({
     if (!pp.pagamento_fora_do_cadastro) continue;
     for (const par of pp.parcelas) foraPorParcela.set(par.id, pp.pagamento_fora_do_cadastro);
   }
+  // Decisão 145: a remessa paga a parcela de PP pelo líquido — o que falta
+  // menos a retenção da aprovação, pela mesma conta da geração do arquivo.
+  const linhasDaAprovacao = new Map<string, Array<{ imposto: string; aliquota: number | string | null }>>();
+  for (const r of (retencoesDaAprovacaoRes.data ?? []) as Array<{
+    pedido_compra_id: string;
+    imposto: string;
+    aliquota: number | string | null;
+  }>) {
+    const lista = linhasDaAprovacao.get(r.pedido_compra_id) ?? [];
+    lista.push(r);
+    linhasDaAprovacao.set(r.pedido_compra_id, lista);
+  }
+  const aliquotasPorParcela = new Map<string, ReturnType<typeof aliquotasDaParcela>>();
+  for (const pp of rows) {
+    const aliquotas = aliquotasDaParcela({
+      verba: pp.verba_producao,
+      remessa: null,
+      aliquotas: montarRetencaoDaAprovacao(linhasDaAprovacao.get(pp.id) ?? [], null)?.aliquotas ?? null,
+    });
+    if (!aliquotas) continue;
+    for (const par of pp.parcelas) aliquotasPorParcela.set(par.id, aliquotas);
+  }
 
   const titulosCnab: TituloElegivelParaRemessa[] = ((cnabAPagarRes.data ?? []) as Array<{
     origem_tipo: string;
@@ -950,11 +982,18 @@ export default async function PedidosCompraFinanceiroPage({
       const fora = origemTipo === "pp" ? (foraPorParcela.get(row.origem_id) ?? null) : null;
       const pixFora = fora?.meio === "pix" ? pixDe(fora.pix_tipo, fora.pix_chave) : null;
       const contaFora = fora?.meio === "conta" ? contaDe(fora) : null;
+      const bruto = Number(row.valor);
+      const { retido, liquido } =
+        origemTipo === "pp"
+          ? retencoesPelaAprovacao(bruto, aliquotasPorParcela.get(row.origem_id) ?? null)
+          : { retido: 0, liquido: bruto };
       const linha: TituloElegivelParaRemessa = {
         origemTipo,
         origemId: row.origem_id,
         descricao: row.descricao,
-        valor: Number(row.valor),
+        valor: liquido,
+        bruto,
+        retido,
         destinatarioNome: destinatario.nome,
         destinatarioTipo,
         // Fora do cadastro, só o meio da PP vale: a forma fica fixa.

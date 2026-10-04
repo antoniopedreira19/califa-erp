@@ -15,6 +15,7 @@
  * Testes: node --import tsx --test lib/fiscal/retencao-da-aprovacao.test.ts
  */
 
+import { formatBRL } from "@/lib/format";
 import { IMPOSTOS_RETIDOS, type ImpostoRetido } from "@/lib/types";
 import { dataBr } from "./datas";
 
@@ -25,6 +26,12 @@ export interface RetencaoDaAprovacao {
   data: string | null;
   /** Só os impostos com alíquota (> 0), em %. */
   aliquotas: Partial<Record<ImpostoRetido, number>>;
+  /**
+   * Decisão 145: a parcela está numa remessa CNAB que pagou o líquido. As
+   * alíquotas são as que a remessa descontou, e o líquido da baixa tem de
+   * ser o que o banco pagou (o banco de dados confere). `null` fora disso.
+   */
+  remessa: { liquido: number } | null;
 }
 
 /**
@@ -67,12 +74,14 @@ export function montarRetencaoDaAprovacao(
     if (Number.isFinite(aliquota) && aliquota > 0) aliquotas[imposto] = aliquota;
   }
   if (Object.keys(aliquotas).length === 0) return null;
-  return { data, aliquotas };
+  return { data, aliquotas, remessa: null };
 }
 
 /** "Retenções informadas na aprovação da PP (20/10/2026) · editáveis" — a
  *  ajuda ao lado da chave de retenção, na baixa. */
 export function textoDaRetencaoDaAprovacao(r: RetencaoDaAprovacao): string {
+  if (r.remessa)
+    return `Retenção da aprovação, descontada na remessa: o banco pagou ${formatBRL(r.remessa.liquido)} · a baixa repete esse líquido`;
   return r.data
     ? `Retenções informadas na aprovação da PP (${dataBr(r.data)}) · editáveis`
     : "Retenções informadas na aprovação da PP · editáveis";

@@ -164,9 +164,13 @@ export interface TituloRow {
   baixas: BaixaDoTitulo[];
   /** O que as baixas quitaram: líquido + retidos. Falta = valor − baixado. */
   baixado: number;
-  /** Já foi para uma remessa CNAB: só a baixa do que falta, sem retenção
-   *  (interino da D15). */
+  /** Já foi para uma remessa CNAB: só a baixa do que falta (o banco pagou
+   *  o documento inteiro). */
   em_remessa: boolean;
+  /** A remessa pagou o líquido, descontando a retenção da aprovação da PP
+   *  (decisão 145): a baixa repete essa retenção. Falso na remessa que pagou
+   *  o valor cheio, que segue sem retenção. */
+  em_remessa_com_retencao: boolean;
   /** PP de verba de produção: só o valor inteiro, sem retenção (P3). */
   eh_verba: boolean;
   /** O fornecedor — chave do "Repetir as alíquotas". `null` sem fornecedor. */
@@ -390,7 +394,10 @@ function motivoSemParcialDa(r: TituloRow): string | null {
       return "Folha só aceita a baixa do valor inteiro.";
   }
   if (r.eh_verba) return "PP de verba só aceita a baixa do valor inteiro.";
-  if (r.em_remessa) return "Pago pela remessa com o valor cheio: só a baixa do que falta.";
+  if (r.em_remessa)
+    return r.em_remessa_com_retencao
+      ? "Pago pela remessa: só a baixa do que falta."
+      : "Pago pela remessa com o valor cheio: só a baixa do que falta.";
   return null;
 }
 
@@ -726,15 +733,19 @@ export function TitulosPagarList({
           : null,
         motivoSemParcial: motivoSemParcialDa(baixando),
         // Retenção só no serviço de fornecedor (decisão 125): PP que não é
-        // de verba, avulso e recorrência. O que foi para uma remessa saiu
-        // com o valor cheio (interino da D15).
+        // de verba, avulso e recorrência. O que foi para uma remessa com o
+        // valor cheio sai sem retenção; a remessa que pagou o líquido
+        // (decisão 145) abre com a retenção dela.
         retencao:
           (baixando.origem === "pp" && !baixando.eh_verba) ||
           baixando.origem === "avulso" ||
           baixando.origem === "recorrencia"
             ? {
                 mostra: true,
-                motivo: baixando.em_remessa ? "Pago pela remessa com o valor cheio." : null,
+                motivo:
+                  baixando.em_remessa && !baixando.em_remessa_com_retencao
+                    ? "Pago pela remessa com o valor cheio."
+                    : null,
               }
             : { mostra: false },
         ultimaRetencao: baixando.parte_id ? ultimasRetencoes[baixando.parte_id] ?? null : null,

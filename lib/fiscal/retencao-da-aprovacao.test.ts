@@ -49,6 +49,7 @@ test("as linhas viram as alíquotas da baixa; numeric em texto também", () => {
   assert.deepEqual(r, {
     data: "2026-10-20",
     aliquotas: { PIS: 0.65, COFINS: 3, CSLL: 1, IRRF: 1.5 },
+    remessa: null,
   });
 });
 
@@ -71,16 +72,22 @@ test("só o ISS retido também vale", () => {
   assert.deepEqual(montarRetencaoDaAprovacao([{ imposto: "ISS", aliquota: "5.0000" }], null), {
     data: null,
     aliquotas: { ISS: 5 },
+    remessa: null,
   });
 });
 
 test("o texto da ajuda leva a data da aprovação", () => {
   assert.equal(
-    textoDaRetencaoDaAprovacao({ data: "2026-10-20", aliquotas: { IRRF: 1.5 } }),
+    textoDaRetencaoDaAprovacao({ data: "2026-10-20", aliquotas: { IRRF: 1.5 }, remessa: null }),
     "Retenções informadas na aprovação da PP (20/10/2026) · editáveis",
   );
   assert.equal(
-    textoDaRetencaoDaAprovacao({ data: null, aliquotas: { IRRF: 1.5 } }),
+    textoDaRetencaoDaAprovacao({ data: null, aliquotas: { IRRF: 1.5 }, remessa: null }),
     "Retenções informadas na aprovação da PP · editáveis",
+  );
+  // Decisão 145: na remessa que pagou o líquido, a ajuda diz quanto o banco pagou.
+  assert.equal(
+    textoDaRetencaoDaAprovacao({ data: "2026-10-20", aliquotas: { IRRF: 1.5 }, remessa: { liquido: 7508 } }).replace(/\u00a0/g, " "),
+    "Retenção da aprovação, descontada na remessa: o banco pagou R$ 7.508,00 · a baixa repete esse líquido",
   );
 });
