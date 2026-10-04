@@ -33,7 +33,6 @@ import { feriadosDoCalculo, parametroVigente, regimeDaPJ, type CadastroFiscal } 
 import { codigoDoCnae } from "./calculos";
 import { codigoDarf } from "./codigos-darf";
 import {
-  addDias,
   ajustarVencimento,
   dataBr,
   mesDe,
@@ -298,7 +297,8 @@ type ChaveDoParametro =
   | "pis_cofins_dia"
   | "retencoes_dia"
   | "credito_pis"
-  | "credito_cofins";
+  | "credito_cofins"
+  | "darf_minimo";
 
 /** A carga inicial (migrations 20261002100001 e 20261002100300), se faltar a linha no cadastro. */
 const PARAMETROS_PADRAO: Record<ChaveDoParametro, number> = {
@@ -314,6 +314,7 @@ const PARAMETROS_PADRAO: Record<ChaveDoParametro, number> = {
   retencoes_dia: 20,
   credito_pis: 1.65,
   credito_cofins: 7.6,
+  darf_minimo: 10,
 };
 
 /**
@@ -1443,7 +1444,82 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
   for (const t of trimestres)
     for (const pj of ctx.pjs)
       out.push(...guiasIrpjCsll(ctx, pj, t).filter((g) => g.memoria.some((m) => m.grupo === "base" && m.valor !== 0)));
+  aplicarDarfMinimo(out, ctx.cad);
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// DARF mínimo
+// ---------------------------------------------------------------------------
+
+/** Os tributos pagos por DARF: o mínimo vale para eles (o ISS é municipal). */
+const POR_DARF = new Set<Tributo>(["PIS", "COFINS", "IRPJ", "CSLL", "CSRF", "IRRF"]);
+
+/** Soma dois rateios por empresa gerencial e regional (os valores; o % sai do `escalarRateio`). */
+function somarRateios(a: RateioDaGuia[], b: RateioDaGuia[]): RateioDaGuia[] {
+  const m = new Map<string, RateioDaGuia>();
+  for (const x of [...a, ...b]) {
+    const k = `${x.empresa_id}|${x.regional_id ?? ""}`;
+    const y = m.get(k);
+    if (y) m.set(k, { ...y, valor: r2(y.valor + x.valor), pct: y.pct + x.pct });
+    else m.set(k, { ...x });
+  }
+  return [...m.values()];
+}
+
+/**
+ * DARF mínimo (Lei 9.430/1996, art. 68; decisão 145, item 3): não se paga
+ * DARF abaixo de R$ 10,00 (`darf_minimo`). O valor de um código que fica
+ * abaixo dele soma à guia do mesmo código e da mesma PJ no período seguinte,
+ * até chegar ao mínimo, e se paga no vencimento desse último período. A guia
+ * abaixo do mínimo fica com apurado zero (não gera título) e diz para onde
+ * o valor foi; a seguinte mostra de onde ele veio. O que veio não se abate
+ * de crédito: é imposto de um período já fechado. Sem guia no período
+ * seguinte, o valor segue esperando a próxima guia do código.
+ *
+ * Roda sobre as guias na ordem em que `calcularApuracao` as monta (os meses
+ * em ordem, depois os trimestres em ordem); muda as guias no lugar.
+ */
+function aplicarDarfMinimo(guias: Guia[], cad: CadastroFiscal): void {
+  const pendente = new Map<string, { valor: number; de: string; rateio: RateioDaGuia[] }>();
+  for (const g of guias) {
+    if (!POR_DARF.has(g.tributo) || !g.codigo) continue;
+    // A família é o código: a chave sem a competência (`pis_cum|<PJ>`, `irrf|<PJ>`…).
+    const familia = g.chave.slice(0, g.chave.lastIndexOf("|"));
+    const vindo = pendente.get(familia);
+    if (vindo) {
+      pendente.delete(familia);
+      g.memoria.push({
+        grupo: "debito",
+        rotulo: `Vindo de ${vindo.de} (abaixo do DARF mínimo)`,
+        detalhe: "o valor abaixo de R$ 10,00 soma ao período seguinte, no mesmo código; não se abate de crédito",
+        valor: vindo.valor,
+      });
+      g.apurado = r2(g.apurado + vindo.valor);
+      g.rateio = escalarRateio(somarRateios(g.rateio, vindo.rateio), g.apurado);
+    }
+    const minimo = parametro(cad, "darf_minimo", fimDoPeriodo(g));
+    if (g.apurado > 0 && g.apurado < minimo) {
+      const proximo =
+        g.periodo === "trimestral" ? nomeDoTrimestre(proximoTrimestre(g.competencia)) : nomeDoMes(proximoMes(g.competencia));
+      pendente.set(familia, { valor: g.apurado, de: g.rotulo_competencia, rateio: g.rateio });
+      g.memoria.push({
+        grupo: "saldo",
+        rotulo: `Abaixo do DARF mínimo (${formatBRL(minimo)})`,
+        detalhe: `não se paga: passa para ${proximo}, no mesmo código (Lei 9.430/1996, art. 68)`,
+        valor: -g.apurado,
+      });
+      g.avisos.push(
+        `Abaixo do DARF mínimo de ${formatBRL(minimo)}: ${formatBRL(g.apurado)} passam para a guia de ${proximo}, no mesmo código.`,
+      );
+      g.apurado = 0;
+      g.rateio = escalarRateio(g.rateio, 0);
+    }
+    if (g.periodo === "trimestral" && (vindo || g.apurado === 0)) {
+      g.cotas = cotasDe(g.apurado, g.competencia, matrizDaPJ(cad, g.empresa_contabil_id).municipio, cad);
+      g.vencimento = g.cotas[0].vencimento;
+    }
+  }
 }
 
 /**
@@ -1469,9 +1545,21 @@ export function estadoDaGuia(
 // ---------------------------------------------------------------------------
 
 /**
- * Os títulos de uma aprovação: a complementar na diferença (vence 5 dias
- * depois da aprovação, como no protótipo), as cotas no IRPJ/CSLL (as da
- * aprovação; sem elas, as da guia) e um título nos demais. Guia sem valor
+ * O vencimento da guia complementar: o legal da guia original (decisão 145,
+ * item 2). O imposto vence na data do período, e pagar depois disso é
+ * atraso, com multa e juros na baixa (Lei 9.430/1996, art. 61); não existe
+ * prazo a mais por a diferença aparecer depois. No IRPJ/CSLL, o da 1ª cota
+ * (ou da cota única).
+ */
+export function vencimentoDaComplementar(g: Pick<Guia, "periodo" | "vencimento" | "cotas">): string {
+  return g.periodo === "trimestral" ? g.cotas?.[0]?.vencimento ?? g.vencimento : g.vencimento;
+}
+
+/**
+ * Os títulos de uma aprovação: a complementar na diferença (no vencimento
+ * legal da guia original, `vencimentoDaComplementar`; até 04/10/2026,
+ * 5 dias depois da aprovação, como no protótipo), as cotas no IRPJ/CSLL (as
+ * da aprovação; sem elas, as da guia) e um título nos demais. Guia sem valor
  * não gera título.
  *
  * Diferença do protótipo: a descrição usa o `local` da guia ("Salvador-BA",
@@ -1491,7 +1579,8 @@ export function titulosDaAprovacao(g: Guia, a: AprovacaoFiscal): TituloDaAprovac
     descricao: texto,
     rateio: escalarRateio(g.rateio, valor),
   });
-  if (a.diferenca) return a.valor_guia > 0 ? [simples("diferenca", addDias(a.data, 5), a.valor_guia, `${descricao} · complementar`)] : [];
+  if (a.diferenca)
+    return a.valor_guia > 0 ? [simples("diferenca", vencimentoDaComplementar(g), a.valor_guia, `${descricao} · complementar`)] : [];
   if (g.periodo === "trimestral") {
     const cotas = a.cotas ?? g.cotas ?? [];
     return cotas

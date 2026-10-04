@@ -367,6 +367,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           cidadeDaMatriz={matrizDa(guiaAberta.empresa_contabil_id, pjPorId, estabPorId)?.municipio ?? ""}
           cnpjDaMatriz={matrizDa(guiaAberta.empresa_contabil_id, pjPorId, estabPorId)?.cnpj ?? "—"}
           cadastroDasCotas={cadastroDasCotas}
+          hoje={dados.hoje}
           onClose={() => setAberta(null)}
           onAprovada={(texto) => {
             setAberta(null);

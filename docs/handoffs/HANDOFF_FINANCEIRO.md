@@ -6657,3 +6657,18 @@ estendido a Contas a Receber em 31/08.**
 - **CSLL do lucro real trimestral:** DARF 6012 (era 6773, o do ajuste anual).
 - Sem migration e sem dado a corrigir: nenhuma nota real no 12.08 e nenhuma
   guia aprovada até 04/10.
+
+## ⚠️ Nota de 2026-10-04 (2) — remessa pelo líquido, complementar e DARF mínimo (decisão 145)
+
+- **Remessa CNAB:** a parcela de PP com retenção na aprovação sai pelo
+  líquido; o item guarda `retido` e `retencoes` (migration
+  `20261004100001`). A baixa da parcela em remessa é do que falta, e o
+  líquido dela tem de ser o que o banco pagou (`baixar_parcela_pp` confere
+  pelo `_item_da_remessa`). Remessa que pagou o valor cheio segue sem
+  retenção, como antes. **Para testes:** gerar remessa com PP de teste trava a
+  PP até cancelar a remessa (não há tela de cancelar).
+- **Complementar:** vence no vencimento legal da guia original
+  (`vencimentoDaComplementar`), não mais 5 dias depois da aprovação.
+- **DARF mínimo:** guia federal abaixo de R$ 10,00 fica zerada e passa para a
+  guia seguinte do mesmo código (`aplicarDarfMinimo`).
+

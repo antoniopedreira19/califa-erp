@@ -44,6 +44,7 @@ import {
   type RateioDaGuia,
   type RecebimentoFiscal,
   type TituloDaAprovacao,
+  vencimentoDaComplementar,
 } from "./apuracao";
 
 // ---------------------------------------------------------------------------
@@ -632,6 +633,7 @@ const APROVACOES_DO_PROTOTIPO: AprovacaoFiscal[] = [
   { chave: "iss|ca-ssa|2026-12", data: "2026-12-05", valor_calculado: 500, valor_guia: -2400, diferenca: true, compensacoes_usadas: [], cotas: null },
 ];
 
+/** As complementares vencem na data legal da guia original (decisão 145; no protótipo, 5 dias depois da aprovação). */
 const TITULOS_DO_PROTOTIPO: TituloEsperado[] = [
   { chave: "iss|ca-ssa|2026-10", origem: "apuracao", vencimento: "2026-11-05", principal: 3500, juros: 0, valor: 3500, rateio: [["Agência California", "NE", 2900, 82.86], ["CCH", "Agency", 600, 17.14]] },
   { chave: "iss|hit|2026-10", origem: "apuracao", vencimento: "2026-11-05", principal: 80000, juros: 0, valor: 80000, rateio: [["Hitlab", "Hitlab", 80000, 100]] },
@@ -651,9 +653,9 @@ const TITULOS_DO_PROTOTIPO: TituloEsperado[] = [
   { chave: "pis_cum|california|2026-11", origem: "apuracao", vencimento: "2026-12-24", principal: 357.5, juros: 0, valor: 357.5, rateio: [["Agência California", "NE", 357.5, 100]] },
   { chave: "pis|hitlab|2026-11", origem: "apuracao", vencimento: "2026-12-24", principal: 5460, juros: 0, valor: 5460, rateio: [["Hitlab", "Hitlab", 5460, 100]] },
   { chave: "iss|ca-ssa|2026-12", origem: "apuracao", vencimento: "2027-01-05", principal: 2900, juros: 0, valor: 2900, rateio: [["Agência California", "NE", 2400, 82.76], ["Agência California", "RJ", 500, 17.24]] },
-  { chave: "iss|ca-ssa|2026-10", origem: "diferenca", vencimento: "2026-12-10", principal: 240, juros: 0, valor: 240, rateio: [["Agência California", "NE", 186.1, 77.54], ["CCH", "Agency", 38.5, 16.04], ["CCH", "Doca", 15.4, 6.42]] },
-  { chave: "pis|california|2026-10", origem: "diferenca", vencimento: "2026-12-10", principal: 198, juros: 0, valor: 198, rateio: [["Agência California", "NE", 128.67, 64.98], ["Agência California", "SP", 41.33, 20.88], ["CCH", "Agency", 20, 10.1], ["CCH", "Doca", 8, 4.04]] },
-  { chave: "cofins|california|2026-10", origem: "diferenca", vencimento: "2026-12-10", principal: 912, juros: 0, valor: 912, rateio: [["Agência California", "NE", 592.65, 64.98], ["Agência California", "SP", 190.38, 20.88], ["CCH", "Agency", 92.12, 10.1], ["CCH", "Doca", 36.85, 4.04]] },
+  { chave: "iss|ca-ssa|2026-10", origem: "diferenca", vencimento: "2026-11-05", principal: 240, juros: 0, valor: 240, rateio: [["Agência California", "NE", 186.1, 77.54], ["CCH", "Agency", 38.5, 16.04], ["CCH", "Doca", 15.4, 6.42]] },
+  { chave: "pis|california|2026-10", origem: "diferenca", vencimento: "2026-11-25", principal: 198, juros: 0, valor: 198, rateio: [["Agência California", "NE", 128.67, 64.98], ["Agência California", "SP", 41.33, 20.88], ["CCH", "Agency", 20, 10.1], ["CCH", "Doca", 8, 4.04]] },
+  { chave: "cofins|california|2026-10", origem: "diferenca", vencimento: "2026-11-25", principal: 912, juros: 0, valor: 912, rateio: [["Agência California", "NE", 592.65, 64.98], ["Agência California", "SP", 190.38, 20.88], ["CCH", "Agency", 92.12, 10.1], ["CCH", "Doca", 36.85, 4.04]] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -972,12 +974,15 @@ describe("casos de borda", () => {
     assert.equal(s.delta, 100);
     assert.equal(s.aprovacao, original);
 
-    // A complementar vence 5 dias depois da aprovação e reparte como a guia (200 NE + 100 Doca).
+    // A complementar vence na data legal da guia original — 05/11, já passada: nasce
+    // vencida, e a baixa leva multa e juros (decisão 145) — e reparte como a guia
+    // (200 NE + 100 Doca).
     const dif = aprovacao(chave, "2026-12-05", 300, { valor_guia: 100, diferenca: true });
     const [titulo, ...resto] = titulosDaAprovacao(depois, dif);
     assert.equal(resto.length, 0);
     assert.equal(titulo.origem, "diferenca");
-    assert.equal(titulo.vencimento, "2026-12-10");
+    assert.equal(titulo.vencimento, "2026-11-05");
+    assert.equal(titulo.vencimento, vencimentoDaComplementar(depois));
     assert.equal(titulo.valor, 100);
     assert.equal(titulo.descricao, "ISS próprio · outubro/2026 · Salvador-BA · complementar");
     assert.deepEqual(resumoDoRateio(titulo.rateio), [
@@ -1185,6 +1190,41 @@ describe("casos de borda", () => {
     );
     // O saldo credor do não cumulativo segue na guia não cumulativa.
     assert.equal(guiaDe(guias, "pis|california|2026-12").memoria.at(-1)?.rotulo, "Saldo credor de novembro/2026");
+  });
+
+  test("DARF mínimo: abaixo de R$ 10,00 não se paga e soma à guia seguinte do mesmo código (decisão 145)", () => {
+    const pagamento = (id: string, data: string, irrf: number) => ({ id, data, bruto: irrf / 0.015, retido: { IRRF: irrf } });
+    const fatos: FatosFiscais = {
+      ...SEM_FATOS,
+      notasFornecedor: [
+        nfDeTeste({ id: "f1", emissao: "2026-11-03", valor: 600, pagamentos: [pagamento("p1", "2026-11-10", 9)] }),
+        nfDeTeste({ id: "f2", emissao: "2026-12-01", valor: 40, pagamentos: [pagamento("p2", "2026-12-10", 0.6)] }),
+        nfDeTeste({ id: "f3", emissao: "2027-01-02", valor: 400, pagamentos: [pagamento("p3", "2027-01-05", 6)] }),
+      ],
+    };
+    const guias = calcularApuracao(CAD, fatos, "2027-02-10", []);
+    const nov = guiaDe(guias, "irrf|california|2026-11");
+    const dez = guiaDe(guias, "irrf|california|2026-12");
+    const jan = guiaDe(guias, "irrf|california|2027-01");
+    // Novembro: R$ 9,00 não se paga e passa para dezembro.
+    assert.equal(nov.apurado, 0);
+    assert.deepEqual(nov.memoria.at(-1) && [nov.memoria.at(-1)!.grupo, semNbsp(nov.memoria.at(-1)!.rotulo), nov.memoria.at(-1)!.valor], [
+      "saldo",
+      "Abaixo do DARF mínimo (R$ 10,00)",
+      -9,
+    ]);
+    assert.deepEqual(nov.avisos.map(semNbsp), ["Abaixo do DARF mínimo de R$ 10,00: R$ 9,00 passam para a guia de dezembro/2026, no mesmo código."]);
+    // Dezembro: 0,60 + 9,00 = 9,60, ainda abaixo: passa para janeiro.
+    assert.equal(dez.apurado, 0);
+    assert.equal(dez.memoria.find((m) => m.rotulo.startsWith("Vindo de"))?.valor, 9);
+    // Janeiro: 6,00 + 9,60 = 15,60 — paga-se no vencimento de janeiro, com o rateio de onde veio.
+    assert.equal(jan.apurado, 15.6);
+    assert.equal(semNbsp(jan.memoria.find((m) => m.rotulo.startsWith("Vindo de"))!.rotulo), "Vindo de dezembro/2026 (abaixo do DARF mínimo)");
+    assert.equal(r2(jan.rateio.reduce((s, x) => s + x.valor, 0)), 15.6);
+    // E vira título no valor inteiro, no vencimento de janeiro.
+    const [titulo] = titulosDaAprovacao(jan, aprovacao(jan.chave, "2027-02-18", 15.6));
+    assert.deepEqual([titulo.valor, titulo.vencimento], [15.6, jan.vencimento]);
+    assert.deepEqual(titulosDaAprovacao(nov, aprovacao(nov.chave, "2026-12-18", 0)), []);
   });
 
   test("crédito de PIS/COFINS da NF do fornecedor: presumido, tirado, 12.08, a confirmar e sim", () => {
