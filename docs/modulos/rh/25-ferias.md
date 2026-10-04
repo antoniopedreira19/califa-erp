@@ -10,6 +10,50 @@
 > - Notificações de férias removidas em 2026-10-03 (ver [handoff](../../handoffs/2026-10-03-perfil-redesign-e-cleanup-notificacoes.md)). Vão renascer no [hub central de notificações](../../pendencias/hub-central-notificacoes.md).
 > - Sócios excluídos do subsistema por migration `20261002000012`.
 > - Import histórico documentado em [`40-historico-ferias-importado.md`](40-historico-ferias-importado.md).
+> - Trigger de geração de períodos corrigida em 2026-10-03 (migration `20261003000002`) — ver §F15 "Alteração de data de admissão".
+
+## F15. Alteração de data de admissão (regra da trigger)
+
+A trigger `fn_gerar_ferias_periodos` roda em `INSERT` e `UPDATE` de `colaboradores`. A regra vigente desde 2026-10-03:
+
+| Cenário | Comportamento |
+|---|---|
+| `INSERT` com `data_admissao` preenchida | Gera todos os períodos a partir da admissão até hoje + 2 anos. |
+| `UPDATE` sem mudar `data_admissao` | No-op. Alterações em outros campos (nome, email, telefone, etc.) não disparam regeneração. |
+| `UPDATE` mudando `data_admissao`, sem lançamentos no colaborador | **Deleta todos os períodos existentes e regenera do zero** com a admissão nova. |
+| `UPDATE` mudando `data_admissao`, com lançamentos ativos (aprovado/concluído/pendente/em análise) | **NÃO regenera**. Mantém os períodos atuais pra não quebrar os lançamentos. Loga aviso via `RAISE WARNING`. |
+| `UPDATE` com `tipo_contratacao = 'socio'` | No-op em qualquer caso (sócio nunca entra no subsistema). |
+
+### Por que essa regra
+
+Alterar `data_admissao` é raro na prática — tipicamente é correção de erro de cadastro feita no mesmo dia. Nesse cenário o colaborador ainda não lançou férias, e regenerar os períodos do zero é seguro e esperado.
+
+Casos onde há lançamentos ativos são atípicos: o RH descobriu meses depois que a admissão estava errada. Nesse caso, regenerar automaticamente **destruiria o vínculo entre lançamentos e períodos** (via `periodo_id`), quebraria a validação de saldo e deixaria o histórico incoerente. Melhor exigir ajuste manual (via SQL + confirmação).
+
+### Bug histórico corrigido
+
+Antes de `20261003000002`, a trigger tentava deletar os períodos obsoletos com um `NOT EXISTS` que consultava `information_schema.tables` (verificando se a tabela `colaboradores_ferias_lancamentos` existe no schema). Como ela existia, o `NOT EXISTS` era sempre `false` e o `DELETE` nunca rodava. Combinado com `ON CONFLICT (colaborador_id, numero) DO NOTHING` no `INSERT`, o resultado era períodos velhos congelados no banco após qualquer `UPDATE` em `colaboradores`.
+
+Caso real: Antonio Pedreira (TESTE) teve `data_admissao` alterada de `2026-09-28` → `2025-01-01` em 2026-10-03. Os 3 primeiros períodos ficaram começando em 2026-09-28, e um quarto período isolado aparecia em 2028-01-01. Nenhum batia com a admissão atual. Corrigido pelo mesmo commit da migration (`UPDATE colaboradores SET data_admissao = data_admissao` dispara a trigger).
+
+### Como diagnosticar inconsistência no futuro
+
+Query de sanidade:
+
+```sql
+select c.id, c.nome, c.data_admissao,
+       min(p.aquisitivo_inicio) as primeiro_periodo,
+       count(p.id) as n_periodos
+  from colaboradores c
+  left join colaboradores_ferias_periodos p on p.colaborador_id = c.id
+ where c.status = 'ativo'
+   and c.tipo_contratacao != 'socio'
+ group by c.id, c.nome, c.data_admissao
+having c.data_admissao != min(p.aquisitivo_inicio)
+    or min(p.aquisitivo_inicio) is null;
+```
+
+Se retornar linhas, há colaboradores cuja data de admissão não bate com o início do primeiro período aquisitivo — provavelmente tiveram admissão alterada antes do fix.
 
 ## 1. Contexto
 
