@@ -294,6 +294,7 @@ export type AuditAction =
   | "nivel.reativado"
   | "colaborador.criado"
   | "colaborador.editado"
+  | "colaborador.editado_pelo_proprio"
   | "colaborador.inativado"
   | "colaborador.reativado"
   | "colaborador.alocacao_aberta"
