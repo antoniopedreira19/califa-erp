@@ -74,6 +74,10 @@ export interface ImpostoDaLista {
   baixado_por_nome: string | null;
   /** Timestamp ISO da baixa; nulo sem baixa. */
   baixado_em: string | null;
+  /** Decisão 145: o título em aberto cancelado à mão (timestamp ISO); nulo fora disso. */
+  cancelado_em: string | null;
+  motivo_cancelamento: string | null;
+  cancelado_por_nome: string | null;
   /** A PJ (empresa contábil) da guia: "California". */
   pj: string;
   /** O nome do CNPJ: o estabelecimento (guia municipal) ou a PJ. */
@@ -136,9 +140,10 @@ const SELECT_IMPOSTO = `
   id, origem, tributo, titulo, codigo_receita, empresa_contabil_id, estabelecimento_id,
   competencia, rotulo_competencia, cota_numero, cota_total, descricao, vencimento,
   principal, juros, valor, status, guia_path, pago_em, conta_bancaria_id, multa_juros,
-  comprovante_path, baixado_em,
+  comprovante_path, baixado_em, cancelado_em, motivo_cancelamento,
   conta:contas_bancarias!conta_bancaria_id(nome, banco),
   baixado_por_profile:profiles!baixado_por(nome),
+  cancelado_por_profile:profiles!cancelado_por(nome),
   rateio:impostos_a_pagar_rateio(empresa_id, regional_id, valor, percentual, ordem,
     empresa:empresas(nome_fantasia, razao_social), regional:regionais(nome)),
   correcoes:impostos_a_pagar_correcoes(id, de, para, justificativa, anexo_path, created_at,
@@ -171,8 +176,11 @@ interface LinhaDoBanco {
   multa_juros: Num;
   comprovante_path: string | null;
   baixado_em: string | null;
+  cancelado_em: string | null;
+  motivo_cancelamento: string | null;
   conta: { nome: string; banco: string } | null;
   baixado_por_profile: { nome: string | null } | null;
+  cancelado_por_profile: { nome: string | null } | null;
   rateio: Array<{
     empresa_id: string;
     regional_id: string | null;
@@ -290,6 +298,9 @@ export async function lerImpostos(
       comprovante_path: t.comprovante_path,
       baixado_por_nome: t.baixado_por_profile?.nome ?? null,
       baixado_em: t.baixado_em,
+      cancelado_em: t.cancelado_em,
+      motivo_cancelamento: t.motivo_cancelamento,
+      cancelado_por_nome: t.cancelado_por_profile?.nome ?? null,
       pj,
       local: estab ? estab.nome : pj,
       cnpj: formatarCnpj(estab ? estab.cnpj : cnpjDaMatriz(t.empresa_contabil_id)),

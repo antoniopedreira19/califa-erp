@@ -25,6 +25,7 @@ import type {
 import type { CadastroFiscal } from "./cadastro";
 import { addDias, r2, ultimoDiaDoMes } from "./datas";
 import {
+  AVISO_SEM_FATOS,
   calcularApuracao,
   cotasDe,
   escalarRateio,
@@ -241,6 +242,7 @@ const CAD: CadastroFiscal = {
   cnaes: CNAES,
   feriados: FERIADOS,
   parametros: PARAMETROS,
+  receitasAnteriores: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -804,8 +806,12 @@ describe("equivalência com o protótipo aprovado em 02/10/2026", () => {
         ["(=) Base presumida", "", null, null, 537280],
       ],
     );
+    // Sem a receita de janeiro a setembro no cadastro, vale o limite do próprio trimestre, e a guia avisa (decisão 145).
     assert.equal(hitlab.avisos.length, 1);
-    assert.match(hitlab.avisos[0], /^LC 224\/2025 aplicada/);
+    assert.equal(
+      semNbsp(hitlab.avisos[0]),
+      "LC 224/2025: falta informar a receita recebida nos 1º, 2º e 3º trimestres de 2026 no cadastro de impostos (aba Parâmetros). Até lá, vale o limite do próprio trimestre, sem a sobra do ano nem o ajuste do 4º trimestre: o IRPJ pode sair maior.",
+    );
   });
 
   test("títulos, códigos, locais e regras de vencimento das guias", () => {
@@ -1190,6 +1196,103 @@ describe("casos de borda", () => {
     );
     // O saldo credor do não cumulativo segue na guia não cumulativa.
     assert.equal(guiaDe(guias, "pis|california|2026-12").memoria.at(-1)?.rotulo, "Saldo credor de novembro/2026");
+  });
+
+  test("guia aprovada cujas notas foram canceladas não some: sai zerada, como diferença, com o aviso (decisão 145)", () => {
+    const nota = notaDeTeste({ id: "n1", emissao: "2026-10-05", valor: 10000 });
+    const comNota: FatosFiscais = { ...SEM_FATOS, notas: [nota] };
+    const iss = guiaDe(calcularApuracao(CAD, comNota, "2026-11-04", []), "iss|ca-ssa|2026-10");
+    const pis = guiaDe(calcularApuracao(CAD, comNota, "2026-11-04", []), "pis|california|2026-10");
+    const aprovacoes = [aprovacao(iss.chave, "2026-11-03", iss.apurado), aprovacao(pis.chave, "2026-11-20", pis.apurado)];
+
+    // A nota foi cancelada: sai dos fatos.
+    const depois = calcularApuracao(CAD, SEM_FATOS, "2026-12-04", aprovacoes);
+    for (const chave of [iss.chave, pis.chave]) {
+      const g = guiaDe(depois, chave);
+      assert.equal(g.apurado, 0);
+      assert.deepEqual(g.memoria, []);
+      assert.deepEqual(g.avisos, [AVISO_SEM_FATOS]);
+      const s = estadoDaGuia(g, "2026-12-04", aprovacoes);
+      assert.equal(s.estado, "diferenca");
+      assert.equal(s.delta, -(chave === iss.chave ? iss.apurado : pis.apurado));
+      // Aprovar a diferença para menos registra, sem título: o que fazer com o título é à mão.
+      assert.deepEqual(titulosDaAprovacao(g, aprovacao(chave, "2026-12-05", 0, { valor_guia: 0, diferenca: true })), []);
+    }
+    // Sem aprovação, a guia sem fato não aparece (como antes).
+    assert.equal(calcularApuracao(CAD, SEM_FATOS, "2026-12-04", []).length, 0);
+  });
+
+  test("LC 224 na Hitlab: sobra de limite, ajuste do ano no 4º trimestre e a CSLL só desde abril (decisão 145)", () => {
+    const recebidoNoT4 = (valor: number): FatosFiscais => ({
+      ...SEM_FATOS,
+      notas: [notaDeTeste({ id: "h1", estabelecimento_id: "hit", cnae_id: "hit:90.01-9-99", emissao: "2026-10-05", valor, jobs: [{ ...J.j1107, valor }] })],
+      recebimentos: [{ id: "rh1", nota_id: "h1", data: "2026-11-10", bruto: valor, retido: {} }],
+    });
+    const anteriores = (t1: number, t2: number, t3: number): CadastroFiscal => ({
+      ...CAD,
+      receitasAnteriores: (
+        [
+          ["2026-T1", t1],
+          ["2026-T2", t2],
+          ["2026-T3", t3],
+        ] as const
+      ).map(([trimestre, receita_bruta]) => ({
+        id: `ra-${trimestre}`,
+        tenant_id: T,
+        empresa_contabil_id: "hitlab",
+        trimestre,
+        receita_bruta,
+        observacao: null,
+        informado_por: "u",
+        created_at: EM,
+        updated_at: EM,
+      })),
+    });
+    const guias = (cad: CadastroFiscal, t4: number) => calcularApuracao(cad, recebidoNoT4(t4), "2027-01-06", []);
+    const deducao = (g: Guia) => g.memoria.find((m) => m.rotulo.startsWith("(−) Acréscimo da LC 224"))?.valor ?? 0;
+
+    // Caso I (IN 2.305, art. 15, §5º, I): 1,0 + 1,6 + 1,5 + 0,6 = 4,7 milhões no ano, abaixo de 5: nenhum acréscimo no
+    // 4º trimestre, e o pago a mais em T2 (100 mil) e T3 (250 mil) volta: 3,2% × 350 mil × 25% = R$ 2.800,00 no IRPJ.
+    const caso1 = guias(anteriores(1_000_000, 1_600_000, 1_500_000), 600_000);
+    const ir1 = guiaDe(caso1, "irpj|hitlab|2026-T4");
+    assert.equal(deducao(ir1), -2800);
+    assert.equal(ir1.apurado, 39200); // 15% e adicional sobre 192 mil (32% de 600 mil) = 42.000, menos 2.800
+    assert.equal(semNbsp(ir1.memoria.find((m) => m.rotulo.startsWith("Ajuste do ano"))!.rotulo), "Ajuste do ano da LC 224: R$ 4.700.000,00 recebidos em 2026");
+    // A CSLL conta de abril (T2 a T4, limite de 3,75 milhões): 3,7 milhões, abaixo; T2 pagou 350 mil a mais (sem a
+    // sobra de T1) e T3, 250 mil: 3,2% × 600 mil × 9% = R$ 1.728,00.
+    const cs1 = guiaDe(caso1, "csll|hitlab|2026-T4");
+    assert.equal(deducao(cs1), -1728);
+    assert.equal(cs1.apurado, 15552);
+    assert.deepEqual(ir1.avisos, []);
+
+    // Caso III (§5º, III): 2,0 + 1,5 + 1,5 + 1,5 = 6,5 milhões; excedente do ano de 1,5 milhão, e T1 a T3 já
+    // pagaram 1,25 milhão (750 + 250 + 250 mil): o 4º trimestre leva os 250 mil que faltam.
+    const ir3 = guiaDe(guias(anteriores(2_000_000, 1_500_000, 1_500_000), 1_500_000), "irpj|hitlab|2026-T4");
+    assert.equal(ir3.memoria.find((m) => m.rotulo === "(=) Base presumida")?.valor, 488000); // 32% de 1,25 mi + 35,2% de 250 mil
+    assert.equal(deducao(ir3), 0);
+
+    // Caso II (§5º, II): 3,0 + 0 + 0 + 2,5 = 5,5 milhões; excedente do ano de 500 mil, menor que os 1,75 milhão que T1
+    // pagou: o 4º trimestre não leva nada, e T1 é refeito com 500 mil: 3,2% × 1,25 mi × 25% = R$ 10.000,00 de volta.
+    const ir2 = guiaDe(guias(anteriores(3_000_000, 0, 0), 2_500_000), "irpj|hitlab|2026-T4");
+    assert.equal(ir2.memoria.find((m) => m.rotulo === "(=) Base presumida")?.valor, 800000);
+    assert.equal(deducao(ir2), -10000);
+    assert.equal(ir2.apurado, 184000);
+
+    // A sobra de limite num trimestre que não é o último: em 2027, T1 recebe 1,0 mi (sobra 250 mil) e T2, 1,6 mi.
+    const fatos2027: FatosFiscais = {
+      ...SEM_FATOS,
+      notas: [
+        notaDeTeste({ id: "h2", estabelecimento_id: "hit", cnae_id: "hit:90.01-9-99", emissao: "2027-01-05", valor: 1_000_000, jobs: [{ ...J.j1107, valor: 1_000_000 }] }),
+        notaDeTeste({ id: "h3", estabelecimento_id: "hit", cnae_id: "hit:90.01-9-99", emissao: "2027-04-05", valor: 1_600_000, jobs: [{ ...J.j1107, valor: 1_600_000 }] }),
+      ],
+      recebimentos: [
+        { id: "rh2", nota_id: "h2", data: "2027-02-10", bruto: 1_000_000, retido: {} },
+        { id: "rh3", nota_id: "h3", data: "2027-05-10", bruto: 1_600_000, retido: {} },
+      ],
+    };
+    const t2 = guiaDe(calcularApuracao(CAD, fatos2027, "2027-07-06", []), "irpj|hitlab|2027-T2");
+    assert.equal(semNbsp(t2.memoria.find((m) => m.rotulo.startsWith("Limite da LC 224"))!.rotulo), "Limite da LC 224 no trimestre: R$ 1.500.000,00");
+    assert.equal(t2.memoria.find((m) => m.rotulo === "(=) Base presumida")?.valor, 515200); // 32% de 1,5 mi + 35,2% de 100 mil
   });
 
   test("DARF mínimo: abaixo de R$ 10,00 não se paga e soma à guia seguinte do mesmo código (decisão 145)", () => {

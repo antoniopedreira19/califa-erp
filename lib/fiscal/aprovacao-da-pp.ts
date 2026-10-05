@@ -35,7 +35,7 @@ export interface FiscalDaAprovacaoPP {
 }
 
 export const FISCAL_DA_APROVACAO_VAZIO: FiscalDaAprovacaoPP = {
-  cadastro: { regimes: [], estabelecimentos: [], cnaes: [], feriados: [], parametros: [] },
+  cadastro: { regimes: [], estabelecimentos: [], cnaes: [], feriados: [], parametros: [], receitasAnteriores: [] },
   tomadorPadraoPorEmpresa: {},
   tomadorPadraoGeral: null,
   notasDosJobs: {},

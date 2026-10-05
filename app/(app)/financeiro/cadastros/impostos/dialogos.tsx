@@ -9,7 +9,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Building2, CalendarDays, Percent, Plus, SlidersHorizontal } from "lucide-react";
+import { AlertCircle, Building2, CalendarDays, Landmark, Percent, Plus, SlidersHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ import type {
   FiscalParametro,
   RegraDeVencimentoFiscal,
   UF,
+  FiscalReceitaAnterior,
 } from "@/lib/types";
 import {
   aliquotasPisCofins,
@@ -55,6 +56,7 @@ import {
   novaVigenciaCnae,
   novaVigenciaParametros,
   removerFeriado,
+  registrarReceitaAnterior,
 } from "./actions";
 import type { EmpresaDoCadastro } from "./cadastro-impostos";
 import { ultimaVersao, type ParametroNaTela } from "./montagem";
@@ -934,6 +936,80 @@ export function ParametroDialog({
           )}
           <Erro mensagem={erro} />
           <Rodape pendente={pendente} onCancelar={onClose} />
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LC 224/2025: a receita recebida antes da Apuração (decisão 145, item 7)
+// ---------------------------------------------------------------------------
+
+export function ReceitaAnteriorDialog({
+  empresa,
+  trimestre,
+  atual,
+  onClose,
+}: {
+  empresa: { id: string; nome: string };
+  /** "2026-T2". */
+  trimestre: string;
+  atual: FiscalReceitaAnterior | null;
+  onClose: () => void;
+}) {
+  const { pendente, erro, enviar } = useEnvio(onClose);
+  const [valor, setValor] = React.useState<number>(atual?.receita_bruta ?? 0);
+  const [ano, numero] = trimestre.split("-T");
+
+  function handleSubmit(ev: React.FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const fd = new FormData(ev.currentTarget);
+    enviar(() =>
+      registrarReceitaAnterior({
+        empresa_contabil_id: empresa.id,
+        trimestre,
+        receita_bruta: valor,
+        observacao: fd.get("observacao")?.toString().trim() || null,
+      }),
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !pendente && onClose()}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Landmark className="h-5 w-5 text-california-red" />
+            Receita do {numero}º trimestre de {ano}
+          </DialogTitle>
+          <DialogDescription>
+            {empresa.nome}: a receita bruta recebida no trimestre, antes de a Apuração começar no sistema. Ela entra na
+            sobra de limite e no ajuste do ano da LC 224/2025.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <Rotulo obrigatorio>Receita bruta recebida no trimestre</Rotulo>
+            <MoneyInput value={valor} onValueChange={setValor} aria-label="Receita bruta recebida no trimestre" />
+          </div>
+          <div className="space-y-1">
+            <Rotulo htmlFor="fiscal-receita-anterior-obs">Observação</Rotulo>
+            <Textarea
+              id="fiscal-receita-anterior-obs"
+              name="observacao"
+              rows={2}
+              maxLength={500}
+              defaultValue={atual?.observacao ?? ""}
+              placeholder="Ex.: conforme o livro Caixa enviado pela contabilidade."
+            />
+          </div>
+          <Nota>
+            Só a receita que vai à presunção (os serviços). Receitas financeiras e ganhos de capital não entram no limite.
+          </Nota>
+          <Erro mensagem={erro} />
+          <Rodape pendente={pendente} onCancelar={onClose} rotulo={atual ? "Salvar" : "Registrar"} />
         </form>
       </DialogContent>
     </Dialog>

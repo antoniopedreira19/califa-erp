@@ -59,6 +59,7 @@ const CAD: CadastroFiscal = {
   cnaes: [],
   feriados: [],
   parametros: [],
+  receitasAnteriores: [],
 };
 
 const PJS = [

@@ -368,6 +368,8 @@ interface Contexto {
   estab(id: string): FiscalEstabelecimento;
   pjDoEstab(id: string): string;
   matriz(pj: string): FiscalEstabelecimento;
+  /** A guia desta chave já foi aprovada: ela sai mesmo sem fato (decisão 145, item 6). */
+  aprovada(chave: string): boolean;
   /** As notas que o sistema já conhecia em `asOf`. */
   conhecidas: NotaSaidaFiscal[];
   /** Uma nota conhecida em `asOf`. */
@@ -423,7 +425,12 @@ export function cnaeNaEmissao(cad: CadastroFiscal, n: Pick<NotaSaidaFiscal, "num
   return cnaeVigenteNaEmissao(cad, escolhido, dia(n.emissao));
 }
 
-function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: string): Contexto {
+function criarContexto(
+  cad: CadastroFiscal,
+  fatos: FatosFiscais,
+  asOfInformado: string,
+  aprovadas: ReadonlySet<string> = new Set(),
+): Contexto {
   const asOf = dia(asOfInformado);
   const estabelecimentos = ordenarEstabelecimentos(cad.estabelecimentos);
   const estabPorId = new Map(estabelecimentos.map((e) => [e.id, e]));
@@ -472,6 +479,7 @@ function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: 
     cad,
     fatos,
     asOf,
+    aprovada: (chave: string) => aprovadas.has(chave),
     feriados: feriadosDoCalculo(cad),
     estabelecimentos,
     pjs,
@@ -758,7 +766,7 @@ function guiaIss(
         nota_id: a.nota_id,
       });
   }
-  if (!memoria.length) return null;
+  if (!memoria.length && !ctx.aprovada(`iss|${e.id}|${comp}`)) return null;
   const soma = somaDaMemoria(memoria);
   const v = vencimentoNoMesSeguinte(comp, e.iss_dia, e.iss_regra, ctx.feriados, e.municipio);
   return {
@@ -962,7 +970,7 @@ function guiaPisCofins(
       detalhe: cumulativa ? "retenção que passou do mês anterior" : "crédito que passou do mês anterior",
       valor: -saldoAnterior,
     });
-  if (!memoria.length) return null;
+  if (!memoria.length && !ctx.aprovada(chaveDoPisCofins(tributo, pj, comp, parte))) return null;
 
   const soma = somaDaMemoria(memoria);
   const v = vencimentoPisCofins(ctx.cad, comp, ctx.matriz(pj).municipio, ctx.feriados);
@@ -1108,7 +1116,23 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       avisos.push(
         "Lucro bruto do trimestre negativo: IRPJ e CSLL ficam zerados. A compensação de prejuízo entra como ajuste justificado na aprovação.",
       );
-  } else {
+  }
+  const aliquotaIrpj = p("irpj");
+  const aliquotaAdicional = p("irpj_adicional");
+  const aliquotaCsll = p("csll");
+  const limiteMes = p("irpj_adicional_limite_mes");
+  const limite = limiteMes * 3;
+  // O IRPJ (15% + adicional) e a CSLL de uma base presumida: as contas do ajuste do ano da LC 224.
+  const impostoDaBase = (tributo: "IRPJ" | "CSLL", base: number) =>
+    tributo === "IRPJ"
+      ? r2((base * aliquotaIrpj) / 100 + (Math.max(0, base - limite) * aliquotaAdicional) / 100)
+      : r2((base * aliquotaCsll) / 100);
+  let deducaoIr = 0;
+  let deducaoCs = 0;
+  const avisosIr: string[] = [];
+  const avisosCs: string[] = [];
+
+  if (reg.ramo !== "real") {
     const recebimentos = ctx.fatos.recebimentos.filter((r) => {
       if (!dentro(r.data) || dia(r.data) > ctx.asOf) return false;
       const n = ctx.nota(r.nota_id);
@@ -1117,51 +1141,66 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
     const recebido = r2(recebimentos.reduce((s, r) => s + r.bruto, 0));
     for (const r of recebimentos) pesos.push(...pesosDaNota(ctx.nota(r.nota_id)!, r.bruto));
     receitaRef = recebido;
-    const limite = p("lc224_limite_trimestre");
     const presuncao = p("presuncao_servicos");
     const presuncaoLc224 = p("presuncao_lc224");
-    const ate = Math.min(recebido, limite);
-    const acima = Math.max(0, recebido - limite);
-    const base = r2((ate * presuncao) / 100 + (acima * presuncaoLc224) / 100);
-    const linhas: ItemMemoria[] = [
-      {
+    const baseDe = (receita: number, excesso: number) =>
+      r2(((receita - excesso) * presuncao) / 100 + (excesso * presuncaoLc224) / 100);
+    for (const tributo of ["IRPJ", "CSLL"] as const) {
+      const lc = lc224DoTrimestre(ctx, pj, t, tributo, recebido);
+      const acima = lc.excesso;
+      const ate = r2(recebido - acima);
+      const base = baseDe(recebido, acima);
+      const mem = tributo === "IRPJ" ? memIr : memCs;
+      mem.push({
         grupo: "base",
         rotulo: "Recebido no trimestre (regime de caixa)",
         detalhe: `${plural(recebimentos.length, "recebimento", "recebimentos")}, pelo bruto`,
         valor: recebido,
-      },
-      {
+      });
+      mem.push(...lc.linhas);
+      mem.push({
         grupo: "base",
-        rotulo: `Presunção de ${pct(presuncao)}% até ${formatBRL(limite)}`,
+        rotulo:
+          lc.limite === null
+            ? `Presunção de ${pct(presuncao)}%`
+            : lc.completo
+              ? `Presunção de ${pct(presuncao)}% até o limite`
+              : `Presunção de ${pct(presuncao)}% até ${formatBRL(lc.limite)}`,
         base: ate,
         aliquota: presuncao,
         valor: r2((ate * presuncao) / 100),
-      },
-    ];
-    if (acima > 0)
-      linhas.push({
-        grupo: "base",
-        rotulo: `Presunção de ${pct(presuncaoLc224)}% acima de ${formatBRL(limite)} (LC 224/2025)`,
-        detalhe: `acréscimo de ${pct(r2((presuncaoLc224 / presuncao - 1) * 100))}% na presunção sobre a receita acima de ${valorCurto(limite * 4)} por ano, controlada por trimestre`,
-        base: acima,
-        aliquota: presuncaoLc224,
-        valor: r2((acima * presuncaoLc224) / 100),
       });
-    linhas.push({ grupo: "base", rotulo: "(=) Base presumida", valor: base });
-    memIr.push(...linhas.map((l) => ({ ...l })));
-    memCs.push(...linhas.map((l) => ({ ...l })));
-    baseIr = baseCs = base;
-    if (acima > 0)
-      avisos.push(
-        "LC 224/2025 aplicada sem sobra de limite de trimestres anteriores (pendência com a contabilidade: a medida pelo recebido e a sobra do ano).",
+      if (acima > 0)
+        mem.push({
+          grupo: "base",
+          rotulo: lc.completo
+            ? `Presunção de ${pct(presuncaoLc224)}% sobre o que passa do limite (LC 224/2025)`
+            : `Presunção de ${pct(presuncaoLc224)}% acima de ${formatBRL(lc.limite ?? lc.lt)} (LC 224/2025)`,
+          detalhe: `acréscimo de ${pct(r2((presuncaoLc224 / presuncao - 1) * 100))}% na presunção sobre a receita acima de ${valorCurto(lc.lt * 4)} por ano, controlada por trimestre`,
+          base: acima,
+          aliquota: presuncaoLc224,
+          valor: r2((acima * presuncaoLc224) / 100),
+        });
+      mem.push({ grupo: "base", rotulo: "(=) Base presumida", valor: base });
+      // 4º trimestre: o acréscimo pago a mais nos trimestres anteriores volta como dedução (§5º).
+      const deducao = r2(
+        lc.recalculos.reduce(
+          (soma, x) => soma + impostoDaBase(tributo, baseDe(x.receita, x.excessoPago)) - impostoDaBase(tributo, baseDe(x.receita, x.excessoDevido)),
+          0,
+        ),
       );
+      if (tributo === "IRPJ") {
+        baseIr = base;
+        deducaoIr = deducao;
+        avisosIr.push(...lc.avisos);
+      } else {
+        baseCs = base;
+        deducaoCs = deducao;
+        avisosCs.push(...lc.avisos);
+      }
+    }
   }
 
-  const aliquotaIrpj = p("irpj");
-  const aliquotaAdicional = p("irpj_adicional");
-  const aliquotaCsll = p("csll");
-  const limiteMes = p("irpj_adicional_limite_mes");
-  const limite = limiteMes * 3;
   const ir15 = r2((baseIr * aliquotaIrpj) / 100);
   const adicional = r2((Math.max(0, baseIr - limite) * aliquotaAdicional) / 100);
   memIr.push({ grupo: "debito", rotulo: `IRPJ ${pct(aliquotaIrpj)}%`, base: baseIr, aliquota: aliquotaIrpj, valor: ir15 });
@@ -1191,10 +1230,29 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       memCs.push({ grupo: "retido", rotulo: `CSLL retida pelo cliente · NF ${n.numero}`, detalhe: `recebida em ${dataBr(r.data)}`, valor: -r.retido.CSLL, nota_id: n.id });
     }
   }
-  const irDevido = r2(Math.max(0, ir15 - irrf) + adicional);
-  const csDevido = r2(Math.max(0, (baseCs * aliquotaCsll) / 100 - csllRetida));
+  let irDevido = r2(Math.max(0, ir15 - irrf) + adicional);
+  let csDevido = r2(Math.max(0, (baseCs * aliquotaCsll) / 100 - csllRetida));
+  // A dedução do ajuste do ano da LC 224 (4º trimestre): até o imposto do
+  // trimestre; o que sobra se restitui ou compensa, a pedido (§§7º e 8º).
+  const deduzir = (tributo: "IRPJ" | "CSLL", devido: number, deducao: number, mem: ItemMemoria[], av: string[]) => {
+    if (deducao <= 0) return devido;
+    const usada = r2(Math.min(devido, deducao));
+    mem.push({
+      grupo: "saldo",
+      rotulo: "(−) Acréscimo da LC 224 pago a mais no ano",
+      detalhe: "ajuste do 4º trimestre (IN RFB 2.305/2025, art. 15, §5º): os trimestres anteriores refeitos pelo excedente do ano",
+      valor: -usada,
+    });
+    if (deducao - usada >= 0.01)
+      av.push(
+        `O acréscimo da LC 224 pago a mais passa do ${tributo} deste trimestre: ${formatBRL(r2(deducao - usada))} podem ser restituídos ou compensados, a pedido, com Selic (IN RFB 2.305/2025, art. 15, §§7º e 8º).`,
+      );
+    return r2(devido - usada);
+  };
+  irDevido = deduzir("IRPJ", irDevido, deducaoIr, memIr, avisosIr);
+  csDevido = deduzir("CSLL", csDevido, deducaoCs, memCs, avisosCs);
   // Diferença do protótipo: lá IRPJ e CSLL dividiam a lista de avisos, e este (só do IRPJ) aparecia também na CSLL.
-  const avisosIrpj = [...avisos];
+  const avisosIrpj = [...avisos, ...avisosIr];
   if (irrf > ir15)
     avisosIrpj.push(
       `IRRF retido maior que os ${pct(aliquotaIrpj)}%: o excedente vira saldo negativo, que a contabilidade recupera por PER/DCOMP.`,
@@ -1226,7 +1284,166 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       cotas,
     };
   };
-  return [guia("IRPJ", memIr, irDevido, avisosIrpj), guia("CSLL", memCs, csDevido, avisos)];
+  return [guia("IRPJ", memIr, irDevido, avisosIrpj), guia("CSLL", memCs, csDevido, [...avisos, ...avisosCs])];
+}
+
+// ---------------------------------------------------------------------------
+// LC 224/2025 no lucro presumido (decisão 145, item 7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Desde quando o acréscimo vale (LC 224/2025, art. 14; IN RFB 2.305/2025,
+ * art. 3º): o IRPJ em janeiro/2026; a CSLL, pela noventena, em abril/2026 —
+ * o limite dela em 2026 é de três trimestres (Perguntas e Respostas da
+ * Receita, itens 12 e 13).
+ */
+const INICIO_DA_LC224: Record<"IRPJ" | "CSLL", string> = { IRPJ: "2026-01-01", CSLL: "2026-04-01" };
+
+interface Lc224DoTrimestre {
+  /** A receita do trimestre que vai à presunção majorada. */
+  excesso: number;
+  /** O limite de um trimestre (R$ 1,25 milhão, o parâmetro). */
+  lt: number;
+  /** O limite aplicado ao trimestre; `null` fora da vigência. */
+  limite: number | null;
+  /** A receita do ano é conhecida: valem a sobra e o ajuste do 4º trimestre. */
+  completo: boolean;
+  linhas: ItemMemoria[];
+  /** 4º trimestre: os trimestres anteriores refeitos pelo excedente do ano (§5º, I e II). */
+  recalculos: Array<{ receita: number; excessoPago: number; excessoDevido: number }>;
+  avisos: string[];
+}
+
+/**
+ * O excedente da LC 224 num trimestre, pela IN RFB 2.305/2025, art. 15, na
+ * redação da IN 2.306/2026:
+ * - o limite do trimestre é R$ 1,25 milhão, comparado com a receita do
+ *   próprio trimestre; a sobra de um trimestre abaixo do limite passa para os
+ *   seguintes do mesmo ano (§§2º a 4º); o excedente nunca passa;
+ * - no 4º trimestre confere-se o ano (§5º): receita do ano até o limite
+ *   anual, nenhum acréscimo, e o pago a mais antes volta como dedução; acima
+ *   dele, o 4º trimestre leva o que falta para o excedente do ano, ou nada,
+ *   refazendo os anteriores na proporção quando eles pagaram mais.
+ * No regime de caixa, a receita é a recebida (a norma não diz; é a mesma
+ * receita da base). Antes do início da Apuração, a do cadastro
+ * (`receitasAnteriores`); sem ela, vale o limite do próprio trimestre, como
+ * antes — erra para mais — e a guia avisa.
+ */
+function lc224DoTrimestre(ctx: Contexto, pj: string, t: string, tributo: "IRPJ" | "CSLL", recebido: number): Lc224DoTrimestre {
+  const lt = parametro(ctx.cad, "lc224_limite_trimestre", fimDoTrimestre(t));
+  const [ano, q] = t.split("-T").map(Number);
+  const inicio = INICIO_DA_LC224[tributo];
+  if (fimDoTrimestre(t) < inicio) return { excesso: 0, lt, limite: null, completo: true, linhas: [], recalculos: [], avisos: [] };
+  const qInicio = Number(inicio.slice(0, 4)) === ano ? Math.ceil(Number(inicio.slice(5, 7)) / 3) : 1;
+  const primeiro = trimestreDe(PRIMEIRA_COMPETENCIA);
+  const receitaDe = (tk: string): number | null => {
+    if (tk >= primeiro)
+      return r2(
+        ctx.fatos.recebimentos
+          .filter((r) => {
+            if (trimestreDe(r.data) !== tk || dia(r.data) > ctx.asOf) return false;
+            const n = ctx.nota(r.nota_id);
+            return !!n && ctx.pjDoEstab(n.estabelecimento_id) === pj;
+          })
+          .reduce((soma, r) => soma + r.bruto, 0),
+      );
+    const informada = ctx.cad.receitasAnteriores.find((x) => x.empresa_contabil_id === pj && x.trimestre === tk);
+    return informada ? informada.receita_bruta : null;
+  };
+  const anteriores: Array<{ tk: string; receita: number | null }> = [];
+  for (let k = qInicio; k < q; k++) anteriores.push({ tk: `${ano}-T${k}`, receita: receitaDe(`${ano}-T${k}`) });
+
+  const faltam = anteriores.filter((a) => a.receita === null).map((a) => a.tk);
+  if (faltam.length) {
+    const excesso = r2(Math.max(0, recebido - lt));
+    return {
+      excesso,
+      lt,
+      limite: lt,
+      completo: false,
+      linhas: [],
+      recalculos: [],
+      avisos:
+        excesso > 0 || q === 4
+          ? [
+              `LC 224/2025: falta informar a receita recebida ${
+                faltam.length > 1
+                  ? `nos ${juntar(faltam.map((tk) => `${tk.split("-T")[1]}º`))} trimestres de ${ano}`
+                  : `no ${faltam[0].split("-T")[1]}º trimestre de ${ano}`
+              } no cadastro de impostos (aba Parâmetros). Até lá, vale o limite do próprio trimestre, sem a sobra do ano nem o ajuste do 4º trimestre: o ${tributo} pode sair maior.`,
+            ]
+          : [],
+    };
+  }
+
+  let sobra = 0;
+  let somaExcessos = 0;
+  const pagos: Array<{ receita: number; excesso: number }> = [];
+  for (const a of anteriores) {
+    const receita = a.receita ?? 0;
+    const limiteK = r2(lt + sobra);
+    const excessoK = r2(Math.max(0, receita - limiteK));
+    sobra = r2(Math.max(0, limiteK - receita));
+    somaExcessos = r2(somaExcessos + excessoK);
+    pagos.push({ receita, excesso: excessoK });
+  }
+
+  if (q < 4) {
+    const limite = r2(lt + sobra);
+    return {
+      excesso: r2(Math.max(0, recebido - limite)),
+      lt,
+      limite,
+      completo: true,
+      linhas: [
+        {
+          grupo: "base",
+          rotulo: `Limite da LC 224 no trimestre: ${formatBRL(limite)}`,
+          detalhe:
+            sobra > 0
+              ? `${formatBRL(lt)} + a sobra de ${formatBRL(sobra)} dos trimestres anteriores de ${ano} (IN RFB 2.305/2025, art. 15, §4º)`
+              : `${formatBRL(lt)} por trimestre; a sobra passa para os trimestres seguintes do ano`,
+          valor: 0,
+        },
+      ],
+      recalculos: [],
+      avisos: [],
+    };
+  }
+
+  // 4º trimestre: o ano inteiro (§5º).
+  const receitaAno = r2(pagos.reduce((soma, x) => soma + x.receita, 0) + recebido);
+  const limiteAno = r2(lt * (4 - qInicio + 1));
+  const excessoAno = r2(Math.max(0, receitaAno - limiteAno));
+  let excesso = 0;
+  let recalculos: Lc224DoTrimestre["recalculos"] = [];
+  if (receitaAno <= limiteAno) {
+    recalculos = pagos.filter((x) => x.excesso > 0).map((x) => ({ receita: x.receita, excessoPago: x.excesso, excessoDevido: 0 }));
+  } else if (excessoAno < somaExcessos) {
+    recalculos = pagos
+      .filter((x) => x.excesso > 0)
+      .map((x) => ({ receita: x.receita, excessoPago: x.excesso, excessoDevido: r2((x.excesso / somaExcessos) * excessoAno) }));
+  } else {
+    excesso = r2(excessoAno - somaExcessos);
+  }
+  return {
+    excesso,
+    lt,
+    limite: lt,
+    completo: true,
+    linhas: [
+      {
+        grupo: "base",
+        rotulo: `Ajuste do ano da LC 224: ${formatBRL(receitaAno)} recebidos em ${ano}`,
+        detalhe: `limite de ${formatBRL(limiteAno)} no ano${qInicio > 1 ? ` (o ${tributo} só a partir do ${nomeDoTrimestre(`${ano}-T${qInicio}`)})` : ""}; ${
+          excessoAno > 0 ? `${formatBRL(excessoAno)} passam do limite no ano` : "nada passa do limite no ano"
+        } (IN RFB 2.305/2025, art. 15, §5º)`,
+        valor: 0,
+      },
+    ],
+    recalculos,
+    avisos: [],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1276,7 +1493,7 @@ function guiasRetencoes(ctx: Contexto, pj: string, comp: string): Guia[] {
         pesos.push({ job: j, peso: pg.bruto });
       }
     }
-    if (!memoria.length) continue;
+    if (!memoria.length && !ctx.aprovada(`${tributo.toLowerCase()}|${pj}|${comp}`)) continue;
     const soma = somaDaMemoria(memoria);
     const diaDoVencimento = parametro(ctx.cad, "retencoes_dia", fim);
     const v = vencimentoNoMesSeguinte(comp, diaDoVencimento, "antecipa", ctx.feriados, matriz.municipio);
@@ -1324,7 +1541,7 @@ function guiasRetencoes(ctx: Contexto, pj: string, comp: string): Guia[] {
       });
       pesos.push({ job: j, peso: nf.valor });
     }
-    if (!memoria.length) continue;
+    if (!memoria.length && !ctx.aprovada(`issret|${e.id}|${comp}`)) continue;
     const soma = somaDaMemoria(memoria);
     // Diferença do protótipo: lá o ISS retido sempre prorrogava; aqui segue a regra do município no cadastro.
     const v = vencimentoNoMesSeguinte(comp, e.iss_retido_dia, e.iss_regra, ctx.feriados, e.municipio);
@@ -1408,7 +1625,7 @@ export function issARecuperar(cad: CadastroFiscal, fatos: FatosFiscais, aprovaco
  * curso sai como estimativa; o estado de cada guia vem de `estadoDaGuia`.
  */
 export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf: string, aprovacoes: AprovacaoFiscal[]): Guia[] {
-  const ctx = criarContexto(cad, fatos, asOf);
+  const ctx = criarContexto(cad, fatos, asOf, new Set(aprovacoes.filter((a) => !a.diferenca).map((a) => a.chave)));
   const aprovadas = aprovacaoPorChave(aprovacoes);
   const aRecuperar = todosARecuperar(ctx, aprovadas);
   const competencias = competenciasAte(ctx.asOf);
@@ -1443,10 +1660,27 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
   const trimestres = [...new Set(competencias.map(trimestreDe))];
   for (const t of trimestres)
     for (const pj of ctx.pjs)
-      out.push(...guiasIrpjCsll(ctx, pj, t).filter((g) => g.memoria.some((m) => m.grupo === "base" && m.valor !== 0)));
+      out.push(
+        ...guiasIrpjCsll(ctx, pj, t).filter(
+          (g) => g.memoria.some((m) => m.grupo === "base" && m.valor !== 0) || ctx.aprovada(g.chave),
+        ),
+      );
+  // A guia aprovada que perdeu todos os fatos (notas canceladas depois) não
+  // some: sai zerada, como diferença para menos, e diz o que fazer à mão.
+  for (const g of out) if (ctx.aprovada(g.chave) && semFatos(g)) g.avisos.push(AVISO_SEM_FATOS);
   aplicarDarfMinimo(out, ctx.cad);
   return out;
 }
+
+/** A guia não tem mais nada que a sustente: nenhuma linha (ou, no trimestre, nenhuma base). */
+function semFatos(g: Guia): boolean {
+  if (g.periodo === "trimestral") return !g.memoria.some((m) => m.grupo === "base" && m.valor !== 0);
+  return g.memoria.length === 0;
+}
+
+/** O aviso da guia aprovada sem fatos (decisão 145, item 6): o que fazer fica com o financeiro. */
+export const AVISO_SEM_FATOS =
+  "Hoje esta guia não tem nenhum fato: as notas (ou os pagamentos) dela foram cancelados depois da aprovação. O imposto que ainda não foi pago se cancela em Impostos a Pagar, com motivo; o que já foi pago fica a recuperar, com a contabilidade.";
 
 // ---------------------------------------------------------------------------
 // DARF mínimo

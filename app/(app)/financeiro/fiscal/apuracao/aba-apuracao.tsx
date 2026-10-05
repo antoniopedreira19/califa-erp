@@ -89,7 +89,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
 
   // Só os feriados e os parâmetros vão para as cotas (o resto do cadastro fica no servidor).
   const cadastroDasCotas: CadastroFiscal = React.useMemo(
-    () => ({ regimes: [], estabelecimentos: [], cnaes: [], feriados: dados.feriados, parametros: dados.parametros }),
+    () => ({ regimes: [], estabelecimentos: [], cnaes: [], feriados: dados.feriados, parametros: dados.parametros, receitasAnteriores: [] }),
     [dados.feriados, dados.parametros],
   );
 

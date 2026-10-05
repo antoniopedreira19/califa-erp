@@ -19,6 +19,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { dataBr } from "@/lib/fiscal/datas";
+import { PRIMEIRA_COMPETENCIA, trimestreDe } from "@/lib/fiscal/apuracao";
 import type { FiscalCnae, FiscalEstabelecimento } from "@/lib/types";
 import {
   aliquotasPisCofins,
@@ -33,6 +34,7 @@ import {
   novoFeriadoSchema,
   ordemDoNovo,
   problemaDoNovoEstabelecimento,
+  receitaAnteriorSchema,
   vesperaDaVigencia,
 } from "@/lib/validations/fiscal-cadastro";
 
@@ -633,3 +635,65 @@ export async function novaVigenciaParametros(input: unknown): Promise<Result> {
   revalidar();
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// LC 224/2025: a receita recebida antes da Apuração (decisão 145, item 7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Registra (ou troca) a receita bruta recebida por uma PJ num trimestre
+ * anterior ao início da Apuração. A sobra de limite e o ajuste do ano da
+ * LC 224 usam a receita do ano inteiro; os trimestres dentro da Apuração vêm
+ * dos recebimentos e não se informam aqui.
+ */
+export async function registrarReceitaAnterior(input: unknown): Promise<Result> {
+  const parsed = receitaAnteriorSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: primeiraMensagem(parsed.error.issues) };
+  const gate = await checarGate("fiscal_receita_anterior.registrada");
+  if (!gate.ok) return gate;
+  const tenantId = gate.session.activeTenant.id;
+  const v = parsed.data;
+  if (v.trimestre >= trimestreDe(PRIMEIRA_COMPETENCIA)) {
+    return { ok: false, message: "Esse trimestre já está na Apuração: a receita dele vem dos recebimentos." };
+  }
+
+  const { data: antes, error: erroAntes } = await gate.supabase
+    .from("fiscal_receitas_anteriores")
+    .select("receita_bruta")
+    .eq("tenant_id", tenantId)
+    .eq("empresa_contabil_id", v.empresa_contabil_id)
+    .eq("trimestre", v.trimestre)
+    .maybeSingle<{ receita_bruta: number | string }>();
+  if (erroAntes) return { ok: false, message: `Falha ao ler a receita registrada: ${erroAntes.message}` };
+
+  const { error } = await gate.supabase.from("fiscal_receitas_anteriores").upsert(
+    {
+      tenant_id: tenantId,
+      empresa_contabil_id: v.empresa_contabil_id,
+      trimestre: v.trimestre,
+      receita_bruta: Math.round(v.receita_bruta * 100) / 100,
+      observacao: v.observacao || null,
+      informado_por: gate.session.profile.id,
+    },
+    { onConflict: "tenant_id,empresa_contabil_id,trimestre" },
+  );
+  if (error) return { ok: false, message: `Falha ao registrar a receita: ${error.message}` };
+
+  await logAuditEvent({
+    acao: "fiscal_receita_anterior.registrada",
+    tenantId,
+    entidadeTipo: "fiscal_receita_anterior",
+    entidadeId: null,
+    metadata: {
+      empresa_contabil_id: v.empresa_contabil_id,
+      trimestre: v.trimestre,
+      antes: antes ? Number(antes.receita_bruta) : null,
+      depois: Math.round(v.receita_bruta * 100) / 100,
+    },
+  });
+
+  revalidar();
+  revalidatePath("/financeiro/fiscal");
+  return { ok: true };
+}
+
