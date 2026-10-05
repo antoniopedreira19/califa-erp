@@ -12,7 +12,8 @@ import { CalendarDays, Landmark, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatarCnpj, regimeDaPJ, type CadastroFiscal } from "@/lib/fiscal/cadastro";
 import { dataBr } from "@/lib/fiscal/datas";
-import type { FiscalCnae, FiscalEstabelecimento, FiscalFeriado, RegraDeVencimentoFiscal } from "@/lib/types";
+import type { FiscalCnae, FiscalEstabelecimento, FiscalFeriado, FiscalReceitaAnterior, RegraDeVencimentoFiscal } from "@/lib/types";
+import { PRIMEIRA_COMPETENCIA, nomeDoTrimestre, trimestreDe } from "@/lib/fiscal/apuracao";
 import {
   dataCurta,
   diaDaSemana,
@@ -34,6 +35,7 @@ import {
   Nota,
   NovoFeriadoDialog,
   ParametroDialog,
+  ReceitaAnteriorDialog,
   RemoverFeriadoDialog,
 } from "./dialogos";
 
@@ -438,8 +440,8 @@ function Cnaes({
       ) : (
         <Nota tom="azul">
           Lucro Real: CSLL e IRPJ incidem sobre o lucro bruto do trimestre (receita líquida − custo líquido dos créditos), com o adicional de{" "}
-          {pct(adicional)} sobre o que passar de {moeda(limiteTrimestre)} no trimestre. O subitem 12.08 do 82.30-0-01 tem PIS e COFINS reduzidos e
-          não dá crédito sobre os custos do job.
+          {pct(adicional)} sobre o que passar de {moeda(limiteTrimestre)} no trimestre. O subitem 12.08 do 82.30-0-01 tem PIS e COFINS reduzidos, em
+          guia própria (DARF 8109 e 2172), e a parte dele na receita do mês sai do crédito sobre os custos (rateio proporcional).
         </Nota>
       )}
       {editando && (
@@ -800,6 +802,80 @@ function Parametros({ cadastro, hoje, pjs }: { cadastro: CadastroFiscal; hoje: s
         </table>
       </div>
       {editando && <ParametroDialog item={editando} parametros={cadastro.parametros} hoje={hoje} onClose={() => setEditando(null)} />}
+      <ReceitasAnteriores cadastro={cadastro} pjs={pjs} />
+    </div>
+  );
+}
+
+/** Os trimestres do ano em que a Apuração começou e que vieram antes dela ("2026-T1" a "2026-T3"). */
+function trimestresAntesDaApuracao(): string[] {
+  const [ano, q] = trimestreDe(PRIMEIRA_COMPETENCIA).split("-T").map(Number);
+  return Array.from({ length: q - 1 }, (_, i) => `${ano}-T${i + 1}`);
+}
+
+/**
+ * LC 224/2025 (decisão 145, item 7): a receita recebida pelas PJs do lucro
+ * presumido nos trimestres antes da Apuração, informada à mão. Sem ela, o
+ * IRPJ e a CSLL usam o limite do próprio trimestre (podem sair maiores) e a
+ * guia avisa.
+ */
+function ReceitasAnteriores({ cadastro, pjs }: { cadastro: CadastroFiscal; pjs: PJ[] }) {
+  const [editando, setEditando] = React.useState<{ pj: PJ; trimestre: string } | null>(null);
+  const presumidas = pjs.filter((p) => p.regime === "lucro_presumido");
+  const trimestres = trimestresAntesDaApuracao();
+  if (!presumidas.length || !trimestres.length) return null;
+  const registrada = (pj: PJ, trimestre: string): FiscalReceitaAnterior | null =>
+    cadastro.receitasAnteriores.find((r) => r.empresa_contabil_id === pj.empresa.id && r.trimestre === trimestre) ?? null;
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-soft">
+      <div className="space-y-1 px-4 pb-3 pt-4">
+        <p className="text-sm font-semibold">LC 224/2025 · receita recebida antes da Apuração</p>
+        <p className="text-xs text-muted-foreground">
+          No lucro presumido, a presunção sobe 10% (32% → 35,2%) só sobre a receita acima de R$ 5 milhões no ano, controlada
+          por trimestre: R$ 1,25 milhão por trimestre, a sobra passa para os trimestres seguintes, e o 4º trimestre confere o
+          ano. A Apuração começa em {nomeDoTrimestre(trimestreDe(PRIMEIRA_COMPETENCIA))}; informe a receita bruta recebida
+          antes disso. Sem ela, o IRPJ e a CSLL usam o limite do próprio trimestre e podem sair maiores.
+        </p>
+      </div>
+      <table className="w-full table-fixed text-sm">
+        <thead>
+          <tr className="border-y border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+            <th className={cn(th, "w-[22%]")}>Empresa</th>
+            <th className={cn(th, "w-[20%]")}>Trimestre</th>
+            <th className={cn(th, "w-[22%]")}>Receita recebida</th>
+            <th className={cn(th, "w-[33%]")}>Observação</th>
+            <th className={cn(th, "w-[3%]")} />
+          </tr>
+        </thead>
+        <tbody>
+          {presumidas.flatMap((pj) =>
+            trimestres.map((trimestre) => {
+              const r = registrada(pj, trimestre);
+              return (
+                <tr key={`${pj.empresa.id}-${trimestre}`} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2.5 font-semibold">{pj.empresa.nome}</td>
+                  <td className="px-3 py-2.5 text-xs">{nomeDoTrimestre(trimestre)}</td>
+                  <td className="px-3 py-2.5 font-mono text-xs">
+                    {r ? moeda(r.receita_bruta) : <span className="font-sans font-semibold text-amber-700">a informar</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{r?.observacao ?? "—"}</td>
+                  <td className="px-2 py-2.5 text-center">
+                    <BotaoLapis rotulo={r ? "Alterar a receita" : "Informar a receita"} onClick={() => setEditando({ pj, trimestre })} />
+                  </td>
+                </tr>
+              );
+            }),
+          )}
+        </tbody>
+      </table>
+      {editando && (
+        <ReceitaAnteriorDialog
+          empresa={{ id: editando.pj.empresa.id, nome: editando.pj.empresa.nome }}
+          trimestre={editando.trimestre}
+          atual={registrada(editando.pj, editando.trimestre)}
+          onClose={() => setEditando(null)}
+        />
+      )}
     </div>
   );
 }

@@ -14,7 +14,6 @@ import type { CadastroFiscal } from "./cadastro";
 import {
   creditoDaNf,
   faltaNaNfParaAprovar,
-  faturadoNo1208ParaANf,
   guiaDoIssRetido,
   nfIncompleta,
   nfInicial,
@@ -29,7 +28,7 @@ import {
   type ColunasDaNfNaPP,
   type NfEmConferencia,
 } from "./nf-da-pp";
-import { notasDosJobsParaCredito, ultimasRetencoesDasPPs } from "./aprovacao-da-pp";
+import { ultimasRetencoesDasPPs } from "./aprovacao-da-pp";
 import { retencoesPadrao, valoresRetidos } from "./calculos";
 
 // --- O cadastro de impostos, como a carga da migration 20261002100001 ----
@@ -123,6 +122,7 @@ const CADASTRO: CadastroFiscal = {
     parametro("credito_pis", 1.65),
     parametro("credito_cofins", 7.6),
   ],
+  receitasAnteriores: [],
 };
 
 // --- A linha da PP -------------------------------------------------------
@@ -311,39 +311,33 @@ test("as guias: DARF no dia 20 do mês seguinte ao pagamento; ISS retido pelo mu
 const NF: NfEmConferencia = { numero: "602", emissao: "2026-11-03", valor: 18000, tomador: "ssa" };
 const HOJE = "2026-11-05";
 
-test("crédito: a confirmar sem nota de saída, e gera com nota fora do 12.08", () => {
-  const sem = creditoDaNf({ nf: NF, cadastro: CADASTRO, notasDoJob: { tem_nota: false, primeira_1208: null }, semCredito: false, motivoSemCredito: "", hoje: HOJE });
-  assert.equal(sem.final.estado, "confirmar");
-  assert.equal(sem.final.total, 1665);
-  assert.equal(sem.final.mes, "novembro/2026");
-  assert.equal(sem.tirado, false);
-  const com = creditoDaNf({ nf: NF, cadastro: CADASTRO, notasDoJob: { tem_nota: true, primeira_1208: null }, semCredito: false, motivoSemCredito: "", hoje: HOJE });
-  assert.equal(com.final.estado, "sim");
-});
-
-test("crédito: o 12.08 do mesmo mês ou de antes tira; de mês posterior, não", () => {
-  assert.equal(faturadoNo1208ParaANf("2026-11-30", "2026-11-03"), true);
-  assert.equal(faturadoNo1208ParaANf("2026-10-15", "2026-11-03"), true);
-  assert.equal(faturadoNo1208ParaANf("2026-12-01", "2026-11-03"), false);
-  assert.equal(faturadoNo1208ParaANf(null, "2026-11-03"), false);
-  const c = creditoDaNf({ nf: NF, cadastro: CADASTRO, notasDoJob: { tem_nota: true, primeira_1208: "2026-10-15" }, semCredito: false, motivoSemCredito: "", hoje: HOJE });
-  assert.equal(c.final.estado, "nao");
-  assert.match(c.final.motivo, /12\.08/);
+test("crédito: fornecedor PJ com NF gera o crédito cheio no mês da emissão, sem olhar o job (decisão 146)", () => {
+  const c = creditoDaNf({ nf: NF, cadastro: CADASTRO, semCredito: false, motivoSemCredito: "", hoje: HOJE });
+  assert.equal(c.final.estado, "sim");
+  assert.equal(c.final.gera, true);
+  assert.equal(c.final.total, 1665);
+  assert.equal(c.final.mes, "novembro/2026");
+  assert.equal(c.tirado, false);
+  // O valor é o cheio: a parte do 12.08 sai na Apuração, pelo rateio do mês.
+  assert.equal(
+    c.final.motivo,
+    "Fornecedor PJ com NF. É o crédito cheio: se a PJ tomadora tiver nota no 12.08 em novembro/2026, a parte do 12.08 na receita do mês sai dele (rateio proporcional).",
+  );
 });
 
 test("crédito: tomador no lucro presumido não gera, e a caixa não tira o que a regra não dá", () => {
-  const c = creditoDaNf({ nf: { ...NF, tomador: "hit" }, cadastro: CADASTRO, notasDoJob: { tem_nota: true, primeira_1208: null }, semCredito: true, motivoSemCredito: "Outro", hoje: HOJE });
+  const c = creditoDaNf({ nf: { ...NF, tomador: "hit" }, cadastro: CADASTRO, semCredito: true, motivoSemCredito: "Outro", hoje: HOJE });
   assert.equal(c.automatico.gera, false);
   assert.equal(c.tirado, false);
   assert.match(c.final.motivo, /lucro presumido/);
 });
 
 test("crédito: o financeiro tira com motivo; sem motivo, a tela pede", () => {
-  const sem = creditoDaNf({ nf: NF, cadastro: CADASTRO, notasDoJob: { tem_nota: true, primeira_1208: null }, semCredito: true, motivoSemCredito: "", hoje: HOJE });
+  const sem = creditoDaNf({ nf: NF, cadastro: CADASTRO, semCredito: true, motivoSemCredito: "", hoje: HOJE });
   assert.equal(sem.tirado, true);
   assert.equal(sem.final.gera, false);
   assert.equal(sem.final.motivo, "Marcado pelo financeiro como sem crédito: escolha o motivo.");
-  const com = creditoDaNf({ nf: NF, cadastro: CADASTRO, notasDoJob: { tem_nota: true, primeira_1208: null }, semCredito: true, motivoSemCredito: "Reembolso de despesa do cliente", hoje: HOJE });
+  const com = creditoDaNf({ nf: NF, cadastro: CADASTRO, semCredito: true, motivoSemCredito: "Reembolso de despesa do cliente", hoje: HOJE });
   assert.equal(com.final.motivo, "Marcado pelo financeiro como sem crédito: reembolso de despesa do cliente.");
   assert.equal(textoDoMotivo("Outro"), "outro motivo");
 });
@@ -353,10 +347,10 @@ test("crédito: as alíquotas vêm do parâmetro vigente na emissão", () => {
     ...CADASTRO,
     parametros: [...CADASTRO.parametros, parametro("credito_cofins", 8, "2026-11-01")],
   };
-  const c = creditoDaNf({ nf: NF, cadastro: cad, notasDoJob: { tem_nota: true, primeira_1208: null }, semCredito: false, motivoSemCredito: "", hoje: HOJE });
+  const c = creditoDaNf({ nf: NF, cadastro: cad, semCredito: false, motivoSemCredito: "", hoje: HOJE });
   assert.equal(c.aliquotaCofins, 8);
   assert.equal(c.final.cofins, 1440);
-  const antes = creditoDaNf({ nf: { ...NF, emissao: "2026-10-30" }, cadastro: cad, notasDoJob: { tem_nota: true, primeira_1208: null }, semCredito: false, motivoSemCredito: "", hoje: HOJE });
+  const antes = creditoDaNf({ nf: { ...NF, emissao: "2026-10-30" }, cadastro: cad, semCredito: false, motivoSemCredito: "", hoje: HOJE });
   assert.equal(antes.aliquotaCofins, 7.6);
 });
 
@@ -374,21 +368,6 @@ test("CNPJ tomador sugerido: o da empresa da PP; sem ele, a matriz California", 
   const semPrincipal = tomadoresPadrao(CADASTRO.estabelecimentos, [{ id: "x", cnpj: null, principal: false }]);
   assert.equal(semPrincipal.geral, "ssa");
   assert.equal(tomadoresPadrao([], []).geral, null);
-});
-
-test("notas dos jobs: emitida conta, cancelada não; a primeira no 12.08", () => {
-  const r = notasDosJobsParaCredito([
-    { origem_id: "j1", faturamento: { data_emissao: "2026-11-10", status: "emitido", fiscal_cnae: { subitem: "12.08" } } },
-    { origem_id: "j1", faturamento: { data_emissao: "2026-10-05", status: "emitido", fiscal_cnae: { subitem: "12.08" } } },
-    { origem_id: "j1", faturamento: { data_emissao: "2026-09-01", status: "emitido", fiscal_cnae: { subitem: "17.10" } } },
-    { origem_id: "j2", faturamento: { data_emissao: "2026-09-01", status: "emitido", fiscal_cnae: null } },
-    { origem_id: "j3", faturamento: { data_emissao: "2026-09-01", status: "cancelado", fiscal_cnae: null } },
-    { origem_id: null, faturamento: null },
-  ]);
-  assert.deepEqual(r, {
-    j1: { tem_nota: true, primeira_1208: "2026-10-05" },
-    j2: { tem_nota: true, primeira_1208: null },
-  });
 });
 
 test("última retenção do fornecedor: a PP mais recente, com as alíquotas em número", () => {

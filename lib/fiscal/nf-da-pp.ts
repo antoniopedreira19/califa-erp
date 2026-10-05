@@ -313,28 +313,6 @@ export function guiaDoIssRetido(
 // O crédito de PIS/COFINS
 // ---------------------------------------------------------------------------
 
-/** As notas de saída do job que o crédito olha. */
-export interface NotasDoJobParaCredito {
-  /** O job já tem nota de saída emitida (cancelada não conta). */
-  tem_nota: boolean;
-  /** A emissão da primeira nota do job no 82.30-0-01 · 12.08, se houver. */
-  primeira_1208: string | null;
-}
-
-export const SEM_NOTAS_DO_JOB: NotasDoJobParaCredito = { tem_nota: false, primeira_1208: null };
-
-/**
- * O job conta como faturado no 12.08 para esta NF quando a nota no 12.08
- * saiu no mês da emissão da NF ou antes. Nota no 12.08 de mês posterior
- * não tira o crédito daqui: ele entra no mês da emissão e é estornado no
- * mês da nota (regra do protótipo aprovado).
- */
-export function faturadoNo1208ParaANf(primeira1208: string | null, emissao: string): boolean {
-  if (!primeira1208) return false;
-  if (!emissao) return true;
-  return mesDe(primeira1208) <= mesDe(emissao);
-}
-
 /** O parâmetro do cadastro vigente na data (a linha mais recente que já começou). */
 function parametroNaData(cad: CadastroFiscal, chave: string, data: string): number | null {
   const p = cad.parametros
@@ -361,14 +339,14 @@ export interface CreditoDaNf {
 
 /**
  * O crédito de PIS/COFINS da NF (`situacaoDoCredito`), com o regime do CNPJ
- * tomador vindo do cadastro, as alíquotas dos parâmetros e as notas de
- * saída do job. A caixa "Não gera crédito" só vale quando a regra daria
+ * tomador vindo do cadastro e as alíquotas dos parâmetros. É o crédito
+ * cheio: a parte do 12.08 sai na Apuração, pelo rateio proporcional do mês
+ * (decisão 146). A caixa "Não gera crédito" só vale quando a regra daria
  * crédito — e pede o motivo.
  */
 export function creditoDaNf(e: {
   nf: NfEmConferencia;
   cadastro: CadastroFiscal;
-  notasDoJob: NotasDoJobParaCredito;
   semCredito: boolean;
   motivoSemCredito: string;
   /** "AAAA-MM-DD", para quando a NF ainda não tem emissão. */
@@ -386,8 +364,6 @@ export function creditoDaNf(e: {
     emissao: e.nf.emissao || null,
     regimeDoTomador,
     retirado: false,
-    jobTemNotaDeSaida: e.notasDoJob.tem_nota,
-    jobFaturadoNoCumulativo: faturadoNo1208ParaANf(e.notasDoJob.primeira_1208, e.nf.emissao),
     aliquotaPis,
     aliquotaCofins,
   };

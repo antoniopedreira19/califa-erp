@@ -39,7 +39,7 @@ const MATRIZ: FiscalEstabelecimento = {
   created_at: EM,
   updated_at: EM,
 };
-const CAD: CadastroFiscal = { regimes: [], estabelecimentos: [MATRIZ], cnaes: [], feriados: [], parametros: [] };
+const CAD: CadastroFiscal = { regimes: [], estabelecimentos: [MATRIZ], cnaes: [], feriados: [], parametros: [], receitasAnteriores: [] };
 
 /** Três partes desiguais: o arredondamento tem de fechar na última. */
 const RATEIO: RateioDaGuia[] = [
@@ -281,7 +281,9 @@ describe("Diferença: o complementar", () => {
     assert.equal(p.p_valor_calculado, 850);
     assert.equal(p.p_valor_guia, 250);
     assert.equal(p.p_titulos.length, 1);
-    assert.equal(p.p_titulos[0].vencimento, "2027-01-10");
+    // A complementar vence na data legal da guia original (decisão 145), não 5 dias depois da aprovação.
+    assert.equal(p.p_titulos[0].vencimento, g.vencimento);
+    assert.equal(p.p_titulos[0].vencimento, "2026-12-07");
     assert.match(p.p_titulos[0].descricao, /complementar/);
     // A trava do banco compara guia com calculado: o texto explica a origem.
     assert.ok((p.p_justificativa ?? "").length >= 10);

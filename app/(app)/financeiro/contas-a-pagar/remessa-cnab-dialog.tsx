@@ -73,7 +73,13 @@ export interface TituloElegivelParaRemessa {
   origemTipo: CnabOrigemTipo;
   origemId: string;
   descricao: string;
+  /** O que o arquivo paga: na PP com retenção na aprovação, o líquido. */
   valor: number;
+  /** O que falta pagar do título, antes da retenção. */
+  bruto: number;
+  /** Decisão 145: a retenção da aprovação da PP, descontada do pagamento
+   *  (fica para a agência recolher). 0 no resto. */
+  retido: number;
   destinatarioNome: string;
   destinatarioTipo: "fornecedor" | "colaborador" | "cliente";
   /** Indicação visual — o gerador vai revalidar. */
@@ -226,6 +232,7 @@ export function ExportarRemessaCnabDialog({
     sequencial: number;
     qtd: number;
     valorTotal: number;
+    retidoTotal: number;
     nomeArquivo: string;
   } | null>(null);
 
@@ -354,6 +361,7 @@ export function ExportarRemessaCnabDialog({
         sequencial: res.sequencial,
         qtd: res.qtdItens,
         valorTotal: res.valorTotal,
+        retidoTotal: res.retidoTotal,
         nomeArquivo: res.nomeArquivo,
       });
       setRejeitados(res.itensRejeitados);
@@ -424,6 +432,15 @@ export function ExportarRemessaCnabDialog({
                     <dt className="text-emerald-700">Valor total</dt>
                     <dd>{formatBRL(sucesso.valorTotal)}</dd>
                   </div>
+                  {sucesso.retidoTotal > 0 && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-emerald-700">Retido das PPs</dt>
+                      <dd>
+                        {formatBRL(sucesso.retidoTotal)} descontados dos fornecedores, pelas retenções da aprovação. A
+                        agência recolhe pelas guias da Apuração.
+                      </dd>
+                    </div>
+                  )}
                 </dl>
                 <p className="mt-3 text-xs text-emerald-800">
                   Faça login no internet banking do Santander e importe o
@@ -620,6 +637,14 @@ export function ExportarRemessaCnabDialog({
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums">
                                 {formatBRL(t.valor)}
+                                {t.retido > 0 && (
+                                  <span
+                                    className="block whitespace-nowrap text-[11px] text-muted-foreground"
+                                    title="Retenção da aprovação da PP, descontada do pagamento (a agência recolhe)."
+                                  >
+                                    {formatBRL(t.bruto)} − {formatBRL(t.retido)} retidos
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           );

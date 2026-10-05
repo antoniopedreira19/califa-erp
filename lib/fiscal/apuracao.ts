@@ -13,8 +13,10 @@
  * - ISS próprio, por CNPJ emissor e mês da EMISSÃO da nota: menos o ISS que o
  *   cliente reteve e o ISS a compensar (Salvador);
  * - PIS e COFINS, por PJ e mês, pela matriz. Lucro real: débito pela emissão,
- *   crédito sobre o custo (NF do fornecedor emitida no mês), estorno do
- *   crédito do job faturado no 12.08 e saldo credor que passa de mês. Lucro
+ *   crédito sobre o custo (NF do fornecedor emitida no mês) menos a parte da
+ *   receita do mês no 12.08 (rateio proporcional, decisão 146) e saldo
+ *   credor que passa de mês; a receita do 12.08 (regime cumulativo) vai em
+ *   guia própria, DARF 8109 e 2172, sem crédito (decisão 144). Lucro
  *   presumido pelo caixa: débito pelo RECEBIMENTO, sem crédito;
  * - IRPJ e CSLL, por PJ e trimestre, em até 3 cotas (lucro real: estimativa
  *   pelo lucro bruto; presumido: presunção sobre o recebido, com a LC 224/2025);
@@ -31,7 +33,6 @@ import { feriadosDoCalculo, parametroVigente, regimeDaPJ, type CadastroFiscal } 
 import { codigoDoCnae } from "./calculos";
 import { codigoDarf } from "./codigos-darf";
 import {
-  addDias,
   ajustarVencimento,
   dataBr,
   mesDe,
@@ -147,7 +148,7 @@ export interface AprovacaoFiscal {
 }
 
 export interface ItemMemoria {
-  grupo: "debito" | "credito" | "estorno" | "retido" | "saldo" | "compensacao" | "base" | "info";
+  grupo: "debito" | "credito" | "rateio_credito" | "retido" | "saldo" | "compensacao" | "base" | "info";
   rotulo: string;
   detalhe?: string;
   base?: number;
@@ -296,7 +297,8 @@ type ChaveDoParametro =
   | "pis_cofins_dia"
   | "retencoes_dia"
   | "credito_pis"
-  | "credito_cofins";
+  | "credito_cofins"
+  | "darf_minimo";
 
 /** A carga inicial (migrations 20261002100001 e 20261002100300), se faltar a linha no cadastro. */
 const PARAMETROS_PADRAO: Record<ChaveDoParametro, number> = {
@@ -312,13 +314,13 @@ const PARAMETROS_PADRAO: Record<ChaveDoParametro, number> = {
   retencoes_dia: 20,
   credito_pis: 1.65,
   credito_cofins: 7.6,
+  darf_minimo: 10,
 };
 
 /**
  * O parâmetro vigente na data. Datas usadas: o fim do período para as
- * alíquotas e os dias de vencimento da guia; a emissão da NF para o crédito
- * (o estorno devolve o mesmo crédito que entrou); o vencimento da cota para a
- * Selic estimada.
+ * alíquotas e os dias de vencimento da guia; a emissão da NF para o crédito;
+ * o vencimento da cota para a Selic estimada.
  */
 const parametro = (cad: CadastroFiscal, chave: ChaveDoParametro, data: string) =>
   parametroVigente(cad, chave, dia(data))?.valor ?? PARAMETROS_PADRAO[chave];
@@ -351,7 +353,19 @@ export const MUNICIPIOS_QUE_COMPENSAM_ISS = new Set(["Salvador"]);
 // Contexto de um cálculo: índices montados uma vez por chamada
 // ---------------------------------------------------------------------------
 
-type SituacaoDoCredito = { gera: boolean; estado: "sim" | "nao" | "confirmar"; motivo: string };
+type SituacaoDoCredito = { gera: boolean; estado: "sim" | "nao"; motivo: string };
+
+/**
+ * A receita de uma PJ num mês, para o rateio proporcional do crédito de
+ * PIS/COFINS (decisão 146): as notas emitidas no mês por todos os CNPJs dela.
+ */
+export interface ReceitaDoRateio {
+  total: number;
+  /** A parte no regime cumulativo (o 12.08): é a parte do crédito que sai. */
+  cumulativa: number;
+  /** Os CNAEs cumulativos dessas notas, pelo subitem quando há ("12.08"). */
+  cnaes: string[];
+}
 
 interface Contexto {
   cad: CadastroFiscal;
@@ -365,16 +379,17 @@ interface Contexto {
   estab(id: string): FiscalEstabelecimento;
   pjDoEstab(id: string): string;
   matriz(pj: string): FiscalEstabelecimento;
+  /** A guia desta chave já foi aprovada: ela sai mesmo sem fato (decisão 145, item 6). */
+  aprovada(chave: string): boolean;
   /** As notas que o sistema já conhecia em `asOf`. */
   conhecidas: NotaSaidaFiscal[];
   /** Uma nota conhecida em `asOf`. */
   nota(id: string): NotaSaidaFiscal | undefined;
   cnae(n: NotaSaidaFiscal): FiscalCnae;
   recebimentosDaNota(id: string): RecebimentoFiscal[];
-  /** A primeira nota conhecida do job no 12.08 (pela emissão). */
-  primeira1208(jobId: string): NotaSaidaFiscal | undefined;
-  jobTemNota(jobId: string): boolean;
   credito(nf: NotaFornecedorFiscal): SituacaoDoCredito;
+  /** A receita da PJ no mês ("AAAA-MM"), com as notas conhecidas em `asOf`. */
+  receitaDoRateio(pj: string, comp: string): ReceitaDoRateio;
 }
 
 const vigenteEm = (c: Pick<FiscalCnae, "vigencia_inicio" | "vigencia_fim">, data: string) =>
@@ -420,7 +435,12 @@ export function cnaeNaEmissao(cad: CadastroFiscal, n: Pick<NotaSaidaFiscal, "num
   return cnaeVigenteNaEmissao(cad, escolhido, dia(n.emissao));
 }
 
-function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: string): Contexto {
+function criarContexto(
+  cad: CadastroFiscal,
+  fatos: FatosFiscais,
+  asOfInformado: string,
+  aprovadas: ReadonlySet<string> = new Set(),
+): Contexto {
   const asOf = dia(asOfInformado);
   const estabelecimentos = ordenarEstabelecimentos(cad.estabelecimentos);
   const estabPorId = new Map(estabelecimentos.map((e) => [e.id, e]));
@@ -454,21 +474,13 @@ function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: 
     else recebimentosPorNota.set(r.nota_id, [r]);
   }
 
-  const primeiras1208 = new Map<string, NotaSaidaFiscal>();
-  const jobsComNota = new Set<string>();
-  for (const n of [...conhecidas].sort((a, b) => a.emissao.localeCompare(b.emissao))) {
-    const eh1208 = cnae(n).subitem === "12.08";
-    for (const j of n.jobs) {
-      jobsComNota.add(j.job_id);
-      if (eh1208 && !primeiras1208.has(j.job_id)) primeiras1208.set(j.job_id, n);
-    }
-  }
-
   const creditos = new Map<string, SituacaoDoCredito>();
+  const receitas = new Map<string, ReceitaDoRateio>();
   const ctx: Contexto = {
     cad,
     fatos,
     asOf,
+    aprovada: (chave: string) => aprovadas.has(chave),
     feriados: feriadosDoCalculo(cad),
     estabelecimentos,
     pjs,
@@ -479,8 +491,6 @@ function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: 
     nota: (id) => notaPorId.get(id),
     cnae,
     recebimentosDaNota: (id) => recebimentosPorNota.get(id) ?? [],
-    primeira1208: (jobId) => primeiras1208.get(jobId),
-    jobTemNota: (jobId) => jobsComNota.has(jobId),
     credito: (nf) => {
       let s = creditos.get(nf.id);
       if (!s) {
@@ -488,6 +498,15 @@ function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: 
         creditos.set(nf.id, s);
       }
       return s;
+    },
+    receitaDoRateio: (pj, comp) => {
+      const k = `${pj}|${comp}`;
+      let r = receitas.get(k);
+      if (!r) {
+        r = receitaDoRateio(ctx, pj, comp);
+        receitas.set(k, r);
+      }
+      return r;
     },
   };
   return ctx;
@@ -500,7 +519,14 @@ function criarContexto(cad: CadastroFiscal, fatos: FatosFiscais, asOfInformado: 
 /**
  * A regra do protótipo (`situacaoCredito`), com a "Hitlab" generalizada para
  * "o CNPJ tomador está no lucro presumido" e o "sem crédito" vindo da
- * aprovação da PP. O 12.08 é qualquer nota no subitem 12.08 que cubra o job.
+ * aprovação da PP. Diferença do protótipo (decisão 146, 04/10/2026): o job
+ * não entra mais na regra. Lá, o custo do job faturado no 12.08 não dava
+ * crédito (e o de mês anterior era estornado no mês da nota); mas nada nos
+ * documentos fiscais liga a NF do fornecedor à nota de saída, e a lei só
+ * aceita a apropriação direta com contabilidade de custos integrada à
+ * escrituração (Lei 10.833/2003, art. 3º, § 8º, I). Toda NF de fornecedor PJ
+ * dá o crédito cheio, e a guia do mês tira a parte do 12.08 pelo rateio
+ * proporcional (`receitaDoRateio`).
  */
 function situacaoDoCredito(ctx: Contexto, nf: NotaFornecedorFiscal): SituacaoDoCredito {
   const pjTomadora = ctx.pjDoEstab(nf.tomador_estabelecimento_id);
@@ -514,16 +540,11 @@ function situacaoDoCredito(ctx: Contexto, nf: NotaFornecedorFiscal): SituacaoDoC
       motivo: motivo ? `Marcado pelo financeiro como sem crédito: ${motivo}.` : "Marcado pelo financeiro como sem crédito.",
     };
   }
-  const n1208 = ctx.primeira1208(nf.job.job_id);
-  if (n1208 && mesDe(n1208.emissao) <= mesDe(nf.emissao))
-    return { gera: false, estado: "nao", motivo: `Job faturado no ${codigoDoCnae(ctx.cnae(n1208))} (NF ${n1208.numero}): custo sem crédito.` };
-  if (!ctx.jobTemNota(nf.job.job_id))
-    return {
-      gera: true,
-      estado: "confirmar",
-      motivo: "O job ainda não tem nota de saída. Se for faturado no 12.08, o crédito é estornado no mês da nota.",
-    };
-  return { gera: true, estado: "sim", motivo: "Fornecedor PJ com NF e job faturado fora do 12.08." };
+  return {
+    gera: true,
+    estado: "sim",
+    motivo: "Fornecedor PJ com NF: crédito no mês da emissão, menos a parte da receita do mês no 12.08 (rateio proporcional).",
+  };
 }
 
 /** A situação do crédito de PIS/COFINS de uma NF de fornecedor, vista em `asOf`. */
@@ -532,7 +553,7 @@ export function situacaoDoCreditoDaNF(
   fatos: FatosFiscais,
   nf: NotaFornecedorFiscal,
   asOf: string,
-): { gera: boolean; estado: "sim" | "nao" | "confirmar"; motivo: string } {
+): { gera: boolean; estado: "sim" | "nao"; motivo: string } {
   return situacaoDoCredito(criarContexto(cad, fatos, asOf), nf);
 }
 
@@ -541,37 +562,32 @@ const aliquotaDoCredito = (cad: CadastroFiscal, nf: NotaFornecedorFiscal) =>
   parametro(cad, "credito_pis", nf.emissao) + parametro(cad, "credito_cofins", nf.emissao);
 
 /**
- * Os estornos de crédito de um período: para cada job faturado no 12.08 (a
- * PRIMEIRA nota dele no 12.08 cai no período), as NFs de fornecedor de meses
- * anteriores que deram crédito.
- *
- * Diferença do protótipo: lá o laço ia nota a nota, e um job com duas notas
- * no 12.08 estornava duas vezes (inclusive custos que nunca deram crédito).
- * Aqui o estorno sai uma vez por job, na primeira nota, e só do que gerou
- * crédito — que é a regra escrita ("custos de meses anteriores que já deram
- * crédito"). Com os dados do protótipo, o resultado é o mesmo.
+ * A receita da PJ no mês para o rateio proporcional do crédito (decisão 146;
+ * Lei 10.637/2002 e Lei 10.833/2003, art. 3º, § 8º, II): o custo é comum às
+ * duas receitas, e o crédito fica na proporção da receita não cumulativa na
+ * receita bruta total do mês. A receita é a das notas emitidas no mês, em
+ * todos os CNPJs da PJ; a cumulativa, a das notas em CNAE cumulativo (o
+ * 12.08). Sem receita cumulativa no mês (inclusive sem receita nenhuma), o
+ * crédito fica inteiro.
  */
-function estornosDeCredito(
-  ctx: Contexto,
-  pj: string,
-  notaNoPeriodo: (n: NotaSaidaFiscal) => boolean,
-  nfAntesDaNota: (nf: NotaFornecedorFiscal, n: NotaSaidaFiscal) => boolean,
-) {
-  const out: Array<{ nota: NotaSaidaFiscal; nf: NotaFornecedorFiscal }> = [];
-  const vistos = new Set<string>();
+function receitaDoRateio(ctx: Contexto, pj: string, comp: string): ReceitaDoRateio {
+  let total = 0;
+  let cumulativa = 0;
+  const cnaes: string[] = [];
   for (const n of ctx.conhecidas) {
-    if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || !notaNoPeriodo(n) || ctx.cnae(n).subitem !== "12.08") continue;
-    for (const j of n.jobs) {
-      if (vistos.has(j.job_id) || ctx.primeira1208(j.job_id) !== n) continue;
-      vistos.add(j.job_id);
-      for (const nf of ctx.fatos.notasFornecedor) {
-        if (nf.job.job_id !== j.job_id || ctx.pjDoEstab(nf.tomador_estabelecimento_id) !== pj) continue;
-        if (nfAntesDaNota(nf, n) && ctx.credito(nf).gera) out.push({ nota: n, nf });
-      }
-    }
+    if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || mesDe(n.emissao) !== comp) continue;
+    total += n.valor;
+    const c = ctx.cnae(n);
+    if (!c.cumulativo) continue;
+    cumulativa += n.valor;
+    const rotulo = c.subitem ?? c.codigo;
+    if (!cnaes.includes(rotulo)) cnaes.push(rotulo);
   }
-  return out;
+  return { total: r2(total), cumulativa: r2(cumulativa), cnaes };
 }
+
+/** A fração do crédito que sai pelo rateio: a receita cumulativa sobre a total (0 sem receita). */
+const parteQueSai = (r: ReceitaDoRateio) => (r.total > 0 ? r.cumulativa / r.total : 0);
 
 // ---------------------------------------------------------------------------
 // Rateio por empresa gerencial e regional
@@ -755,7 +771,7 @@ function guiaIss(
         nota_id: a.nota_id,
       });
   }
-  if (!memoria.length) return null;
+  if (!memoria.length && !ctx.aprovada(`iss|${e.id}|${comp}`)) return null;
   const soma = somaDaMemoria(memoria);
   const v = vencimentoNoMesSeguinte(comp, e.iss_dia, e.iss_regra, ctx.feriados, e.municipio);
   return {
@@ -815,26 +831,55 @@ function vencimentoPisCofins(
 export const vencimentoDoPisCofins = (cad: CadastroFiscal, pj: string, comp: string) =>
   vencimentoPisCofins(cad, comp, matrizDaPJ(cad, pj).municipio, feriadosDoCalculo(cad));
 
-function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" | "COFINS", saldoAnterior: number): Guia | null {
+/**
+ * A parte do PIS/COFINS de uma PJ que a guia cobre. No lucro real, a receita
+ * do regime cumulativo (o 12.08) se recolhe em DARF próprio (8109 e 2172), e
+ * o crédito só se desconta do valor apurado no não cumulativo (Lei
+ * 10.833/2003, art. 3º, caput: "do valor apurado na forma do art. 2º"):
+ * duas guias (decisão 144). No presumido tudo é cumulativo: uma guia só.
+ */
+export type ParteDoPisCofins = "toda" | "nao_cumulativa" | "cumulativa";
+
+/** A chave da guia de PIS/COFINS: a parte cumulativa do lucro real é `pis_cum|…` e `cofins_cum|…`. */
+export const chaveDoPisCofins = (tributo: "PIS" | "COFINS", pj: string, comp: string, parte: ParteDoPisCofins = "toda") =>
+  `${tributo.toLowerCase()}${parte === "cumulativa" ? "_cum" : ""}|${pj}|${comp}`;
+
+function guiaPisCofins(
+  ctx: Contexto,
+  pj: string,
+  comp: string,
+  tributo: "PIS" | "COFINS",
+  parte: ParteDoPisCofins,
+  saldoAnterior: number,
+): Guia | null {
   const fim = ultimoDiaDoMes(comp);
   const reg = regimeDaGuia(ctx.cad, pj, fim);
+  const cumulativa = parte === "cumulativa";
   const aliquotaDaNota = (c: FiscalCnae) => (tributo === "PIS" ? c.aliquota_pis : c.aliquota_cofins);
   const aliquotaDoCreditoDoTributo = (nf: NotaFornecedorFiscal) =>
     parametro(ctx.cad, tributo === "PIS" ? "credito_pis" : "credito_cofins", nf.emissao);
+  /** A nota é desta guia: na parte cumulativa só o CNAE cumulativo; na não cumulativa, o resto. */
+  const daParte = (n: NotaSaidaFiscal) => parte === "toda" || ctx.cnae(n).cumulativo === cumulativa;
   const memoria: ItemMemoria[] = [];
   const pesos: Peso[] = [];
+  // Guia não cumulativa sem nota no mês (só crédito, ou só nota do 12.08): o
+  // rateio vai pelos jobs dos custos com crédito — a aprovação precisa dele
+  // quando a guia da contabilidade vem com valor.
+  const pesosDosCreditos: Peso[] = [];
   let base = 0;
+  // O crédito do mês, já sem a parte do 12.08: o aviso de saldo credor olha.
+  let creditoLiquido = 0;
 
   if (reg.ramo === "real") {
     for (const n of ctx.conhecidas) {
-      if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || mesDe(n.emissao) !== comp) continue;
+      if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || mesDe(n.emissao) !== comp || !daParte(n)) continue;
       const c = ctx.cnae(n);
       const a = aliquotaDaNota(c);
       base += n.valor;
       memoria.push({
         grupo: "debito",
         rotulo: comJobs(`NF ${n.numero}`, n),
-        detalhe: `${ctx.estab(n.estabelecimento_id).nome} · ${codigoDoCnae(c)}${c.cumulativo ? " · alíquota reduzida, sem crédito" : ""}`,
+        detalhe: `${ctx.estab(n.estabelecimento_id).nome} · ${codigoDoCnae(c)}${c.cumulativo ? " · regime cumulativo, sem crédito" : ""}`,
         base: n.valor,
         aliquota: a,
         valor: r2((n.valor * a) / 100),
@@ -843,7 +888,10 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
       });
       pesos.push(...pesosDaNota(n, n.valor));
     }
-    // Créditos: custos de job com NF de fornecedor emitida no mês.
+  }
+  if (reg.ramo === "real" && !cumulativa) {
+    // Créditos: custos com NF de fornecedor emitida no mês, pelo valor cheio.
+    let creditoCheio = 0;
     for (const nf of ctx.fatos.notasFornecedor) {
       if (ctx.pjDoEstab(nf.tomador_estabelecimento_id) !== pj || mesDe(nf.emissao) !== comp || dia(nf.emissao) > ctx.asOf) continue;
       const s = ctx.credito(nf);
@@ -853,38 +901,34 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
         continue;
       }
       const a = aliquotaDoCreditoDoTributo(nf);
+      const valor = r2((nf.valor * a) / 100);
+      creditoCheio = r2(creditoCheio + valor);
+      pesosDosCreditos.push({ job: j, peso: valor });
       memoria.push({
         grupo: "credito",
         rotulo: `${nf.pp} · NF ${nf.numero} · ${j.codigo} ${j.nome}`,
-        detalhe: `crédito sobre custo · emitida em ${dataBr(nf.emissao)}${s.estado === "confirmar" ? " · job ainda sem nota (a confirmar)" : ""}`,
+        detalhe: `crédito sobre custo · emitida em ${dataBr(nf.emissao)}`,
         base: nf.valor,
         aliquota: a,
-        valor: -r2((nf.valor * a) / 100),
+        valor: -valor,
         job_id: j.job_id,
         pp: nf.pp,
       });
     }
-    // Estorno: job faturado no 12.08 neste mês cujos custos de meses anteriores deram crédito.
-    const estornos = estornosDeCredito(
-      ctx,
-      pj,
-      (n) => mesDe(n.emissao) === comp,
-      (nf) => mesDe(nf.emissao) < comp,
-    );
-    for (const { nota, nf } of estornos) {
-      const a = aliquotaDoCreditoDoTributo(nf);
+    // Rateio proporcional (decisão 146): a parte da receita do mês no 12.08 sai do crédito.
+    const receita = ctx.receitaDoRateio(pj, comp);
+    const sai = r2(creditoCheio * parteQueSai(receita));
+    if (sai > 0)
       memoria.push({
-        grupo: "estorno",
-        rotulo: `Estorno do crédito · ${nf.pp} · NF ${nf.numero}`,
-        detalhe: `${nf.job.codigo} faturado no 12.08 (NF ${nota.numero}); o crédito entrou em ${nomeDoMes(mesDe(nf.emissao))}`,
-        base: nf.valor,
-        aliquota: a,
-        valor: r2((nf.valor * a) / 100),
-        job_id: nf.job.job_id,
-        pp: nf.pp,
+        grupo: "rateio_credito",
+        rotulo: `Parte do ${juntar(receita.cnaes)} na receita do mês`,
+        detalhe: `${formatBRL(receita.cumulativa)} de ${formatBRL(receita.total)} emitidos em ${nomeDoMes(comp)}: essa parte do crédito sai (${tributo === "PIS" ? "Lei 10.637/2002" : "Lei 10.833/2003"}, art. 3º, § 8º, II)`,
+        base: creditoCheio,
+        aliquota: r4(parteQueSai(receita) * 100),
+        valor: sai,
       });
-    }
-  } else {
+    creditoLiquido = r2(creditoCheio - sai);
+  } else if (reg.ramo !== "real") {
     // Presumido pelo caixa: o que entrou no mês, pelo bruto, na alíquota do CNAE da nota.
     for (const r of ctx.fatos.recebimentos) {
       if (mesDe(r.data) !== comp || dia(r.data) > ctx.asOf) continue;
@@ -906,11 +950,12 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
     }
   }
 
-  // Retenções sofridas no mês (o cliente reteve ao pagar).
+  // Retenções sofridas no mês (o cliente reteve ao pagar): abatem a guia da
+  // parte da nota retida (no lucro real, a do 12.08 abate a cumulativa).
   for (const r of ctx.fatos.recebimentos) {
     if (mesDe(r.data) !== comp || dia(r.data) > ctx.asOf) continue;
     const n = ctx.nota(r.nota_id);
-    if (!n || ctx.pjDoEstab(n.estabelecimento_id) !== pj) continue;
+    if (!n || ctx.pjDoEstab(n.estabelecimento_id) !== pj || !daParte(n)) continue;
     const v = r.retido[tributo];
     if (!v) continue;
     memoria.push({
@@ -921,24 +966,30 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
       nota_id: n.id,
     });
   }
+  // Na parte cumulativa não há crédito: o saldo que passa de mês é retenção não usada.
   if (saldoAnterior > 0)
     memoria.push({
       grupo: "saldo",
-      rotulo: `Saldo credor de ${nomeDoMes(mesAnterior(comp))}`,
-      detalhe: "crédito que passou do mês anterior",
+      rotulo: `${cumulativa ? "Saldo" : "Saldo credor"} de ${nomeDoMes(mesAnterior(comp))}`,
+      detalhe: cumulativa ? "retenção que passou do mês anterior" : "crédito que passou do mês anterior",
       valor: -saldoAnterior,
     });
-  if (!memoria.length) return null;
+  if (!memoria.length && !ctx.aprovada(chaveDoPisCofins(tributo, pj, comp, parte))) return null;
 
   const soma = somaDaMemoria(memoria);
   const v = vencimentoPisCofins(ctx.cad, comp, ctx.matriz(pj).municipio, ctx.feriados);
   const avisos = [...reg.avisos];
-  if (soma < 0) avisos.push(`Crédito maior que o débito: ${formatBRL(-soma)} passam para ${nomeDoMes(proximoMes(comp))}.`);
+  // No não cumulativo, o saldo é de crédito quando há crédito no mês (já sem a parte do 12.08) ou vindo do anterior.
+  const sobraDeCredito = !cumulativa && (creditoLiquido > 0 || saldoAnterior > 0);
+  if (soma < 0)
+    avisos.push(
+      `${sobraDeCredito ? "Crédito maior" : "Retenção maior"} que o débito: ${formatBRL(-soma)} passam para ${nomeDoMes(proximoMes(comp))}.`,
+    );
   return {
-    chave: `${tributo.toLowerCase()}|${pj}|${comp}`,
+    chave: chaveDoPisCofins(tributo, pj, comp, parte),
     tributo,
-    titulo: tributo,
-    codigo: codigoDarf(tributo, reg.regime),
+    titulo: cumulativa ? (tributo === "PIS" ? "PIS cumulativo" : "COFINS cumulativa") : tributo,
+    codigo: codigoDarf(tributo, reg.regime, { cumulativo: cumulativa }),
     empresa_contabil_id: pj,
     estabelecimento_id: null,
     local: localFederal(ctx, pj, true),
@@ -952,7 +1003,7 @@ function guiaPisCofins(ctx: Contexto, pj: string, comp: string, tributo: "PIS" |
     apurado: Math.max(0, soma),
     saldo_credor_gerado: soma < 0 ? -soma : 0,
     base: r2(base),
-    rateio: rateioPor(pesos, Math.max(0, soma)),
+    rateio: rateioPor(pesos.length ? pesos : pesosDosCreditos, Math.max(0, soma)),
     avisos,
   };
 }
@@ -1014,18 +1065,17 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
     );
     let custo = 0;
     let creditos = 0;
+    // Os CNAEs cujo rateio tirou crédito no trimestre (decisão 146): o detalhe da linha diz.
+    const rateados: string[] = [];
     for (const nf of custos) {
       custo += nf.valor;
-      if (ctx.credito(nf).gera) creditos += (nf.valor * aliquotaDoCredito(ctx.cad, nf)) / 100;
+      if (!ctx.credito(nf).gera) continue;
+      // O crédito de cada mês, menos a parte da receita do mês no 12.08 (como nas guias de PIS/COFINS).
+      const receitaDoMes = ctx.receitaDoRateio(pj, mesDe(nf.emissao));
+      const sai = parteQueSai(receitaDoMes);
+      creditos += ((nf.valor * aliquotaDoCredito(ctx.cad, nf)) / 100) * (1 - sai);
+      if (sai > 0) for (const c of receitaDoMes.cnaes) if (!rateados.includes(c)) rateados.push(c);
     }
-    // Estorno dos créditos de jobs faturados no 12.08 no trimestre (só os de NFs do próprio trimestre).
-    const estornos = estornosDeCredito(
-      ctx,
-      pj,
-      (n) => dentro(n.emissao),
-      (nf, n) => mesDe(nf.emissao) < mesDe(n.emissao) && dentro(nf.emissao),
-    );
-    for (const { nf } of estornos) creditos -= (nf.valor * aliquotaDoCredito(ctx.cad, nf)) / 100;
     receita = r2(receita);
     iss = r2(iss);
     pis = r2(pis);
@@ -1054,7 +1104,9 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       {
         grupo: "base",
         rotulo: "(+) Créditos de PIS/COFINS sobre o custo",
-        detalhe: "o crédito volta para a agência: o custo de verdade é menor",
+        detalhe: `o crédito volta para a agência: o custo de verdade é menor${
+          rateados.length ? ` · sem a parte do ${juntar(rateados)} na receita (rateio proporcional)` : ""
+        }`,
         valor: creditos,
       },
       {
@@ -1071,7 +1123,23 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       avisos.push(
         "Lucro bruto do trimestre negativo: IRPJ e CSLL ficam zerados. A compensação de prejuízo entra como ajuste justificado na aprovação.",
       );
-  } else {
+  }
+  const aliquotaIrpj = p("irpj");
+  const aliquotaAdicional = p("irpj_adicional");
+  const aliquotaCsll = p("csll");
+  const limiteMes = p("irpj_adicional_limite_mes");
+  const limite = limiteMes * 3;
+  // O IRPJ (15% + adicional) e a CSLL de uma base presumida: as contas do ajuste do ano da LC 224.
+  const impostoDaBase = (tributo: "IRPJ" | "CSLL", base: number) =>
+    tributo === "IRPJ"
+      ? r2((base * aliquotaIrpj) / 100 + (Math.max(0, base - limite) * aliquotaAdicional) / 100)
+      : r2((base * aliquotaCsll) / 100);
+  let deducaoIr = 0;
+  let deducaoCs = 0;
+  const avisosIr: string[] = [];
+  const avisosCs: string[] = [];
+
+  if (reg.ramo !== "real") {
     const recebimentos = ctx.fatos.recebimentos.filter((r) => {
       if (!dentro(r.data) || dia(r.data) > ctx.asOf) return false;
       const n = ctx.nota(r.nota_id);
@@ -1080,51 +1148,66 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
     const recebido = r2(recebimentos.reduce((s, r) => s + r.bruto, 0));
     for (const r of recebimentos) pesos.push(...pesosDaNota(ctx.nota(r.nota_id)!, r.bruto));
     receitaRef = recebido;
-    const limite = p("lc224_limite_trimestre");
     const presuncao = p("presuncao_servicos");
     const presuncaoLc224 = p("presuncao_lc224");
-    const ate = Math.min(recebido, limite);
-    const acima = Math.max(0, recebido - limite);
-    const base = r2((ate * presuncao) / 100 + (acima * presuncaoLc224) / 100);
-    const linhas: ItemMemoria[] = [
-      {
+    const baseDe = (receita: number, excesso: number) =>
+      r2(((receita - excesso) * presuncao) / 100 + (excesso * presuncaoLc224) / 100);
+    for (const tributo of ["IRPJ", "CSLL"] as const) {
+      const lc = lc224DoTrimestre(ctx, pj, t, tributo, recebido);
+      const acima = lc.excesso;
+      const ate = r2(recebido - acima);
+      const base = baseDe(recebido, acima);
+      const mem = tributo === "IRPJ" ? memIr : memCs;
+      mem.push({
         grupo: "base",
         rotulo: "Recebido no trimestre (regime de caixa)",
         detalhe: `${plural(recebimentos.length, "recebimento", "recebimentos")}, pelo bruto`,
         valor: recebido,
-      },
-      {
+      });
+      mem.push(...lc.linhas);
+      mem.push({
         grupo: "base",
-        rotulo: `Presunção de ${pct(presuncao)}% até ${formatBRL(limite)}`,
+        rotulo:
+          lc.limite === null
+            ? `Presunção de ${pct(presuncao)}%`
+            : lc.completo
+              ? `Presunção de ${pct(presuncao)}% até o limite`
+              : `Presunção de ${pct(presuncao)}% até ${formatBRL(lc.limite)}`,
         base: ate,
         aliquota: presuncao,
         valor: r2((ate * presuncao) / 100),
-      },
-    ];
-    if (acima > 0)
-      linhas.push({
-        grupo: "base",
-        rotulo: `Presunção de ${pct(presuncaoLc224)}% acima de ${formatBRL(limite)} (LC 224/2025)`,
-        detalhe: `acréscimo de ${pct(r2((presuncaoLc224 / presuncao - 1) * 100))}% na presunção sobre a receita acima de ${valorCurto(limite * 4)} por ano, controlada por trimestre`,
-        base: acima,
-        aliquota: presuncaoLc224,
-        valor: r2((acima * presuncaoLc224) / 100),
       });
-    linhas.push({ grupo: "base", rotulo: "(=) Base presumida", valor: base });
-    memIr.push(...linhas.map((l) => ({ ...l })));
-    memCs.push(...linhas.map((l) => ({ ...l })));
-    baseIr = baseCs = base;
-    if (acima > 0)
-      avisos.push(
-        "LC 224/2025 aplicada sem sobra de limite de trimestres anteriores (pendência com a contabilidade: a medida pelo recebido e a sobra do ano).",
+      if (acima > 0)
+        mem.push({
+          grupo: "base",
+          rotulo: lc.completo
+            ? `Presunção de ${pct(presuncaoLc224)}% sobre o que passa do limite (LC 224/2025)`
+            : `Presunção de ${pct(presuncaoLc224)}% acima de ${formatBRL(lc.limite ?? lc.lt)} (LC 224/2025)`,
+          detalhe: `acréscimo de ${pct(r2((presuncaoLc224 / presuncao - 1) * 100))}% na presunção sobre a receita acima de ${valorCurto(lc.lt * 4)} por ano, controlada por trimestre`,
+          base: acima,
+          aliquota: presuncaoLc224,
+          valor: r2((acima * presuncaoLc224) / 100),
+        });
+      mem.push({ grupo: "base", rotulo: "(=) Base presumida", valor: base });
+      // 4º trimestre: o acréscimo pago a mais nos trimestres anteriores volta como dedução (§5º).
+      const deducao = r2(
+        lc.recalculos.reduce(
+          (soma, x) => soma + impostoDaBase(tributo, baseDe(x.receita, x.excessoPago)) - impostoDaBase(tributo, baseDe(x.receita, x.excessoDevido)),
+          0,
+        ),
       );
+      if (tributo === "IRPJ") {
+        baseIr = base;
+        deducaoIr = deducao;
+        avisosIr.push(...lc.avisos);
+      } else {
+        baseCs = base;
+        deducaoCs = deducao;
+        avisosCs.push(...lc.avisos);
+      }
+    }
   }
 
-  const aliquotaIrpj = p("irpj");
-  const aliquotaAdicional = p("irpj_adicional");
-  const aliquotaCsll = p("csll");
-  const limiteMes = p("irpj_adicional_limite_mes");
-  const limite = limiteMes * 3;
   const ir15 = r2((baseIr * aliquotaIrpj) / 100);
   const adicional = r2((Math.max(0, baseIr - limite) * aliquotaAdicional) / 100);
   memIr.push({ grupo: "debito", rotulo: `IRPJ ${pct(aliquotaIrpj)}%`, base: baseIr, aliquota: aliquotaIrpj, valor: ir15 });
@@ -1154,10 +1237,29 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       memCs.push({ grupo: "retido", rotulo: `CSLL retida pelo cliente · NF ${n.numero}`, detalhe: `recebida em ${dataBr(r.data)}`, valor: -r.retido.CSLL, nota_id: n.id });
     }
   }
-  const irDevido = r2(Math.max(0, ir15 - irrf) + adicional);
-  const csDevido = r2(Math.max(0, (baseCs * aliquotaCsll) / 100 - csllRetida));
+  let irDevido = r2(Math.max(0, ir15 - irrf) + adicional);
+  let csDevido = r2(Math.max(0, (baseCs * aliquotaCsll) / 100 - csllRetida));
+  // A dedução do ajuste do ano da LC 224 (4º trimestre): até o imposto do
+  // trimestre; o que sobra se restitui ou compensa, a pedido (§§7º e 8º).
+  const deduzir = (tributo: "IRPJ" | "CSLL", devido: number, deducao: number, mem: ItemMemoria[], av: string[]) => {
+    if (deducao <= 0) return devido;
+    const usada = r2(Math.min(devido, deducao));
+    mem.push({
+      grupo: "saldo",
+      rotulo: "(−) Acréscimo da LC 224 pago a mais no ano",
+      detalhe: "ajuste do 4º trimestre (IN RFB 2.305/2025, art. 15, §5º): os trimestres anteriores refeitos pelo excedente do ano",
+      valor: -usada,
+    });
+    if (deducao - usada >= 0.01)
+      av.push(
+        `O acréscimo da LC 224 pago a mais passa do ${tributo} deste trimestre: ${formatBRL(r2(deducao - usada))} podem ser restituídos ou compensados, a pedido, com Selic (IN RFB 2.305/2025, art. 15, §§7º e 8º).`,
+      );
+    return r2(devido - usada);
+  };
+  irDevido = deduzir("IRPJ", irDevido, deducaoIr, memIr, avisosIr);
+  csDevido = deduzir("CSLL", csDevido, deducaoCs, memCs, avisosCs);
   // Diferença do protótipo: lá IRPJ e CSLL dividiam a lista de avisos, e este (só do IRPJ) aparecia também na CSLL.
-  const avisosIrpj = [...avisos];
+  const avisosIrpj = [...avisos, ...avisosIr];
   if (irrf > ir15)
     avisosIrpj.push(
       `IRRF retido maior que os ${pct(aliquotaIrpj)}%: o excedente vira saldo negativo, que a contabilidade recupera por PER/DCOMP.`,
@@ -1189,7 +1291,166 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       cotas,
     };
   };
-  return [guia("IRPJ", memIr, irDevido, avisosIrpj), guia("CSLL", memCs, csDevido, avisos)];
+  return [guia("IRPJ", memIr, irDevido, avisosIrpj), guia("CSLL", memCs, csDevido, [...avisos, ...avisosCs])];
+}
+
+// ---------------------------------------------------------------------------
+// LC 224/2025 no lucro presumido (decisão 145, item 7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Desde quando o acréscimo vale (LC 224/2025, art. 14; IN RFB 2.305/2025,
+ * art. 3º): o IRPJ em janeiro/2026; a CSLL, pela noventena, em abril/2026 —
+ * o limite dela em 2026 é de três trimestres (Perguntas e Respostas da
+ * Receita, itens 12 e 13).
+ */
+const INICIO_DA_LC224: Record<"IRPJ" | "CSLL", string> = { IRPJ: "2026-01-01", CSLL: "2026-04-01" };
+
+interface Lc224DoTrimestre {
+  /** A receita do trimestre que vai à presunção majorada. */
+  excesso: number;
+  /** O limite de um trimestre (R$ 1,25 milhão, o parâmetro). */
+  lt: number;
+  /** O limite aplicado ao trimestre; `null` fora da vigência. */
+  limite: number | null;
+  /** A receita do ano é conhecida: valem a sobra e o ajuste do 4º trimestre. */
+  completo: boolean;
+  linhas: ItemMemoria[];
+  /** 4º trimestre: os trimestres anteriores refeitos pelo excedente do ano (§5º, I e II). */
+  recalculos: Array<{ receita: number; excessoPago: number; excessoDevido: number }>;
+  avisos: string[];
+}
+
+/**
+ * O excedente da LC 224 num trimestre, pela IN RFB 2.305/2025, art. 15, na
+ * redação da IN 2.306/2026:
+ * - o limite do trimestre é R$ 1,25 milhão, comparado com a receita do
+ *   próprio trimestre; a sobra de um trimestre abaixo do limite passa para os
+ *   seguintes do mesmo ano (§§2º a 4º); o excedente nunca passa;
+ * - no 4º trimestre confere-se o ano (§5º): receita do ano até o limite
+ *   anual, nenhum acréscimo, e o pago a mais antes volta como dedução; acima
+ *   dele, o 4º trimestre leva o que falta para o excedente do ano, ou nada,
+ *   refazendo os anteriores na proporção quando eles pagaram mais.
+ * No regime de caixa, a receita é a recebida (a norma não diz; é a mesma
+ * receita da base). Antes do início da Apuração, a do cadastro
+ * (`receitasAnteriores`); sem ela, vale o limite do próprio trimestre, como
+ * antes — erra para mais — e a guia avisa.
+ */
+function lc224DoTrimestre(ctx: Contexto, pj: string, t: string, tributo: "IRPJ" | "CSLL", recebido: number): Lc224DoTrimestre {
+  const lt = parametro(ctx.cad, "lc224_limite_trimestre", fimDoTrimestre(t));
+  const [ano, q] = t.split("-T").map(Number);
+  const inicio = INICIO_DA_LC224[tributo];
+  if (fimDoTrimestre(t) < inicio) return { excesso: 0, lt, limite: null, completo: true, linhas: [], recalculos: [], avisos: [] };
+  const qInicio = Number(inicio.slice(0, 4)) === ano ? Math.ceil(Number(inicio.slice(5, 7)) / 3) : 1;
+  const primeiro = trimestreDe(PRIMEIRA_COMPETENCIA);
+  const receitaDe = (tk: string): number | null => {
+    if (tk >= primeiro)
+      return r2(
+        ctx.fatos.recebimentos
+          .filter((r) => {
+            if (trimestreDe(r.data) !== tk || dia(r.data) > ctx.asOf) return false;
+            const n = ctx.nota(r.nota_id);
+            return !!n && ctx.pjDoEstab(n.estabelecimento_id) === pj;
+          })
+          .reduce((soma, r) => soma + r.bruto, 0),
+      );
+    const informada = ctx.cad.receitasAnteriores.find((x) => x.empresa_contabil_id === pj && x.trimestre === tk);
+    return informada ? informada.receita_bruta : null;
+  };
+  const anteriores: Array<{ tk: string; receita: number | null }> = [];
+  for (let k = qInicio; k < q; k++) anteriores.push({ tk: `${ano}-T${k}`, receita: receitaDe(`${ano}-T${k}`) });
+
+  const faltam = anteriores.filter((a) => a.receita === null).map((a) => a.tk);
+  if (faltam.length) {
+    const excesso = r2(Math.max(0, recebido - lt));
+    return {
+      excesso,
+      lt,
+      limite: lt,
+      completo: false,
+      linhas: [],
+      recalculos: [],
+      avisos:
+        excesso > 0 || q === 4
+          ? [
+              `LC 224/2025: falta informar a receita recebida ${
+                faltam.length > 1
+                  ? `nos ${juntar(faltam.map((tk) => `${tk.split("-T")[1]}º`))} trimestres de ${ano}`
+                  : `no ${faltam[0].split("-T")[1]}º trimestre de ${ano}`
+              } no cadastro de impostos (aba Parâmetros). Até lá, vale o limite do próprio trimestre, sem a sobra do ano nem o ajuste do 4º trimestre: o ${tributo} pode sair maior.`,
+            ]
+          : [],
+    };
+  }
+
+  let sobra = 0;
+  let somaExcessos = 0;
+  const pagos: Array<{ receita: number; excesso: number }> = [];
+  for (const a of anteriores) {
+    const receita = a.receita ?? 0;
+    const limiteK = r2(lt + sobra);
+    const excessoK = r2(Math.max(0, receita - limiteK));
+    sobra = r2(Math.max(0, limiteK - receita));
+    somaExcessos = r2(somaExcessos + excessoK);
+    pagos.push({ receita, excesso: excessoK });
+  }
+
+  if (q < 4) {
+    const limite = r2(lt + sobra);
+    return {
+      excesso: r2(Math.max(0, recebido - limite)),
+      lt,
+      limite,
+      completo: true,
+      linhas: [
+        {
+          grupo: "base",
+          rotulo: `Limite da LC 224 no trimestre: ${formatBRL(limite)}`,
+          detalhe:
+            sobra > 0
+              ? `${formatBRL(lt)} + a sobra de ${formatBRL(sobra)} dos trimestres anteriores de ${ano} (IN RFB 2.305/2025, art. 15, §4º)`
+              : `${formatBRL(lt)} por trimestre; a sobra passa para os trimestres seguintes do ano`,
+          valor: 0,
+        },
+      ],
+      recalculos: [],
+      avisos: [],
+    };
+  }
+
+  // 4º trimestre: o ano inteiro (§5º).
+  const receitaAno = r2(pagos.reduce((soma, x) => soma + x.receita, 0) + recebido);
+  const limiteAno = r2(lt * (4 - qInicio + 1));
+  const excessoAno = r2(Math.max(0, receitaAno - limiteAno));
+  let excesso = 0;
+  let recalculos: Lc224DoTrimestre["recalculos"] = [];
+  if (receitaAno <= limiteAno) {
+    recalculos = pagos.filter((x) => x.excesso > 0).map((x) => ({ receita: x.receita, excessoPago: x.excesso, excessoDevido: 0 }));
+  } else if (excessoAno < somaExcessos) {
+    recalculos = pagos
+      .filter((x) => x.excesso > 0)
+      .map((x) => ({ receita: x.receita, excessoPago: x.excesso, excessoDevido: r2((x.excesso / somaExcessos) * excessoAno) }));
+  } else {
+    excesso = r2(excessoAno - somaExcessos);
+  }
+  return {
+    excesso,
+    lt,
+    limite: lt,
+    completo: true,
+    linhas: [
+      {
+        grupo: "base",
+        rotulo: `Ajuste do ano da LC 224: ${formatBRL(receitaAno)} recebidos em ${ano}`,
+        detalhe: `limite de ${formatBRL(limiteAno)} no ano${qInicio > 1 ? ` (o ${tributo} só a partir do ${nomeDoTrimestre(`${ano}-T${qInicio}`)})` : ""}; ${
+          excessoAno > 0 ? `${formatBRL(excessoAno)} passam do limite no ano` : "nada passa do limite no ano"
+        } (IN RFB 2.305/2025, art. 15, §5º)`,
+        valor: 0,
+      },
+    ],
+    recalculos,
+    avisos: [],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1239,7 +1500,7 @@ function guiasRetencoes(ctx: Contexto, pj: string, comp: string): Guia[] {
         pesos.push({ job: j, peso: pg.bruto });
       }
     }
-    if (!memoria.length) continue;
+    if (!memoria.length && !ctx.aprovada(`${tributo.toLowerCase()}|${pj}|${comp}`)) continue;
     const soma = somaDaMemoria(memoria);
     const diaDoVencimento = parametro(ctx.cad, "retencoes_dia", fim);
     const v = vencimentoNoMesSeguinte(comp, diaDoVencimento, "antecipa", ctx.feriados, matriz.municipio);
@@ -1287,7 +1548,7 @@ function guiasRetencoes(ctx: Contexto, pj: string, comp: string): Guia[] {
       });
       pesos.push({ job: j, peso: nf.valor });
     }
-    if (!memoria.length) continue;
+    if (!memoria.length && !ctx.aprovada(`issret|${e.id}|${comp}`)) continue;
     const soma = somaDaMemoria(memoria);
     // Diferença do protótipo: lá o ISS retido sempre prorrogava; aqui segue a regra do município no cadastro.
     const v = vencimentoNoMesSeguinte(comp, e.iss_retido_dia, e.iss_regra, ctx.feriados, e.municipio);
@@ -1371,7 +1632,7 @@ export function issARecuperar(cad: CadastroFiscal, fatos: FatosFiscais, aprovaco
  * curso sai como estimativa; o estado de cada guia vem de `estadoDaGuia`.
  */
 export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf: string, aprovacoes: AprovacaoFiscal[]): Guia[] {
-  const ctx = criarContexto(cad, fatos, asOf);
+  const ctx = criarContexto(cad, fatos, asOf, new Set(aprovacoes.filter((a) => !a.diferenca).map((a) => a.chave)));
   const aprovadas = aprovacaoPorChave(aprovacoes);
   const aRecuperar = todosARecuperar(ctx, aprovadas);
   const competencias = competenciasAte(ctx.asOf);
@@ -1389,11 +1650,16 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
       if (g) out.push(g);
     }
     for (const pj of ctx.pjs) {
+      // Lucro real: a parte não cumulativa e, em guia própria, a cumulativa (o 12.08).
+      const partes: readonly ParteDoPisCofins[] =
+        regimeDaGuia(ctx.cad, pj, ultimoDiaDoMes(comp)).ramo === "real" ? ["nao_cumulativa", "cumulativa"] : ["toda"];
       for (const tributo of ["PIS", "COFINS"] as const) {
-        const k = `${tributo}|${pj}`;
-        const g = guiaPisCofins(ctx, pj, comp, tributo, saldo.get(k) ?? 0);
-        saldo.set(k, g ? g.saldo_credor_gerado : 0);
-        if (g) out.push(g);
+        for (const parte of partes) {
+          const k = `${tributo}|${pj}|${parte}`;
+          const g = guiaPisCofins(ctx, pj, comp, tributo, parte, saldo.get(k) ?? 0);
+          saldo.set(k, g ? g.saldo_credor_gerado : 0);
+          if (g) out.push(g);
+        }
       }
       out.push(...guiasRetencoes(ctx, pj, comp));
     }
@@ -1401,8 +1667,100 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
   const trimestres = [...new Set(competencias.map(trimestreDe))];
   for (const t of trimestres)
     for (const pj of ctx.pjs)
-      out.push(...guiasIrpjCsll(ctx, pj, t).filter((g) => g.memoria.some((m) => m.grupo === "base" && m.valor !== 0)));
+      out.push(
+        ...guiasIrpjCsll(ctx, pj, t).filter(
+          (g) => g.memoria.some((m) => m.grupo === "base" && m.valor !== 0) || ctx.aprovada(g.chave),
+        ),
+      );
+  // A guia aprovada que perdeu todos os fatos (notas canceladas depois) não
+  // some: sai zerada, como diferença para menos, e diz o que fazer à mão.
+  for (const g of out) if (ctx.aprovada(g.chave) && semFatos(g)) g.avisos.push(AVISO_SEM_FATOS);
+  aplicarDarfMinimo(out, ctx.cad);
   return out;
+}
+
+/** A guia não tem mais nada que a sustente: nenhuma linha (ou, no trimestre, nenhuma base). */
+function semFatos(g: Guia): boolean {
+  if (g.periodo === "trimestral") return !g.memoria.some((m) => m.grupo === "base" && m.valor !== 0);
+  return g.memoria.length === 0;
+}
+
+/** O aviso da guia aprovada sem fatos (decisão 145, item 6): o que fazer fica com o financeiro. */
+export const AVISO_SEM_FATOS =
+  "Hoje esta guia não tem nenhum fato: as notas (ou os pagamentos) dela foram cancelados depois da aprovação. O imposto que ainda não foi pago se cancela em Impostos a Pagar, com motivo; o que já foi pago fica a recuperar, com a contabilidade.";
+
+// ---------------------------------------------------------------------------
+// DARF mínimo
+// ---------------------------------------------------------------------------
+
+/** Os tributos pagos por DARF: o mínimo vale para eles (o ISS é municipal). */
+const POR_DARF = new Set<Tributo>(["PIS", "COFINS", "IRPJ", "CSLL", "CSRF", "IRRF"]);
+
+/** Soma dois rateios por empresa gerencial e regional (os valores; o % sai do `escalarRateio`). */
+function somarRateios(a: RateioDaGuia[], b: RateioDaGuia[]): RateioDaGuia[] {
+  const m = new Map<string, RateioDaGuia>();
+  for (const x of [...a, ...b]) {
+    const k = `${x.empresa_id}|${x.regional_id ?? ""}`;
+    const y = m.get(k);
+    if (y) m.set(k, { ...y, valor: r2(y.valor + x.valor), pct: y.pct + x.pct });
+    else m.set(k, { ...x });
+  }
+  return [...m.values()];
+}
+
+/**
+ * DARF mínimo (Lei 9.430/1996, art. 68; decisão 145, item 3): não se paga
+ * DARF abaixo de R$ 10,00 (`darf_minimo`). O valor de um código que fica
+ * abaixo dele soma à guia do mesmo código e da mesma PJ no período seguinte,
+ * até chegar ao mínimo, e se paga no vencimento desse último período. A guia
+ * abaixo do mínimo fica com apurado zero (não gera título) e diz para onde
+ * o valor foi; a seguinte mostra de onde ele veio. O que veio não se abate
+ * de crédito: é imposto de um período já fechado. Sem guia no período
+ * seguinte, o valor segue esperando a próxima guia do código.
+ *
+ * Roda sobre as guias na ordem em que `calcularApuracao` as monta (os meses
+ * em ordem, depois os trimestres em ordem); muda as guias no lugar.
+ */
+function aplicarDarfMinimo(guias: Guia[], cad: CadastroFiscal): void {
+  const pendente = new Map<string, { valor: number; de: string; rateio: RateioDaGuia[] }>();
+  for (const g of guias) {
+    if (!POR_DARF.has(g.tributo) || !g.codigo) continue;
+    // A família é o código: a chave sem a competência (`pis_cum|<PJ>`, `irrf|<PJ>`…).
+    const familia = g.chave.slice(0, g.chave.lastIndexOf("|"));
+    const vindo = pendente.get(familia);
+    if (vindo) {
+      pendente.delete(familia);
+      g.memoria.push({
+        grupo: "debito",
+        rotulo: `Vindo de ${vindo.de} (abaixo do DARF mínimo)`,
+        detalhe: "o valor abaixo de R$ 10,00 soma ao período seguinte, no mesmo código; não se abate de crédito",
+        valor: vindo.valor,
+      });
+      g.apurado = r2(g.apurado + vindo.valor);
+      g.rateio = escalarRateio(somarRateios(g.rateio, vindo.rateio), g.apurado);
+    }
+    const minimo = parametro(cad, "darf_minimo", fimDoPeriodo(g));
+    if (g.apurado > 0 && g.apurado < minimo) {
+      const proximo =
+        g.periodo === "trimestral" ? nomeDoTrimestre(proximoTrimestre(g.competencia)) : nomeDoMes(proximoMes(g.competencia));
+      pendente.set(familia, { valor: g.apurado, de: g.rotulo_competencia, rateio: g.rateio });
+      g.memoria.push({
+        grupo: "saldo",
+        rotulo: `Abaixo do DARF mínimo (${formatBRL(minimo)})`,
+        detalhe: `não se paga: passa para ${proximo}, no mesmo código (Lei 9.430/1996, art. 68)`,
+        valor: -g.apurado,
+      });
+      g.avisos.push(
+        `Abaixo do DARF mínimo de ${formatBRL(minimo)}: ${formatBRL(g.apurado)} passam para a guia de ${proximo}, no mesmo código.`,
+      );
+      g.apurado = 0;
+      g.rateio = escalarRateio(g.rateio, 0);
+    }
+    if (g.periodo === "trimestral" && (vindo || g.apurado === 0)) {
+      g.cotas = cotasDe(g.apurado, g.competencia, matrizDaPJ(cad, g.empresa_contabil_id).municipio, cad);
+      g.vencimento = g.cotas[0].vencimento;
+    }
+  }
 }
 
 /**
@@ -1428,9 +1786,21 @@ export function estadoDaGuia(
 // ---------------------------------------------------------------------------
 
 /**
- * Os títulos de uma aprovação: a complementar na diferença (vence 5 dias
- * depois da aprovação, como no protótipo), as cotas no IRPJ/CSLL (as da
- * aprovação; sem elas, as da guia) e um título nos demais. Guia sem valor
+ * O vencimento da guia complementar: o legal da guia original (decisão 145,
+ * item 2). O imposto vence na data do período, e pagar depois disso é
+ * atraso, com multa e juros na baixa (Lei 9.430/1996, art. 61); não existe
+ * prazo a mais por a diferença aparecer depois. No IRPJ/CSLL, o da 1ª cota
+ * (ou da cota única).
+ */
+export function vencimentoDaComplementar(g: Pick<Guia, "periodo" | "vencimento" | "cotas">): string {
+  return g.periodo === "trimestral" ? g.cotas?.[0]?.vencimento ?? g.vencimento : g.vencimento;
+}
+
+/**
+ * Os títulos de uma aprovação: a complementar na diferença (no vencimento
+ * legal da guia original, `vencimentoDaComplementar`; até 04/10/2026,
+ * 5 dias depois da aprovação, como no protótipo), as cotas no IRPJ/CSLL (as
+ * da aprovação; sem elas, as da guia) e um título nos demais. Guia sem valor
  * não gera título.
  *
  * Diferença do protótipo: a descrição usa o `local` da guia ("Salvador-BA",
@@ -1450,7 +1820,8 @@ export function titulosDaAprovacao(g: Guia, a: AprovacaoFiscal): TituloDaAprovac
     descricao: texto,
     rateio: escalarRateio(g.rateio, valor),
   });
-  if (a.diferenca) return a.valor_guia > 0 ? [simples("diferenca", addDias(a.data, 5), a.valor_guia, `${descricao} · complementar`)] : [];
+  if (a.diferenca)
+    return a.valor_guia > 0 ? [simples("diferenca", vencimentoDaComplementar(g), a.valor_guia, `${descricao} · complementar`)] : [];
   if (g.periodo === "trimestral") {
     const cotas = a.cotas ?? g.cotas ?? [];
     return cotas

@@ -238,6 +238,7 @@ export type AuditAction =
   | "fiscal_feriado.criado"
   | "fiscal_feriado.removido"
   | "fiscal_parametro.nova_vigencia"
+  | "fiscal_receita_anterior.registrada"
   | "lancamento_financeiro.criado"
   | "lancamento_financeiro.estornado"
   | "pedido_compra.baixa_estornada"

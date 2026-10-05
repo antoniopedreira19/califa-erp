@@ -89,7 +89,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
 
   // Só os feriados e os parâmetros vão para as cotas (o resto do cadastro fica no servidor).
   const cadastroDasCotas: CadastroFiscal = React.useMemo(
-    () => ({ regimes: [], estabelecimentos: [], cnaes: [], feriados: dados.feriados, parametros: dados.parametros }),
+    () => ({ regimes: [], estabelecimentos: [], cnaes: [], feriados: dados.feriados, parametros: dados.parametros, receitasAnteriores: [] }),
     [dados.feriados, dados.parametros],
   );
 
@@ -367,6 +367,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           cidadeDaMatriz={matrizDa(guiaAberta.empresa_contabil_id, pjPorId, estabPorId)?.municipio ?? ""}
           cnpjDaMatriz={matrizDa(guiaAberta.empresa_contabil_id, pjPorId, estabPorId)?.cnpj ?? "—"}
           cadastroDasCotas={cadastroDasCotas}
+          hoje={dados.hoje}
           onClose={() => setAberta(null)}
           onAprovada={(texto) => {
             setAberta(null);
@@ -566,9 +567,9 @@ function LinhaGuia({
   onAbrir: () => void;
 }) {
   const debito = somaGrupo(g, ["debito"]);
-  const creditos = somaGrupo(g, ["credito", "estorno"]);
+  const creditos = somaGrupo(g, ["credito", "rateio_credito"]);
   const retido = somaGrupo(g, ["retido", "saldo", "compensacao"]);
-  const temEstorno = g.memoria.some((m) => m.grupo === "estorno");
+  const temRateio = g.memoria.some((m) => m.grupo === "rateio_credito");
   const baseRotulo = g.periodo === "trimestral" ? g.memoria.filter((m) => m.grupo === "base").slice(-1)[0] : null;
   const base = baseRotulo ? baseRotulo.valor : g.base;
   const aprovado = r2(g.aprovacoes.reduce((s, a) => s + a.valor_guia, 0));
@@ -597,7 +598,7 @@ function LinhaGuia({
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs">{debito ? moeda(debito) : "—"}</td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs text-emerald-700">
         {creditos ? moeda(creditos) : "—"}
-        {temEstorno && <span className="block font-sans text-[10px] font-semibold text-rose-700">com estorno 12.08</span>}
+        {temRateio && <span className="block font-sans text-[10px] font-semibold text-rose-700">sem a parte do 12.08</span>}
       </td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs text-emerald-700">{retido ? moeda(retido) : "—"}</td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums">

@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 
 import {
   aliquotasDaParcela,
+  aliquotasDaRemessa,
   baixaEmLoteSchema,
   centroDoItem,
   montarChamadas,
@@ -287,12 +288,35 @@ test("cada imposto arredondado em centavos sobre o que falta, como a baixa de um
   assert.deepEqual(retencoesPelaAprovacao(0.4, { PIS: 0.65 }).retencoes, []);
 });
 
-test("a parcela de PP só retém o que a aprovação gravou: verba e remessa saem cheias", () => {
-  assert.deepEqual(aliquotasDaParcela({ verba: false, emRemessa: false, aliquotas: PADRAO }), PADRAO);
-  assert.equal(aliquotasDaParcela({ verba: true, emRemessa: false, aliquotas: PADRAO }), null);
-  assert.equal(aliquotasDaParcela({ verba: false, emRemessa: true, aliquotas: PADRAO }), null);
-  assert.equal(aliquotasDaParcela({ verba: false, emRemessa: false, aliquotas: null }), null);
-  assert.equal(aliquotasDaParcela({ verba: false, emRemessa: false, aliquotas: { PIS: 0 } }), null);
+test("a parcela de PP retém o que a aprovação gravou; na remessa, o que a remessa descontou (decisão 145)", () => {
+  assert.deepEqual(aliquotasDaParcela({ verba: false, remessa: null, aliquotas: PADRAO }), PADRAO);
+  assert.equal(aliquotasDaParcela({ verba: true, remessa: null, aliquotas: PADRAO }), null);
+  assert.equal(aliquotasDaParcela({ verba: false, remessa: null, aliquotas: null }), null);
+  assert.equal(aliquotasDaParcela({ verba: false, remessa: null, aliquotas: { PIS: 0 } }), null);
+  // Remessa que pagou o valor cheio: sem retenção, mesmo com a da aprovação.
+  assert.equal(aliquotasDaParcela({ verba: false, remessa: { aliquotas: null }, aliquotas: PADRAO }), null);
+  // Remessa que pagou o líquido: valem as alíquotas dela, não as da aprovação de hoje.
+  const daRemessa = { PIS: 0.65, COFINS: 3 };
+  assert.deepEqual(aliquotasDaParcela({ verba: false, remessa: { aliquotas: daRemessa }, aliquotas: PADRAO }), daRemessa);
+  assert.equal(aliquotasDaParcela({ verba: true, remessa: { aliquotas: daRemessa }, aliquotas: PADRAO }), null);
+});
+
+test("as alíquotas que a remessa descontou saem do que o item guardou", () => {
+  assert.deepEqual(
+    aliquotasDaRemessa([
+      { imposto: "PIS", aliquota: 0.65, valor: 52 },
+      { imposto: "IRRF", aliquota: "1.5", valor: 120 },
+      { imposto: "INSS", aliquota: 11, valor: 1 },
+      { imposto: "COFINS", aliquota: 0, valor: 0 },
+    ]),
+    { PIS: 0.65, IRRF: 1.5 },
+  );
+  assert.equal(aliquotasDaRemessa([]), null);
+  assert.equal(aliquotasDaRemessa(null), null);
+  // A mesma conta da remessa e da baixa: o líquido bate.
+  const remessa = retencoesPelaAprovacao(8000, PADRAO);
+  const baixa = retencoesPelaAprovacao(8000, aliquotasDaRemessa(remessa.retencoes));
+  assert.equal(baixa.liquido, remessa.liquido);
 });
 
 test("PP sem retenção na aprovação: valor cheio, retenções vazias", () => {

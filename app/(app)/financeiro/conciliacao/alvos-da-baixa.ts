@@ -56,7 +56,10 @@ function motivoSemParcialDa(r: TituloRow): string | null {
       return "Folha só aceita a baixa do valor inteiro.";
   }
   if (r.eh_verba) return "PP de verba só aceita a baixa do valor inteiro.";
-  if (r.em_remessa) return "Pago pela remessa com o valor cheio: só a baixa do que falta.";
+  if (r.em_remessa)
+    return r.em_remessa_com_retencao
+      ? "Pago pela remessa: só a baixa do que falta."
+      : "Pago pela remessa com o valor cheio: só a baixa do que falta.";
   return null;
 }
 
@@ -99,7 +102,10 @@ export function alvoDaBaixaAPagar(
       baixando.origem === "recorrencia"
         ? {
             mostra: true,
-            motivo: baixando.em_remessa ? "Pago pela remessa com o valor cheio." : null,
+            motivo:
+              baixando.em_remessa && !baixando.em_remessa_com_retencao
+                ? "Pago pela remessa com o valor cheio."
+                : null,
           }
         : { mostra: false },
     ultimaRetencao: baixando.parte_id ? ultimasRetencoes[baixando.parte_id] ?? null : null,

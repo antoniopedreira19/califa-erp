@@ -199,7 +199,7 @@ export function vencimentoDasRetencoes(
 // Crédito de PIS/COFINS da NF do fornecedor
 // ---------------------------------------------------------------------------
 
-export type EstadoDoCredito = "sim" | "confirmar" | "nao";
+export type EstadoDoCredito = "sim" | "nao";
 
 export interface SituacaoDoCredito {
   estado: EstadoDoCredito;
@@ -221,19 +221,18 @@ export interface EntradaDoCredito {
   /** O financeiro tirou o crédito, com motivo. */
   retirado: boolean;
   motivoRetirado?: string | null;
-  /** O job já tem nota de saída? E alguma no CNAE cumulativo (12.08)? */
-  jobTemNotaDeSaida: boolean;
-  jobFaturadoNoCumulativo: boolean;
   aliquotaPis?: number;
   aliquotaCofins?: number;
 }
 
 /**
- * Regra aprovada (01 e 02/10/2026): todo custo de job com NF de fornecedor
- * pessoa jurídica gera crédito no mês da EMISSÃO da NF (inclusive Simples e
- * MEI); não gera se a PJ tomadora está no lucro presumido (cumulativo), se o
- * job foi faturado no 12.08 (estorno no mês da nota de saída), ou se o
- * financeiro tirou, com motivo. Sem nota de saída ainda, "a confirmar".
+ * Regra aprovada (01 e 02/10/2026, revista pela decisão 146 em 04/10/2026):
+ * todo custo com NF de fornecedor pessoa jurídica gera crédito no mês da
+ * EMISSÃO da NF (inclusive Simples e MEI); não gera se a PJ tomadora está no
+ * lucro presumido (cumulativo) ou se o financeiro tirou, com motivo. O valor
+ * aqui é o crédito cheio: a Apuração tira dele a parte da receita do mês no
+ * 12.08 (rateio proporcional, Lei 10.833/2003, art. 3º, § 8º, II). O job não
+ * entra na regra.
  */
 export function situacaoDoCredito(e: EntradaDoCredito): SituacaoDoCredito {
   const aPis = e.aliquotaPis ?? 1.65;
@@ -251,16 +250,12 @@ export function situacaoDoCredito(e: EntradaDoCredito): SituacaoDoCredito {
       gera: false,
       motivo: e.motivoRetirado ? `Marcado pelo financeiro como sem crédito: ${e.motivoRetirado}.` : "Marcado pelo financeiro como sem crédito.",
     };
-  if (e.jobFaturadoNoCumulativo)
-    return { ...base, estado: "nao", gera: false, motivo: "Job faturado no 82.30-0-01 · 12.08: custo sem crédito." };
-  if (!e.jobTemNotaDeSaida)
-    return {
-      ...base,
-      estado: "confirmar",
-      gera: true,
-      motivo: "O job ainda não tem nota de saída. Se for faturado no 12.08, o crédito é estornado no mês da nota.",
-    };
-  return { ...base, estado: "sim", gera: true, motivo: "Fornecedor PJ com NF e job faturado fora do 12.08." };
+  return {
+    ...base,
+    estado: "sim",
+    gera: true,
+    motivo: `Fornecedor PJ com NF. É o crédito cheio: se a PJ tomadora tiver nota no 12.08 ${mes ? `em ${mes}` : "no mês da emissão"}, a parte do 12.08 na receita do mês sai dele (rateio proporcional).`,
+  };
 }
 
 /** Os motivos da caixa "Não gera crédito" (a lista do protótipo aprovado). */

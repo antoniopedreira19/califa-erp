@@ -91,7 +91,6 @@ import {
   rotuloCurtoDoRegime,
   vencimentoDasGuiasFederais,
   type NfEmConferencia,
-  type NotasDoJobParaCredito,
 } from "@/lib/fiscal/nf-da-pp";
 import { aprovarPPComData, aprovarPPComNotaFiscal } from "./actions-titulos";
 import { FaixaQuemEnviou } from "./faixa-quem-enviou";
@@ -122,8 +121,6 @@ interface PPParaAprovar {
   /** Módulo fiscal: a NF em conferência na coluna "Dados da PP". Null na PP
    *  sem NF anexada (recibo, boleto, verba): sem as seções novas. */
   nf: NfEmConferencia | null;
-  /** Módulo fiscal: as notas de saída do job — o crédito olha. */
-  notasDoJob: NotasDoJobParaCredito;
   /** Módulo fiscal: a última PP aprovada com retenção do mesmo fornecedor. */
   ultimaRetencao: UltimaRetencao | null;
 }
@@ -139,12 +136,8 @@ const TEXTO_SEM_NF =
   "Preencha a data de emissão e o valor da NF em “Dados da PP”, olhando a nota ao lado: o valor é a base das retenções e a data, o mês do crédito.";
 
 /** Módulo fiscal: a pílula do crédito, por estado. */
-const PILULA_DO_CREDITO: Record<"sim" | "confirmar" | "nao", { texto: string; tom: string }> = {
+const PILULA_DO_CREDITO: Record<"sim" | "nao", { texto: string; tom: string }> = {
   sim: { texto: "Gera crédito", tom: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-  confirmar: {
-    texto: "Gera crédito · a confirmar",
-    tom: "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
-  },
   nao: { texto: "Não gera crédito", tom: "border-border bg-muted text-muted-foreground" },
 };
 
@@ -303,7 +296,6 @@ export function AprovarPPDialog({
       ? creditoDaNf({
           nf,
           cadastro,
-          notasDoJob: pp.notasDoJob,
           semCredito,
           motivoSemCredito,
           hoje: hoje.split("/").reverse().join("-"),
@@ -730,9 +722,10 @@ export function AprovarPPDialog({
           )}
 
           {/* Módulo fiscal: o crédito de PIS/COFINS desta NF. Automático
-              pela regra (fornecedor PJ com NF, em custo de job), no mês da
-              emissão; o estorno do 12.08 acontece no mês da nota de saída.
-              O financeiro só tira o crédito, e com motivo. */}
+              pela regra (fornecedor PJ com NF), no mês da emissão, pelo
+              valor cheio; a parte do 12.08 sai na Apuração, pelo rateio
+              proporcional do mês (decisão 146). O financeiro só tira o
+              crédito, e com motivo. */}
           {nf && (
             <div className="space-y-2 border-t border-border pt-3">
               <p className="text-sm font-bold">Crédito de PIS/COFINS</p>

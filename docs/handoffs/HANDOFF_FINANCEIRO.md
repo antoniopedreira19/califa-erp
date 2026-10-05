@@ -6645,3 +6645,64 @@ estendido a Contas a Receber em 31/08.**
   `aberto → rejeitado_financeiro` para quem está logado. Se acontecer de
   novo, o mesmo padrão serve, com as mesmas travas (sem lançamento, nota,
   envio ao faturamento, errata, save ou PP enviada).
+
+## ⚠️ Nota de 2026-10-04 — guia própria do 12.08 e CSLL 6012 (decisão 144)
+
+- **12.08 no lucro real:** o PIS e a COFINS das notas no 12.08 saem em guias
+  próprias, "PIS cumulativo · DARF 8109" e "COFINS cumulativa · DARF 2172"
+  (chaves `pis_cum|<PJ>|AAAA-MM` e `cofins_cum|…`), sem crédito. Antes, o
+  débito delas entrava na guia 6912/5856 e o crédito o abatia. A guia não
+  cumulativa ficou com o resto (notas fora do 12.08, créditos, estornos,
+  saldo credor), com a mesma chave de antes. Presumido (Hitlab) não mudou.
+- **CSLL do lucro real trimestral:** DARF 6012 (era 6773, o do ajuste anual).
+- Sem migration e sem dado a corrigir: nenhuma nota real no 12.08 e nenhuma
+  guia aprovada até 04/10.
+
+## ⚠️ Nota de 2026-10-04 (2) — remessa pelo líquido, complementar e DARF mínimo (decisão 145)
+
+- **Remessa CNAB:** a parcela de PP com retenção na aprovação sai pelo
+  líquido; o item guarda `retido` e `retencoes` (migration
+  `20261004100001`). A baixa da parcela em remessa é do que falta, e o
+  líquido dela tem de ser o que o banco pagou (`baixar_parcela_pp` confere
+  pelo `_item_da_remessa`). Remessa que pagou o valor cheio segue sem
+  retenção, como antes. **Para testes:** gerar remessa com PP de teste trava a
+  PP até cancelar a remessa (não há tela de cancelar).
+- **Complementar:** vence no vencimento legal da guia original
+  (`vencimentoDaComplementar`), não mais 5 dias depois da aprovação.
+- **DARF mínimo:** guia federal abaixo de R$ 10,00 fica zerada e passa para a
+  guia seguinte do mesmo código (`aplicarDarfMinimo`).
+
+## ⚠️ Nota de 2026-10-04 (3) — guia sem notas e LC 224 (decisão 145, itens 6 e 7)
+
+- **Guia aprovada que perde os fatos** (notas canceladas depois): não some
+  mais; sai zerada, como diferença para menos, com `AVISO_SEM_FATOS`. O que
+  fazer é à mão: em Impostos a Pagar, o título em aberto ganhou "Cancelar
+  imposto" (status `cancelado`, motivo de 10 caracteres,
+  `cancelar_imposto_a_pagar`, migration `20261004100002`). Pago não se
+  cancela. Quem lê `impostos_a_pagar` filtra `status = 'a_pagar'`.
+- **LC 224 na Hitlab:** `lc224DoTrimestre` segue a IN RFB 2.305 (art. 15,
+  redação da IN 2.306): limite de R$ 1,25 mi por trimestre com a sobra do ano,
+  ajuste no 4º trimestre (com a dedução do pago a mais) e a CSLL só desde
+  abril/2026. A receita de jan–set/2026 vem de `fiscal_receitas_anteriores`
+  (Cadastros › Impostos › Parâmetros; só admin e financeiro leem, migrations
+  `20261004100003` e `20261004100004`). **Ainda vazia:** até o financeiro
+  informar, vale o limite do próprio trimestre, e a guia avisa.
+
+## ⚠️ Nota de 2026-10-04 (4) — crédito pelo rateio proporcional (decisão 146)
+
+- **O crédito de PIS/COFINS não olha mais o job.** Toda NF de fornecedor PJ
+  com tomador no lucro real dá o crédito cheio no mês da emissão; a guia não
+  cumulativa tira a parte da receita do mês no 12.08 numa linha só
+  (`rateio_credito`, "Parte do 12.08 na receita do mês"), pela receita das
+  notas emitidas no mês em todos os CNPJs da PJ (Lei 10.833/2003, art. 3º,
+  § 8º, II). Saíram o "a confirmar", o estorno do job faturado no 12.08 e a
+  leitura das notas de saída dos jobs no Aprovar PP.
+- A estimativa de IRPJ/CSLL do lucro real usa o crédito de cada mês já com o
+  rateio do mês. Guia não cumulativa sem nota no mês reparte pelas empresas
+  dos jobs dos custos com crédito (a aprovação com valor precisa do rateio).
+- Mês sem receita nenhuma: o crédito fica inteiro (sem receita do 12.08 a
+  tirar) — **confirmar com a contabilidade**, junto do método declarado na
+  EFD-Contribuições de 2026 (0110), que vale para o ano inteiro.
+- Sem migration e sem dado a corrigir: nenhuma nota real com CNAE fiscal e
+  nenhuma guia aprovada até 04/10. O grupo da memória guardada nas aprovações
+  passou de `estorno` para `rateio_credito`; não havia aprovação gravada.
