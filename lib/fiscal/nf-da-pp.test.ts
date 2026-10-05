@@ -123,6 +123,7 @@ const CADASTRO: CadastroFiscal = {
     parametro("credito_pis", 1.65),
     parametro("credito_cofins", 7.6),
   ],
+  receitasAnteriores: [],
 };
 
 // --- A linha da PP -------------------------------------------------------

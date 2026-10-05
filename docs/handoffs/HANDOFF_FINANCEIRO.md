@@ -6672,3 +6672,19 @@ estendido a Contas a Receber em 31/08.**
 - **DARF mínimo:** guia federal abaixo de R$ 10,00 fica zerada e passa para a
   guia seguinte do mesmo código (`aplicarDarfMinimo`).
 
+## ⚠️ Nota de 2026-10-04 (3) — guia sem notas e LC 224 (decisão 145, itens 6 e 7)
+
+- **Guia aprovada que perde os fatos** (notas canceladas depois): não some
+  mais; sai zerada, como diferença para menos, com `AVISO_SEM_FATOS`. O que
+  fazer é à mão: em Impostos a Pagar, o título em aberto ganhou "Cancelar
+  imposto" (status `cancelado`, motivo de 10 caracteres,
+  `cancelar_imposto_a_pagar`, migration `20261004100002`). Pago não se
+  cancela. Quem lê `impostos_a_pagar` filtra `status = 'a_pagar'`.
+- **LC 224 na Hitlab:** `lc224DoTrimestre` segue a IN RFB 2.305 (art. 15,
+  redação da IN 2.306): limite de R$ 1,25 mi por trimestre com a sobra do ano,
+  ajuste no 4º trimestre (com a dedução do pago a mais) e a CSLL só desde
+  abril/2026. A receita de jan–set/2026 vem de `fiscal_receitas_anteriores`
+  (Cadastros › Impostos › Parâmetros; só admin e financeiro leem, migrations
+  `20261004100003` e `20261004100004`). **Ainda vazia:** até o financeiro
+  informar, vale o limite do próprio trimestre, e a guia avisa.
+

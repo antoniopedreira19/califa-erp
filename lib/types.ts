@@ -4003,6 +4003,24 @@ export interface FiscalParametro {
   updated_at: string;
 }
 
+/**
+ * Receita bruta recebida por PJ e trimestre antes do início da Apuração,
+ * informada à mão: a sobra de limite e o ajuste do ano da LC 224/2025 no
+ * lucro presumido (decisão 145, item 7).
+ */
+export interface FiscalReceitaAnterior {
+  id: string;
+  tenant_id: string;
+  empresa_contabil_id: string;
+  /** "2026-T1". */
+  trimestre: string;
+  receita_bruta: number;
+  observacao: string | null;
+  informado_por: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Retenção na fonte prevista na aprovação da PP (alíquota por imposto). */
 export interface PedidoCompraRetencao {
   id: string;
@@ -4061,7 +4079,8 @@ export interface FiscalAprovacao {
 }
 
 export type OrigemImpostoAPagar = "apuracao" | "diferenca" | "avulso";
-export type StatusImpostoAPagar = "a_pagar" | "pago";
+/** `cancelado`: título em aberto cancelado à mão, com motivo (decisão 145). */
+export type StatusImpostoAPagar = "a_pagar" | "pago" | "cancelado";
 
 export interface ImpostoAPagar {
   id: string;
@@ -4094,6 +4113,10 @@ export interface ImpostoAPagar {
   comprovante_path: string | null;
   baixado_por: string | null;
   baixado_em: string | null;
+  /** Decisão 145: o cancelamento à mão do título em aberto. Nulos fora dele. */
+  cancelado_em: string | null;
+  cancelado_por: string | null;
+  motivo_cancelamento: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;

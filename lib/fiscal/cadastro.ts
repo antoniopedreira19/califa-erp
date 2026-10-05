@@ -12,6 +12,7 @@ import type {
   FiscalEstabelecimento,
   FiscalFeriado,
   FiscalParametro,
+  FiscalReceitaAnterior,
   FiscalRegime,
 } from "@/lib/types";
 import type { CnaeDoCalculo, EstabelecimentoDoCalculo, ParametrosDeRetencao } from "./calculos";
@@ -24,17 +25,20 @@ export interface CadastroFiscal {
   cnaes: FiscalCnae[];
   feriados: FiscalFeriado[];
   parametros: FiscalParametro[];
+  /** A receita recebida antes da Apuração, por PJ e trimestre (LC 224; decisão 145). Só admin e financeiro leem. */
+  receitasAnteriores: FiscalReceitaAnterior[];
 }
 
 export async function carregarCadastroFiscal(supabase: SupabaseClient, tenantId: string): Promise<CadastroFiscal> {
-  const [regimes, estabelecimentos, cnaes, feriados, parametros] = await Promise.all([
+  const [regimes, estabelecimentos, cnaes, feriados, parametros, receitasAnteriores] = await Promise.all([
     supabase.from("fiscal_regimes").select("*").eq("tenant_id", tenantId).order("vigencia_inicio"),
     supabase.from("fiscal_estabelecimentos").select("*").eq("tenant_id", tenantId).order("ordem").order("nome"),
     supabase.from("fiscal_cnaes").select("*").eq("tenant_id", tenantId).order("codigo").order("subitem", { nullsFirst: true }),
     supabase.from("fiscal_feriados").select("*").eq("tenant_id", tenantId).order("data"),
     supabase.from("fiscal_parametros").select("*").eq("tenant_id", tenantId).order("chave").order("vigencia_inicio"),
+    supabase.from("fiscal_receitas_anteriores").select("*").eq("tenant_id", tenantId).order("trimestre"),
   ]);
-  for (const r of [regimes, estabelecimentos, cnaes, feriados, parametros]) {
+  for (const r of [regimes, estabelecimentos, cnaes, feriados, parametros, receitasAnteriores]) {
     if (r.error) console.error("[fiscal.cadastro]", r.error.message);
   }
   return {
@@ -49,6 +53,10 @@ export async function carregarCadastroFiscal(supabase: SupabaseClient, tenantId:
     })),
     feriados: (feriados.data ?? []) as FiscalFeriado[],
     parametros: ((parametros.data ?? []) as FiscalParametro[]).map((p) => ({ ...p, valor: Number(p.valor) })),
+    receitasAnteriores: ((receitasAnteriores.data ?? []) as FiscalReceitaAnterior[]).map((r) => ({
+      ...r,
+      receita_bruta: Number(r.receita_bruta),
+    })),
   };
 }
 

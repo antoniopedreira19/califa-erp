@@ -408,6 +408,13 @@ export function MemoriaDialog({
                         }: ${g.delta > 0 ? "a diferença vira uma guia complementar" : "a diferença fica como saldo a compensar"}.`
                       : "Confira com a guia que a contabilidade mandou. Vale o valor da guia; o calculado fica guardado ao lado."}
                   </p>
+                  {diferenca && g.delta < 0 && (
+                    <p className="mt-1 text-[12px] text-muted-foreground">
+                      O imposto diminuiu {moeda(Math.abs(g.delta))}. Se o título desta guia ainda não foi pago, corrija o
+                      valor ou cancele o imposto em Impostos a Pagar, com o motivo; se já foi pago, a diferença fica a
+                      recuperar, com a contabilidade. Aprovar aqui registra a diferença, sem gerar título.
+                    </p>
+                  )}
                   {diferenca && g.delta > 0 && (
                     <p className="mt-1 text-[12px] text-muted-foreground">
                       A complementar vence em {dataBr(vencimentoDaComplementar(g))}, a data da guia original.

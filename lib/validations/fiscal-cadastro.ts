@@ -428,3 +428,21 @@ export const novaVigenciaParametrosSchema = z
   });
 
 export type NovaVigenciaParametrosInput = z.input<typeof novaVigenciaParametrosSchema>;
+
+/**
+ * A receita bruta recebida por uma PJ do lucro presumido num trimestre antes
+ * do início da Apuração (LC 224/2025; decisão 145, item 7): a sobra de limite
+ * e o ajuste do ano usam a receita do ano inteiro.
+ */
+export const receitaAnteriorSchema = z.object({
+  empresa_contabil_id: z.string().uuid("Escolha a empresa."),
+  trimestre: z.string().regex(/^\d{4}-T[1-4]$/, "Trimestre inválido."),
+  receita_bruta: z
+    .number({ invalid_type_error: "Use só números." })
+    .refine((v) => Number.isFinite(v), "Use só números.")
+    .refine((v) => v >= 0, "A receita não pode ser negativa.")
+    .refine((v) => v <= 1e11, "Valor alto demais."),
+  observacao: z.string().trim().max(500, "Observação longa demais (até 500 caracteres).").nullable(),
+});
+
+export type ReceitaAnteriorInput = z.input<typeof receitaAnteriorSchema>;

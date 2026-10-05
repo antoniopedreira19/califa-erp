@@ -39,7 +39,7 @@ const MATRIZ: FiscalEstabelecimento = {
   created_at: EM,
   updated_at: EM,
 };
-const CAD: CadastroFiscal = { regimes: [], estabelecimentos: [MATRIZ], cnaes: [], feriados: [], parametros: [] };
+const CAD: CadastroFiscal = { regimes: [], estabelecimentos: [MATRIZ], cnaes: [], feriados: [], parametros: [], receitasAnteriores: [] };
 
 /** Três partes desiguais: o arredondamento tem de fechar na última. */
 const RATEIO: RateioDaGuia[] = [

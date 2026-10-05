@@ -135,6 +135,7 @@ const CAD: CadastroFiscal = {
     feriado("2026-12-08", "Nossa Senhora da Conceição da Praia", "Salvador"),
   ],
   parametros: PARAMETROS,
+  receitasAnteriores: [],
 };
 
 // ---------------------------------------------------------------------------

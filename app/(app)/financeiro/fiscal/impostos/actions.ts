@@ -132,7 +132,9 @@ export async function darBaixaImposto(
     return { ok: false, message: "Não foi possível dar baixa. Tente novamente." };
   }
   if (!atual) return { ok: false, message: "Imposto não encontrado." };
-  if (atual.status !== "a_pagar") return { ok: false, message: "Este imposto já está pago." };
+  if (atual.status !== "a_pagar") {
+    return { ok: false, message: atual.status === "cancelado" ? "Este imposto foi cancelado." : "Este imposto já está pago." };
+  }
   if (Math.abs(Number(atual.valor) - d.valor_confirmado) >= 0.005) {
     return {
       ok: false,
@@ -189,6 +191,51 @@ export async function cancelarBaixaImposto(
     return {
       ok: false,
       message: mensagemDoBanco(error.message, "Não foi possível cancelar a baixa. Tente novamente."),
+    };
+  }
+
+  revalidarImpostos();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Cancelar o título em aberto (decisão 145, item 6)
+// ---------------------------------------------------------------------------
+
+const cancelarTituloSchema = z.object({
+  imposto_id: z.string().uuid(),
+  motivo: z
+    .string()
+    .trim()
+    .min(10, "Explique o motivo do cancelamento em pelo menos 10 caracteres.")
+    .max(1000),
+});
+
+/**
+ * Cancela, à mão e com motivo, um imposto ainda em aberto — por exemplo,
+ * quando as notas da guia aprovada foram canceladas e o imposto deixou de
+ * ser devido. O pago não se cancela: fica a recuperar, com a contabilidade.
+ * O banco grava quem, quando e por quê (`fiscal.imposto_cancelado`).
+ */
+export async function cancelarImposto(
+  input: z.input<typeof cancelarTituloSchema>,
+): Promise<{ ok: true } | Err> {
+  const parsed = cancelarTituloSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const gate = await checarGateFinanceiro(parsed.data.imposto_id, "imposto_a_pagar.cancelar");
+  if (!gate.ok) return gate;
+
+  const { error } = await gate.supabase.rpc("cancelar_imposto_a_pagar", {
+    p_imposto_id: parsed.data.imposto_id,
+    p_motivo: parsed.data.motivo,
+  });
+  if (error) {
+    console.error("[impostos.cancelar]", error.message);
+    return {
+      ok: false,
+      message: mensagemDoBanco(error.message, "Não foi possível cancelar o imposto. Tente novamente."),
     };
   }
 

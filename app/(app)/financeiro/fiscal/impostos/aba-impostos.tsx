@@ -25,6 +25,7 @@ import {
   Plus,
   Search,
   Wallet,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -41,6 +42,7 @@ import {
   AvulsoDialog,
   BaixaImpostoDialog,
   BaixaRegistradaDialog,
+  CancelarImpostoDialog,
   CorrigirDialog,
   br,
   hojeIso,
@@ -52,12 +54,17 @@ import { paraOLoteImposto } from "./lote";
 
 type Filtro = "a_pagar" | "vencidos" | "pagos" | "todos";
 
-type Status = "pago" | "vencido" | "a_pagar";
+type Status = "pago" | "vencido" | "a_pagar" | "cancelado";
 
 function statusDo(t: ImpostoDaLista, hoje: string): Status {
   if (t.status === "pago") return "pago";
+  // Decisão 145: cancelado à mão, com motivo; só aparece em "Todos".
+  if (t.status === "cancelado") return "cancelado";
   return t.vencimento < hoje ? "vencido" : "a_pagar";
 }
+
+/** Em aberto: nem pago, nem cancelado. */
+const estaEmAberto = (t: ImpostoDaLista) => t.status === "a_pagar";
 
 export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const router = useRouter();
@@ -67,6 +74,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const [busca, setBusca] = React.useState("");
   const [baixandoId, setBaixandoId] = React.useState<string | null>(null);
   const [corrigindoId, setCorrigindoId] = React.useState<string | null>(null);
+  const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [vendoId, setVendoId] = React.useState<string | null>(null);
   const [criando, setCriando] = React.useState(false);
   /** "Criar e dar baixa": a baixa abre quando o imposto novo chega da página. */
@@ -107,7 +115,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const filtrados = base
     .filter((t) => {
       const s = statusDo(t, hoje);
-      if (filtro === "a_pagar") return s !== "pago";
+      if (filtro === "a_pagar") return s === "a_pagar" || s === "vencido";
       if (filtro === "vencidos") return s === "vencido";
       if (filtro === "pagos") return s === "pago";
       return true;
@@ -118,7 +126,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
         : a.vencimento.localeCompare(b.vencimento),
     );
 
-  const abertos = titulos.filter((t) => t.status !== "pago");
+  const abertos = titulos.filter(estaEmAberto);
   const limite = somaDias(hoje, 7);
   const emAberto = r2(abertos.reduce((s, t) => s + t.valor, 0));
   const semana = r2(
@@ -132,16 +140,17 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
       .reduce((s, t) => s + t.valor + t.multa_juros, 0),
   );
   const contagem = (p: string) =>
-    titulos.filter((t) => (p === "todos" || t.empresa_contabil_id === p) && t.status !== "pago").length;
+    titulos.filter((t) => (p === "todos" || t.empresa_contabil_id === p) && estaEmAberto(t)).length;
 
   // Baixa em lote: só os impostos em aberto que a lista mostra.
-  const elegiveis = filtrados.filter((t) => t.status !== "pago").map((t) => t.id);
+  const elegiveis = filtrados.filter(estaEmAberto).map((t) => t.id);
   const selecao = useSelecao(elegiveis);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const selecionados: TituloParaLote[] = filtrados.filter((t) => selecao.marcado(t.id)).map(paraOLoteImposto);
 
   const baixando = porId(baixandoId);
   const corrigindo = porId(corrigindoId);
+  const cancelando = porId(cancelandoId);
   const vendo = porId(vendoId);
 
   return (
@@ -265,14 +274,18 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
             {filtrados.map((t) => {
               const s = statusDo(t, hoje);
               const pago = s === "pago";
+              const cancelado = s === "cancelado";
+              const aberto = !pago && !cancelado;
               const marcado = selecao.marcado(t.id);
               const corrigidoDe = t.correcoes[0]?.de;
               return (
                 <tr
                   key={t.id}
-                  onClick={pago ? () => setVendoId(t.id) : () => selecao.alternar(t.id)}
+                  onClick={pago ? () => setVendoId(t.id) : aberto ? () => selecao.alternar(t.id) : undefined}
                   className={cn(
-                    "cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40",
+                    "border-b border-border transition-colors last:border-0",
+                    !cancelado && "cursor-pointer hover:bg-accent/40",
+                    cancelado && "text-muted-foreground",
                     marcado && "bg-california-red/[0.04]",
                   )}
                 >
@@ -280,10 +293,10 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
                     className="py-3 pl-4 pr-1 text-center"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!pago) selecao.alternar(t.id);
+                      if (aberto) selecao.alternar(t.id);
                     }}
                   >
-                    {!pago && <CaixaDaLinha marcado={marcado} onAlternar={() => selecao.alternar(t.id)} />}
+                    {aberto && <CaixaDaLinha marcado={marcado} onAlternar={() => selecao.alternar(t.id)} />}
                   </td>
                   <td className="px-2 py-3 text-center">
                     <span
@@ -296,6 +309,9 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
                     </span>
                     {pago && (
                       <span className="block whitespace-nowrap text-[10.5px] text-emerald-700">pago {br(t.pago_em)}</span>
+                    )}
+                    {cancelado && (
+                      <span className="block whitespace-nowrap text-[10.5px]">cancelado {br(t.cancelado_em)}</span>
                     )}
                   </td>
                   <td className="px-3 py-3">
@@ -367,6 +383,12 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
                   <td className="px-2 py-3 text-center">
                     {pago ? (
                       <Pilula tom="verde">Pago</Pilula>
+                    ) : cancelado ? (
+                      <span
+                        title={`Cancelado${t.cancelado_por_nome ? ` por ${t.cancelado_por_nome}` : ""}: ${t.motivo_cancelamento ?? ""}`}
+                      >
+                        <Pilula tom="cinza">Cancelado</Pilula>
+                      </span>
                     ) : s === "vencido" ? (
                       <Pilula tom="vermelho">Vencido</Pilula>
                     ) : (
@@ -375,8 +397,20 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
                   </td>
                   <td className="px-3 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      {!pago && (
+                      {aberto && (
                         <>
+                          <button
+                            type="button"
+                            title="Cancelar o imposto (deixou de ser devido), com motivo"
+                            aria-label="Cancelar imposto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCancelandoId(t.id);
+                            }}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                          </button>
                           <button
                             type="button"
                             title="Corrigir o valor (guia da contabilidade diferente)"
@@ -462,6 +496,18 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
           setToast(mensagem);
         }}
       />
+      {cancelando && (
+        <CancelarImpostoDialog
+          imposto={cancelando}
+          onClose={() => setCancelandoId(null)}
+          onCancelado={(mensagem) => {
+            setCancelandoId(null);
+            selecao.limpar();
+            setToast(mensagem);
+            router.refresh();
+          }}
+        />
+      )}
       {corrigindo && (
         <CorrigirDialog
           imposto={corrigindo}
