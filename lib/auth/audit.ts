@@ -341,6 +341,20 @@ export type AuditAction =
   | "ferias.lancamento.cancelado_pelo_rh"
   | "ferias.lancamento.lancado_direto_pelo_rh"
   | "ferias.recibo.gerado"
+  // Benefícios (RH) — Fase 1
+  | "beneficio.vinculo.criado"
+  | "beneficio.vinculo.modo_alterado"
+  | "beneficio.vinculo.encerrado"
+  | "beneficio.dependente.criado"
+  | "beneficio.dependente.editado"
+  | "beneficio.dependente.desativado"
+  | "beneficio.dependente.incluido_em_plano"
+  | "beneficio.dependente.removido_de_plano"
+  | "beneficio.catalogo.criado"
+  | "beneficio.catalogo.editado"
+  | "beneficio.faixa.criada"
+  | "beneficio.faixa.editada"
+  | "beneficio.faixa.removida"
   | "acao_negada";
 
 export interface AuditPayload {

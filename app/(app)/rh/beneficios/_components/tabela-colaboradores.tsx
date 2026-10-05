@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { HeartPulse, Smile, Users2 } from "lucide-react";
 import type { LinhaColaboradorBeneficios } from "@/lib/queries/beneficios";
+import type { BeneficioTipo } from "@/lib/types";
 import { DrawerColaboradorBeneficios } from "./drawer-colaborador";
+
+type BeneficioOpcao = {
+  id: string;
+  nome: string;
+  tipo: BeneficioTipo;
+  beneficio_base_id: string | null;
+};
 
 const formatarBrl = (n: number) =>
   n.toLocaleString("pt-BR", {
@@ -25,10 +33,12 @@ export function TabelaColaboradores({
   linhas,
   ano,
   mes,
+  beneficios,
 }: {
   linhas: LinhaColaboradorBeneficios[];
   ano: number;
   mes: number;
+  beneficios: BeneficioOpcao[];
 }) {
   const [colaboradorAberto, setColaboradorAberto] = useState<string | null>(null);
 
@@ -103,6 +113,7 @@ export function TabelaColaboradores({
           ano={ano}
           mes={mes}
           onClose={() => setColaboradorAberto(null)}
+          beneficios={beneficios}
         />
       )}
     </>
