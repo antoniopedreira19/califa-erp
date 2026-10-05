@@ -15,6 +15,12 @@ import { dividirEmParcelas, parcelasFecham } from "@/lib/calculos/pps-item";
  * igual). Então a soma não sai de 100% — o único erro possível é as
  * anteriores passarem de 100% e não sobrar nada para a última.
  *
+ * Sem valor da PP (R$ Unit., QT ou D/M vazio) não há total para dividir:
+ * o R$ das parcelas fica travado em "—" e só o % se escolhe. Em 05/10/2026
+ * o R$ digitável nesse estado deixava a última parcela negativa (0 − o
+ * digitado) sem erro nenhum, e o "não preencheu o valor pelo %" era o
+ * mesmo trio vazio.
+ *
  * O servidor continua recebendo só o R$ de cada parcela. O % é do
  * formulário: ao reabrir a PP ele se refaz do R$ gravado.
  */
@@ -173,7 +179,8 @@ function mudarValor(
         ? {
             ...p,
             valor: bruto,
-            // Sem valor da PP ainda (trio vazio), o % fica como estava.
+            // O campo de R$ só aparece com valor da PP; a guarda fica
+            // contra a divisão por zero.
             percentual: valorPP > 0 ? texto((numero(bruto) / valorPP) * 100) : p.percentual,
           }
         : p,
@@ -182,15 +189,32 @@ function mudarValor(
   );
 }
 
+/** Parcela que não pode ir: % zerado, ou R$ zerado/negativo quando a PP
+ *  já tem valor. O R$ pesa à parte porque o % é arredondado a duas casas
+ *  e pode ficar positivo com o R$ já no zero. */
+function parcelaInvalida(p: ParcelaLocal, valorPP: number): boolean {
+  return numero(p.percentual) <= 0 || (valorPP > 0 && numero(p.valor) <= 0);
+}
+
 /** A trava do "Gerar": a frase do erro, ou null. */
-export function problemaDasParcelas(parcelas: ParcelaLocal[]): string | null {
+export function problemaDasParcelas(
+  parcelas: ParcelaLocal[],
+  valorPP: number,
+): string | null {
   if (parcelas.length <= 1) return null;
   const anteriores = parcelas.slice(0, -1);
-  if (numero(parcelas[parcelas.length - 1].percentual) <= 0) {
+  const ultima = parcelas[parcelas.length - 1];
+  if (numero(ultima.percentual) <= 0) {
     return `As parcelas anteriores já somam ${formatPercentual(soma(anteriores, "percentual"))}. Deixe espaço para a última parcela.`;
+  }
+  if (valorPP > 0 && numero(ultima.valor) <= 0) {
+    return `As parcelas anteriores já somam ${formatCurrency(soma(anteriores, "valor"), "BRL")} de ${formatCurrency(valorPP, "BRL")}. Deixe espaço para a última parcela.`;
   }
   if (anteriores.some((p) => numero(p.percentual) <= 0)) {
     return "Toda parcela precisa de um percentual acima de 0%.";
+  }
+  if (anteriores.some((p) => parcelaInvalida(p, valorPP))) {
+    return "Toda parcela precisa de um valor acima de R$ 0,00.";
   }
   return null;
 }
@@ -277,7 +301,11 @@ export function ParcelasDaPPField({
   const n = parcelas.length;
   const totalPercentual = soma(parcelas, "percentual");
   const totalValor = soma(parcelas, "valor");
-  const problema = problemaDasParcelas(parcelas);
+  const problema = problemaDasParcelas(parcelas, valorPP);
+  // Trio vazio: sem total para dividir, o R$ das parcelas espera.
+  const semValor = valorPP <= 0;
+  const tituloSemValor =
+    "O valor de cada parcela sai do % assim que R$ Unit., QT e D/M estiverem preenchidos.";
   // O total fica vermelho só quando a SOMA não fecha; parcela zerada ou
   // negativa com a soma em 100% já está marcada na própria linha.
   const somaFecha =
@@ -298,7 +326,7 @@ export function ParcelasDaPPField({
       </div>
       {parcelas.map((p, i) => {
         const ultima = i === n - 1;
-        const invalido = numero(p.percentual) <= 0;
+        const invalido = parcelaInvalida(p, valorPP);
         return (
           <div key={i} className="grid grid-cols-[36px_1fr_120px_1fr] items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">
@@ -322,10 +350,14 @@ export function ParcelasDaPPField({
                   {p.percentual} %
                 </CaixaTravada>
                 <CaixaTravada
-                  titulo="A última parcela fecha o valor da PP: é o que falta das anteriores."
+                  titulo={
+                    semValor
+                      ? tituloSemValor
+                      : "A última parcela fecha o valor da PP: é o que falta das anteriores."
+                  }
                   invalido={invalido}
                 >
-                  {texto(numero(p.valor))}
+                  {semValor ? "—" : texto(numero(p.valor))}
                 </CaixaTravada>
               </>
             ) : (
@@ -339,16 +371,25 @@ export function ParcelasDaPPField({
                     setParcelas((prev) => mudarPercentual(prev, i, bruto, valorPP))
                   }
                 />
-                <Input
-                  aria-label={`Valor da parcela ${i + 1}`}
-                  value={p.valor}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setParcelas((prev) => mudarValor(prev, i, e.target.value, valorPP))
-                  }
-                  className="no-spinner text-right font-mono"
-                  inputMode="decimal"
-                />
+                {semValor ? (
+                  <CaixaTravada titulo={tituloSemValor} invalido={false}>
+                    —
+                  </CaixaTravada>
+                ) : (
+                  <Input
+                    aria-label={`Valor da parcela ${i + 1}`}
+                    value={p.valor}
+                    disabled={disabled}
+                    onChange={(e) =>
+                      setParcelas((prev) => mudarValor(prev, i, e.target.value, valorPP))
+                    }
+                    className={cn(
+                      "no-spinner text-right font-mono",
+                      invalido && "border-california-red/60 text-california-red",
+                    )}
+                    inputMode="decimal"
+                  />
+                )}
               </>
             )}
           </div>
@@ -381,10 +422,21 @@ export function ParcelasDaPPField({
             !somaFecha && "text-california-red",
           )}
         >
-          {formatPercentual(totalPercentual)} · {formatCurrency(totalValor, "BRL")} /{" "}
-          {formatCurrency(valorPP, "BRL")}
+          {formatPercentual(totalPercentual)}
+          {!semValor && (
+            <>
+              {" "}
+              · {formatCurrency(totalValor, "BRL")} / {formatCurrency(valorPP, "BRL")}
+            </>
+          )}
         </span>
       </div>
+      {semValor && (
+        <p className="text-[11px] text-muted-foreground">
+          Preencha R$ Unit., QT e D/M para ver o valor de cada parcela. O % já pode ser
+          escolhido.
+        </p>
+      )}
       {problema && <p className="text-[11px] font-medium text-california-red">{problema}</p>}
     </div>
   );

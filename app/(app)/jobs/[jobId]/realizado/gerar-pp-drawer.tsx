@@ -799,7 +799,7 @@ export function GerarPPDrawer({
       setErro("Toda parcela precisa de uma data de vencimento.");
       return false;
     }
-    const problemaParcelas = problemaDasParcelas(parcelas);
+    const problemaParcelas = problemaDasParcelas(parcelas, valorPP);
     if (problemaParcelas) {
       setErro(problemaParcelas);
       return false;
