@@ -4,9 +4,16 @@ import { ShieldPlus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
-import { kpisTenantBeneficios } from "@/lib/queries/beneficios";
+import {
+  kpisTenantBeneficios,
+  listarColaboradoresComBeneficios,
+  listarBeneficiosDoCatalogo,
+} from "@/lib/queries/beneficios";
+import type { BeneficioModoCusteio } from "@/lib/types";
 import { KpisBeneficios } from "./_components/kpis-beneficios";
 import { SeletorCompetencia } from "./_components/seletor-competencia";
+import { FiltrosColaboradores } from "./_components/filtros-colaboradores";
+import { TabelaColaboradores } from "./_components/tabela-colaboradores";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +28,19 @@ function normalizarTab(valor: string | undefined): Tab {
   return valor === "catalogo" ? "catalogo" : "colaboradores";
 }
 
+const MODOS_VALIDOS: BeneficioModoCusteio[] = [
+  "rateado",
+  "integral_empresa",
+  "integral_empresa_com_upgrade",
+];
+
+function normalizarModo(valor: string | undefined): BeneficioModoCusteio | undefined {
+  if (!valor) return undefined;
+  return MODOS_VALIDOS.includes(valor as BeneficioModoCusteio)
+    ? (valor as BeneficioModoCusteio)
+    : undefined;
+}
+
 export default async function BeneficiosPage({
   searchParams,
 }: {
@@ -28,6 +48,9 @@ export default async function BeneficiosPage({
     tab?: string;
     ano?: string;
     mes?: string;
+    busca?: string;
+    beneficioId?: string;
+    modoCusteio?: string;
   };
 }) {
   const session = await requireSession();
@@ -39,12 +62,28 @@ export default async function BeneficiosPage({
   const ano = Number(searchParams.ano) || hoje.getFullYear();
   const mes = Number(searchParams.mes) || hoje.getMonth() + 1;
   const tab: Tab = normalizarTab(searchParams.tab);
+  const busca = searchParams.busca?.trim() || undefined;
+  const beneficioId = searchParams.beneficioId?.trim() || undefined;
+  const modoCusteio = normalizarModo(searchParams.modoCusteio);
 
-  const kpis = await kpisTenantBeneficios({
-    tenantId: session.activeTenant.id,
-    ano,
-    mes,
-  });
+  const [kpis, catalogo, linhas] = await Promise.all([
+    kpisTenantBeneficios({
+      tenantId: session.activeTenant.id,
+      ano,
+      mes,
+    }),
+    listarBeneficiosDoCatalogo({ tenantId: session.activeTenant.id }),
+    tab === "colaboradores"
+      ? listarColaboradoresComBeneficios({
+          tenantId: session.activeTenant.id,
+          ano,
+          mes,
+          busca,
+          beneficioId,
+          modoCusteio,
+        })
+      : Promise.resolve([]),
+  ]);
 
   return (
     <div className="space-y-6 max-w-[1480px] mx-auto">
@@ -88,8 +127,14 @@ export default async function BeneficiosPage({
 
       {/* Conteúdo da tab */}
       {tab === "colaboradores" && (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center text-sm text-muted-foreground">
-          Em breve (S3): tabela de colaboradores com planos ativos, busca e filtros.
+        <div className="space-y-4">
+          <FiltrosColaboradores
+            busca={busca}
+            beneficioId={beneficioId}
+            modoCusteio={modoCusteio}
+            beneficios={catalogo.filter((b) => b.ativo).map((b) => ({ id: b.id, nome: b.nome }))}
+          />
+          <TabelaColaboradores linhas={linhas} ano={ano} mes={mes} />
         </div>
       )}
 
