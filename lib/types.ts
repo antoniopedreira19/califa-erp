@@ -4144,3 +4144,120 @@ export interface ImpostoAPagarCorrecao {
   criado_por: string;
   created_at: string;
 }
+
+// ============================================================================
+// Benefícios — Fase 1 (RH)
+// Spec: docs/modulos/rh/50-beneficios.md
+// Modelo: docs/modulos/rh/51-beneficios-modelo-de-dados.md
+// Migration: 20261006000001_beneficios_fundacao.sql
+// ============================================================================
+
+export type BeneficioTipo = "saude" | "dental";
+export type BeneficioModeloPreco = "faixa_etaria" | "flat";
+export type BeneficioModoCusteio =
+  | "rateado"
+  | "integral_empresa"
+  | "integral_empresa_com_upgrade";
+
+export interface Beneficio {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  operadora: string;
+  tipo: BeneficioTipo;
+  modelo_preco: BeneficioModeloPreco;
+  percentual_empresa_titular: number;
+  percentual_colaborador_dependentes: number;
+  /** Preenchido quando modelo_preco='flat'. Para 'faixa_etaria' é null. */
+  valor_flat: number | null;
+  /** Benefício base para o modo integral_empresa_com_upgrade. Especial aponta pra Direto. */
+  beneficio_base_id: string | null;
+  codigo_externo: string | null;
+  ativo: boolean;
+  observacao: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BeneficioFaixaPreco {
+  id: string;
+  beneficio_id: string;
+  idade_min: number;
+  /** null = sem limite superior (ex: faixa 59+). */
+  idade_max: number | null;
+  valor: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Dependente {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  nome: string;
+  cpf: string;
+  data_nascimento: string;
+  /** Livre no MVP: 'conjuge', 'filho', 'filha', 'pai', 'mae', 'irmao', 'irma', 'outro'. */
+  parentesco: string;
+  ativo: boolean;
+  data_inicio: string;
+  /** null = ativo. Preenchido quando dependente sai. */
+  data_fim: string | null;
+  observacao: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ColaboradorBeneficio {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  beneficio_id: string;
+  modo_custeio: BeneficioModoCusteio;
+  data_inicio: string;
+  /** null = vigente. */
+  data_fim: string | null;
+  observacao: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ColaboradorBeneficioDependente {
+  id: string;
+  colaborador_beneficio_id: string;
+  dependente_id: string;
+  data_inicio: string;
+  data_fim: string | null;
+  created_at: string;
+}
+
+/**
+ * Retorno da função SQL fn_beneficios_custo_mensal(ano, mes, colaborador_id).
+ * Uma linha por vínculo ativo na competência.
+ */
+export interface BeneficioCustoMensalLinha {
+  vinculo_id: string;
+  beneficio_id: string;
+  beneficio_nome: string;
+  beneficio_tipo: BeneficioTipo;
+  modo_custeio: BeneficioModoCusteio;
+  idade_titular: number;
+  valor_integral_titular: number;
+  valor_empresa_titular: number;
+  valor_colaborador_titular: number;
+  qtde_dependentes: number;
+  valor_dependentes_total: number;
+  valor_desconto_folha_total: number;
+}
+
+/**
+ * Retorno de fn_beneficios_custo_mensal_tenant(tenant_id, ano, mes).
+ * Agregado para os KPIs da página /rh/beneficios.
+ */
+export interface BeneficioKpisTenant {
+  qtde_vinculos_saude: number;
+  qtde_vinculos_dental: number;
+  custo_total_empresa: number;
+  custo_total_colaboradores: number;
+}
