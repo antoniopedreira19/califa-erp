@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-01
 **Decidido por:** Tiago
-**Status:** aceita — entregue em 01/10/2026
+**Status:** aceita — entregue em 01/10/2026; revisada em 05/10/2026 (§7)
 **Migration:** nenhuma (a PP continua gravando só o R$ de cada parcela;
 o % é do formulário)
 
@@ -112,3 +112,42 @@ financeiro, corrigida para R$ 1.200 e reenviada — o banco gravou R$ 360 +
 R$ 840. Cancelada no fim. No TES-1008/26, a PP-00091 aberta em edição sem
 salvar: 60/40, R$ Unit. 12.000 manteve 60/40 (7.200 + 4.800), 25% na
 primeira deixou 75% na última.
+
+## 7. Revisão de 05/10/2026 — parcelas antes do valor da PP
+
+Dois retornos de uso, os dois com R$ Unit., QT e D/M ainda vazios (valor
+da PP = R$ 0):
+
+1. *"Coloco o percentual e ele não coloca o valor."* — R$ 0 × 30% = R$ 0.
+   O R$ só aparecia depois de preencher o trio, sem nada na tela dizendo
+   isso.
+2. *"Coloco o valor manual e a segunda parcela fica negativa."* — com a PP
+   em R$ 0 o % não tinha de onde sair e ficava como estava; a última
+   fechava em R$ 0 − R$ 4.250 = **−R$ 4.250**, com o % em 50% e **sem
+   erro nenhum**. Ao preencher o trio, o R$ digitado sumia (as parcelas se
+   refaziam pelo %).
+
+O que mudou:
+
+- **Sem valor da PP, o R$ das parcelas fica travado em "—"** (cadeado,
+  como a última) e o bloco avisa: *"Preencha R$ Unit., QT e D/M para ver o
+  valor de cada parcela. O % já pode ser escolhido."* O rodapé mostra só
+  o % até haver valor. O % continua digitável: escolher 30/70 antes e
+  preencher o trio depois dá o R$ de cada parcela pelo % escolhido.
+- **A trava do "Gerar" passou a olhar também o R$** (`problemaDasParcelas`
+  recebe o valor da PP): a última parcela com R$ zerado ou negativo barra
+  com *"As parcelas anteriores já somam R$ X de R$ Y. Deixe espaço para a
+  última parcela."*, e qualquer outra com R$ zerado barra com *"Toda
+  parcela precisa de um valor acima de R$ 0,00."* O % é arredondado a duas
+  casas e podia ficar positivo com o R$ já no zero; o servidor já recusava
+  parcela não positiva, mas a tela não avisava antes.
+- Fica como estava: com o valor da PP preenchido, digitar na primeira um
+  R$ acima do total deixa a última vermelha (−% e −R$) com a frase do
+  §2 — é o aviso de que não sobrou nada para ela, e o "Gerar" fica barrado.
+
+Conferência (05/10/2026), no TES-1008/26 · Item 5, como administrador,
+sem gerar PP: 2 parcelas com o trio vazio mostraram "—" e o aviso; 30% na
+primeira e depois R$ 8.500 × 1 × 1 deram R$ 2.550 + R$ 5.950; R$ 4.250
+digitado voltou a 50/50; R$ 9.000 deixou a última em −5,88% / −R$ 500 com
+a trava; apagar o D/M voltou o R$ a "—" mantendo 30/70. Nenhuma PP
+gravada.
