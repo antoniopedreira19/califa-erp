@@ -4666,6 +4666,16 @@ código publicado logo depois (`3305751`).
   Antes redividia em partes iguais.
 - Componente novo: `realizado/parcelas-da-pp.tsx`. Ver decisão 138.
 
+## ⚠️ Nota de 2026-10-05 — parcelas da PP antes do valor (decisão 138, §7)
+
+- Com R$ Unit., QT ou D/M vazio, o R$ de cada parcela fica travado em "—"
+  e o bloco pede o trio; o % continua escolhível e vira R$ quando o trio é
+  preenchido. Antes o R$ era digitável com a PP em R$ 0, e a última
+  parcela ficava negativa (0 − o digitado) sem erro.
+- A trava do "Gerar" também olha o R$: última parcela com R$ zerado ou
+  negativo, ou outra com R$ zerado, barra. `problemaDasParcelas(parcelas,
+  valorPP)` ganhou o segundo argumento.
+
 ## ⚠️ Nota de 2026-10-03 — "Meus" da lista de jobs inclui o produtor (decisão 036)
 
 - O "Meus" de `/jobs` era só `jobs.responsavel_id` (o GP), e o produtor

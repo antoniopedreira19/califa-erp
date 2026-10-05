@@ -152,9 +152,10 @@ export const SELECT_DEVOLUCAO_DE_VERBA = `
         )
 `;
 
-/** `cnab_remessas_itens`: o que já foi para uma remessa. Quem consulta tira
- *  a remessa cancelada (`.neq("remessa.status", "cancelado")`). */
-export const SELECT_ITEM_EM_REMESSA = "origem_id, remessa:cnab_remessas!inner(status)";
+/** `cnab_remessas_itens`: o que já foi para uma remessa, e quanto ela reteve
+ *  (decisão 145). Quem consulta tira a remessa cancelada
+ *  (`.neq("remessa.status", "cancelado")`). */
+export const SELECT_ITEM_EM_REMESSA = "origem_id, retido, remessa:cnab_remessas!inner(status)";
 
 /** `faturas_cartao` fechadas ou pagas: a fatura desce como UM título. */
 export const SELECT_FATURA_DO_TITULO =
@@ -500,8 +501,11 @@ export function montarTitulosAPagar(e: {
     "pp_verba_devolucao_id",
     estornosPorBaixa,
   );
-  const emRemessa = new Set(
-    ((e.remessasItens ?? []) as Array<{ origem_id: string }>).map((i) => i.origem_id),
+  const itensEmRemessa = (e.remessasItens ?? []) as Array<{ origem_id: string; retido: number | string | null }>;
+  const emRemessa = new Set(itensEmRemessa.map((i) => i.origem_id));
+  // A remessa que pagou o líquido (decisão 145): a baixa repete a retenção dela.
+  const remessaComRetencao = new Set(
+    itensEmRemessa.filter((i) => Number(i.retido ?? 0) > 0).map((i) => i.origem_id),
   );
 
   for (const l of (e.baixas ?? []) as unknown as Array<{
@@ -593,6 +597,7 @@ export function montarTitulosAPagar(e: {
         baixas: baixasDaParcela.get(par.id) ?? [],
         baixado: totalBaixado(baixasDaParcela.get(par.id) ?? []),
         em_remessa: emRemessa.has(par.id),
+        em_remessa_com_retencao: remessaComRetencao.has(par.id),
         eh_verba: pp.verba_producao,
         parte_id: pp.fornecedor_id || null,
         // A parcela roteada para o cartão carrega a forma da PP mesmo
@@ -709,6 +714,7 @@ export function montarTitulosAPagar(e: {
       baixas: baixasDaAvulsa.get(a.id) ?? [],
       baixado: totalBaixado(baixasDaAvulsa.get(a.id) ?? []),
       em_remessa: emRemessa.has(a.id),
+      em_remessa_com_retencao: remessaComRetencao.has(a.id),
       eh_verba: false,
       parte_id: a.fornecedor_id ?? null,
       // Se paga, prefere a forma registrada na baixa (realizado); senão,
@@ -845,6 +851,7 @@ export function montarTitulosAPagar(e: {
         baixas: baixasDoDesembolso.get(par.id) ?? [],
         baixado: totalBaixado(baixasDoDesembolso.get(par.id) ?? []),
         em_remessa: emRemessa.has(par.id),
+        em_remessa_com_retencao: remessaComRetencao.has(par.id),
         eh_verba: false,
         parte_id: null,
         // Se paga, usa a forma registrada na baixa; senão, null (planejado
@@ -939,6 +946,7 @@ export function montarTitulosAPagar(e: {
       baixas: baixasDaDevolucao.get(dev.id) ?? [],
       baixado: totalBaixado(baixasDaDevolucao.get(dev.id) ?? []),
       em_remessa: false,
+      em_remessa_com_retencao: false,
       eh_verba: false,
       parte_id: null,
       forma_pagamento: dev.pago_em ? baixa?.forma_pagamento ?? null : null,
@@ -1029,6 +1037,7 @@ export function montarTitulosAPagar(e: {
       baixas: [],
       baixado: f.status === "paga" ? Number(f.valor_cobrado ?? 0) : 0,
       em_remessa: false,
+      em_remessa_com_retencao: false,
       eh_verba: false,
       parte_id: null,
       // A fatura NÃO é um título "no cartão": ela é o que se paga PELO

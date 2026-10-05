@@ -60,7 +60,7 @@ import { ppStatusLabel, situacaoDaVerba, type PPStatus } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
-import { nfInicial, SEM_NOTAS_DO_JOB, type NfEmConferencia } from "@/lib/fiscal/nf-da-pp";
+import { nfInicial, type NfEmConferencia } from "@/lib/fiscal/nf-da-pp";
 import type { PPRow } from "./pedidos-compra-list";
 import { PPDossie, type AbaDossie } from "./pp-dossie";
 import { AprovarPPDialog } from "./aprovar-pp-dialog";
@@ -617,7 +617,6 @@ export function PPTela({
           fornecedorNome: pp.fornecedor_nome,
           regimeDoFornecedor: pp.regime_do_fornecedor?.regime ?? null,
           nf: nfDaTela,
-          notasDoJob: fiscal.notasDosJobs[pp.job_id] ?? SEM_NOTAS_DO_JOB,
           ultimaRetencao: fiscal.ultimasRetencoes[pp.fornecedor_id] ?? null,
         }}
         cadastro={fiscal.cadastro}

@@ -51,6 +51,7 @@ export async function listarCnaesDoGrupo(): Promise<CnaesDoGrupoResult> {
     cnaes: (data ?? []) as FiscalCnae[],
     feriados: [],
     parametros: [],
+    receitasAnteriores: [],
   });
   return {
     ok: true,

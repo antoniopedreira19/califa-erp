@@ -17,7 +17,7 @@
 
 import * as React from "react";
 import { format } from "date-fns";
-import { AlertCircle, AlertTriangle, CreditCard, Eye, Pencil, Plus } from "lucide-react";
+import { AlertCircle, AlertTriangle, CreditCard, Eye, Pencil, Plus, XCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +44,7 @@ import { RateioRegionalEditor } from "@/app/(app)/financeiro/contas-a-pagar/rate
 import { CampoAnexo, LinkAnexo, useCampoDeAnexo } from "@/components/financeiro/anexo-de-imposto";
 import {
   cancelarBaixaImposto,
+  cancelarImposto,
   corrigirImposto,
   criarImpostoAvulso,
   darBaixaImposto,
@@ -686,6 +687,103 @@ export function CorrigirDialog({
             className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
           >
             {pending ? "Salvando..." : "Salvar correção"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cancelar o título em aberto (decisão 145, item 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cancela, à mão e com motivo, um imposto ainda em aberto: o caso típico é
+ * a guia aprovada cujas notas foram canceladas depois (a Apuração mostra a
+ * diferença para menos). Nada se cancela sozinho; o financeiro decide.
+ */
+export function CancelarImpostoDialog({
+  imposto: t,
+  onClose,
+  onCancelado,
+}: {
+  imposto: ImpostoDaLista;
+  onClose: () => void;
+  onCancelado: (mensagem: string) => void;
+}) {
+  const [pending, startTransition] = React.useTransition();
+  const [motivo, setMotivo] = React.useState("");
+  const [erro, setErro] = React.useState<string | null>(null);
+
+  function fechar() {
+    if (!pending) onClose();
+  }
+
+  function confirmar() {
+    if (motivo.trim().length < 10) return setErro("Explique o motivo do cancelamento (mínimo 10 caracteres).");
+    setErro(null);
+    startTransition(async () => {
+      const res = await cancelarImposto({ imposto_id: t.id, motivo: motivo.trim() }).catch(() => ({
+        ok: false as const,
+        message: "Não foi possível cancelar o imposto. Tente novamente.",
+      }));
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onCancelado(`${t.titulo} de ${moeda(t.valor)} cancelado. O motivo fica registrado no título.`);
+    });
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && fechar()}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <XCircle className="h-5 w-5 text-california-red" />
+            Cancelar imposto
+          </DialogTitle>
+          <DialogDescription>
+            Para o imposto que deixou de ser devido — por exemplo, quando as notas da guia aprovada foram canceladas. O
+            título sai de Impostos a Pagar e do fluxo de caixa, e o motivo fica registrado.
+          </DialogDescription>
+        </DialogHeader>
+        <Resumo t={t} />
+        {erro && <Erro>{erro}</Erro>}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold">
+            Motivo <span className="text-california-red">*</span>
+          </label>
+          <Textarea
+            rows={3}
+            value={motivo}
+            onChange={(e) => {
+              setMotivo(e.target.value);
+              setErro(null);
+            }}
+            placeholder="Ex.: a NF 2051 foi cancelada depois da aprovação; o imposto deixou de ser devido."
+          />
+        </div>
+        <p className="text-[11.5px] text-muted-foreground">
+          Imposto já pago não se cancela: o que foi pago fica a recuperar, com a contabilidade.
+        </p>
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={fechar}
+            disabled={pending}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+          >
+            Voltar
+          </button>
+          <button
+            type="button"
+            onClick={confirmar}
+            disabled={pending}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
+          >
+            {pending ? "Cancelando..." : "Cancelar o imposto"}
           </button>
         </div>
       </DialogContent>

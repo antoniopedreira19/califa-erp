@@ -7,6 +7,7 @@
  *   1. Valida sessão + permissão
  *   2. Busca conta bancária (com convênio) + empresa contábil (endereço)
  *   3. Pra cada item da lista, resolve origem → destinatário → forma de pagamento
+ *      (a parcela de PP com retenção na aprovação sai pelo líquido: decisão 145)
  *   4. Separa itens elegíveis dos rejeitados (motivo específico por item)
  *   5. Aloca sequencial via RPC atômica
  *   6. Monta arquivo via biblioteca lib/cnab/santander
@@ -30,7 +31,9 @@ import { normalizarChavePix, problemaDaChavePix } from "@/lib/pix";
 import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import { aplicarForaDoCadastroNaRemessa } from "@/lib/cnab/fora-do-cadastro";
 import { lerPagamentoForaDoCadastro } from "@/lib/data/foto-pagamento-da-pp";
-import type { PagamentoForaDoCadastroDaPP } from "@/lib/types";
+import { aliquotasDaParcela, retencoesPelaAprovacao } from "@/lib/financeiro/baixa-em-lote";
+import { montarRetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
+import type { PagamentoForaDoCadastroDaPP, RetencaoDaBaixa } from "@/lib/types";
 import {
   gerarArquivo,
   type FormaLancamento,
@@ -94,7 +97,10 @@ export type GerarRemessaCnabResult =
       /** Conteúdo do arquivo codificado em Base64 pra download no browser. */
       conteudoBase64: string;
       qtdItens: number;
+      /** O que o arquivo paga (o líquido das PPs com retenção). */
       valorTotal: number;
+      /** Decisão 145: a retenção descontada das PPs, que fica para a agência recolher. */
+      retidoTotal: number;
       /** Itens que foram rejeitados na validação (ficam fora do arquivo). */
       itensRejeitados: CnabItemRejeitado[];
     }
@@ -111,7 +117,12 @@ export type GerarRemessaCnabResult =
 interface OrigemResolvida {
   origemTipo: CnabOrigemTipo;
   origemId: string;
+  /** O que o arquivo paga: o que falta, menos o retido. */
   valor: number;
+  /** Decisão 145: a retenção da aprovação da PP, descontada do pagamento.
+   *  0 e [] no resto (e na PP sem retenção). */
+  retido: number;
+  retencoes: RetencaoDaBaixa[];
   descricao: string;
   /** UUID do destinatário resolvido (fornecedor ou colaborador). */
   destinatarioId: string;
@@ -348,6 +359,7 @@ export async function gerarRemessaCnab(
     (acc, e) => acc + Number(e.origem.valor),
     0,
   );
+  const retidoTotal = Math.round(elegiveis.reduce((acc, e) => acc + e.origem.retido, 0) * 100) / 100;
 
   // 8. Grava cnab_remessas + itens
   const { data: remessaRow, error: remessaErr } = await supabase
@@ -382,6 +394,8 @@ export async function gerarRemessaCnab(
     destinatario_tipo: e.origem.destinatarioTipo,
     destinatario_id: e.origem.destinatarioId,
     valor: e.origem.valor.toFixed(2),
+    retido: e.origem.retido.toFixed(2),
+    retencoes: e.origem.retencoes,
     data_pagamento: input.dataPagamento,
   }));
   const { error: itensErr } = await supabase
@@ -401,6 +415,8 @@ export async function gerarRemessaCnab(
       sequencial,
       qtd_itens: elegiveis.length,
       valor_total: valorTotal.toFixed(2),
+      retido_total: retidoTotal.toFixed(2),
+      itens_com_retencao: elegiveis.filter((e) => e.origem.retido > 0).length,
       conta_bancaria_id: conta.id,
       rejeitados: rejeitados.length,
     },
@@ -416,6 +432,7 @@ export async function gerarRemessaCnab(
     conteudoBase64: Buffer.from(conteudo, "ascii").toString("base64"),
     qtdItens: elegiveis.length,
     valorTotal,
+    retidoTotal,
     itensRejeitados: rejeitados,
   };
 }
@@ -490,6 +507,8 @@ async function resolverOrigem(
         origemTipo: item.origemTipo,
         origemId: data.id,
         valor: falta,
+        retido: 0,
+        retencoes: [],
         descricao: data.descricao,
         destinatarioId: dest.id,
         destinatarioTipo: dest.tipo,
@@ -502,7 +521,7 @@ async function resolverOrigem(
       .from("pedidos_compra_parcelas")
       .select(
         // Decisão 137: o meio fora do cadastro e a foto em que ele está.
-        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id, pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo, pagamento_fora_do_cadastro_aprovado_em, fornecedor_banco_codigo, fornecedor_banco_nome, fornecedor_agencia, fornecedor_agencia_dv, fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta, fornecedor_pix_tipo, fornecedor_pix_chave)",
+        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id, verba_producao, retencoes:pedidos_compra_retencoes(imposto, aliquota), pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo, pagamento_fora_do_cadastro_aprovado_em, fornecedor_banco_codigo, fornecedor_banco_nome, fornecedor_agencia, fornecedor_agencia_dv, fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta, fornecedor_pix_tipo, fornecedor_pix_chave)",
       )
       .eq("id", item.origemId)
       .eq("tenant_id", tenantId)
@@ -516,6 +535,8 @@ async function resolverOrigem(
           status: string;
           servico: string;
           fornecedor_id: string | null;
+          verba_producao: boolean | null;
+          retencoes: Array<{ imposto: string; aliquota: number | string | null }> | null;
           pagamento_fora_do_cadastro_meio: string | null;
           pagamento_fora_do_cadastro_motivo: string | null;
           pagamento_fora_do_cadastro_aprovado_em: string | null;
@@ -557,12 +578,26 @@ async function resolverOrigem(
       Number(data.valor),
     );
     if (falta <= 0.004) return { ok: false, message: "Parcela já baixada." };
+    // Decisão 145 (04/10/2026): quem paga retém. A remessa desconta a
+    // retenção da aprovação da PP — a mesma conta da baixa — e paga o
+    // líquido; o item guarda o retido, e a baixa repete.
+    const { retencoes, retido, liquido } = retencoesPelaAprovacao(
+      falta,
+      aliquotasDaParcela({
+        verba: pp.verba_producao === true,
+        remessa: null,
+        aliquotas: montarRetencaoDaAprovacao(pp.retencoes ?? [], null)?.aliquotas ?? null,
+      }),
+    );
+    if (liquido <= 0.004) return { ok: false, message: "A retenção da aprovação é maior que o que falta pagar." };
     return {
       ok: true,
       data: {
         origemTipo: "pp",
         origemId: data.id,
-        valor: falta,
+        valor: liquido,
+        retido,
+        retencoes,
         descricao: `PP ${pp.servico.slice(0, 100)}`,
         destinatarioId: pp.fornecedor_id,
         destinatarioTipo: "fornecedor",
@@ -607,6 +642,8 @@ async function resolverOrigem(
       origemTipo: "desembolso",
       origemId: data.id,
       valor: Number(data.valor),
+      retido: 0,
+      retencoes: [],
       descricao: `Desembolso ${d.descricao.slice(0, 100)}`,
       destinatarioId: dest.id,
       destinatarioTipo: dest.tipo,

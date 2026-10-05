@@ -44,6 +44,9 @@ de hoje, cada nota e cada PP já entrem com o dado que a Apuração vai usar.
   82.30-0-01 · 12.08 (estorno no mês da nota de saída — ⚠️ o Tiago pediu
   para revisar esta regra ao fim da implementação) ou quando o financeiro
   tira, com motivo. Sem nota de saída, "a confirmar".
+  ⚠️ **04/10/2026 — substituída pela decisão 146:** o job saiu da regra; o
+  crédito é cheio no mês da emissão e a guia tira a parte da receita do mês
+  no 12.08 (rateio proporcional). Não há mais "a confirmar" nem estorno.
 - **Retenções:** regime normal (ou não informado) → PIS 0,65%, COFINS 3%,
   CSLL 1% (DARF 5952) e IRRF 1,5% (DARF 1708), no mês do pagamento, com
   vencimento no dia 20 do mês seguinte (antecipa); Simples/MEI → sem

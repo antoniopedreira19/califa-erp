@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
-import type { Cota, ItemMemoria } from "@/lib/fiscal/apuracao";
+import { vencimentoDaComplementar, type Cota, type ItemMemoria } from "@/lib/fiscal/apuracao";
 import { dataBr, r2 } from "@/lib/fiscal/datas";
 import { aprovarGuia, urlDaGuiaAprovada } from "./actions";
 import { JUSTIFICATIVA_MINIMA, calculadoParaAGuia, cotasDaAprovacao } from "./aprovacao";
@@ -34,7 +34,7 @@ const GRUPOS: Array<{ grupos: ItemMemoria["grupo"][]; titulo: string }> = [
   { grupos: ["base"], titulo: "Base de cálculo do trimestre" },
   { grupos: ["debito"], titulo: "Débito" },
   { grupos: ["credito"], titulo: "Créditos sobre custos (NF de fornecedor emitida no mês)" },
-  { grupos: ["estorno"], titulo: "Estorno de crédito (job faturado no 12.08)" },
+  { grupos: ["rateio_credito"], titulo: "Rateio proporcional do crédito (receita do mês no 12.08)" },
   { grupos: ["info"], titulo: "Custos sem crédito" },
   { grupos: ["retido"], titulo: "Retido pelo cliente" },
   { grupos: ["compensacao"], titulo: "ISS a compensar" },
@@ -62,6 +62,7 @@ export function MemoriaDialog({
   cidadeDaMatriz,
   cnpjDaMatriz,
   cadastroDasCotas,
+  hoje,
   onClose,
   onAprovada,
 }: {
@@ -73,6 +74,8 @@ export function MemoriaDialog({
   cnpjDaMatriz: string;
   /** Só os feriados e os parâmetros: o que as cotas precisam. */
   cadastroDasCotas: CadastroFiscal;
+  /** Hoje em São Paulo ("AAAA-MM-DD"): diz se a complementar já nasce vencida. */
+  hoje: string;
   onClose: () => void;
   onAprovada: (mensagem: string) => void;
 }) {
@@ -264,7 +267,7 @@ export function MemoriaDialog({
                               className={cn(
                                 "whitespace-nowrap px-3 py-1.5 text-right font-mono",
                                 !ehBase && m.valor < 0 && "text-emerald-700",
-                                !ehBase && m.grupo === "estorno" && "text-rose-700",
+                                !ehBase && m.grupo === "rateio_credito" && "text-rose-700",
                                 m.grupo === "info" && "text-muted-foreground",
                               )}
                             >
@@ -405,6 +408,24 @@ export function MemoriaDialog({
                         }: ${g.delta > 0 ? "a diferença vira uma guia complementar" : "a diferença fica como saldo a compensar"}.`
                       : "Confira com a guia que a contabilidade mandou. Vale o valor da guia; o calculado fica guardado ao lado."}
                   </p>
+                  {diferenca && g.delta < 0 && (
+                    <p className="mt-1 text-[12px] text-muted-foreground">
+                      O imposto diminuiu {moeda(Math.abs(g.delta))}. Se o título desta guia ainda não foi pago, corrija o
+                      valor ou cancele o imposto em Impostos a Pagar, com o motivo; se já foi pago, a diferença fica a
+                      recuperar, com a contabilidade. Aprovar aqui registra a diferença, sem gerar título.
+                    </p>
+                  )}
+                  {diferenca && g.delta > 0 && (
+                    <p className="mt-1 text-[12px] text-muted-foreground">
+                      A complementar vence em {dataBr(vencimentoDaComplementar(g))}, a data da guia original.
+                      {vencimentoDaComplementar(g) < hoje && (
+                        <span className="font-semibold text-amber-700">
+                          {" "}
+                          Essa data já passou: a guia sai com multa e juros, que entram na baixa.
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 {temComp && (
