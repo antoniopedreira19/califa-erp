@@ -134,7 +134,19 @@ export default async function BeneficiosPage({
             modoCusteio={modoCusteio}
             beneficios={catalogo.filter((b) => b.ativo).map((b) => ({ id: b.id, nome: b.nome }))}
           />
-          <TabelaColaboradores linhas={linhas} ano={ano} mes={mes} />
+          <TabelaColaboradores
+            linhas={linhas}
+            ano={ano}
+            mes={mes}
+            beneficios={catalogo
+              .filter((b) => b.ativo)
+              .map((b) => ({
+                id: b.id,
+                nome: b.nome,
+                tipo: b.tipo,
+                beneficio_base_id: b.beneficio_base_id,
+              }))}
+          />
         </div>
       )}
 
