@@ -18,7 +18,7 @@ import { enviarPlanilha } from "./enviar-planilha";
 import { descartarEnvioPlanilha } from "./envio-actions";
 import { FormatoDaPlanilha } from "./formato-da-planilha";
 import { TabelaDeAbas } from "./tabela-de-abas";
-import { ResumoDaAba, type OrigemDoPlanejado } from "./resumo-da-aba";
+import { ResumoDaAba, perguntaOPlanejado, type OrigemDoPlanejado } from "./resumo-da-aba";
 
 /**
  * O modal de importação de planilha (decisão 110, 27/09/2026) — no lugar
@@ -53,13 +53,6 @@ const BTN_SEC =
   "inline-flex items-center gap-2 rounded-lg border border-border bg-white px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-accent";
 const BTN_PRI =
   "inline-flex items-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover hover:shadow-brand disabled:opacity-50";
-
-/** A sugestão do planejado (decisão do Tiago, 14/09/2026): planilha só com
- *  o orçado sugere manter o da anterior; a que traz planejado, o dela. */
-function origemSugerida(leitura: Leitura, aba: string): OrigemDoPlanejado {
-  const p = leitura.previews[aba]?.planejado;
-  return p && p.versao_anterior !== null && !p.planilha_tem_planejado ? "anterior" : "planilha";
-}
 
 export function ImportarPlanilhaDialog({
   open,
@@ -99,7 +92,9 @@ export function ImportarPlanilhaDialog({
   const [envio, setEnvio] = React.useState<EnvioDaPlanilha | null>(null);
   const [leitura, setLeitura] = React.useState<Leitura | null>(null);
   const [aba, setAba] = React.useState("");
-  const [origem, setOrigem] = React.useState<OrigemDoPlanejado>("planilha");
+  // De onde vem o planejado (decisão 076). Nada vem marcado — nem pelo
+  // arquivo, como era até 05/10/2026: quem importa lê e escolhe.
+  const [origem, setOrigem] = React.useState<OrigemDoPlanejado | null>(null);
   const [certeza, setCerteza] = React.useState(false);
   const [arrastando, setArrastando] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -120,7 +115,7 @@ export function ImportarPlanilhaDialog({
     setEnvio(null);
     setLeitura(null);
     setAba("");
-    setOrigem("planilha");
+    setOrigem(null);
     setCerteza(false);
     setArrastando(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -163,14 +158,15 @@ export function ImportarPlanilhaDialog({
     }
     setLeitura(lida);
     setAba(lida.sugerida);
-    setOrigem(origemSugerida(lida, lida.sugerida));
+    setOrigem(null);
     setEtapa("conferir");
   }
 
+  // Outra aba é outra planilha: a escolha do planejado recomeça.
   function escolherAba(nome: string) {
     if (!leitura || nome === aba) return;
     setAba(nome);
-    setOrigem(origemSugerida(leitura, nome));
+    setOrigem(null);
   }
 
   const apaga =
@@ -182,7 +178,8 @@ export function ImportarPlanilhaDialog({
     setCerteza(false);
     setErro(null);
     setEtapa("gravando");
-    const r = await gravar({ envio, aba, origem_planejado: origem });
+    // Sem a pergunta (sem versão anterior, ou Interno), vale a planilha.
+    const r = await gravar({ envio, aba, origem_planejado: origem ?? "planilha" });
     if (!r.ok) {
       setErro(r.message);
       setEtapa("conferir");
@@ -196,6 +193,7 @@ export function ImportarPlanilhaDialog({
 
   const preview = leitura?.previews[aba] ?? null;
   const conferindo = etapa === "conferir" && leitura && preview;
+  const faltaEscolher = !!preview && perguntaOPlanejado(preview, interno) && origem === null;
 
   return (
     <Dialog open={open} onOpenChange={mudarAberto}>
@@ -328,7 +326,8 @@ export function ImportarPlanilhaDialog({
             <button
               type="button"
               onClick={() => (apaga ? setCerteza(true) : void executarGravacao())}
-              className={BTN_PRI}
+              disabled={faltaEscolher}
+              className={cn(BTN_PRI, "disabled:cursor-not-allowed disabled:hover:shadow-sm")}
             >
               <CheckCircle2 className="h-4 w-4" />
               {rotuloGravar}

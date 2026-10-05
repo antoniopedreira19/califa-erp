@@ -58,6 +58,12 @@ function OpcaoPlanejado({
   );
 }
 
+/** A pergunta do planejado só aparece com versão anterior e fora do
+ *  Interno. O modal usa a mesma conta para travar o botão de gravar. */
+export function perguntaOPlanejado(preview: PreviewDaAba, interno: boolean): boolean {
+  return preview.planejado.versao_anterior !== null && !interno;
+}
+
 export function ResumoDaAba({
   preview,
   origemPlanejado,
@@ -67,7 +73,8 @@ export function ResumoDaAba({
   mostrarHonorarios,
 }: {
   preview: PreviewDaAba;
-  origemPlanejado: OrigemDoPlanejado;
+  /** `null` enquanto quem importa não escolheu: nada vem marcado (05/10/2026). */
+  origemPlanejado: OrigemDoPlanejado | null;
   onOrigemPlanejado: (origem: OrigemDoPlanejado) => void;
   /** Serviço Interno (decisão 105): o planejado é o orçado, sem pergunta. */
   interno: boolean;
@@ -78,10 +85,18 @@ export function ResumoDaAba({
   mostrarHonorarios: boolean;
 }) {
   const p = preview.planejado;
-  const perguntar = p.versao_anterior !== null && !interno;
+  const perguntar = perguntaOPlanejado(preview, interno);
   const herdando = perguntar && origemPlanejado === "anterior";
+  // Sem escolha, a tabela não adianta nenhuma das duas: planejado em "—".
+  const semEscolha = perguntar && origemPlanejado === null;
   const planejadoDoGrupo = (g: PreviewDaAba["grupos"][number]) =>
-    interno ? g.total_bruto : herdando ? g.total_planejado_herdado : g.total_planejado;
+    interno
+      ? g.total_bruto
+      : semEscolha
+        ? 0
+        : herdando
+          ? g.total_planejado_herdado
+          : g.total_planejado;
 
   const totalOrcado = preview.grupos.reduce((s, g) => s + g.total_bruto, 0);
   const totalPlanejado = preview.grupos.reduce((s, g) => s + planejadoDoGrupo(g), 0);
@@ -107,6 +122,18 @@ export function ResumoDaAba({
         <fieldset className="space-y-2 rounded-xl border border-border p-4">
           <legend className="px-1 text-xs font-semibold text-foreground">Planejado</legend>
           <OpcaoPlanejado
+            marcado={origemPlanejado === "planilha"}
+            onEscolher={() => onOrigemPlanejado("planilha")}
+            titulo="Usar o planejado da planilha"
+            detalhe={
+              p.planilha_tem_planejado
+                ? mensal
+                  ? "Os valores do bloco PLANEJADO da planilha — na planilha interna, pelas colunas do cabeçalho."
+                  : "Os valores das colunas H · R$, I · QT e J · D/M."
+                : "A planilha só tem o orçado: o planejado de todas as linhas fica zerado."
+            }
+          />
+          <OpcaoPlanejado
             marcado={origemPlanejado === "anterior"}
             onEscolher={() => onOrigemPlanejado("anterior")}
             titulo={`Manter o planejado da v${p.versao_anterior}`}
@@ -119,18 +146,6 @@ export function ResumoDaAba({
                 ? ` ${semPar === 1 ? "A outra entra zerada" : `As outras ${semPar} entram zeradas`}.`
                 : ""
             }`}
-          />
-          <OpcaoPlanejado
-            marcado={origemPlanejado === "planilha"}
-            onEscolher={() => onOrigemPlanejado("planilha")}
-            titulo="Usar o planejado da planilha"
-            detalhe={
-              p.planilha_tem_planejado
-                ? mensal
-                  ? "Os valores do bloco PLANEJADO da planilha — na planilha interna, pelas colunas do cabeçalho."
-                  : "Os valores das colunas H · R$, I · QT e J · D/M."
-                : "A planilha só tem o orçado: o planejado de todas as linhas fica zerado."
-            }
           />
         </fieldset>
       )}
