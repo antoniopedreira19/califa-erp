@@ -3657,8 +3657,10 @@ outro. Regras e conferência na
 [076](../decisions/076-a-importacao-da-versao-pergunta-de-onde-vem-o-planejado.md).
 Nova versão e sobrescrever perguntam: **manter o planejado da versão
 anterior** (vigente, ou a própria no sobrescrever) nas linhas casadas, ou
-**usar o da planilha**. A tela vem marcada pelo arquivo. O casamento é o da
-importação do projeto: id oculto, e sem id grupo + descrição.
+**usar o da planilha**. Nada vem marcado: quem importa escolhe (até
+05/10/2026 a tela vinha marcada pelo arquivo — ver a nota daquele dia). O
+casamento é o da importação do projeto: id oculto, e sem id grupo +
+descrição.
 
 | Arquivo | O quê |
 |---|---|
@@ -4990,3 +4992,19 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Sem migration e sem permissão nova. Testado no "Orçamento de Teste"
   (TES-1020/26, TES-1021/26 e TES-1021/26-C1, todos cancelados no fim).
 - Ver decisão 143.
+
+## ⚠️ Nota de 2026-10-05 — a pergunta do planejado na importação não vem marcada (revisão da decisão 076)
+
+- No "Importar planilha" da versão, **"Usar o planejado da planilha" vem
+  primeiro** e "Manter o planejado da vN" depois, e **nenhuma vem
+  marcada** — pedido do Tiago, para forçar os produtores a ler e escolher.
+- Sem escolha: botão de gravar desabilitado e planejado, rentabilidade e %
+  da lista de grupos em "—". O quadro continua igual, sem destaque e sem
+  texto pedindo a leitura (recusados pelo Tiago na aprovação). Trocar de
+  aba recomeça a escolha.
+- Sem versão anterior, ou no Interno, a pergunta não aparece e nada muda.
+- Código: `_importacao/resumo-da-aba.tsx` (ordem, `origemPlanejado` aceita
+  `null`, `perguntaOPlanejado`) e `_importacao/importar-planilha-dialog.tsx`
+  (estado começa `null`, `origemSugerida` removida, botão travado). Sem
+  migration; a action não mudou.
+- Ver decisão 076, "Revisão de 2026-10-05".

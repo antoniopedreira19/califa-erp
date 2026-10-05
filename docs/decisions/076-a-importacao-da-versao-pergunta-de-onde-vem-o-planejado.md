@@ -1,7 +1,7 @@
 # 076 — A importação da versão pergunta de onde vem o planejado
 
 **Data:** 2026-09-14
-**Status:** aceita
+**Status:** aceita (revisada em 2026-10-05: nada vem marcado)
 **Contexto:** a planilha que vai para o cliente só tem o orçado. Ele mexe,
 devolve, e a agência precisa de uma versão nova com o orçado dele **e o
 planejado que ela já tinha montado**. O "Importar" do projeto já fazia isso
@@ -16,15 +16,14 @@ nacional e para o internacional ([072](072-orcamento-internacional.md)).
 > **O "Importar planilha" da versão — nova versão e sobrescrever — pergunta
 > de onde vem o planejado:**
 >
+> - **"Usar o planejado da planilha"** — vale o do arquivo (zerado se ele só
+>   tem o orçado), que é como a importação sempre funcionou;
 > - **"Manter o planejado da vN"** — a linha casada com a versão anterior
 >   herda o planejado dela, com a categoria e a marca de save; a linha sem
->   par entra zerada;
-> - **"Usar o planejado da planilha"** — vale o do arquivo (zerado se ele só
->   tem o orçado), que é como a importação sempre funcionou.
+>   par entra zerada.
 >
-> A tela já vem marcada pelo arquivo: planilha com planejado sugere a dela;
-> planilha só com o orçado sugere manter o da anterior. Quem importa
-> confirma.
+> **Nenhuma das duas vem marcada:** quem importa lê e escolhe, e o botão de
+> gravar só libera depois da escolha (revisão de 05/10/2026, abaixo).
 
 Decisões do Tiago em 14/09/2026:
 
@@ -38,6 +37,26 @@ Sem versão anterior (orçamento que ainda não tem nenhuma) a pergunta não
 aparece e vale a planilha. BV não é herdado, como no sobrescrever de antes.
 No internacional, a linha casada mantém o tipo gravado nas duas escolhas
 — a planilha não tem coluna de tipo.
+
+## ⚠️ Revisão de 2026-10-05 — nada vem marcado
+
+Pedido do Tiago: forçar os produtores a ler as duas opções e escolher. Até
+aqui a tela vinha marcada pelo arquivo (planilha com planejado sugeria a
+dela; só com o orçado, manter o da anterior) — e quem importava confirmava
+sem ler.
+
+- **"Usar o planejado da planilha" passa a ser a primeira opção**, "Manter
+  o planejado da vN" a segunda.
+- **Nenhuma vem marcada.** Enquanto não há escolha, o botão de gravar fica
+  desabilitado e a lista de grupos mostra o planejado, a rentabilidade e o
+  % em "—", para não adiantar nenhuma das duas respostas. O quadro fica
+  como era: sem destaque e sem texto pedindo a leitura (o Tiago recusou os
+  dois na aprovação).
+- **Trocar de aba recomeça a escolha** (outra aba é outra planilha).
+- Sem a pergunta (orçamento sem versão anterior, ou Interno) nada muda:
+  vale a planilha e o botão já vem liberado.
+- O servidor não mudou: `origem_planejado` continua `"anterior" |
+  "planilha"`, e a tela só manda depois da escolha.
 
 ## A visão agregada fica de fora
 
@@ -68,7 +87,9 @@ casamento.
   casam **antes** de criar a versão (senão a "mais recente" seria a nova)
   ou de apagar o conteúdo (no sobrescrever).
 - `versoes/importar-drawer.tsx` — a pergunta, e os totais do preview
-  seguindo a escolha.
+  seguindo a escolha. Desde a decisão 110 (modal), a pergunta mora em
+  `_importacao/resumo-da-aba.tsx` e a trava do botão em
+  `_importacao/importar-planilha-dialog.tsx`.
 
 ## Conferido
 
