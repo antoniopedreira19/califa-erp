@@ -7,6 +7,7 @@ import {
   FileSignature,
   FileX,
   Palmtree,
+  ShieldPlus,
   type LucideIcon,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -38,6 +39,7 @@ export default async function CentralRHPage() {
     contratacoesEmAndamentoRes,
     feriasAguardandoRes,
     rescisoesRes,
+    beneficiosAtivosRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -75,12 +77,18 @@ export default async function CentralRHPage() {
       .eq("status", "inativo")
       .not("data_encerramento", "is", null)
       .gte("data_encerramento", corteRescisoesISO),
+    supabase
+      .from("colaborador_beneficio")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id)
+      .is("data_fim", null),
   ]);
   const colaboradoresAtivos = colaboradoresAtivosRes.count ?? 0;
   const pendenciasNoMes = pendenciasRes.count ?? 0;
   const contratacoesEmAndamento = contratacoesEmAndamentoRes.count ?? 0;
   const feriasAguardando = feriasAguardandoRes.count ?? 0;
   const rescisoesRecentes = rescisoesRes.count ?? 0;
+  const beneficiosAtivos = beneficiosAtivosRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -137,6 +145,14 @@ export default async function CentralRHPage() {
           }
         />
         <RhCard
+          href="/rh/beneficios"
+          icon={ShieldPlus}
+          title="Benefícios"
+          description="Planos de saúde, dental e dependentes dos colaboradores. Catálogo, vínculos e custo mensal calculado por faixa etária."
+          count={beneficiosAtivos}
+          countLabel={beneficiosAtivos === 1 ? "vínculo ativo" : "vínculos ativos"}
+        />
+        <RhCard
           href="/rh/rescisoes"
           icon={FileX}
           title="Rescisões"
@@ -148,7 +164,7 @@ export default async function CentralRHPage() {
               : "nos últimos 90 dias"
           }
         />
-        {/* Próximos cards: Benefícios, Turnover */}
+        {/* Próximo card: Turnover */}
       </div>
     </div>
   );
