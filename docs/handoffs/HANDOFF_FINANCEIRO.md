@@ -6688,3 +6688,21 @@ estendido a Contas a Receber em 31/08.**
   `20261004100003` e `20261004100004`). **Ainda vazia:** até o financeiro
   informar, vale o limite do próprio trimestre, e a guia avisa.
 
+## ⚠️ Nota de 2026-10-04 (4) — crédito pelo rateio proporcional (decisão 146)
+
+- **O crédito de PIS/COFINS não olha mais o job.** Toda NF de fornecedor PJ
+  com tomador no lucro real dá o crédito cheio no mês da emissão; a guia não
+  cumulativa tira a parte da receita do mês no 12.08 numa linha só
+  (`rateio_credito`, "Parte do 12.08 na receita do mês"), pela receita das
+  notas emitidas no mês em todos os CNPJs da PJ (Lei 10.833/2003, art. 3º,
+  § 8º, II). Saíram o "a confirmar", o estorno do job faturado no 12.08 e a
+  leitura das notas de saída dos jobs no Aprovar PP.
+- A estimativa de IRPJ/CSLL do lucro real usa o crédito de cada mês já com o
+  rateio do mês. Guia não cumulativa sem nota no mês reparte pelas empresas
+  dos jobs dos custos com crédito (a aprovação com valor precisa do rateio).
+- Mês sem receita nenhuma: o crédito fica inteiro (sem receita do 12.08 a
+  tirar) — **confirmar com a contabilidade**, junto do método declarado na
+  EFD-Contribuições de 2026 (0110), que vale para o ano inteiro.
+- Sem migration e sem dado a corrigir: nenhuma nota real com CNAE fiscal e
+  nenhuma guia aprovada até 04/10. O grupo da memória guardada nas aprovações
+  passou de `estorno` para `rateio_credito`; não havia aprovação gravada.

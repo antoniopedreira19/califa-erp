@@ -440,8 +440,8 @@ function Cnaes({
       ) : (
         <Nota tom="azul">
           Lucro Real: CSLL e IRPJ incidem sobre o lucro bruto do trimestre (receita líquida − custo líquido dos créditos), com o adicional de{" "}
-          {pct(adicional)} sobre o que passar de {moeda(limiteTrimestre)} no trimestre. O subitem 12.08 do 82.30-0-01 tem PIS e COFINS reduzidos e
-          não dá crédito sobre os custos do job.
+          {pct(adicional)} sobre o que passar de {moeda(limiteTrimestre)} no trimestre. O subitem 12.08 do 82.30-0-01 tem PIS e COFINS reduzidos, em
+          guia própria (DARF 8109 e 2172), e a parte dele na receita do mês sai do crédito sobre os custos (rateio proporcional).
         </Nota>
       )}
       {editando && (

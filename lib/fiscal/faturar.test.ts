@@ -275,7 +275,7 @@ test("guias a conferir na emissão: só mês encerrado dentro da Apuração, com
     iss: "iss|ca-ssa|2026-10",
     pisCofins: ["pis|pj-ca|2026-10", "cofins|pj-ca|2026-10"],
   });
-  // Nota do 12.08: a guia cumulativa dela (decisão 144) e a não cumulativa, onde o 12.08 estorna crédito.
+  // Nota do 12.08: a guia cumulativa dela (decisão 144) e a não cumulativa, de onde o rateio tira crédito (decisão 146).
   assert.deepEqual(guiasDaEmissaoParaConferir({ ...base, cnaeCumulativo: true, emissao: "2026-10-30", hoje: "2026-11-10" }), {
     iss: "iss|ca-ssa|2026-10",
     pisCofins: ["pis_cum|pj-ca|2026-10", "cofins_cum|pj-ca|2026-10", "pis|pj-ca|2026-10", "cofins|pj-ca|2026-10"],

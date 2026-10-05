@@ -416,9 +416,9 @@ export default async function PedidosCompraFinanceiroPage({
   const rows: PPRow[] = mapearPPsDoFinanceiro(data, fornecedoresRes.data);
 
   // As PPs em avaliação com NF anexada abrem as seções novas da aprovação
-  // (módulo fiscal). O que elas leem — cadastro de impostos, notas de
-  // saída dos jobs, última retenção do fornecedor — sai agora e corre
-  // junto das leituras do cartão abaixo; a página só espera no fim.
+  // (módulo fiscal). O que elas leem — cadastro de impostos e última
+  // retenção do fornecedor — sai agora e corre junto das leituras do
+  // cartão abaixo; a página só espera no fim.
   const fiscalDaAprovacaoPromise = carregarFiscalDaAprovacaoPP(
     supabase,
     session.activeTenant.id,

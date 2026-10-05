@@ -13,11 +13,11 @@
  * - ISS próprio, por CNPJ emissor e mês da EMISSÃO da nota: menos o ISS que o
  *   cliente reteve e o ISS a compensar (Salvador);
  * - PIS e COFINS, por PJ e mês, pela matriz. Lucro real: débito pela emissão,
- *   crédito sobre o custo (NF do fornecedor emitida no mês), estorno do
- *   crédito do job faturado no 12.08 e saldo credor que passa de mês; a
- *   receita do 12.08 (regime cumulativo) vai em guia própria, DARF 8109 e
- *   2172, sem crédito (decisão 144). Lucro presumido pelo caixa: débito pelo
- *   RECEBIMENTO, sem crédito;
+ *   crédito sobre o custo (NF do fornecedor emitida no mês) menos a parte da
+ *   receita do mês no 12.08 (rateio proporcional, decisão 146) e saldo
+ *   credor que passa de mês; a receita do 12.08 (regime cumulativo) vai em
+ *   guia própria, DARF 8109 e 2172, sem crédito (decisão 144). Lucro
+ *   presumido pelo caixa: débito pelo RECEBIMENTO, sem crédito;
  * - IRPJ e CSLL, por PJ e trimestre, em até 3 cotas (lucro real: estimativa
  *   pelo lucro bruto; presumido: presunção sobre o recebido, com a LC 224/2025);
  * - retenções feitas ao pagar fornecedores: CSRF (DARF 5952) e IRRF (DARF
@@ -148,7 +148,7 @@ export interface AprovacaoFiscal {
 }
 
 export interface ItemMemoria {
-  grupo: "debito" | "credito" | "estorno" | "retido" | "saldo" | "compensacao" | "base" | "info";
+  grupo: "debito" | "credito" | "rateio_credito" | "retido" | "saldo" | "compensacao" | "base" | "info";
   rotulo: string;
   detalhe?: string;
   base?: number;
@@ -319,9 +319,8 @@ const PARAMETROS_PADRAO: Record<ChaveDoParametro, number> = {
 
 /**
  * O parâmetro vigente na data. Datas usadas: o fim do período para as
- * alíquotas e os dias de vencimento da guia; a emissão da NF para o crédito
- * (o estorno devolve o mesmo crédito que entrou); o vencimento da cota para a
- * Selic estimada.
+ * alíquotas e os dias de vencimento da guia; a emissão da NF para o crédito;
+ * o vencimento da cota para a Selic estimada.
  */
 const parametro = (cad: CadastroFiscal, chave: ChaveDoParametro, data: string) =>
   parametroVigente(cad, chave, dia(data))?.valor ?? PARAMETROS_PADRAO[chave];
@@ -354,7 +353,19 @@ export const MUNICIPIOS_QUE_COMPENSAM_ISS = new Set(["Salvador"]);
 // Contexto de um cálculo: índices montados uma vez por chamada
 // ---------------------------------------------------------------------------
 
-type SituacaoDoCredito = { gera: boolean; estado: "sim" | "nao" | "confirmar"; motivo: string };
+type SituacaoDoCredito = { gera: boolean; estado: "sim" | "nao"; motivo: string };
+
+/**
+ * A receita de uma PJ num mês, para o rateio proporcional do crédito de
+ * PIS/COFINS (decisão 146): as notas emitidas no mês por todos os CNPJs dela.
+ */
+export interface ReceitaDoRateio {
+  total: number;
+  /** A parte no regime cumulativo (o 12.08): é a parte do crédito que sai. */
+  cumulativa: number;
+  /** Os CNAEs cumulativos dessas notas, pelo subitem quando há ("12.08"). */
+  cnaes: string[];
+}
 
 interface Contexto {
   cad: CadastroFiscal;
@@ -376,10 +387,9 @@ interface Contexto {
   nota(id: string): NotaSaidaFiscal | undefined;
   cnae(n: NotaSaidaFiscal): FiscalCnae;
   recebimentosDaNota(id: string): RecebimentoFiscal[];
-  /** A primeira nota conhecida do job no 12.08 (pela emissão). */
-  primeira1208(jobId: string): NotaSaidaFiscal | undefined;
-  jobTemNota(jobId: string): boolean;
   credito(nf: NotaFornecedorFiscal): SituacaoDoCredito;
+  /** A receita da PJ no mês ("AAAA-MM"), com as notas conhecidas em `asOf`. */
+  receitaDoRateio(pj: string, comp: string): ReceitaDoRateio;
 }
 
 const vigenteEm = (c: Pick<FiscalCnae, "vigencia_inicio" | "vigencia_fim">, data: string) =>
@@ -464,17 +474,8 @@ function criarContexto(
     else recebimentosPorNota.set(r.nota_id, [r]);
   }
 
-  const primeiras1208 = new Map<string, NotaSaidaFiscal>();
-  const jobsComNota = new Set<string>();
-  for (const n of [...conhecidas].sort((a, b) => a.emissao.localeCompare(b.emissao))) {
-    const eh1208 = cnae(n).subitem === "12.08";
-    for (const j of n.jobs) {
-      jobsComNota.add(j.job_id);
-      if (eh1208 && !primeiras1208.has(j.job_id)) primeiras1208.set(j.job_id, n);
-    }
-  }
-
   const creditos = new Map<string, SituacaoDoCredito>();
+  const receitas = new Map<string, ReceitaDoRateio>();
   const ctx: Contexto = {
     cad,
     fatos,
@@ -490,8 +491,6 @@ function criarContexto(
     nota: (id) => notaPorId.get(id),
     cnae,
     recebimentosDaNota: (id) => recebimentosPorNota.get(id) ?? [],
-    primeira1208: (jobId) => primeiras1208.get(jobId),
-    jobTemNota: (jobId) => jobsComNota.has(jobId),
     credito: (nf) => {
       let s = creditos.get(nf.id);
       if (!s) {
@@ -499,6 +498,15 @@ function criarContexto(
         creditos.set(nf.id, s);
       }
       return s;
+    },
+    receitaDoRateio: (pj, comp) => {
+      const k = `${pj}|${comp}`;
+      let r = receitas.get(k);
+      if (!r) {
+        r = receitaDoRateio(ctx, pj, comp);
+        receitas.set(k, r);
+      }
+      return r;
     },
   };
   return ctx;
@@ -511,7 +519,14 @@ function criarContexto(
 /**
  * A regra do protótipo (`situacaoCredito`), com a "Hitlab" generalizada para
  * "o CNPJ tomador está no lucro presumido" e o "sem crédito" vindo da
- * aprovação da PP. O 12.08 é qualquer nota no subitem 12.08 que cubra o job.
+ * aprovação da PP. Diferença do protótipo (decisão 146, 04/10/2026): o job
+ * não entra mais na regra. Lá, o custo do job faturado no 12.08 não dava
+ * crédito (e o de mês anterior era estornado no mês da nota); mas nada nos
+ * documentos fiscais liga a NF do fornecedor à nota de saída, e a lei só
+ * aceita a apropriação direta com contabilidade de custos integrada à
+ * escrituração (Lei 10.833/2003, art. 3º, § 8º, I). Toda NF de fornecedor PJ
+ * dá o crédito cheio, e a guia do mês tira a parte do 12.08 pelo rateio
+ * proporcional (`receitaDoRateio`).
  */
 function situacaoDoCredito(ctx: Contexto, nf: NotaFornecedorFiscal): SituacaoDoCredito {
   const pjTomadora = ctx.pjDoEstab(nf.tomador_estabelecimento_id);
@@ -525,16 +540,11 @@ function situacaoDoCredito(ctx: Contexto, nf: NotaFornecedorFiscal): SituacaoDoC
       motivo: motivo ? `Marcado pelo financeiro como sem crédito: ${motivo}.` : "Marcado pelo financeiro como sem crédito.",
     };
   }
-  const n1208 = ctx.primeira1208(nf.job.job_id);
-  if (n1208 && mesDe(n1208.emissao) <= mesDe(nf.emissao))
-    return { gera: false, estado: "nao", motivo: `Job faturado no ${codigoDoCnae(ctx.cnae(n1208))} (NF ${n1208.numero}): custo sem crédito.` };
-  if (!ctx.jobTemNota(nf.job.job_id))
-    return {
-      gera: true,
-      estado: "confirmar",
-      motivo: "O job ainda não tem nota de saída. Se for faturado no 12.08, o crédito é estornado no mês da nota.",
-    };
-  return { gera: true, estado: "sim", motivo: "Fornecedor PJ com NF e job faturado fora do 12.08." };
+  return {
+    gera: true,
+    estado: "sim",
+    motivo: "Fornecedor PJ com NF: crédito no mês da emissão, menos a parte da receita do mês no 12.08 (rateio proporcional).",
+  };
 }
 
 /** A situação do crédito de PIS/COFINS de uma NF de fornecedor, vista em `asOf`. */
@@ -543,7 +553,7 @@ export function situacaoDoCreditoDaNF(
   fatos: FatosFiscais,
   nf: NotaFornecedorFiscal,
   asOf: string,
-): { gera: boolean; estado: "sim" | "nao" | "confirmar"; motivo: string } {
+): { gera: boolean; estado: "sim" | "nao"; motivo: string } {
   return situacaoDoCredito(criarContexto(cad, fatos, asOf), nf);
 }
 
@@ -552,37 +562,32 @@ const aliquotaDoCredito = (cad: CadastroFiscal, nf: NotaFornecedorFiscal) =>
   parametro(cad, "credito_pis", nf.emissao) + parametro(cad, "credito_cofins", nf.emissao);
 
 /**
- * Os estornos de crédito de um período: para cada job faturado no 12.08 (a
- * PRIMEIRA nota dele no 12.08 cai no período), as NFs de fornecedor de meses
- * anteriores que deram crédito.
- *
- * Diferença do protótipo: lá o laço ia nota a nota, e um job com duas notas
- * no 12.08 estornava duas vezes (inclusive custos que nunca deram crédito).
- * Aqui o estorno sai uma vez por job, na primeira nota, e só do que gerou
- * crédito — que é a regra escrita ("custos de meses anteriores que já deram
- * crédito"). Com os dados do protótipo, o resultado é o mesmo.
+ * A receita da PJ no mês para o rateio proporcional do crédito (decisão 146;
+ * Lei 10.637/2002 e Lei 10.833/2003, art. 3º, § 8º, II): o custo é comum às
+ * duas receitas, e o crédito fica na proporção da receita não cumulativa na
+ * receita bruta total do mês. A receita é a das notas emitidas no mês, em
+ * todos os CNPJs da PJ; a cumulativa, a das notas em CNAE cumulativo (o
+ * 12.08). Sem receita cumulativa no mês (inclusive sem receita nenhuma), o
+ * crédito fica inteiro.
  */
-function estornosDeCredito(
-  ctx: Contexto,
-  pj: string,
-  notaNoPeriodo: (n: NotaSaidaFiscal) => boolean,
-  nfAntesDaNota: (nf: NotaFornecedorFiscal, n: NotaSaidaFiscal) => boolean,
-) {
-  const out: Array<{ nota: NotaSaidaFiscal; nf: NotaFornecedorFiscal }> = [];
-  const vistos = new Set<string>();
+function receitaDoRateio(ctx: Contexto, pj: string, comp: string): ReceitaDoRateio {
+  let total = 0;
+  let cumulativa = 0;
+  const cnaes: string[] = [];
   for (const n of ctx.conhecidas) {
-    if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || !notaNoPeriodo(n) || ctx.cnae(n).subitem !== "12.08") continue;
-    for (const j of n.jobs) {
-      if (vistos.has(j.job_id) || ctx.primeira1208(j.job_id) !== n) continue;
-      vistos.add(j.job_id);
-      for (const nf of ctx.fatos.notasFornecedor) {
-        if (nf.job.job_id !== j.job_id || ctx.pjDoEstab(nf.tomador_estabelecimento_id) !== pj) continue;
-        if (nfAntesDaNota(nf, n) && ctx.credito(nf).gera) out.push({ nota: n, nf });
-      }
-    }
+    if (ctx.pjDoEstab(n.estabelecimento_id) !== pj || mesDe(n.emissao) !== comp) continue;
+    total += n.valor;
+    const c = ctx.cnae(n);
+    if (!c.cumulativo) continue;
+    cumulativa += n.valor;
+    const rotulo = c.subitem ?? c.codigo;
+    if (!cnaes.includes(rotulo)) cnaes.push(rotulo);
   }
-  return out;
+  return { total: r2(total), cumulativa: r2(cumulativa), cnaes };
 }
+
+/** A fração do crédito que sai pelo rateio: a receita cumulativa sobre a total (0 sem receita). */
+const parteQueSai = (r: ReceitaDoRateio) => (r.total > 0 ? r.cumulativa / r.total : 0);
 
 // ---------------------------------------------------------------------------
 // Rateio por empresa gerencial e regional
@@ -857,9 +862,13 @@ function guiaPisCofins(
   const daParte = (n: NotaSaidaFiscal) => parte === "toda" || ctx.cnae(n).cumulativo === cumulativa;
   const memoria: ItemMemoria[] = [];
   const pesos: Peso[] = [];
-  // Guia não cumulativa sem nota no mês (só estorno): o rateio vai pelos jobs estornados.
-  const pesosDoEstorno: Peso[] = [];
+  // Guia não cumulativa sem nota no mês (só crédito, ou só nota do 12.08): o
+  // rateio vai pelos jobs dos custos com crédito — a aprovação precisa dele
+  // quando a guia da contabilidade vem com valor.
+  const pesosDosCreditos: Peso[] = [];
   let base = 0;
+  // O crédito do mês, já sem a parte do 12.08: o aviso de saldo credor olha.
+  let creditoLiquido = 0;
 
   if (reg.ramo === "real") {
     for (const n of ctx.conhecidas) {
@@ -881,7 +890,8 @@ function guiaPisCofins(
     }
   }
   if (reg.ramo === "real" && !cumulativa) {
-    // Créditos: custos de job com NF de fornecedor emitida no mês.
+    // Créditos: custos com NF de fornecedor emitida no mês, pelo valor cheio.
+    let creditoCheio = 0;
     for (const nf of ctx.fatos.notasFornecedor) {
       if (ctx.pjDoEstab(nf.tomador_estabelecimento_id) !== pj || mesDe(nf.emissao) !== comp || dia(nf.emissao) > ctx.asOf) continue;
       const s = ctx.credito(nf);
@@ -891,39 +901,33 @@ function guiaPisCofins(
         continue;
       }
       const a = aliquotaDoCreditoDoTributo(nf);
+      const valor = r2((nf.valor * a) / 100);
+      creditoCheio = r2(creditoCheio + valor);
+      pesosDosCreditos.push({ job: j, peso: valor });
       memoria.push({
         grupo: "credito",
         rotulo: `${nf.pp} · NF ${nf.numero} · ${j.codigo} ${j.nome}`,
-        detalhe: `crédito sobre custo · emitida em ${dataBr(nf.emissao)}${s.estado === "confirmar" ? " · job ainda sem nota (a confirmar)" : ""}`,
+        detalhe: `crédito sobre custo · emitida em ${dataBr(nf.emissao)}`,
         base: nf.valor,
         aliquota: a,
-        valor: -r2((nf.valor * a) / 100),
+        valor: -valor,
         job_id: j.job_id,
         pp: nf.pp,
       });
     }
-    // Estorno: job faturado no 12.08 neste mês cujos custos de meses anteriores deram crédito.
-    const estornos = estornosDeCredito(
-      ctx,
-      pj,
-      (n) => mesDe(n.emissao) === comp,
-      (nf) => mesDe(nf.emissao) < comp,
-    );
-    for (const { nota, nf } of estornos) {
-      const a = aliquotaDoCreditoDoTributo(nf);
-      const valor = r2((nf.valor * a) / 100);
+    // Rateio proporcional (decisão 146): a parte da receita do mês no 12.08 sai do crédito.
+    const receita = ctx.receitaDoRateio(pj, comp);
+    const sai = r2(creditoCheio * parteQueSai(receita));
+    if (sai > 0)
       memoria.push({
-        grupo: "estorno",
-        rotulo: `Estorno do crédito · ${nf.pp} · NF ${nf.numero}`,
-        detalhe: `${nf.job.codigo} faturado no 12.08 (NF ${nota.numero}); o crédito entrou em ${nomeDoMes(mesDe(nf.emissao))}`,
-        base: nf.valor,
-        aliquota: a,
-        valor,
-        job_id: nf.job.job_id,
-        pp: nf.pp,
+        grupo: "rateio_credito",
+        rotulo: `Parte do ${juntar(receita.cnaes)} na receita do mês`,
+        detalhe: `${formatBRL(receita.cumulativa)} de ${formatBRL(receita.total)} emitidos em ${nomeDoMes(comp)}: essa parte do crédito sai (${tributo === "PIS" ? "Lei 10.637/2002" : "Lei 10.833/2003"}, art. 3º, § 8º, II)`,
+        base: creditoCheio,
+        aliquota: r4(parteQueSai(receita) * 100),
+        valor: sai,
       });
-      pesosDoEstorno.push({ job: nf.job, peso: valor });
-    }
+    creditoLiquido = r2(creditoCheio - sai);
   } else if (reg.ramo !== "real") {
     // Presumido pelo caixa: o que entrou no mês, pelo bruto, na alíquota do CNAE da nota.
     for (const r of ctx.fatos.recebimentos) {
@@ -975,9 +979,11 @@ function guiaPisCofins(
   const soma = somaDaMemoria(memoria);
   const v = vencimentoPisCofins(ctx.cad, comp, ctx.matriz(pj).municipio, ctx.feriados);
   const avisos = [...reg.avisos];
+  // No não cumulativo, o saldo é de crédito quando há crédito no mês (já sem a parte do 12.08) ou vindo do anterior.
+  const sobraDeCredito = !cumulativa && (creditoLiquido > 0 || saldoAnterior > 0);
   if (soma < 0)
     avisos.push(
-      `${cumulativa ? "Retenção maior" : "Crédito maior"} que o débito: ${formatBRL(-soma)} passam para ${nomeDoMes(proximoMes(comp))}.`,
+      `${sobraDeCredito ? "Crédito maior" : "Retenção maior"} que o débito: ${formatBRL(-soma)} passam para ${nomeDoMes(proximoMes(comp))}.`,
     );
   return {
     chave: chaveDoPisCofins(tributo, pj, comp, parte),
@@ -997,7 +1003,7 @@ function guiaPisCofins(
     apurado: Math.max(0, soma),
     saldo_credor_gerado: soma < 0 ? -soma : 0,
     base: r2(base),
-    rateio: rateioPor(pesos.length ? pesos : pesosDoEstorno, Math.max(0, soma)),
+    rateio: rateioPor(pesos.length ? pesos : pesosDosCreditos, Math.max(0, soma)),
     avisos,
   };
 }
@@ -1059,18 +1065,17 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
     );
     let custo = 0;
     let creditos = 0;
+    // Os CNAEs cujo rateio tirou crédito no trimestre (decisão 146): o detalhe da linha diz.
+    const rateados: string[] = [];
     for (const nf of custos) {
       custo += nf.valor;
-      if (ctx.credito(nf).gera) creditos += (nf.valor * aliquotaDoCredito(ctx.cad, nf)) / 100;
+      if (!ctx.credito(nf).gera) continue;
+      // O crédito de cada mês, menos a parte da receita do mês no 12.08 (como nas guias de PIS/COFINS).
+      const receitaDoMes = ctx.receitaDoRateio(pj, mesDe(nf.emissao));
+      const sai = parteQueSai(receitaDoMes);
+      creditos += ((nf.valor * aliquotaDoCredito(ctx.cad, nf)) / 100) * (1 - sai);
+      if (sai > 0) for (const c of receitaDoMes.cnaes) if (!rateados.includes(c)) rateados.push(c);
     }
-    // Estorno dos créditos de jobs faturados no 12.08 no trimestre (só os de NFs do próprio trimestre).
-    const estornos = estornosDeCredito(
-      ctx,
-      pj,
-      (n) => dentro(n.emissao),
-      (nf, n) => mesDe(nf.emissao) < mesDe(n.emissao) && dentro(nf.emissao),
-    );
-    for (const { nf } of estornos) creditos -= (nf.valor * aliquotaDoCredito(ctx.cad, nf)) / 100;
     receita = r2(receita);
     iss = r2(iss);
     pis = r2(pis);
@@ -1099,7 +1104,9 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       {
         grupo: "base",
         rotulo: "(+) Créditos de PIS/COFINS sobre o custo",
-        detalhe: "o crédito volta para a agência: o custo de verdade é menor",
+        detalhe: `o crédito volta para a agência: o custo de verdade é menor${
+          rateados.length ? ` · sem a parte do ${juntar(rateados)} na receita (rateio proporcional)` : ""
+        }`,
         valor: creditos,
       },
       {
