@@ -34,7 +34,7 @@ const GRUPOS: Array<{ grupos: ItemMemoria["grupo"][]; titulo: string }> = [
   { grupos: ["base"], titulo: "Base de cálculo do trimestre" },
   { grupos: ["debito"], titulo: "Débito" },
   { grupos: ["credito"], titulo: "Créditos sobre custos (NF de fornecedor emitida no mês)" },
-  { grupos: ["estorno"], titulo: "Estorno de crédito (job faturado no 12.08)" },
+  { grupos: ["rateio_credito"], titulo: "Rateio proporcional do crédito (receita do mês no 12.08)" },
   { grupos: ["info"], titulo: "Custos sem crédito" },
   { grupos: ["retido"], titulo: "Retido pelo cliente" },
   { grupos: ["compensacao"], titulo: "ISS a compensar" },
@@ -267,7 +267,7 @@ export function MemoriaDialog({
                               className={cn(
                                 "whitespace-nowrap px-3 py-1.5 text-right font-mono",
                                 !ehBase && m.valor < 0 && "text-emerald-700",
-                                !ehBase && m.grupo === "estorno" && "text-rose-700",
+                                !ehBase && m.grupo === "rateio_credito" && "text-rose-700",
                                 m.grupo === "info" && "text-muted-foreground",
                               )}
                             >

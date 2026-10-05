@@ -86,14 +86,15 @@ test("retenções do regime normal na PP de R$ 18.000 e as guias", () => {
   assert.equal(vencimentoDasRetencoes("2026-11-20", FERIADOS, "Salvador").data, "2026-12-18");
 });
 
-test("crédito de PIS/COFINS: a confirmar, retirado e presumido", () => {
-  const base = { valor: 18000, emissao: "2026-11-03", regimeDoTomador: "lucro_real" as const, retirado: false, jobTemNotaDeSaida: false, jobFaturadoNoCumulativo: false };
+test("crédito de PIS/COFINS: gera cheio, retirado e presumido (decisão 146: o job não entra)", () => {
+  const base = { valor: 18000, emissao: "2026-11-03", regimeDoTomador: "lucro_real" as const, retirado: false };
   const a = situacaoDoCredito(base);
-  assert.equal(a.estado, "confirmar");
+  assert.equal(a.estado, "sim");
+  assert.equal(a.gera, true);
   assert.equal(a.total, 1665);
   assert.equal(a.mes, "novembro/2026");
   assert.equal(situacaoDoCredito({ ...base, retirado: true, motivoRetirado: "reembolso de despesa do cliente" }).estado, "nao");
   assert.equal(situacaoDoCredito({ ...base, regimeDoTomador: "lucro_presumido" }).gera, false);
-  assert.equal(situacaoDoCredito({ ...base, jobTemNotaDeSaida: true }).estado, "sim");
-  assert.equal(situacaoDoCredito({ ...base, jobTemNotaDeSaida: true, jobFaturadoNoCumulativo: true }).estado, "nao");
+  // Sem a emissão, o texto fala do mês da emissão.
+  assert.match(situacaoDoCredito({ ...base, emissao: null }).motivo, /nota no 12\.08 no mês da emissão/);
 });

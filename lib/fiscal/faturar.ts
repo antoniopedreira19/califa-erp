@@ -274,8 +274,8 @@ export interface GuiasDaEmissao {
   /**
    * `pis|<PJ>|AAAA-MM` e `cofins|<PJ>|AAAA-MM`; na nota de CNAE cumulativo
    * (o 12.08), também `pis_cum|…` e `cofins_cum|…`, a guia própria dela no
-   * lucro real (decisão 144) — a não cumulativa fica, porque o 12.08 pode
-   * estornar crédito nela.
+   * lucro real (decisão 144) — a não cumulativa fica, porque a receita do
+   * 12.08 tira crédito dela pelo rateio proporcional do mês (decisão 146).
    */
   pisCofins: string[];
 }

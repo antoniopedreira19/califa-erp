@@ -165,6 +165,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 143 | [As PPs que travam o cancelamento se cancelam pelo próprio pop-up](143-pps-se-cancelam-pelo-pop-up-do-cancelamento.md) | 2026-10-03 |
 | 144 | [Módulo fiscal: guia própria do 12.08 e o código da CSLL](144-guia-propria-do-1208-e-codigo-da-csll.md) | 2026-10-04 |
 | 145 | [Módulo fiscal: correções pela lei (remessa pelo líquido, complementar, DARF mínimo)](145-fiscal-correcoes-pela-lei.md) | 2026-10-04 |
+| 146 | [Crédito de PIS/COFINS pelo rateio proporcional do mês (o job sai da regra)](146-credito-pelo-rateio-proporcional.md) | 2026-10-04 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
