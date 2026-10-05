@@ -285,6 +285,61 @@ export interface ColaboradorBasico {
   cpf: string | null;
 }
 
+export interface BeneficioCompleto {
+  id: string;
+  nome: string;
+  operadora: string;
+  tipo: BeneficioTipo;
+  modelo_preco: "faixa_etaria" | "flat";
+  percentual_empresa_titular: number;
+  percentual_colaborador_dependentes: number;
+  valor_flat: number | null;
+  beneficio_base_id: string | null;
+  codigo_externo: string | null;
+  ativo: boolean;
+  observacao: string | null;
+  faixas: Array<{
+    id: string;
+    idade_min: number;
+    idade_max: number | null;
+    valor: number;
+  }>;
+}
+
+/**
+ * Lista todos os benefícios com faixas aninhadas, para a tab Catálogo.
+ */
+export async function listarBeneficiosCompletos(args: {
+  tenantId: string;
+}): Promise<BeneficioCompleto[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("beneficios")
+    .select(
+      `id, nome, operadora, tipo, modelo_preco,
+       percentual_empresa_titular, percentual_colaborador_dependentes,
+       valor_flat, beneficio_base_id, codigo_externo, ativo, observacao,
+       faixas:beneficio_faixas_preco ( id, idade_min, idade_max, valor )`,
+    )
+    .eq("tenant_id", args.tenantId)
+    .order("nome");
+  if (error) {
+    throw new Error(`Erro ao listar catálogo completo: ${error.message}`);
+  }
+  type Row = Omit<BeneficioCompleto, "faixas"> & {
+    faixas: Array<{
+      id: string;
+      idade_min: number;
+      idade_max: number | null;
+      valor: number;
+    }> | null;
+  };
+  return (data as unknown as Row[] | null ?? []).map((b) => ({
+    ...b,
+    faixas: (b.faixas ?? []).sort((a, c) => a.idade_min - c.idade_min),
+  }));
+}
+
 export async function colaboradorPorId(args: {
   tenantId: string;
   colaboradorId: string;

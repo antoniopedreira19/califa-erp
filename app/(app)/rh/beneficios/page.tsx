@@ -8,12 +8,14 @@ import {
   kpisTenantBeneficios,
   listarColaboradoresComBeneficios,
   listarBeneficiosDoCatalogo,
+  listarBeneficiosCompletos,
 } from "@/lib/queries/beneficios";
 import type { BeneficioModoCusteio } from "@/lib/types";
 import { KpisBeneficios } from "./_components/kpis-beneficios";
 import { SeletorCompetencia } from "./_components/seletor-competencia";
 import { FiltrosColaboradores } from "./_components/filtros-colaboradores";
 import { TabelaColaboradores } from "./_components/tabela-colaboradores";
+import { TabCatalogo } from "./_components/tab-catalogo";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +68,7 @@ export default async function BeneficiosPage({
   const beneficioId = searchParams.beneficioId?.trim() || undefined;
   const modoCusteio = normalizarModo(searchParams.modoCusteio);
 
-  const [kpis, catalogo, linhas] = await Promise.all([
+  const [kpis, catalogo, linhas, catalogoCompleto] = await Promise.all([
     kpisTenantBeneficios({
       tenantId: session.activeTenant.id,
       ano,
@@ -82,6 +84,9 @@ export default async function BeneficiosPage({
           beneficioId,
           modoCusteio,
         })
+      : Promise.resolve([]),
+    tab === "catalogo"
+      ? listarBeneficiosCompletos({ tenantId: session.activeTenant.id })
       : Promise.resolve([]),
   ]);
 
@@ -150,11 +155,7 @@ export default async function BeneficiosPage({
         </div>
       )}
 
-      {tab === "catalogo" && (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center text-sm text-muted-foreground">
-          Em breve (S5): catálogo editável de benefícios e faixas de preço.
-        </div>
-      )}
+      {tab === "catalogo" && <TabCatalogo beneficios={catalogoCompleto} />}
     </div>
   );
 }
