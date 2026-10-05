@@ -27,12 +27,15 @@ import type { BeneficioModoCusteio } from "@/lib/types";
 import { FormVinculo } from "./form-vinculo";
 import { FormDependente } from "./form-dependente";
 
-const formatarBrl = (n: number) =>
-  n.toLocaleString("pt-BR", {
+const formatarBrl = (n: number | null | undefined) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  return v.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
   });
+};
 
 const formatarData = (iso: string) => {
   const [a, m, d] = iso.split("-");
@@ -694,17 +697,29 @@ function AbaBreakdown({
     );
   }
 
-  const totalEmpresa = breakdown.reduce(
-    (s, l) => s + Number(l.valor_empresa_titular),
-    0,
+  const semFaixa = breakdown.some(
+    (l) =>
+      l.valor_integral_titular === null ||
+      l.valor_integral_titular === undefined ||
+      !Number.isFinite(Number(l.valor_integral_titular)),
   );
-  const totalColaborador = breakdown.reduce(
-    (s, l) => s + Number(l.valor_desconto_folha_total),
-    0,
-  );
+  const totalEmpresa = breakdown.reduce((s, l) => {
+    const v = Number(l.valor_empresa_titular);
+    return s + (Number.isFinite(v) ? v : 0);
+  }, 0);
+  const totalColaborador = breakdown.reduce((s, l) => {
+    const v = Number(l.valor_desconto_folha_total);
+    return s + (Number.isFinite(v) ? v : 0);
+  }, 0);
 
   return (
     <div className="space-y-3 py-4">
+      {semFaixa && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          Alguma linha abaixo não encontrou faixa de preço cadastrada para a idade.
+          Confira o catálogo do benefício em questão.
+        </div>
+      )}
       <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
@@ -720,39 +735,54 @@ function AbaBreakdown({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {breakdown.map((l) => (
-              <tr key={l.vinculo_id}>
-                <td className="px-3 py-2">
-                  <div className="font-medium">{l.beneficio_nome}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {MODO_LABEL[l.modo_custeio]}
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-center tabular-nums">{l.idade_titular}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {formatarBrl(Number(l.valor_integral_titular))}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
-                  {formatarBrl(Number(l.valor_empresa_titular))}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-amber-700">
-                  {formatarBrl(Number(l.valor_colaborador_titular))}
-                </td>
-                <td className="px-3 py-2 text-center tabular-nums">
-                  {l.qtde_dependentes}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-amber-700">
-                  {formatarBrl(Number(l.valor_dependentes_total))}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-800">
-                  {formatarBrl(Number(l.valor_desconto_folha_total))}
-                </td>
-              </tr>
-            ))}
+            {breakdown.map((l) => {
+              const semFaixaLinha =
+                l.valor_integral_titular === null ||
+                l.valor_integral_titular === undefined ||
+                !Number.isFinite(Number(l.valor_integral_titular));
+              return (
+                <tr key={l.vinculo_id} className={semFaixaLinha ? "bg-amber-50/50" : ""}>
+                  <td className="px-3 py-2">
+                    <div className="font-medium">{l.beneficio_nome}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {MODO_LABEL[l.modo_custeio]}
+                    </div>
+                    {semFaixaLinha && (
+                      <div className="mt-0.5 text-xs text-amber-700">
+                        Faixa de preço não cadastrada para esta idade.
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center tabular-nums">
+                    {l.idade_titular}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {formatarBrl(l.valor_integral_titular)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
+                    {formatarBrl(l.valor_empresa_titular)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-amber-700">
+                    {formatarBrl(l.valor_colaborador_titular)}
+                  </td>
+                  <td className="px-3 py-2 text-center tabular-nums">
+                    {l.qtde_dependentes}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-amber-700">
+                    {formatarBrl(l.valor_dependentes_total)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-800">
+                    {formatarBrl(l.valor_desconto_folha_total)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot className="bg-muted/40 text-xs font-semibold">
             <tr>
-              <td colSpan={3} className="px-3 py-2 text-right">Total</td>
+              <td colSpan={3} className="px-3 py-2 text-right">
+                Total
+              </td>
               <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
                 {formatarBrl(totalEmpresa)}
               </td>
