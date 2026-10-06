@@ -11,13 +11,21 @@ interface Props {
   className?: string;
   maxWidth?: number;
   as?: Tag;
+  /** Quebra o texto em até N linhas e corta o resto com "…". Sem ele, o
+   *  texto fica numa linha só. O cartão com o texto inteiro abre nos dois
+   *  casos, e só quando houve corte. */
+  linhas?: 2 | 3;
 }
+
+// Classe inteira por valor: o Tailwind não enxerga `line-clamp-${n}`.
+const CLAMP = { 2: "line-clamp-2", 3: "line-clamp-3" } as const;
 
 export function TruncateTooltip({
   text,
   className,
   maxWidth = 360,
   as: Component = "div",
+  linhas,
 }: Props) {
   const ref = React.useRef<HTMLElement>(null);
   const [pos, setPos] = React.useState<
@@ -28,7 +36,10 @@ export function TruncateTooltip({
   function abrir() {
     const el = ref.current;
     if (!el) return;
-    if (el.scrollWidth <= el.clientWidth + 1) return;
+    const cortado = linhas
+      ? el.scrollHeight > el.clientHeight + 1
+      : el.scrollWidth > el.clientWidth + 1;
+    if (!cortado) return;
     const r = el.getBoundingClientRect();
     setPos({ top: r.bottom + 4, left: r.left, minWidth: r.width });
   }
@@ -51,7 +62,12 @@ export function TruncateTooltip({
     <>
       <Component
         ref={ref as React.RefObject<never>}
-        className={cn("truncate", className)}
+        className={cn(
+          // `break-words`: uma palavra maior que a coluna quebra em vez de
+          // vazar para a célula vizinha.
+          linhas ? `${CLAMP[linhas]} break-words` : "truncate",
+          className,
+        )}
         onMouseEnter={abrir}
         onMouseLeave={fechar}
       >
