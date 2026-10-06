@@ -192,11 +192,17 @@ test("Freelancer edita realizado, NAO edita metadata do job", () => {
   assert.equal(pode("freelancer", "jobs.editar"), false);
 });
 
-test("Freelancer NAO cria errata, PP nem consome Save", () => {
+test("Freelancer NAO cria errata nem consome Save", () => {
   assert.equal(pode("freelancer", "jobs.criar_errata"), false);
-  assert.equal(pode("freelancer", "jobs.emitir_pp"), false);
-  assert.equal(pode("freelancer", "jobs.cancelar_pp"), false);
   assert.equal(pode("freelancer", "jobs.consumir_save"), false);
+});
+
+// 06/10/2026 (Tiago, revisão da decisão 136): o freelancer gera, edita e
+// cancela a PP ainda não enviada, como o produtor. Enviar é do GP.
+test("Freelancer gera e cancela PP, mas NAO envia ao financeiro", () => {
+  assert.equal(pode("freelancer", "jobs.emitir_pp"), true);
+  assert.equal(pode("freelancer", "jobs.cancelar_pp"), true);
+  assert.equal(pode("freelancer", "jobs.enviar_pp"), false);
 });
 
 test("Freelancer VE chat mas NAO envia", () => {

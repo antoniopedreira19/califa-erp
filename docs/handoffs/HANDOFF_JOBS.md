@@ -4710,3 +4710,23 @@ código publicado logo depois (`3305751`).
 - Conferido logado em 1838 px: "Meus" e "Todos" sem rolagem horizontal, e
   nenhuma linha com mais de duas linhas. Números e larguras na nota de
   05/10/2026 da decisão 036.
+
+## ⚠️ Nota de 2026-10-06 — o freelancer gera PP e não envia (revisão da decisão 136, §7)
+
+- Uma freelancer da produção não via a coluna "Gerar PP" na Planilha
+  Interna do job que a produtora via. Era a regra: `jobs.emitir_pp` e
+  `jobs.cancelar_pp` não tinham o freelancer.
+- Agora o freelancer **gera, edita e cancela a PP ainda não enviada**, como
+  o produtor, e só nos jobs dos projetos em que está na Equipe (a RLS já
+  recortava). **Enviar ao financeiro continua com GP e administrador.** No
+  painel do item ele vê "Só o GP envia PP ao financeiro".
+- Só a matriz de `lib/permissoes.ts` mudou, com o teste junto. Nenhuma
+  migration.
+- Com o "Gerar PP" vêm também o "Marcar: todas as PPs geradas" do item e o
+  "Concluir PPs" do cabeçalho, que seguem a geração, como já era para o
+  produtor.
+- Testado logado como freelancer de teste no TES-1014/26: a PP-00124 foi
+  gerada, ficou com o envio fechado e foi cancelada.
+- Pendência registrada na decisão 136, §7: a tela do job mostra ao
+  freelancer o orçado e a rentabilidade, que `jobs.ver_restrito` diz que
+  ele não vê.
