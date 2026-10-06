@@ -235,6 +235,16 @@ export async function enviarJobParaAbertura(
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
+  // Mídia Off (decisão 147, entrega 1): o orçamento vai até a aprovação. O
+  // job dela tem conta própria (veículo + honorários, faturamento por mês)
+  // e chega na próxima entrega — gravar aqui o fechamento nacional deixaria
+  // `valor_total` e os `_abertura` errados para sempre.
+  if (orc.categoria?.modelo_planilha === "midia_off") {
+    return {
+      ok: false,
+      message: "O envio da Mídia Off para abertura fica disponível na próxima entrega.",
+    };
+  }
   // Modelo mensal (decisão 078): as datas do job são o período do
   // orçamento, que acompanha os meses — o modal as mostra travadas (Tiago,
   // 14/09/2026). Aceitar outra data aqui desalinharia job, orçamento e

@@ -55,6 +55,13 @@ export type AuditAction =
   // Troca de categoria que entra ou sai do modelo mensal: muda a estrutura
   // de todas as versões, e saindo apaga os meses depois do primeiro.
   | "orcamento.modelo_planilha_trocado"
+  // Mídia Off (decisão 147). Trocar o meio apaga as linhas dele em todos
+  // os meses; remover o meio de um mês apaga as linhas do mês. O metadata
+  // guarda quantas — é o único rastro delas.
+  | "versao_orcamento.midia_meio_editado"
+  | "versao_orcamento.midia_meio_removido"
+  // O fornecedor marcado como veículo de mídia, com os meios que vende.
+  | "veiculo_midia.criado"
   // Decisão 105: o orçamento passou para o serviço Interno e as linhas
   // viraram F · Interno, com o planejado igual ao orçado.
   | "orcamento.virou_interno"

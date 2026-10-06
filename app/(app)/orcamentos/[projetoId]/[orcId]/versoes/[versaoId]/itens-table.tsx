@@ -16,6 +16,7 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularTotaisPlanejados } from "@/lib/calculos/versao-totais";
 import {
+  CAMPOS_DE_MIDIA_VAZIOS,
   tipoCustoLabel,
   type TipoCusto,
   type VersaoOrcamentoItem,
@@ -474,6 +475,7 @@ function itemProvisorio(id: string, d: Draft): VersaoOrcamentoItem {
     planejado_antes_save: null,
     fornecedor_id: null,
     observacoes: null,
+    ...CAMPOS_DE_MIDIA_VAZIOS,
     created_at: "",
     updated_at: "",
   };

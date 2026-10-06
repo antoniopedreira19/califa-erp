@@ -192,6 +192,13 @@ export async function GET(
   const modelos = new Set(
     orcamentos.map((o) => o.categoria?.modelo_planilha ?? "nacional"),
   );
+  // Mídia Off (decisão 147): a exportação dela fica para depois do desenho.
+  if (modelos.has("midia_off")) {
+    return NextResponse.json(
+      { error: "A exportação de planilha da Mídia Off ainda não está disponível." },
+      { status: 400 },
+    );
+  }
   // Fee e Always On (decisão 078) entram na mesma regra: só com outros
   // mensais (Tiago, 15/09/2026).
   if (modelos.size > 1) {

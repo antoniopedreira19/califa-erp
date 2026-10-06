@@ -20,8 +20,10 @@ import {
   type CategoriaParaServico,
 } from "@/lib/categorias-do-servico";
 import {
+  erroDoPeriodoDaCampanha,
   erroDoPeriodoMensal,
   mesesDoPeriodo,
+  nomeDoMes,
   trimestreDe,
 } from "@/lib/calculos/meses-trimestre";
 import {
@@ -241,6 +243,22 @@ function recusaDoPeriodoMensal(
     : null;
 }
 
+/** Mídia Off (decisão 147): o período é a campanha inteira, sem o
+ *  trimestre — os meses da planilha nascem dele. */
+function recusaDoPeriodoDaCampanha(
+  inicio: string | null,
+  fim: string | null,
+): { ok: false; message: string; fieldErrors: Record<string, string[]> } | null {
+  const erro = erroDoPeriodoDaCampanha(inicio, fim);
+  return erro
+    ? {
+        ok: false,
+        message: "Verifique os campos destacados.",
+        fieldErrors: { data_fim_prevista: [erro] },
+      }
+    : null;
+}
+
 async function assertProjetoDoTenant(
   supabase: ReturnType<typeof createClient>,
   projetoId: string,
@@ -356,6 +374,14 @@ export async function criarOrcamento(
   // que os meses da v1 nascem (decisão 078).
   if (par.modelo === "mensal") {
     const recusa = recusaDoPeriodoMensal(
+      parsed.data.data_inicio_prevista,
+      parsed.data.data_fim_prevista,
+    );
+    if (recusa) return recusa;
+  }
+  // Mídia Off: o período é obrigatório, e os meses da v1 nascem dele.
+  if (par.modelo === "midia_off") {
+    const recusa = recusaDoPeriodoDaCampanha(
       parsed.data.data_inicio_prevista,
       parsed.data.data_fim_prevista,
     );
@@ -509,14 +535,16 @@ async function criarVersaoInicial(
   // poderá ser feito com um agrupamento sem nome". De quebra, o mês vazio
   // continua sem grupo no banco, que é o que o "Copiar itens de outro mês"
   // exige do destino.
-  if (modelo === "mensal") {
-    // Modelo mensal (decisão 078): a v1 nasce com os meses do período.
+  if (modelo === "mensal" || modelo === "midia_off") {
+    // Modelo mensal (decisão 078) e Mídia Off (decisão 147): a v1 nasce com
+    // os meses do período.
     const meses = await criarMesesDoPeriodo(supabase, {
       tenantId,
       versaoId: data.id,
       profileId,
       inicio: periodo.inicio,
       fim: periodo.fim,
+      modelo,
     });
     if (!meses.ok) {
       console.error("[orcamentos.criar.v1.meses]", meses.message);
@@ -706,6 +734,40 @@ export async function atualizarOrcamento(
     if (recusa) return recusa;
   }
 
+  // Mídia Off (decisão 147): a planilha dela não se converte na de outra
+  // categoria, nem o contrário — meio, grade e período não têm para onde
+  // ir. Quem precisa trocar cria um orçamento novo.
+  if ((modeloNovo === "midia_off") !== (modeloAtual === "midia_off")) {
+    const msg =
+      modeloAtual === "midia_off"
+        ? "A planilha de Mídia Off não se converte na de outra categoria. Para mudar, crie um orçamento novo."
+        : "A planilha de Mídia Off não recebe as linhas de outra categoria. Crie um orçamento novo de Mídia Off.";
+    return { ok: false, message: msg, fieldErrors: { categoria_id: [msg] } };
+  }
+  // Os meses da campanha acompanham o período: os que entram nascem
+  // vazios; os que saem só saem sem linhas.
+  let mesesDaCampanha: SincroniaDeMeses | null = null;
+  if (modeloNovo === "midia_off") {
+    const recusa = recusaDoPeriodoDaCampanha(inicio, fim);
+    if (recusa) return recusa;
+    if (inicio !== atual.data_inicio_prevista || fim !== atual.data_fim_prevista) {
+      const sincronia = await conferirMesesDaCampanha(
+        supabase,
+        session.activeTenant.id,
+        orcId,
+        { inicio: inicio!, fim: fim! },
+      );
+      if (!sincronia.ok) {
+        return {
+          ok: false,
+          message: sincronia.message,
+          fieldErrors: { data_fim_prevista: [sincronia.message] },
+        };
+      }
+      mesesDaCampanha = sincronia;
+    }
+  }
+
   // Entrar ou sair do modelo mensal muda a estrutura de todas as versões.
   // A tela pede a confirmação; sem ela, nada é gravado.
   const trocaDeModelo = (modeloAtual === "mensal") !== (modeloNovo === "mensal");
@@ -810,6 +872,14 @@ export async function atualizarOrcamento(
     });
   }
 
+  if (mesesDaCampanha) {
+    await aplicarMesesDaCampanha(supabase, {
+      tenantId: session.activeTenant.id,
+      profileId: session.profile.id,
+      sincronia: mesesDaCampanha,
+    });
+  }
+
   if (trocaDeTrimestre) {
     await refazerMesesDoOrcamento(supabase, {
       tenantId: session.activeTenant.id,
@@ -885,6 +955,110 @@ async function trimestreMudou(
     return null;
   }
   return { versaoIds, itens: itensRes.count ?? 0 };
+}
+
+interface SincroniaDeMeses {
+  ok: true;
+  /** Por versão: os meses a criar e os ids dos meses vazios a apagar. */
+  versoes: Array<{ versaoId: string; criar: string[]; apagar: string[] }>;
+}
+
+/**
+ * Mídia Off (decisão 147): o período novo, mês a mês, contra os meses de
+ * cada versão. Mês que sai do período com linha recusa a edição — as
+ * linhas não somem por efeito colateral de uma data. Não grava nada.
+ */
+async function conferirMesesDaCampanha(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  orcamentoId: string,
+  periodo: { inicio: string; fim: string },
+): Promise<SincroniaDeMeses | { ok: false; message: string }> {
+  const { data: versoes } = await supabase
+    .from("versoes_orcamento")
+    .select("id")
+    .eq("orcamento_id", orcamentoId)
+    .eq("tenant_id", tenantId)
+    .returns<{ id: string }[]>();
+  const versaoIds = (versoes ?? []).map((v) => v.id);
+  if (versaoIds.length === 0) return { ok: true, versoes: [] };
+
+  const [mesesRes, gruposRes] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_meses")
+      .select("id, versao_orcamento_id, mes")
+      .in("versao_orcamento_id", versaoIds)
+      .eq("tenant_id", tenantId)
+      .returns<{ id: string; versao_orcamento_id: string; mes: string }[]>(),
+    supabase
+      .from("versoes_orcamento_grupos")
+      .select("mes_id")
+      .in("versao_orcamento_id", versaoIds)
+      .not("mes_id", "is", null)
+      .eq("tenant_id", tenantId)
+      .returns<{ mes_id: string }[]>(),
+  ]);
+  if (mesesRes.error || gruposRes.error) {
+    console.error("[orcamentos.meses_campanha]", (mesesRes.error ?? gruposRes.error)?.message);
+    return { ok: false, message: "Não foi possível conferir os meses da campanha." };
+  }
+
+  const desejados = mesesDoPeriodo(periodo);
+  const comMeio = new Set((gruposRes.data ?? []).map((g) => g.mes_id));
+  const presos = new Set<string>();
+  const resultado: SincroniaDeMeses["versoes"] = [];
+  for (const versaoId of versaoIds) {
+    const doVersao = (mesesRes.data ?? []).filter((m) => m.versao_orcamento_id === versaoId);
+    const fora = doVersao.filter((m) => !desejados.includes(m.mes));
+    for (const m of fora) if (comMeio.has(m.id)) presos.add(m.mes);
+    resultado.push({
+      versaoId,
+      criar: desejados.filter((d) => !doVersao.some((m) => m.mes === d)),
+      apagar: fora.map((m) => m.id),
+    });
+  }
+  if (presos.size > 0) {
+    const nomes = [...presos].sort().map((m) => nomeDoMes(m));
+    const lista = nomes.length === 1 ? nomes[0] : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+    return {
+      ok: false,
+      message: `O período novo deixa de fora ${lista}, que ${nomes.length === 1 ? "tem" : "têm"} linhas. Apague ${nomes.length === 1 ? "o mês" : "os meses"} em “Editar meses”, na planilha, ou ajuste o período.`,
+    };
+  }
+  return { ok: true, versoes: resultado };
+}
+
+/** Grava a sincronia conferida: cria os meses que entraram e apaga os
+ *  vazios que saíram. Sem grupo neles, nada mais vai junto. */
+async function aplicarMesesDaCampanha(
+  supabase: ReturnType<typeof createClient>,
+  {
+    tenantId,
+    profileId,
+    sincronia,
+  }: { tenantId: string; profileId: string; sincronia: SincroniaDeMeses },
+) {
+  const criar = sincronia.versoes.flatMap((v) =>
+    v.criar.map((mes) => ({
+      tenant_id: tenantId,
+      versao_orcamento_id: v.versaoId,
+      mes,
+      created_by: profileId,
+    })),
+  );
+  const apagar = sincronia.versoes.flatMap((v) => v.apagar);
+  if (criar.length > 0) {
+    const { error } = await supabase.from("versoes_orcamento_meses").insert(criar);
+    if (error) console.error("[orcamentos.meses_campanha.criar]", error.message);
+  }
+  if (apagar.length > 0) {
+    const { error } = await supabase
+      .from("versoes_orcamento_meses")
+      .delete()
+      .in("id", apagar)
+      .eq("tenant_id", tenantId);
+    if (error) console.error("[orcamentos.meses_campanha.apagar]", error.message);
+  }
 }
 
 /** Troca os meses de todas as versões pelos do período novo. Só roda com

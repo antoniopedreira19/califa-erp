@@ -51,6 +51,7 @@ import {
 import { descartarEnvioPlanilha } from "../../_importacao/envio-actions";
 import { ParametrosModal } from "../../_rascunho/parametros-modal";
 import { TotaisProjetoCard } from "../../_totais/totais-projeto-card";
+import { CardMidiaNaAgregada, type OrcamentoMidiaNaAgregada } from "./card-midia";
 import {
   ITEM_VAZIO,
   itemDoInterno,
@@ -123,6 +124,10 @@ interface Props {
   podeMarcarSave: boolean;
   /** Estado inicial, montado no servidor a partir da versão vigente. */
   inicial: OrcamentoRascunho[];
+  /** Os orçamentos de Mídia Off (decisão 147): só consulta, com o atalho
+   *  para a tela do orçamento. Entram nos três indicadores do topo, e não
+   *  no quadro de Totais, que é o da planilha nacional. */
+  midias: OrcamentoMidiaNaAgregada[];
   /** Os orçamentos gravados, como o seletor "Exportar" os vê — versão
    *  vigente e o valor que a aba imprime, calculados sobre o que está no
    *  banco. A exportação lê o banco, não o rascunho da tela. */
@@ -218,6 +223,7 @@ export function EditorAgregado({
   podeEditarImpostos,
   podeMarcarSave,
   inicial,
+  midias,
   exportaveis,
   categorias,
   nomesDeCategoria,
@@ -757,7 +763,7 @@ export function EditorAgregado({
   // Cada orçamento fecha pela SUA cadeia e o consolidado soma os
   // fechamentos — a mesma ideia com que o card já lida com taxas
   // diferentes entre orçamentos (decisão 072).
-  const resumo = linhasTodas.reduce(
+  const resumoDosEditaveis = linhasTodas.reduce(
     (acc, l) => ({
       faturamentoPrevisto: acc.faturamentoPrevisto + l.faturamentoPrevisto,
       valorJob: acc.valorJob + l.valorJob,
@@ -774,6 +780,18 @@ export function EditorAgregado({
       intTransactionCosts: 0,
       planejado: 0,
     },
+  );
+  // A Mídia Off soma pelo fechamento dela (decisão 147): o imposto já é o
+  // de dentro dos honorários, e o planejado são as notas dos veículos.
+  const resumo = midias.reduce(
+    (acc, m) => ({
+      ...acc,
+      faturamentoPrevisto: acc.faturamentoPrevisto + m.faturamentoPrevisto,
+      valorJob: acc.valorJob + m.valorJob,
+      imposto: acc.imposto + m.imposto,
+      planejado: acc.planejado + m.custoPlanejado,
+    }),
+    resumoDosEditaveis,
   );
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     resumo.valorJob,
@@ -1045,6 +1063,19 @@ export function EditorAgregado({
           (26px) + o gap. Mesmo arranjo da tela da versão individual. */}
       <div className="flex flex-col gap-6 pr-[154px]">
       <div className="flex flex-col gap-4">
+        {midias.map((m) => (
+          <CardMidiaNaAgregada
+            key={m.id}
+            orc={m}
+            onAbrir={(evento, href) => {
+              // Com alteração por salvar, o atalho passa pela mesma
+              // pergunta do Cancelar em vez de descartar calado.
+              if (!sujo) return;
+              evento.preventDefault();
+              setAskSair(href);
+            }}
+          />
+        ))}
         {/* ⚠️ A chave Bruto ⇄ Líquido saiu daqui em 08/09/2026 (decisão
             062), pelo mesmo motivo da tela da versão: o BV passou a
             descontar só o REALIZADO, e o rascunho não tem realizado. */}

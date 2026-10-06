@@ -63,6 +63,9 @@ interface Props {
   /** Ação da versão ao lado do "Editar meses" — o "Importar planilha" do
    *  orçamento mensal (decisão 078, 15/09/2026). */
   acao?: ReactNode;
+  /** "linhas": as palavras da Mídia Off (decisão 147) no "Editar meses".
+   *  Padrão: "itens". */
+  vocabulario?: "itens" | "linhas";
 }
 
 function formatarPct(n: number): string {
@@ -78,6 +81,7 @@ export function ReguaMeses({
   selecionado,
   editar,
   acao,
+  vocabulario = "itens",
 }: Props) {
   return (
     <div className="space-y-2.5">
@@ -104,7 +108,7 @@ export function ReguaMeses({
         ))}
         {(editar || acao) && (
           <div className="flex items-center gap-2 pl-1">
-            {editar && <EditarMeses {...editar} />}
+            {editar && <EditarMeses {...editar} vocabulario={vocabulario} />}
             {acao}
           </div>
         )}
@@ -169,12 +173,17 @@ function EditarMeses({
   trimestreRotulo,
   meses,
   disponiveis,
+  vocabulario,
 }: {
   versaoId: string;
   trimestreRotulo: string;
   meses: MesEditavel[];
   disponiveis: { mes: string; rotulo: string }[];
+  vocabulario: "itens" | "linhas";
 }) {
+  const midia = vocabulario === "linhas";
+  const contagem = (n: number) =>
+    midia ? (n === 1 ? "1 linha" : `${n} linhas`) : n === 1 ? "1 item" : `${n} itens`;
   const router = useRouter();
   const [aberto, setAberto] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -246,7 +255,7 @@ function EditarMeses({
                   <CalendarDays className="h-4 w-4 flex-none text-muted-foreground" />
                   <span className="truncate">{m.rotulo}</span>
                   <span className="flex-none text-xs font-normal text-muted-foreground">
-                    {m.qtdItens === 1 ? "1 item" : `${m.qtdItens} itens`}
+                    {contagem(m.qtdItens)}
                   </span>
                 </span>
                 <button
@@ -306,11 +315,29 @@ function EditarMeses({
         title={apagar ? `Apagar ${apagar.rotulo.toLowerCase()}?` : "Apagar mês?"}
         description={
           apagar && apagar.qtdItens > 0 ? (
-            <>
-              Os <strong>{apagar.qtdItens === 1 ? "1 item" : `${apagar.qtdItens} itens`}</strong>{" "}
-              e os grupos deste mês serão apagados. O período do orçamento passa a
-              acompanhar os meses que ficarem. Não dá para desfazer.
-            </>
+            midia ? (
+              <>
+                {apagar.qtdItens === 1 ? (
+                  <>
+                    A <strong>linha</strong>
+                  </>
+                ) : (
+                  <>
+                    As <strong>{apagar.qtdItens} linhas</strong>
+                  </>
+                )}{" "}
+                e os meios deste mês serão apagados. O período do orçamento passa a
+                acompanhar os meses que ficarem. Não dá para desfazer.
+              </>
+            ) : (
+              <>
+                Os <strong>{contagem(apagar.qtdItens)}</strong>{" "}
+                e os grupos deste mês serão apagados. O período do orçamento passa a
+                acompanhar os meses que ficarem. Não dá para desfazer.
+              </>
+            )
+          ) : midia ? (
+            "O mês não tem linhas. O período do orçamento passa a acompanhar os meses que ficarem."
           ) : (
             "O mês não tem itens. O período do orçamento passa a acompanhar os meses que ficarem."
           )

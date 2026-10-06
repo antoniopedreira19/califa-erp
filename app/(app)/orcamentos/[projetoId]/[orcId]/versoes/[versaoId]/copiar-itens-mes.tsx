@@ -5,7 +5,10 @@
  *  do Tiago (14/09/2026), e o caso real é montar agosto a partir de julho.
  *
  *  Copia grupos e itens (orçado e planejado). BV e save não vêm: são do mês
- *  de origem. */
+ *  de origem.
+ *
+ *  Na Mídia Off (decisão 147) é o mesmo botão, com "meios" e "linhas": TV e
+ *  rádio vêm sem inserções, e as datas do período passam para o mês novo. */
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -27,6 +30,8 @@ interface Props {
   origens: { id: string; rotulo: string; qtdGrupos: number; qtdItens: number }[];
   /** Presente ⇒ o botão fica desabilitado com este motivo. */
   bloqueio?: string;
+  /** "linhas": as palavras da Mídia Off (decisão 147). Padrão: "itens". */
+  vocabulario?: "itens" | "linhas";
 }
 
 export function CopiarItensDoMes({
@@ -34,7 +39,9 @@ export function CopiarItensDoMes({
   destinoNome,
   origens,
   bloqueio,
+  vocabulario = "itens",
 }: Props) {
+  const midia = vocabulario === "linhas";
   const router = useRouter();
   const [aberto, setAberto] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -43,7 +50,11 @@ export function CopiarItensDoMes({
   const comGrupo = origens.filter((o) => o.qtdGrupos > 0);
   const motivo =
     bloqueio ??
-    (comGrupo.length === 0 ? "Nenhum outro mês tem itens para copiar." : undefined);
+    (comGrupo.length === 0
+      ? midia
+        ? "Nenhum outro mês tem linhas para copiar."
+        : "Nenhum outro mês tem itens para copiar."
+      : undefined);
 
   function copiar(origemId: string) {
     setErro(null);
@@ -68,16 +79,28 @@ export function CopiarItensDoMes({
         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-foreground"
       >
         <Copy className="h-3.5 w-3.5" />
-        Copiar itens de outro mês
+        {midia ? "Copiar linhas de outro mês" : "Copiar itens de outro mês"}
       </button>
 
       <Dialog open={aberto} onOpenChange={setAberto}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Copiar itens para {destinoNome}</DialogTitle>
+            <DialogTitle>
+              {midia ? "Copiar linhas para" : "Copiar itens para"} {destinoNome}
+            </DialogTitle>
             <DialogDescription>
-              Os grupos e os itens do mês escolhido são copiados para{" "}
-              {destinoNome}, com orçado e planejado. BV e save não vêm junto.
+              {midia ? (
+                <>
+                  Os meios e as linhas do mês escolhido são copiados para{" "}
+                  {destinoNome}. TV e rádio vêm sem inserções; nos meios por
+                  período, as datas passam para o mês novo.
+                </>
+              ) : (
+                <>
+                  Os grupos e os itens do mês escolhido são copiados para{" "}
+                  {destinoNome}, com orçado e planejado. BV e save não vêm junto.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -91,8 +114,21 @@ export function CopiarItensDoMes({
               >
                 <span className="text-sm font-semibold">{o.rotulo}</span>
                 <span className="text-xs text-muted-foreground">
-                  {o.qtdGrupos === 1 ? "1 grupo" : `${o.qtdGrupos} grupos`} ·{" "}
-                  {o.qtdItens === 1 ? "1 item" : `${o.qtdItens} itens`}
+                  {midia
+                    ? o.qtdGrupos === 1
+                      ? "1 meio"
+                      : `${o.qtdGrupos} meios`
+                    : o.qtdGrupos === 1
+                      ? "1 grupo"
+                      : `${o.qtdGrupos} grupos`}{" "}
+                  ·{" "}
+                  {midia
+                    ? o.qtdItens === 1
+                      ? "1 linha"
+                      : `${o.qtdItens} linhas`
+                    : o.qtdItens === 1
+                      ? "1 item"
+                      : `${o.qtdItens} itens`}
                 </span>
               </button>
             ))}

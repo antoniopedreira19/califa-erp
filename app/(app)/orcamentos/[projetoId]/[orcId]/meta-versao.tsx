@@ -61,7 +61,23 @@ interface Props {
    *  Obrigatória e anulável, não opcional: quem monta o cabeçalho tem que
    *  dizer de qual modelo é a versão, e não deixar um default responder. */
   internacional: MetaInternacional | null;
+  /** Mídia Off (decisão 147): a base dos honorários e a parte do veículo,
+   *  ou `null` nas demais categorias. Obrigatória e anulável, como a de
+   *  cima. A base e o veículo seguem a trava dos honorários. */
+  midia: MetaMidia | null;
 }
+
+/** Os parâmetros que só a Mídia Off tem (decisão 147). */
+export interface MetaMidia {
+  /** A parte do negociado que fica com o veículo, em %. */
+  percentualVeiculo: number;
+  base: "negociado" | "liquido";
+}
+
+const BASES_DOS_HONORARIOS: Array<{ value: MetaMidia["base"]; rotulo: string }> = [
+  { value: "negociado", rotulo: "do negociado" },
+  { value: "liquido", rotulo: "do líquido do veículo" },
+];
 
 /**
  * Linha de parâmetros da versão ativa — Honorários e Impostos no nacional;
@@ -90,6 +106,7 @@ export function MetaVersao({
   readOnly,
   readOnlyReason,
   internacional,
+  midia,
 }: Props) {
   const router = useRouter();
   const [editando, setEditando] = React.useState(false);
@@ -103,18 +120,23 @@ export function MetaVersao({
   // leitura e não são enviados (decisão do Tiago, 14/09/2026).
   const travarImpostos = internacional !== null && !podeEditarHonorarios;
 
+  // Mídia Off: a base dos honorários mora num Select, fora do FormData.
+  const [base, setBase] = React.useState<MetaMidia["base"]>(midia?.base ?? "negociado");
+
   // Trocar de aba remonta os valores: o estado do seletor tem que
   // acompanhar, senão a alíquota da versão anterior fica na tela.
   React.useEffect(() => {
     setImposto(valorInicialAliquota(percentualImposto));
+    setBase(midia?.base ?? "negociado");
     setEditando(false);
     setErro(null);
-  }, [versaoId, percentualImposto]);
+  }, [versaoId, percentualImposto, midia?.base]);
 
   function fechar() {
     setEditando(false);
     setErro(null);
     setImposto(valorInicialAliquota(percentualImposto));
+    setBase(midia?.base ?? "negociado");
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -126,6 +148,10 @@ export function MetaVersao({
     // alíquota atual — escolher só é obrigatório na aprovação.
     if (imposto !== "" && !travarImpostos) {
       formData.set("percentual_imposto", imposto);
+    }
+    // Mídia Off: a base vai com os honorários, sob a mesma trava.
+    if (midia && podeEditarHonorarios) {
+      formData.set("base_honorarios", base);
     }
 
     startTransition(async () => {
@@ -198,6 +224,33 @@ export function MetaVersao({
                 />
               </>
             )}
+          </>
+        ) : midia ? (
+          <>
+            {/* Mídia Off (decisão 147): os honorários levam a base, e a
+                parte do veículo fica à vista — as três decidem a conta. */}
+            <span>
+              <span className="text-foreground/60">Honorários:</span>{" "}
+              <span className="font-medium text-foreground">
+                {formatarPercentual(percentualHonorarios)}%
+              </span>{" "}
+              <span className="text-foreground/60">
+                {BASES_DOS_HONORARIOS.find((b) => b.value === midia.base)?.rotulo}
+              </span>
+            </span>
+            <Separador />
+            <span>
+              <span className="text-foreground/60">Veículo:</span>{" "}
+              <span className="font-medium text-foreground">
+                {formatarPercentual(midia.percentualVeiculo)}%
+              </span>{" "}
+              <span className="text-foreground/60">do negociado</span>
+            </span>
+            <Separador />
+            <Campo
+              rotulo="Impostos"
+              valor={`${formatarPercentual(percentualImposto)}%`}
+            />
           </>
         ) : (
           <>
@@ -317,7 +370,56 @@ export function MetaVersao({
               {formatarPercentual(percentualHonorarios)}%
             </span>
           )}
+          {midia &&
+            (podeEditarHonorarios ? (
+              <Select value={base} onValueChange={(v) => setBase(v as MetaMidia["base"])}>
+                <SelectTrigger className="h-7 w-[186px] bg-white text-sm" aria-label="Base dos honorários">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BASES_DOS_HONORARIOS.map((b) => (
+                    <SelectItem key={b.value} value={b.value}>
+                      {b.rotulo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-foreground/60">
+                {BASES_DOS_HONORARIOS.find((b) => b.value === midia.base)?.rotulo}
+              </span>
+            ))}
         </CampoEdicao>
+
+        {midia && (
+          <CampoEdicao
+            rotulo="Veículo"
+            travado={!podeEditarHonorarios}
+            dica={
+              podeEditarHonorarios
+                ? "A parte do veículo: 80% nas planilhas de referência."
+                : "Só administrador ou gerente de projeto altera a parte do veículo."
+            }
+          >
+            {podeEditarHonorarios ? (
+              <input
+                name="percentual_veiculo"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                defaultValue={midia.percentualVeiculo}
+                aria-label="Parte do veículo, em %"
+                className="no-spinner h-7 w-[64px] rounded-md border border-border bg-white px-2 text-sm font-medium text-foreground outline-none focus:border-california-red/50"
+              />
+            ) : (
+              <span className="inline-flex h-7 items-center rounded-md border border-border bg-muted/50 px-2 text-sm font-medium text-muted-foreground">
+                {formatarPercentual(midia.percentualVeiculo)}%
+              </span>
+            )}
+            <span className="text-foreground/60">% do negociado</span>
+          </CampoEdicao>
+        )}
 
         {internacional && (
           <CampoEdicao

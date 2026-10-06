@@ -423,7 +423,9 @@ async function analisar(
     const modeloDoOrcamento = orcamento.categoria?.modelo_planilha ?? "nacional";
     if (modeloDoOrcamento !== leitura.modelo) {
       return recusar(
-        modeloDoOrcamento === "mensal"
+        modeloDoOrcamento === "midia_off"
+          ? "Orçamento de Mídia Off: a importação de planilha dele ainda não está disponível — nada entra nele."
+          : modeloDoOrcamento === "mensal"
           ? "Orçamento de Fee ou Always On, e a planilha não tem os blocos de mês — nada entra nele."
           : leitura.modelo === "mensal"
             ? "A planilha é de orçamento de Fee ou Always On, com um bloco por mês, e este orçamento não é — nada entra nele."

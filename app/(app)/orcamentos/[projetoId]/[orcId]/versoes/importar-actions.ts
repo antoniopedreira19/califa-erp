@@ -234,6 +234,14 @@ async function verificarOrcamento(
       message: `Orçamento em estado ${orc.status} não aceita nova versão.`,
     };
   }
+  // Mídia Off (decisão 147): a importação de planilha dela fica para depois
+  // do desenho. A tela já desliga o botão; esta é a regra.
+  if (orc.categoria?.modelo_planilha === "midia_off") {
+    return {
+      ok: false,
+      message: "A importação de planilha da Mídia Off ainda não está disponível.",
+    };
+  }
   return {
     ok: true,
     projeto_id: orc.projeto_id,

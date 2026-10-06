@@ -455,12 +455,26 @@ export interface VersaoOrcamento {
    *  nova, não trava — desligar não desmarca o que já existe
    *  (docs/decisions/028-save-entre-jobs.md §10). */
   save_por_padrao: boolean;
+  /** Só Mídia Off (decisão 147): a parte do negociado que fica com o
+   *  veículo, em %. 80 nas planilhas de referência. Nos outros modelos fica
+   *  no padrão e ninguém lê. */
+  percentual_veiculo: number;
+  /** Só Mídia Off (decisão 147): sobre o que correm os honorários — o
+   *  negociado ou o líquido do veículo (contrato da AMBEV). */
+  base_honorarios: BaseHonorariosMidia;
   aprovado_em: string | null;
   aprovado_por: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
+
+/** Base dos honorários da Mídia Off (decisão 147). */
+export type BaseHonorariosMidia = "negociado" | "liquido";
+
+/** Como o meio da Mídia Off é comprado (decisão 147): grade de inserções
+ *  por dia (TV e rádio) ou período (OOH, DOOH, portais). */
+export type FormaDeCompraMidia = "grade" | "periodo";
 
 export interface VersaoOrcamentoGrupo {
   id: string;
@@ -472,6 +486,13 @@ export interface VersaoOrcamentoGrupo {
    *  modelos nacional e internacional. Os itens herdam o mês pelo grupo —
    *  não existe mês no item (decisão 078). */
   mes_id: string | null;
+  /** Só Mídia Off (decisão 147): o meio do grupo ("TV Fechada"), a forma
+   *  de compra e o formato. O grupo de mídia é um meio num mês; o nome é
+   *  "meio · formato", e meio + formato identificam o meio na versão.
+   *  `null` nos outros modelos. */
+  meio: string | null;
+  forma_compra: FormaDeCompraMidia | null;
+  formato: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -547,6 +568,68 @@ export interface VersaoOrcamentoItem {
   fornecedor_id: string | null;
   /** Legado; não é mais usado nas telas. */
   observacoes: string | null;
+  // ---- Só Mídia Off (decisão 147). Nos outros modelos ficam nulos.
+  // Na linha de mídia, o ORÇADO é o NEGOCIADO: `valor_unitario_orcado` é o
+  // unitário negociado; `quantidade_orcada`, as inserções (grade, somadas
+  // pelo banco) ou a quantidade (período); `dias_meses_orcado`, 1 (grade)
+  // ou os períodos. O veículo é `fornecedor_id`, o programa ou ponto é
+  // `item`, e o tipo (A · Direto ou A · Repasse) é `tipo_custo`.
+  praca: string | null;
+  /** Grade: a peça (A, B…). */
+  peca: string | null;
+  formato: string | null;
+  /** Grade: inserções por dia do mês do grupo, `{ "3": 2 }`. */
+  insercoes_por_dia: Record<string, number> | null;
+  /** Período: início e fim da veiculação (`YYYY-MM-DD`). */
+  data_inicio: string | null;
+  data_fim: string | null;
+  /** Período: o que é um período ("mês", "bissemanas"…). */
+  unidade_periodo: string | null;
+  valor_unitario_tabela: number | null;
+  /** Desconto sobre a tabela, em % (0 a 100). */
+  percentual_desconto: number | null;
+  /** Dado do veículo que não entra na conta (faces, impacto). */
+  detalhe: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Os campos de Mídia Off de uma linha que não é de mídia, para quem monta
+ *  um `VersaoOrcamentoItem` fora do banco (linha provisória, rascunho). */
+export const CAMPOS_DE_MIDIA_VAZIOS = {
+  praca: null,
+  peca: null,
+  formato: null,
+  insercoes_por_dia: null,
+  data_inicio: null,
+  data_fim: null,
+  unidade_periodo: null,
+  valor_unitario_tabela: null,
+  percentual_desconto: null,
+  detalhe: null,
+} as const satisfies Pick<
+  VersaoOrcamentoItem,
+  | "praca"
+  | "peca"
+  | "formato"
+  | "insercoes_por_dia"
+  | "data_inicio"
+  | "data_fim"
+  | "unidade_periodo"
+  | "valor_unitario_tabela"
+  | "percentual_desconto"
+  | "detalhe"
+>;
+
+/** O fornecedor que é veículo de mídia (decisão 147): os meios que ele
+ *  vende — o primeiro é o principal — e a praça. */
+export interface VeiculoMidia {
+  id: string;
+  tenant_id: string;
+  fornecedor_id: string;
+  meios: string[];
+  praca: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -759,8 +842,17 @@ export type CategoriaDominioEscopo = "projeto" | "orcamento";
  * `mensal` (decisão 078): Fee e Always On. A versão tem de 1 a 3 meses do
  * mesmo trimestre civil, cada um com seus grupos; o fechamento de cada mês
  * é o nacional.
+ *
+ * `midia_off` (decisão 147): Mídia Off. A versão tem os meses da campanha
+ * inteira (sem a trava do trimestre), e cada mês tem os seus meios — um
+ * grupo por meio, em grade de inserções ou por período. A conta é a da
+ * mídia (`lib/calculos/midia-off.ts`), não a nacional.
  */
-export type CategoriaModeloPlanilha = "nacional" | "internacional" | "mensal";
+export type CategoriaModeloPlanilha =
+  | "nacional"
+  | "internacional"
+  | "mensal"
+  | "midia_off";
 
 export interface CategoriaDominio {
   id: string;

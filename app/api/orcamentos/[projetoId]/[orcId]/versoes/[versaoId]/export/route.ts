@@ -109,6 +109,14 @@ export async function GET(
   if (!orcRes.data) {
     return NextResponse.json({ error: "Orçamento não encontrado" }, { status: 404 });
   }
+  // Mídia Off (decisão 147): a exportação dela fica para depois do desenho —
+  // a planilha nacional sairia com o negociado no lugar do valor do job.
+  if (orcRes.data.categoria?.modelo_planilha === "midia_off") {
+    return NextResponse.json(
+      { error: "A exportação de planilha da Mídia Off ainda não está disponível." },
+      { status: 400 },
+    );
+  }
 
   const versao = versaoRes.data;
   const orcamento = orcRes.data;

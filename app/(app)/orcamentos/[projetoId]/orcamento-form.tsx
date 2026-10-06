@@ -32,7 +32,10 @@ import {
   servicoTemCategoriaExclusiva,
   type CategoriaParaServico,
 } from "@/lib/categorias-do-servico";
-import { erroDoPeriodoMensal } from "@/lib/calculos/meses-trimestre";
+import {
+  erroDoPeriodoDaCampanha,
+  erroDoPeriodoMensal,
+} from "@/lib/calculos/meses-trimestre";
 import { CidadeCombobox, type CidadeOption } from "../cidade-combobox";
 import {
   atualizarOrcamento,
@@ -211,6 +214,9 @@ export function OrcamentoForm({
     categoriaEscolhida?.modelo_planilha ??
     (parOriginal ? (modeloPlanilhaAtual ?? "nacional") : "nacional");
   const ehMensal = modeloEscolhido === "mensal";
+  // Mídia Off (decisão 147): o período é a campanha inteira, e é dele que
+  // os meses da planilha nascem.
+  const ehMidiaOff = modeloEscolhido === "midia_off";
 
   function handleServico(novo: string) {
     setServicoId(novo);
@@ -282,6 +288,32 @@ export function OrcamentoForm({
         setFieldErrors({ data_fim_prevista: [erroPeriodo] });
         return;
       }
+    }
+    if (ehMidiaOff) {
+      const erroPeriodo = erroDoPeriodoDaCampanha(
+        formData.get("data_inicio_prevista")?.toString() || null,
+        formData.get("data_fim_prevista")?.toString() || null,
+      );
+      if (erroPeriodo) {
+        setError("Verifique os campos destacados.");
+        setFieldErrors({ data_fim_prevista: [erroPeriodo] });
+        return;
+      }
+    }
+    // A planilha de Mídia Off não se converte na de outra categoria, nem o
+    // contrário (decisão 147). O servidor recusa do mesmo jeito.
+    if (
+      isEdit &&
+      categoriaEscolhida &&
+      (modeloPlanilhaAtual === "midia_off") !== ehMidiaOff
+    ) {
+      const msg =
+        modeloPlanilhaAtual === "midia_off"
+          ? "A planilha de Mídia Off não se converte na de outra categoria. Para mudar, crie um orçamento novo."
+          : "A planilha de Mídia Off não recebe as linhas de outra categoria. Crie um orçamento novo de Mídia Off.";
+      setError(msg);
+      setFieldErrors({ categoria_id: [msg] });
+      return;
     }
 
     // Modo rascunho: a mesma validação, sem ida ao servidor. O que sai
@@ -557,7 +589,7 @@ export function OrcamentoForm({
         <Field
           label="Início previsto"
           name="data_inicio_prevista"
-          required={ehMensal}
+          required={ehMensal || ehMidiaOff}
           errors={fieldErrors}
         >
           <DatePicker
@@ -571,7 +603,7 @@ export function OrcamentoForm({
         <Field
           label="Fim previsto"
           name="data_fim_prevista"
-          required={ehMensal}
+          required={ehMensal || ehMidiaOff}
           errors={fieldErrors}
         >
           <DatePicker
@@ -587,6 +619,15 @@ export function OrcamentoForm({
             O período define o trimestre do orçamento: início e fim no mesmo
             trimestre, e os meses da planilha nascem dele.
             {inicio && fim && !erroDoPeriodoMensal(inicio, fim)
+              ? " Os meses podem ser editados depois, na planilha."
+              : ""}
+          </p>
+        )}
+
+        {ehMidiaOff && (
+          <p className="-mt-2 text-xs text-muted-foreground md:col-span-2">
+            O período é a campanha inteira: os meses da planilha nascem dele.
+            {inicio && fim && !erroDoPeriodoDaCampanha(inicio, fim)
               ? " Os meses podem ser editados depois, na planilha."
               : ""}
           </p>
