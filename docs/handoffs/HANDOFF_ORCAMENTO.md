@@ -5065,8 +5065,13 @@ aplicada na hora combinada com a frente do Antonio, junto da
   depois "ZZ Teste duplicação B" criado e o item do A editado, sem
   recarregar, e salvo de novo — um A (-19, com o item editado) e um B
   (-20). Pelo console, reenviar o A como novo com a mesma chave e sem
-  chave: as duas recusas, nada gravado. Os dois ZZ ficaram no projeto de
-  teste.
+  chave: as duas recusas, nada gravado. Salvamento que para no meio:
+  "ZZ Teste falha parcial C" (válido) e "D" (item sem nome) salvos juntos —
+  o C foi criado e virou gravado na tela, o D ficou "Novo" com a mensagem
+  "O que veio antes foi salvo, mas o orçamento “ZZ Teste falha parcial D”
+  não foi criado…", e o rodapé seguiu em "Alterações não salvas"; com o
+  item nomeado, o segundo salvamento criou só o D (-22 e -23, um de cada).
+  Os quatro ZZ ficaram no projeto de teste.
 - **Limpeza do AMB-P017/26** (migration 20261006600002, pedida pelo Tiago
   em 06/10/2026 e aplicada depois de a correção estar publicada, por causa
   do código maior + 1). Saíram as 36 cópias; ficou o primeiro de cada um
