@@ -35,8 +35,9 @@ import {
   ExportarOrcamentosMenu,
   type OrcamentoExportavel,
 } from "../_selecao/exportar-orcamentos-menu";
-import { BotaoVoltar } from "@/components/voltar/botao-voltar";
-import { MarcarPagina } from "@/components/voltar/marcar-pagina";
+import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
+import { PAGINA_DO_PROJETO, itensDeOrcamentos } from "@/lib/faixa-do-projeto";
+import { faixaDoOrcamentoSemItens } from "./faixa-orcamentos";
 import { AvisoArquivado } from "../aviso-arquivado";
 
 export const dynamic = "force-dynamic";
@@ -428,11 +429,32 @@ export default async function ProjetoDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <BotaoVoltar reserva="/orcamentos" />
-        {/* Nome desta página no balão do voltar de quem sair daqui. */}
-        <MarcarPagina rotulo={`${projeto.codigo} · ${projeto.nome}`} />
+        {/* Faixa do projeto (decisão 106) também aqui, desde 05/10/2026: o
+            chip do projeto marcado, as abas da agregada e dos orçamentos, e
+            o “+” do novo orçamento. A página não entra no grupo da faixa —
+            o voltar de um orçamento continua trazendo para cá —, e o voltar
+            daqui leva à lista de projetos, como antes. */}
+        <FaixaDoProjeto
+          {...faixaDoOrcamentoSemItens(
+            projeto,
+            !projetoArquivado && pode(session.activeRole, "orcamentos.criar"),
+          )}
+          reservaDoVoltar="/orcamentos"
+          ativo={PAGINA_DO_PROJETO}
+          itens={itensDeOrcamentos(
+            projeto.id,
+            orcamentosBrutos as Array<{
+              id: string;
+              codigo: string;
+              nome: string;
+              status: string;
+              arquivado_em: string | null;
+            }>,
+            null,
+          )}
+        />
 
-        <div className="mt-3">
+        <div className="mt-5">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             {projeto.codigo}
           </p>

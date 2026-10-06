@@ -9,6 +9,7 @@ import {
   FolderKanban,
   LayoutGrid,
   Lock,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
@@ -16,6 +17,7 @@ import { saidaSegurada } from "@/components/voltar/estado";
 import { useMarcarPagina } from "@/components/voltar/marcar-pagina";
 import {
   AGREGADA,
+  PAGINA_DO_PROJETO,
   destinoDaAba,
   type ItemDaFaixa,
   type ModuloDaFaixa,
@@ -32,16 +34,22 @@ interface Props {
   agregadaHref: string;
   /** `null` enquanto carregam (fallback do Suspense na tela do orçamento). */
   itens: ItemDaFaixa[] | null;
-  /** Id do item aberto na tela, ou `AGREGADA`. */
+  /** Id do item aberto na tela, `AGREGADA`, ou `PAGINA_DO_PROJETO` na
+   *  página do projeto (o chip do projeto fica marcado). */
   ativo: string;
+  /** O “+” depois da última aba: leva à página "Novo orçamento", como o
+   *  botão vermelho da página do projeto. Só em Orçamentos, para quem pode
+   *  criar orçamento e com o projeto ativo. */
+  novoHref?: string;
 }
 
 /**
  * Faixa do projeto — decisão 106 (opção A do protótipo "Abas do projeto").
  *
  * Primeira linha das telas de orçamento, de job e das visões agregadas, nos
- * três módulos: o voltar, o projeto e uma aba para a agregada e para cada
- * orçamento ou job irmão. É um nível acima das abas que a tela já tinha
+ * três módulos, e da página do projeto em Orçamentos (05/10/2026): o
+ * voltar, o projeto e uma aba para a agregada e para cada orçamento ou job
+ * irmão. Em Orçamentos, um “+” depois da última aba leva ao novo orçamento. É um nível acima das abas que a tela já tinha
  * (versões, seções do job), e por isso tem forma própria — pílula escura,
  * da cor da barra lateral — em vez do sublinhado vermelho delas.
  *
@@ -60,6 +68,7 @@ export function FaixaDoProjeto({
   agregadaHref,
   itens,
   ativo,
+  novoHref,
 }: Props) {
   const searchParams = useSearchParams();
   const abaAtual = searchParams.get("aba");
@@ -76,11 +85,15 @@ export function FaixaDoProjeto({
   // As abas da faixa são da mesma sessão (decisão 108): o voltar pula as
   // páginas deste grupo e leva para onde a pessoa estava antes de entrar
   // no projeto. O rótulo é o nome no balão do voltar de quem sair daqui.
+  // A página do projeto mostra a faixa mas fica FORA do grupo (decisão do
+  // Tiago, 05/10/2026): o voltar de um orçamento continua levando a ela.
+  const naPaginaDoProjeto = ativo === PAGINA_DO_PROJETO;
   const itemAberto = itens?.find((i) => i.id === ativo);
   useMarcarPagina({
-    grupo: `${modulo}:${agregadaHref}`,
-    rotulo:
-      ativo === AGREGADA
+    grupo: naPaginaDoProjeto ? undefined : `${modulo}:${agregadaHref}`,
+    rotulo: naPaginaDoProjeto
+      ? `${projeto.codigo} · ${projeto.nome}`
+      : ativo === AGREGADA
         ? `Visão agregada · ${projeto.codigo}`
         : itemAberto
           ? itemAberto.codigo
@@ -147,10 +160,20 @@ export function FaixaDoProjeto({
   const chipDoProjeto = (
     <>
       <FolderKanban className="h-4 w-4 flex-none text-california-red" />
-      <span className="font-mono text-[11.5px] font-semibold text-muted-foreground">
+      <span
+        className={cn(
+          "font-mono text-[11.5px] font-semibold",
+          naPaginaDoProjeto ? "text-white/60" : "text-muted-foreground",
+        )}
+      >
         {projeto.codigo}
       </span>
-      <span className="max-w-[240px] truncate text-[13px] font-semibold text-foreground">
+      <span
+        className={cn(
+          "max-w-[240px] truncate text-[13px] font-semibold",
+          naPaginaDoProjeto ? "text-white" : "text-foreground",
+        )}
+      >
         {projeto.nome}
       </span>
     </>
@@ -162,10 +185,19 @@ export function FaixaDoProjeto({
       className="relative flex items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-soft"
     >
       {/* O voltar leva à página anterior à faixa (decisão 108). Em
-          Orçamentos o projeto é uma página, e o chip leva até ela. */}
+          Orçamentos o projeto é uma página, e o chip leva até ela — ou, na
+          própria página do projeto, fica marcado como a aba aberta. */}
       <BotaoVoltar reserva={reservaDoVoltar} variante="faixa" />
       <Divisoria />
-      {projeto.href ? (
+      {naPaginaDoProjeto ? (
+        <span
+          aria-current="page"
+          title={`${projeto.codigo} · ${projeto.nome}`}
+          className="inline-flex h-8 min-w-0 flex-none items-center gap-2 rounded-lg bg-california-dark px-2"
+        >
+          {chipDoProjeto}
+        </span>
+      ) : projeto.href ? (
         <Link
           href={projeto.href}
           prefetch={false}
@@ -184,10 +216,12 @@ export function FaixaDoProjeto({
       <Divisoria />
 
       {/* Sem barra de rolagem: com muitos itens o gesto é arrastar, e o
-          "Todos" mostra o que ficou de fora. */}
+          "Todos" mostra o que ficou de fora. Sem `flex-1`: o trilho tem a
+          largura das abas, e o “+” fica colado à última (só encolhe quando
+          as abas não cabem). */}
       <div
         ref={trilhoRef}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <Aba
           href={destino(AGREGADA, agregadaHref)}
@@ -240,6 +274,20 @@ export function FaixaDoProjeto({
           })
         )}
       </div>
+
+      {/* Fora do trilho, para não sumir rolado quando as abas transbordam. */}
+      {novoHref && (
+        <Link
+          href={novoHref}
+          prefetch={false}
+          title="Novo orçamento"
+          aria-label="Novo orçamento"
+          onClick={(e) => segurarSaida(e, novoHref)}
+          className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-california-red/50 hover:bg-california-red/5 hover:text-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Plus className="h-4 w-4" />
+        </Link>
+      )}
 
       {transborda && itens !== null && (
         <div ref={ancoraRef} className="relative flex-none">

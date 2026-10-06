@@ -451,6 +451,10 @@ export default async function OrcamentoDetailPage({
   const orcamentoArquivado = Boolean(orcamento.arquivado_em);
   const projetoArquivado = projetoRaw.status === "arquivado";
   const arquivado = orcamentoArquivado || projetoArquivado;
+  // O “+” da faixa: as mesmas condições do "Novo orçamento" da página do
+  // projeto, mais a permissão que a action de criar confere.
+  const podeCriarOrcamento =
+    !projetoArquivado && pode(session.activeRole, "orcamentos.criar");
   const protegido =
     orcamento.status === "aprovado" ||
     orcamento.status === "job_criado" ||
@@ -663,11 +667,14 @@ export default async function OrcamentoDetailPage({
         <Suspense
           fallback={
             <FaixaDoProjeto
-              {...faixaDoOrcamentoSemItens({
-                id: params.projetoId,
-                codigo: projetoRaw.codigo,
-                nome: projetoRaw.nome,
-              })}
+              {...faixaDoOrcamentoSemItens(
+                {
+                  id: params.projetoId,
+                  codigo: projetoRaw.codigo,
+                  nome: projetoRaw.nome,
+                },
+                podeCriarOrcamento,
+              )}
               ativo={orcamento.id}
               itens={null}
             />
@@ -681,6 +688,7 @@ export default async function OrcamentoDetailPage({
               nome: projetoRaw.nome,
             }}
             orcamentoId={orcamento.id}
+            podeCriarOrcamento={podeCriarOrcamento}
           />
         </Suspense>
 
