@@ -6,6 +6,8 @@ interface Props {
   tenantId: string;
   projeto: { id: string; codigo: string; nome: string };
   orcamentoId: string;
+  /** Mostra o “+” de novo orçamento: quem pode criar, com o projeto ativo. */
+  podeCriarOrcamento: boolean;
 }
 
 /**
@@ -17,7 +19,12 @@ interface Props {
  * dentro de um `<Suspense>` cujo fallback é a mesma faixa sem os itens —
  * a altura não muda quando eles chegam.
  */
-export async function FaixaDosOrcamentos({ tenantId, projeto, orcamentoId }: Props) {
+export async function FaixaDosOrcamentos({
+  tenantId,
+  projeto,
+  orcamentoId,
+  podeCriarOrcamento,
+}: Props) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("orcamentos")
@@ -30,7 +37,7 @@ export async function FaixaDosOrcamentos({ tenantId, projeto, orcamentoId }: Pro
 
   return (
     <FaixaDoProjeto
-      {...faixaDoOrcamentoSemItens(projeto)}
+      {...faixaDoOrcamentoSemItens(projeto, podeCriarOrcamento)}
       ativo={orcamentoId}
       itens={itensDeOrcamentos(
         projeto.id,
@@ -48,11 +55,14 @@ export async function FaixaDosOrcamentos({ tenantId, projeto, orcamentoId }: Pro
 }
 
 /** O que a faixa do orçamento tem antes dos itens — também é o fallback. */
-export function faixaDoOrcamentoSemItens(projeto: {
-  id: string;
-  codigo: string;
-  nome: string;
-}) {
+export function faixaDoOrcamentoSemItens(
+  projeto: {
+    id: string;
+    codigo: string;
+    nome: string;
+  },
+  podeCriarOrcamento: boolean,
+) {
   return {
     modulo: "orcamentos" as const,
     reservaDoVoltar: `/orcamentos/${projeto.id}`,
@@ -62,5 +72,15 @@ export function faixaDoOrcamentoSemItens(projeto: {
       href: `/orcamentos/${projeto.id}`,
     },
     agregadaHref: `/orcamentos/${projeto.id}/agregado`,
+    novoHref: novoOrcamentoHref(projeto.id, podeCriarOrcamento),
   };
+}
+
+/** Destino do “+” da faixa: a mesma página do "Novo orçamento" da página do
+ *  projeto (decisão do Tiago, 05/10/2026). `undefined` esconde o “+”. */
+export function novoOrcamentoHref(
+  projetoId: string,
+  podeCriarOrcamento: boolean,
+): string | undefined {
+  return podeCriarOrcamento ? `/orcamentos/${projetoId}/novo` : undefined;
 }

@@ -14,6 +14,11 @@ export type ModuloDaFaixa = "orcamentos" | "jobs" | "financeiro";
 /** Id da primeira aba, a da visão agregada. Nenhum uuid colide com ele. */
 export const AGREGADA = "agregada";
 
+/** `ativo` da página do projeto em Orçamentos (05/10/2026): a faixa aparece
+ *  nela com o chip do projeto marcado. A página não é aba da faixa — o
+ *  voltar de um orçamento continua levando a ela. */
+export const PAGINA_DO_PROJETO = "projeto";
+
 export interface ItemDaFaixa {
   id: string;
   /** Código mostrado na aba: o do job, nas abas de job. Nas de orçamento é

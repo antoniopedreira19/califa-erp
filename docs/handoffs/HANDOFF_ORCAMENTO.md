@@ -5008,3 +5008,19 @@ aplicada na hora combinada com a frente do Antonio, junto da
   (estado começa `null`, `origemSugerida` removida, botão travado). Sem
   migration; a action não mudou.
 - Ver decisão 076, "Revisão de 2026-10-05".
+
+## ⚠️ Nota de 2026-10-05 (2) — faixa na página do projeto e o “+” de novo orçamento (decisão 106, §5)
+
+- A página do projeto (`/orcamentos/[projetoId]`) ganhou a faixa do
+  projeto. O chip do projeto aparece marcado, e o voltar solto passou para
+  dentro dela, com o mesmo destino.
+- A página do projeto não entra no grupo da faixa: o voltar de um
+  orçamento continua levando a ela, como antes.
+- Um “+” depois da última aba leva à página "Novo orçamento", como o botão
+  vermelho do card, nas três telas com faixa em Orçamentos. Na agregada,
+  ele não cria rascunho: sai para o formulário, e a faixa segura a saída
+  se houver alteração por salvar.
+- O “+” aparece só para quem tem `orcamentos.criar`, e não aparece no
+  projeto arquivado.
+- O trilho das abas não estica mais. Com muitas abas, o “+” fica entre
+  elas e o "Todos".

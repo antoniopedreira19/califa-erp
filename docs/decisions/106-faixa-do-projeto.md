@@ -42,9 +42,9 @@ com valor e status. O Tiago escolheu a **A**.
   fora, o próprio botão ou a escolha de um item.
 
 Vale para as seis telas: orçamento e agregada de Orçamentos, job e
-agregada de Jobs, job e agregada do Financeiro. O Financeiro não sai do
-módulo: as abas dele levam a `/financeiro/jobs/…` e
-`/financeiro/projetos/…`.
+agregada de Jobs, job e agregada do Financeiro — e, desde 05/10/2026, a
+página do projeto em Orçamentos (§5). O Financeiro não sai do módulo: as
+abas dele levam a `/financeiro/jobs/…` e `/financeiro/projetos/…`.
 
 ## 3. As regras (respostas do Tiago, 25/09/2026)
 
@@ -90,3 +90,56 @@ fluxo. Para tirar a exceção, basta trocar o ramo `fluxo` em
 - **Job sem projeto do financeiro** (anterior à migration
   20260820000011) não tem agregada no Financeiro: nele fica o voltar de
   antes, sem faixa.
+
+## 5. ⚠️ A faixa na página do projeto e o “+” de novo orçamento (2026-10-05)
+
+Pedido do Tiago: a faixa aparece desde a página do projeto em Orçamentos
+(`/orcamentos/[projetoId]`, a lista "Orçamentos do projeto"), e depois do
+último orçamento entra um “+” para criar mais um. Um protótipo com os
+componentes reais foi validado antes (artifact "Faixa do Projeto").
+
+**O que vale:**
+
+- **Na página do projeto, o chip do projeto é a aba aberta**: pílula
+  grafite, como as outras abas abertas (`ativo = PAGINA_DO_PROJETO`). O
+  voltar solto que a página tinha passou para dentro da faixa, com o mesmo
+  destino (a página anterior; na falta dela, a lista de projetos).
+- **A página do projeto não entra no grupo da faixa** (resposta do Tiago:
+  "continua como hoje"). O voltar de um orçamento ou da agregada continua
+  levando à página do projeto quando se veio dela. Só as abas da agregada e
+  dos orçamentos são o grupo que o voltar pula (decisão 108).
+- **O “+” é o mesmo que o botão "+ Novo orçamento"** da página do projeto:
+  leva à página "Novo orçamento", e criar abre o orçamento novo, cuja aba
+  passa a ser a última da faixa. Isso vale nas três telas com faixa em
+  Orçamentos (página do projeto, orçamento e agregada). Na agregada, o “+”
+  **não** é o "Criar orçamento de job" de lá, que cria rascunho até o
+  "Salvar alterações": ele sai para a página do formulário, e a faixa
+  segura a saída se houver alteração por salvar.
+- **Quem vê o “+”**: quem tem `orcamentos.criar` (a permissão que a action
+  de criar confere), com o projeto ativo; some no projeto arquivado
+  (decisão 118). Só em Orçamentos: em Jobs e no Financeiro o job nasce da
+  aprovação.
+- **Posição**: logo depois da última aba. O trilho das abas deixou de
+  esticar (`flex-1`); quando as abas não cabem, ele encolhe e o “+” fica
+  visível entre as abas e o botão "Todos".
+- O botão vermelho "+ Novo orçamento" e o "Visão agregada" do card da
+  página do projeto continuam como estavam.
+
+**Código:** `PAGINA_DO_PROJETO` em `lib/faixa-do-projeto.ts`. Em
+`components/faixa-do-projeto.tsx`, a prop `novoHref` e o chip marcado. Em
+`faixa-orcamentos.tsx`, `novoOrcamentoHref` e o parâmetro
+`podeCriarOrcamento` de `faixaDoOrcamentoSemItens`. A página do projeto
+usa os orçamentos que já carregava, sem consulta nova.
+
+**Conferido logado em 05/10/2026** (TES-P002/26 e TES-P001/26, 1838 px):
+- a página do projeto mostra a faixa com o chip marcado e o “+”;
+- projeto → aba de um orçamento → voltar ("Voltar para TES-P002/26 · Teste
+  Demo") volta à página do projeto;
+- o “+” da página do projeto e o da agregada levam a `/novo`, e o voltar
+  de lá indica o projeto;
+- com 18 orçamentos, as abas transbordam e o “+” fica visível antes do
+  "Todos";
+- a agregada de Jobs segue sem “+”.
+
+A regra de quem vê o “+” por papel foi conferida só pelo código, porque
+não houve login como financeiro.

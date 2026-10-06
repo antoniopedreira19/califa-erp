@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { AGREGADA, itensDeOrcamentos } from "@/lib/faixa-do-projeto";
+import { novoOrcamentoHref } from "../faixa-orcamentos";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
@@ -565,6 +566,14 @@ export default async function OrcamentosAgregadoPage({
           agregadaHref={`/orcamentos/${projeto.id}/agregado`}
           itens={itensDeOrcamentos(projeto.id, orcamentos, null)}
           ativo={AGREGADA}
+          // O “+” sai da agregada para a página "Novo orçamento", como o
+          // botão da página do projeto (decisão do Tiago, 05/10/2026) — e
+          // não para o rascunho do "Criar orçamento de job" daqui. Com
+          // alteração por salvar, a faixa segura a saída.
+          novoHref={novoOrcamentoHref(
+            projeto.id,
+            !projetoArquivado && pode(session.activeRole, "orcamentos.criar"),
+          )}
         />
       }
       projeto={{
