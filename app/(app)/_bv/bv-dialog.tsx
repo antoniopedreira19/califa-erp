@@ -61,10 +61,10 @@ export interface FornecedorOpcao {
 
 /** Onde o BV é gravado.
  *
- *  Por padrão nas Server Actions, contra o item já existente no banco. O
- *  editor de orçamento do projeto passa um adaptador que guarda o BV no
- *  rascunho: lá o item ainda não tem id, e a linha em `itens_bv` só nasce
- *  no "Salvar orçamentos", depois que os itens existem. */
+ *  Por padrão nas Server Actions, contra o item já existente no banco.
+ *  Até a decisão 148 a visão agregada passava um adaptador que guardava o
+ *  BV no rascunho, até o "Salvar orçamentos"; desde então ela grava pelo
+ *  padrão, e nenhuma tela passa outro. */
 export interface AdaptadorBv {
   /** `chaveDoItem` vem marcada com o espaço a que o id pertence — versão,
    *  cópia do job ou rascunho. O adaptador de rascunho só usa o `.id`; as

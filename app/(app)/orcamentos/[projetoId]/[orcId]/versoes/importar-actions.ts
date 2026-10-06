@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
+import { checarPermissao } from "@/lib/permissoes-server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import {
@@ -727,6 +728,11 @@ export async function sobrescreverVersaoComPlanilha(
   entrada: EntradaDaGravacao,
 ): Promise<ConfirmResult> {
   const session = await requireSession();
+  // A troca apaga e regrava a planilha com a chave de serviço: a permissão
+  // tem que ser conferida aqui, não só no botão (06/10/2026, decisão 148 —
+  // a visão agregada passou a importar por esta mesma porta).
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return { ok: false, message: gate.message };
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 

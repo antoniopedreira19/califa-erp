@@ -167,6 +167,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 145 | [Módulo fiscal: correções pela lei (remessa pelo líquido, complementar, DARF mínimo)](145-fiscal-correcoes-pela-lei.md) | 2026-10-04 |
 | 146 | [Crédito de PIS/COFINS pelo rateio proporcional do mês (o job sai da regra)](146-credito-pelo-rateio-proporcional.md) | 2026-10-04 |
 | 147 | [Planilha de Mídia Off no orçamento (entrega 1: até aprovar)](147-planilha-midia-off.md) | 2026-10-06 |
+| 148 | [A visão agregada salva cada alteração na hora (entrega 1)](148-agregada-salva-cada-alteracao.md) | 2026-10-06 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -179,4 +180,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 148.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 149.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

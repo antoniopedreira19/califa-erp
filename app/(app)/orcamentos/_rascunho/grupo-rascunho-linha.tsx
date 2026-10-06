@@ -7,11 +7,11 @@
  *  linha dela. O que sobra aqui são as duas peças que mudam de tela para
  *  tela — o nome e a lixeira.
  *
- *  A diferença para a versão está no destino da escrita: lá é Server
- *  Action, aqui é o estado em memória do editor. Nada existe no banco
- *  até o "Salvar orçamentos", e por isso o nome é editado direto no
- *  campo, sem passo de confirmação: nesta tela o usuário monta vários
- *  orçamentos em sequência e cada clique a mais é atrito.
+ *  O nome é editado direto no campo, sem passo de confirmação: nesta
+ *  tela o usuário monta vários orçamentos em sequência e cada clique a
+ *  mais é atrito. Desde a decisão 148 o nome grava ao sair do campo (ou
+ *  no Enter), pela mesma action da tela da versão (`renomearGrupo`) — e
+ *  não a cada tecla. Esc desfaz o que foi digitado.
  */
 
 import * as React from "react";
@@ -29,6 +29,11 @@ export function NomeDoGrupoRascunho({
   readOnly?: boolean;
   onRenomear: (nome: string) => void;
 }) {
+  // O que está sendo digitado. Volta ao nome gravado quando ele muda por
+  // fora (a gravação recusada desfaz o nome).
+  const [valor, setValor] = React.useState(grupo.nome);
+  React.useEffect(() => setValor(grupo.nome), [grupo.nome]);
+
   if (readOnly) {
     return (
       <span className="truncate text-[13.5px] font-bold tracking-[-0.01em] text-foreground">
@@ -37,10 +42,32 @@ export function NomeDoGrupoRascunho({
     );
   }
 
+  function confirmar() {
+    const nome = valor.trim();
+    // Grupo sem nome não existe no banco: o campo vazio volta ao de antes.
+    if (!nome) {
+      setValor(grupo.nome);
+      return;
+    }
+    if (nome !== grupo.nome) onRenomear(nome);
+  }
+
   return (
     <input
-      value={grupo.nome}
-      onChange={(e) => onRenomear(e.target.value)}
+      value={valor}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={confirmar}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          setValor(grupo.nome);
+          // O blur depois do Esc grava o nome de antes: nada muda.
+          requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
+        }
+      }}
       placeholder="Nome do grupo"
       aria-label="Nome do grupo"
       className="w-full min-w-0 max-w-[260px] rounded-md bg-transparent px-1.5 py-0.5 text-[13.5px] font-bold tracking-[-0.01em] text-foreground outline-none transition-colors hover:bg-white focus:bg-white focus:ring-2 focus:ring-california-red/15"
@@ -57,6 +84,8 @@ export function AcoesDoGrupoRascunho({
   onRemover: () => void;
 }) {
   const [perguntando, setPerguntando] = React.useState(false);
+  // A linha em branco que ainda não tem descrição não está no banco.
+  const itens = grupo.itens.filter((it) => it.item.trim() !== "").length;
 
   return (
     <>
@@ -74,12 +103,11 @@ export function AcoesDoGrupoRascunho({
         onOpenChange={setPerguntando}
         title="Remover grupo?"
         description={
-          grupo.itens.length > 0 ? (
+          itens > 0 ? (
             <>
               O grupo <strong className="text-foreground">{grupo.nome}</strong>{" "}
-              e seus {grupo.itens.length}{" "}
-              {grupo.itens.length === 1 ? "item" : "itens"} saem do rascunho.
-              Nada foi gravado ainda, então nada some do banco.
+              e {itens === 1 ? "o item dele saem" : `os ${itens} itens dele saem`}{" "}
+              do orçamento, e os BVs desses itens junto.
             </>
           ) : (
             <>

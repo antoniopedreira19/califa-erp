@@ -7,7 +7,7 @@ import { ImportarPlanilhaDialog } from "@/app/(app)/orcamentos/_importacao/impor
 import { carregarAbaNoRascunho, lerPlanilhaDoRascunho } from "./actions";
 import type { GrupoPayload } from "./tipos";
 
-/** O arquivo enviado e a aba escolhida — o "Salvar orçamentos" relê essa
+/** O arquivo enviado e a aba escolhida — a importação da versão relê essa
  *  aba no servidor para registrar a importação. */
 export type EnvioComAba = EnvioDaPlanilha & { aba: string };
 
@@ -30,15 +30,19 @@ interface Props {
   /** Orçamento de serviço Interno (decisão 105): toda linha com valor entra
    *  como F · Interno, inclusive a de tipo em branco. Obrigatório. */
   interno: boolean;
-  onImportado: (planilha: PlanilhaLida) => void;
+  /** Grava a planilha (na agregada, na hora — decisão 148). O diálogo
+   *  espera: recusada, ele continua aberto com o motivo e o arquivo. */
+  onImportado: (
+    planilha: PlanilhaLida,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
 /**
  * Importação de planilha dentro do editor do orçamento do projeto — o
- * mesmo modal da versão (decisão 110), sem gravar: a aba escolhida vira
- * grupos e itens do rascunho. O "Salvar orçamentos" registra a importação
- * em `orcamento_importacoes` e descarta o arquivo (decisão 129); o editor
- * descarta também o que for trocado, removido ou abandonado.
+ * mesmo modal da versão (decisão 110). Ele só lê e mostra a prévia; ao
+ * confirmar, a agregada grava na hora pela importação da versão
+ * (`importarPlanilhaNaAgregada`, decisão 148), que registra em
+ * `orcamento_importacoes` e descarta o arquivo (decisão 129).
  */
 export function ImportarPlanilhaModal({
   open,
@@ -57,7 +61,7 @@ export function ImportarPlanilhaModal({
         <>
           A importação vale só para{" "}
           <span className="font-semibold text-foreground">{nome}</span> — os demais
-          orçamentos do rascunho não são afetados.
+          orçamentos do projeto não são afetados.
         </>
       }
       modeloPlanilha={modeloPlanilha}
@@ -65,18 +69,17 @@ export function ImportarPlanilhaModal({
       mostrarHonorarios={false}
       confirmarSubstituicao={null}
       rotuloGravar="Importar"
-      textoGravando="Lendo a aba escolhida..."
+      textoGravando="Importando a planilha..."
       ler={(envio) => lerPlanilhaDoRascunho({ envio, modelo_planilha: modeloPlanilha, interno })}
       gravar={async ({ envio, aba }) => {
         const r = await carregarAbaNoRascunho({ envio, aba, modelo_planilha: modeloPlanilha, interno });
         if (!r.ok) return r;
-        onImportado({
+        return onImportado({
           envio: { ...envio, aba },
           grupos: r.grupos,
           percentualHonorarios: r.percentual_honorarios,
           avisos: r.avisos,
         });
-        return { ok: true };
       }}
     />
   );

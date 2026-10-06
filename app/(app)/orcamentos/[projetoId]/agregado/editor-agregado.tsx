@@ -5,10 +5,11 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
+  Check,
   EyeOff,
   FolderKanban,
+  Loader2,
   Plus,
-  Save,
   X,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -27,10 +28,10 @@ import {
   isCampoItemEditavel,
   itemSchema,
 } from "@/lib/validations/itens";
-import { bvSchema } from "@/lib/validations/bv";
 import type {
   Categoria,
   CategoriaDominio,
+  ItemBv,
   Profile,
   Regional,
   TipoCusto,
@@ -39,16 +40,14 @@ import type {
 import type { CidadeOption } from "../../cidade-combobox";
 import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import type { AdaptadorItens } from "../[orcId]/versoes/[versaoId]/itens-table";
-import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
+import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import { ResumoRentabilidade } from "../[orcId]/versoes/[versaoId]/resumo-rentabilidade";
 import { OrcamentoForm, type DadosOrcamento } from "../orcamento-form";
 import { JobRascunhoCard } from "../../_rascunho/orcamento-card";
 import {
   ImportarPlanilhaModal,
-  type EnvioComAba,
   type PlanilhaLida,
 } from "../../_rascunho/importar-planilha-modal";
-import { descartarEnvioPlanilha } from "../../_importacao/envio-actions";
 import { ParametrosModal } from "../../_rascunho/parametros-modal";
 import { TotaisProjetoCard } from "../../_totais/totais-projeto-card";
 import { CardMidiaNaAgregada, type OrcamentoMidiaNaAgregada } from "./card-midia";
@@ -62,16 +61,24 @@ import {
 } from "../../_rascunho/rascunho";
 import {
   PARAMETROS_PADRAO,
-  type AlteracoesProjetoPayload,
-  type GrupoPayload,
   type GrupoRascunho,
   type ItemRascunho,
-  type OrcamentoCriado,
   type OrcamentoRascunho,
   type OrigemBanco,
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
-import { salvarAlteracoesDoProjeto } from "./actions";
+import { importarPlanilhaNaAgregada } from "./actions";
+import { criarOrcamentoDaAgregada } from "../actions";
+import {
+  adicionarItem,
+  atualizarCampoItem,
+  atualizarVersao,
+  criarGrupo,
+  moverItem,
+  removerGrupo,
+  removerItem,
+  renomearGrupo,
+} from "../[orcId]/versoes/actions";
 import { estagioFunil } from "@/lib/calculos/funil";
 import { moverNaLista } from "@/lib/calculos/ordem-itens";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
@@ -154,6 +161,10 @@ interface Props {
    *  leitura nesta etapa: a coluna mostra os quatro estados e não abre o
    *  diálogo — marcar save segue na planilha da versão. */
   savePorItem?: Record<string, EstadoSaveDaLinha>;
+  /** Os BVs de cada item, do banco (vários por item, decisão 062). A janela
+   *  do BV da agregada grava pelas actions da versão e o refresh traz a
+   *  lista de volta (decisão 148). */
+  bvsPorItem: Record<string, ItemBv[]>;
   /** Saldos de save que este cliente tem para gastar — alimentam o
    *  formulário de "consumir save de outro job". */
   saldosDeSave?: SaldoDeSave[];
@@ -173,10 +184,13 @@ type Modal =
 /**
  * Visão agregada editável: a continuação do orçamento do projeto.
  *
- * Junta num lugar só os orçamentos que já existem — cada um na sua versão
- * vigente — e os que forem criados aqui. Tudo é rascunho no navegador até
- * o "Salvar alterações", que grava o lote de uma vez, do mesmo jeito que o
- * editor do orçamento do projeto.
+ * Junta num lugar só os orçamentos do projeto — cada um na sua versão
+ * vigente. Desde 06/10/2026 (decisão 148) cada alteração grava na hora,
+ * pelas mesmas actions da tela da versão: a célula, o item, o grupo, a
+ * ordem, os parâmetros, o BV e o save. O "Criar orçamento de job" grava o
+ * orçamento com a v1 vazia. Não há mais "Salvar alterações" — ele mandava
+ * a tela inteira e apagava do banco o que não estava na tela de quem
+ * salvava, e foi por ele que o AMB-P017/26 ganhou 36 cópias.
  *
  * Duas travas vêm do domínio e não são negociáveis na tela: versão aprovada
  * não se altera, e orçamento que já virou job aberto pelo financeiro
@@ -212,10 +226,18 @@ function nosGrupos(
   return algum ? proximos : orcamentos;
 }
 
+/** Um tique: o que vem depois já não é atualização da transição de quem
+ *  chamou (o React só marca o trecho síncrono do `startTransition`). Ver
+ *  o porquê nos adaptadores da planilha, dentro do editor. */
+function foraDaTransicao(): Promise<void> {
+  return Promise.resolve();
+}
+
 export function EditorAgregado({
   projeto,
   faixa,
   savePorItem,
+  bvsPorItem,
   saldosDeSave,
   nomeDoGrupo,
   honorariosCliente,
@@ -277,6 +299,17 @@ export function EditorAgregado({
   );
   React.useEffect(() => {
     if (servicosInternos.size === 0) return;
+    // Só chama o setState quando há linha a corrigir. Chamado sempre, ele
+    // agenda um render mesmo devolvendo a mesma lista, e um render que
+    // refaça a lista (atualização ainda pendente na fila) roda o efeito de
+    // novo — o laço de "Maximum update depth" visto em 06/10/2026.
+    const precisa = orcamentos.some(
+      (orc) =>
+        !!orc.servico_id &&
+        servicosInternos.has(orc.servico_id) &&
+        orc.grupos.some((g) => g.itens.some((it) => itemDoInterno(it) !== it)),
+    );
+    if (!precisa) return;
     setOrcamentos((atuais) => {
       let mudou = false;
       const proximos = atuais.map((orc) => {
@@ -298,76 +331,65 @@ export function EditorAgregado({
     });
   }, [orcamentos, servicosInternos]);
   // "Exibir": filtro de TELA. Cards e Totais seguem esta lista; os três
-  // indicadores do topo são do projeto inteiro e não seguem. Nada é
-  // salvo — o que está escondido continua entrando no "Salvar
-  // alterações" como estava.
+  // indicadores do topo são do projeto inteiro e não seguem. Esconder um
+  // orçamento não muda nada nele.
   const [exibidos, setExibidos] = React.useState<string[]>(() =>
     inicial.map((o) => o.id),
   );
   const [modal, setModal] = React.useState<Modal>(null);
   const [erro, setErro] = React.useState<string | null>(null);
-  /** Para onde ir depois do "Sair sem salvar?": a lista do projeto (o
-   *  Cancelar) ou a tela de um orçamento (o "Editar meses" do mensal).
+  /** Para onde ir quando alguém sai com uma gravação ainda a caminho.
    *  `null` = pergunta fechada. */
   const [askSair, setAskSair] = React.useState<string | null>(null);
-  const [salvando, startSalvar] = React.useTransition();
+  /** A chave do formulário de orçamento novo aberto agora: vai para
+   *  `orcamentos.chave_rascunho`, e o segundo envio do mesmo formulário é
+   *  recusado pelo índice único (decisão 148). */
+  const chaveDoFormulario = React.useRef<string | null>(null);
 
-  /** O XLSX de cada orçamento importado nesta sessão — já no Storage, com
-   *  a aba escolhida (decisão 110). Fora do estado porque nenhum render
-   *  depende dele. É só de passagem (decisão 129): o "Salvar" registra a
-   *  importação e o servidor descarta o arquivo; o que for trocado,
-   *  removido ou abandonado a tela descarta. */
-  const arquivos = React.useRef(new Map<string, EnvioComAba>());
-
-  /** Descarta o arquivo de um orçamento (ou de todos) e esquece dele. */
-  function descartarArquivos(id?: string) {
-    const alvos =
-      id === undefined
-        ? Array.from(arquivos.current.keys())
-        : arquivos.current.has(id)
-          ? [id]
-          : [];
-    for (const alvo of alvos) {
-      const envio = arquivos.current.get(alvo);
-      arquivos.current.delete(alvo);
-      if (envio) void descartarEnvioPlanilha(envio.path);
-    }
-  }
-
-  // Sair da tela sem salvar — pelo Cancelar, pelo voltar ou por qualquer
-  // link — desmonta o editor: o que ficou importado e não foi salvo sai do
-  // Storage. Fechar a aba não chega aqui; a limpeza de envios com mais de
-  // um dia cobre esse caso.
-  React.useEffect(() => {
-    const mapa = arquivos.current;
-    return () => {
-      for (const envio of mapa.values()) void descartarEnvioPlanilha(envio.path);
-      mapa.clear();
-    };
-  }, []);
-
-  /** Retrato do que está gravado. É contra ele que "houve mudança?" é
-   *  respondido — sem isso o botão de salvar ficaria sempre aceso.
-   *  `aberto` fica de fora: expandir um card não é alteração de conteúdo.
-   *  Em estado, e não em ref, porque atualizar depois de salvar precisa
-   *  redesenhar o rodapé. */
-  const [baseline, setBaseline] = React.useState(() => assinatura(inicial));
-  const sujo = assinatura(orcamentos) !== baseline;
+  // ---------- gravação ----------
+  // Cada alteração vai ao banco sozinha. A tela muda na hora e fica como
+  // referência — sem recarregar a página a cada célula, que com 10
+  // orçamentos deixaria a agregada lenta (docs/PERFORMANCE.md). Recusada,
+  // a alteração é desfeita na tela e o motivo aparece.
+  const [gravacao, setGravacao] = React.useState<{
+    pendentes: number;
+    ultima: Date | null;
+    falhou: boolean;
+  }>({ pendentes: 0, ultima: null, falhou: false });
+  const gravar = React.useCallback(
+    async <T extends { ok: boolean }>(acao: () => Promise<T>): Promise<T> => {
+      setGravacao((g) => ({ ...g, pendentes: g.pendentes + 1 }));
+      let res: T;
+      try {
+        res = await acao();
+      } catch (e) {
+        setGravacao((g) => ({ ...g, pendentes: Math.max(0, g.pendentes - 1), falhou: true }));
+        throw e;
+      }
+      setGravacao((g) => ({
+        pendentes: Math.max(0, g.pendentes - 1),
+        ultima: res.ok ? new Date() : g.ultima,
+        falhou: !res.ok,
+      }));
+      return res;
+    },
+    [],
+  );
+  const salvandoAgora = gravacao.pendentes > 0;
 
   React.useEffect(() => {
-    if (!sujo) return;
+    if (!salvandoAgora) return;
     function avisar(e: BeforeUnloadEvent) {
       e.preventDefault();
       e.returnValue = "";
     }
     window.addEventListener("beforeunload", avisar);
     return () => window.removeEventListener("beforeunload", avisar);
-  }, [sujo]);
+  }, [salvandoAgora]);
 
-  // O `beforeunload` só pega fechar a aba e recarregar. O voltar e as abas
-  // da faixa do projeto navegam por dentro do app e passariam direto: com
-  // alteração não salva, eles caem na mesma confirmação (decisão 108).
-  useProtegerSaida(sujo, (href) => setAskSair(href));
+  // Nada fica "por salvar". Só a gravação ainda a caminho segura a saída
+  // pelo voltar e pelas abas da faixa (decisão 108).
+  useProtegerSaida(salvandoAgora, (href) => setAskSair(href));
 
   // ---------- rótulos ----------
   const nomePor = React.useMemo(
@@ -437,117 +459,258 @@ export function EditorAgregado({
     );
   }
 
-  function criarOrcamento(dados: DadosOrcamento) {
-    // Uuid, e não `novoId`: o id vai ao servidor como a chave do rascunho
-    // (`orcamentos.chave_rascunho`), que o índice único não deixa gravar
-    // duas vezes. Precisa ser único entre abas e sessões, não só na tela.
-    const id = crypto.randomUUID();
+  /** Grava o orçamento novo com a v1 vazia e o põe na tela como gravado.
+   *  Recusado, o formulário continua aberto, com o motivo e o que foi
+   *  preenchido. */
+  async function criarOrcamento(
+    dados: DadosOrcamento,
+  ): Promise<{ ok: false; message: string; fieldErrors?: Record<string, string[]> } | void> {
+    const chave = chaveDoFormulario.current ?? crypto.randomUUID();
+    chaveDoFormulario.current = chave;
+    const fd = new FormData();
+    fd.set("chave", chave);
+    fd.set("nome", dados.nome);
+    fd.set("categoria_id", dados.categoria_id ?? "");
+    fd.set("servico_id", dados.servico_id ?? "");
+    fd.set("descritivo", dados.descritivo ?? "");
+    fd.set("regional_id", dados.regional_id);
+    fd.set("cidade_id", dados.cidade_id);
+    fd.set("gp_responsavel_id", dados.gp_responsavel_id);
+    fd.set("produtor_id", dados.produtor_id);
+    fd.set("data_inicio_prevista", dados.data_inicio_prevista ?? "");
+    fd.set("data_fim_prevista", dados.data_fim_prevista ?? "");
+
+    const res = await gravar(() => criarOrcamentoDaAgregada(projeto.id, fd));
+    if (!res.ok) return res;
+
     // A cadeia vem da categoria escolhida no formulário (decisão 072).
     // Categoria não encontrada cai em nacional — o fechamento que todo
     // orçamento sempre teve.
     const modeloPlanilha =
       categorias.find((c) => c.id === dados.categoria_id)?.modelo_planilha ??
       "nacional";
-    // O orçamento recém-criado sempre aparece, mesmo com a tela filtrada:
-    // ninguém cria um orçamento para não vê-lo.
-    setExibidos((atuais) => [...atuais, id]);
-    setOrcamentos((atuais) => [
-      ...atuais,
-      {
-        ...dados,
-        id,
-        aberto: true,
-        origem: null,
-        grupos: [],
-        arquivoNome: null,
-        percentualHonorariosDetectado: null,
-        // Orçamento novo nunca é mensal por aqui (decisão 078).
-        meses: [],
-        // Orçamento novo nasce com os honorários do cadastro do cliente.
-        parametros: {
-          ...PARAMETROS_PADRAO,
-          percentual_honorarios: honorariosCliente,
-          // Os mesmos valores de partida que o servidor grava ao salvar —
-          // senão os Totais do rascunho mostrariam a cadeia sem int. taxes.
-          ...(modeloPlanilha === "internacional"
-            ? {
-                moeda_estrangeira: "USD",
-                percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
-              }
-            : {}),
-        },
-        modeloPlanilha,
+    const id = res.orcamentoId;
+    const origemBanco: OrigemBanco = res.versaoId
+      ? {
+          orcamentoId: id,
+          versaoId: res.versaoId,
+          numeroVersao: 1,
+          statusOrcamento: "rascunho",
+          statusVersao: "rascunho",
+          bloqueio: null,
+          estagio: estagioFunil("rascunho", null),
+        }
+      : {
+          // O orçamento entrou e a v1 não: em consulta, como a página o
+          // mostra, até a versão ser criada na tela do orçamento.
+          orcamentoId: id,
+          versaoId: "",
+          numeroVersao: 0,
+          statusOrcamento: "rascunho",
+          statusVersao: "",
+          bloqueio:
+            "Este orçamento ainda não tem nenhuma versão. Crie a primeira na tela do orçamento.",
+          estagio: estagioFunil("rascunho", null),
+        };
+    const novo: OrcamentoRascunho = {
+      ...dados,
+      id,
+      origemBanco,
+      aberto: true,
+      origem: null,
+      grupos: [],
+      arquivoNome: null,
+      percentualHonorariosDetectado: null,
+      // Orçamento novo nunca é mensal por aqui (decisão 078).
+      meses: [],
+      // Os mesmos valores com que a v1 nasce no servidor: honorários do
+      // cadastro do cliente e a alíquota padrão (`criarVersaoInicial`).
+      parametros: {
+        ...PARAMETROS_PADRAO,
+        percentual_honorarios: honorariosCliente,
+        ...(modeloPlanilha === "internacional"
+          ? {
+              moeda_estrangeira: "USD",
+              percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
+            }
+          : {}),
       },
-    ]);
+      modeloPlanilha,
+    };
+    // O recém-criado sempre aparece, mesmo com a tela filtrada: ninguém
+    // cria um orçamento para não vê-lo.
+    setOrcamentos((atuais) => [...atuais, novo]);
+    setExibidos((atuais) => [...atuais, id]);
+    chaveDoFormulario.current = null;
     setModal(null);
+    setErro(null);
+    // A faixa do projeto e o "Exportar" vêm do servidor.
+    router.refresh();
+  }
+
+  function abrirFormulario() {
+    chaveDoFormulario.current = crypto.randomUUID();
+    setModal({ tipo: "form" });
+  }
+
+  /** A versão do orçamento na tela — a que recebe as gravações. */
+  function versaoDe(orcamentoId: string): string | null {
+    const orc = orcamentosRef.current.find((o) => o.id === orcamentoId);
+    return orc?.origemBanco?.versaoId || null;
+  }
+
+  /** O grupo novo nasce no banco com um nome livre ("Novo grupo", "Novo
+   *  grupo 2"…) — o nome é único na versão (no mensal, no mês). A linha em
+   *  branco que vem com ele fica só na tela até ganhar descrição. */
+  async function novoGrupoNoBanco(orcamentoId: string, mesId: string | null) {
+    const orc = orcamentosRef.current.find((o) => o.id === orcamentoId);
+    const versaoId = versaoDe(orcamentoId);
+    if (!orc || !versaoId) return;
+    const usados = new Set(
+      orc.grupos.filter((g) => g.mesId === mesId).map((g) => g.nome.trim().toLowerCase()),
+    );
+    let nome = "Novo grupo";
+    for (let n = 2; usados.has(nome.toLowerCase()); n += 1) nome = `Novo grupo ${n}`;
+
+    const fd = new FormData();
+    fd.set("nome", nome);
+    if (mesId) fd.set("mes_id", mesId);
+    const res = await gravar(() => criarGrupo(versaoId, fd));
+    if (!res.ok || !res.id) {
+      setErro(
+        `Orçamento “${orc.nome}”: ${res.ok ? "não foi possível criar o grupo." : res.message}`,
+      );
+      return;
+    }
+    const grupoId = res.id;
+    mutarOrcamento(orcamentoId, (o) => ({
+      ...o,
+      origem: o.origem ?? "manual",
+      grupos: [
+        ...o.grupos,
+        { id: grupoId, nome, mesId, itens: [{ ...ITEM_VAZIO, id: novoId("it") }] },
+      ],
+    }));
     setErro(null);
   }
 
-  function removerOrcamento(id: string) {
-    descartarArquivos(id);
-    setOrcamentos((atuais) => atuais.filter((o) => o.id !== id));
-    setExibidos((atuais) => atuais.filter((x) => x !== id));
-  }
-
   function criarPlanilha(id: string) {
-    mutarOrcamento(id, (o) => ({
-      ...o,
-      origem: "manual",
-      grupos: [
-        {
-          id: novoId("g"),
-          nome: "Novo grupo",
-          mesId: null,
-          itens: [{ ...ITEM_VAZIO, id: novoId("it") }],
-        },
-      ],
-    }));
+    void novoGrupoNoBanco(id, null);
   }
 
-  function aplicarImportacao(id: string, planilha: PlanilhaLida) {
-    // Importar de novo no mesmo orçamento troca a planilha: a anterior sai.
-    const anterior = arquivos.current.get(id);
-    if (anterior && anterior.path !== planilha.envio.path) {
-      void descartarEnvioPlanilha(anterior.path);
+  function novoGrupo(id: string, mesId: string | null) {
+    void novoGrupoNoBanco(id, mesId);
+  }
+
+  /** A importação grava na hora (a mesma da tela da versão) e a planilha do
+   *  card passa a ser a que ficou no banco, com os ids reais. O diálogo
+   *  espera: recusada, ele mostra o motivo e guarda o arquivo para tentar
+   *  de novo (e o descarta ao fechar). */
+  async function aplicarImportacao(
+    orcamentoId: string,
+    planilha: PlanilhaLida,
+  ): Promise<{ ok: true } | { ok: false; message: string }> {
+    const versaoId = versaoDe(orcamentoId);
+    if (!versaoId) {
+      return { ok: false, message: "Este orçamento não tem versão aberta para receber a planilha." };
     }
-    arquivos.current.set(id, planilha.envio);
-    mutarOrcamento(id, (o) => ({
+    const res = await gravar(() => importarPlanilhaNaAgregada(versaoId, planilha.envio));
+    if (!res.ok) return res;
+    mutarOrcamento(orcamentoId, (o) => ({
       ...o,
       origem: "importado",
       arquivoNome: planilha.envio.nome,
       percentualHonorariosDetectado: planilha.percentualHonorarios,
-      grupos: planilha.grupos.map((g: GrupoPayload) => ({
-        id: novoId("g"),
-        nome: g.nome,
-        mesId: null,
-        itens: g.itens.map((it) => ({ ...it, id: novoId("it"), bv: null })),
-      })),
+      grupos: res.grupos,
     }));
     setErro(null);
+    router.refresh();
+    return { ok: true };
   }
 
-  /** `mesId`: o mês em que o grupo nasce, no orçamento de Fee ou Always On
-   *  (decisão 078); `null` nos outros. O número do nome conta só os grupos
-   *  daquele mês — o nome é único dentro do mês. */
-  function novoGrupo(id: string, mesId: string | null) {
-    mutarOrcamento(id, (o) => ({
+  async function renomearGrupoNoBanco(orcamentoId: string, grupoId: string, nome: string) {
+    const orc = orcamentosRef.current.find((o) => o.id === orcamentoId);
+    const antes = orc?.grupos.find((g) => g.id === grupoId)?.nome;
+    if (!orc || antes === undefined || antes === nome) return;
+    const trocar = (paraNome: string) =>
+      mutarOrcamento(orcamentoId, (o) => ({
+        ...o,
+        grupos: o.grupos.map((g) => (g.id === grupoId ? { ...g, nome: paraNome } : g)),
+      }));
+    trocar(nome);
+    const fd = new FormData();
+    fd.set("nome", nome);
+    const res = await gravar(() => renomearGrupo(grupoId, fd));
+    if (!res.ok) {
+      trocar(antes);
+      setErro(`Orçamento “${orc.nome}”: ${res.message} O nome voltou a “${antes}”.`);
+    }
+  }
+
+  async function removerGrupoNoBanco(orcamentoId: string, grupoId: string) {
+    const orc = orcamentosRef.current.find((o) => o.id === orcamentoId);
+    const indice = orc?.grupos.findIndex((g) => g.id === grupoId) ?? -1;
+    if (!orc || indice < 0) return;
+    const grupo = orc.grupos[indice];
+    mutarOrcamento(orcamentoId, (o) => ({
       ...o,
-      grupos: [
-        ...o.grupos,
-        {
-          id: novoId("g"),
-          nome: `Novo grupo ${o.grupos.filter((g) => g.mesId === mesId).length + 1}`,
-          mesId,
-          itens: [{ ...ITEM_VAZIO, id: novoId("it") }],
-        },
-      ],
+      grupos: o.grupos.filter((g) => g.id !== grupoId),
     }));
+    const res = await gravar(() => removerGrupo(grupoId));
+    if (!res.ok) {
+      mutarOrcamento(orcamentoId, (o) => {
+        const grupos = o.grupos.slice();
+        grupos.splice(Math.min(indice, grupos.length), 0, grupo);
+        return { ...o, grupos };
+      });
+      setErro(`Orçamento “${orc.nome}”: ${res.message} O grupo voltou.`);
+    }
+  }
+
+  /** O grupo onde o item está agora. */
+  function grupoDoItem(itemId: string): string | null {
+    for (const orc of orcamentosRef.current) {
+      for (const g of orc.grupos) {
+        if (g.itens.some((it) => it.id === itemId)) return g.id;
+      }
+    }
+    return null;
+  }
+
+  /** A linha completa, como o `adicionarItem` da versão a recebe. */
+  function formDataDoItem(item: ItemRascunho): FormData {
+    const fd = new FormData();
+    fd.set("item", item.item);
+    fd.set("tipo_custo", item.tipo_custo);
+    if (item.categoria_id) fd.set("categoria_id", item.categoria_id);
+    fd.set("valor_unitario_orcado", String(item.valor_unitario_orcado));
+    fd.set("quantidade_orcada", String(item.quantidade_orcada));
+    fd.set("dias_meses_orcado", String(item.dias_meses_orcado));
+    fd.set("valor_unitario_planejado", String(item.valor_unitario_planejado));
+    fd.set("quantidade_planejada", String(item.quantidade_planejada));
+    fd.set("dias_meses_planejado", String(item.dias_meses_planejado));
+    return fd;
   }
 
   // ---------- adaptadores da planilha ----------
+  // As mesmas actions da tela da versão. A linha em branco do "Criar
+  // planilha" / "Novo grupo" (id local `it-…`) fica só na tela até ganhar
+  // descrição, como a linha provisória da versão: sem descrição o banco
+  // recusa o item.
+  //
+  // A planilha chama o adaptador de dentro de um `startTransition`, e o
+  // que o editor muda antes do primeiro `await` vira atualização de
+  // transição: fica retida até a gravação voltar do servidor. Com a troca
+  // de id da linha nova (feita depois do `await`) na mesma fila, cada
+  // render refazia a lista de orçamentos, o efeito do Serviço Interno
+  // rodava de novo e a tela entrava em laço — a descrição nunca chegava
+  // aos totais (visto no navegador em 06/10/2026). Por isso cada função
+  // espera um tique antes de mexer no estado: a mudança sai da transição,
+  // e o card e o Totais acompanham a célula na hora.
   const adaptador = React.useMemo<AdaptadorItens>(
     () => ({
       atualizarCampo: async (itemId, campo, valor) => {
+        await foraDaTransicao();
         if (!isCampoItemEditavel(campo)) {
           return { ok: false, message: "Campo não editável." };
         }
@@ -558,20 +721,41 @@ export function EditorAgregado({
             message: parsed.error.errors[0]?.message ?? "Valor inválido.",
           };
         }
-        mutarItem(itemId, (item) => {
-          const atualizado = { ...item, [campo]: parsed.data } as ItemRascunho;
-          if (
-            campo === "tipo_custo" &&
-            !aceitaBV(String(parsed.data))
-          ) {
-            atualizado.bv = null;
+        const anterior = acharItem(itemId);
+        if (!anterior) return { ok: false, message: "Item não encontrado." };
+        const atualizado = { ...anterior, [campo]: parsed.data } as ItemRascunho;
+        if (campo === "tipo_custo" && !aceitaBV(String(parsed.data))) {
+          atualizado.bv = null;
+        }
+        mutarItem(itemId, () => atualizado);
+
+        if (itemId.startsWith("it-")) {
+          if (!atualizado.item.trim()) return { ok: true, id: itemId };
+          const grupoId = grupoDoItem(itemId);
+          if (!grupoId) return { ok: false, message: "Grupo não encontrado." };
+          const res = await gravar(() => adicionarItem(grupoId, formDataDoItem(atualizado)));
+          if (!res.ok || !res.id) {
+            mutarItem(itemId, () => anterior);
+            return { ok: false, message: res.ok ? "Não foi possível gravar o item." : res.message };
           }
-          return atualizado;
-        });
+          const idReal = res.id;
+          mutarItem(itemId, (it) => ({ ...it, id: idReal }));
+          return { ok: true, id: idReal };
+        }
+
+        const res = await gravar(() => atualizarCampoItem(itemId, campo, valor));
+        if (!res.ok) {
+          mutarItem(itemId, () => anterior);
+          return res;
+        }
+        // Sair de A, AR ou D cancela o BV em negociação no servidor: a
+        // lista de BVs vem de lá.
+        if (campo === "tipo_custo" && !aceitaBV(String(parsed.data))) router.refresh();
         return { ok: true, id: itemId };
       },
 
       adicionar: async (grupoId, formData) => {
+        await foraDaTransicao();
         const parsed = itemSchema.safeParse({
           item: formData.get("item")?.toString() ?? "",
           tipo_custo: formData.get("tipo_custo")?.toString() ?? "A",
@@ -594,7 +778,11 @@ export function EditorAgregado({
               parsed.error.errors[0]?.message ?? "Verifique os campos do item.",
           };
         }
-        const id = novoId("it");
+        const res = await gravar(() => adicionarItem(grupoId, formData));
+        if (!res.ok || !res.id) {
+          return res.ok ? { ok: false, message: "Não foi possível gravar o item." } : res;
+        }
+        const id = res.id;
         setOrcamentos((atuais) =>
           nosGrupos(atuais, (grupo) =>
             grupo.id === grupoId
@@ -612,6 +800,12 @@ export function EditorAgregado({
       },
 
       remover: async (itemId) => {
+        await foraDaTransicao();
+        let grupoAntes: GrupoRascunho | null = null;
+        for (const orc of orcamentosRef.current) {
+          const g = orc.grupos.find((x) => x.itens.some((it) => it.id === itemId));
+          if (g) grupoAntes = g;
+        }
         setOrcamentos((atuais) =>
           nosGrupos(atuais, (grupo) =>
             grupo.itens.some((it) => it.id === itemId)
@@ -619,14 +813,25 @@ export function EditorAgregado({
               : grupo,
           ),
         );
+        if (itemId.startsWith("it-")) return { ok: true, id: itemId };
+        const res = await gravar(() => removerItem(itemId));
+        if (!res.ok) {
+          const volta = grupoAntes;
+          if (volta) {
+            setOrcamentos((atuais) =>
+              nosGrupos(atuais, (grupo) => (grupo.id === volta.id ? volta : grupo)),
+            );
+          }
+          return res;
+        }
         return { ok: true, id: itemId };
       },
 
-      // Decisão 104: a ordem nova fica no rascunho, como qualquer outra
-      // edição daqui, e vai ao banco no "Salvar alterações". O item só se
-      // move entre os grupos do MESMO orçamento — cada card tem a sua
-      // planilha, e a tabela só enxerga os grupos dela.
+      // Decisão 104: a ordem nova grava na hora, como na tela da versão. O
+      // item só se move entre os grupos do MESMO orçamento — cada card tem
+      // a sua planilha, e a tabela só enxerga os grupos dela.
       mover: async (itemId, grupoId, indice) => {
+        await foraDaTransicao();
         // Pela ref, como o `acharItem`: o adaptador não se refaz a cada edição.
         const dono = orcamentosRef.current.find(
           (o) =>
@@ -643,50 +848,19 @@ export function EditorAgregado({
             return grupos ? { ...orc, grupos } : orc;
           }),
         );
+        if (itemId.startsWith("it-")) return { ok: true, id: itemId };
+        const res = await gravar(() => moverItem(itemId, grupoId, indice));
+        if (!res.ok) {
+          setOrcamentos((atuais) => atuais.map((orc) => (orc.id === dono.id ? dono : orc)));
+          return res;
+        }
         return { ok: true, id: itemId };
       },
 
       aposEscrita: () => {},
     }),
-    [mutarItem],
-  );
-
-  const adaptadorBv = React.useMemo<AdaptadorBv>(
-    () => ({
-      salvar: async (chave, formData) => {
-        // O rascunho só usa o id: aqui a "chave" é a da linha local, e o
-        // espaço vem marcado só para o servidor saber onde procurar.
-        const itemId = chave.id;
-        const alvo = acharItem(itemId);
-        if (!alvo) return { ok: false, message: "Item não encontrado." };
-        if (!aceitaBV(alvo.tipo_custo)) {
-          return {
-            ok: false,
-            message:
-              "BV só pode ser lançado em item de custo tipo A, A · Repasse ou D.",
-          };
-        }
-        const parsed = bvSchema.safeParse({
-          fornecedor_id: formData.get("fornecedor_id")?.toString() ?? "",
-          valor: formData.get("valor")?.toString() ?? "",
-          prazo_repasse: formData.get("prazo_repasse")?.toString() ?? "",
-        });
-        if (!parsed.success) {
-          return {
-            ok: false,
-            message: parsed.error.errors[0]?.message ?? "BV inválido.",
-          };
-        }
-        mutarItem(itemId, (item) => ({ ...item, bv: parsed.data }));
-        return { ok: true, id: itemId };
-      },
-      cancelar: async (itemId) => {
-        mutarItem(itemId, (item) => ({ ...item, bv: null }));
-        return { ok: true, id: itemId };
-      },
-      aposEscrita: () => {},
-    }),
-    [acharItem, mutarItem],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mutarItem, acharItem, gravar],
   );
 
   // ---------- consolidado ----------
@@ -802,119 +976,23 @@ export function EditorAgregado({
   );
 
   const moedaProjeto = orcamentos[0]?.parametros.moeda ?? "BRL";
-  const novosSemItens = orcamentos.filter(
-    (o) => !o.origemBanco && contarItens(o.grupos) === 0,
-  );
-
-  // ---------- salvamento ----------
-  function salvar() {
-    if (!sujo) return;
-    if (novosSemItens.length > 0) {
-      setErro(
-        `Sem itens em: ${novosSemItens.map((o) => o.nome).join(", ")}. Importe uma planilha ou adicione itens antes de salvar.`,
-      );
+  /** A alíquota é o único parâmetro do modal: grava na versão pela action
+   *  da tela da versão, com as travas dela (internacional, aprovada). */
+  async function salvarParametros(orc: OrcamentoRascunho, p: ParametrosVersao) {
+    const versaoId = versaoDe(orc.id);
+    if (!versaoId) return;
+    const antes = orc.parametros;
+    mutarOrcamento(orc.id, (o) => ({ ...o, parametros: p }));
+    const fd = new FormData();
+    fd.set("percentual_imposto", String(p.percentual_imposto));
+    const res = await gravar(() => atualizarVersao(versaoId, fd));
+    if (!res.ok) {
+      mutarOrcamento(orc.id, (o) => ({ ...o, parametros: antes }));
+      setErro(`Orçamento “${orc.nome}”: ${res.message}`);
       return;
     }
-    setErro(null);
-
-    const editados = orcamentos
-      .filter((o) => o.origemBanco && !o.origemBanco.bloqueio)
-      .map((o) => ({
-        orcamentoId: o.origemBanco!.orcamentoId,
-        versaoId: o.origemBanco!.versaoId,
-        parametros: o.parametros,
-        grupos: o.grupos.map((g) => ({
-          // Id local (prefixo "g-") = grupo criado agora; o servidor insere.
-          id: g.id.startsWith("g-") ? null : g.id,
-          localId: g.id,
-          nome: g.nome,
-          mesId: g.mesId,
-          itens: g.itens.map((it) => ({
-            id: it.id.startsWith("it-") ? null : it.id,
-            localId: it.id,
-            item: it.item,
-            tipo_custo: it.tipo_custo as TipoCusto,
-            categoria_id: it.categoria_id,
-            valor_unitario_orcado: it.valor_unitario_orcado,
-            quantidade_orcada: it.quantidade_orcada,
-            dias_meses_orcado: it.dias_meses_orcado,
-            valor_unitario_planejado: it.valor_unitario_planejado,
-            quantidade_planejada: it.quantidade_planejada,
-            dias_meses_planejado: it.dias_meses_planejado,
-            planilha_origem: it.planilha_origem,
-            bv: it.bv,
-          })),
-        })),
-      }));
-
-    const novos = orcamentos.filter((o) => !o.origemBanco);
-
-    const payload: AlteracoesProjetoPayload = {
-      editados,
-      novos: novos.map((o) => ({
-        chave: o.id,
-        nome: o.nome,
-        categoria_id: o.categoria_id,
-        servico_id: o.servico_id,
-        descritivo: o.descritivo,
-        regional_id: o.regional_id,
-        cidade_id: o.cidade_id,
-        gp_responsavel_id: o.gp_responsavel_id,
-        produtor_id: o.produtor_id,
-        data_inicio_prevista: o.data_inicio_prevista,
-        data_fim_prevista: o.data_fim_prevista,
-        envio: arquivos.current.get(o.id) ?? null,
-        grupos: o.grupos.map((g) => ({
-          nome: g.nome,
-          itens: g.itens.map((it) => ({
-            item: it.item,
-            tipo_custo: it.tipo_custo as TipoCusto,
-            categoria_id: it.categoria_id,
-            valor_unitario_orcado: it.valor_unitario_orcado,
-            quantidade_orcada: it.quantidade_orcada,
-            dias_meses_orcado: it.dias_meses_orcado,
-            valor_unitario_planejado: it.valor_unitario_planejado,
-            quantidade_planejada: it.quantidade_planejada,
-            dias_meses_planejado: it.dias_meses_planejado,
-            planilha_origem: it.planilha_origem,
-            bv: it.bv,
-          })),
-        })),
-      })),
-      parametrosNovos: novos.map((o) => o.parametros),
-    };
-
-    const formData = new FormData();
-    formData.set("payload", JSON.stringify(payload));
-
-    startSalvar(async () => {
-      const res = await salvarAlteracoesDoProjeto(projeto.id, formData);
-      // O que foi gravado troca o id local pelo real — as linhas novas e,
-      // um nível acima, os orçamentos novos, que passam a ser "do banco".
-      // Vale também quando o salvamento parou no meio: o que veio antes do
-      // erro já está gravado. Sem isso, o próximo salvamento antes de a
-      // página recarregar gravaria tudo de novo — e recarregar pode falhar.
-      // Até 06/10/2026 os orçamentos novos ficavam de fora, e cada "Salvar
-      // alterações" os recriava (36 cópias no AMB-P017/26).
-      const gravados = comoGravados(orcamentos, novos, res.ids, res.novos);
-      setOrcamentos(gravados);
-      // Arquivo de orçamento novo que já foi criado: o servidor o descartou.
-      for (const novo of novos.slice(0, res.novos.length)) {
-        arquivos.current.delete(novo.id);
-      }
-      if (!res.ok) {
-        // O que falhou continua por salvar: a referência não muda.
-        setErro(res.message);
-        router.refresh();
-        return;
-      }
-      setBaseline(assinatura(gravados));
-      // Gravado: nenhum arquivo importado fica. O servidor já descartou os
-      // dos orçamentos novos; o de um orçamento que já existia (importado
-      // na versão sem planilha) não vai no payload e sai por aqui.
-      descartarArquivos();
-      router.refresh();
-    });
+    // O "Exportar" mostra o valor de cada orçamento, calculado no servidor.
+    router.refresh();
   }
 
   const modalImportar = modal?.tipo === "importar" ? modal : null;
@@ -990,18 +1068,21 @@ export function EditorAgregado({
           <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
             {projetoArquivado
               ? "Projeto arquivado: a visão agregada fica só para consulta. Reative o projeto na tela dele para editar."
-              : "Edite a planilha de cada orçamento aqui e veja o impacto no consolidado do projeto. As alterações caem na versão aberta de cada um — orçamento aprovado ou já aberto como job fica em consulta."}
+              : "Edite a planilha de cada orçamento aqui e veja o impacto no consolidado do projeto. Cada alteração é salva na hora, na versão aberta de cada um — orçamento aprovado ou já aberto como job fica em consulta."}
           </p>
+          <div className="flex flex-none items-center gap-4">
+          {!projetoArquivado && <StatusDaGravacao gravacao={gravacao} />}
           {!projetoArquivado && (
             <button
               type="button"
-              onClick={() => setModal({ tipo: "form" })}
+              onClick={abrirFormulario}
               className="inline-flex flex-none items-center gap-2 rounded-xl bg-california-red px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover"
             >
               <Plus className="h-4 w-4" />
               Criar orçamento de job
             </button>
           )}
+          </div>
         </div>
       </div>
 
@@ -1068,9 +1149,8 @@ export function EditorAgregado({
             key={m.id}
             orc={m}
             onAbrir={(evento, href) => {
-              // Com alteração por salvar, o atalho passa pela mesma
-              // pergunta do Cancelar em vez de descartar calado.
-              if (!sujo) return;
+              // Com gravação a caminho, o atalho pergunta antes de sair.
+              if (!salvandoAgora) return;
               evento.preventDefault();
               setAskSair(href);
             }}
@@ -1084,6 +1164,7 @@ export function EditorAgregado({
           return (
             <JobRascunhoCard
               modeloPlanilha={orc.modeloPlanilha}
+              versaoLabel={`v${orc.origemBanco?.numeroVersao || 1}`}
               interno={
                 orc.servico_id !== null && servicosInternos.has(orc.servico_id)
               }
@@ -1109,9 +1190,8 @@ export function EditorAgregado({
                   : null
               }
               onAbrirOrcamento={(evento, href) => {
-                // Com alteração por salvar, o link passa pela mesma
-                // pergunta do Cancelar em vez de descartar calado.
-                if (!sujo) return;
+                // Com gravação a caminho, o link pergunta antes de sair.
+                if (!salvandoAgora) return;
                 evento.preventDefault();
                 setAskSair(href);
               }}
@@ -1121,7 +1201,7 @@ export function EditorAgregado({
               categorias={categoriasItem}
               fornecedores={fornecedores}
               adaptador={adaptador}
-              adaptadorBv={adaptadorBv}
+              bvsPorItem={bvsPorItem}
               bloqueio={bloqueio}
               badge={
                 orc.origemBanco
@@ -1136,26 +1216,15 @@ export function EditorAgregado({
               onAlternar={() =>
                 mutarOrcamento(orc.id, (o) => ({ ...o, aberto: !o.aberto }))
               }
-              onRemover={() => removerOrcamento(orc.id)}
               onImportar={() =>
                 setModal({ tipo: "importar", orcamentoId: orc.id })
               }
               onCriarPlanilha={() => criarPlanilha(orc.id)}
               onNovoGrupo={(mesId) => novoGrupo(orc.id, mesId)}
               onRenomearGrupo={(grupoId, nome) =>
-                mutarOrcamento(orc.id, (o) => ({
-                  ...o,
-                  grupos: o.grupos.map((g) =>
-                    g.id === grupoId ? { ...g, nome } : g,
-                  ),
-                }))
+                void renomearGrupoNoBanco(orc.id, grupoId, nome)
               }
-              onRemoverGrupo={(grupoId) =>
-                mutarOrcamento(orc.id, (o) => ({
-                  ...o,
-                  grupos: o.grupos.filter((g) => g.id !== grupoId),
-                }))
-              }
+              onRemoverGrupo={(grupoId) => void removerGrupoNoBanco(orc.id, grupoId)}
             />
           );
         })}
@@ -1163,58 +1232,9 @@ export function EditorAgregado({
 
         <TotaisProjetoCard
           moeda={moedaProjeto}
-          descricao="Orçado × Planejado por orçamento · a versão vigente de cada um, com as alterações ainda não salvas já refletidas."
+          descricao="Orçado × Planejado por orçamento · a versão vigente de cada um."
           linhas={linhasTotais}
         />
-      </div>
-
-      <div className="sticky bottom-0 z-30 -mx-5 border-t border-border bg-white/95 backdrop-blur md:-mx-8">
-        <div className="flex items-center gap-4 px-5 py-3.5 md:px-8">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="text-[13px] font-semibold">
-              {sujo ? "Alterações não salvas" : "Nada alterado ainda"}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {sujo
-                ? "Nada foi gravado até você salvar."
-                : "Edite a planilha de qualquer orçamento para começar."}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              sujo
-                ? setAskSair(`/orcamentos/${projeto.id}`)
-                : router.push(`/orcamentos/${projeto.id}`)
-            }
-            className="inline-flex items-center rounded-xl border border-border bg-white px-4 py-2.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-accent"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={salvar}
-            disabled={!sujo || salvando}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors",
-              sujo && !salvando
-                ? "bg-california-red hover:bg-california-red-hover"
-                : "cursor-not-allowed bg-muted-foreground/40",
-            )}
-          >
-            {salvando ? (
-              <>
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                Salvando...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                Salvar alterações
-              </>
-            )}
-          </button>
-        </div>
       </div>
 
       <Dialog
@@ -1226,7 +1246,8 @@ export function EditorAgregado({
             Novo orçamento de job
           </DialogTitle>
           <DialogDescription className="text-[13px]">
-            O orçamento será criado quando as alterações forem salvas.
+            O orçamento é criado ao confirmar, com a v1 vazia. Depois é só
+            importar a planilha ou criar a planilha nele.
           </DialogDescription>
           <OrcamentoForm
             projetoId={projeto.id}
@@ -1253,9 +1274,7 @@ export function EditorAgregado({
             orcImportando.servico_id !== null &&
             servicosInternos.has(orcImportando.servico_id)
           }
-          onImportado={(planilha) =>
-            aplicarImportacao(orcImportando.id, planilha)
-          }
+          onImportado={(planilha) => aplicarImportacao(orcImportando.id, planilha)}
         />
       )}
 
@@ -1264,9 +1283,7 @@ export function EditorAgregado({
           open
           onOpenChange={(o) => !o && setModal(null)}
           parametros={orcParametros.parametros}
-          onSalvar={(p: ParametrosVersao) =>
-            mutarOrcamento(orcParametros.id, (o) => ({ ...o, parametros: p }))
-          }
+          onSalvar={(p: ParametrosVersao) => void salvarParametros(orcParametros, p)}
           clienteNome={projeto.cliente ?? "cliente"}
           travarImposto={
             orcParametros.modeloPlanilha === "internacional" &&
@@ -1278,15 +1295,14 @@ export function EditorAgregado({
       <ConfirmDialog
         open={askSair !== null}
         onOpenChange={(aberto) => !aberto && setAskSair(null)}
-        title="Sair sem salvar?"
-        description="As alterações feitas nesta tela serão perdidas. Nada foi gravado ainda."
-        confirmLabel="Sair sem salvar"
-        cancelLabel="Continuar editando"
+        title="Ainda salvando"
+        description="Uma alteração ainda está indo para o banco. Saindo agora, ela pode não ser gravada."
+        confirmLabel="Sair mesmo assim"
+        cancelLabel="Esperar"
         variant="destructive"
         onConfirm={() => {
           const destino = askSair ?? `/orcamentos/${projeto.id}`;
           setAskSair(null);
-          setBaseline(assinatura(orcamentos));
           router.push(destino);
         }}
       />
@@ -1348,71 +1364,48 @@ export function EditorAgregado({
   );
 }
 
-/**
- * O estado da tela depois de um salvamento: as linhas inseridas com o id
- * real, e cada orçamento novo que o servidor criou com a `origemBanco` —
- * daí em diante ele vai como editado, nunca mais como novo.
- *
- * `novos` é a lista que foi no payload, e `criados` vem na mesma ordem; no
- * salvamento que parou no meio, `criados` é mais curta.
- */
-function comoGravados(
-  orcamentos: OrcamentoRascunho[],
-  novos: OrcamentoRascunho[],
-  ids: Record<string, string>,
-  criados: OrcamentoCriado[],
-): OrcamentoRascunho[] {
-  const mapa: Record<string, string> = { ...ids };
-  const origens = new Map<string, OrigemBanco>();
-  for (const [i, criado] of criados.entries()) {
-    const novo = novos[i];
-    if (!novo) continue;
-    origens.set(novo.id, {
-      orcamentoId: criado.orcamentoId,
-      versaoId: criado.versaoId,
-      numeroVersao: 1,
-      statusOrcamento: "rascunho",
-      statusVersao: "rascunho",
-      bloqueio: null,
-      estagio: estagioFunil("rascunho", null),
-    });
-    for (const [g, grupo] of novo.grupos.entries()) {
-      const real = criado.grupos[g];
-      if (!real) continue;
-      if (real.id) mapa[grupo.id] = real.id;
-      for (const [k, item] of grupo.itens.entries()) {
-        if (real.itens[k]) mapa[item.id] = real.itens[k];
-      }
-    }
-  }
-  const comIds = trocarIds(orcamentos, mapa);
-  if (origens.size === 0) return comIds;
-  return comIds.map((orc) => {
-    const origem = origens.get(orc.id);
-    return origem && !orc.origemBanco ? { ...orc, origemBanco: origem } : orc;
-  });
-}
-
-/** Aplica o mapa "id local → id real" devolvido pelo salvamento. */
-function trocarIds(
-  orcamentos: OrcamentoRascunho[],
-  ids: Record<string, string>,
-): OrcamentoRascunho[] {
-  if (Object.keys(ids).length === 0) return orcamentos;
-  return orcamentos.map((orc) => ({
-    ...orc,
-    grupos: orc.grupos.map((g) => ({
-      ...g,
-      id: ids[g.id] ?? g.id,
-      itens: g.itens.map((it) => ({ ...it, id: ids[it.id] ?? it.id })),
-    })),
-  }));
-}
-
-/** Só o que vai para o banco. Abrir e fechar cards não conta como edição. */
-function assinatura(orcamentos: OrcamentoRascunho[]): string {
-  return JSON.stringify(
-    orcamentos.map(({ aberto: _aberto, ...resto }) => resto),
+/** O que substitui o rodapé "Salvar alterações" (decisão 148): fica ao lado
+ *  do "Criar orçamento de job" e diz se a última alteração já está gravada. */
+function StatusDaGravacao({
+  gravacao,
+}: {
+  gravacao: { pendentes: number; ultima: Date | null; falhou: boolean };
+}) {
+  const hora = (d: Date) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-medium",
+        gravacao.pendentes === 0 && gravacao.falhou
+          ? "text-california-red"
+          : "text-muted-foreground",
+      )}
+    >
+      {gravacao.pendentes > 0 ? (
+        <>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Salvando…
+        </>
+      ) : gravacao.falhou ? (
+        <>
+          <AlertCircle className="h-3.5 w-3.5" />
+          Não salvou — a alteração foi desfeita
+        </>
+      ) : gravacao.ultima ? (
+        <>
+          <Check className="h-3.5 w-3.5 text-emerald-600" />
+          Tudo salvo · {hora(gravacao.ultima)}
+        </>
+      ) : (
+        <>
+          <Check className="h-3.5 w-3.5 text-emerald-600" />
+          Salvamento automático
+        </>
+      )}
+    </span>
   );
 }
 
