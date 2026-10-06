@@ -4,6 +4,10 @@ import { useState } from "react";
 import { HeartPulse, Smile, Users2, UserRound } from "lucide-react";
 import type { LinhaColaboradorBeneficios } from "@/lib/queries/beneficios";
 import type { BeneficioTipo } from "@/lib/types";
+import {
+  coresBeneficio,
+  compararPlanosParaChip,
+} from "@/lib/beneficios/cores";
 import { DrawerColaboradorBeneficios } from "./drawer-colaborador";
 
 type BeneficioOpcao = {
@@ -86,9 +90,15 @@ export function TabelaColaboradores({
                     <span className="text-xs text-muted-foreground">—</span>
                   ) : (
                     <div className="flex flex-wrap gap-1">
-                      {l.planos_ativos.map((p) => (
-                        <ChipPlano key={p.beneficio_id} nome={p.nome} tipo={p.tipo} />
-                      ))}
+                      {[...l.planos_ativos]
+                        .sort(compararPlanosParaChip)
+                        .map((p) => (
+                          <ChipPlano
+                            key={p.beneficio_id}
+                            nome={p.nome}
+                            tipo={p.tipo}
+                          />
+                        ))}
                     </div>
                   )}
                 </td>
@@ -131,15 +141,12 @@ export function TabelaColaboradores({
   );
 }
 
-function ChipPlano({ nome, tipo }: { nome: string; tipo: "saude" | "dental" }) {
+function ChipPlano({ nome, tipo }: { nome: string; tipo: BeneficioTipo }) {
   const Icon = tipo === "saude" ? HeartPulse : Smile;
-  const classes =
-    tipo === "saude"
-      ? "bg-rose-50 text-rose-700 border-rose-200"
-      : "bg-sky-50 text-sky-700 border-sky-200";
+  const cores = coresBeneficio(tipo);
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${classes}`}
+      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${cores.chip}`}
     >
       <Icon className="h-3 w-3" />
       {nome}
