@@ -225,16 +225,16 @@ export function chaveDoLoteAPagar(r: TituloAPagar): string {
  * Por que o título não entra na baixa em lote; `null` entra. O lote paga
  * pela conta escolhida, uma baixa por título, sempre pelo que falta (a
  * parcial entra pelo restante). Entram PP, avulso e recorrência em
- * aberto (decisão aprovada pelo Tiago em 02/10/2026); folha, fatura de
- * cartão e devolução de verba têm baixa própria, o previsto no cartão vira
- * item da fatura na baixa (decisão 093), e o desembolso tem o centro de
- * custo escolhido na baixa — todos um de cada vez.
+ * aberto (decisão aprovada pelo Tiago em 02/10/2026) e, desde 05/10/2026,
+ * a folha (revisão da decisão 140); fatura de cartão e devolução de verba
+ * têm baixa própria, o previsto no cartão vira item da fatura na baixa
+ * (decisão 093), e o desembolso tem o centro de custo escolhido na baixa —
+ * todos um de cada vez. A origem já marcada barra as outras na seleção
+ * (`useSelecao`), não aqui.
  */
 export function motivoForaDoLoteAPagar(r: TituloAPagar): string | null {
   if (r.status === "pago") return "Título já pago.";
   switch (r.origem) {
-    case "folha":
-      return "Folha tem baixa própria: dê baixa nela sozinha.";
     case "fatura_cartao":
       return "Fatura de cartão tem baixa própria: dê baixa nela sozinha.";
     case "pp_devolucao_verba":
@@ -272,8 +272,8 @@ export function paraOLoteAPagar(r: TituloAPagar): TituloParaLote | null {
     contraparte: r.fornecedor_nome || "—",
     vencimento: r.data_pagamento,
     aberto: faltaPagar(r),
-    // Avulso e recorrência já têm o par; a PP tem só o tipo (decisão 068)
-    // e usa o subtipo do lote.
+    // Avulso, recorrência e folha já têm o par; a PP tem só o tipo
+    // (decisão 068) e usa o subtipo do lote.
     centroDeCusto:
       r.plano_conta_tipo_id && r.plano_conta_subtipo_id
         ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }

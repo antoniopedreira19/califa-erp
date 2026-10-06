@@ -14,8 +14,9 @@
  *   • o diálogo, com a data e a conta UMA vez e uma baixa por título.
  *
  * Quem usa: cada lista monta os seus títulos como `TituloParaLote` (a chave
- * é também o id da seleção), passa as chaves dos que aceitam baixa em lote
- * para `useSelecao`, e entrega ao diálogo os selecionados. O diálogo chama a
+ * é também o id da seleção), passa os que aceitam baixa em lote para
+ * `useSelecao` (com a origem, `elegivelDoLote`: um lote leva uma origem só)
+ * e entrega ao diálogo os selecionados. O diálogo chama a
  * Server Action `darBaixaEmLote`, que baixa um por um pela action da baixa
  * individual — as regras moram em `lib/financeiro/baixa-em-lote.ts`.
  *
@@ -56,10 +57,13 @@ import {
 import { cn } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaSubtipo, PlanoContaTipo } from "@/lib/types";
 import {
+  origemDoLote,
   retencoesPelaAprovacao,
+  selecaoPorOrigem,
   type AliquotasDaAprovacao,
   type AlvoDaBaixaEmLote,
   type CentroDeCusto,
+  type ElegivelDoLote,
   type EntradaDaBaixaEmLote,
 } from "@/lib/financeiro/baixa-em-lote";
 import {
@@ -139,14 +143,21 @@ function hojeIso(): string {
 // Seleção
 // ---------------------------------------------------------------------------
 
-/** A seleção de uma lista. `elegiveis` são as chaves que aceitam baixa em
- *  lote, na lista como ela está na tela (filtros valendo). */
-export function useSelecao(elegiveis: string[]) {
+/** O título que aceita baixa em lote, com a origem (para a seleção). */
+export function elegivelDoLote(t: TituloParaLote): ElegivelDoLote {
+  return { chave: t.chave, origem: origemDoLote(t.alvo) };
+}
+
+/** A seleção de uma lista. `elegiveis` são os títulos que aceitam baixa em
+ *  lote, na lista como ela está na tela (filtros valendo), com a origem de
+ *  cada um: a seleção leva uma origem só (revisão da decisão 140,
+ *  05/10/2026). */
+export function useSelecao(elegiveis: readonly ElegivelDoLote[]) {
   const [sel, setSel] = React.useState<Set<string>>(() => new Set());
-  const chave = elegiveis.join("|");
+  const chave = elegiveis.map((e) => e.chave).join("|");
   // Título que saiu da lista (baixado, filtrado) sai da seleção.
   React.useEffect(() => {
-    const aceitos = new Set(elegiveis);
+    const aceitos = new Set(elegiveis.map((e) => e.chave));
     setSel((prev) => {
       const n = new Set([...prev].filter((id) => aceitos.has(id)));
       return n.size === prev.size ? prev : n;
@@ -154,23 +165,37 @@ export function useSelecao(elegiveis: string[]) {
     // `chave` resume `elegiveis`, que é um array novo a cada renderização.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chave]);
-  const marcados = elegiveis.filter((id) => sel.has(id));
+  // Uma origem por lote (revisão da decisão 140, 05/10/2026).
+  const regra = selecaoPorOrigem(elegiveis, sel);
   return {
     sel,
     marcado: (id: string) => sel.has(id),
-    alternar: (id: string) =>
+    /** Por que a caixa fica desligada por causa da origem; `null` entra. A
+     *  lista junta isto ao motivo dela (pago, cartão…). */
+    foraDaOrigem: regra.foraDaOrigem,
+    alternar: (id: string) => {
+      // A caixa de outra origem já vem desligada; isto só segura o clique
+      // na linha.
+      if (!sel.has(id) && regra.foraDaOrigem(id)) return;
       setSel((prev) => {
         const n = new Set(prev);
         if (n.has(id)) n.delete(id);
         else n.add(id);
         return n;
-      }),
-    todos: elegiveis.length > 0 && marcados.length === elegiveis.length,
-    alguns: marcados.length > 0 && marcados.length < elegiveis.length,
-    alternarTodos: () =>
-      setSel(marcados.length === elegiveis.length ? new Set() : new Set(elegiveis)),
+      });
+    },
+    /** A caixa do cabeçalho, pronta para `CaixaDoCabecalho`. */
+    cabecalho: {
+      todos: regra.cabecalho.todos,
+      alguns: regra.cabecalho.alguns,
+      disponivel: regra.cabecalho.disponivel,
+      motivo: regra.cabecalho.motivo ?? undefined,
+      origem: regra.cabecalho.origem ?? undefined,
+      onAlternar: () =>
+        setSel(regra.cabecalho.todos ? new Set() : new Set(regra.cabecalho.chaves)),
+    },
     limpar: () => setSel(new Set()),
-    quantos: marcados.length,
+    quantos: regra.marcados.length,
   };
 }
 
@@ -203,17 +228,25 @@ export function CaixaDaLinha({
   );
 }
 
-/** A caixa do cabeçalho: marca todos os títulos visíveis que aceitam baixa. */
+/** A caixa do cabeçalho: marca todos os títulos visíveis que aceitam baixa
+ *  — da origem já marcada, quando a lista mostra mais de uma (uma origem
+ *  por lote). As props vêm prontas de `useSelecao().cabecalho`. */
 export function CaixaDoCabecalho({
   todos,
   alguns,
   onAlternar,
   disponivel = true,
+  motivo,
+  origem,
 }: {
   todos: boolean;
   alguns: boolean;
   onAlternar: () => void;
   disponivel?: boolean;
+  /** Por que fica desligada. */
+  motivo?: string;
+  /** A origem que ela marca, quando a lista mostra mais de uma. */
+  origem?: string;
 }) {
   const ref = React.useRef<HTMLInputElement>(null);
   React.useEffect(() => {
@@ -225,7 +258,15 @@ export function CaixaDoCabecalho({
       type="checkbox"
       checked={todos}
       disabled={!disponivel}
-      title={todos ? "Tirar todos da seleção" : "Selecionar todos os que aceitam baixa"}
+      title={
+        !disponivel && motivo
+          ? motivo
+          : todos
+            ? "Tirar todos da seleção"
+            : origem
+              ? `Selecionar todos os títulos de ${origem}`
+              : "Selecionar todos os que aceitam baixa"
+      }
       aria-label="Selecionar todos"
       onChange={onAlternar}
       className="h-4 w-4 cursor-pointer accent-california-red disabled:cursor-not-allowed disabled:opacity-40"

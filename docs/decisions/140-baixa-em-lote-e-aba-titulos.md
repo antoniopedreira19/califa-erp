@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-02
 **Decidido por:** Tiago
-**Status:** aceita — entregue em 02/10/2026
+**Status:** aceita — entregue em 02/10/2026; revista em 05/10/2026 (folha no lote e uma origem por lote, §6), entregue em 06/10/2026
 **Migration:** nenhuma (cada título continua baixado pela função de baixa que já existia)
 
 ---
@@ -40,11 +40,11 @@ quando a Apuração e os Impostos a Pagar forem entregues (decisão 139, §4).
 - O centro de custo é o que o título já tem; quem não tem recebe o do lote:
   "02 · Custo Operacional" + o subtipo escolhido nos pagamentos (onde toda
   PP nasce, decisão 068) e "01 · Receita" + o subtipo nos recebimentos.
-- **Entram:** a pagar de PP, avulso e recorrência; a receber de NF e
-  recebimento avulso — inadimplente e parcial também.
+- **Entram:** a pagar de PP, avulso, recorrência e folha (desde 05/10/2026,
+  §6); a receber de NF e recebimento avulso — inadimplente e parcial também.
+  **Uma origem por lote** (§6).
 - **Ficam fora** (caixa desligada, com o motivo ao passar o mouse): pago e
-  cancelado; folha, fatura de cartão e devolução de verba, que têm baixa
-  própria; o previsto no cartão (vira item da fatura na baixa, decisão 093);
+  cancelado; fatura de cartão e devolução de verba, que têm baixa própria; o previsto no cartão (vira item da fatura na baixa, decisão 093);
   a PP com **pagamento fora do cadastro** (para onde vai o dinheiro só
   aparece na baixa dela, decisão 137); o **desembolso**, cujo centro de
   custo o financeiro escolhe na baixa — o lote não tem como escolhê-lo, e o
@@ -112,3 +112,67 @@ quando a Apuração e os Impostos a Pagar forem entregues (decisão 139, §4).
    títulos podem passar do tempo máximo da função na Vercel.
 6. **A barra da seleção** mostra "Saem" pelo bruto (a lista não tem as
    alíquotas); só o diálogo mostra o líquido. A barra também deve buscar?
+
+## 6. ⚠️ Revisão de 2026-10-05 — folha no lote e uma origem por lote
+
+O Tiago tentou marcar os títulos da folha 09/2026 em Títulos a Pagar e a
+caixa estava desligada ("Folha tem baixa própria"). Conferido: a folha não
+tem baixa própria. A baixa de um título de folha é a mesma do avulso
+(`darBaixaTitulo` → `baixar_conta_avulsa`), e o que ela tem de diferente —
+só o valor inteiro, nunca no cartão (revisão de 01/10/2026) — o lote já
+cumpre: paga sempre o que falta, pela conta bancária. Os 112 títulos de
+folha em aberto já têm o centro de custo deles (Despesa com Pessoal ·
+Salário ou ProLabore), então o "02 · Custo Operacional" do lote não entra.
+
+**Decidido pelo Tiago em 05/10/2026:**
+
+1. **A folha entra no lote** (`ORIGENS_PAGAR_NO_LOTE`). Fatura de cartão e
+   devolução de verba continuam fora.
+2. **Um lote leva uma origem só.** Origem é cada chip das telas: PP,
+   Avulso, Folha e Recorrência a pagar; Nota fiscal e Recebimento avulso a
+   receber; Imposto. Avulso e Recorrência são origens diferentes, como os
+   chips. Vale em Títulos a Pagar, Títulos a Receber, Impostos a Pagar e na
+   aba Títulos da conciliação (onde a pagar, a receber e imposto também
+   deixam de se misturar).
+   - Marcado o primeiro título, os de outra origem ficam com a caixa
+     desligada e o motivo: *"Só uma origem por lote: os títulos marcados
+     são de Folha."*
+   - **A caixa do cabeçalho segue a origem já marcada:** marca todos os
+     visíveis dela (*"Selecionar todos os títulos de Folha"*). Sem nada
+     marcado, marca todos só se a lista mostra uma origem; com várias, fica
+     desligada: *"Marque um título, ou filtre uma origem, para selecionar
+     todos."*
+   - **O servidor também recusa** o lote misto (`baixaEmLoteSchema`):
+     *"Só uma origem por lote: este mistura PP e Folha. Faça um lote para
+     cada origem."*
+
+**Por quê:** cada origem tem efeito diferente na baixa — a PP retém o que a
+aprovação decidiu e fecha a parcela, a folha cai em Despesa com Pessoal —, e
+o lote misto fica difícil de conferir antes de confirmar e depois, no
+extrato. Entrada e saída no mesmo lote (aba Títulos) era o caso pior.
+
+**Código:** `lib/financeiro/baixa-em-lote.ts` (`OrigemDoLote`,
+`origemDoLote`, `selecaoPorOrigem` e a trava no schema) e `useSelecao`
+(`components/financeiro/baixa-em-lote.tsx`), usado pelas quatro listas.
+Sem migration.
+
+**Conferido em 06/10/2026, sem gravar nada:** em Títulos a Pagar, as 112
+folhas com a caixa ligada; uma folha marcada desligou as 15 PPs e os 2
+avulsos com o motivo; o cabeçalho marcou as 112 (R$ 881.202,63, o total do
+banco) e o diálogo disse "Os 112 pagamentos usam o centro de custo que já
+têm" — fechado por Esc, sem confirmar. Na aba Títulos da conciliação, uma
+folha marcada desligou os outros a pagar e os a receber. A action chamada
+pelo console com PP + Folha voltou a mensagem da trava; só Folha, com id
+inexistente, passou pelo schema e parou em "Lançamento não encontrado". Os
+112 títulos seguem "aprovada" no banco.
+
+**Risco em aberto (pergunta 5 do §5, agora concreta):** a folha é o caso de
+lote grande — 112 títulos de uma vez. O lote baixa um por um, numa única
+chamada ao servidor, e o projeto não configura `maxDuration`: vale o padrão
+da Vercel do plano, que não consegui ver daqui. Se a chamada passar do
+tempo, as baixas já feitas ficam (cada uma é uma transação), o diálogo
+mostra erro e os títulos que faltam continuam na lista para outro lote — não
+duplica, porque o já baixado sai da lista e o servidor recusa ("Já está
+baixado"). A saída sugerida ao Tiago: o diálogo mandar o lote em partes (por
+exemplo, de 20 em 20) e mostrar o andamento.
+

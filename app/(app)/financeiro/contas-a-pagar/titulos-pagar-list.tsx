@@ -87,6 +87,7 @@ import {
   BarraDeSelecao,
   CaixaDaLinha,
   CaixaDoCabecalho,
+  elegivelDoLote,
   useSelecao,
   type TituloParaLote,
 } from "@/components/financeiro/baixa-em-lote";
@@ -418,16 +419,16 @@ function chaveDoLote(r: TituloRow): string {
  * Por que o título não entra na baixa em lote; `null` entra. O lote paga
  * pela conta escolhida, uma baixa por título, sempre pelo que falta (a
  * parcial entra pelo restante). Entram PP, avulso e recorrência em
- * aberto (decisão aprovada pelo Tiago em 02/10/2026); folha, fatura de
- * cartão e devolução de verba têm baixa própria, o previsto no cartão vira
- * item da fatura na baixa (decisão 093), e o desembolso tem o centro de
- * custo escolhido na baixa — todos um de cada vez.
+ * aberto (decisão aprovada pelo Tiago em 02/10/2026) e, desde 05/10/2026,
+ * a folha (revisão da decisão 140); fatura de cartão e devolução de verba
+ * têm baixa própria, o previsto no cartão vira item da fatura na baixa
+ * (decisão 093), e o desembolso tem o centro de custo escolhido na baixa —
+ * todos um de cada vez. A origem já marcada barra as outras na seleção
+ * (`useSelecao`), não aqui.
  */
 function motivoForaDoLote(r: TituloRow): string | null {
   if (r.status === "pago") return "Título já pago.";
   switch (r.origem) {
-    case "folha":
-      return "Folha tem baixa própria: dê baixa nela sozinha.";
     case "fatura_cartao":
       return "Fatura de cartão tem baixa própria: dê baixa nela sozinha.";
     case "pp_devolucao_verba":
@@ -465,8 +466,8 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
     contraparte: r.fornecedor_nome || "—",
     vencimento: r.data_pagamento,
     aberto: faltaPagar(r),
-    // Avulso e recorrência já têm o par; a PP tem só o tipo (decisão 068)
-    // e usa o subtipo do lote.
+    // Avulso, recorrência e folha já têm o par; a PP tem só o tipo
+    // (decisão 068) e usa o subtipo do lote.
     centroDeCusto:
       r.plano_conta_tipo_id && r.plano_conta_subtipo_id
         ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
@@ -662,8 +663,12 @@ export function TitulosPagarList({
 
   // Baixa em lote (pedido do Tiago, 02/10/2026): marcar vários títulos da
   // lista e dar baixa de uma vez. A seleção vale para o que está na tela:
-  // o título que some do filtro, ou que foi pago, sai dela sozinho.
-  const elegiveis = filtrados.filter((r) => motivoForaDoLote(r) === null).map(chaveDoLote);
+  // o título que some do filtro, ou que foi pago, sai dela sozinho. Uma
+  // origem por lote (revisão da decisão 140, 05/10/2026).
+  const elegiveis = filtrados.flatMap((r) => {
+    const t = motivoForaDoLote(r) === null ? paraOLote(r) : null;
+    return t ? [elegivelDoLote(t)] : [];
+  });
   const selecao = useSelecao(elegiveis);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const selecionados = filtrados
@@ -999,14 +1004,9 @@ export function TitulosPagarList({
           <thead>
             <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
               {/* A caixa do cabeçalho marca todos os que a lista mostra e
-                  aceitam a baixa em lote. */}
+                  aceitam a baixa em lote — da origem já marcada. */}
               <th className="w-10 py-3 pl-4 pr-2 font-semibold">
-                <CaixaDoCabecalho
-                  todos={selecao.todos}
-                  alguns={selecao.alguns}
-                  onAlternar={selecao.alternarTodos}
-                  disponivel={elegiveis.length > 0}
-                />
+                <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
               <th className="w-[9%] px-2 py-3 font-semibold">Data Pgto.</th>
               <th className="w-[8%] px-2 py-3 font-semibold">Venc. Orig.</th>
@@ -1045,9 +1045,9 @@ export function TitulosPagarList({
               const estornos =
                 r.baixas.length > 0 ? r.baixas.flatMap((b) => b.estornos) : r.estornos_da_baixa;
               // Baixa em lote: `null` = a linha entra na seleção.
-              const motivoLote = motivoForaDoLote(r);
-              const noLote = motivoLote === null;
               const chaveLote = chaveDoLote(r);
+              const motivoLote = motivoForaDoLote(r) ?? selecao.foraDaOrigem(chaveLote);
+              const noLote = motivoLote === null;
               const marcado = selecao.marcado(chaveLote);
               return (
                 <tr

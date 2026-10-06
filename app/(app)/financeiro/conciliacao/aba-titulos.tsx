@@ -40,6 +40,7 @@ import {
   CaixaDaLinha,
   CaixaDoCabecalho,
   ChipTipo,
+  elegivelDoLote,
   useSelecao,
   type TituloParaLote,
 } from "@/components/financeiro/baixa-em-lote";
@@ -157,8 +158,12 @@ export function AbaTitulos({
 
   // A baixa em lote, como nas listas: a seleção vale para o que está na
   // tela (filtros valendo), e o título que some do filtro, ou que foi
-  // baixado, sai dela sozinho.
-  const elegiveis = filtrados.filter((l) => l.motivoForaDoLote === null).map((l) => l.chave);
+  // baixado, sai dela sozinho. Uma origem por lote (revisão da decisão
+  // 140, 05/10/2026): a pagar, a receber e imposto nunca se misturam, e
+  // dentro de cada lado vale o chip de origem das listas.
+  const elegiveis = filtrados.flatMap((l) =>
+    l.motivoForaDoLote === null && l.lote ? [elegivelDoLote(l.lote)] : [],
+  );
   const selecao = useSelecao(elegiveis);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const selecionados = filtrados
@@ -252,13 +257,9 @@ export function AbaTitulos({
           <thead>
             <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
               <th className="w-[3%] py-3 pl-4 pr-1 font-semibold">
-                {/* Marca todos os que a aba mostra e aceitam a baixa em lote. */}
-                <CaixaDoCabecalho
-                  todos={selecao.todos}
-                  alguns={selecao.alguns}
-                  onAlternar={selecao.alternarTodos}
-                  disponivel={elegiveis.length > 0}
-                />
+                {/* Marca todos os que a aba mostra e aceitam a baixa em lote
+                    — da origem já marcada. */}
+                <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
               <th className="w-[8%] px-2 py-3 font-semibold">Vencimento</th>
               <th className="w-[8%] px-2 py-3 font-semibold">Tipo</th>
@@ -282,7 +283,8 @@ export function AbaTitulos({
             )}
             {filtrados.map((l) => {
               const vencido = l.vencimento !== null && l.vencimento < hoje;
-              const noLote = l.motivoForaDoLote === null;
+              const motivoLote = l.motivoForaDoLote ?? selecao.foraDaOrigem(l.chave);
+              const noLote = motivoLote === null;
               const marcado = selecao.marcado(l.chave);
               return (
                 <tr
@@ -302,7 +304,7 @@ export function AbaTitulos({
                       nem sempre mostra o próprio). */}
                   <td
                     className="py-3 pl-4 pr-1 text-center"
-                    title={l.motivoForaDoLote ?? undefined}
+                    title={motivoLote ?? undefined}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (noLote) selecao.alternar(l.chave);
@@ -312,7 +314,7 @@ export function AbaTitulos({
                       marcado={marcado}
                       onAlternar={() => selecao.alternar(l.chave)}
                       disponivel={noLote}
-                      motivo={l.motivoForaDoLote ?? undefined}
+                      motivo={motivoLote ?? undefined}
                     />
                   </td>
                   <td className="px-2 py-3 text-center">

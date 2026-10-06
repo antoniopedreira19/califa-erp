@@ -32,6 +32,9 @@
  * - **Cartão de crédito.** No cartão a baixa é a entrada do item na fatura
  *   (decisão 093), um de cada vez; o lote paga pela conta bancária.
  *
+ * - **Outra origem.** Um lote leva uma origem só (revisão da decisão 140,
+ *   05/10/2026): PP com PP, folha com folha. `OrigemDoLote`.
+ *
  * Impostos a Pagar (módulo fiscal, entrega 2): o imposto em aberto entra no
  * lote como no protótipo aprovado — pelo valor inteiro, com a multa e os
  * juros e o comprovante de cada guia (a guia é a da aprovação; o imposto
@@ -48,11 +51,16 @@ import { IMPOSTOS_RETIDOS, type ImpostoRetido, type RetencaoDaBaixa } from "@/li
 // ---------------------------------------------------------------------------
 
 /** As origens a pagar que entram no lote (decisão aprovada pelo Tiago em
- *  02/10/2026). Folha, fatura de cartão e devolução de verba têm baixa
- *  própria e ficam de fora. O desembolso também: o centro de custo dele é
- *  escolhido na baixa, um a um, e o lote não tem regra para escolhê-lo
- *  (o protótipo não o tinha; pergunta levada ao Tiago em 02/10/2026). */
-export const ORIGENS_PAGAR_NO_LOTE = ["pp", "avulso", "recorrencia"] as const;
+ *  02/10/2026). Fatura de cartão e devolução de verba têm baixa própria e
+ *  ficam de fora. O desembolso também: o centro de custo dele é escolhido
+ *  na baixa, um a um, e o lote não tem regra para escolhê-lo (o protótipo
+ *  não o tinha; pergunta levada ao Tiago em 02/10/2026).
+ *
+ *  A folha entrou em 05/10/2026 (revisão da decisão 140): a baixa dela é a
+ *  mesma do avulso (`baixar_conta_avulsa`), e o que ela tem de diferente —
+ *  só o valor inteiro, nunca no cartão — o lote já cumpre. O centro de
+ *  custo é o dela (Despesa com Pessoal), nunca o do lote. */
+export const ORIGENS_PAGAR_NO_LOTE = ["pp", "avulso", "recorrencia", "folha"] as const;
 export type OrigemPagarNoLote = (typeof ORIGENS_PAGAR_NO_LOTE)[number];
 
 /** As origens a receber que entram no lote: a nota fiscal e o recebimento
@@ -61,12 +69,110 @@ export type OrigemPagarNoLote = (typeof ORIGENS_PAGAR_NO_LOTE)[number];
 export const ORIGENS_RECEBER_NO_LOTE = ["nf", "recebimento_avulso"] as const;
 export type OrigemReceberNoLote = (typeof ORIGENS_RECEBER_NO_LOTE)[number];
 
+// ---------------------------------------------------------------------------
+// Uma origem por lote (revisão da decisão 140, 05/10/2026)
+// ---------------------------------------------------------------------------
+
+/**
+ * A origem do título no lote — cada chip de origem das telas: PP, Avulso,
+ * Folha e Recorrência a pagar; Nota fiscal e Recebimento avulso a receber;
+ * Imposto. Um lote leva UMA origem só (pedido do Tiago em 05/10/2026): cada
+ * origem tem efeito diferente na baixa — a PP retém o que a aprovação
+ * decidiu, a folha cai em Despesa com Pessoal —, e o lote misto fica difícil
+ * de conferir antes de confirmar e depois, no extrato. Avulso e Recorrência
+ * são origens diferentes, como os chips (escolha do Tiago).
+ */
+export type OrigemDoLote =
+  | `pagar|${OrigemPagarNoLote}`
+  | `receber|${OrigemReceberNoLote}`
+  | "imposto";
+
+/** O nome da origem nas mensagens. */
+export const NOME_DA_ORIGEM_NO_LOTE: Record<OrigemDoLote, string> = {
+  "pagar|pp": "PP",
+  "pagar|avulso": "Avulso",
+  "pagar|recorrencia": "Recorrência",
+  "pagar|folha": "Folha",
+  "receber|nf": "Nota fiscal",
+  "receber|recebimento_avulso": "Recebimento avulso",
+  imposto: "Imposto",
+};
+
+export function origemDoLote(alvo: AlvoDaBaixaEmLote): OrigemDoLote {
+  if (alvo.modulo === "imposto") return "imposto";
+  if (alvo.modulo === "pagar") return `pagar|${alvo.origem}`;
+  return `receber|${alvo.origem}`;
+}
+
+/** "PP", "PP e Folha", "PP, Avulso e Folha". */
+function nomesDasOrigens(origens: OrigemDoLote[]): string {
+  const nomes = origens.map((o) => NOME_DA_ORIGEM_NO_LOTE[o]);
+  if (nomes.length <= 1) return nomes[0] ?? "";
+  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
+
+/** O título que aceita baixa em lote, com a origem dele, para a seleção. */
+export interface ElegivelDoLote {
+  chave: string;
+  origem: OrigemDoLote;
+}
+
+/**
+ * A seleção pela regra de uma origem por lote — puro, para ter teste sem
+ * tela; `useSelecao` (`components/financeiro/baixa-em-lote.tsx`) o usa.
+ *
+ * - A origem da seleção é a do primeiro marcado; título de outra origem fica
+ *   com a caixa desligada e o motivo.
+ * - A caixa do cabeçalho segue a origem já marcada (escolha do Tiago): marca
+ *   todos os visíveis dela. Sem nada marcado, marca todos só quando a lista
+ *   mostra uma origem; com várias, fica desligada e pede a escolha.
+ */
+export function selecaoPorOrigem(
+  elegiveis: readonly ElegivelDoLote[],
+  marcadas: ReadonlySet<string>,
+) {
+  const marcados = elegiveis.filter((e) => marcadas.has(e.chave));
+  const origem = marcados[0]?.origem ?? null;
+  const visiveis = [...new Set(elegiveis.map((e) => e.origem))];
+  const doCabecalho = origem ?? (visiveis.length === 1 ? visiveis[0] : null);
+  const daOrigem = doCabecalho ? elegiveis.filter((e) => e.origem === doCabecalho) : [];
+  const marcadosDaOrigem = daOrigem.filter((e) => marcadas.has(e.chave)).length;
+  return {
+    /** A origem dos marcados; `null` sem nada marcado. */
+    origem,
+    /** As chaves marcadas, na ordem da lista. */
+    marcados: marcados.map((e) => e.chave),
+    /** Por que a caixa desta chave fica desligada; `null` entra. Só olha a
+     *  origem — o resto (pago, cartão…) é da lista. */
+    foraDaOrigem(chave: string): string | null {
+      if (!origem) return null;
+      const e = elegiveis.find((x) => x.chave === chave);
+      if (!e || e.origem === origem) return null;
+      return `Só uma origem por lote: os títulos marcados são de ${NOME_DA_ORIGEM_NO_LOTE[origem]}.`;
+    },
+    cabecalho: {
+      /** As chaves que a caixa do cabeçalho marca. */
+      chaves: daOrigem.map((e) => e.chave),
+      disponivel: daOrigem.length > 0,
+      todos: daOrigem.length > 0 && marcadosDaOrigem === daOrigem.length,
+      alguns: marcadosDaOrigem > 0 && marcadosDaOrigem < daOrigem.length,
+      /** O nome da origem quando a lista mostra mais de uma (o cabeçalho
+       *  não marca a lista inteira); `null` com uma origem só. */
+      origem: doCabecalho && visiveis.length > 1 ? NOME_DA_ORIGEM_NO_LOTE[doCabecalho] : null,
+      motivo:
+        elegiveis.length > 0 && !doCabecalho
+          ? "Marque um título, ou filtre uma origem, para selecionar todos."
+          : null,
+    },
+  };
+}
+
 /**
  * Por onde cada título se baixa: a action da baixa de um por um e o id que
  * ela recebe.
  *
- * - `pagar`: o id da parcela (PP) ou da conta avulsa (avulso
- *   e recorrência) — o mesmo `{ origem, id }` de `darBaixaTitulo`.
+ * - `pagar`: o id da parcela (PP) ou da conta avulsa (avulso,
+ *   recorrência e folha) — o mesmo `{ origem, id }` de `darBaixaTitulo`.
  * - `receber` + `nf`: o id do título (`titulos_receber`).
  * - `receber` + `recebimento_avulso`: o id da conta avulsa de entrada.
  * - `imposto`: o id do imposto a pagar (`impostos_a_pagar`).
@@ -206,6 +312,16 @@ export const baixaEmLoteSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "O mesmo título aparece duas vezes no lote.",
+        path: ["itens"],
+      });
+    }
+    // Uma origem por lote (revisão da decisão 140, 05/10/2026). A tela já
+    // não deixa marcar outra; aqui é a trava de quem chama a action direto.
+    const origens = [...new Set(d.itens.map((i) => origemDoLote(i.alvo)))];
+    if (origens.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Só uma origem por lote: este mistura ${nomesDasOrigens(origens)}. Faça um lote para cada origem.`,
         path: ["itens"],
       });
     }

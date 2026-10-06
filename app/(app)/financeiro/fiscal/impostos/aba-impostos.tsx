@@ -142,8 +142,12 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const contagem = (p: string) =>
     titulos.filter((t) => (p === "todos" || t.empresa_contabil_id === p) && estaEmAberto(t)).length;
 
-  // Baixa em lote: só os impostos em aberto que a lista mostra.
-  const elegiveis = filtrados.filter(estaEmAberto).map((t) => t.id);
+  // Baixa em lote: só os impostos em aberto que a lista mostra — todos da
+  // mesma origem (Imposto), então a regra de uma origem por lote não barra
+  // nenhum aqui.
+  const elegiveis = filtrados
+    .filter(estaEmAberto)
+    .map((t) => ({ chave: t.id, origem: "imposto" as const }));
   const selecao = useSelecao(elegiveis);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const selecionados: TituloParaLote[] = filtrados.filter((t) => selecao.marcado(t.id)).map(paraOLoteImposto);
@@ -243,12 +247,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
           <thead>
             <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
               <th className="w-[3%] py-3 pl-4 pr-1 font-semibold">
-                <CaixaDoCabecalho
-                  todos={selecao.todos}
-                  alguns={selecao.alguns}
-                  onAlternar={selecao.alternarTodos}
-                  disponivel={elegiveis.length > 0}
-                />
+                <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
               <th className="w-[8%] px-2 py-3 font-semibold">Vencimento</th>
               <th className="w-[19%] px-3 py-3 text-left font-semibold">Imposto</th>

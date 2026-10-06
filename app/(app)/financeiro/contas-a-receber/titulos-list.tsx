@@ -94,6 +94,7 @@ import {
   BarraDeSelecao,
   CaixaDaLinha,
   CaixaDoCabecalho,
+  elegivelDoLote,
   useSelecao,
   type TituloParaLote,
 } from "@/components/financeiro/baixa-em-lote";
@@ -411,8 +412,11 @@ export function TitulosList({
 
   // Baixa em lote (pedido do Tiago, 02/10/2026). A caixa do cabeçalho marca
   // só os visíveis (o filtro de status vale), e quem sai da lista sai da
-  // seleção.
-  const elegiveis = visiveis.filter((r) => motivoForaDoLote(r) === null).map(chaveDoLote);
+  // seleção. Uma origem por lote (revisão da decisão 140, 05/10/2026).
+  const elegiveis = visiveis.flatMap((r) => {
+    const t = motivoForaDoLote(r) === null ? paraOLote(r) : null;
+    return t ? [elegivelDoLote(t)] : [];
+  });
   const selecao = useSelecao(elegiveis);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const selecionados = visiveis
@@ -618,14 +622,9 @@ export function TitulosList({
             <tr className="border-b border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
               {/* A seleção da baixa em lote (02/10/2026), com a caixa da
                   remessa CNAB. A do cabeçalho marca os visíveis que aceitam
-                  baixa. */}
+                  baixa — da origem já marcada. */}
               <th className="w-10 px-3 py-3 text-center">
-                <CaixaDoCabecalho
-                  todos={selecao.todos}
-                  alguns={selecao.alguns}
-                  onAlternar={selecao.alternarTodos}
-                  disponivel={elegiveis.length > 0}
-                />
+                <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
               <th className="w-[150px] px-3.5 py-3 font-semibold">Vencimento</th>
               <th className="w-[150px] px-3.5 py-3 font-semibold">
@@ -671,8 +670,8 @@ export function TitulosList({
               const inadimplente = estaInadimplente(r);
               const agrupada = r.jobs_cobertos.length > 1;
               // Baixa em lote: entra ou não, e por quê.
-              const motivoLote = motivoForaDoLote(r);
               const chaveLote = chaveDoLote(r);
+              const motivoLote = motivoForaDoLote(r) ?? selecao.foraDaOrigem(chaveLote);
               return (
                 <tr
                   key={r.id}

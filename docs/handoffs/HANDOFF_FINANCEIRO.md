@@ -6479,10 +6479,11 @@ estendido a Contas a Receber em 31/08.**
   títulos" (`components/financeiro/baixa-em-lote.tsx`). Uma data, uma conta e
   uma forma para todos; cada título é baixado pela Server Action de sempre
   (`app/(app)/financeiro/actions-baixa-em-lote.ts`), pelo valor em aberto.
-- Fora do lote, com o motivo na caixa: folha, fatura, devolução de verba,
+- Fora do lote, com o motivo na caixa: fatura, devolução de verba,
   previsto no cartão, PP fora do cadastro (137), **desembolso** (o tipo dele
   se escolhe na baixa), rendimento e transferência. O servidor recusa as
   origens fora da lista (`ORIGENS_PAGAR_NO_LOTE` / `ORIGENS_RECEBER_NO_LOTE`).
+  A folha também ficava fora até 06/10/2026 (ver a nota daquele dia).
 - **Conciliação de uma conta:** abas Extrato | Títulos (`&aba=titulos`). A
   aba Títulos é igual para qualquer conta; "Baixar" e o lote abrem com a
   conta da conciliação escolhida (`contaInicial` / `contaPadrao`).
@@ -6706,3 +6707,26 @@ estendido a Contas a Receber em 31/08.**
 - Sem migration e sem dado a corrigir: nenhuma nota real com CNAE fiscal e
   nenhuma guia aprovada até 04/10. O grupo da memória guardada nas aprovações
   passou de `estorno` para `rateio_credito`; não havia aprovação gravada.
+
+## ⚠️ Nota de 2026-10-06 — folha no lote e uma origem por lote (revisão da decisão 140)
+
+- **A folha entra na baixa em lote.** A caixa dizia "Folha tem baixa
+  própria", mas a baixa dela é a do avulso (`baixar_conta_avulsa`); o lote
+  já paga só o valor inteiro e nunca no cartão. O centro de custo é o da
+  folha (Despesa com Pessoal), não o do lote. Saiu de `motivoForaDoLote`
+  (Títulos a Pagar) e da cópia `motivoForaDoLoteAPagar`
+  (`conciliacao/alvos-da-baixa.ts`).
+- **Uma origem por lote** (pedido do Tiago em 05/10/2026): origem = chip da
+  tela (PP, Avulso, Folha, Recorrência; Nota fiscal, Recebimento avulso;
+  Imposto). O primeiro marcado desliga os de outra origem; o cabeçalho
+  marca todos da origem já marcada e, sem nada marcado numa lista com várias
+  origens, fica desligado pedindo a escolha. O schema do lote recusa o
+  misto. `useSelecao` agora recebe `{ chave, origem }` (`elegivelDoLote`) e
+  devolve `cabecalho` pronto para `CaixaDoCabecalho`; a regra pura é
+  `selecaoPorOrigem` (`lib/financeiro/baixa-em-lote.ts`), com teste.
+- Conferido no navegador sem gravar (Títulos a Pagar e aba Títulos da
+  conciliação) e a trava do servidor pelo console. Ver decisão 140, §6.
+- **Risco em aberto:** lote de 112 folhas numa chamada só pode passar do
+  tempo da função na Vercel (sem `maxDuration` no projeto). O que já baixou
+  fica, o resto volta para a lista; não duplica. Sugestão: mandar em partes.
+
