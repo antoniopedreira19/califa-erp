@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const session = await requireSession();
   const url = new URL(req.url);
   const pedido = url.searchParams.get("modelo");
-  const modelo: CategoriaModeloPlanilha =
+  const modelo: Exclude<CategoriaModeloPlanilha, "midia_off"> =
     pedido === "internacional" || pedido === "mensal" ? pedido : "nacional";
 
   let meses: string[] = [];

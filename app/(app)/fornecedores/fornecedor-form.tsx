@@ -92,8 +92,10 @@ import {
 } from "@/lib/fiscal/regime-do-fornecedor";
 import {
   atualizarFornecedor,
+  atualizarVeiculoFornecedor,
   criarFornecedor,
   criarFornecedorRapido,
+  criarVeiculoFornecedor,
   buscarFornecedorPorDocumento,
   verificarPixDuplicado,
   type ActionResult,
@@ -343,6 +345,12 @@ interface Props {
   /** Edição salva. No dialog é o que fecha e devolve o controle para a PP
    *  (09/09/2026); na página o `router.refresh()` já basta. */
   onSalvo?: () => void;
+  /** `veiculo`: o cadastro do veículo de mídia (decisão 147) — o mesmo
+   *  formulário, com o pagamento opcional e os meios gravados junto, pelas
+   *  actions do veículo. */
+  variante?: "fornecedor" | "veiculo";
+  /** Só no veículo: os meios e a praça, lidos na hora de gravar. */
+  dadosDoVeiculo?: () => { meios: string[]; praca: string };
 }
 
 export function FornecedorForm({
@@ -355,10 +363,13 @@ export function FornecedorForm({
   onCriado,
   onSelecionarExistente,
   onSalvo,
+  variante = "fornecedor",
+  dadosDoVeiculo,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(fornecedor);
   const emDialog = modo === "dialog";
+  const ehVeiculo = variante === "veiculo";
 
   /** Quem já tem o CPF/CNPJ digitado. Conferido ao sair do campo e de
    *  novo no servidor; enquanto estiver aqui, o formulário não grava. */
@@ -749,7 +760,8 @@ export function FornecedorForm({
   if (!docOk) pendencias.push(ehPj ? "CNPJ" : "CPF");
   if (!emailOk) pendencias.push("e-mail");
   if (!telOk) pendencias.push("telefone");
-  if (!bancoOk && !pixOk) pendencias.push("conta bancária ou chave PIX");
+  // O veículo de mídia nasce sem conta (decisão 147).
+  if (!ehVeiculo && !bancoOk && !pixOk) pendencias.push("conta bancária ou chave PIX");
 
   const travadoPorDuplicado = Boolean(duplicado) && !isEdit;
   const pronto = pendencias.length === 0 && !travadoPorDuplicado;
@@ -759,7 +771,9 @@ export function FornecedorForm({
     : pronto
       ? isEdit
         ? "Tudo preenchido. Salve para gravar as alterações."
-        : "Pronto para criar. Endereço e observações podem ser completados depois."
+        : ehVeiculo
+          ? "Pronto para criar. Pagamento, endereço e observações podem ser completados depois."
+          : "Pronto para criar. Endereço e observações podem ser completados depois."
       : `Falta ${listar(pendencias)}.`;
 
   // Módulo fiscal: de onde veio o regime à vista, para o texto embaixo do
@@ -777,12 +791,21 @@ export function FornecedorForm({
     const arquivoIndo = declaracaoArquivo.gravando(
       formData.get("declaracao_simples_path")?.toString() || null,
     );
+    if (ehVeiculo) {
+      const v = dadosDoVeiculo?.() ?? { meios: [], praca: "" };
+      formData.set("veiculo_meios", JSON.stringify(v.meios));
+      formData.set("veiculo_praca", v.praca);
+    }
     startTransition(async () => {
-      const res: ActionResult | undefined = await (isEdit
-        ? atualizarFornecedor(fornecedor!.id, formData, confirmarPagamento)
-        : emDialog
-          ? criarFornecedorRapido(formData)
-          : criarFornecedor(formData)
+      const res: ActionResult | undefined = await (ehVeiculo
+        ? isEdit
+          ? atualizarVeiculoFornecedor(fornecedor!.id, formData, confirmarPagamento)
+          : criarVeiculoFornecedor(formData)
+        : isEdit
+          ? atualizarFornecedor(fornecedor!.id, formData, confirmarPagamento)
+          : emDialog
+            ? criarFornecedorRapido(formData)
+            : criarFornecedor(formData)
       ).catch(() => ({
         ok: false as const,
         message: "Não foi possível salvar. Tente novamente.",
@@ -1001,7 +1024,11 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Identificação"
-            descricao="Como o fornecedor aparece nos itens do orçamento e nas PPs. O CPF/CNPJ é a chave que impede cadastro repetido."
+            descricao={
+              ehVeiculo
+                ? "Como o veículo aparece nas linhas do plano de mídia e nos PIs. O CPF/CNPJ é a chave que impede cadastro repetido."
+                : "Como o fornecedor aparece nos itens do orçamento e nas PPs. O CPF/CNPJ é a chave que impede cadastro repetido."
+            }
             selo="obrigatorio"
             emDialog={emDialog}
           >
@@ -1214,9 +1241,17 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Pagamento"
-            descricao="Conta bancária ou chave PIX — pelo menos uma das duas. Cadastre as duas sempre que houver."
-            descricaoNoDialog="Uma das duas basta. Cadastre as duas sempre que houver."
-            selo="obrigatorio"
+            descricao={
+              ehVeiculo
+                ? "Opcional por enquanto: vai ser exigido para gerar a PP do repasse, nas linhas A · Repasse."
+                : "Conta bancária ou chave PIX — pelo menos uma das duas. Cadastre as duas sempre que houver."
+            }
+            descricaoNoDialog={
+              ehVeiculo
+                ? "Opcional por enquanto: vai ser exigido para gerar a PP do repasse, nas linhas A · Repasse."
+                : "Uma das duas basta. Cadastre as duas sempre que houver."
+            }
+            selo={ehVeiculo ? "opcional" : "obrigatorio"}
             emDialog={emDialog}
           >
             <div className="flex flex-col gap-[18px]">

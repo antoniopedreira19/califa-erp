@@ -92,6 +92,12 @@ interface Props {
   /** Modelo mensal (decisão 078): os meses sem item, que bloqueiam a
    *  aprovação. `null` fora do mensal. */
   mesesSemItens: string[] | null;
+  /** Mídia Off (decisão 147): quantas linhas estão sem veículo — bloqueia a
+   *  aprovação. `null` fora da Mídia Off. */
+  linhasSemVeiculo: number | null;
+  /** Mídia Off: a barra fala em meios e linhas, e o envio para abertura
+   *  ainda não existe (chega na entrega do job). */
+  midiaOff: boolean;
   /** Modelo mensal: início e fim vêm do período do orçamento, e o modal os
    *  mostra travados (Tiago, 14/09/2026). */
   periodoTravado: boolean;
@@ -165,6 +171,8 @@ export function FluxoAbertura({
   percentualImposto,
   cambioInternacional,
   mesesSemItens,
+  linhasSemVeiculo,
+  midiaOff,
   periodoTravado,
   custoPlanejado,
   faturamentoPrevisto,
@@ -207,8 +215,14 @@ export function FluxoAbertura({
     qtdItens,
     qtdItensComValor,
     mesesSemItens,
+    linhasSemVeiculo,
   });
   const aprovada = versaoStatus === "aprovada";
+  // Mídia Off (decisão 147, entrega 1): o orçamento vai até a aprovação; o
+  // job dela — PPs, PI, faturamento por mês — é a próxima entrega.
+  const aberturaIndisponivel = midiaOff
+    ? "O envio da Mídia Off para abertura fica disponível na próxima entrega."
+    : null;
   // `devolvida` (decisão 057): o financeiro rejeitou a abertura. O job
   // continua existindo — o reenvio refaz o formulário sobre ele —, mas a
   // barra volta a oferecer o envio, como na etapa `aprovada`.
@@ -451,8 +465,17 @@ export function FluxoAbertura({
               <span className="text-xs text-muted-foreground">
                 Aprovando{" "}
                 <strong className="text-foreground">{versaoLabel}</strong> ·{" "}
-                {qtdGrupos} {qtdGrupos === 1 ? "grupo" : "grupos"} · {qtdItens}{" "}
-                {qtdItens === 1 ? "item" : "itens"}
+                {midiaOff ? (
+                  <>
+                    {qtdGrupos} {qtdGrupos === 1 ? "meio" : "meios"} · {qtdItens}{" "}
+                    {qtdItens === 1 ? "linha" : "linhas"}
+                  </>
+                ) : (
+                  <>
+                    {qtdGrupos} {qtdGrupos === 1 ? "grupo" : "grupos"} · {qtdItens}{" "}
+                    {qtdItens === 1 ? "item" : "itens"}
+                  </>
+                )}
               </span>
               {bloqueio ? (
                 <span className="flex items-start gap-1.5 text-xs font-medium text-california-red">
@@ -479,7 +502,9 @@ export function FluxoAbertura({
                 · valores travados para edição
               </span>
               <span className="text-xs text-muted-foreground">
-                {codigoReservado
+                {aberturaIndisponivel
+                  ? aberturaIndisponivel
+                  : codigoReservado
                   ? podeEnviarAbertura
                     ? `Próximo passo: reenviar o job ${codigoReservado} para o financeiro`
                     : `Próximo passo: o GP reenvia o job ${codigoReservado} para o financeiro`
@@ -577,7 +602,9 @@ export function FluxoAbertura({
             <button
               type="button"
               onClick={abrirFormulario}
-              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+              disabled={aberturaIndisponivel !== null}
+              title={aberturaIndisponivel ?? undefined}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-sm disabled:hover:bg-california-red"
             >
               Enviar Job para Abertura
               <ArrowRight className="h-4 w-4" />

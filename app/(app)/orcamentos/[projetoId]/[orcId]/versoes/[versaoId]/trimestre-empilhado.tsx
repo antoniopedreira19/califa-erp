@@ -34,9 +34,13 @@ export interface MesDoTrimestre {
 export function TrimestreEmpilhado({
   meses,
   moeda,
+  acoes,
 }: {
   meses: MesDoTrimestre[];
   moeda: string;
+  /** Botões ao lado do "Recolher todos" — na Mídia Off, o "Caber na tela ⇄
+   *  Alargar colunas" da grade (decisão 147). */
+  acoes?: React.ReactNode;
 }) {
   // Nasce com o primeiro mês aberto: com os três abertos a página enterra
   // o Totais do trimestre, e com todos fechados ela não mostra planilha.
@@ -56,13 +60,14 @@ export function TrimestreEmpilhado({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center">
+      <div className="flex flex-wrap items-center gap-2">
         <BotaoRecolherTodos
           algumAberto={algumAberto}
           onAlternarTodos={() =>
             setAbertos(algumAberto ? new Set() : new Set(meses.map((m) => m.id)))
           }
         />
+        {acoes}
       </div>
       {meses.map((m) => {
         const aberto = abertos.has(m.id);

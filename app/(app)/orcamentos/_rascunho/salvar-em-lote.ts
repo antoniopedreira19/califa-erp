@@ -120,7 +120,7 @@ export async function salvarOrcamentosDoProjeto(
 
   // Projeto do tenant + vínculos que restringem regional e GP. Uma
   // consulta de cada, não uma por job: a lista é a mesma para todos.
-  const [projRes, regRes, respRes, orcCountRes] = await Promise.all([
+  const [projRes, regRes, respRes, orcCountRes, midiaOffRes] = await Promise.all([
     supabase
       .from("projetos")
       .select("id, codigo")
@@ -142,7 +142,17 @@ export async function salvarOrcamentosDoProjeto(
       .select("codigo")
       .eq("projeto_id", projetoId)
       .eq("tenant_id", tenantId),
+    // As categorias de Mídia Off (decisão 147): o orçamento dela só nasce
+    // na tela "Novo orçamento", com a planilha por meio e mês.
+    supabase
+      .from("categorias_dominio")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("modelo_planilha", "midia_off"),
   ]);
+  const categoriasMidiaOff = new Set(
+    ((midiaOffRes.data ?? []) as { id: string }[]).map((c) => c.id),
+  );
 
   if (!projRes.data) return { ok: false, message: "Projeto não encontrado." };
 
@@ -191,6 +201,12 @@ export async function salvarOrcamentosDoProjeto(
       const primeiro =
         parsed.error.errors[0]?.message ?? "Campos obrigatórios em falta.";
       return { ok: false, message: `${rotulo}: ${primeiro}` };
+    }
+    if (categoriasMidiaOff.has(parsed.data.categoria_id)) {
+      return {
+        ok: false,
+        message: `${rotulo}: o orçamento de Mídia Off nasce na tela “Novo orçamento”, com a planilha por meio e mês.`,
+      };
     }
     if (!regionaisDoProjeto.has(parsed.data.regional_id)) {
       return {

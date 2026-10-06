@@ -12,6 +12,7 @@ import {
   type ItemParaTotais,
 } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { fechamentoDosItens, parametrosDaVersao } from "@/lib/calculos/midia-off";
 import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import type {
   CategoriaDominio,
@@ -243,6 +244,9 @@ export default async function ProjetoDetailPage({
     int_transaction_costs: number;
     moeda_estrangeira: string | null;
     cambio_compra: number | null;
+    // Mídia Off (decisão 147): a conta da mídia.
+    percentual_veiculo: number;
+    base_honorarios: string;
   };
   const versoesPorOrcamento = new Map<string, VersaoLeve[]>();
   const jobsPorOrcamento = new Map<
@@ -275,7 +279,7 @@ export default async function ProjetoDetailPage({
         // orçamento internacional — e contradiria a tela da versão em
         // ~R$ 93 mil no exemplo da planilha modelo (decisão 072).
         .select(
-          "id, orcamento_id, numero_versao, percentual_honorarios, percentual_imposto, created_at, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra",
+          "id, orcamento_id, numero_versao, percentual_honorarios, percentual_imposto, created_at, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios",
         )
         .in("orcamento_id", orcamentoIds)
         .eq("tenant_id", session.activeTenant.id),
@@ -347,6 +351,15 @@ export default async function ProjetoDetailPage({
       }
 
       for (const [orcId, versao] of versaoAlvoPorOrcamento) {
+        // Mídia Off (decisão 147): o total gravado é o negociado; o valor do
+        // job sai da conta da mídia. A exportação dela ainda não existe.
+        if (modeloPorOrcamento.get(orcId) === "midia_off") {
+          valorJobMap.set(
+            orcId,
+            fechamentoDosItens(itensPorVersao.get(versao.id) ?? [], parametrosDaVersao(versao)).valorJob,
+          );
+          continue;
+        }
         // A MESMA definição de "Valor do job" do fechamento da versão
         // (calcularTotaisVersao): principal com valorJob + honorários +
         // imposto — e, no internacional, mais int. taxes e custos de
@@ -395,7 +408,13 @@ export default async function ProjetoDetailPage({
   // Arquivado (decisão 118) e cancelado ficam fora do seletor de
   // exportação: saíram da mesa, e a visão agregada também não os lista.
   const exportaveis: OrcamentoExportavel[] = orcamentos
-    .filter((o) => !o.arquivado && o.estagio !== "cancelado")
+    // Mídia Off (decisão 147): a exportação dela fica para depois do desenho.
+    .filter(
+      (o) =>
+        !o.arquivado &&
+        o.estagio !== "cancelado" &&
+        modeloPorOrcamento.get(o.id) !== "midia_off",
+    )
     .map((o) => ({
       id: o.id,
       nome: o.nome,

@@ -29,6 +29,13 @@ export interface ComboboxItem {
    * atividade (módulo fiscal, 02/10/2026). Sem ele, o campo mostra o rótulo.
    */
   curto?: string;
+  /**
+   * Título do bloco a que o item pertence. Um item com `grupo` diferente do
+   * anterior abre um bloco na lista — no veículo da planilha de Mídia Off,
+   * "Vendem TV Fechada" e "Outros meios" (decisão 147). Quem usa ordena os
+   * itens por grupo; sem ele, a lista é a de sempre.
+   */
+  grupo?: string;
 }
 
 /**
@@ -240,10 +247,15 @@ export function Combobox({
             {filtered.length === 0 && (
               <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum resultado.</p>
             )}
-            {filtered.map((item) => (
+            {filtered.map((item, i) => (
+              <React.Fragment key={item.value}>
+              {item.grupo && item.grupo !== filtered[i - 1]?.grupo && (
+                <p className="px-3 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                  {item.grupo}
+                </p>
+              )}
               <button
                 type="button"
-                key={item.value}
                 onClick={() => {
                   onChange(item.value);
                   setOpen(false);
@@ -269,6 +281,7 @@ export function Combobox({
                   )}
                 </span>
               </button>
+              </React.Fragment>
             ))}
           </div>
 

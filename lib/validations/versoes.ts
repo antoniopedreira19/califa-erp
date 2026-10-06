@@ -92,7 +92,13 @@ export function bloqueioAprovacaoVersao(input: {
    *  ("dezembro"). Obrigatório e anulável como o câmbio: `null` fora do
    *  mensal, e quem chama tem que dizer qual é o caso. */
   mesesSemItens: string[] | null;
+  /** Mídia Off (decisão 147, resposta b do Tiago em 04/10/2026): quantas
+   *  linhas estão sem veículo — a linha pode ficar sem ele no rascunho, mas
+   *  a versão só aprova com todas preenchidas. `null` fora da Mídia Off, e
+   *  é ele que troca "item" por "linha" nas frases. */
+  linhasSemVeiculo: number | null;
 }): string | null {
+  const midia = input.linhasSemVeiculo !== null;
   if (!isAliquotaConhecida(input.percentualImposto)) {
     return 'Escolha a alíquota de impostos da versão antes de aprovar. Use o botão "Editar" da versão.';
   }
@@ -116,19 +122,28 @@ export function bloqueioAprovacaoVersao(input: {
     }
   }
   if (input.qtdItens === 0) {
-    return "Adicione ao menos 1 item antes de aprovar a versão.";
+    return midia
+      ? "Adicione ao menos 1 linha antes de aprovar a versão."
+      : "Adicione ao menos 1 item antes de aprovar a versão.";
   }
   if (input.qtdItensComValor === 0) {
-    return "Nenhum item da planilha tem valor. Preencha ao menos um item antes de aprovar a versão.";
+    return midia
+      ? "Nenhuma linha da planilha tem valor. Preencha ao menos uma linha antes de aprovar a versão."
+      : "Nenhum item da planilha tem valor. Preencha ao menos um item antes de aprovar a versão.";
   }
   // Modelo mensal (decisão 078, Tiago em 14/09/2026): mês vazio viraria um
   // mês de faturamento zero no job. Quem não vai usar o mês o apaga.
   if (input.mesesSemItens && input.mesesSemItens.length > 0) {
     const nomes = listaPtBr(input.mesesSemItens);
     const texto = nomes.charAt(0).toUpperCase() + nomes.slice(1);
+    const unidade = midia ? "linhas" : "itens";
     return input.mesesSemItens.length === 1
-      ? `${texto} não tem itens. Preencha o mês ou apague-o em "Editar meses" antes de aprovar a versão.`
-      : `${texto} não têm itens. Preencha os meses ou apague-os em "Editar meses" antes de aprovar a versão.`;
+      ? `${texto} não tem ${unidade}. Preencha o mês ou apague-o em "Editar meses" antes de aprovar a versão.`
+      : `${texto} não têm ${unidade}. Preencha os meses ou apague-os em "Editar meses" antes de aprovar a versão.`;
+  }
+  if (input.linhasSemVeiculo !== null && input.linhasSemVeiculo > 0) {
+    const n = input.linhasSemVeiculo;
+    return `${n === 1 ? "1 linha está" : `${n} linhas estão`} sem veículo. Escolha o veículo de todas as linhas antes de aprovar a versão.`;
   }
   return null;
 }

@@ -155,6 +155,16 @@ function extractVersaoPartial(formData: FormData): Record<string, unknown> {
     if (Number.isFinite(n) && n >= 0) partial.int_transaction_costs = n;
   }
 
+  // ---- Parâmetros da Mídia Off (decisão 147). Só chegam da tela da
+  // Mídia Off; `atualizarVersao` os descarta nos outros modelos.
+  const veiculo = formData.get("percentual_veiculo")?.toString().trim();
+  if (veiculo && veiculo.length > 0) {
+    const n = Number(veiculo);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) partial.percentual_veiculo = n;
+  }
+  const base = formData.get("base_honorarios")?.toString().trim();
+  if (base === "negociado" || base === "liquido") partial.base_honorarios = base;
+
   // `status` não entra: desde 17/08/2026 o status da versão é 100% do
   // sistema (aprovação, cascata de substituídas, `cancelarVersao`). Um
   // formulário que mande o campo é ignorado de propósito — a regra tem
@@ -303,16 +313,17 @@ export async function criarVersao(
     return { ok: false, message: mapVersaoDbError(error.message) };
   }
 
-  // Versão nova do modelo mensal nasce com os meses do período do
-  // orçamento, vazios (decisão 078). Se não der, a tela oferece o "Editar
-  // meses" — a versão não é desfeita por isso.
-  if (modelo === "mensal") {
+  // Versão nova do modelo mensal (decisão 078) e da Mídia Off (decisão 147)
+  // nasce com os meses do período do orçamento, vazios. Se não der, a tela
+  // oferece o "Editar meses" — a versão não é desfeita por isso.
+  if (modelo === "mensal" || modelo === "midia_off") {
     const meses = await criarMesesDoPeriodo(supabase, {
       tenantId: session.activeTenant.id,
       versaoId: data.id,
       profileId: session.profile.id,
       inicio: orc.data_inicio_prevista,
       fim: orc.data_fim_prevista,
+      modelo,
     });
     if (!meses.ok) {
       console.error("[versoes.criar.meses]", meses.message);
@@ -344,7 +355,7 @@ export async function atualizarVersao(
 
   const { data: atual } = await supabase
     .from("versoes_orcamento")
-    .select("orcamento_id, status, percentual_honorarios, percentual_imposto, percentual_int_taxes")
+    .select("orcamento_id, status, percentual_honorarios, percentual_imposto, percentual_int_taxes, percentual_veiculo, base_honorarios")
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -353,6 +364,8 @@ export async function atualizarVersao(
       percentual_honorarios: number;
       percentual_imposto: number | string;
       percentual_int_taxes: number | string;
+      percentual_veiculo: number | string;
+      base_honorarios: string;
     }>();
 
   if (!atual) return { ok: false, message: "Versão não encontrada." };
@@ -410,6 +423,30 @@ export async function atualizarVersao(
     if (!intTaxesMudou) delete updates.percentual_int_taxes;
   }
 
+  // Mídia Off (decisão 147): a base dos honorários e a parte do veículo
+  // mudam o valor cobrado do cliente, como os honorários — a mesma trava.
+  // Nos outros modelos os dois campos não existem para a tela.
+  if (modeloDaVersao === "midia_off") {
+    const veiculoMudou =
+      typeof updates.percentual_veiculo === "number" &&
+      Math.abs(Number(atual.percentual_veiculo) - updates.percentual_veiculo) > 1e-6;
+    const baseMudou =
+      typeof updates.base_honorarios === "string" &&
+      updates.base_honorarios !== atual.base_honorarios;
+    if ((veiculoMudou || baseMudou) && !pode(session.activeRole, "orcamentos.editar_impostos")) {
+      return {
+        ok: false,
+        message:
+          "Só administrador ou gerente de projeto altera a base dos honorários e a parte do veículo.",
+      };
+    }
+    if (!veiculoMudou) delete updates.percentual_veiculo;
+    if (!baseMudou) delete updates.base_honorarios;
+  } else {
+    delete updates.percentual_veiculo;
+    delete updates.base_honorarios;
+  }
+
   const { error } = await supabase
     .from("versoes_orcamento")
     .update(updates)
@@ -426,13 +463,25 @@ export async function atualizarVersao(
     tenantId: session.activeTenant.id,
     entidadeTipo: "versao_orcamento",
     entidadeId: versaoId,
-    metadata: honorariosMudou
-      ? {
-          campo: "percentual_honorarios",
-          de: Number(atual.percentual_honorarios),
-          para: honorariosNovo,
-        }
-      : undefined,
+    metadata:
+      honorariosMudou || "percentual_veiculo" in updates || "base_honorarios" in updates
+        ? {
+            ...(honorariosMudou
+              ? {
+                  campo: "percentual_honorarios",
+                  de: Number(atual.percentual_honorarios),
+                  para: honorariosNovo,
+                }
+              : {}),
+            // Mídia Off (decisão 147).
+            ...("percentual_veiculo" in updates
+              ? { percentual_veiculo: { de: Number(atual.percentual_veiculo), para: updates.percentual_veiculo } }
+              : {}),
+            ...("base_honorarios" in updates
+              ? { base_honorarios: { de: atual.base_honorarios, para: updates.base_honorarios } }
+              : {}),
+          }
+        : undefined,
   });
 
   const { data: orcAtual } = await supabase
@@ -514,6 +563,10 @@ export async function duplicarVersao(
       cambio_data: original.cambio_data,
       percentual_int_taxes: original.percentual_int_taxes,
       int_transaction_costs: original.int_transaction_costs,
+      // Mídia Off (decisão 147): as condições de mídia vão junto, pela mesma
+      // razão das internacionais.
+      percentual_veiculo: original.percentual_veiculo,
+      base_honorarios: original.base_honorarios,
       created_by: session.profile.id,
     })
     .select("id")
@@ -537,7 +590,7 @@ export async function duplicarVersao(
   // Duplica grupos e mapeia old_id → new_id pra reatribuir os itens.
   const { data: gruposOriginais } = await supabase
     .from("versoes_orcamento_grupos")
-    .select("id, nome, ordem, mes_id")
+    .select("id, nome, ordem, mes_id, meio, forma_compra, formato")
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
     .order("ordem");
@@ -550,6 +603,10 @@ export async function duplicarVersao(
       nome: g.nome,
       ordem: g.ordem,
       mes_id: g.mes_id ? (mesMap.get(g.mes_id) ?? null) : null,
+      // Mídia Off (decisão 147): o meio do grupo.
+      meio: g.meio ?? null,
+      forma_compra: g.forma_compra ?? null,
+      formato: g.formato ?? null,
     }));
     const { data: novosGrupos, error: gErr } = await supabase
       .from("versoes_orcamento_grupos")
@@ -581,7 +638,10 @@ export async function duplicarVersao(
       // esta coluna — ela só vale se a versão nova nascer em save
       // (`save_por_padrao`) ou se um dia a marca passar a ser copiada.
       "planejado_antes_save, " +
-      "fornecedor_id, observacoes",
+      "fornecedor_id, observacoes, " +
+      // Mídia Off (decisão 147): a linha de mídia inteira.
+      "praca, peca, formato, insercoes_por_dia, data_inicio, data_fim, unidade_periodo, " +
+      "valor_unitario_tabela, percentual_desconto, detalhe",
     )
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
@@ -1739,17 +1799,34 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
         .is("substituido_em", null),
     ]);
 
-  // Modelo mensal (decisão 078): todo mês da versão precisa ter item. Lido
-  // do banco aqui, e não da tela: a regra não pode depender do cliente.
-  const mesesVazios =
-    orc.categoria?.modelo_planilha === "mensal"
-      ? await mesesSemItensDaVersao(supabase, session.activeTenant.id, versaoId)
-      : null;
-  if (orc.categoria?.modelo_planilha === "mensal" && mesesVazios === null) {
+  // Modelo mensal (decisão 078) e Mídia Off (decisão 147): todo mês da
+  // versão precisa ter item. Lido do banco aqui, e não da tela: a regra
+  // não pode depender do cliente.
+  const modeloDaVersao = orc.categoria?.modelo_planilha ?? "nacional";
+  const porMes = modeloDaVersao === "mensal" || modeloDaVersao === "midia_off";
+  const [mesesVazios, semVeiculo] = await Promise.all([
+    porMes
+      ? mesesSemItensDaVersao(supabase, session.activeTenant.id, versaoId)
+      : Promise.resolve(null),
+    // Mídia Off (resposta b do Tiago, 04/10/2026): toda linha com veículo.
+    modeloDaVersao === "midia_off"
+      ? supabase
+          .from("versoes_orcamento_itens")
+          .select("id", { count: "exact", head: true })
+          .eq("versao_orcamento_id", versaoId)
+          .eq("tenant_id", session.activeTenant.id)
+          .is("fornecedor_id", null)
+      : Promise.resolve(null),
+  ]);
+  if (porMes && mesesVazios === null) {
     return {
       ok: false,
       message: "Não foi possível conferir os meses da versão. Tente de novo.",
     };
+  }
+  if (semVeiculo?.error) {
+    console.error("[versao.aprovar.veiculo]", semVeiculo.error.message);
+    return { ok: false, message: "Não foi possível conferir os veículos das linhas." };
   }
 
   // Alíquota escolhida + item com valor. Mesma função do botão "Aprovar
@@ -1770,6 +1847,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     qtdItens: itensCount ?? 0,
     qtdItensComValor: comValorCount ?? 0,
     mesesSemItens: mesesVazios,
+    linhasSemVeiculo: semVeiculo ? (semVeiculo.count ?? 0) : null,
   });
 
   if (bloqueio) {

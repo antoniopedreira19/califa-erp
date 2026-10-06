@@ -29,6 +29,12 @@ import type {
 } from "@/lib/types";
 import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import { EditorAgregado } from "./editor-agregado";
+import type { OrcamentoMidiaNaAgregada } from "./card-midia";
+import {
+  chaveDoMeio,
+  fechamentoDosItens,
+  parametrosDaVersao,
+} from "@/lib/calculos/midia-off";
 import type { OrcamentoRascunho } from "../../_rascunho/tipos";
 import type { OrcamentoExportavel } from "../../_selecao/exportar-orcamentos-menu";
 
@@ -193,7 +199,9 @@ export default async function OrcamentosAgregadoPage({
               "id, orcamento_id, numero_versao, status, moeda, taxa_cambio, " +
                 "percentual_honorarios, percentual_imposto, " +
                 // Cadeia internacional (decisão 072).
-                "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra",
+                "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, " +
+                // Mídia Off (decisão 147).
+                "percentual_veiculo, base_honorarios",
             )
             .in(
               "orcamento_id",
@@ -238,6 +246,8 @@ export default async function OrcamentosAgregadoPage({
     int_transaction_costs: number | string;
     moeda_estrangeira: string | null;
     cambio_compra: number | string | null;
+    percentual_veiculo: number | string;
+    base_honorarios: string;
   }>;
 
   const vigentePorOrcamento = new Map<string, (typeof versoes)[number]>();
@@ -256,7 +266,8 @@ export default async function OrcamentosAgregadoPage({
     versaoIds.length > 0
       ? supabase
           .from("versoes_orcamento_grupos")
-          .select("id, nome, versao_orcamento_id, ordem, mes_id")
+          // `meio` e `formato`: o card da Mídia Off conta os meios (147).
+          .select("id, nome, versao_orcamento_id, ordem, mes_id, meio, formato")
           .eq("tenant_id", tenantId)
           .in("versao_orcamento_id", versaoIds)
           .order("ordem", { ascending: true })
@@ -399,7 +410,50 @@ export default async function OrcamentosAgregadoPage({
   // ficam em consulta, e o "Criar orçamento de job" some.
   const projetoArquivado = projeto.status === "arquivado";
 
-  const inicial: OrcamentoRascunho[] = orcamentos.map((orc) => {
+  // Mídia Off (decisão 147, entrega 1): só consulta, com o atalho para a
+  // tela do orçamento — a planilha dela é por meio e mês, com a conta da
+  // mídia, e o editor daqui é o da nacional.
+  const ehMidiaOff = (orc: (typeof orcamentos)[number]) =>
+    orc.categoria?.modelo_planilha === "midia_off";
+  const midias: OrcamentoMidiaNaAgregada[] = orcamentos.filter(ehMidiaOff).map((orc) => {
+    const versao = vigentePorOrcamento.get(orc.id);
+    const itensDaVersao = versao
+      ? ((itensRes.data ?? []) as any[]).filter((it) => it.versao_orcamento_id === versao.id)
+      : [];
+    const gruposDaVersao = versao
+      ? ((gruposRes.data ?? []) as any[]).filter((g) => g.versao_orcamento_id === versao.id && g.meio)
+      : [];
+    const f = versao
+      ? fechamentoDosItens(
+          itensDaVersao.map((it) => ({
+            tipo_custo: it.tipo_custo,
+            total_orcado:
+              num(it.valor_unitario_orcado) * num(it.quantidade_orcada) * num(it.dias_meses_orcado),
+          })),
+          parametrosDaVersao(versao),
+        )
+      : null;
+    return {
+      id: orc.id,
+      nome: orc.nome,
+      detalhe: versao
+        ? `v${versao.numero_versao}${versao.status === "aprovada" ? " · aprovada" : ""}`
+        : "sem versão",
+      href: versao
+        ? `/orcamentos/${params.projetoId}/${orc.id}?v=${versao.id}`
+        : `/orcamentos/${params.projetoId}/${orc.id}`,
+      qtdMeses: versao ? (mesesPorVersao.get(versao.id) ?? []).length : 0,
+      qtdMeios: new Set(gruposDaVersao.map((g) => chaveDoMeio(g.meio, g.formato))).size,
+      qtdLinhas: itensDaVersao.length,
+      valorJob: f?.valorJob ?? 0,
+      faturamentoPrevisto: f?.faturamentoPrevisto ?? 0,
+      imposto: f?.imposto ?? 0,
+      custoPlanejado: f?.custoPlanejado ?? 0,
+      resultadoGeral: f?.resultadoGeral ?? null,
+    };
+  });
+
+  const inicial: OrcamentoRascunho[] = orcamentos.filter((o) => !ehMidiaOff(o)).map((orc) => {
     const versao = vigentePorOrcamento.get(orc.id);
     const grupos = versao ? (gruposPorVersao.get(versao.id) ?? []) : [];
     const bloqueio = projetoArquivado
@@ -537,11 +591,16 @@ export default async function OrcamentosAgregadoPage({
   // (decisão 131): as categorias dele são da planilha nacional, e o
   // formulário mostra só as dele, como na tela do orçamento.
   const categoriasOrcamento = (categoriasOrcRes.data ?? []) as CategoriaParaServico[];
-  const soNaTelaDoOrcamento = (c: CategoriaParaServico) =>
+  // A Mídia Off também só nasce na tela do orçamento (decisão 147): a
+  // planilha dela é por meio e mês. O serviço Mídia fica, por causa da
+  // Mídia On.
+  const soMensal = (c: CategoriaParaServico) =>
     c.servico_exclusivo_id !== null && c.modelo_planilha === "mensal";
+  const soNaTelaDoOrcamento = (c: CategoriaParaServico) =>
+    soMensal(c) || c.modelo_planilha === "midia_off";
   const servicosComCategoriaPropria = new Set(
     categoriasOrcamento
-      .filter(soNaTelaDoOrcamento)
+      .filter(soMensal)
       .map((c) => c.servico_exclusivo_id)
       .filter((id): id is string => id !== null),
   );
@@ -591,6 +650,7 @@ export default async function OrcamentosAgregadoPage({
           HONORARIOS_PADRAO_FALLBACK,
       )}
       inicial={inicial}
+      midias={midias}
       exportaveis={exportaveis}
       categorias={categoriasOrcamento.filter((c) => !soNaTelaDoOrcamento(c))}
       nomesDeCategoria={categoriasOrcamento}

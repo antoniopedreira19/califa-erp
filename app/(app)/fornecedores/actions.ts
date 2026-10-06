@@ -9,7 +9,9 @@ import { checarPermissao } from "@/lib/permissoes-server";
 import {
   fornecedorSchema,
   fornecedorCompletoSchema,
+  fornecedorVeiculoSchema,
 } from "@/lib/validations/fornecedores";
+import { MEIOS } from "@/lib/midia/meios";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
 import type { Fornecedor } from "@/lib/types";
 import {
@@ -190,8 +192,11 @@ function mapDbError(msg: string): string {
  */
 async function inserirFornecedor(
   formData: FormData,
-  schema: typeof fornecedorSchema | typeof fornecedorCompletoSchema,
-  origem: "cadastro" | "pp",
+  schema:
+    | typeof fornecedorSchema
+    | typeof fornecedorCompletoSchema
+    | typeof fornecedorVeiculoSchema,
+  origem: "cadastro" | "pp" | "midia",
 ): Promise<ActionResult> {
   const session = await requireSession();
   // Cobre os dois callers do miolo: a tela /fornecedores/novo (criarFornecedor)
@@ -463,10 +468,22 @@ export async function atualizarFornecedor(
   /** O usuário já viu o aviso das PPs no financeiro e mandou salvar. */
   confirmarComPPsNoFinanceiro = false,
 ): Promise<ActionResult> {
+  return atualizarComSchema(id, formData, confirmarComPPsNoFinanceiro, fornecedorSchema);
+}
+
+/** O miolo da edição. O schema é o do fornecedor de sempre ou o do veículo
+ *  de mídia (decisão 147), que não exige conta. Não exportada: todo export
+ *  async de arquivo "use server" vira Server Action. */
+async function atualizarComSchema(
+  id: string,
+  formData: FormData,
+  confirmarComPPsNoFinanceiro: boolean,
+  schema: typeof fornecedorSchema | typeof fornecedorVeiculoSchema,
+): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "cadastros.fornecedores.editar");
   if (!gate.ok) return gate;
-  const parsed = fornecedorSchema.safeParse(extractInput(formData));
+  const parsed = schema.safeParse(extractInput(formData));
 
   if (!parsed.success) {
     return {
@@ -572,6 +589,206 @@ export async function atualizarFornecedor(
   revalidatePath("/fornecedores");
   revalidatePath(`/fornecedores/${id}`);
   return { ok: true, id };
+}
+
+// ---------------------------------------------------------------------------
+// Veículo de mídia (decisão 147)
+//
+// O veículo é um fornecedor — é ele que recebe o PI, emite a nota e, no
+// A · Repasse, recebe a PP — com os meios que vende e a praça, que moram em
+// `veiculos_midia`. O cadastro é o formulário do fornecedor com o pagamento
+// opcional: a conta só vai ser exigida para gerar a PP do repasse. As três
+// actions abaixo gravam o veículo junto, então fornecedor sem conta é
+// sempre um veículo.
+// ---------------------------------------------------------------------------
+
+/** Meios e praça do veículo, do formulário (`veiculo_meios` em JSON). */
+function dadosDoVeiculo(
+  formData: FormData,
+): { ok: true; meios: string[]; praca: string | null } | { ok: false; message: string } {
+  let meios: unknown;
+  try {
+    meios = JSON.parse(formData.get("veiculo_meios")?.toString() || "[]");
+  } catch {
+    meios = [];
+  }
+  const praca = formData.get("veiculo_praca")?.toString().trim() || null;
+  return conferirMeios(meios, praca);
+}
+
+function conferirMeios(
+  meios: unknown,
+  praca: string | null,
+): { ok: true; meios: string[]; praca: string | null } | { ok: false; message: string } {
+  const lista = Array.isArray(meios)
+    ? Array.from(new Set(meios.filter((m): m is string => typeof m === "string")))
+    : [];
+  if (lista.length === 0) {
+    return { ok: false, message: "Escolha ao menos um meio do veículo, no alto do cadastro." };
+  }
+  if (!lista.every((m) => MEIOS.some((x) => x.nome === m))) {
+    return { ok: false, message: "Meio do veículo inválido." };
+  }
+  if (praca && praca.length > 120) {
+    return { ok: false, message: "A praça do veículo tem no máximo 120 caracteres." };
+  }
+  return { ok: true, meios: lista, praca };
+}
+
+async function gravarVeiculo(
+  tenantId: string,
+  profileId: string,
+  fornecedorId: string,
+  meios: string[],
+  praca: string | null,
+): Promise<string | null> {
+  const supabase = createClient();
+  // Atualiza quem já é veículo; senão cria — sem o upsert, que regravaria
+  // `created_by` com quem editou.
+  const { data: atualizados, error: erroUpdate } = await supabase
+    .from("veiculos_midia")
+    .update({ meios, praca })
+    .eq("fornecedor_id", fornecedorId)
+    .eq("tenant_id", tenantId)
+    .select("id");
+  if (erroUpdate) {
+    console.error("[fornecedores.veiculo.update]", erroUpdate.message);
+    return erroUpdate.message;
+  }
+  if ((atualizados ?? []).length > 0) return null;
+  const { error } = await supabase.from("veiculos_midia").insert({
+    tenant_id: tenantId,
+    fornecedor_id: fornecedorId,
+    meios,
+    praca,
+    created_by: profileId,
+  });
+  if (error) {
+    console.error("[fornecedores.veiculo]", error.message);
+    return error.message;
+  }
+  return null;
+}
+
+/** O "Novo veículo" da planilha de Mídia Off: o fornecedor e o veículo. */
+export async function criarVeiculoFornecedor(formData: FormData): Promise<ActionResult> {
+  const veiculo = dadosDoVeiculo(formData);
+  if (!veiculo.ok) return veiculo;
+  const res = await inserirFornecedor(formData, fornecedorVeiculoSchema, "midia");
+  if (!res.ok || !res.id) return res;
+
+  const session = await requireSession();
+  const erro = await gravarVeiculo(
+    session.activeTenant.id,
+    session.profile.id,
+    res.id,
+    veiculo.meios,
+    veiculo.praca,
+  );
+  if (erro) {
+    return {
+      ok: false,
+      message:
+        "O fornecedor foi cadastrado, mas os meios do veículo não foram gravados. Busque-o pelo CNPJ no campo Veículo para escolher de novo.",
+    };
+  }
+  await logAuditEvent({
+    acao: "veiculo_midia.criado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "fornecedor",
+    entidadeId: res.id,
+    metadata: { meios: veiculo.meios, praca: veiculo.praca },
+  });
+  return res;
+}
+
+/** O lápis do veículo na planilha: a edição do cadastro, com os meios. Só
+ *  para quem já é veículo — a régua sem conta não vale para o fornecedor
+ *  comum. */
+export async function atualizarVeiculoFornecedor(
+  id: string,
+  formData: FormData,
+  confirmarComPPsNoFinanceiro = false,
+): Promise<ActionResult> {
+  const veiculo = dadosDoVeiculo(formData);
+  if (!veiculo.ok) return veiculo;
+  const session = await requireSession();
+  const supabase = createClient();
+  const { data: atual } = await supabase
+    .from("veiculos_midia")
+    .select("id")
+    .eq("fornecedor_id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string }>();
+  if (!atual) {
+    return { ok: false, message: "Este fornecedor não é um veículo de mídia." };
+  }
+
+  const res = await atualizarComSchema(
+    id,
+    formData,
+    confirmarComPPsNoFinanceiro,
+    fornecedorVeiculoSchema,
+  );
+  if (!res.ok) return res;
+
+  const erro = await gravarVeiculo(
+    session.activeTenant.id,
+    session.profile.id,
+    id,
+    veiculo.meios,
+    veiculo.praca,
+  );
+  if (erro) {
+    return {
+      ok: false,
+      message: "O cadastro foi salvo, mas os meios do veículo não. Tente de novo.",
+    };
+  }
+  return res;
+}
+
+/** O documento digitado já era de um fornecedor: escolhê-lo como veículo
+ *  grava os meios dele, sem mexer no cadastro. */
+export async function marcarFornecedorComoVeiculo(
+  fornecedorId: string,
+  meios: string[],
+  praca: string | null,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "cadastros.fornecedores.inline");
+  if (!gate.ok) return gate;
+  const conferido = conferirMeios(meios, praca?.trim() || null);
+  if (!conferido.ok) return conferido;
+
+  const supabase = createClient();
+  const { data: fornecedor } = await supabase
+    .from("fornecedores")
+    .select("id, status")
+    .eq("id", fornecedorId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: string }>();
+  if (!fornecedor) return { ok: false, message: "Fornecedor não encontrado." };
+  if (fornecedor.status !== "ativo") {
+    return { ok: false, message: "Este fornecedor está inativo. Reative o cadastro antes." };
+  }
+
+  const erro = await gravarVeiculo(
+    session.activeTenant.id,
+    session.profile.id,
+    fornecedorId,
+    conferido.meios,
+    conferido.praca,
+  );
+  if (erro) return { ok: false, message: "Não foi possível gravar os meios do veículo." };
+  await logAuditEvent({
+    acao: "veiculo_midia.criado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "fornecedor",
+    entidadeId: fornecedorId,
+    metadata: { meios: conferido.meios, praca: conferido.praca, origem: "existente" },
+  });
+  return { ok: true, id: fornecedorId };
 }
 
 export async function verificarPixDuplicado(

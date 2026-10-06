@@ -385,3 +385,33 @@ export const CADEIA_INTERNACIONAL = {
   /** Valores comuns na moeda estrangeira. */
   valor: "text-[#2f6fdb]",
 } as const;
+
+/** A faixa PROGRAMAÇÃO (o calendário de inserções da TV e do rádio) e a
+ *  VEICULAÇÃO (início, fim e quantidade do OOH e do DOOH) da planilha de
+ *  Mídia Off (decisão 147). Não são um quinto bloco: descrevem a linha, não
+ *  um momento dela. Por isso o neutro — o fundo da linha de grupo
+ *  (`LINHA_GRUPO_NOME`) — e não uma cor nova. O ORÇADO continua azul. */
+export const VEICULACAO = {
+  faixa:
+    "text-[#5f5d57] bg-[#f3f2ee] border-b-[3px] border-b-[#c9c6bf] border-l-2 border-l-[#e2e0da]",
+  cabecalho: "text-[#6b6b6b] bg-[#faf9f7] border-l border-l-[#eceae5]",
+  /** Célula do dia na linha. */
+  dia: "border-l border-l-[#eceae5]",
+  /** Fim de semana: o cinza da linha de grupo, mais leve. */
+  diaFimDeSemana: "bg-[#f6f5f2]",
+  /** Os dias como títulos das colunas. */
+  diaCabecalho: "bg-[#f3f2ee] border-l border-l-[#e3e1db]",
+  diaCabecalhoFimDeSemana: "bg-[#e9e7e1] border-l border-l-[#e3e1db]",
+  /** A soma de inserções por dia, no pé do mês. */
+  diaSoma: "bg-[#faf9f7] border-l border-l-[#eceae5] border-t border-t-[#e3e1db]",
+  celula: "border-l border-l-[#eceae5]",
+  /** O pé da tabela: "Inserções por dia" e o total do meio. */
+  pe: "border-t border-t-[#e3e1db] bg-[#faf9f7]",
+  peForte: "border-t-2 border-t-foreground bg-[#f3f2ee]",
+  /** Dias marcados para preencher, e o dia selecionado pelo teclado. */
+  diaMarcado: "!bg-[#fbd5d9] shadow-[inset_0_0_0_1px_rgba(231,75,86,.45)]",
+  diaSelecionado: "!bg-white shadow-[inset_0_0_0_1.5px_#e74b56]",
+  diaHover: "hover:bg-[#fdecee]",
+  /** O cabeçalho das colunas fixas (Praça e Veículo) na grade larga. */
+  cabecalhoFixo: "bg-[#f7f7f6]",
+} as const;

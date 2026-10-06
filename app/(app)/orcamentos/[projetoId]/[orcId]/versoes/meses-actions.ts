@@ -1,7 +1,8 @@
 "use server";
 
 /**
- * Meses da versão do orçamento mensal — Fee e Always On (decisão 078).
+ * Meses da versão do orçamento mensal — Fee e Always On (decisão 078) — e da
+ * Mídia Off (decisão 147), que tem a campanha inteira, sem o trimestre.
  *
  * "Editar meses" adiciona e apaga meses do trimestre, e "Copiar itens de
  * outro mês" monta um mês vazio a partir de outro. As três gravam por RPC
@@ -30,6 +31,8 @@ type Supabase = ReturnType<typeof createClient>;
 
 interface Contexto {
   versaoId: string;
+  /** `mensal` (Fee e Always On) ou `midia_off`. */
+  modelo: "mensal" | "midia_off";
   orcamentoId: string;
   projetoId: string;
   inicio: string | null;
@@ -90,10 +93,11 @@ async function carregarContexto(
       message: "Orçamento aprovado ou com job criado não aceita mudança nos meses.",
     };
   }
-  if (orc.categoria?.modelo_planilha !== "mensal") {
+  const modelo = orc.categoria?.modelo_planilha;
+  if (modelo !== "mensal" && modelo !== "midia_off") {
     return {
       ok: false,
-      message: "Só orçamentos de Fee e Always On são divididos em meses.",
+      message: "Só orçamentos de Fee, Always On e Mídia Off são divididos em meses.",
     };
   }
 
@@ -101,6 +105,7 @@ async function carregarContexto(
     ok: true,
     ctx: {
       versaoId,
+      modelo,
       orcamentoId: versao.orcamento_id,
       projetoId: orc.projeto_id,
       inicio: orc.data_inicio_prevista,
@@ -112,7 +117,11 @@ async function carregarContexto(
 
 /** As frases que as RPCs levantam já estão em português; o resto vira a
  *  mensagem padrão da ação. */
-function mensagemDoBanco(msg: string, padrao: string): string {
+function mensagemDoBanco(
+  msg: string,
+  padrao: string,
+  modelo: Contexto["modelo"] = "mensal",
+): string {
   if (msg.includes("pelo menos um mês")) {
     return "O orçamento precisa ter pelo menos um mês.";
   }
@@ -123,7 +132,9 @@ function mensagemDoBanco(msg: string, padrao: string): string {
     return "Este mês já está no orçamento.";
   }
   if (msg.includes("mês vazio")) {
-    return "O mês de destino já tem grupos. Só é possível copiar para um mês vazio.";
+    return modelo === "midia_off"
+      ? "O mês de destino já tem linhas. Só é possível copiar para um mês vazio."
+      : "O mês de destino já tem grupos. Só é possível copiar para um mês vazio.";
   }
   if (msg.includes("mês diferente")) {
     return "Escolha um mês diferente do atual.";
@@ -154,10 +165,11 @@ export async function adicionarMesNaVersao(
   if (ctx.meses.some((m) => m.mes === mesNovo)) {
     return { ok: false, message: "Este mês já está no orçamento." };
   }
-  // O trimestre é a identidade do orçamento: vale o dos meses que já
-  // existem, ou, sem nenhum, o do período.
+  // O trimestre é a identidade do orçamento de Fee e Always On: vale o dos
+  // meses que já existem, ou, sem nenhum, o do período. A Mídia Off tem a
+  // campanha inteira (decisão 147).
   const referencia = ctx.meses[0]?.mes ?? ctx.inicio;
-  if (referencia && !mesmoTrimestre(referencia, mesNovo)) {
+  if (ctx.modelo === "mensal" && referencia && !mesmoTrimestre(referencia, mesNovo)) {
     return {
       ok: false,
       message: "Só dá para adicionar meses do mesmo trimestre do orçamento.",
@@ -305,15 +317,25 @@ export async function copiarItensDoMes(
   );
   if (!carregado.ok) return carregado;
 
-  const { data: copiados, error } = await supabase.rpc("copiar_mes_da_versao", {
-    p_origem_mes_id: origemMesId,
-    p_destino_mes_id: destinoMesId,
-  });
+  // Na Mídia Off, a cópia é a dela (decisão 147): TV e rádio vêm sem
+  // inserções, e as datas do período passam para o mês novo.
+  const midia = carregado.ctx.modelo === "midia_off";
+  const { data: copiados, error } = await supabase.rpc(
+    midia ? "midia_copiar_mes" : "copiar_mes_da_versao",
+    {
+      p_origem_mes_id: origemMesId,
+      p_destino_mes_id: destinoMesId,
+    },
+  );
   if (error) {
     console.error("[meses.copiar]", error.message);
     return {
       ok: false,
-      message: mensagemDoBanco(error.message, "Não foi possível copiar os itens."),
+      message: mensagemDoBanco(
+        error.message,
+        midia ? "Não foi possível copiar as linhas." : "Não foi possível copiar os itens.",
+        carregado.ctx.modelo,
+      ),
     };
   }
 

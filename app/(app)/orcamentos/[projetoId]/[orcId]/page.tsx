@@ -50,6 +50,13 @@ import { ResumoRentabilidade } from "./versoes/[versaoId]/resumo-rentabilidade";
 import { mesesDaVersaoQuery, mesesSemItens } from "@/lib/data/meses-versao";
 import type { VersaoOrcamentoMes } from "@/lib/types";
 import { PlanilhaMensal } from "./planilha-mensal";
+import { PlanilhaMidiaOff } from "./midia/planilha-midia";
+import type { VeiculoDaLista } from "./midia/secoes";
+import {
+  fechamentoDosItens,
+  meioDoGrupo,
+  parametrosDaVersao,
+} from "@/lib/calculos/midia-off";
 import { AprovacaoActions } from "./versoes/[versaoId]/aprovacao-actions";
 import { AvisoArquivado } from "../../aviso-arquivado";
 import {
@@ -482,7 +489,12 @@ export default async function OrcamentoDetailPage({
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
   // submenu "copiar uma versão existente" mostra para cada aba.
   const versaoIds = versoesTodas.map((v) => v.id);
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes] = await Promise.all([
+  // Mídia Off (decisão 147): a planilha tem a conta e a lista de veículos
+  // dela.
+  const modeloDoOrcamento: CategoriaModeloPlanilha =
+    orcamentoRaw?.categoria?.modelo_planilha ?? "nacional";
+  const midiaOff = modeloDoOrcamento === "midia_off";
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -518,7 +530,9 @@ export default async function OrcamentoDetailPage({
     versaoIds.length > 0
       ? supabase
           .from("versoes_orcamento_itens")
-          .select("versao_orcamento_id, total_orcado")
+          // `tipo_custo`: na Mídia Off o valor da aba é o da conta da mídia,
+          // que separa o A · Repasse.
+          .select("versao_orcamento_id, total_orcado, tipo_custo")
           .in("versao_orcamento_id", versaoIds)
           .eq("tenant_id", session.activeTenant.id)
       : Promise.resolve({ data: [], error: null }),
@@ -566,9 +580,35 @@ export default async function OrcamentoDetailPage({
             }[]
           >()
       : Promise.resolve({ data: [], error: null }),
+    // Os veículos da Mídia Off: os fornecedores ativos marcados como
+    // veículo, com os meios que vendem (decisão 147).
+    midiaOff && versaoAtiva
+      ? supabase
+          .from("veiculos_midia")
+          .select("fornecedor_id, meios, praca, fornecedor:fornecedores!inner(nome, status)")
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("fornecedor.status", "ativo")
+          .returns<
+            {
+              fornecedor_id: string;
+              meios: string[];
+              praca: string | null;
+              fornecedor: { nome: string; status: string };
+            }[]
+          >()
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (ppsRes.error) console.error("[versao.pps_do_job]", (ppsRes.error as any).message);
+  if (veiculosRes.error) console.error("[versao.veiculos]", (veiculosRes.error as any).message);
+  const veiculos: VeiculoDaLista[] = (veiculosRes.data ?? [])
+    .map((v) => ({
+      id: v.fornecedor_id,
+      nome: v.fornecedor.nome,
+      meios: v.meios ?? [],
+      praca: v.praca,
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   const ppsQueTravam: PPQueTravaOEnvio[] = (ppsRes.data ?? []).map((pp) => ({
     id: pp.id,
     codigo: pp.codigo,
@@ -626,6 +666,7 @@ export default async function OrcamentoDetailPage({
       : [[], {}];
 
   const agregadoPorVersao = new Map<string, { count: number; total: number }>();
+  const itensPorVersaoMidia = new Map<string, { tipo_custo: any; total_orcado: number }[]>();
   for (const it of (agregadoRes.data ?? []) as any[]) {
     const atual = agregadoPorVersao.get(it.versao_orcamento_id) ?? {
       count: 0,
@@ -634,6 +675,23 @@ export default async function OrcamentoDetailPage({
     atual.count += 1;
     atual.total += Number(it.total_orcado ?? 0);
     agregadoPorVersao.set(it.versao_orcamento_id, atual);
+    if (midiaOff) {
+      const lista = itensPorVersaoMidia.get(it.versao_orcamento_id) ?? [];
+      lista.push({ tipo_custo: it.tipo_custo, total_orcado: Number(it.total_orcado ?? 0) });
+      itensPorVersaoMidia.set(it.versao_orcamento_id, lista);
+    }
+  }
+  // Na Mídia Off o total gravado é o NEGOCIADO; o valor da aba é o do job,
+  // pela conta da mídia de cada versão (decisão 147).
+  if (midiaOff) {
+    for (const v of versoesTodas) {
+      const agg = agregadoPorVersao.get(v.id);
+      if (!agg) continue;
+      agg.total = fechamentoDosItens(
+        itensPorVersaoMidia.get(v.id) ?? [],
+        parametrosDaVersao(v),
+      ).valorJob;
+    }
   }
 
   const abas: VersaoAba[] = versoesTodas.map((v) => {
@@ -747,6 +805,11 @@ export default async function OrcamentoDetailPage({
                 podeCriarVersao={podeCriarVersao}
                 motivoBloqueio={motivoBloqueio}
                 arquivado={arquivado}
+                exportarBloqueado={
+                  midiaOff
+                    ? "A exportação de planilha da Mídia Off ainda não está disponível."
+                    : undefined
+                }
               />
             )}
             {orcamento.status === "job_criado" && job && (
@@ -903,6 +966,7 @@ export default async function OrcamentoDetailPage({
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
           ppsQueTravam={ppsQueTravam}
+          veiculos={veiculos}
         />
       ) : (
         <SemVersoes
@@ -964,6 +1028,7 @@ function VersaoSelecionada({
   mesPedido,
   fechamentoDaCopia,
   ppsQueTravam,
+  veiculos,
 }: {
   params: { projetoId: string; orcId: string };
   session: Awaited<ReturnType<typeof requireSession>>;
@@ -1011,6 +1076,8 @@ function VersaoSelecionada({
   fechamentoDaCopia: FechamentoDaCopia | null;
   /** PPs do job vivo de pré-abertura fora de `cancelada` (decisão 143). */
   ppsQueTravam: PPQueTravaOEnvio[];
+  /** Mídia Off (decisão 147): os veículos do cadastro; vazio nos demais. */
+  veiculos: VeiculoDaLista[];
 }) {
   // Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
   // planejado igual ao orçado e sem save.
@@ -1084,16 +1151,20 @@ function VersaoSelecionada({
     Number(versao.percentual_imposto),
     planilha.internacional,
   );
-  // Modelo mensal (decisão 078): mês sem item bloqueia a aprovação. A
-  // mesma conta roda no servidor, sobre o banco.
+  // Mídia Off (decisão 147): a conta é a da mídia — veículo + honorários,
+  // o imposto de dentro dos honorários. O total gravado é o negociado.
+  const midiaOff = planilha.modeloPlanilha === "midia_off";
+  const paramsMidia = midiaOff ? parametrosDaVersao(versao) : null;
+  const fechamentoMidia = paramsMidia ? fechamentoDosItens(itens, paramsMidia) : null;
+  // Modelo mensal (decisão 078) e Mídia Off: mês sem item bloqueia a
+  // aprovação. A mesma conta roda no servidor, sobre o banco.
   const mesesVazios =
-    planilha.modeloPlanilha === "mensal"
+    planilha.modeloPlanilha === "mensal" || midiaOff
       ? mesesSemItens(meses, grupos, itens)
       : null;
-  const custoPlanejado = itens.reduce(
-    (s, it) => s + Number(it.total_planejado ?? 0),
-    0,
-  );
+  const custoPlanejado = fechamentoMidia
+    ? fechamentoMidia.custoPlanejado
+    : itens.reduce((s, it) => s + Number(it.total_planejado ?? 0), 0);
 
   // ⚠️ O BV saiu da conta do resultado PLANEJADO em 08/09/2026 (decisão
   // 062). Até aqui ele era somado de volta como "+ BVs", espelhando a
@@ -1106,11 +1177,21 @@ function VersaoSelecionada({
   // `deducoesDoResultado`, e não `imposto`: no internacional saem do valor
   // do job também as int. taxes e os custos de transação. No nacional o
   // campo vale exatamente `imposto`, então o número não muda lá.
-  const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
+  const resultadoNacional = calcularResultadoOperacional(
     totais.valorJob,
     totais.deducoesDoResultado,
     custoPlanejado,
   );
+  const { resultadoOperacional, resultadoGeral } = fechamentoMidia
+    ? {
+        resultadoOperacional: fechamentoMidia.resultadoOperacional,
+        resultadoGeral: fechamentoMidia.resultadoGeral,
+      }
+    : resultadoNacional;
+  const valorDoJob = fechamentoMidia ? fechamentoMidia.valorJob : totais.valorJob;
+  const faturamentoPrevisto = fechamentoMidia
+    ? fechamentoMidia.faturamentoPrevisto
+    : totais.faturamentoPrevisto;
 
   // Preview do código: o definitivo é gerado no insert. Serve só pra tela
   // não mostrar campo vazio — se outro job entrar antes, o número muda.
@@ -1237,6 +1318,14 @@ function VersaoSelecionada({
                   }
                 : null
             }
+            midia={
+              midiaOff
+                ? {
+                    percentualVeiculo: Number(versao.percentual_veiculo ?? 80),
+                    base: versao.base_honorarios === "liquido" ? "liquido" : "negociado",
+                  }
+                : null
+            }
           />
           {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && (
             <AprovacaoActions
@@ -1252,7 +1341,7 @@ function VersaoSelecionada({
         </div>
 
         <ResumoRentabilidade
-          valorJob={totais.valorJob}
+          valorJob={valorDoJob}
           resultadoOperacional={resultadoOperacional}
           resultadoGeral={resultadoGeral}
           moeda={versao.moeda}
@@ -1276,7 +1365,23 @@ function VersaoSelecionada({
           ao lado do "Editar meses": a planilha troca todos os meses de uma
           vez (15/09/2026). O fluxo de aprovação e abertura, abaixo, é o
           mesmo dos outros. */}
-      {planilha.modeloPlanilha === "mensal" ? (
+      {midiaOff && paramsMidia ? (
+        // Mídia Off (decisão 147): régua da campanha, meios por mês e a
+        // conta da mídia.
+        <PlanilhaMidiaOff
+          projetoId={params.projetoId}
+          orcamentoId={params.orcId}
+          versaoId={versao.id}
+          numeroVersao={versao.numero_versao}
+          meses={meses}
+          grupos={grupos}
+          itens={itens}
+          veiculos={veiculos}
+          params={paramsMidia}
+          mesPedido={mesPedido}
+          readOnly={readOnly}
+        />
+      ) : planilha.modeloPlanilha === "mensal" ? (
         <PlanilhaMensal
           projetoId={params.projetoId}
           orcamentoId={params.orcId}
@@ -1404,7 +1509,13 @@ function VersaoSelecionada({
         versaoStatus={versao.status}
         orcamentoNome={orcamento.nome}
         jobHref={job ? `/jobs/${job.id}` : null}
-        qtdGrupos={grupos.length}
+        qtdGrupos={
+          // Na Mídia Off a barra conta os meios (meio + formato), e não os
+          // grupos de cada mês.
+          midiaOff
+            ? new Set(grupos.filter((g) => g.meio).map((g) => meioDoGrupo(g).chave)).size
+            : grupos.length
+        }
         qtdItens={itens.length}
         qtdItensComValor={itens.filter((i) => i.total_orcado > 0).length}
         percentualImposto={Number(versao.percentual_imposto)}
@@ -1420,11 +1531,13 @@ function VersaoSelecionada({
             : null
         }
         mesesSemItens={mesesVazios}
+        linhasSemVeiculo={midiaOff ? itens.filter((i) => !i.fornecedor_id).length : null}
+        midiaOff={midiaOff}
         periodoTravado={planilha.modeloPlanilha === "mensal"}
         custoPlanejado={custoPlanejado}
-        faturamentoPrevisto={totais.faturamentoPrevisto}
-        totalGeradoEmSave={totais.save.totalSaveGerado}
-        valorJob={totais.valorJob}
+        faturamentoPrevisto={faturamentoPrevisto}
+        totalGeradoEmSave={midiaOff ? 0 : totais.save.totalSaveGerado}
+        valorJob={valorDoJob}
         fechamentoDaCopia={fechamentoDaCopia}
         moeda={versao.moeda}
         clienteNome={clienteNome}
@@ -1496,8 +1609,13 @@ function SemVersoes({
           orcamentoId={orcamentoId}
           modeloPlanilha={modeloPlanilha}
           interno={interno}
-          disabled={!podeCriarVersao}
-          disabledReason={motivoBloqueio}
+          // Mídia Off (decisão 147): a importação ainda não existe para ela.
+          disabled={!podeCriarVersao || modeloPlanilha === "midia_off"}
+          disabledReason={
+            modeloPlanilha === "midia_off"
+              ? "A importação de planilha da Mídia Off ainda não está disponível."
+              : motivoBloqueio
+          }
         />
       </div>
     </div>

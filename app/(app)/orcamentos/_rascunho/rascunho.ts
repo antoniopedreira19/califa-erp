@@ -1,3 +1,4 @@
+import { CAMPOS_DE_MIDIA_VAZIOS } from "@/lib/types";
 import type { CategoriaModeloPlanilha, ItemBv, TipoCusto, VersaoOrcamentoItem } from "@/lib/types";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
@@ -120,6 +121,7 @@ export function comoItemDaVersao(
     bv_liquido_planejado: null,
     fornecedor_id: null,
     observacoes: null,
+    ...CAMPOS_DE_MIDIA_VAZIOS,
     created_at: "",
     updated_at: "",
   };

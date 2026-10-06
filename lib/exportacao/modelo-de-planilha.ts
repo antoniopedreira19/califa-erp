@@ -11,7 +11,9 @@ import { secaoInternaDaVersao } from "./interna-da-versao";
  * a lê de volta sem ajuste. No mensal, um bloco vazio por mês de `meses`.
  */
 export function montarPlanilhaModelo(
-  modelo: CategoriaModeloPlanilha,
+  // A Mídia Off ainda não tem planilha para exportar e importar (decisão
+  // 147): o modal de importação fica desligado nela.
+  modelo: Exclude<CategoriaModeloPlanilha, "midia_off">,
   meses: string[] = [],
 ): ExcelJS.Workbook {
   const nomeDoModelo =

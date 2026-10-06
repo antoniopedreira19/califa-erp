@@ -80,6 +80,9 @@ export function AbasVersoes({
   interno,
   travarImpostos,
 }: Props) {
+  // Mídia Off (decisão 147): "meios" e "linhas", e a importação de planilha
+  // ainda não existe para ela.
+  const midia = modeloPlanilha === "midia_off";
   const [menu, setMenu] = React.useState<Menu>(null);
   const [novaAberta, setNovaAberta] = React.useState(false);
   const [importarAberto, setImportarAberto] = React.useState(false);
@@ -169,7 +172,11 @@ export function AbasVersoes({
               <OpcaoMenu
                 icone={<FilePlus className="h-4 w-4 text-california-red" />}
                 titulo="Criar do zero"
-                descricao="Versão vazia — grupos e itens são adicionados depois."
+                descricao={
+                  midia
+                    ? "Versão vazia — meios e linhas são adicionados depois."
+                    : "Versão vazia — grupos e itens são adicionados depois."
+                }
                 onClick={() => {
                   setMenu(null);
                   setNovaAberta(true);
@@ -178,7 +185,11 @@ export function AbasVersoes({
               <OpcaoMenu
                 icone={<Copy className="h-4 w-4 text-california-red" />}
                 titulo="Copiar uma versão existente"
-                descricao="Duplica grupos, itens, honorários e impostos."
+                descricao={
+                  midia
+                    ? "Duplica meios, linhas, honorários e impostos."
+                    : "Duplica grupos, itens, honorários e impostos."
+                }
                 seta
                 desabilitado={versoes.length === 0}
                 onClick={() => setMenu("copiar")}
@@ -187,11 +198,17 @@ export function AbasVersoes({
               <button
                 type="button"
                 role="menuitem"
+                disabled={midia}
+                title={
+                  midia
+                    ? "A importação de planilha da Mídia Off ainda não está disponível."
+                    : undefined
+                }
                 onClick={() => {
                   setMenu(null);
                   setImportarAberto(true);
                 }}
-                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-accent"
+                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 <Upload className="h-4 w-4 flex-none text-muted-foreground" />
                 <span className="text-[13px] font-medium text-foreground">
@@ -241,7 +258,14 @@ export function AbasVersoes({
                         {nomeVersao(nomeJob, v.numero_versao)}
                       </span>
                       <span className="block text-[11.5px] text-muted-foreground">
-                        {v.itens_count === 1 ? "1 item" : `${v.itens_count} itens`} ·{" "}
+                        {midia
+                          ? v.itens_count === 1
+                            ? "1 linha"
+                            : `${v.itens_count} linhas`
+                          : v.itens_count === 1
+                            ? "1 item"
+                            : `${v.itens_count} itens`}{" "}
+                        ·{" "}
                         {formatCurrency(v.itens_total, v.moeda)} · honor.{" "}
                         {String(Number(v.percentual_honorarios)).replace(".", ",")}%
                       </span>

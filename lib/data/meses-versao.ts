@@ -13,6 +13,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { VersaoOrcamentoMes } from "@/lib/types";
 import {
+  erroDoPeriodoDaCampanha,
   erroDoPeriodoMensal,
   mesesDoPeriodo,
   nomeDoMes,
@@ -36,7 +37,8 @@ export function mesesDaVersaoQuery(
 }
 
 /** Cria os meses que o período do orçamento cobre. Período inválido não
- *  cria nada e devolve a frase para quem quiser mostrar. */
+ *  cria nada e devolve a frase para quem quiser mostrar. Na Mídia Off
+ *  (decisão 147) o período é a campanha inteira, sem a trava do trimestre. */
 export async function criarMesesDoPeriodo(
   supabase: Supabase,
   {
@@ -45,15 +47,20 @@ export async function criarMesesDoPeriodo(
     profileId,
     inicio,
     fim,
+    modelo = "mensal",
   }: {
     tenantId: string;
     versaoId: string;
     profileId: string;
     inicio: string | null;
     fim: string | null;
+    modelo?: "mensal" | "midia_off";
   },
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const erro = erroDoPeriodoMensal(inicio, fim);
+  const erro =
+    modelo === "midia_off"
+      ? erroDoPeriodoDaCampanha(inicio, fim)
+      : erroDoPeriodoMensal(inicio, fim);
   if (erro) return { ok: false, message: erro };
 
   const linhas = mesesDoPeriodo({ inicio: inicio!, fim: fim! }).map((mes) => ({

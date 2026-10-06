@@ -44,7 +44,14 @@ const UFS_BRASIL = [
 const nullIfEmpty = (v: unknown) =>
   typeof v === "string" && v.trim().length === 0 ? null : v;
 
-export const fornecedorSchema = z
+/**
+ * O schema do cadastro. `exigirPagamento` é a única diferença entre o
+ * fornecedor de sempre e o veículo de mídia (decisão 147): o veículo nasce
+ * sem conta, que só vai ser exigida para gerar a PP do repasse. Os dois
+ * schemas exportados estão no fim do arquivo.
+ */
+function montarFornecedorSchema(exigirPagamento: boolean) {
+  return z
   .object({
     // === campos existentes ===
     tipo_pessoa: z.enum(["fisica", "juridica"]),
@@ -240,7 +247,8 @@ export const fornecedorSchema = z
     // --- Regra final: pelo menos um bloco de pagamento completo ---
     // Só dispara quando nenhum bloco foi sequer iniciado. Quando o usuário
     // começou mas não terminou um bloco, os erros de campo parcial já guiam.
-    if (!bancoParcial && !pixParcial) {
+    // O veículo de mídia (decisão 147) passa sem nenhum dos dois.
+    if (exigirPagamento && !bancoParcial && !pixParcial) {
       ctx.addIssue({
         code: "custom",
         path: ["banco_codigo"],
@@ -270,6 +278,14 @@ export const fornecedorSchema = z
       declaracao_simples_path: data.declaracao_simples_path,
     };
   });
+}
+
+export const fornecedorSchema = montarFornecedorSchema(true);
+
+/** O cadastro do veículo de mídia (decisão 147): o mesmo do fornecedor, com
+ *  o pagamento opcional. Só as actions do veículo o usam, e elas gravam o
+ *  veículo junto — fornecedor sem conta é sempre um veículo. */
+export const fornecedorVeiculoSchema = montarFornecedorSchema(false);
 
 export type FornecedorInput = z.infer<typeof fornecedorSchema>;
 

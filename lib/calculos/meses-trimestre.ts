@@ -181,6 +181,31 @@ export function siglaTrimestre({ ano, trimestre }: Trimestre): string {
   return `${trimestre}T/${ano}`;
 }
 
+/** O teto da campanha de Mídia Off, em meses: uma data digitada com o ano
+ *  errado não cria centenas de meses vazios. */
+export const MESES_MAXIMOS_DA_CAMPANHA = 24;
+
+/**
+ * Confere o período de um orçamento de Mídia Off (decisão 147): a campanha
+ * inteira, em quantos meses ela tiver — sem a trava do trimestre do Fee e
+ * do Always On. Devolve a mensagem para o usuário, ou `null`.
+ */
+export function erroDoPeriodoDaCampanha(
+  inicio: string | null,
+  fim: string | null,
+): string | null {
+  if (!dataIsoValida(inicio) || !dataIsoValida(fim)) {
+    return "Informe o início e o fim previstos: os meses da campanha nascem do período.";
+  }
+  if (fim < inicio) {
+    return "Data fim deve ser igual ou posterior à data início.";
+  }
+  if (mesesDoPeriodo({ inicio, fim }).length > MESES_MAXIMOS_DA_CAMPANHA) {
+    return `A campanha pode ter até ${MESES_MAXIMOS_DA_CAMPANHA} meses. Confira o ano das datas.`;
+  }
+  return null;
+}
+
 /**
  * Confere o período de um orçamento do modelo mensal. Devolve a mensagem
  * para o usuário, ou `null` quando está tudo certo.
