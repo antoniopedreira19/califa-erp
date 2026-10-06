@@ -16,7 +16,7 @@ O enum `app_role` no banco define 5 papéis operacionais:
 | `administrador` | Administrador | Sócio/diretor. Faz tudo, gerencia usuários, empresas, auditoria. Superset de todas as roles. |
 | `gerente_producao` | Gerente de Projeto | Dono comercial/operacional do trabalho. Fala com cliente, aprova orçamento, aprova envio a faturamento e encerramento. |
 | `produtor` | Produtor | Braço direito do GP. Faz tudo em orçamento e job **menos aprovar**. |
-| `freelancer` | Freelancer | Escopo restrito: só vê projetos onde é participante (via `projeto_responsaveis`). Vê orçamento em modo espectador do bruto (sem BV/totais/save). Edita apenas o realizado dos jobs dele. |
+| `freelancer` | Freelancer | Escopo restrito: só vê projetos onde é participante (via `projeto_responsaveis`). Vê orçamento em modo espectador do bruto (sem BV/totais/save). Edita apenas o realizado dos jobs dele e, desde 06/10/2026, gera PP neles (não envia ao financeiro). |
 | `financeiro` | Financeiro | Controla o caixa: contas a pagar/receber, conciliação, fluxo, desembolsos, abertura de job. Cadastra bancos, plano de contas, cartões. **Read-only em orçamento e job.** |
 
 **Fora deste enum (fase futura):** `rh`, `midia`. Também pode surgir split `financeiro_operacional` / `financeiro_aprovador`.
@@ -129,12 +129,22 @@ administrador, em `/clientes/<id>`. Ver decisão 089 §6 e §6b.
 | Editar realizado | E | E | E | E† | — |
 | Consumir Save | E | E | E | — | — |
 | Criar errata | E | E | E | — | — |
-| Emitir/cancelar PP | E | E | E | — | — |
+| Gerar/editar/cancelar PP ainda não enviada | E | E | E | E† | — |
+| Enviar/reenviar PP ao financeiro; cancelar PP já enviada | A | A | — | — | — |
 | Enviar pra faturamento / encerrar | A | A | — | — | — |
 | **Abertura financeira do job** (via `/financeiro/abertura-de-job`) | A | — | — | — | A |
 | Ver chat do job | V | V | V | V† | V |
 | Enviar mensagem **pelo lado da Produção** (telas de `/jobs`) | E | E | E | — | — |
 | Enviar mensagem **pelo lado do Financeiro** (Contas a Pagar e `/financeiro/jobs`) | E | — | — | — | E |
+
+⚠️ **06/10/2026 — o freelancer gera PP (revisão da decisão 136, §7).**
+Até aqui "Emitir/cancelar PP" não incluía o freelancer, e uma freelancer
+da produção não via a coluna "Gerar PP" que a produtora via. O Tiago
+decidiu que o freelancer faz o mesmo que o produtor: gera, edita e cancela
+a PP ainda não enviada, só nos jobs dos projetos em que está na Equipe. O
+envio ao financeiro (`jobs.enviar_pp`) continua com GP e administrador.
+A linha "Ver job restrito" acima ainda não vale na tela do job: o
+freelancer vê o orçado e a rentabilidade. Fica para uma entrega própria.
 
 > **Os dois lados do chat (decisão 058, 08/09/2026).** A área da mensagem
 > — "Produção" ou "Financeiro" — vem da TELA por onde a pessoa escreveu,
@@ -247,6 +257,7 @@ Para validar a Task 4 (UI) e Task 5 (RLS) end-to-end. Cada linha é um "logar co
 - [ ] **NÃO** consegue abrir nenhum outro projeto (URL direta deve dar 404/vazio via RLS).
 - [ ] Dentro do orçamento: vê valores brutos, mas **NÃO** vê BV/totais/save; sem botão de aprovar/duplicar/editar.
 - [ ] Em Job (quando SEBRAE tiver): vê só planejado + realizado (sem orçado, sem rentabilidade), edita realizado, vê chat mas **não envia**.
+- [ ] Em Job: vê a coluna "Gerar PP" e gera PP; no painel do item, o envio fica fechado com "Só o GP envia PP ao financeiro"; cancela só a PP gerada.
 
 ### Financeiro (`financeiro_teste@califa-erp.local`)
 

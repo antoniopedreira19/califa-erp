@@ -125,8 +125,13 @@ export const permissoes = {
    *  não mexe no save. O banco confere de novo (`save_pode_mexer_no_job`). */
   "jobs.consumir_save":           ["administrador", "gerente_producao"],
   "jobs.criar_errata":            ["administrador", "gerente_producao", "produtor"],
-  "jobs.emitir_pp":               ["administrador", "gerente_producao", "produtor"],
-  "jobs.cancelar_pp":             ["administrador", "gerente_producao", "produtor"],
+  /** Gerar, editar e cancelar PP. O freelancer entrou em 06/10/2026
+   *  (Tiago, revisão da decisão 136): faz o mesmo que o produtor — gera,
+   *  edita e cancela a PP ainda não enviada —, só nos jobs dos projetos em
+   *  que está na Equipe (a RLS de `pedidos_compra` recorta). Enviar ao
+   *  financeiro continua em `jobs.enviar_pp`. */
+  "jobs.emitir_pp":               ["administrador", "gerente_producao", "produtor", "freelancer"],
+  "jobs.cancelar_pp":             ["administrador", "gerente_producao", "produtor", "freelancer"],
   /** Enviar (e reenviar) PP ao financeiro (decisão 136, 01/10/2026): o
    *  produtor gera, edita e cancela a PP ainda não enviada; enviar é do GP.
    *  Antes não havia recurso próprio — valia a checagem de dono do job. */

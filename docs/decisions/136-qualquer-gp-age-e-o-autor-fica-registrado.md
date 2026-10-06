@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-01
 **Decidido por:** Tiago
-**Status:** aceita — entregue em 01/10/2026, em quatro partes (ver §6)
+**Status:** aceita — entregue em 01/10/2026, em quatro partes (ver §6); revista em 06/10/2026: o freelancer também gera PP (ver §7)
 **Protótipo aprovado:** artifact "Autoria no financeiro" (30/09 e 01/10/2026)
 
 ---
@@ -34,7 +34,7 @@ Respostas do Tiago às perguntas do protótipo:
 | O quê | Até 01/10/2026 | Agora |
 |---|---|---|
 | Planilha do job: errata, BV, confirmar BV, concluir PPs | Administrador ou o GP responsável do job | Administrador ou **qualquer GP** |
-| Gerar, editar e cancelar PP ainda não enviada | Administrador ou o GP responsável | Administrador, **qualquer GP ou o produtor** |
+| Gerar, editar e cancelar PP ainda não enviada | Administrador ou o GP responsável | Administrador, **qualquer GP ou o produtor** (e o freelancer desde 06/10/2026, §7) |
 | Enviar e reenviar PP ao financeiro | Administrador ou o GP responsável | Administrador ou **qualquer GP** (recurso novo `jobs.enviar_pp`) |
 | Cancelar PP já enviada (em avaliação ou rejeitada) | Administrador ou o GP responsável | Administrador ou **qualquer GP** |
 | Prestar contas da verba | Responsável pela verba, GP responsável do job ou administrador | Responsável pela verba, **qualquer GP** ou administrador |
@@ -318,3 +318,56 @@ Agrupamento 3 · Item 1, R$ 500,00, emissora Empresa Teste):
    entregue em 01/10/2026.
 4. Chats: cargo de quem escreveu — entregue em 01/10/2026.
 5. Linha do tempo do "Ver PP" na produção — entregue em 01/10/2026.
+
+## 7. ⚠️ Revisão de 2026-10-06 — o freelancer gera PP como o produtor
+
+Uma freelancer da produção (papel `freelancer`, na Equipe de um projeto)
+abriu a Planilha Interna do job e não viu a coluna "Gerar PP", que a
+produtora ao lado via. Era a regra: `jobs.emitir_pp` e `jobs.cancelar_pp`
+não incluíam o freelancer, e o teste de `lib/permissoes.test.ts` fixava
+isso.
+
+O Tiago decidiu: **o freelancer gera PP; só não envia ao financeiro,
+nesse ponto assim como o produtor.**
+
+| O quê | Freelancer até 06/10/2026 | Freelancer agora |
+|---|---|---|
+| Gerar PP | Não | Sim, nos jobs dos projetos em que está na Equipe |
+| Editar e cancelar a PP ainda não enviada (`gerada`) | Não | Sim, como o produtor |
+| Enviar e reenviar PP ao financeiro | Não | Não (`jobs.enviar_pp` segue com GP e administrador) |
+| Cancelar PP já enviada | Não | Não |
+
+- **Código:** só a matriz mudou: o freelancer entrou em
+  `jobs.emitir_pp` e `jobs.cancelar_pp`. Tela e servidor já liam esses
+  dois recursos e separavam o envio por `jobs.enviar_pp` desde a parte 1.
+  Por isso o freelancer herda o mesmo comportamento do produtor: envio
+  fechado com "Só o GP envia PP ao financeiro" e cancelamento só da PP
+  `gerada`.
+- **Banco:** nenhuma migration. A RLS de `pedidos_compra` (`pp_modify`) e
+  a de `jobs_itens_realizado` já deixavam o freelancer gravar nos jobs dos
+  projetos em que está na Equipe (`is_freelancer_do_projeto`). Parcelas,
+  anexos e o bucket `pedidos-compra` pedem só `is_tenant_member`, e
+  nenhum gatilho da PP confere papel. O recorte por projeto continua no
+  banco.
+- **Vem junto com gerar, como no produtor:** o "Marcar: todas as PPs
+  geradas" do painel do item e o "Concluir PPs" do cabeçalho da planilha.
+  Os dois seguem `podeGerarPP` na tela (o código diz "Segue a GERAÇÃO"),
+  e a action vale para quem tem acesso ao job (decisão 052, 04/09/2026).
+  A linha "concluir PPs" da tabela do §2 fala da planilha do GP, mas o
+  código dá esses dois botões a quem gera PP, e o produtor também os vê.
+- **Fica como estava:** errata, BV, save e editar a metadata do job
+  continuam fora do freelancer.
+- **Testado logado em 06/10/2026** como `claude.freelancer.teste`,
+  colocado na Equipe do TES-P001/26 só durante o teste. Na planilha do
+  TES-1001/26 apareceram 6 chips "Gerar PP" e 7 "PPs · N". No TES-1014/26,
+  ele gerou a PP-00124 (R$ 100,00, Fornecedor Teste), com PDF e evento
+  "emitida" no nome dele. "Gerar e enviar ao financeiro" e "Enviar ao
+  financeiro" ficaram fechados com "Só o GP envia PP ao financeiro…". Ele
+  cancelou a mesma PP, e o realizado do item voltou a zero, sem marca de
+  concluído. Não houve erro no console. No fim saiu da Equipe.
+- **Pendência registrada, fora desta revisão:** a tela do job mostra ao
+  freelancer o bloco ORÇADO, o Valor do Job e o resultado operacional com
+  a rentabilidade. A matriz diz que ele vê só planejado e realizado
+  (`jobs.ver_restrito`), mas nenhum ponto da tela do job usa esse recurso.
+  O Tiago escolheu corrigir isso depois, numa entrega própria.
+
