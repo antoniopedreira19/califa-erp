@@ -43,9 +43,9 @@ function paraEdicao(valor: number): string {
 }
 
 /**
- * Os impostos valem para TODAS as versões v1 criadas neste salvamento — no
- * orçamento do projeto os jobs são faturados sob as mesmas condições
- * comerciais.
+ * Os parâmetros de UM orçamento da visão agregada — a versão aberta dele.
+ * Desde a decisão 148 o "Aplicar" grava na hora, pela mesma action da tela
+ * da versão (`atualizarVersao`), com as travas dela.
  *
  * Moeda e taxa de câmbio saíram deste modal em 21/09/2026 (decisão 095): os
  * valores da planilha são sempre em reais. Os dois continuam no objeto de
@@ -78,7 +78,7 @@ export function ParametrosModal({
   function salvar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     // Alíquota em branco é permitida aqui: só a aprovação da versão exige uma
-    // das opções. Sem escolha, preserva o que o rascunho já tinha.
+    // das opções. Sem escolha, preserva o que a versão já tinha.
     const impostoNum =
       imposto === "" ? parametros.percentual_imposto : Number(imposto);
     onSalvar({
@@ -100,11 +100,12 @@ export function ParametrosModal({
         <form onSubmit={salvar}>
           <div className="px-7 pb-4 pt-6">
             <DialogTitle className="text-lg font-bold tracking-tight">
-              Parâmetros das versões
+              Parâmetros do orçamento
             </DialogTitle>
             <DialogDescription className="mt-1.5 text-[13px]">
-              Valem para todos os orçamentos deste rascunho. Honorários vem
-              do cadastro do cliente e não é editável aqui.
+              Valem só para este orçamento, na versão aberta, e são salvos ao
+              aplicar. Os honorários vêm do cadastro do cliente e não são
+              editáveis aqui.
             </DialogDescription>
           </div>
 

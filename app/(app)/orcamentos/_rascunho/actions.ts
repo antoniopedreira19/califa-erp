@@ -20,10 +20,10 @@ import type { GrupoPayload } from "./tipos";
 // Importação de planilha no editor do orçamento — SEM persistir
 // ============================================================
 //
-// No editor do orçamento do projeto o banco só é tocado no "Salvar
-// orçamentos". O arquivo já está no Storage (o navegador o subiu direto,
-// decisão 110): aqui ele é lido, e o "Salvar orçamentos" o arquiva junto
-// do orçamento criado.
+// Só leitura. O arquivo já está no Storage (o navegador o subiu direto,
+// decisão 110): aqui ele é lido para a prévia. Quem grava é a importação
+// da versão, chamada pela agregada (`importarPlanilhaNaAgregada`, decisão
+// 148), que registra a importação e descarta o arquivo.
 
 interface EntradaDoRascunho {
   envio: EnvioDaPlanilha;

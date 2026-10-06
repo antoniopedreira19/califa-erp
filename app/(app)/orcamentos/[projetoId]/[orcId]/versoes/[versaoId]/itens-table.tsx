@@ -111,10 +111,14 @@ import { destinoPorTecla, moverNaLista } from "@/lib/calculos/ordem-itens";
 
 /** Onde a grade grava.
  *
- *  Por padrão, nas Server Actions da versão. O editor de orçamento do
- *  projeto passa um adaptador que mexe no rascunho em memória — lá nada
- *  existe no banco até o "Salvar orçamentos", mas a planilha é a mesma e
- *  não pode ser reescrita só por causa do destino da escrita. */
+ *  Por padrão, nas Server Actions da versão. A visão agregada passa um
+ *  adaptador que grava pelas mesmas actions e mantém o estado dela, onde
+ *  ficam os totais de cada orçamento (decisão 148) — a planilha é a mesma
+ *  e não pode ser reescrita só por causa do destino da escrita.
+ *
+ *  As funções são chamadas de dentro de um `startTransition`: o que o
+ *  adaptador mudar de estado antes do primeiro `await` fica retido até a
+ *  gravação terminar. */
 export interface AdaptadorItens {
   atualizarCampo: (
     itemId: string,

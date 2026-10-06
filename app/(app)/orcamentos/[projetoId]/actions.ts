@@ -345,6 +345,70 @@ export async function criarOrcamento(
   projetoId: string,
   formData: FormData,
 ): Promise<ActionResult | void> {
+  const res = await criarOrcamentoComV1(projetoId, formData, {});
+  if (!res.ok) return res;
+  if (!res.versaoId) {
+    // O orçamento existe e é válido sem versão — é o estado que a tela de
+    // versões já sabe mostrar. Cair nela é o degrau seguro: refazer o
+    // formulário criaria um orçamento duplicado.
+    redirect(`/orcamentos/${projetoId}/${res.orcamentoId}`);
+  }
+  redirect(`/orcamentos/${projetoId}/${res.orcamentoId}?v=${res.versaoId}`);
+}
+
+export type CriarNaAgregadaResult =
+  | {
+      ok: true;
+      orcamentoId: string;
+      /** `null` quando o orçamento entrou e a v1 não: a agregada o mostra
+       *  em consulta, como a página mostra o orçamento sem versão. */
+      versaoId: string | null;
+    }
+  | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * O "Criar orçamento de job" da visão agregada (decisão 148): grava na hora,
+ * com a v1 vazia, e devolve os ids em vez de redirecionar — a tela continua
+ * na agregada e passa a tratar o orçamento como gravado.
+ *
+ * Mesma criação do "Novo orçamento", com duas travas a mais: o mensal e a
+ * Mídia Off só nascem na tela "Novo orçamento" (decisões 078 e 147), e a
+ * `chave` do formulário vai para `orcamentos.chave_rascunho` — o índice
+ * único dela recusa o segundo envio do mesmo formulário (duplo clique,
+ * resposta perdida).
+ */
+export async function criarOrcamentoDaAgregada(
+  projetoId: string,
+  formData: FormData,
+): Promise<CriarNaAgregadaResult> {
+  const chave = formData.get("chave")?.toString() ?? "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chave)) {
+    return { ok: false, message: "A tela está desatualizada. Recarregue a página antes de criar o orçamento." };
+  }
+  const res = await criarOrcamentoComV1(projetoId, formData, {
+    chave,
+    soNaTelaNovoOrcamento: ["mensal", "midia_off"],
+  });
+  if (!res.ok) return res;
+  revalidatePath(`/orcamentos/${projetoId}/agregado`);
+  return { ok: true, orcamentoId: res.orcamentoId, versaoId: res.versaoId };
+}
+
+/** O miolo da criação: orçamento + v1. Não exportada — todo export async
+ *  de arquivo "use server" vira Server Action. */
+async function criarOrcamentoComV1(
+  projetoId: string,
+  formData: FormData,
+  opcoes: {
+    /** Grava em `orcamentos.chave_rascunho` (decisão 148). */
+    chave?: string;
+    /** Modelos de planilha que esta porta recusa. */
+    soNaTelaNovoOrcamento?: CategoriaModeloPlanilha[];
+  },
+): Promise<
+  | { ok: true; orcamentoId: string; versaoId: string | null }
+  | { ok: false; message: string; fieldErrors?: Record<string, string[]> }
+> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.criar");
   if (!gate.ok) return gate;
@@ -370,6 +434,15 @@ export async function criarOrcamento(
     parsed.data.categoria_id,
   );
   if (!par.ok) return par;
+  if (opcoes.soNaTelaNovoOrcamento?.includes(par.modelo)) {
+    return {
+      ok: false,
+      message:
+        par.modelo === "midia_off"
+          ? "O orçamento de Mídia Off nasce na tela “Novo orçamento”, com a planilha por meio e mês."
+          : "O orçamento de Fee e de Always On nasce na tela “Novo orçamento”, com os meses do período.",
+    };
+  }
   // Fee e Always On: o período é obrigatório e cabe num trimestre — é dele
   // que os meses da v1 nascem (decisão 078).
   if (par.modelo === "mensal") {
@@ -411,6 +484,7 @@ export async function criarOrcamento(
     .insert({
       ...rest,
       codigo,
+      ...(opcoes.chave ? { chave_rascunho: opcoes.chave } : {}),
       projeto_id: projetoId,
       tenant_id: session.activeTenant.id,
       created_by: session.profile.id,
@@ -420,6 +494,12 @@ export async function criarOrcamento(
 
   if (error) {
     console.error("[orcamentos.criar]", error.message);
+    if (error.message.includes("uniq_orcamentos_chave_rascunho")) {
+      return {
+        ok: false,
+        message: "Este orçamento já foi criado. Recarregue a página para vê-lo.",
+      };
+    }
     return { ok: false, message: mapDbError(error.message) };
   }
 
@@ -451,14 +531,7 @@ export async function criarOrcamento(
     },
   );
 
-  if (!versaoId) {
-    // O orçamento existe e é válido sem versão — é o estado que a tela de
-    // versões já sabe mostrar. Cair nela é o degrau seguro: refazer o
-    // formulário criaria um orçamento duplicado.
-    redirect(`/orcamentos/${projetoId}/${data.id}`);
-  }
-
-  redirect(`/orcamentos/${projetoId}/${data.id}?v=${versaoId}`);
+  return { ok: true, orcamentoId: data.id, versaoId };
 }
 
 /** Cria a v1 em rascunho de um orçamento recém-criado.

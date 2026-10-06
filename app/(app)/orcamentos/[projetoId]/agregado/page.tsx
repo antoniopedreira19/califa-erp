@@ -19,6 +19,7 @@ import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import type {
   Categoria,
   CategoriaDominio,
+  ItemBv,
   JobStatus,
   OrcamentoStatus,
   Profile,
@@ -71,7 +72,7 @@ function num(v: unknown): number {
  *
  * Monta aqui, no servidor, o estado inicial de cada orçamento a partir da
  * versão que vale: a aprovada, e sem ela a mais recente não cancelada. O
- * editor recebe tudo pronto e trabalha em memória até o "Salvar alterações".
+ * editor recebe tudo pronto e grava cada alteração na hora (decisão 148).
  */
 export default async function OrcamentosAgregadoPage({
   params,
@@ -288,8 +289,12 @@ export default async function OrcamentosAgregadoPage({
     versaoIds.length > 0
       ? supabase
           .from("itens_bv")
+          // A linha inteira (decisão 148): a janela do BV da agregada grava
+          // pelas actions da versão e precisa do id de cada BV — e o item
+          // pode ter vários (decisão 062).
           .select(
-            "item_versao_id, fornecedor_id, valor, prazo_repasse, " +
+            "id, tenant_id, item_versao_id, job_item_orcado_id, fornecedor_id, valor, " +
+              "prazo_repasse, percentual_imposto, situacao, created_by, created_at, updated_at, " +
               "item:versoes_orcamento_itens!inner(versao_orcamento_id)",
           )
           .eq("tenant_id", tenantId)
@@ -328,6 +333,22 @@ export default async function OrcamentosAgregadoPage({
       },
     ]),
   );
+
+  // A lista de BVs por item, como na tela da versão (decisão 062). É ela
+  // que a janela do BV da agregada mostra e grava desde a decisão 148; o
+  // `bv` do item, acima, só segue para o formato do rascunho.
+  const bvsPorItem: Record<string, ItemBv[]> = {};
+  for (const raw of (bvsRes.data ?? []) as any[]) {
+    const { item: _filtro, ...bv } = raw;
+    (bvsPorItem[bv.item_versao_id] ??= []).push({
+      ...bv,
+      valor: num(bv.valor),
+      percentual_imposto:
+        bv.percentual_imposto === null || bv.percentual_imposto === undefined
+          ? null
+          : num(bv.percentual_imposto),
+    } as ItemBv);
+  }
 
   const itensPorGrupo = new Map<string, any[]>();
   for (const it of (itensRes.data ?? []) as any[]) {
@@ -611,6 +632,7 @@ export default async function OrcamentosAgregadoPage({
         (s) => !servicosComCategoriaPropria.has(s.id),
       )}
       savePorItem={savePorItem}
+      bvsPorItem={bvsPorItem}
       saldosDeSave={saldosDeSave}
       nomeDoGrupo={nomeDoGrupo}
       faixa={

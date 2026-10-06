@@ -43,8 +43,8 @@ import {
   type ActionResult,
 } from "./actions";
 
-/** Os campos do orçamento sem nada de banco — o que o editor de orçamento
- *  do projeto guarda no rascunho até o "Salvar orçamentos". */
+/** Os campos do orçamento sem nada de banco — o que o formulário entrega
+ *  à visão agregada, que cria o orçamento na hora (decisão 148). */
 export interface DadosOrcamento {
   nome: string;
   categoria_id: string;
@@ -99,9 +99,15 @@ interface Props {
   onSuccess?: () => void;
   onCancel?: () => void;
   /** Presente ⇒ o formulário não grava nada: valida com o mesmo schema e
-   *  devolve os campos para quem chamou. É assim que o editor de orçamento
-   *  do projeto usa este formulário sem tocar no banco. */
-  onRascunho?: (dados: DadosOrcamento) => void;
+   *  devolve os campos para quem chamou. Quem chama pode gravar e devolver
+   *  uma Promise: o botão fica em "salvando" até ela resolver, e uma recusa
+   *  do servidor aparece no formulário sem perder o que foi preenchido — é
+   *  assim que a visão agregada cria o orçamento na hora (decisão 148). */
+  onRascunho?: (
+    dados: DadosOrcamento,
+  ) =>
+    | void
+    | Promise<{ ok: false; message: string; fieldErrors?: Record<string, string[]> } | void>;
   /** Rótulo do botão de envio. O padrão serve à tela de sempre. */
   rotuloSubmit?: string;
 }
@@ -339,7 +345,16 @@ export function OrcamentoForm({
         return;
       }
       const { codigo: _semCodigo, ...dados } = parsed.data;
-      onRascunho({ ...dados, cidade_nome: cidade?.nome ?? "" });
+      const retorno = onRascunho({ ...dados, cidade_nome: cidade?.nome ?? "" });
+      if (retorno) {
+        startTransition(async () => {
+          const res = await retorno;
+          if (res && res.ok === false) {
+            setError(res.message);
+            setFieldErrors(res.fieldErrors ?? {});
+          }
+        });
+      }
       return;
     }
 

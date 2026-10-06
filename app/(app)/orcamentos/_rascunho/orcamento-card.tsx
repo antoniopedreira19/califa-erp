@@ -18,6 +18,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import type {
   Categoria,
   CategoriaModeloPlanilha,
+  ItemBv,
 } from "@/lib/types";
 import {
   ItensTable,
@@ -25,7 +26,7 @@ import {
   type GrupoDaPlanilha,
 } from "../[projetoId]/[orcId]/versoes/[versaoId]/itens-table";
 import { nomeDoMes, rotuloMes } from "@/lib/calculos/meses-trimestre";
-import type { AdaptadorBv, FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
+import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import {
   BotaoRecolherTodos,
@@ -46,7 +47,6 @@ import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import type { VersaoOrcamentoItem } from "@/lib/types";
 import type { JobRascunho, ParametrosVersao } from "./tipos";
 import {
-  comoBvDaVersao,
   comoItemDaVersao,
   contarItens,
   totaisDoJob,
@@ -81,9 +81,17 @@ interface Props {
   categorias: Categoria[];
   fornecedores: FornecedorOpcao[];
   adaptador: AdaptadorItens;
-  adaptadorBv: AdaptadorBv;
+  /** A versão aberta ("v3") — aparece no subtítulo do formulário de BV,
+   *  que grava nela pelas actions da tela do orçamento (decisão 148). */
+  versaoLabel: string;
+  /** Os BVs de cada item, lidos do banco (vários por item, decisão 062).
+   *  A janela do BV mostra e grava estes, e o refresh depois de gravar os
+   *  traz de volta atualizados. */
+  bvsPorItem: Record<string, ItemBv[]>;
   onAlternar: () => void;
-  onRemover: () => void;
+  /** Ausente ⇒ sem lixeira no card. Desde a decisão 148 o orçamento da
+   *  agregada já nasce gravado: "tirar do rascunho" deixou de existir. */
+  onRemover?: () => void;
   onImportar: () => void;
   onCriarPlanilha: () => void;
   /** O mês em que o grupo nasce (mensal) ou `null`. */
@@ -134,7 +142,8 @@ export function JobRascunhoCard({
   categorias,
   fornecedores,
   adaptador,
-  adaptadorBv,
+  versaoLabel,
+  bvsPorItem,
   onAlternar,
   onRemover,
   onImportar,
@@ -181,22 +190,6 @@ export function JobRascunhoCard({
     [job.grupos],
   );
 
-  // Lista por item, como as telas gravadas (decisão 062). No rascunho a
-  // lista tem no máximo um: o editor local ainda guarda um BV por linha,
-  // e vários BVs só passam a existir depois que o orçamento é salvo.
-  const bvsPorItem = React.useMemo(() => {
-    const mapa: Record<
-      string,
-      NonNullable<ReturnType<typeof comoBvDaVersao>>[]
-    > = {};
-    for (const g of job.grupos) {
-      for (const it of g.itens) {
-        const bv = comoBvDaVersao(it);
-        if (bv) mapa[it.id] = [bv];
-      }
-    }
-    return mapa;
-  }, [job.grupos]);
   const readOnly = Boolean(bloqueio);
 
   // Fee e Always On (decisão 078; layout escolhido pelo Tiago em
@@ -291,7 +284,7 @@ export function JobRascunhoCard({
               <Percent className="h-4 w-4" />
             </button>
           )}
-          {!readOnly && (
+          {!readOnly && onRemover && (
             <button
               type="button"
               onClick={() => setAskRemover(true)}
@@ -458,9 +451,8 @@ export function JobRascunhoCard({
                             novoGrupo={botaoNovoGrupo}
                             bvsPorItem={bvsPorItem}
                             fornecedores={fornecedores}
-                            versaoLabel="v1"
+                            versaoLabel={versaoLabel}
                             adaptador={adaptador}
-                            adaptadorBv={adaptadorBv}
                             rotuloTotal={`Total de ${nome}`}
                           />
                         </div>
@@ -606,9 +598,8 @@ export function JobRascunhoCard({
                     }
                     bvsPorItem={bvsPorItem}
                     fornecedores={fornecedores}
-                    versaoLabel="v1"
+                    versaoLabel={versaoLabel}
                     adaptador={adaptador}
-                    adaptadorBv={adaptadorBv}
                     // O total do orçamento é o pé da tabela desde
                     // 24/08/2026 — era a faixa solta que ficava embaixo
                     // dos cards de grupo, com as colunas fora do eixo.
@@ -637,7 +628,7 @@ export function JobRascunhoCard({
         variant="destructive"
         onConfirm={() => {
           setAskRemover(false);
-          onRemover();
+          onRemover?.();
         }}
       />
     </div>

@@ -5100,3 +5100,23 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **Testado gravando** no `TES-P001/26-21 · ZZ Teste Mídia Off 147`
   (v1 substituída, v2 aprovada, sem job). O "Fornecedor Teste" virou
   veículo de TV Fechada (Salvador/BA) nesse teste.
+
+## ⚠️ Nota de 2026-10-06 (3) — a visão agregada salva cada alteração na hora (decisão 148)
+
+- **Sem "Salvar alterações".** Célula, item, grupo, importação, parâmetros
+  e BV gravam na hora, pelas actions da tela da versão. O orçamento novo
+  nasce gravado, com a v1, ao confirmar o formulário
+  (`criarOrcamentoDaAgregada`, com a chave em `chave_rascunho`). O
+  salvamento em lote saiu do código. Isso corrige a nota (1) acima: o
+  lote que recriava os orçamentos não existe mais.
+- **O topo mostra o estado** ("Salvando…", "Tudo salvo · HH:MM", "Não
+  salvou — a alteração foi desfeita"). Recusada, a alteração volta na
+  tela com o motivo.
+- **Armadilha da transição**: a planilha chama o adaptador dentro de um
+  `startTransition`; o editor espera um tique (`foraDaTransicao`) antes de
+  mexer no estado. Sem isso, nomear a linha em branco punha a tela em laço
+  e a descrição não chegava aos totais. Ver decisão 148.
+- **Aba aberta antes do deploy** fica com a tela antiga, que ainda tem o
+  "Salvar alterações" e chama actions que não existem mais: recarregar.
+- **Próxima entrega**: excluir orçamento completamente vazio (lixeira no
+  card da agregada e "Excluir" no "Editar orçamento"). Ver decisão 148.

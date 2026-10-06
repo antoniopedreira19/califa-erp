@@ -27,8 +27,8 @@ interface Props {
  *
  * Os cards e as linhas de Totais seguem a seleção na hora; os três
  * indicadores do topo continuam sendo do projeto inteiro. Nada é salvo:
- * é só o que a tela mostra, e o que ficou escondido continua entrando no
- * "Salvar alterações" como estava.
+ * é só o que a tela mostra, e o orçamento escondido continua no banco
+ * como estava.
  */
 export function ExibirOrcamentosMenu({ orcamentos, exibidos, onChange }: Props) {
   const [aberto, setAberto] = React.useState(false);

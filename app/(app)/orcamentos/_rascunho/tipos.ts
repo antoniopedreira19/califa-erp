@@ -3,22 +3,17 @@ import type { EstagioFunil } from "@/lib/calculos/funil";
 import { ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
 
 /**
- * O rascunho do orçamento do projeto.
+ * O estado da visão agregada: os orçamentos do projeto como a tela os edita.
  *
- * Nada aqui existe no banco enquanto o usuário não clicar em "Salvar
- * orçamentos": o editor monta vários orçamentos de job juntos e grava
- * todos de uma vez, cada um na sua versão v1. Por isso os ids são locais
- * (`job-1`, `g-3`, `it-12`) e servem só para o React reconciliar listas.
- *
- * O mesmo formato atravessa a fronteira cliente → servidor no salvamento,
- * então não pode conter `File`, `Map` nem nada que não sobreviva ao JSON.
- * O arquivo da planilha importada já está no Storage; o payload leva o
- * caminho e a aba (decisão 110).
+ * Até 06/10/2026 isto era um rascunho que só ia ao banco no "Salvar
+ * alterações". Desde a decisão 148 cada alteração grava na hora e os ids
+ * são os do banco. Sobra um id local só na linha em branco que o "Criar
+ * planilha" e o "Novo grupo" abrem (`it-12`): ela fica na tela até ganhar
+ * descrição, como a linha provisória da tela da versão.
  */
 
-/** BV de um item do rascunho. Vira uma linha em `itens_bv` no salvamento,
- *  sempre em "A negociar" — confirmar é ato do financeiro, na tela da
- *  versão, e não pode acontecer antes do orçamento existir. */
+/** O BV de um item no formato da tela. Na agregada a janela do BV lê e
+ *  grava a lista do banco (`bvsPorItem`); este campo só acompanha o item. */
 export interface BvRascunho {
   fornecedor_id: string | null;
   valor: number;
@@ -165,7 +160,7 @@ export interface OrcamentoRascunho extends JobRascunho {
 }
 
 // ============================================================
-// Payload do salvamento (cliente → Server Action)
+// A planilha lida na importação (`importar-planilha-modal.tsx`)
 // ============================================================
 
 export interface ItemPayload {
@@ -185,86 +180,6 @@ export interface ItemPayload {
 export interface GrupoPayload {
   nome: string;
   itens: ItemPayload[];
-}
-
-export interface JobPayload extends DadosOrcamentoRascunho {
-  /** Identidade do orçamento novo na tela (um uuid gerado ao criá-lo), que
-   *  o servidor grava em `orcamentos.chave_rascunho`. O índice único dessa
-   *  coluna recusa o segundo insert do mesmo rascunho: em 05/10/2026 cada
-   *  "Salvar alterações" da agregada recriou todos os orçamentos novos da
-   *  sessão, e o AMB-P017/26 ficou com 36 cópias. */
-  chave: string;
-  grupos: GrupoPayload[];
-  /** O XLSX original, já no Storage (decisão 110), e a aba escolhida,
-   *  quando o orçamento veio de importação. O servidor relê a aba para
-   *  gravar `orcamento_importacoes` com contagens em que se pode confiar —
-   *  os itens, esses, vêm do payload, porque o usuário pode ter editado a
-   *  planilha depois de importar. */
-  envio: { path: string; nome: string; tamanho: number; aba: string } | null;
-}
-
-export interface OrcamentoProjetoPayload extends ParametrosVersao {
-  jobs: JobPayload[];
-}
-
-/** Os ids reais de um orçamento recém-criado, na ordem em que o payload os
- *  mandou: os grupos na ordem da tela, e os itens de cada grupo também. É
- *  com isso que o editor passa a tratá-lo como gravado — sem essa volta, o
- *  próximo "Salvar alterações" o criaria de novo. */
-export interface OrcamentoCriado {
-  orcamentoId: string;
-  versaoId: string;
-  grupos: { id: string; itens: string[] }[];
-}
-
-// ============================================================
-// Payload do "Salvar alterações" (visão agregada)
-// ============================================================
-
-/**
- * O estado desejado de UM orçamento que já existe.
- *
- * Vai o estado inteiro, não um diff: o servidor carrega o que está gravado
- * e reconcilia por id. Quem não aparece aqui foi removido; item com `id`
- * é atualizado; item sem `id` é novo. Deixar a conta no servidor evita que
- * o cliente precise rastrear remoções — e é lá que o tenant e as travas de
- * versão aprovada são conferidos de qualquer forma.
- */
-export interface ItemEdicaoPayload extends ItemPayload {
-  /** `null` = item novo nesta versão. */
-  id: string | null;
-  /** Id local da linha na tela. O servidor devolve o id real das novas por
-   *  aqui, para o editor trocar sem depender de recarregar a página — sem
-   *  isso, salvar duas vezes seguidas inseriria a mesma linha de novo. */
-  localId: string;
-}
-
-export interface GrupoEdicaoPayload {
-  /** `null` = grupo novo nesta versão. */
-  id: string | null;
-  localId: string;
-  nome: string;
-  /** Mês do grupo no mensal (decisão 078). O servidor só o usa no grupo
-   *  NOVO, e confere que é um mês da versão; o grupo que já existe fica no
-   *  mês gravado. */
-  mesId: string | null;
-  itens: ItemEdicaoPayload[];
-}
-
-export interface OrcamentoEdicaoPayload {
-  orcamentoId: string;
-  versaoId: string;
-  parametros: ParametrosVersao;
-  grupos: GrupoEdicaoPayload[];
-}
-
-export interface AlteracoesProjetoPayload {
-  /** Orçamentos já gravados cujo conteúdo mudou. */
-  editados: OrcamentoEdicaoPayload[];
-  /** Orçamentos criados nesta sessão — mesmo caminho do editor multi-jobs. */
-  novos: JobPayload[];
-  /** Parâmetros dos novos, um conjunto por orçamento. */
-  parametrosNovos: ParametrosVersao[];
 }
 
 /** Parâmetros de um orçamento NOVO nos editores multi e agregado. Os
