@@ -51,7 +51,9 @@ O veículo é um fornecedor — ele recebe o PI, emite a nota e, no A · Repasse
 
 ## Banco
 
-Migrations `20261006500001` (valor `midia_off` no enum), `20261006500002` (colunas da versão, do grupo e da linha; `veiculos_midia`; gatilho da quantidade da grade; trava do trimestre sem a Mídia Off; funções da planilha) e `20261006500003` (linha nova repete a praça). A categoria Mídia Off passa ao modelo `midia_off` e sai do "em breve" na migration que libera a entrega, junto do código.
+Migrations `20261006500001` (valor `midia_off` no enum), `20261006500002` (colunas da versão, do grupo e da linha; `veiculos_midia`; gatilho da quantidade da grade; trava do trimestre sem a Mídia Off; funções da planilha) e `20261006500003` (linha nova repete a praça). A categoria Mídia Off passou ao modelo `midia_off` e saiu do "em breve" na `20261006500004`, aplicada em 06/10/2026 depois do deploy do código (`78f7e04d`) — antes dele, a tela antiga mostraria a categoria sem saber montar a planilha.
+
+Conferido no navegador em 06/10/2026, gravando no banco, no orçamento `TES-P001/26-21 · ZZ Teste Mídia Off 147`: criação com período que cruza o trimestre (meses nascem com a v1), meio em grade e meio por período, praça, veículo pelo "Cadastrar «…» como novo veículo" com documento já cadastrado ("Usar este cadastro"), inserções (o gatilho soma a quantidade), tabela/desconto/negociado, tipo A · Repasse, nova linha com a praça de cima, duplicar e remover linha, copiar mês, editar meio (vale nos dois meses e nas linhas), remover meio do mês, encurtar o período (o mês vazio sai), base "do líquido" e honorários no "Editar" da versão, duplicar versão (v2 cópia fiel), travas de aprovação (mês vazio, linha sem veículo), aprovação, "Enviar Job para Abertura" travado e o card da visão agregada.
 
 ## Próxima entrega (o job)
 
