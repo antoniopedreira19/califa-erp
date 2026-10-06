@@ -357,7 +357,7 @@ function LinhaVinculo({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2 min-w-0">
-          <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${vinculo.beneficio_tipo === "saude" ? "text-rose-600" : "text-sky-600"}`} />
+          <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${vinculo.beneficio_tipo === "saude" ? "text-sky-600" : "text-rose-600"}`} />
           <div className="min-w-0">
             <div className="font-medium text-foreground">{vinculo.beneficio_nome}</div>
             <div className="text-xs text-muted-foreground">
@@ -613,8 +613,8 @@ function LinhaDependente({
                 key={p.link_id}
                 className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs ${
                   p.beneficio_tipo === "saude"
-                    ? "border-rose-200 bg-rose-50 text-rose-700"
-                    : "border-sky-200 bg-sky-50 text-sky-700"
+                    ? "border-sky-200 bg-sky-50 text-sky-700"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
                 }`}
               >
                 {p.beneficio_nome}

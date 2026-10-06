@@ -1,6 +1,7 @@
 import { HeartPulse, Smile, Users } from "lucide-react";
 import { CardBase, EmBreve } from "./card-base";
 import type { BeneficioModoCusteio, BeneficioTipo } from "@/lib/types";
+import { coresBeneficio, compararPlanosParaChip } from "@/lib/beneficios/cores";
 
 const MODO_LABEL: Record<BeneficioModoCusteio, string> = {
   rateado: "Rateio 60/40",
@@ -50,11 +51,18 @@ export function CardBeneficios({ resumo }: { resumo: BeneficiosResumo | null }) 
   return (
     <CardBase titulo="Benefícios" icon={HeartPulse}>
       <div className="space-y-3">
-        {/* Lista de planos */}
+        {/* Lista de planos (ordem canônica: dental primeiro) */}
         <ul className="space-y-2">
-          {resumo.vinculos.map((v, i) => (
-            <LinhaVinculo key={i} vinculo={v} />
-          ))}
+          {[...resumo.vinculos]
+            .sort((a, b) =>
+              compararPlanosParaChip(
+                { tipo: a.beneficio_tipo, nome: a.beneficio_nome },
+                { tipo: b.beneficio_tipo, nome: b.beneficio_nome },
+              ),
+            )
+            .map((v, i) => (
+              <LinhaVinculo key={i} vinculo={v} />
+            ))}
         </ul>
 
         {/* Dependentes */}
@@ -94,11 +102,10 @@ export function CardBeneficios({ resumo }: { resumo: BeneficiosResumo | null }) 
 
 function LinhaVinculo({ vinculo }: { vinculo: VinculoResumo }) {
   const Icon = vinculo.beneficio_tipo === "saude" ? HeartPulse : Smile;
-  const iconColor =
-    vinculo.beneficio_tipo === "saude" ? "text-rose-600" : "text-sky-600";
+  const cores = coresBeneficio(vinculo.beneficio_tipo);
   return (
     <li className="flex items-start gap-2 text-sm">
-      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconColor}`} />
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${cores.icon}`} />
       <div className="min-w-0 flex-1">
         <p className="font-medium leading-tight text-foreground">
           {vinculo.beneficio_nome}
