@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -10,14 +10,24 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Trash2, Infinity, HeartPulse, Smile } from "lucide-react";
 import type { BeneficioCompleto } from "@/lib/queries/beneficios";
+import { coresBeneficio } from "@/lib/beneficios/cores";
 import {
   editarBeneficio,
   criarFaixa,
   editarFaixa,
   removerFaixa,
 } from "@/lib/actions/beneficios/catalogo";
+
+const SEM_BASE = "__sem_base__";
 
 const formatarBrl = (n: number) =>
   n.toLocaleString("pt-BR", {
@@ -51,6 +61,9 @@ export function DrawerCatalogoBeneficio({
   const [ativo, setAtivo] = useState(beneficio.ativo);
   const [obs, setObs] = useState(beneficio.observacao ?? "");
 
+  const cores = coresBeneficio(beneficio.tipo);
+  const Icon = beneficio.tipo === "saude" ? HeartPulse : Smile;
+
   function salvar() {
     setErro(null);
     start(async () => {
@@ -79,118 +92,100 @@ export function DrawerCatalogoBeneficio({
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{beneficio.nome}</DialogTitle>
-          <DialogDescription>
-            {beneficio.operadora} · {beneficio.tipo === "saude" ? "Saúde" : "Dental"} ·{" "}
-            {beneficio.modelo_preco === "flat" ? "Valor flat" : "Faixa etária"}
-          </DialogDescription>
+          <div className="flex items-start gap-3">
+            <div
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${cores.bgSuave} ${cores.icon}`}
+            >
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <DialogTitle>{beneficio.nome}</DialogTitle>
+              <DialogDescription>
+                {beneficio.operadora} ·{" "}
+                {beneficio.tipo === "saude" ? "Saúde" : "Dental"} ·{" "}
+                {beneficio.modelo_preco === "flat"
+                  ? "Valor único por pessoa"
+                  : "Preço por faixa etária"}
+              </DialogDescription>
+            </div>
+            <StatusSelect ativo={ativo} onChange={setAtivo} />
+          </div>
         </DialogHeader>
 
-        <div className="max-h-[65vh] space-y-5 overflow-y-auto pr-2">
+        <div className="max-h-[65vh] space-y-6 overflow-y-auto pr-1">
           {/* Dados básicos */}
-          <section>
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Dados básicos
-            </h4>
+          <Secao titulo="Dados básicos">
             <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium">Nome</label>
+              <Campo label="Nome do plano">
                 <input
                   type="text"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   maxLength={200}
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  className={ESTILO_INPUT}
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium">Operadora</label>
+              </Campo>
+              <Campo label="Operadora">
                 <input
                   type="text"
                   value={operadora}
                   onChange={(e) => setOperadora(e.target.value)}
                   maxLength={200}
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  className={ESTILO_INPUT}
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium">
-                  Código externo (operadora)
-                </label>
+              </Campo>
+              <Campo label="Código externo da operadora">
                 <input
                   type="text"
                   value={codigo}
                   onChange={(e) => setCodigo(e.target.value)}
                   maxLength={50}
                   placeholder="opcional"
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  className={ESTILO_INPUT}
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium">Ativo</label>
-                <select
-                  value={ativo ? "sim" : "nao"}
-                  onChange={(e) => setAtivo(e.target.value === "sim")}
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                >
-                  <option value="sim">Ativo</option>
-                  <option value="nao">Inativo</option>
-                </select>
-              </div>
+              </Campo>
             </div>
-          </section>
+          </Secao>
 
           {/* Rateio */}
-          <section>
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Rateio padrão (modo rateado)
-            </h4>
+          <Secao
+            titulo="Rateio padrão"
+            hint="Valores aplicados quando o modo de custeio do vínculo é “rateado”."
+          >
             <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium">
-                  % empresa (titular)
-                </label>
+              <Campo label={`Empresa paga ${percEmp}% do titular`}>
                 <input
-                  type="number"
+                  type="range"
                   min={0}
                   max={100}
                   value={percEmp}
                   onChange={(e) => setPercEmp(Number(e.target.value))}
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  className="w-full accent-california-red"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
                   Colaborador paga {100 - percEmp}% do titular.
                 </p>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium">
-                  % colaborador (dependentes)
-                </label>
+              </Campo>
+              <Campo label={`Colaborador paga ${percDep}% dos dependentes`}>
                 <input
-                  type="number"
+                  type="range"
                   min={0}
                   max={100}
                   value={percDep}
                   onChange={(e) => setPercDep(Number(e.target.value))}
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  className="w-full accent-california-red"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
                   Dependentes raramente são custeados pela empresa.
                 </p>
-              </div>
+              </Campo>
             </div>
-          </section>
+          </Secao>
 
           {/* Modelo de preço */}
           {beneficio.modelo_preco === "flat" ? (
-            <section>
-              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Valor flat
-              </h4>
-              <div>
-                <label className="mb-1 block text-xs font-medium">
-                  Valor mensal por pessoa (R$)
-                </label>
+            <Secao titulo="Valor único">
+              <Campo label="Valor mensal por pessoa (R$)">
                 <input
                   type="number"
                   step="0.01"
@@ -199,57 +194,59 @@ export function DrawerCatalogoBeneficio({
                   onChange={(e) =>
                     setValorFlat(e.target.value ? Number(e.target.value) : null)
                   }
-                  className="h-9 w-40 rounded-md border border-border bg-background px-2 text-sm"
+                  className={`${ESTILO_INPUT} w-40`}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
                   Cobrado por titular e por cada dependente incluído.
                 </p>
-              </div>
-            </section>
+              </Campo>
+            </Secao>
           ) : (
             <>
-              <section>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Benefício base (para modo upgrade)
-                </h4>
-                <select
-                  value={baseId ?? ""}
-                  onChange={(e) => setBaseId(e.target.value || null)}
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+              <Secao
+                titulo="Plano base"
+                hint="Usado quando o colaborador tem acordo de “integral + upgrade”: empresa cobre o valor do base e colaborador paga a diferença."
+              >
+                <Select
+                  value={baseId ?? SEM_BASE}
+                  onValueChange={(v) => setBaseId(v === SEM_BASE ? null : v)}
                 >
-                  <option value="">— nenhum (este é um plano base) —</option>
-                  {beneficiosParaBase.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.nome}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Quando preenchido, este plano pode ser vinculado no modo &quot;integral empresa com upgrade&quot;
-                  (empresa cobre o valor do base; colaborador paga a diferença).
-                </p>
-              </section>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SEM_BASE}>
+                      Nenhum — este plano é a base
+                    </SelectItem>
+                    {beneficiosParaBase.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Secao>
 
-              <TabelaFaixas
-                beneficioId={beneficio.id}
-                faixas={beneficio.faixas}
-                pendingParent={pending}
-              />
+              <Secao titulo="Faixas de preço" count={beneficio.faixas.length}>
+                <TabelaFaixasInline
+                  beneficioId={beneficio.id}
+                  faixas={beneficio.faixas}
+                  pendingParent={pending}
+                />
+              </Secao>
             </>
           )}
 
-          <section>
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Observação
-            </h4>
+          <Secao titulo="Observação (opcional)">
             <textarea
               value={obs}
               onChange={(e) => setObs(e.target.value)}
               rows={2}
               maxLength={500}
-              className="w-full rounded-md border border-border bg-background p-2 text-sm"
+              className={`${ESTILO_INPUT} w-full resize-none py-2`}
+              placeholder="Notas internas do catálogo"
             />
-          </section>
+          </Secao>
 
           {erro && (
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -281,7 +278,81 @@ export function DrawerCatalogoBeneficio({
   );
 }
 
-function TabelaFaixas({
+const ESTILO_INPUT =
+  "h-9 rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/20";
+
+function Secao({
+  titulo,
+  hint,
+  count,
+  children,
+}: {
+  titulo: string;
+  hint?: string;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {titulo}
+          {count !== undefined && (
+            <span className="ml-1.5 text-muted-foreground/70">({count})</span>
+          )}
+        </h4>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Campo({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-foreground">
+        {label}
+      </label>
+      <div className="w-full">{children}</div>
+    </div>
+  );
+}
+
+function StatusSelect({
+  ativo,
+  onChange,
+}: {
+  ativo: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <Select
+      value={ativo ? "ativo" : "inativo"}
+      onValueChange={(v) => onChange(v === "ativo")}
+    >
+      <SelectTrigger className="h-8 w-[110px] text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="ativo">Ativo</SelectItem>
+        <SelectItem value="inativo">Inativo</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+// =========================================================================
+// Tabela de faixas inline: edição direta sem botões "Editar / OK / Cancelar"
+// =========================================================================
+
+function TabelaFaixasInline({
   beneficioId,
   faixas,
   pendingParent,
@@ -290,211 +361,233 @@ function TabelaFaixas({
   faixas: BeneficioCompleto["faixas"];
   pendingParent: boolean;
 }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [novoAberto, setNovoAberto] = useState(false);
-
-  function remover(id: string, descricao: string) {
-    if (!confirm(`Remover faixa ${descricao}?`)) return;
-    start(async () => {
-      const res = await removerFaixa({ faixaId: id });
-      if (!res.ok) {
-        alert(res.message);
-        return;
-      }
-      router.refresh();
-    });
-  }
+  const [novaAberta, setNovaAberta] = useState(false);
 
   return (
-    <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Faixas de preço ({faixas.length})
-        </h4>
-        <button
-          type="button"
-          onClick={() => setNovoAberto(true)}
-          disabled={pending || pendingParent}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
-        >
-          <Plus className="h-3 w-3" />
-          Nova faixa
-        </button>
-      </div>
+    <div>
       <div className="overflow-hidden rounded-md border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs text-muted-foreground">
+          <thead className="bg-muted/40 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 text-left">De</th>
-              <th className="px-3 py-2 text-left">Até</th>
+              <th className="w-[90px] px-3 py-2 text-left">De</th>
+              <th className="w-[90px] px-3 py-2 text-left">Até</th>
               <th className="px-3 py-2 text-right">Valor</th>
-              <th className="px-3 py-2 text-right">Ação</th>
+              <th className="w-[48px] px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {faixas.length === 0 && !novoAberto && (
+            {faixas.length === 0 && !novaAberta && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-xs text-muted-foreground">
-                  Nenhuma faixa cadastrada. Clique em &quot;Nova faixa&quot;.
+                <td
+                  colSpan={4}
+                  className="px-3 py-6 text-center text-xs text-muted-foreground"
+                >
+                  Nenhuma faixa cadastrada. Clique em “+ Nova faixa” abaixo.
                 </td>
               </tr>
             )}
-            {faixas.map((f) =>
-              editandoId === f.id ? (
-                <LinhaFaixaEdicao
-                  key={f.id}
-                  faixaId={f.id}
-                  idadeMinInicial={f.idade_min}
-                  idadeMaxInicial={f.idade_max}
-                  valorInicial={Number(f.valor)}
-                  onDone={() => setEditandoId(null)}
-                />
-              ) : (
-                <tr key={f.id}>
-                  <td className="px-3 py-2 tabular-nums">{f.idade_min}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {f.idade_max ?? "sem limite"}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {formatarBrl(Number(f.valor))}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setEditandoId(f.id)}
-                      disabled={pending}
-                      className="text-xs text-california-red hover:underline"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        remover(f.id, `${f.idade_min}–${f.idade_max ?? "∞"}`)
-                      }
-                      disabled={pending}
-                      className="ml-3 text-xs text-red-600 hover:underline"
-                    >
-                      <X className="inline h-3 w-3" />
-                    </button>
-                  </td>
-                </tr>
-              ),
-            )}
-            {novoAberto && (
-              <LinhaFaixaNova
+            {faixas.map((f) => (
+              <LinhaFaixa key={f.id} faixa={f} />
+            ))}
+            {novaAberta && (
+              <LinhaNovaFaixa
                 beneficioId={beneficioId}
-                onDone={() => setNovoAberto(false)}
+                onDone={() => setNovaAberta(false)}
               />
             )}
           </tbody>
         </table>
       </div>
-    </section>
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setNovaAberta(true)}
+          disabled={novaAberta || pendingParent}
+          className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-california-red/40 hover:text-foreground disabled:opacity-50"
+        >
+          <Plus className="h-3 w-3" />
+          Nova faixa
+        </button>
+      </div>
+    </div>
   );
 }
 
-function LinhaFaixaEdicao({
-  faixaId,
-  idadeMinInicial,
-  idadeMaxInicial,
-  valorInicial,
-  onDone,
-}: {
-  faixaId: string;
-  idadeMinInicial: number;
-  idadeMaxInicial: number | null;
-  valorInicial: number;
-  onDone: () => void;
-}) {
+/**
+ * Linha de faixa com edição inline direta:
+ * - Click em qualquer célula entra em modo edição
+ * - Blur dos 3 inputs ou Enter → salva
+ * - Esc → reverte
+ * Zero botões "Editar / OK / Cancelar".
+ */
+function LinhaFaixa({ faixa }: { faixa: BeneficioCompleto["faixas"][number] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [idadeMin, setIdadeMin] = useState(idadeMinInicial);
-  const [idadeMax, setIdadeMax] = useState<number | null>(idadeMaxInicial);
-  const [semLimite, setSemLimite] = useState(idadeMaxInicial === null);
-  const [valor, setValor] = useState(valorInicial);
+  const [idadeMin, setIdadeMin] = useState(faixa.idade_min);
+  const [idadeMax, setIdadeMax] = useState<number | null>(faixa.idade_max);
+  const [valor, setValor] = useState(Number(faixa.valor));
 
-  function salvar() {
+  const originalRef = useRef({
+    idadeMin: faixa.idade_min,
+    idadeMax: faixa.idade_max,
+    valor: Number(faixa.valor),
+  });
+
+  // Mantém estado local em sincronia caso a prop mude (ex: router.refresh)
+  useEffect(() => {
+    setIdadeMin(faixa.idade_min);
+    setIdadeMax(faixa.idade_max);
+    setValor(Number(faixa.valor));
+    originalRef.current = {
+      idadeMin: faixa.idade_min,
+      idadeMax: faixa.idade_max,
+      valor: Number(faixa.valor),
+    };
+  }, [faixa.idade_min, faixa.idade_max, faixa.valor]);
+
+  function salvarSeMudou() {
+    const o = originalRef.current;
+    if (
+      idadeMin === o.idadeMin &&
+      idadeMax === o.idadeMax &&
+      valor === o.valor
+    ) {
+      return;
+    }
+    if (valor <= 0) {
+      alert("Valor precisa ser maior que zero.");
+      setValor(o.valor);
+      return;
+    }
     start(async () => {
       const res = await editarFaixa({
-        faixaId,
+        faixaId: faixa.id,
         idadeMin,
-        idadeMax: semLimite ? null : idadeMax,
+        idadeMax,
         valor,
       });
+      if (!res.ok) {
+        alert(res.message);
+        setIdadeMin(o.idadeMin);
+        setIdadeMax(o.idadeMax);
+        setValor(o.valor);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function remover() {
+    if (
+      !confirm(
+        `Remover faixa ${idadeMin}–${idadeMax ?? "sem limite"} (${formatarBrl(valor)})?`,
+      )
+    ) {
+      return;
+    }
+    start(async () => {
+      const res = await removerFaixa({ faixaId: faixa.id });
       if (!res.ok) {
         alert(res.message);
         return;
       }
       router.refresh();
-      onDone();
     });
   }
 
   return (
-    <tr className="bg-california-red/5">
-      <td className="px-3 py-2">
+    <tr className="group">
+      <td className="px-3 py-1.5">
         <input
           type="number"
+          min={0}
+          max={120}
           value={idadeMin}
           onChange={(e) => setIdadeMin(Number(e.target.value))}
-          className="h-7 w-16 rounded border border-border bg-background px-1 text-sm"
+          onBlur={salvarSeMudou}
+          disabled={pending}
+          className="h-8 w-16 rounded border border-transparent bg-transparent px-2 text-sm tabular-nums hover:border-border focus:border-california-red/40 focus:outline-none focus:ring-2 focus:ring-california-red/15"
         />
       </td>
-      <td className="px-3 py-2">
-        <label className="flex items-center gap-1 text-xs">
-          <input
-            type="checkbox"
-            checked={semLimite}
-            onChange={(e) => setSemLimite(e.target.checked)}
-          />
-          sem limite
-        </label>
-        {!semLimite && (
-          <input
-            type="number"
-            value={idadeMax ?? ""}
-            onChange={(e) =>
-              setIdadeMax(e.target.value ? Number(e.target.value) : null)
-            }
-            className="mt-1 h-7 w-16 rounded border border-border bg-background px-1 text-sm"
-          />
+      <td className="px-3 py-1.5">
+        {idadeMax === null ? (
+          <button
+            type="button"
+            onClick={() => setIdadeMax(60)}
+            disabled={pending}
+            className="inline-flex h-8 items-center gap-1 rounded border border-transparent px-2 text-sm text-muted-foreground hover:border-border hover:text-foreground"
+            title="Click para definir idade máxima"
+          >
+            <Infinity className="h-3.5 w-3.5" />
+            <span className="text-xs">sem limite</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={0}
+              max={120}
+              value={idadeMax}
+              onChange={(e) => setIdadeMax(Number(e.target.value))}
+              onBlur={salvarSeMudou}
+              disabled={pending}
+              className="h-8 w-16 rounded border border-transparent bg-transparent px-2 text-sm tabular-nums hover:border-border focus:border-california-red/40 focus:outline-none focus:ring-2 focus:ring-california-red/15"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setIdadeMax(null);
+                start(async () => {
+                  const res = await editarFaixa({
+                    faixaId: faixa.id,
+                    idadeMin,
+                    idadeMax: null,
+                    valor,
+                  });
+                  if (!res.ok) alert(res.message);
+                  else router.refresh();
+                });
+              }}
+              disabled={pending}
+              className="opacity-0 transition-opacity hover:text-california-red group-hover:opacity-100"
+              title="Marcar como sem limite"
+            >
+              <Infinity className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
       </td>
-      <td className="px-3 py-2 text-right">
-        <input
-          type="number"
-          step="0.01"
-          value={valor}
-          onChange={(e) => setValor(Number(e.target.value))}
-          className="h-7 w-24 rounded border border-border bg-background px-1 text-right text-sm"
-        />
+      <td className="px-3 py-1.5 text-right">
+        <div className="inline-flex items-center">
+          <span className="text-xs text-muted-foreground">R$</span>
+          <input
+            type="number"
+            step="0.01"
+            min={0.01}
+            value={valor}
+            onChange={(e) => setValor(Number(e.target.value))}
+            onBlur={salvarSeMudou}
+            disabled={pending}
+            className="h-8 w-28 rounded border border-transparent bg-transparent px-2 text-right text-sm tabular-nums hover:border-border focus:border-california-red/40 focus:outline-none focus:ring-2 focus:ring-california-red/15"
+          />
+        </div>
       </td>
-      <td className="px-3 py-2 text-right">
+      <td className="px-2 py-1.5 text-right">
         <button
           type="button"
-          onClick={salvar}
+          onClick={remover}
           disabled={pending}
-          className="text-xs font-medium text-california-red hover:underline"
+          className="rounded p-1 text-muted-foreground opacity-0 transition-all hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 disabled:opacity-30"
+          title="Remover faixa"
         >
-          OK
-        </button>
-        <button
-          type="button"
-          onClick={onDone}
-          disabled={pending}
-          className="ml-2 text-xs text-muted-foreground hover:underline"
-        >
-          Cancelar
+          <Trash2 className="h-3.5 w-3.5" />
         </button>
       </td>
     </tr>
   );
 }
 
-function LinhaFaixaNova({
+function LinhaNovaFaixa({
   beneficioId,
   onDone,
 }: {
@@ -503,22 +596,27 @@ function LinhaFaixaNova({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [idadeMin, setIdadeMin] = useState(0);
+  const [idadeMin, setIdadeMin] = useState<number | "">("");
   const [idadeMax, setIdadeMax] = useState<number | null>(null);
   const [semLimite, setSemLimite] = useState(false);
-  const [valor, setValor] = useState(0);
+  const [valor, setValor] = useState<number | "">("");
+
+  const inputMinRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputMinRef.current?.focus();
+  }, []);
 
   function salvar() {
-    if (valor <= 0) {
-      alert("Informe um valor maior que zero.");
+    if (idadeMin === "" || valor === "" || valor <= 0) {
+      alert("Preencha a idade inicial e um valor maior que zero.");
       return;
     }
     start(async () => {
       const res = await criarFaixa({
         beneficioId,
-        idadeMin,
+        idadeMin: Number(idadeMin),
         idadeMax: semLimite ? null : idadeMax,
-        valor,
+        valor: Number(valor),
       });
       if (!res.ok) {
         alert(res.message);
@@ -530,61 +628,83 @@ function LinhaFaixaNova({
   }
 
   return (
-    <tr className="bg-emerald-50">
-      <td className="px-3 py-2">
+    <tr className="bg-emerald-50/40">
+      <td className="px-3 py-1.5">
         <input
+          ref={inputMinRef}
           type="number"
+          min={0}
+          max={120}
+          placeholder="0"
           value={idadeMin}
-          onChange={(e) => setIdadeMin(Number(e.target.value))}
-          className="h-7 w-16 rounded border border-border bg-background px-1 text-sm"
+          onChange={(e) =>
+            setIdadeMin(e.target.value === "" ? "" : Number(e.target.value))
+          }
+          disabled={pending}
+          className="h-8 w-16 rounded border border-border bg-background px-2 text-sm tabular-nums focus:border-california-red/40 focus:outline-none focus:ring-2 focus:ring-california-red/15"
         />
       </td>
-      <td className="px-3 py-2">
-        <label className="flex items-center gap-1 text-xs">
-          <input
-            type="checkbox"
-            checked={semLimite}
-            onChange={(e) => setSemLimite(e.target.checked)}
-          />
-          sem limite
-        </label>
-        {!semLimite && (
+      <td className="px-3 py-1.5">
+        <div className="flex items-center gap-2">
           <input
             type="number"
-            value={idadeMax ?? ""}
+            min={0}
+            max={120}
+            placeholder="∞"
+            value={semLimite ? "" : (idadeMax ?? "")}
             onChange={(e) =>
-              setIdadeMax(e.target.value ? Number(e.target.value) : null)
+              setIdadeMax(e.target.value === "" ? null : Number(e.target.value))
             }
-            className="mt-1 h-7 w-16 rounded border border-border bg-background px-1 text-sm"
+            disabled={pending || semLimite}
+            className="h-8 w-16 rounded border border-border bg-background px-2 text-sm tabular-nums focus:border-california-red/40 focus:outline-none focus:ring-2 focus:ring-california-red/15 disabled:bg-muted/40"
           />
-        )}
+          <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={semLimite}
+              onChange={(e) => setSemLimite(e.target.checked)}
+              disabled={pending}
+            />
+            s/ limite
+          </label>
+        </div>
       </td>
-      <td className="px-3 py-2 text-right">
-        <input
-          type="number"
-          step="0.01"
-          value={valor}
-          onChange={(e) => setValor(Number(e.target.value))}
-          className="h-7 w-24 rounded border border-border bg-background px-1 text-right text-sm"
-        />
+      <td className="px-3 py-1.5 text-right">
+        <div className="inline-flex items-center">
+          <span className="text-xs text-muted-foreground">R$</span>
+          <input
+            type="number"
+            step="0.01"
+            min={0.01}
+            placeholder="0,00"
+            value={valor}
+            onChange={(e) =>
+              setValor(e.target.value === "" ? "" : Number(e.target.value))
+            }
+            disabled={pending}
+            className="h-8 w-28 rounded border border-border bg-background px-2 text-right text-sm tabular-nums focus:border-california-red/40 focus:outline-none focus:ring-2 focus:ring-california-red/15"
+          />
+        </div>
       </td>
-      <td className="px-3 py-2 text-right">
-        <button
-          type="button"
-          onClick={salvar}
-          disabled={pending}
-          className="text-xs font-medium text-california-red hover:underline"
-        >
-          OK
-        </button>
-        <button
-          type="button"
-          onClick={onDone}
-          disabled={pending}
-          className="ml-2 text-xs text-muted-foreground hover:underline"
-        >
-          Cancelar
-        </button>
+      <td className="px-2 py-1.5 text-right">
+        <div className="flex justify-end gap-1">
+          <button
+            type="button"
+            onClick={salvar}
+            disabled={pending}
+            className="rounded bg-california-red px-2 py-1 text-[11px] font-medium text-white hover:bg-california-red/90 disabled:opacity-50"
+          >
+            {pending ? "…" : "OK"}
+          </button>
+          <button
+            type="button"
+            onClick={onDone}
+            disabled={pending}
+            className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            Cancelar
+          </button>
+        </div>
       </td>
     </tr>
   );

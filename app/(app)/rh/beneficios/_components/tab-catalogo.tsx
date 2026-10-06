@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { HeartPulse, Smile, Edit3, CheckCircle2, XCircle } from "lucide-react";
 import type { BeneficioCompleto } from "@/lib/queries/beneficios";
+import { coresBeneficio, compararPlanosParaChip } from "@/lib/beneficios/cores";
 import { DrawerCatalogoBeneficio } from "./drawer-catalogo-beneficio";
 
 const formatarBrl = (n: number) =>
@@ -19,7 +20,7 @@ export function TabCatalogo({ beneficios }: { beneficios: BeneficioCompleto[] })
   if (beneficios.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center text-sm text-muted-foreground">
-        Nenhum benefício cadastrado. O catálogo nasce com SulAmerica Direto, SulAmerica Especial 100 e Bradesco Dental.
+        Nenhum benefício cadastrado. O catálogo nasce com Bradesco Dental, SulAmerica Direto e SulAmerica Especial.
       </div>
     );
   }
@@ -27,7 +28,9 @@ export function TabCatalogo({ beneficios }: { beneficios: BeneficioCompleto[] })
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {beneficios.map((b) => (
+        {[...beneficios].sort(compararPlanosParaChip).map((b) => {
+          const cores = coresBeneficio(b.tipo);
+          return (
           <button
             key={b.id}
             type="button"
@@ -36,9 +39,7 @@ export function TabCatalogo({ beneficios }: { beneficios: BeneficioCompleto[] })
           >
             <div className="flex items-start justify-between gap-3">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                  b.tipo === "saude" ? "bg-rose-50 text-rose-600" : "bg-sky-50 text-sky-600"
-                }`}
+                className={`flex h-10 w-10 items-center justify-center rounded-xl ${cores.bgSuave} ${cores.icon}`}
               >
                 {b.tipo === "saude" ? (
                   <HeartPulse className="h-5 w-5" />
@@ -78,7 +79,8 @@ export function TabCatalogo({ beneficios }: { beneficios: BeneficioCompleto[] })
               Empresa {b.percentual_empresa_titular}% · colaborador {100 - b.percentual_empresa_titular}% (titular)
             </div>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {beneficioAberto && (
