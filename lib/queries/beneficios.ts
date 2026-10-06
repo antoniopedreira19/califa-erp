@@ -357,3 +357,72 @@ export async function colaboradorPorId(args: {
   }
   return data as ColaboradorBasico | null;
 }
+
+/**
+ * Resumo compacto pro card de benefícios em /perfil. Combina vínculos
+ * ativos + dependentes incluídos + breakdown da competência numa única
+ * estrutura. Retorna null quando o colaborador não tem vínculo ativo.
+ */
+export async function resumoBeneficiosDoColaborador(args: {
+  tenantId: string;
+  colaboradorId: string;
+  ano: number;
+  mes: number;
+}) {
+  const [vinculos, dependentes, breakdown] = await Promise.all([
+    listarVinculosDoColaborador({
+      tenantId: args.tenantId,
+      colaboradorId: args.colaboradorId,
+    }),
+    listarDependentesDoColaborador({
+      tenantId: args.tenantId,
+      colaboradorId: args.colaboradorId,
+    }),
+    custoMensalDoColaborador({
+      ano: args.ano,
+      mes: args.mes,
+      colaboradorId: args.colaboradorId,
+    }),
+  ]);
+
+  const vinculosAtivos = vinculos.filter((v) => v.data_fim === null);
+  if (vinculosAtivos.length === 0) return null;
+
+  const depsPorVinculo = new Map<string, number>();
+  for (const d of dependentes) {
+    if (!d.ativo || d.data_fim !== null) continue;
+    for (const inc of d.planos_incluidos) {
+      depsPorVinculo.set(
+        inc.vinculo_id,
+        (depsPorVinculo.get(inc.vinculo_id) ?? 0) + 1,
+      );
+    }
+  }
+
+  const qtdeDependentesTotal = dependentes.filter(
+    (d) => d.ativo && d.data_fim === null && d.planos_incluidos.length > 0,
+  ).length;
+
+  const valorEmpresaMes = breakdown.reduce((s, l) => {
+    const v = Number(l.valor_empresa_titular);
+    return s + (Number.isFinite(v) ? v : 0);
+  }, 0);
+  const valorDescontoFolhaMes = breakdown.reduce((s, l) => {
+    const v = Number(l.valor_desconto_folha_total);
+    return s + (Number.isFinite(v) ? v : 0);
+  }, 0);
+
+  return {
+    vinculos: vinculosAtivos.map((v) => ({
+      beneficio_nome: v.beneficio_nome,
+      beneficio_tipo: v.beneficio_tipo,
+      modo_custeio: v.modo_custeio,
+      qtde_dependentes_no_plano: depsPorVinculo.get(v.id) ?? 0,
+    })),
+    qtde_dependentes_total: qtdeDependentesTotal,
+    valor_empresa_mes: valorEmpresaMes,
+    valor_desconto_folha_mes: valorDescontoFolhaMes,
+    competencia_mes: args.mes,
+    competencia_ano: args.ano,
+  };
+}
