@@ -12,22 +12,23 @@ import {
 } from "@/lib/queries/beneficios";
 import type { BeneficioModoCusteio } from "@/lib/types";
 import { KpisBeneficios } from "./_components/kpis-beneficios";
-import { SeletorCompetencia } from "./_components/seletor-competencia";
-import { FiltrosColaboradores } from "./_components/filtros-colaboradores";
+import { FiltrosQuadro } from "./_components/filtros-quadro";
 import { TabelaColaboradores } from "./_components/tabela-colaboradores";
 import { TabCatalogo } from "./_components/tab-catalogo";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "colaboradores" | "catalogo";
+type Tab = "quadro" | "catalogo";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "colaboradores", label: "Colaboradores" },
+  { key: "quadro", label: "Quadro" },
   { key: "catalogo", label: "Catálogo" },
 ];
 
 function normalizarTab(valor: string | undefined): Tab {
-  return valor === "catalogo" ? "catalogo" : "colaboradores";
+  // Compatibilidade: tab "colaboradores" (legada) vira "quadro"
+  if (valor === "catalogo") return "catalogo";
+  return "quadro";
 }
 
 const MODOS_VALIDOS: BeneficioModoCusteio[] = [
@@ -68,14 +69,26 @@ export default async function BeneficiosPage({
   const beneficioId = searchParams.beneficioId?.trim() || undefined;
   const modoCusteio = normalizarModo(searchParams.modoCusteio);
 
-  const [kpis, catalogo, linhas, catalogoCompleto] = await Promise.all([
-    kpisTenantBeneficios({
-      tenantId: session.activeTenant.id,
-      ano,
-      mes,
-    }),
-    listarBeneficiosDoCatalogo({ tenantId: session.activeTenant.id }),
-    tab === "colaboradores"
+  // Catálogo é usado em ambas as tabs (quadro: select de filtro + drawer; catalogo: lista)
+  const catalogo = await listarBeneficiosDoCatalogo({
+    tenantId: session.activeTenant.id,
+  });
+
+  // Carrega dados específicos de cada tab em paralelo
+  const [kpis, linhas, catalogoCompleto] = await Promise.all([
+    tab === "quadro"
+      ? kpisTenantBeneficios({
+          tenantId: session.activeTenant.id,
+          ano,
+          mes,
+        })
+      : Promise.resolve({
+          qtde_vinculos_saude: 0,
+          qtde_vinculos_dental: 0,
+          custo_total_empresa: 0,
+          custo_total_colaboradores: 0,
+        }),
+    tab === "quadro"
       ? listarColaboradoresComBeneficios({
           tenantId: session.activeTenant.id,
           ano,
@@ -98,10 +111,7 @@ export default async function BeneficiosPage({
         title="Gestão de Benefícios"
         description="Planos de saúde, dental e dependentes dos colaboradores. Custo mensal calculado por faixa etária e modo de custeio."
         icon={ShieldPlus}
-        actions={<SeletorCompetencia ano={ano} mes={mes} />}
       />
-
-      <KpisBeneficios kpis={kpis} />
 
       {/* Tabs */}
       <div className="border-b border-border">
@@ -110,6 +120,7 @@ export default async function BeneficiosPage({
             const ativo = t.key === tab;
             const params = new URLSearchParams();
             params.set("tab", t.key);
+            // Preserva competência entre tabs
             params.set("ano", String(ano));
             params.set("mes", String(mes));
             return (
@@ -130,15 +141,19 @@ export default async function BeneficiosPage({
         </nav>
       </div>
 
-      {/* Conteúdo da tab */}
-      {tab === "colaboradores" && (
-        <div className="space-y-4">
-          <FiltrosColaboradores
+      {tab === "quadro" && (
+        <div className="space-y-6">
+          <FiltrosQuadro
             busca={busca}
             beneficioId={beneficioId}
             modoCusteio={modoCusteio}
-            beneficios={catalogo.filter((b) => b.ativo).map((b) => ({ id: b.id, nome: b.nome }))}
+            ano={ano}
+            mes={mes}
+            beneficios={catalogo
+              .filter((b) => b.ativo)
+              .map((b) => ({ id: b.id, nome: b.nome }))}
           />
+          <KpisBeneficios kpis={kpis} />
           <TabelaColaboradores
             linhas={linhas}
             ano={ano}

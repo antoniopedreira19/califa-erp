@@ -17,6 +17,7 @@ export interface LinhaColaboradorBeneficios {
   nome: string;
   tipo_contratacao: string;
   planos_ativos: PlanoAtivoChip[];
+  qtde_dependentes: number;
   custo_empresa: number;
   custo_colaborador: number;
 }
