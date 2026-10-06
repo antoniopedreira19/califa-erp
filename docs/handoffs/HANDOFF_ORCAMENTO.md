@@ -5076,3 +5076,22 @@ aplicada na hora combinada com a frente do Antonio, junto da
   cópia ainda fosse rascunho intocado, sem job, BV, save, realizado ou
   importação, e com conteúdo igual ao do original. A auditoria de criação
   ficou; a limpeza está em `orcamento.copias_apagadas`, com a lista.
+
+## ⚠️ Nota de 2026-10-06 (2) — Mídia Off liberada, até a aprovação (decisão 147)
+
+- **A Mídia Off saiu do "em breve"** (corrige a nota da decisão 131): a
+  categoria passou ao modelo `midia_off` na migration `20261006500004`,
+  aplicada depois do deploy de `78f7e04d`. Orçamento de Mídia Off pede o
+  período da campanha, que vira os meses da planilha (sem a trava do
+  trimestre, teto de 24 meses).
+- **A planilha é outra**: por meio e por mês, com grade de inserções (TV e
+  rádio) ou período (OOH, DOOH, portais), veículo por linha e a conta da
+  mídia (veículo = % do negociado; honorários sobre o negociado ou o
+  líquido). Ver decisão 147 para regras, travas e o que fica para a
+  entrega do job.
+- **Fora até o desenho**: exportar e importar planilha; "Enviar Job para
+  Abertura" travado na tela e recusado no servidor. Na agregada, a Mídia
+  Off é um card de consulta com "Editar na tela do orçamento".
+- **Testado gravando** no `TES-P001/26-21 · ZZ Teste Mídia Off 147`
+  (v1 substituída, v2 aprovada, sem job). O "Fornecedor Teste" virou
+  veículo de TV Fechada (Salvador/BA) nesse teste.
