@@ -93,3 +93,20 @@ o `rodapeEsquerda`. O Tiago escolheu entre quatro desenhos no protótipo de
 A linha "Projeto", que ficava logo abaixo do "Job", também saiu do PDF da
 PP. Nas palavras do Tiago: "Deveria ser o código do Job". As 47 PPs que já
 existiam foram refeitas com o modelo novo. Ver a decisão 126.
+
+## 7. Revisão de 06/10/2026: o número é o maior + 1, e pode ter buraco
+
+O número do código (`-NN`) era a quantidade de orçamentos do projeto + 1.
+Em 06/10/2026 isso mudou para o **maior número já usado + 1**
+(`proximaSequenciaOrcamento`, em `lib/codigos/orcamentos.ts`), nos dois
+caminhos de criação: o "Novo orçamento" e o salvamento da visão agregada.
+
+O motivo foram as 36 cópias que a agregada criou no AMB-P017/26 (ver a nota
+de 06/10/2026 no `HANDOFF_ORCAMENTO.md`). Apagar orçamento do meio da
+sequência deixa a contagem abaixo do maior número, e a conta antiga faria o
+próximo código repetir um que existe — o índice único recusaria todo
+salvamento no projeto.
+
+Por isso a sequência **pode ter buraco**. Como o código não aparece em tela
+nenhuma (§1), o buraco não é visto por ninguém; o que importa é que a ordem
+de criação, que é a das listas, se mantém.

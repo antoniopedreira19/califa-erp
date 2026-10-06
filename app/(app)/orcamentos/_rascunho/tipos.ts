@@ -188,6 +188,12 @@ export interface GrupoPayload {
 }
 
 export interface JobPayload extends DadosOrcamentoRascunho {
+  /** Identidade do orçamento novo na tela (um uuid gerado ao criá-lo), que
+   *  o servidor grava em `orcamentos.chave_rascunho`. O índice único dessa
+   *  coluna recusa o segundo insert do mesmo rascunho: em 05/10/2026 cada
+   *  "Salvar alterações" da agregada recriou todos os orçamentos novos da
+   *  sessão, e o AMB-P017/26 ficou com 36 cópias. */
+  chave: string;
   grupos: GrupoPayload[];
   /** O XLSX original, já no Storage (decisão 110), e a aba escolhida,
    *  quando o orçamento veio de importação. O servidor relê a aba para
@@ -199,6 +205,16 @@ export interface JobPayload extends DadosOrcamentoRascunho {
 
 export interface OrcamentoProjetoPayload extends ParametrosVersao {
   jobs: JobPayload[];
+}
+
+/** Os ids reais de um orçamento recém-criado, na ordem em que o payload os
+ *  mandou: os grupos na ordem da tela, e os itens de cada grupo também. É
+ *  com isso que o editor passa a tratá-lo como gravado — sem essa volta, o
+ *  próximo "Salvar alterações" o criaria de novo. */
+export interface OrcamentoCriado {
+  orcamentoId: string;
+  versaoId: string;
+  grupos: { id: string; itens: string[] }[];
 }
 
 // ============================================================

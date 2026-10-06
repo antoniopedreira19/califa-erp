@@ -12,6 +12,7 @@ import { itemSchema } from "@/lib/validations/itens";
 import { bvSchema } from "@/lib/validations/bv";
 import type {
   AlteracoesProjetoPayload,
+  OrcamentoCriado,
   OrcamentoEdicaoPayload,
   ParametrosVersao,
 } from "../../_rascunho/tipos";
@@ -32,8 +33,35 @@ export type SalvarAlteracoesResult =
        *  seus ids com isso; sem essa volta, um segundo "Salvar alterações"
        *  antes de a página recarregar inseriria as mesmas linhas de novo. */
       ids: Record<string, string>;
+      /** Os orçamentos novos que foram criados, na ordem de `payload.novos`.
+       *  Mesma razão do `ids`, um nível acima: até 06/10/2026 esta volta não
+       *  existia, e cada salvamento recriava todos os orçamentos novos da
+       *  sessão (36 cópias no AMB-P017/26). */
+      novos: OrcamentoCriado[];
     }
-  | { ok: false; message: string };
+  | {
+      ok: false;
+      message: string;
+      /** O que JÁ foi gravado antes da falha. O salvamento não é uma
+       *  transação: as edições e os orçamentos novos anteriores ao erro
+       *  ficam no banco, e o editor precisa saber disso para não
+       *  gravá-los de novo na próxima tentativa. */
+      ids: Record<string, string>;
+      novos: OrcamentoCriado[];
+    };
+
+/** O resultado de uma edição. Os ids das linhas inseridas não vêm aqui:
+ *  vão direto para o acumulador da chamada, para chegarem ao editor mesmo
+ *  quando a edição para no meio. */
+type ResultadoEdicao = { ok: true } | { ok: false; message: string };
+
+function falha(
+  message: string,
+  ids: Record<string, string> = {},
+  novos: OrcamentoCriado[] = [],
+): SalvarAlteracoesResult {
+  return { ok: false, message, ids, novos };
+}
 
 interface ItemAtual {
   id: string;
@@ -79,23 +107,23 @@ export async function salvarAlteracoesDoProjeto(
 ): Promise<SalvarAlteracoesResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.editar");
-  if (!gate.ok) return gate;
+  if (!gate.ok) return falha(gate.message);
   const tenantId = session.activeTenant.id;
 
   const bruto = formData.get("payload")?.toString();
-  if (!bruto) return { ok: false, message: "Nada para salvar." };
+  if (!bruto) return falha("Nada para salvar.");
 
   let payload: AlteracoesProjetoPayload;
   try {
     payload = JSON.parse(bruto) as AlteracoesProjetoPayload;
   } catch {
-    return { ok: false, message: "Alterações inválidas. Recarregue a tela." };
+    return falha("Alterações inválidas. Recarregue a tela.");
   }
 
   const editados = Array.isArray(payload.editados) ? payload.editados : [];
   const novos = Array.isArray(payload.novos) ? payload.novos : [];
   if (editados.length === 0 && novos.length === 0) {
-    return { ok: false, message: "Nada para salvar." };
+    return falha("Nada para salvar.");
   }
 
   const supabase = createClient();
@@ -106,12 +134,12 @@ export async function salvarAlteracoesDoProjeto(
     .eq("id", projetoId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{ id: string }>();
-  if (!projeto) return { ok: false, message: "Projeto não encontrado." };
+  if (!projeto) return falha("Projeto não encontrado.");
 
   // ---------- Validação de forma, antes de qualquer escrita ----------
   for (const alvo of editados) {
     const erro = validarFormato(alvo);
-    if (erro) return { ok: false, message: erro };
+    if (erro) return falha(erro);
   }
 
   // ---------- Edições ----------
@@ -123,15 +151,15 @@ export async function salvarAlteracoesDoProjeto(
       tenantId,
       session.profile.id,
       pode(session.activeRole, "orcamentos.editar_impostos"),
+      ids,
     );
-    if (!res.ok) return res;
-    Object.assign(ids, res.ids);
+    if (!res.ok) return falha(res.message, ids);
   }
 
   // ---------- Orçamentos novos ----------
   // Um por chamada: cada um tem os seus próprios parâmetros, e a action de
   // criação já cuida de código sequencial, importação e rollback.
-  let criados = 0;
+  const novosCriados: OrcamentoCriado[] = [];
   for (const [i, novo] of novos.entries()) {
     const parametros: ParametrosVersao = payload.parametrosNovos?.[i] ?? {
       moeda: "BRL",
@@ -156,20 +184,32 @@ export async function salvarAlteracoesDoProjeto(
 
     const res = await salvarOrcamentosDoProjeto(projetoId, fd);
     if (!res.ok) {
-      return {
-        ok: false,
-        message:
-          editados.length > 0
-            ? `As edições foram salvas, mas o orçamento novo falhou: ${res.message}`
-            : res.message,
-      };
+      // O que veio antes já está no banco. A tela volta a mostrá-lo como
+      // gravado e a próxima tentativa só refaz o que falhou.
+      if (editados.length > 0 || novosCriados.length > 0) {
+        revalidatePath(`/orcamentos/${projetoId}`);
+        revalidatePath(`/orcamentos/${projetoId}/agregado`);
+      }
+      return falha(
+        editados.length > 0 || novosCriados.length > 0
+          ? `O que veio antes foi salvo, mas o orçamento “${novo.nome}” não foi criado: ${res.message}`
+          : res.message,
+        ids,
+        novosCriados,
+      );
     }
-    criados += res.criados;
+    novosCriados.push(...res.orcamentos);
   }
 
   revalidatePath(`/orcamentos/${projetoId}`);
   revalidatePath(`/orcamentos/${projetoId}/agregado`);
-  return { ok: true, editados: editados.length, criados, ids };
+  return {
+    ok: true,
+    editados: editados.length,
+    criados: novosCriados.length,
+    ids,
+    novos: novosCriados,
+  };
 }
 
 /** Valida nomes de grupo, itens e BVs. Sem tocar no banco. */
@@ -206,7 +246,10 @@ async function aplicarEdicao(
   profileId: string,
   /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional. */
   podeEditarImpostos: boolean,
-): Promise<SalvarAlteracoesResult> {
+  /** Acumulador da chamada: id local → id real de cada grupo e item
+   *  inserido aqui, gravado no momento do insert. */
+  ids: Record<string, string>,
+): Promise<ResultadoEdicao> {
   const supabase = createClient();
 
   // ---------- Travas ----------
@@ -379,7 +422,6 @@ async function aplicarEdicao(
   );
 
   // ---------- Grupos ----------
-  const ids: Record<string, string> = {};
   const grupoIdPorIndice = new Map<number, string>();
   const gruposMantidos = new Set<string>();
 
@@ -655,7 +697,7 @@ async function aplicarEdicao(
   });
 
   revalidatePath(`/orcamentos/${projetoId}/${orcamento.id}`);
-  return { ok: true, editados: 1, criados: 0, ids };
+  return { ok: true };
 }
 
 /** Compara só os campos que a tela edita — evita UPDATE em linha intocada. */

@@ -65,10 +65,13 @@ import {
   type GrupoPayload,
   type GrupoRascunho,
   type ItemRascunho,
+  type OrcamentoCriado,
   type OrcamentoRascunho,
+  type OrigemBanco,
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
 import { salvarAlteracoesDoProjeto } from "./actions";
+import { estagioFunil } from "@/lib/calculos/funil";
 import { moverNaLista } from "@/lib/calculos/ordem-itens";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
 import {
@@ -429,7 +432,10 @@ export function EditorAgregado({
   }
 
   function criarOrcamento(dados: DadosOrcamento) {
-    const id = novoId("orc");
+    // Uuid, e não `novoId`: o id vai ao servidor como a chave do rascunho
+    // (`orcamentos.chave_rascunho`), que o índice único não deixa gravar
+    // duas vezes. Precisa ser único entre abas e sessões, não só na tela.
+    const id = crypto.randomUUID();
     // A cadeia vem da categoria escolhida no formulário (decisão 072).
     // Categoria não encontrada cai em nacional — o fechamento que todo
     // orçamento sempre teve.
@@ -828,6 +834,7 @@ export function EditorAgregado({
     const payload: AlteracoesProjetoPayload = {
       editados,
       novos: novos.map((o) => ({
+        chave: o.id,
         nome: o.nome,
         categoria_id: o.categoria_id,
         servico_id: o.servico_id,
@@ -864,16 +871,26 @@ export function EditorAgregado({
 
     startSalvar(async () => {
       const res = await salvarAlteracoesDoProjeto(projeto.id, formData);
+      // O que foi gravado troca o id local pelo real — as linhas novas e,
+      // um nível acima, os orçamentos novos, que passam a ser "do banco".
+      // Vale também quando o salvamento parou no meio: o que veio antes do
+      // erro já está gravado. Sem isso, o próximo salvamento antes de a
+      // página recarregar gravaria tudo de novo — e recarregar pode falhar.
+      // Até 06/10/2026 os orçamentos novos ficavam de fora, e cada "Salvar
+      // alterações" os recriava (36 cópias no AMB-P017/26).
+      const gravados = comoGravados(orcamentos, novos, res.ids, res.novos);
+      setOrcamentos(gravados);
+      // Arquivo de orçamento novo que já foi criado: o servidor o descartou.
+      for (const novo of novos.slice(0, res.novos.length)) {
+        arquivos.current.delete(novo.id);
+      }
       if (!res.ok) {
+        // O que falhou continua por salvar: a referência não muda.
         setErro(res.message);
+        router.refresh();
         return;
       }
-      // As linhas criadas agora trocam o id local pelo real. Sem isso, um
-      // segundo salvamento antes de a página recarregar as inseriria de
-      // novo — e recarregar pode falhar.
-      const comIds = trocarIds(orcamentos, res.ids);
-      setOrcamentos(comIds);
-      setBaseline(assinatura(comIds));
+      setBaseline(assinatura(gravados));
       // Gravado: nenhum arquivo importado fica. O servidor já descartou os
       // dos orçamentos novos; o de um orçamento que já existia (importado
       // na versão sem planilha) não vai no payload e sai por aqui.
@@ -1298,6 +1315,51 @@ export function EditorAgregado({
       />
     </div>
   );
+}
+
+/**
+ * O estado da tela depois de um salvamento: as linhas inseridas com o id
+ * real, e cada orçamento novo que o servidor criou com a `origemBanco` —
+ * daí em diante ele vai como editado, nunca mais como novo.
+ *
+ * `novos` é a lista que foi no payload, e `criados` vem na mesma ordem; no
+ * salvamento que parou no meio, `criados` é mais curta.
+ */
+function comoGravados(
+  orcamentos: OrcamentoRascunho[],
+  novos: OrcamentoRascunho[],
+  ids: Record<string, string>,
+  criados: OrcamentoCriado[],
+): OrcamentoRascunho[] {
+  const mapa: Record<string, string> = { ...ids };
+  const origens = new Map<string, OrigemBanco>();
+  for (const [i, criado] of criados.entries()) {
+    const novo = novos[i];
+    if (!novo) continue;
+    origens.set(novo.id, {
+      orcamentoId: criado.orcamentoId,
+      versaoId: criado.versaoId,
+      numeroVersao: 1,
+      statusOrcamento: "rascunho",
+      statusVersao: "rascunho",
+      bloqueio: null,
+      estagio: estagioFunil("rascunho", null),
+    });
+    for (const [g, grupo] of novo.grupos.entries()) {
+      const real = criado.grupos[g];
+      if (!real) continue;
+      if (real.id) mapa[grupo.id] = real.id;
+      for (const [k, item] of grupo.itens.entries()) {
+        if (real.itens[k]) mapa[item.id] = real.itens[k];
+      }
+    }
+  }
+  const comIds = trocarIds(orcamentos, mapa);
+  if (origens.size === 0) return comIds;
+  return comIds.map((orc) => {
+    const origem = origens.get(orc.id);
+    return origem && !orc.origemBanco ? { ...orc, origemBanco: origem } : orc;
+  });
 }
 
 /** Aplica o mapa "id local → id real" devolvido pelo salvamento. */

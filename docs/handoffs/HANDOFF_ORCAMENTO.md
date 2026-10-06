@@ -5024,3 +5024,46 @@ aplicada na hora combinada com a frente do Antonio, junto da
   projeto arquivado.
 - O trilho das abas não estica mais. Com muitas abas, o “+” fica entre
   elas e o "Todos".
+
+## ⚠️ Nota de 2026-10-06 — a visão agregada não recria mais os orçamentos novos a cada salvamento
+
+- **O que aconteceu.** Em 05/10/2026 a produtora criou 9 orçamentos no
+  AMB-P017/26 pela agregada, salvando a cada um, sem recarregar a página.
+  Depois do "Salvar alterações", o editor trocava o id das linhas novas
+  pelo real, mas o orçamento novo continuava "novo" na tela (sem
+  `origemBanco`). O salvamento seguinte o mandava de novo em
+  `payload.novos`, e o servidor o criava outra vez. Nove salvamentos
+  deram 45 rascunhos: 9 de verdade e 36 cópias idênticas. Na tela nada
+  aparecia, porque o estado do editor não relê o `inicial` do servidor;
+  só a faixa e a lista do projeto mostravam as cópias.
+- **Correção na tela e no servidor.** `salvarOrcamentosDoProjeto` devolve
+  os ids reais de cada orçamento criado (orçamento, versão, grupos e
+  itens, na ordem do payload — `OrcamentoCriado`), e
+  `salvarAlteracoesDoProjeto` os repassa em `novos`. O editor
+  (`comoGravados`) troca os ids e dá ao orçamento a `origemBanco` da v1 em
+  rascunho: daí em diante ele vai como editado. Vale também quando o
+  salvamento para no meio: a falha devolve `ids` e `novos` do que já foi
+  gravado, a tela marca isso como gravado e a próxima tentativa só refaz o
+  que falhou (antes, os ids das linhas inseridas numa edição que falhou
+  também se perdiam).
+- **Trava no banco.** `orcamentos.chave_rascunho` (migration
+  20261006600001), com índice único por tenant. O orçamento novo da
+  agregada nasce na tela com um uuid (`crypto.randomUUID()`, no lugar do
+  `novoId("orc")`), que vai no payload como `chave`. O mesmo rascunho não
+  vira dois orçamentos: o segundo insert é recusado com "Este orçamento já
+  foi gravado num salvamento anterior. Recarregue a página…", e payload sem
+  chave é recusado com "a tela está desatualizada". Nulo nos orçamentos de
+  antes e nos do "Novo orçamento".
+- **Código do orçamento: maior + 1.** `gerarCodigoOrcamento` e o
+  salvamento em lote usavam a contagem + 1. Com orçamento apagado no meio
+  da sequência, o próximo código repetiria um que existe e o índice único
+  recusaria todo salvamento. Agora é o maior número usado + 1
+  (`proximaSequenciaOrcamento`, em `lib/codigos/orcamentos.ts`, com
+  `orcamentos.test.ts`). Em 06/10/2026 a contagem batia com o maior número
+  em todos os 113 orçamentos, então nada muda para o que já existe.
+- **Testado** na agregada do TES-P001/26: "ZZ Teste duplicação A" salvo,
+  depois "ZZ Teste duplicação B" criado e o item do A editado, sem
+  recarregar, e salvo de novo — um A (-19, com o item editado) e um B
+  (-20). Pelo console, reenviar o A como novo com a mesma chave e sem
+  chave: as duas recusas, nada gravado. Os dois ZZ ficaram no projeto de
+  teste.

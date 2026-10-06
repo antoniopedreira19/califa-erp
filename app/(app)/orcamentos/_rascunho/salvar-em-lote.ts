@@ -17,8 +17,13 @@ import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { grupoSchema } from "@/lib/validations/grupos";
 import { itemSchema } from "@/lib/validations/itens";
 import { bvSchema } from "@/lib/validations/bv";
-import type { GrupoPayload, OrcamentoProjetoPayload } from "./tipos";
+import type {
+  GrupoPayload,
+  OrcamentoCriado,
+  OrcamentoProjetoPayload,
+} from "./tipos";
 import { aceitaBV } from "@/lib/calculos/versao-totais";
+import { proximaSequenciaOrcamento } from "@/lib/codigos/orcamentos";
 
 /** Tipos em que o cliente paga o fornecedor direto — os únicos com BV. */
 
@@ -27,8 +32,16 @@ import { aceitaBV } from "@/lib/calculos/versao-totais";
 // ============================================================
 
 export type SalvarResult =
-  | { ok: true; criados: number }
+  | {
+      ok: true;
+      criados: number;
+      /** Um por orçamento do payload, na mesma ordem. */
+      orcamentos: OrcamentoCriado[];
+    }
   | { ok: false; message: string };
+
+/** A chave do rascunho é um uuid gerado na tela (`crypto.randomUUID`). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface Criado {
   orcamentoId: string;
@@ -65,6 +78,9 @@ async function desfazer(criados: Criado[]): Promise<void> {
 }
 
 function mapDbError(msg: string): string {
+  if (msg.includes("uniq_orcamentos_chave_rascunho")) {
+    return "Este orçamento já foi gravado num salvamento anterior. Recarregue a página: ele aparece com o que foi salvo.";
+  }
   if (msg.includes("uniq_orcamentos_codigo_por_tenant")) {
     return "Outro orçamento com o mesmo código foi criado enquanto você montava este. Tente salvar de novo.";
   }
@@ -123,7 +139,7 @@ export async function salvarOrcamentosDoProjeto(
       .eq("tenant_id", tenantId),
     supabase
       .from("orcamentos")
-      .select("id", { count: "exact", head: true })
+      .select("codigo")
       .eq("projeto_id", projetoId)
       .eq("tenant_id", tenantId),
   ]);
@@ -140,6 +156,7 @@ export async function salvarOrcamentosDoProjeto(
   // ---------- Validação de tudo ANTES de gravar qualquer coisa ----------
   // Um job inválido no fim da lista não pode deixar os anteriores no banco.
   const validados: {
+    chave: string;
     orcamento: Record<string, unknown>;
     grupos: GrupoPayload[];
     envio: (EnvioDaPlanilha & { aba: string }) | null;
@@ -148,6 +165,14 @@ export async function salvarOrcamentosDoProjeto(
 
   for (const [i, job] of payload.jobs.entries()) {
     const rotulo = job.nome?.trim() || `Orçamento ${i + 1}`;
+
+    // Sem a chave não há como recusar o mesmo rascunho duas vezes.
+    if (typeof job.chave !== "string" || !UUID.test(job.chave)) {
+      return {
+        ok: false,
+        message: `${rotulo}: a tela está desatualizada. Recarregue a página antes de salvar.`,
+      };
+    }
 
     const parsed = orcamentoSchema.safeParse({
       codigo: "",
@@ -232,6 +257,7 @@ export async function salvarOrcamentosDoProjeto(
 
     const { codigo: _semCodigo, ...dados } = parsed.data;
     validados.push({
+      chave: job.chave,
       orcamento: dados,
       grupos,
       envio:
@@ -266,8 +292,15 @@ export async function salvarOrcamentosDoProjeto(
   const honorarios = faixaPercentual(honorariosCliente.percentual);
   const imposto = faixaPercentual(payload.percentual_imposto);
 
-  let sequencial = orcCountRes.count ?? 0;
+  // Um acima do maior número já usado no projeto, não a contagem: com
+  // orçamento apagado no meio, a contagem repetiria um código que existe.
+  let sequencial =
+    proximaSequenciaOrcamento(
+      projRes.data.codigo,
+      ((orcCountRes.data ?? []) as { codigo: string }[]).map((o) => o.codigo),
+    ) - 1;
   const criados: Criado[] = [];
+  const idsCriados: OrcamentoCriado[] = [];
   // Os arquivos enviados saem do Storage só no fim, com o lote inteiro
   // gravado (decisão 129): se um orçamento falhar, os anteriores são
   // desfeitos, e o "Salvar" de novo ainda precisa ler a planilha.
@@ -314,6 +347,7 @@ export async function salvarOrcamentosDoProjeto(
       .insert({
         ...alvo.orcamento,
         codigo,
+        chave_rascunho: alvo.chave,
         projeto_id: projetoId,
         tenant_id: tenantId,
         created_by: session.profile.id,
@@ -405,6 +439,9 @@ export async function salvarOrcamentosDoProjeto(
     // Guarda de onde sai o BV de cada linha, para casar item ↔ BV depois
     // do insert (a ordem é única dentro da versão).
     const bvsPorOrdem = new Map<number, GrupoPayload["itens"][number]["bv"]>();
+    // A ordem de cada item, grupo a grupo: é por ela que o id real volta
+    // para a linha certa da tela.
+    const ordensPorGrupo: number[][] = alvo.grupos.map(() => []);
     let ordemItem = 0;
 
     for (const [ordemGrupo, grupo] of alvo.grupos.entries()) {
@@ -412,6 +449,7 @@ export async function salvarOrcamentosDoProjeto(
       if (!grupoId) continue;
       for (const item of grupo.itens ?? []) {
         ordemItem += 1;
+        ordensPorGrupo[ordemGrupo].push(ordemItem);
         const dados = itemSchema.parse(item);
         linhas.push({
           tenant_id: tenantId,
@@ -425,6 +463,7 @@ export async function salvarOrcamentosDoProjeto(
       }
     }
 
+    const itemPorOrdem = new Map<number, string>();
     if (linhas.length > 0) {
       const { data: itensCriados, error: itensErr } = await supabase
         .from("versoes_orcamento_itens")
@@ -435,6 +474,9 @@ export async function salvarOrcamentosDoProjeto(
         console.error("[multi.salvar.itens]", itensErr?.message);
         await desfazer([...criados, parcial]);
         return { ok: false, message: "Não foi possível gravar os itens." };
+      }
+      for (const it of itensCriados as { id: string; ordem: number }[]) {
+        itemPorOrdem.set(it.ordem, it.id);
       }
 
       if (bvsPorOrdem.size > 0) {
@@ -468,6 +510,14 @@ export async function salvarOrcamentosDoProjeto(
     }
 
     criados.push(parcial);
+    idsCriados.push({
+      orcamentoId: orcamento.id,
+      versaoId: versao.id,
+      grupos: alvo.grupos.map((_, g) => ({
+        id: grupoPorOrdem.get(g + 1) ?? "",
+        itens: ordensPorGrupo[g].map((ordem) => itemPorOrdem.get(ordem) ?? ""),
+      })),
+    });
 
     // Registro da importação. Falha aqui não desfaz o orçamento — ele já
     // está completo; o que se perde é a linha do histórico.
@@ -522,7 +572,7 @@ export async function salvarOrcamentosDoProjeto(
   for (const path of enviosDoLote) await descartarEnvio(path, tenantId);
 
   revalidatePath(`/orcamentos/${projetoId}`);
-  return { ok: true, criados: criados.length };
+  return { ok: true, criados: criados.length, orcamentos: idsCriados };
 }
 
 function faixaPercentual(valor: unknown): number {
