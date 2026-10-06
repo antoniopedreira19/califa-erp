@@ -354,6 +354,10 @@ export interface Orcamento {
    *  de antes fica intacto. Nulo = ativo. */
   arquivado_em: string | null;
   arquivado_por: string | null;
+  /** Uuid do rascunho da visão agregada que criou o orçamento. O índice
+   *  único impede o mesmo rascunho de virar dois orçamentos (06/10/2026).
+   *  Nulo quando nasceu por outro caminho. Só o servidor grava. */
+  chave_rascunho: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
