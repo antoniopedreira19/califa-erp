@@ -16,14 +16,14 @@ export function KpisBeneficios({ kpis }: { kpis: BeneficioKpisTenant }) {
         label="Plano de saúde"
         value={kpis.qtde_vinculos_saude.toString()}
         hint={kpis.qtde_vinculos_saude === 1 ? "vínculo ativo" : "vínculos ativos"}
-        accent="rose"
+        accent="sky"
       />
       <KpiCard
         icon={Smile}
         label="Dental"
         value={kpis.qtde_vinculos_dental.toString()}
         hint={kpis.qtde_vinculos_dental === 1 ? "vínculo ativo" : "vínculos ativos"}
-        accent="sky"
+        accent="rose"
       />
       <KpiCard
         icon={Building2}
