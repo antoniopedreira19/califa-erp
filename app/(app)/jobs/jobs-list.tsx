@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn } from "@/lib/utils";
 import { jobStatusLabel, type JobStatusExibido, jobStatusBadgeClasses } from "@/lib/types";
 
@@ -85,6 +86,46 @@ function formatMoney(n: number | null): string {
   if (n === null || n === undefined) return "—";
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+
+/** Grade fixa da lista (revisão da decisão 036, 05/10/2026). Com largura
+ *  automática, Marca, Cliente e Responsável em `whitespace-nowrap` se
+ *  esticavam até o texto mais longo da lista: em "Todos", a razão social
+ *  inteira e o nome completo do GP levavam a tabela a ~2200 px e jogavam
+ *  Início, Valor total e Status para fora da tela. Agora cada coluna tem
+ *  largura própria e o Nome fica com o resto (~272 px nos 1616 px de
+ *  conteúdo). Larguras medidas com os textos reais da base; com elas,
+ *  nenhum nome de job passa de duas linhas. */
+function ColunasDaLista() {
+  return (
+    <colgroup>
+      <col className="w-[32px]" />
+      {/* Código */}
+      <col className="w-[112px]" />
+      {/* Nome: absorve a sobra. */}
+      <col />
+      {/* Empresa */}
+      <col className="w-[150px]" />
+      {/* Marca */}
+      <col className="w-[156px]" />
+      {/* Regional */}
+      <col className="w-[100px]" />
+      {/* Cliente */}
+      <col className="w-[156px]" />
+      {/* Responsável */}
+      <col className="w-[172px]" />
+      {/* Início */}
+      <col className="w-[112px]" />
+      {/* Valor total */}
+      <col className="w-[136px]" />
+      {/* Status: cabe o selo mais largo, "Rejeitado pelo financeiro"
+          (182 px). */}
+      <col className="w-[216px]" />
+    </colgroup>
+  );
+}
+
+/** Para o `colSpan` da faixa do projeto, que cobre a tabela inteira. */
+const TOTAL_DE_COLUNAS = 11;
 
 interface GrupoProjeto {
   projetoId: string;
@@ -379,14 +420,19 @@ export function JobsList({
 
       {/* Tabela */}
       <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full min-w-[1320px] border-collapse text-sm">
+        {/* Abaixo de 1500 px a tabela rola na horizontal em vez de espremer
+            o Nome. */}
+        <table className="w-full min-w-[1500px] table-fixed border-collapse text-sm">
+          <ColunasDaLista />
           <thead>
             <tr className="border-b border-border bg-muted/60 text-left text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               <th className="w-8 px-2 py-3" aria-label="Expandir" />
               <th className="px-4 py-3 font-semibold">Código</th>
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 text-center font-semibold">Empresa</th>
-              <th className="px-4 py-3 font-semibold">Projeto</th>
+              {/* Sem coluna Projeto (05/10/2026): o projeto já está na
+                  faixa de cada grupo, e repetir em toda linha tirava
+                  largura do Nome. */}
               <th className="px-4 py-3 font-semibold">Marca</th>
               <th className="px-4 py-3 font-semibold">Regional</th>
               <th className="px-4 py-3 font-semibold">Cliente</th>
@@ -415,11 +461,11 @@ export function JobsList({
                     g.aberto ? "bg-muted/90" : "bg-muted/40",
                   )}
                 >
-                  {/* A faixa cobre a tabela INTEIRA: são 12 colunas no
-                      cabeçalho e nas linhas de job. Estava em 10 e a faixa
-                      morria antes de Valor total e Status, deixando o fim
-                      de cada linha de projeto em branco (04/09/2026). */}
-                  <td colSpan={12} className="p-0">
+                  {/* A faixa cobre a tabela INTEIRA. Estava em 10 de 12
+                      colunas e morria antes de Valor total e Status,
+                      deixando o fim de cada linha de projeto em branco
+                      (04/09/2026). */}
+                  <td colSpan={TOTAL_DE_COLUNAS} className="p-0">
                     <div className="grid grid-cols-[32px_1fr_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
                       <div className="flex items-center justify-center">
                         <span
@@ -510,7 +556,9 @@ export function JobsList({
                           className="absolute left-6 top-1/2 h-px w-[9px] bg-[#dad7d7]"
                         />
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs">
+                      {/* Sem quebra: o código partia no hífen ("AMB-" em
+                          cima, "1001/26" embaixo). */}
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
                         <Link
                           href={`/jobs/${j.id}?from=jobs`}
                           prefetch={false}
@@ -520,9 +568,17 @@ export function JobsList({
                           {j.codigo}
                         </Link>
                       </td>
+                      {/* Nome, Marca, Cliente e Responsável quebram até duas
+                          linhas; o que passar termina em "…" e aparece
+                          inteiro ao passar o mouse. Teto pedido pelo Tiago:
+                          a linha do job não cresce sem limite. */}
                       <td className="px-4 py-3 font-medium">
-                        <span className="inline-flex items-center gap-1.5">
-                          {j.nome}
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <TruncateTooltip
+                            linhas={2}
+                            text={j.nome}
+                            className="min-w-0"
+                          />
                           <DescritivoPopover
                             rotulo="Descritivo do job"
                             codigo={j.codigo}
@@ -572,22 +628,28 @@ export function JobsList({
                         )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        <span className="font-mono text-xs">
-                          {j.projeto_codigo}
-                        </span>{" "}
-                        <span>{j.projeto_nome ?? ""}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                        {j.produto?.trim() ? j.produto : "—"}
+                        {j.produto?.trim() ? (
+                          <TruncateTooltip linhas={2} text={j.produto.trim()} />
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                         {j.regional_nome ?? "—"}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                        {j.cliente_nome ?? "—"}
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {j.cliente_nome ? (
+                          <TruncateTooltip linhas={2} text={j.cliente_nome} />
+                        ) : (
+                          "—"
+                        )}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                        {j.responsavel_nome ?? "—"}
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {j.responsavel_nome ? (
+                          <TruncateTooltip linhas={2} text={j.responsavel_nome} />
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-center text-muted-foreground">
                         {formatDate(j.data_inicio_prevista)}

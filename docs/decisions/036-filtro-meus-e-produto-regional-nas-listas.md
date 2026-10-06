@@ -94,8 +94,9 @@ gramática só.
 Instrução explícita do Tiago: "utilize apenas os filtros do design e as
 colunas adicionais; desconsidere o resto".
 
-- A coluna **Projeto** continua na lista de Jobs. O design a removia por
-  repetir o cabeçalho do grupo; ficou.
+- A coluna **Projeto** continuou na lista de Jobs. O design a removia por
+  repetir o cabeçalho do grupo; ficou até 05/10/2026, quando o Tiago a
+  tirou (nota no fim).
 - A barra de `/orcamentos` seguiu igual fora da chave nova — o mock do
   design mostra um filtro de "empresas" ali que **não** foi adicionado, e
   mantém o de **Ano**, que o mock não mostra.
@@ -169,3 +170,65 @@ banco, em `is_freelancer_do_projeto`, e foi lá que ela foi ajustada:
   projeto** — passaram a ver as listas vazias, com o
   texto "Nenhum projeto na sua equipe" / "Nenhum job nos projetos da sua
   equipe". Entram na Equipe pelo "Editar projeto".
+
+## ⚠️ A lista de Jobs sem a coluna Projeto, em grade fixa e com teto de duas linhas (2026-10-05)
+
+Pergunta do Tiago: por que a lista perde a formatação quando sai do
+"Meus"? Em "Todos" entram jobs com textos longos. A marca e o cliente
+vinham com a razão social inteira (até 38 caracteres) e o responsável com
+o nome completo (até 53). Marca, Cliente e Responsável estavam em
+`whitespace-nowrap`, numa tabela de largura automática. Cada coluna
+crescia até o texto mais longo, a tabela ia a ~2200 px em 1614 px de
+conteúdo, e Início, Valor total e Status saíam da tela, junto com o total
+do projeto na faixa. Para compensar, o Nome era espremido a ~150 px, e o
+código do job quebrava no hífen.
+
+Medido num protótipo com o componente real: com as 12 colunas não havia
+largura para tudo. Mesmo cortando Marca, Cliente e Responsável, o Nome
+ficava com 150 a 230 px.
+
+**O que o Tiago escolheu:**
+
+- **A coluna Projeto sai.** O projeto já aparece na faixa de cada grupo,
+  e repeti-lo em toda linha tirava largura do Nome.
+- **O Cliente fica**, mesmo repetindo a faixa.
+- **Texto inteiro, com teto.** Nome, Marca, Cliente e Responsável quebram
+  a linha até **duas linhas**. O que passar disso termina em "…" e aparece
+  inteiro ao passar o mouse. A linha de um job nunca passa de duas linhas
+  de texto.
+- **O código** não quebra mais (`whitespace-nowrap`).
+
+**Grade fixa.** A tabela passou a `table-fixed` com `colgroup`, e as
+larguras não dependem mais do texto. As colunas medem 32 · 112 · Nome ·
+150 · 156 · 100 · 156 · 172 · 112 · 136 · 216 px, e o Nome fica com o
+resto (~272 px). A largura mínima é 1500 px: abaixo disso a tabela rola
+na horizontal em vez de espremer o Nome. Status tem 216 px porque o selo
+mais largo, "Rejeitado pelo financeiro", mede 182 px.
+
+As larguras foram calibradas com os textos reais dos 52 jobs. Com elas,
+nenhum nome de job passa de duas linhas. Ganham "…" só:
+
+- as duas marcas e os dois clientes que são razão social inteira;
+- os dois responsáveis com nome mais longo.
+
+**Conferido logado, em 05/10/2026, numa janela de 1838 px** (a do Tiago,
+com zoom de 80%):
+
+- "Meus" (11 jobs): a tabela ocupa exatamente os 1614 px, sem rolagem, e
+  todas as linhas têm uma linha só.
+- "Todos" (35 jobs): a mesma largura, sem rolagem. 18 linhas têm uma
+  linha e 17 têm duas. Nove células ganharam "…", três em cada uma de
+  Marca, Cliente e Responsável. O cartão mostra o texto inteiro.
+- Clicar no nome continua abrindo o job.
+
+Código:
+
+- `components/ui/truncate-tooltip.tsx` ganhou a prop `linhas`
+  (`line-clamp` + `break-words`). O cartão abre quando
+  `scrollHeight > clientHeight`. Sem a prop, o componente continua como
+  antes, numa linha só.
+- `app/(app)/jobs/jobs-list.tsx`: `ColunasDaLista`, `TOTAL_DE_COLUNAS`
+  para o `colSpan` da faixa, e as quatro células com `linhas={2}`.
+
+`JobRow` não mudou: `projeto_codigo` e `projeto_nome` continuam
+alimentando a faixa do grupo.

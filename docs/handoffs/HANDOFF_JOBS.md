@@ -4693,3 +4693,20 @@ código publicado logo depois (`3305751`).
   Equipe. Ver a nota de 03/10/2026 na decisão 036.
 - `/jobs`: freelancer sem Equipe vê "Nenhum job nos projetos da sua
   equipe" no lugar de "Nenhum job criado ainda".
+
+## ⚠️ Nota de 2026-10-05 (2) — lista de jobs sem a coluna Projeto, em grade fixa e com teto de duas linhas (decisão 036)
+
+- Em "Todos", os textos longos de Marca, Cliente e Responsável (razão
+  social inteira, nome completo) alargavam as colunas. A tabela ia a
+  ~2200 px, e Início, Valor total e Status saíam da tela.
+- A coluna **Projeto saiu**, porque já está na faixa do grupo. O
+  **Cliente ficou**. A faixa agora cobre 11 colunas.
+- **Grade fixa** (`table-fixed` + `colgroup` em `ColunasDaLista`). O Nome
+  fica com ~272 px, e a largura mínima é 1500 px.
+- Nome, Marca, Cliente e Responsável quebram **até duas linhas**. O resto
+  vira "…", com o texto inteiro ao passar o mouse (`TruncateTooltip` com
+  `linhas={2}`).
+- O código do job não quebra mais no hífen.
+- Conferido logado em 1838 px: "Meus" e "Todos" sem rolagem horizontal, e
+  nenhuma linha com mais de duas linhas. Números e larguras na nota de
+  05/10/2026 da decisão 036.
