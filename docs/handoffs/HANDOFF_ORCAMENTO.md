@@ -5067,3 +5067,12 @@ aplicada na hora combinada com a frente do Antonio, junto da
   (-20). Pelo console, reenviar o A como novo com a mesma chave e sem
   chave: as duas recusas, nada gravado. Os dois ZZ ficaram no projeto de
   teste.
+- **Limpeza do AMB-P017/26** (migration 20261006600002, pedida pelo Tiago
+  em 06/10/2026 e aplicada depois de a correção estar publicada, por causa
+  do código maior + 1). Saíram as 36 cópias; ficou o primeiro de cada um
+  — o que nasceu com a importação da planilha —: -02 TRIAL, -04/-07/-11
+  AFTER DIA 01/02/03, -16 VERBA, -22/-29 GS DIA 1/2, -37 LOGÍSTICA e -46
+  INGRESSOS, além do -01 FRETE (aprovado). A migration só agia se cada
+  cópia ainda fosse rascunho intocado, sem job, BV, save, realizado ou
+  importação, e com conteúdo igual ao do original. A auditoria de criação
+  ficou; a limpeza está em `orcamento.copias_apagadas`, com a lista.
