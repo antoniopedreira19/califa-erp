@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { HeartPulse, Smile, Users2 } from "lucide-react";
+import { HeartPulse, Smile, Users2, UserRound } from "lucide-react";
 import type { LinhaColaboradorBeneficios } from "@/lib/queries/beneficios";
 import type { BeneficioTipo } from "@/lib/types";
 import { DrawerColaboradorBeneficios } from "./drawer-colaborador";
@@ -65,6 +65,7 @@ export function TabelaColaboradores({
               <th className="px-4 py-3 text-left">Colaborador</th>
               <th className="px-4 py-3 text-left">Tipo</th>
               <th className="px-4 py-3 text-left">Planos ativos</th>
+              <th className="px-4 py-3 text-center">Deps</th>
               <th className="px-4 py-3 text-right">Custo empresa</th>
               <th className="px-4 py-3 text-right">Desconto folha</th>
             </tr>
@@ -89,6 +90,16 @@ export function TabelaColaboradores({
                         <ChipPlano key={p.beneficio_id} nome={p.nome} tipo={p.tipo} />
                       ))}
                     </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {l.qtde_dependentes > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-muted/40 px-2 py-0.5 text-xs font-medium tabular-nums text-foreground">
+                      <UserRound className="h-3 w-3" />
+                      {l.qtde_dependentes}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
