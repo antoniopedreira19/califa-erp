@@ -8,6 +8,7 @@ import type {
   AppRole,
 } from "@/lib/types";
 import { carregarAcessoColaborador } from "@/lib/auth/acesso-colaborador";
+import { resumoBeneficiosDoColaborador } from "@/lib/queries/beneficios";
 import { HeroPerfil } from "./hero-perfil";
 import { CardDadosPessoais } from "./card-dados-pessoais";
 import { CardDadosBancarios } from "./card-dados-bancarios";
@@ -85,11 +86,16 @@ export default async function PerfilPage() {
   const ehSocio = colab.tipo_contratacao === "socio";
   const service = createServiceClient();
 
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const mesAtual = hoje.getMonth() + 1;
+
   const [
     { data: periodosData },
     { data: lancamentosData },
     { data: alocacoesData },
     membershipRes,
+    resumoBeneficios,
   ] = await Promise.all([
     ehSocio
       ? Promise.resolve({ data: [] })
@@ -118,6 +124,14 @@ export default async function PerfilPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("user_id", session.profile.id)
       .maybeSingle(),
+    ehSocio
+      ? Promise.resolve(null)
+      : resumoBeneficiosDoColaborador({
+          tenantId: session.activeTenant.id,
+          colaboradorId: colab.id,
+          ano: anoAtual,
+          mes: mesAtual,
+        }),
   ]);
 
   const periodos = (periodosData ?? []) as ColaboradorFeriasPeriodo[];
@@ -201,7 +215,7 @@ export default async function PerfilPage() {
             area={colab.area}
             nivel={colab.nivel}
           />
-          <CardBeneficios />
+          <CardBeneficios resumo={resumoBeneficios} />
           <CardDocumentos />
         </div>
       </div>
