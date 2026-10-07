@@ -151,6 +151,16 @@ segurança; nenhum caminho da UI o produz mais.
 não tinha gate nenhum, então um orçamento fechado aceitava ganhar uma v+1
 pelo caminho da cópia. A trava passou a valer nas duas, no servidor.
 
+⚠️ **O aviso do orçamento aprovado (2026-10-07).** O orçamento **aprovado**
+(sem job) continua aceitando versão nova, e ela edita. O aviso de estado
+protegido dizia o contrário ("a criação de novas versões ficaram
+bloqueados"). Agora, quando ainda se pode criar versão, ele diz: "Os dados
+do orçamento e a versão aprovada ficaram bloqueados. Uma versão nova ainda
+pode ser criada e editada; para aprová-la, cancele antes a aprovação
+atual." Com job criado, ou para quem não edita, o texto antigo continua.
+A Mídia Off, que recusava a linha do orçamento aprovado, foi alinhada
+(revisão da 147, mesma data).
+
 ## 8. Server action que redireciona devolve `undefined`
 
 Achado durante a conferência, vale para todo o projeto: uma Server Action

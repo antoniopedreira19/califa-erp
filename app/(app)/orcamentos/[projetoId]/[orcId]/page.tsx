@@ -915,8 +915,12 @@ export default async function OrcamentoDetailPage({
           <p className="text-sm text-muted-foreground">
             Este orçamento está em estado protegido (
             <strong className="text-foreground">{orcamentoStatusLabel(orcamento.status)}</strong>
-            ). Os dados do orçamento e a criação de novas versões ficaram
-            bloqueados — as abas continuam abertas para consulta.
+            ).{" "}
+            {/* Aprovado ainda aceita versão nova, que edita (decisão 023 §7;
+                Tiago, 07/10/2026): o aviso não pode dizer o contrário. */}
+            {podeCriarVersao
+              ? "Os dados do orçamento e a versão aprovada ficaram bloqueados. Uma versão nova ainda pode ser criada e editada; para aprová-la, cancele antes a aprovação atual."
+              : "Os dados do orçamento e a criação de novas versões ficaram bloqueados — as abas continuam abertas para consulta."}
           </p>
         </div>
       )}
@@ -1433,7 +1437,11 @@ function VersaoSelecionada({
           veiculos={veiculos}
           params={paramsMidia}
           mesPedido={mesPedido}
-          readOnly={readOnly}
+          // A mesma trava das actions da Mídia Off: além da versão, o
+          // orçamento com job ou cancelado (o aprovado edita a versão nova).
+          readOnly={
+            readOnly || orcamento.status === "job_criado" || orcamento.status === "cancelado"
+          }
         />
       ) : planilha.modeloPlanilha === "mensal" ? (
         <PlanilhaMensal

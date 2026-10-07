@@ -61,6 +61,14 @@ Conferido no navegador em 06/10/2026, gravando no banco, no orçamento `TES-P001
 
 Abertura com a conta da mídia, PPs do repasse, AP e PI por veículo e mês, errata, cancelamento da veiculação, faturamento por mês e encerramento.
 
+## ⚠️ Revisão de 2026-10-07 — versão nova de orçamento aprovado edita
+
+**Quem decidiu:** Tiago, 07/10/2026 (opção "a"), ao ver o teste da decisão 150 recusado.
+
+- **Antes:** as actions da planilha (`midia/actions.ts`, `versaoEditavel`) recusavam a linha de orçamento **aprovado**, além do com job e do cancelado. As outras planilhas só olham a versão, e a decisão 023 §7 deixa criar versão em orçamento aprovado. Por isso a v3 rascunho, duplicada depois da aprovação da v2, aparecia editável e toda gravação voltava "Orçamento aprovado, com job ou cancelado não aceita alteração nas linhas.".
+- **Agora:** versão nova (rascunho) de orçamento aprovado edita, como nas outras planilhas. Continuam travados a versão aprovada ou cancelada e o orçamento com job ou cancelado ("Orçamento com job ou cancelado não aceita alteração nas linhas."). A tela segue a mesma trava: a planilha de Mídia Off fica só leitura no orçamento com job ou cancelado. Para aprovar a versão nova, antes se cancela a aprovação atual (a aprovação de orçamento já aprovado continua recusada).
+- O banco não barrava nada disso (o gatilho `guarda_orcamento_so_leitura` só trava o arquivado, e as funções `midia_*` não olham o status). Nenhuma migration.
+
 ## Para conferir depois
 
 - ⚠️ O unitário negociado é gravado com 2 casas (`numeric(14,2)`). Nos exemplos de referência, só uma linha tinha mais casas, e o valor do job mudou R$ 0,10 (Zé Delivery). Se os PMs digitarem negociado com mais casas, ampliar a coluna é mudança de tipo — pedir antes.

@@ -5365,3 +5365,24 @@ aplicada na hora combinada com a frente do Antonio, junto da
   - o texto do "Total gerado em save" passou a "Fica disponível para outros jobs quando o financeiro abrir o job.".
 - **Pop-up de save da linha, no job ainda não aberto:** "O financeiro aprova junto com a abertura do job.".
 - **O resto da decisão** (as caixas na abertura e os pedidos aprovados no "abrir") está no `HANDOFF_FINANCEIRO`, nota de 2026-10-07 (3).
+
+## ⚠️ Nota de 2026-10-07 (9) — Mídia Off: versão nova de orçamento aprovado edita (revisão da 147)
+
+- **Antes:** a planilha de Mídia Off recusava no servidor qualquer linha de
+  orçamento aprovado, mas a tela deixava editar a versão nova (rascunho)
+  criada depois da aprovação. Toda gravação voltava "Orçamento aprovado,
+  com job ou cancelado não aceita alteração nas linhas.". Achado no teste
+  da decisão 150, na v3 do `TES-P001/26-21`.
+- **Agora** (Tiago, opção "a"): igual às outras planilhas e à decisão 023
+  §7. A versão nova de orçamento aprovado edita; travam a versão aprovada
+  ou cancelada e o orçamento com job ou cancelado, na action
+  (`midia/actions.ts`) e na tela (`readOnly` da `PlanilhaMidiaOff`).
+- **O aviso de estado protegido** do orçamento aprovado deixou de dizer
+  que versões novas estão bloqueadas: "Os dados do orçamento e a versão
+  aprovada ficaram bloqueados. Uma versão nova ainda pode ser criada e
+  editada; para aprová-la, cancele antes a aprovação atual." (com job, ou
+  para quem não edita, o texto antigo continua).
+- Conferido no navegador: na v3, o "Usar este cadastro" do pop-up gravou o
+  veículo na linha, e o veículo subiu para "Já usados em TV Fechada";
+  linha devolvida ao Fornecedor Teste e veículo de teste inativado depois.
+  A v2 aprovada segue só leitura.
