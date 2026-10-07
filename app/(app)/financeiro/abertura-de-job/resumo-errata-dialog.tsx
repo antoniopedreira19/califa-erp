@@ -83,16 +83,22 @@ function Par({
   );
 }
 
-/** "1 alterada · 2 novas · 0 removidas". */
+/** "1 alterada · 2 novas · 0 canceladas". A remoção só aparece quando
+ *  houver: desde a decisão 151 a errata cancela a linha, e "removida" ficou
+ *  para o histórico. */
 function linhasAfetadas(l: {
   linhasAlteradas: number;
   linhasNovas: number;
   linhasRemovidas: number;
+  linhasCanceladas: number;
 }): string {
   return (
     `${l.linhasAlteradas} alterada${l.linhasAlteradas === 1 ? "" : "s"} · ` +
     `${l.linhasNovas} nova${l.linhasNovas === 1 ? "" : "s"} · ` +
-    `${l.linhasRemovidas} removida${l.linhasRemovidas === 1 ? "" : "s"}`
+    `${l.linhasCanceladas} cancelada${l.linhasCanceladas === 1 ? "" : "s"}` +
+    (l.linhasRemovidas > 0
+      ? ` · ${l.linhasRemovidas} removida${l.linhasRemovidas === 1 ? "" : "s"}`
+      : "")
   );
 }
 

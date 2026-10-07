@@ -16,13 +16,19 @@
  *
  * O texto digitado é guardado como TEXTO, não como número. Guardar número
  * faz "1," virar 1 e o cursor pular para trás no meio da digitação.
+ *
+ * Desde 07/10/2026 (decisão 151) a errata não mexe no PLANEJADO: ele é o da
+ * abertura do job. A linha nova entra com o planejado zerado, a existente
+ * guarda o dela, e a linha "removida" passa a ser CANCELADA — fica na
+ * planilha com o orçado zerado e o planejado intacto.
  */
 
 import * as React from "react";
 import type { ItemPlanilhaJob, TipoCusto } from "@/lib/types";
 
-/** Campos que a errata abre para edição: os três do bloco Orçado e, desde
- *  07/09/2026 (decisão 054), os três do bloco Planejado. */
+/** Campos das células da errata. Os três do bloco Planejado continuam aqui
+ *  porque a tabela desenha as células dele pelo mesmo caminho, mas desde a
+ *  decisão 151 nenhuma delas abre. */
 export type CampoErrata =
   | "unitario"
   | "quantidade"
@@ -31,18 +37,12 @@ export type CampoErrata =
   | "planQuantidade"
   | "planDiasMeses";
 
-export const CAMPOS_ORCADO: readonly CampoErrata[] = [
-  "unitario",
-  "quantidade",
-  "diasMeses",
-];
-
 export interface EdicaoLinha {
   unitario: string;
   quantidade: string;
   diasMeses: string;
-  /** O PLANEJADO da linha. Só vale quando `planejadoLiberado` — fora
-   *  disso a linha fica com o planejado salvo, e o texto aqui é ignorado. */
+  /** O PLANEJADO da linha. Só leitura desde a decisão 151: a errata não
+   *  muda o planejado, e o texto aqui é ignorado. */
   planUnitario: string;
   planQuantidade: string;
   planDiasMeses: string;
@@ -61,15 +61,15 @@ export interface LinhaNovaRascunho extends EdicaoLinha {
 /** Uma linha que a errata mexeu, como o pop-up de confirmação a mostra. */
 export interface MudancaErrata {
   chave: string;
-  acao: "alterada" | "nova" | "removida";
+  /** `cancelada` desde a decisão 151: a linha fica com o orçado zerado. */
+  acao: "alterada" | "nova" | "cancelada";
   vermelha: boolean;
   item: string;
   totalDe: number;
   totalPara: number;
   delta: number;
-  /** Total PLANEJADO da linha, antes e depois. O pop-up mostra o par
-   *  quando ele difere — a errata passou a mexer no planejado em
-   *  07/09/2026 (decisão 054). */
+  /** Total PLANEJADO da linha, antes e depois. Iguais desde a decisão
+   *  150 (a errata não muda o planejado); ficam para o histórico. */
   planejadoDe: number;
   planejadoPara: number;
 }
@@ -105,28 +105,12 @@ function edicaoDoItem(i: ItemPlanilhaJob): EdicaoLinha {
   };
 }
 
-/** O orçado digitado difere do que está salvo? É a chave da regra do
- *  planejado (decisão 054): sem mudança no orçado, o planejado não abre. */
-function orcadoDifere(e: EdicaoLinha, salvo: ItemPlanilhaJob): boolean {
-  return (
-    numeroDe(e.unitario, 0) !== Number(salvo.valor_unitario_orcado ?? 0) ||
-    numeroDe(e.quantidade, 0) !== Number(salvo.quantidade_orcada ?? 0) ||
-    numeroDe(e.diasMeses, 0) !== Number(salvo.dias_meses_orcado ?? 0)
-  );
-}
-
-/** Devolve o texto do planejado ao valor salvo. Usado quando o orçado da
- *  linha volta ao original: o planejado que tinha sido digitado perde a
- *  razão de existir, e deixá-lo guardado faria ele reaparecer do nada na
- *  próxima correção do orçado. */
-function planejadoSalvo(e: EdicaoLinha, salvo: ItemPlanilhaJob): EdicaoLinha {
-  return {
-    ...e,
-    planUnitario: paraEdicao(Number(salvo.valor_unitario_planejado ?? 0)),
-    planQuantidade: paraEdicao(Number(salvo.quantidade_planejada ?? 0)),
-    planDiasMeses: paraEdicao(Number(salvo.dias_meses_planejado ?? 0)),
-  };
-}
+/** Por que o planejado não abre na linha nova (decisão 151). */
+const MOTIVO_PLANEJADO_DA_NOVA =
+  "Item novo da errata entra com o planejado zerado: o planejado do job é o da abertura.";
+/** Por que o planejado não abre na linha que já existia (decisão 151). */
+const MOTIVO_PLANEJADO_DA_ABERTURA =
+  "O planejado é o da abertura do job: a errata corrige só o orçado.";
 
 export interface RascunhoErrata {
   ativo: boolean;
@@ -137,17 +121,15 @@ export interface RascunhoErrata {
   /** Sai do modo errata e joga fora tudo que foi digitado. */
   descartar: () => void;
   /** Volta um passo do rascunho. Cada ação estrutural (linha nova, linha
-   *  removida, troca de tipo) é um passo; a digitação num mesmo campo é
+   *  cancelada, troca de tipo) é um passo; a digitação num mesmo campo é
    *  um passo só, e não um por tecla. */
   desfazer: () => void;
   /** Há passo para voltar — o botão e o atalho ficam desligados sem isto. */
   podeDesfazer: boolean;
   edicaoDe: (chave: string) => EdicaoLinha | undefined;
-  /** O PLANEJADO desta linha aceita digitação? Regra do Tiago (07/09/2026,
-   *  decisão 054): só quando o ORÇADO dela também mudou — linha nova, ou
-   *  linha existente com R$ Unit., QT ou D/M do orçado diferentes do
-   *  salvo. Nunca em linha vermelha, em save, nem em `A`/`D`, onde o
-   *  planejado espelha o orçado por trigger. */
+  /** O PLANEJADO desta linha aceita digitação? Nunca, desde a decisão 151
+   *  (07/10/2026): o planejado do job é o da abertura. Fica na interface
+   *  porque a tabela e a edição do financeiro perguntam por ele. */
   planejadoLiberado: (chave: string) => boolean;
   /** Por que o planejado NÃO abre — o `title` da célula. `null` quando ele
    *  abre, ou quando a célula nem mostra número (linha vermelha). */
@@ -158,7 +140,13 @@ export interface RascunhoErrata {
   /** Devolve a chave da linha nova (`nova:N`), para a tela selecioná-la
    *  e abrir a descrição na hora. */
   adicionar: (grupoId: string, vermelha: boolean) => string;
+  /** Linha nova desta errata: sai do rascunho. Linha que já existia: é
+   *  CANCELADA (decisão 151) — fica com o orçado zerado e o planejado. */
   remover: (chave: string) => void;
+  /** Desfaz o cancelamento feito NESTA errata. */
+  reativar: (chave: string) => void;
+  /** A linha está cancelada neste rascunho (ainda não gravada). */
+  estaCancelada: (chave: string) => boolean;
   /** É uma linha criada agora, ainda sem id no banco. */
   ehNova: (chave: string) => boolean;
   /** A planilha como ela ficaria se a errata fosse confirmada agora. */
@@ -193,7 +181,8 @@ export interface RascunhoErrata {
       quantidade_planejada: number;
       dias_meses_planejado: number;
     }>;
-    remocoes: string[];
+    /** Linhas que a errata cancela (decisão 151). */
+    cancelamentos: string[];
   };
 }
 
@@ -206,7 +195,8 @@ export function useRascunhoErrata(
   const [ativo, setAtivo] = React.useState(false);
   const [edicoes, setEdicoes] = React.useState<Record<string, EdicaoLinha>>({});
   const [novas, setNovas] = React.useState<LinhaNovaRascunho[]>([]);
-  const [removidas, setRemovidas] = React.useState<string[]>([]);
+  // Linhas que já existiam e que esta errata cancela (decisão 151).
+  const [canceladas, setCanceladas] = React.useState<string[]>([]);
   // ⚠️ Ref, e não state. A chave da linha nova só precisa ser única — ela
   // não é lida na renderização, é gravada dentro da própria linha. Como
   // state ela virou bug: `setNovas` era chamado DENTRO do updater de
@@ -223,18 +213,18 @@ export function useRascunhoErrata(
   // Sem isso o Cmd+Z voltaria uma tecla por vez, e o que o usuário quer
   // desfazer é "a alteração daquela célula", não "o último caractere".
   const [historico, setHistorico] = React.useState<
-    { edicoes: Record<string, EdicaoLinha>; novas: LinhaNovaRascunho[]; removidas: string[] }[]
+    { edicoes: Record<string, EdicaoLinha>; novas: LinhaNovaRascunho[]; canceladas: string[] }[]
   >([]);
   const alvoRef = React.useRef<string | null>(null);
-  const atualRef = React.useRef({ edicoes, novas, removidas });
-  atualRef.current = { edicoes, novas, removidas };
+  const atualRef = React.useRef({ edicoes, novas, canceladas });
+  atualRef.current = { edicoes, novas, canceladas };
 
   const fotografar = React.useCallback((alvo: string | null) => {
     // `alvo` null = ação estrutural, sempre vira passo.
     if (alvo !== null && alvo === alvoRef.current) return;
     alvoRef.current = alvo;
-    const { edicoes: e, novas: n, removidas: r } = atualRef.current;
-    setHistorico((h) => [...h.slice(-19), { edicoes: { ...e }, novas: [...n], removidas: [...r] }]);
+    const { edicoes: e, novas: n, canceladas: c } = atualRef.current;
+    setHistorico((h) => [...h.slice(-19), { edicoes: { ...e }, novas: [...n], canceladas: [...c] }]);
   }, []);
 
   const desfazer = React.useCallback(() => {
@@ -243,7 +233,7 @@ export function useRascunhoErrata(
       const anterior = h[h.length - 1];
       setEdicoes(anterior.edicoes);
       setNovas(anterior.novas);
-      setRemovidas(anterior.removidas);
+      setCanceladas(anterior.canceladas);
       // O próximo caractere digitado volta a valer como passo novo.
       alvoRef.current = null;
       return h.slice(0, -1);
@@ -253,7 +243,7 @@ export function useRascunhoErrata(
   const zerar = React.useCallback(() => {
     setEdicoes({});
     setNovas([]);
-    setRemovidas([]);
+    setCanceladas([]);
     setHistorico([]);
     alvoRef.current = null;
     seqRef.current = 0;
@@ -266,7 +256,7 @@ export function useRascunhoErrata(
     for (const i of itensSalvos) inicial[i.id] = edicaoDoItem(i);
     setEdicoes(inicial);
     setNovas([]);
-    setRemovidas([]);
+    setCanceladas([]);
     setHistorico([]);
     alvoRef.current = null;
     seqRef.current = 0;
@@ -289,20 +279,11 @@ export function useRascunhoErrata(
       setNovas((lista) =>
         lista.map((n) => (n.chave === chave ? { ...n, [campo]: valor } : n)),
       );
-      setEdicoes((mapa) => {
-        if (!mapa[chave]) return mapa;
-        let proxima: EdicaoLinha = { ...mapa[chave], [campo]: valor };
-        // Orçado de volta ao salvo ⇒ o planejado digitado cai junto. É a
-        // regra da decisão 054 aplicada no sentido inverso: sem mudança
-        // no orçado não há mudança no planejado.
-        const salvo = salvosPorId.get(chave);
-        if (salvo && CAMPOS_ORCADO.includes(campo) && !orcadoDifere(proxima, salvo)) {
-          proxima = planejadoSalvo(proxima, salvo);
-        }
-        return { ...mapa, [chave]: proxima };
-      });
+      setEdicoes((mapa) =>
+        mapa[chave] ? { ...mapa, [chave]: { ...mapa[chave], [campo]: valor } } : mapa,
+      );
     },
-    [fotografar, salvosPorId],
+    [fotografar],
   );
 
   const editarTipo = React.useCallback((chave: string, tipo: TipoCusto) => {
@@ -357,10 +338,21 @@ export function useRascunhoErrata(
       setNovas((lista) => lista.filter((n) => n.chave !== chave));
       return;
     }
-    setRemovidas((lista) =>
+    // Linha que já existia não sai da planilha: é cancelada (decisão 151).
+    setCanceladas((lista) =>
       lista.includes(chave) ? lista : [...lista, chave],
     );
   }, [fotografar]);
+
+  const reativar = React.useCallback((chave: string) => {
+    fotografar(null);
+    setCanceladas((lista) => lista.filter((c) => c !== chave));
+  }, [fotografar]);
+
+  const estaCancelada = React.useCallback(
+    (chave: string) => canceladas.includes(chave),
+    [canceladas],
+  );
 
   const edicaoDe = React.useCallback(
     (chave: string): EdicaoLinha | undefined => {
@@ -376,43 +368,43 @@ export function useRascunhoErrata(
     [],
   );
 
-  /** A regra do planejado num lugar só — a tabela e a conta dos itens
-   *  leem daqui. Devolve o motivo da trava, ou null quando ele abre. */
+  /** Por que o planejado da linha não abre — o `title` da célula. Desde a
+   *  decisão 151 (07/10/2026) ele nunca abre na errata: o planejado do job
+   *  é o da abertura. `null` só na linha vermelha, que nem mostra número. */
   const travaDoPlanejado = React.useCallback(
     (chave: string): string | null => {
       if (interno) return "No serviço Interno o planejado é igual ao orçado.";
       const nova = novas.find((n) => n.chave === chave);
-      if (nova) return null;
+      if (nova) return nova.vermelha ? null : MOTIVO_PLANEJADO_DA_NOVA;
       const salvo = salvosPorId.get(chave);
-      const e = edicoes[chave];
-      if (!salvo || !e) return "Linha fora da errata.";
+      if (!salvo) return "Linha fora da errata.";
       if (salvo.linha_vermelha) return null;
       if (salvo.em_save) return "Linha em save não tem planejado.";
-      if (!orcadoDifere(e, salvo)) {
-        return "O planejado só abre depois de corrigir o orçado desta linha.";
-      }
-      return null;
+      return MOTIVO_PLANEJADO_DA_ABERTURA;
     },
-    [novas, salvosPorId, edicoes, interno],
+    [novas, salvosPorId, interno],
   );
 
-  const planejadoLiberado = React.useCallback(
-    (chave: string): boolean => {
-      if (travaDoPlanejado(chave) !== null) return false;
-      const nova = novas.find((n) => n.chave === chave);
-      if (nova) return !nova.vermelha;
-      return !salvosPorId.get(chave)?.linha_vermelha;
-    },
-    [travaDoPlanejado, novas, salvosPorId],
-  );
+  const planejadoLiberado = React.useCallback((_chave: string) => false, []);
 
   /** A planilha como ela ficaria depois de confirmar. */
   const itens = React.useMemo<ItemPlanilhaJob[]>(() => {
     if (!ativo) return itensSalvos;
 
+    // O instante do cancelamento no rascunho: a tabela só precisa saber
+    // que a linha está cancelada; a data de verdade é a do banco.
+    const agora = new Date().toISOString();
     const vivos = itensSalvos
-      .filter((i) => !removidas.includes(i.id))
+      .map((i): ItemPlanilhaJob =>
+        canceladas.includes(i.id)
+          ? // Cancelada nesta errata (decisão 151): orçado zerado, planejado
+            // intacto — o mesmo que `registrar_errata_do_job` vai gravar.
+            { ...i, valor_unitario_orcado: 0, total_orcado: 0, cancelada_em: agora }
+          : i,
+      )
       .map((i) => {
+        // Linha cancelada (agora ou numa errata anterior) não se corrige.
+        if (i.cancelada_em) return i;
         const e = edicoes[i.id];
         if (!e) return i;
         // Linha vermelha já gravada não tem orçado para mexer.
@@ -420,24 +412,16 @@ export function useRascunhoErrata(
         const unit = numeroDe(e.unitario, 0);
         const qtd = numeroDe(e.quantidade, 0);
         const dm = numeroDe(e.diasMeses, 0);
-        // O planejado segue a mesma regra que o banco vai aplicar:
-        // liberado, é o que foi digitado; nos demais casos fica como está
-        // salvo. O espelho de `A`/`D` saiu em 08/09/2026 (decisão 062).
+        // A errata não muda o planejado (decisão 151): fica o salvo. No
+        // Interno ele acompanha o orçado, como o trigger do banco grava
+        // (decisão 105).
         const plan = interno
           ? { u: unit, q: qtd, d: dm }
-          : i.em_save
-          ? { u: 0, q: 0, d: 0 }
-          : travaDoPlanejado(i.id) === null
-              ? {
-                  u: numeroDe(e.planUnitario, 0),
-                  q: numeroDe(e.planQuantidade, 0),
-                  d: numeroDe(e.planDiasMeses, 0),
-                }
-              : {
-                  u: Number(i.valor_unitario_planejado ?? 0),
-                  q: Number(i.quantidade_planejada ?? 0),
-                  d: Number(i.dias_meses_planejado ?? 0),
-                };
+          : {
+              u: Number(i.valor_unitario_planejado ?? 0),
+              q: Number(i.quantidade_planejada ?? 0),
+              d: Number(i.dias_meses_planejado ?? 0),
+            };
         return {
           ...i,
           tipo_custo: e.tipo,
@@ -456,18 +440,15 @@ export function useRascunhoErrata(
       const unit = n.vermelha ? 0 : numeroDe(n.unitario, 0);
       const qtd = n.vermelha ? 1 : numeroDe(n.quantidade, 0);
       const dm = n.vermelha ? 1 : numeroDe(n.diasMeses, 0);
-      // A linha nova tem orçado novo por definição, então o planejado dela
-      // abre junto (decisão 054). Só a vermelha fica zerada — o espelho de
-      // `A`/`D` saiu em 08/09/2026 (decisão 062).
+      // A linha nova entra com o planejado ZERADO (decisão 151): o
+      // planejado do job é o da abertura. QT e D/M em 1, como a linha
+      // nasce no rascunho; a vermelha fica toda em zero, e no Interno o
+      // planejado acompanha o orçado (decisão 105).
       const plan = n.vermelha
         ? { u: 0, q: 0, d: 0 }
         : interno
           ? { u: unit, q: qtd, d: dm }
-          : {
-            u: numeroDe(n.planUnitario, 0),
-            q: numeroDe(n.planQuantidade, 0),
-            d: numeroDe(n.planDiasMeses, 0),
-          };
+          : { u: 0, q: 1, d: 1 };
       return {
         id: n.chave,
         orcado_id: n.chave,
@@ -491,11 +472,12 @@ export function useRascunhoErrata(
         bv_liquido_planejado: null,
         em_save: false,
         save_consumido: 0,
+        cancelada_em: null,
       };
     });
 
     return [...vivos, ...criadas];
-  }, [ativo, itensSalvos, edicoes, novas, removidas, travaDoPlanejado, interno]);
+  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno]);
 
   const mudancas = React.useMemo<MudancaErrata[]>(() => {
     if (!ativo) return [];
@@ -503,6 +485,9 @@ export function useRascunhoErrata(
     const porId = new Map(itensSalvos.map((i) => [i.id, i]));
 
     for (const i of itens) {
+      // A cancelada entra pelo laço de baixo; a que já estava cancelada
+      // não muda.
+      if (i.cancelada_em) continue;
       const base = porId.get(i.id);
       if (!base) {
         const total = Number(i.total_orcado ?? 0);
@@ -524,10 +509,9 @@ export function useRascunhoErrata(
       const planDe = Number(base.total_planejado ?? 0);
       const planPara = Number(i.total_planejado ?? 0);
       // O tipo de custo muda o faturamento sem mexer no total orçado — por
-      // isso ele conta como mudança mesmo com os dois totais iguais. O
-      // planejado sozinho não muda nada aqui: ele só abre com o orçado
-      // alterado (decisão 054), e QT × D/M trocados com o mesmo total
-      // orçado já são mudança de unitário, QT ou D/M.
+      // isso ele conta como mudança mesmo com os dois totais iguais. QT ×
+      // D/M trocados com o mesmo total orçado já são mudança de unitário,
+      // QT ou D/M. O planejado não entra: a errata não o muda (decisão 151).
       const orcadoMudou =
         Number(base.valor_unitario_orcado ?? 0) !== Number(i.valor_unitario_orcado ?? 0) ||
         Number(base.quantidade_orcada ?? 0) !== Number(i.quantidade_orcada ?? 0) ||
@@ -546,25 +530,27 @@ export function useRascunhoErrata(
       });
     }
 
-    for (const id of removidas) {
+    for (const id of canceladas) {
       const base = porId.get(id);
       if (!base) continue;
       const de = Number(base.total_orcado ?? 0);
+      // O orçado vai a zero; o planejado fica (decisão 151).
+      const plan = Number(base.total_planejado ?? 0);
       lista.push({
         chave: id,
-        acao: "removida",
+        acao: "cancelada",
         vermelha: base.linha_vermelha,
         item: base.item,
         totalDe: de,
         totalPara: 0,
         delta: -de,
-        planejadoDe: Number(base.total_planejado ?? 0),
-        planejadoPara: 0,
+        planejadoDe: plan,
+        planejadoPara: plan,
       });
     }
 
     return lista;
-  }, [ativo, itens, itensSalvos, removidas]);
+  }, [ativo, itens, itensSalvos, canceladas]);
 
   const resumo = React.useMemo(() => {
     const conta = (a: MudancaErrata["acao"]) =>
@@ -572,10 +558,10 @@ export function useRascunhoErrata(
     const partes: string[] = [];
     const alt = conta("alterada");
     const nov = conta("nova");
-    const rem = conta("removida");
+    const can = conta("cancelada");
     if (alt) partes.push(`${alt} ${alt === 1 ? "linha alterada" : "linhas alteradas"}`);
     if (nov) partes.push(`${nov} ${nov === 1 ? "linha nova" : "linhas novas"}`);
-    if (rem) partes.push(`${rem} ${rem === 1 ? "linha removida" : "linhas removidas"}`);
+    if (can) partes.push(`${can} ${can === 1 ? "linha cancelada" : "linhas canceladas"}`);
     return partes.length > 0 ? partes.join(" · ") : "nenhuma alteração ainda";
   }, [mudancas]);
 
@@ -586,6 +572,8 @@ export function useRascunhoErrata(
       const porId = new Map(itensSalvos.map((i) => [i.id, i]));
       const alteracoes = itens
         .filter((i) => porId.has(i.id))
+        // A cancelada vai em `cancelamentos`, não como correção.
+        .filter((i) => !i.cancelada_em)
         .filter((i) => {
           const base = porId.get(i.id)!;
           return (
@@ -601,8 +589,8 @@ export function useRascunhoErrata(
           quantidade: Number(i.quantidade_orcada ?? 0),
           dias_meses: Number(i.dias_meses_orcado ?? 0),
           tipo_custo: i.tipo_custo,
-          // Já passou pela regra da 054 em `itens`: é o digitado quando o
-          // planejado abriu, e o salvo quando não abriu.
+          // É o planejado salvo: a errata não o muda (decisão 151). O
+          // servidor confere de novo e grava o do banco.
           valor_unitario_planejado: Number(i.valor_unitario_planejado ?? 0),
           quantidade_planejada: Number(i.quantidade_planejada ?? 0),
           dias_meses_planejado: Number(i.dias_meses_planejado ?? 0),
@@ -630,10 +618,10 @@ export function useRascunhoErrata(
             dias_meses_planejado: Number(criada?.dias_meses_planejado ?? 0),
           };
         }),
-        remocoes: removidas,
+        cancelamentos: canceladas,
       };
     },
-    [itens, itensSalvos, novas, removidas],
+    [itens, itensSalvos, novas, canceladas],
   );
 
   return {
@@ -651,6 +639,8 @@ export function useRascunhoErrata(
     editarNome,
     adicionar,
     remover,
+    reativar,
+    estaCancelada,
     ehNova,
     itens,
     mudancas,

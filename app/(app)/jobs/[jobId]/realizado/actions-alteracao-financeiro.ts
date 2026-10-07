@@ -6,7 +6,7 @@
  * Irmã de `registrarErrata`, com as respostas do Tiago de 28/09/2026:
  *
  * - **Só os valores** do orçado — R$ unitário, QT e D/M (P1). Tipo de custo,
- *   linha nova, linha removida, linha vermelha e planejado continuam sendo
+ *   linha nova, linha cancelada, linha vermelha e planejado continuam sendo
  *   da errata da produção.
  * - **Linha com PP já no financeiro é editável** (P2), ao contrário da
  *   errata (decisão 040). Linha com save não: o save tem porta própria, e o
@@ -197,7 +197,7 @@ export async function registrarAlteracaoDoFinanceiro(
     supabase
       .from("jobs_itens_orcado")
       .select(
-        "id, item, grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, em_save, save_consumido",
+        "id, item, grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, em_save, save_consumido, cancelada_em",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
@@ -348,6 +348,13 @@ export async function registrarAlteracaoDoFinanceiro(
     const dmDe = Number(atual.dias_meses_orcado ?? 0);
     if (l.valor_unitario === unitDe && l.quantidade === qtdDe && l.dias_meses === dmDe) {
       continue;
+    }
+    // Linha cancelada por errata (decisão 151): o orçado dela fica zerado.
+    if (atual.cancelada_em) {
+      return {
+        ok: false,
+        message: `"${atual.item}" foi cancelada por errata: o orçado dela fica zerado.`,
+      };
     }
     if (atual.linha_vermelha === true) {
       return {

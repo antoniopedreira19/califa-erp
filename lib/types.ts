@@ -2046,6 +2046,13 @@ export interface ItemPlanilhaJob {
    *  do FATURAMENTO — já foi faturado lá — e fica na do VALOR DO JOB.
    *  Mantida por trigger a partir de `saves_consumos`; não escrever à mão. */
   save_consumido: number;
+  /** Linha CANCELADA por errata (decisão 151, 07/10/2026). A errata não
+   *  apaga mais linha: ela fica na planilha com o orçado zerado, e o
+   *  planejado da abertura continua contando. Não recebe PP nem BV, e as
+   *  PPs dela ficam dadas por concluídas. `null` na linha viva.
+   *  Obrigatório: quem monta a linha diz explicitamente que ela não está
+   *  cancelada. */
+  cancelada_em: string | null;
 }
 
 /** O planejado da linha antes de ela virar save (decisão 099). */
@@ -2138,8 +2145,10 @@ export interface JobErrata {
   created_at: string;
 }
 
-/** O que a errata fez com a linha. */
-export type ErrataAcao = "alterada" | "nova" | "removida";
+/** O que a errata fez com a linha. `removida` só existe no histórico:
+ *  desde a decisão 151 (07/10/2026) a errata CANCELA a linha em vez de
+ *  apagá-la. */
+export type ErrataAcao = "alterada" | "nova" | "removida" | "cancelada";
 
 export function errataAcaoLabel(a: ErrataAcao): string {
   switch (a) {
@@ -2147,6 +2156,8 @@ export function errataAcaoLabel(a: ErrataAcao): string {
       return "Nova";
     case "removida":
       return "Removida";
+    case "cancelada":
+      return "Cancelada";
     default:
       return "Alterada";
   }

@@ -117,7 +117,9 @@ export function itemInternoDoJob(item: ItemDoJob, jobAberto: boolean): ItemInter
 
   return {
     id: item.id,
-    item: item.item,
+    // A linha cancelada por errata (decisão 151) continua na planilha, com
+    // o orçado zerado: o nome diz por que ela não soma no orçado.
+    item: item.cancelada_em ? `${item.item} (cancelada)` : item.item,
     tipo_custo: item.tipo_custo,
     valor_unitario_orcado: item.valor_unitario_orcado,
     quantidade_orcada: item.quantidade_orcada,

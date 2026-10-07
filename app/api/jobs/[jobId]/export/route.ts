@@ -92,7 +92,7 @@ export async function GET(
           "id, grupo_id, ordem, item, tipo_custo, linha_vermelha, " +
             "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
             "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
-            "em_save, save_consumido",
+            "em_save, save_consumido, cancelada_em",
         )
         .eq("job_id", params.jobId)
         .eq("tenant_id", tenantId)
@@ -198,6 +198,7 @@ export async function GET(
       bv_liquido_planejado: null,
       em_save: it.em_save === true,
       save_consumido: Number(it.save_consumido ?? 0),
+      cancelada_em: it.cancelada_em ?? null,
       somaDasPPs: Number(realizado?.total_realizado ?? 0),
       pps: ppsPorItem.get(it.id) ?? [],
       bvs: bvsPorItem.get(it.id) ?? [],

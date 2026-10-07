@@ -409,7 +409,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const buscaOrcado = supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, item, total_orcado, total_planejado, quantidade_orcada, linha_vermelha, tipo_custo, em_save",
+      "id, item, total_orcado, total_planejado, quantidade_orcada, linha_vermelha, tipo_custo, em_save, cancelada_em",
     )
     .eq("tenant_id", session.activeTenant.id);
 
@@ -424,6 +424,15 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     return {
       ok: false,
       message: "Item não encontrado na planilha do job.",
+    };
+  }
+
+  // Linha cancelada por errata (decisão 151): saiu da conta do orçado e não
+  // recebe Pedido de Produção. A tela nem oferece; aqui é a trava de verdade.
+  if ((orcado as any).cancelada_em) {
+    return {
+      ok: false,
+      message: `"${(orcado as any).item ?? "A linha"}" foi cancelada por errata e não recebe Pedido de Produção.`,
     };
   }
 

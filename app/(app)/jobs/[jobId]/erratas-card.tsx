@@ -30,6 +30,13 @@ function comSinal(v: number, moeda: string): string {
 
 /** Classifica a mudança do item pro rótulo colorido, como no design. */
 function tagDaMudanca(i: JobErrataItem): { rotulo: string; classe: string } {
+  // Decisão 151: a linha cancelada fica na planilha com o orçado zerado.
+  if (i.acao === "cancelada") {
+    return {
+      rotulo: "Cancelada",
+      classe: "border-border bg-muted text-muted-foreground",
+    };
+  }
   const mudouTipo = i.tipo_custo_de !== i.tipo_custo_para;
   const mudouValor = i.valor_unitario_de !== i.valor_unitario_para;
   if (mudouTipo && !mudouValor) {
@@ -75,7 +82,7 @@ export function ErratasCard({
           Erratas
         </h2>
         <span className="text-[11.5px] text-muted-foreground">
-          Alterações de itens orçados, planejado e tipos de custo após a abertura do job
+          Alterações de itens orçados e tipos de custo após a abertura do job
         </span>
 
         {/* Sem errata não há "antes x depois" que faça sentido: mostra só o

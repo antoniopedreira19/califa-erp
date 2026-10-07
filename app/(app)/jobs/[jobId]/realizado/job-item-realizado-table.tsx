@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Lock, Plus, Trash2, X } from "lucide-react";
+import { Ban, ChevronDown, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -260,6 +260,12 @@ const ALTURA_LINHA = "h-[34px]";
 const MOTIVO_TRAVA_PP =
   "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
 
+/** Linha cancelada por errata (decisão 151): fica na planilha com o
+ *  orçado zerado e o planejado da abertura, e não entra mais em errata. É
+ *  o `title` do cadeado, do selo e da calha. */
+const MOTIVO_CANCELADA =
+  "Linha cancelada por errata: o orçado fica zerado e o planejado da abertura continua contando. Não recebe PP nem BV.";
+
 /** Por que a linha com save não entra na errata (decisão 099 §15): save
  *  gerado, consumo, pedido aguardando ou recusa ainda não retirada. O mesmo
  *  cadeado do PP, com o motivo no `title`. Mudar o save é pelo pop-up da
@@ -494,9 +500,10 @@ function CampoDaErrata({
  * uma vez só, em `useRascunhoErrata`, e é de lá que sai o total da linha.
  *
  * No Planejado a célula só abre quando `errata.planejadoLiberado` diz que
- * sim — o orçado da linha mudou, ou a linha é nova. Travada, ela mostra o
- * motivo no `title` e continua de leitura, com a forma de sempre (zero
- * vira travessão, como em `CelulaLeitura`).
+ * sim — e desde a decisão 151 (07/10/2026) ele nunca diz: o planejado do
+ * job é o da abertura. Travada, a célula mostra o motivo no `title` e
+ * continua de leitura, com a forma de sempre (zero vira travessão, como em
+ * `CelulaLeitura`).
  */
 function CelulaOrcadoErrata({
   item,
@@ -937,7 +944,12 @@ export function JobItemRealizadoTable({
     (rowId: string, coluna: string): TipoEditor | null => {
       if (!editando || !errata) return null;
       const item = itemPorId.get(rowId);
-      if (!item || travadasPorPP.has(rowId) || travadasPorSave.has(rowId)) {
+      if (
+        !item ||
+        item.cancelada_em ||
+        travadasPorPP.has(rowId) ||
+        travadasPorSave.has(rowId)
+      ) {
         return null;
       }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
@@ -953,8 +965,8 @@ export function JobItemRealizadoTable({
       ) {
         return item.linha_vermelha ? null : "numero";
       }
-      // O Planejado só abre com o orçado da linha alterado (decisão 054);
-      // a regra inteira mora no rascunho.
+      // O Planejado não abre na errata desde a decisão 151 (07/10/2026);
+      // a regra mora no rascunho, e a edição do financeiro também fecha.
       if (
         coluna === "valor_unitario_planejado" ||
         coluna === "quantidade_planejada" ||
@@ -1330,11 +1342,14 @@ export function JobItemRealizadoTable({
                     const categoria = item.categoria_id
                       ? categoriasMap.get(item.categoria_id)
                       : null;
-                    // PP no financeiro fala primeiro: é a trava mais antiga
-                    // e a que o servidor confere antes.
-                    const motivoDaTrava = travadasPorPP.has(item.id)
-                      ? MOTIVO_TRAVA_PP
-                      : (travadasPorSave.get(item.id) ?? null);
+                    // Cancelada fala primeiro (decisão 151): a linha já saiu
+                    // da conta do orçado. Depois, PP no financeiro — a trava
+                    // mais antiga e a que o servidor confere antes.
+                    const motivoDaTrava = item.cancelada_em
+                      ? MOTIVO_CANCELADA
+                      : travadasPorPP.has(item.id)
+                        ? MOTIVO_TRAVA_PP
+                        : (travadasPorSave.get(item.id) ?? null);
                     const travada = motivoDaTrava !== null;
                     const abertaAqui = (campo: string) =>
                       aberta?.rowId === item.id && aberta.campo === campo;
@@ -1444,6 +1459,14 @@ export function JobItemRealizadoTable({
                               {item.linha_vermelha && (
                                 <span className={cn(ERRATA.tagVermelha, "flex-none")}>
                                   só realizado
+                                </span>
+                              )}
+                              {item.cancelada_em && (
+                                <span
+                                  title={MOTIVO_CANCELADA}
+                                  className={cn(ERRATA.tagRemovida, "flex-none")}
+                                >
+                                  cancelada
                                 </span>
                               )}
                             </div>
@@ -1658,9 +1681,9 @@ export function JobItemRealizadoTable({
                   })}
 
                   {/* Os dois jeitos de criar linha, no pé do grupo.
-                      "Novo item" é a linha de sempre: tem orçado, entra na
-                      conta e o planejado dela abre na própria errata
-                      (decisão 054). "Linha vermelha" é a
+                      "Novo item" é a linha de sempre: tem orçado e entra na
+                      conta, com o planejado zerado — o planejado do job é o
+                      da abertura (decisão 151). "Linha vermelha" é a
                       outra coisa — ela nasce sem orçado e sem planejado e
                       só recebe realizado, por PP. É o custo que o
                       orçamento não previu e que alguém precisa pedir
@@ -1694,8 +1717,9 @@ export function JobItemRealizadoTable({
                             Linha vermelha
                           </button>
                           <span className="text-[11px] text-muted-foreground">
-                            orçado e planejado zerados · só recebe realizado por
-                            PP
+                            novo item entra com o planejado zerado · linha
+                            vermelha: orçado e planejado zerados, só recebe
+                            realizado por PP
                           </span>
                         </div>
                       </td>
@@ -1860,9 +1884,30 @@ export function JobItemRealizadoTable({
               ? grupo.itens.map((item) => {
                   // No modo errata a calha troca de assunto: BV e PP são
                   // ações sobre a linha como ela está, e ela está sendo
-                  // reescrita. O que cabe ali é remover.
+                  // reescrita. O que cabe ali é cancelar (decisão 151 — a
+                  // linha nova desta errata, que ainda não existe, sai).
                   if (editando) {
                     if (!errata || !podeEditarLinhas) return null;
+                    // Cancelada numa errata anterior: não volta, e não há
+                    // o que oferecer além de dizer que ela está fora.
+                    if (item.cancelada_em && !errata.estaCancelada(item.id)) {
+                      return (
+                        <LinhaDaCalha
+                          key={item.id}
+                          posicao={posicoesCalha[`i:${item.id}`]}
+                        >
+                          <div
+                            title={MOTIVO_CANCELADA}
+                            className={cn(
+                              "pointer-events-auto flex items-center text-[11px] font-medium text-muted-foreground",
+                              ALTURA_LINHA,
+                            )}
+                          >
+                            Cancelada
+                          </div>
+                        </LinhaDaCalha>
+                      );
+                    }
                     // Linha com save não se remove — `barrarRemocao`, em
                     // `actions-errata.ts`, recusa no servidor porque o
                     // `on delete cascade` de `saves_consumos` devolveria
@@ -1887,6 +1932,8 @@ export function JobItemRealizadoTable({
                     const motivoDaTrava = travadaPorPP
                       ? MOTIVO_TRAVA_PP
                       : motivoSave;
+                    const nova = errata.ehNova(item.id);
+                    const cancelada = errata.estaCancelada(item.id);
                     return (
                       <LinhaDaCalha
                         key={item.id}
@@ -1900,7 +1947,11 @@ export function JobItemRealizadoTable({
                         >
                           <button
                             type="button"
-                            onClick={() => errata.remover(item.id)}
+                            onClick={() =>
+                              cancelada
+                                ? errata.reativar(item.id)
+                                : errata.remover(item.id)
+                            }
                             disabled={travadaPorSave || travadaPorPP}
                             title={
                               travadaPorSave || travadaPorPP
@@ -1909,9 +1960,35 @@ export function JobItemRealizadoTable({
                             }
                             className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-muted-foreground"
                           >
-                            <Trash2 className="h-3 w-3" />
-                            Remover
+                            {nova ? (
+                              <Trash2 className="h-3 w-3" />
+                            ) : cancelada ? (
+                              <Undo2 className="h-3 w-3" />
+                            ) : (
+                              <Ban className="h-3 w-3" />
+                            )}
+                            {nova ? "Remover" : cancelada ? "Reativar" : "Cancelar"}
                           </button>
+                        </div>
+                      </LinhaDaCalha>
+                    );
+                  }
+
+                  // Linha cancelada (decisão 151): sem PP nem BV.
+                  if (item.cancelada_em) {
+                    return (
+                      <LinhaDaCalha
+                        key={item.id}
+                        posicao={posicoesCalha[`i:${item.id}`]}
+                      >
+                        <div
+                          title={MOTIVO_CANCELADA}
+                          className={cn(
+                            "pointer-events-auto flex items-center text-[11px] font-medium text-muted-foreground",
+                            ALTURA_LINHA,
+                          )}
+                        >
+                          Cancelada
                         </div>
                       </LinhaDaCalha>
                     );
