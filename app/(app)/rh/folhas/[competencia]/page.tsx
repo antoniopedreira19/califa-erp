@@ -300,7 +300,9 @@ function descreverEstadoFolha(
   total: number,
   contagem: ContagemStatus,
 ): string {
-  if (total === 0) return "Nenhuma linha nesta competência.";
+  if (total === 0) {
+    return "Competência aberta. Gere o PJ e importe o CLT da contabilidade para começar.";
+  }
   if (contagem.pendente_correcao > 0) {
     return `${total} colaboradores · ${contagem.pendente_correcao} linha${contagem.pendente_correcao === 1 ? "" : "s"} com pendência a corrigir antes de reenviar ao financeiro.`;
   }

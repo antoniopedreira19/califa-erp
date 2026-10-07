@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Square, Upload, Send, Loader2 } from "lucide-react";
 import { enviarCompetencia } from "../importar-actions";
 import { ImportarFolhaModal } from "./importar-folha-modal";
+import { BotaoGerarFolhaPj } from "./botao-gerar-folha-pj";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -110,6 +111,11 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
             temPj
               ? `${props.pj.linhas} linha${props.pj.linhas === 1 ? "" : "s"} · ${brl.format(props.pj.total)}`
               : "Nenhuma linha gerada ainda"
+          }
+          acao={
+            !temPj && props.podeEditar ? (
+              <BotaoGerarFolhaPj ano={props.ano} mes={props.mes} />
+            ) : null
           }
         />
         <CheckpointRow
