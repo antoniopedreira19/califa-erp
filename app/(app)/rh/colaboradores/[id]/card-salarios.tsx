@@ -49,10 +49,24 @@ export function CardSalarios({
   const vigente = salarios.find((s) => s.data_fim === null) ?? null;
   const historico = salarios.filter((s) => s.data_fim !== null);
 
-  /** "R$ 7.500,00" | "7500" | "7500.00" → number (reais). */
+  /** "R$ 7.500,00" | "7500" | "7500.00" | "7500,00" → number (reais). */
   function brlParaNumero(v: string): number {
-    const n = Number(v.replace(/\./g, "").replace(",", "."));
+    const limpo = v.trim();
+    // Se tem vírgula, é formato pt-BR (ponto = separador de milhar).
+    // Senão, usa como veio (interpreta ponto como decimal).
+    const norm = limpo.includes(",")
+      ? limpo.replace(/\./g, "").replace(",", ".")
+      : limpo;
+    const n = Number(norm);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  /** Converte um número de reais pra string no formato que o salarioSchema
+   *  do backend entende sem bagunçar: vírgula decimal, sem separador de
+   *  milhar. Ex: 12000 → "12000,00" (schema remove pontos — vazio — e
+   *  troca vírgula por ponto → 12000.00 → Number → 12000). */
+  function numeroParaFormatoBackend(n: number): string {
+    return n.toFixed(2).replace(".", ",");
   }
 
   function handleMudanca(e: React.FormEvent<HTMLFormElement>) {
@@ -70,7 +84,7 @@ export function CardSalarios({
       const vRec =
         (form.elements.namedItem("valor_recibo") as HTMLInputElement)?.value ?? "";
       const total = brlParaNumero(vClt) + brlParaNumero(vRec);
-      formData.set("valor", total.toFixed(2));
+      formData.set("valor", numeroParaFormatoBackend(total));
       formData.set("valor_recibo", vRec);
     }
 
@@ -99,7 +113,7 @@ export function CardSalarios({
       const vRec =
         (form.elements.namedItem("valor_recibo") as HTMLInputElement)?.value ?? "";
       const total = brlParaNumero(vClt) + brlParaNumero(vRec);
-      valorRaw = total.toFixed(2);
+      valorRaw = numeroParaFormatoBackend(total);
       valorReciboRaw = vRec;
     } else {
       valorRaw =
@@ -352,7 +366,11 @@ export function CardSalarios({
                       id="valor_recibo"
                       name="valor_recibo"
                       required
-                      defaultValue={vigente?.valor_recibo ?? ""}
+                      defaultValue={
+                        vigente?.valor_recibo != null
+                          ? String(vigente.valor_recibo)
+                          : ""
+                      }
                     />
                   </div>
                 </>
