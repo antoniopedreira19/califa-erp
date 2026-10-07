@@ -345,7 +345,7 @@ export default async function PedidosCompraFinanceiroPage({
     supabase
       .from("folhas_pagamento")
       .select(
-        "id, competencia_ano, competencia_mes, salario_base, status, motivo_pendencia, colaborador_id, alocacoes:folhas_pagamento_alocacoes(id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome))",
+        "id, competencia_ano, competencia_mes, salario_base, status, motivo_pendencia, colaborador_id, origem, alocacoes:folhas_pagamento_alocacoes(id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome))",
       )
       .eq("tenant_id", session.activeTenant.id)
       .in("status", ["enviada", "pendente_correcao"])
@@ -730,6 +730,7 @@ export default async function PedidosCompraFinanceiroPage({
       salario_base: String(l.salario_base),
       status: l.status,
       motivo_pendencia: l.motivo_pendencia,
+      origem: l.origem,
       // Sem o colaborador no RPC, a linha aparece com travessão e sem
       // pagamento — nunca com dado inventado.
       colaborador: cnabColaboradoresRes.get(l.colaborador_id) ?? {
