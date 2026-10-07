@@ -507,6 +507,31 @@ export async function aprovarLinhaFolha(
     if (!gravado.ok) return gravado;
   }
 
+  // 5.5) Trava de NF para linhas PJ geradas pela California.
+  // Spec: docs/superpowers/specs/2026-10-07-folha-anexo-nf.md (D3)
+  const exigeNf =
+    folha.origem === "california" &&
+    (colab.tipo_contratacao === "pj" ||
+      colab.tipo_contratacao === "mei" ||
+      colab.tipo_contratacao === "clt_recibo");
+  if (exigeNf) {
+    const { data: nf } = await supabase
+      .from("colaboradores_nf_anexos")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("colaborador_id", folha.colaborador_id)
+      .eq("competencia_ano", folha.competencia_ano)
+      .eq("competencia_mes", folha.competencia_mes)
+      .maybeSingle();
+    if (!nf) {
+      return {
+        ok: false,
+        message:
+          "Essa linha não pode ser aprovada sem NF anexada. Peça pro colaborador anexar em /perfil, ou use o cadastro dele em /rh/colaboradores.",
+      };
+    }
+  }
+
   // 6) Plano de contas — depende do tipo do colaborador E da origem da linha.
   //    Fluxo PJ (california): pj/mei/clt_recibo → 05.015 Serviços de Terceiros (PJ).
   //    Fluxo CLT (contabilidade): clt → 05.001, estagio → 05.005, socio → 05.011.
