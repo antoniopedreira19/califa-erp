@@ -123,6 +123,10 @@ interface Props {
   honorariosCliente: number;
   /** Projeto arquivado (decisão 118): tudo em consulta, sem orçamento novo. */
   projetoArquivado: boolean;
+  /** O "Importar" da planilha do projeto: projeto ativo e
+   *  `orcamentos.criar`, a permissão que a importação confere no servidor
+   *  (07/10/2026). */
+  podeImportar: boolean;
   /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional
    *  no modal de parâmetros (decisão do Tiago, 14/09/2026). */
   podeEditarImpostos: boolean;
@@ -242,6 +246,7 @@ export function EditorAgregado({
   nomeDoGrupo,
   honorariosCliente,
   projetoArquivado,
+  podeImportar,
   podeEditarImpostos,
   podeMarcarSave,
   inicial,
@@ -1047,7 +1052,7 @@ export function EditorAgregado({
                   exibidos={exibidos}
                   onChange={setExibidos}
                 />
-                <ImportarOrcamentosDrawer projetoId={projeto.id} />
+                {podeImportar && <ImportarOrcamentosDrawer projetoId={projeto.id} />}
                 <ExportarOrcamentosMenu
                   projetoId={projeto.id}
                   orcamentos={exportaveis}

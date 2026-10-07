@@ -665,6 +665,7 @@ export default async function OrcamentosAgregadoPage({
         responsavel: projeto.responsavel?.nome ?? null,
       }}
       projetoArquivado={projetoArquivado}
+      podeImportar={!projetoArquivado && pode(session.activeRole, "orcamentos.criar")}
       podeEditarImpostos={pode(session.activeRole, "orcamentos.editar_impostos")}
       podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
       honorariosCliente={Number(

@@ -2853,9 +2853,11 @@ de `lib/importacao/diff-projeto.ts`, puro e provado por script.
 
 O preview lista orçamento a orçamento: o que muda (alteradas, novas,
 apagadas, grupos), o orçado antes → depois, o resultado (`→ v{n}`, "sem
-versão nova", "não entra" com o motivo) e, em destaque, quem terá a
-aprovação desfeita. Confirmar cria as versões e mostra o que entrou;
-"Fechar" recarrega a tela.
+versão nova", "não entra" com o motivo). Orçamento aprovado entra como
+"não entra" (até 06/10/2026 ele recebia a versão e tinha a aprovação
+desfeita, com aviso em destaque — ver a nota (5) de 2026-10-07).
+Confirmar cria as versões e mostra o que entrou; "Fechar" recarrega a
+tela.
 
 ⚠️ **2026-09-04: a importação do projeto continua herdando o imposto da
 vigente.** Em 03/09 ela passou a zerar a alíquota junto com o "Importar
@@ -5242,3 +5244,31 @@ aplicada na hora combinada com a frente do Antonio, junto da
   depois, a recusa da permissão, com 1 `acao_negada` e a versão intocada.
   Como administrador, a chave ligou e desligou pela tela, com os dois
   eventos `save.orcamento.*`.
+
+## ⚠️ Nota de 2026-10-07 (5) — "Importar" só para quem importa, e orçamento aprovado fora da importação do projeto (revisão da decisão 041)
+
+- **O botão "Importar" da planilha do projeto** (página do projeto e
+  visão agregada) só aparece com o projeto ativo e com
+  `orcamentos.criar`, a permissão que a importação confere no servidor
+  (nota 2 de hoje). Financeiro e freelancer não o veem mais. Na agregada
+  o botão aparecia até em projeto arquivado; agora segue a mesma regra da
+  página do projeto.
+- **Orçamento aprovado não recebe versão pela importação do projeto**
+  (Tiago, 07/10/2026; revisão da decisão 041). A prévia o mostra como
+  "não entra", com o motivo "Orçamento aprovado não recebe versão pela
+  importação. Para alterá-lo, cancele a aprovação na tela do orçamento e
+  importe de novo." Saíram do drawer o aviso amarelo, o selo "Aprovação
+  desfeita" e a marca "aprovação desfeita" na linha. Da action saíram o
+  passo que chamava `cancelarAprovacaoVersao` e o
+  `aprovacao_desfeita` da auditoria. Antes, o produtor via "aprovação
+  desfeita" na prévia e batia num erro no meio da gravação, porque
+  desfazer a aprovação pede `orcamentos.aprovar`.
+- **Testado no dev do worktree.** Como administrador, o "Importar" aparece
+  nas duas telas. A planilha com o `TES-P001/26-01` (aprovado) e o `-17`
+  voltou com o `-01` como "não entra" e o botão "Criar 0 versões"; a
+  gravação direta respondeu "nada a importar", e o `-01` seguiu aprovado
+  com as mesmas 4 versões. Como Financeiro (o `claude.gp.teste` trocado
+  de papel e devolvido a Gerente de Projeto no fim, com autorização do
+  Tiago), o "Importar" não aparece em nenhuma das duas telas, e a action
+  recusa com "Você não tem permissão para essa ação.". Não há projeto
+  arquivado no banco, então esse caso foi conferido só pelo código.

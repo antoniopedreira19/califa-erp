@@ -508,8 +508,10 @@ export default async function ProjetoDetailPage({
             />
             )}
             {/* Importar e Exportar logo depois de "Editar projeto", como no
-                design "Exportar e Exibir - Projeto e Visao Agregada". */}
-            {!projetoArquivado && (
+                design "Exportar e Exibir - Projeto e Visao Agregada". O
+                Importar só aparece para quem pode importar — a mesma
+                permissão que a action confere (07/10/2026). */}
+            {!projetoArquivado && pode(session.activeRole, "orcamentos.criar") && (
               <ImportarOrcamentosDrawer projetoId={projeto.id} />
             )}
             <ExportarOrcamentosMenu projetoId={projeto.id} orcamentos={exportaveis} />
