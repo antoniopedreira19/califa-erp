@@ -41,6 +41,7 @@ import { AberturaForm } from "../../abertura-de-job/[jobId]/abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import {
   carregarJobParaAbertura,
+  linhasDoSave,
   revisaoPendenteDoJob,
 } from "../../abertura-de-job/dados";
 import { fotosDaAbertura } from "../../abertura-de-job/fotos";
@@ -371,6 +372,19 @@ export default async function JobNoFinanceiroPage({
   const faturamentoPrevisto =
     Math.round(Number(jobNaFila.faturamento_previsto ?? 0) * 100) / 100;
 
+  // Quanto deste job é pago com crédito de outro (decisão 028): com o
+  // faturamento previsto zero, é isto que distingue "o cliente paga o
+  // fornecedor direto" de "o cliente já pagou, num job anterior". A mesma
+  // soma da página da abertura, sobre a mesma coluna
+  // (`jobs_itens_orcado.save_consumido`), que `detalhe.itens` já traz. Até
+  // 07/10/2026 a prop não era passada aqui, e o job aberto pago por save
+  // dizia que o cliente pagava o fornecedor direto.
+  const saveConsumido =
+    Math.round(
+      detalhe.itens.reduce((s, i) => s + Number(i.save_consumido ?? 0), 0) *
+        100,
+    ) / 100;
+
   const baseCompetencia = job.data_inicio_prevista ?? hoje;
   const anoAtual = Number(hoje.slice(0, 4));
   const anoDoJob = job.competencia_ano ?? Number(baseCompetencia.slice(0, 4));
@@ -558,16 +572,19 @@ export default async function JobNoFinanceiroPage({
                 ? detalhe.internacional.percentualIntTaxes
                 : null
             }
-            resultadoPlanilha={
-              custoPlanejadoJob > 0
-                ? Math.round(
-                    (totaisJob.valorJob -
-                      totaisJob.deducoesDoResultado -
-                      custoPlanejadoJob) *
-                      100,
-                  ) / 100
-                : null
-            }
+            // A Rentabilidade é o resultado operacional planejado (Tiago,
+            // 07/10/2026): os mesmos três números do resumo do cabeçalho,
+            // na conta do financeiro, para os dois não divergirem.
+            rentabilidade={{
+              valorJob: resumoFinanceiro?.valorJob ?? totaisJob.valorJob,
+              deducoes:
+                resumoFinanceiro?.deducoesDoResultado ??
+                totaisJob.deducoesDoResultado,
+              custoPlanejado:
+                custoPlanejadoJob + (resumoFinanceiro?.planejadoDosPedidos ?? 0),
+            }}
+            saveConsumido={saveConsumido}
+            linhasDoSave={linhasDoSave(detalhe.itens)}
             enviadoPorNome={carregadoParaAbertura.enviadoPorNome}
             curvaInicial={previsoes.curva}
             recebimentoInicial={previsoes.recebimento}

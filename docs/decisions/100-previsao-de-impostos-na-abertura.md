@@ -97,6 +97,27 @@ inclusive o que o cliente paga direto ao fornecedor. No JOB-0032
 (TES-0001/26), Rentabilidade R$ 40.800,00 e planilha R$ 39.600,00: os
 R$ 1.200,00 são rentabilidade de itens que o cliente paga direto.
 
+> ⚠️ **07/10/2026 — a Rentabilidade passa a ser a conta da planilha.**
+> O Tiago trocou a regra para todos os jobs:
+>
+> ```text
+> Rentabilidade = valor do job − impostos do valor do job − custo planejado
+> ```
+>
+> É o resultado operacional planejado da planilha interna e o número do
+> cabeçalho do job aberto. O percentual é sobre o valor do job. O selo que
+> comparava os dois números saiu, porque agora a conta é a mesma.
+>
+> O olhar de caixa falhava no save. O job pago inteiro com saldo de save de
+> outro job não tem nota a emitir, e saía com rentabilidade negativa igual ao
+> custo inteiro: −R$ 14.129,80 num job de R$ 22.867,65 (protótipo de
+> 07/10). Na conta nova ele dá R$ 4.271,80. O job todo em save dá R$ 0,00,
+> porque a receita migra para quem consome (decisão 103).
+>
+> Na abertura, as parcelas vêm do imposto do job (`valorJob`,
+> `deducoesDoResultado`) e de `planilha_planejado`. No job aberto, vêm dos
+> mesmos números do `ResumoResultado` do cabeçalho.
+
 ## 5. Como a tela se comporta
 
 - Enquanto ninguém mexe nos **valores**, o cronograma **segue as

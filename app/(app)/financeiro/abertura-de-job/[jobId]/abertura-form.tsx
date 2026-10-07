@@ -256,16 +256,27 @@ interface Props {
    *  transação ficam de fora, Tiago 23/09/2026). Nulo no nacional. */
   aliquotaIntTaxes: number | null;
   /**
-   * Resultado operacional planejado da planilha interna (valor do job −
-   * deduções − planejado). A rentabilidade se compara com ele no rodapé
-   * das Previsões. Nulo quando a planilha ainda não tem planejado.
+   * As três parcelas da Rentabilidade: valor do job − impostos do valor do
+   * job (e, no internacional, int. taxes e custos de transação) − custo
+   * planejado. É a conta do resultado operacional planejado da planilha
+   * interna (Tiago, 07/10/2026; até ali era faturamento − custo previsto −
+   * impostos da nota, decisão 100 §4). Quem monta é a página, com os mesmos
+   * números que ela mostra no resto da tela.
    */
-  resultadoPlanilha: number | null;
+  rentabilidade: { valorJob: number; deducoes: number; custoPlanejado: number };
   /** Quanto do orçado deste job é pago com crédito de outro job (save).
    *  Só serve para EXPLICAR um faturamento previsto zerado: sem save, ele
    *  significa "o cliente paga o fornecedor direto"; com save, significa
-   *  "o cliente já pagou isto, num job anterior" (decisão 028). */
-  saveConsumido?: number;
+   *  "o cliente já pagou isto, num job anterior" (decisão 028).
+   *  Obrigatória desde 07/10/2026: opcional, com 0 por padrão, ela deixou
+   *  a página do job aberto montar o formulário sem ela, e o job pago por
+   *  save dizia "pago diretamente pelo cliente ao fornecedor". */
+  saveConsumido: number;
+  /** As linhas do job em save e fora dele (`linhasDoSave`, em `dados.ts`).
+   *  Só serve para EXPLICAR um custo previsto zero: a linha em save não tem
+   *  custo neste job, e a de fora é paga pelo cliente direto ao fornecedor
+   *  (escolha do Tiago, 07/10/2026). */
+  linhasDoSave: { emSave: number; foraDoSave: number };
   /** Quem clicou em "Enviar job para abertura" na tela da versão. */
   enviadoPorNome: string | null;
   curvaInicial: CurvaLinha[];
@@ -420,8 +431,9 @@ export function AberturaForm({
   impostoPrevisto,
   aliquotaImposto,
   aliquotaIntTaxes,
-  resultadoPlanilha,
-  saveConsumido = 0,
+  rentabilidade,
+  saveConsumido,
+  linhasDoSave,
   enviadoPorNome,
   curvaInicial,
   recebimentoInicial,
@@ -584,6 +596,16 @@ export function AberturaForm({
   // Custo zero é legítimo: job 100% pago direto pelo cliente ao
   // fornecedor (tipos A/D) abre sem curva de desembolso.
   const semDesembolso = custoPrevisto <= 0;
+  // Por que o custo é zero (07/10/2026): linha em save não tem custo neste
+  // job (decisão 028 §9). Até aqui o aviso dizia sempre "pago direto pelo
+  // cliente ao fornecedor (itens de calha BV)", e o job todo em save, sem
+  // nenhum item de calha BV, saía com a explicação errada.
+  const custoZeroPeloSave: "todo" | "misto" | null =
+    semDesembolso && linhasDoSave.emSave > 0
+      ? linhasDoSave.foraDoSave > 0
+        ? "misto"
+        : "todo"
+      : null;
   const curvaDatasOk = curva.every((l) => l.data.length === 10);
   const curvaValoresOk = linhasCurva.every((l) => l.valor > 0);
   const curvaOk =
@@ -874,17 +896,17 @@ export function AberturaForm({
   const contaImp = contas.find((c) => c.id === contaImpId) ?? null;
 
 
-  // Rentabilidade (era "Margem prevista" até 23/09/2026): o que a
-  // California recebe menos o que ela desembolsa — custos E impostos. Não entra o que o cliente paga direto
-  // ao fornecedor — esse dinheiro nunca passa pelo caixa da agência.
+  // Rentabilidade: valor do job − impostos − custo planejado, a mesma conta
+  // do resultado operacional planejado da planilha interna (Tiago,
+  // 07/10/2026). Até ali (decisão 100 §4) ela olhava só o caixa —
+  // faturamento − custo previsto − impostos da nota —, e o job pago com
+  // saldo de save de outro job, sem nada a faturar, saía com rentabilidade
+  // negativa igual ao custo inteiro.
   const margem = emCentavos(
-    faturamentoPrevisto - custoPrevisto - impostoPrevisto,
+    rentabilidade.valorJob - rentabilidade.deducoes - rentabilidade.custoPlanejado,
   );
-  const margemBateComPlanilha =
-    resultadoPlanilha !== null &&
-    Math.abs(emCentavos(resultadoPlanilha) - margem) < 0.011;
   const margemPct =
-    faturamentoPrevisto > 0 ? (margem / faturamentoPrevisto) * 100 : 0;
+    rentabilidade.valorJob > 0 ? (margem / rentabilidade.valorJob) * 100 : 0;
 
   // Contagem das linhas de cada bloco: aparece no rodapé da tabela de
   // previsões e no resumo do registro, na lateral.
@@ -2291,9 +2313,13 @@ export function AberturaForm({
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {semDesembolso
-                      ? "Nenhum item de calha PP — a California não desembolsa neste job."
-                      : "Planejado dos itens que a California paga (tipos que geram PP)"}
+                    {custoZeroPeloSave === "todo"
+                      ? "Todas as linhas estão em save — o custo nasce no job que consumir o saldo."
+                      : custoZeroPeloSave === "misto"
+                        ? "Linhas em save e itens de calha BV — a California não desembolsa neste job."
+                        : semDesembolso
+                          ? "Nenhum item de calha PP — a California não desembolsa neste job."
+                          : "Planejado dos itens que a California paga (tipos que geram PP)"}
                   </p>
                 </div>
                 <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
@@ -2655,11 +2681,34 @@ export function AberturaForm({
                                 Nenhum desembolso previsto pela California
                               </p>
                               <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-                                Os custos deste job são pagos diretamente pelo
-                                cliente ao fornecedor (itens de calha BV). O
-                                planejado da planilha segue como controle
-                                interno, mas não gera previsão de custos — o
-                                job abre sem cronograma de desembolsos.
+                                {custoZeroPeloSave === "todo" ? (
+                                  <>
+                                    Todas as linhas deste job estão em save: o
+                                    serviço não acontece aqui, e sim no job que
+                                    consumir o saldo. É lá que o custo nasce —
+                                    este job abre sem cronograma de
+                                    desembolsos.
+                                  </>
+                                ) : custoZeroPeloSave === "misto" ? (
+                                  <>
+                                    As linhas em save não têm custo neste job —
+                                    o serviço acontece no job que consumir o
+                                    saldo. As demais são pagas diretamente pelo
+                                    cliente ao fornecedor (itens de calha BV).
+                                    O planejado da planilha segue como controle
+                                    interno, mas não gera previsão de custos —
+                                    o job abre sem cronograma de desembolsos.
+                                  </>
+                                ) : (
+                                  <>
+                                    Os custos deste job são pagos diretamente
+                                    pelo cliente ao fornecedor (itens de calha
+                                    BV). O planejado da planilha segue como
+                                    controle interno, mas não gera previsão de
+                                    custos — o job abre sem cronograma de
+                                    desembolsos.
+                                  </>
+                                )}
                               </p>
                             </div>
                           </div>
@@ -3046,33 +3095,23 @@ export function AberturaForm({
                       )}
                     >
                       {formatCurrency(margem)}
-                      {faturamentoPrevisto > 0
+                      {rentabilidade.valorJob > 0
                         ? ` · ${formatPercentual(margemPct)}`
                         : ""}
                     </strong>
                   </span>
-                  <span className="font-mono text-[11.5px] text-muted-foreground">
-                    {formatMoedaTexto(faturamentoPrevisto)} −{" "}
-                    {formatMoedaTexto(custoPrevisto)} −{" "}
-                    {formatMoedaTexto(impostoPrevisto)}
+                  {/* A conta por extenso: valor do job − impostos − custo
+                      planejado, o resultado operacional planejado da
+                      planilha interna. Como agora é a mesma conta, o selo
+                      que comparava os dois números saiu (07/10/2026). */}
+                  <span
+                    className="font-mono text-[11.5px] text-muted-foreground"
+                    title="Valor do job − impostos − custo planejado: o resultado operacional planejado da planilha interna."
+                  >
+                    {formatMoedaTexto(rentabilidade.valorJob)} −{" "}
+                    {formatMoedaTexto(rentabilidade.deducoes)} −{" "}
+                    {formatMoedaTexto(rentabilidade.custoPlanejado)}
                   </span>
-                  {resultadoPlanilha !== null &&
-                    (margemBateComPlanilha ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-                        <Check className="h-3 w-3" />
-                        Bate com o resultado operacional planejado da planilha
-                        interna
-                      </span>
-                    ) : (
-                      <span
-                        title="A margem olha o dinheiro que passa pelo caixa da California; a planilha olha o valor do job inteiro, inclusive o que o cliente paga direto ao fornecedor."
-                        className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700"
-                      >
-                        <Info className="h-3 w-3" />
-                        Planilha interna: resultado operacional planejado de{" "}
-                        {formatCurrency(resultadoPlanilha)}
-                      </span>
-                    ))}
                   <span className="ml-auto text-xs text-muted-foreground">
                     {qtdRecebimentosLabel} ·{" "}
                     {semDesembolso
@@ -3345,7 +3384,7 @@ export function AberturaForm({
                 )}
               >
                 {formatCurrency(margem)}
-                {faturamentoPrevisto > 0
+                {rentabilidade.valorJob > 0
                   ? ` · ${formatPercentual(margemPct)}`
                   : ""}
               </span>
