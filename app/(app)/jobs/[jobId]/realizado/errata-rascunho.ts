@@ -475,6 +475,7 @@ export function useRascunhoErrata(
         cancelada_em: null,
         // Linha criada por errata não existia na abertura (decisão 151).
         orcado_abertura: 0,
+        save_depois_da_abertura: false,
       };
     });
 

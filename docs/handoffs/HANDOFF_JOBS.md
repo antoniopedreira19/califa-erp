@@ -4789,8 +4789,9 @@ código publicado logo depois (`3305751`).
 - Sem migration: a foto da abertura sai da versão aprovada
   (`lib/calculos/abertura-do-job.ts`) e reproduz o `valor_job_abertura` de
   todos os jobs abertos.
-- Pergunta aberta na decisão 151: a linha que vira save depois da abertura
-  descasa o rodapé da planilha do card de Totais.
+- A linha que vira save depois da abertura continua contando no planejado
+  (resposta do Tiago no mesmo dia): ela mostra o planejado de antes do
+  save e entra na conta. A que já era save na abertura segue fora.
 
 ## ⚠️ Nota de 2026-10-07 (3) — PP a emitir trava o encerramento e sai com a errata (decisão 153)
 

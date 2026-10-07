@@ -276,6 +276,9 @@ export interface ItemParaBv {
    *  criada por errata. Ausente ou `null` (orçamento, telas sem a foto da
    *  abertura): vale o orçado de hoje, como sempre foi. */
   orcado_abertura?: number | null;
+  /** Linha que virou save depois da abertura (decisão 151): o planejado
+   *  dela continua contando, em vez de ir a zero como o da linha em save. */
+  save_depois_da_abertura?: boolean;
   /** A linha gera SAVE: é faturada aqui e o serviço não acontece neste
    *  projeto. Fica fora da rentabilidade, porque não tem custo com que
    *  comparar (docs/decisions/028-save-entre-jobs.md §9). */
@@ -332,7 +335,9 @@ export function blocosDoItem(
 
   const planejadoBruto = planejadoBrutoDoItem(
     Number(item.total_planejado ?? 0),
-    emSave,
+    // A linha que virou save depois da abertura mantém o planejado da
+    // abertura (decisão 151).
+    emSave && item.save_depois_da_abertura !== true,
   );
 
   const realizadoBruto = realizadoBrutoDoItem(
@@ -349,10 +354,14 @@ export function blocosDoItem(
     // A linha em save é venda sem execução: ela fica fora da comparação
     // orçado × custo, mas continua cheia na coluna ORÇADO.
     orcadoRentabilidade: emSave ? 0 : orcado,
-    orcadoRentabilidadePlanejada: emSave
-      ? 0
-      : item.orcado_abertura === null || item.orcado_abertura === undefined
-        ? orcado
+    // Com a foto da abertura, vale o orçado de lá — inclusive na linha que
+    // virou save depois (decisão 151); a que já era save na abertura vem
+    // com 0. Sem a foto, a regra de sempre: save fora da rentabilidade.
+    orcadoRentabilidadePlanejada:
+      item.orcado_abertura === null || item.orcado_abertura === undefined
+        ? emSave
+          ? 0
+          : orcado
         : Number(item.orcado_abertura),
     planejado: valoresDoBloco(planejadoBruto, DEDUCAO_BV_NO_PLANEJADO),
     realizado: valoresDoBloco(
