@@ -15,6 +15,7 @@
     "test:folha": "node --import tsx --test lib/validations/rh-folhas.test.ts",
     "test:folha-parser": "node --import tsx --test lib/pdf/parse-folha-contabilidade.test.ts",
     "test:nf-janela": "node --import tsx --test lib/folha/janela-pagamento.test.ts",
+    "test:nf-countdown": "node --import tsx --test lib/folha/countdown-nf.test.ts",
     "atualizar:bancos": "tsx scripts/atualizar-bancos-febraban.ts"
   },
   "dependencies": {
