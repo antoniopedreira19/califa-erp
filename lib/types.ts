@@ -3820,6 +3820,48 @@ export function folhaLinhaStatusLabel(s: FolhaLinhaStatus): string {
  *  - "contabilidade": importada do PDF "Relação Geral dos Líquidos" (fluxo CLT: clt + parte CLT do híbrido + estagio + socio). */
 export type FolhaOrigem = "california" | "contabilidade";
 
+/** Warnings emitidos pelo parser/importador do PDF da contabilidade. */
+export interface FolhaImportacaoWarning {
+  tipo:
+    | "colaborador_nao_encontrado"
+    | "secao_errada"
+    | "tipo_incompativel"
+    | "linha_ja_promovida"
+    | "soma_divergente"
+    | "cpf_invalido"
+    | "valor_invalido";
+  mensagem: string;
+  cpf?: string;
+  nome?: string;
+  secao?: "empregados" | "estagiarios" | "contribuintes";
+}
+
+/** Totalizadores extraídos do rodapé do PDF da contabilidade (snapshot para auditoria). */
+export interface FolhaImportacaoTotalizadores {
+  empregados?: { linhas: number; total: string };
+  estagiarios?: { linhas: number; total: string };
+  contribuintes?: { linhas: number; total: string };
+  total_empresa?: string;
+}
+
+/** Auditoria de uma importação do PDF "Relação Geral dos Líquidos". */
+export interface FolhaImportacao {
+  id: string;
+  tenant_id: string;
+  competencia_ano: number;
+  competencia_mes: number;
+  arquivo_nome: string;
+  arquivo_hash: string;
+  linhas_total: number;
+  linhas_criadas: number;
+  linhas_atualizadas: number;
+  linhas_ignoradas: number;
+  warnings: FolhaImportacaoWarning[];
+  totalizadores_pdf: FolhaImportacaoTotalizadores;
+  uploaded_by: string;
+  uploaded_at: string;
+}
+
 export interface FolhaPagamento {
   id: string;
   tenant_id: string;
