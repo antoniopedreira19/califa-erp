@@ -34,6 +34,10 @@ export interface JobNaFila {
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
   data_prevista_faturamento: string | null;
+  /** Fee e Always On (decisão 149): a data de recebimento de cada mês que a
+   *  produção enviou — `{ "AAAA-MM-01": "AAAA-MM-DD" }`. Pré-preenche as
+   *  parcelas da abertura. Nula fora do mensal. */
+  recebimento_previsto_por_mes: Record<string, string> | null;
   observacoes: string | null;
   created_at: string;
   produto: string | null;
@@ -287,7 +291,7 @@ export interface TotaisPlanilhaJob {
 
 const SELECT_JOB_FILA =
   "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
-  "data_prevista_faturamento, observacoes, created_at, produto, cidade, projeto_id, " +
+  "data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, created_at, produto, cidade, projeto_id, " +
   // Quem enviou (decisão 136). `created_by` aponta para `auth.users`, e o
   // nome dele sai em query própria; `enviado_abertura_por` aponta para
   // `profiles` e vem no embed.
@@ -394,6 +398,7 @@ function montarJobNaFila(
     data_inicio_prevista: j.data_inicio_prevista,
     data_fim_prevista: j.data_fim_prevista,
     data_prevista_faturamento: j.data_prevista_faturamento,
+    recebimento_previsto_por_mes: j.recebimento_previsto_por_mes ?? null,
     observacoes: j.observacoes,
     created_at: j.created_at,
     produto: j.produto,

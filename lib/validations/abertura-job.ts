@@ -38,6 +38,21 @@ export const contatoCobrancaSchema = z.object({
 export type ContatoCobrancaInput = z.infer<typeof contatoCobrancaSchema>;
 
 /**
+ * Modelo mensal (decisão 149): a data prevista de recebimento de UM mês do
+ * trimestre. `mes` é o primeiro dia do mês (`AAAA-MM-01`). Quem confere que
+ * o mês é da versão e que todo mês com faturamento tem data é
+ * `enviarJobParaAbertura`, que conhece os meses e o faturamento de cada um.
+ */
+export const recebimentoDoMesSchema = z.object({
+  mes: z.string().regex(/^\d{4}-\d{2}-01$/, "Mês inválido."),
+  data: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista para recebimento é obrigatória."),
+});
+
+export type RecebimentoDoMesInput = z.infer<typeof recebimentoDoMesSchema>;
+
+/**
  * Modal "Enviar job para abertura" (handoff "Abertura de Job.dc.html").
  *
  * Só valida o que o modal deixa editar. Produto continua herdado do
@@ -87,11 +102,15 @@ export const aberturaJobSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de fim é obrigatória."),
     // Data do evento. Entre o fim e o recebimento na tela; obrigatória
-    // desde 27/08/2026. A coluna `jobs.data_evento` é nullable só por
-    // causa dos jobs anteriores — daqui pra frente nenhum job nasce sem.
+    // desde 27/08/2026 — menos no Fee e no Always On (decisão 149), que
+    // não têm evento. Vazia vira `null`, e quem cobra a obrigatoriedade é
+    // `enviarJobParaAbertura`, que conhece o modelo da planilha.
     data_evento: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data do evento é obrigatória."),
+      .union([
+        z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data do evento é obrigatória."),
+        z.literal(""),
+      ])
+      .transform((v) => (v === "" ? null : v)),
     // Coluna `data_prevista_faturamento`; o rótulo da tela virou "Data
     // prevista para recebimento" em 27/08/2026. Vazia vira `null`: o job
     // sem faturamento previsto não tem recebimento (decisão 105), e a
@@ -105,6 +124,9 @@ export const aberturaJobSchema = z
         z.literal(""),
       ])
       .transform((v) => (v === "" ? null : v)),
+    // Modelo mensal (decisão 149): uma data por mês do trimestre. Vazia
+    // fora do mensal. Chega como JSON, como os contatos.
+    recebimentos_por_mes: z.array(recebimentoDoMesSchema).max(3, "No máximo 3 meses."),
     // Obrigatório desde 03/09/2026, e só AQUI: é o texto que a produção
     // deixa para quem abre o job no financeiro. A coluna
     // `jobs.observacoes` segue nullable — 27 dos 30 jobs existentes

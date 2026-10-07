@@ -16,7 +16,12 @@ import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { formatDataHoraBr } from "../formatos";
-import { sugerirCurva, sugerirRecebimento, trimestreDe } from "../curva";
+import {
+  recebimentoEnviadoPorMes,
+  sugerirCurva,
+  sugerirRecebimento,
+  trimestreDe,
+} from "../curva";
 import { AberturaForm } from "./abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import { impostoDoJob } from "../imposto-previsto";
@@ -324,11 +329,17 @@ export default async function AbrirJobNoFinanceiroPage({
               hojeIso,
             )}
             impostosIniciais={[]}
-            recebimentoInicial={sugerirRecebimento(
-              faturamentoPrevisto,
-              job.data_prevista_faturamento,
-              hojeIso,
-            )}
+            recebimentoInicial={
+              // Fee e Always On (decisão 149): as parcelas de cada mês
+              // nascem com as datas que a produção enviou.
+              faturamentoMensal?.mensal
+                ? recebimentoEnviadoPorMes(job.recebimento_previsto_por_mes)
+                : sugerirRecebimento(
+                    faturamentoPrevisto,
+                    job.data_prevista_faturamento,
+                    hojeIso,
+                  )
+            }
             faturamentoPorMes={
               faturamentoMensal?.mensal ? faturamentoMensal.meses : null
             }

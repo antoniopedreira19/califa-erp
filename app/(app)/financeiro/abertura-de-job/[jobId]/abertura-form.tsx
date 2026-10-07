@@ -66,7 +66,12 @@ import {
 } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { distribuirDelta } from "@/lib/calculos/alteracao-financeiro";
-import { formatDataAsHoraBr, formatDataBr, formatPeriodo } from "../formatos";
+import {
+  formatDataAsHoraBr,
+  formatDataBr,
+  formatPeriodo,
+  linhasDoRecebimentoEnviado,
+} from "../formatos";
 import {
   curvaFecha,
   dividirEmParcelas,
@@ -356,8 +361,10 @@ function paraForm(linhas: CurvaLinha[]): LinhaPrevisaoForm[] {
 
 /**
  * O recebimento do job mensal: uma linha por mês com faturamento, no
- * valor do mês. A data vem da previsão gravada daquele mês; na abertura
- * nasce vazia, esperando o dia (Tiago, 14/09/2026).
+ * valor do mês. A data vem da previsão gravada daquele mês; na abertura,
+ * da data que a produção enviou para o mês (decisão 149, 06/10/2026). Até
+ * ali ela nascia vazia, esperando o dia (Tiago, 14/09/2026) — e o mês sem
+ * data enviada ainda nasce assim.
  */
 function recebimentoMensalParaForm(
   meses: FaturamentoDoMes[],
@@ -1436,16 +1443,15 @@ export function AberturaForm({
       valor: formatPeriodo(job.data_inicio_prevista, job.data_fim_prevista),
       mono: true,
     },
-    {
-      // Mesma regra do diálogo de conferência: a data é de
-      // recebimento, não de faturamento (27/08/2026). Sem faturamento
-      // previsto não há recebimento (decisão 105).
-      rotulo: "Recebimento em",
-      valor: semRecebimento
-        ? "Sem recebimento"
-        : formatDataBr(job.data_prevista_faturamento),
-      mono: !semRecebimento,
-    },
+    // Mesma regra do diálogo de conferência: a data é de recebimento, não
+    // de faturamento (27/08/2026). Sem faturamento previsto não há
+    // recebimento (decisão 105); no Fee e no Always On, uma linha por mês
+    // (decisão 149).
+    ...linhasDoRecebimentoEnviado(
+      job.data_prevista_faturamento,
+      job.recebimento_previsto_por_mes,
+      semRecebimento,
+    ),
   ];
 
   const resumoPlanilha =

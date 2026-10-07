@@ -6730,3 +6730,17 @@ estendido a Contas a Receber em 31/08.**
   tempo da função na Vercel (sem `maxDuration` no projeto). O que já baixou
   fica, o resto volta para a lista; não duplica. Sugestão: mandar em partes.
 
+
+## ⚠️ Nota de 2026-10-06 (2) — a abertura do mensal chega com as datas de recebimento de cada mês (decisão 149)
+
+- **Fee e Always On**: a produção agora envia uma data de recebimento por
+  mês (`jobs.recebimento_previsto_por_mes`). Na abertura, as "Parcelas de
+  recebimento" nascem com essas datas — até aqui nasciam vazias, esperando
+  o "Dia do recebimento" (`recebimentoEnviadoPorMes` em `curva.ts`). O
+  financeiro continua mudando cada data à vontade.
+- "Dados da produção" e o diálogo de conferência da fila mostram
+  "Recebimento de outubro", "Recebimento de novembro"… no lugar do
+  "Recebimento em" (`linhasDoRecebimentoEnviado` em `formatos.ts`).
+- Fee e Always On enviados daqui em diante não têm data de evento: não
+  aparecem marcados num dia da grade do Calendário de Jobs (seguem
+  contando como ativos entre início e fim). Ver decisão 149.

@@ -22,7 +22,12 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { ContatosCobrancaCaixa } from "@/components/financeiro/contatos-cobranca";
 import type { JobNaFila } from "./dados";
-import { formatDataAsHoraBr, formatDataBr, formatPeriodo } from "./formatos";
+import {
+  formatDataAsHoraBr,
+  formatDataBr,
+  formatPeriodo,
+  linhasDoRecebimentoEnviado,
+} from "./formatos";
 import { IconeSave } from "./icone-save";
 
 interface Props {
@@ -63,18 +68,16 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
       valor: formatPeriodo(job.data_inicio_prevista, job.data_fim_prevista),
       mono: true,
     },
-    {
-      // A data é `data_prevista_faturamento`, mas o que ela marca é
-      // o RECEBIMENTO — "faturamento" fica para o valor e para o
-      // processo de emitir a nota (27/08/2026).
-      rotulo: "Recebimento em",
-      // Sem faturamento previsto não há recebimento (decisão 105).
-      valor:
-        Number(job.faturamento_previsto ?? 0) <= 0.004
-          ? "Sem recebimento"
-          : formatDataBr(job.data_prevista_faturamento),
-      mono: Number(job.faturamento_previsto ?? 0) > 0.004,
-    },
+    // A data é `data_prevista_faturamento`, mas o que ela marca é o
+    // RECEBIMENTO — "faturamento" fica para o valor e para o processo de
+    // emitir a nota (27/08/2026). Sem faturamento previsto não há
+    // recebimento (decisão 105); no Fee e no Always On, uma linha por mês
+    // (decisão 149).
+    ...linhasDoRecebimentoEnviado(
+      job.data_prevista_faturamento,
+      job.recebimento_previsto_por_mes,
+      Number(job.faturamento_previsto ?? 0) <= 0.004,
+    ),
   ];
 
   const resumoPlanilha =

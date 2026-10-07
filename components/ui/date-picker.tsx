@@ -46,6 +46,11 @@ export interface DatePickerProps {
   fromYear?: number;
   /** Ano máximo do dropdown (só quando `comSeletorAnoMes`). */
   toYear?: number;
+  /** Mês em que o calendário abre quando o campo está vazio, em ISO
+   *  "YYYY-MM-DD". Sem ele, abre no mês corrente. Com data escolhida, abre
+   *  sempre no mês dela. Uso: a data de recebimento de cada mês do Fee e do
+   *  Always On abre no mês seguinte ao de referência (decisão 149). */
+  mesInicial?: string;
 }
 
 function parseIsoDate(iso: string | undefined): Date | null {
@@ -71,6 +76,7 @@ export function DatePicker({
   comSeletorAnoMes,
   fromYear,
   toYear,
+  mesInicial,
 }: DatePickerProps) {
   const [date, setDate] = React.useState<Date | null>(() => parseIsoDate(defaultValue));
   const [open, setOpen] = React.useState(false);
@@ -144,7 +150,7 @@ export function DatePicker({
             disabled={dateDisabled}
             initialFocus
             fixedWeeks
-            defaultMonth={date ?? undefined}
+            defaultMonth={date ?? parseIsoDate(mesInicial) ?? undefined}
             {...(comSeletorAnoMes
               ? {
                   captionLayout: "dropdown",

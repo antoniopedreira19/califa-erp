@@ -24,10 +24,71 @@ import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { SAVE } from "@/app/(app)/_planilha/blocos";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+import {
+  alterarRecebimento,
+  somarMeses,
+  type MesDoEnvio,
+  type RecebimentoDoMes,
+} from "@/lib/calculos/recebimento-por-mes";
 import {
   CidadeCombobox,
   type CidadeOption,
 } from "@/app/(app)/orcamentos/cidade-combobox";
+
+// ---------------------------------------------------------------------------
+// O tipo do job muda o formulário (decisão 149, 06/10/2026):
+//
+// - Serviço Interno: não há recebimento — a data aparece travada.
+// - Fee e Always On (modelo mensal): não há data de evento — travada,
+//   "Não se aplica" — e o recebimento é uma data POR MÊS do trimestre. A
+//   data do primeiro mês sugere a dos meses seguintes que estiverem vazios.
+// ---------------------------------------------------------------------------
+
+function nomeComAno(mes: string): string {
+  const n = nomeDoMes(mes);
+  return `${n.charAt(0).toUpperCase()}${n.slice(1)}/${mes.slice(0, 4)}`;
+}
+
+function dataBr(iso: string): string {
+  if (!iso) return "—";
+  const [a, m, d] = iso.split("-");
+  return `${d}/${m}/${a}`;
+}
+
+/**
+ * As linhas de datas da conferência (o pop-up seguinte ao formulário, e o
+ * "Ver dados do job" depois do envio). `semRecebimento` é a mesma régua do
+ * formulário: faturamento zero ou serviço Interno.
+ */
+export function linhasDeDatasDoResumo(
+  d: DadosJob,
+  semRecebimento: boolean,
+  mesesDoEnvio: MesDoEnvio[] | null,
+): { rotulo: string; valor: string; mono?: boolean }[] {
+  const linhas: { rotulo: string; valor: string; mono?: boolean }[] = [];
+  if (!mesesDoEnvio) linhas.push({ rotulo: "Data evento", valor: dataBr(d.dataEvento), mono: true });
+  else linhas.push({ rotulo: "Data evento", valor: "Não se aplica" });
+
+  if (semRecebimento) {
+    linhas.push({ rotulo: "Recebimento em", valor: "Sem recebimento" });
+    return linhas;
+  }
+  if (mesesDoEnvio) {
+    for (const m of mesesDoEnvio) {
+      const r = d.recebimentosPorMes.find((x) => x.mes === m.mes);
+      const sem = m.faturamento <= 0.004;
+      linhas.push({
+        rotulo: `Recebimento de ${nomeDoMes(m.mes)}`,
+        valor: sem ? "Sem recebimento" : dataBr(r?.data ?? ""),
+        mono: !sem,
+      });
+    }
+    return linhas;
+  }
+  linhas.push({ rotulo: "Recebimento em", valor: dataBr(d.dataFaturamento), mono: true });
+  return linhas;
+}
 
 /** Uma linha da seção "Contato de cobrança". Strings sempre — o estado do
  *  formulário nunca carrega `null`; quem converte "" em null é o Zod. */
@@ -58,6 +119,8 @@ export interface DadosJob {
   /** Coluna `data_prevista_faturamento`; na tela é "Data prevista para
    *  recebimento" desde 27/08/2026. */
   dataFaturamento: string;
+  /** Modelo mensal: uma data de recebimento por mês. Vazia fora dele. */
+  recebimentosPorMes: RecebimentoDoMes[];
   observacoes: string;
   /** Quem recebe a cobrança no cliente. Ao menos um é obrigatório para
    *  enviar; vira linha em `jobs_contatos` (docs/decisions/012). */
@@ -150,11 +213,13 @@ export function contatoEmBranco(c: ContatoCobranca): boolean {
   );
 }
 
-/** `semRecebimento`: o job não tem faturamento previsto (decisão 105) —
- *  a data de recebimento não existe e não é cobrada. */
+/** `semRecebimento`: o job não tem faturamento previsto (decisão 105) ou é
+ *  do serviço Interno (decisão 149) — a data de recebimento não existe e não
+ *  é cobrada. `mesesDoEnvio`: os meses do modelo mensal, `null` fora dele. */
 export function faltamCampos(
   d: DadosJob,
   semRecebimento: boolean,
+  mesesDoEnvio: MesDoEnvio[] | null,
 ): Record<CampoObrigatorio, boolean> {
   return {
     nome: d.nome.trim().length < 2,
@@ -164,8 +229,18 @@ export function faltamCampos(
     produtor_id: !d.produtorId,
     data_inicio_prevista: !d.dataInicio,
     data_fim_prevista: !d.dataFim,
-    data_evento: !d.dataEvento,
-    data_prevista_faturamento: !semRecebimento && !d.dataFaturamento,
+    // Fee e Always On não têm data de evento (decisão 149).
+    data_evento: !mesesDoEnvio && !d.dataEvento,
+    // No mensal, todo mês COM faturamento precisa da sua data.
+    data_prevista_faturamento: semRecebimento
+      ? false
+      : mesesDoEnvio
+        ? mesesDoEnvio.some(
+            (m) =>
+              m.faturamento > 0.004 &&
+              !d.recebimentosPorMes.find((r) => r.mes === m.mes)?.data,
+          )
+        : !d.dataFaturamento,
     // Descritivo obrigatório desde 03/09/2026 — é o recado da produção
     // para quem abre o job no financeiro.
     observacoes: d.observacoes.trim().length === 0,
@@ -244,6 +319,14 @@ interface Props {
   /** Modelo mensal (decisão 078): início e fim são o período do orçamento,
    *  que acompanha os meses — aparecem travados. */
   periodoTravado?: boolean;
+  /** Serviço Interno (decisão 149): não há recebimento, qualquer que seja o
+   *  número. Obrigatória — campo opcional em prop some em silêncio
+   *  (CLAUDE.md). */
+  servicoInterno: boolean;
+  /** Modelo mensal (decisão 149): os meses do trimestre e o faturamento de
+   *  cada um, na mesma origem do fechamento acima. `null` fora do mensal —
+   *  e é isso que tira a Data Evento e troca a data única pelas do mês. */
+  mesesDoEnvio: MesDoEnvio[] | null;
 
   fieldErrors: Record<string, string[]>;
   erroGeral: string | null;
@@ -272,6 +355,8 @@ export function EnviarJobModal({
   produtores,
   cidadesIniciais,
   periodoTravado = false,
+  servicoInterno,
+  mesesDoEnvio,
   fieldErrors,
   erroGeral,
 }: Props) {
@@ -285,8 +370,18 @@ export function EnviarJobModal({
 
   // Sem faturamento previsto não há recebimento (decisão 105): o campo
   // aparece travado e não é cobrado. O servidor decide pelo mesmo número.
-  const semRecebimento = faturamentoPrevisto <= 0.004;
-  const faltando = faltamCampos(dados, semRecebimento);
+  // O serviço Interno também não tem recebimento — pelo SERVIÇO, e não
+  // só pelo número (decisão 149).
+  const semRecebimento = faturamentoPrevisto <= 0.004 || servicoInterno;
+  const faltando = faltamCampos(dados, semRecebimento, mesesDoEnvio);
+
+  /** Escolher (ou limpar) a data de um mês — ver `alterarRecebimento`. */
+  function alterarRecebimentoDoMes(mes: string, data: string) {
+    if (!mesesDoEnvio) return;
+    onChange({
+      recebimentosPorMes: alterarRecebimento(dados.recebimentosPorMes, mesesDoEnvio, mes, data),
+    });
+  }
   const completo = !Object.values(faltando).some(Boolean);
 
   /** Erro visível: o que o servidor devolveu, ou o que faltou ao tentar. */
@@ -574,54 +669,83 @@ export function EnviarJobModal({
             />
           </Campo>
 
-          <Campo
-            rotulo="Data Evento"
-            obrigatorio
-            erro={erroDe("data_evento")}
-          >
-            <DatePicker
-              key={`evento-${dados.dataEvento}`}
-              name="__job_data_evento"
-              defaultValue={dados.dataEvento}
-              onDateChange={(d) => onChange({ dataEvento: d ? toIso(d) : "" })}
-              className={cn(
-                erroDe("data_evento") &&
-                  "border-california-red ring-2 ring-california-red/15",
-              )}
-            />
-          </Campo>
-
-          {/* Linha 6 — o recebimento desce sozinho, no lugar que era do
-              faturamento. O espaçador segura as duas colunas que sobram
-              para o contato de cobrança começar em linha própria. */}
-          <Campo
-            rotulo="Data prevista para recebimento"
-            obrigatorio={!semRecebimento}
-            erro={semRecebimento ? null : erroDe("data_prevista_faturamento")}
-          >
-            {semRecebimento ? (
-              <>
-                <Travado valor="Sem recebimento" />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  O job não tem faturamento previsto.
-                </p>
-              </>
-            ) : (
+          {/* Fee e Always On não têm data de evento (decisão 149): o campo
+              fica no lugar, travado com "Não se aplica" — a grade é a mesma
+              em todo tipo de job. */}
+          {!mesesDoEnvio ? (
+            <Campo
+              rotulo="Data Evento"
+              obrigatorio
+              erro={erroDe("data_evento")}
+            >
               <DatePicker
-                key={`fat-${dados.dataFaturamento}`}
-                name="__job_data_faturamento"
-                defaultValue={dados.dataFaturamento}
-                onDateChange={(d) => onChange({ dataFaturamento: d ? toIso(d) : "" })}
+                key={`evento-${dados.dataEvento}`}
+                name="__job_data_evento"
+                defaultValue={dados.dataEvento}
+                onDateChange={(d) => onChange({ dataEvento: d ? toIso(d) : "" })}
                 className={cn(
-                  erroDe("data_prevista_faturamento") &&
+                  erroDe("data_evento") &&
                     "border-california-red ring-2 ring-california-red/15",
                 )}
               />
-            )}
-          </Campo>
+            </Campo>
+          ) : (
+            <Campo
+              rotulo="Data Evento"
+              apoio={`${herdados.categoriaNome ?? "O modelo mensal"} não tem data de evento.`}
+            >
+              <Travado valor="Não se aplica" />
+            </Campo>
+          )}
 
-          <div className="hidden md:col-span-2 md:block" aria-hidden />
+          {/* Linha 6 — o recebimento. Três casos:
+              - mensal com faturamento: uma data por mês, cada mês numa
+                coluna (o trimestre tem de 1 a 3 meses, cabe na grade);
+              - sem recebimento (Interno, ou faturamento zero): travado;
+              - o resto: a data única de sempre. O espaçador segura as
+                duas colunas que sobram para o contato de cobrança começar
+                em linha própria. */}
+          {mesesDoEnvio && !semRecebimento ? (
+            <RecebimentoPorMes
+              meses={mesesDoEnvio}
+              linhas={dados.recebimentosPorMes}
+              tentou={tentou}
+              erroServidor={fieldErrors.data_prevista_faturamento?.[0] ?? null}
+              onAlterar={alterarRecebimentoDoMes}
+            />
+          ) : (
+            <>
+              <Campo
+                rotulo="Data prevista para recebimento"
+                obrigatorio={!semRecebimento}
+                erro={semRecebimento ? null : erroDe("data_prevista_faturamento")}
+              >
+                {semRecebimento ? (
+                  <>
+                    <Travado valor="Sem recebimento" />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {servicoInterno
+                        ? "Serviço Interno não tem recebimento."
+                        : "O job não tem faturamento previsto."}
+                    </p>
+                  </>
+                ) : (
+                  <DatePicker
+                    key={`fat-${dados.dataFaturamento}`}
+                    name="__job_data_faturamento"
+                    defaultValue={dados.dataFaturamento}
+                    onDateChange={(d) => onChange({ dataFaturamento: d ? toIso(d) : "" })}
+                    className={cn(
+                      erroDe("data_prevista_faturamento") &&
+                        "border-california-red ring-2 ring-california-red/15",
+                    )}
+                  />
+                )}
+              </Campo>
 
+              <div className="hidden md:col-span-2 md:block" aria-hidden />
+            </>
+          )}
 
           {/* Linha 7 — contato de cobrança. Uma linha por pessoa: é o que
               o financeiro usa para cobrar, e muda de job para job. */}
@@ -861,6 +985,91 @@ function toIso(d: Date): string {
   const mes = `${d.getMonth() + 1}`.padStart(2, "0");
   const dia = `${d.getDate()}`.padStart(2, "0");
   return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+/**
+ * Recebimento do modelo mensal: o rótulo ocupa a linha inteira e cada mês
+ * fica numa coluna da grade do formulário — o trimestre tem de 1 a 3 meses.
+ * Os rótulos dos meses usam o mesmo estilo dos rótulos do contato de
+ * cobrança (texto pequeno, asterisco vermelho).
+ */
+function RecebimentoPorMes({
+  meses,
+  linhas,
+  tentou,
+  erroServidor,
+  onAlterar,
+}: {
+  meses: MesDoEnvio[];
+  linhas: RecebimentoDoMes[];
+  tentou: boolean;
+  erroServidor: string | null;
+  onAlterar: (mes: string, data: string) => void;
+}) {
+  const primeiro = meses.find((m) => m.faturamento > 0.004)?.mes ?? null;
+  return (
+    <div className="space-y-1.5 md:col-span-3">
+      <Label>
+        Datas previstas para recebimento
+        <span className="ml-1 text-california-red">*</span>
+      </Label>
+      <div className="grid gap-x-5 gap-y-1.5 md:grid-cols-3">
+        {meses.map((m) => {
+          const l = linhas.find((x) => x.mes === m.mes) ?? { mes: m.mes, data: "", sugerida: false };
+          const sem = m.faturamento <= 0.004;
+          const faltou = !sem && tentou && !l.data;
+          const temSeguinteVazio = meses.some(
+            (x) =>
+              x.mes > m.mes &&
+              x.faturamento > 0.004 &&
+              !linhas.find((r) => r.mes === x.mes)?.data,
+          );
+          const apoio = sem
+            ? "O mês não tem faturamento previsto."
+            : l.sugerida && primeiro
+              ? `Sugerida pela data de ${nomeDoMes(primeiro)}. Altere se precisar.`
+              : m.mes === primeiro && temSeguinteVazio
+                ? "Os meses seguintes vazios recebem o mesmo dia, como sugestão."
+                : null;
+          return (
+            <div key={m.mes} className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {nomeComAno(m.mes)}
+                  {!sem && <span className="ml-1 text-california-red">*</span>}
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {sem ? "sem faturamento" : formatCurrency(m.faturamento)}
+                </span>
+              </div>
+              {sem ? (
+                <Travado valor="Sem recebimento" />
+              ) : (
+                <DatePicker
+                  key={`receb-${m.mes}-${l.data}`}
+                  name={`__job_recebimento_${m.mes}`}
+                  defaultValue={l.data}
+                  // Vazio, o calendário abre no mês seguinte ao de
+                  // referência — onde o recebimento costuma cair.
+                  mesInicial={somarMeses(m.mes, 1)}
+                  onDateChange={(d) => onAlterar(m.mes, d ? toIso(d) : "")}
+                  className={cn(
+                    faltou && "border-california-red ring-2 ring-california-red/15",
+                  )}
+                />
+              )}
+              {faltou ? (
+                <p className="text-xs text-california-red">Campo obrigatório.</p>
+              ) : apoio ? (
+                <p className="text-xs text-muted-foreground">{apoio}</p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      {erroServidor && <p className="text-xs text-california-red">{erroServidor}</p>}
+    </div>
+  );
 }
 
 /** Rótulo + campo + linha de apoio, que vira mensagem de erro quando há erro. */

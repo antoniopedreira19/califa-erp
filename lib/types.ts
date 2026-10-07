@@ -1038,12 +1038,18 @@ export interface Job {
   /** Errata que devolveu o job ao mural. */
   abertura_revisao_errata_id: string | null;
   /** Data do EVENTO, informada no envio do job. Obrigatória no
-   *  formulário desde 27/08/2026; nula nos jobs abertos antes disso. */
+   *  formulário desde 27/08/2026; nula nos jobs abertos antes disso e, desde
+   *  a decisão 149, no Fee e no Always On, que não têm evento. */
   data_evento: string | null;
   /** Data prevista para o RECEBIMENTO, informada no envio do job. A
    *  coluna segue `data_prevista_faturamento`: só o rótulo da tela virou
-   *  "Data prevista para recebimento", em 27/08/2026. */
+   *  "Data prevista para recebimento", em 27/08/2026. No modelo mensal
+   *  (decisão 149) é a data do primeiro mês com faturamento. */
   data_prevista_faturamento: string | null;
+  /** Modelo mensal (decisão 149): a data prevista de recebimento de cada
+   *  mês, informada no envio — `{ "AAAA-MM-01": "AAAA-MM-DD" }`. Nula fora
+   *  do mensal. Pré-preenche as parcelas da abertura no financeiro. */
+  recebimento_previsto_por_mes: Record<string, string> | null;
   /**
    * Contexto livre da produção, lido no modal de conferência do financeiro.
    * Aparece na tela como **Descritivo do Job** desde 17/08/2026 — a coluna
