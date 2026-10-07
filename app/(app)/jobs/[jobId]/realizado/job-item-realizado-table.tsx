@@ -2231,6 +2231,8 @@ export function JobItemRealizadoTable({
                 fornecedorId: pp.fornecedor_id ?? null,
                 empresaId: pp.empresa_id,
                 estabelecimentoId: pp.estabelecimento_id ?? null,
+                prazoPagamento: pp.prazo_pagamento,
+                geradaEm: pp.created_at,
                 servico: pp.servico,
                 anexos: pp.anexos,
                 substitui: pp.substitui,

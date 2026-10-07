@@ -3,7 +3,9 @@
 **Data:** 2026-10-07
 **Status:** entregas 1 e 2 aceitas e no ar (07/10/2026). A entrega 3 (a
 conferência lado a lado na produção) está desenhada e aprovada, e vem
-depois.
+depois. ⚠️ Exceção da [157](157-prazo-de-envio-da-pp.md) (07/10/2026): a
+PP gerada que perdeu o prazo de envio tem o vencimento atualizado, sem
+cancelar e refazer.
 **Quem decidiu:** Tiago, de 06 a 07/10/2026, a partir do protótipo
 interativo "Etapa antes da PP" (https://claude.ai/artifact/BkLusveQDiropTy9UBccYe,
 v1 a v17, rodadas nos comentários do artifact). "Pronto o protótipo /

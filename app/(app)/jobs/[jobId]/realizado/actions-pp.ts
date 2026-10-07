@@ -9,10 +9,12 @@ import {
   COLUNAS_DE_PAGAMENTO,
   aplicarPagamentoForaDoCadastro,
   camposDoPagamentoForaDoCadastro,
+  lerFoto,
   lerPagamentoForaDoCadastro,
   resumoDoCadastroDePagamento,
   tirarFoto,
   type DadosDePagamento,
+  type FotoDePagamentoDaPP,
   type PagamentoForaDoCadastro,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
@@ -50,10 +52,16 @@ import {
   type TipoCusto,
 } from "@/lib/types";
 import {
+  dataLimiteDeEnvio,
   ehJanelaDePagamento,
   hojeEmSaoPauloIso,
+  isoParaBr,
+  ppSegueOPrazoDeEnvio,
+  primeiraJanelaComEnvioAberto,
+  vencimentoAceitaEnvio,
   vencimentosNasJanelas,
 } from "@/lib/calculos/janelas-pagamento";
+import { carregarFeriadosNacionais } from "@/lib/data/feriados-nacionais";
 
 const BUCKET = "pedidos-compra";
 const PDF_TTL_SEGUNDOS = 3600;
@@ -245,14 +253,19 @@ function camposDeUrgencia(
 
 /**
  * Prazo e parcelas só em janela de pagamento (decisão 077): dia 08 ou 20,
- * e fim de semana passa para a segunda. Nunca no passado.
+ * e fim de semana passa para a segunda. Nunca no passado. E o 1º
+ * vencimento só numa janela que ainda aceita envio hoje (decisão 157).
  *
  * A data que já estava gravada e não mudou passa, mesmo fora da regra: é a
  * PP gerada antes de 14/09/2026, que só precisa obedecer quando alguém
  * trocar a data (pergunta 6a). Sem esta checagem aqui, a regra dependeria
  * só do calendário da tela.
  */
-function validarVencimentosNasJanelas(datas: string[], gravadas: string[]): string | null {
+function validarVencimentosNasJanelas(
+  datas: string[],
+  gravadas: string[],
+  feriados: string[],
+): string | null {
   const hoje = hojeEmSaoPauloIso();
   for (let i = 0; i < datas.length; i++) {
     const data = datas[i].slice(0, 10);
@@ -264,8 +277,28 @@ function validarVencimentosNasJanelas(datas: string[], gravadas: string[]): stri
     if (!ehJanelaDePagamento(data)) {
       return `${br} não é uma janela de pagamento. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte.`;
     }
+    // O prazo de envio (decisão 157) só pesa no 1º vencimento: as parcelas
+    // seguintes caem em janelas depois dele, com data-limite depois.
+    if (i === 0) {
+      const erroPrazo = erroDoPrazoDeEnvio(data, hoje, feriados);
+      if (erroPrazo) return erroPrazo;
+    }
   }
   return null;
+}
+
+/**
+ * O vencimento ainda aceita envio hoje (decisão 157)? A PP chega ao
+ * financeiro até 15 dias corridos antes da janela (no dia útil anterior,
+ * caindo em fim de semana ou feriado nacional). Null = aceita.
+ */
+function erroDoPrazoDeEnvio(vencimento: string, hoje: string, feriados: string[]): string | null {
+  if (vencimentoAceitaEnvio(vencimento, hoje, feriados)) return null;
+  const limite = dataLimiteDeEnvio(vencimento, feriados);
+  const primeira = primeiraJanelaComEnvioAberto(hoje, feriados);
+  return limite
+    ? `O prazo de envio para o vencimento ${isoParaBr(vencimento)} terminou em ${isoParaBr(limite)}: o financeiro recebe a PP até 15 dias antes da janela. A primeira janela possível hoje é ${isoParaBr(primeira)}.`
+    : `${isoParaBr(vencimento)} não é uma janela de pagamento. A primeira janela possível hoje é ${isoParaBr(primeira)}.`;
 }
 
 const anexoUploadedSchema = z.object({
@@ -826,6 +859,9 @@ async function renderizarDocumentoDaPP(args: {
   job: { codigo: string; nome: string; produto: string };
   contexto: ContextoPdf;
   parcelas: Array<{ numero: number; data_vencimento: string; valor: number }>;
+  /** A data de emissão impressa. Ausente = agora (a geração); o
+   *  "Atualizar vencimento" (decisão 157) mantém a da PP. */
+  emitidaEm?: string;
 }): Promise<{ path: string; buffer: Buffer }> {
   // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
   // seus side-effects de inicialização do resto do módulo.
@@ -840,7 +876,7 @@ async function renderizarDocumentoDaPP(args: {
       especificacoes: args.pp.especificacoes,
       valor: args.pp.valor,
       prazo_pagamento: parcelas[0]?.data_vencimento ?? "",
-      created_at: new Date().toISOString(),
+      created_at: args.emitidaEm ?? new Date().toISOString(),
       verba_producao: args.pp.verba_producao,
     },
     empresa: args.empresa as never,
@@ -1055,10 +1091,11 @@ async function finalizarPedidoCompraImpl(
   }
   const d = dadosParsed.data;
 
-  // ---- Janelas de pagamento e urgência (decisão 077) ----
+  // ---- Janelas de pagamento, prazo de envio e urgência (decisões 077 e 157) ----
   const erroJanela = validarVencimentosNasJanelas(
     d.parcelas.map((p) => p.data_vencimento),
     [],
+    await carregarFeriadosNacionais(supabase, session.activeTenant.id),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(d, null, session.profile.id);
@@ -1985,7 +2022,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, estabelecimento_id, anexos:pedidos_compra_anexos(id)",
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, estabelecimento_id, prazo_pagamento, created_at, anexos:pedidos_compra_anexos(id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1999,6 +2036,8 @@ export async function enviarPedidoCompraAoFinanceiro(
       verba_producao: boolean;
       fornecedor_id: string | null;
       estabelecimento_id: string | null;
+      prazo_pagamento: string;
+      created_at: string;
       anexos: Array<{ id: string }> | null;
     }>();
 
@@ -2026,6 +2065,36 @@ export async function enviarPedidoCompraAoFinanceiro(
     job,
   );
   if (bloqueioEnvio) return bloqueioEnvio;
+
+  // Prazo de envio (decisão 157): o financeiro recebe a PP até 15 dias
+  // antes da janela do vencimento. Vale também para a PP que esperou a
+  // abertura do job — o atalho "Atualizar vencimento" do painel resolve.
+  // A gerada antes de 08/10/2026 passa como está.
+  if (ppSegueOPrazoDeEnvio(ppRow.created_at)) {
+    const hoje = hojeEmSaoPauloIso();
+    const feriados = await carregarFeriadosNacionais(supabase, session.activeTenant.id);
+    const prazo = ppRow.prazo_pagamento.slice(0, 10);
+    if (!vencimentoAceitaEnvio(prazo, hoje, feriados)) {
+      const limite = dataLimiteDeEnvio(prazo, feriados);
+      await logAuditEvent({
+        acao: "acao_negada",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "pedido_compra",
+        entidadeId: pp_id,
+        metadata: {
+          acao_tentada: "pedido_compra.enviada_financeiro",
+          motivo: "prazo_de_envio_encerrado",
+          job_id: job.id,
+          vencimento: prazo,
+          data_limite: limite,
+        },
+      });
+      return {
+        ok: false,
+        message: `O prazo de envio para o vencimento ${isoParaBr(prazo)} terminou${limite ? ` em ${isoParaBr(limite)}` : ""}. Atualize o vencimento da ${ppRow.codigo} — a primeira janela possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
+      };
+    }
+  }
 
   // Verba de Produção é adiantamento: sai antes de existir nota, e as
   // notas entram na prestação de contas. Nas demais, a nota do fornecedor
@@ -2345,11 +2414,13 @@ export async function salvarPPAEmitir(
   }
 
   // As datas já salvas passam como estão (a regra só vale para a data que
-  // muda); o resto segue as janelas de pagamento (decisão 077).
+  // muda); o resto segue as janelas de pagamento (decisão 077) e o prazo de
+  // envio (decisão 157). A data salva que perdeu o prazo barra na geração.
   const gravadas = (existente?.dados?.parcelas ?? []).map((p) => p.data_vencimento);
   const erroJanela = validarVencimentosNasJanelas(
     d.parcelas.map((p) => p.data_vencimento),
     gravadas,
+    await carregarFeriadosNacionais(supabase, tenantId),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(d, null, session.profile.id);
@@ -2900,4 +2971,228 @@ export async function cancelarERefazerPP(
 
   revalidatePath(`/jobs/${linhaPP.job_id}`);
   return { ok: true, aEmitirId: novoId, codigo: linhaPP.codigo };
+}
+
+// ---------------------------------------------------------------------------
+// Atualizar vencimento (decisão 157)
+// ---------------------------------------------------------------------------
+
+/**
+ * Os feriados nacionais do cadastro, para a tela calcular a data-limite de
+ * envio com a mesma conta do servidor (decisão 157): o calendário do
+ * prazo, o "envie até" e o atalho "Atualizar vencimento".
+ */
+export async function feriadosNacionaisParaPP(): Promise<string[]> {
+  const session = await requireSession();
+  return carregarFeriadosNacionais(createClient(), session.activeTenant.id);
+}
+
+/**
+ * "Atualizar vencimento" da PP gerada que perdeu o prazo de envio
+ * (decisão 157). Pedido do Tiago em 07/10/2026: em vez de "Cancelar e
+ * refazer", escolher a nova janela e apertar um botão.
+ *
+ * A PP continua a mesma — código, documentos, valores e dados de pagamento.
+ * Mudam o 1º vencimento, as parcelas seguintes (a mesma janela nos meses
+ * seguintes, decisão 077, com os mesmos valores) e o PDF, refeito com as
+ * datas novas e a data de emissão de antes.
+ *
+ * Só vale para a PP ainda no job (`gerada`) e só quando o vencimento atual
+ * já não aceita envio: fora disso a PP gerada segue sem edição (decisão 153).
+ */
+export async function atualizarVencimentoDaPP(
+  ppId: string,
+  novoVencimento: string,
+): Promise<Result<{ codigo: string; vencimento: string }>> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  if (!z.string().uuid().safeParse(ppId).success || !dataSchema.safeParse(novoVencimento).success) {
+    return { ok: false, message: "Escolha um vencimento válido." };
+  }
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: ppBruta } = await supabase
+    .from("pedidos_compra")
+    .select("*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor)")
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!ppBruta) return { ok: false, message: "PP não encontrada." };
+  const pp = ppBruta as unknown as FotoDePagamentoDaPP & {
+    id: string;
+    codigo: string;
+    status: PPStatus;
+    job_id: string;
+    item_realizado_id: string;
+    estabelecimento_id: string | null;
+    verba_producao: boolean;
+    fornecedor_id: string | null;
+    responsavel_verba_id: string | null;
+    servico: string;
+    especificacoes: string | null;
+    quantidade: number | string;
+    valor: number | string;
+    prazo_pagamento: string;
+    pdf_path: string | null;
+    created_at: string;
+    dados_pagamento_congelados_em: string | null;
+    parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
+  };
+  if (pp.status !== "gerada") {
+    return {
+      ok: false,
+      message: `${pp.codigo} já saiu do job: o vencimento só se atualiza antes do envio ao financeiro.`,
+    };
+  }
+
+  const gate = await checarGatesRealizado(pp.item_realizado_id);
+  if (!gate.ok) return gate;
+  const { job } = gate;
+
+  const hoje = hojeEmSaoPauloIso();
+  const feriados = await carregarFeriadosNacionais(supabase, tenantId);
+  const atual = pp.prazo_pagamento.slice(0, 10);
+  if (vencimentoAceitaEnvio(atual, hoje, feriados)) {
+    return {
+      ok: false,
+      message: `O vencimento ${isoParaBr(atual)} ainda aceita envio até ${isoParaBr(dataLimiteDeEnvio(atual, feriados) ?? atual)}. Envie a PP como está.`,
+    };
+  }
+  const novo = novoVencimento.slice(0, 10);
+  const erroJanela = validarVencimentosNasJanelas([novo], [], feriados);
+  if (erroJanela) return { ok: false, message: erroJanela };
+
+  // As parcelas na ordem; a PP sem linha de parcela (anterior a 17/08) vira
+  // uma só, com o valor da PP.
+  const parcelasAntes = (pp.parcelas ?? [])
+    .slice()
+    .sort((a, b) => a.numero - b.numero)
+    .map((p) => ({ id: p.id, numero: p.numero, data_vencimento: p.data_vencimento.slice(0, 10), valor: Number(p.valor) }));
+  if (parcelasAntes.length === 0) {
+    return { ok: false, message: "Esta PP não tem parcelas gravadas. Cancele e gere outra." };
+  }
+  const datasNovas = vencimentosNasJanelas(novo, parcelasAntes.length);
+  const parcelasNovas = parcelasAntes.map((p, i) => ({ ...p, data_vencimento: datasNovas[i] }));
+
+  // ---- O PDF com as datas novas, antes de gravar ----
+  // Mesmo documento de antes: o pagamento sai da foto que a PP tirou na
+  // geração (cadastro + meio escolhido, decisões 067 e 127), não do
+  // cadastro de agora.
+  const [fornRes, cnpjDaPP, responsavelRes, contexto] = await Promise.all([
+    pp.verba_producao || !pp.fornecedor_id
+      ? Promise.resolve({ data: null })
+      : supabase.from("fornecedores").select("*").eq("id", pp.fornecedor_id).eq("tenant_id", tenantId).maybeSingle(),
+    // O cabeçalho é o do CNPJ da PP (decisão 156), o mesmo da geração.
+    cnpjDaPPNaGeracao(supabase, tenantId, job, pp.estabelecimento_id),
+    pp.verba_producao && pp.responsavel_verba_id
+      ? supabase.from("profiles").select("nome").eq("id", pp.responsavel_verba_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    carregarContextoPdf(supabase, tenantId, job),
+  ]);
+  if (!cnpjDaPP.ok) return cnpjDaPP;
+  const cadastro = (fornRes.data ?? null) as Record<string, unknown> | null;
+  const fornecedorDoPdf =
+    cadastro && pp.dados_pagamento_congelados_em
+      ? { ...cadastro, ...lerFoto(pp) }
+      : fornecedorDoDocumento(
+          cadastro,
+          lerPagamentoForaDoCadastro(ppBruta as Parameters<typeof lerPagamentoForaDoCadastro>[0]),
+        );
+
+  let documento: { path: string; buffer: Buffer };
+  try {
+    documento = await renderizarDocumentoDaPP({
+      tenantId,
+      jobId: job.id,
+      ppId: pp.id,
+      codigo: pp.codigo,
+      pp: {
+        servico: pp.servico,
+        quantidade: Number(pp.quantidade),
+        especificacoes: pp.especificacoes ?? null,
+        valor: Number(pp.valor),
+        verba_producao: pp.verba_producao,
+      },
+      empresa: cnpjDaPP.empresa,
+      fornecedor: fornecedorDoPdf,
+      responsavelVerbaNome: pp.verba_producao
+        ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
+        : null,
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas: parcelasNovas,
+      emitidaEm: pp.created_at,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Falha ao refazer o PDF: ${msg}` };
+  }
+
+  // ---- Grava: a PP (só se ainda gerada — trava de corrida) e as parcelas ----
+  const { data: atualizada, error: ppErr } = await supabase
+    .from("pedidos_compra")
+    .update({ prazo_pagamento: novo })
+    .eq("id", pp.id)
+    .eq("tenant_id", tenantId)
+    .eq("status", "gerada")
+    .select("id");
+  if (ppErr || !atualizada || atualizada.length === 0) {
+    return {
+      ok: false,
+      message: ppErr ? `Falha ao atualizar o vencimento: ${ppErr.message}` : "A PP mudou de situação. Recarregue a página.",
+    };
+  }
+
+  const desfazer = async () => {
+    await supabase.from("pedidos_compra").update({ prazo_pagamento: atual }).eq("id", pp.id).eq("tenant_id", tenantId);
+    for (const p of parcelasAntes) {
+      await supabase
+        .from("pedidos_compra_parcelas")
+        .update({ data_vencimento: p.data_vencimento })
+        .eq("id", p.id)
+        .eq("tenant_id", tenantId);
+    }
+  };
+
+  for (const p of parcelasNovas) {
+    const { error } = await supabase
+      .from("pedidos_compra_parcelas")
+      .update({ data_vencimento: p.data_vencimento })
+      .eq("id", p.id)
+      .eq("tenant_id", tenantId);
+    if (error) {
+      await desfazer();
+      return { ok: false, message: `Falha ao atualizar a parcela ${p.numero}: ${error.message}` };
+    }
+  }
+
+  // O PDF por cima do anterior, no mesmo caminho.
+  const caminho = pp.pdf_path || documento.path;
+  const { error: uploadErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(caminho, documento.buffer, { contentType: "application/pdf", upsert: true });
+  if (uploadErr) {
+    await desfazer();
+    return { ok: false, message: `Falha ao subir o PDF: ${uploadErr.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.vencimento_atualizado",
+    tenantId,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp.id,
+    metadata: {
+      pp_codigo: pp.codigo,
+      job_id: job.id,
+      de: parcelasAntes.map((p) => p.data_vencimento),
+      para: parcelasNovas.map((p) => p.data_vencimento),
+      data_limite_anterior: dataLimiteDeEnvio(atual, feriados),
+      data_limite_nova: dataLimiteDeEnvio(novo, feriados),
+    },
+  });
+
+  revalidatePath(`/jobs/${job.id}`);
+  return { ok: true, codigo: pp.codigo, vencimento: novo };
 }

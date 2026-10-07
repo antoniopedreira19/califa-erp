@@ -58,7 +58,9 @@ import {
 import {
   ehJanelaDePagamento,
   hojeEmSaoPauloIso,
-  janelaSeguinte,
+  isoParaBr,
+  primeiraJanelaComEnvioAberto,
+  vencimentoAceitaEnvio,
   vencimentosNasJanelas,
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFornecedor } from "@/app/(app)/fornecedores/actions";
@@ -83,10 +85,12 @@ import {
 } from "./anexos-da-pp";
 import { textoAguardaAbertura } from "./pp-a-emitir-ui";
 import {
+  AvisoPrazoDeEnvioPerdido,
   AvisoPrazoForaDaJanela,
   UrgenciaPPField,
   diaForaDaJanela,
 } from "./prazo-e-urgencia-pp";
+import { EnvioAte, useFeriadosNacionais } from "./prazo-de-envio-pp";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import {
@@ -159,10 +163,11 @@ interface Props {
  *  "Mais de 6…" até 24. */
 const MAX_PARCELAS = 24;
 
-/** A primeira janela de pagamento depois de hoje (decisão 077). Era hoje
- *  + 15 dias, uma data que quase nunca caía numa janela. */
-function defaultPrazoPagamento(): string {
-  return janelaSeguinte(hojeEmSaoPauloIso());
+/** A primeira janela de pagamento que ainda aceita envio hoje (decisão
+ *  157): até 07/10/2026 era a primeira janela depois de hoje (decisão
+ *  077), e antes disso hoje + 15 dias. */
+function defaultPrazoPagamento(feriados: string[] = []): string {
+  return primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados);
 }
 
 function dateToIso(date: Date | null): string {
@@ -333,6 +338,12 @@ export function GerarPPDrawer({
   // O CNPJ da PP — a "Empresa emissora" do formulário (decisão 156).
   const [cnpjId, setCnpjId] = React.useState<string>(cnpjPadraoDaPP ?? "");
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
+  // Prazo de envio (decisão 157): os feriados nacionais chegam depois do
+  // primeiro render. O ref deixa a abertura do formulário usar a lista
+  // sem refazer o formulário quando ela chega.
+  const feriados = useFeriadosNacionais();
+  const feriadosRef = React.useRef(feriados);
+  feriadosRef.current = feriados;
   // Descrição e quantidade abrem VAZIAS desde 17/08/2026: com PPs
   // parciais, herdar o nome e a quantidade do item induzia a pedir o item
   // inteiro para um fornecedor só, que é o oposto do que a tela faz.
@@ -476,7 +487,7 @@ export function GerarPPDrawer({
     setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
     setCnpjId(cnpjPadraoDaPP ?? "");
-    setPrazoPagamento(defaultPrazoPagamento());
+    setPrazoPagamento(defaultPrazoPagamento(feriadosRef.current));
     setPrazoOriginal(null);
     setUrgente(false);
     setJustificativa("");
@@ -605,6 +616,14 @@ export function GerarPPDrawer({
       setErro(travaDaAbertura);
       return;
     }
+    // A data salva que perdeu o prazo de envio ainda se salva, mas não gera
+    // PP (decisão 157) — o servidor diria o mesmo na revisão.
+    if (gerar && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
+      setErro(
+        `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou. Escolha outra data para gerar a PP.`,
+      );
+      return;
+    }
     if (!validar()) return;
     salvar(gerar);
   }
@@ -706,6 +725,12 @@ export function GerarPPDrawer({
     ) {
       setErro(
         "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
+      );
+      return false;
+    }
+    if (prazoPagamento !== prazoOriginal && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
+      setErro(
+        `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
       );
       return false;
     }
@@ -1131,8 +1156,9 @@ export function GerarPPDrawer({
                     name="prazo_pagamento"
                     defaultValue={prazoPagamento}
                     onDateChange={(date) => mudarPrazo(dateToIso(date))}
-                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal)}
+                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados)}
                   />
+                  <EnvioAte vencimento={prazoPagamento} feriados={feriados} />
                 </div>
                 <div>
                   <span className="text-xs font-medium">Parcelas</span>
@@ -1219,6 +1245,7 @@ export function GerarPPDrawer({
                 </div>
               </div>
               <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} />
+              <AvisoPrazoDeEnvioPerdido prazo={prazoPagamento} hojeIso={hoje} feriados={feriados} />
 
               {parcelas.length > 1 && (
                 <ParcelasDaPPField

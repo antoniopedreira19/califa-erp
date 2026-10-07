@@ -4856,3 +4856,28 @@ código publicado logo depois (`3305751`).
   com o CNPJ da PP.
 - Migration `20261007300009`. Testado no AMB-1026/26 (só leitura) e no
   TES-1014/26 (PP-00146).
+
+## ⚠️ Nota de 2026-10-07 (6) — prazo de envio da PP e "Atualizar vencimento" (decisão 157)
+
+- **Data-limite de envio = dia 08/20 do calendário − 15 dias corridos**; em
+  sábado, domingo ou feriado nacional do cadastro, volta ao dia útil
+  anterior. Em 07/10/2026 a primeira janela possível é 08/11 (paga 09/11,
+  envio até 23/10).
+- **Formulário da PP:** o calendário só acende janela com envio aberto, o
+  prazo sugerido é a primeira delas e aparece "Envio ao financeiro até …".
+  Data salva que perdeu o prazo ainda salva, mas não gera.
+- **Servidor:** salvar a PP a emitir, gerar e enviar ao financeiro checam o
+  prazo (`erroDoPrazoDeEnvio`; envio recusado grava `acao_negada`,
+  `prazo_de_envio_encerrado`). Só o 1º vencimento conta.
+- **PP gerada antes de 08/10/2026 passa como está**
+  (`INICIO_DO_PRAZO_DE_ENVIO`).
+- **"Atualizar vencimento"** no cartão da PP gerada que perdeu o prazo
+  (painel do item): lista das 6 próximas janelas abertas + botão; o
+  "Enviar" fica travado até lá. Refaz parcelas (mesma janela, mesmos
+  valores) e PDF (emissão original, CNPJ da PP, foto do pagamento);
+  auditoria `pedido_compra.vencimento_atualizado`. Action
+  `atualizarVencimentoDaPP` (`jobs.emitir_pp`).
+- Peças de tela em `realizado/prazo-de-envio-pp.tsx`; regra em
+  `lib/calculos/janelas-pagamento.ts`, com teste. Sem migration.
+- Testado no TES-1008/26 (PP-00088 → 09/11, PP-00122 → 20/11 e 21/12), com o
+  corte antecipado só no servidor local.

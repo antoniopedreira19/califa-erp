@@ -1,7 +1,9 @@
 # 077 — O prazo da PP só cai em janela de pagamento, e a PP pode ser urgente
 
 **Data:** 2026-09-14
-**Status:** aceita
+**Status:** aceita. Completada pela [157](157-prazo-de-envio-da-pp.md) em
+07/10/2026: o prazo também precisa respeitar a data-limite de envio (15
+dias antes da janela).
 **Contexto:** formulário de gerar/editar PP (`gerar-pp-drawer.tsx`),
 correção da PP rejeitada (`editar-pp-drawer.tsx`), `actions-pp.ts`, e no
 financeiro a lista de aprovação, a tela da PP e Títulos a Pagar. Pedido do
