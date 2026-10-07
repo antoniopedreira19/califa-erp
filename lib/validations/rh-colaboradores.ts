@@ -221,6 +221,25 @@ export const salarioSchema = z.object({
       }
       return (Math.round(n * 100) / 100).toFixed(2);
     }),
+  /** Parcela RPA do híbrido (clt_recibo). NULL/omitido para outros tipos.
+   *  Validado contra o total pelo trigger do banco. */
+  valor_recibo: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v, ctx) => {
+      if (!v || v.length === 0) return null;
+      const norm = v.replace(/\./g, "").replace(",", ".");
+      const n = Number(norm);
+      if (!Number.isFinite(n) || n < 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Parte Recibo precisa ser maior ou igual a zero.",
+        });
+        return z.NEVER;
+      }
+      return (Math.round(n * 100) / 100).toFixed(2);
+    }),
   data_inicio: z
     .string()
     .trim()

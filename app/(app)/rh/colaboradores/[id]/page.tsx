@@ -312,6 +312,7 @@ export default async function ColaboradorDetalhePage({
           />
           <CardSalarios
             colaboradorId={colab.id}
+            tipoContratacao={colab.tipo_contratacao}
             salarios={salarios}
             isAdmin={isAdmin}
             pendencia={pendenciasPorCard.salario}

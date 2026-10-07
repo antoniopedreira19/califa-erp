@@ -28,6 +28,7 @@ export async function registrarMudancaSalarial(
 
   const parsed = salarioSchema.safeParse({
     valor: formData.get("valor")?.toString() ?? "",
+    valor_recibo: formData.get("valor_recibo")?.toString() ?? "",
     data_inicio: formData.get("data_inicio")?.toString() ?? "",
     motivo: formData.get("motivo")?.toString() ?? "",
   });
@@ -41,10 +42,10 @@ export async function registrarMudancaSalarial(
 
   const supabase = createClient();
 
-  // Confirma colaborador do tenant
+  // Confirma colaborador do tenant e descobre tipo (precisa pra validar valor_recibo)
   const { data: colab, error: colabError } = await supabase
     .from("colaboradores")
-    .select("id")
+    .select("id, tipo_contratacao")
     .eq("id", colaboradorId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -52,10 +53,35 @@ export async function registrarMudancaSalarial(
     return { ok: false, message: "Colaborador não encontrado." };
   }
 
+  // Coerência valor_recibo <-> tipo_contratacao (o trigger do banco também valida,
+  // mas aqui damos erro claro antes de bater no CHECK).
+  const ehHibrido = colab.tipo_contratacao === "clt_recibo";
+  let valorReciboFinal: string | null = parsed.data.valor_recibo;
+  if (ehHibrido) {
+    if (valorReciboFinal == null) {
+      return {
+        ok: false,
+        message:
+          "Para colaborador CLT + Recibo é obrigatório informar a parte Recibo (RPA).",
+        fieldErrors: { valor_recibo: ["Informe a parte Recibo."] },
+      };
+    }
+    if (Number(valorReciboFinal) > Number(parsed.data.valor)) {
+      return {
+        ok: false,
+        message: "A parte Recibo não pode ser maior que o salário total.",
+        fieldErrors: { valor_recibo: ["Parte Recibo maior que o total."] },
+      };
+    }
+  } else {
+    // Força NULL em qualquer tipo que não seja clt_recibo (o CHECK do banco bloqueia).
+    valorReciboFinal = null;
+  }
+
   // Pega o vigente pra fechar (e capturar valor anterior no audit)
   const { data: vigente } = await supabase
     .from("colaboradores_salarios")
-    .select("id, valor")
+    .select("id, valor, valor_recibo")
     .eq("colaborador_id", colaboradorId)
     .is("data_fim", null)
     .maybeSingle();
@@ -79,6 +105,7 @@ export async function registrarMudancaSalarial(
       tenant_id: session.activeTenant.id,
       colaborador_id: colaboradorId,
       valor: parsed.data.valor,
+      valor_recibo: valorReciboFinal,
       data_inicio: parsed.data.data_inicio,
       motivo: parsed.data.motivo,
       created_by: session.profile.id,
@@ -97,6 +124,8 @@ export async function registrarMudancaSalarial(
     metadata: {
       valor_anterior: vigente?.valor ?? null,
       valor_novo: parsed.data.valor,
+      valor_recibo_anterior: vigente?.valor_recibo ?? null,
+      valor_recibo_novo: valorReciboFinal,
       data_inicio: parsed.data.data_inicio,
       motivo: parsed.data.motivo,
     },
@@ -114,6 +143,7 @@ export async function registrarMudancaSalarial(
 export async function corrigirSalarioAtual(
   colaboradorId: string,
   valorNovo: string,
+  valorReciboNovo?: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
   if (session.activeRole !== "administrador") {
@@ -124,8 +154,8 @@ export async function corrigirSalarioAtual(
   }
 
   const parsed = salarioSchema
-    .pick({ valor: true })
-    .safeParse({ valor: valorNovo });
+    .pick({ valor: true, valor_recibo: true })
+    .safeParse({ valor: valorNovo, valor_recibo: valorReciboNovo ?? "" });
   if (!parsed.success) {
     return {
       ok: false,
@@ -138,7 +168,7 @@ export async function corrigirSalarioAtual(
 
   const { data: vigente, error: vigenteError } = await supabase
     .from("colaboradores_salarios")
-    .select("id, valor, tenant_id")
+    .select("id, valor, valor_recibo, tenant_id, colaborador:colaboradores(tipo_contratacao)")
     .eq("colaborador_id", colaboradorId)
     .is("data_fim", null)
     .maybeSingle();
@@ -152,9 +182,33 @@ export async function corrigirSalarioAtual(
     return { ok: false, message: "Colaborador de outro tenant." };
   }
 
+  const tipo = (vigente as unknown as {
+    colaborador: { tipo_contratacao: string } | null;
+  }).colaborador?.tipo_contratacao;
+  const ehHibrido = tipo === "clt_recibo";
+  let valorReciboFinal: string | null = parsed.data.valor_recibo;
+  if (ehHibrido) {
+    if (valorReciboFinal == null) {
+      return {
+        ok: false,
+        message: "Informe a parte Recibo (RPA).",
+        fieldErrors: { valor_recibo: ["Informe a parte Recibo."] },
+      };
+    }
+    if (Number(valorReciboFinal) > Number(parsed.data.valor)) {
+      return {
+        ok: false,
+        message: "A parte Recibo não pode ser maior que o salário total.",
+        fieldErrors: { valor_recibo: ["Parte Recibo maior que o total."] },
+      };
+    }
+  } else {
+    valorReciboFinal = null;
+  }
+
   const { error: upError } = await supabase
     .from("colaboradores_salarios")
-    .update({ valor: parsed.data.valor })
+    .update({ valor: parsed.data.valor, valor_recibo: valorReciboFinal })
     .eq("id", vigente.id);
   if (upError) {
     console.error("[rh.salario.corrigir]", upError.message);
@@ -169,6 +223,8 @@ export async function corrigirSalarioAtual(
     metadata: {
       valor_anterior: vigente.valor,
       valor_novo: parsed.data.valor,
+      valor_recibo_anterior: vigente.valor_recibo,
+      valor_recibo_novo: valorReciboFinal,
     },
   });
 
