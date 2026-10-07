@@ -11,7 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Empresa, FolhaLinhaStatus, TipoContratacao } from "@/lib/types";
+import type {
+  Empresa,
+  FolhaLinhaStatus,
+  FolhaOrigem,
+  TipoContratacao,
+} from "@/lib/types";
 import { folhaLinhaStatusLabel, tipoContratacaoLabel } from "@/lib/types";
 import {
   formaDePagamento,
@@ -43,6 +48,8 @@ export type FolhaLinhaFinanceiro = {
   salario_base: string;
   status: FolhaLinhaStatus;
   motivo_pendencia: string | null;
+  /** Origem da linha: "california" (fluxo PJ) ou "contabilidade" (fluxo CLT). */
+  origem: FolhaOrigem;
   /**
    * O colaborador inteiro como o financeiro enxerga (decisão 132): nome,
    * contratação, documentos e pagamento. Obrigatório de propósito — um
@@ -61,6 +68,7 @@ export type FolhaLinhaFinanceiro = {
 
 type StatusFiltro = "todos" | FolhaLinhaStatus;
 type TipoFiltro = "todos" | TipoContratacao;
+type OrigemFiltro = "todas" | FolhaOrigem;
 
 const ORDEM_TIPO: TipoContratacao[] = ["pj", "mei", "clt_recibo", "clt", "estagio", "socio"];
 
@@ -102,6 +110,7 @@ export function FolhasPagarList({
   const [busca, setBusca] = React.useState("");
   const [status, setStatus] = React.useState<StatusFiltro>("todos");
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
+  const [origem, setOrigem] = React.useState<OrigemFiltro>("todas");
   // Vazio = todas as regionais, como no filtro da aba de PPs.
   const [regionaisFiltro, setRegionaisFiltro] = React.useState<string[]>([]);
   const [ordenacao, setOrdenacao] = React.useState<Ordenacao>({
@@ -170,13 +179,14 @@ export function FolhasPagarList({
     return linhasPorRegional.filter((l) => {
       if (status !== "todos" && l.status !== status) return false;
       if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo) return false;
+      if (origem !== "todas" && l.origem !== origem) return false;
       if (!q) return true;
       return (
         l.colaborador.nome.toLowerCase().includes(q) ||
         l.colaborador.funcao.toLowerCase().includes(q)
       );
     });
-  }, [linhasPorRegional, busca, status, tipo]);
+  }, [linhasPorRegional, busca, status, tipo, origem]);
 
   // Competência mais recente primeiro, como vem do servidor; dentro dela, a
   // ordem escolhida. Nome sem distinguir acento: "Álvaro" fica entre os A.
@@ -274,6 +284,32 @@ export function FolhasPagarList({
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={origem}
+          onValueChange={(v) => setOrigem(v as OrigemFiltro)}
+        >
+          <SelectTrigger className="w-48" aria-label="Origem da folha">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">
+              Origem: Todas ({linhasPorRegional.length})
+            </SelectItem>
+            <SelectItem value="california">
+              Origem: PJ (
+              {linhasPorRegional.filter((l) => l.origem === "california").length}
+              )
+            </SelectItem>
+            <SelectItem value="contabilidade">
+              Origem: CLT (
+              {
+                linhasPorRegional.filter((l) => l.origem === "contabilidade")
+                  .length
+              }
+              )
+            </SelectItem>
+          </SelectContent>
+        </Select>
         <MultiSelectRegionais
           regionais={opcoesRegional}
           selecionadas={regionaisFiltro}
@@ -345,6 +381,7 @@ export function FolhasPagarList({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{l.colaborador.nome}</span>
                     <SeloContratacao tipo={l.colaborador.tipo_contratacao} />
+                    <SeloOrigem origem={l.origem} />
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {l.colaborador.funcao}
@@ -492,6 +529,23 @@ function SeloContratacao({ tipo }: { tipo: TipoContratacao }) {
       }`}
     >
       {tipoContratacaoLabel(tipo)}
+    </span>
+  );
+}
+
+/** Rótulo do fluxo que originou a linha (PJ = California gerou; CLT = veio da contabilidade). */
+function SeloOrigem({ origem }: { origem: FolhaOrigem }) {
+  const pj = origem === "california";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-semibold ${
+        pj ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+      }`}
+      title={
+        pj ? "Gerada pela California (fluxo PJ)" : "Importada da contabilidade (fluxo CLT)"
+      }
+    >
+      {pj ? "PJ" : "CLT"}
     </span>
   );
 }
