@@ -223,6 +223,9 @@ export function PlanilhaMensal({
         versaoId={versao.id}
         clienteNome={clienteNome}
         savePorPadrao={versao.save_por_padrao === true}
+        saveConsumoJobId={versao.save_consumo_job_id ?? null}
+        // O save do orçamento inteiro conta a versão toda, não só o mês.
+        itensDaVersao={itens}
         savePorItem={savePorItem}
         saldosDeSave={saldosDeSave}
         nomeDoGrupo={nomeDoGrupo}

@@ -38,11 +38,15 @@ import type { SaldoDeSave } from "@/lib/data/saves";
 import { GruposSection } from "./grupos-section";
 import { NovoGrupoInline } from "./novo-grupo-inline";
 import { TotaisCard } from "./totais-card";
+import { marcarSaveDaLinha, salvarConsumoDeSave } from "./save-actions";
 import {
-  definirSavePorPadrao,
-  marcarSaveDaLinha,
-  salvarConsumoDeSave,
-} from "./save-actions";
+  AvisoSaveDaLinha,
+  FaixaSaveDoOrcamento,
+  MenuSaveDoOrcamento,
+  modoDoSave,
+  resumoDoSave,
+} from "./save-do-orcamento";
+import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 
 interface Props {
   grupos: VersaoOrcamentoGrupo[];
@@ -69,7 +73,13 @@ interface Props {
   // ---- SAVE (docs/decisions/028-save-entre-jobs.md)
   /** Aparece no texto do formulário: o crédito é do cliente. */
   clienteNome: string;
+  /** Orçamento de save inteiro (decisão 154). */
   savePorPadrao: boolean;
+  /** Job cujo saldo a versão inteira consome (decisão 154), ou `null`. */
+  saveConsumoJobId: string | null;
+  /** As linhas da VERSÃO inteira. No modelo mensal, `itens` é só o mês, e
+   *  o save do orçamento inteiro conta todos os meses. Ausente ⇒ `itens`. */
+  itensDaVersao?: VersaoOrcamentoItem[];
   /** Estado do save por id do item. Só traz item que tem algo. */
   savePorItem: Record<string, EstadoSaveDaLinha>;
   /** Saldos de save que este cliente tem para gastar. */
@@ -122,6 +132,8 @@ export function PlanilhaVersao({
   versaoId,
   clienteNome,
   savePorPadrao,
+  saveConsumoJobId,
+  itensDaVersao,
   savePorItem,
   saldosDeSave,
   nomeDoGrupo,
@@ -145,11 +157,51 @@ export function PlanilhaVersao({
   // versão já gera ou consome save — ou é um "Orçamento de save", em que
   // todo item novo nasce em save (decisão 107). O saldo que o cliente tem
   // em outros jobs não abre mais a coluna: ele abria em quase todo cliente.
-  const temSave = savePorPadrao || Object.keys(savePorItem).length > 0;
+  const temSave =
+    savePorPadrao || saveConsumoJobId !== null || Object.keys(savePorItem).length > 0;
   const [saveVisivel, setSaveVisivel] = React.useState(temSave);
-  const [padrao, setPadrao] = React.useState(savePorPadrao);
   const [linhaAberta, setLinhaAberta] =
     React.useState<VersaoOrcamentoItem | null>(null);
+  const [avisoDaLinha, setAvisoDaLinha] = React.useState(false);
+
+  // O save do orçamento INTEIRO (decisão 154): o modo vem das duas colunas
+  // da versão, e os números contam a versão toda — no mensal, todos os
+  // meses, não só o desta planilha.
+  const modo = modoDoSave(savePorPadrao, saveConsumoJobId);
+  const linhasDaVersao = itensDaVersao ?? itens;
+  const resumo = React.useMemo(
+    () =>
+      resumoDoSave({
+        versaoId,
+        modo,
+        moeda,
+        saldos: saldosDeSave,
+        itens: linhasDaVersao,
+        nomeDoGrupo,
+        savePorItem,
+        faturamentoPrevisto: calcularTotaisVersao(
+          linhasDaVersao,
+          percentualHonorarios,
+          percentualImposto,
+          internacional,
+        ).faturamentoPrevisto,
+      }),
+    // `modo` é derivado das duas colunas logo acima.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      versaoId,
+      savePorPadrao,
+      saveConsumoJobId,
+      moeda,
+      saldosDeSave,
+      linhasDaVersao,
+      nomeDoGrupo,
+      savePorItem,
+      percentualHonorarios,
+      percentualImposto,
+      internacional,
+    ],
+  );
 
   const editavel = !readOnly;
   // O Interno não tem save (decisão 105): nem coluna, nem "Orçamento de
@@ -196,27 +248,29 @@ export function PlanilhaVersao({
           versaoLabel={versaoLabel}
           saveVisivel={saveVisivel && !interno}
           savePorItem={savePorItem}
-          onAbrirSave={editavel && !interno ? setLinhaAberta : undefined}
+          onAbrirSave={
+            editavel && !interno
+              ? (item) =>
+                  // Com um modo ligado, o save não se mexe linha a linha:
+                  // o pop-up dá lugar a um aviso (decisão 154).
+                  modo.tipo === "nenhum" ? setLinhaAberta(item) : setAvisoDaLinha(true)
+              : undefined
+          }
           onAlternarSave={interno ? undefined : () => setSaveVisivel((v) => !v)}
           moedaEstrangeira={moedaEstrangeira}
           interno={interno}
           rotuloTotal={mes ? `Total de ${mes.nome}` : undefined}
-          savePorPadrao={padrao && !interno}
-          onAlternarSavePadrao={
-            editavel && !interno
-              ? async (ligado) => {
-                  setPadrao(ligado);
-                  // Ligar o orçamento de save abre a coluna: todo item novo
-                  // vai nascer em save, e a marca dele só aparece nela
-                  // (decisão 107). Desligar não recolhe — as linhas que já
-                  // nasceram em save continuam lá.
-                  if (ligado) setSaveVisivel(true);
-                  const r = await definirSavePorPadrao(versaoId, ligado);
-                  if (!r.ok) setPadrao(!ligado);
-                  router.refresh();
-                }
-              : undefined
+          controleDoSave={
+            editavel && !interno ? (
+              <MenuSaveDoOrcamento
+                resumo={resumo}
+                // Ligar um modo abre a coluna: a marca de cada linha só
+                // aparece nela (decisão 107). Retirar não recolhe.
+                onMudou={() => setSaveVisivel(true)}
+              />
+            ) : undefined
           }
+          faixaDoSave={interno ? undefined : <FaixaSaveDoOrcamento resumo={resumo} />}
           novoGrupo={
             readOnly ? undefined : (
               <NovoGrupoInline
@@ -249,6 +303,12 @@ export function PlanilhaVersao({
           subtitulo={subtituloTotais}
         />
       )}
+
+      <AvisoSaveDaLinha
+        resumo={resumo}
+        aberto={avisoDaLinha}
+        onFechar={() => setAvisoDaLinha(false)}
+      />
 
       <SaveDialog
         contexto="orcamento"

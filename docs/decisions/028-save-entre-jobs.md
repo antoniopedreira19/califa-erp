@@ -186,16 +186,19 @@ O custo nasce no job que consumir.
 
 ## 10. Orçamento de save inteiro
 
-Uma chave no cabeçalho da versão faz **toda linha nova nascer marcada**. O
-job resultante tem **valor do job zero** e faturamento cheio, e o saldo
-inteiro fica disponível para o cliente.
+~~Uma chave no cabeçalho da versão faz **toda linha nova nascer marcada**.~~
+Desde 07/10/2026 ([decisão 154](154-save-do-orcamento-inteiro.md)), o
+botão "Save" da planilha marca **todas as linhas**, as que já existem e as
+novas. O job resultante tem **valor do job zero** e faturamento cheio, e o
+saldo inteiro fica disponível para o cliente.
 
 É a segunda porta de entrada do save, e reaproveita o fluxo orçamento →
 versão → aprovação → job que já existe. Não há tipo de job novo nem
 máquina de estados nova.
 
-A chave é **default de linha nova, não trava**: uma linha pode ser
-desmarcada depois.
+~~A chave é **default de linha nova, não trava**: uma linha pode ser
+desmarcada depois.~~ Superado pela 154: com o orçamento de save ligado,
+uma linha não sai do save sozinha.
 
 > ⚠️ **07/10/2026 — quem liga a chave.** A chave é de quem edita o
 > orçamento, `orcamentos.editar` (administrador, GP e produtor), e não da
@@ -205,6 +208,16 @@ desmarcada depois.
 > que o produtor cria nasce em save em nome dele (`save_marcado_por`). A
 > trava fica em `definirSavePorPadrao`; a RLS de `versoes_orcamento` só
 > exige ser do tenant.
+
+> ⚠️ **07/10/2026 (2) — o orçamento inteiro ([decisão 154](154-save-do-orcamento-inteiro.md)).**
+> A chave saiu: o botão "Save" da barra da planilha dedica o orçamento
+> inteiro a **gerar** save (todas as linhas, inclusive as que já existem)
+> ou a **consumir** o saldo de um único job, e "Retirar todos os saves"
+> desfaz tudo. Os dois modos se excluem; ligar um deles com linha de save
+> de outro tipo é recusado com o motivo; e, com um modo ligado, o save não
+> se mexe linha a linha. A permissão continua a da chave
+> (`orcamentos.editar`), e `definirSavePorPadrao` deu lugar a três actions
+> sobre funções do banco (`versao_save_*_tudo`).
 
 ## 11. Job com faturamento zero encerra sem faturar
 
@@ -257,7 +270,8 @@ o honorário **uma vez só**, no Job A.
 | `lib/calculos/bv-planilha.ts` | Exclusão da linha em save da rentabilidade |
 | `versoes_orcamento_itens.em_save`, `jobs_itens_orcado.em_save` | A marca |
 | `jobs_itens_orcado.save_consumido` | Quanto a linha consome |
-| `versoes_orcamento.save_por_padrao` | A chave do orçamento de save |
+| `versoes_orcamento.save_por_padrao` | O orçamento de save inteiro (decisão 154) |
+| `versoes_orcamento.save_consumo_job_id` | O orçamento que consome o saldo de um job inteiro (decisão 154) |
 | `jobs_saves`, `jobs_saves_consumos`, `vw_saves` | O crédito, o consumo e o saldo |
 | `faturamento_itens.origem_tipo = 'save'` | A separação dentro da nota |
 

@@ -73,6 +73,11 @@ export type AuditAction =
   | "save.consumo.definido"
   | "save.orcamento.ligado"
   | "save.orcamento.desligado"
+  // O save do orçamento INTEIRO (decisão 154): substitui a chave de cima,
+  // que fica na lista pelos eventos já gravados.
+  | "save.orcamento.gerar_tudo"
+  | "save.orcamento.consumir_tudo"
+  | "save.orcamento.retirar_tudo"
   // Aprovação de save (decisão 099): cada linha que gera ou consome save
   // vira um pedido que o financeiro decide.
   | "save.pedido.enviado"

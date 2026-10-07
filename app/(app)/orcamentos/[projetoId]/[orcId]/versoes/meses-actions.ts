@@ -139,6 +139,11 @@ function mensagemDoBanco(
   if (msg.includes("mês diferente")) {
     return "Escolha um mês diferente do atual.";
   }
+  // Save do orçamento inteiro (decisão 154): a cópia que passaria do saldo
+  // do job que o orçamento consome é recusada pelo banco com a frase pronta.
+  if (msg.startsWith("Passa do saldo") || msg.startsWith("Este orçamento inteiro")) {
+    return msg;
+  }
   return padrao;
 }
 
