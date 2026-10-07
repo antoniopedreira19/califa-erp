@@ -102,7 +102,6 @@ export function ImportarOrcamentosDrawer({ projetoId }: Props) {
   }
 
   const novas = preview?.novasVersoes ?? 0;
-  const desfazem = preview?.orcamentos.filter((o) => o.desfazAprovacao) ?? [];
 
   return (
     <Dialog
@@ -176,8 +175,9 @@ export function ImportarOrcamentosDrawer({ projetoId }: Props) {
                       em rascunho.
                     </li>
                     <li>
-                      Orçamento <b>aprovado</b> com alteração tem a aprovação
-                      desfeita. Job aberto não recebe versão.
+                      Orçamento <b>aprovado</b> e job não recebem versão. Para
+                      alterar um aprovado, cancele a aprovação na tela dele
+                      antes de importar.
                     </li>
                     <li>
                       Honorários e imposto vêm da versão, não da planilha.
@@ -229,18 +229,6 @@ export function ImportarOrcamentosDrawer({ projetoId }: Props) {
                     </tbody>
                   </table>
                 </div>
-
-                {desfazem.length > 0 && (
-                  <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3 text-[12.5px] text-amber-800">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                      {desfazem.map((o) => o.nome).join(", ")}{" "}
-                      {desfazem.length === 1 ? "está aprovado" : "estão aprovados"}
-                      . Ao importar, a aprovação é desfeita e a versão nova
-                      passa a valer — a aprovação precisa ser refeita depois.
-                    </span>
-                  </div>
-                )}
 
                 {preview.orcamentos.some((o) => o.versaoDesatualizada) && (
                   <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3 text-[12.5px] text-amber-800">
@@ -312,11 +300,6 @@ export function ImportarOrcamentosDrawer({ projetoId }: Props) {
                       <span className="ml-auto font-mono text-xs">
                         v{c.numeroVersao} · rascunho
                       </span>
-                      {c.aprovacaoDesfeita && (
-                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-px text-[10px] font-bold uppercase tracking-wider text-amber-800">
-                          Aprovação desfeita
-                        </span>
-                      )}
                     </li>
                   ))}
                 </ul>
@@ -405,15 +388,8 @@ function LinhaPreview({ o }: { o: ResumoOrcamentoImportado }) {
       </td>
       <td className="px-3 py-2.5 text-right align-top">
         {o.acao === "nova_versao" && (
-          <span className="inline-flex flex-col items-end gap-1">
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-px font-mono text-[11px] font-bold text-emerald-700">
-              → v{o.proximaVersao}
-            </span>
-            {o.desfazAprovacao && (
-              <span className="text-[10.5px] font-semibold text-amber-800">
-                aprovação desfeita
-              </span>
-            )}
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-px font-mono text-[11px] font-bold text-emerald-700">
+            → v{o.proximaVersao}
           </span>
         )}
         {o.acao === "sem_alteracao" && (

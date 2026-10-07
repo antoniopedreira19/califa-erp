@@ -28,7 +28,6 @@ import type {
   PlanejadoAntesDoSave,
   TipoCusto,
 } from "@/lib/types";
-import { cancelarAprovacaoVersao } from "../[projetoId]/[orcId]/versoes/actions";
 import { copiarMesesEntreVersoes } from "@/lib/data/meses-versao";
 import { conferirMesesDaSecao } from "@/lib/importacao/meses-da-planilha";
 
@@ -42,9 +41,9 @@ import { conferirMesesDaSecao } from "@/lib/importacao/meses-da-planilha";
  *   planejado zerado; linha apagada leva o planejado junto;
  * - **job aberto** (e qualquer orçamento que já virou job) não recebe
  *   versão pela importação;
- * - **orçamento aprovado** com alteração tem a **aprovação desfeita** —
- *   pelo mesmo caminho do "Cancelar aprovação" da tela — e a versão nova
- *   passa a ser a vigente.
+ * - **orçamento aprovado** também não (Tiago, 07/10/2026 — antes a
+ *   importação desfazia a aprovação). Para alterá-lo, a aprovação se
+ *   cancela na tela do orçamento, e a importação vem depois.
  *
  * Duas portas, como a importação da versão: `previewImportacaoProjeto`
  * lê e compara sem gravar; `confirmarImportacaoProjeto` refaz a leitura
@@ -61,8 +60,6 @@ export interface ResumoOrcamentoImportado {
   acao: AcaoDoOrcamento;
   /** Por que não entra, em `recusado`. */
   motivo: string | null;
-  /** Orçamento aprovado com alteração: a aprovação será desfeita. */
-  desfazAprovacao: boolean;
   versaoAtual: number | null;
   proximaVersao: number | null;
   /** A planilha foi exportada de uma versão que já não é a vigente. */
@@ -94,7 +91,6 @@ export type ConfirmProjetoResult =
         nome: string;
         versaoId: string;
         numeroVersao: number;
-        aprovacaoDesfeita: boolean;
       }[];
     }
   | { ok: false; message: string };
@@ -387,7 +383,6 @@ async function analisar(
       titulo: secao.titulo || "Orçamento sem título",
       acao: "recusado",
       motivo: null,
-      desfazAprovacao: false,
       versaoAtual: null,
       proximaVersao: null,
       versaoDesatualizada: false,
@@ -453,6 +448,15 @@ async function analisar(
           : "Já virou job e foi enviado ao financeiro — não recebe versão nova.",
       );
     }
+    // Aprovado não recebe versão por aqui (Tiago, 07/10/2026). Antes a
+    // importação desfazia a aprovação sozinha; agora quem quer alterar um
+    // aprovado cancela a aprovação na tela do orçamento, onde a trava de
+    // `orcamentos.aprovar` vale, e importa depois.
+    if (orcamento.status === "aprovado") {
+      return recusar(
+        "Orçamento aprovado não recebe versão pela importação. Para alterá-lo, cancele a aprovação na tela do orçamento e importe de novo.",
+      );
+    }
 
     const vigente = vigentes.get(orcamento.id) ?? null;
     if (!vigente) {
@@ -486,7 +490,6 @@ async function analisar(
       ...base,
       acao: plano.alterado ? "nova_versao" : "sem_alteracao",
       motivo: null,
-      desfazAprovacao: plano.alterado && orcamento.status === "aprovado",
       versaoAtual: vigente.numero_versao,
       proximaVersao: plano.alterado ? ultimoNumero + 1 : null,
       versaoDesatualizada:
@@ -544,9 +547,7 @@ export async function confirmarImportacaoProjeto(
   const session = await requireSession();
   // Cria versão nova nos orçamentos alterados: a permissão é a do
   // `criarVersao`, conferida aqui e não só no botão — a RLS das versões só
-  // pede que a pessoa seja do tenant (06/10/2026). Desfazer a aprovação
-  // continua pedindo `orcamentos.aprovar`, dentro de
-  // `cancelarAprovacaoVersao`.
+  // pede que a pessoa seja do tenant (06/10/2026).
   const gate = await checarPermissao(session, "orcamentos.criar");
   if (!gate.ok) return { ok: false, message: gate.message };
   const tenantId = session.activeTenant.id;
@@ -735,24 +736,8 @@ export async function confirmarImportacaoProjeto(
       }
     }
 
-    // 5) Orçamento aprovado: a aprovação é desfeita pelo mesmo caminho
-    //    do "Cancelar aprovação" da tela. Depois da versão, e não antes:
-    //    se falhar aqui, sobra um rascunho a mais num orçamento ainda
-    //    aprovado, que é inofensivo — o contrário deixaria o orçamento
-    //    desaprovado sem a versão que justificava.
-    let aprovacaoDesfeita = false;
-    if (orcamento.status === "aprovado") {
-      const r = await cancelarAprovacaoVersao(vigente.id);
-      if (!r.ok) {
-        await desfazer();
-        return falhar(
-          `Orçamento “${orcamento.nome}”: a versão nova não pôde ficar vigente porque a aprovação não foi desfeita (${r.message}).`,
-        );
-      }
-      aprovacaoDesfeita = true;
-    }
-
-    // 6) Registro da importação e auditoria.
+    // 5) Registro da importação e auditoria. Orçamento aprovado não chega
+    //    aqui: `analisar` o recusa (07/10/2026).
     const { error: impErr } = await service.from("orcamento_importacoes").insert({
       tenant_id: tenantId,
       orcamento_id: orcamento.id,
@@ -782,7 +767,6 @@ export async function confirmarImportacaoProjeto(
         arquivo_nome: res.arquivo.nome,
         versao_base_id: vigente.id,
         numero_versao: numero,
-        aprovacao_desfeita: aprovacaoDesfeita,
         ...plano.resumo,
       },
     });
@@ -792,7 +776,6 @@ export async function confirmarImportacaoProjeto(
       nome: orcamento.nome,
       versaoId,
       numeroVersao: numero,
-      aprovacaoDesfeita,
     });
     revalidatePath(`/orcamentos/${projetoId}/${orcamento.id}`);
   }

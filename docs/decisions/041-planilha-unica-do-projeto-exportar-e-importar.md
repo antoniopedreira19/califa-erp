@@ -1,7 +1,7 @@
 # 041 — A planilha única do projeto: exportar vários orçamentos e trazê-la de volta como versão nova
 
 **Data:** 2026-09-03
-**Status:** aceita
+**Status:** aceita; revista em 2026-10-07 (orçamento aprovado não recebe versão pela importação)
 **Contexto:** página do projeto (`/orcamentos/[projetoId]`) e visão
 agregada (`/orcamentos/[projetoId]/agregado`). Design de referência:
 `Exportar e Exibir - Projeto e Visao Agregada.dc.html` (projeto Claude
@@ -170,9 +170,22 @@ tipos chega com o orçado novo e o banco põe o planejado igual a ele.
 Honorários, imposto, moeda e câmbio vêm da **versão**, nunca da
 planilha: a planilha do cliente nem os tem por orçamento.
 
-### Aprovado tem a aprovação desfeita
+### Aprovado não recebe versão
 
-Orçamento **aprovado** com alteração recebe a versão nova e, em seguida,
+Orçamento **aprovado** não recebe versão pela importação do projeto,
+com ou sem alteração: a prévia o mostra como "não entra", com o motivo.
+Para alterá-lo, a aprovação se cancela na tela do orçamento (onde vale a
+trava de `orcamentos.aprovar`), e a importação vem depois.
+
+⚠️ **Revisão (2026-10-07).** Até aqui o aprovado com alteração tinha a
+aprovação desfeita pela própria importação — texto abaixo, mantido como
+histórico. O Tiago decidiu que, neste modo, não deve ser possível
+importar orçamento com versão aprovada. O motivo imediato: a importação
+pede `orcamentos.criar` (produtor incluso), e desfazer a aprovação pede
+`orcamentos.aprovar` (só administrador e GP). O produtor via na prévia
+"aprovação desfeita" e batia num erro no meio da gravação.
+
+*Regra anterior:* orçamento **aprovado** com alteração recebe a versão nova e, em seguida,
 tem a aprovação desfeita pelo mesmo caminho do "Cancelar aprovação" da
 tela (`cancelarAprovacaoVersao`): a versão aprovada volta a `em_revisao`,
 o orçamento também, e a versão nova passa a ser a vigente. A ordem é de
@@ -188,6 +201,7 @@ que justificava. O preview avisa antes, em destaque.
   que o financeiro rejeitou: é a mesma trava do "Nova versão" e do
   "Duplicar". ⚠️ Esse caso é exportável (o funil o mostra como
   aprovado) mas não importável — apontado ao Tiago em 03/09/2026.
+- **Aprovado** (desde 2026-10-07, ver acima) — exportável, não importável.
 - **Cancelado.**
 - Seção **sem identificação** (a coluna oculta foi apagada, ou a planilha
   não é a exportação deste projeto) e orçamento **de outro projeto**.
@@ -227,7 +241,7 @@ alterações" como estava, e orçamento criado na sessão sempre aparece.
 | `app/api/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/export/route.ts` | Exportação de versão única, sobre o mesmo gerador |
 | `lib/importacao/parser-projeto.ts` | Leitura da planilha exportada |
 | `lib/importacao/diff-projeto.ts` | O plano: casamento, alterações, planejado preservado |
-| `app/(app)/orcamentos/_selecao/importar-actions.ts` | Preview e gravação, com as travas e a desaprovação |
+| `app/(app)/orcamentos/_selecao/importar-actions.ts` | Preview e gravação, com as travas (aprovado recusado desde 07/10/2026) |
 | `app/(app)/orcamentos/_selecao/` | Os seletores Exibir e Exportar e o drawer de importação |
 
 ## O que ficou de fora, de propósito
