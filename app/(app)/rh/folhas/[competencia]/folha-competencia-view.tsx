@@ -272,10 +272,13 @@ export function FolhaCompetenciaView({
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{l.colaborador.nome}</span>
-                    <SeloContratacao
+                    <SeloFluxo
                       tipo={l.colaborador.tipo_contratacao}
+                      origem={l.origem}
                     />
-                    <SeloOrigem origem={l.origem} />
+                    {l.colaborador.tipo_contratacao === "clt_recibo" && (
+                      <SeloHibrido />
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {l.colaborador.funcao}
@@ -388,37 +391,65 @@ function TabButton({
   );
 }
 
-function SeloContratacao({ tipo }: { tipo: TipoContratacao }) {
-  const clt = tipo === "clt" || tipo === "estagio";
+/** Rótulo + cor de um pagamento, derivado de (tipo contratual, origem da linha).
+ *
+ *  Azul (origem california, gerada pela California):
+ *    - pj, mei → PJ
+ *    - clt_recibo → Recibo (parte RPA do híbrido)
+ *
+ *  Verde (origem contabilidade, importada do PDF):
+ *    - clt → CLT
+ *    - clt_recibo → CLT (parte CLT do híbrido)
+ *    - estagio → Estagiário
+ *    - socio → Sócio
+ */
+function rotuloFluxo(
+  tipo: TipoContratacao,
+  origem: FolhaOrigem,
+): { label: string; tom: "azul" | "verde" } {
+  if (origem === "california") {
+    if (tipo === "clt_recibo") return { label: "Recibo", tom: "azul" };
+    return { label: "PJ", tom: "azul" };
+  }
+  // origem === "contabilidade"
+  if (tipo === "estagio") return { label: "Estagiário", tom: "verde" };
+  if (tipo === "socio") return { label: "Sócio", tom: "verde" };
+  return { label: "CLT", tom: "verde" };
+}
+
+function SeloFluxo({
+  tipo,
+  origem,
+}: {
+  tipo: TipoContratacao;
+  origem: FolhaOrigem;
+}) {
+  const { label, tom } = rotuloFluxo(tipo, origem);
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold ${
-        clt
-          ? "border-amber-200 bg-amber-50 text-amber-800"
-          : "border-border text-muted-foreground"
+      className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-semibold ${
+        tom === "azul"
+          ? "bg-blue-100 text-blue-800"
+          : "bg-emerald-100 text-emerald-800"
+      }`}
+      title={`${tipoContratacaoLabel(tipo)} · ${
+        origem === "california"
+          ? "gerada pela California"
+          : "importada da contabilidade"
       }`}
     >
-      {tipoContratacaoLabel(tipo)}
+      {label}
     </span>
   );
 }
 
-/** PJ (azul) = gerada pela California; CLT (verde) = importada da contabilidade.
- *  Pro híbrido clt_recibo, diferencia a parte Recibo (PJ) da parte CLT. */
-function SeloOrigem({ origem }: { origem: FolhaOrigem }) {
-  const pj = origem === "california";
+function SeloHibrido() {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-semibold ${
-        pj ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
-      }`}
-      title={
-        pj
-          ? "Gerada pela California (parte Recibo / RPA — pagamento com NF ou RPA)"
-          : "Importada da contabilidade (parte CLT — folha de pagamento)"
-      }
+      className="inline-flex items-center rounded-full border border-border px-1.5 py-0 text-[10px] font-semibold text-muted-foreground"
+      title="Colaborador CLT + Recibo (híbrido): parte do salário vai como Recibo (RPA) e parte como CLT."
     >
-      {pj ? "PJ" : "CLT"}
+      Híbrido
     </span>
   );
 }
