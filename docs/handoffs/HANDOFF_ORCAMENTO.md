@@ -5215,3 +5215,30 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **Fornecedores** ganhou o selo "Veículo" (leva ao cadastro do veículo).
 - Migration `20261007500001`: sai a trava `veiculos_midia_com_meio`; as
   colunas `meios` e `praca` ficam sem uso (apagar = destrutivo, pedir).
+
+## ⚠️ Nota de 2026-10-07 (4) — a chave "Orçamento de save" confere a permissão no servidor
+
+- **Antes**, `definirSavePorPadrao` (`versoes/[versaoId]/save-actions.ts`)
+  só pedia login. A RLS de `versoes_orcamento` (`versoes_update`) só exige
+  ser do tenant (e, para o freelancer, ser da Equipe): o Financeiro ligava
+  e desligava a chave chamando a action pelo console, sem ver o botão.
+- **Agora** a action confere `orcamentos.editar` logo depois do
+  `requireSession()`, a mesma permissão que mostra o botão na planilha da
+  versão e na mensal. Quem não tem recebe "Você não tem permissão para
+  essa ação.", e a tentativa fica em `acao_negada` com o `versao_id`.
+- **Por que `editar` e não `marcar_em_save`:** as duas leituras foram
+  levadas ao Tiago, e ele escolheu manter o produtor na chave, como a tela
+  já permitia. Com a chave ligada, a linha nova que o produtor cria nasce
+  em save em nome dele. Registrado na decisão 028 §10. As duas outras
+  actions do arquivo seguem em `orcamentos.marcar_em_save` (nota de
+  24/09).
+- **Para quem usa, nada muda:** administrador, GP e produtor continuam
+  ligando a chave. Pela auditoria, 3 produtores a ligaram e desligaram
+  9 vezes entre 01 e 05/10, sempre de volta a desligada, e nenhuma linha em
+  save foi marcada por produtor.
+- **Testado** no dev do worktree. Como `claude.freelancer.teste`, pelo
+  transporte do Server Action na versão v1 do `TES-P001/26-25`: antes da
+  trava a action seguia e só parava na RLS ("Versão não encontrada.");
+  depois, a recusa da permissão, com 1 `acao_negada` e a versão intocada.
+  Como administrador, a chave ligou e desligou pela tela, com os dois
+  eventos `save.orcamento.*`.

@@ -239,12 +239,21 @@ export async function salvarConsumoDeSave(
  * É DEFAULT de linha nova, não trava: as linhas que já existem não mudam,
  * e desligar não desmarca nada (decisão 028 §10). Quem marca a linha nova
  * é o trigger `item_nasce_em_save`.
+ *
+ * A chave é de quem edita o orçamento — administrador, GP e produtor —,
+ * e não da `orcamentos.marcar_em_save` das duas actions acima (Tiago,
+ * 07/10/2026). A RLS de `versoes_orcamento` só exige ser do tenant: sem
+ * esta conferência, o financeiro ligava a chave pelo console.
  */
 export async function definirSavePorPadrao(
   versaoId: string,
   ligado: boolean,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar", {
+    versao_id: versaoId,
+  });
+  if (!gate.ok) return gate;
   const supabase = createClient();
 
   const { data: versao, error: loadErr } = await supabase
