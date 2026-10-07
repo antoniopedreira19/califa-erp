@@ -325,6 +325,9 @@ export type AuditAction =
   | "folha.linha.paga"
   // Aprovação desfeita: o título sai e a linha volta a aguardar (decisão 132)
   | "folha.linha.aprovacao_desfeita"
+  // Fluxo CLT via PDF da contabilidade (folha-dois-fluxos, 2026-10-06)
+  | "folha.importada"
+  | "folha_competencia.enviada"
   // Rateio anual por regional (2026-09-23)
   | "rateio.regional.salvo"
   | "rateio.regional.copiado"
