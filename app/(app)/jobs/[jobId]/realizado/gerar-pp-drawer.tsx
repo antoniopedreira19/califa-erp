@@ -1292,6 +1292,7 @@ export function GerarPPDrawer({
                             empresas.find((e) => e.id === empresaId)?.razao_social ?? "empresa emissora"
                           }
                           existente={notaExistenteDe(existentes, a.nf.numero)}
+                          valorPP={valorPP}
                           disabled={pending}
                         />
                       );

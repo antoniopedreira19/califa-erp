@@ -1523,6 +1523,8 @@ export async function carregarDetalheDoJob(
     // que separa o produtor (gera, não envia, cancela só a não enviada) do
     // GP. `podeEnviarPP` acima soma a isso a abertura do job.
     papelEnviaPP: pode(session.activeRole, "jobs.enviar_pp"),
+    // Corrigir a NF da PP em avaliação sem aprovar (revisão da decisão 152).
+    papelCorrigeNf: pode(session.activeRole, "jobs.corrigir_nf_pp"),
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
   };

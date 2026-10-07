@@ -13,6 +13,10 @@
  *    emissão, valor (o TOTAL da nota) e CNPJ tomador. "Esta NF também cobre
  *    outra PP" abre o valor desta PP. A nota que já existe (mesmo
  *    fornecedor + número) vem preenchida e travada: só o financeiro corrige.
+ *  • A parte da nota vai até o valor da PP (revisão da 152, 07/10/2026):
+ *    nota maior que a PP abre "Valor nesta PP" sozinho, com o valor da PP.
+ *    Na correção da PP em avaliação (`modo="correcao"`), a nota só trava
+ *    depois de registrada pelo financeiro.
  *  • Nos outros tipos, o número do documento.
  *
  * Todo campo é obrigatório no ENVIO ao financeiro; salvar e gerar não pedem.
@@ -87,14 +91,30 @@ export function parteDaNf(nf: NfDigitada): number {
   return nf.cobreOutra ? nf.valorNaPP : nf.valor;
 }
 
-export function faltasDaNf(nf: NfDigitada): CampoNf[] {
+/** Os campos da NF que faltam ou estão errados. A parte desta PP vai de
+ *  zero até o valor da nota e até o valor da PP (`valorPP`; 0 = a PP ainda
+ *  sem valor, no formulário). */
+export function faltasDaNf(nf: NfDigitada, valorPP: number): CampoNf[] {
   const f: CampoNf[] = [];
   if (!nf.numero.trim()) f.push("numero");
   if (!nf.emissao) f.push("emissao");
   if (!(nf.valor > 0)) f.push("valor");
   if (!nf.tomador) f.push("tomador");
   if (nf.cobreOutra && (!(nf.valorNaPP > 0) || nf.valorNaPP > nf.valor + 0.004)) f.push("valorNaPP");
+  else if (valorPP > 0 && parteDaNf(nf) > valorPP + 0.004) f.push("valorNaPP");
   return f;
+}
+
+/** Até quanto da nota pode ir nesta PP: o menor entre a nota e a PP. */
+export function limiteDaParte(nf: NfDigitada, valorPP: number): number {
+  return valorPP > 0 ? Math.min(nf.valor, valorPP) : nf.valor;
+}
+
+/** Quanto da nota sobra para esta PP, depois das outras PPs com ela. O
+ *  valor da nota é o do cadastro, ou o digitado na correção. */
+export function sobraDaNota(existente: NotaExistente, valorDaNota = existente.valor): number {
+  const nasOutras = existente.pps.reduce((s, o) => s + (o.valor_na_pp ?? 0), 0);
+  return Math.round((valorDaNota - nasOutras) * 100) / 100;
 }
 
 /** Um CNPJ tomador do cadastro de impostos (ativo e com CNPJ). */
@@ -117,6 +137,8 @@ export function useNotasExistentes(
   fornecedorId: string | null,
   numeros: string[],
   excluirPPId: string | null,
+  /** Muda para buscar de novo (depois de corrigir a NF de outra PP). */
+  versao = 0,
 ): Record<string, NotaExistente> {
   const [porChave, setPorChave] = React.useState<Record<string, NotaExistente>>({});
   const chaves = React.useMemo(
@@ -124,7 +146,7 @@ export function useNotasExistentes(
       [...new Set(numeros.map((n) => chaveDoNumeroDaNf(n)).filter((c): c is string => c !== null))].sort(),
     [numeros],
   );
-  const assinatura = `${fornecedorId ?? ""}|${chaves.join(",")}|${excluirPPId ?? ""}`;
+  const assinatura = `${fornecedorId ?? ""}|${chaves.join(",")}|${excluirPPId ?? ""}|${versao}`;
   React.useEffect(() => {
     if (!fornecedorId || chaves.length === 0) {
       setPorChave({});
@@ -420,7 +442,12 @@ export function ListaDeAnexos({
 /**
  * Os campos da nota na linha do arquivo do tipo NF, e a parte desta PP.
  * Com a nota já no cadastro, os dados vêm de lá e ficam travados — o
- * número continua livre, para quem digitou o número errado.
+ * número continua livre, para quem digitou o número errado. Na correção da
+ * PP em avaliação (`modo="correcao"`), a nota só trava depois de registrada
+ * pelo financeiro; antes, a correção vale para todas as PPs com ela.
+ *
+ * A parte desta PP vai até o valor da PP (revisão da 152): com a nota maior
+ * que a PP, "Valor nesta PP" abre sozinho com o valor da PP.
  */
 export function NfDoAnexo({
   nf,
@@ -431,6 +458,9 @@ export function NfDoAnexo({
   tomadorEsperado,
   empresaNome,
   existente,
+  valorPP,
+  modo = "edicao",
+  onCorrigirOutraPP,
   obrigatorio = false,
   compacta = false,
   disabled,
@@ -448,6 +478,13 @@ export function NfDoAnexo({
   empresaNome: string;
   /** A nota do cadastro com este número (null = nota nova). */
   existente: NotaExistente | null;
+  /** O valor da PP (0 = ainda sem valor, no formulário): a parte da nota
+   *  nesta PP vai até ele. */
+  valorPP: number;
+  /** "correcao": PP em avaliação; a nota só trava se já registrada. */
+  modo?: "edicao" | "correcao";
+  /** Abre a correção da outra PP que está com a nota (no envio). */
+  onCorrigirOutraPP?: (pp: { id: string; codigo: string }) => void;
   obrigatorio?: boolean;
   /** Coluna estreita (tela lado a lado): dois campos por linha. */
   compacta?: boolean;
@@ -458,31 +495,59 @@ export function NfDoAnexo({
   const t = tomadores.find((x) => x.id === nf.tomador);
   const rotulo = "text-[11px] font-medium text-muted-foreground";
   const altura = "h-8 px-2 text-xs";
-  const travada = existente !== null;
+  const travada = modo === "correcao" ? existente?.registrada === true : existente !== null;
   const outras = existente?.pps ?? [];
-  const jaNasOutras = outras.reduce((s, o) => s + (o.valor_na_pp ?? 0), 0);
+  const sobra = existente && outras.length > 0 ? sobraDaNota(existente, nf.valor > 0 ? nf.valor : existente.valor) : null;
+  const notaMaiorQueAPP = valorPP > 0 && nf.valor > valorPP + 0.004;
 
   // A nota que já existe manda nos dados: data, valor e tomador vêm dela, e
-  // a parte desta PP começa no que falta da nota (decisão 152).
+  // a parte desta PP começa no que falta da nota, até o valor da PP
+  // (decisão 152 e revisão).
   const chaveDaExistente = existente?.nota_id ?? null;
   React.useEffect(() => {
     if (!existente) return;
-    const falta = Math.max(0, Math.round((existente.valor - jaNasOutras) * 100) / 100);
+    const falta = Math.max(0, sobraDaNota(existente));
     onMudar({
       emissao: existente.emissao,
       valor: existente.valor,
       tomador: existente.tomador,
-      cobreOutra: outras.length > 0 || nf.cobreOutra,
-      valorNaPP: nf.cobreOutra && nf.valorNaPP > 0 ? nf.valorNaPP : falta,
+      cobreOutra: outras.length > 0 || nf.cobreOutra || (valorPP > 0 && existente.valor > valorPP + 0.004),
+      valorNaPP: nf.cobreOutra && nf.valorNaPP > 0 ? nf.valorNaPP : valorPP > 0 ? Math.min(falta, valorPP) : falta,
     });
     // Só quando a nota encontrada muda.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveDaExistente]);
 
+  // Nota maior que a PP: a PP não usa mais da nota do que ela paga, então
+  // "Valor nesta PP" abre sozinho com o valor da PP. Se a nota volta a
+  // caber na PP, o campo que abriu sozinho fecha.
+  const abriuSozinho = React.useRef(false);
+  React.useEffect(() => {
+    if (disabled) return;
+    if (notaMaiorQueAPP && !nf.cobreOutra) {
+      abriuSozinho.current = true;
+      onMudar({
+        cobreOutra: true,
+        valorNaPP: nf.valorNaPP > 0 && nf.valorNaPP <= valorPP + 0.004 ? nf.valorNaPP : valorPP,
+      });
+    } else if (!notaMaiorQueAPP && abriuSozinho.current && nf.cobreOutra && outras.length === 0) {
+      abriuSozinho.current = false;
+      onMudar({ cobreOutra: false });
+    }
+    // Só quando a nota passa (ou deixa de passar) do valor da PP.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notaMaiorQueAPP, nf.cobreOutra]);
+
   const aviso =
     t && tomadorEsperado && t.id !== tomadorEsperado
       ? `A nota está no CNPJ ${t.nome}, mas a PP sai pela ${empresaNome}. Se a nota veio no CNPJ errado, peça outra ao fornecedor antes de enviar.`
       : null;
+
+  // A parte desta PP não cabe no que sobra da nota (ou a nota já acabou nas
+  // outras PPs): alguma PP está com a parte errada. A que ainda está em
+  // avaliação se corrige daqui.
+  const passaDaSobra = sobra !== null && (sobra <= 0.004 || parteDaNf(nf) > sobra + 0.004);
+  const corrigiveis = outras.filter((o) => o.status === "em_avaliacao");
 
   return (
     <div className="space-y-1.5">
@@ -581,6 +646,7 @@ export function NfDoAnexo({
           {nf.valor > 0 && (
             <span className="text-[11px] text-muted-foreground">
               de {formatCurrency(nf.valor, "BRL")} da nota
+              {notaMaiorQueAPP && <> · a PP é de {formatCurrency(valorPP, "BRL")}</>}
             </span>
           )}
         </div>
@@ -590,24 +656,53 @@ export function NfDoAnexo({
         <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
           <Lock className="mt-0.5 h-3 w-3 flex-none" />
           <span>
-            {outras.length > 0 ? (
+            {modo === "correcao" ? (
+              "Registrada pelo financeiro: os dados da nota só ele corrige. O valor nesta PP continua livre."
+            ) : outras.length > 0 ? (
               <>
-                Esta NF já está na{" "}
-                {outras.map((o, i) => (
-                  <React.Fragment key={o.codigo}>
-                    {i > 0 && ", "}
-                    <span className="font-mono">{o.codigo}</span> ({formatCurrency(o.valor_na_pp ?? 0, "BRL")})
-                  </React.Fragment>
-                ))}
-                . Os dados vêm de lá; só o financeiro corrige.
+                Esta NF já está na <ListaDePPs pps={outras} />.{" "}
+                {existente?.registrada
+                  ? "Os dados vêm de lá; só o financeiro corrige."
+                  : outras.length === 1
+                    ? "Os dados vêm de lá; para mudar, corrija a NF na outra PP."
+                    : "Os dados vêm de lá; para mudar, corrija a NF numa das outras PPs."}
+                {/* Atalho para corrigir a outra PP (no envio). Com a parte
+                    passando do que sobra, ele fica no aviso vermelho. */}
+                {!existente?.registrada && !passaDaSobra && onCorrigirOutraPP && corrigiveis.length > 0 && (
+                  <>
+                    {" "}
+                    {corrigiveis.map((o, i) => (
+                      <React.Fragment key={o.id}>
+                        {i > 0 && " · "}
+                        <button
+                          type="button"
+                          onClick={() => onCorrigirOutraPP({ id: o.id, codigo: o.codigo })}
+                          disabled={disabled}
+                          className="font-semibold text-california-red underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          Corrigir a <span className="font-mono">{o.codigo}</span>
+                        </button>
+                      </React.Fragment>
+                    ))}
+                  </>
+                )}
               </>
             ) : (
               "Esta NF já está no sistema. Os dados vêm de lá; só o financeiro corrige."
             )}
           </span>
         </p>
+      ) : modo === "correcao" ? (
+        outras.length > 0 && (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Também na <ListaDePPs pps={outras} />. A correção dos dados da nota vale para{" "}
+            {outras.length === 1 ? "ela" : "elas"}.
+          </p>
+        )
       ) : (
-        !disabled && (
+        !disabled &&
+        // Nota maior que a PP não é "só desta PP": o campo fica aberto.
+        !notaMaiorQueAPP && (
           <button
             type="button"
             onClick={() =>
@@ -624,6 +719,35 @@ export function NfDoAnexo({
         )
       )}
 
+      {passaDaSobra && sobra !== null && (
+        <div className="space-y-1">
+          <p className="flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug text-california-red">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+            <span>
+              {sobra <= 0.004
+                ? `A NF ${existente?.numero ?? nf.numero} já está inteira nas outras PPs.`
+                : `Da NF ${existente?.numero ?? nf.numero} sobram ${formatCurrency(sobra, "BRL")} para esta PP.`}{" "}
+              Se a parte de outra PP está errada, corrija-a antes.
+            </span>
+          </p>
+          {onCorrigirOutraPP && corrigiveis.length > 0 && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 pl-5">
+              {corrigiveis.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => onCorrigirOutraPP({ id: o.id, codigo: o.codigo })}
+                  disabled={disabled}
+                  className="text-[11px] font-semibold text-california-red underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  Corrigir a <span className="font-mono">{o.codigo}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {aviso && (
         <p className="flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug text-amber-800">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
@@ -634,18 +758,38 @@ export function NfDoAnexo({
   );
 }
 
+/** "PP-00138 (R$ 450,00), PP-00139 (R$ 200,00)". */
+function ListaDePPs({ pps }: { pps: NotaExistente["pps"] }) {
+  return (
+    <>
+      {pps.map((o, i) => (
+        <React.Fragment key={o.codigo}>
+          {i > 0 && ", "}
+          <span className="font-mono">{o.codigo}</span> ({formatCurrency(o.valor_na_pp ?? 0, "BRL")})
+        </React.Fragment>
+      ))}
+    </>
+  );
+}
+
 /** Embaixo da lista: a parte das notas nesta PP conferida com o valor da
- *  PP. Com uma nota, só o aviso quando não bate; com várias, a soma. */
+ *  PP. Passar do valor da PP barra o envio (vermelho); ficar abaixo só
+ *  avisa (amarelo). Com uma nota, só a frase quando não bate; com várias, a
+ *  soma. */
 export function ResumoDasNfs({ valores, valorPP }: { valores: number[]; valorPP: number }) {
   if (valores.length === 0) return null;
   const soma = Math.round(valores.reduce((t, v) => t + (v || 0), 0) * 100) / 100;
   const difere = soma > 0 && valorPP > 0 && Math.abs(soma - valorPP) > 0.004;
+  const passa = difere && soma > valorPP;
+  const cor = passa ? "text-california-red" : "text-amber-800";
   if (valores.length === 1) {
     if (!difere) return null;
     return (
-      <p className="flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug text-amber-800">
+      <p className={cn("flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug", cor)}>
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
-        A NF nesta PP é de {formatCurrency(soma, "BRL")}; a PP, de {formatCurrency(valorPP, "BRL")}. Confira o valor.
+        {passa
+          ? `A NF nesta PP (${formatCurrency(soma, "BRL")}) passa do valor da PP (${formatCurrency(valorPP, "BRL")}).`
+          : `A NF nesta PP é de ${formatCurrency(soma, "BRL")}; a PP, de ${formatCurrency(valorPP, "BRL")}. Confira o valor.`}
       </p>
     );
   }
@@ -654,16 +798,18 @@ export function ResumoDasNfs({ valores, valorPP }: { valores: number[]; valorPP:
       <p className="flex flex-wrap items-baseline justify-end gap-x-3 text-[11.5px] text-muted-foreground">
         <span>
           Soma das {valores.length} notas nesta PP{" "}
-          <b className={cn("font-mono text-foreground", difere && "text-amber-800")}>{formatCurrency(soma, "BRL")}</b>
+          <b className={cn("font-mono text-foreground", difere && cor)}>{formatCurrency(soma, "BRL")}</b>
         </span>
         <span>
           Valor da PP <b className="font-mono text-foreground">{formatCurrency(valorPP, "BRL")}</b>
         </span>
       </p>
       {difere && (
-        <p className="flex items-start justify-end gap-1.5 text-[11.5px] font-semibold leading-snug text-amber-800">
+        <p className={cn("flex items-start justify-end gap-1.5 text-[11.5px] font-semibold leading-snug", cor)}>
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
-          A soma das notas não bate com o valor da PP. Confira os valores.
+          {passa
+            ? "A soma das notas passa do valor da PP."
+            : "A soma das notas não bate com o valor da PP. Confira os valores."}
         </p>
       )}
     </div>
@@ -768,9 +914,15 @@ export function anexoParaEnvio(a: AnexoEmEdicao) {
 /**
  * O que falta nos anexos para ENVIAR ao financeiro (decisão 152): pelo
  * menos um arquivo; o tipo de cada um; o número dos documentos; e, em
- * cada NF, os quatro dados e a parte desta PP. Null = nada.
+ * cada NF, os quatro dados e a parte desta PP. A parte vai até o valor da
+ * nota, até o valor da PP e até o que sobra da nota depois das outras PPs
+ * (revisão da 152). Null = nada.
  */
-export function faltaNosAnexosParaEnviar(anexos: AnexoEmEdicao[]): string | null {
+export function faltaNosAnexosParaEnviar(
+  anexos: AnexoEmEdicao[],
+  valorPP: number,
+  existentes: Record<string, NotaExistente>,
+): string | null {
   const ok = anexos.filter((a) => a.status === "ok");
   if (anexos.some((a) => a.status === "uploading" || a.status === "selecionado")) {
     return "Aguarde os arquivos terminarem de subir.";
@@ -780,17 +932,66 @@ export function faltaNosAnexosParaEnviar(anexos: AnexoEmEdicao[]): string | null
   if (semTipo) return `Escolha o tipo de “${semTipo.nome}”.`;
   const semNumero = ok.find((a) => a.tipo !== "nota_fiscal" && !(a.numero ?? "").trim());
   if (semNumero) return `Preencha o número do documento de “${semNumero.nome}”.`;
-  const nfIncompleta = ok.find((a) => a.tipo === "nota_fiscal" && faltasDaNf(a.nf).length > 0);
-  if (nfIncompleta) {
-    return faltasDaNf(nfIncompleta.nf).every((c) => c === "valorNaPP")
-      ? `Informe o valor da NF “${nfIncompleta.nome}” nesta PP (até o valor da nota).`
-      : `Preencha a nota “${nfIncompleta.nome}”: número, data de emissão, valor e CNPJ tomador.`;
+  const nfs = ok.filter((a) => a.tipo === "nota_fiscal");
+  return faltaNasNfs(
+    nfs.map((a) => ({ nome: a.nome, nf: a.nf })),
+    valorPP,
+    existentes,
+  );
+}
+
+/**
+ * O que falta nas NFs de uma PP, no envio e na correção da PP em avaliação:
+ * os quatro dados de cada nota; a parte desta PP de zero até o valor da
+ * nota e da PP; a mesma nota uma vez só; a soma das partes até o valor da
+ * PP; e a parte de cada nota até o que sobra dela nas outras PPs.
+ */
+export function faltaNasNfs(
+  nfs: Array<{ nome: string; nf: NfDigitada }>,
+  valorPP: number,
+  existentes: Record<string, NotaExistente>,
+): string | null {
+  // A nota que já acabou nas outras PPs vem antes de tudo: sem isso, o
+  // campo zerado só diria "informe o valor".
+  for (const a of nfs) {
+    const existente = notaExistenteDe(existentes, a.nf.numero);
+    if (!existente || existente.pps.length === 0) continue;
+    if (sobraDaNota(existente, a.nf.valor > 0 ? a.nf.valor : existente.valor) <= 0.004) {
+      return `A NF ${existente.numero} já está inteira na ${existente.pps
+        .map((o) => `${o.codigo} (${formatCurrency(o.valor_na_pp ?? 0, "BRL")})`)
+        .join(", ")}: não sobra nada para esta PP. Se a parte de outra PP está errada, corrija-a antes.`;
+    }
   }
-  const chaves = ok
-    .filter((a) => a.tipo === "nota_fiscal")
-    .map((a) => chaveDoNumeroDaNf(a.nf.numero));
+  const incompleta = nfs.find((a) => faltasDaNf(a.nf, valorPP).length > 0);
+  if (incompleta) {
+    return faltasDaNf(incompleta.nf, valorPP).every((c) => c === "valorNaPP")
+      ? `Informe o valor da NF “${incompleta.nome}” nesta PP: maior que zero e até ${formatCurrency(
+          limiteDaParte(incompleta.nf, valorPP),
+          "BRL",
+        )}.`
+      : `Preencha a nota “${incompleta.nome}”: número, data de emissão, valor e CNPJ tomador.`;
+  }
+  const chaves = nfs.map((a) => chaveDoNumeroDaNf(a.nf.numero));
   if (chaves.some((c, i) => c !== null && chaves.indexOf(c) !== i)) {
     return "A mesma NF aparece duas vezes nesta PP.";
+  }
+  const soma = Math.round(nfs.reduce((s, a) => s + parteDaNf(a.nf), 0) * 100) / 100;
+  if (valorPP > 0 && soma > valorPP + 0.004) {
+    return `As NFs nesta PP somam ${formatCurrency(soma, "BRL")}, mais que o valor da PP (${formatCurrency(valorPP, "BRL")}).`;
+  }
+  for (const a of nfs) {
+    const existente = notaExistenteDe(existentes, a.nf.numero);
+    if (!existente || existente.pps.length === 0) continue;
+    const sobra = sobraDaNota(existente, a.nf.valor > 0 ? a.nf.valor : existente.valor);
+    if (parteDaNf(a.nf) > sobra + 0.004) {
+      const outras = existente.pps
+        .map((o) => `${o.codigo} com ${formatCurrency(o.valor_na_pp ?? 0, "BRL")}`)
+        .join(", ");
+      return `A NF ${existente.numero} vale ${formatCurrency(a.nf.valor > 0 ? a.nf.valor : existente.valor, "BRL")} e já está na ${outras}: sobram ${formatCurrency(
+        Math.max(0, sobra),
+        "BRL",
+      )} para esta PP. Se a parte de outra PP está errada, corrija-a antes.`;
+    }
   }
   return null;
 }

@@ -160,6 +160,7 @@ export function PlanilhaConferencia({
         <JobItemRealizadoTable
           // Tela do financeiro: só leitura, não gera nem envia PP.
           papelEnviaPP={false}
+          papelCorrigeNf={false}
           jobId={jobId}
           grupos={gruposDaPlanilha}
           realizadosMap={realizadosMap}

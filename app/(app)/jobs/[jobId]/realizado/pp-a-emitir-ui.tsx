@@ -39,6 +39,7 @@ import {
   useNotasExistentes,
   type TomadorDaNf,
 } from "./anexos-da-pp";
+import { CorrigirNfDialog } from "./corrigir-nf-da-pp";
 
 // ---------------------------------------------------------------------------
 // A pré-abertura: só PP a emitir
@@ -317,6 +318,8 @@ export function EnvioDialog({
   nomeDaEmpresa,
   tomadores,
   tomadorEsperado,
+  tomadorPorEmpresa,
+  nomeDaEmpresaDe,
   moeda,
   onEnviada,
 }: {
@@ -327,6 +330,9 @@ export function EnvioDialog({
   tomadores: TomadorDaNf[];
   /** O CNPJ tomador da empresa emissora — sugerido e conferido nas notas. */
   tomadorEsperado: string | null;
+  /** Para corrigir outra PP com a mesma nota (revisão da decisão 152). */
+  tomadorPorEmpresa: Record<string, string>;
+  nomeDaEmpresaDe: (empresaId: string) => string;
   moeda: string;
   onEnviada: (codigo: string) => void;
 }) {
@@ -339,6 +345,9 @@ export function EnvioDialog({
   const [erro, setErro] = React.useState<string | null>(null);
   const [confirmando, setConfirmando] = React.useState<AcimaDoPlanejado | null>(null);
   const [pending, startTransition] = React.useTransition();
+  /** A outra PP com a mesma nota, em correção (revisão da decisão 152). */
+  const [corrigindo, setCorrigindo] = React.useState<{ id: string; codigo: string } | null>(null);
+  const [versaoDasNotas, setVersaoDasNotas] = React.useState(0);
 
   // Cada abertura começa no que a PP tem gravado.
   const ppId = pp?.id ?? null;
@@ -347,6 +356,7 @@ export function EnvioDialog({
     setTentou(false);
     setErro(null);
     setConfirmando(null);
+    setCorrigindo(null);
     setAviso(null);
     setAnexos(pp.anexos.map((a) => anexoEmEdicao(a, tomadorEsperado)));
     setPrefixo(null);
@@ -364,14 +374,14 @@ export function EnvioDialog({
   }, [ppId]);
 
   const numerosDasNfs = anexos.filter((a) => a.tipo === "nota_fiscal").map((a) => a.nf.numero);
-  const existentes = useNotasExistentes(pp?.fornecedorId ?? null, numerosDasNfs, pp?.id ?? null);
+  const existentes = useNotasExistentes(pp?.fornecedorId ?? null, numerosDasNfs, pp?.id ?? null, versaoDasNotas);
 
   if (!pp) return null;
 
   function enviar(confirmado: boolean) {
     if (!pp) return;
     setTentou(true);
-    const falta = faltaNosAnexosParaEnviar(anexos);
+    const falta = faltaNosAnexosParaEnviar(anexos, pp.valor, existentes);
     if (falta && !pp.verbaProducao) {
       setErro(falta);
       return;
@@ -451,12 +461,14 @@ export function EnvioDialog({
                     <NfDoAnexo
                       nf={a.nf}
                       onMudar={(parte) => mudarNf(id, parte)}
-                      faltas={tentou ? faltasDaNf(a.nf) : []}
+                      faltas={tentou ? faltasDaNf(a.nf, pp.valor) : []}
                       idBase={`envio-${id}`}
                       tomadores={tomadores}
                       tomadorEsperado={tomadorEsperado}
                       empresaNome={nomeDaEmpresa}
                       existente={notaExistenteDe(existentes, a.nf.numero)}
+                      valorPP={pp.valor}
+                      onCorrigirOutraPP={setCorrigindo}
                       obrigatorio
                       disabled={pending}
                     />
@@ -501,6 +513,21 @@ export function EnvioDialog({
             {pending ? "Enviando…" : confirmando ? "Sim, enviar" : "Enviar ao financeiro"}
           </button>
         </div>
+        {/* A outra PP com a mesma nota, corrigida daqui: a nota volta a ser
+            buscada e o que sobra dela para esta PP se atualiza. */}
+        <CorrigirNfDialog
+          alvo={corrigindo}
+          onOpenChange={(o) => !o && setCorrigindo(null)}
+          fornecedorNome={nomeDoFornecedor}
+          nomeDaEmpresa={nomeDaEmpresaDe}
+          tomadores={tomadores}
+          tomadorPorEmpresa={tomadorPorEmpresa}
+          onCorrigida={() => {
+            setCorrigindo(null);
+            setErro(null);
+            setVersaoDasNotas((v) => v + 1);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

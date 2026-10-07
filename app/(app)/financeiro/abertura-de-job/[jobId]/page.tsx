@@ -447,6 +447,7 @@ export default async function AbrirJobNoFinanceiroPage({
           <JobRealizadoSection
             // Tela do financeiro: só leitura, não gera nem envia PP.
             papelEnviaPP={false}
+            papelCorrigeNf={false}
             confirmarSaidaParaOrcamento
             // Antes da abertura não há "inicial" e "atual" (decisão 151).
             aberturaDoJob={null}

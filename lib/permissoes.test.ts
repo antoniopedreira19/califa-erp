@@ -436,6 +436,11 @@ test("Editar orçado pelo financeiro: administrador e financeiro; a produção c
   assert.equal(pode("freelancer", "jobs.editar_orcado_financeiro"), false);
 });
 
+test("Corrigir a NF da PP em avaliação: quem envia e o financeiro (revisão da decisão 152)", () => {
+  const corrige = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.corrigir_nf_pp")));
+  assert.deepEqual(corrige, new Set<AppRole>(["administrador", "gerente_producao", "financeiro"]));
+});
+
 test("Enviar PP ao financeiro é do GP e do administrador (decisão 136)", () => {
   const envia = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.enviar_pp")));
   assert.deepEqual(envia, new Set<AppRole>(["administrador", "gerente_producao"]));

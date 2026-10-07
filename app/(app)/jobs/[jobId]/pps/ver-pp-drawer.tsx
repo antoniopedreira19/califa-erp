@@ -211,6 +211,15 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
         return { ...base, titulo: "Prestação de contas reenviada", detalhe: e.por_nome, estado: "feito" };
       case "prestacao_reprovada":
         return { ...base, titulo: "Prestação reprovada pelo financeiro", motivo: e.motivo, estado: "negado" };
+      case "nf_corrigida":
+        // Revisão da decisão 152: a NF corrigida com a PP em avaliação.
+        // O motivo é o que mudou, escrito pelo banco — vai sem aspas.
+        return {
+          ...base,
+          titulo: "NF corrigida",
+          detalhe: [e.por_nome, e.motivo].filter(Boolean).join(" — ") || null,
+          estado: "feito",
+        };
       case "prestacao_aprovada":
         return i === ultimaPrestacao && situacaoVerba === "concluida"
           ? { ...base, titulo: "Concluída", detalhe: "prestação aprovada pelo financeiro", estado: "feito" }

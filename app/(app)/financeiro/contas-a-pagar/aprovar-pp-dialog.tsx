@@ -47,7 +47,7 @@
  */
 
 import * as React from "react";
-import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
+import { AlertCircle, CheckCircle2, FilePenLine, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -108,6 +108,7 @@ import {
 import { aprovarPPComData, aprovarPPComNotaFiscal } from "./actions-titulos";
 import { FaixaQuemEnviou } from "./faixa-quem-enviou";
 import type { EnvioDaPP } from "@/lib/data/eventos-da-pp";
+import { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
 
 /** Radix não aceita `value=""` num item; este é o rótulo da ausência de
  *  escolha ("decidir na baixa"), traduzido para "" no estado. */
@@ -126,6 +127,9 @@ interface PPParaAprovar {
   /** Decisão 136: o último envio — qualquer GP envia, e o financeiro vê
    *  quem mandou. Null só na PP sem envio registrado. */
   envio: EnvioDaPP | null;
+  /** Revisão da decisão 152: a NF corrigida depois do envio, sem aprovar —
+   *  quem, quando e o que mudou. Null = não foi corrigida. */
+  correcaoDaNf: { por_nome: string | null; em: string; motivo: string | null } | null;
   emitidaPorNome: string | null;
   gpResponsavelNome: string | null;
   /** Módulo fiscal: o fornecedor e o regime do cadastro (null = não informado). */
@@ -407,7 +411,7 @@ export function AprovarPPDialog({
     if (nfs) {
       // Módulo fiscal: sem as notas conferidas não há mês de crédito nem
       // base de retenção.
-      const falta = faltaNasNotasParaAprovar(nfs);
+      const falta = faltaNasNotasParaAprovar(nfs, pp.valor);
       if (falta) {
         setErro(falta);
         return;
@@ -507,6 +511,21 @@ export function AprovarPPDialog({
               em={pp.envio.em}
               referencia={`Emitida por ${pp.emitidaPorNome ?? "—"} · GP responsável do job: ${pp.gpResponsavelNome ?? "—"}`}
             />
+          )}
+          {pp.correcaoDaNf && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-left text-[12.5px] leading-relaxed">
+              <FilePenLine className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div>
+                <div>
+                  <span className="text-amber-800">NF corrigida por</span>{" "}
+                  <strong className="font-semibold text-foreground">{pp.correcaoDaNf.por_nome ?? "—"}</strong>
+                  <span className="text-amber-800"> em {formatDataAsHoraBr(pp.correcaoDaNf.em)}</span>
+                </div>
+                {pp.correcaoDaNf.motivo && (
+                  <div className="text-[11.5px] text-amber-800">{pp.correcaoDaNf.motivo}</div>
+                )}
+              </div>
+            </div>
           )}
           <DialogDescription>
             Vencimento negociado pela produção:{" "}

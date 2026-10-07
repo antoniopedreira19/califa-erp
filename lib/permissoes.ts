@@ -146,6 +146,11 @@ export const permissoes = {
    *  produtor gera, edita e cancela a PP ainda não enviada; enviar é do GP.
    *  Antes não havia recurso próprio — valia a checagem de dono do job. */
   "jobs.enviar_pp":               ["administrador", "gerente_producao"],
+  /** Corrigir a NF da PP em avaliação sem aprovar (revisão da decisão 152,
+   *  07/10/2026): quem envia (GP e administrador) e o financeiro. A parte
+   *  da nota nesta PP, sempre; os dados da nota até o financeiro registrá-la.
+   *  O banco confere de novo (`corrigir_notas_fiscais_da_pp`). */
+  "jobs.corrigir_nf_pp":          ["administrador", "gerente_producao", "financeiro"],
   /** Enviar (e reenviar, se devolvido) o job para abertura no financeiro.
    *  Só o GP (Tiago, 22/09/2026): até aqui a action não tinha gate e o
    *  produtor enviava. */

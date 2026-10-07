@@ -338,7 +338,7 @@ test("a NF em conferência começa no que a linha traz, e a aprovação cobra da
     cobre_outra: false,
   });
   assert.equal(nfIncompleta(vazia), true);
-  assert.match(faltaNasNotasParaAprovar([vazia]) ?? "", /data de emissão e o valor/);
+  assert.match(faltaNasNotasParaAprovar([vazia], 0) ?? "", /data de emissão e o valor/);
 
   const cheia = nfInicial({ ...NOTA_VAZIA, numero: "0602", emissao: "2026-09-28", valor: 17500, tomador: "sa" }, "ssa");
   assert.deepEqual(cheia, {
@@ -351,12 +351,12 @@ test("a NF em conferência começa no que a linha traz, e a aprovação cobra da
     cobre_outra: false,
   });
   assert.equal(nfIncompleta(cheia), false);
-  assert.equal(faltaNasNotasParaAprovar([cheia]), null);
-  assert.match(faltaNasNotasParaAprovar([{ ...cheia, numero: "  " }]) ?? "", /número/);
-  assert.match(faltaNasNotasParaAprovar([{ ...cheia, tomador: "" }]) ?? "", /CNPJ tomador/);
+  assert.equal(faltaNasNotasParaAprovar([cheia], 0), null);
+  assert.match(faltaNasNotasParaAprovar([{ ...cheia, numero: "  " }], 0) ?? "", /número/);
+  assert.match(faltaNasNotasParaAprovar([{ ...cheia, tomador: "" }], 0) ?? "", /CNPJ tomador/);
   // A mesma nota duas vezes na PP ("602" e "0602" são a mesma).
   assert.match(
-    faltaNasNotasParaAprovar([cheia, { ...cheia, anexo_id: "n2", numero: "602" }]) ?? "",
+    faltaNasNotasParaAprovar([cheia, { ...cheia, anexo_id: "n2", numero: "602" }], 0) ?? "",
     /duas vezes/,
   );
 });
@@ -377,10 +377,19 @@ test("a parte da nota nesta PP: a nota inteira, salvo quando cobre outra PP (dec
     somaDasPartes([{ ...nf, cobre_outra: true }, { ...nf, anexo_id: "n2", numero: "603", valor: 2000 }]),
     8000,
   );
-  assert.match(faltaNasNotasParaAprovar([{ ...nf, cobre_outra: true, valor_na_pp: 0 }]) ?? "", /nesta PP/);
+  assert.match(faltaNasNotasParaAprovar([{ ...nf, cobre_outra: true, valor_na_pp: 0 }], 0) ?? "", /nesta PP/);
   assert.match(
-    faltaNasNotasParaAprovar([{ ...nf, cobre_outra: true, valor_na_pp: 12000 }]) ?? "",
+    faltaNasNotasParaAprovar([{ ...nf, cobre_outra: true, valor_na_pp: 12000 }], 0) ?? "",
     /não pode passar do valor da nota/,
+  );
+  // Revisão da 152 (07/10/2026): a parte da nota vai até o valor da PP. A
+  // NF 19 de R$ 450 numa PP de R$ 250 só passa com a parte de R$ 250.
+  const nf19: NfEmConferencia = { ...nf, numero: "19", valor: 450, valor_na_pp: 450, cobre_outra: false };
+  assert.match(faltaNasNotasParaAprovar([nf19], 250) ?? "", /passa do valor da PP/);
+  assert.equal(faltaNasNotasParaAprovar([{ ...nf19, cobre_outra: true, valor_na_pp: 250 }], 250), null);
+  assert.match(
+    faltaNasNotasParaAprovar([{ ...nf19, cobre_outra: true, valor_na_pp: 250 }, { ...nf, anexo_id: "n2", numero: "20", valor: 100 }], 250) ?? "",
+    /somam/,
   );
 
   // Já em outra PP: o campo vem aberto, sugerindo o que falta da nota.

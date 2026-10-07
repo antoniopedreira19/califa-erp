@@ -17,6 +17,7 @@ import {
 } from "@/lib/data/foto-pagamento-da-pp";
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { formatCurrency } from "@/lib/utils";
 import { pode } from "@/lib/permissoes";
 import { DOCUMENTO_TIPOS, PP_URGENTE_JUSTIFICATIVA_MIN } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
@@ -1716,9 +1717,11 @@ export async function signedUrlAnexo(
 /**
  * O que falta nos anexos para enviar (decisão 152): pelo menos um arquivo;
  * o tipo de cada um; o número dos documentos; e, em cada NF, número,
- * emissão, valor, CNPJ tomador e a parte desta PP. Null = nada.
+ * emissão, valor, CNPJ tomador e a parte desta PP. A soma das partes vai
+ * até o valor da PP (revisão da 152, 07/10/2026; o banco confere de novo em
+ * `_conferir_partes_da_nota`). Null = nada.
  */
-function faltaNosAnexosDoEnvio(anexos: AnexoUploaded[]): string | null {
+function faltaNosAnexosDoEnvio(anexos: AnexoUploaded[], valorPP: number): string | null {
   if (anexos.length === 0) {
     return "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.";
   }
@@ -1745,6 +1748,15 @@ function faltaNosAnexosDoEnvio(anexos: AnexoUploaded[]): string | null {
     .map((a) => (a.documento_numero ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^0+/, ""));
   if (chaves.some((c, i) => c !== "" && chaves.indexOf(c) !== i)) {
     return "A mesma NF aparece duas vezes nesta PP.";
+  }
+  const soma =
+    Math.round(
+      anexos
+        .filter((a) => a.documento_tipo === "nota_fiscal")
+        .reduce((s, a) => s + (a.nf_valor_na_pp ?? a.nf_valor ?? 0), 0) * 100,
+    ) / 100;
+  if (soma > valorPP + 0.004) {
+    return `As NFs nesta PP somam ${formatCurrency(soma, "BRL")}, mais que o valor da PP (${formatCurrency(valorPP, "BRL")}). Em “Valor nesta PP”, informe só a parte desta PP.`;
   }
   return null;
 }
@@ -1931,7 +1943,7 @@ export async function enviarPedidoCompraAoFinanceiro(
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
     anexosDoPedido = parsed.data;
-    const falta = faltaNosAnexosDoEnvio(anexosDoPedido);
+    const falta = faltaNosAnexosDoEnvio(anexosDoPedido, Number(ppRow.valor ?? 0));
     if (falta) return { ok: false, message: falta };
   }
 

@@ -59,6 +59,7 @@ import {
   Lock,
   CheckCircle2,
   Trash2,
+  FilePenLine,
 } from "lucide-react";
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -90,6 +91,7 @@ import {
   type PPParaEnviar,
 } from "./pp-a-emitir-ui";
 import type { TomadorDaNf } from "./anexos-da-pp";
+import { CorrigirNfDialog } from "./corrigir-nf-da-pp";
 import {
   marcarPPsConcluidasDoItem,
   reabrirItemParaNovaPP,
@@ -186,6 +188,10 @@ interface Props {
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadores: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
+  /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
+   *  revisão da decisão 152): GP, administrador e financeiro. Vale também
+   *  na tela do financeiro, onde o painel é só leitura. */
+  podeCorrigirNf: boolean;
 }
 
 export function PainelPPsItem({
@@ -219,6 +225,7 @@ export function PainelPPsItem({
   nomeDaEmpresa,
   tomadores,
   tomadorPorEmpresa,
+  podeCorrigirNf,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -233,6 +240,8 @@ export function PainelPPsItem({
   const [enviando, setEnviando] = React.useState<PPDoItem | null>(null);
   const [excluindo, setExcluindo] = React.useState<PPAEmitir | null>(null);
   const [refazendo, setRefazendo] = React.useState<PPDoItem | null>(null);
+  /** Revisão da decisão 152: a NF da PP em avaliação, corrigida sem aprovar. */
+  const [corrigindoNf, setCorrigindoNf] = React.useState<PPDoItem | null>(null);
 
   const podeAgir = onNovaPP !== null;
   const pendentes = pps.filter((pp) => pp.status === "gerada");
@@ -252,6 +261,7 @@ export function PainelPPsItem({
       setEnviando(null);
       setExcluindo(null);
       setRefazendo(null);
+      setCorrigindoNf(null);
     }
   }, [open]);
 
@@ -681,6 +691,20 @@ export function PainelPPsItem({
                         >
                           <Eye className="h-3 w-3" />
                         </BotaoIcone>
+                        {/* Revisão da decisão 152: a NF enviada errada se
+                            corrige sem o financeiro aprovar, enquanto a PP
+                            está em avaliação. */}
+                        {podeCorrigirNf &&
+                          pp.status === "em_avaliacao" &&
+                          pp.anexos.some((a) => a.documento_tipo === "nota_fiscal") && (
+                            <BotaoIcone
+                              titulo="Corrigir a NF"
+                              onClick={() => setCorrigindoNf(pp)}
+                              disabled={pending}
+                            >
+                              <FilePenLine className="h-3 w-3" />
+                            </BotaoIcone>
+                          )}
                         {/* Cancelar segue a regra do servidor
                             (`podeCancelarPP`): em avaliação e rejeitada
                             ainda voltam atrás; aprovada já é título a
@@ -873,6 +897,8 @@ export function PainelPPsItem({
             nomeDaEmpresa={nomeDaEmpresa(enviando.empresaId)}
             tomadores={tomadores}
             tomadorEsperado={tomadorPorEmpresa[enviando.empresaId] ?? null}
+            tomadorPorEmpresa={tomadorPorEmpresa}
+            nomeDaEmpresaDe={nomeDaEmpresa}
             moeda={moeda}
             onEnviada={(codigo) => {
               setEnviando(null);
@@ -881,6 +907,19 @@ export function PainelPPsItem({
             }}
           />
         )}
+        <CorrigirNfDialog
+          alvo={corrigindoNf ? { id: corrigindoNf.id, codigo: corrigindoNf.codigo } : null}
+          onOpenChange={(o) => !o && setCorrigindoNf(null)}
+          fornecedorNome={corrigindoNf?.fornecedorNome ?? ""}
+          nomeDaEmpresa={nomeDaEmpresa}
+          tomadores={tomadores}
+          tomadorPorEmpresa={tomadorPorEmpresa}
+          onCorrigida={(codigo) => {
+            setCorrigindoNf(null);
+            onMensagem?.(`NF da ${codigo} corrigida.`);
+            router.refresh();
+          }}
+        />
         <ConfirmDialog
           open={excluindo !== null}
           onOpenChange={(o) => !o && setExcluindo(null)}

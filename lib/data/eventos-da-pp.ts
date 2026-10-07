@@ -3,9 +3,10 @@ import type { PedidoForaDoCadastro, PPEvento, PPEventoTipo } from "@/lib/types";
 /**
  * O histórico da PP embutido na consulta de `pedidos_compra` (decisão 136).
  *
- * A tabela é escrita só pelos gatilhos do banco — emissão, urgência,
- * pagamento fora do cadastro e cada mudança de status da PP e da prestação
- * de contas. Ela existe porque as colunas da PP guardam um evento por tipo:
+ * A tabela é escrita pelo banco — os gatilhos da emissão, da urgência, do
+ * pagamento fora do cadastro e de cada mudança de status da PP e da
+ * prestação de contas; e a RPC da correção da NF da PP em avaliação
+ * (`nf_corrigida`, revisão da decisão 152). Ela existe porque as colunas da PP guardam um evento por tipo:
  * o reenvio apagava a rejeição, e o financeiro não sabia quem tinha mandado
  * a PP de volta.
  *
@@ -61,6 +62,7 @@ const ROTULO: Record<PPEventoTipo, string> = {
   prestacao_reenviada: "Prestação de contas reenviada",
   prestacao_reprovada: "Prestação de contas reprovada",
   prestacao_aprovada: "Prestação de contas aprovada",
+  nf_corrigida: "NF corrigida",
 };
 
 export function rotuloDoEventoPP(t: PPEventoTipo): string {
@@ -76,7 +78,9 @@ export function eventoPPMostraMotivo(t: PPEventoTipo): boolean {
     t === "reprovada" ||
     t === "aprovacao_desfeita" ||
     t === "cancelada" ||
-    t === "prestacao_reprovada"
+    t === "prestacao_reprovada" ||
+    // O que mudou na nota (revisão da decisão 152).
+    t === "nf_corrigida"
   );
 }
 
@@ -108,6 +112,18 @@ function ultimo(
     if (e.evento === envio || e.evento === reenvio) {
       return { por_nome: e.por_nome, em: e.em, reenviada: e.evento === reenvio };
     }
+  }
+  return null;
+}
+
+/** A última correção da NF com a PP em avaliação (revisão da decisão
+ *  152): quem, quando e o que mudou. Null = a NF não foi corrigida. */
+export function ultimaCorrecaoDaNf(
+  eventos: PPEvento[],
+): { por_nome: string | null; em: string; motivo: string | null } | null {
+  for (let i = eventos.length - 1; i >= 0; i--) {
+    const e = eventos[i];
+    if (e.evento === "nf_corrigida") return { por_nome: e.por_nome, em: e.em, motivo: e.motivo };
   }
   return null;
 }
