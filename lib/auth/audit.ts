@@ -345,6 +345,10 @@ export type AuditAction =
   // Fluxo CLT via PDF da contabilidade (folha-dois-fluxos, 2026-10-06)
   | "folha.importada"
   | "folha_competencia.enviada"
+  // NF por colaborador PJ (folha-anexo-nf, 2026-10-07)
+  | "colaborador.nf_anexada"
+  | "colaborador.nf_removida"
+  | "colaborador.nf_baixada"
   // Rateio anual por regional (2026-09-23)
   | "rateio.regional.salvo"
   | "rateio.regional.copiado"

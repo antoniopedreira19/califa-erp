@@ -230,6 +230,13 @@ export const permissoes = {
   "rh.contratacoes.ver":          ["administrador", "rh"],
   "rh.contratacoes.editar":       ["administrador", "rh"],
   "rh.contratacoes.efetivar":     ["administrador", "rh"],
+  /**
+   * NF por colaborador PJ (folha-anexo-nf, 2026-10-07). "Anexar a própria
+   * NF" não fica aqui — é dono-do-recurso, validado via helper
+   * podeMexerNaNf() na server action. Aqui ficam só as alçadas por papel.
+   */
+  "rh.nf.anexar_qualquer":        ["administrador", "rh"],
+  "rh.nf.ver":                    ["administrador", "rh", "financeiro"],
 } as const satisfies Record<string, readonly AppRole[]>;
 
 /** Chaves validas da matriz — usada como tipo em consumidores. */
