@@ -5308,3 +5308,45 @@ aplicada na hora combinada com a frente do Antonio, junto da
   Financeiro (o `claude.gp.teste` com o papel trocado e devolvido, com
   autorização do Tiago): agregada só em consulta, com os 24 cards
   bloqueados e o motivo no card aberto, e `prepararEnvioPlanilha` recusado.
+
+## ⚠️ Nota de 2026-10-07 (7) — o save do orçamento inteiro (decisão 154)
+
+- **A chave "Orçamento de save" saiu.** No lugar dela, ao lado do
+  "Exibir", fica o botão **Save** (opção 1 do protótipo
+  https://claude.ai/artifact/2fyxzYA64SdGuLcRVDiS8b), com três itens:
+  "Gerar save em todas as linhas", "Consumir o saldo de um job…" (ligado,
+  "Trocar o job do saldo…") e "Retirar todos os saves". O rótulo do botão
+  diz o modo ligado, e uma faixa sobre a planilha mostra os números — no
+  consumo, o saldo do job, o que o orçamento usa e o restante.
+- **Gerar** marca todas as linhas, inclusive as que já existiam (antes a
+  chave só marcava a nova), zera o planejado (que volta ao retirar) e faz
+  a linha nova nascer em save. **Consumir** faz cada linha consumir o
+  próprio orçado do saldo de UM job; o orçamento maior que o saldo não
+  grava nada, e com o consumo ligado o valor que passaria do saldo não
+  grava ("Passa do saldo do …: restam R$ …").
+- **Os dois modos se excluem.** Ligar um deles com linha de save de outro
+  tipo é recusado, com o motivo e a lista das linhas; a linha que já
+  consome do mesmo job é absorvida. Com um modo ligado, o pop-up de save
+  da linha não abre (aviso no lugar), e o save da linha recusa também no
+  servidor.
+- **Permissão:** a da chave (nota (4) acima), `orcamentos.editar`, com o
+  produtor incluído — confirmado pelo Tiago para o modo novo.
+  `definirSavePorPadrao` deu lugar a `gerarSaveNoOrcamentoInteiro`,
+  `consumirSaldoNoOrcamentoInteiro` e `retirarTodosOsSaves`, que levam o
+  mesmo gate e chamam `versao_save_*_tudo` no banco.
+- **No banco** (migrations `20261007900001` e `…900002`):
+  `versoes_orcamento.save_consumo_job_id` (FK para `jobs`, que não deixa
+  embed ambíguo: todos os embeds `jobs` → `versoes_orcamento` já usam a
+  chave explícita), as três funções e dois gatilhos em
+  `versoes_orcamento_itens`.
+- **Efeitos fora do botão:** gravar célula, linha nova e "Copiar itens de
+  outro mês" passam a mostrar as frases do save em vez da mensagem
+  genérica; o "Importar planilha" por cima de uma versão que consome
+  confere o saldo antes de apagar as linhas; a planilha mensal conta a
+  versão inteira.
+- **O que não muda:** cada linha continua sendo um pedido ao financeiro
+  (099). O "Aprovar todos" é a entrega seguinte, em outra frente.
+- **Testado** no banco (simulação desfeita, no "Teste X" v2) e no
+  navegador, como administrador, no orçamento "ZZ Teste 154 save inteiro"
+  (TES-P001/26), que ficou sem save no fim. O registro completo está na
+  decisão 154.

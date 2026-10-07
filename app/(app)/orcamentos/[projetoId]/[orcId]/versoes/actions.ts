@@ -1090,6 +1090,17 @@ export async function removerGrupo(grupoId: string): Promise<ActionResult> {
 // ITENS (agora sempre dentro de um grupo)
 // ============================================================
 
+/** O save do orçamento inteiro (decisão 154) recusa no banco a linha que
+ *  passaria do saldo e a marca de save que contraria o modo da versão. As
+ *  frases já vêm escritas para a tela ("Passa do saldo do TES-1003/26:
+ *  restam…"); o resto continua virando a mensagem padrão da ação. */
+function mensagemDoSaveDoOrcamento(msg: string, padrao: string): string {
+  if (msg.startsWith("Passa do saldo") || msg.startsWith("Este orçamento inteiro")) {
+    return msg;
+  }
+  return padrao;
+}
+
 function extractItemInput(formData: FormData) {
   return {
     item: formData.get("item")?.toString() ?? "",
@@ -1201,7 +1212,10 @@ export async function adicionarItem(
 
   if (error) {
     console.error("[itens.adicionar]", error.message);
-    return { ok: false, message: "Não foi possível adicionar o item." };
+    return {
+      ok: false,
+      message: mensagemDoSaveDoOrcamento(error.message, "Não foi possível adicionar o item."),
+    };
   }
 
   revalidatePath(`/orcamentos/${check.projeto_id}/${check.orcamento_id}`);
@@ -1249,7 +1263,10 @@ export async function atualizarItem(
 
   if (error) {
     console.error("[itens.atualizar]", error.message);
-    return { ok: false, message: "Não foi possível atualizar o item." };
+    return {
+      ok: false,
+      message: mensagemDoSaveDoOrcamento(error.message, "Não foi possível atualizar o item."),
+    };
   }
 
   revalidatePath(`/orcamentos/${check.projeto_id}/${check.orcamento_id}`);
@@ -1425,7 +1442,10 @@ export async function atualizarCampoItem(
 
   if (error) {
     console.error("[itens.atualizarCampo]", campo, error.message);
-    return { ok: false, message: "Não foi possível salvar a alteração." };
+    return {
+      ok: false,
+      message: mensagemDoSaveDoOrcamento(error.message, "Não foi possível salvar a alteração."),
+    };
   }
 
   const { data: orcCampo } = await supabase

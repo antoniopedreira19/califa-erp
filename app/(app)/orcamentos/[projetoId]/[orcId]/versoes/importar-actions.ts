@@ -751,10 +751,15 @@ export async function sobrescreverVersaoComPlanilha(
 
   const { data: versao } = await supabase
     .from("versoes_orcamento")
-    .select("id, status, orcamento_id")
+    .select("id, status, orcamento_id, save_consumo_job_id")
     .eq("id", versaoId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string; status: string; orcamento_id: string }>();
+    .maybeSingle<{
+      id: string;
+      status: string;
+      orcamento_id: string;
+      save_consumo_job_id: string | null;
+    }>();
 
   if (!versao) return { ok: false, message: "Versão não encontrada." };
 
@@ -859,6 +864,42 @@ export async function sobrescreverVersaoComPlanilha(
       message:
         "Nenhum item encontrado na planilha. Nada foi apagado — revise o arquivo e tente de novo.",
     };
+  }
+
+  // Orçamento que consome o saldo de um job inteiro (decisão 154): cada
+  // linha gravada consome o próprio orçado, e o gatilho do banco recusa a
+  // que passaria do saldo. A troca apaga antes de gravar, então a conta
+  // vem ANTES — senão a versão ficaria vazia no meio do caminho.
+  if (versao.save_consumo_job_id) {
+    const totalNovo = linhas
+      .flat()
+      .reduce(
+        (soma, it) =>
+          soma +
+          Number(it.valor_unitario_orcado ?? 0) *
+            Number(it.quantidade_orcada ?? 1) *
+            Number(it.dias_meses_orcado ?? 1),
+        0,
+      );
+    const [{ data: disponivel }, { data: jobOrigem }] = await Promise.all([
+      supabase.rpc("save_disponivel_para_rascunho", {
+        p_job_id: versao.save_consumo_job_id,
+      }),
+      supabase
+        .from("jobs")
+        .select("codigo")
+        .eq("id", versao.save_consumo_job_id)
+        .maybeSingle<{ codigo: string }>(),
+    ]);
+    const saldo = Number(disponivel ?? 0);
+    if (totalNovo > saldo + 0.005) {
+      const brl = (v: number) =>
+        v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      return {
+        ok: false,
+        message: `Este orçamento inteiro consome o saldo do ${jobOrigem?.codigo ?? "job"}: a planilha soma ${brl(totalNovo)}, e o saldo disponível é de ${brl(saldo)}. Nada foi apagado. Retire antes o save do orçamento, ou importe uma planilha que caiba no saldo.`,
+      };
+    }
   }
 
   const service = createServiceClient();

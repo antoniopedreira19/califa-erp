@@ -451,10 +451,15 @@ export interface VersaoOrcamento {
   cambio_venda: number | null;
   /** Data da cotação registrada em `cambio_cotacao`. */
   cambio_data: string | null;
-  /** Orçamento de save: todo item NOVO nasce marcado. É default de linha
-   *  nova, não trava — desligar não desmarca o que já existe
-   *  (docs/decisions/028-save-entre-jobs.md §10). */
+  /** Orçamento de save INTEIRO (decisão 154, que revê a 028 §10): todas as
+   *  linhas geram save e a linha nova já nasce em save. Liga e desliga só
+   *  pelo menu "Save" (`versao_save_gerar_tudo` / `versao_save_retirar_tudo`);
+   *  ligado, uma linha não sai do save sozinha. */
   save_por_padrao: boolean;
+  /** Orçamento que CONSOME o saldo de um job inteiro (decisão 154): toda
+   *  linha consome o próprio orçado desse job, e o valor que passaria do
+   *  saldo não grava. Exclui `save_por_padrao`. Nulo = sem esse modo. */
+  save_consumo_job_id: string | null;
   /** Só Mídia Off (decisão 147): a parte do negociado que fica com o
    *  veículo, em %. 80 nas planilhas de referência. Nos outros modelos fica
    *  no padrão e ninguém lê. */

@@ -1541,6 +1541,7 @@ function VersaoSelecionada({
           versaoId={versao.id}
           clienteNome={clienteNome}
           savePorPadrao={versao.save_por_padrao === true}
+          saveConsumoJobId={versao.save_consumo_job_id ?? null}
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           nomeDoGrupo={Object.fromEntries(grupos.map((g) => [g.id, g.nome]))}

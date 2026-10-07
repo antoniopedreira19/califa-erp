@@ -3,8 +3,9 @@
 /** Escritas do SAVE na versão do orçamento.
  *
  *  Regra em `docs/decisions/028-save-entre-jobs.md` (com a nota de
- *  26/08/2026). Três operações, todas sobre a versão — no job elas passam
- *  pela Errata, que é outro caminho.
+ *  26/08/2026). Duas operações por linha e três do orçamento inteiro
+ *  (decisão 154), todas sobre a versão — no job elas passam pela Errata,
+ *  que é outro caminho.
  *
  *  As invariantes duras (teto do orçado da linha, saldo do job de origem,
  *  linha que não gera e consome ao mesmo tempo) moram no trigger
@@ -22,6 +23,13 @@ export type ActionResult =
   | { ok: true }
   | { ok: false; message: string };
 
+interface VersaoDoItem {
+  orcamento_id: string;
+  status: string;
+  save_por_padrao: boolean;
+  save_consumo_job_id: string | null;
+}
+
 interface ItemDoSave {
   id: string;
   item: string;
@@ -29,7 +37,7 @@ interface ItemDoSave {
   save_consumido: number;
   total_orcado: number;
   versao_orcamento_id: string;
-  versao: { orcamento_id: string; status: string };
+  versao: VersaoDoItem;
 }
 
 /** Carrega o item e a versão dele, recusando o que não é editável.
@@ -50,19 +58,11 @@ async function itemEditavel(
     .from("versoes_orcamento_itens")
     .select(
       "id, item, em_save, save_consumido, total_orcado, versao_orcamento_id, " +
-        "versao:versoes_orcamento!inner(orcamento_id, status)",
+        "versao:versoes_orcamento!inner(orcamento_id, status, save_por_padrao, save_consumo_job_id)",
     )
     .eq("id", itemId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{
-      id: string;
-      item: string;
-      em_save: boolean;
-      save_consumido: number;
-      total_orcado: number;
-      versao_orcamento_id: string;
-      versao: { orcamento_id: string; status: string };
-    }>();
+    .maybeSingle<ItemDoSave>();
 
   if (error) {
     console.error("[save.item]", error.message);
@@ -76,6 +76,23 @@ async function itemEditavel(
       ok: false,
       message:
         "Versão aprovada não permite alterar o save aqui. Use a Errata na Planilha Interna do job.",
+    };
+  }
+  // Com o orçamento inteiro em save, ou consumindo um job, o save não se
+  // mexe linha a linha (decisão 154). O gatilho do banco recusa a marca;
+  // aqui a recusa vale também para o consumo, que o gatilho não olha.
+  if (data.versao.save_por_padrao) {
+    return {
+      ok: false,
+      message:
+        "Este orçamento inteiro gera save: o save não se mexe linha a linha. Para mudar uma linha só, retire antes o save do orçamento, no menu Save.",
+    };
+  }
+  if (data.versao.save_consumo_job_id) {
+    return {
+      ok: false,
+      message:
+        "Este orçamento inteiro consome o saldo de um job: cada linha consome o próprio orçado. Para mudar uma linha só, retire antes o save do orçamento, no menu Save.",
     };
   }
   return { ok: true, item: data, supabase };
@@ -233,59 +250,130 @@ export async function salvarConsumoDeSave(
   return { ok: true };
 }
 
-/**
- * Liga ou desliga o "Orçamento de save" da versão.
- *
- * É DEFAULT de linha nova, não trava: as linhas que já existem não mudam,
- * e desligar não desmarca nada (decisão 028 §10). Quem marca a linha nova
- * é o trigger `item_nasce_em_save`.
- *
- * A chave é de quem edita o orçamento — administrador, GP e produtor —,
- * e não da `orcamentos.marcar_em_save` das duas actions acima (Tiago,
- * 07/10/2026). A RLS de `versoes_orcamento` só exige ser do tenant: sem
- * esta conferência, o financeiro ligava a chave pelo console.
- */
-export async function definirSavePorPadrao(
+// ---------------------------------------------------------------------------
+// O save do ORÇAMENTO INTEIRO (decisão 154)
+// ---------------------------------------------------------------------------
+//
+// Substituem a chave "Orçamento de save", que só marcava a linha NOVA
+// (decisão 028 §10). As três passam por funções do banco que fazem tudo
+// numa transação e recusam, com o motivo, o que não pode:
+//   • `versao_save_gerar_tudo` — todas as linhas viram save; a linha nova já
+//     nasce em save;
+//   • `versao_save_consumir_tudo` — todas as linhas consomem o próprio orçado
+//     do saldo de UM job; o orçamento maior que o saldo não grava nada;
+//   • `versao_save_retirar_tudo` — desfaz o save gerado e o consumo de todas
+//     as linhas e desliga o modo.
+//
+// A permissão é a de quem edita o orçamento — administrador, GP e produtor
+// —, a mesma que a chave tinha desde 07/10/2026 (`b024adcd`): o Tiago
+// manteve o produtor, porque o saldo só se materializa quando o GP ou o
+// administrador envia ao financeiro e o financeiro aprova (decisão 099). A
+// RLS das tabelas só exige ser do tenant: sem esta conferência, o
+// financeiro mexeria no save pelo console.
+
+type ModoDoSave = "gerar" | "consumir" | "retirar";
+
+async function portaDoModo(
   versaoId: string,
-  ligado: boolean,
-): Promise<ActionResult> {
+  modo: ModoDoSave,
+): Promise<
+  | { ok: false; message: string }
+  | {
+      ok: true;
+      tenantId: string;
+      supabase: ReturnType<typeof createClient>;
+    }
+> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.editar", {
     versao_id: versaoId,
+    modo_do_save: modo,
   });
   if (!gate.ok) return gate;
-  const supabase = createClient();
+  return { ok: true, tenantId: session.activeTenant.id, supabase: createClient() };
+}
 
-  const { data: versao, error: loadErr } = await supabase
-    .from("versoes_orcamento")
-    .select("id, status")
-    .eq("id", versaoId)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; status: string }>();
+/** Todas as linhas viram save, e a linha nova já nasce em save. */
+export async function gerarSaveNoOrcamentoInteiro(
+  versaoId: string,
+): Promise<ActionResult> {
+  const porta = await portaDoModo(versaoId, "gerar");
+  if (!porta.ok) return porta;
 
-  if (loadErr || !versao) {
-    return { ok: false, message: "Versão não encontrada." };
-  }
-  if (versao.status === "aprovada") {
-    return { ok: false, message: "Versão aprovada não permite alterações." };
-  }
-
-  const { error } = await supabase
-    .from("versoes_orcamento")
-    .update({ save_por_padrao: ligado })
-    .eq("id", versaoId)
-    .eq("tenant_id", session.activeTenant.id);
-
+  const { data, error } = await porta.supabase.rpc("versao_save_gerar_tudo", {
+    p_versao_id: versaoId,
+  });
   if (error) {
-    console.error("[save.padrao]", error.message);
-    return { ok: false, message: "Não foi possível gravar a chave." };
+    console.error("[save.orcamento.gerar]", error.message);
+    // As recusas do banco falam português e dizem quais linhas impedem.
+    return { ok: false, message: error.message };
   }
 
   await logAuditEvent({
-    acao: ligado ? "save.orcamento.ligado" : "save.orcamento.desligado",
-    tenantId: session.activeTenant.id,
+    acao: "save.orcamento.gerar_tudo",
+    tenantId: porta.tenantId,
     entidadeTipo: "versoes_orcamento",
     entidadeId: versaoId,
+    metadata: (data ?? {}) as Record<string, unknown>,
+  });
+
+  revalidatePath(`/orcamentos`, "layout");
+  return { ok: true };
+}
+
+/** Todas as linhas passam a consumir o próprio orçado do saldo do job. */
+export async function consumirSaldoNoOrcamentoInteiro(
+  versaoId: string,
+  jobOrigemId: string,
+): Promise<ActionResult> {
+  const porta = await portaDoModo(versaoId, "consumir");
+  if (!porta.ok) return porta;
+  if (!jobOrigemId) {
+    return { ok: false, message: "Escolha o job de onde vem o saldo." };
+  }
+
+  const { data, error } = await porta.supabase.rpc("versao_save_consumir_tudo", {
+    p_versao_id: versaoId,
+    p_job_id: jobOrigemId,
+  });
+  if (error) {
+    console.error("[save.orcamento.consumir]", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  await logAuditEvent({
+    acao: "save.orcamento.consumir_tudo",
+    tenantId: porta.tenantId,
+    entidadeTipo: "versoes_orcamento",
+    entidadeId: versaoId,
+    metadata: { job_origem_id: jobOrigemId, ...((data ?? {}) as Record<string, unknown>) },
+  });
+
+  revalidatePath(`/orcamentos`, "layout");
+  return { ok: true };
+}
+
+/** Desfaz o save gerado e o consumo de todas as linhas, e desliga o modo. */
+export async function retirarTodosOsSaves(
+  versaoId: string,
+): Promise<ActionResult> {
+  const porta = await portaDoModo(versaoId, "retirar");
+  if (!porta.ok) return porta;
+
+  const { data, error } = await porta.supabase.rpc("versao_save_retirar_tudo", {
+    p_versao_id: versaoId,
+  });
+  if (error) {
+    console.error("[save.orcamento.retirar]", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  await logAuditEvent({
+    acao: "save.orcamento.retirar_tudo",
+    tenantId: porta.tenantId,
+    entidadeTipo: "versoes_orcamento",
+    entidadeId: versaoId,
+    metadata: (data ?? {}) as Record<string, unknown>,
   });
 
   revalidatePath(`/orcamentos`, "layout");

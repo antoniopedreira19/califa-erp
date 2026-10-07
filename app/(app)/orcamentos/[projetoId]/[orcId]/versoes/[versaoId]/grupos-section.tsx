@@ -11,7 +11,6 @@ import { ItensTable, type GrupoDaPlanilha } from "./itens-table";
 import { AcoesDoGrupo, NomeDoGrupo } from "./grupo-linha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
-import { cn } from "@/lib/utils";
 import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import {
@@ -56,9 +55,12 @@ interface Props {
   onAbrirSave?: (item: VersaoOrcamentoItem) => void;
   /** Liga e desliga a coluna Save. Ausente ⇒ o menu some. */
   onAlternarSave?: () => void;
-  /** Chave "Orçamento de save": todo item novo nasce marcado. */
-  savePorPadrao?: boolean;
-  onAlternarSavePadrao?: (ligado: boolean) => void;
+  /** O botão "Save" do orçamento inteiro (decisão 154), ao lado do
+   *  "Exibir". Ausente ⇒ sem botão (leitura, serviço Interno). */
+  controleDoSave?: React.ReactNode;
+  /** A faixa do modo ligado — o crédito que vira saldo, ou o saldo do job
+   *  que o orçamento consome e o que resta. */
+  faixaDoSave?: React.ReactNode;
   /** Moeda estrangeira da planilha internacional, ou `null` na nacional
    *  (decisão 072). Obrigatória: quem monta esta seção tem que dizer, e
    *  não deixar o default responder por ele. */
@@ -86,8 +88,8 @@ export function GruposSection({
   savePorItem,
   onAbrirSave,
   onAlternarSave,
-  savePorPadrao,
-  onAlternarSavePadrao,
+  controleDoSave,
+  faixaDoSave,
   moedaEstrangeira,
   interno,
   rotuloTotal,
@@ -130,12 +132,7 @@ export function GruposSection({
           <span />
         )}
         <div className="flex items-center gap-3">
-          {onAlternarSavePadrao && (
-            <ChaveOrcamentoDeSave
-              ligado={savePorPadrao ?? false}
-              onChange={onAlternarSavePadrao}
-            />
-          )}
+          {controleDoSave}
           {/* ⚠️ A chave Bruto ⇄ Líquido saiu daqui em 08/09/2026
               (decisão 062). O BV deixou de descontar o PLANEJADO e passou
               a descontar só o REALIZADO — que não existe nesta tela.
@@ -184,14 +181,7 @@ export function GruposSection({
         </div>
       </div>
 
-      {savePorPadrao && (
-        <div className="mb-3 rounded-xl border border-[#d7d5cf] bg-muted/30 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
-          <strong className="text-foreground">Orçamento de save ligado.</strong>{" "}
-          Todo item novo nasce em save — o cliente paga, o serviço vira
-          crédito. As linhas já existentes não mudam; desligar não desmarca
-          nada.
-        </div>
-      )}
+      {faixaDoSave}
 
       {/* O card da planilha é desenhado pela própria `ItensTable` — a
           dica de teclado que vem embaixo dele precisa ficar fora do
@@ -225,47 +215,5 @@ export function GruposSection({
         rotuloTotal={rotuloTotal}
       />
     </div>
-  );
-}
-
-/** A chave do "Orçamento de save" — default de linha nova, não trava
- *  (decisão 028 §10). Fica na barra da planilha, e não no cabeçalho da
- *  página como no design: é ajuste de comportamento da planilha, e o
- *  cabeçalho é server component. */
-function ChaveOrcamentoDeSave({
-  ligado,
-  onChange,
-}: {
-  ligado: boolean;
-  onChange: (ligado: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={ligado}
-      onClick={() => onChange(!ligado)}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
-        ligado
-          ? "border-[#5f5d57] bg-[#5f5d57] text-white"
-          : "border-border bg-card text-muted-foreground hover:bg-muted",
-      )}
-    >
-      <span
-        className={cn(
-          "inline-flex h-3.5 w-6 flex-none items-center rounded-full p-0.5 transition-colors",
-          ligado ? "bg-white/30" : "bg-muted-foreground/25",
-        )}
-      >
-        <span
-          className={cn(
-            "h-2.5 w-2.5 rounded-full bg-current transition-transform",
-            ligado && "translate-x-2.5",
-          )}
-        />
-      </span>
-      Orçamento de save
-    </button>
   );
 }
