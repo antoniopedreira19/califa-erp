@@ -50,6 +50,13 @@ export type FolhaLinhaFinanceiro = {
   motivo_pendencia: string | null;
   /** Origem da linha: "california" (fluxo PJ) ou "contabilidade" (fluxo CLT). */
   origem: FolhaOrigem;
+  /** NF anexada pra essa (colab, competência). Só relevante quando origem=california
+   *  e tipo in (pj, mei, clt_recibo). */
+  nf: {
+    id: string;
+    arquivo_nome: string;
+    uploaded_at: string;
+  } | null;
   /**
    * O colaborador inteiro como o financeiro enxerga (decisão 132): nome,
    * contratação, documentos e pagamento. Obrigatório de propósito — um

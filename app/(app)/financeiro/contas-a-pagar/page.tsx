@@ -722,6 +722,43 @@ export default async function PedidosCompraFinanceiroPage({
   // -------------------------------------------------------------------
   // Folhas de pagamento — mapeamento pra tab "Folhas de Pagamento"
   // -------------------------------------------------------------------
+  // NFs anexadas das competências presentes nas folhas abertas.
+  // Query separada porque colaboradores_nf_anexos não tem FK direta pra
+  // folhas_pagamento (modelagem desacoplada por (colab, ano, mes)).
+  const colabIdsFolha = Array.from(
+    new Set(((folhasRes.data ?? []) as any[]).map((l) => l.colaborador_id)),
+  );
+  let nfsPorChaveFolha = new Map<
+    string,
+    { id: string; arquivo_nome: string; uploaded_at: string }
+  >();
+  if (colabIdsFolha.length > 0) {
+    const { data: nfData } = await supabase
+      .from("colaboradores_nf_anexos")
+      .select(
+        "id, colaborador_id, competencia_ano, competencia_mes, arquivo_nome, uploaded_at",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .in("colaborador_id", colabIdsFolha);
+    for (const n of (nfData ?? []) as Array<{
+      id: string;
+      colaborador_id: string;
+      competencia_ano: number;
+      competencia_mes: number;
+      arquivo_nome: string;
+      uploaded_at: string;
+    }>) {
+      nfsPorChaveFolha.set(
+        `${n.colaborador_id}|${n.competencia_ano}|${n.competencia_mes}`,
+        {
+          id: n.id,
+          arquivo_nome: n.arquivo_nome,
+          uploaded_at: n.uploaded_at,
+        },
+      );
+    }
+  }
+
   const folhasParaTab: FolhaLinhaFinanceiro[] = ((folhasRes.data ?? []) as any[]).map(
     (l) => ({
       id: l.id,
@@ -731,6 +768,10 @@ export default async function PedidosCompraFinanceiroPage({
       status: l.status,
       motivo_pendencia: l.motivo_pendencia,
       origem: l.origem,
+      nf:
+        nfsPorChaveFolha.get(
+          `${l.colaborador_id}|${l.competencia_ano}|${l.competencia_mes}`,
+        ) ?? null,
       // Sem o colaborador no RPC, a linha aparece com travessão e sem
       // pagamento — nunca com dado inventado.
       colaborador: cnabColaboradoresRes.get(l.colaborador_id) ?? {
