@@ -4830,3 +4830,8 @@ código publicado logo depois (`3305751`).
   formulário".
 - Migrations `20261007300006` a `20261007300008`. Testado no TES-1014/26
   (PP-00142 e PP-00143, NF 9019).
+- ⚠️ Mesmo dia, achado na demonstração: corrigida a nota pelo atalho
+  "Corrigir a PP-…", o envio continuava mostrando o CNPJ (e a data e o
+  valor) antigos, porque `NfDoAnexo` só relia a nota quando o id dela
+  mudava. A chave agora inclui emissão, valor e tomador. O banco já gravava
+  o certo (`ligar_notas_fiscais_da_pp` usa os dados da nota); era só a tela.
