@@ -123,6 +123,10 @@ interface Props {
   honorariosCliente: number;
   /** Projeto arquivado (decisão 118): tudo em consulta, sem orçamento novo. */
   projetoArquivado: boolean;
+  /** `orcamentos.editar`. Sem ela a agregada fica em consulta, como no
+   *  projeto arquivado: o servidor já manda o bloqueio em cada card, e aqui
+   *  somem o "Criar orçamento de job" e o status da gravação (07/10/2026). */
+  podeEditar: boolean;
   /** O "Importar" da planilha do projeto: projeto ativo e
    *  `orcamentos.criar`, a permissão que a importação confere no servidor
    *  (07/10/2026). */
@@ -246,6 +250,7 @@ export function EditorAgregado({
   nomeDoGrupo,
   honorariosCliente,
   projetoArquivado,
+  podeEditar,
   podeImportar,
   podeEditarImpostos,
   podeMarcarSave,
@@ -263,6 +268,9 @@ export function EditorAgregado({
   fornecedores,
 }: Props) {
   const router = useRouter();
+  // Sem orçamento novo nem gravação: projeto arquivado (decisão 118) ou
+  // papel que não edita orçamento (07/10/2026).
+  const emConsulta = projetoArquivado || !podeEditar;
   // Uma chave para a página inteira, como na tela da versão: vários
   // orçamentos na mesma tela em modos diferentes não teriam leitura.
   // ⚠️ FIXA em "bruto" desde 08/09/2026 (decisão 062). O BV saiu do
@@ -1073,11 +1081,13 @@ export function EditorAgregado({
           <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
             {projetoArquivado
               ? "Projeto arquivado: a visão agregada fica só para consulta. Reative o projeto na tela dele para editar."
-              : "Edite a planilha de cada orçamento aqui e veja o impacto no consolidado do projeto. Cada alteração é salva na hora, na versão aberta de cada um — orçamento aprovado ou já aberto como job fica em consulta."}
+              : !podeEditar
+                ? "Visão agregada só para consulta: o seu papel não edita orçamentos. Cada card mostra a versão vigente do orçamento."
+                : "Edite a planilha de cada orçamento aqui e veja o impacto no consolidado do projeto. Cada alteração é salva na hora, na versão aberta de cada um — orçamento aprovado ou já aberto como job fica em consulta."}
           </p>
           <div className="flex flex-none items-center gap-4">
-          {!projetoArquivado && <StatusDaGravacao gravacao={gravacao} />}
-          {!projetoArquivado && (
+          {!emConsulta && <StatusDaGravacao gravacao={gravacao} />}
+          {!emConsulta && (
             <button
               type="button"
               onClick={abrirFormulario}

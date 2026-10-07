@@ -1,7 +1,13 @@
 "use server";
 
 import { requireSession } from "@/lib/auth/session";
-import { descartarEnvio, limparEnviosAntigos, novoCaminhoDeEnvio } from "@/lib/importacao/envio";
+import { pode } from "@/lib/permissoes";
+import { checarPermissao } from "@/lib/permissoes-server";
+import {
+  descartarEnvioDaSessao,
+  limparEnviosAntigos,
+  novoCaminhoDeEnvio,
+} from "@/lib/importacao/envio";
 import { recusaDoArquivo } from "@/lib/importacao/limites";
 
 /**
@@ -17,6 +23,17 @@ export async function prepararEnvioPlanilha(input: {
   tamanho: number;
 }): Promise<{ ok: true; path: string } | { ok: false; message: string }> {
   const session = await requireSession();
+  // Só quem importa sobe planilha (07/10/2026). Cada porta da importação
+  // pede `orcamentos.criar` (versão nova) ou `orcamentos.editar` (sobrescrever
+  // e agregada); vale qualquer das duas. A policy de INSERT do bucket confere
+  // o mesmo papel no Storage.
+  if (
+    !pode(session.activeRole, "orcamentos.criar") &&
+    !pode(session.activeRole, "orcamentos.editar")
+  ) {
+    const gate = await checarPermissao(session, "orcamentos.editar");
+    if (!gate.ok) return { ok: false, message: gate.message };
+  }
   const nome = String(input?.nome ?? "");
   const tamanho = Number(input?.tamanho ?? 0);
   const recusa = recusaDoArquivo(nome, tamanho);
@@ -26,8 +43,9 @@ export async function prepararEnvioPlanilha(input: {
 }
 
 /** Apaga o arquivo de uma importação fechada sem gravar, ou de um
- *  rascunho abandonado no editor do projeto. */
+ *  rascunho abandonado no editor do projeto. Com a sessão de quem pediu:
+ *  só o próprio arquivo sai (07/10/2026). */
 export async function descartarEnvioPlanilha(path: string): Promise<void> {
   const session = await requireSession();
-  await descartarEnvio(String(path ?? ""), session.activeTenant.id);
+  await descartarEnvioDaSessao(String(path ?? ""), session.activeTenant.id);
 }

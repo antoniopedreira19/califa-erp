@@ -2,8 +2,10 @@
  * O arquivo de planilha enviado direto para o Storage (decisão 110).
  *
  * O navegador sobe o arquivo para `<tenant>/envios/<uuid>-<nome>` no bucket
- * `orcamento-importacoes` (a policy de INSERT já libera a pasta do tenant
- * para `authenticated`), e as Server Actions recebem só o caminho. Daqui
+ * `orcamento-importacoes` (a policy de INSERT libera essa pasta só para
+ * administrador, GP e produtor; ler e apagar, só o dono do arquivo — desde
+ * 07/10/2026, migration 20261007800001), e as Server Actions recebem só o
+ * caminho. Daqui
  * saem as operações do servidor sobre esse arquivo: baixar para ler e
  * descartar.
  *
@@ -17,7 +19,7 @@
  * outro tenant com o service role.
  */
 
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { LIMITE_PLANILHA_BYTES, LIMITE_PLANILHA_ROTULO } from "./limites";
 
 export const BUCKET_IMPORTACOES = "orcamento-importacoes";
@@ -84,6 +86,19 @@ export async function descartarEnvio(path: string, tenantId: string): Promise<vo
     .storage.from(BUCKET_IMPORTACOES)
     .remove([path]);
   if (error) console.error("[importacao.envio.descartar]", error.message);
+}
+
+/**
+ * O descarte pedido pela tela (importação fechada sem gravar, rascunho
+ * abandonado): apaga com a sessão de quem pediu, e não com a chave de
+ * serviço. A policy de DELETE do bucket só deixa apagar o arquivo que a
+ * própria pessoa subiu (migration 20261007800001); o de outra pessoa fica,
+ * e sai pela limpeza de envios antigos.
+ */
+export async function descartarEnvioDaSessao(path: string, tenantId: string): Promise<void> {
+  if (!envioDoTenant(path, tenantId)) return;
+  const { error } = await createClient().storage.from(BUCKET_IMPORTACOES).remove([path]);
+  if (error) console.error("[importacao.envio.descartar_sessao]", error.message);
 }
 
 /** Um envio só fica esquecido se a aba fechou no meio da importação, ou se

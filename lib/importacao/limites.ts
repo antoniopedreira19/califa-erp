@@ -17,6 +17,10 @@ export const LIMITE_PLANILHA_ROTULO = "10 MB";
 export const TIPO_XLSX =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
+/** O .xlsm (com macros) também é aceito: o mesmo formato, com outro tipo.
+ *  Os dois são os únicos que o bucket aceita (migration 20261007800002). */
+export const TIPO_XLSM = "application/vnd.ms-excel.sheet.macroEnabled.12";
+
 function megabytes(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(1).replace(".", ",");
 }
