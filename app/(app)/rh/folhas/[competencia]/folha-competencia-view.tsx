@@ -54,6 +54,9 @@ export type FolhaLinha = {
     empresa_nome: string;
     regional_nome: string;
   }[];
+  /** NF anexada pra (colab, competência)? Só relevante quando a linha
+   *  exige NF (origem=california + tipo in pj/mei/clt_recibo). */
+  tem_nf: boolean;
 };
 
 export type ContagemStatus = Record<FolhaLinhaStatus, number>;
@@ -279,6 +282,15 @@ export function FolhaCompetenciaView({
                     {l.colaborador.tipo_contratacao === "clt_recibo" && (
                       <SeloHibrido />
                     )}
+                    <SeloNfAnexada
+                      exigeNf={
+                        l.origem === "california" &&
+                        ["pj", "mei", "clt_recibo"].includes(
+                          l.colaborador.tipo_contratacao,
+                        )
+                      }
+                      temNf={l.tem_nf}
+                    />
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {l.colaborador.funcao}
@@ -450,6 +462,30 @@ function SeloHibrido() {
       title="Colaborador CLT + Recibo (híbrido): parte do salário vai como Recibo (RPA) e parte como CLT."
     >
       Híbrido
+    </span>
+  );
+}
+
+/** Indica se o colaborador já anexou NF da competência. Verde = anexada;
+ *  cinza = pendente. Só renderiza quando a linha exige NF. */
+function SeloNfAnexada({
+  exigeNf,
+  temNf,
+}: {
+  exigeNf: boolean;
+  temNf: boolean;
+}) {
+  if (!exigeNf) return null;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-semibold ${
+        temNf
+          ? "bg-emerald-100 text-emerald-800"
+          : "bg-muted text-muted-foreground"
+      }`}
+      title={temNf ? "NF anexada" : "NF ainda não anexada"}
+    >
+      NF {temNf ? "✓" : "—"}
     </span>
   );
 }

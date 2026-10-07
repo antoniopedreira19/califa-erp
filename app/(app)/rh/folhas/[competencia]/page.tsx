@@ -121,7 +121,7 @@ export default async function FolhaCompetenciaPage({
   );
 
   // Passo 2: colaboradores + alocacoes em paralelo.
-  const [colaboradoresRes, alocacoesRes] = await Promise.all([
+  const [colaboradoresRes, alocacoesRes, nfsAnexadasRes] = await Promise.all([
     colaboradorIds.length > 0
       ? supabase
           .from("colaboradores")
@@ -136,7 +136,21 @@ export default async function FolhaCompetenciaPage({
           .select("id, folha_id, empresa_id, regional_id, percentual")
           .in("folha_id", folhaIds)
       : Promise.resolve({ data: [] as any[], error: null }),
+    // NFs anexadas pra essa competência — pra badge "NF ✓" na listagem RH.
+    colaboradorIds.length > 0
+      ? supabase
+          .from("colaboradores_nf_anexos")
+          .select("colaborador_id")
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("competencia_ano", ano)
+          .eq("competencia_mes", mes)
+          .in("colaborador_id", colaboradorIds)
+      : Promise.resolve({ data: [] as { colaborador_id: string }[], error: null }),
   ]);
+
+  const colabsComNf = new Set(
+    (nfsAnexadasRes.data ?? []).map((n) => n.colaborador_id),
+  );
 
   const colaboradorPorId = new Map<
     string,
@@ -207,6 +221,7 @@ export default async function FolhaCompetenciaPage({
         nivel_codigo: c?.nivel_codigo ?? null,
       },
       alocacoes: alocacoesPorFolha.get(l.id) ?? [],
+      tem_nf: colabsComNf.has(l.colaborador_id),
     };
   });
 
