@@ -111,7 +111,7 @@ para R$ 250 (autorizado pelo Tiago; auditoria
 | Teto da parte | A soma das partes das NFs numa PP vai até o **valor da PP**: a PP não usa mais da nota do que ela mesma paga. A mesma NF continua cobrindo várias PPs (R$ 250 + R$ 200 de uma nota de R$ 450). |
 | Nota maior que a PP | "Valor nesta PP" abre sozinho com o valor da PP; o link "Esta NF é só desta PP" some. Passar do valor da PP **barra** o envio (antes, aviso amarelo). Ficar abaixo continua só avisando. |
 | A nota já está em outra PP | O campo vem com o que sobra da nota, até o valor da PP. Pedir mais do que sobra barra o envio **antes do clique**, com o atalho "Corrigir a PP-…" para a PP que está com a parte errada. |
-| Correção pela produção | Botão **"Corrigir a NF"** na PP **em avaliação** (painel do item, "Já no financeiro"), para GP, administrador e financeiro (`jobs.corrigir_nf_pp`), sem aprovar: a parte desta PP sempre; os dados da nota (número, emissão, valor, CNPJ tomador) enquanto o financeiro não a registrou, e então a correção vale para todas as PPs com ela. Depois do registro, só o financeiro mexe nos dados. |
+| Correção pela produção | Botão **"Corrigir a NF"** na PP **em avaliação** (painel do item, "Já no financeiro"), para GP, administrador e financeiro (`jobs.corrigir_nf_pp`), sem aprovar: a parte desta PP sempre — **também depois que o financeiro registrou a nota pela aprovação de outra PP** (confirmado pelo Tiago em 07/10/2026: a parte é da PP em avaliação, que o financeiro ainda não conferiu); os dados da nota (número, emissão, valor, CNPJ tomador) enquanto o financeiro não a registrou, e então a correção vale para todas as PPs com ela. Depois do registro, só o financeiro mexe nos dados. |
 | Rastro | A correção grava o evento `nf_corrigida` no histórico da PP, com o que mudou ("NF 19: valor nesta PP de R$ 450,00 para R$ 250,00"), na PP corrigida e nas outras com a mesma nota ("(corrigida na PP-…)"). A aprovação do financeiro mostra "NF corrigida por … em …" logo abaixo de "Enviada por". Auditoria `pedido_compra.nf_corrigida` com antes e depois. |
 | Mensagens | Em reais ("R$ 450,00", não "450.00"), dizendo quanto cada PP usa da nota. |
 
@@ -150,3 +150,16 @@ da PP-00142 mostrou o aviso. No banco, o produtor é recusado e o GP passa.
    nota como "já na apuração, registrada com a PP-…" (a reprovada) e
    mantém as decisões daquela aprovação. A nota volta a contar quando a PP
    nova é aprovada.
+4. **Dois casos reais achados na revisão de 07/10/2026, para tratar em breve
+   (pedido do Tiago):**
+   - **CNPJ tomador da NF 19** (PP-00138 e PP-00139): a nota está gravada
+     com tomador GoCrazy · Santo André, mas as duas PPs saem pela Califórnia
+     Filmes. Conferir no PDF. Se a nota diz Califórnia, foi erro de
+     digitação: a produção corrige pelo "Corrigir a NF" da PP-00138 enquanto
+     a nota não foi registrada. Se a nota foi emitida para a GoCrazy, pedir
+     outra ao fornecedor.
+   - **NF 102 da Hellen Trindade (R$ 1.200) em duas PPs:** PP-00137
+     (AMB-1021/26, em avaliação) e PP-00136 (AMB-1020/26, gerada), mesmo
+     serviço e mesmo valor — parece PP duplicada. O envio da PP-00136 vai
+     ser barrado ("já está inteira na PP-00137"). Perguntar à produção se a
+     PP-00136 deve ser cancelada.
