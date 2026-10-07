@@ -14,6 +14,10 @@
  * como dia de pagamento. Quando o calendário existir, o ajuste entra em
  * `ajustarParaDiaUtil` e vale para a abertura e para a PP de uma vez.
  *
+ * A data-limite de ENVIO da PP (decisão 157, no fim deste arquivo) já
+ * trata feriado: os nacionais do cadastro de feriados do Fiscal, que quem
+ * chama passa. A janela em si continua como está.
+ *
  * Datas são ISO `YYYY-MM-DD` tratadas em UTC: é dia de calendário, não
  * instante, e fuso nenhum pode empurrar um 08 para 07.
  */
@@ -124,6 +128,117 @@ export function vencimentosNasJanelas(primeiraIso: string, n: number): string[] 
   return Array.from({ length: total }, (_, i) =>
     i === 0 ? primeiraIso.slice(0, 10) : mesmaJanelaMesesDepois(primeiraIso, i),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Data-limite de envio da PP (decisão 157)
+// ---------------------------------------------------------------------------
+
+/** O financeiro recebe a PP até 15 dias corridos antes da janela. */
+export const DIAS_DE_ANTECEDENCIA_DO_ENVIO = 15;
+
+/**
+ * A regra entrou em 08/10/2026. A PP gerada antes dela segue enviável com
+ * o vencimento que tem, como a PP anterior às janelas na decisão 077
+ * (pergunta 6a): eram 16 PPs geradas e não enviadas, 9 já fora do prazo.
+ */
+export const INICIO_DO_PRAZO_DE_ENVIO = "2026-10-08";
+
+/** Sábado, domingo ou feriado nacional do cadastro de feriados. */
+function ehDiaUtil(ms: number, feriados: ReadonlySet<string>): boolean {
+  const diaSemana = new Date(ms).getUTCDay();
+  if (diaSemana === 0 || diaSemana === 6) return false;
+  return !feriados.has(utcParaIso(ms));
+}
+
+function conjuntoDeFeriados(feriados: Iterable<string>): ReadonlySet<string> {
+  return feriados instanceof Set ? feriados : new Set(Array.from(feriados, (f) => f.slice(0, 10)));
+}
+
+/**
+ * Até quando a PP com este vencimento pode ser enviada ao financeiro
+ * (decisão 157, calendário do financeiro de 07/10/2026).
+ *
+ * A conta parte do dia 08 ou 20 do CALENDÁRIO, não do dia em que o
+ * pagamento cai: a janela de 08/11/2026 paga na segunda 09/11, e o limite
+ * é 08/11 − 15 = 24/10. Caindo em sábado, domingo ou feriado nacional,
+ * volta dia a dia até o dia útil anterior — 24/10/2026 é sábado, então o
+ * limite é sexta, 23/10. Null = a data não é janela (PP anterior à regra
+ * das janelas): não há prazo de envio a calcular.
+ */
+export function dataLimiteDeEnvio(
+  vencimentoIso: string,
+  feriados: Iterable<string> = [],
+): string | null {
+  const janela = qualJanela(vencimentoIso);
+  if (janela === null) return null;
+  const ms = isoParaUtc(vencimentoIso);
+  if (ms === null) return null;
+  const d = new Date(ms);
+  const nominal = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), janela);
+  const uteis = conjuntoDeFeriados(feriados);
+  let limite = nominal - DIAS_DE_ANTECEDENCIA_DO_ENVIO * DIA_MS;
+  while (!ehDiaUtil(limite, uteis)) limite -= DIA_MS;
+  return utcParaIso(limite);
+}
+
+/** Hoje ainda dá para enviar uma PP com este vencimento? */
+export function vencimentoAceitaEnvio(
+  vencimentoIso: string,
+  hojeIso: string,
+  feriados: Iterable<string> = [],
+): boolean {
+  const limite = dataLimiteDeEnvio(vencimentoIso, feriados);
+  return limite !== null && hojeIso.slice(0, 10) <= limite;
+}
+
+/**
+ * As `quantas` primeiras janelas que ainda aceitam envio hoje — o prazo
+ * sugerido do formulário é a primeira, e o atalho "Atualizar vencimento"
+ * oferece todas. A data-limite anda junto com a janela (a janela seguinte
+ * tem sempre limite depois), então a primeira aberta separa as fechadas
+ * das abertas.
+ */
+export function janelasComEnvioAberto(
+  hojeIso: string,
+  feriados: Iterable<string> = [],
+  quantas = 1,
+): string[] {
+  const uteis = conjuntoDeFeriados(feriados);
+  const abertas: string[] = [];
+  let janela = proximaJanelaDePagamento(hojeIso);
+  // Duas janelas por mês: 6 voltas já passam do mês e meio de antecedência.
+  for (let volta = 0; abertas.length < quantas && volta < 6 + quantas; volta++) {
+    if (vencimentoAceitaEnvio(janela, hojeIso, uteis)) abertas.push(janela);
+    janela = janelaSeguinte(janela);
+  }
+  return abertas;
+}
+
+/** A primeira janela que ainda aceita envio hoje. */
+export function primeiraJanelaComEnvioAberto(
+  hojeIso: string,
+  feriados: Iterable<string> = [],
+): string {
+  return janelasComEnvioAberto(hojeIso, feriados, 1)[0] ?? janelaSeguinte(hojeIso);
+}
+
+/**
+ * A PP gerada precisa respeitar o prazo de envio? A gerada antes de
+ * 08/10/2026 não (ver `INICIO_DO_PRAZO_DE_ENVIO`). `geradaEm` é o
+ * `created_at` da PP, um instante — o dia dele é o de São Paulo.
+ */
+export function ppSegueOPrazoDeEnvio(geradaEm: string | null | undefined): boolean {
+  if (!geradaEm) return true;
+  const ms = Date.parse(geradaEm);
+  if (Number.isNaN(ms)) return true;
+  const dia = new Date(ms).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  return dia >= INICIO_DO_PRAZO_DE_ENVIO;
+}
+
+/** dd/mm/aaaa, para as mensagens. */
+export function isoParaBr(iso: string): string {
+  return iso.slice(0, 10).split("-").reverse().join("/");
 }
 
 /** Hoje, em ISO, no fuso da casa. Servidor na Vercel roda em UTC: sem o

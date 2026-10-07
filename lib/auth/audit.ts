@@ -226,6 +226,9 @@ export type AuditAction =
   // Revisão da decisão 152 (07/10/2026): a NF da PP em avaliação corrigida
   // sem aprovar (GP, administrador ou financeiro).
   | "pedido_compra.nf_corrigida"
+  // Decisão 157 (07/10/2026): a PP gerada que perdeu o prazo de envio ganha
+  // vencimento novo, sem cancelar e refazer.
+  | "pedido_compra.vencimento_atualizado"
   // Tela 3.2 — a baixa passou a ser da PARCELA, e a data de pagamento do
   // título virou repactuável.
   | "pedido_compra.parcela_paga"

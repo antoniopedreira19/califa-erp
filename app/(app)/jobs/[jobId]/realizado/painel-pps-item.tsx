@@ -60,6 +60,7 @@ import {
   CheckCircle2,
   Trash2,
   FilePenLine,
+  CalendarClock,
 } from "lucide-react";
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -75,6 +76,16 @@ import {
   type SituacaoVerba,
 } from "@/lib/types";
 import { passaDoPlanejado } from "@/lib/calculos/pps-item";
+import {
+  hojeEmSaoPauloIso,
+  isoParaBr,
+  vencimentoAceitaEnvio,
+} from "@/lib/calculos/janelas-pagamento";
+import {
+  AtualizarVencimento,
+  prazoDeEnvioPerdido,
+  useFeriadosNacionais,
+} from "./prazo-de-envio-pp";
 import {
   signedUrlPdf,
   cancelarPedidoCompra,
@@ -121,6 +132,10 @@ export interface PPDoItem {
   /** O CNPJ da PP (decisão 156): o tomador esperado das notas. Obrigatório
    *  pelo mesmo motivo do trio. */
   estabelecimentoId: string | null;
+  /** Decisão 157: o 1º vencimento e quando a PP foi gerada, para a
+   *  data-limite de envio. Obrigatórios pelo mesmo motivo do trio. */
+  prazoPagamento: string;
+  geradaEm: string;
   servico: string;
   /** Os anexos gravados: o envio abre com eles. */
   anexos: AnexoDaPPNaLista[];
@@ -256,6 +271,9 @@ export function PainelPPsItem({
   const excede = passaDoPlanejado(emPPs, totalPlanejado);
   const emAEmitir = Math.round(aEmitir.reduce((s, a) => s + a.valor, 0) * 100) / 100;
   const travaDaAbertura = textoAguardaAbertura(statusDoJob);
+  // Prazo de envio (decisão 157).
+  const feriados = useFeriadosNacionais();
+  const hoje = hojeEmSaoPauloIso();
   const contraparte = (a: PPAEmitir) =>
     a.verba_producao ? nomeDoResponsavel(a.responsavel_verba_id) : nomeDoFornecedor(a.fornecedor_id);
 
@@ -527,6 +545,8 @@ export function PainelPPsItem({
                     fornecedorId: a.fornecedor_id,
                     empresaId: a.empresa_id,
                     estabelecimentoId: a.dados.estabelecimento_id ?? cnpjPadraoDaPP,
+                    prazoPagamento: a.dados.prazo_pagamento,
+                    geradaEm: a.created_at,
                     servico: a.servico,
                     anexos: [],
                     substitui: null,
@@ -576,7 +596,14 @@ export function PainelPPsItem({
                       </>
                     ) : null
                   }
-                  aviso={null}
+                  aviso={
+                    vencimentoAceitaEnvio(a.dados.prazo_pagamento, hoje, feriados) ? null : (
+                      <span className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
+                        <CalendarClock className="mt-0.5 h-3 w-3 shrink-0" />
+                        O prazo de envio do vencimento {isoParaBr(a.dados.prazo_pagamento)} já passou. Edite a PP a emitir e escolha outra data antes de gerar.
+                      </span>
+                    )
+                  }
                 />
               ))}
             </div>
@@ -589,8 +616,12 @@ export function PainelPPsItem({
               </span>
               {pendentes.map((pp) => {
                 const semNF = !pp.verbaProducao && !pp.temAnexo;
+                // Perdeu a data-limite de envio (decisão 157): só sai depois
+                // do "Atualizar vencimento".
+                const prazoPerdido = prazoDeEnvioPerdido(pp, hoje, feriados);
                 // A nota entra no pop-up do envio (decisão 152).
-                const podeEnviar = podeAgir && !envioBloqueadoPor && !travaDaAbertura;
+                const podeEnviar =
+                  podeAgir && !envioBloqueadoPor && !travaDaAbertura && !prazoPerdido;
                 return (
                   <CartaoPP
                     key={pp.id}
@@ -604,7 +635,11 @@ export function PainelPPsItem({
                           type="button"
                           onClick={() => pedirEnvio(pp)}
                           disabled={pending || !podeEnviar}
-                          title={travaDaAbertura ?? envioBloqueadoPor ?? undefined}
+                          title={
+                            travaDaAbertura ??
+                            envioBloqueadoPor ??
+                            (prazoPerdido ? "Atualize o vencimento antes de enviar." : undefined)
+                          }
                           className={cn(
                             "inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border px-2.5 py-1 text-[11px] font-bold transition-colors",
                             podeEnviar
@@ -642,8 +677,20 @@ export function PainelPPsItem({
                       </>
                     }
                     aviso={
-                      semNF || pp.substitui ? (
+                      semNF || pp.substitui || prazoPerdido ? (
                         <span className="flex flex-col gap-1">
+                          {prazoPerdido && (
+                            <AtualizarVencimento
+                              ppId={pp.id}
+                              codigo={pp.codigo}
+                              vencimento={pp.prazoPagamento}
+                              limite={prazoPerdido.limite}
+                              hojeIso={hoje}
+                              feriados={feriados}
+                              podeAtualizar={podeAgir}
+                              onAtualizada={(m) => onMensagem?.(m)}
+                            />
+                          )}
                           {pp.substitui && (
                             <span className="text-[11px] leading-snug text-muted-foreground">
                               Substitui a <span className="font-mono">{pp.substitui}</span>, rejeitada e cancelada.

@@ -11,20 +11,61 @@ import * as React from "react";
 import { format } from "date-fns";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ehJanelaDePagamento } from "@/lib/calculos/janelas-pagamento";
+import {
+  dataLimiteDeEnvio,
+  ehJanelaDePagamento,
+  isoParaBr,
+  primeiraJanelaComEnvioAberto,
+  vencimentoAceitaEnvio,
+} from "@/lib/calculos/janelas-pagamento";
 import { PP_URGENTE_JUSTIFICATIVA_MIN } from "@/lib/types";
 
 /**
- * Predicado do `dateDisabled` do calendário: apaga o passado e todo dia
- * que não é janela. A data já gravada (`original`) continua clicável — é
- * a PP anterior à regra, que pode seguir com ela (pergunta 6a).
+ * Predicado do `dateDisabled` do calendário: apaga o passado, todo dia
+ * que não é janela e, desde a decisão 157, a janela cujo prazo de envio
+ * ao financeiro já passou (15 dias antes, no dia útil anterior). A data já
+ * gravada (`original`) continua clicável — é a PP anterior à regra, que
+ * pode seguir com ela (pergunta 6a).
  */
-export function diaForaDaJanela(hojeIso: string, original?: string | null) {
+export function diaForaDaJanela(
+  hojeIso: string,
+  original?: string | null,
+  feriados: string[] = [],
+) {
   return (date: Date) => {
     const iso = format(date, "yyyy-MM-dd");
     if (original && iso === original.slice(0, 10)) return false;
-    return iso < hojeIso || !ehJanelaDePagamento(iso);
+    return (
+      iso < hojeIso ||
+      !ehJanelaDePagamento(iso) ||
+      !vencimentoAceitaEnvio(iso, hojeIso, feriados)
+    );
   };
+}
+
+/**
+ * A data gravada é janela, mas o prazo de envio dela já passou (decisão
+ * 157): salvar mantém, gerar a PP pede outra data.
+ */
+export function AvisoPrazoDeEnvioPerdido({
+  prazo,
+  hojeIso,
+  feriados,
+}: {
+  prazo: string;
+  hojeIso: string;
+  feriados: string[];
+}) {
+  if (!prazo || !ehJanelaDePagamento(prazo)) return null;
+  if (vencimentoAceitaEnvio(prazo, hojeIso, feriados)) return null;
+  const limite = dataLimiteDeEnvio(prazo, feriados);
+  return (
+    <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
+      <AlertTriangle className="mt-0.5 h-3 w-3 flex-none" />
+      O prazo de envio deste vencimento terminou{limite ? ` em ${isoParaBr(limite)}` : ""}. Para
+      gerar a PP, escolha a partir de {isoParaBr(primeiraJanelaComEnvioAberto(hojeIso, feriados))}.
+    </p>
+  );
 }
 
 /** Aparece só quando o prazo é o gravado e ele está fora das janelas. */
