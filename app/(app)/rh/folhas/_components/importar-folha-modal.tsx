@@ -124,10 +124,10 @@ export function ImportarFolhaModal(props: ImportarFolhaModalProps) {
         <DialogHeader>
           <DialogTitle>Importar folha CLT</DialogTitle>
           <DialogDescription>
-            Selecione o PDF "Relação Geral dos Líquidos" entregue pela
-            contabilidade para a competência {String(props.mes).padStart(2, "0")}/
-            {props.ano}. O match é por CPF; linhas já aprovadas no financeiro
-            não são sobrescritas.
+            Selecione o PDF &ldquo;Relação Geral dos Líquidos&rdquo; entregue
+            pela contabilidade para a competência{" "}
+            {String(props.mes).padStart(2, "0")}/{props.ano}. O match é por CPF;
+            linhas já aprovadas no financeiro não são sobrescritas.
           </DialogDescription>
         </DialogHeader>
 

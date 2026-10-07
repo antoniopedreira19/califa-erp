@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 // NOTE: `require` em vez de `import` para evitar o debug-mode do pdf-parse
 // que roda ao carregar o módulo (tenta ler um PDF de teste e crasha o build).
 // Padrão idêntico ao uso de pdfmake no projeto.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require("pdf-parse") as (
   buffer: Buffer,
 ) => Promise<{ text: string }>;
