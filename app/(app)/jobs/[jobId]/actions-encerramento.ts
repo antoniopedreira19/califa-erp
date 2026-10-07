@@ -87,6 +87,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
 
   if (
     imp.ppsEmAberto.length > 0 ||
+    imp.ppsAEmitir.length > 0 ||
     imp.verbasEmAberto.length > 0 ||
     imp.bvsEmAberto.length > 0 ||
     imp.itensSemMarcacao.length > 0 ||
@@ -101,6 +102,11 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         `${imp.ppsEmAberto.length} ${imp.ppsEmAberto.length === 1 ? "PP em aberto" : "PPs em aberto"} (${imp.ppsEmAberto
           .map((p) => p.codigo)
           .join(", ")})`,
+      );
+    }
+    if (imp.ppsAEmitir.length > 0) {
+      partes.push(
+        `${imp.ppsAEmitir.length} ${imp.ppsAEmitir.length === 1 ? "PP a emitir" : "PPs a emitir"} em ${imp.ppsAEmitir.map((a) => `“${a.item}”`).join(", ")}`,
       );
     }
     if (imp.verbasEmAberto.length > 0) {
@@ -154,6 +160,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       metadata: {
         acao_tentada: "job.encerrado",
         pps_em_aberto: imp.ppsEmAberto.length,
+        pps_a_emitir: imp.ppsAEmitir.length,
         verbas_em_aberto: imp.verbasEmAberto.map((v) => v.codigo),
         bvs_em_aberto: imp.bvsEmAberto.length,
         itens_sem_marcacao: imp.itensSemMarcacao.length,
@@ -166,6 +173,11 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     const comoResolver: string[] = [];
     if (imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0) {
       comoResolver.push("Dê baixa nos documentos antes.");
+    }
+    if (imp.ppsAEmitir.length > 0) {
+      comoResolver.push(
+        "Gere ou exclua as PPs a emitir pelo painel do item na Planilha Interna.",
+      );
     }
     if (imp.verbasEmAberto.length > 0) {
       comoResolver.push(

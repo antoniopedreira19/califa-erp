@@ -44,7 +44,7 @@
  */
 
 import * as React from "react";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -206,6 +206,22 @@ export function AprovarPPDialog({
   const nfs = pp?.nfs && pp.nfs.length > 0 ? pp.nfs : null;
   const base = nfs ? somaDasPartes(nfs) : 0;
   const v = useValorDaBaixa(base, pp?.ultimaRetencao ?? null);
+  // Decisão 152 (resposta do Tiago em 07/10/2026): a NF que outra PP já
+  // registrou traz o ISS retido daquela aprovação, preenchido e travado —
+  // o ISS é da nota, e a parte desta PP retém na mesma alíquota.
+  // `undefined` = nenhuma nota registrada (livre); `null` = registrada sem
+  // ISS retido (travado em zero).
+  const registroComIss = React.useMemo(() => {
+    if (!pp || !nfs) return null;
+    for (const nf of nfs) {
+      const r = pp.registroDeOutraPP[nf.anexo_id];
+      if (r) return r;
+    }
+    return null;
+  }, [pp, nfs]);
+  const issTravado: number | null | undefined = registroComIss
+    ? (registroComIss.iss_aliquota ?? null)
+    : undefined;
   const [ajustando, setAjustando] = React.useState(false);
   // Módulo fiscal: a troca manual do crédito, sempre com motivo.
   const [semCredito, setSemCredito] = React.useState(false);
@@ -229,6 +245,12 @@ export function AprovarPPDialog({
       const aliquota = padraoDoRegime[imposto];
       if (aliquota) v.porAliquota(imposto, aliquota);
     }
+    travarIss();
+  }
+
+  /** O ISS da nota já registrada por outra PP volta ao valor dela. */
+  function travarIss() {
+    if (issTravado !== undefined) v.porAliquota("ISS", issTravado);
   }
 
   // Cada abertura começa limpa: o diálogo é a decisão de UMA aprovação, e
@@ -677,7 +699,7 @@ export function AprovarPPDialog({
                       <Chave
                         id="aprovar-pp-reter"
                         ligada={v.retem}
-                        desligada={retencaoTravada || pending}
+                        desligada={retencaoTravada || pending || (v.retem && (issTravado ?? 0) > 0)}
                         onChange={(x) => {
                           if (x) aplicarRetencaoPadrao();
                           else {
@@ -744,6 +766,7 @@ export function AprovarPPDialog({
                             type="button"
                             onClick={() => {
                               v.repetir();
+                              travarIss();
                               setErro(null);
                             }}
                             disabled={pending}
@@ -753,7 +776,26 @@ export function AprovarPPDialog({
                           </button>
                         )}
                       </div>
-                      {ajustando && <GradeDeAliquotas v={v} />}
+                      {ajustando && (
+                        <GradeDeAliquotas
+                          v={v}
+                          issTravadoPor={
+                            issTravado !== undefined
+                              ? `ISS da NF já registrado com a ${registroComIss?.na_pp ?? "outra PP"}`
+                              : null
+                          }
+                        />
+                      )}
+                      {issTravado !== undefined && (
+                        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground text-pretty">
+                          <Lock className="mt-0.5 h-3 w-3 flex-none" />
+                          <span>
+                            {issTravado
+                              ? `ISS retido de ${percentual(issTravado)}, o mesmo registrado na aprovação da ${registroComIss?.na_pp ?? "outra PP"}: a NF é a mesma.`
+                              : `Sem ISS retido, como na aprovação da ${registroComIss?.na_pp ?? "outra PP"}: a NF é a mesma.`}
+                          </span>
+                        </p>
+                      )}
                       {(darfs.length > 0 || guiasIss.length > 0 || (guias.iss > 0 && notasJaRegistradas.length > 0)) && (
                         <p className="text-[11px] leading-snug text-muted-foreground text-pretty">
                           {darfs.length > 0 && (
@@ -995,7 +1037,14 @@ function Chave({
  * alíquota e valor, um calcula o outro (como na baixa, decisão 125), sobre
  * o valor da NF.
  */
-function GradeDeAliquotas({ v }: { v: EstadoDoValorDaBaixa }) {
+function GradeDeAliquotas({
+  v,
+  issTravadoPor,
+}: {
+  v: EstadoDoValorDaBaixa;
+  /** Decisão 152: a NF já registrada por outra PP trava o ISS (o motivo). */
+  issTravadoPor: string | null;
+}) {
   return (
     <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-2.5">
       <div className="grid grid-cols-[minmax(0,1fr)_88px_128px] gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -1015,11 +1064,14 @@ function GradeDeAliquotas({ v }: { v: EstadoDoValorDaBaixa }) {
             valor={v.aliquotas[imposto]}
             onChange={(x) => v.porAliquota(imposto, x)}
             rotulo={`Alíquota de ${imposto}`}
+            travadoPor={imposto === "ISS" ? issTravadoPor : null}
           />
           <MoneyInput
             value={v.valores[imposto]}
             onValueChange={(x) => v.porValor(imposto, arredondar(x))}
             aria-label={`Valor retido de ${imposto}`}
+            disabled={imposto === "ISS" && issTravadoPor !== null}
+            title={imposto === "ISS" ? (issTravadoPor ?? undefined) : undefined}
             className="h-8 px-2 text-right text-xs"
           />
         </div>
@@ -1038,10 +1090,13 @@ function PercentualCompacto({
   valor,
   onChange,
   rotulo,
+  travadoPor = null,
 }: {
   valor: number | null;
   onChange: (x: number | null) => void;
   rotulo: string;
+  /** O motivo da trava (vira o `title`); null = editável. */
+  travadoPor?: string | null;
 }) {
   const paraTexto = (n: number | null) =>
     n === null ? "" : n.toLocaleString("pt-BR", { maximumFractionDigits: 4 });
@@ -1065,6 +1120,8 @@ function PercentualCompacto({
         autoComplete="off"
         aria-label={rotulo}
         value={texto}
+        disabled={travadoPor !== null}
+        title={travadoPor ?? undefined}
         placeholder="0,00"
         onChange={(e) => {
           const limpo = e.target.value.replace(/[^\d,]/g, "");
@@ -1076,7 +1133,7 @@ function PercentualCompacto({
           const n = Number(limpo.replace(",", "."));
           if (Number.isFinite(n)) onChange(n > 0 ? n : null);
         }}
-        className="flex h-8 w-full rounded-lg border border-border bg-white py-1 pl-2 pr-6 text-right font-mono text-xs tabular-nums transition-colors placeholder:text-muted-foreground/60 hover:border-california-red/40 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15"
+        className="flex h-8 w-full rounded-lg border border-border bg-white py-1 pl-2 pr-6 text-right font-mono text-xs tabular-nums transition-colors placeholder:text-muted-foreground/60 hover:border-california-red/40 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15 disabled:cursor-not-allowed disabled:bg-muted/50 disabled:hover:border-border"
       />
       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
         %

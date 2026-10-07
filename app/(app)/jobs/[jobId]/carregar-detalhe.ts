@@ -1262,6 +1262,15 @@ export async function carregarDetalheDoJob(
       })),
   );
 
+  // PPs a emitir que ninguém gerou nem excluiu (decisão 153): travam o
+  // encerramento, pelo nome do item.
+  const itemDoRealizado = new Map(
+    itens.map((it) => [realizadosMap.get(it.id)?.id ?? "", it.item]),
+  );
+  const ppsAEmitir = [...aEmitirPorItemId.entries()].flatMap(([realizadoId, lista]) =>
+    lista.map(() => ({ item: itemDoRealizado.get(realizadoId) ?? "Item da planilha" })),
+  );
+
   // Itens de custo que ainda não disseram se sai mais PP (decisão 052).
   // Sai dos dados já carregados: a linha da planilha diz o tipo, e a
   // âncora do realizado guarda o marco. A e D ficam de fora — eles pagam
@@ -1287,6 +1296,7 @@ export async function carregarDetalheDoJob(
     job.status === "finalizado"
       ? {
           ppsEmAberto,
+          ppsAEmitir,
           verbasEmAberto,
           bvsEmAberto,
           itensSemMarcacao,

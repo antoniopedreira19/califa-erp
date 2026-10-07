@@ -36,6 +36,8 @@ import { listaPtBr } from "./envio-faturamento-ui";
 export interface FechamentoDoJob {
   /** PPs sem baixa e rejeitadas (decisão 083) — travam. */
   ppsEmAberto: { codigo: string; status: string }[];
+  /** PPs a emitir que ninguém gerou nem excluiu (decisão 153) — travam. */
+  ppsAEmitir: { item: string }[];
   /** Verbas de produção pagas que ainda não fecharam (decisão 081 §7). */
   verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
   bvsEmAberto: { item: string; situacao: string }[];
@@ -72,6 +74,7 @@ export interface TotaisDoFechamento {
 export function pendenciasDoFechamento(f: FechamentoDoJob): number {
   return (
     f.ppsEmAberto.length +
+    f.ppsAEmitir.length +
     f.verbasEmAberto.length +
     f.bvsEmAberto.length +
     f.itensSemMarcacao.length
@@ -133,6 +136,7 @@ export function EnviarEncerramentoDialog({
 
   const {
     ppsEmAberto,
+    ppsAEmitir,
     verbasEmAberto,
     bvsEmAberto,
     itensSemMarcacao,
@@ -218,6 +222,14 @@ export function EnviarEncerramentoDialog({
                     : {ppsEmAberto.map((p) => p.codigo).join(", ")}.
                   </p>
                 )}
+                {ppsAEmitir.length > 0 && (
+                  <p className="text-muted-foreground">
+                    {ppsAEmitir.length === 1
+                      ? "1 PP a emitir"
+                      : `${ppsAEmitir.length} PPs a emitir`}
+                    : {ppsAEmitir.map((a) => a.item).join(", ")}.
+                  </p>
+                )}
                 {bvsEmAberto.length > 0 && (
                   <p className="text-muted-foreground">
                     {bvsEmAberto.length === 1
@@ -249,7 +261,7 @@ export function EnviarEncerramentoDialog({
                 {(ppsEmAberto.length > 0 || bvsEmAberto.length > 0) && (
                   <p className="text-muted-foreground">
                     Resolva esses documentos — a PP rejeitada volta para a
-                    produção corrigir ou cancelar, a aprovada espera a baixa, e o
+                    produção refazer ou cancelar, a aprovada espera a baixa, e o
                     BV espera o recebimento.
                   </p>
                 )}
@@ -258,6 +270,12 @@ export function EnviarEncerramentoDialog({
                     A produção presta contas da verba na aba de PPs, e o
                     financeiro aprova a prestação. A baixa do estorno do que não
                     foi gasto fica com o financeiro e não trava o encerramento.
+                  </p>
+                )}
+                {ppsAEmitir.length > 0 && (
+                  <p className="text-muted-foreground">
+                    Gere ou exclua as PPs a emitir pelo painel do item, na
+                    Planilha Interna.
                   </p>
                 )}
                 {itensSemMarcacao.length > 0 && (

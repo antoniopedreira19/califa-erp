@@ -571,11 +571,16 @@ function TrilhaEncerramento({
     );
   }
 
-  const { ppsEmAberto, verbasEmAberto, bvsEmAberto, itensSemMarcacao } = fechamento;
+  const { ppsEmAberto, ppsAEmitir, verbasEmAberto, bvsEmAberto, itensSemMarcacao } = fechamento;
   const partes: string[] = [];
   if (ppsEmAberto.length > 0) {
     partes.push(
       `${ppsEmAberto.length === 1 ? "1 PP em aberto" : `${ppsEmAberto.length} PPs em aberto`} (${codigos(ppsEmAberto.map((p) => p.codigo))})`,
+    );
+  }
+  if (ppsAEmitir.length > 0) {
+    partes.push(
+      `${ppsAEmitir.length === 1 ? "1 PP a emitir" : `${ppsAEmitir.length} PPs a emitir`} em ${codigos(ppsAEmitir.map((a) => `“${a.item}”`))}`,
     );
   }
   if (verbasEmAberto.length > 0) {
