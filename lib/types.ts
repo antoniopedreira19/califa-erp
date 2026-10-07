@@ -3777,8 +3777,12 @@ export interface ColaboradorSalario {
   id: string;
   tenant_id: string;
   colaborador_id: string;
-  /** numeric(14,2) — chega como string do Supabase-js. */
+  /** numeric(14,2) — chega como string do Supabase-js. Total mensal do contrato. */
   valor: string;
+  /** Para `clt_recibo`: parcela paga como RPA pela California (gera folha interna).
+   *  A parcela CLT é derivada = `valor - valor_recibo`.
+   *  NULL para qualquer outro `tipo_contratacao`. CHECK garantido por trigger. */
+  valor_recibo: string | null;
   data_inicio: string;
   data_fim: string | null;
   motivo: string | null;
