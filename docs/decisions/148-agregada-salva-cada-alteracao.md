@@ -1,4 +1,4 @@
-# 148 — A visão agregada salva cada alteração na hora (entrega 1)
+# 148 — A visão agregada salva cada alteração na hora, e o orçamento vazio se exclui
 
 **Data:** 2026-10-06
 **Quem decidiu:** Tiago — "Vamos salvar por células mesmo para garantir que erros não ocorram, e não hajam interferências quando mais de uma pessoa vir a mexer" (06/10/2026), com o protótipo aprovado no mesmo dia ("Aprovado, pode seguir com a entrega 1") e a criação do orçamento junto na entrega 1.
@@ -46,10 +46,27 @@ Correção: cada função do adaptador espera um tique (`foraDaTransicao`) antes
 - Importação no `TES-P001/26-25 · ZZ Teste 148 importação`, com a exportação interna do "Teste importação 110": 2 grupos e 3 itens, iguais à prévia; registro em `orcamento_importacoes` sem caminho; nada deixado em `envios/`.
 - Os dois ZZ 148 ficaram no projeto de teste.
 
-## Entrega 2 (próxima): excluir orçamento completamente vazio
+## Entrega 2: excluir orçamento completamente vazio (07/10/2026)
 
-Combinado com o Tiago em 06/10/2026:
+Combinado com o Tiago em 06/10/2026; "sem reaproveitar código" em 07/10/2026.
 
-- **Vazio** = rascunho, nunca aprovado, sem job e sem item em nenhuma versão. Grupo sem item conta como vazio; a linha em branco que ainda não está no banco não conta.
-- **Quem:** quem tem `orcamentos.criar` (administrador, gerente de projeto — `gerente_producao` — e produtor).
-- **Onde:** a lixeira no card da agregada, só no orçamento vazio, e "Excluir" no rodapé do "Editar orçamento", ao lado de "Arquivar". Com confirmação e auditoria.
+| Ponto | Como ficou |
+|---|---|
+| Vazio | Em rascunho, nunca aprovado, sem job e sem nenhum item em nenhuma versão. Grupo sem item conta como vazio; a linha em branco que ainda não tem descrição não está no banco e não conta. A regra mora num lugar só: `orcamento_esta_vazio` (banco). |
+| Quem | Quem tem `orcamentos.criar` (administrador, gerente de projeto — `gerente_producao` — e produtor). Orçamento arquivado, ou de projeto arquivado, não se exclui: reative antes. |
+| Onde | A lixeira do card da agregada, só no orçamento vazio, e "Excluir" no rodapé do "Editar orçamento", ao lado de "Arquivar". Confirmação: "Excluir este orçamento?" — "«nome» não tem nenhum item e sai do projeto. A exclusão não pode ser desfeita." |
+| Lixeira ao vivo | A agregada recebe do banco o que vale fora da versão aberta (`orcamentos_excluiveis_do_projeto`: rascunho, sem aprovação, sem job, e as versões que ainda têm item) e confere a versão aberta pelo próprio estado. A lixeira some quando uma linha ganha descrição e volta quando o último item sai, sem recarregar. |
+| Exclusão | `excluirOrcamentoVazio` → `excluir_orcamento_vazio` (banco): confere papel, tenant, empresa e regional, arquivamento e o vazio; apaga (versões, grupos, meses e histórico de importação vão em cascata) e grava `orcamento.excluido` na auditoria, com código, nome e projeto — tudo na mesma transação. Na agregada o card sai só depois de o servidor confirmar; na página do orçamento a tela vai para o projeto. |
+| Código não volta | `codigos_de_orcamento_usados` guarda todo código que um orçamento já teve (gatilho na criação e na troca de código; carga com os atuais e os da auditoria). O gerador (`gerarCodigoOrcamento`) junta esse registro aos orçamentos de hoje: excluído o `-28`, o próximo é o `-29`. Mesmo modelo dos projetos (decisão 122). |
+| Voltar (decisão 108) | A página do orçamento excluído sai do rastro da aba (`esquecerPagina`), e o "Voltar" nunca leva a um "não encontrado". |
+
+**Por que a função roda como dona do banco.** `authenticated` não tem DELETE em `orcamentos` nem em `orcamento_importacoes`, de propósito: ninguém apaga orçamento direto pela API. A primeira versão da função (invoker) foi recusada no teste pela tela; a correção (`20261007990002`) a fez `security definer`, conferindo ela mesma o que a RLS de `orcamentos` conferiria. A única porta para apagar um orçamento continua sendo essa função.
+
+**Banco:** migrations `20261007990001` (registro de códigos, carga, gatilho, `orcamento_esta_vazio`, `orcamentos_excluiveis_do_projeto`, `excluir_orcamento_vazio`) e `20261007990002` (a função como dona). Na carga entraram 238 códigos: os 105 atuais e 133 de orçamentos que já não existem ou de códigos antigos (decisão 114). Em 07/10/2026 havia 8 orçamentos vazios, 7 em projetos reais — nenhum foi apagado; a equipe decide.
+
+**Testado (07/10/2026), no TES-P001/26:**
+- No banco, simulando os usuários de teste: o freelancer é recusado pelo papel; o produtor passa pelo papel e é recusado num orçamento com itens.
+- Na agregada: o `-28` ("ZZ Teste 148 exclusão A") nasceu com a lixeira; com "Criar planilha" ela continuou (linha em branco); com a linha nomeada sumiu; removido o item, voltou. Excluído pela lixeira: card, faixa e Totais atualizados; versão e grupo apagados; auditoria gravada; código guardado.
+- O `-29` ("B") nasceu sem reaproveitar o `-28`; excluído pela gaveta "Editar" da página dele, que só mostra "Excluir" no vazio (o "ZZ Teste 148 autosave", com itens, mostra só "Arquivar").
+- O `-30` ("C"), aberto por cliques (Projetos → projeto → orçamento) e excluído pela gaveta: a tela foi ao projeto e o "Voltar" levou a "Projetos", não ao orçamento excluído.
+- Pelo console, chamando a action direto: orçamento com itens, orçamento aprovado e projeto errado — as três recusadas.

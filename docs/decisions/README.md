@@ -167,7 +167,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 145 | [Módulo fiscal: correções pela lei (remessa pelo líquido, complementar, DARF mínimo)](145-fiscal-correcoes-pela-lei.md) | 2026-10-04 |
 | 146 | [Crédito de PIS/COFINS pelo rateio proporcional do mês (o job sai da regra)](146-credito-pelo-rateio-proporcional.md) | 2026-10-04 |
 | 147 | [Planilha de Mídia Off no orçamento (entrega 1: até aprovar)](147-planilha-midia-off.md) | 2026-10-06 |
-| 148 | [A visão agregada salva cada alteração na hora (entrega 1)](148-agregada-salva-cada-alteracao.md) | 2026-10-06 |
+| 148 | [A visão agregada salva cada alteração na hora, e o orçamento vazio se exclui](148-agregada-salva-cada-alteracao.md) | 2026-10-06 |
 | 149 | [O envio para abertura muda pelo tipo de job: Interno sem recebimento; Fee e Always On sem evento e com recebimento por mês](149-envio-para-abertura-por-tipo-de-job.md) | 2026-10-06 |
 | 150 | [Cadastro de Veículos em Cadastros; os meios do veículo vêm do uso nas planilhas](150-cadastro-de-veiculos.md) | 2026-10-07 |
 | 151 | [A errata não mexe no planejado e cancela a linha em vez de apagá-la](151-errata-nao-mexe-no-planejado-e-cancela-linha.md) | 2026-10-07 |

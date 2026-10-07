@@ -1336,3 +1336,62 @@ export async function reativarOrcamento(
   revalidatePath(`/orcamentos/${projetoId}/${orcId}`);
   return { ok: true, id: orcId };
 }
+
+/** Exclui o orçamento completamente vazio — em rascunho, nunca aprovado,
+ *  sem job e sem nenhum item em nenhuma versão (decisão 148, entrega 2).
+ *
+ *  Quem pode: quem cria orçamento. A função do banco
+ *  (`excluir_orcamento_vazio`) confere tudo de novo, apaga e audita na
+ *  mesma transação — quem tem a tela aberta há tempo não exclui um
+ *  orçamento que outra pessoa acabou de preencher. O código dele não volta
+ *  a ser usado (`codigos_de_orcamento_usados`). */
+export async function excluirOrcamentoVazio(
+  projetoId: string,
+  orcId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return gate;
+  const supabase = createClient();
+
+  const chkProjeto = await assertProjetoDoTenant(
+    supabase,
+    projetoId,
+    session.activeTenant.id,
+  );
+  if (!chkProjeto.ok) {
+    return chkProjeto.message === PROJETO_ARQUIVADO
+      ? {
+          ok: false,
+          message: "Projeto arquivado é só leitura. Reative o projeto para excluir.",
+        }
+      : chkProjeto;
+  }
+
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("id")
+    .eq("id", orcId)
+    .eq("projeto_id", projetoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string }>();
+  if (!orc) return { ok: false, message: "Orçamento não encontrado." };
+
+  const { error } = await supabase.rpc("excluir_orcamento_vazio", {
+    p_orcamento_id: orcId,
+  });
+
+  if (error) {
+    // As recusas da função (P0001/P0002) já vêm em português, para quem
+    // está na tela. O resto é erro técnico e fica no log.
+    if (error.code === "P0001" || error.code === "P0002") {
+      return { ok: false, message: error.message };
+    }
+    console.error("[orcamento.excluir]", error.message);
+    return { ok: false, message: "Não foi possível excluir o orçamento." };
+  }
+
+  revalidatePath(`/orcamentos/${projetoId}`);
+  revalidatePath(`/orcamentos/${projetoId}/agregado`);
+  return { ok: true, id: orcId };
+}

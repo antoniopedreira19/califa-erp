@@ -22,6 +22,10 @@ export type AuditAction =
   | "orcamento.editado"
   | "orcamento.arquivado"
   | "orcamento.reativado"
+  // Exclusão do orçamento completamente vazio (decisão 148, entrega 2).
+  // Gravada pela função do banco `excluir_orcamento_vazio`, na mesma
+  // transação do DELETE; o metadata guarda código, nome e projeto.
+  | "orcamento.excluido"
   | "projeto.criado"
   | "projeto.atualizado"
   | "projeto.arquivado"

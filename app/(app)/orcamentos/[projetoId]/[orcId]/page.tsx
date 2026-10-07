@@ -236,6 +236,7 @@ export default async function OrcamentoDetailPage({
     fornecedoresRes,
     regionaisRes,
     codigosDeJobRes,
+    vazioRes,
   ] = await Promise.all([
     supabase
       .from("orcamentos")
@@ -367,6 +368,9 @@ export default async function OrcamentoDetailPage({
       .select("codigo")
       .eq("tenant_id", session.activeTenant.id)
       .like("codigo", `%/${anoDoCodigoDeJob()}`),
+    // A regra do orçamento completamente vazio, no banco (decisão 148): é
+    // a mesma que a exclusão confere.
+    supabase.rpc("orcamento_esta_vazio", { p_orcamento_id: params.orcId }),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -497,6 +501,10 @@ export default async function OrcamentoDetailPage({
   // Job devolvido (decisão 128): o "Editar" e o planejado abrem para
   // corrigir; o orçado e as versões novas continuam travados.
   const correcaoLiberada = jobDevolvido && !readOnlyPeloPapel && !arquivado;
+  // Decisão 148, entrega 2: o "Excluir" do "Editar orçamento" só aparece no
+  // orçamento completamente vazio, para quem cria orçamento.
+  const excluivel =
+    vazioRes.data === true && podeCriarOrcamento && !orcamentoArquivado && !correcaoLiberada;
   const podeCriarVersao =
     orcamento.status !== "job_criado" &&
     orcamento.status !== "cancelado" &&
@@ -818,6 +826,7 @@ export default async function OrcamentoDetailPage({
               projetoCodigo={projetoRaw.codigo}
               disabled={protegido && !correcaoLiberada}
               arquivavel={!correcaoLiberada}
+              excluivel={excluivel}
               disabledReason={
                 arquivado
                   ? orcamentoArquivado

@@ -136,6 +136,12 @@ export interface OrigemBanco {
    *  seletores "Exibir" e "Exportar" da visão agregada. Opcional porque o
    *  editor multi-jobs, que também usa este tipo, não carrega jobs. */
   estagio?: EstagioFunil;
+  /** O que o banco diz sobre excluir este orçamento (decisão 148, entrega
+   *  2). `null` = não se exclui: tem job, já foi aprovado, não está em
+   *  rascunho, ou quem vê não cria orçamento. Preenchido, falta só não ter
+   *  item: `versoesComItem` são as versões que ainda têm — a versão aberta
+   *  a tela confere pelo próprio estado, porque é editada na hora. */
+  exclusao: { versoesComItem: string[] } | null;
 }
 
 export interface OrcamentoRascunho extends JobRascunho {

@@ -5,6 +5,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Sequencial por projeto. Ex.: "AMB-P003/26-01" — até a decisão 114
  * (28/09/2026), "AMB-0003/26-01". O código de antes saiu do sistema em
  * 29/09/2026 (decisão 126).
+ *
+ * Código não volta a ser usado (decisão 148, entrega 2): além dos
+ * orçamentos que existem, o maior número considera os códigos de
+ * `codigos_de_orcamento_usados` — os de orçamentos excluídos ficam lá.
  */
 export async function gerarCodigoOrcamento(
   supabase: SupabaseClient,
@@ -23,21 +27,34 @@ export async function gerarCodigoOrcamento(
     throw new Error("Projeto não encontrado.");
   }
 
-  // 2) Os códigos que o projeto já usou
-  const { data: orcamentos, error: errCodigos } = await supabase
-    .from("orcamentos")
-    .select("codigo")
-    .eq("projeto_id", projetoId)
-    .eq("tenant_id", tenantId);
+  // 2) Os códigos que o projeto já usou: os dos orçamentos de hoje e os
+  //    registrados, que incluem os excluídos. O prefixo só estreita a busca;
+  //    `proximaSequenciaOrcamento` confere o padrão de cada um.
+  const [orcamentosRes, usadosRes] = await Promise.all([
+    supabase
+      .from("orcamentos")
+      .select("codigo")
+      .eq("projeto_id", projetoId)
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("codigos_de_orcamento_usados")
+      .select("codigo")
+      .eq("tenant_id", tenantId)
+      .like("codigo", `${projeto.codigo}-%`),
+  ]);
 
-  if (errCodigos) {
-    throw new Error(`Falha ao ler os orçamentos do projeto: ${errCodigos.message}`);
+  if (orcamentosRes.error) {
+    throw new Error(`Falha ao ler os orçamentos do projeto: ${orcamentosRes.error.message}`);
+  }
+  if (usadosRes.error) {
+    throw new Error(`Falha ao ler os códigos já usados: ${usadosRes.error.message}`);
   }
 
-  const seq = proximaSequenciaOrcamento(
-    projeto.codigo,
-    ((orcamentos ?? []) as { codigo: string }[]).map((o) => o.codigo),
-  );
+  const codigos = new Set<string>();
+  for (const o of (orcamentosRes.data ?? []) as { codigo: string }[]) codigos.add(o.codigo);
+  for (const c of (usadosRes.data ?? []) as { codigo: string }[]) codigos.add(c.codigo);
+
+  const seq = proximaSequenciaOrcamento(projeto.codigo, [...codigos]);
   return `${projeto.codigo}-${String(seq).padStart(2, "0")}`;
 }
 
