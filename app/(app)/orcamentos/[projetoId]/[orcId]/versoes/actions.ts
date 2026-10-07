@@ -16,6 +16,7 @@ import {
   mesesSemItensDaVersao,
 } from "@/lib/data/meses-versao";
 import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes";
+import { erroDoParDoOrcamento } from "@/lib/data/par-servico-categoria";
 import {
   ALIQUOTA_IMPOSTO_PADRAO,
   PERCENTUAL_INT_TAXES_PADRAO,
@@ -1765,12 +1766,16 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   const { data: orc } = await supabase
     .from("orcamentos")
     // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
-    .select("status, projeto_id, categoria:categorias_dominio!categoria_id(modelo_planilha)")
+    // `servico_id` e `categoria_id`: o par serviço × categoria aprova só
+    // quando combina (revisão da decisão 149, 07/10/2026).
+    .select("status, projeto_id, servico_id, categoria_id, categoria:categorias_dominio!categoria_id(modelo_planilha)")
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
       status: string;
       projeto_id: string;
+      servico_id: string | null;
+      categoria_id: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
     }>();
 
@@ -1824,7 +1829,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   // não pode depender do cliente.
   const modeloDaVersao = orc.categoria?.modelo_planilha ?? "nacional";
   const porMes = modeloDaVersao === "mensal" || modeloDaVersao === "midia_off";
-  const [mesesVazios, semVeiculo] = await Promise.all([
+  const [mesesVazios, semVeiculo, par] = await Promise.all([
     porMes
       ? mesesSemItensDaVersao(supabase, session.activeTenant.id, versaoId)
       : Promise.resolve(null),
@@ -1837,7 +1842,14 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
           .eq("tenant_id", session.activeTenant.id)
           .is("fornecedor_id", null)
       : Promise.resolve(null),
+    erroDoParDoOrcamento(
+      supabase,
+      session.activeTenant.id,
+      orc.servico_id,
+      orc.categoria_id,
+    ),
   ]);
+  if (!par.ok) return { ok: false, message: par.message };
   if (porMes && mesesVazios === null) {
     return {
       ok: false,
@@ -1852,6 +1864,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   // Alíquota escolhida + item com valor. Mesma função do botão "Aprovar
   // versão", para a tela e o servidor nunca discordarem do motivo.
   const bloqueio = bloqueioAprovacaoVersao({
+    parServicoCategoria: par.erro,
     percentualImposto: Number(versao.percentual_imposto),
     // Internacional exige o câmbio inteiro (decisão 072, 14/09/2026).
     cambioInternacional:

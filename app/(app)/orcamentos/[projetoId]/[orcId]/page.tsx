@@ -24,7 +24,10 @@ import {
   type VersaoOrcamentoItem,
 } from "@/lib/types";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
-import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
+import {
+  erroDoParServicoCategoria,
+  type CategoriaParaServico,
+} from "@/lib/categorias-do-servico";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
@@ -404,6 +407,23 @@ export default async function OrcamentoDetailPage({
   const servicos = (servicosRes.data ?? []) as ServicoOption[];
   const categoriasOrcamento = (categoriasOrcRes.data ??
     []) as CategoriaParaServico[];
+  // Serviço × categoria que não combinam (revisão da 149, 07/10/2026): os
+  // orçamentos de antes da decisão 078 seguem editáveis, mas não aprovam
+  // assim. A barra de aprovação mostra o motivo; a action e o banco
+  // conferem de novo, com todas as categorias (inclusive as inativas).
+  const servicoDoOrcamento = servicos.find((s) => s.id === orcamento.servico_id);
+  const categoriaDoOrcamento = categoriasOrcamento.find(
+    (c) => c.id === orcamento.categoria_id,
+  );
+  const parServicoCategoria =
+    servicoDoOrcamento && categoriaDoOrcamento
+      ? erroDoParServicoCategoria(
+          servicoDoOrcamento,
+          categoriaDoOrcamento,
+          categoriasOrcamento,
+          servicoDoOrcamento.nome,
+        )
+      : null;
   // A cidade gravada no orçamento entra por fora da lista: com o combobox
   // limitado a 30, ela pode não estar entre as primeiras, e o editor
   // precisa exibi-la mesmo assim.
@@ -992,6 +1012,7 @@ export default async function OrcamentoDetailPage({
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
           porMesDaCopia={porMesDaCopia}
+          parServicoCategoria={parServicoCategoria}
           ppsQueTravam={ppsQueTravam}
           veiculos={veiculos}
         />
@@ -1055,6 +1076,7 @@ function VersaoSelecionada({
   mesPedido,
   fechamentoDaCopia,
   porMesDaCopia,
+  parServicoCategoria,
   ppsQueTravam,
   veiculos,
 }: {
@@ -1105,6 +1127,9 @@ function VersaoSelecionada({
   /** Modelo mensal: o faturamento de cada mês da cópia, junto do
    *  fechamento acima (decisão 149). Nulo sem cópia ou fora do mensal. */
   porMesDaCopia: FaturamentoDoMes[] | null;
+  /** O par serviço × categoria do orçamento, quando não combina (revisão
+   *  da 149): bloqueia a aprovação. `null` com o par válido. */
+  parServicoCategoria: string | null;
   /** PPs do job vivo de pré-abertura fora de `cancelada` (decisão 143). */
   ppsQueTravam: PPQueTravaOEnvio[];
   /** Mídia Off (decisão 147): os veículos do cadastro; vazio nos demais. */
@@ -1595,6 +1620,7 @@ function VersaoSelecionada({
         }
         mesesSemItens={mesesVazios}
         linhasSemVeiculo={midiaOff ? itens.filter((i) => !i.fornecedor_id).length : null}
+        parServicoCategoria={parServicoCategoria}
         midiaOff={midiaOff}
         periodoTravado={planilha.modeloPlanilha === "mensal"}
         servicoInterno={interno}

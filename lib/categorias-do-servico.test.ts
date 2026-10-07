@@ -13,6 +13,7 @@ import {
   servicoTemCategoriaExclusiva,
   type CategoriaParaServico,
 } from "./categorias-do-servico";
+import { bloqueioAprovacaoVersao } from "./validations/versoes";
 
 const ATIVACAO = { id: "ativacao", investimento_interno: false };
 const FEE = { id: "fee", investimento_interno: false };
@@ -89,4 +90,32 @@ test("o que já valia continua valendo (078 e 105)", () => {
   assert.deepEqual(nomes(categoriasDoServico(INTERNO, TODAS)), ["Evento", "Always On"]);
   assert.deepEqual(nomes(categoriasDoServico(ATIVACAO, TODAS)), ["Evento", "Internacional"]);
   assert.equal(erroDoParServicoCategoria(ATIVACAO, EVENTO, TODAS, "Ativação"), null);
+});
+
+// Revisão da decisão 149 (07/10/2026): o par fora da regra não aprova.
+// Os 4 orçamentos de antes da 078 têm serviço Always On com Conteúdo ou
+// Extra; trocando o serviço para Ativação (ou a categoria para Always On)
+// a aprovação segue.
+test("aprovação: serviço Always On com categoria Extra bloqueia, com a frase do par", () => {
+  const ALWAYS_ON_SERVICO = { id: "always-on", investimento_interno: false };
+  const EXTRA = cat("Extra");
+  const todas = [...TODAS, EXTRA];
+  const par = erroDoParServicoCategoria(ALWAYS_ON_SERVICO, EXTRA, todas, "Always On");
+  assert.equal(par, "Com o serviço Always On, a categoria é Always On.");
+  const base = {
+    percentualImposto: 19.53,
+    cambioInternacional: null,
+    qtdItens: 1,
+    qtdItensComValor: 1,
+    mesesSemItens: null,
+    linhasSemVeiculo: null,
+  };
+  assert.equal(
+    bloqueioAprovacaoVersao({ ...base, parServicoCategoria: par }),
+    'Serviço e categoria do orçamento não combinam: com o serviço Always On, a categoria é Always On. Troque a categoria ou o serviço no "Editar" do orçamento antes de aprovar.',
+  );
+  // Trocado o serviço para Ativação, o par combina e nada bloqueia.
+  const trocado = erroDoParServicoCategoria(ATIVACAO, EXTRA, todas, "Ativação");
+  assert.equal(trocado, null);
+  assert.equal(bloqueioAprovacaoVersao({ ...base, parServicoCategoria: trocado }), null);
 });

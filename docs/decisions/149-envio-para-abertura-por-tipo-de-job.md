@@ -54,6 +54,25 @@ O Interno já tinha faturamento previsto zero (só F · Interno, decisão 105), 
 - **Ativação** "Orçamento de Teste": o formulário de sempre.
 - **Trava do servidor** (action chamada sem o formulário): nacional sem Data Evento → recusado ("Data do evento é obrigatória."); mensal só com outubro → recusado ("Informe a data prevista de recebimento de cada mês."). Nenhum job criado.
 
+## Revisão de 07/10/2026 — serviço × categoria fora da regra não aprova
+
+Os 4 orçamentos com serviço Always On e categoria Conteúdo ou Extra (de antes da 078) foram mostrados ao Tiago (https://claude.ai/artifact/JTwPrWGyJXV59Mk9VKHS6Y). A resposta, caso a caso:
+
+| Orçamento | Situação | O que foi feito |
+|---|---|---|
+| NOV-P004/26 · SEBRAE NOSSO CANTO \| ANCINE MANIFESTO | Aprovado (Lufa, 28/08), sem job | **Aprovação cancelada** pelo "Cancelar aprovação" da tela em 07/10/2026. Versão e orçamento voltaram a "Em revisão". |
+| NOV-P004/26 · SEBRAE NOSSO CANTO \| HITLAB | Em revisão (aprovado e desaprovado pela Lufa em 27/08) | Nada mudou. |
+| NOV-P004/26 · SEBRAE NOSSO CANTO \| ANCINE HEROS | Rascunho | Nada mudou. |
+| HIT-P001/26 · Projeto Raízes do Futuro | Cancelado e arquivado | Nada mudou. |
+
+**A regra:** nenhum deles aprova como está. A versão só aprova com o par serviço × categoria do orçamento dentro da regra da 078 — a troca é da categoria ou do serviço, no "Editar" do orçamento, que já oferecia as duas saídas (o par antigo continua editável, como o Tiago decidiu em 14/09). O "Em revisão" é o estado em que o "Cancelar aprovação" deixa a versão e o orçamento.
+
+- **Tela**: a barra de aprovação mostra "Serviço e categoria do orçamento não combinam: com o serviço Always On, a categoria é Always On. Troque a categoria ou o serviço no "Editar" do orçamento antes de aprovar." e o "Aprovar versão" fica travado (`bloqueioAprovacaoVersao`, campo novo e obrigatório `parServicoCategoria`).
+- **Action** `aprovarVersao`: relê serviço e categoria do orçamento (`lib/data/par-servico-categoria.ts`, todas as categorias, inclusive inativas) e recusa com a mesma frase.
+- **Banco**: gatilho `trg_versao_aprova_com_servico_e_categoria_coerentes` (BEFORE UPDATE OF status em `versoes_orcamento`) recusa a passagem para `aprovada`, pela função `erro_do_par_servico_categoria`, que espelha `erroDoParServicoCategoria`. Migration `20261007970001` (+ o `grant` ao `service_role` em migration à parte). Vale para qualquer caminho de aprovação.
+- **Testado**: a função acusa exatamente os 4 (entre 105 orçamentos com serviço e categoria); o gatilho recusou a aprovação do HITLAB e deixou passar a de uma versão do TES-P001/26 com par válido (as duas em transação desfeita); a action chamada sem a tela recusou o HITLAB; HITLAB, ANCINE HEROS e ANCINE MANIFESTO (depois do cancelamento) mostram a frase e o botão travado; o "Editar" do MANIFESTO lista os serviços e as categorias Always On e Extra.
+
 ## Status
 
 - 2026-10-06: decidida e implementada.
+- 2026-10-07: revisão — a aprovação exige o par serviço × categoria dentro da regra da 078; a aprovação do ANCINE MANIFESTO foi cancelada.
