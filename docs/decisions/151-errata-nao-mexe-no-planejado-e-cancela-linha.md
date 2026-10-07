@@ -1,9 +1,8 @@
 # 151 — A errata não mexe no planejado e cancela a linha em vez de apagá-la
 
 **Data:** 2026-10-07
-**Status:** entregas 1 e 2 aceitas e no ar (07/10/2026). Fica uma
-pergunta aberta sobre a linha que vira save depois da abertura (fim do
-arquivo).
+**Status:** entregas 1 e 2 aceitas e no ar (07/10/2026), com a linha que
+vira save depois da abertura contando no planejado (fim do arquivo).
 **Quem decidiu:** Tiago, em 06 e 07/10/2026, a partir do protótipo
 interativo (https://claude.ai/artifact/UvUXt8rKSNsXTEofUxtt7p, v3). Todas as
 respostas seguiram a recomendação que acompanhava a pergunta.
@@ -147,40 +146,29 @@ Decidido em 07/10/2026 no mesmo protótipo:
   financeiro.
 - TES-1014/26 (sem errata): valor único no cabeçalho e no Totais.
 
-### Pergunta aberta: a linha que vira save depois da abertura
+### A linha que vira save depois da abertura (resposta do Tiago, 07/10/2026)
 
-O rodapé da planilha soma a RENTAB. planejada linha a linha; o card de
-Totais fecha sobre a versão inteira. Os dois batem, menos quando uma linha
-da abertura saiu da conta por outro caminho que não o cancelamento:
+Pergunta feita depois da entrega 2: a linha da abertura que vira save
+(decisão 099) continua contando no lado planejado? **Sim** — a mesma regra
+da linha cancelada.
 
-- **Remoção antiga** (antes desta decisão): a linha sumiu da planilha.
-  Não acontece mais — agora é cancelamento. Só existe em jobs de teste
-  (TES-1001, TES-1006, TES-1008).
-- **Linha que vira save depois da abertura** (decisão 099): o planejado
-  dela vai a zero pelo trigger e o orçado sai da base. Hoje só em jobs de
-  teste (TES-1001, TES-1002, TES-1008), mas pode acontecer em job real.
+- O loader (`carregar-detalhe`) reconhece a linha que está em save hoje e
+  não estava na versão aprovada, e devolve nela o planejado de antes do
+  save (`planejado_antes_save`), com `save_depois_da_abertura: true`. Na
+  planilha a coluna Planejado dessa linha mostra esse planejado.
+- `blocosDoItem` não zera o planejado dela, e a base da rentabilidade
+  planejada é o orçado da abertura. A linha que já era save na versão
+  segue fora (orçado da abertura 0, planejado 0).
+- No TES-1008/26 (Item 8: orçado R$ 2.500, planejado R$ 2.000) o
+  resultado planejado foi de R$ 41.600,00 para R$ 39.600,00. No
+  TES-1002/26 o rodapé dos três meses soma o mesmo R$ 54.000,00 de
+  rentabilidade e R$ 201.000,00 de planejado do card de Totais do
+  trimestre.
 
-No TES-1008/26 o card mostra R$ 26.000,00 de rentabilidade planejada e o
-rodapé R$ 13.500,00 — a diferença é a linha removida (R$ 10.000) e o Item
-8 em save (R$ 2.500). Aguarda o Tiago.
+Fica de fora, sem caso hoje: a linha que estava em save na abertura e
+saiu do save depois (o planejado dela volta pelo save e entra na conta).
 
-## Testado (07/10/2026)
-
-No TES-1002/26 · Teste Always On (projeto de teste TES-P001/26), mês de
-dezembro, pela tela, logado:
-
-- Item 1: orçado de R$ 10.000 para R$ 12.000, o planejado de R$ 8.000 não
-  abriu e ficou gravado igual.
-- "Item novo · teste 150": orçado R$ 5.000, planejado travado e gravado
-  zero (unitário 0, QT 1, D/M 1).
-- Item 4 cancelado: unitário 0, planejado R$ 8.000 mantido, marca com autor
-  e errata, PPs concluídas; o pendente de "Concluir PPs" do encerramento
-  seguiu em 21 (a linha nova entrou, a cancelada saiu).
-- Errata seguinte no mesmo job: a cancelada fica com "Cancelada" na calha,
-  sem botão, e o orçado não abre.
-- Bypass pelo console, nada gravado: corrigir a cancelada, cancelar de
-  novo, reservar PP e lançar BV nela — as quatro recusadas com o nome da
-  linha.
-- A revisão da abertura do financeiro mostra "2 alteradas · 1 nova · 1
-  cancelada". O registro dela ficou pendente: o job de teste não tem a data
-  dos recolhimentos de impostos (decisão 100), e a data não foi inventada.
+**Remoções antigas.** As linhas removidas por errata antes desta decisão
+sumiram da planilha, e o rodapé fica abaixo do card de Totais pelo valor
+delas. Só existem em jobs de teste (TES-1001, TES-1006 e TES-1008 — no
+TES-1008, R$ 10.000) e não acontecem mais: agora a linha é cancelada.

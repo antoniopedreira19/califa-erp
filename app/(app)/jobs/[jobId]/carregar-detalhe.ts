@@ -75,7 +75,7 @@ import {
 import type { EtapasDaFicha } from "./ficha-job";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
-import type { AnexoDaPPNaLista, PPAEmitir } from "@/lib/types";
+import type { AnexoDaPPNaLista, PPAEmitir, PlanejadoAntesDoSave } from "@/lib/types";
 import {
   fechamentoDaAbertura,
   orcadoDaLinhaNaAbertura,
@@ -482,14 +482,31 @@ export async function carregarDetalheDoJob(
         em_save: i.em_save === true,
         save_consumido: Number(i.save_consumido ?? 0),
       }));
+  const versaoLida = itensDeVersaoLidos(itensDaVersaoRes);
+  // O orçado de cada linha na abertura: 0 na que já era save na versão,
+  // porque save não entra na rentabilidade (decisão 028 §9).
   const orcadoNaVersao = new Map(
-    itensDaVersao.map((i) => [i.id, Number(i.total_orcado ?? 0)]),
+    itensDaVersao.map((i) => [i.id, i.em_save ? 0 : Number(i.total_orcado ?? 0)]),
   );
+  const eraSaveNaVersao = new Map(itensDaVersao.map((i) => [i.id, i.em_save === true]));
+
+  // Linha que virou save DEPOIS da abertura (decisão 151): o trigger zerou
+  // o planejado dela, mas ele continua contando no lado planejado. Volta o
+  // de antes do save — o mesmo número que a abertura conheceu.
+  const planejadoDaAbertura = (it: any): PlanejadoAntesDoSave | null => {
+    if (!versaoLida || it.em_save !== true || !it.item_versao_id) return null;
+    if (!eraSaveNaVersao.has(it.item_versao_id)) return null;
+    if (eraSaveNaVersao.get(it.item_versao_id) === true) return null;
+    const antes = it.planejado_antes_save as PlanejadoAntesDoSave | null;
+    return antes ?? null;
+  };
 
   // `id` é o id da CÓPIA do job — a chave que o realizado, o BV, a PP e o
   // save usam. `orcado_id` carrega o mesmo valor e fica por compatibilidade;
   // `item_versao_id` é `null` na linha que nasceu de uma errata.
-  const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => ({
+  const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => {
+    const antesDoSave = planejadoDaAbertura(it);
+    return {
     id: it.id,
     orcado_id: it.id,
     item_versao_id: it.item_versao_id ?? null,
@@ -503,10 +520,23 @@ export async function carregarDetalheDoJob(
     quantidade_orcada: Number(it.quantidade_orcada ?? 1),
     dias_meses_orcado: Number(it.dias_meses_orcado ?? 1),
     total_orcado: Number(it.total_orcado ?? 0),
-    valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
-    quantidade_planejada: Number(it.quantidade_planejada ?? 0),
-    dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
-    total_planejado: Number(it.total_planejado ?? 0),
+    ...(antesDoSave
+      ? {
+          valor_unitario_planejado: Number(antesDoSave.valor_unitario ?? 0),
+          quantidade_planejada: Number(antesDoSave.quantidade ?? 0),
+          dias_meses_planejado: Number(antesDoSave.dias_meses ?? 0),
+          total_planejado:
+            Number(antesDoSave.valor_unitario ?? 0) *
+            Number(antesDoSave.quantidade ?? 0) *
+            Number(antesDoSave.dias_meses ?? 0),
+        }
+      : {
+          valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
+          quantidade_planejada: Number(it.quantidade_planejada ?? 0),
+          dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
+          total_planejado: Number(it.total_planejado ?? 0),
+        }),
+    save_depois_da_abertura: antesDoSave !== null,
     // `null` preservado de propósito: significa "ainda não congelado", e
     // é o que manda a conta calcular a dedução a partir do BV vigente.
     em_save: it.em_save === true,
@@ -517,14 +547,15 @@ export async function carregarDetalheDoJob(
     // O orçado da linha na abertura — a base da rentabilidade planejada
     // (decisão 151, entrega 2). 0 na linha criada por errata. Sem a versão
     // lida, `null`: vale o orçado de hoje.
-    orcado_abertura: itensDeVersaoLidos(itensDaVersaoRes)
+    orcado_abertura: versaoLida
       ? orcadoDaLinhaNaAbertura(it.item_versao_id ?? null, orcadoNaVersao)
       : null,
     bv_liquido_planejado:
       it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
         ? null
         : Number(it.bv_liquido_planejado),
-  }));
+    };
+  });
   const realizados = (realizadosRes.data ?? []).map((r: any) => ({
     ...r,
     valor_unitario_realizado: Number(r.valor_unitario_realizado ?? 0),

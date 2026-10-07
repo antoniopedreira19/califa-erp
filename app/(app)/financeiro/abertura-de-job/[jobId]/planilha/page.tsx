@@ -197,6 +197,7 @@ export default async function PlanilhaDaAberturaPage({
     cancelada_em: it.cancelada_em ?? null,
     // A conferência é da abertura: o orçado de hoje É o da abertura.
     orcado_abertura: null,
+    save_depois_da_abertura: false,
     bv_liquido_planejado:
       it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
         ? null

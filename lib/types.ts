@@ -2066,6 +2066,12 @@ export interface ItemPlanilhaJob {
    *  antes da abertura, exportação): vale o orçado de hoje. Obrigatório
    *  pelo mesmo motivo de `cancelada_em`. */
   orcado_abertura: number | null;
+  /** A linha virou SAVE depois da abertura (não estava em save na versão
+   *  aprovada). Decisão 151, resposta do Tiago em 07/10/2026: o planejado
+   *  dela continua contando no lado planejado — o loader devolve nela o
+   *  planejado de antes do save, e a conta não o zera. `false` em toda
+   *  linha que não seja esse caso, e nas telas sem a foto da abertura. */
+  save_depois_da_abertura: boolean;
 }
 
 /** O planejado da linha antes de ela virar save (decisão 099). */
