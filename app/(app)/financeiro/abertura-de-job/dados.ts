@@ -1145,3 +1145,19 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
   }
   return saida;
 }
+
+/**
+ * As linhas do job contadas pelo save (decisão 028), para o formulário da
+ * abertura explicar um custo previsto zero: a linha em save não tem custo
+ * aqui (o serviço acontece no job que consumir o saldo), e a que está fora
+ * do save, sem gerar PP, é paga pelo cliente direto ao fornecedor. A linha
+ * cancelada por errata (decisão 151) não conta. Uma conta só para a página
+ * da abertura e a do job aberto (07/10/2026).
+ */
+export function linhasDoSave(
+  itens: { em_save: boolean; cancelada_em: string | null }[],
+): { emSave: number; foraDoSave: number } {
+  const vivas = itens.filter((i) => !i.cancelada_em);
+  const emSave = vivas.filter((i) => i.em_save).length;
+  return { emSave, foraDoSave: vivas.length - emSave };
+}

@@ -6763,3 +6763,25 @@ estendido a Contas a Receber em 31/08.**
   código (decisão 153). Os textos dos dois diálogos mudaram.
 - Pendência pedida pelo Tiago para depois desta entrega: mapear as PPs com
   mais de uma NF anexada ainda não registradas, para registro retroativo.
+
+## ⚠️ Nota de 2026-10-07 (2) — save na abertura: aviso do job aberto, custo zero do save e a Rentabilidade da planilha
+
+Achados no protótipo da aprovação do save dentro da abertura, testados no TES.
+
+- **Aviso do job aberto pago por save.**
+  - **Antes:** `financeiro/jobs/[jobId]/page.tsx` montava o `AberturaForm` sem `saveConsumido`, que era opcional e valia 0. O job aberto pago com saldo de save de outro job dizia "Todo o valor deste job é pago diretamente pelo cliente ao fornecedor".
+  - **Agora:** a página soma `jobs_itens_orcado.save_consumido` dos itens que já carrega, como faz a página da abertura. A prop virou obrigatória, e o `tsc` acusa quem esquecer de passá-la.
+- **Custo zero explicado pelo save.**
+  - Prop nova obrigatória `linhasDoSave` (`linhasDoSave(itens)` em `abertura-de-job/dados.ts`; a linha cancelada não conta).
+  - **Job todo em save:** o cartão de custo diz "Todas as linhas estão em save — o custo nasce no job que consumir o saldo.", e o aviso âmbar explica que o serviço acontece no job que consumir o saldo.
+  - **Save com itens de calha BV:** um texto que cita os dois.
+  - **Sem save:** fica o texto de antes.
+  - Os textos foram escolhidos pelo Tiago na sessão "Corrigir o aviso de save no job aberto". O trabalho dela foi terminado e registrado aqui.
+- **Rentabilidade = valor do job − impostos − custo planejado**, a conta do resultado operacional planejado da planilha (Tiago, 07/10/2026; revisão da decisão 100 §4).
+  - A prop `resultadoPlanilha` saiu. Entrou `rentabilidade: { valorJob, deducoes, custoPlanejado }`.
+  - A conta por extenso no rodapé das Previsões mostra os três números. O selo "Bate com… / Planilha interna: …" saiu.
+- **Testado no dev do worktree, logado como administrador:**
+  - TES-1007/26 (todo em save): texto novo do custo e Rentabilidade R$ 0,00;
+  - TES-1004/26 (consome R$ 1.000): Rentabilidade R$ 1.600,00 · 22,99%, igual ao "Resultado op. (planejado)" do cabeçalho (R$ 1.600,00 · 23,0%);
+  - abertura do TES-1012/26: R$ 32.000,00 = 139.182,30 − 27.182,30 − 80.000,00.
+- **Fica para depois:** não há no banco um job aberto com faturamento zero e consumo de save. O aviso "pago com saldo em save" do job aberto foi conferido pelo valor que a página passa ao formulário, e não pela tela. O orçamento `TES-P001/26-26 · Teste aviso job pago por save` (v1 aprovada, sem job) está pronto para esse teste.

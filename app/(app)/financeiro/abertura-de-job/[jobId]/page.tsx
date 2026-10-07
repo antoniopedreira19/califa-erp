@@ -11,7 +11,7 @@ import { FichaJob } from "@/app/(app)/jobs/[jobId]/ficha-job";
 import { AlteracoesFinanceiroCard } from "@/app/(app)/jobs/[jobId]/alteracoes-financeiro-card";
 import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
-import { carregarJobParaAbertura } from "../dados";
+import { carregarJobParaAbertura, linhasDoSave } from "../dados";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
@@ -246,16 +246,15 @@ export default async function AbrirJobNoFinanceiroPage({
     ) / 100;
 
   const impostoPrevisto = imposto?.impostoPrevisto ?? 0;
-  // Resultado operacional planejado — a mesma conta do card de Totais.
-  const resultadoPlanilha =
-    imposto && job.planilha_planejado > 0
-      ? Math.round(
-          (imposto.valorJob -
-            imposto.deducoesDoResultado -
-            job.planilha_planejado) *
-            100,
-        ) / 100
-      : null;
+  // As parcelas da Rentabilidade: a conta do resultado operacional
+  // planejado do card de Totais — valor do job − impostos − planejado de
+  // todos os tipos (Tiago, 07/10/2026). Leitura do imposto que falha cai no
+  // valor gravado no job, sem deduções, como o imposto previsto acima.
+  const rentabilidade = {
+    valorJob: imposto?.valorJob ?? Number(job.valor_total ?? 0),
+    deducoes: imposto?.deducoesDoResultado ?? 0,
+    custoPlanejado: Math.round(job.planilha_planejado * 100) / 100,
+  };
 
   const baseCompetencia = job.data_inicio_prevista ?? hojeIso;
   const anoSugerido = Number(baseCompetencia.slice(0, 4));
@@ -319,8 +318,9 @@ export default async function AbrirJobNoFinanceiroPage({
             impostoPrevisto={impostoPrevisto}
             aliquotaImposto={imposto?.aliquotaImposto ?? 0}
             aliquotaIntTaxes={imposto?.aliquotaIntTaxes ?? null}
-            resultadoPlanilha={resultadoPlanilha}
+            rentabilidade={rentabilidade}
             saveConsumido={saveConsumido}
+            linhasDoSave={linhasDoSave(detalhe.itens)}
             enviadoPorNome={enviadoPorNome}
             curvaInicial={sugerirCurva(
               custoPrevisto,
