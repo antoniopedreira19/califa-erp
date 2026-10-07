@@ -27,7 +27,8 @@
  *   por padrão no regime normal e no fornecedor sem regime informado
  *   (PIS 0,65%, COFINS 3%, CSLL 1%, IRRF 1,5%, do cadastro de impostos);
  *   desligadas e travadas no Simples e no MEI (IN 459); sem retenção no
- *   cartão, como na baixa.
+ *   cartão, como na baixa. Ligadas, vêm com o aviso âmbar de que só valem
+ *   para serviço: nota de mercadoria não tem retenção (07/10/2026).
  * - **Crédito de PIS/COFINS** — automático pela regra, no mês da emissão
  *   da NF. Só o financeiro tira, e com motivo.
  *
@@ -149,6 +150,15 @@ function formatDate(iso: string | null): string {
 /** Módulo fiscal: o que as seções novas dizem enquanto a NF não tem data e valor. */
 const TEXTO_SEM_NF =
   "Preencha a data de emissão e o valor das notas em “Dados da PP”, olhando a nota ao lado: o valor é a base das retenções e a data, o mês do crédito.";
+
+/**
+ * Com "Reter na fonte" ligado — o que só acontece no Lucro Real ou
+ * Presumido e no fornecedor sem regime informado, porque no Simples e no
+ * MEI a chave fica travada desligada. O sistema não sabe se a nota é de
+ * serviço ou de mercadoria; quem olha a nota decide (Tiago, 07/10/2026).
+ */
+const AVISO_RETENCAO_SO_EM_SERVICO =
+  "A retenção na fonte só vale para serviço. Se a nota for de mercadoria (DANFE, NF-e), desligue: compra de mercadoria não tem retenção de PIS/COFINS/CSLL, IR nem ISS.";
 
 /** Módulo fiscal: a pílula do crédito, por estado. */
 const PILULA_DO_CREDITO: Record<"sim" | "nao", { texto: string; tom: string }> = {
@@ -730,6 +740,10 @@ export function AprovarPPDialog({
 
                   {v.retem && (
                     <>
+                      <p className="flex items-start gap-1.5 text-[12px] leading-snug text-amber-800 text-pretty">
+                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+                        <span>{AVISO_RETENCAO_SO_EM_SERVICO}</span>
+                      </p>
                       {v.retido > 0 ? (
                         <p className="text-[12px] leading-relaxed tabular-nums">
                           <span>

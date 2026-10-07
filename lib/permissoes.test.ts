@@ -308,6 +308,12 @@ test("GP, Produtor e Freelancer cadastram fornecedor INLINE (exceção do PP)", 
   assert.equal(pode("freelancer", "cadastros.fornecedores.editar"), false);
 });
 
+test("Financeiro cria e edita cliente pela tela, nao pelo projeto (07/10/2026)", () => {
+  assert.equal(pode("financeiro", "cadastros.clientes.editar"), true);
+  assert.equal(pode("financeiro", "cadastros.clientes.inline"), false);
+  assert.equal(pode("produtor", "cadastros.clientes.editar"), false);
+});
+
 test("Financeiro cria e edita fornecedor pela tela, nao pelo PP (07/10/2026)", () => {
   assert.equal(pode("financeiro", "cadastros.fornecedores.editar"), true);
   assert.equal(pode("administrador", "cadastros.fornecedores.editar"), true);

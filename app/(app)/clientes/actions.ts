@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { pode } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/utils";
 import { proximoCodigoLivre } from "@/lib/codigos/cliente-curto";
 import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
@@ -297,6 +298,18 @@ function codigoMarca(seq: number): string {
 }
 
 /**
+ * Quem cria cliente ou acrescenta marca: a tela (`cadastros.clientes.editar`,
+ * admin e financeiro desde 07/10/2026) ou o cadastro rápido de dentro do
+ * projeto (`.inline`, admin e GP).
+ */
+async function checarCriarCliente(
+  session: Awaited<ReturnType<typeof requireSession>>,
+): ReturnType<typeof checarPermissao> {
+  if (pode(session.activeRole, "cadastros.clientes.editar")) return { ok: true };
+  return checarPermissao(session, "cadastros.clientes.inline");
+}
+
+/**
  * `semRedirect`: o cadastro rápido de dentro do formulário de projeto
  * (17/09/2026). Ali não há para onde redirecionar — o dialog fecha e o
  * cliente novo precisa VOLTAR, com id, para ficar escolhido no campo.
@@ -307,12 +320,13 @@ export async function criarCliente(
   opcoes?: { semRedirect?: boolean },
 ): Promise<ActionResult> {
   const session = await requireSession();
-  // CRIAR usa o gate largo (`inline`, liberado em 18/09/2026): Admin, GP e
-  // Produtor. Quem cria orcamento precisa poder cadastrar o cliente que o
-  // orcamento pede — e cliente novo nao mexe no cadastro de ninguem.
-  // Abrir o cadastro de um cliente que JA existe (atualizarCliente,
-  // inativar, reativar) continua em `cadastros.clientes.editar`.
-  const gate = await checarPermissao(session, "cadastros.clientes.inline");
+  // CRIAR aceita a tela (`editar`: Admin e Financeiro) ou o gate largo
+  // (`inline`, liberado em 18/09/2026: Admin e GP). Quem cria orcamento
+  // precisa poder cadastrar o cliente que o orcamento pede — e cliente novo
+  // nao mexe no cadastro de ninguem. Abrir o cadastro de um cliente que JA
+  // existe (atualizarCliente, inativar, reativar) continua em
+  // `cadastros.clientes.editar`.
+  const gate = await checarCriarCliente(session);
   if (!gate.ok) return gate;
 
   const payload = parsePayload(formData);
@@ -513,7 +527,7 @@ export async function adicionarMarcaAoCliente(
   | { ok: false; message: string }
 > {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.clientes.inline");
+  const gate = await checarCriarCliente(session);
   if (!gate.ok) return gate;
 
   const parsed = marcaLinhaSchema

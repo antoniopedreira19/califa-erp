@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-03
 **Decidido por:** Tiago ("Faça os pontos remanescentes", 03/10/2026)
-**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração e a nota do Simples saem do cadastro rápido, o regime normal vira "Lucro Real ou Presumido" e o financeiro ganha a tela de fornecedores)
+**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração e a nota do Simples saem do cadastro rápido, o regime normal vira "Lucro Real ou Presumido", o financeiro ganha Fornecedores, Clientes e Veículos, e a aprovação da PP avisa que retenção só vale para serviço)
 **Migration:** `20261002100800_fiscal_fornecedor_consulta_e_declaracao.sql`
 (aditiva: duas colunas anuláveis em `fornecedores` e o bucket privado
 `fornecedores`)
@@ -149,6 +149,37 @@ O teste logado como financeiro não foi feito, porque não há como entrar
 nesse papel sem a senha de alguém. O que garante é a action, pelo
 `pode()` testado.
 
-**Outros cadastros:** o financeiro segue só vendo Clientes, Empresas do
-grupo, Categorias de orçamento e Cidades. Ele já editava Contas bancárias,
-Plano de contas e Cartões.
+**Outros cadastros:** o financeiro segue só vendo Empresas do grupo,
+Categorias de orçamento e Cidades. Ele já editava Contas bancárias, Plano de
+contas e Cartões. Clientes e Veículos: ver abaixo.
+
+### Ainda em 07/10/2026 — Clientes, Veículos e o aviso da mercadoria
+
+| Ponto | Como ficou |
+|---|---|
+| Financeiro em Clientes | `cadastros.clientes.editar` passa a ser de administrador e financeiro. O financeiro cria, edita, inativa e reativa pela tela. A criação (`criarCliente`) e o "+" da Marca (`adicionarMarcaAoCliente`) aceitam quem tem a tela ou o cadastro rápido do projeto (`.inline`, admin e GP). A RLS já liberava qualquer membro: sem migration. |
+| Financeiro em Veículos | Já tinha desde o commit anterior: a tela de Veículos grava pelas actions de fornecedores. A matriz de permissões ganhou a linha "Veículos de mídia", com os gates de `cadastros.fornecedores.editar`. |
+| Aviso de mercadoria na aprovação da PP | Com "Reter na fonte" ligado, aparece em âmbar, embaixo da chave: "A retenção na fonte só vale para serviço. Se a nota for de mercadoria (DANFE, NF-e), desligue: compra de mercadoria não tem retenção de PIS/COFINS/CSLL, IR nem ISS." O sistema não sabe se a nota é de serviço ou de mercadoria: quem olha a nota decide. |
+
+**Em que regime o aviso aparece.** O Tiago pediu o aviso só nos regimes em
+que a situação existe, e perguntou se era o Simples. É o contrário. No
+Simples e no MEI a chave de retenção já fica travada desligada (IN 459), e
+o financeiro não consegue reter. O caso é o fornecedor de **Lucro Real ou
+Presumido** e o **sem regime informado**: neles a retenção vem ligada por
+padrão (PIS 0,65%, COFINS 3%, CSLL 1%, IRRF 1,5%). Como o aviso só aparece
+com a chave ligada, ele fica restrito a esses regimes sem regra extra.
+
+**Opções que o Tiago não escolheu:** marcar no pop-up se a nota é de
+serviço ou de mercadoria; ou gravar o tipo da nota no anexo da PP, que
+exigiria migration. Ficou o aviso fixo.
+
+**Conferido (07/10/2026):**
+- PP-00132 (Fornecedor Teste, Lucro Real ou Presumido): com a chave ligada,
+  o aviso aparece embaixo dela. Desligada, ele some;
+- PP-00135 (MEI): chave travada, sem aviso;
+- os dois pop-ups foram fechados sem aprovar;
+- matriz do papel Financeiro: Clientes, Fornecedores (tela) e Veículos de
+  mídia com ver, criar, editar e excluir;
+- `/clientes/novo` e `/cadastros/veiculos` carregam sem erro;
+- `npm run test:permissoes`: 40 de 42. As 2 falhas são as do RH, que já
+  existiam.

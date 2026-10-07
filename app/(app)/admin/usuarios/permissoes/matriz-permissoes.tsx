@@ -63,6 +63,16 @@ const LINHAS: readonly Linha[] = [
   { modulo: "Cadastros", item: "Fornecedor rápido dentro do PP",
     permissoes: { criar: "cadastros.fornecedores.inline" },
   },
+  // Veículo de mídia é fornecedor (decisões 147 e 150): a tela de Veículos
+  // grava pelas actions de fornecedores, com os mesmos gates.
+  { modulo: "Cadastros", item: "Veículos de mídia",
+    permissoes: {
+      ver: "sidebar.cadastros",
+      criar: "cadastros.fornecedores.editar",
+      editar: "cadastros.fornecedores.editar",
+      excluir: "cadastros.fornecedores.editar",
+    },
+  },
   { modulo: "Cadastros", item: "Empresas do grupo",
     permissoes: {
       ver: "sidebar.cadastros",

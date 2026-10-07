@@ -81,7 +81,8 @@ export function CampoCliente({
    *    Produtor, porque quem cria orçamento precisa do cliente que ele
    *    pede. Vale para o "+" e para o atalho "Cadastrar «…»" da busca;
    *  * abrir o cadastro de um cliente que JÁ existe é
-   *    `cadastros.clientes.editar`, só do administrador. É o lápis.
+   *    `cadastros.clientes.editar`, do administrador e (desde 07/10/2026)
+   *    do financeiro. É o lápis.
    *
    * A action barra dos dois lados de qualquer jeito. Aqui é para a pessoa
    * não preencher o cadastro inteiro e só então ler "Você não tem
