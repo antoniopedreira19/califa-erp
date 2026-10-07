@@ -3923,8 +3923,12 @@ export interface ColaboradorSalario {
   id: string;
   tenant_id: string;
   colaborador_id: string;
-  /** numeric(14,2) — chega como string do Supabase-js. */
+  /** numeric(14,2) — chega como string do Supabase-js. Total mensal do contrato. */
   valor: string;
+  /** Para `clt_recibo`: parcela paga como RPA pela California (gera folha interna).
+   *  A parcela CLT é derivada = `valor - valor_recibo`.
+   *  NULL para qualquer outro `tipo_contratacao`. CHECK garantido por trigger. */
+  valor_recibo: string | null;
   data_inicio: string;
   data_fim: string | null;
   motivo: string | null;
@@ -3957,6 +3961,53 @@ export function folhaLinhaStatusLabel(s: FolhaLinhaStatus): string {
   }
 }
 
+/** Origem da linha de folha:
+ *  - "california": gerada por gerarFolha a partir do cadastro (fluxo PJ: pj + mei + parte RPA do híbrido).
+ *  - "contabilidade": importada do PDF "Relação Geral dos Líquidos" (fluxo CLT: clt + parte CLT do híbrido + estagio + socio). */
+export type FolhaOrigem = "california" | "contabilidade";
+
+/** Warnings emitidos pelo parser/importador do PDF da contabilidade. */
+export interface FolhaImportacaoWarning {
+  tipo:
+    | "colaborador_nao_encontrado"
+    | "secao_errada"
+    | "tipo_incompativel"
+    | "linha_ja_promovida"
+    | "soma_divergente"
+    | "cpf_invalido"
+    | "valor_invalido";
+  mensagem: string;
+  cpf?: string;
+  nome?: string;
+  secao?: "empregados" | "estagiarios" | "contribuintes";
+}
+
+/** Totalizadores extraídos do rodapé do PDF da contabilidade (snapshot para auditoria). */
+export interface FolhaImportacaoTotalizadores {
+  empregados?: { linhas: number; total: string };
+  estagiarios?: { linhas: number; total: string };
+  contribuintes?: { linhas: number; total: string };
+  total_empresa?: string;
+}
+
+/** Auditoria de uma importação do PDF "Relação Geral dos Líquidos". */
+export interface FolhaImportacao {
+  id: string;
+  tenant_id: string;
+  competencia_ano: number;
+  competencia_mes: number;
+  arquivo_nome: string;
+  arquivo_hash: string;
+  linhas_total: number;
+  linhas_criadas: number;
+  linhas_atualizadas: number;
+  linhas_ignoradas: number;
+  warnings: FolhaImportacaoWarning[];
+  totalizadores_pdf: FolhaImportacaoTotalizadores;
+  uploaded_by: string;
+  uploaded_at: string;
+}
+
 export interface FolhaPagamento {
   id: string;
   tenant_id: string;
@@ -3966,6 +4017,9 @@ export interface FolhaPagamento {
   /** Valor MANUAL que será pago. Não é vigente da Camada 1. */
   salario_base: string;
   status: FolhaLinhaStatus;
+  origem: FolhaOrigem;
+  /** Data de pagamento vinda do PDF da contabilidade. NULL em linhas california. */
+  data_pagamento_prevista: string | null;
   motivo_pendencia: string | null;
   enviada_em: string | null;
   enviada_por: string | null;
