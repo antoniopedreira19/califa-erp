@@ -16,8 +16,19 @@ import type {
   FolhaLinhaStatus,
   TipoContratacao,
 } from "@/lib/types";
-import { folhaLinhaStatusLabel } from "@/lib/types";
+import { folhaLinhaStatusLabel, tipoContratacaoLabel } from "@/lib/types";
 import { EditarLinhaFolhaDrawer } from "./editar-linha-folha-drawer";
+
+type TipoFiltro = "todos" | TipoContratacao;
+const SENTINEL_TODOS_TIPOS = "todos";
+const ORDEM_TIPO: TipoContratacao[] = [
+  "pj",
+  "mei",
+  "clt_recibo",
+  "clt",
+  "estagio",
+  "socio",
+];
 
 export type FolhaLinha = {
   id: string;
@@ -73,14 +84,24 @@ export function FolhaCompetenciaView({
   const [regionalId, setRegionalId] = React.useState<string>(
     SENTINEL_TODAS_REGIONAIS,
   );
+  const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
   const [linhaEditando, setLinhaEditando] = React.useState<FolhaLinha | null>(
     null,
   );
+
+  // Só os tipos que efetivamente aparecem nessa competência vão pro seletor,
+  // com a contagem — espelha o padrão da aba Folhas em Contas a Pagar.
+  const tiposPresentes = React.useMemo(() => {
+    const presentes = new Set(linhas.map((l) => l.colaborador.tipo_contratacao));
+    return ORDEM_TIPO.filter((t) => presentes.has(t));
+  }, [linhas]);
 
   const filtradas = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return linhas.filter((l) => {
       if (tab !== "todos" && l.status !== tab) return false;
+      if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo)
+        return false;
       if (
         regionalId !== SENTINEL_TODAS_REGIONAIS &&
         !l.alocacoes.some((a) => a.regional_id === regionalId)
@@ -93,7 +114,7 @@ export function FolhaCompetenciaView({
         l.colaborador.funcao.toLowerCase().includes(q)
       );
     });
-  }, [linhas, busca, tab, regionalId]);
+  }, [linhas, busca, tab, tipo, regionalId]);
 
   const contagemPorTab: Record<StatusFiltro, number> = {
     todos: linhas.length,
@@ -150,6 +171,23 @@ export function FolhaCompetenciaView({
             className="pl-9"
           />
         </div>
+        <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
+          <SelectTrigger className="w-56" aria-label="Tipo de contratação">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SENTINEL_TODOS_TIPOS}>
+              Todas as contratações
+            </SelectItem>
+            {tiposPresentes.map((t) => (
+              <SelectItem key={t} value={t}>
+                {tipoContratacaoLabel(t)} (
+                {linhas.filter((l) => l.colaborador.tipo_contratacao === t).length}
+                )
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select
           value={regionalId}
           onValueChange={(v) => setRegionalId(v)}
@@ -207,7 +245,12 @@ export function FolhaCompetenciaView({
                 className="cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-muted/50"
               >
                 <td className="px-4 py-3">
-                  <div className="font-medium">{l.colaborador.nome}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{l.colaborador.nome}</span>
+                    <SeloContratacao
+                      tipo={l.colaborador.tipo_contratacao}
+                    />
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {l.colaborador.funcao}
                     {l.colaborador.nivel_codigo
@@ -316,6 +359,21 @@ function TabButton({
         </span>
       )}
     </button>
+  );
+}
+
+function SeloContratacao({ tipo }: { tipo: TipoContratacao }) {
+  const clt = tipo === "clt" || tipo === "estagio";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold ${
+        clt
+          ? "border-amber-200 bg-amber-50 text-amber-800"
+          : "border-border text-muted-foreground"
+      }`}
+    >
+      {tipoContratacaoLabel(tipo)}
+    </span>
   );
 }
 
