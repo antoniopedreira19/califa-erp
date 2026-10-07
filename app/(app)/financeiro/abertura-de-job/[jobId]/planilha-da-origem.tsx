@@ -62,6 +62,7 @@ async function PlanilhaDaOrigemCarregada({
   return (
     <JobRealizadoSection
       papelEnviaPP={false}
+      papelCorrigeNf={false}
       confirmarSaidaParaOrcamento
       edicaoDoFinanceiro={null}
       // A planilha da origem é anterior à abertura (decisão 151).

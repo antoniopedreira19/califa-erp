@@ -333,8 +333,10 @@ export function nfIncompleta(nf: NfEmConferencia): boolean {
   return !nf.emissao || !(nf.valor > 0) || !(parteDaNota(nf) > 0);
 }
 
-/** O que impede aprovar com estas notas (null = nada). */
-export function faltaNasNotasParaAprovar(nfs: readonly NfEmConferencia[]): string | null {
+/** O que impede aprovar com estas notas (null = nada). A soma das partes
+ *  das notas vai até o valor da PP (revisão da decisão 152, 07/10/2026; o
+ *  banco confere de novo em `_conferir_partes_da_nota`). */
+export function faltaNasNotasParaAprovar(nfs: readonly NfEmConferencia[], valorPP: number): string | null {
   for (const nf of nfs) {
     const qual = nfs.length > 1 && nf.numero.trim() ? ` da NF ${nf.numero.trim()}` : "";
     if (!nf.numero.trim()) {
@@ -354,6 +356,13 @@ export function faltaNasNotasParaAprovar(nfs: readonly NfEmConferencia[]): strin
   const chaves = nfs.map((nf) => chaveDoNumeroDaNf(nf.numero));
   if (chaves.some((c, i) => c !== null && chaves.indexOf(c) !== i)) {
     return "A mesma NF aparece duas vezes nesta PP.";
+  }
+  const soma = somaDasPartes(nfs);
+  if (valorPP > 0 && soma > valorPP + 0.004) {
+    const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    return nfs.length > 1
+      ? `As notas somam ${brl(soma)} nesta PP, mais que o valor da PP (${brl(valorPP)}). Ajuste o “Valor nesta PP”.`
+      : `A NF nesta PP (${brl(soma)}) passa do valor da PP (${brl(valorPP)}). Use “Esta NF também cobre outra PP” e informe só a parte desta PP.`;
   }
   return null;
 }

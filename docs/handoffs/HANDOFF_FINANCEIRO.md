@@ -6869,3 +6869,16 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
 - A baixa do título só repete o que a aprovação decidiu: não mudou.
 - Conferido na PP-00132, fechada sem aprovar.
 
+## ⚠️ Nota de 2026-10-07 (9) — NF corrigida pela produção; a parte vai até o valor da PP (revisão da decisão 152)
+
+- **A produção corrige a NF da PP em avaliação** sem o financeiro aprovar:
+  a parte da PP sempre, e os dados da nota enquanto ela não foi registrada.
+  O financeiro também pode, pelo mesmo botão na página do job.
+- **Aprovar PP:** quando a NF foi corrigida depois do envio, uma faixa âmbar
+  "NF corrigida por … em …" com o que mudou aparece logo abaixo de "Enviada
+  por". O histórico da PP ganhou o evento "NF corrigida" (sem aspas: o
+  texto é do sistema).
+- **A soma das partes das notas numa PP vai até o valor da PP** também na
+  aprovação: a tela barra ("A NF nesta PP (R$ …) passa do valor da PP") e o
+  banco confere de novo (`_conferir_partes_da_nota`).
+- Conferido na PP-00142 do TES-1014/26, fechada sem aprovar.

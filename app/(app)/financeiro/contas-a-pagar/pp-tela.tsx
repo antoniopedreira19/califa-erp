@@ -65,7 +65,7 @@ import type { PPRow } from "./pedidos-compra-list";
 import { PPDossie, type AbaDossie } from "./pp-dossie";
 import { AprovarPPDialog } from "./aprovar-pp-dialog";
 import { AprovarPrestacaoDialog } from "./aprovar-prestacao-dialog";
-import { ultimoEnvioDaPP, ultimoEnvioDaPrestacao } from "@/lib/data/eventos-da-pp";
+import { ultimaCorrecaoDaNf, ultimoEnvioDaPP, ultimoEnvioDaPrestacao } from "@/lib/data/eventos-da-pp";
 import {
   reprovarPrestacaoVerba,
   signedUrlAnexoPrestacao,
@@ -631,6 +631,7 @@ export function PPTela({
           parcelas: Math.max(pp.parcelas.length, 1),
           pagamentoForaDoCadastro: pp.pagamento_fora_do_cadastro,
           envio: ultimoEnvioDaPP(pp.eventos),
+          correcaoDaNf: ultimaCorrecaoDaNf(pp.eventos),
           emitidaPorNome: pp.emitida_por_nome,
           gpResponsavelNome: pp.job_responsavel_nome,
           // Módulo fiscal: o que as retenções e o crédito precisam.

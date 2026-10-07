@@ -219,6 +219,9 @@ export type AuditAction =
   | "pedido_compra.a_emitir.editada"
   | "pedido_compra.a_emitir.excluida"
   | "pedido_compra.a_emitir.gerada"
+  // Revisão da decisão 152 (07/10/2026): a NF da PP em avaliação corrigida
+  // sem aprovar (GP, administrador ou financeiro).
+  | "pedido_compra.nf_corrigida"
   // Tela 3.2 — a baixa passou a ser da PARCELA, e a data de pagamento do
   // título virou repactuável.
   | "pedido_compra.parcela_paga"

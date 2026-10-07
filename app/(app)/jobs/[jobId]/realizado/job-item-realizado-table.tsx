@@ -159,6 +159,9 @@ interface Props {
    *  ele o painel do item fecha o envio com o motivo, e o "Ver PP" só
    *  cancela a PP ainda não enviada. */
   papelEnviaPP: boolean;
+  /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
+   *  revisão da decisão 152): o botão no painel do item. */
+  papelCorrigeNf: boolean;
   /** `cadastros.fornecedores.editar` — o "+" do campo Fornecedor. */
   podeCadastrarFornecedor?: boolean;
   podeEditarFornecedor?: boolean;
@@ -661,6 +664,7 @@ export function JobItemRealizadoTable({
   podeAcoes,
   podeGerarPP = false,
   papelEnviaPP,
+  papelCorrigeNf,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   podeConfirmarBv,
@@ -2250,6 +2254,7 @@ export function JobItemRealizadoTable({
               }}
               tomadores={tomadoresDaNf}
               tomadorPorEmpresa={tomadorPorEmpresa}
+              podeCorrigirNf={papelCorrigeNf}
               emPPs={emPPs}
               envioBloqueadoPor={envioBloqueadoPor}
               itemRealizadoId={itemIdAtual ?? ""}

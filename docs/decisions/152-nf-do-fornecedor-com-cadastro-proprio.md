@@ -1,7 +1,9 @@
 # 152 — A NF do fornecedor tem cadastro próprio e conta uma vez só
 
 **Data:** 2026-10-07
-**Status:** aceita e no ar (07/10/2026)
+**Status:** aceita e no ar (07/10/2026); revista no mesmo dia — a parte da
+NF numa PP vai até o valor da PP, e a NF da PP em avaliação se corrige sem o
+financeiro aprovar (ver "Revisão de 07/10/2026")
 **Quem decidiu:** Tiago, em 07/10/2026, junto da aprovação do protótipo da
 PP a emitir (decisão 153). As respostas seguiram a recomendação que
 acompanhava cada pergunta.
@@ -31,15 +33,17 @@ individualmente."
 | Identidade da NF | Fornecedor + número. Pontuação, espaços e zeros à esquerda não contam: `00009001` e `9.001` são a mesma nota (`chave_do_numero_da_nf`). |
 | Quando a NF conta | **Uma vez, pelo TOTAL, quando é registrada** — na aprovação da 1ª PP que a traz: crédito de PIS/COFINS e ISS retido no mês da emissão. |
 | PPs chegam uma de cada vez | A 2ª PP vê a NF "já registrada" ("Registrada na aprovação da PP-…"). O crédito e o ISS dela não entram de novo. |
-| A parte de cada PP | Cada PP guarda a sua parte da NF (`nf_valor_na_pp`). Padrão: a nota inteira. A soma das partes, nas PPs não canceladas, não passa do valor da nota (o banco recusa). |
+| A parte de cada PP | Cada PP guarda a sua parte da NF (`nf_valor_na_pp`). Padrão: a nota inteira. A soma das partes, nas PPs não canceladas, não passa do valor da nota (o banco recusa). ⚠️ Desde a revisão de 07/10/2026, a soma das partes numa PP também não passa do **valor da PP**. |
 | CSRF e IRRF | Seguem o **pagamento de cada PP**, sobre a parte dela — como antes. |
-| Quem corrige | A produção informa os dados no anexo. O financeiro recebe tudo preenchido e **editável**; a correção vale para **todas** as PPs da nota. |
+| Quem corrige | A produção informa os dados no anexo. O financeiro recebe tudo preenchido e **editável**; a correção vale para **todas** as PPs da nota. ⚠️ Desde a revisão de 07/10/2026, com a PP em avaliação, o GP (e o financeiro) corrige pelo botão "Corrigir a NF", sem aprovar. |
 
 ## Na produção (formulário da PP a emitir e envio ao financeiro)
 
 - Cada anexo do tipo NF pede número, data de emissão, valor e CNPJ tomador.
 - O campo **"Valor nesta PP"** só aparece pelo link **"Esta NF também cobre
-  outra PP"**. Sem o link, a parte é a nota inteira.
+  outra PP"**. Sem o link, a parte é a nota inteira. ⚠️ Revisão de
+  07/10/2026: com a nota maior que a PP, o campo abre sozinho, com o valor da
+  PP, e o link some.
 - NF que **já existe em outra PP** (mesmo fornecedor e número) vem
   preenchida e **travada**: "Esta NF já está na PP-… (R$ …). Os dados vêm
   de lá; só o financeiro corrige." O "Valor nesta PP" abre sugerindo o que
@@ -85,7 +89,47 @@ individualmente."
   registradas antes.
 - Migrations: `20261007300001_notas_fiscais_do_fornecedor.sql`,
   `20261007300002_pp_a_emitir.sql` (as funções da produção) e
-  `20261007300003_renumera_decisoes_152_153.sql`.
+  `20261007300003_renumera_decisoes_152_153.sql`. Revisão de 07/10/2026:
+  `20261007300006` a `20261007300008`.
+
+## Revisão de 07/10/2026 — a parte vai até o valor da PP, e a NF se corrige sem aprovar
+
+**O que aconteceu.** A produção usou a NF 19 (R$ 450) em duas PPs: PP-00138
+(R$ 250) e PP-00139 (R$ 200). Na PP-00138 não clicou em "Esta NF também
+cobre outra PP", e a parte gravada foi a nota inteira — R$ 450 numa PP de
+R$ 250; a tela só avisava em amarelo. A PP-00139 esbarrou na soma
+(450 + 200 > 450) com "Ajuste o valor nesta PP", mas quem estava errada era
+a PP-00138, já enviada, que ninguém da produção conseguia corrigir, e o
+financeiro só corrigia aprovando. A parte da PP-00138 foi corrigida no banco
+para R$ 250 (autorizado pelo Tiago; auditoria
+`pedido_compra.nf_parte_corrigida`).
+
+**Decidido pelo Tiago (07/10/2026):**
+
+| Tema | Regra |
+|---|---|
+| Teto da parte | A soma das partes das NFs numa PP vai até o **valor da PP**: a PP não usa mais da nota do que ela mesma paga. A mesma NF continua cobrindo várias PPs (R$ 250 + R$ 200 de uma nota de R$ 450). |
+| Nota maior que a PP | "Valor nesta PP" abre sozinho com o valor da PP; o link "Esta NF é só desta PP" some. Passar do valor da PP **barra** o envio (antes, aviso amarelo). Ficar abaixo continua só avisando. |
+| A nota já está em outra PP | O campo vem com o que sobra da nota, até o valor da PP. Pedir mais do que sobra barra o envio **antes do clique**, com o atalho "Corrigir a PP-…" para a PP que está com a parte errada. |
+| Correção pela produção | Botão **"Corrigir a NF"** na PP **em avaliação** (painel do item, "Já no financeiro"), para GP, administrador e financeiro (`jobs.corrigir_nf_pp`), sem aprovar: a parte desta PP sempre; os dados da nota (número, emissão, valor, CNPJ tomador) enquanto o financeiro não a registrou, e então a correção vale para todas as PPs com ela. Depois do registro, só o financeiro mexe nos dados. |
+| Rastro | A correção grava o evento `nf_corrigida` no histórico da PP, com o que mudou ("NF 19: valor nesta PP de R$ 450,00 para R$ 250,00"), na PP corrigida e nas outras com a mesma nota ("(corrigida na PP-…)"). A aprovação do financeiro mostra "NF corrigida por … em …" logo abaixo de "Enviada por". Auditoria `pedido_compra.nf_corrigida` com antes e depois. |
+| Mensagens | Em reais ("R$ 450,00", não "450.00"), dizendo quanto cada PP usa da nota. |
+
+**Banco.** `_conferir_partes_da_nota` passou a conferir também cada PP ligada
+à nota (envio, aprovação e correção passam por ela); `_reais` formata as
+mensagens; `corrigir_notas_fiscais_da_pp` (security definer; confere papel,
+PP em avaliação e nota registrada); `notas_fiscais_do_fornecedor` devolve o
+id da PP; `pedidos_compra.nf_corrigida_em/por`; evento `nf_corrigida` em
+`pedidos_compra_eventos` (o primeiro escrito fora dos gatilhos da PP).
+Migrations `20261007300006`, `20261007300007` e `20261007300008`.
+
+**Testado (07/10/2026, TES-1014/26, item Passagem, NF 9019 de R$ 400):**
+PP-00142 (R$ 250) abriu "Valor nesta PP" sozinho com R$ 250 e recusou R$ 300;
+PP-00143 (R$ 200) veio com R$ 150 (o que sobrava), recusou R$ 200 com
+"Da NF 9019 sobram R$ 150,00" e o atalho "Corrigir a PP-00142"; a correção
+(R$ 250 → R$ 200) pelo atalho liberou o envio. A troca do CNPJ tomador pela
+PP-00143 mudou a nota nas duas PPs e gravou o evento nas duas; a aprovação
+da PP-00142 mostrou o aviso. No banco, o produtor é recusado e o GP passa.
 
 ## Pendências
 

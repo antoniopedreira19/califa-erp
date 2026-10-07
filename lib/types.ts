@@ -1952,11 +1952,15 @@ export type PPEventoTipo =
   | "prestacao_enviada"
   | "prestacao_reenviada"
   | "prestacao_reprovada"
-  | "prestacao_aprovada";
+  | "prestacao_aprovada"
+  // Revisão da decisão 152 (07/10/2026): a NF corrigida com a PP em
+  // avaliação, sem aprovar. O `motivo` diz o que mudou.
+  | "nf_corrigida";
 
 /**
  * Um evento do histórico da PP (decisão 136): quem fez o quê e quando.
- * Escrito só pelos gatilhos do banco; a aplicação lê. Montado por
+ * Escrito pelo banco — os gatilhos da PP e, na correção da NF, a RPC
+ * `corrigir_notas_fiscais_da_pp`; a aplicação lê. Montado por
  * `lib/data/eventos-da-pp.ts`.
  */
 export interface PPEvento {

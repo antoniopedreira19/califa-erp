@@ -4804,3 +4804,29 @@ código publicado logo depois (`3305751`).
   passagem para cancelada. Linha com PP gerada continua sem poder ser
   cancelada (`barrarCancelamento`, como já era). A errata em si não mudou.
 - A calha da planilha mostrando a PP a emitir está em protótipo.
+
+## ⚠️ Nota de 2026-10-07 (4) — a parte da NF vai até o valor da PP; "Corrigir a NF" na PP em avaliação (revisão da decisão 152)
+
+- **Origem:** a produção usou a NF 19 (R$ 450) em duas PPs, R$ 250 e R$ 200.
+  A primeira foi enviada com a nota inteira como parte (sem o clique em
+  "Esta NF também cobre outra PP"), e a segunda não enviava. A parte da
+  PP-00138 foi corrigida no banco, com autorização do Tiago.
+- **Regra nova:** a parte da NF numa PP vai até o valor da PP. Nota maior
+  que a PP abre "Valor nesta PP" sozinho com o valor da PP, e o link "Esta
+  NF é só desta PP" some. Passar do valor da PP barra o envio na tela e no
+  banco; antes era só aviso amarelo.
+- **Nota já em outra PP:** o campo vem com o que sobra da nota. Pedir mais
+  barra antes do clique ("Da NF … sobram R$ … para esta PP") com o atalho
+  "Corrigir a PP-…", que abre a correção da outra PP por cima do envio.
+- **Botão "Corrigir a NF"** (ícone de folha com lápis) na PP em avaliação do
+  painel do item, para GP, administrador e financeiro
+  (`jobs.corrigir_nf_pp`, prop `papelCorrigeNf` → `podeCorrigirNf`): a
+  parte da PP sempre; os dados da nota enquanto o financeiro não a
+  registrou (valem para todas as PPs com ela). Componente
+  `realizado/corrigir-nf-da-pp.tsx`; actions `carregarNfsDaPPParaCorrigir` e
+  `corrigirNfsDaPP` em `actions-notas-da-pp.ts`.
+- **Histórico:** evento `nf_corrigida` com o que mudou, na PP corrigida e
+  nas outras com a mesma nota; aparece na linha do tempo do "Ver
+  formulário".
+- Migrations `20261007300006` a `20261007300008`. Testado no TES-1014/26
+  (PP-00142 e PP-00143, NF 9019).
