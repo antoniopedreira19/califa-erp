@@ -14,13 +14,16 @@ import { cn } from "@/lib/utils";
 import type {
   Empresa,
   FolhaLinhaStatus,
+  FolhaOrigem,
   TipoContratacao,
 } from "@/lib/types";
 import { folhaLinhaStatusLabel, tipoContratacaoLabel } from "@/lib/types";
 import { EditarLinhaFolhaDrawer } from "./editar-linha-folha-drawer";
 
 type TipoFiltro = "todos" | TipoContratacao;
+type OrigemFiltro = "todas" | FolhaOrigem;
 const SENTINEL_TODOS_TIPOS = "todos";
+const SENTINEL_TODAS_ORIGENS = "todas";
 const ORDEM_TIPO: TipoContratacao[] = [
   "pj",
   "mei",
@@ -34,6 +37,7 @@ export type FolhaLinha = {
   id: string;
   salario_base: string;
   status: FolhaLinhaStatus;
+  origem: FolhaOrigem;
   motivo_pendencia: string | null;
   colaborador: {
     id: string;
@@ -85,6 +89,7 @@ export function FolhaCompetenciaView({
     SENTINEL_TODAS_REGIONAIS,
   );
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
+  const [origem, setOrigem] = React.useState<OrigemFiltro>("todas");
   const [linhaEditando, setLinhaEditando] = React.useState<FolhaLinha | null>(
     null,
   );
@@ -102,6 +107,7 @@ export function FolhaCompetenciaView({
       if (tab !== "todos" && l.status !== tab) return false;
       if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo)
         return false;
+      if (origem !== "todas" && l.origem !== origem) return false;
       if (
         regionalId !== SENTINEL_TODAS_REGIONAIS &&
         !l.alocacoes.some((a) => a.regional_id === regionalId)
@@ -114,7 +120,7 @@ export function FolhaCompetenciaView({
         l.colaborador.funcao.toLowerCase().includes(q)
       );
     });
-  }, [linhas, busca, tab, tipo, regionalId]);
+  }, [linhas, busca, tab, tipo, origem, regionalId]);
 
   const contagemPorTab: Record<StatusFiltro, number> = {
     todos: linhas.length,
@@ -189,6 +195,25 @@ export function FolhaCompetenciaView({
           </SelectContent>
         </Select>
         <Select
+          value={origem}
+          onValueChange={(v) => setOrigem(v as OrigemFiltro)}
+        >
+          <SelectTrigger className="w-44" aria-label="Origem da linha">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SENTINEL_TODAS_ORIGENS}>
+              Origem: Todas ({linhas.length})
+            </SelectItem>
+            <SelectItem value="california">
+              Origem: PJ ({linhas.filter((l) => l.origem === "california").length})
+            </SelectItem>
+            <SelectItem value="contabilidade">
+              Origem: CLT ({linhas.filter((l) => l.origem === "contabilidade").length})
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
           value={regionalId}
           onValueChange={(v) => setRegionalId(v)}
         >
@@ -250,6 +275,7 @@ export function FolhaCompetenciaView({
                     <SeloContratacao
                       tipo={l.colaborador.tipo_contratacao}
                     />
+                    <SeloOrigem origem={l.origem} />
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {l.colaborador.funcao}
@@ -373,6 +399,26 @@ function SeloContratacao({ tipo }: { tipo: TipoContratacao }) {
       }`}
     >
       {tipoContratacaoLabel(tipo)}
+    </span>
+  );
+}
+
+/** PJ (azul) = gerada pela California; CLT (verde) = importada da contabilidade.
+ *  Pro híbrido clt_recibo, diferencia a parte Recibo (PJ) da parte CLT. */
+function SeloOrigem({ origem }: { origem: FolhaOrigem }) {
+  const pj = origem === "california";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-semibold ${
+        pj ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+      }`}
+      title={
+        pj
+          ? "Gerada pela California (parte Recibo / RPA — pagamento com NF ou RPA)"
+          : "Importada da contabilidade (parte CLT — folha de pagamento)"
+      }
+    >
+      {pj ? "PJ" : "CLT"}
     </span>
   );
 }
