@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MoedaInput } from "@/components/ui/moeda-input";
-import type { ColaboradorSalario } from "@/lib/types";
+import type { ColaboradorSalario, TipoContratacao } from "@/lib/types";
 import type { NivelPendencia } from "@/lib/rh/pendencias";
 import { SeloPendencia } from "./selo-pendencia";
 import {
@@ -25,15 +25,18 @@ import {
 
 export function CardSalarios({
   colaboradorId,
+  tipoContratacao,
   salarios,
   isAdmin,
   pendencia,
 }: {
   colaboradorId: string;
+  tipoContratacao: TipoContratacao;
   salarios: ColaboradorSalario[];
   isAdmin: boolean;
   pendencia?: NivelPendencia;
 }) {
+  const ehHibrido = tipoContratacao === "clt_recibo";
   const router = useRouter();
   const [openMudanca, setOpenMudanca] = React.useState(false);
   const [openCorrigir, setOpenCorrigir] = React.useState(false);
@@ -66,11 +69,18 @@ export function CardSalarios({
   function handleCorrigir(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const valorRaw = (e.currentTarget.elements.namedItem("valor") as HTMLInputElement)
-      ?.value ?? "";
+    const form = e.currentTarget;
+    const valorRaw =
+      (form.elements.namedItem("valor") as HTMLInputElement)?.value ?? "";
+    const valorReciboRaw =
+      (form.elements.namedItem("valor_recibo") as HTMLInputElement)?.value ?? "";
 
     startTransition(async () => {
-      const res = await corrigirSalarioAtual(colaboradorId, valorRaw);
+      const res = await corrigirSalarioAtual(
+        colaboradorId,
+        valorRaw,
+        ehHibrido ? valorReciboRaw : undefined,
+      );
       if (!res.ok) {
         setError(res.message);
         return;
@@ -119,9 +129,28 @@ export function CardSalarios({
 
             <form onSubmit={handleMudanca} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="valor">Novo valor mensal</Label>
+                <Label htmlFor="valor">
+                  {ehHibrido ? "Salário total mensal (CLT + Recibo)" : "Novo valor mensal"}
+                </Label>
                 <MoedaInput id="valor" name="valor" required />
+                {ehHibrido && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Soma da parte CLT (paga pela contabilidade) + parte Recibo (paga pela California).
+                  </p>
+                )}
               </div>
+
+              {ehHibrido && (
+                <div className="space-y-2">
+                  <Label htmlFor="valor_recibo">
+                    Parte Recibo (RPA) — paga pela California
+                  </Label>
+                  <MoedaInput id="valor_recibo" name="valor_recibo" required />
+                  <p className="text-[11px] text-muted-foreground">
+                    A parte CLT é derivada automaticamente: Total − Recibo.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Data da mudança</Label>
@@ -195,6 +224,24 @@ export function CardSalarios({
                     <div className="mt-2 text-2xl font-bold tabular-nums text-foreground">
                       {formatarMoeda(vigente.valor)}
                     </div>
+                    {ehHibrido && vigente.valor_recibo != null && (
+                      <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
+                        <span>
+                          Recibo:{" "}
+                          <span className="font-medium text-foreground tabular-nums">
+                            {formatarMoeda(vigente.valor_recibo)}
+                          </span>
+                        </span>
+                        <span>
+                          CLT:{" "}
+                          <span className="font-medium text-foreground tabular-nums">
+                            {formatarMoeda(
+                              (Number(vigente.valor) - Number(vigente.valor_recibo)).toFixed(2),
+                            )}
+                          </span>
+                        </span>
+                      </div>
+                    )}
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       Desde {formatarData(vigente.data_inicio)}
                       {vigente.motivo ? ` · ${vigente.motivo}` : ""}
@@ -256,7 +303,9 @@ export function CardSalarios({
             </DialogHeader>
             <form onSubmit={handleCorrigir} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="valor">Novo valor mensal</Label>
+                <Label htmlFor="valor">
+                  {ehHibrido ? "Salário total mensal (CLT + Recibo)" : "Novo valor mensal"}
+                </Label>
                 <MoedaInput
                   id="valor"
                   name="valor"
@@ -264,6 +313,20 @@ export function CardSalarios({
                   defaultValue={vigente ? String(vigente.valor) : ""}
                 />
               </div>
+
+              {ehHibrido && (
+                <div className="space-y-2">
+                  <Label htmlFor="valor_recibo">
+                    Parte Recibo (RPA)
+                  </Label>
+                  <MoedaInput
+                    id="valor_recibo"
+                    name="valor_recibo"
+                    required
+                    defaultValue={vigente?.valor_recibo ?? ""}
+                  />
+                </div>
+              )}
               {error && (
                 <div className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
