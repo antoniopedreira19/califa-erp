@@ -61,7 +61,12 @@ export const permissoes = {
    * oposto (nasce da necessidade da producao), tem o gate mais largo.
    */
   "cadastros.clientes.inline":              ["administrador", "gerente_producao"],
-  "cadastros.fornecedores.editar":          ["administrador"],
+  /**
+   * A tela de Fornecedores: criar, editar, inativar e a declaracao do
+   * Simples. Financeiro entrou em 07/10/2026 (decisao do Tiago, revisao da
+   * 142): a declaracao ficou so na tela, e e o financeiro quem a recebe.
+   */
+  "cadastros.fornecedores.editar":          ["administrador", "financeiro"],
   /**
    * Cadastro rapido de fornecedor DENTRO do fluxo de PP (drawer inline).
    * Inclui freelancer desde 18/09/2026 (decisao do Tiago): ele edita o

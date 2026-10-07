@@ -147,7 +147,7 @@ fim.
 
 | campo | "+" (criar) | lápis (editar) | atalho "Cadastrar «…»" |
 |---|---|---|---|
-| Fornecedor da PP | `cadastros.fornecedores.inline` — Admin, GP, Produtor | `cadastros.fornecedores.editar` — só Admin | segue o "+" |
+| Fornecedor da PP | `cadastros.fornecedores.inline` — Admin, GP, Produtor | `cadastros.fornecedores.editar` — Admin (e Financeiro desde 07/10/2026, decisão 142 §5) | segue o "+" |
 | Cliente do projeto | `cadastros.clientes.inline` — Admin, GP, Produtor | `cadastros.clientes.editar` — só Admin | segue o "+" |
 | **Marca do projeto** | `cadastros.clientes.inline` — Admin, GP, Produtor | não tem lápis — ver §6b | — |
 

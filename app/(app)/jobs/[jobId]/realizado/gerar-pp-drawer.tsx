@@ -1023,8 +1023,8 @@ export function GerarPPDrawer({
                         São duas permissões diferentes (18/09/2026): criar
                         aqui é `cadastros.fornecedores.inline`, que o GP e
                         o produtor têm porque a PP é o fluxo deles; abrir
-                        para editar é `cadastros.fornecedores.editar`, que
-                        é só do administrador. Por isso o gate segue o
+                        para editar é `cadastros.fornecedores.editar`, do
+                        administrador e do financeiro. Por isso o gate segue o
                         papel do botão, e não o botão. */}
                     {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
                     <button

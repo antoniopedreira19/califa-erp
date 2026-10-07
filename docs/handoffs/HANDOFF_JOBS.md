@@ -3928,7 +3928,7 @@ Agora:
   É o gate da [048](../decisions/048-fornecedor-nasce-de-dentro-da-pp.md),
   feito para a produção cadastrar sem sair da PP. **Ele continua valendo
   para o GP: a PP é o fluxo dele.**
-- **Lápis (editar) → `cadastros.fornecedores.editar`** — só administrador.
+- **Lápis (editar) → `cadastros.fornecedores.editar`** — só administrador (o financeiro entrou em 07/10/2026, decisão 142 §5).
 - O atalho *"Cadastrar «…» como novo fornecedor"* da busca sem resultado
   segue o "+".
 

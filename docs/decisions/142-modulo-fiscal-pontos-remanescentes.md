@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-03
 **Decidido por:** Tiago ("Faça os pontos remanescentes", 03/10/2026)
-**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração sai do cadastro rápido e o regime normal vira "Lucro Real ou Presumido")
+**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração e a nota do Simples saem do cadastro rápido, o regime normal vira "Lucro Real ou Presumido" e o financeiro ganha a tela de fornecedores)
 **Migration:** `20261002100800_fiscal_fornecedor_consulta_e_declaracao.sql`
 (aditiva: duas colunas anuláveis em `fornecedores` e o bucket privado
 `fornecedores`)
@@ -120,11 +120,35 @@ testes.
   "FORNECEDOR TESTE LTDA · Lucro Real ou Presumido" no pop-up de
   aprovação, que foi fechado sem aprovar.
 
-**Ficou para o Tiago:**
-1. Os arquivos errados da Dome e da Alecal continuam nos cadastros. Tirar
-   é pelo ✕ da página de cada um, e o arquivo fica no bucket (§2).
-2. A nota azul do Simples ainda diz "com a declaração" no cadastro rápido,
-   onde a declaração não aparece mais.
-3. Editar fornecedor (`cadastros.fornecedores.editar`) é só do
-   administrador. Os 4 usuários com papel financeiro não conseguem marcar
-   a declaração.
+**O que ficou em aberto, e o Tiago resolveu na mesma tarde:**
+1. Os arquivos errados da Dome e da Alecal estavam nos cadastros. Saíram.
+2. A nota azul do Simples dizia "com a declaração" no cadastro rápido, onde
+   a declaração já não aparecia. Saiu.
+3. Editar fornecedor (`cadastros.fornecedores.editar`) era só do
+   administrador, e os 4 usuários com papel financeiro não conseguiam
+   marcar a declaração. O financeiro entrou.
+
+### Na mesma tarde (07/10/2026)
+
+| Ponto | Como ficou |
+|---|---|
+| Arquivos errados | Tirados pelo ✕ da página e salvos, Dome e Alecal. Os outros campos ficaram iguais. A auditoria `fornecedor.editado` tem `declaracao_simples_arquivo: "retirado"` e o caminho anterior. Os dois arquivos continuam no bucket (§2). |
+| Nota do Simples | Sai do cadastro rápido, junto com a declaração. Na página continua. O MEI mantém a nota dele nos dois lugares. |
+| Financeiro nos fornecedores | `cadastros.fornecedores.editar` passa a ser de administrador e financeiro. Com isso o financeiro cria, edita e inativa pela tela, e marca e anexa a declaração. A criação (`inserirFornecedor`), a reserva do arquivo da declaração e o "marcar como veículo" aceitam quem tem a tela ou o cadastro rápido. O financeiro continua sem o cadastro rápido da PP (`.inline`). A RLS de `fornecedores` e do bucket já liberava qualquer membro da empresa: sem migration. |
+
+**Conferido:**
+- no "+" da PP do TES-1014/26, com Simples, sem caixa, sem arquivo e sem
+  nota. Com MEI, a nota do MEI aparece;
+- na matriz `/admin/usuarios/permissoes`, papel Financeiro: "Fornecedores
+  (tela)" com ver, criar, editar e excluir, e "Fornecedor rápido dentro do
+  PP" vazio;
+- `npm run test:permissoes`: 39 de 41. As 2 falhas são as do RH, que já
+  existiam.
+
+O teste logado como financeiro não foi feito, porque não há como entrar
+nesse papel sem a senha de alguém. O que garante é a action, pelo
+`pode()` testado.
+
+**Outros cadastros:** o financeiro segue só vendo Clientes, Empresas do
+grupo, Categorias de orçamento e Cidades. Ele já editava Contas bancárias,
+Plano de contas e Cartões.

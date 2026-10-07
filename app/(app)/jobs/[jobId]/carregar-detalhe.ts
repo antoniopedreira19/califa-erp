@@ -1383,7 +1383,7 @@ export async function carregarDetalheDoJob(
    *    largo da decisão 048, que existe justamente para o GP e o produtor
    *    cadastrarem sem sair da PP;
    *  * abrir o cadastro para editar é `cadastros.fornecedores.editar`,
-   *    que é só do administrador.
+   *    do administrador e (desde 07/10/2026) do financeiro.
    *
    * A action barra dos dois lados de qualquer jeito. Aqui é para a pessoa
    * não preencher o cadastro inteiro e só então ler "Você não tem

@@ -6826,3 +6826,16 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
 - Sem migration. Conferido no `/fornecedores/novo`, no "+" da PP do
   TES-1014/26 e na PP-00132.
 
+## ⚠️ Nota de 2026-10-07 (6) — financeiro na tela de fornecedores; nota do Simples fora do cadastro rápido (decisão 142 §5)
+
+- **O financeiro ganhou a tela de Fornecedores:** pode criar, editar,
+  inativar, e marcar e anexar a declaração do Simples
+  (`cadastros.fornecedores.editar` = administrador e financeiro). O cadastro
+  rápido da PP continua fora para ele. Sem migration: a RLS já liberava.
+- **A nota azul do Simples saiu do cadastro rápido**, junto com a
+  declaração. O MEI mantém a dele.
+- **Os arquivos errados da Dome e da Alecal saíram dos cadastros** pelo ✕
+  da página. Ficaram no bucket, e a auditoria registra "retirado".
+- Não houve teste logado como financeiro (falta a senha). Conferido na
+  matriz de permissões e no `test:permissoes`.
+

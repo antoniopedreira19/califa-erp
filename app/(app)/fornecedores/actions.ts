@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { pode } from "@/lib/permissoes";
 import {
   fornecedorSchema,
   fornecedorCompletoSchema,
@@ -189,6 +190,19 @@ function mapDbError(msg: string): string {
  * cadastro rápido de dentro da PP (que devolve o registro para a tela
  * selecionar). O que muda entre eles é só o schema e o que fazer depois.
  */
+/**
+ * Quem cria fornecedor: a tela (`cadastros.fornecedores.editar`, admin e
+ * financeiro desde 07/10/2026) ou o cadastro rápido de dentro da PP
+ * (`.inline`, admin, GP, produtor e freelancer). Vale também para subir o
+ * arquivo da declaração e para marcar um fornecedor como veículo.
+ */
+async function checarCriarFornecedor(
+  session: Awaited<ReturnType<typeof requireSession>>,
+): ReturnType<typeof checarPermissao> {
+  if (pode(session.activeRole, "cadastros.fornecedores.editar")) return { ok: true };
+  return checarPermissao(session, "cadastros.fornecedores.inline");
+}
+
 async function inserirFornecedor(
   formData: FormData,
   schema:
@@ -199,10 +213,10 @@ async function inserirFornecedor(
 ): Promise<ActionResult> {
   const session = await requireSession();
   // Cobre os dois callers do miolo: a tela /fornecedores/novo (criarFornecedor)
-  // e o cadastro rapido dentro do PP (criarFornecedorRapido, decisao 048). O
-  // gate mais amplo (inline) libera Admin/GP/Produtor — Freelancer e
-  // Financeiro ficam de fora dos dois fluxos.
-  const gate = await checarPermissao(session, "cadastros.fornecedores.inline");
+  // e o cadastro rapido dentro do PP (criarFornecedorRapido, decisao 048).
+  // Libera quem tem a tela (admin e financeiro) ou o inline (admin, GP,
+  // produtor e freelancer).
+  const gate = await checarCriarFornecedor(session);
   if (!gate.ok) return gate;
   const parsed = schema.safeParse(extractInput(formData));
 
@@ -698,7 +712,7 @@ export async function atualizarVeiculoFornecedor(
  *  só o marca, sem mexer no cadastro. */
 export async function marcarFornecedorComoVeiculo(fornecedorId: string): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.fornecedores.inline");
+  const gate = await checarCriarFornecedor(session);
   if (!gate.ok) return gate;
 
   const supabase = createClient();
@@ -830,14 +844,14 @@ export async function reativarFornecedor(id: string): Promise<ActionResult> {
 
 /** Reserva o caminho `<tenant>/declaracoes/<uuid>-<nome>` para o navegador
  *  subir o arquivo. O gate é o mais amplo do cadastro: quem cria (o "+" da
- *  PP) ou edita fornecedor. */
+ *  PP) ou edita fornecedor (a tela, com o financeiro desde 07/10/2026). */
 export async function reservarArquivoDaDeclaracao(input: {
   nome: string;
   tamanho: number;
   tipo: string;
 }): Promise<{ ok: true; path: string } | { ok: false; message: string }> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.fornecedores.inline");
+  const gate = await checarCriarFornecedor(session);
   if (!gate.ok) return gate;
   const nome = String(input?.nome ?? "");
   const recusa = recusaDoArquivoDaDeclaracao(
