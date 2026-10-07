@@ -77,6 +77,12 @@ function listaPtBr(itens: string[]): string {
 }
 
 export function bloqueioAprovacaoVersao(input: {
+  /** O par serviço × categoria do ORÇAMENTO, quando não combina: a frase de
+   *  `erroDoParServicoCategoria` (lib/categorias-do-servico.ts). `null` com
+   *  o par válido. Obrigatório: são os orçamentos de antes da decisão 078
+   *  (serviço Always On com categoria Conteúdo ou Extra), que o editor
+   *  deixou como estavam e que não aprovam assim (Tiago, 07/10/2026). */
+  parServicoCategoria: string | null;
   percentualImposto: number;
   /** Câmbio da versão quando o orçamento é internacional; `null` no
    *  nacional. Obrigatório: quem chama tem que dizer qual é o caso, e um
@@ -99,6 +105,13 @@ export function bloqueioAprovacaoVersao(input: {
   linhasSemVeiculo: number | null;
 }): string | null {
   const midia = input.linhasSemVeiculo !== null;
+  // Serviço × categoria (revisão da decisão 149, 07/10/2026): o orçamento
+  // antigo com o par fora da regra da 078 continua editável e consultável,
+  // mas só aprova depois de trocar a categoria ou o serviço.
+  if (input.parServicoCategoria) {
+    const motivo = input.parServicoCategoria;
+    return `Serviço e categoria do orçamento não combinam: ${motivo.charAt(0).toLowerCase()}${motivo.slice(1)} Troque a categoria ou o serviço no "Editar" do orçamento antes de aprovar.`;
+  }
   if (!isAliquotaConhecida(input.percentualImposto)) {
     return 'Escolha a alíquota de impostos da versão antes de aprovar. Use o botão "Editar" da versão.';
   }

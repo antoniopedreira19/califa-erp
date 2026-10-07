@@ -5386,3 +5386,16 @@ aplicada na hora combinada com a frente do Antonio, junto da
   veículo na linha, e o veículo subiu para "Já usados em TV Fechada";
   linha devolvida ao Fornecedor Teste e veículo de teste inativado depois.
   A v2 aprovada segue só leitura.
+
+## ⚠️ Nota de 2026-10-07 — serviço × categoria fora da regra não aprova (revisão da decisão 149)
+
+- A versão só aprova com o par serviço × categoria do orçamento dentro da
+  regra da 078. Tela (barra de aprovação com o motivo e o botão travado),
+  action `aprovarVersao` e banco (gatilho
+  `trg_versao_aprova_com_servico_e_categoria_coerentes`, migration
+  `20261007970001`) recusam com a mesma frase.
+- Afeta os 4 orçamentos de antes da 078 com serviço Always On e categoria
+  Conteúdo ou Extra. A aprovação do **SEBRAE NOSSO CANTO | ANCINE
+  MANIFESTO** foi cancelada em 07/10/2026 a pedido do Tiago (voltou a "Em
+  revisão"); HITLAB, ANCINE HEROS e Raízes do Futuro não mudaram. Para
+  aprovar, troca-se a categoria ou o serviço no "Editar". Ver decisão 149.

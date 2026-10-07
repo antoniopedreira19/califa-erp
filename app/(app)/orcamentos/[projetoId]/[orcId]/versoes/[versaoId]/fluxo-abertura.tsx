@@ -101,6 +101,10 @@ interface Props {
   /** Mídia Off (decisão 147): quantas linhas estão sem veículo — bloqueia a
    *  aprovação. `null` fora da Mídia Off. */
   linhasSemVeiculo: number | null;
+  /** Serviço × categoria do orçamento que não combinam (revisão da 149,
+   *  07/10/2026): a frase do motivo, que bloqueia a aprovação. `null` com o
+   *  par válido. Obrigatória. */
+  parServicoCategoria: string | null;
   /** Mídia Off: a barra fala em meios e linhas, e o envio para abertura
    *  ainda não existe (chega na entrega do job). */
   midiaOff: boolean;
@@ -190,6 +194,7 @@ export function FluxoAbertura({
   cambioInternacional,
   mesesSemItens,
   linhasSemVeiculo,
+  parServicoCategoria,
   midiaOff,
   periodoTravado,
   servicoInterno,
@@ -232,6 +237,7 @@ export function FluxoAbertura({
   // Mesma função que a server action usa: o title do botão explica exatamente
   // o motivo pelo qual o servidor recusaria.
   const bloqueio = bloqueioAprovacaoVersao({
+    parServicoCategoria,
     percentualImposto,
     cambioInternacional,
     qtdItens,
