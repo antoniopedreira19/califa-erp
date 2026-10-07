@@ -42,7 +42,8 @@
  * do cadastro. A produção anexava a NF e o print da consulta do CNPJ no
  * lugar da declaração. O que o cadastro já tem continua indo no envio, pelo
  * estado, então editar pelo pop-up não apaga nada. E Lucro Real ou
- * Presumido perdeu a nota azul.
+ * Presumido perdeu a nota azul; a do Simples, que fala da declaração, sai
+ * do cadastro rápido.
  */
 
 import * as React from "react";
@@ -1196,8 +1197,13 @@ export function FornecedorForm({
               {/* Módulo fiscal: o que o regime faz com as retenções e o
                   crédito, na aprovação da PP. Fora do pop-up rápido do
                   veículo (Tiago, 07/10/2026, decisão 150). Lucro Real ou
-                  Presumido não tem nota (Tiago, 07/10/2026). */}
-              {ehPj && regime && NOTA_DO_REGIME[regime] && !(ehVeiculo && emDialog) && (
+                  Presumido não tem nota, e a do Simples, que fala da
+                  declaração, sai do cadastro rápido junto com ela (Tiago,
+                  07/10/2026). */}
+              {ehPj &&
+                regime &&
+                NOTA_DO_REGIME[regime] &&
+                !(emDialog && (ehVeiculo || regime === "simples")) && (
                 <div className="col-span-12 flex gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-sky-900">
                   <span className="mt-0.5 shrink-0">
                     <Info className="h-3.5 w-3.5" />

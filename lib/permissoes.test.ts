@@ -308,6 +308,12 @@ test("GP, Produtor e Freelancer cadastram fornecedor INLINE (exceção do PP)", 
   assert.equal(pode("freelancer", "cadastros.fornecedores.editar"), false);
 });
 
+test("Financeiro cria e edita fornecedor pela tela, nao pelo PP (07/10/2026)", () => {
+  assert.equal(pode("financeiro", "cadastros.fornecedores.editar"), true);
+  assert.equal(pode("administrador", "cadastros.fornecedores.editar"), true);
+  assert.equal(pode("financeiro", "cadastros.fornecedores.inline"), false);
+});
+
 test("So Administrador e GP cadastram cliente INLINE (decisao do Tiago, 18/09/2026)", () => {
   const inline = new Set(getRolesFor("cadastros.clientes.inline"));
   assert.deepEqual(inline, new Set(["administrador", "gerente_producao"]));
