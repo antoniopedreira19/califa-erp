@@ -3941,6 +3941,36 @@ export interface ColaboradorSalario {
   created_at: string;
 }
 
+/** Metadado do anexo de NF por (colaborador, competência).
+ *  Arquivo em Storage no bucket 'colaboradores-nf', path
+ *  {tenant_id}/{colaborador_id}/{ano}-{mes}.pdf. Reenvio sobrescreve.
+ *  Spec: docs/superpowers/specs/2026-10-07-folha-anexo-nf.md */
+export interface ColaboradorNfAnexo {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  competencia_ano: number;
+  competencia_mes: number;
+  arquivo_path: string;
+  arquivo_nome: string;
+  arquivo_tamanho_bytes: number;
+  uploaded_by: string;
+  uploaded_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Janela de pagamento: salários (dia 03 do mês seguinte) ou
+ *  fornecedores (dia 08). Derivada de uploaded_at vs dia 25 do mês
+ *  da competência em America/Sao_Paulo. */
+export type JanelaPagamento = "salarios" | "fornecedores";
+
+export interface NfJanela {
+  janela: JanelaPagamento;
+  /** ISO yyyy-mm-dd (dia 03 ou dia 08 do mês seguinte à competência). */
+  data_prevista: string;
+}
+
 /** Camada 2 — snapshot da folha por competência. Uma linha = 1
  *  colaborador × 1 competência. Ver docs/modulos/rh/20-folha-mensal.md. */
 export type FolhaLinhaStatus =
