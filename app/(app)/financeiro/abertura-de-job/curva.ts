@@ -196,6 +196,21 @@ export function sugerirRecebimento(
   ];
 }
 
+/**
+ * Fee e Always On (decisão 149): as datas de recebimento que a produção
+ * enviou, uma linha por mês. Só a data e o mês importam aqui — o valor de
+ * cada linha é o faturamento do mês, que a abertura põe por conta própria
+ * (`recebimentoMensalParaForm`). Mês sem data enviada fica de fora e nasce
+ * vazio, como antes.
+ */
+export function recebimentoEnviadoPorMes(
+  porMes: Record<string, string> | null | undefined,
+): RecebimentoLinha[] {
+  return Object.entries(porMes ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([mes, data]) => ({ id: `recebimento-${mes}`, data, valor: 0, mes }));
+}
+
 /** Ao clicar em "Adicionar parcela": 30 dias depois da última. */
 export function proximaDataRecebimento(
   linhas: CurvaLinha[],

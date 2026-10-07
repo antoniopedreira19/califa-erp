@@ -31,10 +31,12 @@ import {
 import {
   EnviarJobModal,
   contatoEmBranco,
+  linhasDeDatasDoResumo,
   type DadosJob,
   type HerdadosJob,
   type PessoaOpcao,
 } from "./enviar-job-modal";
+import type { MesDoEnvio } from "@/lib/calculos/recebimento-por-mes";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
 import { PPsQueTravam, type PPQueTravaOEnvio } from "./pps-que-travam";
 
@@ -51,6 +53,10 @@ export interface JobExistente {
   /** Quando o financeiro devolveu (decisão 136). */
   devolvido_em: string | null;
   data_prevista_faturamento: string | null;
+  /** Modelo mensal (decisão 149): a data de cada mês. Obrigatória no tipo
+   *  (nula fora do mensal): linha montada à mão com campo opcional descarta
+   *  o dado em silêncio (CLAUDE.md). */
+  recebimento_previsto_por_mes: Record<string, string> | null;
   produto: string | null;
   cidade: string | null;
   regional_id: string | null;
@@ -101,6 +107,11 @@ interface Props {
   /** Modelo mensal: início e fim vêm do período do orçamento, e o modal os
    *  mostra travados (Tiago, 14/09/2026). */
   periodoTravado: boolean;
+  /** Serviço Interno (decisão 149): sem recebimento, pelo serviço. */
+  servicoInterno: boolean;
+  /** Modelo mensal (decisão 149): os meses e o faturamento de cada um, na
+   *  mesma origem do fechamento do formulário. `null` fora do mensal. */
+  mesesDoEnvio: MesDoEnvio[] | null;
   custoPlanejado: number;
   /** O que a California emite nota. */
   faturamentoPrevisto: number;
@@ -174,6 +185,8 @@ export function FluxoAbertura({
   linhasSemVeiculo,
   midiaOff,
   periodoTravado,
+  servicoInterno,
+  mesesDoEnvio,
   custoPlanejado,
   faturamentoPrevisto,
   totalGeradoEmSave,
@@ -265,9 +278,13 @@ export function FluxoAbertura({
               rotulo: rotuloVersao,
               origem: "versao",
             };
-  // Sem faturamento previsto não há recebimento (decisão 105). Mesmo
-  // número que o modal e o servidor usam.
-  const semRecebimento = fechamento.faturamentoPrevisto <= 0.004;
+  // Sem faturamento previsto não há recebimento (decisão 105), nem no
+  // serviço Interno (decisão 149). Mesma régua do modal e do servidor.
+  const semRecebimento = fechamento.faturamentoPrevisto <= 0.004 || servicoInterno;
+  // Mais de um mês com data: o recebimento do job não é um só, e as
+  // frases da barra falam do primeiro.
+  const variosRecebimentos =
+    Object.keys(job?.recebimento_previsto_por_mes ?? {}).length > 1;
 
   // "Revisar abertura" da página do job: chega com `?abertura=revisar`,
   // abre o formulário preenchido e tira o parâmetro da URL, para um
@@ -334,12 +351,24 @@ export function FluxoAbertura({
     formData.set("produtor_id", dados.produtorId);
     formData.set("data_inicio_prevista", dados.dataInicio);
     formData.set("data_fim_prevista", dados.dataFim);
-    formData.set("data_evento", dados.dataEvento);
+    // Fee e Always On não têm data de evento (decisão 149): vai vazia.
+    formData.set("data_evento", mesesDoEnvio ? "" : dados.dataEvento);
     // Sem faturamento previsto não há recebimento (decisão 105): vai vazia,
-    // mesmo que o formulário guarde uma data de antes.
+    // mesmo que o formulário guarde uma data de antes. No mensal a data é
+    // por mês, e a única vai vazia — o servidor grava a do primeiro mês.
     formData.set(
       "data_prevista_faturamento",
-      semRecebimento ? "" : dados.dataFaturamento,
+      semRecebimento || mesesDoEnvio ? "" : dados.dataFaturamento,
+    );
+    formData.set(
+      "recebimentos_por_mes",
+      JSON.stringify(
+        mesesDoEnvio && !semRecebimento
+          ? dados.recebimentosPorMes
+              .filter((r) => r.data)
+              .map((r) => ({ mes: r.mes, data: r.data }))
+          : [],
+      ),
     );
     formData.set("observacoes", dados.observacoes);
     // Único campo composto do formulário: vai como JSON e a action
@@ -436,20 +465,11 @@ export function FluxoAbertura({
       valor: `${formatarData(dados.dataInicio)} → ${formatarData(dados.dataFim)}`,
       mono: true,
     },
-    {
-      rotulo: "Data evento",
-      valor: formatarData(dados.dataEvento),
-      mono: true,
-    },
-    {
-      // Era "Faturamento em" até 27/08/2026 — o campo é o mesmo
-      // (`data_prevista_faturamento`), só o rótulo mudou.
-      rotulo: "Recebimento em",
-      valor: semRecebimento
-        ? "Sem recebimento"
-        : formatarData(dados.dataFaturamento),
-      mono: !semRecebimento,
-    },
+    // Data do evento e recebimento: "Não se aplica" e uma linha por mês
+    // no Fee e no Always On (decisão 149). O "Recebimento em" era
+    // "Faturamento em" até 27/08/2026 — o campo é o mesmo
+    // (`data_prevista_faturamento`), só o rótulo mudou.
+    ...linhasDeDatasDoResumo(dados, semRecebimento, mesesDoEnvio),
   ];
 
   return (
@@ -525,7 +545,7 @@ export function FluxoAbertura({
               </span>
               <span className="text-xs text-muted-foreground">
                 {job.data_prevista_faturamento
-                  ? `Recebimento previsto para ${formatarData(job.data_prevista_faturamento)}`
+                  ? `${variosRecebimentos ? "Primeiro recebimento" : "Recebimento"} previsto para ${formatarData(job.data_prevista_faturamento)}`
                   : "Aguardando abertura pelo financeiro"}
               </span>
             </>
@@ -714,6 +734,8 @@ export function FluxoAbertura({
         produtores={produtores}
         cidadesIniciais={cidadesIniciais}
         periodoTravado={periodoTravado}
+        servicoInterno={servicoInterno}
+        mesesDoEnvio={mesesDoEnvio}
         fieldErrors={fieldErrors}
         erroGeral={erroGeral}
       />
@@ -853,7 +875,13 @@ export function BannersEstado({
             <p className="mt-0.5 text-xs text-muted-foreground">
               Aguardando abertura pelo financeiro
               {job.data_prevista_faturamento
-                ? ` · recebimento previsto para ${formatarData(job.data_prevista_faturamento)}`
+                ? ` · ${
+                    // Fee e Always On (decisão 149): uma data por mês, e a
+                    // da frase é a do primeiro.
+                    Object.keys(job.recebimento_previsto_por_mes ?? {}).length > 1
+                      ? "primeiro recebimento"
+                      : "recebimento"
+                  } previsto para ${formatarData(job.data_prevista_faturamento)}`
                 : ""}
             </p>
           </div>

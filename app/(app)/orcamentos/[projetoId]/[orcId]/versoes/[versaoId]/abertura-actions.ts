@@ -13,10 +13,19 @@ import { gerarCodigoJob } from "@/lib/codigos/jobs";
 import type { VersaoOrcamentoItem } from "@/lib/types";
 import {
   espelhosDe,
+  faturamentoPorMesDoFinanceiro,
   lerBaseDosEspelhos,
   totaisDoFinanceiro,
   type EspelhosDoJob,
 } from "@/lib/data/espelhos-do-job";
+import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
+import {
+  faturamentoPorMes,
+  type FaturamentoDoMes,
+  type GrupoComMes,
+  type ItemComGrupo,
+  type MesDoJob,
+} from "@/lib/calculos/faturamento-por-mes";
 import { formatCurrency } from "@/lib/utils";
 import { cancelarAprovacaoVersao } from "../actions";
 import { cancelarPedidoCompra } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
@@ -41,6 +50,19 @@ function parseContatos(raw: string): unknown {
   }
 }
 
+/** Modelo mensal (decisão 149): a data de cada mês chega como JSON, como os
+ *  contatos. Ilegível vira lista vazia, e a conferência dos meses devolve a
+ *  mensagem certa. */
+function parseRecebimentos(raw: string): unknown {
+  if (!raw) return [];
+  try {
+    const valor = JSON.parse(raw);
+    return Array.isArray(valor) ? valor : [];
+  } catch {
+    return [];
+  }
+}
+
 function extractInput(formData: FormData) {
   return {
     nome: formData.get("nome")?.toString() ?? "",
@@ -53,6 +75,9 @@ function extractInput(formData: FormData) {
     data_evento: formData.get("data_evento")?.toString() ?? "",
     data_prevista_faturamento:
       formData.get("data_prevista_faturamento")?.toString() ?? "",
+    recebimentos_por_mes: parseRecebimentos(
+      formData.get("recebimentos_por_mes")?.toString() ?? "",
+    ),
     observacoes: formData.get("observacoes")?.toString() ?? "",
     contatos_cobranca: parseContatos(
       formData.get("contatos_cobranca")?.toString() ?? "",
@@ -218,7 +243,9 @@ export async function enviarJobParaAbertura(
       // `!categoria_id` é obrigatório: `orcamentos` tem duas FKs para
       // `categorias_dominio` (categoria e serviço), e o embed ambíguo
       // derruba a query inteira em silêncio.
-      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+      // `!servico_id` pelo mesmo motivo: o Interno não tem recebimento
+      // (decisão 149), e é o serviço que diz se o orçamento é Interno.
+      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno)",
     )
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -232,9 +259,23 @@ export async function enviarJobParaAbertura(
       data_inicio_prevista: string | null;
       data_fim_prevista: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+      servico: { investimento_interno: boolean } | null;
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
+  const mensal = orc.categoria?.modelo_planilha === "mensal";
+  const servicoInterno = orc.servico?.investimento_interno === true;
+  // Fee e Always On não têm data de evento (decisão 149): o que vier do
+  // formulário é descartado. Nos outros modelos ela segue obrigatória.
+  if (mensal) {
+    parsed.data.data_evento = null;
+  } else if (!parsed.data.data_evento) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: { data_evento: ["Data do evento é obrigatória."] },
+    };
+  }
   // Mídia Off (decisão 147, entrega 1): o orçamento vai até a aprovação. O
   // job dela tem conta própria (veículo + honorários, faturamento por mês)
   // e chega na próxima entrega — gravar aqui o fechamento nacional deixaria
@@ -427,11 +468,32 @@ export async function enviarJobParaAbertura(
   //    total do cliente — inclui o que ele paga direto ao fornecedor. O
   //    faturamento previsto (só o que a California emite nota) aparece na
   //    tela, mas não é o que dimensiona o job no financeiro.
-  const { data: itensBrutos, error: itensErr } = await supabase
-    .from("versoes_orcamento_itens")
-    .select("id, tipo_custo, total_orcado, em_save, save_consumido")
-    .eq("versao_orcamento_id", versaoId)
-    .eq("tenant_id", session.activeTenant.id);
+  //    No mensal vêm junto os meses e o mês de cada grupo: a data de
+  //    recebimento é por mês, e só o mês com faturamento a exige
+  //    (decisão 149). As leituras são independentes (docs/PERFORMANCE.md).
+  const [itensRes, mesesRes, gruposRes] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("id, grupo_id, tipo_custo, total_orcado, em_save, save_consumido")
+      .eq("versao_orcamento_id", versaoId)
+      .eq("tenant_id", session.activeTenant.id),
+    mensal
+      ? mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoId)
+      : Promise.resolve({ data: [] as MesDoJob[], error: null }),
+    mensal
+      ? supabase
+          .from("versoes_orcamento_grupos")
+          .select("id, mes_id")
+          .eq("versao_orcamento_id", versaoId)
+          .eq("tenant_id", session.activeTenant.id)
+          .returns<GrupoComMes[]>()
+      : Promise.resolve({ data: [] as GrupoComMes[], error: null }),
+  ]);
+  const { data: itensBrutos, error: itensErr } = itensRes;
+  if (mesesRes.error || gruposRes.error) {
+    console.error("[abertura.meses]", (mesesRes.error ?? gruposRes.error)?.message);
+    return { ok: false, message: "Não foi possível ler os meses do orçamento." };
+  }
 
   if (itensErr) {
     console.error("[abertura.itens]", itensErr.message);
@@ -458,13 +520,17 @@ export async function enviarJobParaAbertura(
   //     abertura de novo sobre eles. Lido antes de gravar qualquer coisa.
   let espelhosDoReenvio: EspelhosDoJob | null = null;
   let linhasDoJobDevolvido: string[] = [];
+  let porMesDoReenvio: FaturamentoDoMes[] | null = null;
   if (jobDevolvido) {
     const lida = await lerBaseDosEspelhos(supabase, session.activeTenant.id, jobDevolvido.id, {
-      comMeses: false,
+      // Os meses só interessam ao mensal: o reenvio confere a data de
+      // recebimento de cada mês pelo faturamento da cópia (decisão 149).
+      comMeses: mensal,
     });
     if (!lida.ok) return { ok: false, message: lida.message };
     espelhosDoReenvio = espelhosDe(totaisDoFinanceiro(lida.base.itens, lida.base));
     linhasDoJobDevolvido = lida.base.itens.map((i) => i.id);
+    porMesDoReenvio = faturamentoPorMesDoFinanceiro(lida.base.itens, lida.base);
   }
 
   // 4b'. Recebimento só existe com faturamento (decisão 105). O job sem
@@ -475,8 +541,47 @@ export async function enviarJobParaAbertura(
   const previstoDoEnvio = espelhosDoReenvio
     ? Number(espelhosDoReenvio.faturamento_previsto ?? 0)
     : totais.faturamentoPrevisto;
-  const semRecebimento = previstoDoEnvio <= 0.004;
-  if (!semRecebimento && !parsed.data.data_prevista_faturamento) {
+  //      O serviço Interno também não tem recebimento, pelo serviço e não
+  //      só pelo número (decisão 149) — hoje ele já fatura zero (105).
+  const semRecebimento = previstoDoEnvio <= 0.004 || servicoInterno;
+
+  // 4b''. Modelo mensal (decisão 149): uma data por mês COM faturamento, no
+  //      lugar da data única. A coluna `data_prevista_faturamento` recebe a
+  //      do primeiro mês — é ela que as listas e o "faturamento próximo"
+  //      leem. Mês sem faturamento não tem recebimento: a data dele, se
+  //      vier, é descartada, como a do job sem faturamento.
+  let recebimentoPorMes: Record<string, string> | null = null;
+  if (mensal && !semRecebimento) {
+    const porMes =
+      porMesDoReenvio ??
+      faturamentoPorMes(
+        mesesRes.data ?? [],
+        gruposRes.data ?? [],
+        ((itensBrutos ?? []) as unknown as ItemComGrupo[]),
+        Number(versao.percentual_honorarios ?? 0),
+        Number(versao.percentual_imposto ?? 0),
+      );
+    const informadas = new Map(
+      parsed.data.recebimentos_por_mes.map((r) => [r.mes, r.data] as const),
+    );
+    const comFaturamento = porMes.filter((m) => m.faturamento > 0.004);
+    if (comFaturamento.some((m) => !informadas.get(m.mes))) {
+      return {
+        ok: false,
+        message: "Verifique os campos destacados.",
+        fieldErrors: {
+          data_prevista_faturamento: [
+            "Informe a data prevista de recebimento de cada mês.",
+          ],
+        },
+      };
+    }
+    recebimentoPorMes = Object.fromEntries(
+      comFaturamento.map((m) => [m.mes, informadas.get(m.mes)!]),
+    );
+    parsed.data.data_prevista_faturamento =
+      comFaturamento.length > 0 ? informadas.get(comFaturamento[0].mes)! : null;
+  } else if (!semRecebimento && !parsed.data.data_prevista_faturamento) {
     return {
       ok: false,
       message: "Verifique os campos destacados.",
@@ -632,6 +737,7 @@ export async function enviarJobParaAbertura(
         data_fim_prevista: parsed.data.data_fim_prevista,
         data_evento: parsed.data.data_evento,
         data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+        recebimento_previsto_por_mes: recebimentoPorMes,
         observacoes: parsed.data.observacoes,
         responsavel_id: parsed.data.gp_responsavel_id,
         produtor_id: parsed.data.produtor_id,
@@ -673,6 +779,7 @@ export async function enviarJobParaAbertura(
         produtor_id: parsed.data.produtor_id,
         data_evento: parsed.data.data_evento,
         data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+        recebimento_previsto_por_mes: recebimentoPorMes,
         qtd_contatos_cobranca: parsed.data.contatos_cobranca.length,
         valor_total: espelhosDoReenvio.valor_total,
         faturamento_previsto: espelhosDoReenvio.faturamento_previsto,
@@ -710,6 +817,8 @@ export async function enviarJobParaAbertura(
       // Só no job: `orcamentos` não tem data de evento (27/08/2026).
       data_evento: parsed.data.data_evento,
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+      // Modelo mensal: a data de cada mês (decisão 149). Nula nos outros.
+      recebimento_previsto_por_mes: recebimentoPorMes,
       // Na tela chama "Descritivo do Job" desde 17/08/2026; a coluna
       // segue `observacoes`. O financeiro lê no diálogo de conferência da
       // fila de abertura e no detalhe do job.
@@ -1047,6 +1156,7 @@ export async function enviarJobParaAbertura(
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       data_evento: parsed.data.data_evento,
       data_prevista_faturamento: parsed.data.data_prevista_faturamento,
+      recebimento_previsto_por_mes: recebimentoPorMes,
       // Quantos contatos de cobrança foram gravados (obrigatório ≥ 1
       // desde 17/08/2026). Sem e-mail nem nome no audit: dado pessoal do
       // cliente não precisa ser duplicado no log.

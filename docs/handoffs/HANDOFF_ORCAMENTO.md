@@ -5120,3 +5120,24 @@ aplicada na hora combinada com a frente do Antonio, junto da
   "Salvar alterações" e chama actions que não existem mais: recarregar.
 - **Próxima entrega**: excluir orçamento completamente vazio (lixeira no
   card da agregada e "Excluir" no "Editar orçamento"). Ver decisão 148.
+
+## ⚠️ Nota de 2026-10-06 (4) — o envio para abertura muda pelo tipo de job (decisão 149)
+
+- **Fee e Always On** (categoria de modelo mensal, inclusive o Interno ·
+  Always On): Data Evento travada, "Não se aplica"; no lugar da data única,
+  "Datas previstas para recebimento", uma por mês do trimestre, cada mês
+  numa coluna com o faturamento dele. A data do primeiro mês sugere a dos
+  meses seguintes que estiverem vazios; mês preenchido nunca muda, e mês do
+  meio não mexe em nenhum outro (`lib/calculos/recebimento-por-mes.ts`).
+- **Serviço Interno**: "Sem recebimento — Serviço Interno não tem
+  recebimento.", pelo serviço e não só pelo faturamento zero.
+- **Banco**: coluna nova `jobs.recebimento_previsto_por_mes` (migration
+  `20261006700001`); no mensal, `data_prevista_faturamento` recebe a do
+  primeiro mês e `data_evento` fica nula. O servidor exige a data de cada
+  mês com faturamento e a Data Evento fora do mensal.
+- **Fica com o formulário nacional**: orçamento de serviço Always On com
+  categoria nacional (4 no banco, do SEBRAE e da Universal) — tratar a
+  categoria deles é a próxima conversa.
+- Testado gravando no `TES-P001/26 · Teste demonstração` (TES-1022/26,
+  enviado e depois cancelado pelo "Cancelar envio à abertura"). Ver
+  decisão 149.

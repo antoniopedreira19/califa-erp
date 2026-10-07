@@ -8,6 +8,8 @@
  * servidor e o do navegador seriam diferentes).
  */
 
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+
 const FUSO_BR = "America/Sao_Paulo";
 
 /** dd/mm/aaaa a partir de uma coluna `date`. Corte de string, sem fuso. */
@@ -75,4 +77,28 @@ export function formatPeriodo(
 ): string {
   if (!inicio && !fim) return "—";
   return `${formatDataBr(inicio)} → ${formatDataBr(fim)}`;
+}
+
+/**
+ * As linhas de recebimento do que a produção enviou, para os resumos da
+ * abertura ("Dados da produção" e o diálogo de conferência). Fee e Always
+ * On (decisão 149): uma linha por mês — "Recebimento de outubro". Nos
+ * outros, a data única de sempre. Sem faturamento previsto, "Sem
+ * recebimento" (decisão 105).
+ */
+export function linhasDoRecebimentoEnviado(
+  dataUnica: string | null,
+  porMes: Record<string, string> | null,
+  semRecebimento: boolean,
+): { rotulo: string; valor: string; mono?: boolean }[] {
+  if (semRecebimento) return [{ rotulo: "Recebimento em", valor: "Sem recebimento" }];
+  const meses = Object.entries(porMes ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  if (meses.length === 0) {
+    return [{ rotulo: "Recebimento em", valor: formatDataBr(dataUnica), mono: true }];
+  }
+  return meses.map(([mes, data]) => ({
+    rotulo: `Recebimento de ${nomeDoMes(mes)}`,
+    valor: formatDataBr(data),
+    mono: true,
+  }));
 }

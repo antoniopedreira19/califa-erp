@@ -23,6 +23,7 @@ import { pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
 import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
 import {
   faturamentoPorMes,
+  type FaturamentoDoMes,
   type GrupoComMes,
   type MesDoJob,
 } from "@/lib/calculos/faturamento-por-mes";
@@ -281,6 +282,36 @@ export function savesDosMesesEnviados(
   return porMes
     .filter((m) => mensal.enviados.includes(m.mes))
     .map((m) => ({ mes: m.mes, valor_save: m.save }));
+}
+
+/**
+ * O faturamento de CADA mês, com as linhas no estado que interessa — a
+ * mesma conta de `savesDosMesesEnviados`, para todos os meses. É o que o
+ * reenvio do job devolvido do mensal mostra e confere ao pedir a data de
+ * recebimento de cada mês (decisão 149). Nulo fora do mensal, ou quando a
+ * base foi lida com `comMeses: false`.
+ */
+export function faturamentoPorMesDoFinanceiro(
+  itens: LinhaDoEspelho[],
+  base: BaseDosEspelhos,
+  contar: string[] = [],
+): FaturamentoDoMes[] | null {
+  const mensal = base.mensal;
+  if (!mensal) return null;
+  const vistos = itensParaOFinanceiro(itens, base.pedidos, contar);
+  return faturamentoPorMes(
+    mensal.meses,
+    mensal.grupos,
+    vistos.map((i) => ({
+      grupo_id: i.grupo_id ?? "",
+      tipo_custo: i.tipo_custo,
+      total_orcado: i.total_orcado,
+      em_save: i.em_save,
+      save_consumido: i.save_consumido,
+    })),
+    base.percentualHonorarios,
+    base.percentualImposto,
+  );
 }
 
 /** O `p_totais` das RPCs de save que mexem nos números do financeiro. */

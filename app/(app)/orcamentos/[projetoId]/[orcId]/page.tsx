@@ -67,7 +67,12 @@ import {
 } from "./versoes/[versaoId]/fluxo-abertura";
 import type { PPQueTravaOEnvio } from "./versoes/[versaoId]/pps-que-travam";
 import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
-import { lerBaseDosEspelhos, totaisDoFinanceiro } from "@/lib/data/espelhos-do-job";
+import {
+  faturamentoPorMesDoFinanceiro,
+  lerBaseDosEspelhos,
+  totaisDoFinanceiro,
+} from "@/lib/data/espelhos-do-job";
+import { faturamentoPorMes, type FaturamentoDoMes } from "@/lib/calculos/faturamento-por-mes";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +123,8 @@ interface JobReservado {
   data_fim_prevista: string | null;
   data_evento: string | null;
   data_prevista_faturamento: string | null;
+  /** Modelo mensal (decisão 149): as datas por mês que ele tinha. */
+  recebimento_previsto_por_mes: Record<string, string> | null;
   observacoes: string | null;
   motivo_rejeicao: string | null;
 }
@@ -285,7 +292,7 @@ export default async function OrcamentoDetailPage({
         // por eles que a tela sabe que o financeiro devolveu o job.
         // `*_abertura`: os números congelados no envio/reenvio — o "Ver
         // dados do job" mostra o que foi gravado (decisão 099).
-        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, status, motivo_rejeicao, devolvido_em, valor_job_abertura, faturamento_previsto_abertura, " +
+        "id, codigo, nome, produto, cidade, regional_id, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, status, motivo_rejeicao, devolvido_em, valor_job_abertura, faturamento_previsto_abertura, " +
           // GP e produtor gravados no job: o "Ver dados do job" os mostra
           // (decisão 135).
           "responsavel:profiles!responsavel_id(nome), produtor:profiles!produtor_id(nome)",
@@ -300,7 +307,7 @@ export default async function OrcamentoDetailPage({
     supabase
       .from("jobs")
       .select(
-        "id, codigo, nome, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, observacoes, motivo_rejeicao",
+        "id, codigo, nome, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, motivo_rejeicao",
       )
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
@@ -559,7 +566,11 @@ export default async function OrcamentoDetailPage({
     // da action (`lerBaseDosEspelhos` → `totaisDoFinanceiro`). Aguardando
     // abertura, a cópia é o que acabou de ser enviado ("Ver dados do job").
     job?.status === "rejeitado_financeiro" || job?.status === "aguardando_abertura"
-      ? lerBaseDosEspelhos(supabase, session.activeTenant.id, job.id, { comMeses: false })
+      ? lerBaseDosEspelhos(supabase, session.activeTenant.id, job.id, {
+          // O mensal pede a data de recebimento de cada mês pelo
+          // faturamento da cópia (decisão 149); os outros não leem meses.
+          comMeses: modeloDoOrcamento === "mensal",
+        })
       : Promise.resolve(null),
     // PPs que travam o "Cancelar aprovação" do job devolvido e o "Cancelar
     // envio à abertura": os dois pop-ups as listam e cancelam (decisão 143).
@@ -617,6 +628,9 @@ export default async function OrcamentoDetailPage({
   }));
 
   let fechamentoDaCopia: FechamentoDaCopia | null = null;
+  // Modelo mensal: o faturamento de cada mês na mesma origem do fechamento
+  // da cópia (decisão 149). Nulo fora do mensal.
+  let porMesDaCopia: FaturamentoDoMes[] | null = null;
   if (reenvioRes && reenvioRes.ok) {
     const t = totaisDoFinanceiro(reenvioRes.base.itens, reenvioRes.base);
     fechamentoDaCopia = {
@@ -624,6 +638,7 @@ export default async function OrcamentoDetailPage({
       valorJob: t.valorJob,
       totalGeradoEmSave: t.save.totalSaveGerado,
     };
+    porMesDaCopia = faturamentoPorMesDoFinanceiro(reenvioRes.base.itens, reenvioRes.base);
   } else if (reenvioRes) {
     console.error("[versao.reenvio]", reenvioRes.message);
   }
@@ -965,6 +980,7 @@ export default async function OrcamentoDetailPage({
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
+          porMesDaCopia={porMesDaCopia}
           ppsQueTravam={ppsQueTravam}
           veiculos={veiculos}
         />
@@ -1027,6 +1043,7 @@ function VersaoSelecionada({
   meses,
   mesPedido,
   fechamentoDaCopia,
+  porMesDaCopia,
   ppsQueTravam,
   veiculos,
 }: {
@@ -1074,6 +1091,9 @@ function VersaoSelecionada({
   mesPedido: string | undefined;
   /** Job devolvido ou aguardando abertura: o fechamento da cópia do job. */
   fechamentoDaCopia: FechamentoDaCopia | null;
+  /** Modelo mensal: o faturamento de cada mês da cópia, junto do
+   *  fechamento acima (decisão 149). Nulo sem cópia ou fora do mensal. */
+  porMesDaCopia: FaturamentoDoMes[] | null;
   /** PPs do job vivo de pré-abertura fora de `cancelada` (decisão 143). */
   ppsQueTravam: PPQueTravaOEnvio[];
   /** Mídia Off (decisão 147): os veículos do cadastro; vazio nos demais. */
@@ -1193,6 +1213,25 @@ function VersaoSelecionada({
     ? fechamentoMidia.faturamentoPrevisto
     : totais.faturamentoPrevisto;
 
+  // Envio para abertura do Fee e do Always On (decisão 149): os meses e o
+  // faturamento de cada um, na MESMA origem do fechamento que o formulário
+  // mostra — a cópia do job quando ela existe, a versão antes do envio.
+  // Nulo fora do mensal: é isso que mantém a Data Evento e a data única.
+  const mesesDoEnvio =
+    planilha.modeloPlanilha === "mensal"
+      ? (
+          porMesDaCopia ??
+          faturamentoPorMes(
+            meses,
+            grupos,
+            itens,
+            Number(versao.percentual_honorarios),
+            Number(versao.percentual_imposto),
+            planilha.internacional,
+          )
+        ).map((m) => ({ mes: m.mes, faturamento: m.faturamento }))
+      : null;
+
   // Preview do código: o definitivo é gerado no insert. Serve só pra tela
   // não mostrar campo vazio — se outro job entrar antes, o número muda.
 
@@ -1229,6 +1268,14 @@ function VersaoSelecionada({
     // do envio (o orçamento não guarda o campo).
     dataEvento: origemDoEnvio?.data_evento ?? "",
     dataFaturamento: origemDoEnvio?.data_prevista_faturamento ?? "",
+    // Fee e Always On (decisão 149): um mês por linha, com a data que o job
+    // já tinha (reenvio, "Ver dados do job", código reservado). Nada é
+    // "sugerido" aqui: a sugestão só nasce de escolher o primeiro mês.
+    recebimentosPorMes: (mesesDoEnvio ?? []).map((m) => ({
+      mes: m.mes,
+      data: origemDoEnvio?.recebimento_previsto_por_mes?.[m.mes] ?? "",
+      sugerida: false,
+    })),
     // O Descritivo do orçamento adianta o do envio (decisão 037): quem
     // escreveu no calor da negociação não reescreve aqui. O job manda
     // quando já existe — ali o texto já foi ajustado neste modal, e
@@ -1534,6 +1581,8 @@ function VersaoSelecionada({
         linhasSemVeiculo={midiaOff ? itens.filter((i) => !i.fornecedor_id).length : null}
         midiaOff={midiaOff}
         periodoTravado={planilha.modeloPlanilha === "mensal"}
+        servicoInterno={interno}
+        mesesDoEnvio={mesesDoEnvio}
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={faturamentoPrevisto}
         totalGeradoEmSave={midiaOff ? 0 : totais.save.totalSaveGerado}
