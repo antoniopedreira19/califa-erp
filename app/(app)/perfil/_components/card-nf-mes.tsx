@@ -42,16 +42,17 @@ export function CardNfMes(props: {
   anoVigente: number;
   mesVigente: number;
 }) {
-  // Só renderiza para tipos que exigem NF.
-  if (!["pj", "mei", "clt_recibo"].includes(props.tipoContratacao)) {
-    return null;
-  }
-
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [histOpen, setHistOpen] = React.useState(false);
+
+  // Só renderiza para tipos que exigem NF.
+  // (Early return só depois dos hooks pra respeitar rules-of-hooks.)
+  if (!["pj", "mei", "clt_recibo"].includes(props.tipoContratacao)) {
+    return null;
+  }
 
   const countdown = diasAtePrazoNf({
     hoje: new Date(),
