@@ -283,6 +283,14 @@ export async function previewImportacao(
   entrada: EntradaDoPreview,
 ): Promise<PreviewResult> {
   const session = await requireSession();
+  // Só lê, mas é a primeira etapa da gravação e baixa o arquivo com a chave
+  // de serviço: pede a permissão de quem grava — a da versão nova, ou a de
+  // editar quando a planilha sobrescreve a versão aberta (06/10/2026).
+  const gate = await checarPermissao(
+    session,
+    entrada.versao_id ? "orcamentos.editar" : "orcamentos.criar",
+  );
+  if (!gate.ok) return { ok: false, message: gate.message };
   const tenantId = session.activeTenant.id;
 
   const check = await verificarOrcamento(orcamentoId, tenantId);
@@ -381,6 +389,11 @@ export async function confirmarImportacao(
   entrada: EntradaDaGravacao,
 ): Promise<ConfirmResult> {
   const session = await requireSession();
+  // Cria a versão com a chave de serviço, que passa por cima da RLS: a
+  // permissão é a do `criarVersao`, conferida aqui e não só no botão
+  // (06/10/2026).
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return { ok: false, message: gate.message };
 
   const check = await verificarOrcamento(orcamentoId, session.activeTenant.id);
   if (!check.ok) return { ok: false, message: check.message };

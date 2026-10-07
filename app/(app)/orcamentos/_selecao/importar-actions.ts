@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
+import { checarPermissao } from "@/lib/permissoes-server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { extrairArquivoXlsx } from "@/lib/importacao/arquivo";
 import {
@@ -504,6 +505,12 @@ export async function previewImportacaoProjeto(
   projetoId: string,
   formData: FormData,
 ): Promise<PreviewProjetoResult> {
+  // Só lê, mas é a primeira etapa da gravação: pede a mesma permissão dela,
+  // para quem não pode importar ouvir o não antes da prévia (06/10/2026).
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return { ok: false, message: gate.message };
+
   const res = await analisar(projetoId, formData);
   if (!res.ok) return res;
 
@@ -535,6 +542,13 @@ export async function confirmarImportacaoProjeto(
   formData: FormData,
 ): Promise<ConfirmProjetoResult> {
   const session = await requireSession();
+  // Cria versão nova nos orçamentos alterados: a permissão é a do
+  // `criarVersao`, conferida aqui e não só no botão — a RLS das versões só
+  // pede que a pessoa seja do tenant (06/10/2026). Desfazer a aprovação
+  // continua pedindo `orcamentos.aprovar`, dentro de
+  // `cancelarAprovacaoVersao`.
+  const gate = await checarPermissao(session, "orcamentos.criar");
+  if (!gate.ok) return { ok: false, message: gate.message };
   const tenantId = session.activeTenant.id;
 
   const res = await analisar(projetoId, formData);

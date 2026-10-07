@@ -5159,3 +5159,43 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Conferido logado em 1838 px: "Meus" e "Todos" sem rolagem horizontal,
   com as 12 colunas, e nenhuma linha com mais de duas linhas. Números e
   larguras na nota de 07/10/2026 da decisão 036.
+
+## ⚠️ Nota de 2026-10-07 (2) — a importação de planilha confere a permissão no servidor
+
+- **Antes**, as Server Actions da importação só pediam login. Elas gravam
+  com a chave de serviço (versão, grupos, itens, `orcamento_importacoes`)
+  ou pelo cliente comum, e a RLS de `versoes_orcamento`, grupos e itens só
+  confere se a pessoa é do tenant. Na prática, Financeiro e freelancer
+  criavam versão chamando a action pelo console, mesmo sem ver o botão.
+- **Agora** cada action confere o papel logo no início, com
+  `checarPermissao`. Quem não tem a permissão recebe "Você não tem
+  permissão para essa ação.", e a tentativa fica em `acao_negada`:
+
+  | Action | Arquivo | Permissão |
+  |---|---|---|
+  | `confirmarImportacao` (versão nova) | `versoes/importar-actions.ts` | `orcamentos.criar`, a do `criarVersao` |
+  | `previewImportacao` | idem | `orcamentos.criar`; `orcamentos.editar` quando sobrescreve (`versao_id`) |
+  | `sobrescreverVersaoComPlanilha` | idem | `orcamentos.editar` (decisão 148) |
+  | `previewImportacaoProjeto` e `confirmarImportacaoProjeto` | `_selecao/importar-actions.ts` | `orcamentos.criar` |
+  | `lerPlanilhaDoRascunho` e `carregarAbaNoRascunho` | `_rascunho/actions.ts` | `orcamentos.editar`, a do editor da agregada |
+
+- **As leituras também pedem a permissão.** A prévia e as duas do rascunho
+  não gravam, mas são a primeira etapa da gravação: quem não pode importar
+  ouve o "não" antes de ver a prévia. Proteger o arquivo não é o papel
+  delas: a policy do bucket `orcamento-importacoes` deixa qualquer pessoa
+  do tenant subir e ler na pasta de envios. A trava é o que impede o
+  arquivo de virar versão.
+- **Para quem importa, nada muda.** Hoje `orcamentos.criar` e
+  `orcamentos.editar` valem para os mesmos papéis: administrador, GP e
+  produtor. Pela auditoria, só administrador e produtor já tinham
+  importado.
+- **Fica de fora:** `_importacao/envio-actions.ts` (reservar o caminho e
+  descartar o arquivo, só no Storage) e o botão "Importar" da página do
+  projeto e da agregada. Esse botão aparece para Financeiro e freelancer,
+  e agora termina na recusa.
+- **Testado** no dev do worktree. Como administrador: a v2 do
+  `TES-P001/26-17` foi importada pelo "+" → "Importar planilha (.xlsx)"
+  (apagada depois), e a planilha do projeto reimportada sem alteração
+  respondeu "nada a importar". Como `claude.freelancer.teste`: as 8
+  actions, chamadas direto pelo transporte do Server Action, devolveram a
+  recusa, com 8 `acao_negada` e nada gravado.

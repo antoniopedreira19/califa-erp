@@ -1,6 +1,7 @@
 "use server";
 
 import { requireSession } from "@/lib/auth/session";
+import { checarPermissao } from "@/lib/permissoes-server";
 import { baixarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
 import {
   abaSugerida,
@@ -42,6 +43,10 @@ function modeloDoRascunho(m: CategoriaModeloPlanilha): CategoriaModeloPlanilha {
 /** A tabela de abas e o resumo de cada aba legível (decisão 110). */
 export async function lerPlanilhaDoRascunho(entrada: EntradaDoRascunho): Promise<PreviewResult> {
   const session = await requireSession();
+  // Só lê, mas baixa o arquivo com a chave de serviço e só serve ao editor
+  // da agregada: pede a permissão dele (`agregado/actions.ts`), 06/10/2026.
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return { ok: false, message: gate.message };
   const arq = await baixarEnvio(entrada.envio, session.activeTenant.id);
   if (!arq.ok) return { ok: false, message: arq.message };
 
@@ -113,6 +118,8 @@ export async function carregarAbaNoRascunho(
   entrada: EntradaDoRascunho & { aba: string },
 ): Promise<AbaNoRascunhoResult> {
   const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.editar");
+  if (!gate.ok) return { ok: false, message: gate.message };
   const arq = await baixarEnvio(entrada.envio, session.activeTenant.id);
   if (!arq.ok) return { ok: false, message: arq.message };
 
