@@ -189,6 +189,9 @@ export default async function ProjetoNoFinanceiroPage({
               <ResumoResultado
                 valorJob={resumo.valorJob}
                 deducoes={resumo.imposto}
+                // A visão do projeto soma jobs: o valor não se divide
+                // (decisão 151 é do job).
+                abertura={null}
                 custoPlanejado={resumo.planejado}
                 custoRealizado={resumo.realizado}
                 bvRealizado={resumo.bvRealizado}

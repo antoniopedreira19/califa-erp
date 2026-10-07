@@ -169,6 +169,9 @@ export default async function ProjetoAgregadoPage({
           <div className="mt-[24px]">
             <ResumoResultado
               valorJob={resumoProjeto.valorJob}
+              // A visão do projeto soma jobs: o valor não se divide
+              // (decisão 151 é do job).
+              abertura={null}
               deducoes={
                 resumoProjeto.imposto +
                 resumoProjeto.intTaxes +

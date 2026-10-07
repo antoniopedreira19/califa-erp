@@ -448,6 +448,8 @@ export default async function AbrirJobNoFinanceiroPage({
             // Tela do financeiro: só leitura, não gera nem envia PP.
             papelEnviaPP={false}
             confirmarSaidaParaOrcamento
+            // Antes da abertura não há "inicial" e "atual" (decisão 151).
+            aberturaDoJob={null}
             edicaoDoFinanceiro={
               pode(session.activeRole, "jobs.editar_orcado_financeiro")
                 ? { travadoPor: null, mesesComNota: [], recebimento: [], envios: [] }

@@ -76,6 +76,11 @@ import type { EtapasDaFicha } from "./ficha-job";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
 import type { AnexoDaPPNaLista, PPAEmitir } from "@/lib/types";
+import {
+  fechamentoDaAbertura,
+  orcadoDaLinhaNaAbertura,
+  type ItemDaVersaoNaAbertura,
+} from "@/lib/calculos/abertura-do-job";
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -170,6 +175,7 @@ export async function carregarDetalheDoJob(
     alteracoesFinanceiroRes,
     aEmitirRes,
     tomadoresRes,
+    itensDaVersaoRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -405,6 +411,14 @@ export async function carregarDetalheDoJob(
       .eq("ativo", true)
       .order("ordem")
       .order("nome"),
+    // A versão aprovada é a foto da abertura (decisão 151, entrega 2): o
+    // orçado de cada linha na abertura e os números do lado planejado do
+    // resultado. Só as colunas da conta — a versão não muda com a errata.
+    supabase
+      .from("versoes_orcamento_itens")
+      .select("id, tipo_custo, total_orcado, em_save, save_consumido")
+      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -454,6 +468,24 @@ export async function carregarDetalheDoJob(
       valor: Number(bv.valor ?? 0),
     });
   }
+  // A foto da abertura (decisão 151): os itens da versão aprovada. Sem eles
+  // a tela fica como era — orçado de hoje na rentabilidade, valor único.
+  if (itensDaVersaoRes.error) {
+    console.error("[job.itens_da_versao]", itensDaVersaoRes.error.message);
+  }
+  const itensDaVersao: ItemDaVersaoNaAbertura[] = itensDaVersaoRes.error
+    ? []
+    : ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
+        id: i.id,
+        tipo_custo: i.tipo_custo,
+        total_orcado: Number(i.total_orcado ?? 0),
+        em_save: i.em_save === true,
+        save_consumido: Number(i.save_consumido ?? 0),
+      }));
+  const orcadoNaVersao = new Map(
+    itensDaVersao.map((i) => [i.id, Number(i.total_orcado ?? 0)]),
+  );
+
   // `id` é o id da CÓPIA do job — a chave que o realizado, o BV, a PP e o
   // save usam. `orcado_id` carrega o mesmo valor e fica por compatibilidade;
   // `item_versao_id` é `null` na linha que nasceu de uma errata.
@@ -482,6 +514,12 @@ export async function carregarDetalheDoJob(
     // Linha cancelada por errata (decisão 151): fica na planilha com o
     // orçado zerado e o planejado da abertura.
     cancelada_em: it.cancelada_em ?? null,
+    // O orçado da linha na abertura — a base da rentabilidade planejada
+    // (decisão 151, entrega 2). 0 na linha criada por errata. Sem a versão
+    // lida, `null`: vale o orçado de hoje.
+    orcado_abertura: itensDeVersaoLidos(itensDaVersaoRes)
+      ? orcadoDaLinhaNaAbertura(it.item_versao_id ?? null, orcadoNaVersao)
+      : null,
     bv_liquido_planejado:
       it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
         ? null
@@ -897,6 +935,22 @@ export async function carregarDetalheDoJob(
     Number(versaoAprovada.percentual_imposto),
     planilha.internacional,
   );
+  // O job como foi aberto (decisão 151, entrega 2): o lado PLANEJADO do
+  // resultado. Só depois da abertura do financeiro — antes dela não há
+  // "inicial" e "atual". `null` quando a versão não reproduz o
+  // `valor_job_abertura` gravado (ver `fechamentoDaAbertura`).
+  const aberturaDoJob =
+    raw.data_abertura_financeiro && itensDeVersaoLidos(itensDaVersaoRes)
+      ? fechamentoDaAbertura(
+          itensDaVersao,
+          Number(versaoAprovada.percentual_honorarios),
+          Number(versaoAprovada.percentual_imposto),
+          planilha.internacional,
+          raw.valor_job_abertura === null || raw.valor_job_abertura === undefined
+            ? null
+            : Number(raw.valor_job_abertura),
+        )
+      : null;
   // Passa pelos blocos com BV, e não pela soma crua das colunas: em `A` e
   // `D` o realizado é o ORÇADO (eles não geram PP e ficam em zero na
   // tabela), e o resumo do cabeçalho precisa bater com o card de Totais
@@ -1397,6 +1451,7 @@ export async function carregarDetalheDoJob(
     envios,
     faturamentoMensal,
     totaisJob,
+    aberturaDoJob,
     custoPlanejadoJob,
     custoRealizadoJob,
     bvPlanejadoJob,
@@ -1430,4 +1485,10 @@ export async function carregarDetalheDoJob(
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
   };
+}
+
+/** A leitura da versão deu certo e trouxe linhas? Sem ela não há foto da
+ *  abertura, e a tela fica como era. */
+function itensDeVersaoLidos(res: { error: unknown; data: unknown[] | null }): boolean {
+  return !res.error && (res.data ?? []).length > 0;
 }

@@ -195,6 +195,8 @@ export default async function PlanilhaDaAberturaPage({
     // Linha cancelada por errata (decisão 151): fica na planilha com o
     // orçado zerado e o planejado da abertura.
     cancelada_em: it.cancelada_em ?? null,
+    // A conferência é da abertura: o orçado de hoje É o da abertura.
+    orcado_abertura: null,
     bv_liquido_planejado:
       it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
         ? null

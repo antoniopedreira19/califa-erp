@@ -64,6 +64,8 @@ async function PlanilhaDaOrigemCarregada({
       papelEnviaPP={false}
       confirmarSaidaParaOrcamento
       edicaoDoFinanceiro={null}
+      // A planilha da origem é anterior à abertura (decisão 151).
+      aberturaDoJob={null}
       interno={detalhe.interno}
       savePorItem={detalhe.savePorItem}
       saldosDeSave={[]}
