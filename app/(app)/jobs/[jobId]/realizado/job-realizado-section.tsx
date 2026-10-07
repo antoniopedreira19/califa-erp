@@ -39,6 +39,7 @@ import type {
   ItemPlanilhaJob,
   JobItemRealizado,
   PedidoCompraNaLista,
+  PPAEmitir,
   Fornecedor,
   Empresa,
   ItemBv,
@@ -63,6 +64,7 @@ import {
   type PortaDoConsumo,
 } from "@/app/(app)/_planilha/save-dialog";
 import type { SaldoDeSave } from "@/lib/data/saves";
+import type { TomadorDaNf } from "./anexos-da-pp";
 import {
   cancelarPedidoDeSave,
   enviarSavesParaAprovacao,
@@ -259,6 +261,11 @@ interface Props {
   aberturaEmRevisao?: boolean;
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
+  /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
+  aEmitirPorItemId: Map<string, PPAEmitir[]>;
+  /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
+  tomadoresDaNf: TomadorDaNf[];
+  tomadorPorEmpresa: Record<string, string>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
@@ -312,6 +319,9 @@ export function JobRealizadoSection({
   jaEnviadoParaFaturamento = false,
   aberturaEmRevisao = false,
   ppsPorItemId,
+  aEmitirPorItemId,
+  tomadoresDaNf,
+  tomadorPorEmpresa,
   fornecedores,
   empresas,
   responsaveis,
@@ -964,6 +974,10 @@ export function JobRealizadoSection({
           preAbertura={preAbertura}
           aberturaEmRevisao={aberturaEmRevisao}
           ppsPorItemId={ppsPorItemId}
+          aEmitirPorItemId={aEmitirPorItemId}
+          statusDoJob={job.status}
+          tomadoresDaNf={tomadoresDaNf}
+          tomadorPorEmpresa={tomadorPorEmpresa}
           fornecedores={fornecedores}
           empresas={empresas}
           responsaveis={responsaveis}
@@ -1038,9 +1052,8 @@ export function JobRealizadoSection({
             {job.status === "aguardando_abertura"
               ? "Job aguardando abertura pelo financeiro — erratas e BVs ficam disponíveis após a abertura."
               : "Job devolvido pelo financeiro — erratas e BVs ficam disponíveis após a abertura."}{" "}
-            Pedidos de produção já podem ser <strong>gerados</strong>; o envio
-            ao financeiro é que espera a abertura, e o realizado só conta PP
-            enviada.
+            Por enquanto, só <strong>PPs a emitir</strong>: gerar e enviar a PP
+            voltam com a abertura.
           </span>
         </div>
       )}

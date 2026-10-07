@@ -180,6 +180,11 @@ export function PlanilhaConferencia({
           // Job aguardando abertura não tem PP: ela só existe depois de
           // aberto. O BV, sim — ele nasce no orçamento e chega aqui.
           ppsPorItemId={new Map()}
+          // Nem PP a emitir: a tela é só leitura (decisão 153).
+          aEmitirPorItemId={new Map()}
+          statusDoJob="aguardando_abertura"
+          tomadoresDaNf={[]}
+          tomadorPorEmpresa={{}}
           fornecedores={[]}
           empresas={[]}
           responsaveis={[]}

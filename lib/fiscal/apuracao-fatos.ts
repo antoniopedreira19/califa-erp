@@ -10,10 +10,13 @@
  *   com a empresa gerencial da própria nota, sem regional.
  * - **Recebimentos:** as baixas de `titulos_receber` (`titulo_baixa`), com
  *   o bruto = líquido + o que o cliente reteve (`baixas_retencoes`).
- * - **NFs de fornecedor:** as PPs aprovadas ou pagas com a NF registrada
- *   pelo financeiro na aprovação (`nf_*`), com as alíquotas decididas ali
- *   (`pedidos_compra_retencoes`) e os pagamentos (`pp_baixa`) com o que a
- *   agência de fato reteve.
+ * - **NFs de fornecedor (decisão 152, 07/10/2026):** o cadastro
+ *   `notas_fiscais_fornecedor`, uma linha por nota registrada pelo
+ *   financeiro, que cobre ao menos uma PP aprovada ou paga. A nota conta UMA
+ *   vez, pelo total, mesmo cobrindo mais de uma PP; o ISS retido sai da
+ *   alíquota guardada na nota. Os pagamentos (`pp_baixa`), com o que a
+ *   agência de fato reteve, vão na primeira nota de cada PP, com o código e
+ *   o job da PP que pagou.
  * - **Aprovações:** `fiscal_aprovacoes`.
  *
  * Limites conhecidos (a próxima entrega trata): o estorno parcial do valor
@@ -41,6 +44,8 @@ export interface FatosDoBanco {
 }
 
 const IMPOSTOS: readonly ImpostoRetido[] = ["ISS", "PIS", "COFINS", "CSLL", "IRRF"];
+/** As PPs cujas notas entram na Apuração. */
+const PP_QUE_CONTA = new Set(["aprovada", "pago"]);
 const INICIO = `${PRIMEIRA_COMPETENCIA}-01`;
 
 type Nome = { nome_fantasia: string | null; razao_social: string | null } | null;
@@ -105,18 +110,21 @@ interface RecebimentoDoBanco {
   retencoes: Array<{ imposto: string; valor: number | string }> | null;
 }
 
-interface PPDoBanco {
+interface NotaFornecedorDoBanco {
   id: string;
-  codigo: string;
-  nf_numero: string | null;
-  nf_data_emissao: string | null;
-  nf_valor: number | string | null;
-  nf_tomador_estabelecimento_id: string | null;
+  numero: string;
+  data_emissao: string;
+  valor: number | string;
+  tomador_estabelecimento_id: string;
+  iss_retido_aliquota: number | string | null;
   credito_pis_cofins_retirado: boolean | null;
   credito_pis_cofins_motivo: string | null;
+  registrada_na_pp_id: string | null;
   fornecedor: { nome: string | null; razao_social: string | null } | null;
-  job: JobDoBanco | null;
-  retencoes: Array<{ imposto: string; aliquota: number | string }> | null;
+  anexos: Array<{
+    created_at: string;
+    pp: { id: string; codigo: string; status: string; job: JobDoBanco | null } | null;
+  }> | null;
 }
 
 interface PagamentoDoBanco {
@@ -181,16 +189,15 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
       .eq("origem", "titulo_baixa")
       .gte("data_movimento", INICIO),
     supabase
-      .from("pedidos_compra")
+      .from("notas_fiscais_fornecedor")
       .select(
-        "id, codigo, nf_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, " +
-          "credito_pis_cofins_retirado, credito_pis_cofins_motivo, " +
-          `fornecedor:fornecedores(nome, razao_social), job:jobs(${SELECT_JOB}), ` +
-          "retencoes:pedidos_compra_retencoes(imposto, aliquota)",
+        "id, numero, data_emissao, valor, tomador_estabelecimento_id, iss_retido_aliquota, " +
+          "credito_pis_cofins_retirado, credito_pis_cofins_motivo, registrada_na_pp_id, " +
+          "fornecedor:fornecedores(nome, razao_social), " +
+          `anexos:pedidos_compra_anexos(created_at, pp:pedidos_compra(id, codigo, status, job:jobs(${SELECT_JOB})))`,
       )
       .eq("tenant_id", tenantId)
-      .in("status", ["aprovada", "pago"])
-      .not("nf_registrada_em", "is", null),
+      .not("registrada_em", "is", null),
     supabase
       .from("fiscal_aprovacoes")
       .select("chave, data, valor_calculado, valor_guia, diferenca, compensacoes_usadas, cotas")
@@ -207,9 +214,7 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
   }
 
   const notasBanco = (notasRes.data ?? []) as unknown as NotaDoBanco[];
-  const ppsBanco = ((ppsRes.data ?? []) as unknown as PPDoBanco[]).filter(
-    (p) => p.nf_data_emissao && p.nf_valor !== null && p.nf_tomador_estabelecimento_id && p.job,
-  );
+  const notasFornecedorBanco = (ppsRes.data ?? []) as unknown as NotaFornecedorDoBanco[];
 
   // Segunda rodada: os jobs das notas e os pagamentos das PPs.
   const idsDeJob = [
@@ -219,7 +224,14 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
       ),
     ),
   ];
-  const idsDePP = ppsBanco.map((p) => p.id);
+  // As PPs aprovadas ou pagas que as notas cobrem: os pagamentos delas.
+  const idsDePP = [
+    ...new Set(
+      notasFornecedorBanco.flatMap((n) =>
+        (n.anexos ?? []).filter((a) => a.pp && PP_QUE_CONTA.has(a.pp.status) && a.pp.job).map((a) => a.pp!.id),
+      ),
+    ),
+  ];
   const [jobsRes, pagamentosRes] = await Promise.all([
     idsDeJob.length
       ? supabase.from("jobs").select(SELECT_JOB).in("id", idsDeJob)
@@ -241,7 +253,7 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
     notas: notasBanco,
     jobs: (jobsRes.data ?? []) as unknown as JobDoBanco[],
     recebimentos: (recebimentosRes.data ?? []) as unknown as RecebimentoDoBanco[],
-    pps: ppsBanco,
+    notasFornecedor: notasFornecedorBanco,
     pagamentos: (pagamentosRes.data ?? []) as unknown as PagamentoDoBanco[],
     aprovacoes: (aprovacoesRes.data ?? []) as unknown as AprovacaoDoBanco[],
   });
@@ -253,7 +265,7 @@ export function montarFatos(e: {
   notas: NotaDoBanco[];
   jobs: JobDoBanco[];
   recebimentos: RecebimentoDoBanco[];
-  pps: PPDoBanco[];
+  notasFornecedor: NotaFornecedorDoBanco[];
   pagamentos: PagamentoDoBanco[];
   aprovacoes: AprovacaoDoBanco[];
 }): FatosDoBanco {
@@ -328,37 +340,67 @@ export function montarFatos(e: {
     pagamentosPorPP.set(p.pedido_compra_id, lista);
   }
 
-  const notasFornecedor: NotaFornecedorFiscal[] = e.pps.map((p) => {
-    const aliquotas: Partial<Record<ImpostoRetido, number>> = {};
-    for (const r of p.retencoes ?? []) {
-      const imposto = r.imposto as ImpostoRetido;
-      const a = Number(r.aliquota);
-      if (IMPOSTOS.includes(imposto) && Number.isFinite(a) && a > 0) aliquotas[imposto] = a;
+  // Decisão 152: cada nota entra uma vez. Só conta a nota que cobre ao
+  // menos uma PP aprovada ou paga — a PP que a registrou pode ter sido
+  // reprovada depois (decisão 083), e aí a nota espera a próxima.
+  type PPDaNota = { id: string; codigo: string; job: JobDoFato; anexada_em: string };
+  const notasComPPs = e.notasFornecedor
+    .map((n) => {
+      const pps = new Map<string, PPDaNota>();
+      for (const a of n.anexos ?? []) {
+        if (!a.pp || !PP_QUE_CONTA.has(a.pp.status) || !a.pp.job) continue;
+        const atual = pps.get(a.pp.id);
+        if (!atual || a.created_at < atual.anexada_em)
+          pps.set(a.pp.id, { id: a.pp.id, codigo: a.pp.codigo, job: jobDoFato(a.pp.job), anexada_em: a.created_at });
+      }
+      return { n, pps: [...pps.values()].sort((x, y) => x.codigo.localeCompare(y.codigo)) };
+    })
+    .filter((x) => x.pps.length > 0);
+
+  // A primeira nota de cada PP (na ordem em que foi anexada) leva os
+  // pagamentos dela: as retenções do pagamento são da PP, não da nota.
+  const primeiraNotaDaPP = new Map<string, { nota: string; em: string }>();
+  for (const { n, pps } of notasComPPs) {
+    for (const pp of pps) {
+      const atual = primeiraNotaDaPP.get(pp.id);
+      if (!atual || pp.anexada_em < atual.em || (pp.anexada_em === atual.em && n.id < atual.nota))
+        primeiraNotaDaPP.set(pp.id, { nota: n.id, em: pp.anexada_em });
     }
+  }
+
+  const notasFornecedor: NotaFornecedorFiscal[] = notasComPPs.map(({ n, pps }) => {
+    const iss = Number(n.iss_retido_aliquota);
+    // O job da nota: o da PP que a registrou, se ainda conta; senão, o da primeira.
+    const daQueRegistrou = pps.find((pp) => pp.id === n.registrada_na_pp_id) ?? pps[0];
     return {
-      id: p.id,
-      pp: p.codigo,
-      numero: p.nf_numero ?? "—",
-      fornecedor_nome: p.fornecedor?.nome?.trim() || p.fornecedor?.razao_social?.trim() || "—",
-      job: jobDoFato(p.job!),
-      tomador_estabelecimento_id: p.nf_tomador_estabelecimento_id!,
-      emissao: p.nf_data_emissao!,
-      valor: Number(p.nf_valor),
-      aliquotas_aprovacao: aliquotas,
-      sem_credito: Boolean(p.credito_pis_cofins_retirado),
-      motivo_sem_credito: p.credito_pis_cofins_motivo,
-      pagamentos: (pagamentosPorPP.get(p.id) ?? [])
-        .slice()
-        .sort((a, b) => a.data_movimento.localeCompare(b.data_movimento))
-        .map((pg) => {
-          const retido = retidoDe(pg.retencoes);
-          return {
-            id: pg.id,
-            data: pg.data_movimento,
-            bruto: Math.round((Number(pg.valor) + somaRetida(retido)) * 100) / 100,
-            retido,
-          };
-        }),
+      id: n.id,
+      pp: pps.map((pp) => pp.codigo).join(", "),
+      pp_ids: pps.map((pp) => pp.id),
+      numero: n.numero,
+      fornecedor_nome: n.fornecedor?.nome?.trim() || n.fornecedor?.razao_social?.trim() || "—",
+      job: daQueRegistrou.job,
+      tomador_estabelecimento_id: n.tomador_estabelecimento_id,
+      emissao: n.data_emissao,
+      valor: Number(n.valor),
+      aliquotas_aprovacao: Number.isFinite(iss) && iss > 0 ? { ISS: iss } : {},
+      sem_credito: Boolean(n.credito_pis_cofins_retirado),
+      motivo_sem_credito: n.credito_pis_cofins_motivo,
+      pagamentos: pps
+        .filter((pp) => primeiraNotaDaPP.get(pp.id)?.nota === n.id)
+        .flatMap((pp) =>
+          (pagamentosPorPP.get(pp.id) ?? []).map((pg) => {
+            const retido = retidoDe(pg.retencoes);
+            return {
+              id: pg.id,
+              data: pg.data_movimento,
+              bruto: Math.round((Number(pg.valor) + somaRetida(retido)) * 100) / 100,
+              retido,
+              pp: pp.codigo,
+              job: pp.job,
+            };
+          }),
+        )
+        .sort((a, b) => a.data.localeCompare(b.data)),
     };
   });
 

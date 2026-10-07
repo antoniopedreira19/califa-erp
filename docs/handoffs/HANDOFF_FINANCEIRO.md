@@ -6744,3 +6744,22 @@ estendido a Contas a Receber em 31/08.**
 - Fee e Always On enviados daqui em diante não têm data de evento: não
   aparecem marcados num dia da grade do Calendário de Jobs (seguem
   contando como ativos entre início e fim). Ver decisão 149.
+
+## ⚠️ Nota de 2026-10-07 — a NF do fornecedor com cadastro próprio (decisão 152)
+
+- A NF do fornecedor virou cadastro próprio (`notas_fiscais_fornecedor`),
+  identificado por fornecedor + número. Uma nota pode cobrir mais de uma
+  PP; cada PP guarda a sua parte (`pedidos_compra_anexos.nf_valor_na_pp`).
+- **A nota conta uma vez só, pelo total**, quando a 1ª PP que a traz é
+  aprovada. A 2ª PP mostra "Registrada na aprovação da PP-…" e o crédito
+  "já na apuração". As retenções da PP (CSRF, IRRF) usam a parte dela.
+- Na aprovação, os dados de cada NF vêm preenchidos pela produção e são
+  editáveis; a correção vale para todas as PPs da nota.
+  `registrar_notas_fiscais_da_pp` substitui `registrar_nf_da_pp` (que fica
+  no banco sem uso). As colunas `pedidos_compra.nf_*` ficam como histórico.
+- A Apuração lê as notas registradas: uma nota conta enquanto ao menos uma
+  PP aprovada ou paga a cobre.
+- Rejeitar e reprovar PP: a produção agora cancela e refaz a PP, com outro
+  código (decisão 153). Os textos dos dois diálogos mudaram.
+- Pendência pedida pelo Tiago para depois desta entrega: mapear as PPs com
+  mais de uma NF anexada ainda não registradas, para registro retroativo.

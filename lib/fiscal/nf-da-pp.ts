@@ -11,8 +11,12 @@
  * `registrar_nf_da_pp`.
  *
  * Decisão do Tiago (02/10/2026): a data de emissão e o valor da NF são
- * registrados SÓ pelo financeiro, na aprovação, olhando a nota ao lado. A
- * produção continua informando só o número, no anexo — como hoje.
+ * registrados SÓ pelo financeiro, na aprovação, olhando a nota ao lado.
+ * ⚠️ Revista pela decisão 152 (07/10/2026): a NF virou cadastro próprio
+ * (`notas_fiscais_fornecedor`), a PP pode ter várias e uma nota pode cobrir
+ * mais de uma PP. A produção informa os dados de cada nota no envio; o
+ * financeiro confere e corrige, e a correção vale para todas as PPs da nota.
+ * A nota conta UMA vez no fiscal, pelo total, a partir do registro.
  *
  * Funções puras. A leitura do banco fica em `aprovacao-da-pp.ts`.
  * Testes: node --import tsx --test lib/fiscal/nf-da-pp.test.ts
@@ -79,68 +83,166 @@ export function regimeDoFornecedorDaPP(
   };
 }
 
-/** A NF que o financeiro registrou na aprovação (as colunas `nf_*` da PP). */
-export interface NotaFiscalRegistradaDaPP {
-  numero: string;
-  data_emissao: string;
-  valor: number;
-  tomador_estabelecimento_id: string;
-  registrada_em: string;
+/** O registro fiscal da nota no cadastro (`notas_fiscais_fornecedor`). */
+export interface RegistroDaNota {
+  em: string;
+  /** "PP-00110": a PP em cuja aprovação a nota foi registrada. */
+  na_pp: string | null;
+  /** O ISS retido decidido naquela aprovação (a guia sai do total da nota). */
+  iss_aliquota: number | null;
   credito_retirado: boolean;
   credito_motivo: string | null;
 }
 
 /**
- * A NF do fornecedor na linha da PP. Só existe quando a PP tem anexo do
- * tipo NF e não é verba de produção — fora disso o grupo "Nota fiscal do
- * fornecedor" não aparece e a aprovação segue como antes.
+ * Uma NF da PP — um anexo do tipo NF (decisão 152). Os dados são os da nota
+ * do cadastro quando o anexo já está ligado a ela; antes disso, os que a
+ * produção informou no anexo.
  */
-export interface NotaFiscalDaLinhaPP {
-  /** O número que a produção informou no anexo do tipo NF (o primeiro). */
-  numero_do_anexo: string | null;
-  /** O que o financeiro registrou; null enquanto não registrou. */
-  registrada: NotaFiscalRegistradaDaPP | null;
+export interface NotaDaLinhaPP {
+  anexo_id: string;
+  arquivo_nome: string;
+  nota_id: string | null;
+  numero: string;
+  /** "AAAA-MM-DD". */
+  emissao: string | null;
+  /** O valor TOTAL da nota. */
+  valor: number | null;
+  tomador: string | null;
+  /** A parte da nota que é desta PP (null = a nota inteira). */
+  valor_na_pp: number | null;
+  /** Null enquanto a nota não foi registrada pelo financeiro. */
+  registrada: RegistroDaNota | null;
+  /** As outras PPs (não canceladas) que esta nota cobre. */
+  outras_pps: Array<{ codigo: string; valor_na_pp: number }>;
 }
 
-/** O que a consulta da PP traz para montar `NotaFiscalDaLinhaPP`. */
-export interface ColunasDaNfNaPP {
-  verba_producao: boolean | null;
-  anexos: Array<{
-    documento_tipo: DocumentoTipo | null;
-    documento_numero: string | null;
-    created_at: string;
-  }> | null;
-  nf_numero: string | null;
+/**
+ * As NFs do fornecedor na linha da PP. Só existe quando a PP tem anexo do
+ * tipo NF e não é verba de produção — fora disso o grupo "Notas fiscais do
+ * fornecedor" não aparece e a aprovação segue como antes.
+ */
+export interface NotasFiscaisDaLinhaPP {
+  /** Na ordem em que os arquivos foram anexados. */
+  notas: NotaDaLinhaPP[];
+  /** O financeiro conferiu as notas desta PP na aprovação (`nf_registrada_em`). */
+  conferidas_em: string | null;
+}
+
+/**
+ * O anexo com a nota, como `SELECT_ANEXOS_COM_NOTA` traz. As colunas `nf_*`
+ * do anexo são o que a produção informou; `nota`, o cadastro.
+ */
+export interface AnexoComNotaDoBanco {
+  id: string;
+  arquivo_nome_original: string;
+  documento_tipo: DocumentoTipo | null;
+  documento_numero: string | null;
+  created_at: string;
   nf_data_emissao: string | null;
   nf_valor: string | number | null;
   nf_tomador_estabelecimento_id: string | null;
-  nf_registrada_em: string | null;
-  credito_pis_cofins_retirado: boolean | null;
-  credito_pis_cofins_motivo: string | null;
+  nf_valor_na_pp: string | number | null;
+  nota: {
+    id: string;
+    numero: string;
+    data_emissao: string;
+    valor: string | number;
+    tomador_estabelecimento_id: string;
+    registrada_em: string | null;
+    iss_retido_aliquota: string | number | null;
+    credito_pis_cofins_retirado: boolean | null;
+    credito_pis_cofins_motivo: string | null;
+    registrada_na_pp: { codigo: string } | null;
+    anexos: Array<{
+      pedido_compra_id: string;
+      nf_valor_na_pp: string | number | null;
+      pp: { codigo: string; status: string } | null;
+    }> | null;
+  } | null;
 }
 
-export function notaFiscalDaLinhaPP(r: ColunasDaNfNaPP): NotaFiscalDaLinhaPP | null {
+/**
+ * O embed dos anexos com a nota e as outras PPs dela. Três chaves entre as
+ * tabelas (anexo → nota, nota → anexos, nota → PP que registrou): a última
+ * vai com o nome da coluna, senão o PostgREST recusa por ambiguidade.
+ */
+export const SELECT_ANEXOS_COM_NOTA = `anexos:pedidos_compra_anexos(
+          id, arquivo_nome_original, arquivo_tamanho_bytes, created_at,
+          documento_tipo, documento_numero,
+          nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_valor_na_pp,
+          nota:notas_fiscais_fornecedor(
+            id, numero, data_emissao, valor, tomador_estabelecimento_id,
+            registrada_em, iss_retido_aliquota,
+            credito_pis_cofins_retirado, credito_pis_cofins_motivo,
+            registrada_na_pp:pedidos_compra!registrada_na_pp_id(codigo),
+            anexos:pedidos_compra_anexos(pedido_compra_id, nf_valor_na_pp, pp:pedidos_compra(codigo, status))
+          )
+        )`;
+
+/** O que a consulta da PP traz para montar `NotasFiscaisDaLinhaPP`. */
+export interface ColunasDaNfNaPP {
+  id: string;
+  verba_producao: boolean | null;
+  nf_registrada_em: string | null;
+  anexos: AnexoComNotaDoBanco[] | null;
+}
+
+const numeroOuNull = (v: string | number | null | undefined): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+export function notasFiscaisDaLinhaPP(r: ColunasDaNfNaPP): NotasFiscaisDaLinhaPP | null {
   if (r.verba_producao) return null;
   const anexosNf = (r.anexos ?? [])
     .filter((a) => a.documento_tipo === "nota_fiscal")
+    .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
   if (anexosNf.length === 0) return null;
-  const numero =
-    anexosNf.map((a) => (a.documento_numero ?? "").trim()).find((n) => n !== "") ?? null;
-  // `registrar_nf_da_pp` grava os quatro juntos; um só preenchido não é registro.
-  const registrada: NotaFiscalRegistradaDaPP | null =
-    r.nf_registrada_em && r.nf_data_emissao && r.nf_valor != null && r.nf_tomador_estabelecimento_id
-      ? {
-          numero: r.nf_numero ?? "",
-          data_emissao: r.nf_data_emissao.slice(0, 10),
-          valor: Number(r.nf_valor),
-          tomador_estabelecimento_id: r.nf_tomador_estabelecimento_id,
-          registrada_em: r.nf_registrada_em,
-          credito_retirado: r.credito_pis_cofins_retirado === true,
-          credito_motivo: r.credito_pis_cofins_motivo ?? null,
-        }
-      : null;
-  return { numero_do_anexo: numero, registrada };
+  const notas = anexosNf.map((a): NotaDaLinhaPP => {
+    const n = a.nota;
+    return {
+      anexo_id: a.id,
+      arquivo_nome: a.arquivo_nome_original,
+      nota_id: n?.id ?? null,
+      numero: (n?.numero ?? a.documento_numero ?? "").trim(),
+      emissao: (n?.data_emissao ?? a.nf_data_emissao)?.slice(0, 10) ?? null,
+      valor: numeroOuNull(n ? n.valor : a.nf_valor),
+      tomador: n?.tomador_estabelecimento_id ?? a.nf_tomador_estabelecimento_id ?? null,
+      valor_na_pp: numeroOuNull(a.nf_valor_na_pp),
+      registrada: n?.registrada_em
+        ? {
+            em: n.registrada_em,
+            na_pp: n.registrada_na_pp?.codigo ?? null,
+            iss_aliquota: numeroOuNull(n.iss_retido_aliquota),
+            credito_retirado: n.credito_pis_cofins_retirado === true,
+            credito_motivo: n.credito_pis_cofins_motivo ?? null,
+          }
+        : null,
+      outras_pps: (n?.anexos ?? [])
+        .filter((x) => x.pedido_compra_id !== r.id && x.pp && x.pp.status !== "cancelada")
+        .map((x) => ({ codigo: x.pp!.codigo, valor_na_pp: numeroOuNull(x.nf_valor_na_pp) ?? 0 }))
+        .sort((x, y) => x.codigo.localeCompare(y.codigo)),
+    };
+  });
+  return { notas, conferidas_em: r.nf_registrada_em };
+}
+
+/** "602", ou "602, 603" quando a PP tem mais de uma nota. Null sem número. */
+export function numerosDasNotas(n: NotasFiscaisDaLinhaPP | null): string | null {
+  const numeros = (n?.notas ?? []).map((x) => x.numero).filter((x) => x !== "");
+  return numeros.length ? numeros.join(", ") : null;
+}
+
+/**
+ * A chave que identifica a mesma nota do mesmo fornecedor — o espelho de
+ * `public.chave_do_numero_da_nf`: sem pontuação, espaços e zeros à esquerda.
+ */
+export function chaveDoNumeroDaNf(numero: string): string | null {
+  const s = numero.toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^0+/, "");
+  return s === "" ? null : s;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,43 +276,85 @@ export function rotuloCurtoDoRegime(regime: RegimeTributarioFornecedor | null): 
 // ---------------------------------------------------------------------------
 
 export interface NfEmConferencia {
+  /** O anexo do tipo NF que esta nota é. */
+  anexo_id: string;
   numero: string;
-  /** "AAAA-MM-DD"; vazia até o financeiro informar. */
+  /** "AAAA-MM-DD"; vazia até alguém informar. */
   emissao: string;
-  /** Zero até o financeiro informar. */
+  /** O valor TOTAL da nota. Zero até alguém informar. */
   valor: number;
   /** `fiscal_estabelecimentos.id`; vazio só quando o cadastro não tem CNPJ ativo. */
   tomador: string;
+  /** A parte da nota nesta PP — só vale com `cobre_outra`. */
+  valor_na_pp: number;
+  /** "Esta NF também cobre outra PP": a parte deixa de ser a nota inteira. */
+  cobre_outra: boolean;
 }
 
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
 /**
- * Começa no que já está registrado na PP; sem registro, no número do anexo
- * e no CNPJ tomador sugerido, com a data e o valor em branco.
+ * Começa no que a linha traz (o cadastro, ou o que a produção informou);
+ * sem tomador, no CNPJ tomador sugerido. A parte começa no que o anexo
+ * guardou; na nota que já está em outra PP, no que falta da nota.
  */
-export function nfInicial(nota: NotaFiscalDaLinhaPP, tomadorPadrao: string | null): NfEmConferencia {
-  const r = nota.registrada;
-  if (r) {
-    return {
-      numero: r.numero,
-      emissao: r.data_emissao,
-      valor: r.valor,
-      tomador: r.tomador_estabelecimento_id,
-    };
-  }
-  return { numero: nota.numero_do_anexo ?? "", emissao: "", valor: 0, tomador: tomadorPadrao ?? "" };
+export function nfInicial(nota: NotaDaLinhaPP, tomadorPadrao: string | null): NfEmConferencia {
+  const valor = nota.valor ?? 0;
+  const jaNasOutras = nota.outras_pps.reduce((s, o) => s + o.valor_na_pp, 0);
+  const parteGuardada = nota.valor_na_pp;
+  const cobreOutra =
+    nota.outras_pps.length > 0 ||
+    (parteGuardada !== null && valor > 0 && Math.abs(parteGuardada - valor) > 0.004);
+  const parte =
+    parteGuardada ?? (nota.outras_pps.length > 0 ? Math.max(0, r2(valor - jaNasOutras)) : valor);
+  return {
+    anexo_id: nota.anexo_id,
+    numero: nota.numero,
+    emissao: nota.emissao ?? "",
+    valor,
+    tomador: nota.tomador ?? tomadorPadrao ?? "",
+    valor_na_pp: parte,
+    cobre_outra: cobreOutra,
+  };
+}
+
+/** A parte da nota que é desta PP: a nota inteira, salvo quando cobre outra. */
+export function parteDaNota(nf: NfEmConferencia): number {
+  return nf.cobre_outra ? nf.valor_na_pp : nf.valor;
+}
+
+/** A soma das partes das notas desta PP — a base das retenções do pagamento. */
+export function somaDasPartes(nfs: readonly NfEmConferencia[]): number {
+  return r2(nfs.reduce((s, nf) => s + parteDaNota(nf), 0));
 }
 
 /** Sem data de emissão ou valor, não há mês de crédito nem base de retenção. */
 export function nfIncompleta(nf: NfEmConferencia): boolean {
-  return !nf.emissao || !(nf.valor > 0);
+  return !nf.emissao || !(nf.valor > 0) || !(parteDaNota(nf) > 0);
 }
 
-/** O que impede aprovar com esta NF (null = nada). */
-export function faltaNaNfParaAprovar(nf: NfEmConferencia): string | null {
-  if (!nf.numero.trim() || nfIncompleta(nf)) {
-    return "Preencha a nota fiscal do fornecedor em “Dados da PP”, olhando a nota ao lado: número, data de emissão e valor são obrigatórios para aprovar.";
+/** O que impede aprovar com estas notas (null = nada). */
+export function faltaNasNotasParaAprovar(nfs: readonly NfEmConferencia[]): string | null {
+  for (const nf of nfs) {
+    const qual = nfs.length > 1 && nf.numero.trim() ? ` da NF ${nf.numero.trim()}` : "";
+    if (!nf.numero.trim()) {
+      return "Preencha o número de cada nota fiscal em “Dados da PP”, olhando a nota ao lado.";
+    }
+    if (!nf.emissao || !(nf.valor > 0)) {
+      return `Preencha a data de emissão e o valor${qual} em “Dados da PP”, olhando a nota ao lado.`;
+    }
+    if (!nf.tomador) return `Escolha o CNPJ tomador${qual} em “Dados da PP”.`;
+    if (nf.cobre_outra && !(nf.valor_na_pp > 0)) {
+      return `Informe o valor${qual} nesta PP.`;
+    }
+    if (nf.cobre_outra && nf.valor_na_pp > nf.valor + 0.004) {
+      return `O valor${qual} nesta PP não pode passar do valor da nota.`;
+    }
   }
-  if (!nf.tomador) return "Escolha o CNPJ tomador da NF em “Dados da PP”.";
+  const chaves = nfs.map((nf) => chaveDoNumeroDaNf(nf.numero));
+  if (chaves.some((c, i) => c !== null && chaves.indexOf(c) !== i)) {
+    return "A mesma NF aparece duas vezes nesta PP.";
+  }
   return null;
 }
 

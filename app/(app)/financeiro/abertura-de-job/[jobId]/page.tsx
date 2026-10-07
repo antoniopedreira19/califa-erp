@@ -486,6 +486,9 @@ export default async function AbrirJobNoFinanceiroPage({
             podeExportarInterna={podeExportarInterna}
             podeConfirmarBv={false}
             ppsPorItemId={detalhe.ppsPorItemId}
+            aEmitirPorItemId={detalhe.aEmitirPorItemId}
+            tomadoresDaNf={detalhe.tomadoresDaNf}
+            tomadorPorEmpresa={detalhe.tomadorPorEmpresa}
             fornecedores={detalhe.fornecedores}
             empresas={detalhe.empresas}
             responsaveis={detalhe.responsaveis}

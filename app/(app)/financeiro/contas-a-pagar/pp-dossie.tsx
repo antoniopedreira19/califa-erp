@@ -52,8 +52,12 @@ import {
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import {
   nfIncompleta,
+  nfInicial,
+  somaDasPartes,
   textoDoRegime,
   type NfEmConferencia,
+  type NotaDaLinhaPP,
+  type NotasFiscaisDaLinhaPP,
 } from "@/lib/fiscal/nf-da-pp";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
@@ -95,7 +99,8 @@ export function PPDossie({
   anexoAtivo,
   onAnexo,
   onErro,
-  nf,
+  notas,
+  nfs,
   onNf,
   estabelecimentos,
 }: {
@@ -106,9 +111,11 @@ export function PPDossie({
   anexoAtivo: number;
   onAnexo: (i: number) => void;
   onErro: (mensagem: string) => void;
-  /** Módulo fiscal: a NF em conferência (a tela guarda; aqui se edita).
-   *  Null quando a PP não tem NF anexada. */
-  nf: NfEmConferencia | null;
+  /** Módulo fiscal: as NFs da PP (uma por anexo do tipo NF, decisão 152)
+   *  e cada uma em conferência (a tela guarda; aqui se edita), na mesma
+   *  ordem. Null quando a PP não tem NF anexada. */
+  notas: NotasFiscaisDaLinhaPP | null;
+  nfs: NfEmConferencia[] | null;
   onNf: (nf: NfEmConferencia) => void;
   /** Os CNPJs do cadastro de impostos — o CNPJ tomador da NF. */
   estabelecimentos: FiscalEstabelecimento[];
@@ -345,12 +352,17 @@ export function PPDossie({
           </Grupo>
           )}
 
-          {/* Módulo fiscal: a NF do fornecedor, conferida aqui, ao lado da nota. */}
-          <NotaFiscalDoFornecedor
+          {/* Módulo fiscal: as NFs do fornecedor, conferidas aqui, ao lado da nota. */}
+          <NotasFiscaisDoFornecedor
             pp={pp}
-            nf={nf}
+            notas={notas}
+            nfs={nfs}
             onNf={onNf}
             estabelecimentos={estabelecimentos}
+            onVer={(anexoId) => {
+              const i = pp.anexos.findIndex((a) => a.id === anexoId);
+              if (i >= 0) onAnexo(i);
+            }}
           />
 
           <Historico pp={pp} />
@@ -725,14 +737,20 @@ function isoDoDia(d: Date): string {
 }
 
 /**
- * Módulo fiscal: a nota fiscal do fornecedor (02/10/2026).
+ * Módulo fiscal: as notas fiscais do fornecedor (02/10/2026; decisão 152 —
+ * 07/10/2026).
  *
- * O número vem do anexo do tipo NF, que a produção preenche ao gerar a PP.
- * A data de emissão, o valor e o CNPJ tomador, quem registra é o
- * financeiro, aqui, olhando a nota no painel do meio — decisão do Tiago: a
- * produção continua informando só o número. A data de emissão decide o mês
- * do crédito de PIS/COFINS; o valor é a base das retenções do pop-up de
- * aprovação. Tudo grava junto com a aprovação (`aprovarPPComNotaFiscal`).
+ * Uma ficha por anexo do tipo NF. A produção informa os dados de cada nota
+ * no envio; o financeiro confere aqui, olhando a nota no painel do meio
+ * ("Ver" abre o arquivo dela), e corrige o que precisar — a correção vale
+ * para todas as PPs ligadas à nota. A data de emissão decide o mês do
+ * crédito de PIS/COFINS; a soma das partes desta PP é a base das retenções
+ * do pop-up de aprovação. Tudo grava junto com a aprovação
+ * (`aprovarPPComNotaFiscal`).
+ *
+ * Uma nota pode cobrir mais de uma PP: o valor é o TOTAL da nota, e "Esta
+ * NF também cobre outra PP" abre o valor desta PP. Na nota que já está em
+ * outra PP, o campo já vem aberto, com as outras PPs embaixo.
  *
  * Editável só em avaliação. Nos outros status, o que ficou registrado — e
  * nada na PP que saiu da avaliação sem registro (aprovada antes do módulo
@@ -740,57 +758,133 @@ function isoDoDia(d: Date): string {
  * (número e valor) é a estreita; a da direita (data e CNPJ), a que precisa
  * de largura.
  */
-function NotaFiscalDoFornecedor({
+function NotasFiscaisDoFornecedor({
   pp,
-  nf,
+  notas,
+  nfs,
   onNf,
+  estabelecimentos,
+  onVer,
+}: {
+  pp: PPRow;
+  notas: NotasFiscaisDaLinhaPP | null;
+  nfs: NfEmConferencia[] | null;
+  onNf: (nf: NfEmConferencia) => void;
+  estabelecimentos: FiscalEstabelecimento[];
+  /** Abre o arquivo da nota no painel do meio. */
+  onVer: (anexoId: string) => void;
+}) {
+  if (!notas) return null;
+  const editavel = pp.status === "em_avaliacao" && nfs !== null;
+  // Fora da avaliação: só as notas que o financeiro registrou.
+  const lista: Array<{ nota: NotaDaLinhaPP; nf: NfEmConferencia }> = editavel
+    ? notas.notas.map((nota, i) => ({ nota, nf: nfs[i] }))
+    : notas.notas
+        .filter((nota) => nota.registrada)
+        .map((nota) => ({ nota, nf: nfInicial(nota, null) }));
+  if (lista.length === 0) return null;
+
+  const varias = lista.length > 1;
+  const soma = somaDasPartes(lista.map((x) => x.nf));
+  const completas = lista.every((x) => !nfIncompleta(x.nf));
+  const difereDaPP = completas && Math.abs(soma - pp.valor) > 0.004;
+
+  return (
+    <div>
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        {varias ? `Notas fiscais do fornecedor (${lista.length})` : "Nota fiscal do fornecedor"}
+      </p>
+      <div className={cn(varias && "space-y-2")}>
+        {lista.map(({ nota, nf }, i) => (
+          <FichaDaNota
+            key={nota.anexo_id}
+            pp={pp}
+            nota={nota}
+            nf={nf}
+            indice={varias ? i + 1 : null}
+            editavel={editavel}
+            onNf={onNf}
+            onVer={() => onVer(nota.anexo_id)}
+            estabelecimentos={estabelecimentos}
+          />
+        ))}
+      </div>
+
+      {editavel && !completas ? (
+        <p className="mt-2 text-[11px] font-semibold leading-snug text-amber-800">
+          Preencha a data de emissão e o valor com os da nota ao lado.
+        </p>
+      ) : (
+        !editavel && (
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+            Registrado pelo financeiro na aprovação.
+          </p>
+        )
+      )}
+      {difereDaPP && (
+        <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-800">
+          {varias ? "As notas somam" : "A NF é de"} {formatCurrency(soma, "BRL")} nesta PP; a PP,
+          de {formatCurrency(pp.valor, "BRL")}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FichaDaNota({
+  pp,
+  nota,
+  nf,
+  indice,
+  editavel,
+  onNf,
+  onVer,
   estabelecimentos,
 }: {
   pp: PPRow;
-  nf: NfEmConferencia | null;
+  nota: NotaDaLinhaPP;
+  nf: NfEmConferencia;
+  /** "1", "2"… com mais de uma nota; null com uma só. */
+  indice: number | null;
+  editavel: boolean;
   onNf: (nf: NfEmConferencia) => void;
+  onVer: () => void;
   estabelecimentos: FiscalEstabelecimento[];
 }) {
-  const registro = pp.nota_fiscal;
-  if (!registro) return null;
-
-  const editavel = pp.status === "em_avaliacao" && nf !== null;
-  let atual: NfEmConferencia;
-  if (editavel && nf) {
-    atual = nf;
-  } else if (registro.registrada) {
-    atual = {
-      numero: registro.registrada.numero,
-      emissao: registro.registrada.data_emissao,
-      valor: registro.registrada.valor,
-      tomador: registro.registrada.tomador_estabelecimento_id,
-    };
-  } else {
-    return null;
-  }
-
-  // A data e o valor são do financeiro: enquanto faltarem, a aprovação não
-  // tem base de retenção nem mês de crédito.
-  const falta = editavel && nfIncompleta(atual);
-  const difereDaPP = atual.valor > 0 && Math.abs(atual.valor - pp.valor) > 0.004;
   // O CNPJ é o que se confere com a nota; o nome fica na lista.
   const cnpjDoTomador = (id: string) => {
     const e = estabelecimentos.find((x) => x.id === id);
     return e ? formatarCnpj(e.cnpj) : "—";
   };
   const ativos = estabelecimentos.filter((e) => e.ativo && e.cnpj);
+  const id = `pp-nf-${nota.anexo_id}`;
+  const outras = nota.outras_pps;
+  // A nota que outra PP já registrou: o crédito e o ISS retido dela já
+  // estão na Apuração; a correção daqui vale para as duas.
+  const registradaEmOutra = nota.registrada && nota.registrada.na_pp !== pp.codigo ? nota.registrada : null;
 
   return (
-    <div>
-      <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        Nota fiscal do fornecedor
-      </p>
+    <div className={cn(indice !== null && "rounded-lg border border-border bg-white p-2")}>
+      {indice !== null && (
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold" title={nota.arquivo_nome}>
+            {indice} · {nota.arquivo_nome}
+          </span>
+          <button
+            type="button"
+            onClick={onVer}
+            className="flex-none text-[11px] font-semibold text-california-red underline-offset-2 hover:underline"
+          >
+            Ver
+          </button>
+        </div>
+      )}
 
-      {editavel && nf ? (
+      {editavel ? (
         <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-2 gap-y-2">
-          <CampoDaNF rotulo="Número" htmlFor="pp-nf-numero">
+          <CampoDaNF rotulo="Número" htmlFor={`${id}-numero`}>
             <Input
-              id="pp-nf-numero"
+              id={`${id}-numero`}
               value={nf.numero}
               onChange={(e) => onNf({ ...nf, numero: e.target.value })}
               inputMode="numeric"
@@ -799,36 +893,33 @@ function NotaFiscalDoFornecedor({
               className="h-8 px-2 py-1 font-mono text-xs"
             />
           </CampoDaNF>
-          <CampoDaNF rotulo="Data de emissão" htmlFor="pp-nf-emissao">
+          <CampoDaNF rotulo="Data de emissão" htmlFor={`${id}-emissao`}>
             {/* O DatePicker só lê o valor quando monta: a aba Dados remonta
                 com o que está na conferência, e a tela zera a conferência
                 ao fechar. */}
             <DatePicker
-              key={pp.id}
-              id="pp-nf-emissao"
-              name="pp_nf_emissao"
+              key={`${pp.id}-${nota.anexo_id}`}
+              id={`${id}-emissao`}
+              name={`pp_nf_emissao_${nota.anexo_id}`}
               defaultValue={nf.emissao || undefined}
               placeholder="Selecione"
               onDateChange={(d) => onNf({ ...nf, emissao: d ? isoDoDia(d) : "" })}
               className="h-8 px-2 text-xs"
             />
           </CampoDaNF>
-          <CampoDaNF rotulo="Valor da NF" htmlFor="pp-nf-valor">
+          <CampoDaNF rotulo="Valor da NF" htmlFor={`${id}-valor`}>
             <MoneyInput
-              id="pp-nf-valor"
+              id={`${id}-valor`}
               value={nf.valor}
               onValueChange={(v) => onNf({ ...nf, valor: v })}
               aria-label="Valor da NF"
               className="h-8 px-2 text-[11.5px]"
             />
           </CampoDaNF>
-          <CampoDaNF rotulo="CNPJ tomador" htmlFor="pp-nf-tomador">
-            <Select
-              value={nf.tomador || undefined}
-              onValueChange={(v) => onNf({ ...nf, tomador: v })}
-            >
+          <CampoDaNF rotulo="CNPJ tomador" htmlFor={`${id}-tomador`}>
+            <Select value={nf.tomador || undefined} onValueChange={(v) => onNf({ ...nf, tomador: v })}>
               <SelectTrigger
-                id="pp-nf-tomador"
+                id={`${id}-tomador`}
                 aria-label="CNPJ tomador"
                 className="h-8 px-2 font-mono text-[11px]"
               >
@@ -843,46 +934,64 @@ function NotaFiscalDoFornecedor({
               </SelectContent>
             </Select>
           </CampoDaNF>
+          {nf.cobre_outra && (
+            <CampoDaNF rotulo="Valor nesta PP" htmlFor={`${id}-parte`}>
+              <MoneyInput
+                id={`${id}-parte`}
+                value={nf.valor_na_pp}
+                onValueChange={(v) => onNf({ ...nf, valor_na_pp: v })}
+                aria-label="Valor nesta PP"
+                className="h-8 px-2 text-[11.5px]"
+              />
+            </CampoDaNF>
+          )}
         </div>
       ) : (
         <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-2 gap-y-1.5">
-          <LeituraDaNF
-            rotulo="Número"
-            valor={<span className="font-mono">{atual.numero || "—"}</span>}
-          />
-          <LeituraDaNF rotulo="Data de emissão" valor={formatDate(atual.emissao || null)} />
+          <LeituraDaNF rotulo="Número" valor={<span className="font-mono">{nf.numero || "—"}</span>} />
+          <LeituraDaNF rotulo="Data de emissão" valor={formatDate(nf.emissao || null)} />
           <LeituraDaNF
             rotulo="Valor da NF"
-            valor={<span className="font-mono">{formatCurrency(atual.valor, "BRL")}</span>}
+            valor={<span className="font-mono">{formatCurrency(nf.valor, "BRL")}</span>}
           />
           <LeituraDaNF
             rotulo="CNPJ tomador"
-            valor={<span className="font-mono">{cnpjDoTomador(atual.tomador)}</span>}
+            valor={<span className="font-mono">{cnpjDoTomador(nf.tomador)}</span>}
           />
+          {nf.cobre_outra && (
+            <LeituraDaNF
+              rotulo="Valor nesta PP"
+              valor={<span className="font-mono">{formatCurrency(nf.valor_na_pp, "BRL")}</span>}
+            />
+          )}
         </dl>
       )}
 
-      {falta ? (
-        <p className="mt-2 text-[11px] font-semibold leading-snug text-amber-800">
-          Preencha a data de emissão e o valor com os da nota ao lado.
-        </p>
-      ) : (
-        !editavel && (
-          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-            Registrado pelo financeiro na aprovação.
-          </p>
-        )
+      {editavel && outras.length === 0 && (
+        <button
+          type="button"
+          onClick={() =>
+            onNf({
+              ...nf,
+              cobre_outra: !nf.cobre_outra,
+              valor_na_pp: nf.cobre_outra ? nf.valor : nf.valor_na_pp || nf.valor,
+            })
+          }
+          className="mt-1.5 text-[11px] font-semibold text-california-red underline-offset-2 hover:underline"
+        >
+          {nf.cobre_outra ? "Esta NF é só desta PP" : "Esta NF também cobre outra PP"}
+        </button>
       )}
-      {difereDaPP && (
-        <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-800">
-          A NF é de {formatCurrency(atual.valor, "BRL")}; a PP, de{" "}
-          {formatCurrency(pp.valor, "BRL")}.
-        </p>
-      )}
-      {editavel && (
-        <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground text-pretty">
-          O número vem do anexo da produção. A data de emissão define o mês do crédito de
-          PIS/COFINS; o valor é a base das retenções.
+      {outras.length > 0 && (
+        <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+          Também na{" "}
+          {outras.map((o, i) => (
+            <React.Fragment key={o.codigo}>
+              {i > 0 && ", "}
+              <span className="font-mono">{o.codigo}</span> ({formatCurrency(o.valor_na_pp, "BRL")})
+            </React.Fragment>
+          ))}
+          .{registradaEmOutra ? ` Registrada na aprovação da ${registradaEmOutra.na_pp ?? "outra PP"}.` : ""}
         </p>
       )}
     </div>

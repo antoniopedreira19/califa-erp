@@ -12,10 +12,13 @@ import type {
   JobItemRealizado,
   PedidoCompra,
   PedidoCompraNaLista,
+  PPAEmitir,
   Fornecedor,
   Empresa,
   ItemBv,
 } from "@/lib/types";
+import type { TomadorDaNf } from "./anexos-da-pp";
+import { textoAguardaAbertura } from "./pp-a-emitir-ui";
 import { nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
@@ -24,7 +27,6 @@ import { VerPPDrawer } from "../pps/ver-pp-drawer";
 import {
   somaDasPPsNaoCanceladas,
   contarPendentes,
-  exigeSomaIgualAoOrcado,
 } from "@/lib/calculos/pps-item";
 import { ppChegouAoFinanceiro } from "@/lib/types";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
@@ -172,6 +174,13 @@ interface Props {
   aberturaEmRevisao?: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
+  /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
+  aEmitirPorItemId: Map<string, PPAEmitir[]>;
+  /** O status do job: aguardando abertura e devolvido só aceitam PP a emitir. */
+  statusDoJob: string;
+  /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
+  tomadoresDaNf: TomadorDaNf[];
+  tomadorPorEmpresa: Record<string, string>;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
@@ -658,6 +667,10 @@ export function JobItemRealizadoTable({
   preAbertura,
   aberturaEmRevisao = false,
   ppsPorItemId,
+  aEmitirPorItemId,
+  statusDoJob,
+  tomadoresDaNf,
+  tomadorPorEmpresa,
   fornecedores,
   empresas,
   responsaveis,
@@ -695,9 +708,28 @@ export function JobItemRealizadoTable({
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const [painelOpen, setPainelOpen] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  /** PP gerada aberta no formulário para edição. Null = gerar nova. */
-  const [ppEditando, setPpEditando] =
-    React.useState<PedidoCompraNaLista | null>(null);
+  /** PP a emitir aberta no formulário para edição. Null = nova (decisão
+   *  153: a PP gerada não se edita mais). */
+  const [aEmitirEditando, setAEmitirEditando] = React.useState<PPAEmitir | null>(null);
+  /** O "Gerar PP" do formulário: o painel abre a revisão desta PP a emitir
+   *  assim que ela chega pelo refresh. */
+  const [pedidoDeRevisao, setPedidoDeRevisao] = React.useState<{ id: string; vez: number } | null>(null);
+  /** "Cancelar e refazer": o formulário abre na PP a emitir que voltou,
+   *  assim que ela chega pelo refresh. */
+  const [editarQuandoChegar, setEditarQuandoChegar] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!editarQuandoChegar) return;
+    for (const lista of aEmitirPorItemId.values()) {
+      const alvo = lista.find((a) => a.id === editarQuandoChegar);
+      if (!alvo) continue;
+      setEditarQuandoChegar(null);
+      setItemIdAtual(alvo.item_realizado_id);
+      setAEmitirEditando(alvo);
+      setPainelOpen(false);
+      setDrawerOpen(true);
+      return;
+    }
+  }, [editarQuandoChegar, aEmitirPorItemId]);
   /** PP aberta em LEITURA — a que já foi ao financeiro e não é mais
    *  editável por ninguém (08/09/2026). */
   const [ppVendo, setPpVendo] = React.useState<PedidoCompraNaLista | null>(
@@ -2125,6 +2157,8 @@ export function JobItemRealizadoTable({
         const ppsDoItem = itemIdAtual
           ? (ppsPorItemId.get(itemIdAtual) ?? [])
           : [];
+        // Decisão 153: as PPs a emitir do item, fora do realizado.
+        const aEmitirDoItem = itemIdAtual ? (aEmitirPorItemId.get(itemIdAtual) ?? []) : [];
         // Toda PP do item que não foi cancelada — a gerada inclusive
         // (decisão 074). É o mesmo número que o realizado da linha.
         const emPPs = somaDasPPsNaoCanceladas(ppsDoItem);
@@ -2134,14 +2168,6 @@ export function JobItemRealizadoTable({
           ? realizadosMap.get(itemAtual.id)
           : undefined;
         const itemConcluido = realizadoAtual?.pps_concluidas_em != null;
-        // AR fora do save: as PPs precisam fechar o orçado antes de ir ao
-        // financeiro (decisão 062). O formulário usa isto para não oferecer
-        // um "Gerar e enviar" que o servidor recusaria.
-        const orcadoAFechar =
-          itemAtual &&
-          exigeSomaIgualAoOrcado(itemAtual.tipo_custo, itemAtual.em_save === true)
-            ? Number(itemAtual.total_orcado ?? 0)
-            : null;
         const concluidoPorNome =
           responsaveis.find((r) => r.id === realizadoAtual?.pps_concluidas_por)
             ?.nome ?? null;
@@ -2151,12 +2177,13 @@ export function JobItemRealizadoTable({
             )
           : null;
 
-        // As duas portas do ENVIO num texto só, para o painel do item e
-        // para o "Gerar e enviar" do formulário (decisão 077). A
+        // As portas do ENVIO num texto só, para o painel do item. A
         // pré-abertura vem primeiro: num job ainda não aberto a marca de
-        // revisão nem existe, e é o motivo que o usuário precisa ler.
+        // revisão nem existe, e é o motivo que o usuário precisa ler
+        // (decisão 153: ali só PP a emitir).
         const envioBloqueadoPor = preAbertura
-          ? "O financeiro ainda não abriu este job. O envio de PPs volta com a abertura — gerar, editar e cancelar continuam liberados."
+          ? textoAguardaAbertura(statusDoJob) ??
+            "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir."
           : aberturaEmRevisao
             ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
             : !papelEnviaPP
@@ -2193,7 +2220,35 @@ export function JobItemRealizadoTable({
                 verbaProducao: pp.verba_producao === true,
                 temAnexo: (pp.anexos ?? []).length > 0,
                 situacaoVerba: situacaoDaVerba(pp),
+                fornecedorId: pp.fornecedor_id ?? null,
+                empresaId: pp.empresa_id,
+                servico: pp.servico,
+                anexos: pp.anexos,
+                substitui: pp.substitui,
+                motivoRejeicao: pp.motivo_rejeicao ?? null,
               }))}
+              aEmitir={aEmitirDoItem}
+              statusDoJob={statusDoJob}
+              pedidoDeRevisao={pedidoDeRevisao}
+              onEditarAEmitir={
+                podeGerarPP
+                  ? (a) => {
+                      setAEmitirEditando(a);
+                      setPainelOpen(false);
+                      setDrawerOpen(true);
+                    }
+                  : null
+              }
+              onRefeita={(id) => setEditarQuandoChegar(id)}
+              podeRefazer={papelEnviaPP}
+              nomeDoFornecedor={(id) => (id ? nomeDoFornecedor(fornecedores, id) : "—")}
+              nomeDoResponsavel={(id) => responsaveis.find((r) => r.id === id)?.nome ?? "—"}
+              nomeDaEmpresa={(id) => {
+                const e = empresas.find((x) => x.id === id);
+                return e ? (e.nome_fantasia ?? e.razao_social) : "—";
+              }}
+              tomadores={tomadoresDaNf}
+              tomadorPorEmpresa={tomadorPorEmpresa}
               emPPs={emPPs}
               envioBloqueadoPor={envioBloqueadoPor}
               itemRealizadoId={itemIdAtual ?? ""}
@@ -2206,18 +2261,7 @@ export function JobItemRealizadoTable({
                       // O painel some enquanto o formulário está aberto:
                       // dois drawers empilhados na direita brigariam pelo
                       // mesmo espaço.
-                      setPpEditando(null);
-                      setPainelOpen(false);
-                      setDrawerOpen(true);
-                    }
-                  : null
-              }
-              onEditar={
-                podeGerarPP
-                  ? (pp) => {
-                      const completa = ppsDoItem.find((x) => x.id === pp.id);
-                      if (!completa) return;
-                      setPpEditando(completa);
+                      setAEmitirEditando(null);
                       setPainelOpen(false);
                       setDrawerOpen(true);
                     }
@@ -2242,7 +2286,7 @@ export function JobItemRealizadoTable({
               onOpenChange={(aberto) => {
                 setDrawerOpen(aberto);
                 if (!aberto) {
-                  setPpEditando(null);
+                  setAEmitirEditando(null);
                   // O formulário nunca fecha tudo (04/09/2026): Gerar PP,
                   // Salvar alterações e Cancelar devolvem para o painel
                   // do item, que é de onde ele foi aberto — a PP nova
@@ -2262,42 +2306,19 @@ export function JobItemRealizadoTable({
               quantidadePlanejada={quantidadePlanejada}
               dmPlanejado={dmPlanejado}
               emPPsEmitidas={emPPs}
-              ppEditando={ppEditando}
+              aEmitirEditando={aEmitirEditando}
               itemConcluido={itemConcluido}
-              envioBloqueadoPor={envioBloqueadoPor}
-              orcadoAFechar={orcadoAFechar}
-              onSuccess={(codigo, modo, aviso) => {
-                if (modo === "editada") {
-                  setToast(
-                    aviso
-                      ? `${codigo} salva — segue gerada, no job. ${aviso}`
-                      : `${codigo} salva — segue gerada, no job.`,
-                  );
+              statusDoJob={statusDoJob}
+              tomadores={tomadoresDaNf}
+              tomadorPorEmpresa={tomadorPorEmpresa}
+              onSuccess={(modo, id) => {
+                if (modo === "salva") {
+                  setToast("PP a emitir salva. Gere a PP pelo painel do item quando quiser.");
                   return;
                 }
-                if (modo === "enviada") {
-                  setToast(
-                    ppEditando
-                      ? `${codigo} salva e enviada ao financeiro.`
-                      : `Pedido de Produção ${codigo} gerado e enviado ao financeiro.`,
-                  );
-                } else {
-                  setToast(
-                    aviso
-                      ? `Pedido de Produção ${codigo} gerado — segue no job. ${aviso}`
-                      : `Pedido de Produção ${codigo} gerado. Envie ao financeiro pelo painel do item.`,
-                  );
-                }
-                // Estado otimista: o chip da calha já conta a PP nova antes
-                // do router.refresh() completar. Some sozinho quando a PP
-                // real chega via prop (ppsPorItemId do server).
-                if (!ppEditando && itemIdAtual) {
-                  setPpsOtimistas((prev) => {
-                    const next = new Map(prev);
-                    next.set(itemIdAtual, { codigo });
-                    return next;
-                  });
-                }
+                // "Gerar PP": a PP a emitir foi salva e o painel abre a
+                // revisão dela antes de gerar (decisão 153).
+                setPedidoDeRevisao((antes) => ({ id, vez: (antes?.vez ?? 0) + 1 }));
               }}
             />
 

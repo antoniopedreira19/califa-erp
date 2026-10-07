@@ -228,11 +228,12 @@ export interface TituloRow {
   fora_do_cadastro: BaixaTituloAlvo["foraDoCadastro"];
   /**
    * Módulo fiscal (decisão 139): o número da NF do fornecedor, que o
-   * financeiro registrou na aprovação da PP (`pedidos_compra.nf_numero`).
-   * A linha mostra "NF 602" embaixo do título, e o lote e a aba Títulos da
-   * conciliação levam na referência ("PP-00110 · NF 602"). Null na PP sem
-   * NF registrada; toda outra origem manda `null` explícito. Obrigatório
-   * pelo mesmo motivo do asterisco acima.
+   * financeiro registrou na aprovação da PP. Decisão 152: as notas vêm do
+   * cadastro `notas_fiscais_fornecedor`, e a PP com mais de uma mostra
+   * todas ("602, 603"). A linha mostra "NF 602" embaixo do título, e o
+   * lote e a aba Títulos da conciliação levam na referência ("PP-00110 ·
+   * NF 602"). Null na PP sem NF registrada; toda outra origem manda `null`
+   * explícito. Obrigatório pelo mesmo motivo do asterisco acima.
    */
   nf_numero: string | null;
   estorno_de_avulsa_id: string | null;

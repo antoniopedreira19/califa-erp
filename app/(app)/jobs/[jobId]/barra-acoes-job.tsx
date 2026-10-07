@@ -704,8 +704,8 @@ function linhasAntesDaAbertura(
         >
           orçamento
         </Link>
-        . Gerar PP já está liberado; o envio de PPs ao financeiro é que
-        volta com a abertura.
+        . Por enquanto, só PPs a emitir: gerar e enviar a PP voltam com a
+        abertura.
       </>,
     ];
   }

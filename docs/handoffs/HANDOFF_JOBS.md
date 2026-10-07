@@ -4750,3 +4750,27 @@ código publicado logo depois (`3305751`).
 - A entrega 2 (valor do job dividido entre inicial e atual, Totais e
   rentabilidade planejada pela abertura) está desenhada na própria decisão
   150.
+
+## ⚠️ Nota de 2026-10-07 (2) — PP a emitir e a NF com cadastro próprio (decisões 153 e 152)
+
+- O formulário da PP agora salva uma **PP a emitir**: sem código, fora do
+  realizado e invisível ao financeiro. Rodapé "Cancelar · Salvar · Gerar
+  PP"; "Gerar PP" passa por uma revisão no painel do item antes de dar o
+  código.
+- **A PP gerada não se edita mais.** Saíram `editarPedidoCompraGerada`,
+  `reenviarPedidoCompra` e `pps/editar-pp-drawer.tsx`. O envio ao
+  financeiro virou um pop-up no painel com todos os campos obrigatórios.
+- **PP rejeitada: "Cancelar e refazer"** (painel do item e aba Pedidos de
+  Produção). Ela é cancelada e volta como PP a emitir com os mesmos dados e
+  anexos; a PP nova diz "Substitui a PP-…".
+- **Pré-abertura: só PP a emitir.** Isso revê a decisão 056 (gerar PP na
+  pré-abertura).
+- Painel do item: "Em PPs a emitir" ao lado de "Em PPs emitidas", e a seção
+  "PPs a emitir" com Gerar, Editar e Excluir.
+- Anexo do tipo NF pede número, emissão, valor e CNPJ tomador; a mesma NF
+  pode cobrir mais de uma PP (link "Esta NF também cobre outra PP"), e a NF
+  que já existe em outra PP vem travada (decisão 152).
+- Tabelas `pedidos_compra_a_emitir` e `pedidos_compra_a_emitir_anexos`;
+  migrations `20261007300001` a `20261007300003`.
+- Testado no TES-1014/26 (PP-00129 a PP-00131). A conferência lado a lado na
+  produção é a entrega 3 da decisão 153, por fazer.

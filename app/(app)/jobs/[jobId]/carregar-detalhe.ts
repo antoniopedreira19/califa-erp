@@ -73,6 +73,9 @@ import {
   type MesDeFaturamento,
 } from "@/lib/calculos/faturamento-por-mes";
 import type { EtapasDaFicha } from "./ficha-job";
+import { formatarCnpj } from "@/lib/fiscal/cadastro";
+import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
+import type { AnexoDaPPNaLista, PPAEmitir } from "@/lib/types";
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -165,6 +168,8 @@ export async function carregarDetalheDoJob(
     recusasDeSave,
     consumosComPedidoRes,
     alteracoesFinanceiroRes,
+    aEmitirRes,
+    tomadoresRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -199,7 +204,11 @@ export async function carregarDetalheDoJob(
     supabase
       .from("pedidos_compra")
       .select(
-        "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), responsavel:profiles!responsavel_verba_id(nome), anexos:pedidos_compra_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes), parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, data_pagamento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by), " +
+        "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), responsavel:profiles!responsavel_verba_id(nome), " +
+          // O tipo, o número e a NF de cada anexo (decisões 152 e 153): o
+          // envio ao financeiro abre com eles.
+          "anexos:pedidos_compra_anexos(id, arquivo_path, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, created_at, documento_tipo, documento_numero, nota_fiscal_id, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_valor_na_pp), " +
+          "parcelas:pedidos_compra_parcelas(id, tenant_id, pedido_compra_id, numero, data_vencimento, data_pagamento, valor, pdf_path, pago_em, pago_por, created_at, updated_at, created_by), " +
           // Prestação de contas da verba e estorno do saldo (decisão 081).
           SELECT_PRESTACAO_DA_VERBA +
           // Histórico de eventos (decisão 136): a linha do tempo do "Ver PP".
@@ -220,7 +229,9 @@ export async function carregarDetalheDoJob(
       .order("nome"),
     supabase
       .from("empresas")
-      .select("id, razao_social, nome_fantasia, ativo, principal")
+      // `cnpj` entrou em 07/10/2026 (decisão 152): a NF da PP sugere o CNPJ
+      // tomador da empresa emissora.
+      .select("id, razao_social, nome_fantasia, ativo, principal, cnpj")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("principal", { ascending: false })
@@ -368,6 +379,32 @@ export async function carregarDetalheDoJob(
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
+    // As PPs a emitir do job (decisão 153): as abertas vão para o painel de
+    // cada item; as já geradas que refazem uma rejeitada dizem a PP nova
+    // "Substitui a PP-…". Duas chaves para `pedidos_compra` e quatro para
+    // `profiles`: os embeds vão com o nome da coluna.
+    supabase
+      .from("pedidos_compra_a_emitir")
+      .select(
+        "id, job_id, item_realizado_id, empresa_id, verba_producao, fornecedor_id, responsavel_verba_id, " +
+          "servico, valor, dados, ultima_pp_do_item, pp_id, created_at, updated_at, " +
+          "criada:profiles!criada_por(nome), refaz:pedidos_compra!refaz_pp_id(id, codigo, motivo_rejeicao), " +
+          "anexos:pedidos_compra_a_emitir_anexos(id, arquivo_path, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, " +
+          "documento_tipo, documento_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_valor_na_pp, created_at)",
+      )
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .is("excluida_em", null)
+      .order("created_at", { ascending: true }),
+    // Os CNPJs tomadores da NF da PP (decisão 152): os ativos com CNPJ do
+    // cadastro de impostos — a mesma lista do financeiro.
+    supabase
+      .from("fiscal_estabelecimentos")
+      .select("id, nome, cnpj, ativo, papel, ordem")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("ativo", true)
+      .order("ordem")
+      .order("nome"),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -509,6 +546,83 @@ export async function carregarDetalheDoJob(
     }
   }
 
+  // A PP a emitir (decisão 153): as abertas, por item; e, das que já
+  // viraram PP, a que cada PP nova substitui.
+  if (aEmitirRes.error) console.error("[job.pp_a_emitir]", aEmitirRes.error.message);
+  const numOuNull = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+  const aEmitirPorItemId = new Map<string, PPAEmitir[]>();
+  const substituiPorPP = new Map<string, string>();
+  for (const r of (aEmitirRes.data ?? []) as any[]) {
+    if (r.pp_id) {
+      if (r.refaz?.codigo) substituiPorPP.set(r.pp_id as string, r.refaz.codigo as string);
+      continue;
+    }
+    const linha: PPAEmitir = {
+      id: r.id,
+      job_id: r.job_id,
+      item_realizado_id: r.item_realizado_id,
+      empresa_id: r.empresa_id,
+      verba_producao: r.verba_producao === true,
+      fornecedor_id: r.fornecedor_id ?? null,
+      responsavel_verba_id: r.responsavel_verba_id ?? null,
+      servico: r.servico,
+      valor: Number(r.valor ?? 0),
+      dados: r.dados,
+      ultima_pp_do_item: typeof r.ultima_pp_do_item === "boolean" ? r.ultima_pp_do_item : null,
+      refaz: r.refaz
+        ? { id: r.refaz.id, codigo: r.refaz.codigo, motivo_rejeicao: r.refaz.motivo_rejeicao ?? null }
+        : null,
+      criada_por_nome: r.criada?.nome ?? null,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      anexos: ((r.anexos ?? []) as any[])
+        .map((a) => ({
+          id: a.id,
+          arquivo_path: a.arquivo_path,
+          arquivo_nome_original: a.arquivo_nome_original,
+          arquivo_tamanho_bytes: Number(a.arquivo_tamanho_bytes ?? 0),
+          arquivo_mimetype: a.arquivo_mimetype,
+          documento_tipo: a.documento_tipo ?? null,
+          documento_numero: a.documento_numero ?? null,
+          nf_data_emissao: a.nf_data_emissao ?? null,
+          nf_valor: numOuNull(a.nf_valor),
+          nf_tomador_estabelecimento_id: a.nf_tomador_estabelecimento_id ?? null,
+          nf_valor_na_pp: numOuNull(a.nf_valor_na_pp),
+          created_at: a.created_at,
+        }))
+        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    };
+    const atuais = aEmitirPorItemId.get(linha.item_realizado_id) ?? [];
+    atuais.push(linha);
+    aEmitirPorItemId.set(linha.item_realizado_id, atuais);
+  }
+
+  // Os CNPJs tomadores da NF e o de cada empresa emissora (a mesma
+  // sugestão do financeiro: `tomadoresPadrao`).
+  if (tomadoresRes.error) console.error("[job.tomadores]", tomadoresRes.error.message);
+  const estabelecimentosAtivos = ((tomadoresRes.data ?? []) as any[]).filter(
+    (e) => typeof e.cnpj === "string" && e.cnpj.replace(/\D/g, "").length === 14,
+  );
+  const tomadoresDaNf = estabelecimentosAtivos.map((e) => ({
+    id: e.id as string,
+    nome: e.nome as string,
+    cnpj: formatarCnpj(e.cnpj as string),
+  }));
+  const tomadorPorEmpresa = tomadoresPadrao(
+    estabelecimentosAtivos.map((e) => ({
+      id: e.id as string,
+      cnpj: e.cnpj as string | null,
+      ativo: e.ativo === true,
+      papel: e.papel as string,
+      ordem: Number(e.ordem ?? 0),
+    })),
+    ((empresasRes.data ?? []) as any[]).map((e) => ({
+      id: e.id as string,
+      cnpj: (e.cnpj as string | null) ?? null,
+      principal: e.principal === true,
+    })),
+  ).porEmpresa;
+
   const ppsDoJob: PedidoCompraNaLista[] = (ppsRes.data ?? []).map((pp: any) => ({
     ...pp,
     // numeric do Postgres chega como string: sem o Number, o formulário
@@ -524,11 +638,26 @@ export async function carregarDetalheDoJob(
     parcelas: (pp.parcelas ?? [])
       .map((p: any) => ({ ...p, valor: Number(p.valor ?? 0) }))
       .sort((a: any, b: any) => a.numero - b.numero),
-    anexos: (pp.anexos ?? []).map((a: any) => ({
-      id: a.id,
-      arquivo_nome_original: a.arquivo_nome_original,
-      arquivo_tamanho_bytes: Number(a.arquivo_tamanho_bytes ?? 0),
-    })),
+    anexos: ((pp.anexos ?? []) as any[])
+      .map(
+        (a): AnexoDaPPNaLista => ({
+          id: a.id,
+          arquivo_path: a.arquivo_path,
+          arquivo_nome_original: a.arquivo_nome_original,
+          arquivo_tamanho_bytes: Number(a.arquivo_tamanho_bytes ?? 0),
+          arquivo_mimetype: a.arquivo_mimetype,
+          created_at: a.created_at,
+          documento_tipo: a.documento_tipo ?? null,
+          documento_numero: a.documento_numero ?? null,
+          nota_fiscal_id: a.nota_fiscal_id ?? null,
+          nf_data_emissao: a.nf_data_emissao ?? null,
+          nf_valor: numOuNull(a.nf_valor),
+          nf_tomador_estabelecimento_id: a.nf_tomador_estabelecimento_id ?? null,
+          nf_valor_na_pp: numOuNull(a.nf_valor_na_pp),
+        }),
+      )
+      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    substitui: substituiPorPP.get(pp.id) ?? null,
     prestacao: prestacaoDaVerba(pp.prestacao),
     devolucao: devolucaoDaVerba(pp.devolucao),
     cadastro_do_fornecedor_mudou: cadastroMudouDepoisDaFoto(
@@ -1232,6 +1361,11 @@ export async function carregarDetalheDoJob(
     contatosCobranca,
     ppsDoJob,
     ppsPorItemId,
+    // Decisão 153: as PPs a emitir de cada item, fora do realizado.
+    aEmitirPorItemId,
+    // Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora.
+    tomadoresDaNf,
+    tomadorPorEmpresa,
     fornecedores,
     fornecedoresPorId,
     empresas,

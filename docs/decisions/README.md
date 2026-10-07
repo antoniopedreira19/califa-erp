@@ -171,6 +171,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 149 | [O envio para abertura muda pelo tipo de job: Interno sem recebimento; Fee e Always On sem evento e com recebimento por mês](149-envio-para-abertura-por-tipo-de-job.md) | 2026-10-06 |
 | 150 | [Cadastro de Veículos em Cadastros; os meios do veículo vêm do uso nas planilhas](150-cadastro-de-veiculos.md) | 2026-10-07 |
 | 151 | [A errata não mexe no planejado e cancela a linha em vez de apagá-la](151-errata-nao-mexe-no-planejado-e-cancela-linha.md) | 2026-10-07 |
+| 152 | [A NF do fornecedor tem cadastro próprio e conta uma vez só](152-nf-do-fornecedor-com-cadastro-proprio.md) | 2026-10-07 |
+| 153 | [PP a emitir: a PP é revisada antes de gerar e não se edita depois](153-pp-a-emitir.md) | 2026-10-07 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -183,4 +185,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 152.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 154.** (091 e 092 existem na pasta e ainda não estão nesta tabela.)

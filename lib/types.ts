@@ -1507,8 +1507,9 @@ export const ENCERRAMENTO_INDISPONIVEL =
  *  A gerada entra (02/09/2026): é um rascunho que ninguém enviou nem
  *  cancelou, e o job não fecha com pendência solta.
  *  A rejeitada entra (decisão 083, 15/09/2026): ela volta a ser pendência da
- *  produção, que corrige e reenvia ou cancela — e é para onde vai a PP
- *  aprovada que o financeiro reprova. Só a cancelada não é compromisso. */
+ *  produção, que cancela e refaz (decisão 153) ou só cancela — e é para onde
+ *  vai a PP aprovada que o financeiro reprova. Só a cancelada não é
+ *  compromisso. */
 export const PP_STATUS_EM_ABERTO: PPStatus[] = [
   "gerada",
   "em_avaliacao",
@@ -1873,9 +1874,10 @@ export interface PedidoCompra {
  * `pago`, `rejeitada` ou `cancelada`. Até 02/09/2026 gerar e enviar eram
  * o mesmo clique e a PP nascia direto em avaliação.
  *
- * `rejeitada` não é terminal de verdade: o GP corrige e reenvia, e a PP
- * volta pra `em_avaliacao`. Por isso ela continua contando no realizado
- * do item — quem tira uma PP do item é só o cancelamento.
+ * `rejeitada` não é terminal de verdade: a produção cancela e refaz, e a
+ * PP nova toma o lugar dela (decisão 153; até 07/10/2026 a própria PP era
+ * corrigida e reenviada). Por isso ela continua contando no realizado do
+ * item até ser cancelada — quem tira uma PP do item é só o cancelamento.
  *
  * `gerada` é invisível para o financeiro e não congela a previsão da
  * abertura (decisão 039) — mas CONTA no realizado do item desde
@@ -2447,6 +2449,102 @@ export interface PedidoCompraParcela {
   created_by: string | null;
 }
 
+/** Um anexo da PP como o job o carrega (decisões 152 e 153). */
+export interface AnexoDaPPNaLista {
+  id: string;
+  /** Onde o arquivo está no bucket (o envio regrava a lista inteira). */
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string;
+  created_at: string;
+  documento_tipo: DocumentoTipo | null;
+  documento_numero: string | null;
+  /** A nota do cadastro, a partir do envio. */
+  nota_fiscal_id: string | null;
+  nf_data_emissao: string | null;
+  nf_valor: number | null;
+  nf_tomador_estabelecimento_id: string | null;
+  nf_valor_na_pp: number | null;
+}
+
+/**
+ * O formulário da PP como a PP a emitir guarda (decisão 153): o mesmo
+ * formato que a geração valida (`dadosSchema` de `actions-pp.ts`).
+ */
+export interface DadosDaPPAEmitir {
+  empresa_id: string;
+  /** Vencimento da 1ª parcela. */
+  prazo_pagamento: string;
+  servico: string;
+  valor_unitario: number;
+  quantidade: number;
+  dias_meses: number;
+  especificacoes: string | null;
+  urgente: boolean;
+  urgente_justificativa: string | null;
+  parcelas: Array<{ data_vencimento: string; valor: number }>;
+  verba_producao: boolean;
+  fornecedor_id: string | null;
+  responsavel_verba_id: string | null;
+  /** Decisão 127, no formato do envio (`pagamentoParaEnvio`). */
+  pagamento_fora_do_cadastro: {
+    meio: MeioForaDoCadastro;
+    motivo: string;
+    pix_tipo: PixTipoChave | null;
+    pix_chave: string | null;
+    banco_codigo: string | null;
+    agencia: string | null;
+    agencia_dv: string | null;
+    conta: string | null;
+    conta_dv: string | null;
+    tipo_conta: TipoContaBancariaFornecedor | null;
+  } | null;
+}
+
+/** Um anexo da PP a emitir: vira anexo da PP quando ela é gerada. */
+export interface PPAEmitirAnexo {
+  id: string;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string;
+  documento_tipo: DocumentoTipo | null;
+  documento_numero: string | null;
+  nf_data_emissao: string | null;
+  nf_valor: number | null;
+  nf_tomador_estabelecimento_id: string | null;
+  nf_valor_na_pp: number | null;
+  created_at: string;
+}
+
+/**
+ * PP a emitir (decisão 153, 07/10/2026): o formulário da PP salvo antes de
+ * gerar. Sem código, fora do realizado ("Em PPs a emitir" é um número à
+ * parte), invisível ao financeiro. O id é o que a PP terá ao ser gerada.
+ */
+export interface PPAEmitir {
+  id: string;
+  job_id: string;
+  item_realizado_id: string;
+  empresa_id: string;
+  verba_producao: boolean;
+  fornecedor_id: string | null;
+  responsavel_verba_id: string | null;
+  servico: string;
+  valor: number;
+  dados: DadosDaPPAEmitir;
+  /** "Esta é a última PP deste item?" — vale quando gerar. */
+  ultima_pp_do_item: boolean | null;
+  /** A PP rejeitada que esta refaz, com o motivo da rejeição. */
+  refaz: { id: string; codigo: string; motivo_rejeicao: string | null } | null;
+  criada_por_nome: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Na ordem em que foram anexados. */
+  anexos: PPAEmitirAnexo[];
+}
+
 /** PP com os campos que as telas de lista mostram junto. */
 export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
@@ -2459,11 +2557,12 @@ export interface PedidoCompraNaLista extends PedidoCompra {
   grupo_nome: string | null;
   /** Sempre ao menos uma, ordenada por `numero`. */
   parcelas: PedidoCompraParcela[];
-  anexos: Array<{
-    id: string;
-    arquivo_nome_original: string;
-    arquivo_tamanho_bytes: number;
-  }>;
+  /** Na ordem em que foram anexados. O tipo, o número e a NF de cada um
+   *  (decisão 152) entram no envio ao financeiro. */
+  anexos: AnexoDaPPNaLista[];
+  /** A PP rejeitada que esta substitui ("Cancelar e refazer", decisão 153).
+   *  Null na PP comum. Obrigatório, como os campos abaixo. */
+  substitui: string | null;
   /** Perfil do responsável pela verba, quando verba_producao = true. */
   responsavel?: { nome: string | null } | null;
   /** O ASTERISCO da decisão 067: o cadastro do fornecedor mudou de banco,
@@ -2602,6 +2701,19 @@ export interface PedidoCompraAnexo {
   arquivo_mimetype: string;
   created_by: string | null;
   created_at: string;
+  documento_tipo: DocumentoTipo | null;
+  documento_numero: string | null;
+  /**
+   * Decisão 152: o anexo do tipo NF aponta para a nota (`notas_fiscais_fornecedor`)
+   * a partir do envio ao financeiro (ou da aprovação, nas PPs anteriores).
+   */
+  nota_fiscal_id: string | null;
+  /** O que a produção informou da NF; depois da ligação, valem os dados da nota. */
+  nf_data_emissao: string | null;
+  nf_valor: number | null;
+  nf_tomador_estabelecimento_id: string | null;
+  /** A parte da nota que é desta PP (a nota pode cobrir mais de uma PP). */
+  nf_valor_na_pp: number | null;
 }
 
 export interface PPVerbaDevolucao {
@@ -4145,7 +4257,38 @@ export interface PedidoCompraRetencao {
   created_at: string;
 }
 
-/** A NF do fornecedor registrada pelo financeiro na aprovação da PP. */
+/**
+ * NF de fornecedor, uma linha por nota (decisão 152, 07/10/2026). A mesma nota
+ * (mesmo fornecedor + número sem zeros à esquerda) pode cobrir mais de uma PP:
+ * cada anexo do tipo NF aponta para ela e guarda a sua parte. Conta UMA vez no
+ * fiscal, pelo total, a partir de `registrada_em`.
+ */
+export interface NotaFiscalFornecedor {
+  id: string;
+  tenant_id: string;
+  fornecedor_id: string;
+  numero: string;
+  numero_chave: string;
+  data_emissao: string;
+  valor: number;
+  tomador_estabelecimento_id: string;
+  registrada_em: string | null;
+  registrada_por: string | null;
+  registrada_na_pp_id: string | null;
+  iss_retido_aliquota: number | null;
+  credito_pis_cofins_retirado: boolean;
+  credito_pis_cofins_motivo: string | null;
+  criada_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * A NF do fornecedor registrada pelo financeiro na aprovação da PP, nas
+ * colunas da própria PP. ⚠️ Histórico desde a decisão 152: as notas vivem em
+ * `notas_fiscais_fornecedor`; aqui só `nf_registrada_*` continua sendo escrito
+ * ("as notas desta PP foram conferidas").
+ */
 export interface NotaFiscalDaPP {
   nf_numero: string | null;
   nf_data_emissao: string | null;

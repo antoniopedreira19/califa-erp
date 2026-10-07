@@ -300,7 +300,8 @@ export async function darBaixaAvulsaInline(input: unknown): Promise<Result> {
 
 /**
  * Rejeita a PP com motivo obrigatório. Não é cancelamento: a PP continua
- * ocupando o item, e o GP corrige e reenvia pela aba de PPs do job.
+ * ocupando o item até a produção cancelar e refazer — ela volta como PP a
+ * emitir e gera uma PP nova, com outro código (decisão 153).
  */
 export async function rejeitarPedidoCompraFinanceiro(
   pp_id: string,
@@ -440,7 +441,8 @@ const reprovarAprovadaSchema = z.object({
 
 /**
  * Reprova uma PP já aprovada: ela volta para `rejeitada`, com motivo, e a
- * produção corrige e reenvia ou cancela (decisão 083, 1a).
+ * produção cancela e refaz, ou só cancela (decisão 083, 1a; refazer pela
+ * decisão 153).
  *
  * A produção não cancela PP aprovada — ela é título a pagar (decisão 027) —,
  * então este é o único caminho de volta, e ele é do financeiro (6a).
