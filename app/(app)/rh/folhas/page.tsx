@@ -224,7 +224,7 @@ export default async function FolhasPage() {
           title="Nenhuma folha registrada ainda"
           description={
             podeGerar
-              ? "Clique em Nova folha para gerar a primeira competência."
+              ? "Clique em Abrir folha para começar uma competência."
               : "Aguarde o RH gerar a primeira folha."
           }
           action={podeGerar ? <NovaFolhaModal /> : undefined}
