@@ -5217,6 +5217,12 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **Fornecedores** ganhou o selo "Veículo" (leva ao cadastro do veículo).
 - Migration `20261007500001`: sai a trava `veiculos_midia_com_meio`; as
   colunas `meios` e `praca` ficam sem uso (apagar = destrutivo, pedir).
+- **Rodapé do formulário do fornecedor** (página e pop-ups, inclusive o
+  "Novo fornecedor" da PP): quando a mensagem é longa ("Pronto para criar.
+  Pagamento, endereço e observações podem ser completados depois."), a
+  linha quebra e os botões desciam para a esquerda. Agora ficam sempre à
+  direita (`ml-auto` no grupo dos botões). Achado no teste da criação, a
+  pedido do Tiago.
 
 ## ⚠️ Nota de 2026-10-07 (4) — a chave "Orçamento de save" confere a permissão no servidor
 
