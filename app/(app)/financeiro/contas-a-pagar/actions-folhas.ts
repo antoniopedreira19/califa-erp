@@ -13,7 +13,7 @@ import {
 } from "@/lib/validations/rh-colaboradores";
 import { normalizarChavePix } from "@/lib/pix";
 import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
-import type { TipoContratacao } from "@/lib/types";
+import type { FolhaOrigem, TipoContratacao } from "@/lib/types";
 
 type ActionResult<T = Record<string, unknown>> =
   | ({ ok: true } & T)
@@ -25,18 +25,47 @@ function ultimoDiaDoMes(ano: number, mes: number): string {
   return `${ano}-${String(mes).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Mapeia tipo de contratação → código do subtipo de "Despesa com Pessoal". */
-function subtipoCodigoParaContratacao(tipo: TipoContratacao): string {
+/** Mapeia (tipo de contratação, origem da linha) → código do subtipo de
+ *  "Despesa com Pessoal" (categoria 05).
+ *
+ *  Linhas de origem='california' (fluxo PJ gerado pela California) vão para
+ *  05.015 Serviços de Terceiros (PJ) — pj, mei e a parte Recibo do híbrido.
+ *
+ *  Linhas de origem='contabilidade' (fluxo CLT importado do PDF) vão para
+ *  os subtipos específicos: 05.001 Salário (clt / parte CLT do híbrido),
+ *  05.005 Estagiário, 05.011 ProLabore (sócio).
+ *
+ *  Spec D6.
+ */
+function subtipoCodigoParaContratacao(
+  tipo: TipoContratacao,
+  origem: FolhaOrigem,
+): string {
+  if (origem === "california") {
+    switch (tipo) {
+      case "pj":
+      case "mei":
+      case "clt_recibo":
+        return "015"; // Serviços de Terceiros (PJ) — inclui RPA
+      default:
+        throw new Error(
+          `tipo_contratacao '${tipo}' não é compatível com origem 'california'`,
+        );
+    }
+  }
+  // origem === "contabilidade"
   switch (tipo) {
     case "clt":
     case "clt_recibo":
       return "001"; // Salário
     case "estagio":
       return "005"; // Estagiário
-    case "pj":
-    case "mei":
     case "socio":
       return "011"; // ProLabore
+    default:
+      throw new Error(
+        `tipo_contratacao '${tipo}' não é compatível com origem 'contabilidade'`,
+      );
   }
 }
 
@@ -333,7 +362,7 @@ export async function aprovarLinhaFolha(
   const { data: folha, error: folhaError } = await supabase
     .from("folhas_pagamento")
     .select(
-      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes",
+      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem",
     )
     .eq("id", folhaId)
     .eq("tenant_id", tenantId)
@@ -478,8 +507,13 @@ export async function aprovarLinhaFolha(
     if (!gravado.ok) return gravado;
   }
 
-  // 6) Plano de contas
-  const codigoSubtipo = subtipoCodigoParaContratacao(colab.tipo_contratacao);
+  // 6) Plano de contas — depende do tipo do colaborador E da origem da linha.
+  //    Fluxo PJ (california): pj/mei/clt_recibo → 05.015 Serviços de Terceiros (PJ).
+  //    Fluxo CLT (contabilidade): clt → 05.001, estagio → 05.005, socio → 05.011.
+  const codigoSubtipo = subtipoCodigoParaContratacao(
+    colab.tipo_contratacao,
+    folha.origem,
+  );
   const { data: tipoRow } = await supabase
     .from("plano_contas_tipos")
     .select("id")
@@ -501,7 +535,7 @@ export async function aprovarLinhaFolha(
   if (!subtipoRow) {
     return {
       ok: false,
-      message: `Subtipo ${codigoSubtipo} de Despesa com Pessoal não encontrado.`,
+      message: `Subtipo ${codigoSubtipo} de 'Despesa com Pessoal' não está cadastrado no plano de contas. Crie em /financeiro/cadastros/plano-de-contas antes de aprovar.`,
     };
   }
 
