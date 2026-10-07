@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn } from "@/lib/utils";
 import type { Cliente, ProjetoStatus } from "@/lib/types";
 import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
@@ -83,11 +84,72 @@ function anoDoProjeto(p: ProjetoRow): string {
   return p.data_inicio_prevista.slice(0, 4);
 }
 
+/** Grade fixa da lista (07/10/2026), a mesma saída da lista de Jobs
+ *  (decisão 036, nota de 05/10/2026). Com largura automática, o GP
+ *  Responsável em `whitespace-nowrap` se esticava até o nome mais longo e,
+ *  em "Todos", empurrava Abertos e Status para fora da tela; Cliente e
+ *  Marca, com a razão social inteira, quebravam em até quatro linhas, e o
+ *  código partia no hífen. Agora cada coluna tem largura própria e o Nome
+ *  fica com o resto (~290 px nos 1614 px de conteúdo). Larguras medidas
+ *  com os textos reais da base; com elas, nenhum nome de projeto passa de
+ *  duas linhas. Cliente, Marca e GP têm as larguras da lista de Jobs. */
+function ColunasDaLista() {
+  return (
+    <colgroup>
+      {/* Código */}
+      <col className="w-[112px]" />
+      {/* Nome: absorve a sobra. */}
+      <col />
+      {/* Cliente */}
+      <col className="w-[156px]" />
+      {/* Marca */}
+      <col className="w-[156px]" />
+      {/* Regional: a sigla e o contador "+N", sem quebra. */}
+      <col className="w-[104px]" />
+      {/* GP Responsável */}
+      <col className="w-[172px]" />
+      {/* Início */}
+      <col className="w-[112px]" />
+      {/* Orçamentos, Aprovados, Enviados e Abertos: cabe o título, com o
+          respiro menor de `FUNIL_PX`. */}
+      <col className="w-[112px]" />
+      <col className="w-[104px]" />
+      <col className="w-[88px]" />
+      <col className="w-[88px]" />
+      {/* Status: cabe o selo mais largo, "Arquivado" (87 px). */}
+      <col className="w-[120px]" />
+    </colgroup>
+  );
+}
+
+/** Respiro lateral das quatro colunas do funil. Com o `px-4` das outras,
+ *  os títulos ("ORÇAMENTOS" mede 92 px) só cabiam tirando largura do
+ *  Nome; os números são curtos e centralizados, então 8 px bastam. */
+const FUNIL_PX = "px-2";
+
+/** Para o `colSpan` da linha de lista vazia, que cobre a tabela inteira. */
+const TOTAL_DE_COLUNAS = 12;
+
+/** Contador "+N" das colunas com mais de um valor (Marca, Regional, GP):
+ *  o primeiro aparece inteiro e o resto vai no título. `flex-none` para o
+ *  texto ao lado encolher e o contador não. */
+function Contador({ itens }: { itens: string[] }) {
+  if (itens.length < 2) return null;
+  return (
+    <span
+      title={itens.join(", ")}
+      className="inline-flex flex-none items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+    >
+      +{itens.length - 1}
+    </span>
+  );
+}
+
 /** Célula do funil: zero vira travessão discreto pra tabela não virar uma
  *  parede de zeros — o olho acha na hora onde há movimento. */
 function CelulaFunil({ valor }: { valor: number }) {
   return (
-    <td className="px-4 py-3 text-center tabular-nums">
+    <td className={cn(FUNIL_PX, "py-3 text-center tabular-nums")}>
       {valor === 0 ? <span className="text-muted-foreground">—</span> : valor}
     </td>
   );
@@ -269,8 +331,11 @@ export function ProjetosList({
         </Select>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
+        {/* Abaixo de 1500 px a tabela rola na horizontal em vez de espremer
+            o Nome. Era `overflow-hidden`: o que passava da largura sumia. */}
+        <table className="w-full min-w-[1500px] table-fixed text-sm">
+          <ColunasDaLista />
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-semibold">Código</th>
@@ -280,10 +345,10 @@ export function ProjetosList({
               <th className="px-4 py-3 font-semibold">Regional</th>
               <th className="px-4 py-3 font-semibold">GP Responsável</th>
               <th className="px-4 py-3 font-semibold">Início</th>
-              <th className="px-4 py-3 font-semibold text-center">Orçamentos</th>
-              <th className="px-4 py-3 font-semibold text-center">Aprovados</th>
-              <th className="px-4 py-3 font-semibold text-center">Enviados</th>
-              <th className="px-4 py-3 font-semibold text-center">Abertos</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Orçamentos</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Aprovados</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Enviados</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Abertos</th>
               <th className="px-4 py-3 font-semibold">Status</th>
             </tr>
           </thead>
@@ -302,7 +367,9 @@ export function ProjetosList({
                   }
                 }}
               >
-                <td className="px-4 py-3 font-mono text-xs">
+                {/* Sem quebra: o código partia no hífen ("AMB-" em cima,
+                    "P019/26" embaixo). */}
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
                   <Link
                     href={`/orcamentos/${p.id}`}
                     prefetch={false}
@@ -312,9 +379,16 @@ export function ProjetosList({
                     {p.codigo}
                   </Link>
                 </td>
+                {/* Nome, Cliente, Marca e GP Responsável quebram até duas
+                    linhas; o que passar termina em "…" e aparece inteiro ao
+                    passar o mouse. Mesmo teto da lista de Jobs. */}
                 <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="font-medium">{p.nome}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <TruncateTooltip
+                      linhas={2}
+                      text={p.nome}
+                      className="min-w-0 font-medium"
+                    />
                     <DescritivoPopover
                       rotulo="Descritivo do projeto"
                       codigo={p.codigo}
@@ -335,27 +409,30 @@ export function ProjetosList({
                     />
                   </span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{p.cliente_nome ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {p.cliente_nome ? (
+                    <TruncateTooltip linhas={2} text={p.cliente_nome} />
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {p.marcas.length === 0 ? (
                     "—"
                   ) : (
                     // Mesmo tratamento das regionais: a primeira inteira, e
                     // um contador a partir da segunda (decisão 133).
-                    <span className="inline-flex items-center gap-1">
-                      <span>{p.marcas[0].nome}</span>
-                      {p.marcas.length > 1 && (
-                        <span
-                          title={p.marcas.map((m) => m.nome).join(", ")}
-                          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
-                        >
-                          +{p.marcas.length - 1}
-                        </span>
-                      )}
+                    <span className="flex min-w-0 items-center gap-1">
+                      <TruncateTooltip
+                        linhas={2}
+                        text={p.marcas[0].nome}
+                        className="min-w-0"
+                      />
+                      <Contador itens={p.marcas.map((m) => m.nome)} />
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-3">
                   {p.regionais.length === 0 ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
@@ -363,38 +440,28 @@ export function ProjetosList({
                     // contador evita que a coluna estoure a linha.
                     <span className="inline-flex items-center gap-1">
                       <span className="text-muted-foreground">{p.regionais[0].nome}</span>
-                      {p.regionais.length > 1 && (
-                        <span
-                          title={p.regionais.map((r) => r.nome).join(", ")}
-                          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
-                        >
-                          +{p.regionais.length - 1}
-                        </span>
-                      )}
+                      <Contador itens={p.regionais.map((r) => r.nome)} />
                     </span>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                <td className="px-4 py-3 text-muted-foreground">
                   {p.gps.length === 0 ? (
                     "—"
                   ) : (
                     // Mesmo tratamento das regionais: o primeiro inteiro, e
                     // um contador a partir do segundo.
-                    <span className="inline-flex items-center gap-1">
-                      <span>{p.gps[0]}</span>
-                      {p.gps.length > 1 && (
-                        <span
-                          title={p.gps.join(", ")}
-                          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
-                        >
-                          +{p.gps.length - 1}
-                        </span>
-                      )}
+                    <span className="flex min-w-0 items-center gap-1">
+                      <TruncateTooltip
+                        linhas={2}
+                        text={p.gps[0]}
+                        className="min-w-0"
+                      />
+                      <Contador itens={p.gps} />
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDate(p.data_inicio_prevista)}</td>
-                <td className="px-4 py-3 text-center tabular-nums">{p.orcamentos_count}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDate(p.data_inicio_prevista)}</td>
+                <td className={cn(FUNIL_PX, "py-3 text-center tabular-nums")}>{p.orcamentos_count}</td>
                 <CelulaFunil valor={p.aprovados_count} />
                 <CelulaFunil valor={p.enviados_count} />
                 <CelulaFunil valor={p.abertos_count} />
@@ -407,7 +474,7 @@ export function ProjetosList({
             ))}
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={TOTAL_DE_COLUNAS} className="px-4 py-10 text-center text-sm text-muted-foreground">
                   {meus
                     ? "Nenhum projeto com esse recorte. Você não é responsável nem produtor de nenhum job dos projetos que combinam com os filtros."
                     : "Nenhum projeto encontrado com esses filtros."}
