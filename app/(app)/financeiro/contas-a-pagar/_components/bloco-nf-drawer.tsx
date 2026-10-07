@@ -28,12 +28,12 @@ export function BlocoNfDrawer(props: {
   competenciaMes: number;
   nf: NfResumo | null;
 }) {
+  const [baixando, setBaixando] = React.useState(false);
+
   const exigeNf =
     props.origem === "california" &&
     ["pj", "mei", "clt_recibo"].includes(props.tipoContratacao);
   if (!exigeNf) return null;
-
-  const [baixando, setBaixando] = React.useState(false);
 
   async function baixar() {
     if (!props.nf) return;
