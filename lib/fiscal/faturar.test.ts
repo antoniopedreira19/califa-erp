@@ -42,6 +42,7 @@ const estab = (
   ativo,
   ordem: 0,
   observacao: null,
+  logradouro: null, numero: null, complemento: null, bairro: null, cep: null, telefone: null, email: null, inscricao_estadual: null, inscricao_municipal: null,
   created_at: "",
   updated_at: "",
 });

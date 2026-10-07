@@ -14,6 +14,7 @@
  * Assim as apurações antigas continuam com a alíquota da época.
  */
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -141,6 +142,16 @@ export async function atualizarEstabelecimento(input: unknown): Promise<Result> 
     iss_retido_dia: v.iss_retido_dia,
     iss_regra: v.iss_regra,
     observacao: v.observacao,
+    // Decisão 156: o cabeçalho do PDF da PP.
+    logradouro: v.logradouro,
+    numero: v.numero,
+    complemento: v.complemento,
+    bairro: v.bairro,
+    cep: v.cep,
+    telefone: v.telefone,
+    email: v.email,
+    inscricao_estadual: v.inscricao_estadual,
+    inscricao_municipal: v.inscricao_municipal,
   };
 
   const { error } = await gate.supabase
@@ -235,6 +246,15 @@ export async function criarEstabelecimento(input: unknown): Promise<Result> {
     ativo: v.ativo,
     ordem: ordemDoNovo(existentes),
     observacao: v.observacao,
+    logradouro: v.logradouro,
+    numero: v.numero,
+    complemento: v.complemento,
+    bairro: v.bairro,
+    cep: v.cep,
+    telefone: v.telefone,
+    email: v.email,
+    inscricao_estadual: v.inscricao_estadual,
+    inscricao_municipal: v.inscricao_municipal,
   };
 
   const { data: novo, error } = await gate.supabase
@@ -697,3 +717,77 @@ export async function registrarReceitaAnterior(input: unknown): Promise<Result> 
   return { ok: true };
 }
 
+// ---------------------------------------------------------------------------
+// CNPJ da PP por regional (decisão 156)
+// ---------------------------------------------------------------------------
+
+const cnpjDaRegionalSchema = z.object({
+  regional_id: z.string().uuid(),
+  /** Null = pela empresa gerencial do job. */
+  estabelecimento_id: z.string().uuid().nullable(),
+});
+
+/** O CNPJ que o formulário da PP já traz escolhido para os jobs da regional.
+ *  Sem escolha (null), vale o CNPJ da empresa gerencial do job. */
+export async function salvarCnpjDaPPDaRegional(input: unknown): Promise<Result> {
+  const parsed = cnpjDaRegionalSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Escolha a regional e o CNPJ." };
+  const gate = await checarGate("fiscal_cnpj_da_pp_regional.atualizado");
+  if (!gate.ok) return gate;
+  const tenantId = gate.session.activeTenant.id;
+  const { regional_id, estabelecimento_id } = parsed.data;
+
+  const [regionalRes, estabRes, atualRes] = await Promise.all([
+    gate.supabase.from("regionais").select("id, nome").eq("id", regional_id).eq("tenant_id", tenantId).maybeSingle<{ id: string; nome: string }>(),
+    estabelecimento_id
+      ? gate.supabase
+          .from("fiscal_estabelecimentos")
+          .select("id, nome, cnpj, ativo")
+          .eq("id", estabelecimento_id)
+          .eq("tenant_id", tenantId)
+          .maybeSingle<{ id: string; nome: string; cnpj: string | null; ativo: boolean }>()
+      : Promise.resolve({ data: null, error: null }),
+    gate.supabase
+      .from("fiscal_cnpj_da_pp_por_regional")
+      .select("estabelecimento_id")
+      .eq("regional_id", regional_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ estabelecimento_id: string }>(),
+  ]);
+  if (!regionalRes.data) return { ok: false, message: "Regional não encontrada." };
+  if (estabelecimento_id && (!estabRes.data || !estabRes.data.ativo || !estabRes.data.cnpj)) {
+    return { ok: false, message: "Escolha um CNPJ ativo do cadastro." };
+  }
+
+  const { error } = estabelecimento_id
+    ? await gate.supabase.from("fiscal_cnpj_da_pp_por_regional").upsert(
+        {
+          regional_id,
+          tenant_id: tenantId,
+          estabelecimento_id,
+          atualizado_por: gate.session.profile.id,
+        },
+        { onConflict: "regional_id" },
+      )
+    : await gate.supabase
+        .from("fiscal_cnpj_da_pp_por_regional")
+        .delete()
+        .eq("regional_id", regional_id)
+        .eq("tenant_id", tenantId);
+  if (error) return { ok: false, message: `Falha ao salvar o CNPJ da regional: ${error.message}` };
+
+  await logAuditEvent({
+    acao: "fiscal_cnpj_da_pp_regional.atualizado",
+    tenantId,
+    entidadeTipo: "regional",
+    entidadeId: regional_id,
+    metadata: {
+      regional: regionalRes.data.nome,
+      antes: atualRes.data?.estabelecimento_id ?? null,
+      depois: estabelecimento_id,
+      cnpj: estabRes.data?.nome ?? null,
+    },
+  });
+  revalidar();
+  return { ok: true };
+}

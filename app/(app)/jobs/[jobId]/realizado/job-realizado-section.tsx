@@ -270,6 +270,9 @@ interface Props {
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadoresDaNf: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
+  /** Decisão 156: o CNPJ que a PP nova já traz escolhido (regional do job →
+   *  empresa gerencial → principal). Repassado à tabela. */
+  cnpjPadraoDaPP: string | null;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
@@ -332,6 +335,7 @@ export function JobRealizadoSection({
   aEmitirPorItemId,
   tomadoresDaNf,
   tomadorPorEmpresa,
+  cnpjPadraoDaPP,
   fornecedores,
   empresas,
   responsaveis,
@@ -990,6 +994,7 @@ export function JobRealizadoSection({
           statusDoJob={job.status}
           tomadoresDaNf={tomadoresDaNf}
           tomadorPorEmpresa={tomadorPorEmpresa}
+          cnpjPadraoDaPP={cnpjPadraoDaPP}
           fornecedores={fornecedores}
           empresas={empresas}
           responsaveis={responsaveis}

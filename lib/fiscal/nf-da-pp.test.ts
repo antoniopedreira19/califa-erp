@@ -67,6 +67,7 @@ function estab(
     ativo,
     ordem,
     observacao: null,
+    logradouro: null, numero: null, complemento: null, bairro: null, cep: null, telefone: null, email: null, inscricao_estadual: null, inscricao_municipal: null,
     created_at: CARIMBO,
     updated_at: CARIMBO,
   };

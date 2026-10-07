@@ -1798,7 +1798,11 @@ export interface PedidoCompra {
   item_realizado_id: string;
   job_id: string;
   fornecedor_id: string | null;
+  /** A empresa GERENCIAL — a do job (RLS, relatórios, fluxo de caixa). */
   empresa_id: string;
+  /** O CNPJ da PP (decisão 156): sai no PDF, é o tomador esperado da NF e
+   *  o CNPJ da conta que paga. Independente da gerencial. */
+  estabelecimento_id: string | null;
   servico: string;
   /** O trio que forma o valor, espelhando as colunas do item na planilha:
    *  valor = valor_unitario × quantidade × dias_meses (01/09/2026). O
@@ -2494,7 +2498,11 @@ export interface AnexoDaPPNaLista {
  * formato que a geração valida (`dadosSchema` de `actions-pp.ts`).
  */
 export interface DadosDaPPAEmitir {
+  /** A empresa gerencial: a do job (a geração confere de novo). */
   empresa_id: string;
+  /** O CNPJ da PP (decisão 156). Opcional porque a PP a emitir salva antes
+   *  de 07/10/2026 não o tem: o formulário e a geração usam o padrão do job. */
+  estabelecimento_id?: string | null;
   /** Vencimento da 1ª parcela. */
   prazo_pagamento: string;
   servico: string;
@@ -4286,6 +4294,16 @@ export interface FiscalEstabelecimento {
   ativo: boolean;
   ordem: number;
   observacao: string | null;
+  /** O cabeçalho do PDF da PP (decisão 156). Município e UF são os de cima. */
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cep: string | null;
+  telefone: string | null;
+  email: string | null;
+  inscricao_estadual: string | null;
+  inscricao_municipal: string | null;
   created_at: string;
   updated_at: string;
 }

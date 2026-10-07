@@ -109,6 +109,7 @@ export default async function JobDetailPage({
     aEmitirPorItemId,
     tomadoresDaNf,
     tomadorPorEmpresa,
+    cnpjPadraoDaPP,
     fornecedores,
     fornecedoresPorId,
     empresas,
@@ -437,6 +438,7 @@ export default async function JobDetailPage({
             aEmitirPorItemId={aEmitirPorItemId}
             tomadoresDaNf={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
+            cnpjPadraoDaPP={cnpjPadraoDaPP}
             fornecedores={fornecedores}
             empresas={empresas}
             responsaveis={responsaveis}

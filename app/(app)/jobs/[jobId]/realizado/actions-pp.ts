@@ -31,6 +31,8 @@ import {
   parcelasFecham,
 } from "@/lib/calculos/pps-item";
 import { aplicarConclusaoDoItem } from "./conclusao-item";
+import { cnpjPadraoDaPP, empresaDoDocumento, type CnpjDoDocumento } from "@/lib/fiscal/cnpj-da-pp";
+import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
 // puxa pdfmake, que tem side-effects de inicialização que falham em runtime
 // serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
@@ -141,7 +143,13 @@ const dataSchema = z
 const MAX_PARCELAS = 24;
 
 const dadosBaseSchema = z.object({
+  // A empresa GERENCIAL. A geração grava a do job (decisão 156): o que vem
+  // daqui só vale se o job não tiver empresa.
   empresa_id: z.string().uuid(),
+  // O CNPJ da PP (decisão 156): quem contrata e paga. Sai no PDF e é o
+  // tomador esperado da NF. Ausente na PP a emitir salva antes de 07/10/2026:
+  // a geração usa o padrão do job.
+  estabelecimento_id: z.string().uuid().nullable().optional(),
   // Vencimento da 1ª parcela. A parcela 1 SEMPRE repete esta data — o
   // campo continua existindo em `pedidos_compra` porque é o que o
   // financeiro e as views leem hoje.
@@ -377,6 +385,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         /** Errata devolveu o job ao mural: nenhuma PP sai para o
          *  financeiro até a revisão da abertura ser salva (decisão 040). */
         abertura_em_revisao: boolean;
+        /** A regional do job: decide o CNPJ padrão da PP (decisão 156). */
+        regional_id: string | null;
       };
       supabase: ReturnType<typeof createClient>;
     }
@@ -448,7 +458,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const { data: jobRow, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao",
+      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, regional_id",
     )
     .eq("id", item.job_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -675,9 +685,77 @@ export interface AcimaDoPlanejado {
   excedente: number;
 }
 
+/** As NFs cujo CNPJ tomador não é o CNPJ da PP (decisão 156): o envio
+ *  pede "tem certeza?" e o financeiro decide na aprovação. */
+export interface TomadorDiferente {
+  /** O CNPJ da PP (`fiscal_estabelecimentos.id`). */
+  cnpjDaPP: string | null;
+  notas: Array<{ numero: string; tomador: string }>;
+}
+
 export type ResultadoEnvio =
   | { ok: true; codigo: string }
-  | { ok: false; message: string; acimaDoPlanejado?: AcimaDoPlanejado };
+  | { ok: false; message: string; acimaDoPlanejado?: AcimaDoPlanejado; tomadorDiferente?: TomadorDiferente };
+
+/**
+ * O CNPJ da PP na geração (decisão 156): o escolhido no formulário ou, sem
+ * ele, o padrão do job (regional → empresa gerencial → principal). Confere
+ * que é um CNPJ ativo do cadastro de impostos e devolve os dados que o PDF
+ * põe no cabeçalho.
+ */
+async function cnpjDaPPNaGeracao(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  job: { regional_id: string | null; empresa_id: string | null },
+  escolhido: string | null,
+): Promise<{ ok: true; id: string; empresa: ReturnType<typeof empresaDoDocumento> } | { ok: false; message: string }> {
+  const [estabRes, empresasRes, regionalRes] = await Promise.all([
+    supabase
+      .from("fiscal_estabelecimentos")
+      .select(
+        "id, nome, cnpj, ativo, papel, ordem, municipio, uf, logradouro, numero, complemento, bairro, cep, telefone, email, inscricao_estadual, inscricao_municipal, contabil:empresas_contabeis(razao_social)",
+      )
+      .eq("tenant_id", tenantId),
+    supabase.from("empresas").select("id, cnpj, principal").eq("tenant_id", tenantId),
+    job.regional_id
+      ? supabase
+          .from("fiscal_cnpj_da_pp_por_regional")
+          .select("estabelecimento_id")
+          .eq("tenant_id", tenantId)
+          .eq("regional_id", job.regional_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (estabRes.error) return { ok: false, message: "Não foi possível ler o cadastro de CNPJs." };
+  type Estab = CnpjDoDocumento & {
+    id: string;
+    ativo: boolean;
+    papel: string;
+    ordem: number | null;
+    contabil: { razao_social: string | null } | Array<{ razao_social: string | null }> | null;
+  };
+  const estabs = (estabRes.data ?? []) as unknown as Estab[];
+  const ativos = estabs.filter((e) => e.ativo && (e.cnpj ?? "").replace(/\D/g, "").length === 14);
+  const padrao = tomadoresPadrao(
+    ativos.map((e) => ({ id: e.id, cnpj: e.cnpj, ativo: e.ativo, papel: e.papel, ordem: Number(e.ordem ?? 0) })),
+    ((empresasRes.data ?? []) as Array<{ id: string; cnpj: string | null; principal: boolean | null }>),
+  );
+  const daRegional = (regionalRes.data as { estabelecimento_id: string } | null)?.estabelecimento_id;
+  const id =
+    escolhido ??
+    cnpjPadraoDaPP(job, {
+      porRegional: job.regional_id && daRegional ? { [job.regional_id]: daRegional } : {},
+      porEmpresa: padrao.porEmpresa,
+      geral: padrao.geral,
+      ativos: new Set(ativos.map((e) => e.id)),
+    });
+  const estab = id ? ativos.find((e) => e.id === id) : undefined;
+  if (!estab) {
+    return { ok: false, message: "Escolha o CNPJ da PP entre os CNPJs ativos do cadastro de impostos." };
+  }
+  const contabil = Array.isArray(estab.contabil) ? estab.contabil[0] : estab.contabil;
+  return { ok: true, id: estab.id, empresa: empresaDoDocumento(estab, contabil?.razao_social ?? null) };
+}
 
 /** O que o PDF da PP carrega além dela: projeto, orçamento, cliente e o
  *  responsável do projeto. Uma leitura só, usada pela geração, pela edição
@@ -1078,12 +1156,13 @@ async function finalizarPedidoCompraImpl(
           .eq("tenant_id", session.activeTenant.id)
           .eq("status", "ativo")
           .maybeSingle(),
+    // A gerencial é a do job (decisão 156); a do formulário só vale se o
+    // job não tiver empresa.
     supabase
       .from("empresas")
-      .select("*")
-      .eq("id", d.empresa_id)
+      .select("id")
+      .eq("id", job.empresa_id ?? d.empresa_id)
       .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
       .maybeSingle(),
     // O responsável precisa ser membro ATIVO do tenant, e a checagem usa a
     // MESMA fonte que a tela usa para montar a lista — senão o formulário
@@ -1105,7 +1184,16 @@ async function finalizarPedidoCompraImpl(
   if (d.verba_producao && !responsavelRes.data)
     return { ok: false, message: "Responsável inválido ou não encontrado." };
   if (!empRes.data)
-    return { ok: false, message: "Empresa emissora inválida ou inativa." };
+    return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
+
+  // Decisão 156: o CNPJ da PP (o do PDF, o tomador esperado da NF).
+  const cnpjDaPP = await cnpjDaPPNaGeracao(
+    supabase,
+    session.activeTenant.id,
+    { regional_id: job.regional_id, empresa_id: job.empresa_id },
+    d.estabelecimento_id ?? null,
+  );
+  if (!cnpjDaPP.ok) return cnpjDaPP;
 
   // Gera codigo
   let codigo: string;
@@ -1130,7 +1218,8 @@ async function finalizarPedidoCompraImpl(
     verba_producao: d.verba_producao,
     fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
     responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
-    empresa_id: d.empresa_id,
+    empresa_id: job.empresa_id ?? d.empresa_id,
+    estabelecimento_id: cnpjDaPP.id,
     servico: d.servico,
     valor_unitario: d.valor_unitario,
     quantidade: d.quantidade,
@@ -1280,7 +1369,8 @@ async function finalizarPedidoCompraImpl(
         valor,
         verba_producao: d.verba_producao,
       },
-      empresa: empRes.data,
+      // O cabeçalho é o do CNPJ da PP, não o da gerencial (decisão 156).
+      empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       responsavelVerbaNome: d.verba_producao
         ? (responsavelRes.data?.nome ?? "")
@@ -1886,6 +1976,8 @@ export async function enviarPedidoCompraAoFinanceiro(
   pp_id: string,
   confirmarAcimaDoPlanejado = false,
   anexosDoEnvio?: z.input<typeof anexoUploadedSchema>[],
+  /** Decisão 156: o "tem certeza?" da nota em outro CNPJ já foi respondido. */
+  confirmarTomadorDiferente = false,
 ): Promise<ResultadoEnvio> {
   const session = await requireSession();
   const supabase = createClient();
@@ -1893,7 +1985,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, anexos:pedidos_compra_anexos(id)",
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, estabelecimento_id, anexos:pedidos_compra_anexos(id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1906,6 +1998,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       valor: number | string;
       verba_producao: boolean;
       fornecedor_id: string | null;
+      estabelecimento_id: string | null;
       anexos: Array<{ id: string }> | null;
     }>();
 
@@ -1945,6 +2038,30 @@ export async function enviarPedidoCompraAoFinanceiro(
     anexosDoPedido = parsed.data;
     const falta = faltaNosAnexosDoEnvio(anexosDoPedido, Number(ppRow.valor ?? 0));
     if (falta) return { ok: false, message: falta };
+  }
+
+  // Decisão 156: a nota em outro CNPJ que não o da PP não barra o envio —
+  // pede o "tem certeza?" e o financeiro decide na aprovação.
+  const notasEmOutroCnpj = ppRow.estabelecimento_id
+    ? anexosDoPedido.filter(
+        (a) =>
+          a.documento_tipo === "nota_fiscal" &&
+          a.nf_tomador_estabelecimento_id &&
+          a.nf_tomador_estabelecimento_id !== ppRow.estabelecimento_id,
+      )
+    : [];
+  if (notasEmOutroCnpj.length > 0 && !confirmarTomadorDiferente) {
+    return {
+      ok: false,
+      message: "A nota está em outro CNPJ que não o da PP. Confirme o envio.",
+      tomadorDiferente: {
+        cnpjDaPP: ppRow.estabelecimento_id,
+        notas: notasEmOutroCnpj.map((a) => ({
+          numero: (a.documento_numero ?? "").trim(),
+          tomador: a.nf_tomador_estabelecimento_id as string,
+        })),
+      },
+    };
   }
 
   // A trava do AR vem ANTES da conta do planejado: ela barra de vez, e
@@ -2051,6 +2168,9 @@ export async function enviarPedidoCompraAoFinanceiro(
       verba_producao: ppRow.verba_producao,
       anexos: anexosDoPedido.length,
       notas_fiscais: anexosDoPedido.filter((a) => a.documento_tipo === "nota_fiscal").length,
+      // Decisão 156: enviada com nota em outro CNPJ, depois do "tem certeza?".
+      nota_em_outro_cnpj_confirmada: notasEmOutroCnpj.length > 0,
+      cnpj_da_pp: ppRow.estabelecimento_id,
     },
   });
 
@@ -2579,6 +2699,7 @@ export async function cancelarERefazerPP(
     job_id: string;
     item_realizado_id: string;
     empresa_id: string;
+    estabelecimento_id: string | null;
     verba_producao: boolean;
     fornecedor_id: string | null;
     responsavel_verba_id: string | null;
@@ -2634,6 +2755,7 @@ export async function cancelarERefazerPP(
     .map((p) => ({ data_vencimento: p.data_vencimento.slice(0, 10), valor: Number(p.valor) }));
   const dados = {
     empresa_id: linhaPP.empresa_id,
+    estabelecimento_id: linhaPP.estabelecimento_id ?? null,
     prazo_pagamento: (parcelas[0]?.data_vencimento ?? linhaPP.prazo_pagamento).slice(0, 10),
     servico: linhaPP.servico,
     valor_unitario: Number(linhaPP.valor_unitario),

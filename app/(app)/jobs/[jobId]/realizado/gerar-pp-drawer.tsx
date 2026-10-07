@@ -110,7 +110,8 @@ interface Props {
     /** Segunda linha da opção e chave de busca (09/09/2026). */
     cpf_cnpj?: string | null;
   }>;
-  empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
+  /** As empresas gerenciais: só o nome da do job aparece (decisão 156). */
+  empresas: Array<{ id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }>;
   /** Membros ativos do tenant — exibidos quando switch Verba de Produção está ON. */
   responsaveis: Array<{ id: string; nome: string }>;
   /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
@@ -145,6 +146,10 @@ interface Props {
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadores: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
+  /** Decisão 156: o CNPJ que a PP nova já traz escolhido (regional do job →
+   *  empresa gerencial → principal). A lista de "Empresa emissora" são os
+   *  CNPJs (`tomadores`); a empresa gerencial é a do job. */
+  cnpjPadraoDaPP: string | null;
   /** "salva": guardou a PP a emitir. "revisar": guardou e o painel abre a
    *  revisão antes de gerar (o "Gerar PP"). */
   onSuccess?: (modo: "salva" | "revisar", id: string) => void;
@@ -209,7 +214,7 @@ export function GerarPPDrawer({
   aEmitirEditando,
   statusDoJob,
   tomadores,
-  tomadorPorEmpresa,
+  cnpjPadraoDaPP,
   onSuccess,
 }: Props) {
   const editando = aEmitirEditando !== null;
@@ -323,7 +328,10 @@ export function GerarPPDrawer({
    *  responder precisa ser levado até ela (17/09/2026). */
   const refUltimaPP = React.useRef<HTMLDivElement>(null);
   const [responsavelId, setResponsavelId] = React.useState<string>("");
+  // A empresa GERENCIAL é a do job (decisão 156): não se escolhe aqui.
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
+  // O CNPJ da PP — a "Empresa emissora" do formulário (decisão 156).
+  const [cnpjId, setCnpjId] = React.useState<string>(cnpjPadraoDaPP ?? "");
   const [prazoPagamento, setPrazoPagamento] = React.useState<string>(defaultPrazoPagamento());
   // Descrição e quantidade abrem VAZIAS desde 17/08/2026: com PPs
   // parciais, herdar o nome e a quantidade do item induzia a pedir o item
@@ -352,8 +360,9 @@ export function GerarPPDrawer({
   const [justificativa, setJustificativa] = React.useState("");
   const [faltaJustificativa, setFaltaJustificativa] = React.useState(false);
   // Decisão 152: os anexos com tipo, número e, na NF, os dados dela. O
-  // CNPJ tomador sugerido é o da empresa emissora.
-  const tomadorPadrao = tomadorPorEmpresa[empresaId] ?? null;
+  // CNPJ tomador sugerido é o CNPJ da PP (decisão 156).
+  const tomadorPadrao = cnpjId || null;
+  const nomeDoCnpj = tomadores.find((t) => t.id === cnpjId)?.nome ?? "o CNPJ da PP";
   const {
     anexos,
     setAnexos,
@@ -425,6 +434,7 @@ export function GerarPPDrawer({
       );
       setResponsavelId(d.responsavel_verba_id ?? "");
       setEmpresaId(d.empresa_id);
+      setCnpjId(d.estabelecimento_id ?? cnpjPadraoDaPP ?? "");
       setPrazoPagamento(d.prazo_pagamento.slice(0, 10));
       setPrazoOriginal(d.prazo_pagamento.slice(0, 10));
       setUrgente(d.urgente === true);
@@ -445,7 +455,7 @@ export function GerarPPDrawer({
       );
       setAnexos(
         aEmitirEditando.anexos.map((a) =>
-          anexoEmEdicao(a, tomadorPorEmpresa[d.empresa_id] ?? null),
+          anexoEmEdicao(a, d.estabelecimento_id ?? cnpjPadraoDaPP ?? null),
         ),
       );
       setPpId(aEmitirEditando.id);
@@ -465,6 +475,7 @@ export function GerarPPDrawer({
     setPagamento(PAGAMENTO_PELO_CADASTRO);
     setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
+    setCnpjId(cnpjPadraoDaPP ?? "");
     setPrazoPagamento(defaultPrazoPagamento());
     setPrazoOriginal(null);
     setUrgente(false);
@@ -627,8 +638,8 @@ export function GerarPPDrawer({
         return false;
       }
     }
-    if (!empresaId) {
-      setErro("Escolha uma empresa emissora.");
+    if (!cnpjId) {
+      setErro("Escolha a empresa emissora (o CNPJ da PP).");
       return false;
     }
     if (!prazoPagamento) {
@@ -715,6 +726,7 @@ export function GerarPPDrawer({
       try {
         const dadosBase = {
           empresa_id: empresaId,
+          estabelecimento_id: cnpjId || null,
           prazo_pagamento: prazoPagamento,
           servico: servico.trim(),
           valor_unitario: unitNum,
@@ -1080,21 +1092,31 @@ export function GerarPPDrawer({
                 </div>
               )}
 
+              {/* Decisão 156: a "Empresa emissora" é o CNPJ da PP — sai no
+                  PDF e é contra ele que o fornecedor emite a nota. A empresa
+                  gerencial vem do job e não se escolhe. */}
               <div>
                 <label className="text-xs font-medium">Empresa emissora *</label>
-                <Select value={empresaId} onValueChange={setEmpresaId}>
+                <Select value={cnpjId || undefined} onValueChange={setCnpjId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Escolha a empresa" />
+                    <SelectValue placeholder="Escolha o CNPJ" />
                   </SelectTrigger>
                   <SelectContent>
-                    {empresas.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.razao_social}
-                        {e.principal ? " (principal)" : ""}
+                    {tomadores.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.nome} · <span className="font-mono">{t.cnpj}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  A nota do fornecedor vem neste CNPJ. Empresa gerencial do job:{" "}
+                  {(() => {
+                    const g = empresas.find((e) => e.id === empresaId);
+                    return g ? (g.nome_fantasia ?? g.razao_social) : "—";
+                  })()}
+                  .
+                </p>
               </div>
 
               {/* Prazo e Parcelas dividem a linha: o prazo é o vencimento
@@ -1287,10 +1309,8 @@ export function GerarPPDrawer({
                           faltas={[]}
                           idBase={`pp-nf-${id}`}
                           tomadores={tomadores}
-                          tomadorEsperado={tomadorPorEmpresa[empresaId] ?? null}
-                          empresaNome={
-                            empresas.find((e) => e.id === empresaId)?.razao_social ?? "empresa emissora"
-                          }
+                          tomadorEsperado={cnpjId || null}
+                          empresaNome={nomeDoCnpj}
                           existente={notaExistenteDe(existentes, a.nf.numero)}
                           valorPP={valorPP}
                           disabled={pending}

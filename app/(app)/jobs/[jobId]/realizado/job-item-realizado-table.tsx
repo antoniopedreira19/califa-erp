@@ -184,6 +184,8 @@ interface Props {
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadoresDaNf: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
+  /** Decisão 156: o CNPJ que a PP nova já traz escolhido. */
+  cnpjPadraoDaPP: string | null;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
   /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
@@ -675,6 +677,7 @@ export function JobItemRealizadoTable({
   statusDoJob,
   tomadoresDaNf,
   tomadorPorEmpresa,
+  cnpjPadraoDaPP,
   fornecedores,
   empresas,
   responsaveis,
@@ -2227,6 +2230,7 @@ export function JobItemRealizadoTable({
                 situacaoVerba: situacaoDaVerba(pp),
                 fornecedorId: pp.fornecedor_id ?? null,
                 empresaId: pp.empresa_id,
+                estabelecimentoId: pp.estabelecimento_id ?? null,
                 servico: pp.servico,
                 anexos: pp.anexos,
                 substitui: pp.substitui,
@@ -2254,6 +2258,7 @@ export function JobItemRealizadoTable({
               }}
               tomadores={tomadoresDaNf}
               tomadorPorEmpresa={tomadorPorEmpresa}
+              cnpjPadraoDaPP={cnpjPadraoDaPP}
               podeCorrigirNf={papelCorrigeNf}
               emPPs={emPPs}
               envioBloqueadoPor={envioBloqueadoPor}
@@ -2317,6 +2322,7 @@ export function JobItemRealizadoTable({
               statusDoJob={statusDoJob}
               tomadores={tomadoresDaNf}
               tomadorPorEmpresa={tomadorPorEmpresa}
+              cnpjPadraoDaPP={cnpjPadraoDaPP}
               onSuccess={(modo, id) => {
                 if (modo === "salva") {
                   setToast("PP a emitir salva. Gere a PP pelo painel do item quando quiser.");
@@ -2357,10 +2363,12 @@ export function JobItemRealizadoTable({
                     nomeDoFornecedor(fornecedores, ppVendo.fornecedor_id ?? "")
                   : ""
               }
-              empresaNome={
-                empresas.find((e) => e.id === ppVendo?.empresa_id)
-                  ?.razao_social ?? "—"
-              }
+              // Decisão 156: a "Empresa emissora" da PP é o CNPJ dela.
+              empresaNome={(() => {
+                const t = tomadoresDaNf.find((x) => x.id === ppVendo?.estabelecimento_id);
+                if (t) return `${t.nome} · ${t.cnpj}`;
+                return empresas.find((e) => e.id === ppVendo?.empresa_id)?.razao_social ?? "—";
+              })()}
               itemDescricao={itemAtual?.item ?? ""}
               valorPlanejado={planejadoAtual}
               emPPsEmitidas={emPPs}

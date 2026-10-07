@@ -6882,3 +6882,15 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
   aprovação: a tela barra ("A NF nesta PP (R$ …) passa do valor da PP") e o
   banco confere de novo (`_conferir_partes_da_nota`).
 - Conferido na PP-00142 do TES-1014/26, fechada sem aprovar.
+
+## ⚠️ Nota de 2026-10-07 (10) — o CNPJ da PP e a nota em outro CNPJ (decisão 156)
+
+- A PP tem CNPJ próprio (`estabelecimento_id`), separado da empresa
+  gerencial. O quadro da nota no Contas a Pagar mostra "CNPJ da PP"; a nota
+  em outro CNPJ ganha uma frase vermelha, e o pop-up de aprovação, uma
+  faixa vermelha. O CNPJ tomador sugerido é o da PP.
+- **Cadastros › Impostos › CNPJs emissores**: o diálogo do CNPJ ganhou
+  "Cabeçalho do PDF da PP" (endereço, telefone, e-mail, inscrições), e a
+  aba ganhou o quadro "CNPJ da PP por regional" (SS → GoCrazy).
+- Falta preencher os dados da GoCrazy, e a baixa ainda não confere a conta
+  contra o CNPJ da PP (pendências da decisão 156).

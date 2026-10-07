@@ -99,7 +99,7 @@ export function CorrigirNfDialog({
             numero: n.numero,
             emissao: n.emissao,
             valor: n.valor,
-            tomador: n.tomador ?? tomadorPorEmpresa[res.pp.empresa_id] ?? "",
+            tomador: n.tomador ?? res.pp.estabelecimento_id ?? tomadorPorEmpresa[res.pp.empresa_id] ?? "",
             valorNaPP: n.valor_na_pp ?? n.valor,
             cobreOutra: n.valor_na_pp !== null && n.valor > 0 && Math.abs(n.valor_na_pp - n.valor) > 0.004,
           },
@@ -172,8 +172,9 @@ export function CorrigirNfDialog({
     });
   }
 
-  const empresaNome = pp ? nomeDaEmpresa(pp.empresa_id) : "";
-  const tomadorEsperado = pp ? (tomadorPorEmpresa[pp.empresa_id] ?? null) : null;
+  // Decisão 156: a nota é conferida com o CNPJ da PP, não com a gerencial.
+  const tomadorEsperado = pp ? (pp.estabelecimento_id ?? tomadorPorEmpresa[pp.empresa_id] ?? null) : null;
+  const empresaNome = tomadores.find((t) => t.id === tomadorEsperado)?.nome ?? (pp ? nomeDaEmpresa(pp.empresa_id) : "");
 
   return (
     <Dialog open onOpenChange={(o) => !pending && onOpenChange(o)}>

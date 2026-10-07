@@ -186,6 +186,7 @@ export function PlanilhaConferencia({
           statusDoJob="aguardando_abertura"
           tomadoresDaNf={[]}
           tomadorPorEmpresa={{}}
+          cnpjPadraoDaPP={null}
           fornecedores={[]}
           empresas={[]}
           responsaveis={[]}

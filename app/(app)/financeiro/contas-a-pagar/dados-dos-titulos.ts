@@ -54,7 +54,7 @@ import type { TituloRow } from "./titulos-pagar-list";
 
 /** `pedidos_compra`: a PP inteira, como a aba de PPs e os títulos usam. */
 export const SELECT_PP_DO_FINANCEIRO = `
-        id, codigo, status, valor, quantidade, servico, especificacoes,
+        id, codigo, status, valor, quantidade, servico, especificacoes, estabelecimento_id,
         prazo_pagamento, prazo_pagamento_financeiro, pdf_path, created_at,
         dados_pagamento_congelados_em,
         fornecedor_banco_codigo, fornecedor_banco_nome,
@@ -217,6 +217,7 @@ export function mapearPPsDoFinanceiro(
     quantidade: string | number;
     servico: string;
     especificacoes: string | null;
+    estabelecimento_id: string | null;
     prazo_pagamento: string;
     prazo_pagamento_financeiro: string | null;
     pdf_path: string;
@@ -344,6 +345,8 @@ export function mapearPPsDoFinanceiro(
     pagamento_fora_do_cadastro: lerPagamentoForaDoCadastro(r),
     empresa_id: r.empresa?.id ?? "",
     empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
+    // Decisão 156: o CNPJ da PP, separado da gerencial.
+    estabelecimento_id: r.estabelecimento_id ?? null,
     job_id: r.job?.id ?? "",
     job_codigo: r.job?.codigo ?? "",
     job_nome: r.job?.nome ?? "",
