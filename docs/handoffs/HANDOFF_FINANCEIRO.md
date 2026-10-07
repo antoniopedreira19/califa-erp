@@ -6785,3 +6785,20 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
   - TES-1004/26 (consome R$ 1.000): Rentabilidade R$ 1.600,00 · 22,99%, igual ao "Resultado op. (planejado)" do cabeçalho (R$ 1.600,00 · 23,0%);
   - abertura do TES-1012/26: R$ 32.000,00 = 139.182,30 − 27.182,30 − 80.000,00.
 - **Fica para depois:** não há no banco um job aberto com faturamento zero e consumo de save. O aviso "pago com saldo em save" do job aberto foi conferido pelo valor que a página passa ao formulário, e não pela tela. O orçamento `TES-P001/26-26 · Teste aviso job pago por save` (v1 aprovada, sem job) está pronto para esse teste.
+
+## ⚠️ Nota de 2026-10-07 (3) — o save que vem com o job é aprovado na abertura (decisão 155)
+
+- **Formulário "Abrir job no financeiro":**
+  - bloco novo "Saves deste job · N", logo depois das Previsões, com o resumo por tipo, o selo do modo inteiro (decisão 154) e as linhas (recolhidas em 3 quando passam de 5);
+  - uma caixa por tipo presente, "Aprovar save gerado" e "Aprovar consumo de save". Sem as caixas marcadas, o "Abrir job no financeiro" não libera, e o rodapé diz o que falta;
+  - na confirmação, a linha "Saves aprovados com a abertura" e o botão "Sim, abrir job e aprovar os saves".
+- **`abrirJobNoFinanceiro(jobId, payload, { gera, consumo })`:**
+  - confere as caixas contra as linhas do job ANTES de abrir, e recusa com a mesma mensagem do rodapé;
+  - depois de abrir, chama `save_aprovar_na_abertura` (migration `20261007950001`), que cria os pedidos e os aprova numa transação só. A auditoria é `save.pedido.aprovado` com `na: "abertura"`;
+  - se a aprovação falhar, os pedidos vão para a faixa Saves pelo caminho de antes, e a mensagem avisa.
+- **Atalho "Visualizar planilha do {código}"** para cada job de origem do consumo, logo abaixo do "Visualizar planilha interna". Ele abre a Planilha Interna do outro job em pop-up, em leitura (`planilha-da-origem.tsx`, por streaming).
+- **Job aberto:** o mesmo bloco em leitura, com "Aprovado por {nome} em {data}" e a situação de cada pedido.
+- **Conferência da fila e marca na linha:**
+  - o texto passou a "São aprovados junto com a abertura do job, no formulário de abertura…";
+  - a linha da fila ganhou "Orçamento inteiro em save", "Orçamento inteiro pago pelo saldo do {código}" ou "N linhas com save".
+- **Testado** em TES-1023/26 (consumo) e TES-1024/26 (gera inteiro). Detalhes na decisão 155.

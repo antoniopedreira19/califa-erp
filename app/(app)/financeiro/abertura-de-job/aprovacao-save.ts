@@ -328,6 +328,38 @@ export async function enfileirarSavesDoJob(
 }
 
 /**
+ * Decisão 155: cria os pedidos de save do job que acabou de ser aberto E os
+ * aprova, numa transação só (`save_aprovar_na_abertura`). É o que o
+ * financeiro marcou no formulário ("Aprovar save gerado", "Aprovar consumo
+ * de save"). Chamar DEPOIS de o job estar `aberto`, como a de cima.
+ *
+ * Se falhar, nada fica gravado, e quem chama cai em `enfileirarSavesDoJob`:
+ * os pedidos vão para a faixa Saves e se aprovam pelo caminho de antes.
+ */
+export async function aprovarSavesNaAbertura(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+  momento: "abertura" | "reenvio",
+): Promise<{ ok: true; quantidade: number } | { ok: false; message: string }> {
+  const lida = await lerBaseDosEspelhos(supabase, tenantId, jobId);
+  if (!lida.ok) return { ok: false, message: lida.message };
+  const numeros = numerosDasLinhasComSave(lida.base);
+  if (Object.keys(numeros).length === 0) return { ok: true, quantidade: 0 };
+
+  const { data, error } = await supabase.rpc("save_aprovar_na_abertura", {
+    p_job_id: jobId,
+    p_momento: momento,
+    p_numeros: numeros,
+  });
+  if (error) {
+    console.error("[abertura-job.saves-aprovar]", error.message);
+    return { ok: false, message: error.message };
+  }
+  return { ok: true, quantidade: Number(data ?? 0) };
+}
+
+/**
  * O pedido que a página do job no financeiro está aprovando
  * (`?aprovarSave=<id>`): a faixa "Aprovação de save · revisão da
  * abertura" e os números que o formulário mostra e valida.

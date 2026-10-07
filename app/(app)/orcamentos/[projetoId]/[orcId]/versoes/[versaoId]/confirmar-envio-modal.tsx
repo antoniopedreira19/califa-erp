@@ -38,6 +38,8 @@ export function ConfirmarEnvioModal({
   valorTotal,
   faturamentoPrevisto,
   totalGeradoEmSave,
+  totalConsumidoEmSave,
+  origensDoConsumo,
   moeda,
   contatos,
   observacoes,
@@ -62,6 +64,12 @@ export function ConfirmarEnvioModal({
   faturamentoPrevisto: number;
   /** Crédito gerado pelas linhas em save. Zero não vira linha. */
   totalGeradoEmSave: number;
+  /** Consumo de save desta versão (ou da cópia do job) e os jobs de onde
+   *  vem o saldo (decisão 155). Zero esconde a linha. Até 07/10/2026 o
+   *  envio mostrava só o save gerado, e o job pago por save chegava com
+   *  "Faturamento previsto R$ 0,00" sem explicação. */
+  totalConsumidoEmSave: number;
+  origensDoConsumo: string[];
   moeda: string;
   /** Contatos de cobrança digitados no formulário — dado digitado tem de
    *  ser conferível antes de gravar. */
@@ -157,6 +165,23 @@ export function ConfirmarEnvioModal({
                 )}
               >
                 {formatCurrency(totalGeradoEmSave, moeda)}
+              </span>
+            </div>
+          )}
+          {/* Decisão 155: o consumo de save também se confere aqui. */}
+          {totalConsumidoEmSave > 0 && (
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[13px] font-semibold">
+                Consumo de save
+                {origensDoConsumo.length > 0 ? ` · ${origensDoConsumo.join(", ")}` : ""}
+              </span>
+              <span
+                className={cn(
+                  "font-mono text-[14px] font-bold",
+                  SAVE.textoApagado,
+                )}
+              >
+                {formatCurrency(totalConsumidoEmSave, moeda)}
               </span>
             </div>
           )}

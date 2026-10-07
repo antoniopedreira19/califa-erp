@@ -808,7 +808,7 @@ async function revisoesPendentes(
  * "Saves deste job" da conferência (decisão 099). Duas queries em lote:
  * as linhas, e depois as origens dos consumos com o código do job.
  */
-async function savesDaConferencia(
+export async function savesDaConferencia(
   jobIds: string[],
   tenantId: string,
 ): Promise<Map<string, SaveDaConferencia[]>> {
@@ -903,7 +903,7 @@ async function savesDaConferencia(
  * `null` sem tipo de custo (linha removida depois do pedido): sem ele não
  * há alavanca para fechar, e um número inventado seria pior que nenhum.
  */
-function faturamentoDaLinhaEmSave(
+export function faturamentoDaLinhaEmSave(
   valor: number,
   tipoCusto: TipoCusto | null,
   versao: {

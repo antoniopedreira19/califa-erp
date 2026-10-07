@@ -643,6 +643,7 @@ export default async function OrcamentoDetailPage({
       faturamentoPrevisto: t.faturamentoPrevisto,
       valorJob: t.valorJob,
       totalGeradoEmSave: t.save.totalSaveGerado,
+      totalConsumidoEmSave: t.save.totalSaveUsado,
     };
     porMesDaCopia = faturamentoPorMesDoFinanceiro(reenvioRes.base.itens, reenvioRes.base);
   } else if (reenvioRes) {
@@ -1593,6 +1594,16 @@ function VersaoSelecionada({
         custoPlanejado={custoPlanejado}
         faturamentoPrevisto={faturamentoPrevisto}
         totalGeradoEmSave={midiaOff ? 0 : totais.save.totalSaveGerado}
+        // O consumo de save e de quais jobs (decisão 155): o envio mostra
+        // o que a abertura vai aprovar.
+        totalConsumidoEmSave={midiaOff ? 0 : totais.save.totalSaveUsado}
+        origensDoConsumo={[
+          ...new Set(
+            Object.values(savePorItem)
+              .filter((s) => s.saveConsumido > 0)
+              .flatMap((s) => s.origens.map((o) => o.codigo)),
+          ),
+        ]}
         valorJob={valorDoJob}
         fechamentoDaCopia={fechamentoDaCopia}
         moeda={versao.moeda}

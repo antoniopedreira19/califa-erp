@@ -33,6 +33,7 @@ import { registrarFotoDaAbertura } from "./fotos";
 import { impostoDoJob } from "./imposto-previsto";
 import { ehJanelaDePagamento, emCentavos, somaCurva } from "./curva";
 import {
+  aprovarSavesNaAbertura,
   custoPrevistoDoFinanceiro,
   enfileirarSavesDoJob,
   espelhosDaAprovacao,
@@ -314,6 +315,10 @@ async function conferirRecebimentoPorMes(
 export async function abrirJobNoFinanceiro(
   jobId: string,
   input: AberturaFinanceiraInput,
+  /** As caixas "Aprovar save gerado" e "Aprovar consumo de save" do
+   *  formulário (decisão 155). O job que tem save de um tipo só abre com a
+   *  caixa daquele tipo marcada — conferido aqui, não só na tela. */
+  aprovacaoDosSaves: { gera: boolean; consumo: boolean },
 ): Promise<ActionResult> {
   const session = await requireSession();
 
@@ -344,6 +349,36 @@ export async function abrirJobNoFinanceiro(
   }
 
   const supabase = createClient();
+
+  // Decisão 155: abrir o job aprova os saves que vieram com ele, e por isso
+  // cada tipo presente precisa da caixa marcada. Antes de qualquer escrita:
+  // a recusa aqui não pode deixar o job meio aberto. A mesma seleção da
+  // conferência (`em_save` ou `save_consumido` > 0).
+  const { data: linhasComSave, error: linhasComSaveErro } = await supabase
+    .from("jobs_itens_orcado")
+    .select("em_save")
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("job_id", jobId)
+    .or("em_save.eq.true,save_consumido.gt.0");
+  if (linhasComSaveErro) {
+    console.error("[abertura-job.saves-tipos]", linhasComSaveErro.message);
+    return { ok: false, message: "Não foi possível conferir os saves do job. Tente de novo." };
+  }
+  const temSaveGerado = (linhasComSave ?? []).some((l) => l.em_save === true);
+  const temConsumo = (linhasComSave ?? []).some((l) => l.em_save !== true);
+  const faltaGera = temSaveGerado && !aprovacaoDosSaves.gera;
+  const faltaConsumo = temConsumo && !aprovacaoDosSaves.consumo;
+  if (faltaGera || faltaConsumo) {
+    return {
+      ok: false,
+      message:
+        faltaGera && faltaConsumo
+          ? "Marque a aprovação dos saves para abrir o job."
+          : faltaGera
+            ? "Marque “Aprovar save gerado” para abrir o job."
+            : "Marque “Aprovar consumo de save” para abrir o job.",
+    };
+  }
 
   const { data: job } = await supabase
     .from("jobs")
@@ -619,12 +654,13 @@ export async function abrirJobNoFinanceiro(
     });
   }
 
-  // Os saves e consumos que vieram do orçamento entram na faixa Saves
-  // agora (decisão 099): o financeiro acabou de conferir estes números, e
-  // a linha já conta para ele. A RPC só aceita job `aberto` — por isso
-  // roda depois do update acima, e antes do resto, que pode sair mais
-  // cedo com erro. Falha aqui não desfaz a abertura: fica guardada e vira
-  // a mensagem do fim, se nada mais falhar.
+  // Os saves e consumos que vieram do orçamento são aprovados agora
+  // (decisão 155): o financeiro marcou as caixas conferindo estes números,
+  // e a linha já contava para ele. A RPC só aceita job `aberto` — por isso
+  // roda depois do update acima, e antes do resto, que pode sair mais cedo
+  // com erro. Se a aprovação falhar (nada fica gravado), os pedidos vão
+  // para a faixa Saves pelo caminho de antes. Falha aqui não desfaz a
+  // abertura: fica guardada e vira a mensagem do fim.
   const momentoDosSaves = (await jobJaFoiDevolvido(
     supabase,
     session.activeTenant.id,
@@ -632,19 +668,33 @@ export async function abrirJobNoFinanceiro(
   ))
     ? "reenvio"
     : "abertura";
-  const saves = await enfileirarSavesDoJob(
+  const aprovados = await aprovarSavesNaAbertura(
     supabase,
     session.activeTenant.id,
     jobId,
     momentoDosSaves,
   );
+  const saves = aprovados.ok
+    ? aprovados
+    : await enfileirarSavesDoJob(
+        supabase,
+        session.activeTenant.id,
+        jobId,
+        momentoDosSaves,
+      );
   if (saves.ok && saves.quantidade > 0) {
     await logAuditEvent({
-      acao: "save.pedido.enviado",
+      acao: aprovados.ok ? "save.pedido.aprovado" : "save.pedido.enviado",
       tenantId: session.activeTenant.id,
       entidadeTipo: "job",
       entidadeId: jobId,
-      metadata: { momento: momentoDosSaves, quantidade: saves.quantidade },
+      metadata: aprovados.ok
+        ? { na: "abertura", momento: momentoDosSaves, quantidade: saves.quantidade }
+        : {
+            momento: momentoDosSaves,
+            quantidade: saves.quantidade,
+            aprovacao_na_abertura_falhou: aprovados.message,
+          },
     });
   }
 
@@ -859,6 +909,12 @@ export async function abrirJobNoFinanceiro(
     return {
       ok: false,
       message: `O job foi aberto, mas os saves dele não entraram na faixa Saves (${saves.message}). A produção pode enviá-los pelo botão “Enviar saves para aprovação”, acima da planilha do job.`,
+    };
+  }
+  if (!aprovados.ok && saves.quantidade > 0) {
+    return {
+      ok: false,
+      message: `O job foi aberto, mas os saves não puderam ser aprovados junto (${aprovados.message}). Eles foram para a faixa Saves desta página: aprove cada um por lá.`,
     };
   }
 

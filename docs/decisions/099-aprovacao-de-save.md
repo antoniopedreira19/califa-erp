@@ -63,6 +63,14 @@ precisa de dono.
 6. **Aprovar é registrar a revisão da abertura:** "Aprovar save" leva à
    revisão do job no financeiro (`?aba=abertura&aprovarSave=<id>`), e só o
    registro dela aprova.
+
+> ⚠️ **07/10/2026 — [decisão 155](155-save-aprovado-na-abertura.md).** Os itens
+> 2 e 6 mudaram para o save que vem com o envio (momentos `abertura` e
+> `reenvio`). O financeiro marca "Aprovar save gerado" e "Aprovar consumo de
+> save" no formulário da abertura, e abrir o job aprova os pedidos, numa
+> transação só. Nada vai para a faixa Saves, e não há revisão por save.
+> Recusar antes de abrir é o "Reprovar job". A errata de save do job aberto
+> (`job_aberto`) continua como descrito aqui.
 7. **Retirar:** sempre com aviso. Save gerado até o envio para
    encerramento; consumo até o envio para faturamento (mensal: por mês).
    Save aprovado cujo saldo já começou a ser usado não sai. Retirar um

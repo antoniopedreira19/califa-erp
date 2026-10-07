@@ -118,6 +118,11 @@ interface Props {
   /** Crédito que as linhas em save da versão geram para o cliente.
    *  Zerado, some do formulário e da confirmação. */
   totalGeradoEmSave: number;
+  /** O que as linhas da versão consomem de saldo de save de outros jobs, e
+   *  de quais (códigos). Zerado, some do formulário e da confirmação
+   *  (decisão 155). */
+  totalConsumidoEmSave: number;
+  origensDoConsumo: string[];
   /** Compromisso total do cliente — é o que vai para `jobs.valor_total`. */
   valorJob: number;
   /** Job devolvido ou aguardando abertura: o fechamento da cópia do job,
@@ -168,6 +173,8 @@ export interface FechamentoDaCopia {
   faturamentoPrevisto: number;
   valorJob: number;
   totalGeradoEmSave: number;
+  /** O consumo de save da cópia do job (decisão 155). */
+  totalConsumidoEmSave: number;
 }
 
 export function FluxoAbertura({
@@ -190,6 +197,8 @@ export function FluxoAbertura({
   custoPlanejado,
   faturamentoPrevisto,
   totalGeradoEmSave,
+  totalConsumidoEmSave,
+  origensDoConsumo,
   valorJob,
   fechamentoDaCopia,
   moeda,
@@ -268,6 +277,7 @@ export function FluxoAbertura({
               faturamentoPrevisto: faturamentoGravado,
               valorJob: valorGravado,
               totalGeradoEmSave,
+              totalConsumidoEmSave,
               rotulo: rotuloVersao,
               origem: "versao",
             }
@@ -275,6 +285,7 @@ export function FluxoAbertura({
               faturamentoPrevisto,
               valorJob,
               totalGeradoEmSave,
+              totalConsumidoEmSave,
               rotulo: rotuloVersao,
               origem: "versao",
             };
@@ -727,6 +738,8 @@ export function FluxoAbertura({
         valorTotal={fechamento.valorJob}
         faturamentoPrevisto={fechamento.faturamentoPrevisto}
         totalGeradoEmSave={fechamento.totalGeradoEmSave}
+        totalConsumidoEmSave={fechamento.totalConsumidoEmSave}
+        origensDoConsumo={origensDoConsumo}
         moeda={moeda}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
@@ -758,6 +771,8 @@ export function FluxoAbertura({
         valorTotal={fechamento.valorJob}
         faturamentoPrevisto={fechamento.faturamentoPrevisto}
         totalGeradoEmSave={fechamento.totalGeradoEmSave}
+        totalConsumidoEmSave={fechamento.totalConsumidoEmSave}
+        origensDoConsumo={origensDoConsumo}
         moeda={moeda}
         // Só o que vai ao servidor: a linha em branco é descartada no envio
         // e, sem faturamento, o contato é opcional (decisão 105).

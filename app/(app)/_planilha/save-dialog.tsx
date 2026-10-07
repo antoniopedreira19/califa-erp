@@ -287,7 +287,8 @@ function textoDaSituacao(
       return "Marcado antes de existir a aprovação de save e nunca enviado ao financeiro. Envie pelo botão “Enviar saves para aprovação”, acima da planilha.";
     }
     if (status === "aguardando_abertura" || status === "rejeitado_financeiro") {
-      return "Segue para a aprovação do financeiro quando o job for aberto.";
+      // Decisão 155: o financeiro aprova no formulário da abertura.
+      return "O financeiro aprova junto com a abertura do job.";
     }
     // Job cancelado (22/09/2026): o banco retira da fila o pedido que
     // aguardava (`save_job_cancelado_retira_pedidos`), e a linha, que segue

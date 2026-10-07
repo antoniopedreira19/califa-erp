@@ -9,7 +9,7 @@ import {
   Search,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import type { JobNaFila, SaveNaFila } from "./dados";
+import type { JobNaFila, SaveDaConferencia, SaveNaFila } from "./dados";
 import { formatPeriodo } from "./formatos";
 import { ConferenciaDialog } from "./conferencia-dialog";
 import { ReprovarDialog } from "./reprovar-dialog";
@@ -143,6 +143,7 @@ export function FilaAbertura({
             <span className="font-mono text-[11.5px] text-muted-foreground">
               {formatPeriodo(l.data_inicio_prevista, l.data_fim_prevista)}
             </span>
+            <MarcaDeSave saves={l.saves} itens={l.planilha_itens} />
           </div>
         </td>
         <td className="px-4 py-3.5">
@@ -460,5 +461,33 @@ function QuemEnviou({
       </span>
       <span className="text-[12px] text-muted-foreground">{quando}</span>
     </div>
+  );
+}
+
+/**
+ * O job tem save (decisão 155): a fila avisa antes da conferência, porque
+ * a aprovação dos saves agora acontece no formulário da abertura. Com o
+ * orçamento inteiro num modo (decisão 154), diz qual. A conta é pelas
+ * linhas que a conferência já traz: todas em save, ou todas consumindo.
+ */
+function MarcaDeSave({
+  saves,
+  itens,
+}: {
+  saves: SaveDaConferencia[];
+  itens: number;
+}) {
+  if (saves.length === 0) return null;
+  const gera = saves.filter((s) => s.tipo === "gera").length;
+  const consome = saves.length - gera;
+  const inteiro = saves.length === itens && (gera === 0 || consome === 0);
+  const origem = saves.find((s) => s.tipo === "consome")?.origens[0]?.codigo;
+  const texto = inteiro
+    ? gera > 0
+      ? "Orçamento inteiro em save"
+      : `Orçamento inteiro pago pelo saldo do ${origem ?? "job de origem"}`
+    : `${saves.length} ${saves.length === 1 ? "linha com save" : "linhas com save"}`;
+  return (
+    <span className="text-[11.5px] font-medium text-muted-foreground">{texto}</span>
   );
 }

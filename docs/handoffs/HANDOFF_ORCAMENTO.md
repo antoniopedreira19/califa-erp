@@ -5350,3 +5350,12 @@ aplicada na hora combinada com a frente do Antonio, junto da
   navegador, como administrador, no orçamento "ZZ Teste 154 save inteiro"
   (TES-P001/26), que ficou sem save no fim. O registro completo está na
   decisão 154.
+
+## ⚠️ Nota de 2026-10-07 (8) — o envio mostra o consumo de save, e o save é aprovado na abertura (decisão 155)
+
+- **"Enviar job para abertura" e a confirmação:**
+  - ganharam a linha "Consumo de save", com o valor e os jobs de onde vem o saldo (props `totalConsumidoEmSave` e `origensDoConsumo` no `FluxoAbertura` e nos dois pop-ups, mais `FechamentoDaCopia.totalConsumidoEmSave` no job devolvido);
+  - o job pago inteiro por save deixa de chegar com "Faturamento previsto R$ 0,00" sem explicação;
+  - o texto do "Total gerado em save" passou a "Fica disponível para outros jobs quando o financeiro abrir o job.".
+- **Pop-up de save da linha, no job ainda não aberto:** "O financeiro aprova junto com a abertura do job.".
+- **O resto da decisão** (as caixas na abertura e os pedidos aprovados no "abrir") está no `HANDOFF_FINANCEIRO`, nota de 2026-10-07 (3).
