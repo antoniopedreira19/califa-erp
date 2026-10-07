@@ -40,6 +40,7 @@ import {
   type TomadorDaNf,
 } from "./anexos-da-pp";
 import { CorrigirNfDialog } from "./corrigir-nf-da-pp";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // ---------------------------------------------------------------------------
 // A pré-abertura: só PP a emitir
@@ -298,6 +299,8 @@ export function RevisaoDialog({
 export interface PPParaEnviar {
   id: string;
   codigo: string;
+  /** O CNPJ da PP (decisão 156): o tomador esperado das notas. */
+  estabelecimentoId: string | null;
   valor: number;
   servico: string;
   fornecedorId: string | null;
@@ -348,6 +351,9 @@ export function EnvioDialog({
   /** A outra PP com a mesma nota, em correção (revisão da decisão 152). */
   const [corrigindo, setCorrigindo] = React.useState<{ id: string; codigo: string } | null>(null);
   const [versaoDasNotas, setVersaoDasNotas] = React.useState(0);
+  /** Decisão 156: notas em outro CNPJ que não o da PP — o "tem certeza?". */
+  const [tomadorPergunta, setTomadorPergunta] = React.useState<Array<{ numero: string; tomador: string }> | null>(null);
+  const [tomadorConfirmado, setTomadorConfirmado] = React.useState(false);
 
   // Cada abertura começa no que a PP tem gravado.
   const ppId = pp?.id ?? null;
@@ -357,6 +363,8 @@ export function EnvioDialog({
     setErro(null);
     setConfirmando(null);
     setCorrigindo(null);
+    setTomadorPergunta(null);
+    setTomadorConfirmado(false);
     setAviso(null);
     setAnexos(pp.anexos.map((a) => anexoEmEdicao(a, tomadorEsperado)));
     setPrefixo(null);
@@ -378,12 +386,23 @@ export function EnvioDialog({
 
   if (!pp) return null;
 
-  function enviar(confirmado: boolean) {
+  function enviar(confirmado: boolean, tomadorOk: boolean = tomadorConfirmado) {
     if (!pp) return;
     setTentou(true);
     const falta = faltaNosAnexosParaEnviar(anexos, pp.valor, existentes);
     if (falta && !pp.verbaProducao) {
       setErro(falta);
+      return;
+    }
+    // Decisão 156: nota em outro CNPJ não barra — pede o "tem certeza?".
+    const emOutroCnpj =
+      !pp.verbaProducao && pp.estabelecimentoId
+        ? anexos
+            .filter((a) => a.status === "ok" && a.tipo === "nota_fiscal" && a.nf.tomador && a.nf.tomador !== pp.estabelecimentoId)
+            .map((a) => ({ numero: a.nf.numero.trim(), tomador: a.nf.tomador }))
+        : [];
+    if (emOutroCnpj.length > 0 && !tomadorOk) {
+      setTomadorPergunta(emOutroCnpj);
       return;
     }
     setErro(null);
@@ -393,8 +412,13 @@ export function EnvioDialog({
         alvo.id,
         confirmado,
         anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+        tomadorOk,
       );
       if (!res.ok) {
+        if (res.tomadorDiferente) {
+          setTomadorPergunta(res.tomadorDiferente.notas);
+          return;
+        }
         if (res.acimaDoPlanejado) {
           setConfirmando(res.acimaDoPlanejado);
           return;
@@ -513,6 +537,35 @@ export function EnvioDialog({
             {pending ? "Enviando…" : confirmando ? "Sim, enviar" : "Enviar ao financeiro"}
           </button>
         </div>
+        {/* Decisão 156: a nota em outro CNPJ que não o da PP — o financeiro
+            decide na aprovação. */}
+        <ConfirmDialog
+          open={tomadorPergunta !== null}
+          onOpenChange={(o) => !o && setTomadorPergunta(null)}
+          title="Enviar com a nota em outro CNPJ?"
+          description={
+            <>
+              {(tomadorPergunta ?? []).map((n, i) => (
+                <React.Fragment key={`${n.numero}-${i}`}>
+                  {i > 0 && " "}A NF {n.numero} está no CNPJ{" "}
+                  <strong className="text-foreground">{tomadores.find((t) => t.id === n.tomador)?.nome ?? "—"}</strong>.
+                </React.Fragment>
+              ))}{" "}
+              A PP é do CNPJ{" "}
+              <strong className="text-foreground">{tomadores.find((t) => t.id === pp.estabelecimentoId)?.nome ?? "—"}</strong>. O
+              financeiro decide na aprovação.
+            </>
+          }
+          confirmLabel="Sim, enviar"
+          cancelLabel="Voltar"
+          variant="destructive"
+          pending={pending}
+          onConfirm={() => {
+            setTomadorConfirmado(true);
+            setTomadorPergunta(null);
+            enviar(confirmando !== null, true);
+          }}
+        />
         {/* A outra PP com a mesma nota, corrigida daqui: a nota volta a ser
             buscada e o que sobra dela para esta PP se atualiza. */}
         <CorrigirNfDialog

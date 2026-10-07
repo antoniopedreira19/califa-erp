@@ -60,6 +60,7 @@ const estab = (id: string, pj: string, nome: string, ordem: number): FiscalEstab
   ativo: true,
   ordem,
   observacao: null,
+  logradouro: null, numero: null, complemento: null, bairro: null, cep: null, telefone: null, email: null, inscricao_estadual: null, inscricao_municipal: null,
   created_at: EM,
   updated_at: EM,
 });

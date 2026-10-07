@@ -4835,3 +4835,24 @@ código publicado logo depois (`3305751`).
   valor) antigos, porque `NfDoAnexo` só relia a nota quando o id dela
   mudava. A chave agora inclui emissão, valor e tomador. O banco já gravava
   o certo (`ligar_notas_fiscais_da_pp` usa os dados da nota); era só a tela.
+
+## ⚠️ Nota de 2026-10-07 (5) — o CNPJ da PP separado da empresa gerencial (decisão 156)
+
+- **"Empresa emissora" do formulário da PP agora é o CNPJ** (os CNPJs ativos
+  do cadastro de impostos: California, GoCrazy, Hitlab), não a empresa
+  gerencial. É o que sai no PDF, vem como tomador da NF e confere a nota
+  (`pedidos_compra.estabelecimento_id`).
+- **A empresa gerencial é a do job**: não se escolhe; aparece embaixo do
+  campo. A geração grava a do job.
+- **O CNPJ vem pela regional** (`fiscal_cnpj_da_pp_por_regional`, SS →
+  GoCrazy), senão pela gerencial (Hitlab → Hitlab), senão pela principal.
+  Prop `cnpjPadraoDaPP` (carregar-detalhe → seção → tabela → formulário e
+  painel). Regra em `lib/fiscal/cnpj-da-pp.ts`, com teste.
+- **Nota em outro CNPJ**: aviso vermelho na NF e pop-up "Enviar com a nota
+  em outro CNPJ?" no envio (`confirmarTomadorDiferente`, 4º parâmetro de
+  `enviarPedidoCompraAoFinanceiro`); o servidor devolve `tomadorDiferente`
+  sem a confirmação.
+- A revisão e o "Ver formulário" mostram o CNPJ. A correção da NF compara
+  com o CNPJ da PP.
+- Migration `20261007300009`. Testado no AMB-1026/26 (só leitura) e no
+  TES-1014/26 (PP-00146).

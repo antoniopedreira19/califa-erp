@@ -245,6 +245,16 @@ export function EstabelecimentoDialog(props: PropsDoEstabelecimento) {
       iss_retido_dia: fd.get("iss_retido_dia")?.toString() ?? "",
       iss_regra: regra,
       observacao,
+      // Decisão 156: o cabeçalho do PDF da PP.
+      logradouro: fd.get("logradouro")?.toString() ?? "",
+      numero: fd.get("numero")?.toString() ?? "",
+      complemento: fd.get("complemento")?.toString() ?? "",
+      bairro: fd.get("bairro")?.toString() ?? "",
+      cep: fd.get("cep")?.toString() ?? "",
+      telefone: fd.get("telefone")?.toString() ?? "",
+      email: fd.get("email")?.toString() ?? "",
+      inscricao_estadual: fd.get("inscricao_estadual")?.toString() ?? "",
+      inscricao_municipal: fd.get("inscricao_municipal")?.toString() ?? "",
     };
     if (estab) {
       const id = estab.id;
@@ -450,6 +460,54 @@ export function EstabelecimentoDialog(props: PropsDoEstabelecimento) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+          {/* Decisão 156: o PDF da PP sai com o CNPJ da PP no cabeçalho. */}
+          <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+            <p className="text-xs font-semibold">Cabeçalho do PDF da PP</p>
+            <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-logradouro">Endereço</Rotulo>
+                <Input id="fiscal-logradouro" name="logradouro" maxLength={160} defaultValue={estab?.logradouro ?? ""} />
+              </div>
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-numero">Número</Rotulo>
+                <Input id="fiscal-numero" name="numero" maxLength={20} defaultValue={estab?.numero ?? ""} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-complemento">Complemento</Rotulo>
+                <Input id="fiscal-complemento" name="complemento" maxLength={80} defaultValue={estab?.complemento ?? ""} />
+              </div>
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-bairro">Bairro</Rotulo>
+                <Input id="fiscal-bairro" name="bairro" maxLength={80} defaultValue={estab?.bairro ?? ""} />
+              </div>
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-cep">CEP</Rotulo>
+                <Input id="fiscal-cep" name="cep" inputMode="numeric" maxLength={9} defaultValue={estab?.cep ?? ""} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-telefone">Telefone</Rotulo>
+                <Input id="fiscal-telefone" name="telefone" maxLength={30} defaultValue={estab?.telefone ?? ""} />
+              </div>
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-email">E-mail</Rotulo>
+                <Input id="fiscal-email" name="email" type="email" maxLength={120} defaultValue={estab?.email ?? ""} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-ie">Inscrição estadual</Rotulo>
+                <Input id="fiscal-ie" name="inscricao_estadual" maxLength={30} defaultValue={estab?.inscricao_estadual ?? ""} />
+              </div>
+              <div className="space-y-1">
+                <Rotulo htmlFor="fiscal-im">Inscrição municipal</Rotulo>
+                <Input id="fiscal-im" name="inscricao_municipal" maxLength={30} defaultValue={estab?.inscricao_municipal ?? ""} />
+              </div>
             </div>
           </div>
           <div className="space-y-1">

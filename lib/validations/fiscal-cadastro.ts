@@ -265,6 +265,33 @@ const dia = (rotulo: string) =>
  * Os campos que a edição e o cadastro do CNPJ emissor têm em comum — é o
  * mesmo formulário (o lápis da aba CNPJs e o "Novo CNPJ emissor").
  */
+/** Texto opcional de uma linha: vazio vira null. */
+const textoOpcional = (rotulo: string, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v ?? "").trim())
+    .refine((v) => v.length <= max, `${rotulo}: até ${max} caracteres.`)
+    .transform((v) => (v === "" ? null : v));
+
+/** Os dados do cabeçalho do PDF da PP (decisão 156): opcionais. */
+const dadosDoDocumento = {
+  logradouro: textoOpcional("Endereço", 160),
+  numero: textoOpcional("Número", 20),
+  complemento: textoOpcional("Complemento", 80),
+  bairro: textoOpcional("Bairro", 80),
+  cep: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? "").replace(/\D/g, ""))
+    .refine((v) => v === "" || v.length === 8, "O CEP tem 8 dígitos.")
+    .transform((v) => (v === "" ? null : v)),
+  telefone: textoOpcional("Telefone", 30),
+  email: textoOpcional("E-mail", 120).refine((v) => v === null || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "E-mail inválido."),
+  inscricao_estadual: textoOpcional("Inscrição estadual", 30),
+  inscricao_municipal: textoOpcional("Inscrição municipal", 30),
+};
+
 const camposDoEstabelecimento = {
   cnpj: z
     .string()
@@ -282,6 +309,7 @@ const camposDoEstabelecimento = {
     .transform((v) => (v ?? "").trim())
     .refine((v) => v.length <= 500, "Observação: até 500 caracteres.")
     .transform((v) => (v === "" ? null : v)),
+  ...dadosDoDocumento,
 };
 
 /** CNPJ vazio ou com 14 dígitos válidos; ativo só com CNPJ (o CHECK `chk_fiscal_estab_ativo_tem_cnpj`). */

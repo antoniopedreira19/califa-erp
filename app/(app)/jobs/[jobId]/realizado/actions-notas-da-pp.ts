@@ -121,6 +121,8 @@ export interface PPParaCorrigirNf {
   valor: number;
   fornecedor_id: string;
   empresa_id: string;
+  /** O CNPJ da PP (decisão 156): o tomador esperado das notas. */
+  estabelecimento_id: string | null;
   servico: string;
   nfs: NfDaPPParaCorrigir[];
 }
@@ -137,7 +139,7 @@ export async function carregarNfsDaPPParaCorrigir(ppId: unknown): Promise<Result
   const { data: pp, error } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, status, valor, verba_producao, fornecedor_id, empresa_id, servico, " +
+      "id, codigo, status, valor, verba_producao, fornecedor_id, empresa_id, estabelecimento_id, servico, " +
         "anexos:pedidos_compra_anexos(id, arquivo_nome_original, documento_tipo, documento_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_valor_na_pp, created_at)",
     )
     .eq("id", id.data)
@@ -150,6 +152,7 @@ export async function carregarNfsDaPPParaCorrigir(ppId: unknown): Promise<Result
       verba_producao: boolean;
       fornecedor_id: string | null;
       empresa_id: string;
+      estabelecimento_id: string | null;
       servico: string | null;
       anexos: Array<{
         id: string;
@@ -193,6 +196,7 @@ export async function carregarNfsDaPPParaCorrigir(ppId: unknown): Promise<Result
       valor: Number(pp.valor),
       fornecedor_id: pp.fornecedor_id,
       empresa_id: pp.empresa_id,
+      estabelecimento_id: pp.estabelecimento_id,
       servico: pp.servico ?? "",
       nfs,
     },

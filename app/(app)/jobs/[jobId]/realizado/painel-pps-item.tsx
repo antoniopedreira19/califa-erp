@@ -118,6 +118,9 @@ export interface PPDoItem {
   /** Decisões 152 e 153 — obrigatórios pelo mesmo motivo do trio. */
   fornecedorId: string | null;
   empresaId: string;
+  /** O CNPJ da PP (decisão 156): o tomador esperado das notas. Obrigatório
+   *  pelo mesmo motivo do trio. */
+  estabelecimentoId: string | null;
   servico: string;
   /** Os anexos gravados: o envio abre com eles. */
   anexos: AnexoDaPPNaLista[];
@@ -188,6 +191,9 @@ interface Props {
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadores: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
+  /** Decisão 156: o CNPJ padrão do job, para a PP a emitir salva antes de
+   *  07/10/2026, que não tem o CNPJ nos dados. */
+  cnpjPadraoDaPP: string | null;
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152): GP, administrador e financeiro. Vale também
    *  na tela do financeiro, onde o painel é só leitura. */
@@ -225,6 +231,7 @@ export function PainelPPsItem({
   nomeDaEmpresa,
   tomadores,
   tomadorPorEmpresa,
+  cnpjPadraoDaPP,
   podeCorrigirNf,
 }: Props) {
   const router = useRouter();
@@ -519,6 +526,7 @@ export function PainelPPsItem({
                     situacaoVerba: null,
                     fornecedorId: a.fornecedor_id,
                     empresaId: a.empresa_id,
+                    estabelecimentoId: a.dados.estabelecimento_id ?? cnpjPadraoDaPP,
                     servico: a.servico,
                     anexos: [],
                     substitui: null,
@@ -862,7 +870,11 @@ export function PainelPPsItem({
           }}
           aEmitir={revisando}
           nomeDoFornecedor={revisando ? contraparte(revisando) : ""}
-          nomeDaEmpresa={revisando ? nomeDaEmpresa(revisando.empresa_id) : ""}
+          nomeDaEmpresa={
+            revisando
+              ? (tomadores.find((t) => t.id === (revisando.dados.estabelecimento_id ?? cnpjPadraoDaPP))?.nome ?? "—")
+              : ""
+          }
           tomadores={tomadores}
           planejado={totalPlanejado}
           emitidasAntes={emPPs}
@@ -885,6 +897,7 @@ export function PainelPPsItem({
               {
                 id: enviando.id,
                 codigo: enviando.codigo,
+                estabelecimentoId: enviando.estabelecimentoId,
                 valor: enviando.valor,
                 servico: enviando.servico,
                 fornecedorId: enviando.fornecedorId,
@@ -894,9 +907,9 @@ export function PainelPPsItem({
             }
             onOpenChange={(o) => !o && setEnviando(null)}
             nomeDoFornecedor={enviando.fornecedorNome}
-            nomeDaEmpresa={nomeDaEmpresa(enviando.empresaId)}
+            nomeDaEmpresa={tomadores.find((t) => t.id === enviando.estabelecimentoId)?.nome ?? "—"}
             tomadores={tomadores}
-            tomadorEsperado={tomadorPorEmpresa[enviando.empresaId] ?? null}
+            tomadorEsperado={enviando.estabelecimentoId}
             tomadorPorEmpresa={tomadorPorEmpresa}
             nomeDaEmpresaDe={nomeDaEmpresa}
             moeda={moeda}

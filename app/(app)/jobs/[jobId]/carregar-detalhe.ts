@@ -75,6 +75,7 @@ import {
 import type { EtapasDaFicha } from "./ficha-job";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
+import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
 import type { AnexoDaPPNaLista, PPAEmitir, PlanejadoAntesDoSave } from "@/lib/types";
 import {
   fechamentoDaAbertura,
@@ -176,6 +177,7 @@ export async function carregarDetalheDoJob(
     aEmitirRes,
     tomadoresRes,
     itensDaVersaoRes,
+    cnpjDaRegionalRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -419,6 +421,15 @@ export async function carregarDetalheDoJob(
       .select("id, tipo_custo, total_orcado, em_save, save_consumido")
       .eq("versao_orcamento_id", versaoAprovadaId)
       .eq("tenant_id", session.activeTenant.id),
+    // O CNPJ que a PP já traz escolhido para a regional do job (decisão 156).
+    raw.regional_id
+      ? supabase
+          .from("fiscal_cnpj_da_pp_por_regional")
+          .select("estabelecimento_id")
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("regional_id", raw.regional_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -677,7 +688,7 @@ export async function carregarDetalheDoJob(
     nome: e.nome as string,
     cnpj: formatarCnpj(e.cnpj as string),
   }));
-  const tomadorPorEmpresa = tomadoresPadrao(
+  const padraoDosTomadores = tomadoresPadrao(
     estabelecimentosAtivos.map((e) => ({
       id: e.id as string,
       cnpj: e.cnpj as string | null,
@@ -690,7 +701,21 @@ export async function carregarDetalheDoJob(
       cnpj: (e.cnpj as string | null) ?? null,
       principal: e.principal === true,
     })),
-  ).porEmpresa;
+  );
+  const tomadorPorEmpresa = padraoDosTomadores.porEmpresa;
+  // Decisão 156: o CNPJ que a PP nova já traz escolhido — o da regional do
+  // job; senão, o da empresa gerencial; senão, o da principal.
+  if (cnpjDaRegionalRes.error) console.error("[job.cnpj_da_regional]", cnpjDaRegionalRes.error.message);
+  const daRegional = (cnpjDaRegionalRes.data as { estabelecimento_id: string } | null)?.estabelecimento_id;
+  const cnpjPadraoDaPPDoJob = cnpjPadraoDaPP(
+    { regional_id: raw.regional_id ?? null, empresa_id: raw.empresa_id ?? null },
+    {
+      porRegional: raw.regional_id && daRegional ? { [raw.regional_id]: daRegional } : {},
+      porEmpresa: padraoDosTomadores.porEmpresa,
+      geral: padraoDosTomadores.geral,
+      ativos: new Set(tomadoresDaNf.map((t) => t.id)),
+    },
+  );
 
   const ppsDoJob: PedidoCompraNaLista[] = (ppsRes.data ?? []).map((pp: any) => ({
     ...pp,
@@ -1461,6 +1486,7 @@ export async function carregarDetalheDoJob(
     // Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora.
     tomadoresDaNf,
     tomadorPorEmpresa,
+    cnpjPadraoDaPP: cnpjPadraoDaPPDoJob,
     fornecedores,
     fornecedoresPorId,
     empresas,

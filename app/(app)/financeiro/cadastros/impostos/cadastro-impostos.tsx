@@ -8,7 +8,10 @@
  */
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { CalendarDays, Landmark, Pencil, Plus, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { salvarCnpjDaPPDaRegional } from "./actions";
 import { cn } from "@/lib/utils";
 import { formatarCnpj, regimeDaPJ, type CadastroFiscal } from "@/lib/fiscal/cadastro";
 import { dataBr } from "@/lib/fiscal/datas";
@@ -39,6 +42,17 @@ import {
   RemoverFeriadoDialog,
 } from "./dialogos";
 
+/** Uma regional de projeto e o CNPJ que a PP dos jobs dela já traz
+ *  escolhido (decisão 156). Null = pela empresa gerencial do job. */
+export interface RegionalDaPP {
+  id: string;
+  nome: string;
+  /** A empresa gerencial dona da regional. */
+  empresa: string;
+  principal: boolean;
+  estabelecimento_id: string | null;
+}
+
 export interface EmpresaDoCadastro {
   id: string;
   razao_social: string;
@@ -54,6 +68,8 @@ type Aba = "cnpjs" | "cnaes" | "vencimentos" | "feriados" | "parametros";
 interface Props {
   cadastro: CadastroFiscal;
   empresas: EmpresaDoCadastro[];
+  /** Decisão 156: o CNPJ da PP por regional. */
+  regionaisDaPP: RegionalDaPP[];
   /** Hoje no fuso da casa, vindo do servidor (a tela e o servidor concordam). */
   hoje: string;
 }
@@ -67,7 +83,7 @@ interface PJ {
   regimeCaixa: boolean;
 }
 
-export function CadastroImpostos({ cadastro, empresas, hoje }: Props) {
+export function CadastroImpostos({ cadastro, empresas, regionaisDaPP, hoje }: Props) {
   const [aba, setAba] = React.useState<Aba>("cnpjs");
 
   const empresaPorId = React.useMemo(() => new Map(empresas.map((e) => [e.id, e])), [empresas]);
@@ -108,7 +124,12 @@ export function CadastroImpostos({ cadastro, empresas, hoje }: Props) {
         <TabButton active={aba === "feriados"} onClick={() => setAba("feriados")}>Feriados</TabButton>
         <TabButton active={aba === "parametros"} onClick={() => setAba("parametros")}>Parâmetros</TabButton>
       </div>
-      {aba === "cnpjs" && <Cnpjs cadastro={cadastro} empresas={empresas} hoje={hoje} pjDoEstab={pjDoEstab} />}
+      {aba === "cnpjs" && (
+        <>
+          <Cnpjs cadastro={cadastro} empresas={empresas} hoje={hoje} pjDoEstab={pjDoEstab} />
+          <CnpjDaPPPorRegional cadastro={cadastro} regionais={regionaisDaPP} />
+        </>
+      )}
       {aba === "cnaes" && <Cnaes cadastro={cadastro} hoje={hoje} pjDoEstab={pjDoEstab} />}
       {aba === "vencimentos" && <Vencimentos cadastro={cadastro} hoje={hoje} pjs={pjs} pjDoEstab={pjDoEstab} />}
       {aba === "feriados" && <Feriados cadastro={cadastro} pjs={pjs} />}
@@ -307,6 +328,90 @@ function Cnpjs({
         />
       )}
       {criando && <EstabelecimentoDialog estab={null} empresas={empresas} cadastro={cadastro} onClose={() => setCriando(false)} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CNPJ da PP por regional (decisão 156)
+// ---------------------------------------------------------------------------
+
+const PELA_GERENCIAL = "__gerencial__";
+
+/** O CNPJ que o formulário da PP já traz escolhido para os jobs de cada
+ *  regional. A empresa gerencial do job e o CNPJ da PP são independentes: a
+ *  regional SS da Agência California costuma sair pela GoCrazy. */
+function CnpjDaPPPorRegional({ cadastro, regionais }: { cadastro: CadastroFiscal; regionais: RegionalDaPP[] }) {
+  const router = useRouter();
+  const [pending, startTransition] = React.useTransition();
+  const [erro, setErro] = React.useState<string | null>(null);
+  const ativos = cadastro.estabelecimentos.filter((e) => e.ativo && e.cnpj);
+  if (regionais.length === 0) return null;
+
+  function salvar(regionalId: string, valor: string) {
+    setErro(null);
+    startTransition(async () => {
+      const res = await salvarCnpjDaPPDaRegional({
+        regional_id: regionalId,
+        estabelecimento_id: valor === PELA_GERENCIAL ? null : valor,
+      });
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold">CNPJ da PP por regional</h3>
+        <p className="text-sm text-muted-foreground">
+          O CNPJ que a PP dos jobs da regional já traz escolhido. Sem escolha, vale o CNPJ da empresa gerencial do job.
+        </p>
+      </div>
+      {erro && <p className="text-sm font-semibold text-california-red">{erro}</p>}
+      <div className="rounded-2xl border border-border bg-card shadow-soft">
+        <table className="w-full table-fixed text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+              <th className={cn(th, "w-[22%]")}>Empresa gerencial</th>
+              <th className={cn(th, "w-[18%]")}>Regional</th>
+              <th className={th}>CNPJ da PP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {regionais.map((r) => (
+              <tr key={r.id} className="border-b border-border last:border-0">
+                <td className="px-3 py-2 text-xs">{r.empresa}</td>
+                <td className="px-3 py-2 font-semibold">{r.nome}</td>
+                <td className="px-3 py-2">
+                  <Select
+                    value={r.estabelecimento_id ?? PELA_GERENCIAL}
+                    onValueChange={(v) => salvar(r.id, v)}
+                    disabled={pending}
+                  >
+                    <SelectTrigger className="h-9 max-w-[420px] text-xs" aria-label={`CNPJ da PP da regional ${r.nome}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={PELA_GERENCIAL} className="text-xs">
+                        Pela empresa gerencial
+                      </SelectItem>
+                      {ativos.map((e) => (
+                        <SelectItem key={e.id} value={e.id} className="text-xs">
+                          {e.nome} · <span className="font-mono">{formatarCnpj(e.cnpj)}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

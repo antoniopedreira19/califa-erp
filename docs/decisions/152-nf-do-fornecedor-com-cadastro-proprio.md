@@ -152,14 +152,14 @@ da PP-00142 mostrou o aviso. No banco, o produtor é recusado e o GP passa.
    nova é aprovada.
 4. **Dois casos reais achados na revisão de 07/10/2026, para tratar em breve
    (pedido do Tiago):**
-   - **CNPJ tomador da NF 19** (PP-00138 e PP-00139): a nota está gravada
-     com tomador GoCrazy · Santo André, mas as duas PPs saem pela Califórnia
-     Filmes. Conferir no PDF. Se a nota diz Califórnia, foi erro de
-     digitação: a produção corrige pelo "Corrigir a NF" da PP-00138 enquanto
-     a nota não foi registrada. Se a nota foi emitida para a GoCrazy, pedir
-     outra ao fornecedor.
+   - ~~**CNPJ tomador da NF 19**~~ — ⚠️ resolvido em 07/10/2026: as PPs são
+     da regional SS, que sai pela GoCrazy; o tomador estava certo e o aviso
+     é que comparava com a empresa gerencial. Ver a
+     [decisão 156](156-cnpj-da-pp-separado-da-gerencial.md).
    - **NF 102 da Hellen Trindade (R$ 1.200) em duas PPs:** PP-00137
-     (AMB-1021/26, em avaliação) e PP-00136 (AMB-1020/26, gerada), mesmo
-     serviço e mesmo valor — parece PP duplicada. O envio da PP-00136 vai
-     ser barrado ("já está inteira na PP-00137"). Perguntar à produção se a
-     PP-00136 deve ser cancelada.
+     (AMB-1021/26, Dia 1, em avaliação) e PP-00136 (AMB-1020/26, Dia 2,
+     gerada), R$ 1.200 cada. ⚠️ 07/10/2026: não parece duplicata, são dois
+     dias. A produção precisa dizer se a nota é de um dia só (a PP-00136
+     precisa de outra NF), se cobre os dois e vale R$ 2.400 ("Corrigir a NF"
+     na PP-00137: valor R$ 2.400, parte R$ 1.200) ou se cada dia custa
+     R$ 600 (refazer as PPs). O envio da PP-00136 segue barrado até lá.

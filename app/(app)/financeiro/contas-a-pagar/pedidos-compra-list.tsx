@@ -104,6 +104,9 @@ export interface PPRow {
   fornecedor_nome: string;
   empresa_id: string;
   empresa_nome: string;
+  /** O CNPJ da PP (decisão 156): o tomador esperado da NF e o CNPJ da conta
+   *  que paga. Obrigatório pelo mesmo motivo do histórico acima. */
+  estabelecimento_id: string | null;
   job_id: string;
   job_codigo: string;
   job_nome: string;

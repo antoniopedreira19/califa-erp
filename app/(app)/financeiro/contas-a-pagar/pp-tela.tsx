@@ -250,8 +250,9 @@ export function PPTela({
     anexo != null && /\.(png|jpe?g|webp|gif)$/i.test(anexo.arquivo_nome_original);
   // Módulo fiscal: as NFs desta PP como estão na conferência (null = a PP
   // não tem NF anexada, ou é verba de produção).
+  // Decisão 156: a nota é do CNPJ da PP, não da empresa gerencial.
   const tomadorPadrao =
-    fiscal.tomadorPadraoPorEmpresa[pp.empresa_id] ?? fiscal.tomadorPadraoGeral;
+    pp.estabelecimento_id ?? fiscal.tomadorPadraoPorEmpresa[pp.empresa_id] ?? fiscal.tomadorPadraoGeral;
   const editadasDestaPP = nfsEditadas?.ppId === pp.id ? nfsEditadas.porAnexo : {};
   const nfsDaTela: NfEmConferencia[] | null = pp.notas_fiscais
     ? pp.notas_fiscais.notas.map(
@@ -632,6 +633,7 @@ export function PPTela({
           pagamentoForaDoCadastro: pp.pagamento_fora_do_cadastro,
           envio: ultimoEnvioDaPP(pp.eventos),
           correcaoDaNf: ultimaCorrecaoDaNf(pp.eventos),
+          cnpjDaPP: fiscal.cadastro.estabelecimentos.find((e) => e.id === pp.estabelecimento_id) ?? null,
           emitidaPorNome: pp.emitida_por_nome,
           gpResponsavelNome: pp.job_responsavel_nome,
           // Módulo fiscal: o que as retenções e o crédito precisam.

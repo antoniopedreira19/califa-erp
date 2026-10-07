@@ -475,6 +475,7 @@ export function NfDoAnexo({
   tomadores: TomadorDaNf[];
   /** O CNPJ tomador da empresa emissora da PP — o aviso compara. */
   tomadorEsperado: string | null;
+  /** O nome do CNPJ da PP, para o aviso (decisão 156). */
   empresaNome: string;
   /** A nota do cadastro com este número (null = nota nova). */
   existente: NotaExistente | null;
@@ -542,9 +543,11 @@ export function NfDoAnexo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notaMaiorQueAPP, nf.cobreOutra]);
 
+  // Decisão 156: a comparação é com o CNPJ da PP, não com a empresa
+  // gerencial. Não barra: o envio pede "tem certeza?" e o financeiro decide.
   const aviso =
     t && tomadorEsperado && t.id !== tomadorEsperado
-      ? `A nota está no CNPJ ${t.nome}, mas a PP sai pela ${empresaNome}. Se a nota veio no CNPJ errado, peça outra ao fornecedor antes de enviar.`
+      ? `A nota está no CNPJ ${t.nome}, mas a PP é do CNPJ ${empresaNome}. Se a nota veio errada, peça outra ao fornecedor; enviada assim, o financeiro decide na aprovação.`
       : null;
 
   // A parte desta PP não cabe no que sobra da nota (ou a nota já acabou nas
@@ -753,7 +756,7 @@ export function NfDoAnexo({
       )}
 
       {aviso && (
-        <p className="flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug text-amber-800">
+        <p className="flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug text-california-red">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
           <span>{aviso}</span>
         </p>

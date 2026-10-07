@@ -791,11 +791,20 @@ function NotasFiscaisDoFornecedor({
   const completas = lista.every((x) => !nfIncompleta(x.nf));
   const difereDaPP = completas && Math.abs(soma - pp.valor) > 0.004;
 
+  // Decisão 156: o CNPJ da PP — a nota deve vir nele.
+  const cnpjDaPP = estabelecimentos.find((e) => e.id === pp.estabelecimento_id) ?? null;
+
   return (
     <div>
       <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
         {varias ? `Notas fiscais do fornecedor (${lista.length})` : "Nota fiscal do fornecedor"}
       </p>
+      {cnpjDaPP && (
+        <p className="mb-1.5 text-[11px] text-muted-foreground">
+          CNPJ da PP: <span className="font-medium text-foreground">{cnpjDaPP.nome}</span> ·{" "}
+          <span className="font-mono">{formatarCnpj(cnpjDaPP.cnpj)}</span>
+        </p>
+      )}
       <div className={cn(varias && "space-y-2")}>
         {lista.map(({ nota, nf }, i) => (
           <FichaDaNota
@@ -994,6 +1003,14 @@ function FichaDaNota({
             </React.Fragment>
           ))}
           .{registradaEmOutra ? ` Registrada na aprovação da ${registradaEmOutra.na_pp ?? "outra PP"}.` : ""}
+        </p>
+      )}
+      {/* Decisão 156: a nota em outro CNPJ que não o da PP — a produção
+          confirmou no envio; o financeiro decide aqui. */}
+      {pp.estabelecimento_id && nf.tomador && nf.tomador !== pp.estabelecimento_id && (
+        <p className="mt-1.5 text-[11px] font-semibold leading-snug text-california-red">
+          A nota está no CNPJ {estabelecimentos.find((e) => e.id === nf.tomador)?.nome ?? "—"}; a PP é do CNPJ{" "}
+          {estabelecimentos.find((e) => e.id === pp.estabelecimento_id)?.nome ?? "—"}.
         </p>
       )}
     </div>

@@ -130,6 +130,9 @@ interface PPParaAprovar {
   /** Revisão da decisão 152: a NF corrigida depois do envio, sem aprovar —
    *  quem, quando e o que mudou. Null = não foi corrigida. */
   correcaoDaNf: { por_nome: string | null; em: string; motivo: string | null } | null;
+  /** Decisão 156: o CNPJ da PP. A NF em outro CNPJ aparece em vermelho
+   *  aqui: a produção confirmou no envio, e o financeiro decide. */
+  cnpjDaPP: { id: string; nome: string } | null;
   emitidaPorNome: string | null;
   gpResponsavelNome: string | null;
   /** Módulo fiscal: o fornecedor e o regime do cadastro (null = não informado). */
@@ -511,6 +514,19 @@ export function AprovarPPDialog({
               em={pp.envio.em}
               referencia={`Emitida por ${pp.emitidaPorNome ?? "—"} · GP responsável do job: ${pp.gpResponsavelNome ?? "—"}`}
             />
+          )}
+          {pp.cnpjDaPP && nfs && nfs.some((nf) => nf.tomador && nf.tomador !== pp.cnpjDaPP?.id) && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-california-red/30 bg-california-red/5 px-3.5 py-2.5 text-left text-[12.5px] leading-relaxed text-california-red">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <strong className="font-semibold">A nota está em outro CNPJ que não o da PP.</strong>{" "}
+                {nfs
+                  .filter((nf) => nf.tomador && nf.tomador !== pp.cnpjDaPP?.id)
+                  .map((nf) => `NF ${nf.numero.trim()}: ${cadastro.estabelecimentos.find((e) => e.id === nf.tomador)?.nome ?? "—"}`)
+                  .join(" · ")}
+                . A PP é do CNPJ {pp.cnpjDaPP.nome}. Confira antes de aprovar.
+              </div>
+            </div>
           )}
           {pp.correcaoDaNf && (
             <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-left text-[12.5px] leading-relaxed">
