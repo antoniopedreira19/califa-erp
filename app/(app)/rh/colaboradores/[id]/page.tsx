@@ -14,6 +14,7 @@ import { CardDados } from "./card-dados";
 import { CardAlocacoes } from "./card-alocacoes";
 import { CardSalarios } from "./card-salarios";
 import { CardDadosBancarios } from "./card-dados-bancarios";
+import { CardNfColaborador } from "./_components/card-nf-colaborador";
 import { CardAcesso } from "./card-acesso";
 import { BannerPendencias } from "./banner-pendencias";
 import { carregarAcessoColaborador } from "@/lib/auth/acesso-colaborador";
@@ -40,6 +41,9 @@ export default async function ColaboradorDetalhePage({
   const supabase = createClient();
 
   const anoRateio = new Date().getFullYear();
+  const hojeNf = new Date();
+  const anoNfVigente = hojeNf.getFullYear();
+  const mesNfVigente = hojeNf.getMonth() + 1;
   const [
     colabRes,
     alocacoesRes,
@@ -49,6 +53,9 @@ export default async function ColaboradorDetalhePage({
     niveisRes,
     rateiosRes,
     lideresRes,
+    nfVigenteRes,
+    folhasAbertasPjRes,
+    nfsExistentesRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -111,6 +118,29 @@ export default async function ColaboradorDetalhePage({
       .select("user_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
+    // NF do mês vigente deste colaborador (para o card)
+    supabase
+      .from("colaboradores_nf_anexos")
+      .select("id, arquivo_nome, uploaded_at")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", params.id)
+      .eq("competencia_ano", anoNfVigente)
+      .eq("competencia_mes", mesNfVigente)
+      .maybeSingle(),
+    // Folhas PJ abertas deste colaborador (para o backlog)
+    supabase
+      .from("folhas_pagamento")
+      .select("competencia_ano, competencia_mes")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", params.id)
+      .eq("origem", "california")
+      .in("status", ["rascunho", "enviada", "aprovada", "pendente_correcao"]),
+    // NFs já anexadas (qualquer competência) deste colaborador
+    supabase
+      .from("colaboradores_nf_anexos")
+      .select("competencia_ano, competencia_mes")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", params.id),
   ]);
 
   if (!colabRes.data) {
@@ -126,6 +156,22 @@ export default async function ColaboradorDetalhePage({
     empresa: Pick<Empresa, "id" | "nome_fantasia">;
     regional: { id: string; nome: string } | null;
   })[];
+
+  // Backlog de NFs: folhas PJ abertas anteriores ao mês vigente sem NF.
+  const nfsExistentesChaves = new Set(
+    (nfsExistentesRes.data ?? []).map(
+      (n) => `${n.competencia_ano}-${n.competencia_mes}`,
+    ),
+  );
+  const backlogNfPendente = (folhasAbertasPjRes.data ?? [])
+    .filter((f) => {
+      const chave = `${f.competencia_ano}-${f.competencia_mes}`;
+      const anteriorAoVigente =
+        f.competencia_ano < anoNfVigente ||
+        (f.competencia_ano === anoNfVigente && f.competencia_mes < mesNfVigente);
+      return anteriorAoVigente && !nfsExistentesChaves.has(chave);
+    })
+    .map((f) => ({ ano: f.competencia_ano, mes: f.competencia_mes }));
 
   // Agrega rateios por empresa pra passar ao card de alocação. Só entram as
   // regionais com % > 0 no ano corrente (tabela não guarda 0%).
@@ -298,6 +344,15 @@ export default async function ColaboradorDetalhePage({
         <CardDadosBancarios
           colaborador={colab}
           pendencia={pendenciasPorCard.bancario}
+        />
+
+        <CardNfColaborador
+          colaboradorId={colab.id}
+          tipoContratacao={colab.tipo_contratacao}
+          nfVigente={nfVigenteRes.data ?? null}
+          backlog={backlogNfPendente}
+          anoVigente={anoNfVigente}
+          mesVigente={mesNfVigente}
         />
 
         <div className="grid gap-4 lg:grid-cols-2">
