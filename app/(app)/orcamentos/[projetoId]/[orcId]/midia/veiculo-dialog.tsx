@@ -1,25 +1,26 @@
 "use client";
 
 /**
- * O cadastro do veículo (decisão 147, Tiago em 05 e 06/10/2026): o MESMO
- * formulário do fornecedor — o veículo é um fornecedor marcado como veículo
- * —, com os dados de pagamento opcionais (passam a ser exigidos só para
- * gerar a PP do repasse, nas linhas A · Repasse). É a versão do pop-up
- * "Novo fornecedor" da PP, com o formulário real (`FornecedorForm`, modo
- * "dialog", variante "veiculo") e, em cima, o que é só do veículo: os meios
- * que ele vende (o primeiro é o principal) e a praça.
+ * O cadastro rápido do veículo, aberto pela célula Veículo da planilha de
+ * Mídia Off (decisões 147 e 150). É o MESMO formulário do fornecedor — o
+ * veículo é um fornecedor marcado como veículo —, no pop-up "Novo
+ * fornecedor" da PP (`FornecedorForm`, modo "dialog", variante "veiculo"),
+ * com os dados de pagamento opcionais (passam a ser exigidos só para gerar
+ * a PP do repasse, nas linhas A · Repasse).
+ *
+ * Desde a decisão 150 (Tiago, 07/10/2026) não há meio nem praça no
+ * cadastro: os meios do veículo vêm das linhas em que ele é escolhido, e a
+ * praça fica na linha. O pop-up também não mostra a nota do regime
+ * tributário (as retenções são da aprovação da PP).
  */
 
 import * as React from "react";
 import { AlertCircle, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { FornecedorForm } from "@/app/(app)/fornecedores/fornecedor-form";
 import { carregarFornecedor, type FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import type { Fornecedor, TipoPessoa } from "@/lib/types";
-import { MEIOS } from "@/lib/midia/meios";
 import type { VeiculoDaLista } from "./secoes";
 
 export function VeiculoDialog({
@@ -27,7 +28,6 @@ export function VeiculoDialog({
   onOpenChange,
   veiculo,
   nomeInicial,
-  meioInicial,
   onCriado,
   onSelecionarExistente,
   onSalvo,
@@ -38,27 +38,18 @@ export function VeiculoDialog({
   veiculo?: VeiculoDaLista;
   /** Vem do "Cadastrar «…» como novo veículo" da busca. */
   nomeInicial?: string;
-  /** O meio da linha de onde o cadastro foi aberto. */
-  meioInicial?: string;
-  onCriado: (f: FornecedorResumo, meios: string[], praca: string) => void;
+  onCriado: (f: FornecedorResumo) => void;
   /** O documento já era de um fornecedor: escolhê-lo como veículo. */
-  onSelecionarExistente: (f: FornecedorResumo, meios: string[], praca: string) => void;
-  onSalvo: (meios: string[], praca: string) => void;
+  onSelecionarExistente: (f: FornecedorResumo) => void;
+  onSalvo: () => void;
 }) {
   const editando = Boolean(veiculo);
   const [tipoPessoa, setTipoPessoa] = React.useState<TipoPessoa>("juridica");
-  const [praca, setPraca] = React.useState("");
-  const [meios, setMeios] = React.useState<string[]>([]);
   const [fornecedor, setFornecedor] = React.useState<Fornecedor | null>(null);
   const [erroAoCarregar, setErroAoCarregar] = React.useState<string | null>(null);
-  // O formulário lê meios e praça na hora de gravar — o estado mais novo.
-  const dados = React.useRef({ meios, praca });
-  dados.current = { meios, praca };
 
   React.useEffect(() => {
     if (!open) return;
-    setPraca(veiculo?.praca ?? "");
-    setMeios(veiculo ? veiculo.meios : meioInicial ? [meioInicial] : []);
     setFornecedor(null);
     setErroAoCarregar(null);
     setTipoPessoa("juridica");
@@ -76,7 +67,7 @@ export function VeiculoDialog({
     return () => {
       vivo = false;
     };
-  }, [open, veiculo, meioInicial]);
+  }, [open, veiculo]);
 
   const pronto = !editando || fornecedor !== null;
 
@@ -116,53 +107,6 @@ export function VeiculoDialog({
           </div>
         </DialogHeader>
 
-        {/* O que é só do veículo. */}
-        <div className="flex flex-none flex-col gap-3.5 border-b border-border px-6 py-[22px]">
-          <div className="flex flex-wrap items-baseline gap-2.5">
-            <h3 className="text-[13.5px] font-bold tracking-tight">Veículo de mídia</h3>
-            <span className="inline-block flex-none rounded-full bg-california-red/[0.08] px-2 py-[3px] text-[10px] font-bold uppercase tracking-wider text-[#c2404a]">
-              Obrigatório
-            </span>
-            <span className="min-w-[160px] flex-1 text-right text-[11.5px] leading-snug text-muted-foreground">
-              Na planilha, a lista de cada linha mostra primeiro os veículos do meio dela.
-            </span>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor="veiculo-meios" className="text-[12.5px] font-semibold">
-                  Meios<span className="ml-1 text-california-red">*</span>
-                </Label>
-                <span className="text-[11px] text-muted-foreground">O primeiro é o principal</span>
-              </div>
-              <MultiSelect
-                id="veiculo-meios"
-                items={MEIOS.map((m) => ({ value: m.nome, label: m.nome }))}
-                value={meios}
-                onChange={setMeios}
-                placeholder="Escolha um ou mais meios"
-                className="min-h-11 rounded-lg bg-white"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor="veiculo-praca" className="text-[12.5px] font-semibold">
-                  Praça
-                </Label>
-                <span className="text-[11px] text-muted-foreground">Opcional</span>
-              </div>
-              <input
-                id="veiculo-praca"
-                value={praca}
-                onChange={(e) => setPraca(e.target.value)}
-                maxLength={120}
-                placeholder="Nacional, Belém/PA…"
-                className="flex h-11 w-full rounded-lg border border-border bg-white px-3.5 py-2 text-sm text-foreground transition-colors placeholder:text-muted-foreground/60 hover:border-california-red/40 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15"
-              />
-            </div>
-          </div>
-        </div>
-
         {erroAoCarregar && (
           <div className="m-6 flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -176,13 +120,12 @@ export function VeiculoDialog({
             nomeInicial={nomeInicial}
             modo="dialog"
             variante="veiculo"
-            dadosDoVeiculo={() => dados.current}
             tipoPessoa={tipoPessoa}
             onTipoPessoaChange={setTipoPessoa}
             onCancelar={() => onOpenChange(false)}
-            onCriado={(f) => onCriado(f, dados.current.meios, dados.current.praca)}
-            onSelecionarExistente={(f) => onSelecionarExistente(f, dados.current.meios, dados.current.praca)}
-            onSalvo={() => onSalvo(dados.current.meios, dados.current.praca)}
+            onCriado={onCriado}
+            onSelecionarExistente={onSelecionarExistente}
+            onSalvo={onSalvo}
           />
         )}
         {open && !pronto && !erroAoCarregar && (

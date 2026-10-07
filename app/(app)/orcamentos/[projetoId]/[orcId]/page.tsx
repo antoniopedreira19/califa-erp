@@ -501,7 +501,7 @@ export default async function OrcamentoDetailPage({
   const modeloDoOrcamento: CategoriaModeloPlanilha =
     orcamentoRaw?.categoria?.modelo_planilha ?? "nacional";
   const midiaOff = modeloDoOrcamento === "midia_off";
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes] = await Promise.all([
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes, usoRes] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -592,32 +592,38 @@ export default async function OrcamentoDetailPage({
           >()
       : Promise.resolve({ data: [], error: null }),
     // Os veículos da Mídia Off: os fornecedores ativos marcados como
-    // veículo, com os meios que vendem (decisão 147).
+    // veículo (decisão 147).
     midiaOff && versaoAtiva
       ? supabase
           .from("veiculos_midia")
-          .select("fornecedor_id, meios, praca, fornecedor:fornecedores!inner(nome, status)")
+          .select("fornecedor_id, fornecedor:fornecedores!inner(nome, status)")
           .eq("tenant_id", session.activeTenant.id)
           .eq("fornecedor.status", "ativo")
-          .returns<
-            {
-              fornecedor_id: string;
-              meios: string[];
-              praca: string | null;
-              fornecedor: { nome: string; status: string };
-            }[]
-          >()
+          .returns<{ fornecedor_id: string; fornecedor: { nome: string; status: string } }[]>()
+      : Promise.resolve({ data: [], error: null }),
+    // E os meios em que cada um já foi usado nas planilhas (decisão 150):
+    // a lista da célula mostra primeiro os já usados no meio da linha.
+    midiaOff && versaoAtiva
+      ? supabase
+          .from("vw_veiculos_meios_usados")
+          .select("fornecedor_id, meio")
+          .eq("tenant_id", session.activeTenant.id)
+          .returns<{ fornecedor_id: string; meio: string }[]>()
       : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (ppsRes.error) console.error("[versao.pps_do_job]", (ppsRes.error as any).message);
   if (veiculosRes.error) console.error("[versao.veiculos]", (veiculosRes.error as any).message);
+  if (usoRes.error) console.error("[versao.veiculos_uso]", (usoRes.error as any).message);
+  const meiosUsados = new Map<string, string[]>();
+  for (const u of usoRes.data ?? []) {
+    meiosUsados.set(u.fornecedor_id, [...(meiosUsados.get(u.fornecedor_id) ?? []), u.meio]);
+  }
   const veiculos: VeiculoDaLista[] = (veiculosRes.data ?? [])
     .map((v) => ({
       id: v.fornecedor_id,
       nome: v.fornecedor.nome,
-      meios: v.meios ?? [],
-      praca: v.praca,
+      meios: (meiosUsados.get(v.fornecedor_id) ?? []).sort((a, b) => a.localeCompare(b, "pt-BR")),
     }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   const ppsQueTravam: PPQueTravaOEnvio[] = (ppsRes.data ?? []).map((pp) => ({

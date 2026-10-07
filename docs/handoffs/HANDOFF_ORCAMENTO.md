@@ -5199,3 +5199,19 @@ aplicada na hora combinada com a frente do Antonio, junto da
   respondeu "nada a importar". Como `claude.freelancer.teste`: as 8
   actions, chamadas direto pelo transporte do Server Action, devolveram a
   recusa, com 8 `acao_negada` e nada gravado.
+
+## ⚠️ Nota de 2026-10-07 (3) — Cadastro de Veículos e os meios pelo uso (decisão 150)
+
+- **Cadastros › Veículos** (`/cadastros/veiculos`): card entre Fornecedores e
+  Cidades, lista com busca, filtro por meio, "Usado em", selo "Sem
+  pagamento" e Inativar (= inativar o fornecedor). Novo e editar usam o
+  formulário do fornecedor na variante "veiculo" (pagamento opcional);
+  CNPJ de fornecedor existente → "Usar este cadastro" só o marca.
+- **O veículo não tem mais meio nem praça no cadastro** (corrige a nota da
+  147): os meios vêm das linhas em que ele foi escolhido
+  (`vw_veiculos_meios_usados`), e a célula Veículo da planilha agrupa "Já
+  usados em {meio}" / "Outros veículos". O pop-up rápido ficou sem o bloco
+  de meios e praça e sem a nota do regime tributário.
+- **Fornecedores** ganhou o selo "Veículo" (leva ao cadastro do veículo).
+- Migration `20261007500001`: sai a trava `veiculos_midia_com_meio`; as
+  colunas `meios` e `praca` ficam sem uso (apagar = destrutivo, pedir).
