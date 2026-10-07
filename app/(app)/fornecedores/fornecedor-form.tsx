@@ -1654,7 +1654,9 @@ export function FornecedorForm({
             </span>
           </div>
 
-          <div className="flex flex-none items-center gap-2.5">
+          {/* `ml-auto`: com a mensagem longa ("Pronto para criar: …") a
+              linha quebra, e os botões ficariam à esquerda. */}
+          <div className="ml-auto flex flex-none items-center gap-2.5">
             {emDialog ? (
               <button
                 type="button"
