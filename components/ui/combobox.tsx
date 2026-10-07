@@ -32,7 +32,7 @@ export interface ComboboxItem {
   /**
    * Título do bloco a que o item pertence. Um item com `grupo` diferente do
    * anterior abre um bloco na lista — no veículo da planilha de Mídia Off,
-   * "Vendem TV Fechada" e "Outros meios" (decisão 147). Quem usa ordena os
+   * "Já usados em TV Fechada" e "Outros veículos" (decisões 147 e 150). Quem usa ordena os
    * itens por grupo; sem ele, a lista é a de sempre.
    */
   grupo?: string;

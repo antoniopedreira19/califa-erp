@@ -42,6 +42,8 @@ No banco, o ORÇADO da linha é o NEGOCIADO: `valor_unitario_orcado` é o unitá
 
 O veículo é um fornecedor — ele recebe o PI, emite a nota e, no A · Repasse, recebe a PP. O cadastro é o formulário do fornecedor com o pagamento **opcional** (vai ser exigido para gerar a PP do repasse) e, em cima, os **meios** que ele vende (o primeiro é o principal) e a praça, em `veiculos_midia`. A lista da linha mostra primeiro os veículos que vendem o meio dela ("Vendem TV Fechada") e depois os outros. A linha pode ficar sem veículo no rascunho; a versão só aprova com todas preenchidas.
 
+> ⚠️ **07/10/2026 — mudou na [150](150-cadastro-de-veiculos.md):** o cadastro do veículo não pede mais meio nem praça. Os meios vêm do uso nas planilhas (a lista agrupa "Já usados em {meio}" e "Outros veículos"), e a praça fica só na linha. O cadastro ganhou a tela Cadastros › Veículos.
+
 ## Entrega 1: até aprovar
 
 - O orçamento vai até a aprovação. "Enviar Job para Abertura" fica desligado na Mídia Off ("disponível na próxima entrega"), na tela e no servidor.

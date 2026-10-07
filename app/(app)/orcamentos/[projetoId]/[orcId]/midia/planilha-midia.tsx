@@ -429,23 +429,25 @@ export function PlanilhaMidiaOff({
     linhaId: string;
     nomeInicial?: string;
     veiculo?: VeiculoDaLista;
-    meioInicial?: string;
   } | null>(null);
 
   function abrirVeiculo(linhaId: string, nomeInicial?: string) {
     const linha = linhasRef.current.find((l) => l.id === linhaId);
     const veiculo = !nomeInicial && linha?.veiculoId ? veiculos.find((v) => v.id === linha.veiculoId) : undefined;
-    setDialogVeiculo({
-      linhaId,
-      nomeInicial,
-      veiculo,
-      meioInicial: linha ? infoDoGrupo.get(linha.grupoId)?.meio.meio : undefined,
-    });
+    setDialogVeiculo({ linhaId, nomeInicial, veiculo });
   }
 
-  function escolherVeiculoNaLinha(v: VeiculoDaLista) {
-    setVeiculosNovos((vs) => [...vs.filter((x) => x.id !== v.id), v]);
-    if (dialogVeiculo) atualizarLinha(dialogVeiculo.linhaId, { veiculoId: v.id });
+  /** O veículo recém-cadastrado (ou o fornecedor que virou veículo) entra na
+   *  lista na hora, já usado no meio da linha; o servidor confirma o uso no
+   *  próximo carregamento (decisão 150). */
+  function escolherVeiculoNaLinha(f: { id: string; nome: string }) {
+    if (!dialogVeiculo) return;
+    const linha = linhasRef.current.find((l) => l.id === dialogVeiculo.linhaId);
+    const meio = linha ? infoDoGrupo.get(linha.grupoId)?.meio.meio : undefined;
+    const antes = veiculos.find((v) => v.id === f.id)?.meios ?? [];
+    const meios = Array.from(new Set([...antes, ...(meio ? [meio] : [])]));
+    setVeiculosNovos((vs) => [...vs.filter((x) => x.id !== f.id), { id: f.id, nome: f.nome, meios }]);
+    atualizarLinha(dialogVeiculo.linhaId, { veiculoId: f.id });
     setDialogVeiculo(null);
   }
 
@@ -814,18 +816,15 @@ export function PlanilhaMidiaOff({
           }}
           veiculo={dialogVeiculo?.veiculo}
           nomeInicial={dialogVeiculo?.nomeInicial}
-          meioInicial={dialogVeiculo?.meioInicial}
-          onCriado={(f, meiosDoVeiculo, praca) =>
-            escolherVeiculoNaLinha({ id: f.id, nome: f.nome, meios: meiosDoVeiculo, praca: praca.trim() || null })
-          }
-          onSelecionarExistente={async (f, meiosDoVeiculo, praca) => {
-            const r = await marcarFornecedorComoVeiculo(f.id, meiosDoVeiculo, praca);
+          onCriado={escolherVeiculoNaLinha}
+          onSelecionarExistente={async (f) => {
+            const r = await marcarFornecedorComoVeiculo(f.id);
             if (!r.ok) {
               avisarErro(r.message);
               setDialogVeiculo(null);
               return;
             }
-            escolherVeiculoNaLinha({ id: f.id, nome: f.nome, meios: meiosDoVeiculo, praca: praca.trim() || null });
+            escolherVeiculoNaLinha(f);
           }}
           onSalvo={() => {
             setDialogVeiculo(null);

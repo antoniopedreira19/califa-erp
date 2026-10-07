@@ -345,12 +345,10 @@ interface Props {
   /** Edição salva. No dialog é o que fecha e devolve o controle para a PP
    *  (09/09/2026); na página o `router.refresh()` já basta. */
   onSalvo?: () => void;
-  /** `veiculo`: o cadastro do veículo de mídia (decisão 147) — o mesmo
-   *  formulário, com o pagamento opcional e os meios gravados junto, pelas
-   *  actions do veículo. */
+  /** `veiculo`: o cadastro do veículo de mídia (decisões 147 e 150) — o
+   *  mesmo formulário, com o pagamento opcional, gravado pelas actions do
+   *  veículo. Na página, Cancelar e Criar voltam para Cadastros › Veículos. */
   variante?: "fornecedor" | "veiculo";
-  /** Só no veículo: os meios e a praça, lidos na hora de gravar. */
-  dadosDoVeiculo?: () => { meios: string[]; praca: string };
 }
 
 export function FornecedorForm({
@@ -364,7 +362,6 @@ export function FornecedorForm({
   onSelecionarExistente,
   onSalvo,
   variante = "fornecedor",
-  dadosDoVeiculo,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(fornecedor);
@@ -791,16 +788,12 @@ export function FornecedorForm({
     const arquivoIndo = declaracaoArquivo.gravando(
       formData.get("declaracao_simples_path")?.toString() || null,
     );
-    if (ehVeiculo) {
-      const v = dadosDoVeiculo?.() ?? { meios: [], praca: "" };
-      formData.set("veiculo_meios", JSON.stringify(v.meios));
-      formData.set("veiculo_praca", v.praca);
-    }
     startTransition(async () => {
       const res: ActionResult | undefined = await (ehVeiculo
         ? isEdit
           ? atualizarVeiculoFornecedor(fornecedor!.id, formData, confirmarPagamento)
-          : criarVeiculoFornecedor(formData)
+          : // Pela página de Cadastros a action redireciona para a lista.
+            criarVeiculoFornecedor(formData, emDialog ? "midia" : "cadastro")
         : isEdit
           ? atualizarFornecedor(fornecedor!.id, formData, confirmarPagamento)
           : emDialog
@@ -1192,8 +1185,9 @@ export function FornecedorForm({
               )}
 
               {/* Módulo fiscal: o que o regime faz com as retenções e o
-                  crédito, na aprovação da PP. */}
-              {ehPj && regime && (
+                  crédito, na aprovação da PP. Fora do pop-up rápido do
+                  veículo (Tiago, 07/10/2026, decisão 150). */}
+              {ehPj && regime && !(ehVeiculo && emDialog) && (
                 <div className="col-span-12 flex gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-sky-900">
                   <span className="mt-0.5 shrink-0">
                     <Info className="h-3.5 w-3.5" />
@@ -1672,7 +1666,7 @@ export function FornecedorForm({
               </button>
             ) : (
               <Link
-                href="/fornecedores"
+                href={ehVeiculo ? "/cadastros/veiculos" : "/fornecedores"}
                 prefetch={false}
                 className="rounded-lg border border-border bg-white px-[18px] py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-accent"
               >
@@ -1708,7 +1702,9 @@ export function FornecedorForm({
                     ? "Salvar alterações"
                     : emDialog
                       ? "Criar e selecionar"
-                      : "Criar fornecedor"}
+                      : ehVeiculo
+                        ? "Criar veículo"
+                        : "Criar fornecedor"}
                 </>
               )}
             </button>

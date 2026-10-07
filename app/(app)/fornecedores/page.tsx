@@ -14,15 +14,25 @@ export default async function FornecedoresPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const { data: fornecedores, error } = await supabase
-    .from("fornecedores")
-    .select("*")
-    .eq("tenant_id", session.activeTenant.id)
-    .order("nome", { ascending: true })
-    .returns<Fornecedor[]>();
+  const [{ data: fornecedores, error }, veiculosRes] = await Promise.all([
+    supabase
+      .from("fornecedores")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .order("nome", { ascending: true })
+      .returns<Fornecedor[]>(),
+    // Quem também é veículo de mídia ganha o selo (decisão 150).
+    supabase
+      .from("veiculos_midia")
+      .select("fornecedor_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .returns<{ fornecedor_id: string }[]>(),
+  ]);
 
   if (error) console.error("[fornecedores.page]", error.message);
+  if (veiculosRes.error) console.error("[fornecedores.page.veiculos]", veiculosRes.error.message);
   const rows = fornecedores ?? [];
+  const veiculoIds = (veiculosRes.data ?? []).map((v) => v.fornecedor_id);
 
   return (
     <div className="space-y-6">
@@ -61,7 +71,7 @@ export default async function FornecedoresPage() {
           }
         />
       ) : (
-        <FornecedoresList fornecedores={rows} />
+        <FornecedoresList fornecedores={rows} veiculoIds={veiculoIds} />
       )}
     </div>
   );

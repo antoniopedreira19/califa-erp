@@ -71,9 +71,9 @@ export interface VeiculoDaLista {
   /** O id do fornecedor. */
   id: string;
   nome: string;
-  /** O primeiro é o principal. */
+  /** Os meios em que o veículo já foi usado nas planilhas (decisão 150):
+   *  vêm do uso, e não do cadastro. */
   meios: string[];
-  praca: string | null;
 }
 
 export interface ApiDaPlanilha {
@@ -831,8 +831,8 @@ function CelulaTipo({ linha }: { linha: LinhaMidia }) {
 /** O veículo da linha, do cadastro de veículos. Como o campo de fornecedor
  *  da PP: ao passar o mouse aparece o "+" (cadastrar) ou o lápis (editar o
  *  escolhido), e a busca sem resultado oferece o cadastro com o nome
- *  digitado. A lista mostra primeiro os veículos que vendem o meio da
- *  linha, depois os outros. */
+ *  digitado. A lista mostra primeiro os veículos já usados no meio da linha
+ *  (em qualquer planilha), depois os outros (decisão 150). */
 function CelulaVeiculo({ linha, className }: { linha: LinhaMidia; className: string }) {
   const api = useApi();
   const nav = React.useContext(NavCtx);
@@ -841,12 +841,15 @@ function CelulaVeiculo({ linha, className }: { linha: LinhaMidia; className: str
     const item = (v: VeiculoDaLista, grupo: string) => ({
       value: v.id,
       label: v.nome,
-      descricao: [v.meios.join(" + "), v.praca].filter(Boolean).join(" · "),
+      descricao: v.meios.length ? `Já usado em ${v.meios.join(", ")}` : "Ainda não usado",
       grupo,
     });
     const doMeio = api.veiculos.filter((v) => v.meios.includes(meioDaLinha));
     const outros = api.veiculos.filter((v) => !v.meios.includes(meioDaLinha));
-    return [...doMeio.map((v) => item(v, `Vendem ${meioDaLinha}`)), ...outros.map((v) => item(v, "Outros meios"))];
+    return [
+      ...doMeio.map((v) => item(v, `Já usados em ${meioDaLinha}`)),
+      ...outros.map((v) => item(v, "Outros veículos")),
+    ];
   }, [api.veiculos, meioDaLinha]);
   const naLista = linha.veiculoId !== null && api.veiculos.some((v) => v.id === linha.veiculoId);
   // Resposta do Tiago (04/10/2026, opção b): a linha pode ficar sem veículo

@@ -169,7 +169,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 147 | [Planilha de Mídia Off no orçamento (entrega 1: até aprovar)](147-planilha-midia-off.md) | 2026-10-06 |
 | 148 | [A visão agregada salva cada alteração na hora (entrega 1)](148-agregada-salva-cada-alteracao.md) | 2026-10-06 |
 | 149 | [O envio para abertura muda pelo tipo de job: Interno sem recebimento; Fee e Always On sem evento e com recebimento por mês](149-envio-para-abertura-por-tipo-de-job.md) | 2026-10-06 |
-| 150 | *Reservada* — Cadastro de Veículos (frente Mídia Off, no worktree `midia-off`, ainda não publicada). Quem publicar substitui esta linha. | 2026-10-07 |
+| 150 | [Cadastro de Veículos em Cadastros; os meios do veículo vêm do uso nas planilhas](150-cadastro-de-veiculos.md) | 2026-10-07 |
 | 151 | [A errata não mexe no planejado e cancela a linha em vez de apagá-la](151-errata-nao-mexe-no-planejado-e-cancela-linha.md) | 2026-10-07 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em

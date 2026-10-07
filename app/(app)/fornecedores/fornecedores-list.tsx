@@ -24,8 +24,17 @@ function fornecedorIncompleto(f: Fornecedor): boolean {
   return !f.cep || (!f.banco_codigo && !f.pix_chave);
 }
 
-export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] }) {
+export function FornecedoresList({
+  fornecedores,
+  veiculoIds,
+}: {
+  fornecedores: Fornecedor[];
+  /** Quem também é veículo de mídia (decisão 150): ganha o selo "Veículo",
+   *  que leva ao cadastro em Cadastros › Veículos. */
+  veiculoIds: string[];
+}) {
   const router = useRouter();
+  const ehVeiculo = React.useMemo(() => new Set(veiculoIds), [veiculoIds]);
   const [busca, setBusca] = React.useState("");
   const [mostrarInativos, setMostrarInativos] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
@@ -148,6 +157,17 @@ export function FornecedoresList({ fornecedores }: { fornecedores: Fornecedor[] 
                       <span className="inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                         Dados incompletos
                       </span>
+                    )}
+                    {ehVeiculo.has(f.id) && (
+                      <Link
+                        href={`/cadastros/veiculos/${f.id}`}
+                        prefetch={false}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Também é veículo de mídia: veja em Cadastros › Veículos."
+                        className="inline-flex items-center rounded-md border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+                      >
+                        Veículo
+                      </Link>
                     )}
                   </div>
                   {f.razao_social && (
