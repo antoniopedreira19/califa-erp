@@ -92,8 +92,16 @@ individualmente."
 1. **Retroativo (pedido do Tiago, depois desta entrega):** mapear as PPs com
    mais de uma NF anexada que ainda não foram registradas — o registro dos
    campos não existia — para registrar em lote.
-2. **O ISS retido fica o da 1ª aprovação.** Uma aprovação posterior não
-   muda a alíquota de uma nota já registrada; só o crédito e os dados.
+2. **O ISS retido fica o da 1ª aprovação — e trava** (resposta do Tiago em
+   07/10/2026: "Ao notar que a NF já está no sistema, os campos devem ser
+   automaticamente preenchidos com o preenchimento já feito, e travados com
+   o mesmo"). Na aprovação de outra PP da mesma nota, o ISS das retenções
+   vem com a alíquota registrada e não se edita ("Sem ISS retido, como na
+   aprovação da PP-00129: a NF é a mesma."); com ISS acima de zero, a chave
+   "Reter na fonte" não desliga. O servidor confere
+   (`registrar_notas_fiscais_da_pp`, migration `20261007300005`): com
+   retenção, o ISS desta PP tem de ser o da nota. Testado na PP-00132 do
+   TES-1014/26 — a tela trava, e a função recusa 2% e aceita sem ISS.
 3. **Nota registrada por uma PP reprovada e refeita:** a PP nova mostra a
    nota como "já na apuração, registrada com a PP-…" (a reprovada) e
    mantém as decisões daquela aprovação. A nota volta a contar quando a PP

@@ -105,14 +105,28 @@ envio, "Ver PP e documentos lado a lado" abre o PDF da PP, o documento à
 vista e a coluna "Documentos e dados"; no formulário, só o documento e os
 dados ("Voltar ao formulário").
 
-## Em aberto
+## Respostas do Tiago (07/10/2026, depois da entrega)
 
-1. **Encerramento do job com PP a emitir pendente.** Hoje ela não trava o
-   encerramento (não é PP). Falta decidir se deve travar, ser descartada ou
-   só avisar.
-2. **O financeiro não vê "Substitui a PP-…"** na tela da PP nova. Só a
-   produção vê.
-3. **Linha cancelada por errata com PP a emitir** (decisão 151): a errata não
-   olha a PP a emitir, e a linha cancelada não abre o painel. A PP a emitir
-   que estiver nela fica parada — fora do realizado e do financeiro, mas sem
-   como gerar nem excluir.
+1. **PP a emitir trava o encerramento** ("Deve travar."). Ela entrou em
+   `lib/data/impedimentos-encerramento.ts` (`ppsAEmitir`), a mesma régua do
+   envio para encerramento, do card da home do GP e do filtro da lista de
+   jobs. A barra do job mostra "1 PP a emitir em “Motion (bonificado)”" e o
+   servidor recusa com "Gere ou exclua as PPs a emitir pelo painel do item
+   na Planilha Interna."
+2. **O financeiro não vê "Substitui a PP-…"** ("Não."). Fica como está.
+3. **Errata que cancela a linha apaga a PP a emitir dela.** "Caso a PP já
+   tenha sido gerada, a errata não poderá ser feita na linha" — isso já
+   valia: `barrarCancelamento` recusa linha com qualquer PP no histórico,
+   inclusive a gerada. A exclusão é um gatilho
+   (`trg_jio_cancelada_exclui_pp_a_emitir`, migration `20261007300004`) na
+   passagem da linha para cancelada, na mesma transação da errata, com a
+   exclusão lógica de sempre. A função da errata (decisão 151) não mudou.
+   Testado numa transação desfeita: a PP a emitir do Motion no TES-1014/26
+   passou de não excluída para excluída.
+4. **A calha da planilha mostrando a PP a emitir:** o Tiago quer ver antes
+   ("me mostre como ficaria"). Protótipo à parte.
+5. **Refazer com a mesma NF:** "devemos poder refazer a PP com a NF, e
+   associá-la com a NF, visto que estará substituindo a anterior". É o que
+   já acontece: o anexo volta na PP a emitir e o envio liga a PP nova à
+   mesma nota. Os dados da nota seguem travados para a produção (resposta 6
+   da 152); quem corrige é o financeiro, na aprovação.

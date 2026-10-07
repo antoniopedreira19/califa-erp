@@ -4791,3 +4791,15 @@ código publicado logo depois (`3305751`).
   todos os jobs abertos.
 - Pergunta aberta na decisão 151: a linha que vira save depois da abertura
   descasa o rodapé da planilha do card de Totais.
+
+## ⚠️ Nota de 2026-10-07 (3) — PP a emitir trava o encerramento e sai com a errata (decisão 153)
+
+- **PP a emitir trava o encerramento** (resposta do Tiago). Entrou em
+  `impedimentosDosJobs` como `ppsAEmitir` — vale para o envio para
+  encerramento, o card da home do GP e o filtro da lista de jobs — e no
+  `FechamentoDoJob` (barra e diálogo).
+- **A errata que cancela a linha exclui a PP a emitir dela**: gatilho
+  `trg_jio_cancelada_exclui_pp_a_emitir` (migration `20261007300004`) na
+  passagem para cancelada. Linha com PP gerada continua sem poder ser
+  cancelada (`barrarCancelamento`, como já era). A errata em si não mudou.
+- A calha da planilha mostrando a PP a emitir está em protótipo.

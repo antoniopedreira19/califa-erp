@@ -6802,3 +6802,11 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
   - o texto passou a "São aprovados junto com a abertura do job, no formulário de abertura…";
   - a linha da fila ganhou "Orçamento inteiro em save", "Orçamento inteiro pago pelo saldo do {código}" ou "N linhas com save".
 - **Testado** em TES-1023/26 (consumo) e TES-1024/26 (gera inteiro). Detalhes na decisão 155.
+
+## ⚠️ Nota de 2026-10-07 (4) — o ISS da NF já registrada trava na aprovação (decisão 152)
+
+- Na aprovação de uma PP cuja NF outra PP já registrou, o ISS das retenções
+  vem com a alíquota daquela aprovação e não se edita; com ISS acima de
+  zero, "Reter na fonte" não desliga.
+- O servidor confere: `registrar_notas_fiscais_da_pp` recusa, com retenção,
+  ISS diferente do da nota (migration `20261007300005`).

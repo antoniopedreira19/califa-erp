@@ -30,6 +30,8 @@ import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verb
  * aberto (decisão 052), com verba de produção sem prestação aprovada
  * (decisão 081 §7), com save ou consumo de save aguardando o financeiro ou
  * nunca enviado (decisão 099), nem com a revisão da abertura pendente.
+ * Nem com PP a emitir que ninguém gerou nem excluiu (decisão 153,
+ * resposta do Tiago em 07/10/2026: "deve travar").
  *
  * O FATURAMENTO não entra (decisão 087): faturamento e encerramento correm
  * separados, e o job sem nada a faturar finaliza só com o encerramento.
@@ -38,6 +40,8 @@ import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verb
  */
 export interface ImpedimentosEncerramento {
   ppsEmAberto: { codigo: string; status: string }[];
+  /** PPs a emitir que ninguém gerou nem excluiu (decisão 153), pelo item. */
+  ppsAEmitir: { item: string }[];
   /** Verbas pagas que ainda não fecharam (decisão 081, pergunta 10a). */
   verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
   bvsEmAberto: { item: string; situacao: string }[];
@@ -58,6 +62,7 @@ export interface ImpedimentosEncerramento {
 export function podeEncerrar(imp: ImpedimentosEncerramento): boolean {
   return (
     imp.ppsEmAberto.length === 0 &&
+    imp.ppsAEmitir.length === 0 &&
     imp.verbasEmAberto.length === 0 &&
     imp.bvsEmAberto.length === 0 &&
     imp.itensSemMarcacao.length === 0 &&
@@ -71,6 +76,7 @@ export function podeEncerrar(imp: ImpedimentosEncerramento): boolean {
 function vazio(): ImpedimentosEncerramento {
   return {
     ppsEmAberto: [],
+    ppsAEmitir: [],
     verbasEmAberto: [],
     bvsEmAberto: [],
     itensSemMarcacao: [],
@@ -82,7 +88,7 @@ function vazio(): ImpedimentosEncerramento {
 }
 
 /**
- * Os impedimentos de VÁRIOS jobs de uma vez: sete leituras rasas em
+ * Os impedimentos de VÁRIOS jobs de uma vez: oito leituras rasas em
  * paralelo, filtradas pelos ids, e o cruzamento em memória — o número de
  * consultas não cresce com a quantidade de jobs (`docs/PERFORMANCE.md`,
  * seções B e C). Cada leitura traz só as linhas que travam.
@@ -106,6 +112,7 @@ export async function impedimentosDosJobs(
     semMarcacaoRes,
     pedidosSaveRes,
     linhasComSaveRes,
+    aEmitirRes,
   ] = await Promise.all([
     supabase
       .from("jobs")
@@ -165,6 +172,15 @@ export async function impedimentosDosJobs(
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds)
       .or("em_save.eq.true,save_consumido.gt.0"),
+    // PPs a emitir pendentes (decisão 153): nem geradas nem excluídas. O
+    // nome do item vem da linha da planilha, pela âncora do realizado.
+    supabase
+      .from("pedidos_compra_a_emitir")
+      .select("job_id, realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item))")
+      .eq("tenant_id", tenantId)
+      .in("job_id", jobIds)
+      .is("pp_id", null)
+      .is("excluida_em", null),
   ]);
 
   const de = (jobId: string | null | undefined) =>
@@ -189,6 +205,17 @@ export async function impedimentosDosJobs(
   } else {
     for (const p of (ppsRes.data ?? []) as { job_id: string; codigo: string; status: string }[]) {
       de(p.job_id)?.ppsEmAberto.push({ codigo: p.codigo, status: p.status });
+    }
+  }
+
+  if (aEmitirRes.error) {
+    console.error("[impedimentos.a_emitir]", aEmitirRes.error.message);
+    for (const imp of mapa.values()) imp.ppsAEmitir.push({ item: "PPs a emitir" });
+  } else {
+    for (const a of (aEmitirRes.data ?? []) as any[]) {
+      const realizado = Array.isArray(a.realizado) ? a.realizado[0] : a.realizado;
+      const copia = Array.isArray(realizado?.copia) ? realizado.copia[0] : realizado?.copia;
+      de(a.job_id)?.ppsAEmitir.push({ item: (copia?.item as string) ?? "Item" });
     }
   }
 
