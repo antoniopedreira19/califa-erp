@@ -302,6 +302,8 @@ export function EnviarEncerramentoDialog({
             }
             somenteRealizada
             colunasSaveAbertas
+            // O fechamento é só da ótica realizada.
+            abertura={null}
           />
 
           {erro && (

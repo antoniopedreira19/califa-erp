@@ -4774,3 +4774,20 @@ código publicado logo depois (`3305751`).
   migrations `20261007300001` a `20261007300003`.
 - Testado no TES-1014/26 (PP-00129 a PP-00131). A conferência lado a lado na
   produção é a entrega 3 da decisão 153, por fazer.
+
+## ⚠️ Nota de 2026-10-07 (2) — o valor do job dividido entre inicial e atual (decisão 151, entrega 2)
+
+- Quando uma errata muda o valor do job depois da abertura, o cabeçalho do
+  job (produção e financeiro) se divide: "Valor do job · inicial" na linha
+  do planejado — base do resultado planejado — e "Valor do job · atual" na
+  do realizado. Errata que não muda o valor mantém o card de hoje.
+- O card de Totais acompanha na ótica Planejada (valor, impostos,
+  honorários e orçado da abertura). O card de um mês do modelo mensal fica
+  como era.
+- A RENTAB. planejada da planilha (grupo, item e rodapé) usa o orçado da
+  abertura de cada linha; zero na linha criada por errata.
+- Sem migration: a foto da abertura sai da versão aprovada
+  (`lib/calculos/abertura-do-job.ts`) e reproduz o `valor_job_abertura` de
+  todos os jobs abertos.
+- Pergunta aberta na decisão 151: a linha que vira save depois da abertura
+  descasa o rodapé da planilha do card de Totais.

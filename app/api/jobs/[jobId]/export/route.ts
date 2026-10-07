@@ -199,6 +199,8 @@ export async function GET(
       em_save: it.em_save === true,
       save_consumido: Number(it.save_consumido ?? 0),
       cancelada_em: it.cancelada_em ?? null,
+      // A exportação tem a própria conta de rentabilidade (`montar-interna`).
+      orcado_abertura: null,
       somaDasPPs: Number(realizado?.total_realizado ?? 0),
       pps: ppsPorItem.get(it.id) ?? [],
       bvs: bvsPorItem.get(it.id) ?? [],

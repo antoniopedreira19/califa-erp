@@ -1,9 +1,9 @@
 # 151 — A errata não mexe no planejado e cancela a linha em vez de apagá-la
 
 **Data:** 2026-10-07
-**Status:** entrega 1 aceita e no ar (07/10/2026). A entrega 2 (o valor do
-job dividido entre inicial e atual) está desenhada e aprovada, e vem
-depois.
+**Status:** entregas 1 e 2 aceitas e no ar (07/10/2026). Fica uma
+pergunta aberta sobre a linha que vira save depois da abertura (fim do
+arquivo).
 **Quem decidiu:** Tiago, em 06 e 07/10/2026, a partir do protótipo
 interativo (https://claude.ai/artifact/UvUXt8rKSNsXTEofUxtt7p, v3). Todas as
 respostas seguiram a recomendação que acompanhava a pergunta.
@@ -88,7 +88,7 @@ payload: linha vermelha ou em save, zero; Interno, igual ao orçado novo;
 linha nova, zero com QT e D/M em 1; linha existente, o que ela já tinha.
 Um payload montado à mão não grava o que a tela não deixa.
 
-## Entrega 2 — desenhada e aprovada, ainda por fazer
+## Entrega 2 — o valor do job dividido (no ar)
 
 Decidido em 07/10/2026 no mesmo protótipo:
 
@@ -106,9 +106,63 @@ Decidido em 07/10/2026 no mesmo protótipo:
    orçado atual. Os agrupamentos passam a somar o mesmo número do card de
    Totais.
 
-Precisa de banco: o orçado de cada linha na abertura e as deduções
-(impostos) da abertura. `jobs.valor_job_abertura` e
-`faturamento_previsto_abertura` já existem.
+### Como ficou
+
+- **Sem migration.** A foto da abertura sai da **versão aprovada**, que a
+  errata não altera: `fechamentoDaAbertura` (`lib/calculos/abertura-do-job.ts`)
+  roda a mesma `calcularTotaisVersao` que gravou `jobs.valor_job_abertura`
+  no envio para abertura. Conferido em 07/10/2026: nos 50 jobs abertos a
+  conta reproduz o `valor_job_abertura` gravado ao centavo. Se um dia não
+  reproduzir (job devolvido com save mexido direto na cópia antes do
+  reenvio), a foto é descartada e a tela fica como era.
+- A foto só existe depois da abertura do financeiro
+  (`data_abertura_financeiro`). Antes dela não há "inicial" e "atual".
+- **Cabeçalho** (`ResumoResultado`, prop `abertura` obrigatória): divide
+  quando o valor do job atual difere do da abertura no centavo. As visões
+  de projeto mandam `null` — elas somam jobs e não se dividem.
+- **Card de Totais** (`PainelResultado`, prop `abertura`): na ótica
+  Planejada usa valor, impostos, int. taxes, custos de transação,
+  honorários e orçado da abertura, com o rótulo "Valor do Job inicial"; na
+  Realizada, "Valor do Job atual". Só no card do job inteiro e no do
+  trimestre; o card de um mês do modelo mensal fica como era.
+- **RENTAB. planejada** (grupo, item e rodapé): base nova
+  `orcadoRentabilidadePlanejada` em `blocosDoItem`, que lê
+  `ItemPlanilhaJob.orcado_abertura` (campo obrigatório: o orçado da linha
+  na versão, 0 na linha criada por errata, `null` = orçado de hoje nas
+  telas sem a foto). A realizada segue em `orcadoRentabilidade`.
+- A exportação interna (`montar-interna`) tem conta própria de
+  rentabilidade e ficou como era.
+
+### Testado (07/10/2026)
+
+- TES-1002/26: inicial R$ 354.914,88 → planejado R$ 92.600,00 (26,1%);
+  atual R$ 364.657,64. A conta à mão bate: versão com R$ 255.000 de
+  orçado, honorários 12% (R$ 30.600), imposto R$ 69.314,88; 255.000 −
+  193.000 + 30.600 = 92.600. No Totais do trimestre, ótica Planejada,
+  "Valor do Job inicial" e o mesmo R$ 92.600,00. Em dezembro, depois da
+  errata da entrega 1, o Agrupamento 1 seguiu com RENTAB. planejada
+  R$ 8.000,00 · 20,0% (antes da entrega 2 cairia para R$ 5.000,00).
+- TES-1008/26: inicial R$ 171.229,03 → planejado R$ 41.600,00; atual
+  R$ 181.667,70 → realizado R$ 73.000,00. O mesmo na tela do job no
+  financeiro.
+- TES-1014/26 (sem errata): valor único no cabeçalho e no Totais.
+
+### Pergunta aberta: a linha que vira save depois da abertura
+
+O rodapé da planilha soma a RENTAB. planejada linha a linha; o card de
+Totais fecha sobre a versão inteira. Os dois batem, menos quando uma linha
+da abertura saiu da conta por outro caminho que não o cancelamento:
+
+- **Remoção antiga** (antes desta decisão): a linha sumiu da planilha.
+  Não acontece mais — agora é cancelamento. Só existe em jobs de teste
+  (TES-1001, TES-1006, TES-1008).
+- **Linha que vira save depois da abertura** (decisão 099): o planejado
+  dela vai a zero pelo trigger e o orçado sai da base. Hoje só em jobs de
+  teste (TES-1001, TES-1002, TES-1008), mas pode acontecer em job real.
+
+No TES-1008/26 o card mostra R$ 26.000,00 de rentabilidade planejada e o
+rodapé R$ 13.500,00 — a diferença é a linha removida (R$ 10.000) e o Item
+8 em save (R$ 2.500). Aguarda o Tiago.
 
 ## Testado (07/10/2026)
 

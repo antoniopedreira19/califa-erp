@@ -238,6 +238,8 @@ export function PlanilhaConferencia({
         modeloPlanilha={modeloPlanilha}
         internacional={internacional}
         moedaEstrangeira={moedaEstrangeira}
+        // Conferência antes da abertura: não há "inicial" e "atual".
+        abertura={null}
       />
     </>
   );

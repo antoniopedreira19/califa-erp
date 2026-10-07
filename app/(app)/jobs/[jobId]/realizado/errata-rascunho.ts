@@ -473,6 +473,8 @@ export function useRascunhoErrata(
         em_save: false,
         save_consumido: 0,
         cancelada_em: null,
+        // Linha criada por errata não existia na abertura (decisão 151).
+        orcado_abertura: 0,
       };
     });
 

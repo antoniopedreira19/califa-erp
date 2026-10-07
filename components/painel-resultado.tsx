@@ -9,6 +9,10 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { PercentualDoJob } from "@/components/percentual-do-job";
 import {
+  valorDoJobMudouDesdeAAbertura,
+  type FechamentoDaAbertura,
+} from "@/lib/calculos/abertura-do-job";
+import {
   rotuloDosHonorarios,
   type CadeiaDoResultado,
 } from "@/app/(app)/_planilha/modelo-planilha";
@@ -84,6 +88,15 @@ interface Props {
    * não tem mais o que dizer.
    */
   somenteRealizada?: boolean;
+  /**
+   * O job como foi aberto (decisão 151, entrega 2). Quando o valor do job
+   * mudou depois da abertura, a ótica PLANEJADA usa os números da abertura
+   * — valor, impostos, honorários e orçado — e o rótulo vira "Valor do Job
+   * inicial"; a Realizada segue nos de hoje, como "Valor do Job atual". O
+   * mesmo número do cabeçalho do job. Ausente ou `null` (orçamento, visão
+   * do projeto, fechamento): a conta de sempre.
+   */
+  abertura?: FechamentoDaAbertura | null;
   moeda: string;
 }
 
@@ -132,6 +145,7 @@ export function PainelResultado({
   taxaHonorarios,
   somentePlanejada,
   somenteRealizada,
+  abertura = null,
   moeda,
 }: Props) {
   const [visao, setVisao] = React.useState<Visao>(
@@ -140,6 +154,19 @@ export function PainelResultado({
   const planejada =
     !somenteRealizada && (somentePlanejada || visao === "planejada");
   const internacional = cadeia !== "nacional";
+
+  // Decisão 151: o planejado é o da abertura. Com o valor do job mudado por
+  // errata, a ótica planejada fecha sobre o job como foi aberto.
+  const valorDividido = valorDoJobMudouDesdeAAbertura(abertura, valorJob);
+  const daAbertura = valorDividido && planejada ? abertura : null;
+  if (daAbertura) {
+    valorJob = daAbertura.valorJob;
+    imposto = daAbertura.imposto;
+    intTaxes = daAbertura.intTaxes;
+    intTransactionCosts = daAbertura.intTransactionCosts;
+    honorarios = daAbertura.honorarios;
+    orcado = daAbertura.orcadoRentabilidade;
+  }
 
   const custo = planejada ? custoPlanejado : custoRealizado;
   // Planejada não tem BV (decisão 062): a comissão só entra onde ela
@@ -207,7 +234,13 @@ export function PainelResultado({
 
       <div className="flex flex-col gap-1.5">
         <LinhaValor
-          rotulo="Valor do Job"
+          rotulo={
+            valorDividido
+              ? planejada
+                ? "Valor do Job inicial"
+                : "Valor do Job atual"
+              : "Valor do Job"
+          }
           valor={formatCurrency(valorJob, moeda)}
         />
         <LinhaValor

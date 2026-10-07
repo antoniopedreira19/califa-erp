@@ -842,6 +842,7 @@ export function JobItemRealizadoTable({
   const BLOCO_VAZIO = {
     orcado: 0,
     orcadoRentabilidade: 0,
+    orcadoRentabilidadePlanejada: 0,
     planejado: BLOCO_ZERO,
     realizado: BLOCO_ZERO,
   };
@@ -1265,7 +1266,7 @@ export function JobItemRealizadoTable({
                     >
                       {!rentabPlanejadaVisivel && (
                         <RentabilidadeNoVao
-                          orcado={sub.orcadoRentabilidade}
+                          orcado={sub.orcadoRentabilidadePlanejada}
                           custo={subPlanejado}
                           moeda={moeda}
                           corRotulo={PLANEJADO.textoSuave}
@@ -1296,7 +1297,7 @@ export function JobItemRealizadoTable({
                       <CelulasRentabilidade
                         bloco={PLANEJADO}
                         linha="grupo"
-                        orcado={sub.orcadoRentabilidade}
+                        orcado={sub.orcadoRentabilidadePlanejada}
                         custo={subPlanejado}
                         temCusto={sub.planejado.bruto > 0}
                         moeda={moeda}
@@ -1635,7 +1636,7 @@ export function JobItemRealizadoTable({
                           <CelulasRentabilidade
                             bloco={PLANEJADO}
                             linha="item"
-                            orcado={blocos.orcadoRentabilidade}
+                            orcado={blocos.orcadoRentabilidadePlanejada}
                             custo={valorNaVisao(blocos.planejado, visao)}
                             temCusto={blocos.planejado.bruto > 0}
                             moeda={moeda}
@@ -1806,7 +1807,7 @@ export function JobItemRealizadoTable({
               >
                 {!rentabPlanejadaVisivel && (
                   <RentabilidadeNoVao
-                    orcado={totais.orcadoRentabilidade}
+                    orcado={totais.orcadoRentabilidadePlanejada}
                     custo={valorNaVisao(totais.planejado, visao)}
                     moeda={moeda}
                     corRotulo={PLANEJADO.textoSuave}
@@ -1840,7 +1841,7 @@ export function JobItemRealizadoTable({
                 <CelulasRentabilidade
                   bloco={PLANEJADO}
                   linha="total"
-                  orcado={totais.orcadoRentabilidade}
+                  orcado={totais.orcadoRentabilidadePlanejada}
                   custo={valorNaVisao(totais.planejado, visao)}
                   temCusto={totais.planejado.bruto > 0}
                   moeda={moeda}

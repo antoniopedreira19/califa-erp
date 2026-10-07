@@ -270,6 +270,12 @@ export interface ItemParaBv {
   tipo_custo: TipoCusto;
   total_orcado: number | string | null;
   total_planejado: number | string | null;
+  /** O orçado da linha na ABERTURA do job — base da rentabilidade
+   *  PLANEJADA desde a decisão 151 (07/10/2026): o planejado é o da
+   *  abertura, então ele se compara com o orçado da abertura. 0 na linha
+   *  criada por errata. Ausente ou `null` (orçamento, telas sem a foto da
+   *  abertura): vale o orçado de hoje, como sempre foi. */
+  orcado_abertura?: number | null;
   /** A linha gera SAVE: é faturada aqui e o serviço não acontece neste
    *  projeto. Fica fora da rentabilidade, porque não tem custo com que
    *  comparar (docs/decisions/028-save-entre-jobs.md §9). */
@@ -314,6 +320,9 @@ export function blocosDoItem(
    *  um custo que não existe daria 100% de margem em toda planilha com
    *  save (decisão 028 §9). */
   orcadoRentabilidade: number;
+  /** A base da rentabilidade PLANEJADA: o orçado da abertura (decisão
+   *  151). A REALIZADA segue em `orcadoRentabilidade`, o orçado de hoje. */
+  orcadoRentabilidadePlanejada: number;
   planejado: ValoresDoBloco;
   realizado: ValoresDoBloco;
 } {
@@ -340,6 +349,11 @@ export function blocosDoItem(
     // A linha em save é venda sem execução: ela fica fora da comparação
     // orçado × custo, mas continua cheia na coluna ORÇADO.
     orcadoRentabilidade: emSave ? 0 : orcado,
+    orcadoRentabilidadePlanejada: emSave
+      ? 0
+      : item.orcado_abertura === null || item.orcado_abertura === undefined
+        ? orcado
+        : Number(item.orcado_abertura),
     planejado: valoresDoBloco(planejadoBruto, DEDUCAO_BV_NO_PLANEJADO),
     realizado: valoresDoBloco(
       realizadoBruto,
@@ -357,28 +371,35 @@ export function somarBlocosDosItens(
   blocos: Array<{
     orcado: number;
     orcadoRentabilidade?: number;
+    orcadoRentabilidadePlanejada?: number;
     planejado: ValoresDoBloco;
     realizado: ValoresDoBloco;
   }>,
 ): {
   orcado: number;
   orcadoRentabilidade: number;
+  /** Base da rentabilidade planejada (decisão 151): o orçado da abertura. */
+  orcadoRentabilidadePlanejada: number;
   planejado: ValoresDoBloco;
   realizado: ValoresDoBloco;
 } {
   let orcado = 0;
   let orcadoRentabilidade = 0;
+  let orcadoRentabilidadePlanejada = 0;
   let planejado = BLOCO_ZERO;
   let realizado = BLOCO_ZERO;
   for (const b of blocos) {
     orcado += b.orcado;
     orcadoRentabilidade += b.orcadoRentabilidade ?? b.orcado;
+    orcadoRentabilidadePlanejada +=
+      b.orcadoRentabilidadePlanejada ?? b.orcadoRentabilidade ?? b.orcado;
     planejado = somarBlocos(planejado, b.planejado);
     realizado = somarBlocos(realizado, b.realizado);
   }
   return {
     orcado: arredondar(orcado),
     orcadoRentabilidade: arredondar(orcadoRentabilidade),
+    orcadoRentabilidadePlanejada: arredondar(orcadoRentabilidadePlanejada),
     planejado,
     realizado,
   };

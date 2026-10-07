@@ -2060,6 +2060,12 @@ export interface ItemPlanilhaJob {
    *  Obrigatório: quem monta a linha diz explicitamente que ela não está
    *  cancelada. */
   cancelada_em: string | null;
+  /** O orçado da linha na ABERTURA do job (decisão 151, entrega 2): a base
+   *  da rentabilidade planejada. Vem da versão aprovada; 0 na linha criada
+   *  por errata. `null` = a tela não tem a foto da abertura (conferência
+   *  antes da abertura, exportação): vale o orçado de hoje. Obrigatório
+   *  pelo mesmo motivo de `cancelada_em`. */
+  orcado_abertura: number | null;
 }
 
 /** O planejado da linha antes de ela virar save (decisão 099). */

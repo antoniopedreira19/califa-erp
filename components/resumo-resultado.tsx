@@ -1,5 +1,6 @@
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularResultadoOperacional } from "@/lib/calculos/versao-totais";
+import { valorDoJobMudouDesdeAAbertura } from "@/lib/calculos/abertura-do-job";
 
 interface Props {
   /**
@@ -17,6 +18,15 @@ interface Props {
    * numa tela e errado na outra (decisão 072).
    */
   deducoes: number;
+  /**
+   * O job como foi aberto — valor do job e as deduções daquele valor
+   * (decisão 151, entrega 2). Quando o valor de hoje é outro (uma errata
+   * mexeu no orçado), o card se divide: o valor INICIAL fica na linha do
+   * planejado e é a base do resultado planejado; o ATUAL fica na do
+   * realizado. Errata que não muda o valor do job não divide nada.
+   * Obrigatória: as visões de projeto, que somam jobs, mandam `null`.
+   */
+  abertura: { valorJob: number; deducoes: number } | null;
   /** Soma do planejado dos itens: o desembolso esperado da agência. */
   custoPlanejado: number;
   /** Soma do realizado lançado. */
@@ -45,10 +55,15 @@ interface Props {
  * Resultado operacional = valor do job − impostos − custo (+ BVs), a mesma
  * conta do card de Totais. Sem custo lançado a conta não existe: travessão,
  * nunca um resultado inflado pelo faturamento inteiro.
+ *
+ * Desde a decisão 151 (07/10/2026) o planejado é o da abertura: quando o
+ * valor do job mudou depois dela, o card vira duas linhas inteiras, cada
+ * uma com o valor do job do seu cenário.
  */
 export function ResumoResultado({
   valorJob,
   deducoes,
+  abertura,
   custoPlanejado,
   custoRealizado,
   bvPlanejado = 0,
@@ -59,9 +74,12 @@ export function ResumoResultado({
   // a mesma operação que o painel Resultado escreve como linha "+ BVs".
   // Sem isto o resumo do cabeçalho e o card de Totais mostrariam
   // percentuais diferentes para o mesmo projeto (docs/decisions/022).
+  const dividido = valorDoJobMudouDesdeAAbertura(abertura, valorJob);
+  // O planejado se compara com o job como foi aberto (decisão 151).
+  const basePlanejado = dividido && abertura ? abertura : { valorJob, deducoes };
   const planejado = calcularResultadoOperacional(
-    valorJob,
-    deducoes,
+    basePlanejado.valorJob,
+    basePlanejado.deducoes,
     custoPlanejado - bvPlanejado,
   );
   const realizado = calcularResultadoOperacional(
@@ -69,6 +87,42 @@ export function ResumoResultado({
     deducoes,
     custoRealizado - bvRealizado,
   );
+
+  if (dividido && abertura) {
+    // Duas linhas inteiras, cada uma um cenário fechado: o valor do job
+    // daquele cenário à esquerda e o resultado dele à direita. A grade faz
+    // as duas colunas dividirem a altura de cada linha.
+    return (
+      <div className="grid grid-cols-[auto_auto] rounded-xl border border-border bg-card shadow-soft">
+        <CelulaValor
+          rotulo="Valor do job · inicial"
+          dica="Valor do job na abertura, antes das erratas. É a base do resultado planejado."
+          valor={formatCurrency(abertura.valorJob, moeda)}
+        />
+        <Linha
+          rotulo="Resultado Op. (Planejado)"
+          resultadoOperacional={planejado.resultadoOperacional}
+          resultado={planejado.resultadoGeral}
+          ausente="sem planejado"
+          moeda={moeda}
+        />
+        <CelulaValor
+          rotulo="Valor do job · atual"
+          dica="Valor do job com as erratas. É a base do resultado realizado."
+          valor={formatCurrency(valorJob, moeda)}
+          separador
+        />
+        <Linha
+          rotulo="Resultado Op. (Realizado)"
+          resultadoOperacional={realizado.resultadoOperacional}
+          resultado={realizado.resultadoGeral}
+          ausente="sem realizado"
+          moeda={moeda}
+          separador
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-stretch rounded-xl border border-border bg-card shadow-soft">
@@ -100,6 +154,36 @@ export function ResumoResultado({
           separador
         />
       </div>
+    </div>
+  );
+}
+
+/** O valor do job de uma das duas linhas do card dividido (decisão 151). */
+function CelulaValor({
+  rotulo,
+  dica,
+  valor,
+  separador,
+}: {
+  rotulo: string;
+  dica: string;
+  valor: string;
+  separador?: boolean;
+}) {
+  return (
+    <div
+      title={dica}
+      className={cn(
+        "flex flex-col justify-center gap-1 border-r border-border px-5 py-[7px]",
+        separador && "border-t border-t-border/60",
+      )}
+    >
+      <span className="whitespace-nowrap text-[10px] font-semibold uppercase leading-none tracking-wider text-muted-foreground">
+        {rotulo}
+      </span>
+      <span className="whitespace-nowrap font-mono text-base font-bold leading-none text-foreground">
+        {valor}
+      </span>
     </div>
   );
 }

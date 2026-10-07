@@ -125,6 +125,7 @@ export default async function JobDetailPage({
     abertoPorNome,
     competencias,
     totaisJob,
+    aberturaDoJob,
     custoPlanejadoJob,
     custoRealizadoJob,
     bvPlanejadoJob,
@@ -216,6 +217,9 @@ export default async function JobDetailPage({
               <ResumoResultado
                 valorJob={totaisJob.valorJob}
                 deducoes={totaisJob.deducoesDoResultado}
+                // O job como foi aberto (decisão 151): divide o valor quando
+                // uma errata o mudou.
+                abertura={aberturaDoJob}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
                 bvRealizado={bvRealizadoJob}
@@ -364,6 +368,8 @@ export default async function JobDetailPage({
             // O "Editar orçado" é do financeiro (decisão 115); aqui a
             // produção corrige pela errata.
             edicaoDoFinanceiro={null}
+            // O job como foi aberto (decisão 151): o Totais do job inteiro.
+            aberturaDoJob={aberturaDoJob}
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}

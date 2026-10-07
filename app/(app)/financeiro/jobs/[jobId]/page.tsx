@@ -217,6 +217,7 @@ export default async function JobNoFinanceiroPage({
     job,
     versaoAprovada,
     totaisJob,
+    aberturaDoJob,
     custoPlanejadoJob,
     custoRealizadoJob,
     bvPlanejadoJob,
@@ -512,6 +513,9 @@ export default async function JobNoFinanceiroPage({
                   resumoFinanceiro?.deducoesDoResultado ??
                   totaisJob.deducoesDoResultado
                 }
+                // O job como foi aberto (decisão 151): o mesmo da página de
+                // Jobs.
+                abertura={aberturaDoJob}
                 custoPlanejado={
                   custoPlanejadoJob + (resumoFinanceiro?.planejadoDosPedidos ?? 0)
                 }
@@ -775,6 +779,8 @@ export default async function JobNoFinanceiroPage({
               papelEnviaPP={false}
               confirmarSaidaParaOrcamento
               edicaoDoFinanceiro={edicaoDoFinanceiro}
+              // O job como foi aberto (decisão 151): o mesmo da página de Jobs.
+              aberturaDoJob={aberturaDoJob}
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}

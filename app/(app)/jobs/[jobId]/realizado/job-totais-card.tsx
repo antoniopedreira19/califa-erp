@@ -32,6 +32,7 @@ import {
   type CategoriaModeloPlanilha,
 } from "@/lib/types";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
+import type { FechamentoDaAbertura } from "@/lib/calculos/abertura-do-job";
 
 interface Props {
   itens: ItemPlanilhaJob[];
@@ -64,6 +65,10 @@ interface Props {
   /** Abre as colunas de save já expandidas. No fechamento elas aparecem
    *  por padrão (Tiago, 16/09/2026); o botão continua lá para recolher. */
   colunasSaveAbertas?: boolean;
+  /** O job como foi aberto (decisão 151, entrega 2): a ótica Planejada do
+   *  Resultado fecha sobre ele quando o valor do job mudou. Obrigatória:
+   *  quem não tem a foto (conferência, fechamento) manda `null`. */
+  abertura: FechamentoDaAbertura | null;
 }
 
 /** Taxa configurada na versão: 12 -> "12%", 19.53 -> "19,53%". */
@@ -119,6 +124,7 @@ export function JobTotaisCard({
   subtitulo = "Orçado × Planejado × Realizado · valores calculados a partir dos itens.",
   somenteRealizada = false,
   colunasSaveAbertas = false,
+  abertura,
 }: Props) {
   const {
     subtotaisPorTipo,
@@ -328,6 +334,7 @@ export function JobTotaisCard({
           honorarios={honorarios}
           taxaHonorarios={formatarTaxa(percentualHonorarios)}
           somenteRealizada={somenteRealizada}
+          abertura={abertura}
           moeda={moeda}
         />
       </div>

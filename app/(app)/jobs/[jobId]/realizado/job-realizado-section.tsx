@@ -106,6 +106,7 @@ import {
   somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
 import { useRascunhoErrata } from "./errata-rascunho";
+import type { FechamentoDaAbertura } from "@/lib/calculos/abertura-do-job";
 import { ErrataBarra } from "./errata-barra";
 import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
 import { registrarErrata } from "./actions-errata";
@@ -298,6 +299,11 @@ interface Props {
    *  produção e onde ninguém edita. Obrigatória pelo mesmo motivo de
    *  `interno`. */
   edicaoDoFinanceiro: EdicaoDoFinanceiro | null;
+  /** O job como foi aberto (decisão 151, entrega 2): o card de Totais do
+   *  job inteiro fecha a ótica Planejada sobre ele quando o valor do job
+   *  mudou. `null` antes da abertura. Obrigatória pelo mesmo motivo de
+   *  `interno`. */
+  aberturaDoJob: FechamentoDaAbertura | null;
 }
 
 export function JobRealizadoSection({
@@ -338,6 +344,7 @@ export function JobRealizadoSection({
   interno,
   confirmarSaidaParaOrcamento,
   edicaoDoFinanceiro,
+  aberturaDoJob,
 }: Props) {
   const router = useRouter();
 
@@ -1011,6 +1018,9 @@ export function JobRealizadoSection({
 
   function cardDeTotais(
     itensDoTrecho: ItemPlanilhaJob[],
+    /** O trecho é o job inteiro? Só aí a foto da abertura vale (decisão
+     *  151): o card de um mês do modelo mensal fica com a conta de sempre. */
+    jobInteiro: boolean,
     titulo?: string,
     subtitulo?: string,
   ) {
@@ -1028,6 +1038,7 @@ export function JobRealizadoSection({
         moedaEstrangeira={planilha.moedaEstrangeira}
         titulo={titulo}
         subtitulo={subtitulo}
+        abertura={jobInteiro ? aberturaDoJob : null}
       />
     );
   }
@@ -1272,6 +1283,7 @@ export function JobRealizadoSection({
               <DicasDeTeclado editavel={errata.ativo} />
               {cardDeTotais(
                 mesSelecionado.itens,
+                false,
                 `Totais de ${nomeDoMes(mesSelecionado.mes.mes)}`,
                 "Orçado × Planejado × Realizado · valores calculados a partir dos itens do mês.",
               )}
@@ -1302,6 +1314,7 @@ export function JobRealizadoSection({
               <DicasDeTeclado editavel={errata.ativo} />
               {cardDeTotais(
                 dadosDosMeses.flatMap((d) => d.itens),
+                true,
                 "Totais do trimestre",
                 "Orçado × Planejado × Realizado · soma dos meses.",
               )}
@@ -1314,7 +1327,7 @@ export function JobRealizadoSection({
           {/* Fora do card, como na planilha do orçamento. Fora da errata a
               planilha é só leitura: só as setas. */}
           <DicasDeTeclado editavel={errata.ativo} />
-          {cardDeTotais(errata.itens)}
+          {cardDeTotais(errata.itens, true)}
         </>
       )}
       <SaveDialog
