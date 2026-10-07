@@ -15,7 +15,7 @@ import { CardDadosBancarios } from "./card-dados-bancarios";
 import { CardAcessoUsuario } from "./card-acesso-usuario";
 import { CardAlocacaoAtual } from "./card-alocacao-atual";
 import { CardBeneficios } from "./card-beneficios";
-import { CardNotaFiscal } from "./card-nota-fiscal";
+import { CardNfMes } from "./_components/card-nf-mes";
 import { CardDocumentos } from "./card-documentos";
 import { CardMinhasFerias } from "./card-minhas-ferias";
 
@@ -96,6 +96,9 @@ export default async function PerfilPage() {
     { data: alocacoesData },
     membershipRes,
     resumoBeneficios,
+    { data: nfVigenteData },
+    { data: folhasAbertasData },
+    { data: nfsExistentesData },
   ] = await Promise.all([
     ehSocio
       ? Promise.resolve({ data: [] })
@@ -132,6 +135,29 @@ export default async function PerfilPage() {
           ano: anoAtual,
           mes: mesAtual,
         }),
+    // NF do mês vigente (para o card de /perfil).
+    supabase
+      .from("colaboradores_nf_anexos")
+      .select("id, arquivo_nome, uploaded_at")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", colab.id)
+      .eq("competencia_ano", anoAtual)
+      .eq("competencia_mes", mesAtual)
+      .maybeSingle(),
+    // Folhas PJ abertas (pra calcular backlog de NFs anteriores sem anexo).
+    supabase
+      .from("folhas_pagamento")
+      .select("competencia_ano, competencia_mes")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", colab.id)
+      .eq("origem", "california")
+      .in("status", ["rascunho", "enviada", "aprovada", "pendente_correcao"]),
+    // NFs já anexadas (de qualquer competência) — pra fazer o diff do backlog.
+    supabase
+      .from("colaboradores_nf_anexos")
+      .select("competencia_ano, competencia_mes")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", colab.id),
   ]);
 
   const periodos = (periodosData ?? []) as ColaboradorFeriasPeriodo[];
@@ -154,6 +180,22 @@ export default async function PerfilPage() {
 
   const empresaPrincipal =
     alocacoes[0]?.empresa_nome ?? null;
+
+  // Backlog de NFs: folhas PJ abertas anteriores ao mês vigente sem NF anexada.
+  const nfsExistentesChaves = new Set(
+    (nfsExistentesData ?? []).map(
+      (n) => `${n.competencia_ano}-${n.competencia_mes}`,
+    ),
+  );
+  const backlogNfPendente = (folhasAbertasData ?? [])
+    .filter((f) => {
+      const chave = `${f.competencia_ano}-${f.competencia_mes}`;
+      const anteriorAoVigente =
+        f.competencia_ano < anoAtual ||
+        (f.competencia_ano === anoAtual && f.competencia_mes < mesAtual);
+      return anteriorAoVigente && !nfsExistentesChaves.has(chave);
+    })
+    .map((f) => ({ ano: f.competencia_ano, mes: f.competencia_mes }));
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -192,6 +234,14 @@ export default async function PerfilPage() {
         <div className="space-y-5 min-w-0">
           <CardDadosPessoais colaborador={colab} />
           <CardDadosBancarios colaborador={colab} />
+          <CardNfMes
+            colaboradorId={colab.id}
+            tipoContratacao={colab.tipo_contratacao}
+            nfVigente={nfVigenteData ?? null}
+            backlog={backlogNfPendente}
+            anoVigente={anoAtual}
+            mesVigente={mesAtual}
+          />
           {!ehSocio && (
             <CardMinhasFerias
               periodos={periodos}
@@ -199,7 +249,6 @@ export default async function PerfilPage() {
               tipoContratacao={colab.tipo_contratacao}
             />
           )}
-          <CardNotaFiscal tipoContratacao={colab.tipo_contratacao} />
         </div>
 
         {/* Coluna lateral (direita, 320px fixo em desktop) */}
