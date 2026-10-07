@@ -6855,3 +6855,17 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
 - Sem migration. Conferido na PP-00132 (aviso aparece e some), na PP-00135
   (MEI, sem aviso) e na matriz.
 
+## ⚠️ Nota de 2026-10-07 (8) — a retenção da aprovação da PP começa desligada (decisões 139 e 142 §5)
+
+- **"Reter na fonte" não vem mais ligado no Lucro Real ou Presumido** (nem no
+  sem regime). Antes vinha ligado, com PIS 0,65%, COFINS 3%, CSLL 1% e IRRF
+  1,5%. Agora o financeiro liga e preenche caso a caso, olhando a nota.
+- **Ligar abre a grade de alíquotas em branco**, com o aviso de mercadoria,
+  "Nenhum imposto informado" e o "Repetir as da PP anterior (mesmo
+  fornecedor)".
+- **Continua igual:** Simples/MEI e cartão ficam travados sem retenção. A NF
+  que outra PP já registrou com ISS retido nasce com a chave ligada, só com
+  aquele ISS (decisão 152). Esse caso não tinha PP para testar na tela.
+- A baixa do título só repete o que a aprovação decidiu: não mudou.
+- Conferido na PP-00132, fechada sem aprovar.
+

@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-02
 **Decidido por:** Tiago
-**Status:** aceita — entregue em 02/10/2026 (a Apuração e os Impostos a Pagar vêm nas próximas entregas)
+**Status:** aceita — entregue em 02/10/2026 (a Apuração e os Impostos a Pagar vêm nas próximas entregas); revisada em 07/10/2026 (a retenção na aprovação da PP começa desligada, decisão 142 §5)
 **Migrations:** `20261002100001_fiscal_cadastro_e_dados_da_nf.sql` e
 `20261002100300_fiscal_parametros_selic_e_darf_minimo.sql` (as duas aditivas)
 
@@ -51,6 +51,13 @@ de hoje, cada nota e cada PP já entrem com o dado que a Apuração vai usar.
   CSLL 1% (DARF 5952) e IRRF 1,5% (DARF 1708), no mês do pagamento, com
   vencimento no dia 20 do mês seguinte (antecipa); Simples/MEI → sem
   retenção (IN SRF 459); cartão → sem retenção.
+  ⚠️ **07/10/2026 — a retenção não vem mais ligada (decisão 142 §5):** na
+  aprovação da PP ela começa desligada em todo regime. O financeiro liga e
+  preenche caso a caso, olhando a nota; as alíquotas abrem em branco. As
+  alíquotas acima continuam no cadastro de impostos, mas não são mais
+  aplicadas sozinhas. Simples/MEI e cartão seguem travados sem retenção. A
+  NF que outra PP já registrou com ISS retido nasce com a chave ligada só
+  com aquele ISS (decisão 152).
 - **Vencimentos:** ISS no dia do município do CNPJ (prorroga); PIS/COFINS
   dia 25 (antecipa); retenções federais dia 20 (antecipa).
 - **Filiais de São Paulo e Fortaleza** entram inativas e sem CNPJ: o número

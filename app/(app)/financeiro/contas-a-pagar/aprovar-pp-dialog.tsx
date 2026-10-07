@@ -23,12 +23,14 @@
  * resto fica como está. Só na PP com NF anexada; recibo, boleto e verba de
  * produção aprovam como antes.
  *
- * - **Retenções na fonte** — decididas aqui, sobre o valor da NF. Ligadas
- *   por padrão no regime normal e no fornecedor sem regime informado
- *   (PIS 0,65%, COFINS 3%, CSLL 1%, IRRF 1,5%, do cadastro de impostos);
- *   desligadas e travadas no Simples e no MEI (IN 459); sem retenção no
- *   cartão, como na baixa. Ligadas, vêm com o aviso âmbar de que só valem
- *   para serviço: nota de mercadoria não tem retenção (07/10/2026).
+ * - **Retenções na fonte** — decididas aqui, sobre o valor da NF. Começam
+ *   desligadas: o financeiro liga e preenche caso a caso, olhando a nota
+ *   (Tiago, 07/10/2026; até então vinham ligadas no regime normal com PIS
+ *   0,65%, COFINS 3%, CSLL 1% e IRRF 1,5%). A exceção é a NF que outra PP
+ *   já registrou com ISS retido (decisão 152): a chave nasce ligada só com
+ *   aquele ISS. Travadas desligadas no Simples e no MEI (IN 459); sem
+ *   retenção no cartão, como na baixa. Ligadas, vêm com o aviso âmbar de
+ *   que só valem para serviço: nota de mercadoria não tem retenção.
  * - **Crédito de PIS/COFINS** — automático pela regra, no mês da emissão
  *   da NF. Só o financeiro tira, e com motivo.
  *
@@ -80,10 +82,9 @@ import {
   type EstadoDoValorDaBaixa,
   type UltimaRetencao,
 } from "@/components/financeiro/valor-da-baixa";
-import { parametrosDeRetencao, type CadastroFiscal } from "@/lib/fiscal/cadastro";
+import { type CadastroFiscal } from "@/lib/fiscal/cadastro";
 import {
   MOTIVOS_SEM_CREDITO,
-  retencoesPadrao,
   valoresRetidos,
   type AliquotasRetidas,
 } from "@/lib/fiscal/calculos";
@@ -240,21 +241,16 @@ export function AprovarPPDialog({
   // Simples e MEI não sofrem retenção de PIS/COFINS/CSLL e IRRF (IN 459).
   // Sem regime informado, segue o normal.
   const optanteDoSimples = regime === "simples" || regime === "mei";
-  const padraoDoRegime: AliquotasRetidas = React.useMemo(
-    () => retencoesPadrao(regime, parametrosDeRetencao(cadastro)),
-    [regime, cadastro],
-  );
 
-  /** A retenção no padrão do regime: ligada, com as alíquotas do cadastro
-   *  de impostos, no regime normal; desligada no Simples e no MEI. */
-  function aplicarRetencaoPadrao() {
+  /** Cada aprovação começa SEM retenção: o financeiro liga e preenche caso
+   *  a caso, olhando a nota (Tiago, 07/10/2026). A exceção é a NF que outra
+   *  PP já registrou com ISS retido (decisão 152): a chave nasce ligada só
+   *  com aquele ISS, que não se edita nem desliga. */
+  function iniciarRetencao() {
     v.setRetem(false);
-    if (!nfs || optanteDoSimples) return;
+    setAjustando(false);
+    if (!nfs || optanteDoSimples || !issTravado) return;
     v.setRetem(true);
-    for (const { imposto } of IMPOSTOS_RETIDOS) {
-      const aliquota = padraoDoRegime[imposto];
-      if (aliquota) v.porAliquota(imposto, aliquota);
-    }
     travarIss();
   }
 
@@ -275,19 +271,18 @@ export function AprovarPPDialog({
     setForaAprovado(false);
     setFaltaForaAprovado(false);
     setErro(null);
-    // Módulo fiscal: as retenções voltam ao padrão do regime, e o crédito
-    // ao automático.
-    setAjustando(false);
+    // Módulo fiscal: as retenções voltam ao começo (desligadas), e o
+    // crédito ao automático.
     setSemCredito(false);
     setMotivoSemCredito("");
-    aplicarRetencaoPadrao();
+    iniciarRetencao();
     // `v` muda a cada renderização; o que decide é abrir outra vez.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pp?.id]);
 
   // Módulo fiscal: no cartão não há retenção — o item entra inteiro na
   // fatura, como na baixa (decisão 125). Saindo do cartão, a retenção volta
-  // ao padrão do regime.
+  // ao começo.
   const estavaNoCartao = React.useRef(false);
   React.useEffect(() => {
     if (noCartao === estavaNoCartao.current) return;
@@ -296,7 +291,7 @@ export function AprovarPPDialog({
       v.setRetem(false);
       setAjustando(false);
     } else {
-      aplicarRetencaoPadrao();
+      iniciarRetencao();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noCartao]);
@@ -711,11 +706,11 @@ export function AprovarPPDialog({
                         ligada={v.retem}
                         desligada={retencaoTravada || pending || (v.retem && (issTravado ?? 0) > 0)}
                         onChange={(x) => {
-                          if (x) aplicarRetencaoPadrao();
-                          else {
-                            v.setRetem(false);
-                            setAjustando(false);
-                          }
+                          // Ligar abre as alíquotas em branco para o
+                          // financeiro preencher (Tiago, 07/10/2026).
+                          v.setRetem(x);
+                          setAjustando(x);
+                          if (x) travarIss();
                           setErro(null);
                         }}
                         rotulo="Reter na fonte"
