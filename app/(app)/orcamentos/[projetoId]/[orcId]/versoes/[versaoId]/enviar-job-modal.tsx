@@ -302,6 +302,12 @@ interface Props {
   /** Crédito que as linhas em save geram para o cliente. Zero esconde a
    *  linha — versão sem save não ganha uma linha a explicar. */
   totalGeradoEmSave: number;
+  /** Consumo de save desta versão (ou da cópia do job) e os jobs de onde
+   *  vem o saldo (decisão 155). Zero esconde a linha. Até 07/10/2026 o
+   *  envio mostrava só o save gerado, e o job pago por save chegava com
+   *  "Faturamento previsto R$ 0,00" sem explicação. */
+  totalConsumidoEmSave: number;
+  origensDoConsumo: string[];
   moeda: string;
 
   herdados: HerdadosJob;
@@ -348,6 +354,8 @@ export function EnviarJobModal({
   valorTotal,
   faturamentoPrevisto,
   totalGeradoEmSave,
+  totalConsumidoEmSave,
+  origensDoConsumo,
   moeda,
   herdados,
   regionaisDoProjeto,
@@ -878,8 +886,8 @@ export function EnviarJobModal({
                     {origemFechamento === "job"
                       ? "Crédito gerado pelos itens do job."
                       : "Crédito gerado pelos itens desta versão."}{" "}
-                    Fica disponível para outros jobs depois que o financeiro
-                    aprovar.
+                    Fica disponível para outros jobs quando o financeiro
+                    abrir o job.
                   </span>
                 </span>
                 {/* Grafite do SAVE, de `blocos.ts` — a mesma cor da linha
@@ -894,6 +902,28 @@ export function EnviarJobModal({
                   )}
                 >
                   {formatCurrency(totalGeradoEmSave, moeda)}
+                </span>
+              </div>
+            )}
+            {/* O consumo de save (decisão 155): o que é pago com o saldo de
+                outro job. O financeiro aprova junto com a abertura. */}
+            {totalConsumidoEmSave > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-3 border-t border-border pt-2">
+                <span className="flex flex-col">
+                  <span className="text-sm font-semibold">Consumo de save</span>
+                  <span className="text-xs text-muted-foreground">
+                    Pago com o saldo de save do{" "}
+                    {origensDoConsumo.join(", ") || "job de origem"}. O
+                    financeiro aprova junto com a abertura do job.
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "whitespace-nowrap font-mono text-lg font-bold",
+                    SAVE.textoApagado,
+                  )}
+                >
+                  {formatCurrency(totalConsumidoEmSave, moeda)}
                 </span>
               </div>
             )}

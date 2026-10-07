@@ -44,6 +44,8 @@ import {
   linhasDoSave,
   revisaoPendenteDoJob,
 } from "../../abertura-de-job/dados";
+import { carregarSavesDaAbertura } from "../../abertura-de-job/saves-da-abertura";
+import { PlanilhaDaOrigem } from "../../abertura-de-job/[jobId]/planilha-da-origem";
 import { fotosDaAbertura } from "../../abertura-de-job/fotos";
 import {
   carregarAprovacaoDeSave,
@@ -133,6 +135,7 @@ export default async function JobNoFinanceiroPage({
     custoLido,
     impostoLido,
     resumoFinanceiro,
+    saves,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -200,6 +203,9 @@ export default async function JobNoFinanceiroPage({
     // O cabeçalho e o card de Erratas na conta do financeiro (decisão 099):
     // durante um pedido de save, os números oficiais até a aprovação.
     resumoComoOFinanceiroVe(supabase, tenantId, params.jobId),
+    // O bloco "Saves deste job" em leitura: o que foi aprovado na
+    // abertura, e por quem (decisão 155).
+    carregarSavesDaAbertura(tenantId, params.jobId),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
@@ -585,6 +591,21 @@ export default async function JobNoFinanceiroPage({
             }}
             saveConsumido={saveConsumido}
             linhasDoSave={linhasDoSave(detalhe.itens)}
+            saves={saves}
+            // A planilha de cada job de origem do consumo (decisão 155),
+            // por streaming, como na abertura.
+            planilhasDasOrigens={Object.fromEntries(
+              [
+                ...new Map(
+                  (saves?.linhas ?? [])
+                    .flatMap((l) => l.origens)
+                    .map((o) => [o.jobId, o.codigo] as const),
+                ),
+              ].map(([id, codigo]) => [
+                id,
+                <PlanilhaDaOrigem key={id} session={session} jobId={id} codigo={codigo} />,
+              ]),
+            )}
             enviadoPorNome={carregadoParaAbertura.enviadoPorNome}
             curvaInicial={previsoes.curva}
             recebimentoInicial={previsoes.recebimento}

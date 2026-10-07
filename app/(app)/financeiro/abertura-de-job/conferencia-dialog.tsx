@@ -149,10 +149,10 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
           </div>
         </div>
 
-        {/* As linhas com save, que seguem para aprovação quando o job for
-            aberto (decisão 099). Mesma caixa do Descritivo e do Contato de
-            cobrança: é informação do envio, não decisão — aprovar é na
-            faixa Saves, depois da abertura. */}
+        {/* As linhas com save, que se aprovam no formulário da abertura
+            (decisão 155; até 07/10/2026 iam para a faixa Saves depois de
+            abrir). Mesma caixa do Descritivo e do Contato de cobrança: aqui
+            é informação do envio, não decisão. */}
         {job.saves.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-[12.5px] font-semibold">
@@ -173,9 +173,8 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
                 </div>
               ))}
               <p className="border-t border-border pt-2 text-[11.5px] text-muted-foreground">
-                Não são aprovados aqui: cada um entra na faixa Saves desta
-                página quando o job for aberto. Se algum não deveria ser save,
-                use Reprovar.
+                São aprovados junto com a abertura do job, no formulário de
+                abertura. Se algum não deveria ser save, use Reprovar.
               </p>
             </div>
           </div>
