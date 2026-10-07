@@ -6839,3 +6839,19 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
 - Não houve teste logado como financeiro (falta a senha). Conferido na
   matriz de permissões e no `test:permissoes`.
 
+## ⚠️ Nota de 2026-10-07 (7) — financeiro em Clientes e Veículos; aviso de mercadoria na aprovação da PP (decisão 142 §5)
+
+- **O financeiro ganhou a tela de Clientes:** cria, edita, inativa e
+  reativa (`cadastros.clientes.editar` = administrador e financeiro). O
+  cadastro rápido do projeto continua só com administrador e GP.
+- **Veículos de mídia** já gravavam pelas actions de fornecedores, então o
+  financeiro tem acesso desde a nota (6). A matriz de permissões ganhou a
+  linha deles.
+- **Aprovar PP:** com "Reter na fonte" ligado, um aviso âmbar diz que a
+  retenção só vale para serviço e que nota de mercadoria (DANFE, NF-e) não
+  tem retenção de PIS/COFINS/CSLL, IR nem ISS. Na prática, isso só acontece
+  no Lucro Real ou Presumido e no sem regime: no Simples e no MEI a chave
+  já fica travada.
+- Sem migration. Conferido na PP-00132 (aviso aparece e some), na PP-00135
+  (MEI, sem aviso) e na matriz.
+

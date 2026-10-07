@@ -50,7 +50,12 @@ export const permissoes = {
   // ==================================================================
   // Cadastros globais
   // ==================================================================
-  "cadastros.clientes.editar":              ["administrador"],
+  /**
+   * A tela de Clientes: criar, editar, inativar e reativar. Financeiro
+   * entrou em 07/10/2026 (decisao do Tiago): os dados de faturamento do
+   * cliente moram ali.
+   */
+  "cadastros.clientes.editar":              ["administrador", "financeiro"],
   /**
    * Cadastro rapido de cliente DENTRO do formulario de projeto (decisao
    * 089, liberado em 18/09/2026). Vale so para CRIAR — abrir o cadastro de
