@@ -63,7 +63,9 @@ function comSinal(v: number, moeda: string): string {
 }
 
 function tagDaMudanca(m: MudancaErrata): { classe: string; texto: string } {
-  if (m.acao === "removida") return { classe: ERRATA.tagRemovida, texto: "Removida" };
+  // Decisão 151: a linha não é mais removida, é cancelada — fica na
+  // planilha com o orçado zerado. Mesmo selo cinza da antiga "Removida".
+  if (m.acao === "cancelada") return { classe: ERRATA.tagRemovida, texto: "Cancelada" };
   if (m.acao === "nova") {
     return m.vermelha
       ? { classe: ERRATA.tagVermelha, texto: "Vermelha" }
@@ -178,11 +180,10 @@ export function ErrataConfirmarDialog({
             <ul className="divide-y divide-border">
               {mudancas.map((m) => {
                 const tag = tagDaMudanca(m);
-                // O planejado só muda junto com o orçado (decisão 054); a
-                // sublinha aparece quando ele de fato mudou, e não na
-                // linha removida — ali os dois somem.
-                const planejadoMudou =
-                  m.acao !== "removida" && m.planejadoDe !== m.planejadoPara;
+                // A errata não muda o planejado desde a decisão 151; a
+                // sublinha só aparece no Interno, onde ele acompanha o
+                // orçado (decisão 105).
+                const planejadoMudou = m.planejadoDe !== m.planejadoPara;
                 return (
                   <li
                     key={m.chave}
@@ -201,9 +202,7 @@ export function ErrataConfirmarDialog({
                         </span>
                         <span className="text-muted-foreground">→</span>
                         <span className="text-foreground">
-                          {m.acao === "removida"
-                            ? "—"
-                            : formatCurrency(m.totalPara, moeda)}
+                          {formatCurrency(m.totalPara, moeda)}
                         </span>
                         <span className={cn("font-bold", corDoDelta(m.delta))}>
                           {comSinal(m.delta, moeda)}

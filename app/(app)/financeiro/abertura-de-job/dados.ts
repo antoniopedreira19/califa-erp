@@ -238,7 +238,10 @@ export interface ErrataDaRevisao {
   valorJobDepois: number;
   linhasAlteradas: number;
   linhasNovas: number;
+  /** Só no histórico: desde a decisão 151 a errata cancela, não remove. */
   linhasRemovidas: number;
+  /** Linhas canceladas (decisão 151): ficam com o orçado zerado. */
+  linhasCanceladas: number;
   /** A errata nasceu de um pedido de save (`saves_aprovacoes.errata_id`,
    *  decisão 099) — a "errata de save" do job aberto. */
   deSave: boolean;
@@ -278,7 +281,10 @@ export interface RevisaoDeErrata {
   valorJobDepois: number | null;
   linhasAlteradas: number;
   linhasNovas: number;
+  /** Só no histórico: desde a decisão 151 a errata cancela, não remove. */
   linhasRemovidas: number;
+  /** Linhas canceladas (decisão 151): ficam com o orçado zerado. */
+  linhasCanceladas: number;
 }
 
 export interface TotaisPlanilhaJob {
@@ -633,7 +639,7 @@ function resumirRevisao(
   const primeira = erratas[0];
   const ultima = erratas[erratas.length - 1];
   const soma = (
-    campo: "linhasAlteradas" | "linhasNovas" | "linhasRemovidas",
+    campo: "linhasAlteradas" | "linhasNovas" | "linhasRemovidas" | "linhasCanceladas",
   ) => erratas.reduce((t, e) => t + e[campo], 0);
   return {
     erratas,
@@ -645,6 +651,7 @@ function resumirRevisao(
     linhasAlteradas: soma("linhasAlteradas"),
     linhasNovas: soma("linhasNovas"),
     linhasRemovidas: soma("linhasRemovidas"),
+    linhasCanceladas: soma("linhasCanceladas"),
   };
 }
 
@@ -773,6 +780,7 @@ async function revisoesPendentes(
       linhasAlteradas: conta("alterada"),
       linhasNovas: conta("nova"),
       linhasRemovidas: conta("removida"),
+      linhasCanceladas: conta("cancelada"),
       deSave: pedidosPorErrata.has(e.id),
       pedidoQueNaoVale: naoVale.get(e.id) ?? null,
     });

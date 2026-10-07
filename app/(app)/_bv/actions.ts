@@ -173,7 +173,7 @@ async function contextoPelaVersao(
       .maybeSingle<{ projeto_id: string }>(),
     supabase
       .from("jobs_itens_orcado")
-      .select("id, job_id, tipo_custo, job:jobs!inner(status)")
+      .select("id, job_id, tipo_custo, cancelada_em, job:jobs!inner(status)")
       .eq("item_versao_id", itemVersaoId)
       .eq("tenant_id", tenantId)
       .neq("job.status", "cancelado")
@@ -181,6 +181,7 @@ async function contextoPelaVersao(
         id: string;
         job_id: string;
         tipo_custo: string;
+        cancelada_em: string | null;
         job: { status: string };
       }>(),
   ]);
@@ -188,6 +189,10 @@ async function contextoPelaVersao(
   if (copiaRes.data) {
     const barreira = barreiraDoJob(copiaRes.data.job.status as JobStatus);
     if (barreira) return { error: barreira };
+    // Decisão 151: a linha cancelada na planilha do job não recebe BV.
+    if (copiaRes.data.cancelada_em) {
+      return { error: "Linha cancelada por errata não aceita BV: ela saiu da conta do orçado." };
+    }
   }
 
   // Depois da abertura do job quem manda é a cópia: a errata pode ter
@@ -236,7 +241,7 @@ async function contextoPelaCopiaDoJob(
   const { data, error } = await supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, item, tipo_custo, em_save, item_versao_id, job_id, job:jobs!inner(status, projeto_id, orcamento_id, versao_orcamento_aprovada_id)",
+      "id, item, tipo_custo, em_save, cancelada_em, item_versao_id, job_id, job:jobs!inner(status, projeto_id, orcamento_id, versao_orcamento_aprovada_id)",
     )
     .eq("id", jobItemOrcadoId)
     .eq("tenant_id", tenantId)
@@ -245,6 +250,7 @@ async function contextoPelaCopiaDoJob(
       item: string;
       tipo_custo: string;
       em_save: boolean | null;
+      cancelada_em: string | null;
       item_versao_id: string | null;
       job_id: string;
       job: {
@@ -266,6 +272,11 @@ async function contextoPelaCopiaDoJob(
   }
   const barreira = barreiraDoJob(data.job.status as JobStatus);
   if (barreira) return { error: barreira };
+
+  // Decisão 151: a linha cancelada por errata não recebe BV.
+  if (data.cancelada_em) {
+    return { error: "Linha cancelada por errata não aceita BV: ela saiu da conta do orçado." };
+  }
 
   // Linha em save: o serviço não acontece neste projeto, então não há
   // fornecedor com quem negociar comissão (decisão 028 §9). No caminho da

@@ -376,12 +376,28 @@ export async function registrarErrataDeSave(
     }
   }
 
-  // O status do job e o cliente das origens são leituras independentes.
-  const [job, origemRecusada] = await Promise.all([
+  // O status do job, o cliente das origens e a marca de linha cancelada são
+  // leituras independentes.
+  const [job, origemRecusada, canceladaRes] = await Promise.all([
     lerStatusDoJob(supabase, tenantId, jobId),
     conferirOrigensDoCliente(supabase, tenantId, jobId, origens),
+    supabase
+      .from("jobs_itens_orcado")
+      .select("item, cancelada_em")
+      .eq("id", jobItemOrcadoId)
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ item: string; cancelada_em: string | null }>(),
   ]);
   if (!job) return { ok: false, message: "Job não encontrado." };
+  // Decisão 151: a linha cancelada por errata saiu da conta do orçado — não
+  // gera nem consome save.
+  if (canceladaRes.data?.cancelada_em) {
+    return {
+      ok: false,
+      message: `"${canceladaRes.data.item}" foi cancelada por errata: a linha não gera nem consome save.`,
+    };
+  }
   if (job.status !== "rejeitado_financeiro" && !jobAceitaSave(job.status)) {
     return { ok: false, message: mensagemJobNaoMudaSave(job.status) };
   }

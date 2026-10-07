@@ -313,6 +313,8 @@ export function montarThreadChat(
           ? `Linha nova${i.linha_vermelha ? " (vermelha)" : ""} · ${i.item_nome} em ${i.grupo_nome}: ${moeda(i.total_para, moedaCode)}`
           : i.acao === "removida"
             ? `Linha removida · ${i.item_nome} (${moeda(i.total_de, moedaCode)})`
+            : i.acao === "cancelada"
+              ? `Linha cancelada · ${i.item_nome} (${moeda(i.total_de, moedaCode)} → ${moeda(0, moedaCode)}; o planejado continua)`
             : mudouTipo
               ? `Tipo de custo · ${i.item_nome}: ${tipoCustoLabel(i.tipo_custo_de)} → ${tipoCustoLabel(i.tipo_custo_para)}`
               : `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`;
@@ -345,9 +347,11 @@ export function montarThreadChat(
     const nAlt = conta("alterada");
     const nNovas = conta("nova");
     const nRem = conta("removida");
+    const nCan = conta("cancelada");
     if (nAlt) partes.push(`${nAlt} ${nAlt === 1 ? "linha alterada" : "linhas alteradas"}`);
     if (nNovas) partes.push(`${nNovas} ${nNovas === 1 ? "linha nova" : "linhas novas"}`);
     if (nRem) partes.push(`${nRem} ${nRem === 1 ? "linha removida" : "linhas removidas"}`);
+    if (nCan) partes.push(`${nCan} ${nCan === 1 ? "linha cancelada" : "linhas canceladas"}`);
 
     itens.push({
       tipo: "sistema",

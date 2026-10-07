@@ -220,7 +220,7 @@ function barrarLinhaComSave(
   ids: string[],
   porId: Map<string, any>,
   pedidos: Map<string, PedidoQuePrende>,
-  acao: "errata" | "remocao",
+  acao: "errata" | "cancelamento",
 ): string | null {
   for (const id of ids) {
     const linha = porId.get(id);
@@ -244,14 +244,15 @@ function barrarLinhaComSave(
     if (!motivo) continue;
     return acao === "errata"
       ? `"${linha.item}" ${motivo}. Linha com save não entra em errata — para corrigi-la, ${saida} antes.`
-      : `"${linha.item}" ${motivo}. Linha com save não pode ser removida — ${saida} antes.`;
+      : `"${linha.item}" ${motivo}. Linha com save não pode ser cancelada — ${saida} antes.`;
   }
   return null;
 }
 
-/** O PLANEJADO da linha, opcional nos dois schemas: a errata passou a
- *  corrigi-lo em 07/09/2026 (decisão 054), e um payload sem ele continua
- *  válido — a linha fica com o planejado que já tinha. */
+/** O PLANEJADO da linha, opcional nos dois schemas. Desde a decisão 151
+ *  (07/10/2026) o servidor IGNORA o que vier aqui: a errata não muda o
+ *  planejado (`planejadoDaErrata`). Fica no schema para o payload de uma
+ *  aba aberta antes da mudança continuar válido. */
 const planejadoSchema = {
   valor_unitario_planejado: z.number().nonnegative().optional(),
   quantidade_planejada: z.number().nonnegative().optional(),
@@ -295,6 +296,11 @@ const payloadSchema = z.object({
     .max(500, "A descrição da errata passa de 500 caracteres."),
   alteracoes: z.array(alteracaoSchema).default([]),
   novas: z.array(novaSchema).default([]),
+  /** Linhas que a errata CANCELA (decisão 151): ficam com o orçado zerado
+   *  e o planejado da abertura. */
+  cancelamentos: z.array(z.string().uuid()).default([]),
+  /** O nome antigo, de uma aba aberta antes da decisão 151. Vale como
+   *  cancelamento: a errata não apaga mais linha. */
   remocoes: z.array(z.string().uuid()).default([]),
 });
 
@@ -314,7 +320,7 @@ function totalDe(unit: number, qtd: number, dm: number): number {
 
 interface Mudanca {
   acao: ErrataAcao;
-  /** `null` na remoção, que apaga a linha antes de o item ser gravado. */
+  /** `null` só na linha nova, que ainda não tem id. */
   copiaId: string | null;
   itemNome: string;
   grupoId: string | null;
@@ -330,7 +336,8 @@ interface Mudanca {
   dmPara: number;
   totalDe: number;
   totalPara: number;
-  /** O PLANEJADO da linha, antes e depois (decisão 054). */
+  /** O PLANEJADO da linha, antes e depois. Iguais desde a decisão 151,
+   *  menos na linha nova (zero) e no Interno (acompanha o orçado). */
   planUnitDe: number;
   planUnitPara: number;
   planQtdDe: number;
@@ -349,42 +356,27 @@ interface Trio {
 }
 
 /**
- * O planejado que a linha PASSA a ter — a regra da decisão 054, do lado
- * do servidor, para um payload montado à mão não gravar o que a tela não
- * deixaria:
+ * O planejado que a linha tem depois da errata (decisão 151, 07/10/2026):
+ * a errata NÃO muda o planejado, que é o da abertura do job. O servidor
+ * decide sozinho, sem ler o que veio no payload, para uma chamada montada
+ * à mão não gravar o que a tela não deixa:
  *
- * - linha vermelha: zero (o banco cobra em `chk_jio_linha_vermelha_zerada`);
- * - linha em save: zero (o trigger zera de todo jeito);
- * - orçado alterado e planejado informado: o informado;
- * - nada disso: o planejado que já estava lá.
- *
- * ⚠️ O caso `A`/`D` — espelho do orçado novo — saiu em 08/09/2026
- * (decisão 062). Esses dois tipos passaram a ter planejado digitado como
- * qualquer outro, então a errata trata todos igual e o `tipoPara` deixou
- * de pesar aqui.
+ * - linha vermelha ou em save: zero (o banco cobra os dois);
+ * - serviço Interno: igual ao orçado novo (decisão 105 — o trigger
+ *   `planejado_espelha_orcado` grava isso de todo jeito; aqui é para o
+ *   histórico da errata contar o mesmo);
+ * - linha nova: zero, com QT e D/M em 1, como ela nasce na tela;
+ * - linha que já existia: o planejado que ela já tinha.
  */
-function planejadoQueFica(
-  linha: { vermelha: boolean; emSave: boolean },
-  orcadoMudou: boolean,
+function planejadoDaErrata(
+  linha: { vermelha: boolean; emSave: boolean; interno: boolean; nova: boolean },
   orcadoPara: Trio,
   planejadoAtual: Trio,
-  informado: Partial<{
-    valor_unitario_planejado: number;
-    quantidade_planejada: number;
-    dias_meses_planejado: number;
-  }>,
 ): Trio {
   if (linha.vermelha || linha.emSave) return { unit: 0, qtd: 0, dm: 0 };
-  const temInformado =
-    informado.valor_unitario_planejado !== undefined ||
-    informado.quantidade_planejada !== undefined ||
-    informado.dias_meses_planejado !== undefined;
-  if (!orcadoMudou || !temInformado) return planejadoAtual;
-  return {
-    unit: informado.valor_unitario_planejado ?? planejadoAtual.unit,
-    qtd: informado.quantidade_planejada ?? planejadoAtual.qtd,
-    dm: informado.dias_meses_planejado ?? planejadoAtual.dm,
-  };
+  if (linha.interno) return orcadoPara;
+  if (linha.nova) return { unit: 0, qtd: 1, dm: 1 };
+  return planejadoAtual;
 }
 
 /**
@@ -394,18 +386,19 @@ function planejadoQueFica(
  *
  * - **corrige** uma linha: R$ unitário, QT, D/M e tipo de custo. QT e D/M
  *   entraram junto com o modo errata na própria planilha — antes eles
- *   ficavam congelados como aprovados. Desde 07/09/2026 (decisão 054) o
- *   PLANEJADO da linha vai junto, mas só quando o orçado dela mudou:
- *   planejado sozinho não é errata, e o servidor ignora o que vier sem
- *   mudança no orçado (`planejadoQueFica`).
- * - **cria** linha, normal ou VERMELHA. A vermelha nasce zerada no orçado
- *   e no planejado e serve só para receber PP: é o custo que o orçamento
- *   não previu e que alguém precisa pedir mesmo assim.
- * - **remove** linha, desde que ela ainda não tenha documento nem save.
+ *   ficavam congelados como aprovados. O PLANEJADO não muda desde a
+ *   decisão 151 (07/10/2026): ele é o da abertura (`planejadoDaErrata`).
+ * - **cria** linha, normal ou VERMELHA. A normal entra com o planejado
+ *   zerado; a vermelha nasce zerada no orçado e no planejado e serve só
+ *   para receber PP: é o custo que o orçamento não previu e que alguém
+ *   precisa pedir mesmo assim.
+ * - **cancela** linha (decisão 151; até ali, removia), desde que ela ainda
+ *   não tenha documento nem save. A cancelada fica na planilha com o orçado
+ *   zerado e o planejado da abertura.
  *
  * Desde 22/09/2026 (decisão 099) linha com save — gerado, consumido, com
  * pedido aguardando ou recusado ainda não retirado — não entra em errata
- * nem é removida (`barrarLinhaComSave`), e os números gravados (espelhos
+ * nem é cancelada (`barrarLinhaComSave`), e os números gravados (espelhos
  * do job e antes → depois da errata) são os do FINANCEIRO: pedido de save
  * que ainda aguarda fica de fora (`totaisDoFinanceiro`).
  *
@@ -434,9 +427,13 @@ export async function registrarErrata(
       message: parsed.error.issues[0]?.message ?? "Dados inválidos.",
     };
   }
-  const { descricao, alteracoes, novas, remocoes } = parsed.data;
+  const { descricao, alteracoes, novas } = parsed.data;
+  // `remocoes` é de aba aberta antes da decisão 151: vale como cancelamento.
+  const cancelamentos = Array.from(
+    new Set([...parsed.data.cancelamentos, ...parsed.data.remocoes]),
+  );
 
-  if (alteracoes.length + novas.length + remocoes.length === 0) {
+  if (alteracoes.length + novas.length + cancelamentos.length === 0) {
     return { ok: false, message: "Nenhuma alteração informada." };
   }
 
@@ -490,7 +487,10 @@ export async function registrarErrata(
     // consulta por ambiguidade, e toda errata saía com "Versão aprovada do
     // job não encontrada" — de 11/09 a 14/09/2026.
     .select(
-      "id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, orcamento:orcamentos!orcamento_id(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+      // O serviço vem junto para saber se o job é Interno (decisão 105):
+      // ali o planejado acompanha o orçado. Dica `!servico_id` obrigatória
+      // — `orcamentos` tem duas FKs para `categorias_dominio`.
+      "id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, orcamento:orcamentos!orcamento_id(categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno))",
     )
     .eq("id", job.versao_orcamento_aprovada_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -510,6 +510,10 @@ export async function registrarErrata(
       | undefined,
     versao as never,
   );
+  // Serviço Interno (decisão 105): o planejado acompanha o orçado.
+  const interno =
+    (versao as { orcamento?: { servico?: { investimento_interno?: boolean } | null } })
+      .orcamento?.servico?.investimento_interno === true;
 
   // Depois do envio o valor da nota está congelado: mexer no orçado agora
   // faria a nota sair por um número que não é mais o do job (27/08/2026).
@@ -534,7 +538,7 @@ export async function registrarErrata(
         "id, item_versao_id, item, grupo_id, ordem, tipo_custo, linha_vermelha, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
           "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
-          "em_save, save_consumido",
+          "em_save, save_consumido, cancelada_em",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id),
@@ -617,7 +621,7 @@ export async function registrarErrata(
         if (mes && enviados.has(mes)) tocados.add(mes);
       };
       for (const alt of alteracoes) conferir(porId.get(alt.job_item_orcado_id)?.grupo_id);
-      for (const id of remocoes) conferir(porId.get(id)?.grupo_id);
+      for (const id of cancelamentos) conferir(porId.get(id)?.grupo_id);
       for (const nova of novas) conferir(nova.grupo_id);
       if (tocados.size > 0) {
         return {
@@ -652,6 +656,15 @@ export async function registrarErrata(
       };
     }
 
+    // Linha cancelada (decisão 151) não se corrige: o banco recusaria, e a
+    // mensagem dele não diria qual linha.
+    if (atual.cancelada_em) {
+      return {
+        ok: false,
+        message: `"${atual.item}" foi cancelada numa errata anterior e não pode ser corrigida.`,
+      };
+    }
+
     // A linha vermelha não tem orçado para corrigir — o banco recusaria
     // (`chk_jio_linha_vermelha_zerada`), e a mensagem dele não ajudaria.
     if (atual.linha_vermelha === true && alt.valor_unitario !== 0) {
@@ -671,8 +684,8 @@ export async function registrarErrata(
       alt.quantidade !== qtdDe ||
       alt.dias_meses !== dmDe;
     const mudou = orcadoMudou || alt.tipo_custo !== tipoDe;
-    // Planejado sozinho não é errata (decisão 054): sem mudança no orçado
-    // ou no tipo, o que veio no planejado é ignorado.
+    // Planejado não é errata (decisão 151): sem mudança no orçado ou no
+    // tipo, a linha não entra.
     if (!mudou) continue;
 
     const totalAntes = Number(atual.total_orcado ?? 0);
@@ -687,15 +700,15 @@ export async function registrarErrata(
       qtd: Number(atual.quantidade_planejada ?? 0),
       dm: Number(atual.dias_meses_planejado ?? 0),
     };
-    const planPara = planejadoQueFica(
+    const planPara = planejadoDaErrata(
       {
         vermelha: atual.linha_vermelha === true,
         emSave: atual.em_save === true,
+        interno,
+        nova: false,
       },
-      orcadoMudou,
       { unit: alt.valor_unitario, qtd: alt.quantidade, dm: alt.dias_meses },
       planAtual,
-      alt,
     );
 
     mudancas.push({
@@ -732,35 +745,45 @@ export async function registrarErrata(
     });
   }
 
-  // ---- 2. Remoções ----
-  // Só some o que ainda não virou documento nem dinheiro. As FKs dariam
-  // um erro de banco em parte destes casos e apagariam em silêncio o
-  // resto (`saves_consumos` cascateia) — a trava é aqui, com nome de
-  // gente na mensagem.
-  const remocoesUnicas = Array.from(new Set(remocoes));
-  if (remocoesUnicas.length > 0) {
-    const bloqueio = await barrarRemocao(
+  // ---- 2. Cancelamentos (decisão 151) ----
+  // A linha fica na planilha com o orçado zerado e o planejado da abertura.
+  // As travas são as que a remoção tinha — PP no histórico, BV lançado e
+  // save —, com nome de gente na mensagem.
+  if (cancelamentos.length > 0) {
+    const bloqueio = await barrarCancelamento(
       jobId,
       session.activeTenant.id,
-      remocoesUnicas,
+      cancelamentos,
       porId,
       pedidoQuePrende,
     );
     if (bloqueio) return { ok: false, message: bloqueio };
 
-    for (const id of remocoesUnicas) {
+    for (const id of cancelamentos) {
       const atual = porId.get(id);
       if (!atual) {
         return {
           ok: false,
-          message: "Uma das linhas removidas não pertence a este job.",
+          message: "Uma das linhas canceladas não pertence a este job.",
+        };
+      }
+      if (atual.cancelada_em) {
+        return {
+          ok: false,
+          message: `"${atual.item}" já foi cancelada numa errata anterior.`,
         };
       }
       const tipo = atual.tipo_custo as TipoCusto;
       const totalAntes = Number(atual.total_orcado ?? 0);
+      const planUnit = Number(atual.valor_unitario_planejado ?? 0);
+      const planQtd = Number(atual.quantidade_planejada ?? 0);
+      const planDm = Number(atual.dias_meses_planejado ?? 0);
+      const planTotal = Number(atual.total_planejado ?? 0);
+      const qtd = Number(atual.quantidade_orcada ?? 1);
+      const dm = Number(atual.dias_meses_orcado ?? 1);
 
       mudancas.push({
-        acao: "removida",
+        acao: "cancelada",
         copiaId: atual.id,
         itemNome: atual.item,
         grupoId: atual.grupo_id,
@@ -768,22 +791,25 @@ export async function registrarErrata(
         linhaVermelha: atual.linha_vermelha === true,
         tipoDe: tipo,
         tipoPara: tipo,
+        // O unitário vai a zero; QT e D/M ficam como estavam.
         unitarioDe: Number(atual.valor_unitario_orcado ?? 0),
         unitarioPara: 0,
-        qtdDe: Number(atual.quantidade_orcada ?? 1),
-        qtdPara: 0,
-        dmDe: Number(atual.dias_meses_orcado ?? 1),
-        dmPara: 0,
+        qtdDe: qtd,
+        qtdPara: qtd,
+        dmDe: dm,
+        dmPara: dm,
         totalDe: totalAntes,
         totalPara: 0,
-        planUnitDe: Number(atual.valor_unitario_planejado ?? 0),
-        planUnitPara: 0,
-        planQtdDe: Number(atual.quantidade_planejada ?? 0),
-        planQtdPara: 0,
-        planDmDe: Number(atual.dias_meses_planejado ?? 0),
-        planDmPara: 0,
-        planTotalDe: Number(atual.total_planejado ?? 0),
-        planTotalPara: 0,
+        // O planejado fica: é o da abertura (no Interno, o trigger o leva
+        // a zero junto com o orçado).
+        planUnitDe: planUnit,
+        planUnitPara: interno ? 0 : planUnit,
+        planQtdDe: planQtd,
+        planQtdPara: planQtd,
+        planDmDe: planDm,
+        planDmPara: planDm,
+        planTotalDe: planTotal,
+        planTotalPara: interno ? 0 : planTotal,
         efeito: efeitoDe(
           { total: totalAntes, tipoCusto: tipo },
           { total: 0, tipoCusto: tipo },
@@ -808,14 +834,11 @@ export async function registrarErrata(
     const qtd = nova.linha_vermelha ? 1 : nova.quantidade;
     const dm = nova.linha_vermelha ? 1 : nova.dias_meses;
     const total = totalDe(unit, qtd, dm);
-    // A linha nova é orçado novo por definição: o planejado dela vem do
-    // payload (decisão 054). Sem ele, nasce zerado como antes.
-    const plan = planejadoQueFica(
-      { vermelha: nova.linha_vermelha, emSave: false },
-      true,
+    // A linha nova entra com o planejado zerado (decisão 151).
+    const plan = planejadoDaErrata(
+      { vermelha: nova.linha_vermelha, emSave: false, interno, nova: true },
       { unit, qtd, dm },
       { unit: 0, qtd: 0, dm: 0 },
-      nova,
     );
 
     mudancas.push({
@@ -926,14 +949,17 @@ export async function registrarErrata(
   const alteradasPorId = new Map(
     mudancas.filter((m) => m.acao === "alterada").map((m) => [m.copiaId, m]),
   );
-  const removidasIds = new Set(
-    mudancas.filter((m) => m.acao === "removida").map((m) => m.copiaId),
+  // A cancelada continua na conta, com o orçado zerado (decisão 151).
+  const canceladasIds = new Set(
+    mudancas.filter((m) => m.acao === "cancelada").map((m) => m.copiaId),
   );
 
   const depoisItens: LinhaDoEspelho[] = [
     ...base.itens
-      .filter((i) => !removidasIds.has(i.id))
       .map((i) => {
+        if (canceladasIds.has(i.id)) {
+          return { ...i, total_orcado: 0, valor_unitario_orcado: 0 };
+        }
         const m = alteradasPorId.get(i.id);
         return m
           ? {
@@ -968,7 +994,7 @@ export async function registrarErrata(
   //
   // `registrar_errata_do_job` faz as gravações que esta action fazia uma a
   // uma, na mesma ordem — a errata, as linhas novas com a âncora de
-  // realizado, os itens da errata, as alteradas, as removidas, o BV "a
+  // realizado, os itens da errata, as alteradas, as canceladas, o BV "a
   // negociar" que perdeu a razão de existir e, por fim, os números do job
   // com a revisão da abertura —, mas numa transação: ou tudo, ou nada.
   // Antes, uma falha no meio deixava o histórico dizendo que a linha mudou
@@ -1002,10 +1028,9 @@ export async function registrarErrata(
         valor_unitario_orcado: m.unitarioPara,
         quantidade_orcada: m.qtdPara,
         dias_meses_orcado: m.dmPara,
-        // O planejado vem da própria errata desde 07/09/2026 (decisão
-        // 054). Na vermelha ele fica zerado para sempre — o banco cobra
-        // isso em `chk_jio_linha_vermelha_zerada`; em A/D o trigger
-        // espelha o orçado, e `planejadoQueFica` já mandou o mesmo número.
+        // Zerado (decisão 151): o planejado do job é o da abertura. Na
+        // vermelha o banco cobra o zero em `chk_jio_linha_vermelha_zerada`;
+        // no Interno o trigger o iguala ao orçado.
         valor_unitario_planejado: m.planUnitPara,
         quantidade_planejada: m.planQtdPara,
         dias_meses_planejado: m.planDmPara,
@@ -1049,11 +1074,11 @@ export async function registrarErrata(
         novas: linhasNovas,
         itens: mudancas.map((m) => ({
           // A linha nova ganha id dentro da função; o item da errata aponta
-          // para ela pela chave. Na remoção fica nulo desde já: a linha some
-          // logo depois, e `item_nome` é o que conta.
+          // para ela pela chave. A cancelada continua existindo, então o
+          // item aponta para ela como na correção.
           ...(m.acao === "nova"
             ? { chave_nova: chaveDaNova.get(m) }
-            : { job_item_orcado_id: m.acao === "removida" ? null : m.copiaId }),
+            : { job_item_orcado_id: m.copiaId }),
           acao: m.acao,
           linha_vermelha: m.linhaVermelha,
           grupo_id: m.grupoId,
@@ -1088,18 +1113,18 @@ export async function registrarErrata(
             valor_unitario_orcado: m.unitarioPara,
             quantidade_orcada: m.qtdPara,
             dias_meses_orcado: m.dmPara,
-            // Igual ao atual quando o planejado não abriu — gravar o mesmo
-            // número é inócuo, e o trigger tem a última palavra em A/D e save.
+            // O planejado que já estava lá (decisão 151): gravar o mesmo
+            // número é inócuo, e o trigger tem a última palavra em save e
+            // no Interno.
             valor_unitario_planejado: m.planUnitPara,
             quantidade_planejada: m.planQtdPara,
             dias_meses_planejado: m.planDmPara,
           })),
-        // A linha sai por último dentro da função: a errata já está gravada
-        // com `item_nome`, e o cascade leva junto a âncora de realizado e um
-        // BV que ainda estivesse "a negociar" — as situações travadas foram
-        // barradas lá em cima.
-        removidas: mudancas
-          .filter((m) => m.acao === "removida")
+        // Decisão 151: a linha não sai mais — a função zera o unitário,
+        // grava a marca de cancelada e dá as PPs dela por concluídas. As
+        // situações travadas (PP, BV, save) foram barradas lá em cima.
+        canceladas: mudancas
+          .filter((m) => m.acao === "cancelada")
           .map((m) => m.copiaId),
         bv_cancelar: perderamBv.map((m) => m.copiaId),
         // `jobs.valor_total` é o Valor do Job; os dois números acompanham
@@ -1160,7 +1185,7 @@ export async function registrarErrata(
       descricao,
       itens_alterados: contar("alterada"),
       itens_novos: contar("nova"),
-      itens_removidos: contar("removida"),
+      itens_cancelados: contar("cancelada"),
       linhas_vermelhas: mudancas.filter(
         (m) => m.acao === "nova" && m.linhaVermelha,
       ).length,
@@ -1179,17 +1204,17 @@ export async function registrarErrata(
 }
 
 /**
- * Barra a remoção de linha que já virou documento ou dinheiro.
+ * Barra o cancelamento de linha que já virou documento ou dinheiro.
  *
- * Sem esta função a remoção seria decidida pelas FKs, e elas discordam
- * entre si: `pedidos_compra` é `on delete restrict` e devolveria um erro
- * cru de banco, enquanto `saves_consumos` é `on delete cascade` e apagaria
- * o consumo em silêncio — devolvendo crédito de save ao job de origem sem
- * que ninguém tivesse pedido.
+ * Até a decisão 151 (07/10/2026) a errata apagava a linha, e estas eram as
+ * travas da remoção — as FKs discordavam entre si (`pedidos_compra` é
+ * `on delete restrict`, `saves_consumos` é `on delete cascade`). O
+ * cancelamento não apaga nada, mas herdou as mesmas travas de propósito:
+ * a regra de quem pode sair da conta não mudou, só o jeito de sair.
  *
- * Retorna a mensagem de bloqueio, ou null quando a remoção pode seguir.
+ * Retorna a mensagem de bloqueio, ou null quando o cancelamento pode seguir.
  */
-async function barrarRemocao(
+async function barrarCancelamento(
   jobId: string,
   tenantId: string,
   copiaIds: string[],
@@ -1203,7 +1228,7 @@ async function barrarRemocao(
   //    Desde a decisão 099 (22/09/2026) o pedido aguardando e o recusado
   //    ainda não retirado também prendem a linha: o pedido é histórico e
   //    ficaria apontando para uma linha que sumiu.
-  const bloqueioSave = barrarLinhaComSave(copiaIds, porId, pedidosDeSave, "remocao");
+  const bloqueioSave = barrarLinhaComSave(copiaIds, porId, pedidosDeSave, "cancelamento");
   if (bloqueioSave) return bloqueioSave;
 
   const { data: realizados } = await supabase
@@ -1245,14 +1270,14 @@ async function barrarRemocao(
     | undefined;
   if (pp) {
     const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
-    return `"${nome(copiaId)}" tem o Pedido de Produção ${pp.codigo} no histórico. Uma linha com PP não pode ser removida.`;
+    return `"${nome(copiaId)}" tem o Pedido de Produção ${pp.codigo} no histórico. Uma linha com PP não pode ser cancelada.`;
   }
 
   const bv = (bvsRes.data ?? [])[0] as
     | { job_item_orcado_id: string; situacao: string }
     | undefined;
   if (bv) {
-    return `"${nome(bv.job_item_orcado_id)}" tem BV lançado. Cancele o BV antes de remover a linha.`;
+    return `"${nome(bv.job_item_orcado_id)}" tem BV lançado. Cancele o BV antes de cancelar a linha.`;
   }
 
   return null;

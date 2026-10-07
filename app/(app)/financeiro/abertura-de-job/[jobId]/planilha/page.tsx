@@ -192,6 +192,9 @@ export default async function PlanilhaDaAberturaPage({
     // é o que manda a conta calcular a dedução a partir do BV vigente.
     em_save: it.em_save === true,
     save_consumido: Number(it.save_consumido ?? 0),
+    // Linha cancelada por errata (decisão 151): fica na planilha com o
+    // orçado zerado e o planejado da abertura.
+    cancelada_em: it.cancelada_em ?? null,
     bv_liquido_planejado:
       it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
         ? null

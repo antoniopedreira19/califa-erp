@@ -4730,3 +4730,23 @@ código publicado logo depois (`3305751`).
 - Pendência registrada na decisão 136, §7: a tela do job mostra ao
   freelancer o orçado e a rentabilidade, que `jobs.ver_restrito` diz que
   ele não vê.
+
+## ⚠️ Nota de 2026-10-07 — a errata não mexe no planejado e cancela a linha (decisão 151, entrega 1)
+
+- O planejado do job passou a ser o da abertura. Na errata o planejado não
+  abre em linha nenhuma: a linha nova entra com ele zerado e a existente
+  guarda o dela, mesmo com o orçado corrigido. Isso revê a decisão 054.
+- "Remover" uma linha que já existia virou **"Cancelar"**: ela fica na
+  planilha com o selo "cancelada", o orçado em zero e o planejado da
+  abertura; "Reativar" desfaz dentro da mesma errata. A linha criada na
+  própria errata continua com "Remover".
+- A linha cancelada não recebe PP, BV nem save, não entra em errata de
+  novo, e as PPs dela ficam dadas por concluídas. A calha mostra
+  "Cancelada".
+- Histórico com a ação nova `cancelada`; as remoções antigas continuam
+  "Removida". Migrations `20261007100001` e `20261007100002`.
+- Testado no TES-1002/26 (dezembro). A revisão da abertura desse job ficou
+  pendente porque faltam as datas dos recolhimentos de impostos.
+- A entrega 2 (valor do job dividido entre inicial e atual, Totais e
+  rentabilidade planejada pela abertura) está desenhada na própria decisão
+  150.
