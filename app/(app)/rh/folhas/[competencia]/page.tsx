@@ -15,6 +15,8 @@ import {
 } from "./folha-competencia-view";
 import { CardsResumoFolha } from "./cards-resumo-folha";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { ChecklistCompetencia } from "../_components/checklist-competencia";
+import type { FolhaOrigem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +75,7 @@ export default async function FolhaCompetenciaPage({
       supabase
         .from("folhas_pagamento")
         .select(
-          "id, salario_base, status, motivo_pendencia, colaborador_id",
+          "id, salario_base, status, motivo_pendencia, colaborador_id, origem",
         )
         .eq("tenant_id", session.activeTenant.id)
         .eq("competencia_ano", ano)
@@ -110,6 +112,7 @@ export default async function FolhaCompetenciaPage({
     status: FolhaLinhaStatus;
     motivo_pendencia: string | null;
     colaborador_id: string;
+    origem: FolhaOrigem;
   }[];
 
   const folhaIds = folhasRaw.map((f) => f.id);
@@ -239,6 +242,11 @@ export default async function FolhaCompetenciaPage({
 
   const descricao = descreverEstadoFolha(linhas.length, contagem);
 
+  // Totais por origem para o checklist PJ / CLT.
+  const linhasPj = folhasRaw.filter((l) => l.origem === "california");
+  const linhasClt = folhasRaw.filter((l) => l.origem === "contabilidade");
+  const rascunhosAEnviar = folhasRaw.filter((l) => l.status === "rascunho").length;
+
   return (
     <div className="space-y-6">
       <BotaoVoltar reserva="/rh/folhas" />
@@ -248,6 +256,21 @@ export default async function FolhaCompetenciaPage({
         title={nomeCompetencia}
         description={descricao}
         icon={Receipt}
+      />
+
+      <ChecklistCompetencia
+        ano={ano}
+        mes={mes}
+        pj={{
+          linhas: linhasPj.length,
+          total: linhasPj.reduce((a, l) => a + Number(l.salario_base), 0),
+        }}
+        clt={{
+          linhas: linhasClt.length,
+          total: linhasClt.reduce((a, l) => a + Number(l.salario_base), 0),
+        }}
+        rascunhosAEnviar={rascunhosAEnviar}
+        podeEditar={podeEditar}
       />
 
       {linhas.length > 0 && (

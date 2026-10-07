@@ -133,16 +133,16 @@ export function NovaFolhaModal() {
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
         >
           <Plus className="h-4 w-4" />
-          Nova folha
+          Gerar folha PJ
         </button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Gerar folha de pagamento</DialogTitle>
+          <DialogTitle>Gerar folha PJ</DialogTitle>
           <DialogDescription>
-            Cria uma linha por colaborador ativo, copiando salário e alocações
-            vigentes da data de geração. Idempotente: quem já tem folha nesta
-            competência não é sobrescrito.
+            Cria uma linha por colaborador PJ, MEI ou híbrido (parte Recibo)
+            ativo na competência, copiando salário e alocações vigentes. CLT
+            puro, estagiário e sócio vêm pela importação do PDF da contabilidade.
           </DialogDescription>
         </DialogHeader>
 
@@ -264,7 +264,7 @@ export function NovaFolhaModal() {
                 disabled={pending}
                 className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
               >
-                {pending ? "Gerando..." : "Gerar folha"}
+                {pending ? "Gerando..." : "Gerar folha PJ"}
               </button>
             </div>
           </div>
