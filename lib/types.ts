@@ -3815,6 +3815,11 @@ export function folhaLinhaStatusLabel(s: FolhaLinhaStatus): string {
   }
 }
 
+/** Origem da linha de folha:
+ *  - "california": gerada por gerarFolha a partir do cadastro (fluxo PJ: pj + mei + parte RPA do híbrido).
+ *  - "contabilidade": importada do PDF "Relação Geral dos Líquidos" (fluxo CLT: clt + parte CLT do híbrido + estagio + socio). */
+export type FolhaOrigem = "california" | "contabilidade";
+
 export interface FolhaPagamento {
   id: string;
   tenant_id: string;
@@ -3824,6 +3829,9 @@ export interface FolhaPagamento {
   /** Valor MANUAL que será pago. Não é vigente da Camada 1. */
   salario_base: string;
   status: FolhaLinhaStatus;
+  origem: FolhaOrigem;
+  /** Data de pagamento vinda do PDF da contabilidade. NULL em linhas california. */
+  data_pagamento_prevista: string | null;
   motivo_pendencia: string | null;
   enviada_em: string | null;
   enviada_por: string | null;
