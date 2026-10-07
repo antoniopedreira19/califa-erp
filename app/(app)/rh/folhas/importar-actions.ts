@@ -340,7 +340,9 @@ export async function importarFolhaContabilidade(input: {
       continue;
     }
 
-    // Snapshot das alocações vigentes (Camada 1).
+    // Snapshot das alocações vigentes (Camada 1). Sem alocação, a aprovação
+    // em `/financeiro/contas-a-pagar` vai falhar (não há como ratear): warning
+    // explícito e segue sem gravar alocação.
     const { data: alocVigente } = await supabase
       .from("colaboradores_alocacoes")
       .select("empresa_id, regional_id, usa_rateio_empresa")
@@ -349,7 +351,15 @@ export async function importarFolhaContabilidade(input: {
       .is("data_fim", null)
       .maybeSingle();
 
-    if (!alocVigente) continue;
+    if (!alocVigente) {
+      warnings.push({
+        tipo: "valor_invalido",
+        mensagem: `${p.nome} importado sem alocação vigente — o financeiro não vai conseguir aprovar enquanto não houver alocação cadastrada em /rh/colaboradores.`,
+        cpf: p.cpf,
+        nome: p.nome,
+      });
+      continue;
+    }
 
     if (alocVigente.usa_rateio_empresa) {
       const { data: rateio } = await supabase
@@ -358,17 +368,24 @@ export async function importarFolhaContabilidade(input: {
         .eq("tenant_id", tenantId)
         .eq("empresa_id", alocVigente.empresa_id)
         .eq("ano_vigencia", input.ano);
-      if (rateio && rateio.length > 0) {
-        await supabase.from("folhas_pagamento_alocacoes").insert(
-          rateio.map((r) => ({
-            tenant_id: tenantId,
-            folha_id: nova.id,
-            empresa_id: alocVigente.empresa_id,
-            regional_id: r.regional_id,
-            percentual: String(r.percentual),
-          })),
-        );
+      if (!rateio || rateio.length === 0) {
+        warnings.push({
+          tipo: "valor_invalido",
+          mensagem: `${p.nome}: colaborador usa rateio da empresa mas não há rateio configurado para ${input.ano}. Configure em /financeiro/cadastros antes da aprovação.`,
+          cpf: p.cpf,
+          nome: p.nome,
+        });
+        continue;
       }
+      await supabase.from("folhas_pagamento_alocacoes").insert(
+        rateio.map((r) => ({
+          tenant_id: tenantId,
+          folha_id: nova.id,
+          empresa_id: alocVigente.empresa_id,
+          regional_id: r.regional_id,
+          percentual: String(r.percentual),
+        })),
+      );
     } else if (alocVigente.regional_id) {
       await supabase.from("folhas_pagamento_alocacoes").insert({
         tenant_id: tenantId,
@@ -376,6 +393,13 @@ export async function importarFolhaContabilidade(input: {
         empresa_id: alocVigente.empresa_id,
         regional_id: alocVigente.regional_id,
         percentual: "100.00",
+      });
+    } else {
+      warnings.push({
+        tipo: "valor_invalido",
+        mensagem: `${p.nome}: alocação vigente sem regional nem rateio da empresa. Corrija em /rh/colaboradores antes da aprovação.`,
+        cpf: p.cpf,
+        nome: p.nome,
       });
     }
   }
