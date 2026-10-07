@@ -257,3 +257,55 @@ export async function removerNfColaborador(
 
   return { ok: true } as { ok: true } & Record<string, never>;
 }
+
+/**
+ * Devolve uma Signed URL com validade de 10 minutos pra baixar a NF.
+ * Permissão: dono OU rh.nf.ver (RH, admin, financeiro).
+ */
+export async function baixarNfColaborador(
+  anexoId: string,
+): Promise<ActionResult<{ url: string; arquivo_nome: string }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: anexo } = await supabase
+    .from("colaboradores_nf_anexos")
+    .select(
+      "id, colaborador_id, arquivo_path, arquivo_nome, competencia_ano, competencia_mes",
+    )
+    .eq("id", anexoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (!anexo) {
+    return { ok: false, message: "Anexo não encontrado." };
+  }
+
+  const temAlcada = pode(session.activeRole, "rh.nf.ver");
+  const ehDono = !temAlcada && (await podeMexerNaNf(session, anexo.colaborador_id));
+  if (!temAlcada && !ehDono) {
+    return { ok: false, message: "Sem permissão para baixar NF." };
+  }
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(anexo.arquivo_path, 60 * 10);
+  if (error || !data) {
+    return { ok: false, message: `Falha ao gerar link: ${error?.message}` };
+  }
+
+  // Só audita quando quem baixa não é o dono (visualização por RH/financeiro).
+  if (temAlcada) {
+    await logAuditEvent({
+      acao: "colaborador.nf_baixada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "colaborador",
+      entidadeId: anexo.colaborador_id,
+      metadata: {
+        competencia_ano: anexo.competencia_ano,
+        competencia_mes: anexo.competencia_mes,
+      },
+    });
+  }
+
+  return { ok: true, url: data.signedUrl, arquivo_nome: anexo.arquivo_nome };
+}
