@@ -503,7 +503,11 @@ export function NfDoAnexo({
   // A nota que já existe manda nos dados: data, valor e tomador vêm dela, e
   // a parte desta PP começa no que falta da nota, até o valor da PP
   // (decisão 152 e revisão).
-  const chaveDaExistente = existente?.nota_id ?? null;
+  // A chave inclui os dados: corrigida a nota pela outra PP (o atalho do
+  // envio), a tela relê emissão, valor e tomador sem trocar de nota.
+  const chaveDaExistente = existente
+    ? `${existente.nota_id}|${existente.emissao}|${existente.valor}|${existente.tomador}`
+    : null;
   React.useEffect(() => {
     if (!existente) return;
     const falta = Math.max(0, sobraDaNota(existente));
@@ -514,7 +518,7 @@ export function NfDoAnexo({
       cobreOutra: outras.length > 0 || nf.cobreOutra || (valorPP > 0 && existente.valor > valorPP + 0.004),
       valorNaPP: nf.cobreOutra && nf.valorNaPP > 0 ? nf.valorNaPP : valorPP > 0 ? Math.min(falta, valorPP) : falta,
     });
-    // Só quando a nota encontrada muda.
+    // Só quando a nota encontrada (ou os dados dela) muda.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveDaExistente]);
 
