@@ -174,6 +174,28 @@ export function marcarVoltar(rastro: Rastro, indice: number | null): Rastro {
   return { ...rastro, pendente: indice };
 }
 
+/**
+ * Tira do rastro uma página que deixou de existir — o orçamento excluído
+ * (decisão 148) — e as subpáginas dela. Sem isso, o voltar da página
+ * seguinte levaria a um "não encontrado". O cursor fica na última entrada
+ * que sobrou até a posição dele.
+ */
+export function esquecerPagina(rastro: Rastro, caminho: string): Rastro {
+  const some = (url: string) => {
+    const c = caminhoDe(url);
+    return c === caminho || c.startsWith(`${caminho}/`);
+  };
+  if (!rastro.entradas.some(some)) return rastro;
+  const entradas: string[] = [];
+  let cursor = -1;
+  rastro.entradas.forEach((url, i) => {
+    if (some(url)) return;
+    entradas.push(url);
+    if (i <= rastro.cursor) cursor = entradas.length - 1;
+  });
+  return { entradas, cursor, pendente: null };
+}
+
 // ---------------------------------------------------------------------------
 // Nome da página, para o balão do botão ("Voltar para …").
 // ---------------------------------------------------------------------------

@@ -68,7 +68,7 @@ import {
   type ParametrosVersao,
 } from "../../_rascunho/tipos";
 import { importarPlanilhaNaAgregada } from "./actions";
-import { criarOrcamentoDaAgregada } from "../actions";
+import { criarOrcamentoDaAgregada, excluirOrcamentoVazio } from "../actions";
 import {
   adicionarItem,
   atualizarCampoItem,
@@ -105,7 +105,7 @@ import {
   marcarSaveDaLinha,
   salvarConsumoDeSave,
 } from "../[orcId]/versoes/[versaoId]/save-actions";
-import { useProtegerSaida } from "@/components/voltar/estado";
+import { esquecerPagina, useProtegerSaida } from "@/components/voltar/estado";
 
 interface Props {
   projeto: {
@@ -131,6 +131,9 @@ interface Props {
    *  `orcamentos.criar`, a permissão que a importação confere no servidor
    *  (07/10/2026). */
   podeImportar: boolean;
+  /** `orcamentos.criar` com o projeto ativo: quem cria orçamento exclui o
+   *  completamente vazio, pela lixeira do card (decisão 148, entrega 2). */
+  podeExcluir: boolean;
   /** `orcamentos.editar_impostos` — trava os Impostos BR do internacional
    *  no modal de parâmetros (decisão do Tiago, 14/09/2026). */
   podeEditarImpostos: boolean;
@@ -234,6 +237,20 @@ function nosGrupos(
   return algum ? proximos : orcamentos;
 }
 
+/** A lixeira do card (decisão 148, entrega 2): só no orçamento
+ *  completamente vazio. O banco diz o que vale fora da versão aberta —
+ *  rascunho, nunca aprovado, sem job, sem item nas outras versões — e a
+ *  versão aberta se confere pelo estado da tela, que muda a cada célula.
+ *  A linha em branco que ainda não tem descrição não está no banco e não
+ *  conta; grupo sem item conta como vazio. O servidor confere tudo de novo
+ *  na hora de excluir. */
+function excluivelNaTela(orc: OrcamentoRascunho): boolean {
+  const origem = orc.origemBanco;
+  if (!origem?.exclusao) return false;
+  if (origem.exclusao.versoesComItem.some((v) => v !== origem.versaoId)) return false;
+  return orc.grupos.every((g) => g.itens.every((it) => it.item.trim() === ""));
+}
+
 /** Um tique: o que vem depois já não é atualização da transição de quem
  *  chamou (o React só marca o trecho síncrono do `startTransition`). Ver
  *  o porquê nos adaptadores da planilha, dentro do editor. */
@@ -252,6 +269,7 @@ export function EditorAgregado({
   projetoArquivado,
   podeEditar,
   podeImportar,
+  podeExcluir,
   podeEditarImpostos,
   podeMarcarSave,
   inicial,
@@ -512,6 +530,8 @@ export function EditorAgregado({
           statusVersao: "rascunho",
           bloqueio: null,
           estagio: estagioFunil("rascunho", null),
+          // Nasce vazio: a lixeira aparece até a primeira linha ganhar nome.
+          exclusao: podeExcluir ? { versoesComItem: [] } : null,
         }
       : {
           // O orçamento entrou e a v1 não: em consulta, como a página o
@@ -524,6 +544,7 @@ export function EditorAgregado({
           bloqueio:
             "Este orçamento ainda não tem nenhuma versão. Crie a primeira na tela do orçamento.",
           estagio: estagioFunil("rascunho", null),
+          exclusao: podeExcluir ? { versoesComItem: [] } : null,
         };
     const novo: OrcamentoRascunho = {
       ...dados,
@@ -557,6 +578,26 @@ export function EditorAgregado({
     chaveDoFormulario.current = null;
     setModal(null);
     setErro(null);
+    // A faixa do projeto e o "Exportar" vêm do servidor.
+    router.refresh();
+  }
+
+  /** Exclui o orçamento completamente vazio (decisão 148, entrega 2). Não
+   *  é otimista: a exclusão não se desfaz, então o card só sai depois de o
+   *  servidor conferir de novo e apagar. */
+  async function removerOrcamento(orcamentoId: string) {
+    const orc = orcamentosRef.current.find((o) => o.id === orcamentoId);
+    if (!orc || !excluivelNaTela(orc)) return;
+    const res = await gravar(() => excluirOrcamentoVazio(projeto.id, orcamentoId));
+    if (!res.ok) {
+      setErro(`Orçamento “${orc.nome}”: ${res.message}`);
+      return;
+    }
+    setOrcamentos((atuais) => atuais.filter((o) => o.id !== orcamentoId));
+    setExibidos((atuais) => atuais.filter((x) => x !== orcamentoId));
+    setErro(null);
+    // Se a página dele está no rastro desta aba, o voltar não leva mais a ela.
+    esquecerPagina(`/orcamentos/${projeto.id}/${orcamentoId}`);
     // A faixa do projeto e o "Exportar" vêm do servidor.
     router.refresh();
   }
@@ -1240,6 +1281,9 @@ export function EditorAgregado({
                 void renomearGrupoNoBanco(orc.id, grupoId, nome)
               }
               onRemoverGrupo={(grupoId) => void removerGrupoNoBanco(orc.id, grupoId)}
+              onRemover={
+                excluivelNaTela(orc) ? () => void removerOrcamento(orc.id) : undefined
+              }
             />
           );
         })}

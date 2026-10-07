@@ -42,6 +42,17 @@ test("a ordem dos códigos não importa", () => {
   );
 });
 
+test("código de orçamento excluído não volta (decisão 148)", () => {
+  // O -03 foi excluído: ele só existe no registro de códigos usados, que o
+  // gerador junta aos orçamentos de hoje. Sem ele, o próximo seria o -03.
+  const deHoje = ["AMB-P017/26-01", "AMB-P017/26-02"];
+  const registrados = ["AMB-P017/26-01", "AMB-P017/26-02", "AMB-P017/26-03"];
+  assert.equal(
+    proximaSequenciaOrcamento(PROJETO, [...new Set([...deHoje, ...registrados])]),
+    4,
+  );
+});
+
 test("passa do 99 sem quebrar", () => {
   assert.equal(proximaSequenciaOrcamento(PROJETO, ["AMB-P017/26-100"]), 101);
 });

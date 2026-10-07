@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   RASTRO_VAZIO,
   destinoDoVoltar,
+  esquecerPagina as esquecerNoRastro,
   marcarVoltar,
   nomeDaPagina,
   registrarNavegacao,
@@ -111,6 +112,16 @@ export function marcarPagina(caminho: string, marca: MarcaDaPagina) {
   const entradas = Object.entries({ ...resto, [caminho]: marca }).slice(-LIMITE_DE_MARCAS);
   marcas = Object.fromEntries(entradas);
   gravar(CHAVE_MARCAS, marcas);
+  avisar();
+}
+
+/** A página deixou de existir (o orçamento excluído, decisão 148): sai do
+ *  rastro desta aba, com as subpáginas, e o voltar nunca leva a ela. */
+export function esquecerPagina(caminho: string) {
+  const proximo = esquecerNoRastro(rastro, caminho);
+  if (proximo === rastro) return;
+  rastro = proximo;
+  gravar(CHAVE_RASTRO, rastro);
   avisar();
 }
 

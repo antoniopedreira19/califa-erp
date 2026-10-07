@@ -11,6 +11,7 @@ import {
   RASTRO_VAZIO,
   chaveDaPagina,
   destinoDoVoltar,
+  esquecerPagina,
   marcarVoltar,
   nomeDaPagina,
   registrarNavegacao,
@@ -153,4 +154,27 @@ test("nome da página no balão", () => {
     nomeDaPagina("/jobs/j44?aba=pps", { "/jobs/j44": { rotulo: "JOB-0044 · Teste 1" } }),
     "JOB-0044 · Teste 1",
   );
+});
+
+test("orçamento excluído sai do rastro, e o voltar não leva a ele (decisão 148)", () => {
+  // Projeto → orçamento → versão do orçamento; o orçamento é excluído e a
+  // tela vai para o projeto.
+  let r = navegar("/orcamentos", "/orcamentos/p1", "/orcamentos/p1/o1", "/orcamentos/p1/o1/versoes/v1");
+  r = esquecerPagina(r, "/orcamentos/p1/o1");
+  assert.deepEqual(r.entradas, ["/orcamentos", "/orcamentos/p1"]);
+  assert.equal(atual(r), "/orcamentos/p1");
+  // A ida ao projeto não soma entrada: ele já é a atual.
+  r = registrarNavegacao(r, "/orcamentos/p1", { popstate: false });
+  assert.deepEqual(destinoDoVoltar(r, {}, atual(r), "/orcamentos"), {
+    href: "/orcamentos",
+    indice: 0,
+  });
+});
+
+test("esquecer página que não está no rastro não muda nada", () => {
+  const r = navegar("/orcamentos", "/orcamentos/p1");
+  assert.equal(esquecerPagina(r, "/orcamentos/p1/o9"), r);
+  // O prefixo é a página inteira: "/orcamentos/p1/o1" não leva "/orcamentos/p1/o10".
+  const r2 = navegar("/orcamentos/p1/o10", "/orcamentos/p1");
+  assert.equal(esquecerPagina(r2, "/orcamentos/p1/o1"), r2);
 });

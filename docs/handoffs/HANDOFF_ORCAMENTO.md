@@ -5399,3 +5399,22 @@ aplicada na hora combinada com a frente do Antonio, junto da
   MANIFESTO** foi cancelada em 07/10/2026 a pedido do Tiago (voltou a "Em
   revisão"); HITLAB, ANCINE HEROS e Raízes do Futuro não mudaram. Para
   aprovar, troca-se a categoria ou o serviço no "Editar". Ver decisão 149.
+
+## ⚠️ Nota de 2026-10-07 — orçamento completamente vazio se exclui, e código de orçamento não volta (decisão 148, entrega 2)
+
+- **Excluir**: só o orçamento em rascunho, nunca aprovado, sem job e sem
+  item em nenhuma versão, e só para quem tem `orcamentos.criar`. Pela
+  lixeira do card da agregada (aparece e some conforme os itens, sem
+  recarregar) ou pelo "Excluir" do "Editar orçamento". A função do banco
+  `excluir_orcamento_vazio` confere tudo, apaga e audita
+  (`orcamento.excluido`) na mesma transação.
+- **Não abra DELETE em `orcamentos`** para resolver outra coisa: o
+  `authenticated` não tem, de propósito. A exclusão passa pela função, que
+  roda como dona e confere a RLS ela mesma.
+- **Código não volta**: `codigos_de_orcamento_usados` guarda todo código já
+  usado, e `gerarCodigoOrcamento` o considera. Quem gerar código de
+  orçamento por outro caminho tem que consultar esse registro também.
+- **Voltar**: página que deixa de existir sai do rastro por
+  `esquecerPagina` (`components/voltar/estado.ts`).
+- Teste no TES-P001/26: `-28`, `-29` e `-30` criados e excluídos (os três
+  códigos ficam guardados). Ver decisão 148.

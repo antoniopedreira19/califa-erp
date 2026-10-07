@@ -94,6 +94,7 @@ export default async function OrcamentosAgregadoPage({
     produtores,
     vinculosRegRes,
     vinculosRespRes,
+    excluiveisRes,
   ] = await Promise.all([
     supabase
       .from("projetos")
@@ -161,6 +162,9 @@ export default async function OrcamentosAgregadoPage({
       .select("profile_id, profile:profiles(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId),
+    // Os orçamentos que só dependem de não ter item para sair pela lixeira
+    // do card (decisão 148, entrega 2) — a mesma regra da exclusão.
+    supabase.rpc("orcamentos_excluiveis_do_projeto", { p_projeto_id: params.projetoId }),
   ]);
 
   const projeto = projRes.data as any;
@@ -434,6 +438,20 @@ export default async function OrcamentosAgregadoPage({
   // consulta, com o motivo em cada card (07/10/2026). As actions já
   // recusavam; a tela é que mostrava "Novo item" e "Novo grupo".
   const podeEditar = pode(session.activeRole, "orcamentos.editar");
+  // Exclui quem cria orçamento, como a action confere (decisão 148).
+  const podeExcluir = !projetoArquivado && pode(session.activeRole, "orcamentos.criar");
+  if (excluiveisRes.error) {
+    console.error("[orcamentos.agregado.excluiveis]", excluiveisRes.error.message);
+  }
+  const excluiveis = new Map<string, string[]>(
+    ((excluiveisRes.data ?? []) as { orcamento_id: string; versoes_com_item: string[] }[]).map(
+      (e) => [e.orcamento_id, e.versoes_com_item ?? []],
+    ),
+  );
+  const exclusaoDe = (orcamentoId: string) => {
+    const versoesComItem = podeExcluir ? excluiveis.get(orcamentoId) : undefined;
+    return versoesComItem ? { versoesComItem } : null;
+  };
 
   // Mídia Off (decisão 147, entrega 1): só consulta, com o atalho para a
   // tela do orçamento — a planilha dela é por meio e mês, com a conta da
@@ -535,6 +553,7 @@ export default async function OrcamentosAgregadoPage({
             statusVersao: versao.status,
             bloqueio,
             estagio: estagioDe(orc),
+            exclusao: exclusaoDe(orc.id),
           }
         : {
             orcamentoId: orc.id,
@@ -544,6 +563,7 @@ export default async function OrcamentosAgregadoPage({
             statusVersao: "",
             bloqueio,
             estagio: estagioDe(orc),
+            exclusao: exclusaoDe(orc.id),
           },
     };
   });
@@ -673,6 +693,7 @@ export default async function OrcamentosAgregadoPage({
       projetoArquivado={projetoArquivado}
       podeEditar={podeEditar}
       podeImportar={!projetoArquivado && pode(session.activeRole, "orcamentos.criar")}
+      podeExcluir={podeExcluir}
       podeEditarImpostos={pode(session.activeRole, "orcamentos.editar_impostos")}
       podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
       honorariosCliente={Number(

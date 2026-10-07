@@ -89,8 +89,8 @@ interface Props {
    *  traz de volta atualizados. */
   bvsPorItem: Record<string, ItemBv[]>;
   onAlternar: () => void;
-  /** Ausente ⇒ sem lixeira no card. Desde a decisão 148 o orçamento da
-   *  agregada já nasce gravado: "tirar do rascunho" deixou de existir. */
+  /** Exclui o orçamento. Só vem no orçamento completamente vazio (decisão
+   *  148, entrega 2); ausente ⇒ sem lixeira no card. */
   onRemover?: () => void;
   onImportar: () => void;
   onCriarPlanilha: () => void;
@@ -288,7 +288,8 @@ export function JobRascunhoCard({
             <button
               type="button"
               onClick={() => setAskRemover(true)}
-              title="Remover orçamento do rascunho"
+              title="Excluir orçamento"
+              aria-label="Excluir orçamento"
               className="rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-california-red"
             >
               <Trash2 className="h-4 w-4" />
@@ -615,15 +616,14 @@ export function JobRascunhoCard({
       <ConfirmDialog
         open={askRemover}
         onOpenChange={setAskRemover}
-        title="Remover este orçamento?"
+        title="Excluir este orçamento?"
         description={
           <>
-            <strong className="text-foreground">{job.nome}</strong> sai do
-            rascunho com {nItens} {nItens === 1 ? "item" : "itens"}. Nada foi
-            gravado ainda — nenhum orçamento é apagado do projeto.
+            <strong className="text-foreground">{job.nome}</strong> não tem
+            nenhum item e sai do projeto. A exclusão não pode ser desfeita.
           </>
         }
-        confirmLabel="Remover"
+        confirmLabel="Excluir"
         cancelLabel="Voltar"
         variant="destructive"
         onConfirm={() => {
