@@ -28,6 +28,7 @@ import {
   salvarPagamentoDaFolha,
   type PagamentoDaFolhaInput,
 } from "./actions-folhas";
+import { BlocoNfDrawer } from "./_components/bloco-nf-drawer";
 import type { FolhaLinhaFinanceiro } from "./folhas-pagar-list";
 import {
   PagamentoDaFolha,
@@ -104,6 +105,12 @@ export function RevisarFolhaDrawer({
   }, [open, linha.id]);
 
   const podeAgir = linha.status === "enviada";
+  const exigeNfSemAnexo =
+    linha.origem === "california" &&
+    ["pj", "mei", "clt_recibo"].includes(
+      linha.colaborador.tipo_contratacao,
+    ) &&
+    !linha.nf;
 
   const soma = alocacoes.reduce(
     (acc, a) => acc + (Number(String(a.percentual).replace(",", ".")) || 0),
@@ -250,6 +257,14 @@ export function RevisarFolhaDrawer({
                   )}
               </div>
             )}
+
+            <BlocoNfDrawer
+              origem={linha.origem}
+              tipoContratacao={linha.colaborador.tipo_contratacao}
+              competenciaAno={linha.competencia_ano}
+              competenciaMes={linha.competencia_mes}
+              nf={linha.nf}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="salario_base">Valor a pagar</Label>
@@ -471,7 +486,12 @@ export function RevisarFolhaDrawer({
                     <button
                       type="button"
                       onClick={handleAprovar}
-                      disabled={pending || salvandoPagamento || !somaOk}
+                      disabled={pending || salvandoPagamento || !somaOk || exigeNfSemAnexo}
+                      title={
+                        exigeNfSemAnexo
+                          ? "NF não anexada — colaborador precisa anexar em /perfil"
+                          : undefined
+                      }
                       className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
                     >
                       <CheckCircle2 className="h-4 w-4" />
