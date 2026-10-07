@@ -197,6 +197,7 @@ export default async function FolhaCompetenciaPage({
       id: l.id,
       salario_base: String(l.salario_base),
       status: l.status,
+      origem: l.origem,
       motivo_pendencia: l.motivo_pendencia,
       colaborador: {
         id: c?.id ?? "",
