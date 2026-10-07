@@ -5141,3 +5141,21 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Testado gravando no `TES-P001/26 · Teste demonstração` (TES-1022/26,
   enviado e depois cancelado pelo "Cancelar envio à abertura"). Ver
   decisão 149.
+
+## ⚠️ Nota de 2026-10-07 — lista de Projetos & Orçamentos em grade fixa, com teto de duas linhas (decisão 036)
+
+- Em "Todos", o GP Responsável sem quebra alargava a tabela, e Abertos e
+  Status sumiam pela borda da caixa. Cliente e Marca quebravam em até
+  quatro linhas, e o código partia no hífen. Mesma correção da lista de
+  Jobs (nota de 05/10/2026 da decisão 036).
+- **Grade fixa** (`table-fixed` + `colgroup` em `ColunasDaLista`). O Nome
+  fica com ~290 px, e a largura mínima é 1500 px; abaixo disso a tabela
+  rola dentro da caixa (`overflow-x-auto`).
+- Nome, Cliente, Marca e GP Responsável quebram **até duas linhas**. O
+  resto vira "…", com o texto inteiro ao passar o mouse.
+- Código e Início não quebram. Nenhuma coluna saiu.
+- Status com 120 px (cabe "Arquivado") e as colunas do funil com `px-2`
+  (cabe "ORÇAMENTOS" sem tirar largura do Nome).
+- Conferido logado em 1838 px: "Meus" e "Todos" sem rolagem horizontal,
+  com as 12 colunas, e nenhuma linha com mais de duas linhas. Números e
+  larguras na nota de 07/10/2026 da decisão 036.

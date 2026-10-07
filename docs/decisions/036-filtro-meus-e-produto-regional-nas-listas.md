@@ -232,3 +232,56 @@ Código:
 
 `JobRow` não mudou: `projeto_codigo` e `projeto_nome` continuam
 alimentando a faixa do grupo.
+
+## ⚠️ A lista de Projetos & Orçamentos também em grade fixa, com teto de duas linhas (2026-10-07)
+
+O Tiago mostrou o mesmo defeito em `/orcamentos`, no "Todos", e pediu a
+mesma saída da lista de Jobs. A tabela tinha largura automática e
+`overflow-hidden`. O GP Responsável em `whitespace-nowrap` se esticava até
+o nome mais longo ("Barbara Sophia Tank Moya Teixeira Siciliano"), e
+Abertos e Status sumiam pela borda da caixa, sem rolagem. Cliente e Marca,
+com a razão social inteira, quebravam em até quatro linhas. O código
+partia no hífen ("AMB-" em cima, "P019/26" embaixo).
+
+**O que mudou, igual à lista de Jobs:**
+
+- **Grade fixa**: `table-fixed` + `colgroup` (`ColunasDaLista`). As
+  colunas medem 112 · Nome · 156 · 156 · 104 · 172 · 112 · 112 · 104 · 88
+  · 88 · 120 px, e o Nome fica com o resto (~290 px). Cliente, Marca e GP
+  têm as larguras da lista de Jobs. A largura mínima é 1500 px: abaixo
+  disso a tabela rola na horizontal (a caixa passou de `overflow-hidden`
+  para `overflow-x-auto`).
+- **Teto de duas linhas** em Nome, Cliente, Marca e GP Responsável. O
+  resto vira "…", com o texto inteiro ao passar o mouse (`TruncateTooltip`
+  com `linhas={2}`). Na Marca e no GP, o contador "+N" fica ao lado e não
+  encolhe.
+- **Código e Início** não quebram mais.
+- **Nenhuma coluna saiu.** Na lista de Jobs a coluna Projeto saiu por
+  repetir a faixa do grupo; aqui não há coluna repetida.
+
+**Duas medidas que a lista de Jobs não tinha:**
+
+- **Status com 120 px**: o selo mais largo, "Arquivado", mede 87 px. Hoje
+  não há projeto arquivado na base (40 de 40 ativos), e o selo foi medido
+  à parte.
+- **As quatro colunas do funil com `px-2`** (`FUNIL_PX`). Com o `px-4` das
+  outras, os títulos ("ORÇAMENTOS" mede 92 px) só cabiam tirando ~16 px do
+  Nome, e com eles "AMBEV_CORONA_RECOLHIMENTO MATERIAIS AMBUS_MARESIAS"
+  passava de duas linhas.
+
+**Conferido logado, em 07/10/2026, numa janela de 1838 px:**
+
+- "Meus" (4 projetos): a tabela ocupa exatamente os 1614 px, sem rolagem.
+- "Todos" (40 projetos): a mesma largura, sem rolagem, com as 12 colunas
+  na tela. 11 linhas têm uma linha e 29 têm duas. Nenhum nome de projeto
+  passa de duas linhas. Onze células ganharam "…": quatro clientes e
+  quatro marcas que são razão social inteira, e três GPs com nome longo.
+  Nenhum título nem texto invade o respiro da célula vizinha.
+- O cartão mostra o texto inteiro; o ícone do descritivo abre o cartão sem
+  navegar; clicar no nome abre o projeto.
+- Em 1440 px, a tabela fica nos 1500 px e rola dentro da caixa; a página
+  não rola na horizontal.
+
+Código: só `app/(app)/orcamentos/projetos-list.tsx` (`ColunasDaLista`,
+`TOTAL_DE_COLUNAS`, `FUNIL_PX` e o `Contador` "+N", que antes se repetia
+nas três colunas). `ProjetoRow` não mudou.
