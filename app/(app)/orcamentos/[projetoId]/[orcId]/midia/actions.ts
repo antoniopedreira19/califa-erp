@@ -10,7 +10,9 @@
  * versão e as frases de tela.
  *
  * Trava igual à da planilha nacional: `orcamentos.editar`, versão que não
- * está aprovada nem cancelada, e orçamento de Mídia Off.
+ * está aprovada nem cancelada, e orçamento de Mídia Off. Versão nova de
+ * orçamento já aprovado edita, como nas outras planilhas (decisão 023 §7;
+ * Tiago, 07/10/2026): só o orçamento com job ou cancelado trava.
  */
 
 import { revalidatePath } from "next/cache";
@@ -68,8 +70,8 @@ async function versaoEditavel(
   if (data.status === "aprovada" || data.status === "cancelada") {
     return { ok: false, message: "Versão aprovada ou cancelada não aceita alteração nas linhas." };
   }
-  if (["aprovado", "job_criado", "cancelado"].includes(data.orcamento.status)) {
-    return { ok: false, message: "Orçamento aprovado, com job ou cancelado não aceita alteração nas linhas." };
+  if (["job_criado", "cancelado"].includes(data.orcamento.status)) {
+    return { ok: false, message: "Orçamento com job ou cancelado não aceita alteração nas linhas." };
   }
   if (data.orcamento.arquivado_em) {
     return { ok: false, message: "Orçamento arquivado é só leitura. Reative para editar." };
