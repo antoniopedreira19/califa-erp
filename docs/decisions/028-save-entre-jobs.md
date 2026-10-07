@@ -197,6 +197,15 @@ máquina de estados nova.
 A chave é **default de linha nova, não trava**: uma linha pode ser
 desmarcada depois.
 
+> ⚠️ **07/10/2026 — quem liga a chave.** A chave é de quem edita o
+> orçamento, `orcamentos.editar` (administrador, GP e produtor), e não da
+> `orcamentos.marcar_em_save` que vale para marcar e consumir save na
+> linha desde a revisão de 24/09 da [decisão 099](099-aprovacao-de-save.md).
+> Escolha do Tiago, com o efeito à vista: com a chave ligada, a linha nova
+> que o produtor cria nasce em save em nome dele (`save_marcado_por`). A
+> trava fica em `definirSavePorPadrao`; a RLS de `versoes_orcamento` só
+> exige ser do tenant.
+
 ## 11. Job com faturamento zero encerra sem faturar
 
 Um job 100% pago por save tem faturamento previsto zero. Hoje isso o
