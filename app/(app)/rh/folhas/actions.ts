@@ -73,10 +73,13 @@ export async function gerarFolha(input: {
   const tenantId = session.activeTenant.id;
 
   // Passo 1: quem entra na folha
+  // Fluxo PJ (origem=california): só pj, mei e a parte Recibo do híbrido clt_recibo.
+  // CLT puro, estagio e socio vêm pelo fluxo CLT (importação do PDF da contabilidade).
   const { data: colaboradores, error: colabError } = await supabase
     .from("colaboradores")
-    .select("id, nome")
+    .select("id, nome, tipo_contratacao")
     .eq("tenant_id", tenantId)
+    .in("tipo_contratacao", ["pj", "mei", "clt_recibo"])
     .lte("data_admissao", ultimoDia)
     .or(`status.eq.ativo,data_encerramento.gte.${primeiroDia}`);
 
@@ -88,6 +91,7 @@ export async function gerarFolha(input: {
   const colaboradoresCandidatos = (colaboradores ?? []) as {
     id: string;
     nome: string;
+    tipo_contratacao: "pj" | "mei" | "clt_recibo";
   }[];
   if (colaboradoresCandidatos.length === 0) {
     return {
@@ -100,13 +104,16 @@ export async function gerarFolha(input: {
     };
   }
 
-  // Passo 2: quem já tem folha nesta competência (idempotência)
+  // Passo 2: quem já tem folha nesta competência pelo fluxo PJ (idempotência).
+  // Filtra por origem='california' para não contar uma linha de contabilidade do
+  // mesmo colaborador híbrido como "já existe" — são linhas complementares.
   const { data: existentes } = await supabase
     .from("folhas_pagamento")
     .select("colaborador_id")
     .eq("tenant_id", tenantId)
     .eq("competencia_ano", ano)
-    .eq("competencia_mes", mes);
+    .eq("competencia_mes", mes)
+    .eq("origem", "california");
   const jaTemFolha = new Set(
     ((existentes ?? []) as { colaborador_id: string }[]).map(
       (x) => x.colaborador_id,
@@ -133,7 +140,7 @@ export async function gerarFolha(input: {
   const [salariosRes, alocRes, rateiosRes] = await Promise.all([
     supabase
       .from("colaboradores_salarios")
-      .select("colaborador_id, valor")
+      .select("colaborador_id, valor, valor_recibo")
       .in("colaborador_id", faltantesIds)
       .eq("tenant_id", tenantId)
       .is("data_fim", null),
@@ -150,12 +157,21 @@ export async function gerarFolha(input: {
       .eq("ano_vigencia", ano),
   ]);
 
-  const salarioPor = new Map<string, string>();
+  // Para híbrido (clt_recibo), o salário base da folha é a parte Recibo (valor_recibo),
+  // não o total do contrato (valor). Guardamos as duas colunas pra escolher no Passo 4.
+  const salarioPor = new Map<
+    string,
+    { valor: string; valor_recibo: string | null }
+  >();
   for (const s of (salariosRes.data ?? []) as {
     colaborador_id: string;
     valor: string | number;
+    valor_recibo: string | number | null;
   }[]) {
-    salarioPor.set(s.colaborador_id, String(s.valor));
+    salarioPor.set(s.colaborador_id, {
+      valor: String(s.valor),
+      valor_recibo: s.valor_recibo == null ? null : String(s.valor_recibo),
+    });
   }
 
   // Uma alocação vigente por colaborador (unique parcial garante isso).
@@ -213,8 +229,17 @@ export async function gerarFolha(input: {
   }[] = [];
 
   for (const c of faltantes) {
-    const salario = salarioPor.get(c.id);
-    if (!salario) {
+    const salarioRow = salarioPor.get(c.id);
+    if (!salarioRow) {
+      pulados_sem_salario.push(c.nome);
+      continue;
+    }
+    // Fluxo PJ: híbrido usa parte Recibo (RPA); pj/mei usam o valor total.
+    const salario =
+      c.tipo_contratacao === "clt_recibo"
+        ? salarioRow.valor_recibo
+        : salarioRow.valor;
+    if (salario == null) {
       pulados_sem_salario.push(c.nome);
       continue;
     }
@@ -268,7 +293,9 @@ export async function gerarFolha(input: {
     };
   }
 
-  // Passo 5: insere folhas_pagamento em bulk
+  // Passo 5: insere folhas_pagamento em bulk, marcadas como origem='california'
+  // (gerado pelo fluxo PJ). A unique (tenant, ano, mes, colaborador, origem) deixa
+  // conviver com uma linha 'contabilidade' do mesmo híbrido.
   const linhasFolha = paraCriar.map((p) => ({
     tenant_id: tenantId,
     colaborador_id: p.colab.id,
@@ -276,6 +303,7 @@ export async function gerarFolha(input: {
     competencia_mes: mes,
     salario_base: p.salario,
     status: "rascunho" as const,
+    origem: "california" as const,
     created_by: session.profile.id,
   }));
 
@@ -345,6 +373,8 @@ export async function gerarFolha(input: {
     metadata: {
       ano,
       mes,
+      origem: "california",
+      tipos_incluidos: ["pj", "mei", "clt_recibo"],
       criadas: paraCriar.length,
       ja_existiam: jaExistiam,
       pulados_sem_salario,
