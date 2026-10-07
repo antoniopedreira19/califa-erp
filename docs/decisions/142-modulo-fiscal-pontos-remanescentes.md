@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-03
 **Decidido por:** Tiago ("Faça os pontos remanescentes", 03/10/2026)
-**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração e a nota do Simples saem do cadastro rápido, o regime normal vira "Lucro Real ou Presumido", o financeiro ganha Fornecedores, Clientes e Veículos, e a aprovação da PP avisa que retenção só vale para serviço)
+**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração e a nota do Simples saem do cadastro rápido, o regime normal vira "Lucro Real ou Presumido", o financeiro ganha Fornecedores, Clientes e Veículos, e na aprovação da PP a retenção começa desligada e avisa que só vale para serviço)
 **Migration:** `20261002100800_fiscal_fornecedor_consulta_e_declaracao.sql`
 (aditiva: duas colunas anuláveis em `fornecedores` e o bucket privado
 `fornecedores`)
@@ -165,9 +165,25 @@ contas e Cartões. Clientes e Veículos: ver abaixo.
 que a situação existe, e perguntou se era o Simples. É o contrário. No
 Simples e no MEI a chave de retenção já fica travada desligada (IN 459), e
 o financeiro não consegue reter. O caso é o fornecedor de **Lucro Real ou
-Presumido** e o **sem regime informado**: neles a retenção vem ligada por
-padrão (PIS 0,65%, COFINS 3%, CSLL 1%, IRRF 1,5%). Como o aviso só aparece
-com a chave ligada, ele fica restrito a esses regimes sem regra extra.
+Presumido** e o **sem regime informado**: só neles a chave liga. Como o
+aviso só aparece com a chave ligada, ele fica restrito a esses regimes sem
+regra extra.
+
+⚠️ **A retenção deixou de vir ligada (07/10/2026).** Nesses regimes ela vinha
+ligada por padrão, com PIS 0,65%, COFINS 3%, CSLL 1% e IRRF 1,5%. O Tiago
+mudou: ela começa desligada, e o financeiro liga e preenche caso a caso,
+olhando a nota. Ao ligar, as alíquotas abrem em branco, com o "Repetir as
+da PP anterior (mesmo fornecedor)" à mão. A exceção é a da decisão 152: se
+outra PP já registrou a mesma NF com ISS retido, a chave nasce ligada só com
+aquele ISS, que não se edita nem desliga. Não havia PP pendente nesse caso
+para conferir na tela; ficou conferido pelo código. A regra está na decisão
+139.
+
+Conferido na PP-00132 (Lucro Real ou Presumido):
+- o pop-up abre com a chave desligada e sem aviso;
+- ligada, aparecem o aviso, "Nenhum imposto informado", a grade de
+  alíquotas em branco e o "Repetir as da PP-00129";
+- o pop-up foi fechado sem aprovar.
 
 **Opções que o Tiago não escolheu:** marcar no pop-up se a nota é de
 serviço ou de mercadoria; ou gravar o tipo da nota no anexo da PP, que
