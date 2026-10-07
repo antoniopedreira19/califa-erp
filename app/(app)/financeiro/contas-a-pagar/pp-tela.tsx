@@ -60,7 +60,7 @@ import { ppStatusLabel, situacaoDaVerba, type PPStatus } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
-import { nfInicial, type NfEmConferencia } from "@/lib/fiscal/nf-da-pp";
+import { nfInicial, type NfEmConferencia, type RegistroDaNota } from "@/lib/fiscal/nf-da-pp";
 import type { PPRow } from "./pedidos-compra-list";
 import { PPDossie, type AbaDossie } from "./pp-dossie";
 import { AprovarPPDialog } from "./aprovar-pp-dialog";
@@ -151,14 +151,16 @@ export function PPTela({
   const [askReprovarPP, setAskReprovarPP] = React.useState(false);
   const [motivoPP, setMotivoPP] = React.useState("");
   const [pending, startTransition] = React.useTransition();
-  // Módulo fiscal: a NF do fornecedor em conferência. Mora aqui, e não no
-  // dossiê nem no pop-up, porque os dois a usam: o dossiê edita, ao lado
-  // da nota; o pop-up tira dela a base das retenções e o mês do crédito.
-  // Enquanto ninguém editou vale o que está na PP (o registrado, ou o
-  // número do anexo); o `ppId` impede que a NF de uma PP apareça na outra.
-  const [nfEditada, setNfEditada] = React.useState<
-    (NfEmConferencia & { ppId: string }) | null
-  >(null);
+  // Módulo fiscal: as NFs do fornecedor em conferência, uma por anexo do
+  // tipo NF (decisão 152). Moram aqui, e não no dossiê nem no pop-up,
+  // porque os dois as usam: o dossiê edita, ao lado da nota; o pop-up tira
+  // delas a base das retenções e o mês do crédito. Enquanto ninguém editou
+  // vale o que está na PP (a nota do cadastro, ou o que a produção
+  // informou); o `ppId` impede que as notas de uma PP apareçam na outra.
+  const [nfsEditadas, setNfsEditadas] = React.useState<{
+    ppId: string;
+    porAnexo: Record<string, NfEmConferencia>;
+  } | null>(null);
 
   const ppId = pp?.id ?? null;
   // Na verba com prestação, o painel do meio mostra os documentos da
@@ -184,7 +186,7 @@ export function PPTela({
   // DatePicker da emissão só lê o valor quando monta — zerado depois de
   // abrir, ele ficaria com a data da abertura anterior.
   React.useEffect(() => {
-    if (!open) setNfEditada(null);
+    if (!open) setNfsEditadas(null);
   }, [open]);
 
   React.useEffect(() => {
@@ -246,16 +248,33 @@ export function PPTela({
     pp.verba_producao && pp.prestacao?.status === "em_avaliacao";
   const anexoEhImagem =
     anexo != null && /\.(png|jpe?g|webp|gif)$/i.test(anexo.arquivo_nome_original);
-  // Módulo fiscal: a NF desta PP como está na conferência (null = a PP não
-  // tem NF anexada, ou é verba de produção).
-  const nfDaTela: NfEmConferencia | null = !pp.nota_fiscal
-    ? null
-    : nfEditada && nfEditada.ppId === pp.id
-      ? nfEditada
-      : nfInicial(
-          pp.nota_fiscal,
-          fiscal.tomadorPadraoPorEmpresa[pp.empresa_id] ?? fiscal.tomadorPadraoGeral,
-        );
+  // Módulo fiscal: as NFs desta PP como estão na conferência (null = a PP
+  // não tem NF anexada, ou é verba de produção).
+  const tomadorPadrao =
+    fiscal.tomadorPadraoPorEmpresa[pp.empresa_id] ?? fiscal.tomadorPadraoGeral;
+  const editadasDestaPP = nfsEditadas?.ppId === pp.id ? nfsEditadas.porAnexo : {};
+  const nfsDaTela: NfEmConferencia[] | null = pp.notas_fiscais
+    ? pp.notas_fiscais.notas.map(
+        (n) => editadasDestaPP[n.anexo_id] ?? nfInicial(n, tomadorPadrao),
+      )
+    : null;
+  // A nota que outra PP já registrou: o crédito e o ISS retido dela já
+  // estão na Apuração. A registrada por esta mesma PP (aprovação que falhou
+  // depois de gravar as notas) volta a ser decidida aqui.
+  const registroDeOutraPP: Record<string, RegistroDaNota | null> = Object.fromEntries(
+    (pp.notas_fiscais?.notas ?? []).map((n) => [
+      n.anexo_id,
+      n.registrada && n.registrada.na_pp !== pp.codigo ? n.registrada : null,
+    ]),
+  );
+  function editarNota(nf: NfEmConferencia) {
+    if (!pp) return;
+    const id = pp.id;
+    setNfsEditadas((antes) => ({
+      ppId: id,
+      porAnexo: { ...(antes?.ppId === id ? antes.porAnexo : {}), [nf.anexo_id]: nf },
+    }));
+  }
 
   function handleAprovada(mensagem: string) {
     setAprovarAberto(false);
@@ -498,8 +517,9 @@ export function PPTela({
                     anexoAtivo={anexoAtivo}
                     onAnexo={setAnexoAtivo}
                     onErro={setErro}
-                    nf={nfDaTela}
-                    onNf={(x) => setNfEditada({ ...x, ppId: pp.id })}
+                    notas={pp.notas_fiscais}
+                    nfs={nfsDaTela}
+                    onNf={editarNota}
                     estabelecimentos={fiscal.cadastro.estabelecimentos}
                   />
                 </div>
@@ -616,7 +636,8 @@ export function PPTela({
           // Módulo fiscal: o que as retenções e o crédito precisam.
           fornecedorNome: pp.fornecedor_nome,
           regimeDoFornecedor: pp.regime_do_fornecedor?.regime ?? null,
-          nf: nfDaTela,
+          nfs: nfsDaTela,
+          registroDeOutraPP,
           ultimaRetencao: fiscal.ultimasRetencoes[pp.fornecedor_id] ?? null,
         }}
         cadastro={fiscal.cadastro}
@@ -639,8 +660,8 @@ export function PPTela({
         description={
           <div className="space-y-2">
             <p>
-              A PP volta pro gerente do job, que vê o motivo, corrige e reenvia para
-              avaliação. O item continua reservado — não vira uma PP nova.
+              A produção vê o motivo e refaz a PP: esta é cancelada e volta como
+              PP a emitir, para gerar uma PP nova, com outro código.
             </p>
             <div>
               <label htmlFor="pp-tela-motivo" className="text-xs font-medium">
@@ -761,7 +782,7 @@ export function PPTela({
           <div className="space-y-3">
             <p>
               A PP sai de Títulos a Pagar e volta para a produção, que vê o
-              motivo e corrige e reenvia, ou cancela. As datas escolhidas na
+              motivo e refaz a PP (com outro código) ou só a cancela. As datas escolhidas na
               aprovação são desfeitas; o vencimento negociado com o fornecedor
               fica.
             </p>

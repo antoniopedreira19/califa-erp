@@ -150,28 +150,40 @@ function pjDoEstab(cad: CadastroMinimo, estab: EstabDoBanco): PJDoFiscal {
 
 interface PPDoBanco {
   status: string;
-  nf_numero: string | null;
-  nf_data_emissao: string | null;
-  nf_valor: number | string | null;
-  nf_tomador_estabelecimento_id: string | null;
-  nf_registrada_em: string | null;
   job_id: string | null;
+  anexos: Array<{
+    created_at: string;
+    nota: {
+      numero: string;
+      data_emissao: string;
+      tomador_estabelecimento_id: string;
+      registrada_em: string | null;
+    } | null;
+  }> | null;
 }
 
+/** Decisão 152: as notas da PP vêm do cadastro, pelos anexos. */
 const SELECT_PP =
-  "pp:pedidos_compra!pedido_compra_id(status, nf_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_registrada_em, job_id)";
+  "pp:pedidos_compra!pedido_compra_id(status, job_id, anexos:pedidos_compra_anexos(created_at, nota:notas_fiscais_fornecedor(numero, data_emissao, tomador_estabelecimento_id, registrada_em)))";
 
-/** O mesmo filtro de `carregarFatosFiscais`: o que o motor conta como NF de fornecedor. */
-function entraNaApuracao(pp: PPDoBanco | null): pp is PPDoBanco & { nf_data_emissao: string; nf_tomador_estabelecimento_id: string } {
-  return Boolean(
-    pp &&
-      (pp.status === "aprovada" || pp.status === "pago") &&
-      pp.nf_registrada_em &&
-      pp.nf_data_emissao &&
-      pp.nf_valor !== null &&
-      pp.nf_tomador_estabelecimento_id &&
-      pp.job_id,
-  );
+/**
+ * O mesmo filtro de `carregarFatosFiscais`: a PP aprovada ou paga com nota
+ * registrada. Os pagamentos dela vão na primeira nota (na ordem dos anexos),
+ * que é de onde saem o CNPJ tomador e a emissão; o número junta todas.
+ */
+function notaDaApuracao(pp: PPDoBanco | null): { numero: string; emissao: string; tomador: string } | null {
+  if (!pp || (pp.status !== "aprovada" && pp.status !== "pago") || !pp.job_id) return null;
+  const notas = (pp.anexos ?? [])
+    .filter((a) => a.nota?.registrada_em)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((a) => a.nota!);
+  if (notas.length === 0) return null;
+  return {
+    numero: notas.map((n) => n.numero).join(", "),
+    emissao: notas[0].data_emissao,
+    tomador: notas[0].tomador_estabelecimento_id,
+  };
 }
 
 /**
@@ -199,15 +211,15 @@ export async function lerFiscalDaParcela(parcelaId: unknown): Promise<Resultado<
     if (parcela.error) console.error("[no-fiscal.parcela]", parcela.error.message);
     return { ok: false, message: ERRO_DA_LEITURA };
   }
-  const pp = parcela.data?.pp ?? null;
-  if (!entraNaApuracao(pp)) return { ok: true, fiscal: null };
-  const tomador = cad.estabelecimentos.find((e) => e.id === pp.nf_tomador_estabelecimento_id);
+  const nota = notaDaApuracao(parcela.data?.pp ?? null);
+  if (!nota) return { ok: true, fiscal: null };
+  const tomador = cad.estabelecimentos.find((e) => e.id === nota.tomador);
   if (!tomador) return { ok: true, fiscal: null };
 
   return {
     ok: true,
     fiscal: {
-      nf: { numero: pp.nf_numero ?? "—", emissao: pp.nf_data_emissao },
+      nf: { numero: nota.numero || "—", emissao: nota.emissao },
       tomador: {
         nome: tomador.nome,
         municipio: tomador.municipio,
@@ -396,8 +408,9 @@ export async function lerFiscalDoLote(entrada: unknown): Promise<Resultado<Fisca
   const estab = (id: string | null) => (id ? cad.estabelecimentos.find((e) => e.id === id) : undefined);
   const porParcela: Record<string, PJDoFiscal> = {};
   for (const r of resParcelas.flatMap((x) => (x.data ?? []) as unknown as Array<{ id: string; pp: PPDoBanco | null }>)) {
-    if (!entraNaApuracao(r.pp)) continue;
-    const tomador = estab(r.pp.nf_tomador_estabelecimento_id);
+    const nota = notaDaApuracao(r.pp);
+    if (!nota) continue;
+    const tomador = estab(nota.tomador);
     if (tomador) porParcela[r.id] = pjDoEstab(cad, tomador);
   }
   const porTitulo: Record<string, PJDoFiscal> = {};

@@ -106,6 +106,9 @@ export default async function JobDetailPage({
     contatosCobranca,
     ppsDoJob,
     ppsPorItemId,
+    aEmitirPorItemId,
+    tomadoresDaNf,
+    tomadorPorEmpresa,
     fornecedores,
     fornecedoresPorId,
     empresas,
@@ -423,6 +426,9 @@ export default async function JobDetailPage({
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             aberturaEmRevisao={job.abertura_em_revisao}
             ppsPorItemId={ppsPorItemId}
+            aEmitirPorItemId={aEmitirPorItemId}
+            tomadoresDaNf={tomadoresDaNf}
+            tomadorPorEmpresa={tomadorPorEmpresa}
             fornecedores={fornecedores}
             empresas={empresas}
             responsaveis={responsaveis}
@@ -434,9 +440,6 @@ export default async function JobDetailPage({
           <JobPPsSection
             pps={ppsDoJob}
             fornecedoresPorId={fornecedoresPorId}
-            fornecedores={fornecedores}
-            empresas={empresas}
-            responsaveis={responsaveis}
             editable={podeGerarPP}
             podeEnviar={podeEnviarPP}
             papelEnviaPP={papelEnviaPP}

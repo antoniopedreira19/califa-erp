@@ -1,19 +1,28 @@
 "use client";
 
+/**
+ * O formulário da PP (decisão 153, 07/10/2026): ele salva a PP A EMITIR.
+ *
+ * O caminho passou a ser PP a emitir → PP gerada → enviada. O formulário
+ * é inteiro e editável, e o rodapé tem "Salvar" (guarda a PP a emitir para
+ * depois) e "Gerar PP" (salva, fecha e o painel do item abre a revisão
+ * antes de gerar). A PP gerada não se edita mais; o envio ao financeiro,
+ * com os documentos, fica no painel. Job aguardando abertura ou devolvido
+ * pelo financeiro só salva.
+ *
+ * Os anexos (decisão 152): área de arrastar, cartões brancos com o mais
+ * novo em cima, tipo obrigatório que nasce vazio e, na NF, os dados dela
+ * logo abaixo do arquivo. Aqui são opcionais; o envio cobra todos.
+ */
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   X,
-  Upload,
-  FileText,
-  Image as ImageIcon,
-  Trash2,
   AlertTriangle,
   Pencil,
   Plus,
-  Send,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
@@ -28,20 +37,14 @@ import { Input } from "@/components/ui/input";
 import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import {
-  PP_ANEXO_MIMETYPES_ACEITOS,
-  PP_ANEXO_TAMANHO_MAX_BYTES,
-  PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   PP_URGENTE_JUSTIFICATIVA_MIN,
-  type PPAnexoMimetype,
-  type DocumentoDoAnexo,
   type Fornecedor,
-  type PedidoCompraNaLista,
+  type PPAEmitir,
 } from "@/lib/types";
 import {
   valorDaPPPorUnidade,
   parcelasFecham,
   passaDoPlanejado,
-  faltaParaFecharOOrcado,
 } from "@/lib/calculos/pps-item";
 import {
   ParcelasDaPPField,
@@ -61,12 +64,24 @@ import {
 import { carregarFornecedor } from "@/app/(app)/fornecedores/actions";
 import {
   reservarPedidoCompra,
-  finalizarPedidoCompra,
-  prefixoAnexosPedidoCompra,
-  editarPedidoCompraGerada,
-  enviarPedidoCompraAoFinanceiro,
+  salvarPPAEmitir,
+  prefixoAnexosPPAEmitir,
 } from "./actions-pp";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  ListaDeAnexos,
+  NfDoAnexo,
+  ResumoDasNfs,
+  ZonaDeAnexos,
+  anexoEmEdicao,
+  anexoParaEnvio,
+  itensDaLista,
+  notaExistenteDe,
+  parteDaNf,
+  useAnexosEmEdicao,
+  useNotasExistentes,
+  type TomadorDaNf,
+} from "./anexos-da-pp";
+import { textoAguardaAbertura } from "./pp-a-emitir-ui";
 import {
   AvisoPrazoForaDaJanela,
   UrgenciaPPField,
@@ -120,57 +135,24 @@ interface Props {
    *  descontado antes. Sem teto: passar do planejado não impede gerar —
    *  muda quem pode enviar. */
   emPPsEmitidas: number;
-  /** PP gerada sendo editada. Null = gerar uma nova (02/09/2026). */
-  ppEditando: PedidoCompraNaLista | null;
-  /** O item já está marcado como "todas as PPs geradas"? Só a edição
-   *  começa com a pergunta respondida — a PP nova sempre pergunta do
-   *  zero, porque gerar PP num item marcado exige reabri-lo antes
-   *  (decisão 052). */
+  /** PP a emitir sendo editada. Null = uma nova (decisão 153: a PP
+   *  gerada não se edita mais). */
+  aEmitirEditando: PPAEmitir | null;
+  /** O item já está marcado como "todas as PPs geradas"? */
   itemConcluido: boolean;
-  /** Por que o envio ao financeiro está fechado neste job — o mesmo texto
-   *  do painel do item (decisões 040 e 056). Null = liberado, e o rodapé
-   *  oferece "Gerar e enviar ao financeiro" (decisão 077). */
-  envioBloqueadoPor: string | null;
-  /** O orçado que as PPs do item precisam fechar antes de ir ao
-   *  financeiro — só no AR fora do save (decisão 062). Null = o item não
-   *  tem essa trava. */
-  orcadoAFechar: number | null;
-  /** `aviso` chega quando a PP foi salva mas o envio pedido junto não
-   *  saiu: ela segue gerada, e a frase diz por quê. */
-  onSuccess?: (
-    codigo: string,
-    modo: "gerada" | "editada" | "enviada",
-    aviso?: string,
-  ) => void;
+  /** O status do job: aguardando abertura e devolvido só salvam. */
+  statusDoJob: string;
+  /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
+  tomadores: TomadorDaNf[];
+  tomadorPorEmpresa: Record<string, string>;
+  /** "salva": guardou a PP a emitir. "revisar": guardou e o painel abre a
+   *  revisão antes de gerar (o "Gerar PP"). */
+  onSuccess?: (modo: "salva" | "revisar", id: string) => void;
 }
-
-interface AnexoLocal {
-  anexo_id: string;
-  file: File;
-  path: string;
-  status: "selecionado" | "uploading" | "ok" | "erro" | "rejeitado";
-  mensagem?: string;
-  /** Que documento este arquivo é. Vai junto no insert do anexo e
-   *  alimenta a coluna Documento da Conciliação (28/08/2026). */
-  documento: DocumentoDoAnexo;
-}
-
-import { DocumentoDoAnexoField } from "@/components/financeiro/documento-do-anexo-field";
-
-const BUCKET = "pedidos-compra";
 
 /** O teto do servidor (decisão 077, pergunta 7a): 1 a 6 nos botões e
  *  "Mais de 6…" até 24. */
 const MAX_PARCELAS = 24;
-
-function sanitizeName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
-}
-
-function iconePorMime(mime: string): typeof FileText {
-  if (mime.startsWith("image/")) return ImageIcon;
-  return FileText;
-}
 
 /** A primeira janela de pagamento depois de hoje (decisão 077). Era hoje
  *  + 15 dias, uma data que quase nunca caía numa janela. */
@@ -224,14 +206,14 @@ export function GerarPPDrawer({
   dmPlanejado,
   emPPsEmitidas,
   itemConcluido,
-  ppEditando,
-  envioBloqueadoPor,
-  orcadoAFechar,
+  aEmitirEditando,
+  statusDoJob,
+  tomadores,
+  tomadorPorEmpresa,
   onSuccess,
 }: Props) {
-  const editando = ppEditando !== null;
+  const editando = aEmitirEditando !== null;
   const router = useRouter();
-  const supabase = React.useMemo(() => createClient(), []);
   const [pending, startTransition] = React.useTransition();
 
   const [ppId, setPpId] = React.useState<string | null>(null);
@@ -369,14 +351,27 @@ export function GerarPPDrawer({
   const [urgente, setUrgente] = React.useState(false);
   const [justificativa, setJustificativa] = React.useState("");
   const [faltaJustificativa, setFaltaJustificativa] = React.useState(false);
-  /** "Gerar e enviar" acima do planejado: o "tem certeza?" vem antes de
-   *  gravar, com a mesma conta que o painel do item faz. */
-  const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false);
-
-  const [anexos, setAnexos] = React.useState<AnexoLocal[]>([]);
-  /** Anexos já gravados da PP em edição que o GP marcou para remover.
-   *  Só somem de fato no salvar. */
-  const [removidos, setRemovidos] = React.useState<Set<string>>(new Set());
+  // Decisão 152: os anexos com tipo, número e, na NF, os dados dela. O
+  // CNPJ tomador sugerido é o da empresa emissora.
+  const tomadorPadrao = tomadorPorEmpresa[empresaId] ?? null;
+  const {
+    anexos,
+    setAnexos,
+    subir,
+    remover,
+    mudar,
+    mudarNf,
+    aviso: avisoDosAnexos,
+    setAviso: setAvisoDosAnexos,
+  } = useAnexosEmEdicao(uploadPrefix, tomadorPadrao);
+  const existentes = useNotasExistentes(
+    verbaProducao ? null : fornecedorId || null,
+    anexos.filter((a) => a.tipo === "nota_fiscal").map((a) => a.nf.numero),
+    ppId,
+  );
+  /** A PP rejeitada que esta PP a emitir refaz, com o motivo (decisão 153). */
+  const refaz = aEmitirEditando?.refaz ?? null;
+  const travaDaAbertura = textoAguardaAbertura(statusDoJob);
   const abortedRef = React.useRef(false);
   // Lock sincrono contra double-submit: `pending` do useTransition ativa
   // 1 render depois, então dois cliques rápidos passam pelo disabled=pending.
@@ -393,7 +388,7 @@ export function GerarPPDrawer({
   // `router.refresh()`, e o formulário zerava no meio do caminho
   // (04/09/2026).
   const chaveSessao = open
-    ? `${itemRealizadoId ?? ""}|${ppEditando?.id ?? "nova"}`
+    ? `${itemRealizadoId ?? ""}|${aEmitirEditando?.id ?? "nova"}`
     : null;
   const sessaoRef = React.useRef<string | null>(null);
   React.useEffect(() => {
@@ -409,47 +404,53 @@ export function GerarPPDrawer({
     setFornecedorPendenteId(null);
     setFaltaResposta(false);
     setFaltaPagamento(false);
-    // Editar uma PP gerada não pergunta do zero: a resposta que vale é a
-    // situação atual do item, e o GP muda se quiser.
-    setUltimaPP(ppEditando ? itemConcluido : null);
+    // A PP a emitir volta com a resposta que foi salva; a nova pergunta do
+    // zero (a que refaz uma rejeitada também: o item pode ter mudado).
+    setUltimaPP(aEmitirEditando?.ultima_pp_do_item ?? null);
     setUploadPrefix(null);
     setAnexos([]);
-    setRemovidos(new Set());
+    setAvisoDosAnexos(null);
     setDrawerKey((k) => k + 1);
     setFaltaJustificativa(false);
-    setConfirmandoEnvio(false);
 
-    if (ppEditando) {
-      // Edição abre COM o que a PP já tem — o GP está consertando um
-      // rascunho que existe, não montando uma fatia nova (mesma exceção
-      // da correção de rejeitada, decisão 035 §4).
-      setVerbaProducao(ppEditando.verba_producao);
-      setFornecedorId(ppEditando.fornecedor_id ?? "");
-      setPagamento(estadoDoPagamento(ppEditando.pagamento_fora_do_cadastro));
-      setResponsavelId(ppEditando.responsavel_verba_id ?? "");
-      setEmpresaId(ppEditando.empresa_id);
-      setPrazoPagamento(ppEditando.prazo_pagamento.slice(0, 10));
-      setPrazoOriginal(ppEditando.prazo_pagamento.slice(0, 10));
-      setUrgente(ppEditando.urgente === true);
-      setJustificativa(ppEditando.urgente_justificativa ?? "");
-      const parcelasGravadas = Math.max((ppEditando.parcelas ?? []).length, 1);
-      setMaisDeSeis(parcelasGravadas > 6);
-      setParcelasTexto(String(Math.max(parcelasGravadas, 7)));
-      setServico(ppEditando.servico);
-      setUnitario(formatUnitario(ppEditando.valor_unitario));
-      setQuantidade(formatFator(ppEditando.quantidade));
-      setDm(formatFator(ppEditando.dias_meses));
-      setEspecificacoes(ppEditando.especificacoes ?? "");
-      const parcelasDaPP = ppEditando.parcelas ?? [];
-      // O % de cada parcela se refaz do R$ gravado (decisão 138).
+    if (aEmitirEditando) {
+      // A PP a emitir abre inteira, como foi salva (decisão 153).
+      const d = aEmitirEditando.dados;
+      setVerbaProducao(d.verba_producao);
+      setFornecedorId(d.fornecedor_id ?? "");
+      setPagamento(
+        estadoDoPagamento(
+          d.pagamento_fora_do_cadastro ? { ...d.pagamento_fora_do_cadastro, banco_nome: null } : null,
+        ),
+      );
+      setResponsavelId(d.responsavel_verba_id ?? "");
+      setEmpresaId(d.empresa_id);
+      setPrazoPagamento(d.prazo_pagamento.slice(0, 10));
+      setPrazoOriginal(d.prazo_pagamento.slice(0, 10));
+      setUrgente(d.urgente === true);
+      setJustificativa(d.urgente_justificativa ?? "");
+      const parcelasSalvas = Math.max(d.parcelas.length, 1);
+      setMaisDeSeis(parcelasSalvas > 6);
+      setParcelasTexto(String(Math.max(parcelasSalvas, 7)));
+      setServico(d.servico);
+      setUnitario(formatUnitario(Number(d.valor_unitario)));
+      setQuantidade(formatFator(Number(d.quantidade)));
+      setDm(formatFator(Number(d.dias_meses)));
+      setEspecificacoes(d.especificacoes ?? "");
+      // O % de cada parcela se refaz do R$ salvo (decisão 138).
       setParcelas(
-        parcelasDaPP.length > 1
-          ? parcelasDaPPGravada(parcelasDaPP, Number(ppEditando.valor ?? 0))
+        d.parcelas.length > 1
+          ? parcelasDaPPGravada(d.parcelas, aEmitirEditando.valor)
           : [],
       );
-      setPpId(ppEditando.id);
+      setAnexos(
+        aEmitirEditando.anexos.map((a) =>
+          anexoEmEdicao(a, tomadorPorEmpresa[d.empresa_id] ?? null),
+        ),
+      );
+      setPpId(aEmitirEditando.id);
       (async () => {
-        const res = await prefixoAnexosPedidoCompra(ppEditando.id);
+        const res = await prefixoAnexosPPAEmitir(aEmitirEditando.id);
         if (!res.ok) {
           setErro(res.message);
           return;
@@ -488,7 +489,7 @@ export function GerarPPDrawer({
       setUploadPrefix(res.upload_prefix);
     })();
     // A chave resume as deps que importam; as demais (defaultEmpresaId,
-    // ppEditando inteiro) só seriam relidas numa sessão nova.
+    // a PP a emitir inteira) só seriam relidas numa sessão nova.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, itemRealizadoId, chaveSessao]);
 
@@ -504,111 +505,6 @@ export function GerarPPDrawer({
   //   };
   // }, [ppId, jobId]);
 
-  async function onFileSelect(files: FileList | null) {
-    if (!files || files.length === 0) return;
-
-    if (!uploadPrefix) {
-      setErro(
-        "Aguarde: a preparação da PP ainda não terminou. Tente novamente em 2 segundos.",
-      );
-      return;
-    }
-
-    const somaAtual =
-      anexos.reduce((s, a) => s + a.file.size, 0) +
-      anexosMantidos.reduce((s, a) => s + a.arquivo_tamanho_bytes, 0);
-    let somaAcumulada = somaAtual;
-    // Cada arquivo vira uma linha imediatamente — mesmo rejeitados.
-    // User sempre vê feedback do que aconteceu com cada arquivo escolhido.
-    const novos: AnexoLocal[] = [];
-
-    for (const file of Array.from(files)) {
-      const anexo_id = crypto.randomUUID();
-      const base = {
-        anexo_id,
-        file,
-        path: "",
-        documento: { tipo: null, numero: null } as DocumentoDoAnexo,
-      };
-
-      if (!PP_ANEXO_MIMETYPES_ACEITOS.includes(file.type as PPAnexoMimetype)) {
-        novos.push({
-          ...base,
-          status: "rejeitado",
-          mensagem: `Tipo não aceito (${file.type || "sem mimetype"}).`,
-        });
-        continue;
-      }
-      if (file.size > PP_ANEXO_TAMANHO_MAX_BYTES) {
-        novos.push({
-          ...base,
-          status: "rejeitado",
-          mensagem: `Excede 8 MB (${(file.size / 1024 / 1024).toFixed(1)} MB).`,
-        });
-        continue;
-      }
-      if (somaAcumulada + file.size > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
-        novos.push({
-          ...base,
-          status: "rejeitado",
-          mensagem: "Total de anexos excederia 25 MB.",
-        });
-        continue;
-      }
-      somaAcumulada += file.size;
-      const path = `${uploadPrefix}${anexo_id}-${sanitizeName(file.name)}`;
-      novos.push({ ...base, path, status: "selecionado" });
-    }
-
-    // Mostra TODOS (aceitos + rejeitados) na lista imediatamente
-    setAnexos((prev) => [...prev, ...novos]);
-
-    const aceitos = novos.filter((n) => n.status === "selecionado");
-    if (aceitos.length === 0) return;
-
-    // Marca aceitos como "uploading" e sobe
-    setAnexos((prev) =>
-      prev.map((p) =>
-        aceitos.some((a) => a.anexo_id === p.anexo_id)
-          ? { ...p, status: "uploading" }
-          : p,
-      ),
-    );
-
-    await Promise.all(
-      aceitos.map(async (a) => {
-        const { error } = await supabase.storage
-          .from(BUCKET)
-          .upload(a.path, a.file, {
-            contentType: a.file.type,
-            upsert: false,
-          });
-        setAnexos((prev) =>
-          prev.map((p) =>
-            p.anexo_id === a.anexo_id
-              ? {
-                  ...p,
-                  status: error ? "erro" : "ok",
-                  mensagem: error?.message,
-                }
-              : p,
-          ),
-        );
-      }),
-    );
-  }
-
-  async function removerAnexo(anexo_id: string) {
-    const alvo = anexos.find((a) => a.anexo_id === anexo_id);
-    if (!alvo) return;
-    setAnexos((prev) => prev.filter((p) => p.anexo_id !== anexo_id));
-    // Só remove do bucket se o upload chegou lá — "selecionado" e "rejeitado"
-    // ainda não subiram nada; "uploading" tá em voo e pode não ter finalizado.
-    if (alvo.status === "ok") {
-      await supabase.storage.from(BUCKET).remove([alvo.path]);
-    }
-  }
-
   // ---- Valor da PP: R$ Unit. × QT × D/M ----
   // A PP é montada como a linha da planilha. Os três fatores são do GP —
   // nenhum é derivado do planejado, então o unitário pode ser o desconto
@@ -619,23 +515,10 @@ export function GerarPPDrawer({
   const qtdNum = parseNumeroLocal(quantidade);
   const dmNum = parseNumeroLocal(dm);
   const valorPP = valorDaPPPorUnidade(unitNum, qtdNum, dmNum);
-  // Prévia de "Em PPs emitidas" com esta PP.
-  //
-  // A PP em edição ESTÁ na base desde 11/09/2026 (decisão 074) — a gerada
-  // conta no item —, então o valor gravado dela sai antes de o valor novo
-  // entrar. Sem isso, abrir uma PP de R$ 3.500 e salvar sem mexer em nada
-  // mostraria R$ 7.000. É a mesma conta que a action faz com `excetoPPId`.
-  const jaNaBase =
-    ppEditando && ppEditando.status !== "cancelada"
-      ? Number(ppEditando.valor ?? 0)
-      : 0;
-  const previaEmPPs =
-    Math.round((emPPsEmitidas - jaNaBase + valorPP) * 100) / 100;
+  // Prévia de "Em PPs emitidas" com esta PP. A PP a emitir não está na
+  // base (decisão 153): ela só conta no item quando for gerada.
+  const previaEmPPs = Math.round((emPPsEmitidas + valorPP) * 100) / 100;
   const passaPlanejado = valorPP > 0 && passaDoPlanejado(previaEmPPs, valorPlanejado);
-  /** Anexos já gravados que continuam (modo edição). */
-  const anexosMantidos = (ppEditando?.anexos ?? []).filter(
-    (a) => !removidos.has(a.id),
-  );
 
   const numeroDeParcelas = Math.max(parcelas.length, 1);
 
@@ -701,40 +584,18 @@ export function GerarPPDrawer({
 
   const hoje = hojeEmSaoPauloIso();
 
-  /** Por que o "Gerar e enviar" não está liberado — as travas do envio
-   *  que dá para saber daqui, na ordem do servidor: job, NF e o AR que não
-   *  fecha o orçado. O servidor checa tudo de novo; isto só evita oferecer
-   *  um botão que ia falhar (o AR escapou no primeiro teste, 14/09/2026).
-   *  Null = liberado. */
-  const semNFParaEnviar =
-    !verbaProducao &&
-    anexos.filter((a) => a.status === "ok").length + anexosMantidos.length === 0;
-  const faltaParaFecharAR =
-    orcadoAFechar !== null ? faltaParaFecharOOrcado(previaEmPPs, orcadoAFechar) : 0;
-  const envioTravadoPor =
-    envioBloqueadoPor ??
-    (semNFParaEnviar
-      ? "Anexe a NF do fornecedor para gerar e enviar de uma vez."
-      : faltaParaFecharAR > 0
-        ? `Em custo A · Repasse as PPs precisam fechar o orçado do item antes de ir ao financeiro — faltam ${formatCurrency(faltaParaFecharAR, "BRL")}. Gere as que faltam e envie todas juntas.`
-        : null);
-
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // Dois botões de envio no mesmo formulário: quem diz qual foi é o
-    // `submitter`. Enter num campo usa o primeiro, "Gerar PP" — o seguro.
+    // Dois botões no mesmo formulário: quem diz qual foi é o `submitter`.
+    // Enter num campo usa o primeiro, "Salvar" — o seguro.
     const submitter = (e.nativeEvent as SubmitEvent).submitter;
-    const enviar = submitter?.getAttribute("data-acao") === "enviar";
-    if (enviar && envioTravadoPor) {
-      setErro(envioTravadoPor);
+    const gerar = submitter?.getAttribute("data-acao") === "gerar";
+    if (gerar && travaDaAbertura) {
+      setErro(travaDaAbertura);
       return;
     }
     if (!validar()) return;
-    if (enviar && passaPlanejado) {
-      setConfirmandoEnvio(true);
-      return;
-    }
-    salvar(enviar, false);
+    salvar(gerar);
   }
 
   /** As checagens do formulário. Devolve false e escreve o erro. */
@@ -840,10 +701,10 @@ export function GerarPPDrawer({
     return true;
   }
 
-  function salvar(enviar: boolean, confirmado: boolean) {
+  /** Salva a PP a emitir. Com `gerar`, o painel abre a revisão dela. */
+  function salvar(gerar: boolean) {
     if (!ppId || !itemRealizadoId || ultimaPP === null) return;
     const parcelasEnvio = parcelasParaEnvio();
-    const anexosOk = anexos.filter((a) => a.status === "ok");
 
     // Lock síncrono contra double-submit (pending do useTransition ativa 1
     // render depois — clique duplo rápido passa pelo disabled=pending).
@@ -878,67 +739,21 @@ export function GerarPPDrawer({
               responsavel_verba_id: null,
               pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
             };
-        const anexosParaAction = anexosOk.map((a) => ({
-          anexo_id: a.anexo_id,
-          path: a.path,
-          nome_original: a.file.name,
-          tamanho_bytes: a.file.size,
-          mimetype: a.file.type as PPAnexoMimetype,
-          // Número sem tipo não identifica nada — vai nulo junto.
-          documento_tipo: a.documento.tipo,
-          documento_numero: a.documento.tipo
-            ? (a.documento.numero?.trim() || null)
-            : null,
-        }));
-        const res = ppEditando
-          ? await editarPedidoCompraGerada(
-              ppId,
-              dados,
-              anexosParaAction,
-              Array.from(removidos),
-              ultimaPP,
-            )
-          : await finalizarPedidoCompra(
-              ppId,
-              dados,
-              anexosParaAction,
-              itemRealizadoId,
-              ultimaPP,
-            );
-
+        const res = await salvarPPAEmitir(
+          ppId,
+          itemRealizadoId,
+          dados,
+          // Verba de produção não leva anexo: as notas vão na prestação.
+          verbaProducao ? [] : anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+          ultimaPP,
+        );
         if (!res.ok) {
           setErro(res.message);
-          setConfirmandoEnvio(false);
           return;
         }
-
-        // Sucesso: fecha drawer + toast + refresh imediato
-        // router.refresh() PRECISA ficar fora do startTransition atual pra
-        // ser priorizado corretamente pelo React scheduler — dentro dele o
-        // re-render dos server components fica low-priority e demora.
+        // Sucesso: fecha e o efeito abaixo pede o refresh fora da transição.
         abortedRef.current = true;
-        const modo = ppEditando ? "editada" : "gerada";
-        if (!enviar) {
-          onSuccess?.(res.codigo, modo);
-          onOpenChange(false);
-          return;
-        }
-        // Gravou; agora o envio, pela MESMA action do painel do item — as
-        // travas do servidor valem aqui igual. Se ele não sair, a PP fica
-        // gerada, que é um estado válido, e a mensagem diz por quê.
-        const envio = await enviarPedidoCompraAoFinanceiro(ppId, confirmado);
-        if (envio.ok) {
-          onSuccess?.(res.codigo, "enviada");
-        } else {
-          onSuccess?.(
-            res.codigo,
-            modo,
-            envio.acimaDoPlanejado
-              ? "O envio passa do planejado do item e pede confirmação — envie pelo painel do item."
-              : `O envio não saiu: ${envio.message}`,
-          );
-        }
-        setConfirmandoEnvio(false);
+        onSuccess?.(gerar ? "revisar" : "salva", res.id);
         onOpenChange(false);
       } finally {
         submittingRef.current = false;
@@ -966,39 +781,28 @@ export function GerarPPDrawer({
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle>
             {editando
-              ? `Editar Pedido de Produção · ${ppEditando.codigo}`
-              : "Gerar Pedido de Produção"}
+              ? `Editar PP a emitir${refaz ? ` · refaz a ${refaz.codigo}` : ""}`
+              : "Novo Pedido de Produção"}
           </DialogTitle>
         </DialogHeader>
 
-        <ConfirmDialog
-          open={confirmandoEnvio}
-          onOpenChange={(aberto) => !aberto && setConfirmandoEnvio(false)}
-          title="Enviar acima do planejado?"
-          description={
-            <>
-              Com esta PP o item passa a ter{" "}
-              <strong className="font-mono text-foreground">
-                {formatCurrency(previaEmPPs, "BRL")}
-              </strong>{" "}
-              em PPs,{" "}
-              <strong className="font-mono text-foreground">
-                {formatCurrency(previaEmPPs - valorPlanejado, "BRL")}
-              </strong>{" "}
-              acima do planejado de {formatCurrency(valorPlanejado, "BRL")}. O
-              envio ao financeiro é registrado no seu nome.
-            </>
-          }
-          confirmLabel={editando ? "Sim, salvar e enviar" : "Sim, gerar e enviar"}
-          cancelLabel="Voltar"
-          pending={pending}
-          onConfirm={() => {
-            if (validar()) salvar(true, true);
-          }}
-        />
-
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
+            {/* Refazendo uma PP rejeitada: o motivo no topo (decisão 153). */}
+            {refaz && (
+              <div className="rounded-xl border border-california-red/30 bg-california-red/5 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-california-red">
+                  Refazendo a <span className="font-mono">{refaz.codigo}</span>, rejeitada pelo financeiro
+                </p>
+                <p className="mt-1 text-[12.5px] leading-snug text-foreground">
+                  {refaz.motivo_rejeicao || "— sem motivo informado"}
+                </p>
+                <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground">
+                  A <span className="font-mono">{refaz.codigo}</span> já está cancelada. Corrija o que precisar e gere a
+                  PP nova, com outro código.
+                </p>
+              </div>
+            )}
             {erro && (
               <div className="flex items-start justify-between gap-2 rounded border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
                 <span>{erro}</span>
@@ -1446,139 +1250,60 @@ export function GerarPPDrawer({
               </div>
             </div>
 
-            {/* Anexos — opcional para gerar, obrigatório para enviar
-                (02/09/2026). Verba de produção segue sem anexo. */}
+            {/* Anexos (decisões 152 e 153): opcionais para salvar e gerar,
+                obrigatórios no envio ao financeiro. Verba de produção segue
+                sem anexo: as notas entram na prestação de contas. */}
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {verbaProducao
                   ? "Anexos (não exigidos na verba de produção)"
-                  : "Anexos (opcional para gerar · obrigatório para enviar)"}
+                  : "Anexos (obrigatórios para o envio ao financeiro)"}
               </h3>
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                {verbaProducao
-                  ? "Verba de produção é adiantamento: a PP sai antes de existir nota e as notas entram na prestação de contas."
-                  : "A PP pode ser gerada sem anexo. O envio ao financeiro só libera com pelo menos uma NF anexada."}{" "}
-                Máximo de 8 MB por arquivo, 25 MB no total.
-              </p>
-
-              {anexosMantidos.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex items-center gap-2 rounded border border-border bg-white px-3 py-2 text-xs"
-                >
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="flex-1 truncate">{a.arquivo_nome_original}</span>
-                  <span className="text-muted-foreground">
-                    {(a.arquivo_tamanho_bytes / 1024).toFixed(0)} KB
-                  </span>
-                  <button
-                    type="button"
-                    title="Remover anexo"
-                    aria-label={`Remover ${a.arquivo_nome_original}`}
-                    onClick={() =>
-                      setRemovidos((prev) => new Set(prev).add(a.id))
-                    }
-                    className="text-california-red hover:opacity-70"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-
-              {uploadPrefix ? (
-                <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed border-border p-3 text-sm hover:border-california-red/40">
-                  <Upload className="h-4 w-4" />
-                  <span>Selecionar arquivos (PDF ou imagem)</span>
-                  <input
-                    type="file"
-                    multiple
-                    accept={PP_ANEXO_MIMETYPES_ACEITOS.join(",")}
-                    onChange={(e) => onFileSelect(e.target.files)}
-                    className="hidden"
-                  />
-                </label>
+              {verbaProducao ? (
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  Verba de produção é adiantamento: a PP sai antes de existir nota e as notas entram na prestação de
+                  contas.
+                </p>
               ) : (
-                <div className="flex items-center gap-2 rounded border border-dashed border-border bg-muted/40 p-3 text-sm text-muted-foreground cursor-not-allowed">
-                  <Upload className="h-4 w-4" />
-                  <span>Preparando... aguarde um instante</span>
-                </div>
-              )}
-
-              {anexos.length > 0 && (
-                <ul className="space-y-1">
-                  {anexos.map((a) => {
-                    const Icon = iconePorMime(a.file.type);
-                    const cor =
-                      a.status === "erro" || a.status === "rejeitado"
-                        ? "border-california-red/40 bg-california-red/5"
-                        : a.status === "ok"
-                          ? "border-emerald-200 bg-emerald-50"
-                          : "border-border bg-muted/30";
-                    const label =
-                      a.status === "selecionado"
-                        ? "aguardando..."
-                        : a.status === "uploading"
-                          ? "enviando..."
-                          : a.status === "ok"
-                            ? "ok"
-                            : a.status === "rejeitado"
-                              ? `rejeitado: ${a.mensagem ?? "motivo desconhecido"}`
-                              : (a.mensagem ?? "falha");
-                    return (
-                      <li
-                        key={a.anexo_id}
-                        className={cn(
-                          "flex flex-col gap-1.5 rounded border p-2 text-xs",
-                          cor,
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4" />
-                        <span className="flex-1 truncate">{a.file.name}</span>
-                        <span className="text-muted-foreground">
-                          {(a.file.size / 1024).toFixed(0)} KB
-                        </span>
-                        <span
-                          className={cn(
-                            "text-xs",
-                            a.status === "erro" || a.status === "rejeitado"
-                              ? "text-california-red"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {label}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removerAnexo(a.anexo_id)}
-                          className="text-california-red hover:opacity-70"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                        </div>
-
-                        {/* Que documento é este arquivo. Só depois do
-                            upload: identificar algo que ainda pode ser
-                            rejeitado seria trabalho jogado fora. */}
-                        {a.status === "ok" && (
-                          <DocumentoDoAnexoField
-                            valor={a.documento}
-                            descricaoArquivo={a.file.name}
-                            onChange={(doc) =>
-                              setAnexos((prev) =>
-                                prev.map((p) =>
-                                  p.anexo_id === a.anexo_id
-                                    ? { ...p, documento: doc }
-                                    : p,
-                                ),
-                              )
-                            }
-                          />
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <>
+                  <ZonaDeAnexos id="pp-arquivos" pronto={!!uploadPrefix} onArquivos={subir} />
+                  {avisoDosAnexos && (
+                    <p className="text-[11.5px] font-semibold text-california-red">{avisoDosAnexos}</p>
+                  )}
+                  <ListaDeAnexos
+                    itens={itensDaLista(anexos)}
+                    onTipo={(id, t) => mudar(id, { tipo: t })}
+                    onNumero={(id, numero) => mudar(id, { numero })}
+                    onRemover={remover}
+                    tipoInvalido={() => false}
+                    disabled={pending}
+                    renderNf={(id) => {
+                      const a = anexos.find((x) => x.id === id);
+                      if (!a) return null;
+                      return (
+                        <NfDoAnexo
+                          nf={a.nf}
+                          onMudar={(parte) => mudarNf(id, parte)}
+                          faltas={[]}
+                          idBase={`pp-nf-${id}`}
+                          tomadores={tomadores}
+                          tomadorEsperado={tomadorPorEmpresa[empresaId] ?? null}
+                          empresaNome={
+                            empresas.find((e) => e.id === empresaId)?.razao_social ?? "empresa emissora"
+                          }
+                          existente={notaExistenteDe(existentes, a.nf.numero)}
+                          disabled={pending}
+                        />
+                      );
+                    }}
+                  />
+                  <ResumoDasNfs
+                    valores={anexos
+                      .filter((a) => a.status === "ok" && a.tipo === "nota_fiscal")
+                      .map((a) => parteDaNf(a.nf))}
+                    valorPP={valorPP}
+                  />
+                </>
               )}
             </div>
             {/* A pergunta que fecha (ou mantém aberto) o item. Ela não é
@@ -1668,9 +1393,10 @@ export function GerarPPDrawer({
 
           </div>
 
-          {/* Dois caminhos (decisão 077): gerar e deixar no job, ou gerar e
-              já enviar. Com o envio travado o principal volta a ser "Gerar
-              PP", e a frase diz por quê — botão cinza mudo parece defeito. */}
+          {/* Salvar guarda a PP a emitir; Gerar PP salva e o painel abre a
+              revisão antes de gerar (Tiago, 06/10/2026). Os dois são de
+              todos que abrem o formulário; com o job na pré-abertura, só
+              Salvar, e a frase diz por quê. */}
           <div className="flex flex-col gap-2 border-t border-border px-6 py-4">
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button
@@ -1683,7 +1409,7 @@ export function GerarPPDrawer({
               </button>
               <button
                 type="submit"
-                data-acao="gerar"
+                data-acao="salvar"
                 disabled={
                   pending ||
                   !ppId ||
@@ -1692,47 +1418,39 @@ export function GerarPPDrawer({
                 }
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50",
-                  envioTravadoPor
+                  travaDaAbertura
                     ? "bg-california-red text-white hover:bg-california-red-hover"
                     : "border border-border bg-white hover:bg-accent",
                 )}
               >
-                {pending
-                  ? editando
-                    ? "Salvando..."
-                    : "Gerando..."
-                  : editando
-                    ? "Salvar alterações"
-                    : "Gerar PP"}
+                {pending ? "Salvando..." : "Salvar"}
               </button>
               <button
                 type="submit"
-                data-acao="enviar"
+                data-acao="gerar"
                 disabled={
                   pending ||
                   !ppId ||
-                  envioTravadoPor !== null ||
+                  travaDaAbertura !== null ||
                   anexos.some((a) => a.status === "uploading") ||
                   (verbaProducao ? !responsavelId : !fornecedorId)
                 }
-                title={envioTravadoPor ?? undefined}
+                title={travaDaAbertura ?? undefined}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold",
-                  envioTravadoPor
+                  "rounded-lg px-4 py-2 text-sm font-semibold",
+                  travaDaAbertura
                     ? "cursor-not-allowed border border-border bg-muted text-muted-foreground/70"
                     : "bg-california-red text-white hover:bg-california-red-hover disabled:opacity-50",
                 )}
               >
-                <Send className="h-3.5 w-3.5" />
-                {editando ? "Salvar e enviar ao financeiro" : "Gerar e enviar ao financeiro"}
+                Gerar PP
               </button>
             </div>
-            {envioTravadoPor && (
-              <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">
-                <AlertTriangle className="mt-0.5 h-3 w-3 flex-none text-amber-600" />
-                {envioTravadoPor}
-              </p>
-            )}
+            <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">
+              {travaDaAbertura && <AlertTriangle className="mt-0.5 h-3 w-3 flex-none text-amber-600" />}
+              {travaDaAbertura ??
+                "“Salvar” guarda a PP a emitir para editar depois; “Gerar PP” salva e mostra a revisão antes de gerar. O envio ao financeiro é no painel do item."}
+            </p>
           </div>
         </form>
 

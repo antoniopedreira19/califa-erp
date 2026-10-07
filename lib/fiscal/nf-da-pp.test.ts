@@ -12,21 +12,26 @@ import type {
 } from "@/lib/types";
 import type { CadastroFiscal } from "./cadastro";
 import {
+  chaveDoNumeroDaNf,
   creditoDaNf,
-  faltaNaNfParaAprovar,
+  faltaNasNotasParaAprovar,
   guiaDoIssRetido,
   nfIncompleta,
   nfInicial,
-  notaFiscalDaLinhaPP,
+  notasFiscaisDaLinhaPP,
+  numerosDasNotas,
+  parteDaNota,
   regimeDoFornecedorDaPP,
+  somaDasPartes,
   retencoesParaRegistrar,
   rotuloCurtoDoRegime,
   textoDoMotivo,
   textoDoRegime,
   tomadoresPadrao,
   vencimentoDasGuiasFederais,
-  type ColunasDaNfNaPP,
+  type AnexoComNotaDoBanco,
   type NfEmConferencia,
+  type NotaDaLinhaPP,
 } from "./nf-da-pp";
 import { ultimasRetencoesDasPPs } from "./aprovacao-da-pp";
 import { retencoesPadrao, valoresRetidos } from "./calculos";
@@ -127,62 +132,129 @@ const CADASTRO: CadastroFiscal = {
 
 // --- A linha da PP -------------------------------------------------------
 
-const SEM_REGISTRO: Omit<ColunasDaNfNaPP, "verba_producao" | "anexos"> = {
-  nf_numero: null,
-  nf_data_emissao: null,
-  nf_valor: null,
-  nf_tomador_estabelecimento_id: null,
-  nf_registrada_em: null,
-  credito_pis_cofins_retirado: false,
-  credito_pis_cofins_motivo: null,
-};
+/** Um anexo como `SELECT_ANEXOS_COM_NOTA` traz (decisão 152). */
+function anexo(parcial: Partial<AnexoComNotaDoBanco> & Pick<AnexoComNotaDoBanco, "id">): AnexoComNotaDoBanco {
+  return {
+    arquivo_nome_original: `${parcial.id}.pdf`,
+    documento_tipo: "nota_fiscal",
+    documento_numero: null,
+    created_at: CARIMBO,
+    nf_data_emissao: null,
+    nf_valor: null,
+    nf_tomador_estabelecimento_id: null,
+    nf_valor_na_pp: null,
+    nota: null,
+    ...parcial,
+  };
+}
 
-test("a NF só existe com anexo do tipo NF e fora da verba; o número vem do primeiro anexo de NF", () => {
+test("as NFs só existem com anexo do tipo NF e fora da verba, uma por anexo, na ordem anexada", () => {
   const anexos = [
-    { documento_tipo: "boleto" as const, documento_numero: "B-1", created_at: "2026-09-30T10:00:00Z" },
-    { documento_tipo: "nota_fiscal" as const, documento_numero: " 602 ", created_at: "2026-09-30T11:00:00Z" },
-    { documento_tipo: "nota_fiscal" as const, documento_numero: "603", created_at: "2026-09-30T12:00:00Z" },
+    anexo({ id: "b", documento_tipo: "boleto", documento_numero: "B-1", created_at: "2026-09-30T10:00:00Z" }),
+    anexo({ id: "n2", documento_numero: "603", created_at: "2026-09-30T12:00:00Z" }),
+    anexo({ id: "n1", documento_numero: " 602 ", created_at: "2026-09-30T11:00:00Z" }),
   ];
-  const nf = notaFiscalDaLinhaPP({ ...SEM_REGISTRO, verba_producao: false, anexos });
-  assert.deepEqual(nf, { numero_do_anexo: "602", registrada: null });
-  assert.equal(notaFiscalDaLinhaPP({ ...SEM_REGISTRO, verba_producao: true, anexos }), null);
+  const r = notasFiscaisDaLinhaPP({ id: "pp", verba_producao: false, nf_registrada_em: null, anexos });
+  assert.deepEqual(r?.notas.map((n) => [n.anexo_id, n.numero]), [["n1", "602"], ["n2", "603"]]);
+  assert.equal(numerosDasNotas(r), "602, 603");
+  assert.equal(notasFiscaisDaLinhaPP({ id: "pp", verba_producao: true, nf_registrada_em: null, anexos }), null);
   assert.equal(
-    notaFiscalDaLinhaPP({ ...SEM_REGISTRO, verba_producao: false, anexos: [anexos[0]] }),
+    notasFiscaisDaLinhaPP({ id: "pp", verba_producao: false, nf_registrada_em: null, anexos: [anexos[0]] }),
     null,
   );
-  assert.equal(notaFiscalDaLinhaPP({ ...SEM_REGISTRO, verba_producao: false, anexos: null }), null);
-  // Anexo de NF sem número: o grupo aparece, com o número em branco.
-  assert.deepEqual(
-    notaFiscalDaLinhaPP({
-      ...SEM_REGISTRO,
-      verba_producao: false,
-      anexos: [{ documento_tipo: "nota_fiscal", documento_numero: null, created_at: CARIMBO }],
-    }),
-    { numero_do_anexo: null, registrada: null },
-  );
+  assert.equal(notasFiscaisDaLinhaPP({ id: "pp", verba_producao: false, nf_registrada_em: null, anexos: null }), null);
+  // Anexo de NF sem número: a nota aparece, com o número em branco.
+  const semNumero = notasFiscaisDaLinhaPP({ id: "pp", verba_producao: false, nf_registrada_em: null, anexos: [anexo({ id: "x" })] });
+  assert.equal(semNumero?.notas[0].numero, "");
+  assert.equal(numerosDasNotas(semNumero), null);
 });
 
-test("o registro do financeiro vem das colunas nf_* (numeric chega como texto)", () => {
-  const nf = notaFiscalDaLinhaPP({
+test("antes da ligação vale o que a produção informou; depois, a nota do cadastro (numeric chega como texto)", () => {
+  const informada = notasFiscaisDaLinhaPP({
+    id: "pp",
     verba_producao: false,
-    anexos: [{ documento_tipo: "nota_fiscal", documento_numero: "602", created_at: CARIMBO }],
-    nf_numero: "602",
-    nf_data_emissao: "2026-09-28",
-    nf_valor: "18000.00",
-    nf_tomador_estabelecimento_id: "ssa",
-    nf_registrada_em: "2026-10-02T14:00:00Z",
-    credito_pis_cofins_retirado: true,
-    credito_pis_cofins_motivo: "Reembolso de despesa do cliente",
+    nf_registrada_em: null,
+    anexos: [
+      anexo({
+        id: "n1",
+        documento_numero: "602",
+        nf_data_emissao: "2026-09-28",
+        nf_valor: "18000.00",
+        nf_tomador_estabelecimento_id: "ssa",
+      }),
+    ],
   });
-  assert.deepEqual(nf?.registrada, {
-    numero: "602",
-    data_emissao: "2026-09-28",
-    valor: 18000,
-    tomador_estabelecimento_id: "ssa",
-    registrada_em: "2026-10-02T14:00:00Z",
+  assert.deepEqual(
+    { ...informada!.notas[0] },
+    {
+      anexo_id: "n1",
+      arquivo_nome: "n1.pdf",
+      nota_id: null,
+      numero: "602",
+      emissao: "2026-09-28",
+      valor: 18000,
+      tomador: "ssa",
+      valor_na_pp: null,
+      registrada: null,
+      outras_pps: [],
+    },
+  );
+
+  // A nota cobre esta PP e a PP-00140 (a cancelada não conta); o
+  // financeiro corrigiu o número para 0602 e o valor, que vale para todas.
+  const ligada = notasFiscaisDaLinhaPP({
+    id: "pp",
+    verba_producao: false,
+    nf_registrada_em: "2026-10-02T14:00:00Z",
+    anexos: [
+      anexo({
+        id: "n1",
+        documento_numero: "602",
+        nf_valor: "18000.00",
+        nf_valor_na_pp: "6000.00",
+        nota: {
+          id: "nota-1",
+          numero: "0602",
+          data_emissao: "2026-09-28",
+          valor: "10000.00",
+          tomador_estabelecimento_id: "sa",
+          registrada_em: "2026-10-01T10:00:00Z",
+          iss_retido_aliquota: "5.0000",
+          credito_pis_cofins_retirado: true,
+          credito_pis_cofins_motivo: "Reembolso de despesa do cliente",
+          registrada_na_pp: { codigo: "PP-00140" },
+          anexos: [
+            { pedido_compra_id: "pp", nf_valor_na_pp: "6000.00", pp: { codigo: "PP-00139", status: "em_avaliacao" } },
+            { pedido_compra_id: "outra", nf_valor_na_pp: "4000.00", pp: { codigo: "PP-00140", status: "aprovada" } },
+            { pedido_compra_id: "cancelada", nf_valor_na_pp: "4000.00", pp: { codigo: "PP-00120", status: "cancelada" } },
+          ],
+        },
+      }),
+    ],
+  });
+  const n = ligada!.notas[0];
+  assert.equal(n.nota_id, "nota-1");
+  assert.equal(n.numero, "0602");
+  assert.equal(n.valor, 10000);
+  assert.equal(n.tomador, "sa");
+  assert.equal(n.valor_na_pp, 6000);
+  assert.deepEqual(n.registrada, {
+    em: "2026-10-01T10:00:00Z",
+    na_pp: "PP-00140",
+    iss_aliquota: 5,
     credito_retirado: true,
     credito_motivo: "Reembolso de despesa do cliente",
   });
+  assert.deepEqual(n.outras_pps, [{ codigo: "PP-00140", valor_na_pp: 4000 }]);
+  assert.equal(ligada!.conferidas_em, "2026-10-02T14:00:00Z");
+});
+
+test("a chave do número: sem pontuação, espaços e zeros à esquerda (espelho do banco)", () => {
+  assert.equal(chaveDoNumeroDaNf("00000602"), "602");
+  assert.equal(chaveDoNumeroDaNf(" 6.02 "), "602");
+  assert.equal(chaveDoNumeroDaNf("a-12"), "A12");
+  assert.equal(chaveDoNumeroDaNf("000"), null);
+  assert.equal(chaveDoNumeroDaNf(""), null);
 });
 
 test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
@@ -241,32 +313,93 @@ test("regime do fornecedor: a data da consulta só acompanha o regime que ela in
   assert.equal(antigo?.consultado_em, "2026-09-21");
 });
 
-test("a NF em conferência começa no registro ou no anexo, e a aprovação cobra data e valor", () => {
-  const semRegistro = nfInicial({ numero_do_anexo: "602", registrada: null }, "ssa");
-  assert.deepEqual(semRegistro, { numero: "602", emissao: "", valor: 0, tomador: "ssa" });
-  assert.equal(nfIncompleta(semRegistro), true);
-  assert.match(faltaNaNfParaAprovar(semRegistro) ?? "", /número, data de emissão e valor/);
+const NOTA_VAZIA: NotaDaLinhaPP = {
+  anexo_id: "n1",
+  arquivo_nome: "n1.pdf",
+  nota_id: null,
+  numero: "602",
+  emissao: null,
+  valor: null,
+  tomador: null,
+  valor_na_pp: null,
+  registrada: null,
+  outras_pps: [],
+};
 
-  const registrada = nfInicial(
-    {
-      numero_do_anexo: "602",
-      registrada: {
-        numero: "0602",
-        data_emissao: "2026-09-28",
-        valor: 17500,
-        tomador_estabelecimento_id: "sa",
-        registrada_em: CARIMBO,
-        credito_retirado: false,
-        credito_motivo: null,
-      },
-    },
-    "ssa",
+test("a NF em conferência começa no que a linha traz, e a aprovação cobra data, valor e tomador", () => {
+  const vazia = nfInicial(NOTA_VAZIA, "ssa");
+  assert.deepEqual(vazia, {
+    anexo_id: "n1",
+    numero: "602",
+    emissao: "",
+    valor: 0,
+    tomador: "ssa",
+    valor_na_pp: 0,
+    cobre_outra: false,
+  });
+  assert.equal(nfIncompleta(vazia), true);
+  assert.match(faltaNasNotasParaAprovar([vazia]) ?? "", /data de emissão e o valor/);
+
+  const cheia = nfInicial({ ...NOTA_VAZIA, numero: "0602", emissao: "2026-09-28", valor: 17500, tomador: "sa" }, "ssa");
+  assert.deepEqual(cheia, {
+    anexo_id: "n1",
+    numero: "0602",
+    emissao: "2026-09-28",
+    valor: 17500,
+    tomador: "sa",
+    valor_na_pp: 17500,
+    cobre_outra: false,
+  });
+  assert.equal(nfIncompleta(cheia), false);
+  assert.equal(faltaNasNotasParaAprovar([cheia]), null);
+  assert.match(faltaNasNotasParaAprovar([{ ...cheia, numero: "  " }]) ?? "", /número/);
+  assert.match(faltaNasNotasParaAprovar([{ ...cheia, tomador: "" }]) ?? "", /CNPJ tomador/);
+  // A mesma nota duas vezes na PP ("602" e "0602" são a mesma).
+  assert.match(
+    faltaNasNotasParaAprovar([cheia, { ...cheia, anexo_id: "n2", numero: "602" }]) ?? "",
+    /duas vezes/,
   );
-  assert.deepEqual(registrada, { numero: "0602", emissao: "2026-09-28", valor: 17500, tomador: "sa" });
-  assert.equal(nfIncompleta(registrada), false);
-  assert.equal(faltaNaNfParaAprovar(registrada), null);
-  assert.match(faltaNaNfParaAprovar({ ...registrada, numero: "  " }) ?? "", /número/);
-  assert.match(faltaNaNfParaAprovar({ ...registrada, tomador: "" }) ?? "", /CNPJ tomador/);
+});
+
+test("a parte da nota nesta PP: a nota inteira, salvo quando cobre outra PP (decisão 152)", () => {
+  const nf: NfEmConferencia = {
+    anexo_id: "n1",
+    numero: "602",
+    emissao: "2026-09-28",
+    valor: 10000,
+    tomador: "ssa",
+    valor_na_pp: 6000,
+    cobre_outra: false,
+  };
+  assert.equal(parteDaNota(nf), 10000);
+  assert.equal(parteDaNota({ ...nf, cobre_outra: true }), 6000);
+  assert.equal(
+    somaDasPartes([{ ...nf, cobre_outra: true }, { ...nf, anexo_id: "n2", numero: "603", valor: 2000 }]),
+    8000,
+  );
+  assert.match(faltaNasNotasParaAprovar([{ ...nf, cobre_outra: true, valor_na_pp: 0 }]) ?? "", /nesta PP/);
+  assert.match(
+    faltaNasNotasParaAprovar([{ ...nf, cobre_outra: true, valor_na_pp: 12000 }]) ?? "",
+    /não pode passar do valor da nota/,
+  );
+
+  // Já em outra PP: o campo vem aberto, sugerindo o que falta da nota.
+  const emOutra = nfInicial(
+    {
+      ...NOTA_VAZIA,
+      emissao: "2026-09-28",
+      valor: 10000,
+      tomador: "ssa",
+      outras_pps: [{ codigo: "PP-00140", valor_na_pp: 4000 }],
+    },
+    null,
+  );
+  assert.equal(emOutra.cobre_outra, true);
+  assert.equal(emOutra.valor_na_pp, 6000);
+  // A parte guardada vale; diferente do total, o campo abre.
+  const guardada = nfInicial({ ...NOTA_VAZIA, emissao: "2026-09-28", valor: 10000, tomador: "ssa", valor_na_pp: 7000 }, null);
+  assert.equal(guardada.cobre_outra, true);
+  assert.equal(guardada.valor_na_pp, 7000);
 });
 
 test("retenções para registrar: só com a chave ligada, pela alíquota ou pelo valor digitado", () => {
@@ -308,7 +441,15 @@ test("as guias: DARF no dia 20 do mês seguinte ao pagamento; ISS retido pelo mu
 
 // --- O crédito -----------------------------------------------------------
 
-const NF: NfEmConferencia = { numero: "602", emissao: "2026-11-03", valor: 18000, tomador: "ssa" };
+const NF: NfEmConferencia = {
+  anexo_id: "n1",
+  numero: "602",
+  emissao: "2026-11-03",
+  valor: 18000,
+  tomador: "ssa",
+  valor_na_pp: 18000,
+  cobre_outra: false,
+};
 const HOJE = "2026-11-05";
 
 test("crédito: fornecedor PJ com NF gera o crédito cheio no mês da emissão, sem olhar o job (decisão 146)", () => {

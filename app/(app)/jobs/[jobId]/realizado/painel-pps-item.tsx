@@ -34,6 +34,14 @@
  *    o total e os botões. As colunas têm largura fixa para os valores de
  *    uma PP ficarem embaixo dos da outra. Fundo branco, sem a cor do
  *    bloco REALIZADO — pedido do Tiago. O painel foi de 430 para 500 px.
+ *  - 07/10/2026 (decisão 153, opção C do protótipo aprovado): a PP a
+ *    emitir vem antes de tudo — "PPs a emitir" em cima, com um terceiro
+ *    número, "Em PPs a emitir", fora do realizado. "Gerar PP" passa sempre
+ *    pela revisão. A PP gerada não se edita mais: o envio abre o pop-up dos
+ *    documentos (decisão 152), e a rejeitada tem "Cancelar e refazer". Com
+ *    o job aguardando abertura ou devolvido pelo financeiro, só PP a
+ *    emitir. O cartão da PP a emitir não leva texto embaixo: o item pode
+ *    ter muitas PPs, e o espaço é delas (Tiago, 06/10/2026).
  */
 
 import * as React from "react";
@@ -50,6 +58,7 @@ import {
   AlertTriangle,
   Lock,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -59,16 +68,28 @@ import { PPStatusChip } from "../pps/pp-status-chip";
 import {
   podeCancelarPP,
   verbaAguardaProducao,
+  type AnexoDaPPNaLista,
+  type PPAEmitir,
   type PPStatus,
   type SituacaoVerba,
 } from "@/lib/types";
 import { passaDoPlanejado } from "@/lib/calculos/pps-item";
 import {
   signedUrlPdf,
-  enviarPedidoCompraAoFinanceiro,
   cancelarPedidoCompra,
-  type AcimaDoPlanejado,
+  cancelarERefazerPP,
+  excluirPPAEmitir,
+  gerarPPDaPPAEmitir,
 } from "./actions-pp";
+import {
+  EnvioDialog,
+  FaixaAguardaAbertura,
+  RevisaoDialog,
+  SeloPPAEmitir,
+  textoAguardaAbertura,
+  type PPParaEnviar,
+} from "./pp-a-emitir-ui";
+import type { TomadorDaNf } from "./anexos-da-pp";
 import {
   marcarPPsConcluidasDoItem,
   reabrirItemParaNovaPP,
@@ -92,6 +113,15 @@ export interface PPDoItem {
   /** Onde a verba está depois de paga (decisão 081). Só leitura aqui: a
    *  prestação de contas é feita na aba de PPs (pergunta 5a). */
   situacaoVerba: SituacaoVerba | null;
+  /** Decisões 152 e 153 — obrigatórios pelo mesmo motivo do trio. */
+  fornecedorId: string | null;
+  empresaId: string;
+  servico: string;
+  /** Os anexos gravados: o envio abre com eles. */
+  anexos: AnexoDaPPNaLista[];
+  /** A PP rejeitada que esta substitui ("Cancelar e refazer"). */
+  substitui: string | null;
+  motivoRejeicao: string | null;
 }
 
 interface Props {
@@ -128,16 +158,34 @@ interface Props {
   /** Quem marcou e quando — a faixa verde do topo. */
   concluidoPorNome: string | null;
   concluidoEmLabel: string | null;
-  /** Quem pode gerar também pode enviar, editar e cancelar. Null quando o
-   *  usuário só lê — a tela do financeiro, o job congelado. */
+  /** Quem pode gerar também pode enviar e cancelar. Null quando o usuário
+   *  só lê — a tela do financeiro, o job congelado. */
   onNovaPP: (() => void) | null;
-  onEditar: ((pp: PPDoItem) => void) | null;
-  /** Abre a ficha da PP em leitura. Diferente de `onEditar`, vale para
+  /** Abre a ficha da PP em leitura. Vale para
    *  quem só lê: a PP que já foi ao financeiro não é editável por
    *  ninguém, e o formulário dela precisava ficar visível. */
   onVerFormulario: (pp: PPDoItem) => void;
   /** Mensagem de sucesso para o toast de quem abriu o painel. */
   onMensagem?: (mensagem: string) => void;
+  /** Decisão 153: as PPs a emitir do item, fora do realizado. */
+  aEmitir: PPAEmitir[];
+  /** O status do job — aguardando abertura e devolvido só aceitam PP a emitir. */
+  statusDoJob: string;
+  /** O formulário pediu a revisão desta PP a emitir (o "Gerar PP" dele). */
+  pedidoDeRevisao: { id: string; vez: number } | null;
+  /** Abre o formulário da PP a emitir. Null quando o usuário só lê. */
+  onEditarAEmitir: ((a: PPAEmitir) => void) | null;
+  /** "Cancelar e refazer" devolveu esta PP a emitir: o formulário abre nela. */
+  onRefeita: (aEmitirId: string) => void;
+  /** Quem refaz a rejeitada é quem envia (decisão 136). */
+  podeRefazer: boolean;
+  /** Nomes para os cartões e os pop-ups da PP a emitir. */
+  nomeDoFornecedor: (id: string | null) => string;
+  nomeDoResponsavel: (id: string | null) => string;
+  nomeDaEmpresa: (id: string) => string;
+  /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
+  tomadores: TomadorDaNf[];
+  tomadorPorEmpresa: Record<string, string>;
 }
 
 export function PainelPPsItem({
@@ -158,34 +206,113 @@ export function PainelPPsItem({
   concluidoPorNome,
   concluidoEmLabel,
   onNovaPP,
-  onEditar,
   onVerFormulario,
   onMensagem,
+  aEmitir,
+  statusDoJob,
+  pedidoDeRevisao,
+  onEditarAEmitir,
+  onRefeita,
+  podeRefazer,
+  nomeDoFornecedor,
+  nomeDoResponsavel,
+  nomeDaEmpresa,
+  tomadores,
+  tomadorPorEmpresa,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
-  const [confirmando, setConfirmando] = React.useState<{
-    pp: PPDoItem;
-    numeros: AcimaDoPlanejado;
-  } | null>(null);
   const [cancelando, setCancelando] = React.useState<PPDoItem | null>(null);
   /** Aviso de "gerar nova PP num item completo" (decisão 052). */
   const [avisandoNovaPP, setAvisandoNovaPP] = React.useState(false);
+  // Decisão 153: a revisão antes de gerar, o envio com os documentos, a
+  // exclusão da PP a emitir e o "Cancelar e refazer" da rejeitada.
+  const [revisando, setRevisando] = React.useState<PPAEmitir | null>(null);
+  const [erroDaRevisao, setErroDaRevisao] = React.useState<string | null>(null);
+  const [enviando, setEnviando] = React.useState<PPDoItem | null>(null);
+  const [excluindo, setExcluindo] = React.useState<PPAEmitir | null>(null);
+  const [refazendo, setRefazendo] = React.useState<PPDoItem | null>(null);
 
   const podeAgir = onNovaPP !== null;
   const pendentes = pps.filter((pp) => pp.status === "gerada");
   const enviadas = pps.filter((pp) => pp.status !== "gerada");
   const excede = passaDoPlanejado(emPPs, totalPlanejado);
+  const emAEmitir = Math.round(aEmitir.reduce((s, a) => s + a.valor, 0) * 100) / 100;
+  const travaDaAbertura = textoAguardaAbertura(statusDoJob);
+  const contraparte = (a: PPAEmitir) =>
+    a.verba_producao ? nomeDoResponsavel(a.responsavel_verba_id) : nomeDoFornecedor(a.fornecedor_id);
 
   React.useEffect(() => {
     if (!open) {
       setErro(null);
-      setConfirmando(null);
       setCancelando(null);
       setAvisandoNovaPP(false);
+      setRevisando(null);
+      setEnviando(null);
+      setExcluindo(null);
+      setRefazendo(null);
     }
   }, [open]);
+
+  // O "Gerar PP" do formulário salva a PP a emitir, fecha e pede a revisão
+  // aqui. Ela abre quando a PP a emitir chega pelo refresh.
+  const vezDaRevisao = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (!pedidoDeRevisao || vezDaRevisao.current === pedidoDeRevisao.vez) return;
+    const alvo = aEmitir.find((a) => a.id === pedidoDeRevisao.id);
+    if (!alvo) return;
+    vezDaRevisao.current = pedidoDeRevisao.vez;
+    setErroDaRevisao(null);
+    setRevisando(alvo);
+  }, [pedidoDeRevisao, aEmitir]);
+
+  function gerar() {
+    if (!revisando) return;
+    const alvo = revisando;
+    setErroDaRevisao(null);
+    startTransition(async () => {
+      const res = await gerarPPDaPPAEmitir(alvo.id);
+      if (!res.ok) {
+        setErroDaRevisao(res.message);
+        return;
+      }
+      setRevisando(null);
+      onMensagem?.(`Pedido de Produção ${res.codigo} gerado. Envie ao financeiro quando a nota chegar.`);
+      router.refresh();
+    });
+  }
+
+  function excluir() {
+    if (!excluindo) return;
+    const alvo = excluindo;
+    startTransition(async () => {
+      const res = await excluirPPAEmitir(alvo.id);
+      setExcluindo(null);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onMensagem?.("PP a emitir excluída.");
+      router.refresh();
+    });
+  }
+
+  function refazer() {
+    if (!refazendo) return;
+    const alvo = refazendo;
+    startTransition(async () => {
+      const res = await cancelarERefazerPP(alvo.id);
+      setRefazendo(null);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onMensagem?.(`${res.codigo} cancelada. Corrija a PP a emitir e gere a PP nova.`);
+      router.refresh();
+      onRefeita(res.aEmitirId);
+    });
+  }
 
   /** "Todas as PPs deste item já foram geradas" — o botão do rodapé.
    *  Não gera nem envia nada: só fecha o item. */
@@ -239,47 +366,12 @@ export function PainelPPsItem({
     });
   }
 
-  /** O envio propriamente dito. `confirmado` é o "sim, enviar" do
-   *  pop-up acima do planejado — sem ele o servidor devolve os números
-   *  e o pop-up abre. */
-  function enviar(pp: PPDoItem, confirmado: boolean) {
-    setErro(null);
-    startTransition(async () => {
-      const res = await enviarPedidoCompraAoFinanceiro(pp.id, confirmado);
-      if (!res.ok) {
-        if (res.acimaDoPlanejado) {
-          setConfirmando({ pp, numeros: res.acimaDoPlanejado });
-          return;
-        }
-        setErro(res.message);
-        return;
-      }
-      setConfirmando(null);
-      onMensagem?.(`${res.codigo} enviada ao financeiro.`);
-      router.refresh();
-    });
-  }
-
+  /** O envio abre o pop-up dos documentos (decisão 152): a PP gerada não
+   *  se edita, e a nota do fornecedor entra ali. O "tem certeza?" acima do
+   *  planejado vem dentro dele. */
   function pedirEnvio(pp: PPDoItem) {
-    // A mesma conta do servidor, feita antes para o pop-up abrir sem uma
-    // ida ao servidor. Se os números da tela estiverem velhos, o servidor
-    // devolve os dele e o pop-up abre do mesmo jeito.
-    //
-    // `emPPs` já inclui esta PP desde 11/09/2026 (decisão 074): ela entrou
-    // na conta quando foi gerada. Somá-la de novo aqui mostraria o dobro
-    // do valor dela e pediria confirmação onde o servidor não pede.
-    if (passaDoPlanejado(emPPs, totalPlanejado)) {
-      setConfirmando({
-        pp,
-        numeros: {
-          planejado: totalPlanejado,
-          emPPsDepois: emPPs,
-          excedente: Math.round((emPPs - totalPlanejado) * 100) / 100,
-        },
-      });
-      return;
-    }
-    enviar(pp, false);
+    setErro(null);
+    setEnviando(pp);
   }
 
   function cancelar() {
@@ -351,7 +443,7 @@ export function PainelPPsItem({
 
           {/* Os dois números do design: a referência e o que já está
               comprometido. O Saldo saiu — sem teto ele não decide nada. */}
-          <div className="grid grid-cols-2 overflow-hidden rounded-[14px] border border-border bg-card">
+          <div className="grid grid-cols-3 overflow-hidden rounded-[14px] border border-border bg-card">
             <FichaNumero
               rotulo="Planejado do item"
               valor={formatCurrency(totalPlanejado, moeda)}
@@ -363,10 +455,21 @@ export function PainelPPsItem({
               valor={formatCurrency(emPPs, moeda)}
               conta={`${pps.length} ${pps.length === 1 ? "PP" : "PPs"}`}
               corValor={excede ? "text-california-red" : undefined}
+              className="border-r border-border"
+            />
+            {/* Decisão 153: o valor das PPs a emitir, à parte do realizado. */}
+            <FichaNumero
+              rotulo="Em PPs a emitir"
+              valor={formatCurrency(emAEmitir, moeda)}
+              conta={`${aEmitir.length} · fora do realizado`}
+              corValor="text-muted-foreground"
             />
           </div>
 
-          {envioBloqueadoPor && pendentes.length > 0 && (
+          {/* Job aguardando abertura ou devolvido: só PP a emitir. */}
+          {travaDaAbertura && <FaixaAguardaAbertura texto={travaDaAbertura} />}
+
+          {!travaDaAbertura && envioBloqueadoPor && pendentes.length > 0 && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
               <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
               <p className="text-[11.5px] leading-relaxed text-amber-800">
@@ -375,11 +478,89 @@ export function PainelPPsItem({
             </div>
           )}
 
-          {pps.length === 0 && (
+          {pps.length === 0 && aEmitir.length === 0 && (
             <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">
               {concluido
                 ? "Nenhuma PP neste item, e ele está marcado: é custo que não vai gerar PP. O planejado dele saiu da previsão de custo."
                 : "Nenhuma PP gerada para este item ainda."}
+            </div>
+          )}
+
+          {/* Decisão 153: a PP a emitir em cima — o próximo passo é gerar. */}
+          {aEmitir.length > 0 && (
+            <div className="flex flex-col gap-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                PPs a emitir · {aEmitir.length}
+              </span>
+              {aEmitir.map((a) => (
+                <CartaoPP
+                  key={a.id}
+                  pp={{
+                    id: a.id,
+                    codigo: "",
+                    status: "gerada",
+                    fornecedorNome: contraparte(a),
+                    valorUnitario: a.dados.valor_unitario,
+                    quantidade: a.dados.quantidade,
+                    diasMeses: a.dados.dias_meses,
+                    valor: a.valor,
+                    verbaProducao: a.verba_producao,
+                    temAnexo: a.anexos.length > 0,
+                    situacaoVerba: null,
+                    fornecedorId: a.fornecedor_id,
+                    empresaId: a.empresa_id,
+                    servico: a.servico,
+                    anexos: [],
+                    substitui: null,
+                    motivoRejeicao: null,
+                  }}
+                  moeda={moeda}
+                  codigo={<SeloPPAEmitir refaz={a.refaz?.codigo ?? null} />}
+                  direita={
+                    podeAgir ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setErroDaRevisao(null);
+                          setRevisando(a);
+                        }}
+                        disabled={pending || travaDaAbertura !== null}
+                        title={travaDaAbertura ?? undefined}
+                        className={cn(
+                          "inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border px-2.5 py-1 text-[11px] font-bold transition-colors",
+                          travaDaAbertura
+                            ? "cursor-not-allowed border-border bg-muted text-muted-foreground/70"
+                            : "border-foreground bg-foreground text-white hover:opacity-90",
+                        )}
+                      >
+                        <FilePlus className="h-3 w-3" />
+                        Gerar PP
+                      </button>
+                    ) : null
+                  }
+                  botoes={
+                    onEditarAEmitir ? (
+                      <>
+                        <BotaoIcone
+                          titulo="Editar a PP a emitir"
+                          onClick={() => onEditarAEmitir(a)}
+                          disabled={pending}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </BotaoIcone>
+                        <BotaoIcone
+                          titulo="Excluir a PP a emitir"
+                          onClick={() => setExcluindo(a)}
+                          disabled={pending}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </BotaoIcone>
+                      </>
+                    ) : null
+                  }
+                  aviso={null}
+                />
+              ))}
             </div>
           )}
 
@@ -390,7 +571,8 @@ export function PainelPPsItem({
               </span>
               {pendentes.map((pp) => {
                 const semNF = !pp.verbaProducao && !pp.temAnexo;
-                const podeEnviar = podeAgir && !semNF && !envioBloqueadoPor;
+                // A nota entra no pop-up do envio (decisão 152).
+                const podeEnviar = podeAgir && !envioBloqueadoPor && !travaDaAbertura;
                 return (
                   <CartaoPP
                     key={pp.id}
@@ -404,10 +586,7 @@ export function PainelPPsItem({
                           type="button"
                           onClick={() => pedirEnvio(pp)}
                           disabled={pending || !podeEnviar}
-                          title={
-                            envioBloqueadoPor ??
-                            (semNF ? "Anexe a NF antes de enviar." : undefined)
-                          }
+                          title={travaDaAbertura ?? envioBloqueadoPor ?? undefined}
                           className={cn(
                             "inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border px-2.5 py-1 text-[11px] font-bold transition-colors",
                             podeEnviar
@@ -425,15 +604,7 @@ export function PainelPPsItem({
                     }
                     botoes={
                       <>
-                        {onEditar && (
-                          <BotaoIcone
-                            titulo="Editar"
-                            onClick={() => onEditar(pp)}
-                            disabled={pending}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </BotaoIcone>
-                        )}
+                        {/* A PP gerada não se edita mais (decisão 153). */}
                         <BotaoIcone
                           titulo="Ver PDF"
                           onClick={() => verPdf(pp.id)}
@@ -453,11 +624,19 @@ export function PainelPPsItem({
                       </>
                     }
                     aviso={
-                      semNF ? (
-                        <span className="flex items-start gap-1.5 text-[11px] leading-snug text-california-red">
-                          <Paperclip className="mt-0.5 h-3 w-3 shrink-0" />
-                          Anexe a NF do fornecedor para enviar esta PP ao
-                          financeiro.
+                      semNF || pp.substitui ? (
+                        <span className="flex flex-col gap-1">
+                          {pp.substitui && (
+                            <span className="text-[11px] leading-snug text-muted-foreground">
+                              Substitui a <span className="font-mono">{pp.substitui}</span>, rejeitada e cancelada.
+                            </span>
+                          )}
+                          {semNF && (
+                            <span className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
+                              <Paperclip className="mt-0.5 h-3 w-3 shrink-0" />
+                              Ainda sem a nota do fornecedor: ela e os dados dela entram no envio.
+                            </span>
+                          )}
                         </span>
                       ) : null
                     }
@@ -525,9 +704,38 @@ export function PainelPPsItem({
                       </>
                     }
                     aviso={
-                      verbaAguardaProducao(pp.situacaoVerba) ? (
-                        <span className="text-[11px] font-semibold leading-snug text-amber-800">
-                          Preste contas na aba de PPs
+                      // "Substitui" segue a PP depois do envio, não só antes.
+                      pp.status === "rejeitada" || verbaAguardaProducao(pp.situacaoVerba) || pp.substitui ? (
+                        <span className="flex flex-col gap-1.5">
+                          {pp.substitui && (
+                            <span className="text-[11px] leading-snug text-muted-foreground">
+                              Substitui a <span className="font-mono">{pp.substitui}</span>, rejeitada e cancelada.
+                            </span>
+                          )}
+                          {pp.status === "rejeitada" ? (
+                            // A rejeitada não se edita (decisão 153): cancela e
+                            // volta como PP a emitir, com os mesmos dados.
+                            <span className="flex flex-col gap-1.5">
+                              <span className="text-[11px] font-semibold leading-snug text-red-700">
+                                Motivo da rejeição: {pp.motivoRejeicao ?? "—"}
+                              </span>
+                              {podeAgir && podeRefazer && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRefazendo(pp)}
+                                  disabled={pending}
+                                  className="inline-flex w-fit items-center gap-1.5 rounded-[9px] border border-california-red bg-california-red px-2.5 py-1 text-[11px] font-bold text-white hover:bg-california-red-hover disabled:opacity-50"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  Cancelar e refazer
+                                </button>
+                              )}
+                            </span>
+                          ) : verbaAguardaProducao(pp.situacaoVerba) ? (
+                            <span className="text-[11px] font-semibold leading-snug text-amber-800">
+                              Preste contas na aba de PPs
+                            </span>
+                          ) : null}
                         </span>
                       ) : null
                     }
@@ -537,67 +745,6 @@ export function PainelPPsItem({
             </div>
           )}
 
-          {/* "Tem certeza?" acima do planejado — só quem pode enviar chega
-              aqui. Cobre o corpo do painel, como no design. */}
-          {confirmando && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#282828]/30 p-5">
-              <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
-                <div className="flex flex-col gap-2.5 px-[18px] pb-3.5 pt-[18px]">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-california-red" />
-                    <h3 className="text-[15px] font-bold tracking-tight">
-                      Enviar PP acima do planejado?
-                    </h3>
-                  </div>
-                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-                    Este item está com{" "}
-                    {formatCurrency(confirmando.numeros.emPPsDepois, moeda)} em
-                    PPs, {formatCurrency(confirmando.numeros.excedente, moeda)}{" "}
-                    acima do planejado de{" "}
-                    {formatCurrency(confirmando.numeros.planejado, moeda)}.
-                    Enviar {confirmando.pp.codigo} ao financeiro é registrado no
-                    seu nome.
-                  </p>
-                  <div className="flex flex-col gap-1.5 rounded-[11px] border border-border bg-muted/40 px-3 py-2.5">
-                    <div className="flex items-baseline justify-between gap-2.5">
-                      <span className="text-[11.5px] text-muted-foreground">
-                        Esta PP
-                      </span>
-                      <span className="font-mono text-[12.5px] font-bold">
-                        {formatCurrency(confirmando.pp.valor, moeda)}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-2.5">
-                      <span className="text-[11.5px] text-muted-foreground">
-                        Total do item em PPs
-                      </span>
-                      <span className="font-mono text-[12.5px] font-bold text-california-red">
-                        {formatCurrency(confirmando.numeros.emPPsDepois, moeda)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-[18px] py-3">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmando(null)}
-                    disabled={pending}
-                    className="rounded-[10px] border border-border bg-card px-3.5 py-2 text-[12.5px] font-semibold hover:bg-muted disabled:opacity-50"
-                  >
-                    Voltar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => enviar(confirmando.pp, true)}
-                    disabled={pending}
-                    className="rounded-[10px] bg-california-red px-[15px] py-2 text-[12.5px] font-bold text-white hover:bg-california-red-hover disabled:opacity-50"
-                  >
-                    {pending ? "Enviando…" : "Sim, enviar"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {onNovaPP && (
@@ -682,6 +829,91 @@ export function PainelPPsItem({
             </div>
           </div>
         )}
+
+        {/* Decisão 153: a revisão antes de gerar, sempre. */}
+        <RevisaoDialog
+          open={revisando !== null}
+          onOpenChange={(o) => {
+            if (!o && !pending) setRevisando(null);
+          }}
+          aEmitir={revisando}
+          nomeDoFornecedor={revisando ? contraparte(revisando) : ""}
+          nomeDaEmpresa={revisando ? nomeDaEmpresa(revisando.empresa_id) : ""}
+          tomadores={tomadores}
+          planejado={totalPlanejado}
+          emitidasAntes={emPPs}
+          moeda={moeda}
+          pending={pending}
+          erro={erroDaRevisao}
+          onFecharErro={() => setErroDaRevisao(null)}
+          onGerar={gerar}
+          onEditar={() => {
+            if (!revisando || !onEditarAEmitir) return;
+            const alvo = revisando;
+            setRevisando(null);
+            onEditarAEmitir(alvo);
+          }}
+        />
+        {/* Decisão 152: o envio com os documentos do fornecedor. */}
+        {enviando && (
+          <EnvioDialog
+            pp={
+              {
+                id: enviando.id,
+                codigo: enviando.codigo,
+                valor: enviando.valor,
+                servico: enviando.servico,
+                fornecedorId: enviando.fornecedorId,
+                verbaProducao: enviando.verbaProducao,
+                anexos: enviando.anexos,
+              } satisfies PPParaEnviar
+            }
+            onOpenChange={(o) => !o && setEnviando(null)}
+            nomeDoFornecedor={enviando.fornecedorNome}
+            nomeDaEmpresa={nomeDaEmpresa(enviando.empresaId)}
+            tomadores={tomadores}
+            tomadorEsperado={tomadorPorEmpresa[enviando.empresaId] ?? null}
+            moeda={moeda}
+            onEnviada={(codigo) => {
+              setEnviando(null);
+              onMensagem?.(`${codigo} enviada ao financeiro.`);
+              router.refresh();
+            }}
+          />
+        )}
+        <ConfirmDialog
+          open={excluindo !== null}
+          onOpenChange={(o) => !o && setExcluindo(null)}
+          title="Excluir a PP a emitir?"
+          description={
+            <>
+              {excluindo ? contraparte(excluindo) : ""} ·{" "}
+              <strong className="text-foreground">{formatCurrency(excluindo?.valor ?? 0, moeda)}</strong>. Some do item;
+              nada foi gerado nem enviado.
+            </>
+          }
+          confirmLabel="Excluir"
+          cancelLabel="Voltar"
+          variant="destructive"
+          pending={pending}
+          onConfirm={excluir}
+        />
+        <ConfirmDialog
+          open={refazendo !== null}
+          onOpenChange={(o) => !o && setRefazendo(null)}
+          title={`Cancelar a ${refazendo?.codigo ?? "PP"} e refazer?`}
+          description={
+            <>
+              A <strong className="text-foreground">{refazendo?.codigo}</strong> é cancelada e fica no histórico, com o
+              motivo da rejeição. Ela volta como PP a emitir, com os mesmos dados e anexos, para você corrigir e gerar
+              uma PP nova, com outro código.
+            </>
+          }
+          confirmLabel="Cancelar e refazer"
+          cancelLabel="Voltar"
+          pending={pending}
+          onConfirm={refazer}
+        />
 
         <ConfirmDialog
           open={cancelando !== null}
@@ -802,19 +1034,24 @@ function CartaoPP({
   direita,
   botoes,
   aviso,
+  codigo,
 }: {
   pp: PPDoItem;
   moeda: string;
   direita: React.ReactNode;
   botoes: React.ReactNode;
   aviso: React.ReactNode;
+  /** No lugar do código: o selo da PP a emitir (decisão 153). */
+  codigo?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border px-3.5 py-2.5">
       <div className="flex min-h-[26px] items-center gap-2.5">
-        <span className="font-mono text-[11px] font-semibold text-muted-foreground">
-          {pp.codigo}
-        </span>
+        {codigo ?? (
+          <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+            {pp.codigo}
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
           {pp.fornecedorNome}
         </span>

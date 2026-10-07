@@ -34,6 +34,13 @@
  * A NF (número, emissão, valor e CNPJ tomador) é conferida na tela de
  * trás, ao lado da nota — aqui só se usa o resultado. Aprovar grava a NF
  * (`registrar_nf_da_pp`) e só então aprova (`aprovarPPComNotaFiscal`).
+ *
+ * Decisão 152 (07/10/2026): a PP pode ter várias NFs, e uma NF pode cobrir
+ * mais de uma PP. A base das retenções é a soma das partes desta PP; a nota
+ * conta UMA vez no fiscal, pelo total, na aprovação que a registra — o ISS
+ * retido e o crédito de cada nota aparecem por nota, e a que outra PP já
+ * registrou só é lembrada. Aprovar grava as notas
+ * (`registrar_notas_fiscais_da_pp`).
  */
 
 import * as React from "react";
@@ -83,14 +90,18 @@ import { dataBr, mesDe, nomeDoMes } from "@/lib/fiscal/datas";
 import {
   aliquotaEfetiva,
   creditoDaNf,
-  faltaNaNfParaAprovar,
+  faltaNasNotasParaAprovar,
   guiaDoIssRetido,
   nfIncompleta,
+  parteDaNota,
   percentual,
   retencoesParaRegistrar,
   rotuloCurtoDoRegime,
+  somaDasPartes,
   vencimentoDasGuiasFederais,
+  type CreditoDaNf,
   type NfEmConferencia,
+  type RegistroDaNota,
 } from "@/lib/fiscal/nf-da-pp";
 import { aprovarPPComData, aprovarPPComNotaFiscal } from "./actions-titulos";
 import { FaixaQuemEnviou } from "./faixa-quem-enviou";
@@ -118,9 +129,13 @@ interface PPParaAprovar {
   /** Módulo fiscal: o fornecedor e o regime do cadastro (null = não informado). */
   fornecedorNome: string;
   regimeDoFornecedor: RegimeTributarioFornecedor | null;
-  /** Módulo fiscal: a NF em conferência na coluna "Dados da PP". Null na PP
-   *  sem NF anexada (recibo, boleto, verba): sem as seções novas. */
-  nf: NfEmConferencia | null;
+  /** Módulo fiscal: as NFs em conferência na coluna "Dados da PP", uma por
+   *  anexo do tipo NF (decisão 152). Null na PP sem NF anexada (recibo,
+   *  boleto, verba): sem as seções novas. */
+  nfs: NfEmConferencia[] | null;
+  /** Por anexo: o registro da nota quando OUTRA PP já a registrou (o
+   *  crédito e o ISS retido dela já estão na Apuração); null nas demais. */
+  registroDeOutraPP: Record<string, RegistroDaNota | null>;
   /** Módulo fiscal: a última PP aprovada com retenção do mesmo fornecedor. */
   ultimaRetencao: UltimaRetencao | null;
 }
@@ -133,7 +148,7 @@ function formatDate(iso: string | null): string {
 
 /** Módulo fiscal: o que as seções novas dizem enquanto a NF não tem data e valor. */
 const TEXTO_SEM_NF =
-  "Preencha a data de emissão e o valor da NF em “Dados da PP”, olhando a nota ao lado: o valor é a base das retenções e a data, o mês do crédito.";
+  "Preencha a data de emissão e o valor das notas em “Dados da PP”, olhando a nota ao lado: o valor é a base das retenções e a data, o mês do crédito.";
 
 /** Módulo fiscal: a pílula do crédito, por estado. */
 const PILULA_DO_CREDITO: Record<"sim" | "nao", { texto: string; tom: string }> = {
@@ -184,10 +199,12 @@ export function AprovarPPDialog({
     return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
   }, []);
 
-  // Módulo fiscal: as retenções, sobre o valor da NF conferido na coluna
-  // "Dados da PP" — o mesmo estado da baixa (decisão 125).
-  const nf = pp?.nf ?? null;
-  const base = nf?.valor ?? 0;
+  // Módulo fiscal: as retenções, sobre a soma das partes das notas desta
+  // PP conferidas na coluna "Dados da PP" — o mesmo estado da baixa
+  // (decisão 125). Decisão 152: a nota pode cobrir outras PPs; o pagamento
+  // desta só retém sobre a parte dela.
+  const nfs = pp?.nfs && pp.nfs.length > 0 ? pp.nfs : null;
+  const base = nfs ? somaDasPartes(nfs) : 0;
   const v = useValorDaBaixa(base, pp?.ultimaRetencao ?? null);
   const [ajustando, setAjustando] = React.useState(false);
   // Módulo fiscal: a troca manual do crédito, sempre com motivo.
@@ -206,7 +223,7 @@ export function AprovarPPDialog({
    *  de impostos, no regime normal; desligada no Simples e no MEI. */
   function aplicarRetencaoPadrao() {
     v.setRetem(false);
-    if (!nf || optanteDoSimples) return;
+    if (!nfs || optanteDoSimples) return;
     v.setRetem(true);
     for (const { imposto } of IMPOSTOS_RETIDOS) {
       const aliquota = padraoDoRegime[imposto];
@@ -257,7 +274,8 @@ export function AprovarPPDialog({
   // ---------------------------------------------------------------------
   // Módulo fiscal: o que a NF conferida decide.
   // ---------------------------------------------------------------------
-  const incompleta = nf ? nfIncompleta(nf) : false;
+  const incompleta = nfs ? nfs.some(nfIncompleta) : false;
+  const registroDeOutra = (nf: NfEmConferencia) => pp.registroDeOutraPP[nf.anexo_id] ?? null;
   const retencaoTravada = optanteDoSimples || noCartao;
   const motivoSemRetencao = noCartao
     ? "No cartão de crédito não há retenção: o item entra inteiro na fatura, como na baixa."
@@ -287,20 +305,66 @@ export function AprovarPPDialog({
     guias.darf1708 > 0 ? { codigo: "1708", valor: guias.darf1708 } : null,
   ].filter((x): x is { codigo: string; valor: number } => x !== null);
   const mesDoPagamento = dataPagamento ? mesDe(dataPagamento) : null;
+  // As DARF saem pelo CNPJ tomador da primeira nota (é por onde a
+  // Apuração lança os pagamentos da PP).
   const vencFederal =
-    nf && dataPagamento ? vencimentoDasGuiasFederais(cadastro, nf.tomador, dataPagamento) : null;
-  const guiaIss = nf && guias.iss > 0 ? guiaDoIssRetido(cadastro, nf.tomador, nf.emissao) : null;
-  // O crédito — automático pela regra; o financeiro só tira, e com motivo.
-  const credito =
-    nf && !incompleta
-      ? creditoDaNf({
-          nf,
-          cadastro,
-          semCredito,
-          motivoSemCredito,
-          hoje: hoje.split("/").reverse().join("-"),
+    nfs && dataPagamento ? vencimentoDasGuiasFederais(cadastro, nfs[0].tomador, dataPagamento) : null;
+  // O ISS retido é da NOTA, pelo total, uma vez (decisão 152): só as notas
+  // que esta aprovação registra geram guia; a que outra PP já registrou já
+  // está nela. Uma guia por município do tomador e mês da emissão.
+  const aliquotaIss = v.retem && base > 0 ? (v.valores.ISS / base) * 100 : 0;
+  const guiasIss: Array<{
+    chave: string;
+    municipio: string;
+    uf: string;
+    mes: string;
+    vencimento: string;
+    valor: number;
+  }> = [];
+  if (nfs && aliquotaIss > 0) {
+    for (const nf of nfs) {
+      if (registroDeOutra(nf)) continue;
+      const g = guiaDoIssRetido(cadastro, nf.tomador, nf.emissao);
+      if (!g) continue;
+      const chave = `${nf.tomador}|${mesDe(nf.emissao)}`;
+      const valor = arredondar((nf.valor * aliquotaIss) / 100);
+      const atual = guiasIss.find((x) => x.chave === chave);
+      if (atual) atual.valor = arredondar(atual.valor + valor);
+      else
+        guiasIss.push({
+          chave,
+          municipio: g.municipio,
+          uf: g.uf,
+          mes: mesDe(nf.emissao),
+          vencimento: g.vencimento.data,
+          valor,
+        });
+    }
+  }
+  const notasJaRegistradas = nfs ? nfs.filter((nf) => registroDeOutra(nf)) : [];
+  // O crédito de cada nota — automático pela regra, pelo total da nota; o
+  // financeiro só tira, e com motivo. A nota que outra PP registrou mostra
+  // o que ficou registrado lá.
+  const creditos: Array<{ nf: NfEmConferencia; registro: RegistroDaNota | null; credito: CreditoDaNf }> | null =
+    nfs && !incompleta
+      ? nfs.map((nf) => {
+          const registro = registroDeOutra(nf);
+          return {
+            nf,
+            registro,
+            credito: creditoDaNf({
+              nf,
+              cadastro,
+              semCredito: registro ? registro.credito_retirado : semCredito,
+              motivoSemCredito: registro ? (registro.credito_motivo ?? "") : motivoSemCredito,
+              hoje: hoje.split("/").reverse().join("-"),
+            }),
+          };
         })
       : null;
+  const creditosNovos = (creditos ?? []).filter((c) => !c.registro);
+  const podeTirarCredito = creditosNovos.some((c) => c.credito.automatico.gera);
+  const tirouCredito = creditosNovos.some((c) => c.credito.tirado);
 
   function handleAprovar() {
     if (!pp) return;
@@ -313,10 +377,10 @@ export function AprovarPPDialog({
       setErro("Marque “Aprovar pagamento fora do cadastro” antes de aprovar.");
       return;
     }
-    if (nf) {
-      // Módulo fiscal: sem a NF conferida não há mês de crédito nem base
-      // de retenção.
-      const falta = faltaNaNfParaAprovar(nf);
+    if (nfs) {
+      // Módulo fiscal: sem as notas conferidas não há mês de crédito nem
+      // base de retenção.
+      const falta = faltaNasNotasParaAprovar(nfs);
       if (falta) {
         setErro(falta);
         return;
@@ -327,11 +391,15 @@ export function AprovarPPDialog({
         return;
       }
       if (v.retem && v.retido >= base) {
-        setErro("Os impostos retidos não podem ser maiores que o valor da NF.");
+        setErro(
+          nfs.length > 1
+            ? "Os impostos retidos não podem ser maiores que o valor das notas nesta PP."
+            : "Os impostos retidos não podem ser maiores que o valor da NF.",
+        );
         return;
       }
       // Tirar o crédito pede o motivo.
-      if (credito?.tirado && !motivoSemCredito) {
+      if (tirouCredito && !motivoSemCredito) {
         setErro("Escolha o motivo de a nota não gerar crédito de PIS/COFINS.");
         return;
       }
@@ -345,19 +413,30 @@ export function AprovarPPDialog({
       plano_conta_subtipo_id: noCartao ? subtipoId || null : null,
       aprovar_pagamento_fora_do_cadastro: pp.pagamentoForaDoCadastro ? foraAprovado : false,
     };
-    // Com NF, a NF é gravada primeiro e a aprovação só acontece se ela
-    // gravar (`aprovarPPComNotaFiscal`); sem NF, a aprovação de sempre.
-    const notaFiscal = nf
+    // Com NF, as notas são gravadas primeiro e a aprovação só acontece se
+    // elas gravarem (`aprovarPPComNotaFiscal`); sem NF, a aprovação de
+    // sempre. A nota que outra PP registrou vai com o crédito de lá.
+    const notaFiscal = nfs
       ? {
-          numero: nf.numero.trim(),
-          data_emissao: nf.emissao,
-          valor: nf.valor,
-          tomador_estabelecimento_id: nf.tomador,
+          notas: nfs.map((nf) => {
+            const registro = registroDeOutra(nf);
+            const tirou = registro
+              ? registro.credito_retirado
+              : (creditos?.find((c) => c.nf.anexo_id === nf.anexo_id)?.credito.tirado ?? false);
+            return {
+              anexo_id: nf.anexo_id,
+              numero: nf.numero.trim(),
+              data_emissao: nf.emissao,
+              valor: nf.valor,
+              tomador_estabelecimento_id: nf.tomador,
+              valor_na_pp: parteDaNota(nf),
+              credito_retirado: tirou,
+              credito_motivo: tirou ? (registro ? registro.credito_motivo : motivoSemCredito) : null,
+            };
+          }),
           retencoes: noCartao
             ? []
             : retencoesParaRegistrar(v.retem, v.aliquotas, v.valores, base),
-          credito_retirado: credito?.tirado ?? false,
-          credito_motivo: credito?.tirado ? motivoSemCredito : null,
         }
       : null;
     startTransition(async () => {
@@ -574,8 +653,8 @@ export function AprovarPPDialog({
           </div>
 
           {/* Módulo fiscal: as retenções na fonte, decididas na aprovação
-              sobre o valor da NF. */}
-          {nf && (
+              sobre a soma das partes das notas nesta PP. */}
+          {nfs && (
             <div className="space-y-2 border-t border-border pt-3">
               <p className="text-sm font-bold">Retenções na fonte</p>
               {incompleta ? (
@@ -675,7 +754,7 @@ export function AprovarPPDialog({
                         )}
                       </div>
                       {ajustando && <GradeDeAliquotas v={v} />}
-                      {(darfs.length > 0 || guias.iss > 0) && (
+                      {(darfs.length > 0 || guiasIss.length > 0 || (guias.iss > 0 && notasJaRegistradas.length > 0)) && (
                         <p className="text-[11px] leading-snug text-muted-foreground text-pretty">
                           {darfs.length > 0 && (
                             <>
@@ -700,16 +779,25 @@ export function AprovarPPDialog({
                               .
                             </>
                           )}
-                          {guiaIss && (
-                            <>
-                              {darfs.length > 0 ? " E a" : "Gera a"} guia municipal do ISS
-                              retido,{" "}
+                          {guiasIss.map((g, i) => (
+                            <React.Fragment key={g.chave}>
+                              {darfs.length > 0 || i > 0 ? " E a" : "Gera a"} guia municipal do
+                              ISS retido,{" "}
                               <b className="font-mono font-semibold">
-                                {formatCurrency(guias.iss, "BRL")}
+                                {formatCurrency(g.valor, "BRL")}
                               </b>
-                              , de {guiaIss.municipio}-{guiaIss.uf}, na apuração do mês da
-                              emissão da NF ({nomeDoMes(mesDe(nf.emissao))}), com vencimento em{" "}
-                              <b className="font-semibold">{dataBr(guiaIss.vencimento.data)}</b>.
+                              , de {g.municipio}-{g.uf}, na apuração do mês da emissão da NF (
+                              {nomeDoMes(g.mes)}), com vencimento em{" "}
+                              <b className="font-semibold">{dataBr(g.vencimento)}</b>.
+                            </React.Fragment>
+                          ))}
+                          {guias.iss > 0 && notasJaRegistradas.length > 0 && (
+                            <>
+                              {" "}
+                              O ISS retido da NF{" "}
+                              {notasJaRegistradas.map((nf) => nf.numero.trim()).join(", ")} já
+                              entrou na apuração com a{" "}
+                              {registroDeOutra(notasJaRegistradas[0])?.na_pp ?? "outra PP"}.
                             </>
                           )}
                         </p>
@@ -721,51 +809,59 @@ export function AprovarPPDialog({
             </div>
           )}
 
-          {/* Módulo fiscal: o crédito de PIS/COFINS desta NF. Automático
+          {/* Módulo fiscal: o crédito de PIS/COFINS de cada NF. Automático
               pela regra (fornecedor PJ com NF), no mês da emissão, pelo
-              valor cheio; a parte do 12.08 sai na Apuração, pelo rateio
-              proporcional do mês (decisão 146). O financeiro só tira o
-              crédito, e com motivo. */}
-          {nf && (
+              valor cheio da nota; a parte do 12.08 sai na Apuração, pelo
+              rateio proporcional do mês (decisão 146). O financeiro só tira
+              o crédito, e com motivo. A nota que outra PP registrou só é
+              lembrada: o crédito dela já está na apuração (decisão 152). */}
+          {nfs && (
             <div className="space-y-2 border-t border-border pt-3">
               <p className="text-sm font-bold">Crédito de PIS/COFINS</p>
-              {!credito ? (
+              {!creditos ? (
                 <p className="text-[12px] leading-snug text-muted-foreground">
-                  Aparece quando a data de emissão e o valor da NF estiverem preenchidos.
+                  Aparece quando a data de emissão e o valor das notas estiverem preenchidos.
                 </p>
               ) : (
                 <>
-                  <p className="text-[12.5px] leading-relaxed">
-                    <span
-                      className={cn(
-                        "mr-2 inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 align-[1px] text-[10px] font-bold uppercase tracking-wide",
-                        PILULA_DO_CREDITO[credito.final.estado].tom,
-                      )}
-                    >
-                      {PILULA_DO_CREDITO[credito.final.estado].texto}
-                    </span>
-                    {/* Sem crédito, o valor continua à vista, riscado: quem
-                        tira o crédito vê quanto está deixando de tomar. */}
-                    <b
-                      title={`PIS ${percentual(credito.aliquotaPis)} ${formatCurrency(credito.final.pis, "BRL")} + COFINS ${percentual(credito.aliquotaCofins)} ${formatCurrency(credito.final.cofins, "BRL")}`}
-                      className={cn(
-                        "font-mono font-semibold",
-                        !credito.final.gera &&
-                          "text-muted-foreground line-through decoration-muted-foreground/60",
-                      )}
-                    >
-                      {formatCurrency(credito.final.total, "BRL")}
-                    </b>{" "}
-                    <span className={cn(!credito.final.gera && "text-muted-foreground")}>
-                      {credito.final.mes
-                        ? `na apuração de ${credito.final.mes} (mês da emissão da NF)`
-                        : "na apuração do mês da emissão da NF"}
-                    </span>
-                  </p>
-                  <p className="text-[11.5px] leading-snug text-muted-foreground text-pretty">
-                    {credito.final.motivo}
-                  </p>
-                  {credito.automatico.gera && (
+                  {creditos.map(({ nf, registro, credito }) => (
+                    <p key={nf.anexo_id} className="text-[12.5px] leading-relaxed">
+                      <span
+                        className={cn(
+                          "mr-2 inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 align-[1px] text-[10px] font-bold uppercase tracking-wide",
+                          PILULA_DO_CREDITO[credito.final.estado].tom,
+                        )}
+                      >
+                        {PILULA_DO_CREDITO[credito.final.estado].texto}
+                      </span>
+                      {/* Sem crédito, o valor continua à vista, riscado: quem
+                          tira o crédito vê quanto está deixando de tomar. */}
+                      <b
+                        title={`PIS ${percentual(credito.aliquotaPis)} ${formatCurrency(credito.final.pis, "BRL")} + COFINS ${percentual(credito.aliquotaCofins)} ${formatCurrency(credito.final.cofins, "BRL")}`}
+                        className={cn(
+                          "font-mono font-semibold",
+                          !credito.final.gera &&
+                            "text-muted-foreground line-through decoration-muted-foreground/60",
+                        )}
+                      >
+                        {formatCurrency(credito.final.total, "BRL")}
+                      </b>{" "}
+                      <span className={cn(!credito.final.gera && "text-muted-foreground")}>
+                        {nfs.length > 1 && `NF ${nf.numero.trim()} · `}
+                        {registro
+                          ? `já na apuração, registrada com a ${registro.na_pp ?? "outra PP"}`
+                          : credito.final.mes
+                            ? `na apuração de ${credito.final.mes} (mês da emissão da NF)`
+                            : "na apuração do mês da emissão da NF"}
+                      </span>
+                    </p>
+                  ))}
+                  {creditosNovos[0] && (
+                    <p className="text-[11.5px] leading-snug text-muted-foreground text-pretty">
+                      {creditosNovos[0].credito.final.motivo}
+                    </p>
+                  )}
+                  {podeTirarCredito && (
                     <>
                       <label className="flex w-fit cursor-pointer items-center gap-2 text-[13px] font-semibold">
                         <Checkbox

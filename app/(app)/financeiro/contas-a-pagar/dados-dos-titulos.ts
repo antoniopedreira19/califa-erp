@@ -14,7 +14,13 @@
 
 import { situacaoDaVerba } from "@/lib/types";
 import type { DocumentoTipo, FormaPagamento, PlanoContaTipo, PPStatus } from "@/lib/types";
-import { notaFiscalDaLinhaPP, regimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
+import {
+  notasFiscaisDaLinhaPP,
+  numerosDasNotas,
+  regimeDoFornecedorDaPP,
+  SELECT_ANEXOS_COM_NOTA,
+  type AnexoComNotaDoBanco,
+} from "@/lib/fiscal/nf-da-pp";
 import {
   SELECT_PRESTACAO_DA_VERBA,
   devolucaoDaVerba,
@@ -62,8 +68,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         urgente, urgente_justificativa, urgente_em,
         forma_pagamento, cartao_credito_id,
         plano_conta_tipo_id, plano_conta_subtipo_id,
-        nf_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id,
-        nf_registrada_em, credito_pis_cofins_retirado, credito_pis_cofins_motivo,
+        nf_registrada_em,
         fornecedor:fornecedores(
           id, nome, razao_social,
           regime_tributario, regime_consulta, regime_consultado_em,
@@ -85,10 +90,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         ),
         ${SELECT_PRESTACAO_DA_VERBA},
         ${SELECT_EVENTOS_DA_PP},
-        anexos:pedidos_compra_anexos(
-          id, arquivo_nome_original, arquivo_tamanho_bytes, created_at,
-          documento_tipo, documento_numero
-        ),
+        ${SELECT_ANEXOS_COM_NOTA},
         parcelas:pedidos_compra_parcelas(
           id, numero, data_vencimento, data_pagamento, data_pagamento_primeira,
           valor, pago_em, fatura_cartao_id
@@ -232,13 +234,7 @@ export function mapearPPsDoFinanceiro(
     cartao_credito_id: string | null;
     plano_conta_tipo_id: string | null;
     plano_conta_subtipo_id: string | null;
-    nf_numero: string | null;
-    nf_data_emissao: string | null;
-    nf_valor: string | number | null;
-    nf_tomador_estabelecimento_id: string | null;
     nf_registrada_em: string | null;
-    credito_pis_cofins_retirado: boolean | null;
-    credito_pis_cofins_motivo: string | null;
     fornecedor: {
       id: string;
       nome: string;
@@ -282,14 +278,7 @@ export function mapearPPsDoFinanceiro(
         cliente: { nome_fantasia: string } | null;
       } | null;
     } | null;
-    anexos: Array<{
-      id: string;
-      arquivo_nome_original: string;
-      arquivo_tamanho_bytes: number;
-      created_at: string;
-      documento_tipo: DocumentoTipo | null;
-      documento_numero: string | null;
-    }>;
+    anexos: Array<AnexoComNotaDoBanco & { arquivo_tamanho_bytes: number }>;
     parcelas: Array<{
       id: string;
       numero: number;
@@ -409,11 +398,12 @@ export function mapearPPsDoFinanceiro(
       }))
       .sort((a, b) => a.numero - b.numero),
     // Módulo fiscal (02/10/2026): o regime do cadastro do fornecedor, que
-    // a coluna "Dados da PP" mostra e a retenção usa, e a NF do fornecedor
-    // — o número do anexo do tipo NF e o que o financeiro registrou na
-    // aprovação. Null fora da PP com NF anexada (verba, recibo, boleto).
+    // a coluna "Dados da PP" mostra e a retenção usa, e as NFs do
+    // fornecedor — uma por anexo do tipo NF, com a nota do cadastro quando
+    // já ligada (decisão 152). Null fora da PP com NF anexada (verba,
+    // recibo, boleto).
     regime_do_fornecedor: regimeDoFornecedorDaPP(r.verba_producao ?? false, r.fornecedor),
-    nota_fiscal: notaFiscalDaLinhaPP(r),
+    notas_fiscais: notasFiscaisDaLinhaPP(r),
   }));
 }
 
@@ -634,11 +624,15 @@ export function montarTitulosAPagar(e: {
               pedido: pedidoForaDoCadastro(pp.eventos),
             }
           : null,
-        // Módulo fiscal: o `nf_numero` que o financeiro registrou na
-        // aprovação (vem da `SELECT_PP_DO_FINANCEIRO`, em `nota_fiscal`).
-        // Sem NF registrada — PP sem anexo de NF, verba, aprovada antes do
+        // Módulo fiscal: os números das notas registradas pelo financeiro
+        // ("602, 603" quando a PP tem mais de uma — decisão 152). Sem nota
+        // registrada — PP sem anexo de NF, verba, aprovada antes do
         // módulo —, null.
-        nf_numero: pp.nota_fiscal?.registrada?.numero.trim() || null,
+        nf_numero: numerosDasNotas(
+          pp.notas_fiscais
+            ? { ...pp.notas_fiscais, notas: pp.notas_fiscais.notas.filter((n) => n.registrada) }
+            : null,
+        ),
         estorno_de_avulsa_id: null,
         compra_id: "",
         compra_total: 0,

@@ -209,6 +209,11 @@ export type AuditAction =
   | "pedido_compra.aprovada"
   | "pedido_compra.desaprovada"
   | "pedido_compra.reprovada"
+  // 07/10/2026 (decisão 153): a PP a emitir, antes de gerar a PP.
+  | "pedido_compra.a_emitir.salva"
+  | "pedido_compra.a_emitir.editada"
+  | "pedido_compra.a_emitir.excluida"
+  | "pedido_compra.a_emitir.gerada"
   // Tela 3.2 — a baixa passou a ser da PARCELA, e a data de pagamento do
   // título virou repactuável.
   | "pedido_compra.parcela_paga"

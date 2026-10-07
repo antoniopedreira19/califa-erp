@@ -301,13 +301,20 @@ export function saidasDoCronogramaDeImpostos(jobs: JobDoCronograma[], hoje: stri
  */
 export function ppsComIssNaGuia(
   guias: Guia[],
-  notasFornecedor: ReadonlyArray<{ id: string; pp: string; aliquotas_aprovacao: Partial<Record<string, number>> }>,
+  notasFornecedor: ReadonlyArray<{
+    id: string;
+    pp: string;
+    /** Decisão 152: as PPs da nota. Sem ele, `id` é a PP. */
+    pp_ids?: string[];
+    aliquotas_aprovacao: Partial<Record<string, number>>;
+  }>,
 ): Map<string, number> {
   const naGuia = new Set(guias.filter((g) => g.tributo === "ISS_RET").flatMap((g) => g.memoria.map((m) => m.pp).filter(Boolean)));
   const out = new Map<string, number>();
   for (const nf of notasFornecedor) {
     const aliquota = nf.aliquotas_aprovacao.ISS ?? 0;
-    if (aliquota > 0 && naGuia.has(nf.pp)) out.set(nf.id, aliquota);
+    if (!(aliquota > 0) || !naGuia.has(nf.pp)) continue;
+    for (const pp of nf.pp_ids ?? [nf.id]) out.set(pp, aliquota);
   }
   return out;
 }

@@ -31,7 +31,7 @@ import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field
 import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
-import type { NotaFiscalDaLinhaPP, RegimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
+import type { NotasFiscaisDaLinhaPP, RegimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
 import { PPTela } from "./pp-tela";
 import {
   ultimoEnvioDaPP,
@@ -188,12 +188,12 @@ export interface PPRow {
    */
   regime_do_fornecedor: RegimeDoFornecedorDaPP | null;
   /**
-   * Módulo fiscal: a NF do fornecedor — o número do anexo do tipo NF e o
-   * que o financeiro registrou na aprovação. Null na PP sem anexo de NF e
-   * na verba de produção: o grupo "Nota fiscal do fornecedor" não aparece
-   * e a aprovação segue sem as seções de retenção e crédito.
+   * Módulo fiscal: as NFs do fornecedor — uma por anexo do tipo NF, com a
+   * nota do cadastro quando já ligada (decisão 152). Null na PP sem anexo
+   * de NF e na verba de produção: o grupo "Notas fiscais do fornecedor" não
+   * aparece e a aprovação segue sem as seções de retenção e crédito.
    */
-  nota_fiscal: NotaFiscalDaLinhaPP | null;
+  notas_fiscais: NotasFiscaisDaLinhaPP | null;
 }
 
 function statusBadgeClasses(status: PPStatus): string {

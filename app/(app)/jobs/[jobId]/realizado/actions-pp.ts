@@ -9,6 +9,7 @@ import {
   COLUNAS_DE_PAGAMENTO,
   aplicarPagamentoForaDoCadastro,
   camposDoPagamentoForaDoCadastro,
+  lerPagamentoForaDoCadastro,
   resumoDoCadastroDePagamento,
   tirarFoto,
   type DadosDePagamento,
@@ -27,7 +28,6 @@ import {
   exigeSomaIgualAoOrcado,
   faltaParaFecharOOrcado,
   parcelasFecham,
-  redividirPelaProporcao,
 } from "@/lib/calculos/pps-item";
 import { aplicarConclusaoDoItem } from "./conclusao-item";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
@@ -185,41 +185,6 @@ const dadosBaseSchema = z.object({
   ])
 );
 
-/** Campos base SEM parcelas — base do reenvio (não redefine parcelamento). */
-const dadosCamposBase = z.object({
-  empresa_id: z.string().uuid(),
-  prazo_pagamento: dataSchema,
-  servico: z.string().trim().min(1).max(500),
-  valor_unitario: z.number().positive(),
-  quantidade: z.number().positive(),
-  dias_meses: z.number().positive(),
-  especificacoes: z.string().max(2000).nullable().optional(),
-  urgente: z.boolean().default(false),
-  urgente_justificativa: z.string().max(1000).nullable().optional(),
-});
-
-/** O reenvio corrige a PP mas não redefine o parcelamento:
- *  quem quiser mudar os vencimentos cancela e emite nova PP. */
-const dadosReenvioSchema = dadosCamposBase.and(
-  z.discriminatedUnion("verba_producao", [
-    z.object({
-      verba_producao: z.literal(false),
-      fornecedor_id: z.string().uuid(),
-      responsavel_verba_id: z.null().optional(),
-      // Decisão 127: outro PIX ou outra conta só nesta PP. Null = paga
-      // pelo cadastro, como toda PP até 29/09/2026.
-      pagamento_fora_do_cadastro: pagamentoForaDoCadastroSchema.nullable().optional(),
-    }),
-    z.object({
-      verba_producao: z.literal(true),
-      fornecedor_id: z.null().optional(),
-      responsavel_verba_id: z.string().uuid(),
-      // Verba paga o responsável interno: não há cadastro a contornar.
-      pagamento_fora_do_cadastro: z.null().optional(),
-    }),
-  ])
-);
-
 const dadosSchema = dadosBaseSchema;
 
 /** Ver `PP_URGENTE_JUSTIFICATIVA_MIN` — a tela usa o mesmo número. */
@@ -304,7 +269,35 @@ const anexoUploadedSchema = z.object({
   nome_original: z.string().min(1),
   tamanho_bytes: z.number().int().positive(),
   mimetype: z.enum(PP_ANEXO_MIMETYPES_ACEITOS),
+  /** Decisão 152: na NF, os dados que a produção informou — o valor é o
+   *  TOTAL da nota e `nf_valor_na_pp`, a parte desta PP (null = a nota
+   *  inteira). Opcionais até o envio ao financeiro, que cobra todos. */
+  nf_data_emissao: dataSchema.nullable().default(null),
+  nf_valor: z.number().positive().nullable().default(null),
+  nf_tomador_estabelecimento_id: z.string().uuid().nullable().default(null),
+  nf_valor_na_pp: z.number().positive().nullable().default(null),
 });
+
+/**
+ * O `created_at` de cada anexo gravado num lote, na ordem da lista (do mais
+ * antigo ao mais novo). Gravados juntos, todos ganhariam o mesmo `now()` e a
+ * ordem da tela — o anexo mais novo em cima (decisão 153) — se perderia.
+ */
+function horariosEmOrdem(quantos: number): string[] {
+  const agora = Date.now();
+  return Array.from({ length: quantos }, (_, i) => new Date(agora + i).toISOString());
+}
+
+/** Os dados da NF do anexo, só quando ele é do tipo NF. */
+function nfDoAnexo(a: AnexoUploaded) {
+  const nf = a.documento_tipo === "nota_fiscal";
+  return {
+    nf_data_emissao: nf ? a.nf_data_emissao : null,
+    nf_valor: nf ? a.nf_valor : null,
+    nf_tomador_estabelecimento_id: nf ? a.nf_tomador_estabelecimento_id : null,
+    nf_valor_na_pp: nf ? a.nf_valor_na_pp : null,
+  };
+}
 
 type AnexoUploaded = z.infer<typeof anexoUploadedSchema>;
 
@@ -949,45 +942,14 @@ async function reservarPedidoCompraImpl(
 }
 
 /**
- * Fase 2: client ja subiu anexos direto pro bucket. Envia metadata,
- * server persiste tudo + gera PDF.
+ * A geração da PP: anexos já no bucket, a action grava tudo e gera o PDF.
+ *
+ * ⚠️ Decisão 153 (07/10/2026): não é mais exportada. A PP só nasce da PP a
+ * emitir, pelo "Gerar PP" da revisão (`gerarPPDaPPAEmitir`), que confere a
+ * permissão, a trava da pré-abertura e a pergunta da última PP antes de
+ * chegar aqui. A exportação antiga (`finalizarPedidoCompra`) deixaria gerar
+ * por fora dessas travas.
  */
-export async function finalizarPedidoCompra(
-  pp_id: string,
-  dados: z.input<typeof dadosSchema>,
-  anexos: z.input<typeof anexoUploadedSchema>[],
-  itemRealizadoId: string,
-  /** "Esta é a última PP deste item?" — obrigatória no formulário desde
-   *  a decisão 052. `true` marca o item; `false` o deixa (ou o devolve)
-   *  em aberto. */
-  ultimaPPDoItem: boolean,
-): Promise<Result<{ codigo: string }>> {
-  const session = await requireSession();
-  const gate = await checarPermissao(session, "jobs.emitir_pp");
-  if (!gate.ok) return gate;
-  if (typeof ultimaPPDoItem !== "boolean") {
-    return {
-      ok: false,
-      message: "Responda se esta é a última PP deste item.",
-    };
-  }
-  try {
-    return await finalizarPedidoCompraImpl(
-      pp_id,
-      dados,
-      anexos,
-      itemRealizadoId,
-      ultimaPPDoItem,
-    );
-  } catch (err) {
-    console.error("[pp.finalizar.exception]", err);
-    return {
-      ok: false,
-      message: `Falha ao finalizar PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
-    };
-  }
-}
-
 async function finalizarPedidoCompraImpl(
   pp_id: string,
   dados: z.input<typeof dadosSchema>,
@@ -1255,7 +1217,8 @@ async function finalizarPedidoCompraImpl(
   }
 
   // INSERT anexos bulk
-  const anexosRows = anexosParsed.data.map((a: AnexoUploaded) => ({
+  const horariosDosAnexos = horariosEmOrdem(anexosParsed.data.length);
+  const anexosRows = anexosParsed.data.map((a: AnexoUploaded, i: number) => ({
     id: a.anexo_id,
     tenant_id: session.activeTenant.id,
     pedido_compra_id: pp_id,
@@ -1265,7 +1228,9 @@ async function finalizarPedidoCompraImpl(
     arquivo_mimetype: a.mimetype,
     documento_tipo: a.documento_tipo,
     documento_numero: a.documento_tipo ? a.documento_numero : null,
+    ...nfDoAnexo(a),
     created_by: session.profile.id,
+    created_at: horariosDosAnexos[i],
   }));
   const { error: anexosErr } = await supabase
     .from("pedidos_compra_anexos")
@@ -1652,467 +1617,10 @@ export async function prefixoAnexosPedidoCompra(
   };
 }
 
-/**
- * Corrige uma PP rejeitada pelo financeiro e devolve pra avaliação.
- *
- * O PDF é REGERADO e sobrescreve o anterior no mesmo path: ele é o
- * documento que vai pro fornecedor e é o que o financeiro abre pra
- * conferir, então não pode contradizer a PP. O código da PP não muda,
- * logo o path também não.
- *
- * `valor` não vem do formulário: é calculado da quantidade, igual na
- * emissão (quantidade × R$/un do realizado).
- *
- * O PARCELAMENTO não se refaz aqui — a quantidade de parcelas e os
- * vencimentos foram combinados com o fornecedor na emissão. O que a
- * correção pode mudar é o valor total, e nesse caso cada parcela mantém
- * a sua PROPORÇÃO do valor (decisão 138; até ela, tudo voltava a ser
- * dividido igual e um 30/70 virava 50/50), com número e datas mantidos.
- * Quem quiser outro parcelamento cancela a PP e emite outra.
- */
-export async function reenviarPedidoCompra(
-  pp_id: string,
-  dados: z.input<typeof dadosReenvioSchema>,
-  anexosNovos: z.input<typeof anexoUploadedSchema>[],
-  anexosRemovidosIds: string[],
-  confirmarAcimaDoPlanejado = false,
-): Promise<ResultadoEnvio> {
-  const session = await requireSession();
-  const gatePermissao = await checarPermissao(session, "jobs.emitir_pp");
-  if (!gatePermissao.ok) return gatePermissao;
-  const supabase = createClient();
-
-  const { data: ppRow, error: ppErr } = await supabase
-    .from("pedidos_compra")
-    .select(
-      "id, tenant_id, codigo, job_id, item_realizado_id, status, pdf_path, prazo_pagamento_financeiro, verba_producao, urgente, urgente_por, urgente_em",
-    )
-    .eq("id", pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
-
-  if (ppRow.status !== "rejeitada") {
-    return {
-      ok: false,
-      message: "Só PP rejeitada pelo financeiro pode ser corrigida e reenviada.",
-    };
-  }
-
-  // Verba de produção também se corrige e reenvia (decisão 083, 7b): o
-  // formulário troca fornecedor por responsável, e o resto do caminho é o
-  // mesmo. O MODO não muda aqui — quem nasceu verba continua verba.
-
-  // Reusa os mesmos gates da emissão (job editável, papel que gera PP) e,
-  // por ser envio, o do papel que envia (decisão 136).
-  const gate = await checarGatesRealizado(ppRow.item_realizado_id);
-  if (!gate.ok) return gate;
-  const barradoNoReenvio = await barrarEnvioPeloPapel(gate.session, ppRow.id);
-  if (barradoNoReenvio) return barradoNoReenvio;
-  const { item, job } = gate;
-
-  // Reenviar É enviar ao financeiro: vale a mesma porta do envio —
-  // pré-abertura (decisão 056) e revisão de abertura (decisão 040).
-  const bloqueioEnvio = await barrarEnvioDePP(
-    session.activeTenant.id,
-    pp_id,
-    job,
-  );
-  if (bloqueioEnvio) return bloqueioEnvio;
-
-  const dadosParsed = dadosReenvioSchema.safeParse(dados);
-  if (!dadosParsed.success) {
-    return {
-      ok: false,
-      message: `Dados inválidos: ${dadosParsed.error.issues[0]?.message ?? "erro"}.`,
-    };
-  }
-  const d = dadosParsed.data;
-
-  // ---- Anexos: valida os novos antes de mexer em qualquer coisa ----
-  const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexosNovos);
-  if (!anexosParsed.success) {
-    return { ok: false, message: "Formato de anexo inválido." };
-  }
-
-  const expectedPrefix = `${session.activeTenant.id}/${job.id}/${pp_id}/anexos/`;
-  for (const a of anexosParsed.data) {
-    if (a.tamanho_bytes > PP_ANEXO_TAMANHO_MAX_BYTES) {
-      return { ok: false, message: `Anexo ${a.nome_original} > 8 MB.` };
-    }
-    if (!a.path.startsWith(expectedPrefix)) {
-      return { ok: false, message: "Anexo em path inválido." };
-    }
-  }
-
-  const { data: anexosAtuais } = await supabase
-    .from("pedidos_compra_anexos")
-    .select("id, arquivo_path, arquivo_tamanho_bytes")
-    .eq("pedido_compra_id", pp_id)
-    .eq("tenant_id", session.activeTenant.id);
-
-  const removidos = new Set(anexosRemovidosIds);
-  const mantidos = (anexosAtuais ?? []).filter((a) => !removidos.has(a.id));
-
-  // Verba de produção não tem anexo obrigatório — nem na emissão, nem aqui.
-  if (!ppRow.verba_producao && mantidos.length + anexosParsed.data.length < 1) {
-    return { ok: false, message: "Pelo menos um anexo é obrigatório." };
-  }
-
-  const somaBytes =
-    mantidos.reduce((s, a) => s + Number(a.arquivo_tamanho_bytes ?? 0), 0) +
-    anexosParsed.data.reduce((s, a) => s + a.tamanho_bytes, 0);
-  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
-    return { ok: false, message: "Anexos somam mais que 25 MB." };
-  }
-
-  // Confere no bucket que os novos existem mesmo (metadata pode ser forjada)
-  if (anexosParsed.data.length > 0) {
-    const { data: arquivosNoBucket, error: listErr } = await supabase.storage
-      .from(BUCKET)
-      .list(expectedPrefix.replace(/\/$/, ""));
-    if (listErr) {
-      return { ok: false, message: `Falha ao listar anexos: ${listErr.message}` };
-    }
-    const nomes = new Set(
-      (arquivosNoBucket ?? []).map((f) => `${expectedPrefix}${f.name}`),
-    );
-    for (const a of anexosParsed.data) {
-      if (!nomes.has(a.path)) {
-        return {
-          ok: false,
-          message: `Anexo ${a.nome_original} não foi encontrado no bucket. Refaça o upload.`,
-        };
-      }
-    }
-  }
-
-  // ---- FKs (fornecedor OU responsável da verba, + empresa) ----
-  // O modo vem da PP gravada, não do formulário: a correção não transforma
-  // verba em PP de fornecedor nem o contrário (decisão 083, 7b).
-  const ehVerba = ppRow.verba_producao === true;
-  if (d.verba_producao !== ehVerba) {
-    return {
-      ok: false,
-      message: ehVerba
-        ? "Esta PP é de verba de produção — a correção não troca o modo."
-        : "Esta PP tem fornecedor — a correção não a transforma em verba.",
-    };
-  }
-
-  const [fornRes, empRes, responsavelRes] = await Promise.all([
-    ehVerba
-      ? Promise.resolve({ data: null })
-      : supabase
-          .from("fornecedores")
-          .select("*")
-          .eq("id", d.fornecedor_id as string)
-          .eq("tenant_id", session.activeTenant.id)
-          .eq("status", "ativo")
-          .maybeSingle(),
-    supabase
-      .from("empresas")
-      .select("*")
-      .eq("id", d.empresa_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .maybeSingle(),
-    // Mesma fonte que a tela usa para montar a lista (membros ativos do
-    // tenant), como na emissão — senão o formulário oferece nome que o
-    // servidor recusa.
-    ehVerba
-      ? listActiveMembers(session.activeTenant.id).then((membros) => ({
-          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
-        }))
-      : Promise.resolve({ data: null }),
-  ]);
-
-  if (!ehVerba && !fornRes.data)
-    return { ok: false, message: "Fornecedor inválido ou inativo." };
-  if (ehVerba && !responsavelRes.data)
-    return { ok: false, message: "Responsável inválido ou não encontrado." };
-  if (!empRes.data)
-    return { ok: false, message: "Empresa emissora inválida ou inativa." };
-
-  const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
-  // Valor recalculado do trio corrigido.
-  //
-  // Tem que ser a MESMA conta da emissão: enquanto aqui rateava o orçado
-  // e lá multiplicava o trio, corrigir uma PP de R$ 2.500 × 1 × 2 sem
-  // mexer em número nenhum a reescreveria como R$ 10.000 sozinha.
-  const valor = valorDaPPPorUnidade(
-    d.valor_unitario,
-    d.quantidade,
-    d.dias_meses,
-  );
-  if (valor <= 0) {
-    return {
-      ok: false,
-      message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado.",
-    };
-  }
-
-  // O teto saiu (02/09/2026). O que existe é a confirmação acima do
-  // planejado — a soma é SEM esta PP, que já está no item e não pode
-  // competir consigo mesma.
-  const emPPsSemEsta = await somaDasPPsDoItem(
-    supabase,
-    session.activeTenant.id,
-    ppRow.item_realizado_id,
-    pp_id,
-  );
-  const pedidoDeConfirmacao = pedirConfirmacaoAcimaDoPlanejado(
-    emPPsSemEsta + valor,
-    item.total_planejado,
-    confirmarAcimaDoPlanejado,
-  );
-  if (pedidoDeConfirmacao) return pedidoDeConfirmacao;
-
-  // ---- Parcelas: mesma proporção, datas conforme a 1ª ----
-  // Precisa vir ANTES do PDF: o documento carrega o vencimento e o valor
-  // de cada parcela, então os números têm que estar decididos.
-  const { data: parcelasAtuais } = await supabase
-    .from("pedidos_compra_parcelas")
-    .select("id, numero, data_vencimento, valor, pdf_path")
-    .eq("pedido_compra_id", pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .order("numero", { ascending: true });
-
-  const parcelas = parcelasAtuais ?? [];
-
-  // ---- Janelas de pagamento e urgência (decisão 077) ----
-  // O reenvio só troca o prazo; manter o de antes passa, mesmo fora da
-  // regra — é a PP anterior a ela.
-  const erroJanela = validarVencimentosNasJanelas(
-    [d.prazo_pagamento],
-    parcelas.length > 0 ? [parcelas[0].data_vencimento] : [],
-  );
-  if (erroJanela) return { ok: false, message: erroJanela };
-  const urgencia = camposDeUrgencia(
-    d,
-    ppRow as unknown as { urgente: boolean; urgente_por: string | null; urgente_em: string | null },
-    session.profile.id,
-  );
-  if (!urgencia.ok) return urgencia;
-
-  // Cada parcela mantém o seu % do valor (decisão 138).
-  const valores = redividirPelaProporcao(
-    parcelas.map((p) => Number(p.valor)),
-    valor,
-  );
-  const primeiraMudou =
-    parcelas.length > 0 &&
-    parcelas[0].data_vencimento.slice(0, 10) !== d.prazo_pagamento;
-  // Prazo novo refaz a escada pela MESMA janela, mês a mês — era "+1 mês"
-  // a partir da data, que tirava as parcelas seguintes das janelas.
-  const vencimentosNovos = primeiraMudou
-    ? vencimentosNasJanelas(d.prazo_pagamento, parcelas.length)
-    : [];
-
-  const parcelasNovas = parcelas.map((parcela, i) => {
-    const data = primeiraMudou
-      ? vencimentosNovos[i]
-      : parcela.data_vencimento.slice(0, 10);
-    return {
-      id: parcela.id,
-      numero: parcela.numero,
-      data_vencimento: data,
-      valor: valores[i],
-    };
-  });
-
-  // ---- PDF novo, sobrescrevendo o antigo ----
-  // Um documento só, como na emissão (decisão 112). Aqui o snapshot É
-  // regerado de propósito: a PP foi corrigida, e o papel que o fornecedor
-  // recebe não pode contradizer o que o financeiro vai aprovar.
-  let documento: { path: string; buffer: Buffer };
-  try {
-    documento = await renderizarDocumentoDaPP({
-      tenantId: session.activeTenant.id,
-      jobId: job.id,
-      ppId: pp_id,
-      codigo: ppRow.codigo,
-      pp: {
-        servico: d.servico,
-        quantidade: d.quantidade,
-        especificacoes: d.especificacoes ?? null,
-        valor,
-        verba_producao: ehVerba,
-      },
-      empresa: empRes.data,
-      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
-      responsavelVerbaNome: ehVerba
-        ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? null)
-        : null,
-      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
-      contexto,
-      parcelas: parcelasNovas,
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
-  }
-
-  {
-    const { error: uploadErr } = await supabase.storage
-      .from(BUCKET)
-      .upload(documento.path, documento.buffer, {
-        contentType: "application/pdf",
-        upsert: true,
-      });
-    if (uploadErr) {
-      return { ok: false, message: `Falha ao subir PDF: ${uploadErr.message}` };
-    }
-  }
-
-  const pdfPath = documento.path;
-
-  // ---- Persiste: PP volta pra avaliação, rejeição some do registro ----
-  const { error: updErr } = await supabase
-    .from("pedidos_compra")
-    .update({
-      // Verba: fornecedor null, responsável preenchido. PP normal: o oposto.
-      fornecedor_id: ehVerba ? null : (d.fornecedor_id ?? null),
-      responsavel_verba_id: ehVerba ? (d.responsavel_verba_id ?? null) : null,
-      empresa_id: d.empresa_id,
-      servico: d.servico,
-      valor_unitario: d.valor_unitario,
-      quantidade: d.quantidade,
-      dias_meses: d.dias_meses,
-      especificacoes: d.especificacoes ?? null,
-      valor,
-      prazo_pagamento: d.prazo_pagamento,
-      ...urgencia.campos,
-      pdf_path: pdfPath,
-      status: "em_avaliacao",
-      rejeitada_por: null,
-      rejeitada_em: null,
-      motivo_rejeicao: null,
-      // Foto nova, porque o PDF foi remontado agora com este cadastro
-      // (decisão 067). O reenvio pode inclusive ter TROCADO o fornecedor.
-      ...tirarFoto(fornRes.data as DadosDePagamento | null, foraDoCadastroDe(d)),
-      dados_pagamento_congelados_em: fornRes.data
-        ? new Date().toISOString()
-        : null,
-      // Decisão 127: meio e motivo re-gravados, e a marcação da aprovação
-      // zera — PP corrigida é aprovada de novo, com a chave de agora.
-      ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
-    })
-    .eq("id", pp_id)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (updErr) {
-    return { ok: false, message: `Falha ao reenviar PP: ${updErr.message}` };
-  }
-
-  for (const parcela of parcelasNovas) {
-    const { error: updParcelaErr } = await supabase
-      .from("pedidos_compra_parcelas")
-      .update({
-        valor: parcela.valor,
-        data_vencimento: parcela.data_vencimento,
-        pdf_path: pdfPath,
-      })
-      .eq("id", parcela.id)
-      .eq("tenant_id", session.activeTenant.id);
-    if (updParcelaErr) {
-      return {
-        ok: false,
-        message: `PP reenviada, mas as parcelas não foram atualizadas: ${updParcelaErr.message}`,
-      };
-    }
-  }
-
-  // Documento por parcela de antes da decisão 112 sai do bucket: o
-  // documento único acabou de substituí-lo, e um PDF órfão diria outra
-  // coisa. Na PP de parcela única o caminho é o mesmo e nada sai.
-  {
-    const orfaos = [
-      ...parcelas.map((p) => p.pdf_path as string | null),
-      ppRow.pdf_path as string | null,
-    ].filter((c): c is string => Boolean(c) && c !== pdfPath);
-    if (orfaos.length > 0) {
-      await supabase.storage.from(BUCKET).remove(Array.from(new Set(orfaos)));
-    }
-  }
-
-  if (anexosParsed.data.length > 0) {
-    const { error: insAnexoErr } = await supabase
-      .from("pedidos_compra_anexos")
-      .insert(
-        anexosParsed.data.map((a) => ({
-          id: a.anexo_id,
-          tenant_id: session.activeTenant.id,
-          pedido_compra_id: pp_id,
-          arquivo_path: a.path,
-          arquivo_nome_original: a.nome_original,
-          arquivo_tamanho_bytes: a.tamanho_bytes,
-          arquivo_mimetype: a.mimetype,
-          documento_tipo: a.documento_tipo,
-          documento_numero: a.documento_tipo ? a.documento_numero : null,
-          created_by: session.profile.id,
-        })),
-      );
-    if (insAnexoErr) {
-      return {
-        ok: false,
-        message: `PP reenviada, mas falhou ao registrar anexos: ${insAnexoErr.message}`,
-      };
-    }
-  }
-
-  // Remoção dos anexos que o GP tirou. Depois do update: se falhar aqui, o
-  // pior caso é arquivo órfão no bucket, não PP sem anexo.
-  const paraRemover = (anexosAtuais ?? []).filter((a) => removidos.has(a.id));
-  if (paraRemover.length > 0) {
-    await supabase
-      .from("pedidos_compra_anexos")
-      .delete()
-      .in(
-        "id",
-        paraRemover.map((a) => a.id),
-      )
-      .eq("tenant_id", session.activeTenant.id);
-    await supabase.storage
-      .from(BUCKET)
-      .remove(paraRemover.map((a) => a.arquivo_path));
-  }
-
-  // O item guarda o fornecedor da última PP; verba não tem o que guardar.
-  if (!ehVerba) {
-    await supabase
-      .from("jobs_itens_realizado")
-      .update({ fornecedor_id: d.fornecedor_id })
-      .eq("id", ppRow.item_realizado_id)
-      .eq("tenant_id", session.activeTenant.id);
-  }
-
-  await logAuditEvent({
-    acao: "pedido_compra.reenviada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "pedido_compra",
-    entidadeId: pp_id,
-    metadata: {
-      pp_codigo: ppRow.codigo,
-      valor,
-      verba_producao: ehVerba,
-      fornecedor_id: ehVerba ? null : (d.fornecedor_id ?? null),
-      responsavel_verba_id: ehVerba ? (d.responsavel_verba_id ?? null) : null,
-      pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
-      job_id: job.id,
-      anexos_adicionados: anexosParsed.data.length,
-      anexos_removidos: paraRemover.length,
-      planejado_do_item: item.total_planejado,
-      em_pps_emitidas_depois: emPPsSemEsta + valor,
-      acima_do_planejado: passaDoPlanejado(emPPsSemEsta + valor, item.total_planejado),
-    },
-  });
-
-  revalidatePath(`/jobs/${job.id}`);
-  revalidatePath("/financeiro/contas-a-pagar");
-  return { ok: true, codigo: ppRow.codigo };
-}
+// ⚠️ Decisão 153 (07/10/2026): a correção da PP rejeitada
+// (`reenviarPedidoCompra`) saiu. A rejeitada não se edita mais: "Cancelar e
+// refazer" (`cancelarERefazerPP`) a cancela e devolve uma PP a emitir com os
+// mesmos dados, que gera outra PP, com outro código.
 
 export async function signedUrlPdf(
   pp_id: string,
@@ -2206,6 +1714,135 @@ export async function signedUrlAnexo(
 }
 
 /**
+ * O que falta nos anexos para enviar (decisão 152): pelo menos um arquivo;
+ * o tipo de cada um; o número dos documentos; e, em cada NF, número,
+ * emissão, valor, CNPJ tomador e a parte desta PP. Null = nada.
+ */
+function faltaNosAnexosDoEnvio(anexos: AnexoUploaded[]): string | null {
+  if (anexos.length === 0) {
+    return "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.";
+  }
+  for (const a of anexos) {
+    if (!a.documento_tipo) return `Escolha o tipo de “${a.nome_original}”.`;
+    const numero = (a.documento_numero ?? "").trim();
+    if (a.documento_tipo !== "nota_fiscal") {
+      if (!numero) return `Preencha o número do documento de “${a.nome_original}”.`;
+      continue;
+    }
+    if (!numero || !a.nf_data_emissao || !(a.nf_valor && a.nf_valor > 0) || !a.nf_tomador_estabelecimento_id) {
+      return `Preencha a nota “${a.nome_original}”: número, data de emissão, valor e CNPJ tomador.`;
+    }
+    if (a.nf_data_emissao > hojeEmSaoPauloIso()) {
+      return `A data de emissão da NF ${numero} está no futuro.`;
+    }
+    const parte = a.nf_valor_na_pp ?? a.nf_valor;
+    if (!(parte > 0) || parte > a.nf_valor + 0.004) {
+      return `O valor da NF ${numero} nesta PP precisa ser maior que zero e até o valor da nota.`;
+    }
+  }
+  const chaves = anexos
+    .filter((a) => a.documento_tipo === "nota_fiscal")
+    .map((a) => (a.documento_numero ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^0+/, ""));
+  if (chaves.some((c, i) => c !== "" && chaves.indexOf(c) !== i)) {
+    return "A mesma NF aparece duas vezes nesta PP.";
+  }
+  return null;
+}
+
+/**
+ * Os anexos da PP gerada como o pop-up de envio os deixou: os que saíram da
+ * lista somem (linha e arquivo), os novos entram e os que ficaram têm o
+ * tipo, o número e a NF atualizados. Os novos precisam estar no lugar da PP
+ * no bucket — subiram pelo `prefixoAnexosPedidoCompra`.
+ */
+async function gravarAnexosDoEnvio(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  profileId: string,
+  jobId: string,
+  ppId: string,
+  anexos: AnexoUploaded[],
+): Promise<string | null> {
+  const prefixo = `${tenantId}/${jobId}/${ppId}/anexos/`;
+  const { data: atuais, error: atuaisErr } = await supabase
+    .from("pedidos_compra_anexos")
+    .select("id, arquivo_path")
+    .eq("pedido_compra_id", ppId)
+    .eq("tenant_id", tenantId);
+  if (atuaisErr) return `Falha ao ler os anexos: ${atuaisErr.message}`;
+  const idsAtuais = new Set((atuais ?? []).map((a) => a.id as string));
+  const novos = anexos.filter((a) => !idsAtuais.has(a.anexo_id));
+  const ficam = new Set(anexos.map((a) => a.anexo_id));
+  const saem = (atuais ?? []).filter((a) => !ficam.has(a.id as string));
+
+  const somaBytes = anexos.reduce((s, a) => s + a.tamanho_bytes, 0);
+  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) return "Anexos somam mais que 25 MB.";
+  for (const a of novos) {
+    if (a.tamanho_bytes > PP_ANEXO_TAMANHO_MAX_BYTES) return `Anexo ${a.nome_original} > 8 MB.`;
+    if (!a.path.startsWith(prefixo)) return "Anexo em path inválido.";
+  }
+  if (novos.length > 0) {
+    const { data: noBucket, error: listErr } = await supabase.storage
+      .from(BUCKET)
+      .list(prefixo.replace(/\/$/, ""));
+    if (listErr) return `Falha ao listar anexos: ${listErr.message}`;
+    const nomes = new Set((noBucket ?? []).map((f) => `${prefixo}${f.name}`));
+    const faltando = novos.find((a) => !nomes.has(a.path));
+    if (faltando) return `Anexo ${faltando.nome_original} não foi encontrado no bucket. Refaça o upload.`;
+  }
+
+  if (saem.length > 0) {
+    const { error } = await supabase
+      .from("pedidos_compra_anexos")
+      .delete()
+      .in(
+        "id",
+        saem.map((a) => a.id as string),
+      )
+      .eq("tenant_id", tenantId);
+    if (error) return `Falha ao remover anexos: ${error.message}`;
+    const arquivos = saem.map((a) => a.arquivo_path as string).filter((p) => p.startsWith(prefixo));
+    if (arquivos.length > 0) await supabase.storage.from(BUCKET).remove(arquivos);
+  }
+  if (novos.length > 0) {
+    const horarios = horariosEmOrdem(novos.length);
+    const { error } = await supabase.from("pedidos_compra_anexos").upsert(
+      novos.map((a, i) => ({
+        id: a.anexo_id,
+        tenant_id: tenantId,
+        pedido_compra_id: ppId,
+        arquivo_path: a.path,
+        arquivo_nome_original: a.nome_original,
+        arquivo_tamanho_bytes: a.tamanho_bytes,
+        arquivo_mimetype: a.mimetype,
+        documento_tipo: a.documento_tipo,
+        documento_numero: a.documento_tipo ? a.documento_numero : null,
+        ...nfDoAnexo(a),
+        created_by: profileId,
+        created_at: horarios[i],
+      })),
+      { onConflict: "id", ignoreDuplicates: true },
+    );
+    if (error) return `Falha ao salvar anexos: ${error.message}`;
+  }
+  for (const a of anexos.filter((x) => idsAtuais.has(x.anexo_id))) {
+    const { error } = await supabase
+      .from("pedidos_compra_anexos")
+      .update({
+        documento_tipo: a.documento_tipo,
+        documento_numero: a.documento_tipo ? a.documento_numero : null,
+        ...nfDoAnexo(a),
+        ...(a.documento_tipo === "nota_fiscal" ? {} : { nota_fiscal_id: null }),
+      })
+      .eq("id", a.anexo_id)
+      .eq("pedido_compra_id", ppId)
+      .eq("tenant_id", tenantId);
+    if (error) return `Falha ao salvar o anexo ${a.nome_original}: ${error.message}`;
+  }
+  return null;
+}
+
+/**
  * Envia ao financeiro uma PP que está GERADA (02/09/2026, decisão 039).
  *
  * É a metade que "Gerar PP" perdeu: até aqui gerar e enviar eram o mesmo
@@ -2224,10 +1861,19 @@ export async function signedUrlAnexo(
  *   5. Em item `A · Repasse`, a soma das PPs precisa cobrir o ORÇADO
  *      (decisão 062). Diferente da 4, esta BARRA: não há confirmação que
  *      libere repassar menos do que se recebeu para repassar.
+ *
+ * Decisões 152 e 153 (07/10/2026): o envio é o pop-up do painel, com os
+ * anexos da PP. Ele manda a lista inteira (os que ficaram, os novos e o
+ * que mudou em cada um) e TODO campo é obrigatório: o tipo de cada arquivo,
+ * o número dos documentos e, em cada NF, número, emissão, valor e CNPJ
+ * tomador. Só depois das travas do envio os anexos são gravados e cada NF é
+ * ligada à sua nota do cadastro (`ligar_notas_fiscais_da_pp`) — a nota que
+ * já existe (mesmo fornecedor + número) só se liga, sem mudar os dados.
  */
 export async function enviarPedidoCompraAoFinanceiro(
   pp_id: string,
   confirmarAcimaDoPlanejado = false,
+  anexosDoEnvio?: z.input<typeof anexoUploadedSchema>[],
 ): Promise<ResultadoEnvio> {
   const session = await requireSession();
   const supabase = createClient();
@@ -2279,12 +1925,14 @@ export async function enviarPedidoCompraAoFinanceiro(
   // Verba de Produção é adiantamento: sai antes de existir nota, e as
   // notas entram na prestação de contas. Nas demais, a nota do fornecedor
   // é o que justifica o pedido — e é ela que o financeiro vai conferir.
-  if (!ppRow.verba_producao && (ppRow.anexos ?? []).length < 1) {
-    return {
-      ok: false,
-      message:
-        "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.",
-    };
+  // Decisão 152: todo campo de todo anexo é obrigatório no envio.
+  let anexosDoPedido: AnexoUploaded[] = [];
+  if (!ppRow.verba_producao) {
+    const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
+    if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
+    anexosDoPedido = parsed.data;
+    const falta = faltaNosAnexosDoEnvio(anexosDoPedido);
+    if (falta) return { ok: false, message: falta };
   }
 
   // A trava do AR vem ANTES da conta do planejado: ela barra de vez, e
@@ -2314,6 +1962,43 @@ export async function enviarPedidoCompraAoFinanceiro(
     confirmarAcimaDoPlanejado,
   );
   if (pedidoDeConfirmacao) return pedidoDeConfirmacao;
+
+  // Decisões 152 e 153: os anexos como o pop-up mandou, e cada NF ligada à
+  // sua nota do cadastro. Depois das travas, para o "tem certeza?" acima do
+  // planejado não deixar meio envio gravado.
+  if (!ppRow.verba_producao) {
+    const erroAnexos = await gravarAnexosDoEnvio(
+      supabase,
+      session.activeTenant.id,
+      session.profile.id,
+      job.id,
+      pp_id,
+      anexosDoPedido,
+    );
+    if (erroAnexos) return { ok: false, message: erroAnexos };
+    const notas = anexosDoPedido
+      .filter((a) => a.documento_tipo === "nota_fiscal")
+      .map((a) => ({
+        anexo_id: a.anexo_id,
+        numero: (a.documento_numero ?? "").trim(),
+        data_emissao: a.nf_data_emissao,
+        valor: a.nf_valor,
+        tomador_estabelecimento_id: a.nf_tomador_estabelecimento_id,
+        valor_na_pp: a.nf_valor_na_pp ?? a.nf_valor,
+      }));
+    const { error: notasErr } = await supabase.rpc("ligar_notas_fiscais_da_pp", {
+      p_pp_id: pp_id,
+      p_notas: notas,
+    });
+    if (notasErr) {
+      console.error("[pp.envio.notas]", notasErr.message);
+      const limpa = notasErr.message.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
+      return {
+        ok: false,
+        message: limpa && !/[_"]/.test(limpa) ? limpa : "Não foi possível registrar as notas fiscais. Tente novamente.",
+      };
+    }
+  }
 
   // `.eq("status", "gerada")` é a trava de corrida: dois envios ao mesmo
   // tempo, só um passa. O `select` diz se ESTE passou.
@@ -2352,6 +2037,8 @@ export async function enviarPedidoCompraAoFinanceiro(
       acima_do_planejado: passaDoPlanejado(emPPsDepois, item.total_planejado),
       confirmado_acima_do_planejado: confirmarAcimaDoPlanejado,
       verba_producao: ppRow.verba_producao,
+      anexos: anexosDoPedido.length,
+      notas_fiscais: anexosDoPedido.filter((a) => a.documento_tipo === "nota_fiscal").length,
     },
   });
 
@@ -2362,78 +2049,135 @@ export async function enviarPedidoCompraAoFinanceiro(
   return { ok: true, codigo: ppRow.codigo };
 }
 
-/**
- * Edita uma PP que ainda está GERADA (02/09/2026, decisão 039).
- *
- * Diferente da correção da rejeitada (`reenviarPedidoCompra`), aqui tudo
- * pode mudar — inclusive o parcelamento e o modo verba de produção —,
- * porque a PP ainda não saiu do job: ninguém combinou vencimento com
- * fornecedor nem o financeiro viu o documento. Os PDFs são regerados e
- * sobrescrevem os anteriores; a PP continua gerada.
- *
- * Anexo segue opcional: quem exige é o envio.
- */
-export async function editarPedidoCompraGerada(
-  pp_id: string,
-  dados: z.input<typeof dadosSchema>,
-  anexosNovos: z.input<typeof anexoUploadedSchema>[],
-  anexosRemovidosIds: string[],
-  /** A mesma pergunta obrigatória da emissão: editar uma PP gerada
-   *  reabre a decisão sobre o item (decisão 052). */
-  ultimaPPDoItem: boolean,
-): Promise<Result<{ codigo: string }>> {
-  if (typeof ultimaPPDoItem !== "boolean") {
-    return {
-      ok: false,
-      message: "Responda se esta é a última PP deste item.",
-    };
+// ⚠️ Decisão 153 (07/10/2026): a edição da PP gerada
+// (`editarPedidoCompraGerada`) saiu. Depois de gerada, a PP não se edita
+// mais; para mudar algo, cancela e gera outra a partir de uma PP a emitir.
+
+// ---------------------------------------------------------------------------
+// PP a emitir (decisão 153, 07/10/2026)
+// ---------------------------------------------------------------------------
+//
+// O caminho passou a ser: PP a emitir → PP gerada → enviada. A PP a emitir é
+// o formulário inteiro, salvo e editável (não é rascunho, não fica
+// incompleta); "Gerar PP" passa sempre pela revisão e a transforma na PP,
+// que daí em diante não se edita mais. O id da PP a emitir é o id que a PP
+// vai ter: os anexos sobem uma vez para `<tenant>/<job>/<id>/anexos/`.
+
+/** O texto da trava de gerar na pré-abertura (decisão 153). */
+function geracaoTravadaPeloJob(status: string): string | null {
+  if (status === "aguardando_abertura") {
+    return "O financeiro ainda não abriu este job: por enquanto, só PP a emitir. Gerar a PP volta com a abertura.";
   }
-  try {
-    return await editarPedidoCompraGeradaImpl(
-      pp_id,
-      dados,
-      anexosNovos,
-      anexosRemovidosIds,
-      ultimaPPDoItem,
-    );
-  } catch (err) {
-    console.error("[pp.editar.exception]", err);
-    return {
-      ok: false,
-      message: `Falha ao salvar a PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
-    };
+  if (status === "rejeitado_financeiro") {
+    return "O financeiro devolveu este job e ele ainda não foi aberto: por enquanto, só PP a emitir. Gerar a PP volta com a abertura.";
   }
+  return null;
 }
 
-async function editarPedidoCompraGeradaImpl(
-  pp_id: string,
+/** Os anexos da PP a emitir, gravados como a lista da tela: os que saíram
+ *  da lista somem (linha e arquivo); os novos entram; os que ficaram têm o
+ *  tipo, o número e a NF atualizados. */
+async function sincronizarAnexosDaPPAEmitir(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  profileId: string,
+  aEmitirId: string,
+  prefixo: string,
+  anexos: AnexoUploaded[],
+): Promise<string | null> {
+  const { data: atuais, error: atuaisErr } = await supabase
+    .from("pedidos_compra_a_emitir_anexos")
+    .select("id, arquivo_path")
+    .eq("a_emitir_id", aEmitirId)
+    .eq("tenant_id", tenantId);
+  if (atuaisErr) return `Falha ao ler os anexos: ${atuaisErr.message}`;
+  const ficam = new Set(anexos.map((a) => a.anexo_id));
+  const saem = (atuais ?? []).filter((a) => !ficam.has(a.id as string));
+  if (saem.length > 0) {
+    const { error } = await supabase
+      .from("pedidos_compra_a_emitir_anexos")
+      .delete()
+      .in(
+        "id",
+        saem.map((a) => a.id as string),
+      )
+      .eq("tenant_id", tenantId);
+    if (error) return `Falha ao remover anexos: ${error.message}`;
+    // Só o arquivo que é desta PP a emitir sai do bucket.
+    const arquivos = saem.map((a) => a.arquivo_path as string).filter((p) => p.startsWith(prefixo));
+    if (arquivos.length > 0) await supabase.storage.from(BUCKET).remove(arquivos);
+  }
+  const idsAtuais = new Set((atuais ?? []).map((a) => a.id as string));
+  const novos = anexos.filter((a) => !idsAtuais.has(a.anexo_id));
+  if (novos.length > 0) {
+    const horarios = horariosEmOrdem(novos.length);
+    const { error } = await supabase.from("pedidos_compra_a_emitir_anexos").upsert(
+      novos.map((a, i) => ({
+        id: a.anexo_id,
+        tenant_id: tenantId,
+        a_emitir_id: aEmitirId,
+        arquivo_path: a.path,
+        arquivo_nome_original: a.nome_original,
+        arquivo_tamanho_bytes: a.tamanho_bytes,
+        arquivo_mimetype: a.mimetype,
+        documento_tipo: a.documento_tipo,
+        documento_numero: a.documento_tipo ? a.documento_numero : null,
+        ...nfDoAnexo(a),
+        criado_por: profileId,
+        created_at: horarios[i],
+      })),
+      { onConflict: "id", ignoreDuplicates: true },
+    );
+    if (error) return `Falha ao salvar os anexos: ${error.message}`;
+  }
+  for (const a of anexos.filter((x) => idsAtuais.has(x.anexo_id))) {
+    const { error } = await supabase
+      .from("pedidos_compra_a_emitir_anexos")
+      .update({
+        documento_tipo: a.documento_tipo,
+        documento_numero: a.documento_tipo ? a.documento_numero : null,
+        ...nfDoAnexo(a),
+      })
+      .eq("id", a.anexo_id)
+      .eq("a_emitir_id", aEmitirId)
+      .eq("tenant_id", tenantId);
+    if (error) return `Falha ao salvar o anexo ${a.nome_original}: ${error.message}`;
+  }
+  return null;
+}
+
+/**
+ * Salva a PP a emitir — nova ou em edição (decisão 153). O formulário é
+ * inteiro e passa pelas mesmas regras da geração (dados, janelas de
+ * pagamento, urgência, parcelas e a pergunta da última PP); os anexos são
+ * opcionais aqui e cobrados só no envio ao financeiro. Vale também com o
+ * job aguardando abertura ou devolvido pelo financeiro: é o que esses jobs
+ * aceitam.
+ */
+export async function salvarPPAEmitir(
+  id: string,
+  itemRealizadoId: string,
   dados: z.input<typeof dadosSchema>,
-  anexosNovos: z.input<typeof anexoUploadedSchema>[],
-  anexosRemovidosIds: string[],
+  anexos: z.input<typeof anexoUploadedSchema>[],
   ultimaPPDoItem: boolean,
-): Promise<Result<{ codigo: string }>> {
+): Promise<Result<{ id: string }>> {
   const session = await requireSession();
-  const supabase = createClient();
-
-  const { data: ppRow, error: ppErr } = await supabase
-    .from("pedidos_compra")
-    .select("id, codigo, job_id, item_realizado_id, status, pdf_path, urgente, urgente_por, urgente_em")
-    .eq("id", pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
-  if (ppRow.status !== "gerada") {
-    return {
-      ok: false,
-      message:
-        "Só PP gerada pode ser editada aqui. PP rejeitada é corrigida pela aba de Pedidos de Produção.",
-    };
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  if (!z.string().uuid().safeParse(id).success) {
+    return { ok: false, message: "PP a emitir inválida. Feche o formulário e tente de novo." };
+  }
+  if (typeof ultimaPPDoItem !== "boolean") {
+    return { ok: false, message: "Responda se esta é a última PP deste item." };
   }
 
-  const gate = await checarGatesRealizado(ppRow.item_realizado_id);
+  const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
-  const { item, job } = gate;
+  const { item, job, supabase } = gate;
+  const tenantId = session.activeTenant.id;
+
+  const comSave = await barrarPPEmLinhaComSave(supabase, tenantId, item);
+  if (comSave) return comSave;
 
   const dadosParsed = dadosSchema.safeParse(dados);
   if (!dadosParsed.success) {
@@ -2444,33 +2188,44 @@ async function editarPedidoCompraGeradaImpl(
   }
   const d = dadosParsed.data;
 
-  // ---- Janelas de pagamento e urgência (decisão 077) ----
-  // As datas gravadas entram na comparação: a PP gerada antes da regra só
-  // precisa de janela na data que o GP trocar.
-  const { data: parcelasGravadas } = await supabase
-    .from("pedidos_compra_parcelas")
-    .select("data_vencimento")
-    .eq("pedido_compra_id", pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .order("numero", { ascending: true });
+  const { data: existente } = await supabase
+    .from("pedidos_compra_a_emitir")
+    .select("id, item_realizado_id, pp_id, excluida_em, dados")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      item_realizado_id: string;
+      pp_id: string | null;
+      excluida_em: string | null;
+      dados: { parcelas?: Array<{ data_vencimento: string }> } | null;
+    }>();
+  if (existente && (existente.pp_id || existente.excluida_em)) {
+    return {
+      ok: false,
+      message: existente.pp_id
+        ? "Esta PP a emitir já virou PP. Recarregue a página."
+        : "Esta PP a emitir foi excluída. Recarregue a página.",
+    };
+  }
+  if (existente && existente.item_realizado_id !== itemRealizadoId) {
+    return { ok: false, message: "Esta PP a emitir é de outro item. Recarregue a página." };
+  }
+
+  // As datas já salvas passam como estão (a regra só vale para a data que
+  // muda); o resto segue as janelas de pagamento (decisão 077).
+  const gravadas = (existente?.dados?.parcelas ?? []).map((p) => p.data_vencimento);
   const erroJanela = validarVencimentosNasJanelas(
     d.parcelas.map((p) => p.data_vencimento),
-    (parcelasGravadas ?? []).map((p) => String(p.data_vencimento)),
+    gravadas,
   );
   if (erroJanela) return { ok: false, message: erroJanela };
-  const urgencia = camposDeUrgencia(
-    d,
-    ppRow as unknown as { urgente: boolean; urgente_por: string | null; urgente_em: string | null },
-    session.profile.id,
-  );
+  const urgencia = camposDeUrgencia(d, null, session.profile.id);
   if (!urgencia.ok) return urgencia;
 
   const valor = valorDaPPPorUnidade(d.valor_unitario, d.quantidade, d.dias_meses);
   if (valor <= 0) {
-    return {
-      ok: false,
-      message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado.",
-    };
+    return { ok: false, message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado." };
   }
   if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
     return {
@@ -2479,326 +2234,536 @@ async function editarPedidoCompraGeradaImpl(
     };
   }
 
-  // ---- Anexos: os novos são validados antes de mexer em qualquer coisa ----
-  const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexosNovos);
-  if (!anexosParsed.success) {
-    return { ok: false, message: "Formato de anexo inválido." };
+  const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexos);
+  if (!anexosParsed.success) return { ok: false, message: "Formato de anexo inválido." };
+  const prefixo = `${tenantId}/${job.id}/${id}/anexos/`;
+  const somaBytes = anexosParsed.data.reduce((s, a) => s + a.tamanho_bytes, 0);
+  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
+    return { ok: false, message: "Anexos somam mais que 25 MB." };
   }
-  const expectedPrefix = `${session.activeTenant.id}/${job.id}/${pp_id}/anexos/`;
   for (const a of anexosParsed.data) {
     if (a.tamanho_bytes > PP_ANEXO_TAMANHO_MAX_BYTES) {
       return { ok: false, message: `Anexo ${a.nome_original} > 8 MB.` };
     }
-    if (!a.path.startsWith(expectedPrefix)) {
-      return { ok: false, message: "Anexo em path inválido." };
-    }
+    if (!a.path.startsWith(prefixo)) return { ok: false, message: "Anexo em path inválido." };
   }
-
-  const { data: anexosAtuais } = await supabase
-    .from("pedidos_compra_anexos")
-    .select("id, arquivo_path, arquivo_tamanho_bytes")
-    .eq("pedido_compra_id", pp_id)
-    .eq("tenant_id", session.activeTenant.id);
-  const removidos = new Set(anexosRemovidosIds);
-  const mantidos = (anexosAtuais ?? []).filter((a) => !removidos.has(a.id));
-
-  const somaBytes =
-    mantidos.reduce((s, a) => s + Number(a.arquivo_tamanho_bytes ?? 0), 0) +
-    anexosParsed.data.reduce((s, a) => s + a.tamanho_bytes, 0);
-  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
-    return { ok: false, message: "Anexos somam mais que 25 MB." };
-  }
-
   if (anexosParsed.data.length > 0) {
-    const { data: arquivosNoBucket, error: listErr } = await supabase.storage
+    const { data: noBucket, error: listErr } = await supabase.storage
       .from(BUCKET)
-      .list(expectedPrefix.replace(/\/$/, ""));
-    if (listErr) {
-      return { ok: false, message: `Falha ao listar anexos: ${listErr.message}` };
-    }
-    const nomes = new Set(
-      (arquivosNoBucket ?? []).map((f) => `${expectedPrefix}${f.name}`),
-    );
-    for (const a of anexosParsed.data) {
-      if (!nomes.has(a.path)) {
-        return {
-          ok: false,
-          message: `Anexo ${a.nome_original} não foi encontrado no bucket. Refaça o upload.`,
-        };
-      }
-    }
-  }
-
-  // ---- FKs, como na geração ----
-  const [fornRes, empRes, responsavelRes] = await Promise.all([
-    d.verba_producao
-      ? Promise.resolve({ data: null })
-      : supabase
-          .from("fornecedores")
-          .select("*")
-          .eq("id", d.fornecedor_id as string)
-          .eq("tenant_id", session.activeTenant.id)
-          .eq("status", "ativo")
-          .maybeSingle(),
-    supabase
-      .from("empresas")
-      .select("*")
-      .eq("id", d.empresa_id)
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .maybeSingle(),
-    d.verba_producao
-      ? listActiveMembers(session.activeTenant.id).then((membros) => ({
-          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
-        }))
-      : Promise.resolve({ data: null }),
-  ]);
-
-  if (!d.verba_producao && !fornRes.data)
-    return { ok: false, message: "Fornecedor inválido ou inativo." };
-  if (d.verba_producao && !responsavelRes.data)
-    return { ok: false, message: "Responsável inválido ou não encontrado." };
-  if (!empRes.data)
-    return { ok: false, message: "Empresa emissora inválida ou inativa." };
-
-  // ---- Parcelas: refeitas do zero ----
-  // A PP gerada não tem parcela paga, roteada em fatura nem vista pelo
-  // financeiro, então o parcelamento pode ser redefinido inteiro.
-  const { data: parcelasAntigas } = await supabase
-    .from("pedidos_compra_parcelas")
-    .select("id, pdf_path")
-    .eq("pedido_compra_id", pp_id)
-    .eq("tenant_id", session.activeTenant.id);
-  const caminhosAntigos = new Set<string>(
-    [
-      ...(parcelasAntigas ?? []).map((p) => p.pdf_path as string | null),
-      ppRow.pdf_path as string | null,
-    ].filter((c): c is string => Boolean(c)),
-  );
-
-  const { error: delParcelasErr } = await supabase
-    .from("pedidos_compra_parcelas")
-    .delete()
-    .eq("pedido_compra_id", pp_id)
-    .eq("tenant_id", session.activeTenant.id);
-  if (delParcelasErr) {
-    return {
-      ok: false,
-      message: `Falha ao refazer as parcelas: ${delParcelasErr.message}`,
-    };
-  }
-
-  const { data: parcelasCriadas, error: parcelasErr } = await supabase
-    .from("pedidos_compra_parcelas")
-    .insert(
-      d.parcelas.map((p, i) => ({
-        tenant_id: session.activeTenant.id,
-        pedido_compra_id: pp_id,
-        numero: i + 1,
-        data_vencimento: p.data_vencimento,
-        valor: p.valor,
-        created_by: session.profile.id,
-      })),
-    )
-    .select("id, numero, data_vencimento, valor");
-  if (parcelasErr) {
-    return {
-      ok: false,
-      message: `Falha ao salvar as parcelas: ${parcelasErr.message}`,
-    };
-  }
-  const parcelas = (parcelasCriadas ?? [])
-    .slice()
-    .sort((a, b) => a.numero - b.numero)
-    .map((p) => ({
-      id: p.id as string,
-      numero: p.numero as number,
-      data_vencimento: String(p.data_vencimento).slice(0, 10),
-      valor: Number(p.valor),
-    }));
-
-  // ---- PDF novo, sobrescrevendo o antigo (um só, decisão 112) ----
-  const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
-  let documento: { path: string; buffer: Buffer };
-  try {
-    documento = await renderizarDocumentoDaPP({
-      tenantId: session.activeTenant.id,
-      jobId: job.id,
-      ppId: pp_id,
-      codigo: ppRow.codigo,
-      pp: {
-        servico: d.servico,
-        quantidade: d.quantidade,
-        especificacoes: d.especificacoes ?? null,
-        valor,
-        verba_producao: d.verba_producao,
-      },
-      empresa: empRes.data,
-      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
-      responsavelVerbaNome: d.verba_producao
-        ? (responsavelRes.data?.nome ?? "")
-        : null,
-      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
-      contexto,
-      parcelas,
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, message: `Falha ao gerar PDF: ${msg}` };
-  }
-
-  {
-    const { error: uploadErr } = await supabase.storage
-      .from(BUCKET)
-      .upload(documento.path, documento.buffer, {
-        contentType: "application/pdf",
-        upsert: true,
-      });
-    if (uploadErr) {
-      return { ok: false, message: `Falha ao subir PDF: ${uploadErr.message}` };
-    }
-  }
-  const pdfPath = documento.path;
-
-  // ---- Persiste a PP, ainda gerada ----
-  const { error: updErr } = await supabase
-    .from("pedidos_compra")
-    .update({
-      verba_producao: d.verba_producao,
-      fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
-      responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
-      empresa_id: d.empresa_id,
-      servico: d.servico,
-      valor_unitario: d.valor_unitario,
-      quantidade: d.quantidade,
-      dias_meses: d.dias_meses,
-      especificacoes: d.especificacoes ?? null,
-      ...urgencia.campos,
-      valor,
-      prazo_pagamento: parcelas[0]?.data_vencimento ?? d.prazo_pagamento,
-      pdf_path: pdfPath,
-      // Foto nova junto do PDF novo (decisão 067). Verba de produção não
-      // tem fornecedor: a foto zera e o PDF nem monta o bloco bancário.
-      ...tirarFoto(fornRes.data as DadosDePagamento | null, foraDoCadastroDe(d)),
-      dados_pagamento_congelados_em: fornRes.data
-        ? new Date().toISOString()
-        : null,
-      // Decisão 127: meio e motivo re-gravados, e a marcação da aprovação
-      // zera — PP corrigida é aprovada de novo, com a chave de agora.
-      ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
-    })
-    .eq("id", pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("status", "gerada");
-  if (updErr) {
-    return { ok: false, message: `Falha ao salvar a PP: ${updErr.message}` };
-  }
-
-  {
-    const { error: errPath } = await supabase
-      .from("pedidos_compra_parcelas")
-      .update({ pdf_path: pdfPath })
-      .eq("pedido_compra_id", pp_id)
-      .eq("tenant_id", session.activeTenant.id);
-    if (errPath) console.error("[pp.editar.parcela.pdf_path]", errPath.message);
-  }
-
-  // Documento antigo que não foi sobrescrito (o documento por parcela de
-  // antes da decisão 112) sai do bucket — senão fica um PDF órfão
-  // dizendo outra coisa.
-  const orfaos = Array.from(caminhosAntigos).filter((c) => c !== pdfPath);
-  if (orfaos.length > 0) {
-    await supabase.storage.from(BUCKET).remove(orfaos);
-  }
-
-  if (anexosParsed.data.length > 0) {
-    const { error: insAnexoErr } = await supabase
-      .from("pedidos_compra_anexos")
-      .insert(
-        anexosParsed.data.map((a) => ({
-          id: a.anexo_id,
-          tenant_id: session.activeTenant.id,
-          pedido_compra_id: pp_id,
-          arquivo_path: a.path,
-          arquivo_nome_original: a.nome_original,
-          arquivo_tamanho_bytes: a.tamanho_bytes,
-          arquivo_mimetype: a.mimetype,
-          documento_tipo: a.documento_tipo,
-          documento_numero: a.documento_tipo ? a.documento_numero : null,
-          created_by: session.profile.id,
-        })),
-      );
-    if (insAnexoErr) {
+      .list(prefixo.replace(/\/$/, ""));
+    if (listErr) return { ok: false, message: `Falha ao listar anexos: ${listErr.message}` };
+    const nomes = new Set((noBucket ?? []).map((f) => `${prefixo}${f.name}`));
+    const faltando = anexosParsed.data.find((a) => !nomes.has(a.path));
+    if (faltando) {
       return {
         ok: false,
-        message: `PP salva, mas falhou ao registrar anexos: ${insAnexoErr.message}`,
+        message: `Anexo ${faltando.nome_original} não foi encontrado no bucket. Refaça o upload.`,
       };
     }
   }
 
-  const paraRemover = (anexosAtuais ?? []).filter((a) => removidos.has(a.id));
-  if (paraRemover.length > 0) {
-    await supabase
-      .from("pedidos_compra_anexos")
-      .delete()
-      .in("id", paraRemover.map((a) => a.id))
-      .eq("tenant_id", session.activeTenant.id);
-    await supabase.storage
-      .from(BUCKET)
-      .remove(paraRemover.map((a) => a.arquivo_path));
-  }
+  const linha = {
+    empresa_id: d.empresa_id,
+    verba_producao: d.verba_producao,
+    fornecedor_id: d.verba_producao ? null : (d.fornecedor_id ?? null),
+    responsavel_verba_id: d.verba_producao ? (d.responsavel_verba_id ?? null) : null,
+    servico: d.servico,
+    valor,
+    // O formulário como veio (já validado): a geração o valida de novo, e
+    // o valor normalizado pelo schema não precisa passar duas vezes por ele.
+    dados,
+    ultima_pp_do_item: ultimaPPDoItem,
+    atualizada_por: session.profile.id,
+  };
+  const { error: gravarErr } = existente
+    ? await supabase
+        .from("pedidos_compra_a_emitir")
+        .update(linha)
+        .eq("id", id)
+        .eq("tenant_id", tenantId)
+        .is("pp_id", null)
+        .is("excluida_em", null)
+    : await supabase.from("pedidos_compra_a_emitir").insert({
+        ...linha,
+        id,
+        tenant_id: tenantId,
+        job_id: job.id,
+        item_realizado_id: itemRealizadoId,
+        criada_por: session.profile.id,
+      });
+  if (gravarErr) return { ok: false, message: `Falha ao salvar: ${gravarErr.message}` };
 
-  if (!d.verba_producao) {
-    await supabase
-      .from("jobs_itens_realizado")
-      .update({ fornecedor_id: d.fornecedor_id ?? null })
-      .eq("id", ppRow.item_realizado_id)
-      .eq("tenant_id", session.activeTenant.id);
-  }
-
-  // Sem esta PP, pelo mesmo motivo do envio: o metadata soma `valor` logo
-  // adiante, e ela já está gravada no item.
-  const emPPsEmitidas = await somaDasPPsDoItem(
+  const erroAnexos = await sincronizarAnexosDaPPAEmitir(
     supabase,
-    session.activeTenant.id,
-    ppRow.item_realizado_id,
-    pp_id,
+    tenantId,
+    session.profile.id,
+    id,
+    prefixo,
+    anexosParsed.data,
   );
-
-  const marcacao = await aplicarConclusaoDoItem(supabase, {
-    tenantId: session.activeTenant.id,
-    jobId: job.id,
-    itemRealizadoId: ppRow.item_realizado_id,
-    profileId: session.profile.id,
-    papel: session.activeRole,
-    itemNome: item.item_nome,
-    concluido: ultimaPPDoItem,
-    origem: "formulario_pp",
-  });
-  if (!marcacao.ok) console.error("[pp.editar.marcacao]", marcacao.message);
+  if (erroAnexos) return { ok: false, message: erroAnexos };
 
   await logAuditEvent({
-    acao: "pedido_compra.editada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "pedido_compra",
-    entidadeId: pp_id,
+    acao: existente ? "pedido_compra.a_emitir.editada" : "pedido_compra.a_emitir.salva",
+    tenantId,
+    entidadeTipo: "pedido_compra_a_emitir",
+    entidadeId: id,
     metadata: {
-      pp_codigo: ppRow.codigo,
       valor,
-      valor_unitario: d.valor_unitario,
-      quantidade: d.quantidade,
-      dias_meses: d.dias_meses,
-      parcelas: parcelas.length,
+      anexos: anexosParsed.data.length,
       verba_producao: d.verba_producao,
-      pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
+      fornecedor_id: linha.fornecedor_id,
+      item_realizado_id: itemRealizadoId,
       job_id: job.id,
-      planejado_do_item: item.total_planejado,
-      acima_do_planejado: passaDoPlanejado(emPPsEmitidas + valor, item.total_planejado),
-      anexos_adicionados: anexosParsed.data.length,
-      anexos_removidos: paraRemover.length,
     },
   });
 
   revalidatePath(`/jobs/${job.id}`);
-  return { ok: true, codigo: ppRow.codigo };
+  return { ok: true, id };
+}
+
+/** O lugar dos anexos da PP a emitir no bucket, para o formulário de edição. */
+export async function prefixoAnexosPPAEmitir(
+  id: string,
+): Promise<Result<{ upload_prefix: string }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+  const { data: linha } = await supabase
+    .from("pedidos_compra_a_emitir")
+    .select("id, job_id, item_realizado_id, pp_id, excluida_em")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      job_id: string;
+      item_realizado_id: string;
+      pp_id: string | null;
+      excluida_em: string | null;
+    }>();
+  if (!linha) return { ok: false, message: "PP a emitir não encontrada." };
+  if (linha.pp_id || linha.excluida_em) {
+    return { ok: false, message: "Esta PP a emitir não está mais aberta. Recarregue a página." };
+  }
+  const gate = await checarGatesRealizado(linha.item_realizado_id);
+  if (!gate.ok) return gate;
+  return { ok: true, upload_prefix: `${session.activeTenant.id}/${linha.job_id}/${linha.id}/anexos/` };
+}
+
+/** Exclui a PP a emitir (some do painel; os arquivos dela saem do bucket). */
+export async function excluirPPAEmitir(id: string): Promise<Result> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: linha } = await supabase
+    .from("pedidos_compra_a_emitir")
+    .select("id, job_id, item_realizado_id, pp_id, excluida_em, valor, anexos:pedidos_compra_a_emitir_anexos(arquivo_path)")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      job_id: string;
+      item_realizado_id: string;
+      pp_id: string | null;
+      excluida_em: string | null;
+      valor: number | string;
+      anexos: Array<{ arquivo_path: string }> | null;
+    }>();
+  if (!linha) return { ok: false, message: "PP a emitir não encontrada." };
+  if (linha.pp_id) return { ok: false, message: "Esta PP a emitir já virou PP. Recarregue a página." };
+  if (linha.excluida_em) return { ok: true };
+
+  const gate = await checarGatesRealizado(linha.item_realizado_id);
+  if (!gate.ok) return gate;
+
+  const { error } = await supabase
+    .from("pedidos_compra_a_emitir")
+    .update({ excluida_em: new Date().toISOString(), excluida_por: session.profile.id })
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .is("pp_id", null);
+  if (error) return { ok: false, message: `Falha ao excluir: ${error.message}` };
+
+  const prefixo = `${tenantId}/${linha.job_id}/${id}/anexos/`;
+  const arquivos = (linha.anexos ?? []).map((a) => a.arquivo_path).filter((p) => p.startsWith(prefixo));
+  if (arquivos.length > 0) await supabase.storage.from(BUCKET).remove(arquivos);
+
+  await logAuditEvent({
+    acao: "pedido_compra.a_emitir.excluida",
+    tenantId,
+    entidadeTipo: "pedido_compra_a_emitir",
+    entidadeId: id,
+    metadata: { valor: Number(linha.valor), item_realizado_id: linha.item_realizado_id, job_id: linha.job_id },
+  });
+
+  revalidatePath(`/jobs/${linha.job_id}`);
+  return { ok: true };
+}
+
+/**
+ * Gera a PP a partir da PP a emitir — o "Gerar PP" da revisão (decisão
+ * 153). A geração é a de sempre (`finalizarPedidoCompraImpl`): código, PDF,
+ * parcelas, anexos (com a NF de cada um) e a marca da última PP do item. O
+ * job aguardando abertura ou devolvido pelo financeiro não gera.
+ */
+export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: string }>> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: linha } = await supabase
+    .from("pedidos_compra_a_emitir")
+    .select(
+      "id, job_id, item_realizado_id, pp_id, excluida_em, dados, ultima_pp_do_item, refaz_pp_id, " +
+        "anexos:pedidos_compra_a_emitir_anexos(id, arquivo_path, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, " +
+        "documento_tipo, documento_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_valor_na_pp, created_at)",
+    )
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      job_id: string;
+      item_realizado_id: string;
+      pp_id: string | null;
+      excluida_em: string | null;
+      dados: z.input<typeof dadosSchema>;
+      ultima_pp_do_item: boolean | null;
+      refaz_pp_id: string | null;
+      anexos: Array<{
+        id: string;
+        arquivo_path: string;
+        arquivo_nome_original: string;
+        arquivo_tamanho_bytes: number | string;
+        arquivo_mimetype: string;
+        documento_tipo: (typeof DOCUMENTO_TIPOS)[number] | null;
+        documento_numero: string | null;
+        nf_data_emissao: string | null;
+        nf_valor: number | string | null;
+        nf_tomador_estabelecimento_id: string | null;
+        nf_valor_na_pp: number | string | null;
+        created_at: string;
+      }> | null;
+    }>();
+  if (!linha) return { ok: false, message: "PP a emitir não encontrada." };
+  if (linha.excluida_em) return { ok: false, message: "Esta PP a emitir foi excluída. Recarregue a página." };
+  if (linha.pp_id) {
+    const { data: pp } = await supabase
+      .from("pedidos_compra")
+      .select("codigo")
+      .eq("id", linha.pp_id)
+      .maybeSingle<{ codigo: string }>();
+    return pp ? { ok: true, codigo: pp.codigo } : { ok: false, message: "Recarregue a página." };
+  }
+
+  const { data: jobRow } = await supabase
+    .from("jobs")
+    .select("status")
+    .eq("id", linha.job_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ status: string }>();
+  const travada = geracaoTravadaPeloJob(jobRow?.status ?? "");
+  if (travada) return { ok: false, message: travada };
+  if (typeof linha.ultima_pp_do_item !== "boolean") {
+    return { ok: false, message: "Abra a PP a emitir e responda se esta é a última PP deste item." };
+  }
+
+  const num = (v: number | string | null) => (v === null || v === "" ? null : Number(v));
+  const anexos = (linha.anexos ?? [])
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((a) => ({
+      anexo_id: a.id,
+      documento_tipo: a.documento_tipo,
+      documento_numero: a.documento_numero,
+      path: a.arquivo_path,
+      nome_original: a.arquivo_nome_original,
+      tamanho_bytes: Number(a.arquivo_tamanho_bytes),
+      mimetype: a.arquivo_mimetype as (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number],
+      nf_data_emissao: a.nf_data_emissao,
+      nf_valor: num(a.nf_valor),
+      nf_tomador_estabelecimento_id: a.nf_tomador_estabelecimento_id,
+      nf_valor_na_pp: num(a.nf_valor_na_pp),
+    }));
+
+  let res: Result<{ codigo: string }>;
+  try {
+    res = await finalizarPedidoCompraImpl(
+      id,
+      linha.dados,
+      anexos,
+      linha.item_realizado_id,
+      linha.ultima_pp_do_item,
+    );
+  } catch (err) {
+    console.error("[pp.a_emitir.gerar.exception]", err);
+    return {
+      ok: false,
+      message: `Falha ao gerar a PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
+    };
+  }
+  if (!res.ok) return res;
+
+  const { error: marcaErr } = await supabase
+    .from("pedidos_compra_a_emitir")
+    .update({ pp_id: id, gerada_em: new Date().toISOString(), atualizada_por: session.profile.id })
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .is("pp_id", null);
+  if (marcaErr) console.error("[pp.a_emitir.gerar.marca]", marcaErr.message);
+
+  await logAuditEvent({
+    acao: "pedido_compra.a_emitir.gerada",
+    tenantId,
+    entidadeTipo: "pedido_compra_a_emitir",
+    entidadeId: id,
+    metadata: {
+      pp_codigo: res.codigo,
+      refaz_pp_id: linha.refaz_pp_id,
+      item_realizado_id: linha.item_realizado_id,
+      job_id: linha.job_id,
+    },
+  });
+
+  revalidatePath(`/jobs/${linha.job_id}`);
+  return res;
+}
+
+/**
+ * "Cancelar e refazer" da PP rejeitada pelo financeiro (decisão 153). A PP
+ * não se edita: ela é cancelada (fica no histórico) e volta como PP a
+ * emitir, com os mesmos dados e os mesmos documentos — os arquivos são
+ * copiados para o lugar da PP nova, que nasce com outro código ao gerar.
+ * A PP a emitir lembra qual PP refaz (`refaz_pp_id`): o formulário mostra o
+ * motivo da rejeição, e a PP nova, "Substitui a PP-…".
+ */
+export async function cancelarERefazerPP(
+  ppId: string,
+): Promise<Result<{ aEmitirId: string; codigo: string }>> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.cancelar_pp");
+  if (!permissao.ok) return permissao;
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: pp } = await supabase
+    .from("pedidos_compra")
+    .select(
+      "*, parcelas:pedidos_compra_parcelas(numero, data_vencimento, valor), " +
+        "anexos:pedidos_compra_anexos(id, arquivo_path, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, " +
+        "documento_tipo, documento_numero, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_valor_na_pp, created_at, " +
+        "nota:notas_fiscais_fornecedor(numero, data_emissao, valor, tomador_estabelecimento_id))",
+    )
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+  const linhaPP = pp as unknown as Record<string, unknown> & {
+    codigo: string;
+    status: PPStatus;
+    job_id: string;
+    item_realizado_id: string;
+    empresa_id: string;
+    verba_producao: boolean;
+    fornecedor_id: string | null;
+    responsavel_verba_id: string | null;
+    servico: string;
+    especificacoes: string | null;
+    valor_unitario: number | string;
+    quantidade: number | string;
+    dias_meses: number | string;
+    valor: number | string;
+    prazo_pagamento: string;
+    urgente: boolean | null;
+    urgente_justificativa: string | null;
+    parcelas: Array<{ numero: number; data_vencimento: string; valor: number | string }> | null;
+    anexos: Array<{
+      id: string;
+      arquivo_path: string;
+      arquivo_nome_original: string;
+      arquivo_tamanho_bytes: number | string;
+      arquivo_mimetype: string;
+      documento_tipo: (typeof DOCUMENTO_TIPOS)[number] | null;
+      documento_numero: string | null;
+      nf_data_emissao: string | null;
+      nf_valor: number | string | null;
+      nf_tomador_estabelecimento_id: string | null;
+      nf_valor_na_pp: number | string | null;
+      created_at: string;
+      nota: {
+        numero: string;
+        data_emissao: string;
+        valor: number | string;
+        tomador_estabelecimento_id: string;
+      } | null;
+    }> | null;
+  };
+  if (linhaPP.status !== "rejeitada") {
+    return {
+      ok: false,
+      message: "Só a PP rejeitada pelo financeiro se cancela para refazer.",
+    };
+  }
+
+  const gate = await checarGatesRealizado(linhaPP.item_realizado_id);
+  if (!gate.ok) return gate;
+  // A rejeitada já esteve no financeiro: quem a refaz é quem envia (decisão 136).
+  const barrado = await barrarEnvioPeloPapel(gate.session, ppId);
+  if (barrado) return barrado;
+
+  // Os mesmos dados, no formato do formulário.
+  const fora = lerPagamentoForaDoCadastro(linhaPP as Parameters<typeof lerPagamentoForaDoCadastro>[0]);
+  const parcelas = (linhaPP.parcelas ?? [])
+    .slice()
+    .sort((a, b) => a.numero - b.numero)
+    .map((p) => ({ data_vencimento: p.data_vencimento.slice(0, 10), valor: Number(p.valor) }));
+  const dados = {
+    empresa_id: linhaPP.empresa_id,
+    prazo_pagamento: (parcelas[0]?.data_vencimento ?? linhaPP.prazo_pagamento).slice(0, 10),
+    servico: linhaPP.servico,
+    valor_unitario: Number(linhaPP.valor_unitario),
+    quantidade: Number(linhaPP.quantidade),
+    dias_meses: Number(linhaPP.dias_meses),
+    especificacoes: linhaPP.especificacoes ?? null,
+    urgente: linhaPP.urgente === true,
+    urgente_justificativa: linhaPP.urgente_justificativa ?? null,
+    parcelas: parcelas.length
+      ? parcelas
+      : [{ data_vencimento: linhaPP.prazo_pagamento.slice(0, 10), valor: Number(linhaPP.valor) }],
+    verba_producao: linhaPP.verba_producao,
+    fornecedor_id: linhaPP.verba_producao ? null : linhaPP.fornecedor_id,
+    responsavel_verba_id: linhaPP.verba_producao ? linhaPP.responsavel_verba_id : null,
+    pagamento_fora_do_cadastro: fora
+      ? {
+          meio: fora.meio,
+          motivo: fora.motivo,
+          pix_tipo: fora.pix_tipo,
+          pix_chave: fora.pix_chave,
+          banco_codigo: fora.banco_codigo,
+          agencia: fora.agencia,
+          agencia_dv: fora.agencia_dv,
+          conta: fora.conta,
+          conta_dv: fora.conta_dv,
+          tipo_conta: fora.tipo_conta,
+        }
+      : null,
+  };
+
+  // A PP a emitir nova, com os documentos copiados para o lugar dela.
+  const novoId = crypto.randomUUID();
+  const prefixo = `${tenantId}/${linhaPP.job_id}/${novoId}/anexos/`;
+  const copiados: string[] = [];
+  const anexosNovos: Array<Record<string, unknown>> = [];
+  const horariosDosAnexos = horariosEmOrdem((linhaPP.anexos ?? []).length);
+  const desfazerArquivos = async () => {
+    if (copiados.length > 0) await supabase.storage.from(BUCKET).remove(copiados);
+  };
+  for (const a of (linhaPP.anexos ?? []).slice().sort((x, y) => x.created_at.localeCompare(y.created_at))) {
+    const anexoId = crypto.randomUUID();
+    const destino = `${prefixo}${anexoId}-${a.arquivo_nome_original.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100)}`;
+    const { error: copiaErr } = await supabase.storage.from(BUCKET).copy(a.arquivo_path, destino);
+    if (copiaErr) {
+      await desfazerArquivos();
+      return { ok: false, message: `Falha ao copiar ${a.arquivo_nome_original}: ${copiaErr.message}` };
+    }
+    copiados.push(destino);
+    const nf = a.documento_tipo === "nota_fiscal";
+    anexosNovos.push({
+      id: anexoId,
+      tenant_id: tenantId,
+      a_emitir_id: novoId,
+      arquivo_path: destino,
+      arquivo_nome_original: a.arquivo_nome_original,
+      arquivo_tamanho_bytes: Number(a.arquivo_tamanho_bytes),
+      arquivo_mimetype: a.arquivo_mimetype,
+      documento_tipo: a.documento_tipo,
+      documento_numero: a.nota?.numero ?? a.documento_numero,
+      nf_data_emissao: nf ? (a.nota?.data_emissao ?? a.nf_data_emissao) : null,
+      nf_valor: nf ? (a.nota?.valor ?? a.nf_valor) : null,
+      nf_tomador_estabelecimento_id: nf ? (a.nota?.tomador_estabelecimento_id ?? a.nf_tomador_estabelecimento_id) : null,
+      nf_valor_na_pp: nf ? a.nf_valor_na_pp : null,
+      criado_por: session.profile.id,
+      created_at: horariosDosAnexos[anexosNovos.length],
+    });
+  }
+
+  const { error: insertErr } = await supabase.from("pedidos_compra_a_emitir").insert({
+    id: novoId,
+    tenant_id: tenantId,
+    job_id: linhaPP.job_id,
+    item_realizado_id: linhaPP.item_realizado_id,
+    empresa_id: dados.empresa_id,
+    verba_producao: dados.verba_producao,
+    fornecedor_id: dados.fornecedor_id,
+    responsavel_verba_id: dados.responsavel_verba_id,
+    servico: dados.servico,
+    valor: Number(linhaPP.valor),
+    dados,
+    // A pergunta da última PP volta a ser feita: o item pode ter mudado.
+    ultima_pp_do_item: null,
+    refaz_pp_id: ppId,
+    criada_por: session.profile.id,
+    atualizada_por: session.profile.id,
+  });
+  if (insertErr) {
+    await desfazerArquivos();
+    return { ok: false, message: `Falha ao refazer: ${insertErr.message}` };
+  }
+  if (anexosNovos.length > 0) {
+    const { error: anexosErr } = await supabase.from("pedidos_compra_a_emitir_anexos").insert(anexosNovos);
+    if (anexosErr) {
+      await supabase.from("pedidos_compra_a_emitir").delete().eq("id", novoId).eq("tenant_id", tenantId);
+      await desfazerArquivos();
+      return { ok: false, message: `Falha ao refazer: ${anexosErr.message}` };
+    }
+  }
+
+  // Só agora a PP rejeitada sai: sem a PP a emitir no lugar, nada se cancela.
+  const { data: cancelada, error: cancelErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      status: "cancelada",
+      cancelada_por: session.profile.id,
+      cancelada_em: new Date().toISOString(),
+      motivo_cancelamento: "Rejeitada pelo financeiro e refeita (Cancelar e refazer).",
+    })
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .eq("status", "rejeitada")
+    .select("id");
+  if (cancelErr || !cancelada || cancelada.length === 0) {
+    await supabase.from("pedidos_compra_a_emitir").delete().eq("id", novoId).eq("tenant_id", tenantId);
+    await desfazerArquivos();
+    return {
+      ok: false,
+      message: cancelErr ? `Falha ao cancelar a PP: ${cancelErr.message}` : `${linhaPP.codigo} já tinha saído de rejeitada.`,
+    };
+  }
+
+  // Como no cancelamento comum: o fornecedor do item volta a ficar livre.
+  await supabase
+    .from("jobs_itens_realizado")
+    .update({ fornecedor_id: null })
+    .eq("id", linhaPP.item_realizado_id)
+    .eq("tenant_id", tenantId);
+
+  await logAuditEvent({
+    acao: "pedido_compra.cancelada",
+    tenantId,
+    entidadeTipo: "pedido_compra",
+    entidadeId: ppId,
+    metadata: {
+      pp_codigo: linhaPP.codigo,
+      item_realizado_id: linhaPP.item_realizado_id,
+      job_id: linhaPP.job_id,
+      origem: "cancelar_e_refazer",
+      pp_a_emitir_id: novoId,
+    },
+  });
+
+  revalidatePath(`/jobs/${linhaPP.job_id}`);
+  return { ok: true, aEmitirId: novoId, codigo: linhaPP.codigo };
 }

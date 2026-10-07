@@ -29,6 +29,7 @@ import {
   verbaAguardaProducao,
 } from "@/lib/types";
 import {
+  cancelarERefazerPP,
   cancelarPedidoCompra,
   signedUrlPdfParcela,
   signedUrlPdf,
@@ -36,16 +37,10 @@ import {
 import { PPStatusChip } from "./pp-status-chip";
 import { PrestarContasDrawer } from "./prestar-contas-drawer";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
-import { EditarPPDrawer } from "./editar-pp-drawer";
 
 interface Props {
   pps: PedidoCompraNaLista[];
   fornecedoresPorId: Record<string, string>;
-  fornecedores: Array<{ id: string; nome: string; razao_social: string | null }>;
-  empresas: Array<{ id: string; razao_social: string; principal: boolean }>;
-  /** Membros ativos — a correção da PP de verba escolhe o responsável aqui
-   *  (decisão 083, 7b). */
-  responsaveis: Array<{ id: string; nome: string }>;
   /** GP responsável pelo job ou admin, com o job em estado editável. */
   /** Cancelar a PP e a trilha de ações. Desde 08/09/2026 vale também na
    *  pré-abertura, junto com gerar (decisão 056). */
@@ -149,9 +144,6 @@ function DtPagamento({
 export function JobPPsSection({
   pps,
   fornecedoresPorId,
-  fornecedores,
-  empresas,
-  responsaveis,
   editable,
   podeEnviar = false,
   papelEnviaPP,
@@ -163,7 +155,9 @@ export function JobPPsSection({
   const [busca, setBusca] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
-  const [ppEditando, setPpEditando] = React.useState<PedidoCompraNaLista | null>(
+  /** A rejeitada que vai ser cancelada e refeita (decisão 153): ela não se
+   *  edita mais, volta como PP a emitir no painel do item. */
+  const [ppRefazendo, setPpRefazendo] = React.useState<PedidoCompraNaLista | null>(
     null,
   );
   const [ppCancelando, setPpCancelando] =
@@ -611,11 +605,12 @@ export function JobPPsSection({
                         {podeEnviar && pp.status === "rejeitada" && indice === 0 && (
                           <button
                             type="button"
-                            onClick={() => setPpEditando(pp)}
-                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red/25 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-california-red hover:bg-california-red/[0.06]"
+                            onClick={() => setPpRefazendo(pp)}
+                            disabled={pending}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red/25 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-california-red hover:bg-california-red/[0.06] disabled:opacity-50"
                           >
                             <Pencil className="h-3 w-3" />
-                            Editar
+                            Cancelar e refazer
                           </button>
                         )}
                         <Tooltip>
@@ -732,16 +727,36 @@ export function JobPPsSection({
         onSuccess={setToast}
       />
 
-      <EditarPPDrawer
-        open={ppEditando !== null}
-        onOpenChange={(o) => !o && setPpEditando(null)}
-        pp={ppEditando}
-        fornecedores={fornecedores}
-        empresas={empresas}
-        responsaveis={responsaveis}
-        onSuccess={(codigo) =>
-          setToast(`${codigo} corrigida e reenviada para avaliação.`)
+      <ConfirmDialog
+        open={ppRefazendo !== null}
+        onOpenChange={(o) => !o && setPpRefazendo(null)}
+        title={`Cancelar a ${ppRefazendo?.codigo ?? "PP"} e refazer?`}
+        description={
+          <>
+            A <strong className="text-foreground">{ppRefazendo?.codigo}</strong> é cancelada e fica no histórico,
+            com o motivo da rejeição. Ela volta como PP a emitir no painel do item, com os mesmos dados e anexos,
+            para você corrigir e gerar uma PP nova, com outro código.
+          </>
         }
+        confirmLabel="Cancelar e refazer"
+        cancelLabel="Voltar"
+        pending={pending}
+        onConfirm={() => {
+          const alvo = ppRefazendo;
+          if (!alvo) return;
+          startTransition(async () => {
+            const res = await cancelarERefazerPP(alvo.id);
+            setPpRefazendo(null);
+            if (!res.ok) {
+              setErro(res.message);
+              return;
+            }
+            setToast(
+              `${res.codigo} cancelada. A PP a emitir voltou no painel do item${alvo.item_nome ? ` “${alvo.item_nome}”` : ""}, na Planilha Interna.`,
+            );
+            router.refresh();
+          });
+        }}
       />
 
       {toast && (

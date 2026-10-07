@@ -95,13 +95,26 @@ export interface PagamentoDeFornecedor {
   data: string;
   bruto: number;
   retido: Partial<Record<ImpostoRetido, number>>;
+  /**
+   * Decisão 152: a PP que pagou e o job dela. A nota pode cobrir mais de uma
+   * PP; os pagamentos de cada PP vão na primeira nota dela, com o próprio
+   * código e job (sem eles, valem os da nota).
+   */
+  pp?: string;
+  job?: JobDoFato;
 }
 
-/** NF do fornecedor registrada na aprovação da PP. */
+/**
+ * NF do fornecedor registrada na aprovação da PP. Decisão 152: uma linha por
+ * nota do cadastro, que conta UMA vez, pelo valor total, mesmo cobrindo mais
+ * de uma PP.
+ */
 export interface NotaFornecedorFiscal {
   id: string;
-  /** "PP-00121". */
+  /** "PP-00121", ou "PP-00121, PP-00125" quando a nota cobre mais de uma PP. */
   pp: string;
+  /** As PPs (aprovadas ou pagas) que a nota cobre. Sem ele, `id` é a PP. */
+  pp_ids?: string[];
   numero: string;
   fornecedor_nome: string;
   job: JobDoFato;
@@ -1486,16 +1499,17 @@ function guiasRetencoes(ctx: Contexto, pj: string, comp: string): Guia[] {
         const valor =
           tributo === "CSRF" ? r2((pg.retido.PIS ?? 0) + (pg.retido.COFINS ?? 0) + (pg.retido.CSLL ?? 0)) : r2(pg.retido.IRRF ?? 0);
         if (valor <= 0) continue;
-        const j = nf.job;
+        const j = pg.job ?? nf.job;
+        const pp = pg.pp ?? nf.pp;
         memoria.push({
           grupo: "debito",
-          rotulo: `${nf.pp} · NF ${nf.numero} · ${nf.fornecedor_nome}`,
+          rotulo: `${pp} · NF ${nf.numero} · ${nf.fornecedor_nome}`,
           detalhe: `pago em ${dataBr(pg.data)} · ${j.codigo} ${j.nome}${tributo === "CSRF" ? ` · ${partesDaCsrf(pg)}` : ""}`,
           base: pg.bruto,
           ...(pg.bruto > 0 ? { aliquota: r4((valor / pg.bruto) * 100) } : {}),
           valor,
           job_id: j.job_id,
-          pp: nf.pp,
+          pp,
         });
         pesos.push({ job: j, peso: pg.bruto });
       }

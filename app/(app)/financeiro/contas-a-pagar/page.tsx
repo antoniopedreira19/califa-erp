@@ -422,7 +422,7 @@ export default async function PedidosCompraFinanceiroPage({
   const fiscalDaAprovacaoPromise = carregarFiscalDaAprovacaoPP(
     supabase,
     session.activeTenant.id,
-    rows.filter((r) => r.status === "em_avaliacao" && r.nota_fiscal !== null),
+    rows.filter((r) => r.status === "em_avaliacao" && r.notas_fiscais !== null),
   );
 
   // As alíquotas da última retenção de cada fornecedor, para o "Repetir
