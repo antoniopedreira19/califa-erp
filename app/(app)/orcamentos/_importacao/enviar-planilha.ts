@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { EnvioDaPlanilha } from "@/lib/importacao/envio";
-import { recusaDoArquivo, TIPO_XLSX } from "@/lib/importacao/limites";
+import { recusaDoArquivo, TIPO_XLSM, TIPO_XLSX } from "@/lib/importacao/limites";
 import { prepararEnvioPlanilha } from "./envio-actions";
 
 /**
@@ -19,9 +19,17 @@ export async function enviarPlanilha(
   const reserva = await prepararEnvioPlanilha({ nome: file.name, tamanho: file.size });
   if (!reserva.ok) return reserva;
 
+  // O tipo vai pela extensão, não pelo que o sistema operacional informa: o
+  // bucket só aceita .xlsx e .xlsm (migration 20261007800002), e um .xlsx
+  // sem tipo conhecido chegaria como "application/octet-stream". Com o
+  // arquivo no corpo, o Storage lê o tipo do próprio arquivo, e não da
+  // opção `contentType`.
+  const tipo = file.name.toLowerCase().endsWith(".xlsm") ? TIPO_XLSM : TIPO_XLSX;
+  const arquivo = new File([file], file.name, { type: tipo });
+
   const { error } = await createClient()
     .storage.from("orcamento-importacoes")
-    .upload(reserva.path, file, { contentType: file.type || TIPO_XLSX, upsert: false });
+    .upload(reserva.path, arquivo, { contentType: tipo, upsert: false });
   if (error) {
     console.error("[importacao.enviar]", error.message);
     return {

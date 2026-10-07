@@ -5272,3 +5272,39 @@ aplicada na hora combinada com a frente do Antonio, junto da
   Tiago), o "Importar" não aparece em nenhuma das duas telas, e a action
   recusa com "Você não tem permissão para essa ação.". Não há projeto
   arquivado no banco, então esse caso foi conferido só pelo código.
+
+## ⚠️ Nota de 2026-10-07 (6) — a pasta de envios da importação só para o dono, e a agregada em consulta para quem não edita
+
+- **A pasta de envios** (`orcamento-importacoes/<tenant>/envios/`, onde o
+  navegador sobe a planilha antes da importação) deixava qualquer pessoa
+  logada do tenant ler e subir arquivos, inclusive o freelancer e o
+  financeiro, e alcançar a planilha que outra pessoa estava importando ou
+  que ficou esquecida. Em 07/10 havia lá um arquivo de 05/10, esquecido.
+  Pela migration `20261007800001` (aplicada em 07/10):
+  - **ler e apagar**: só quem subiu o arquivo (o servidor lê com a chave
+    de serviço e não depende disso);
+  - **subir**: só administrador, GP e produtor, e só na pasta `envios` do
+    tenant.
+- **Teto e tipo no próprio bucket**: 10 MB e só `.xlsx`/`.xlsm`
+  (migration `20261007800002`). Ela é aplicada **depois do deploy** deste
+  código: o navegador passou a mandar o tipo pela extensão do arquivo
+  (`enviar-planilha.ts`), porque o tipo informado pelo sistema operacional
+  pode vir vazio.
+- **Actions da pasta** (`_importacao/envio-actions.ts`):
+  `prepararEnvioPlanilha` pede `orcamentos.criar` ou `orcamentos.editar`.
+  `descartarEnvioPlanilha` apaga com a sessão de quem pediu, e não com a
+  chave de serviço, então só apaga o próprio arquivo.
+- **Agregada em consulta para quem não tem `orcamentos.editar`**
+  (financeiro, freelancer): todo card leva o bloqueio "Seu papel não edita
+  orçamentos: aqui é só consulta." e somem "Novo item", "Novo grupo",
+  "Criar orçamento de job", "Importar" e o status da gravação. O texto do
+  topo diz que a visão é só para consulta. As actions já recusavam; a tela
+  é que enganava.
+- **Testado.** No banco, a sessão simulada do freelancer listava 1 arquivo
+  antes e 0 depois, e a gravação dele na pasta é recusada pela policy;
+  quem subiu o arquivo continua vendo o próprio. No navegador, como
+  administrador: um `.xlsx` sem tipo subiu e virou prévia, o "Cancelar"
+  apagou o arquivo (pasta vazia), e a agregada segue editável. Como
+  Financeiro (o `claude.gp.teste` com o papel trocado e devolvido, com
+  autorização do Tiago): agregada só em consulta, com os 24 cards
+  bloqueados e o motivo no card aberto, e `prepararEnvioPlanilha` recusado.

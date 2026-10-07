@@ -430,6 +430,10 @@ export default async function OrcamentosAgregadoPage({
   // Projeto arquivado é só leitura (decisão 118): todos os orçamentos
   // ficam em consulta, e o "Criar orçamento de job" some.
   const projetoArquivado = projeto.status === "arquivado";
+  // Quem não edita orçamento (financeiro, freelancer) vê a agregada em
+  // consulta, com o motivo em cada card (07/10/2026). As actions já
+  // recusavam; a tela é que mostrava "Novo item" e "Novo grupo".
+  const podeEditar = pode(session.activeRole, "orcamentos.editar");
 
   // Mídia Off (decisão 147, entrega 1): só consulta, com o atalho para a
   // tela do orçamento — a planilha dela é por meio e mês, com a conta da
@@ -479,7 +483,9 @@ export default async function OrcamentosAgregadoPage({
     const grupos = versao ? (gruposPorVersao.get(versao.id) ?? []) : [];
     const bloqueio = projetoArquivado
       ? "Projeto arquivado — reative o projeto para editar."
-      : versao
+      : !podeEditar
+        ? "Seu papel não edita orçamentos: aqui é só consulta."
+        : versao
         ? motivoBloqueio(orc.status, versao.status)
         : "Este orçamento ainda não tem nenhuma versão. Crie a primeira na tela do orçamento.";
 
@@ -665,6 +671,7 @@ export default async function OrcamentosAgregadoPage({
         responsavel: projeto.responsavel?.nome ?? null,
       }}
       projetoArquivado={projetoArquivado}
+      podeEditar={podeEditar}
       podeImportar={!projetoArquivado && pode(session.activeRole, "orcamentos.criar")}
       podeEditarImpostos={pode(session.activeRole, "orcamentos.editar_impostos")}
       podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
