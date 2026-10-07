@@ -128,7 +128,7 @@ test("embaixo do campo: âmbar quando trocado à mão, dizendo o que a consulta 
     alterado: true,
   });
   assert.deepEqual(origemDoRegime("simples", NORMAL, CNPJ), {
-    texto: "Alterado manualmente — a consulta do CNPJ em 02/10/2026 indicou regime normal.",
+    texto: "Alterado manualmente — a consulta do CNPJ em 02/10/2026 indicou Lucro Real ou Presumido.",
     alterado: true,
   });
   assert.deepEqual(origemDoRegime("normal", MEI, "64.582.932/0001-72"), {

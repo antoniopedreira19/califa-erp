@@ -23,8 +23,8 @@
  * dizer o que falta antes do clique; quem recusa de verdade é a action.
  *
  * Módulo fiscal (02/10/2026): a pessoa jurídica ganha o **regime
- * tributário** — Normal (Lucro Real ou Presumido), Simples Nacional ou MEI
- * —, ao lado da razão social. A consulta do CNPJ que o cadastro novo já faz
+ * tributário** — Lucro Real ou Presumido, Simples Nacional ou MEI —, ao
+ * lado da razão social. A consulta do CNPJ que o cadastro novo já faz
  * (BrasilAPI) preenche o regime pelos campos de opção pelo Simples e pelo
  * MEI, e a origem fica embaixo do campo; trocado à mão para outro, o texto
  * fica âmbar e diz o que a consulta indicou. No Simples entra a declaração
@@ -36,6 +36,13 @@
  * (inclusive o âmbar de "alterado manualmente") vale ao reabrir. No Simples,
  * ao lado da caixa da declaração, o **arquivo** dela
  * (`declaracao-simples.tsx`).
+ *
+ * 07/10/2026 (Tiago): a caixa e o arquivo da declaração saem do cadastro
+ * rápido (o "+" da PP, do BV e o pop-up do veículo) e ficam só na página
+ * do cadastro. A produção anexava a NF e o print da consulta do CNPJ no
+ * lugar da declaração. O que o cadastro já tem continua indo no envio, pelo
+ * estado, então editar pelo pop-up não apaga nada. E Lucro Real ou
+ * Presumido perdeu a nota azul.
  */
 
 import * as React from "react";
@@ -1162,8 +1169,10 @@ export function FornecedorForm({
               {/* Módulo fiscal: no Simples, a declaração de optante e o
                   arquivo dela (decisão 142). A caixa fica na altura do
                   botão do arquivo. Fora do Simples os dois somem, mas o
-                  arquivo continua com o cadastro. */}
-              {ehPj && regime === "simples" && (
+                  arquivo continua com o cadastro. Só na página: o cadastro
+                  rápido não mostra os dois (Tiago, 07/10/2026), e o que o
+                  cadastro tem segue no envio pelo estado. */}
+              {ehPj && regime === "simples" && !emDialog && (
                 <>
                   <label className="col-span-12 flex cursor-pointer items-center gap-2.5 self-end sm:col-span-7 sm:h-11">
                     <Checkbox
@@ -1186,8 +1195,9 @@ export function FornecedorForm({
 
               {/* Módulo fiscal: o que o regime faz com as retenções e o
                   crédito, na aprovação da PP. Fora do pop-up rápido do
-                  veículo (Tiago, 07/10/2026, decisão 150). */}
-              {ehPj && regime && !(ehVeiculo && emDialog) && (
+                  veículo (Tiago, 07/10/2026, decisão 150). Lucro Real ou
+                  Presumido não tem nota (Tiago, 07/10/2026). */}
+              {ehPj && regime && NOTA_DO_REGIME[regime] && !(ehVeiculo && emDialog) && (
                 <div className="col-span-12 flex gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-sky-900">
                   <span className="mt-0.5 shrink-0">
                     <Info className="h-3.5 w-3.5" />

@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-03
 **Decidido por:** Tiago ("Faça os pontos remanescentes", 03/10/2026)
-**Status:** aceita — entregue em 03/10/2026
+**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração sai do cadastro rápido e o regime normal vira "Lucro Real ou Presumido")
 **Migration:** `20261002100800_fiscal_fornecedor_consulta_e_declaracao.sql`
 (aditiva: duas colunas anuláveis em `fornecedores` e o bucket privado
 `fornecedores`)
@@ -83,3 +83,48 @@ Em 03/10/2026, em modo produção local (`next build` + `next start`), no TES:
    mesma data do fluxo (amanhã), com "vencida · projetada para dd/mm/aaaa";
    o protótipo nunca teve título vencido. A rotina diária já empurra as
    previsões vencidas, então é raro.
+
+## 5. Revisão de 07/10/2026 — a declaração só na página do cadastro
+
+**Decidido por:** Tiago, depois de uma pergunta da produção sobre a caixa
+da declaração no "Novo fornecedor" da PP.
+
+**O que motivou.** Até 07/10, os dois cadastros com arquivo de declaração
+tinham anexado outra coisa no lugar dela:
+
+- **Dome:** a DANFE da nota da compra (NF-e 119), o mesmo PDF anexado na
+  PP-00133;
+- **Alecal:** um print da consulta do CNPJ num site, com "Opção pelo
+  Simples: Sim". É o que a consulta do sistema já faz sozinha.
+
+Nenhum dos dois tem a caixa marcada. A produção não sabe o que é a
+declaração, e o campo é assunto do financeiro.
+
+**O que mudou:**
+
+| Ponto | Antes | Agora |
+|---|---|---|
+| Caixa e arquivo da declaração | Em todo cadastro de fornecedor no Simples | Só na página do cadastro (`/fornecedores/novo` e `/fornecedores/[id]`). O cadastro rápido não mostra os dois: o "+" da PP, o do BV e o pop-up do veículo da Mídia Off. O que o cadastro já tem continua indo no envio (vem do estado do formulário), então editar pelo pop-up não apaga a caixa nem o arquivo. |
+| Nome do regime normal | "Normal (Lucro Real ou Presumido)" no cadastro, "Regime normal (Lucro Real ou Presumido)" na PP, "regime normal" no pop-up de aprovação e no aviso âmbar | "Lucro Real ou Presumido" nos quatro. O valor gravado continua `normal`. |
+| Nota azul do regime normal | "As retenções dependem do serviço contratado e são informadas na aprovação da PP." | Sem nota. Simples e MEI mantêm a deles. |
+
+**Sem migration.** Código: `fornecedor-form.tsx`,
+`lib/fiscal/regime-do-fornecedor.ts` e `lib/fiscal/nf-da-pp.ts`, com os
+testes.
+
+**Conferido no navegador (07/10/2026), sem gravar nada:**
+- `/fornecedores/novo`: a lista mostra "Lucro Real ou Presumido", sem nota
+  azul. No Simples, a caixa, o arquivo e a nota continuam;
+- "+" da PP no TES-1014/26: no Simples, sem caixa e sem arquivo;
+- PP-00132 (Fornecedor Teste): "Lucro Real ou Presumido" no dossiê e
+  "FORNECEDOR TESTE LTDA · Lucro Real ou Presumido" no pop-up de
+  aprovação, que foi fechado sem aprovar.
+
+**Ficou para o Tiago:**
+1. Os arquivos errados da Dome e da Alecal continuam nos cadastros. Tirar
+   é pelo ✕ da página de cada um, e o arquivo fica no bucket (§2).
+2. A nota azul do Simples ainda diz "com a declaração" no cadastro rápido,
+   onde a declaração não aparece mais.
+3. Editar fornecedor (`cadastros.fornecedores.editar`) é só do
+   administrador. Os 4 usuários com papel financeiro não conseguem marcar
+   a declaração.

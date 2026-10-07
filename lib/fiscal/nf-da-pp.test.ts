@@ -268,7 +268,7 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
     declaracao_simples_recebida: null,
   });
   assert.ok(normal);
-  assert.equal(textoDoRegime(normal), "Regime normal (Lucro Real ou Presumido) · consulta do CNPJ em 01/10/2026");
+  assert.equal(textoDoRegime(normal), "Lucro Real ou Presumido · consulta do CNPJ em 01/10/2026");
   assert.equal(
     textoDoRegime({ regime: "simples", consultado_em: null, declaracao_simples_recebida: true }),
     "Optante do Simples Nacional · declaração recebida",
@@ -278,7 +278,7 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
     "Optante do Simples Nacional · consulta do CNPJ em 21/09/2026",
   );
   assert.equal(textoDoRegime({ regime: "mei", consultado_em: null, declaracao_simples_recebida: false }), "MEI");
-  assert.equal(rotuloCurtoDoRegime("normal"), "regime normal");
+  assert.equal(rotuloCurtoDoRegime("normal"), "Lucro Real ou Presumido");
   assert.equal(rotuloCurtoDoRegime("simples"), "optante do Simples");
   assert.equal(rotuloCurtoDoRegime("mei"), "MEI");
   assert.equal(rotuloCurtoDoRegime(null), "regime não informado");

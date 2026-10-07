@@ -258,13 +258,13 @@ export function textoDoRegime(r: RegimeDoFornecedorDaPP): string {
         ? r.declaracao_simples_recebida
           ? "Optante do Simples Nacional · declaração recebida"
           : "Optante do Simples Nacional"
-        : "Regime normal (Lucro Real ou Presumido)";
+        : "Lucro Real ou Presumido";
   return r.consultado_em ? `${texto} · consulta do CNPJ em ${dataBr(r.consultado_em)}` : texto;
 }
 
 /** Ao lado do nome do fornecedor, na linha das retenções do pop-up. */
 export function rotuloCurtoDoRegime(regime: RegimeTributarioFornecedor | null): string {
-  if (regime === "normal") return "regime normal";
+  if (regime === "normal") return "Lucro Real ou Presumido";
   if (regime === "simples") return "optante do Simples";
   if (regime === "mei") return "MEI";
   return "regime não informado";

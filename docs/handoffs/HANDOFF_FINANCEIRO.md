@@ -6810,3 +6810,19 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
   zero, "Reter na fonte" não desliga.
 - O servidor confere: `registrar_notas_fiscais_da_pp` recusa, com retenção,
   ISS diferente do da nota (migration `20261007300005`).
+
+## ⚠️ Nota de 2026-10-07 (5) — fornecedor: declaração do Simples só na página, e "Lucro Real ou Presumido" (decisão 142 §5)
+
+- **O cadastro rápido** (o "+" da PP, o do BV e o pop-up do veículo) não
+  mostra mais a caixa "Declaração de optante recebida" nem o "Arquivo da
+  declaração". Os dois ficam só na página do cadastro. Editar pelo pop-up
+  não apaga o que o cadastro tem.
+- **"Normal (Lucro Real ou Presumido)" virou "Lucro Real ou Presumido"** no
+  cadastro, no dossiê da PP, no pop-up de aprovação e no aviso âmbar de
+  "Alterado manualmente". O valor gravado continua `normal`.
+- **A nota azul do regime normal saiu.** Simples e MEI mantêm a deles.
+- **Motivo:** os dois arquivos de declaração gravados até hoje eram outra
+  coisa (a DANFE da Dome e um print da consulta do CNPJ da Alecal).
+- Sem migration. Conferido no `/fornecedores/novo`, no "+" da PP do
+  TES-1014/26 e na PP-00132.
+

@@ -3,7 +3,7 @@
  * fiscal, entrega 1 — 02/10/2026; consulta guardada e arquivo da declaração
  * na decisão 142).
  *
- * Normal (Lucro Real ou Presumido), Simples Nacional ou MEI: preenchido
+ * Lucro Real ou Presumido (o valor `normal`), Simples Nacional ou MEI: preenchido
  * pela consulta do CNPJ que o cadastro novo já faz na BrasilAPI (os campos
  * de opção pelo Simples e pelo MEI) e editável. É o regime que diz, na
  * aprovação da PP, se há retenção na fonte.
@@ -35,19 +35,22 @@ export const REGIMES_DO_FORNECEDOR: readonly RegimeTributarioFornecedor[] = [
   "mei",
 ];
 
+/** Sem "Normal" na frente desde 07/10/2026 (Tiago): "regime normal" é
+ *  jargão contábil e não diz nada a quem cadastra. O valor gravado continua
+ *  `normal`. */
 export const ROTULO_DO_REGIME: Record<RegimeTributarioFornecedor, string> = {
-  normal: "Normal (Lucro Real ou Presumido)",
+  normal: "Lucro Real ou Presumido",
   simples: "Simples Nacional",
   mei: "MEI",
 };
 
-/** O que cada regime faz com as retenções e o crédito, na aprovação da PP. */
-export const NOTA_DO_REGIME: Record<RegimeTributarioFornecedor, string> = {
+/** O que cada regime faz com as retenções e o crédito, na aprovação da PP.
+ *  Lucro Real ou Presumido não tem nota desde 07/10/2026 (Tiago): "as
+ *  retenções dependem do serviço" não ajudava quem cadastra. */
+export const NOTA_DO_REGIME: Partial<Record<RegimeTributarioFornecedor, string>> = {
   simples:
     "Sem retenção de PIS/COFINS/CSLL e IRRF, com a declaração. O ISS pode ser retido com a alíquota informada na nota. A compra dá crédito de PIS/COFINS normalmente.",
   mei: "Sem retenção nenhuma. A compra dá crédito de PIS/COFINS normalmente.",
-  normal:
-    "As retenções dependem do serviço contratado e são informadas na aprovação da PP.",
 };
 
 /** O que a consulta do CNPJ disse do regime, e de qual CNPJ. */
@@ -148,9 +151,8 @@ export function origemDoRegime(
   const c = consultaDoCnpj(consulta, cnpj);
   if (!regime || !c) return null;
   if (regime !== c.regime) {
-    const indicou = c.regime === "normal" ? "regime normal" : ROTULO_DO_REGIME[c.regime];
     return {
-      texto: `Alterado manualmente — a consulta do CNPJ em ${dataBr(c.em)} indicou ${indicou}.`,
+      texto: `Alterado manualmente — a consulta do CNPJ em ${dataBr(c.em)} indicou ${ROTULO_DO_REGIME[c.regime]}.`,
       alterado: true,
     };
   }
