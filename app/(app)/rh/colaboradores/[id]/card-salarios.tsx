@@ -49,11 +49,30 @@ export function CardSalarios({
   const vigente = salarios.find((s) => s.data_fim === null) ?? null;
   const historico = salarios.filter((s) => s.data_fim !== null);
 
+  /** "R$ 7.500,00" | "7500" | "7500.00" → number (reais). */
+  function brlParaNumero(v: string): number {
+    const n = Number(v.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+
   function handleMudanca(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
     formData.set("data_inicio", dataMudanca);
+
+    if (ehHibrido) {
+      // Pro híbrido, UI tem 2 campos (valor_clt + valor_recibo).
+      // Backend quer: valor = total, valor_recibo = recibo. Faz a soma aqui.
+      const vClt =
+        (form.elements.namedItem("valor_clt") as HTMLInputElement)?.value ?? "";
+      const vRec =
+        (form.elements.namedItem("valor_recibo") as HTMLInputElement)?.value ?? "";
+      const total = brlParaNumero(vClt) + brlParaNumero(vRec);
+      formData.set("valor", total.toFixed(2));
+      formData.set("valor_recibo", vRec);
+    }
 
     startTransition(async () => {
       const res = await registrarMudancaSalarial(colaboradorId, formData);
@@ -70,16 +89,29 @@ export function CardSalarios({
     e.preventDefault();
     setError(null);
     const form = e.currentTarget;
-    const valorRaw =
-      (form.elements.namedItem("valor") as HTMLInputElement)?.value ?? "";
-    const valorReciboRaw =
-      (form.elements.namedItem("valor_recibo") as HTMLInputElement)?.value ?? "";
+
+    let valorRaw: string;
+    let valorReciboRaw: string | undefined;
+
+    if (ehHibrido) {
+      const vClt =
+        (form.elements.namedItem("valor_clt") as HTMLInputElement)?.value ?? "";
+      const vRec =
+        (form.elements.namedItem("valor_recibo") as HTMLInputElement)?.value ?? "";
+      const total = brlParaNumero(vClt) + brlParaNumero(vRec);
+      valorRaw = total.toFixed(2);
+      valorReciboRaw = vRec;
+    } else {
+      valorRaw =
+        (form.elements.namedItem("valor") as HTMLInputElement)?.value ?? "";
+      valorReciboRaw = undefined;
+    }
 
     startTransition(async () => {
       const res = await corrigirSalarioAtual(
         colaboradorId,
         valorRaw,
-        ehHibrido ? valorReciboRaw : undefined,
+        valorReciboRaw,
       );
       if (!res.ok) {
         setError(res.message);
@@ -128,27 +160,21 @@ export function CardSalarios({
             </DialogHeader>
 
             <form onSubmit={handleMudanca} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="valor">
-                  {ehHibrido ? "Salário total mensal (CLT + Recibo)" : "Novo valor mensal"}
-                </Label>
-                <MoedaInput id="valor" name="valor" required />
-                {ehHibrido && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Soma da parte CLT (paga pela contabilidade) + parte Recibo (paga pela California).
-                  </p>
-                )}
-              </div>
-
-              {ehHibrido && (
+              {ehHibrido ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="valor_clt">Salário CLT</Label>
+                    <MoedaInput id="valor_clt" name="valor_clt" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="valor_recibo">Salário Recibo</Label>
+                    <MoedaInput id="valor_recibo" name="valor_recibo" required />
+                  </div>
+                </>
+              ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="valor_recibo">
-                    Parte Recibo (RPA) — paga pela California
-                  </Label>
-                  <MoedaInput id="valor_recibo" name="valor_recibo" required />
-                  <p className="text-[11px] text-muted-foreground">
-                    A parte CLT é derivada automaticamente: Total − Recibo.
-                  </p>
+                  <Label htmlFor="valor">Novo valor mensal</Label>
+                  <MoedaInput id="valor" name="valor" required />
                 </div>
               )}
 
@@ -227,17 +253,17 @@ export function CardSalarios({
                     {ehHibrido && vigente.valor_recibo != null && (
                       <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
                         <span>
-                          Recibo:{" "}
-                          <span className="font-medium text-foreground tabular-nums">
-                            {formatarMoeda(vigente.valor_recibo)}
-                          </span>
-                        </span>
-                        <span>
-                          CLT:{" "}
+                          Salário CLT:{" "}
                           <span className="font-medium text-foreground tabular-nums">
                             {formatarMoeda(
                               (Number(vigente.valor) - Number(vigente.valor_recibo)).toFixed(2),
                             )}
+                          </span>
+                        </span>
+                        <span>
+                          Salário Recibo:{" "}
+                          <span className="font-medium text-foreground tabular-nums">
+                            {formatarMoeda(vigente.valor_recibo)}
                           </span>
                         </span>
                       </div>
@@ -302,28 +328,42 @@ export function CardSalarios({
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCorrigir} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="valor">
-                  {ehHibrido ? "Salário total mensal (CLT + Recibo)" : "Novo valor mensal"}
-                </Label>
-                <MoedaInput
-                  id="valor"
-                  name="valor"
-                  required
-                  defaultValue={vigente ? String(vigente.valor) : ""}
-                />
-              </div>
-
-              {ehHibrido && (
+              {ehHibrido ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="valor_clt">Salário CLT</Label>
+                    <MoedaInput
+                      id="valor_clt"
+                      name="valor_clt"
+                      required
+                      defaultValue={
+                        vigente
+                          ? (
+                              Number(vigente.valor) -
+                              Number(vigente.valor_recibo ?? 0)
+                            ).toFixed(2)
+                          : ""
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="valor_recibo">Salário Recibo</Label>
+                    <MoedaInput
+                      id="valor_recibo"
+                      name="valor_recibo"
+                      required
+                      defaultValue={vigente?.valor_recibo ?? ""}
+                    />
+                  </div>
+                </>
+              ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="valor_recibo">
-                    Parte Recibo (RPA)
-                  </Label>
+                  <Label htmlFor="valor">Novo valor mensal</Label>
                   <MoedaInput
-                    id="valor_recibo"
-                    name="valor_recibo"
+                    id="valor"
+                    name="valor"
                     required
-                    defaultValue={vigente?.valor_recibo ?? ""}
+                    defaultValue={vigente ? String(vigente.valor) : ""}
                   />
                 </div>
               )}
