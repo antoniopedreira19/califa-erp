@@ -13,6 +13,7 @@
     "test:cnab-fora": "node --import tsx --test lib/cnab/fora-do-cadastro.test.ts",
     "test:foto-pp": "node --import tsx --test lib/data/foto-pagamento-da-pp.test.ts",
     "test:folha": "node --import tsx --test lib/validations/rh-folhas.test.ts",
+    "test:folha-parser": "node --import tsx --test lib/pdf/parse-folha-contabilidade.test.ts",
     "atualizar:bancos": "tsx scripts/atualizar-bancos-febraban.ts"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
+    "@types/pdf-parse": "^1.1.5",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",
@@ -36,6 +38,7 @@
     "extenso": "^3.0.0",
     "lucide-react": "^0.344.0",
     "next": "^14.2.35",
+    "pdf-parse": "^2.4.5",
     "pdfmake": "^0.2.10",
     "react": "^18.2.0",
     "react-day-picker": "^8.10.2",
