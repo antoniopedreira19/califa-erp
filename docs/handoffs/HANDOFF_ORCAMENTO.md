@@ -5436,7 +5436,8 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Caso que motivou: UNM-P001/26-01 (a GP digitou outubro à mão; o job já
   existe e a versão não aceita mais importação).
 - Teste no **TES-P001/26-33 · ZZ Teste 158 planilha de um mês** (Always On,
-  hoje só com outubro, v1 com 12 itens da planilha de teste). Ver a 158.
+  outubro a dezembro, v1 com os 36 itens do arquivo original da GP
+  importados com "Repetir"). Ver a 158.
 
 ## ⚠️ Nota de 2026-10-08 (2) — modal de importação em janela estreita
 
