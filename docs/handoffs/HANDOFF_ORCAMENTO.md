@@ -5437,3 +5437,15 @@ aplicada na hora combinada com a frente do Antonio, junto da
   existe e a versão não aceita mais importação).
 - Teste no **TES-P001/26-33 · ZZ Teste 158 planilha de um mês** (Always On,
   hoje só com outubro, v1 com 12 itens da planilha de teste). Ver a 158.
+
+## ⚠️ Nota de 2026-10-08 (2) — modal de importação em janela estreita
+
+- Abaixo de 1440 px de janela, o passo "Conferir" do modal de importação
+  põe a tabela de abas em cima do resumo, e o modal rola como um todo. Lado
+  a lado, as tabelas não cabiam: em 1024 px as colunas "Aba" e "Grupos"
+  ficavam com largura zero, e até 1366 px o título "Grupos que serão
+  criados" invadia a coluna "Itens". A partir de 1440 px nada muda.
+- O título da tabela de grupos agora corta com reticências em vez de
+  invadir a coluna vizinha.
+- Conferido no navegador, medindo as colunas em 1024, 1280, 1439, 1440 e
+  1838 px, no TES-P001/26-33 (o modal fechado sem gravar).
