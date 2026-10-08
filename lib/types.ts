@@ -4640,3 +4640,34 @@ export interface BeneficioKpisTenant {
   custo_total_empresa: number;
   custo_total_colaboradores: number;
 }
+
+// ---------- Leitura de NF por IA (spec 2026-10-08-ler-nf-por-ia) ----------
+
+export interface NfExtracaoCache {
+  id: string;
+  tenant_id: string;
+  hash_sha256: string;
+  dados: unknown; // DadosBrutosNF; guardado como jsonb
+  modelo: string;
+  extraido_em: string;
+}
+
+/** O que a IA extrai da NF, já validado. Null = não identificado com
+ *  segurança (nunca string vazia). */
+export interface DadosExtraidosNF {
+  numero_nf: string | null;
+  data_emissao: string | null; // ISO YYYY-MM-DD
+  valor_total: number | null;
+  descricao_servico: string | null;
+  tomador: {
+    cnpj: string | null; // 14 dígitos
+    razao_social: string | null;
+    estabelecimento_id_match: string | null;
+  };
+  emissor: {
+    cnpj: string | null; // 14 dígitos
+    razao_social: string | null;
+    fornecedor_id_match: string | null;
+  };
+  confianca_baixa: boolean;
+}
