@@ -106,9 +106,23 @@ hoje entrarem na regra (revertido antes do commit):
 - Sem o corte antecipado: a PP-00088 ainda com 08/10 aparecia sem aviso e
   com o "Enviar" liberado.
 
-**Não exercitado na tela:** o aviso da PP a emitir com data que perdeu o
-prazo (não há PP a emitir no banco, e nenhum fluxo cria uma assim hoje). A
-conta é a mesma função testada acima.
+**Conferido em 08/10/2026 — PP a emitir que perdeu o prazo (TES-1001/26,
+Item 3 · Agrupamento 2).** Nenhum fluxo cria esse estado no mesmo dia: a
+PP a emitir foi salva pela tela com o vencimento 09/11 (válido; cartão sem
+aviso) e, só no servidor local, a antecedência subiu de 15 para 40 dias,
+como se o tempo tivesse passado (revertido depois, sem commit):
+
+- O cartão no painel mostrou "O prazo de envio do vencimento 09/11/2026 já
+  passou. Edite a PP a emitir e escolha outra data antes de gerar."
+- "Gerar PP" no cartão abriu a revisão, e o "Gerar PP" dela foi recusado
+  pelo servidor ("terminou em 29/09/2026 [...] A primeira janela possível
+  hoje é 20/11/2026"), sem gerar PP.
+- "Editar" na revisão abriu o formulário com "Envio ao financeiro até
+  29/09/2026" e o aviso "Para gerar a PP, escolha a partir de 20/11/2026".
+  "Gerar PP" ali foi barrado na tela; "Salvar" sem mexer na data gravou.
+- No calendário, o 09 (data gravada) seguiu clicável e o 20 também; com
+  20/11 o aviso sumiu, "Salvar" gravou e o cartão ficou sem aviso.
+- A PP a emitir de teste foi excluída pela tela no fim.
 
 ## O que ficou de fora
 
