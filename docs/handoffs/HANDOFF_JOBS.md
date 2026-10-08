@@ -4746,10 +4746,13 @@ código publicado logo depois (`3305751`).
 - Histórico com a ação nova `cancelada`; as remoções antigas continuam
   "Removida". Migrations `20261007100001` e `20261007100002`.
 - Testado no TES-1002/26 (dezembro). A revisão da abertura desse job ficou
-  pendente porque faltam as datas dos recolhimentos de impostos.
+  pendente porque faltavam as datas dos recolhimentos de impostos.
+  ⚠️ 08/10/2026: registrada pela tela, com a regra do Tiago de usar o mês
+  seguinte ao faturamento de cada parcela (30/10, 30/11 e 30/12/2026;
+  impostos na Conta Teste). É a foto nº 7 da abertura.
 - A entrega 2 (valor do job dividido entre inicial e atual, Totais e
   rentabilidade planejada pela abertura) está desenhada na própria decisão
-  150.
+  151 (nasceu como 150 e foi renumerada).
 
 ## ⚠️ Nota de 2026-10-07 (2) — PP a emitir e a NF com cadastro próprio (decisões 153 e 152)
 
