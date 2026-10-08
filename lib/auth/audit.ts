@@ -392,6 +392,10 @@ export type AuditAction =
   | "beneficio.faixa.criada"
   | "beneficio.faixa.editada"
   | "beneficio.faixa.removida"
+  // Leitura de NF por IA (spec 2026-10-08-ler-nf-por-ia). Loga TODA
+  // chamada, hit ou miss do cache. Metadata guarda modelo, tokens,
+  // custo estimado em USD e flag de confiança baixa.
+  | "pp.anexo.nf_lida_por_ia"
   | "acao_negada";
 
 export interface AuditPayload {
