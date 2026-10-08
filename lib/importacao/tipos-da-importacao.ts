@@ -38,9 +38,13 @@ export interface PreviewDaAba {
   /** % que a planilha traz. Não é o que vai ser aplicado — serve para
    *  avisar quem importou quando difere do cadastro do cliente. */
   percentual_honorarios: number | null;
-  /** % que a versão vai receber de fato: o do cadastro do cliente. */
+  /** % que a versão vai ter de fato: o do cadastro do cliente na versão
+   *  nova; no sobrescrever, o da própria versão, que a importação mantém. */
   percentual_honorarios_cliente: number;
   cliente_nome: string;
+  /** "v1" quando a importação sobrescreve a versão e mantém os honorários
+   *  dela; `null` quando a versão nasce com os do cadastro do cliente. */
+  honorarios_da_versao: string | null;
   linhas_lidas: number;
   linhas_importadas: number;
   linhas_ignoradas: number;

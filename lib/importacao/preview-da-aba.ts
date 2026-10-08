@@ -35,8 +35,10 @@ export function montarPreviewDaAba(
     anterior: { numero_versao: number; grupos: GrupoAtual[]; itens: ItemAtual[] } | null;
     /** Meses de destino no mensal; `null` nos outros modelos. */
     mesesDestino: string[] | null;
-    /** O que a versão vai receber; o editor do orçamento manda `null`. */
-    honorarios: { percentual: number; clienteNome: string } | null;
+    /** Os honorários que a versão vai ter; o editor do orçamento manda
+     *  `null`. `versao` ("v1") quando a importação sobrescreve a versão e
+     *  mantém os dela; `null` quando ela nasce com os do cadastro. */
+    honorarios: { percentual: number; clienteNome: string; versao: string | null } | null;
   },
 ):
   | { ok: true; preview: PreviewDaAba; parsed: ParseResultado; semBloco: SemBlocoDeMes | null }
@@ -130,6 +132,7 @@ export function montarPreviewDaAba(
       percentual_honorarios: parsed.percentual_honorarios,
       percentual_honorarios_cliente: contexto.honorarios?.percentual ?? 0,
       cliente_nome: contexto.honorarios?.clienteNome ?? "",
+      honorarios_da_versao: contexto.honorarios?.versao ?? null,
       linhas_lidas: parsed.linhas_lidas,
       linhas_importadas: parsed.linhas_importadas,
       linhas_ignoradas: parsed.linhas_ignoradas,
