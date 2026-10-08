@@ -30,6 +30,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Lock,
+  Sparkles,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -50,12 +51,20 @@ import {
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   documentoTipoLabel,
+  type DadosExtraidosNF,
   type DocumentoTipo,
 } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { chaveDoNumeroDaNf } from "@/lib/fiscal/nf-da-pp";
 import { buscarNotasDoFornecedor, type NotaExistente } from "./actions-notas-da-pp";
+import { lerDadosDaNFPorIA } from "./actions-ler-nf";
+
+/** Formata um CNPJ de 14 dígitos no padrão XX.XXX.XXX/XXXX-XX. */
+function formatCnpjCurto(digitos: string): string {
+  if (digitos.length !== 14) return digitos;
+  return `${digitos.slice(0, 2)}.${digitos.slice(2, 5)}.${digitos.slice(5, 8)}/${digitos.slice(8, 12)}-${digitos.slice(12)}`;
+}
 
 // ---------------------------------------------------------------------------
 // A NF digitada
@@ -464,6 +473,13 @@ export function NfDoAnexo({
   obrigatorio = false,
   compacta = false,
   disabled,
+  anexoPath,
+  anexoMimetype,
+  fornecedores,
+  fornecedorAtualId,
+  fornecedorAtualNome,
+  servicoAtual,
+  onUsarDescricao,
 }: {
   nf: NfDigitada;
   /** Só o que mudou: quem guarda junta com o estado mais novo (o DatePicker
@@ -490,6 +506,21 @@ export function NfDoAnexo({
   /** Coluna estreita (tela lado a lado): dois campos por linha. */
   compacta?: boolean;
   disabled?: boolean;
+  // ---- Leitura de NF por IA (spec 2026-10-08-ler-nf-por-ia) ----
+  /** O path do arquivo no bucket pedidos-compra. Sem path, o botão de IA não aparece. */
+  anexoPath?: string | null;
+  /** O mimetype do arquivo. Só PDF habilita o botão de IA (spec). */
+  anexoMimetype?: string | null;
+  /** Fornecedores do tenant, pra match de CNPJ emissor. Vazio = sem match. */
+  fornecedores?: Array<{ id: string; cpf_cnpj?: string | null }>;
+  /** O fornecedor atualmente selecionado no PP. Pra comparar com o match. */
+  fornecedorAtualId?: string | null;
+  /** Nome do fornecedor atual, pra montar o aviso em texto. */
+  fornecedorAtualNome?: string | null;
+  /** O campo `servico` do PP, pra decidir se mostra "Usar como descrição". */
+  servicoAtual?: string;
+  /** Callback do botão "Usar como descrição do PP". Só vem se o campo é editável. */
+  onUsarDescricao?: (descricao: string) => void;
 }) {
   const ast = obrigatorio ? " *" : "";
   const hoje = hojeEmSaoPauloIso();
@@ -497,6 +528,68 @@ export function NfDoAnexo({
   const rotulo = "text-[11px] font-medium text-muted-foreground";
   const altura = "h-8 px-2 text-xs";
   const travada = modo === "correcao" ? existente?.registrada === true : existente !== null;
+
+  // ---- Estado da leitura por IA (spec 2026-10-08-ler-nf-por-ia) ----
+  const [extraindoIA, setExtraindoIA] = React.useState(false);
+  const [resultadoIA, setResultadoIA] = React.useState<{
+    dados: DadosExtraidosNF;
+    aplicado_em: Set<"numero" | "emissao" | "valor" | "tomador">;
+  } | null>(null);
+  const [erroIA, setErroIA] = React.useState<string | null>(null);
+
+  async function dispararLeituraIA() {
+    if (!anexoPath || anexoMimetype !== "application/pdf") return;
+    setExtraindoIA(true);
+    setErroIA(null);
+    const r = await lerDadosDaNFPorIA({
+      anexo_path: anexoPath,
+      mimetype: anexoMimetype,
+      tomadores: tomadores.map((x) => ({ id: x.id, cnpj: x.cnpj })),
+      fornecedores: fornecedores ?? [],
+    });
+    setExtraindoIA(false);
+    if (!r.ok) {
+      setErroIA(r.message);
+      return;
+    }
+    const aplicado = new Set<"numero" | "emissao" | "valor" | "tomador">();
+    const parcial: Partial<NfDigitada> = {};
+    if (r.dados.numero_nf && !nf.numero.trim()) {
+      parcial.numero = r.dados.numero_nf;
+      aplicado.add("numero");
+    }
+    if (r.dados.data_emissao && !nf.emissao) {
+      parcial.emissao = r.dados.data_emissao;
+      aplicado.add("emissao");
+    }
+    if (r.dados.valor_total && !(nf.valor > 0)) {
+      parcial.valor = r.dados.valor_total;
+      aplicado.add("valor");
+    }
+    if (r.dados.tomador.estabelecimento_id_match && !nf.tomador) {
+      parcial.tomador = r.dados.tomador.estabelecimento_id_match;
+      aplicado.add("tomador");
+    }
+    if (Object.keys(parcial).length > 0) onMudar(parcial);
+    setResultadoIA({ dados: r.dados, aplicado_em: aplicado });
+  }
+
+  function removerBadgeDe(campo: "numero" | "emissao" | "valor" | "tomador") {
+    setResultadoIA((prev) => {
+      if (!prev || !prev.aplicado_em.has(campo)) return prev;
+      const novo = new Set(prev.aplicado_em);
+      novo.delete(campo);
+      return { ...prev, aplicado_em: novo };
+    });
+  }
+
+  const podeLerIA = !travada && !!anexoPath && anexoMimetype === "application/pdf" && !resultadoIA;
+  const badgeIA = (campo: "numero" | "emissao" | "valor" | "tomador") =>
+    resultadoIA?.aplicado_em.has(campo) ? (
+      <span className="ml-1.5 inline-block rounded bg-amber-100 px-1 text-[9.5px] font-semibold uppercase text-amber-800">
+        IA
+      </span>
+    ) : null;
   const outras = existente?.pps ?? [];
   const sobra = existente && outras.length > 0 ? sobraDaNota(existente, nf.valor > 0 ? nf.valor : existente.valor) : null;
   const notaMaiorQueAPP = valorPP > 0 && nf.valor > valorPP + 0.004;
@@ -558,6 +651,40 @@ export function NfDoAnexo({
 
   return (
     <div className="space-y-1.5">
+      {/* Leitura automática por IA (spec 2026-10-08-ler-nf-por-ia): só aparece
+          com PDF anexado e NF ainda não travada por nota do cadastro. */}
+      {!travada && anexoPath && (
+        <div className="flex min-h-[26px] items-center justify-between gap-2">
+          {podeLerIA && !extraindoIA && (
+            <button
+              type="button"
+              onClick={dispararLeituraIA}
+              disabled={disabled}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-california-red/5 px-2.5 py-1 text-[11px] font-medium text-california-red transition-colors hover:bg-california-red/10 disabled:opacity-40"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Ler NF automaticamente
+            </button>
+          )}
+          {extraindoIA && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Lendo a NF…
+            </span>
+          )}
+          {!podeLerIA && !extraindoIA && anexoMimetype !== "application/pdf" && (
+            <span className="text-[11px] text-muted-foreground" title="Só PDF por enquanto">
+              Leitura por IA só com PDF
+            </span>
+          )}
+          {erroIA && (
+            <span className="text-[11px] text-california-red" role="alert">
+              {erroIA}
+            </span>
+          )}
+        </div>
+      )}
+
       <div
         className={cn(
           "grid gap-x-2 gap-y-2",
@@ -567,11 +694,15 @@ export function NfDoAnexo({
         <div className="min-w-0">
           <label htmlFor={`${idBase}-numero`} className={rotulo}>
             Número da NF{ast}
+            {badgeIA("numero")}
           </label>
           <Input
             id={`${idBase}-numero`}
             value={nf.numero}
-            onChange={(e) => onMudar({ numero: e.target.value })}
+            onChange={(e) => {
+              onMudar({ numero: e.target.value });
+              removerBadgeDe("numero");
+            }}
             inputMode="numeric"
             autoComplete="off"
             maxLength={20}
@@ -582,16 +713,20 @@ export function NfDoAnexo({
         <div className="min-w-0">
           <label htmlFor={`${idBase}-emissao`} className={rotulo}>
             Data de emissão{ast}
+            {badgeIA("emissao")}
           </label>
           {/* O DatePicker só lê o valor quando monta: a chave muda com a
               nota encontrada, para a data dela aparecer. */}
           <DatePicker
-            key={`${idBase}-emissao-${chaveDaExistente ?? "nova"}`}
+            key={`${idBase}-emissao-${chaveDaExistente ?? "nova"}-${resultadoIA?.aplicado_em.has("emissao") ? nf.emissao : "livre"}`}
             id={`${idBase}-emissao`}
             name={`${idBase}_emissao`}
             defaultValue={(existente?.emissao ?? nf.emissao) || undefined}
             placeholder="Selecione"
-            onDateChange={(d) => onMudar({ emissao: d ? isoDoDia(d) : "" })}
+            onDateChange={(d) => {
+              onMudar({ emissao: d ? isoDoDia(d) : "" });
+              removerBadgeDe("emissao");
+            }}
             dateDisabled={(d) => isoDoDia(d) > hoje}
             disabled={disabled || travada}
             className={cn(altura, faltas.includes("emissao") && VERMELHO)}
@@ -600,11 +735,15 @@ export function NfDoAnexo({
         <div className="min-w-0">
           <label htmlFor={`${idBase}-valor`} className={rotulo}>
             Valor da NF{ast}
+            {badgeIA("valor")}
           </label>
           <MoneyInput
             id={`${idBase}-valor`}
             value={nf.valor > 0 ? nf.valor : null}
-            onValueChange={(v) => onMudar({ valor: v })}
+            onValueChange={(v) => {
+              onMudar({ valor: v });
+              removerBadgeDe("valor");
+            }}
             aria-label="Valor da NF"
             disabled={disabled || travada}
             className={cn(altura, faltas.includes("valor") && VERMELHO)}
@@ -613,10 +752,14 @@ export function NfDoAnexo({
         <div className="min-w-0">
           <label htmlFor={`${idBase}-tomador`} className={rotulo}>
             CNPJ tomador{ast}
+            {badgeIA("tomador")}
           </label>
           <Select
             value={nf.tomador || undefined}
-            onValueChange={(v) => onMudar({ tomador: v })}
+            onValueChange={(v) => {
+              onMudar({ tomador: v });
+              removerBadgeDe("tomador");
+            }}
             disabled={disabled || travada}
           >
             <SelectTrigger
@@ -655,6 +798,67 @@ export function NfDoAnexo({
               de {formatCurrency(nf.valor, "BRL")} da nota
               {notaMaiorQueAPP && <> · a PP é de {formatCurrency(valorPP, "BRL")}</>}
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Avisos da leitura por IA (spec D6/D7/D8). Somem com o resultado
+          ao editar os campos relacionados. */}
+      {resultadoIA && (
+        <div className="space-y-1 text-[11.5px]">
+          {resultadoIA.dados.tomador.cnpj &&
+            resultadoIA.dados.tomador.estabelecimento_id_match === null && (
+              <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900">
+                CNPJ tomador da NF ({formatCnpjCurto(resultadoIA.dados.tomador.cnpj)}) não bate
+                com nenhuma empresa cadastrada — selecione manualmente.
+              </p>
+            )}
+          {resultadoIA.dados.emissor.fornecedor_id_match &&
+            fornecedorAtualId &&
+            resultadoIA.dados.emissor.fornecedor_id_match !== fornecedorAtualId && (
+              <p className="rounded border border-california-red/30 bg-california-red/5 px-2 py-1 text-california-red">
+                Atenção: esta NF foi emitida por{" "}
+                <strong>{resultadoIA.dados.emissor.razao_social ?? "outro fornecedor"}</strong>,
+                mas a PP é do <strong>{fornecedorAtualNome ?? "fornecedor selecionado"}</strong>.
+              </p>
+            )}
+          {resultadoIA.dados.emissor.cnpj &&
+            fornecedorAtualId &&
+            resultadoIA.dados.emissor.fornecedor_id_match === null && (
+              <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900">
+                Fornecedor da NF ({formatCnpjCurto(resultadoIA.dados.emissor.cnpj)}) não está
+                cadastrado no sistema.
+              </p>
+            )}
+          {valorPP > 0 &&
+            resultadoIA.dados.valor_total !== null &&
+            Math.abs(resultadoIA.dados.valor_total - valorPP) > 0.01 && (
+              <p className="rounded border border-border bg-muted/40 px-2 py-1 text-muted-foreground">
+                Valor da NF ({formatCurrency(resultadoIA.dados.valor_total, "BRL")}) não bate com
+                valor da PP ({formatCurrency(valorPP, "BRL")}) — pode ser NF que cobre múltiplas PPs.
+              </p>
+            )}
+          {resultadoIA.dados.descricao_servico && (
+            <p className="flex items-start justify-between gap-2 rounded border border-border bg-muted/20 px-2 py-1 text-muted-foreground">
+              <span>
+                <strong className="text-foreground">A NF menciona:</strong>{" "}
+                {resultadoIA.dados.descricao_servico}
+              </span>
+              {onUsarDescricao && !servicoAtual?.trim() && (
+                <button
+                  type="button"
+                  onClick={() => onUsarDescricao(resultadoIA.dados.descricao_servico!)}
+                  className="flex-none text-[11px] font-medium text-california-red hover:underline"
+                >
+                  Usar como descrição do PP
+                </button>
+              )}
+            </p>
+          )}
+          {resultadoIA.dados.confianca_baixa && (
+            <p className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-900">
+              A IA sinalizou baixa confiança nesta leitura — confira todos os campos com atenção.
+            </p>
           )}
         </div>
       )}
