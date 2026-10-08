@@ -226,10 +226,22 @@ export function ResumoDaAba({
         preview.percentual_honorarios !== preview.percentual_honorarios_cliente ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
             A planilha traz <b>{preview.percentual_honorarios.toString().replace(".", ",")}%</b> de
-            honorários, mas a versão vai nascer com{" "}
-            <b>{preview.percentual_honorarios_cliente.toString().replace(".", ",")}%</b> — o percentual do
-            cadastro de {preview.cliente_nome}. Para usar outro, um administrador altera pelo
-            &quot;Editar&quot; da versão depois de criada.
+            honorários,{" "}
+            {preview.honorarios_da_versao ? (
+              <>
+                mas a {preview.honorarios_da_versao} continua com{" "}
+                <b>{preview.percentual_honorarios_cliente.toString().replace(".", ",")}%</b> — a
+                importação não muda os honorários da versão. Para usar outro, altere pelo
+                &quot;Editar&quot; ao lado de Honorários.
+              </>
+            ) : (
+              <>
+                mas a versão vai nascer com{" "}
+                <b>{preview.percentual_honorarios_cliente.toString().replace(".", ",")}%</b> — o
+                percentual do cadastro de {preview.cliente_nome}. Para usar outro, altere pelo
+                &quot;Editar&quot; ao lado de Honorários depois de criada.
+              </>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
@@ -237,7 +249,9 @@ export function ResumoDaAba({
             <b className="text-foreground">
               {preview.percentual_honorarios_cliente.toString().replace(".", ",")}%
             </b>{" "}
-            — do cadastro de {preview.cliente_nome}.
+            {preview.honorarios_da_versao
+              ? `— os da ${preview.honorarios_da_versao}, que a importação mantém.`
+              : `— do cadastro de ${preview.cliente_nome}.`}
           </div>
         ))}
 

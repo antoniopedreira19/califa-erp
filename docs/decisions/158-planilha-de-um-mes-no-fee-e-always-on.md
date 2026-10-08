@@ -1,7 +1,7 @@
 # 158 — Planilha de um mês só no Fee e no Always On
 
 **Data:** 2026-10-08
-**Status:** aceita e implementada (08/10/2026).
+**Status:** aceita e implementada (08/10/2026; revista no mesmo dia: o % de honorários lido da fórmula).
 **Quem decidiu:** Tiago, em 08/10/2026, depois do protótipo navegável ("Planilha de um mês") e da planilha que uma GP não conseguiu importar.
 **Revê:** a [078](078-orcamento-mensal-fee-e-always-on.md) (os meses não mudam pela planilha) e a [076](076-a-importacao-da-versao-pergunta-de-onde-vem-o-planejado.md) (de onde vem o planejado, revista em 05/10: nada vinha marcado).
 **Migration:** nenhuma. A regra é de código.
@@ -108,3 +108,46 @@ mensal.
   aprovar. A cópia que o Tiago editou ("OUTUBRO DE  2026" na A2 da aba "12
   MESES") lê a aba "PILOTO" com a pergunta e mostra a "12 MESES" fora do
   formato, com "falta novembro de 2026 e dezembro de 2026".
+
+## ⚠️ Revisão de 2026-10-08 — o % de honorários é lido de dentro da fórmula
+
+Pedido do Tiago depois de a GP estranhar os valores da aba SUL importada no
+"Teste 2" (TES-P003/26-02): a versão nasceu com 12% (o cadastro do cliente
+Teste — a ANIMA HOLDING também está com 12% no cadastro), e a planilha
+fecha com 13%. Os itens batiam centavo a centavo; a diferença era só essa.
+O modal tem o aviso "A planilha traz X%…", mas ele não aparecia: na
+planilha interna o 13 está dentro da fórmula da linha HONORÁRIOS
+(`=(I350+I352)*13%`), não numa célula.
+
+- **O leitor lê o "× N%" das fórmulas da linha HONORÁRIOS** quando a
+  coluna E e o texto da linha não trazem o percentual — no mensal (a
+  linha de fechamento de cada bloco) e no nacional. Lê até numa fórmula
+  quebrada como `*13%G448`, em que o percentual pretendido continua
+  legível.
+- **Cada bloco de mês guarda o seu %** (`ParseMes.percentual_honorarios`),
+  e o aviso usa o dos meses que entram na versão: o bloco de janeiro da
+  planilha interna não decide o aviso de um orçamento de outubro a
+  dezembro. Meses que entram com percentuais diferentes avisam ("Os meses
+  da planilha têm honorários diferentes…") e vale o primeiro.
+- **O aviso compara com os honorários que a versão vai ter de fato.** No
+  sobrescrever, a importação mantém os da própria versão — e o modal dizia
+  "Honorários da versão: 12% — do cadastro" mesmo numa v1 já ajustada para
+  13%. Agora: "Honorários da versão: 13% — os da v1, que a importação
+  mantém", ou "A planilha traz 13% de honorários, mas a v1 continua com
+  12% — a importação não muda os honorários da versão". Na versão nova
+  continua "vai nascer com 12% — o percentual do cadastro".
+- Nada disso muda valor gravado: o percentual da planilha só alimenta o
+  aviso, como desde 11/08/2026.
+
+Conferido: testes do mensal (fórmula por mês, fórmula quebrada, meses com
+percentuais diferentes, aba sem título de mês); o leitor nas três
+planilhas reais lê 13%; no navegador, logado, as duas portas (sobrescrever
+com a v1 a 13% e a 12%, e a versão nova pelo "+"), sem gravar.
+
+A segunda planilha da GP ("… Ânima 2026 (1).xlsx") tinha outra diferença,
+que é da planilha: "Social Media Unicuritiba" com QT 0 e o TT digitado à mão
+(R$ 7.000,00) em outubro, novembro e dezembro. O ERP calcula R$ × QT × D/M
+e chega a R$ 0, então o orçado do mês ficou R$ 7.000,00 abaixo
+(R$ 114.555,25 contra R$ 121.555,25). Na mesma planilha, a fórmula de
+honorários de outubro está quebrada (`*13%G448`), e o fechamento do mês dá
+erro.

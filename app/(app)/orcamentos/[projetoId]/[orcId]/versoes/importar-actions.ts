@@ -305,11 +305,22 @@ export async function previewImportacao(
   const check = await verificarOrcamento(orcamentoId, tenantId);
   if (!check.ok) return { ok: false, message: check.message };
 
-  // O percentual que a versão vai receber. Lido aqui para o preview poder
-  // avisar antes de confirmar quando a planilha discorda do cadastro.
-  const [honorariosCliente, arq] = await Promise.all([
+  // O percentual que a versão vai ter. Lido aqui para o preview poder
+  // avisar antes de confirmar quando a planilha discorda dele. A versão nova
+  // nasce com o do cadastro; o sobrescrever mantém o da própria versão
+  // (`sobrescreverVersaoComPlanilha`), e é com ele que a planilha se compara.
+  const [honorariosCliente, arq, versaoSobrescrita] = await Promise.all([
     honorariosDoOrcamento(orcamentoId, tenantId),
     baixarEnvio(entrada.envio, tenantId),
+    entrada.versao_id
+      ? createClient()
+          .from("versoes_orcamento")
+          .select("numero_versao, percentual_honorarios")
+          .eq("id", entrada.versao_id)
+          .eq("tenant_id", tenantId)
+          .maybeSingle<{ numero_versao: number; percentual_honorarios: number | string }>()
+          .then((r) => r.data)
+      : Promise.resolve(null),
   ]);
   if (!honorariosCliente) {
     return {
@@ -350,7 +361,13 @@ export async function previewImportacao(
       modelo: check.modelo,
       anterior,
       mesesDestino,
-      honorarios: honorariosCliente,
+      honorarios: versaoSobrescrita
+        ? {
+            percentual: Number(versaoSobrescrita.percentual_honorarios),
+            clienteNome: honorariosCliente.clienteNome,
+            versao: `v${versaoSobrescrita.numero_versao}`,
+          }
+        : { ...honorariosCliente, versao: null },
     });
     if (!r.ok) {
       return {

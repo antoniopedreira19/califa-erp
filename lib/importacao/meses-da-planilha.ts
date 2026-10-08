@@ -73,7 +73,13 @@ export function conferirMesesDaSecao(
 }
 
 export type CasamentoDosMeses =
-  | { ok: true; grupos: ParseGrupo[]; avisos: ImportacaoWarning[] }
+  | {
+      ok: true;
+      grupos: ParseGrupo[];
+      avisos: ImportacaoWarning[];
+      /** Os blocos que entraram, um por mês da versão, em ordem. */
+      blocosAceitos: ParseMes[];
+    }
   | { ok: false; message: string };
 
 /**
@@ -111,6 +117,7 @@ export function casarBlocosComMeses(
 
   const avisos: ImportacaoWarning[] = [];
   const aceitos = new Set<string>();
+  const blocosAceitos: ParseMes[] = [];
   const repetidos: string[] = [];
 
   for (const bloco of blocos) {
@@ -138,6 +145,7 @@ export function casarBlocosComMeses(
       continue;
     }
     aceitos.add(data);
+    blocosAceitos.push(bloco);
   }
 
   if (repetidos.length > 0) {
@@ -170,7 +178,7 @@ export function casarBlocosComMeses(
     .filter((g): g is ParseGrupo & { mes: string } => g.mes !== null && aceitos.has(g.mes))
     .map((g, idx) => ({ ...g, ordem: idx + 1 }));
 
-  return { ok: true, grupos: dosMeses, avisos };
+  return { ok: true, grupos: dosMeses, avisos, blocosAceitos };
 }
 
 // ---------- aba sem título de mês (decisão 158) ----------
@@ -206,6 +214,7 @@ export function comBlocosSinteticos(lida: ParseResultado, meses: string[]): Pars
       mes,
       rotulo: rotuloMes(mes),
       linha_xlsx: 0,
+      percentual_honorarios: null,
     })),
     grupos: ordenados.flatMap((mes) =>
       lida.grupos.map((g) => ({
@@ -253,14 +262,47 @@ export function mesesDaAbaParaGravar(
   const casados = casarBlocosComMeses(lida.grupos, lida.meses, meses);
   if (!casados.ok) return { ok: false, message: casados.message };
   const aceitos = casados.grupos.reduce((s, g) => s + g.itens.length, 0);
+  const honorarios = honorariosDosMeses(casados.blocosAceitos);
   return {
     ok: true,
     parsed: {
       ...lida,
       grupos: casados.grupos,
-      warnings: [...lida.warnings, ...casados.avisos],
+      warnings: [...lida.warnings, ...casados.avisos, ...honorarios.avisos],
       linhas_importadas: aceitos,
       linhas_ignoradas: lida.linhas_ignoradas + lida.linhas_importadas - aceitos,
+      // O % dos meses que entram; sem nenhum, o primeiro que a aba trouxer.
+      percentual_honorarios: honorarios.percentual ?? lida.percentual_honorarios,
     },
+  };
+}
+
+/**
+ * O % de honorários dos blocos que entram na versão (decisão 158). A
+ * planilha interna tem o ano inteiro, e o bloco de janeiro não deve decidir
+ * o aviso de um orçamento de outubro a dezembro. Com percentuais diferentes
+ * entre os meses, vale o primeiro, com aviso: a versão tem um só.
+ */
+function honorariosDosMeses(blocos: ParseMes[]): {
+  percentual: number | null;
+  avisos: ImportacaoWarning[];
+} {
+  const comPercentual = blocos.filter((b) => b.percentual_honorarios !== null);
+  if (comPercentual.length === 0) return { percentual: null, avisos: [] };
+  const percentual = comPercentual[0].percentual_honorarios;
+  const diferentes = new Set(comPercentual.map((b) => b.percentual_honorarios)).size > 1;
+  return {
+    percentual,
+    avisos: diferentes
+      ? [
+          {
+            linha: 0,
+            motivo: `Os meses da planilha têm honorários diferentes (${comPercentual
+              .map((b) => `${b.rotulo.trim()}: ${String(b.percentual_honorarios).replace(".", ",")}%`)
+              .join("; ")}). A versão tem um percentual só.`,
+            severidade: "ajuste",
+          },
+        ]
+      : [],
   };
 }

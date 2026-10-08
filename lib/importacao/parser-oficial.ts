@@ -160,6 +160,10 @@ export interface ParseMes {
   mes: string | null;
   rotulo: string;
   linha_xlsx: number;
+  /** % de honorários do fechamento deste bloco, quando a planilha o traz —
+   *  na planilha interna, dentro da fórmula da linha HONORÁRIOS. `null` sem
+   *  ele. Só serve ao aviso de honorários diferentes do cadastro. */
+  percentual_honorarios: number | null;
 }
 
 export interface ParseResultado {
@@ -344,11 +348,13 @@ function ehLinhaResumo(cells: string[]): boolean {
  * Formato do modelo (08/09/2026): C = "HONORÁRIOS", E = 0,12 → 12.
  * Um número acima de 1 é lido como já percentual ("12" → 12), porque as
  * planilhas antigas escreviam assim. O fallback continua sendo o texto com
- * "%" em qualquer coluna, que é como as versões mais velhas guardavam.
+ * "%" em qualquer coluna, que é como as versões mais velhas guardavam, e
+ * por último o percentual dentro da fórmula da linha (`percentualDaFormula`).
  */
 function extrairPercentualHonorarios(
   cells: string[],
   valorColE: unknown,
+  row: ExcelJS.Row,
 ): number | null {
   const joined = cells.slice(0, 8).join(" ").toLowerCase();
   if (!joined.includes("honor")) return null;
@@ -359,9 +365,31 @@ function extrairPercentualHonorarios(
   }
 
   const m = joined.match(/([0-9]+(?:[.,][0-9]+)?)\s*%/);
-  if (!m) return null;
-  const n = Number(m[1].replace(",", "."));
-  return Number.isFinite(n) ? n : null;
+  if (m) {
+    const n = Number(m[1].replace(",", "."));
+    if (Number.isFinite(n)) return n;
+  }
+  return percentualDaFormula(row, cells.length);
+}
+
+/**
+ * % de honorários escrito DENTRO da fórmula da linha HONORÁRIOS (decisão
+ * 158, 08/10/2026). A planilha interna e a do AON calculam
+ * "=(I350+I352)*13%": o 13 não está em célula nenhuma, e sem ele o aviso de
+ * honorários diferentes do cadastro não aparecia. Lê o primeiro "× N%" das
+ * fórmulas da linha — mesmo numa fórmula quebrada como "*13%G448", em que o
+ * percentual pretendido continua legível. `null` sem fórmula com percentual.
+ */
+function percentualDaFormula(row: ExcelJS.Row, ateColuna: number): number | null {
+  for (let c = 1; c <= ateColuna; c++) {
+    const cell = row.getCell(c);
+    if (cell.type !== ExcelJS.ValueType.Formula) continue;
+    const m = String(cell.formula ?? "").match(/\*\s*(\d+(?:[.,]\d+)?)\s*%/);
+    if (!m) continue;
+    const n = Number(m[1].replace(",", "."));
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
 }
 
 /** Colunas do orçado e do planejado (1 = A). */
@@ -757,6 +785,7 @@ export async function parseOficial(
             ? cells[1]
             : cells[0],
         linha_xlsx: rowNumber,
+        percentual_honorarios: null,
       };
       meses.push(mesAtual);
       grupoAtual = null;
@@ -778,6 +807,17 @@ export async function parseOficial(
     if (cells[0] === "" && !valorRs.ok) {
       const rotulos = cells.slice(2, col.rs).map((s) => s.toLowerCase());
       if (rotulos.some((c) => KEYWORDS_RESUMO.some((k) => c.includes(k)))) {
+        // A linha HONORÁRIOS da planilha interna guarda o percentual dentro
+        // da fórmula (decisão 158): ele vale para o bloco do mês.
+        if (rotulos.some((c) => c.includes("honor"))) {
+          const pct = percentualDaFormula(row, cells.length);
+          if (pct !== null) {
+            if (mesAtual && mesAtual.percentual_honorarios === null) {
+              mesAtual.percentual_honorarios = pct;
+            }
+            if (percentualHonorarios === null) percentualHonorarios = pct;
+          }
+        }
         linhasIgnoradas++;
         return true;
       }
@@ -825,7 +865,7 @@ export async function parseOficial(
 
     // Fechamento (SUB-TOTAL, TOTAL, IMPOSTO, HONORÁRIOS, FATURAMENTO)?
     if (ehLinhaResumo(cells)) {
-      const pct = extrairPercentualHonorarios(cells, row.getCell(5).value);
+      const pct = extrairPercentualHonorarios(cells, row.getCell(5).value, row);
       if (pct !== null && percentualHonorarios === null) {
         percentualHonorarios = pct;
       }

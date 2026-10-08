@@ -362,7 +362,7 @@ async function abaDeUmMes(): Promise<Buffer> {
   ws.addRow(["", " VERBAS DO PROJETO"]);
   ws.addRow(["VERBA", "Plataforma", "-", "", 3000, 1, 1, 3000, "B", 3000, 1, 1, 3000]);
   ws.addRow(["", "", "", "", "SUB-TOTAL B", "", "", 15000, "B"]);
-  ws.addRow(["", "Limite Faturamento", "", "", "HONORÁRIOS", "", "", 1950]);
+  ws.addRow(["", "Limite Faturamento", "", "", "HONORÁRIOS", "", "", { formula: "(H9+H10)*13%", result: 1950 }]);
   ws.addRow(["", "", "", "", "FATURAMENTO", "", "", 21000]);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -495,4 +495,86 @@ test("QT 0 é aceito: item listado sem cobrança no mês (15/09/2026)", async ()
       ["Negativa", 1],
     ],
   );
+});
+
+/** Blocos da planilha interna com o % de honorários só dentro da fórmula. */
+async function internaComHonorarios(blocos: [string, string][]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("SUL");
+  let n = 1;
+  const linha = (cells: Record<string, unknown>) => {
+    for (const [col, v] of Object.entries(cells)) ws.getCell(`${col}${n}`).value = v as any;
+    n++;
+  };
+  for (const [titulo, formula] of blocos) {
+    linha({ A: "On Going", B: titulo, H: "FATURAMENTO" });
+    linha({ A: "PLANILHA", B: "ITEM", F: "R$", G: "QT", H: "DIAS", I: "TT", K: "R$", L: "QT", M: "DIAS", N: "TT" });
+    linha({ A: "EQUIPE", B: "Editor", F: 10000, G: 1, H: 1, I: 10000, J: "B", K: 8000, L: 1, M: 1, N: 8000 });
+    linha({ F: "SUB-TOTAL B", I: 10000, J: "B" });
+    linha({ B: "Limite Faturamento", F: "IMPOSTO", I: 1 });
+    linha({ B: 60000, F: "HONORÁRIOS", I: { formula, result: 1300 } });
+    linha({ F: "FATURAMENTO", I: 1 });
+  }
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+test("o % de honorários é lido de dentro da fórmula, mês a mês (decisão 158)", async () => {
+  const parsed = await parseOficial(
+    await internaComHonorarios([
+      ["SETEMBRO", "(I4+I6)*12%"],
+      ["OUTUBRO", "(I11+I13)*13%G448"],
+      ["NOVEMBRO", "(I18+I20)*13%"],
+    ]),
+    { mensal: true },
+  );
+  assert.deepEqual(parsed.meses.map((m) => [m.rotulo, m.percentual_honorarios]), [
+    ["SETEMBRO", 12],
+    ["OUTUBRO", 13],
+    ["NOVEMBRO", 13],
+  ]);
+  // O primeiro da aba é o de setembro, que não entra num orçamento do 4º
+  // trimestre: o aviso usa o dos meses que entram.
+  assert.equal(parsed.percentual_honorarios, 12);
+  const quarto = mesesDaAbaParaGravar(parsed, ["2026-10-01", "2026-11-01"], null);
+  assert.ok(quarto.ok);
+  if (quarto.ok) {
+    assert.equal(quarto.parsed.percentual_honorarios, 13);
+    assert.ok(!quarto.parsed.warnings.some((w) => /honorários diferentes/.test(w.motivo)));
+  }
+});
+
+test("meses com honorários diferentes avisam, e vale o primeiro (decisão 158)", async () => {
+  const parsed = await parseOficial(
+    await internaComHonorarios([
+      ["OUTUBRO", "(I4+I6)*13%"],
+      ["NOVEMBRO", "(I11+I13)*12,5%"],
+    ]),
+    { mensal: true },
+  );
+  const r = mesesDaAbaParaGravar(parsed, ["2026-10-01", "2026-11-01"], null);
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.equal(r.parsed.percentual_honorarios, 13);
+    assert.ok(
+      r.parsed.warnings.some((w) => /honorários diferentes \(OUTUBRO: 13%; NOVEMBRO: 12,5%\)/.test(w.motivo)),
+      JSON.stringify(r.parsed.warnings),
+    );
+  }
+});
+
+test("aba sem título de mês: o % da fórmula chega ao aviso (decisão 158)", async () => {
+  const parsed = await parseOficial(await abaDeUmMes(), { mensal: true });
+  assert.equal(parsed.percentual_honorarios, 13);
+  const preview = montarPreviewDaAba(parsed, {
+    modelo: "mensal",
+    anterior: null,
+    mesesDestino: TRIMESTRE,
+    honorarios: { percentual: 12, clienteNome: "Cliente Teste", versao: "v1" },
+  });
+  assert.ok(preview.ok);
+  if (preview.ok) {
+    assert.equal(preview.semBloco!.todos.percentual_honorarios, 13);
+    assert.equal(preview.semBloco!.todos.percentual_honorarios_cliente, 12);
+    assert.equal(preview.semBloco!.todos.honorarios_da_versao, "v1");
+  }
 });

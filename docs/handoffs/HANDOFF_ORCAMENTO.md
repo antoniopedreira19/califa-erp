@@ -5450,3 +5450,16 @@ aplicada na hora combinada com a frente do Antonio, junto da
   invadir a coluna vizinha.
 - Conferido no navegador, medindo as colunas em 1024, 1280, 1439, 1440 e
   1838 px, no TES-P001/26-33 (o modal fechado sem gravar).
+
+## ⚠️ Nota de 2026-10-08 (3) — o % de honorários lido da fórmula, e o aviso no sobrescrever (revisão da decisão 158)
+
+- O "Importar planilha" lê o % de honorários de dentro da fórmula da linha
+  HONORÁRIOS (`=(I350+I352)*13%`), bloco a bloco no mensal, e o aviso usa o
+  dos meses que entram. Meses com percentuais diferentes avisam.
+- No sobrescrever, o aviso compara a planilha com os honorários da própria
+  versão (que a importação mantém), e não mais com o cadastro do cliente.
+- Diagnóstico que motivou: a aba SUL da Ânima fecha com 13%, e o cadastro da
+  ANIMA HOLDING está com 12%. Na planilha nova da GP, "Social Media
+  Unicuritiba" tem QT 0 com TT digitado (R$ 7.000,00/mês) — o ERP usa
+  R$ × QT × D/M. Afeta o ANI-P008/26-01 (em revisão): QT 0 nos três meses.
+
