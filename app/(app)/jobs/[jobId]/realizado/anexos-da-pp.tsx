@@ -823,7 +823,7 @@ export function NfDoAnexo({
               </p>
             )}
           {resultadoIA.dados.emissor.cnpj &&
-            fornecedorAtualId &&
+            (fornecedores?.length ?? 0) > 0 &&
             resultadoIA.dados.emissor.fornecedor_id_match === null && (
               <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900">
                 Fornecedor da NF ({formatCnpjCurto(resultadoIA.dados.emissor.cnpj)}) não está
