@@ -72,3 +72,25 @@ test("lerDadosBrutosDaNF lança erro se resposta não é JSON válido", async ()
     lerDadosBrutosDaNF(Buffer.from("fake"), fakeClient("isto não é json")),
   );
 });
+
+test("lerDadosBrutosDaNF lança erro se JSON válido mas sem os campos obrigatórios do schema", async () => {
+  // JSON válido mas com shape diferente — fallback do modelo, SDK muda,
+  // provider devolve payload de erro, etc. O cast `as DadosBrutosNF`
+  // sem checagem faria `confianca_baixa` virar undefined e `.tomador?.cnpj`
+  // crashar depois. Shape check tem que capturar.
+  const semCampos = JSON.stringify({ foo: "bar" });
+  await assert.rejects(() => lerDadosBrutosDaNF(Buffer.from("fake"), fakeClient(semCampos)));
+
+  const faltandoUm = JSON.stringify({
+    numero_nf: null,
+    data_emissao: null,
+    razao_social_emissor: null,
+    cnpj_emissor: null,
+    razao_social_tomador: null,
+    cnpj_tomador: null,
+    valor_total: null,
+    descricao_servico: null,
+    // confianca_baixa: faltando
+  });
+  await assert.rejects(() => lerDadosBrutosDaNF(Buffer.from("fake"), fakeClient(faltandoUm)));
+});

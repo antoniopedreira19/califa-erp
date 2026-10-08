@@ -101,11 +101,32 @@ export async function lerDadosBrutosDaNF(
 
   const texto = (resp as { output_text?: string }).output_text ?? "";
   const usage = (resp as { usage?: { input_tokens: number; output_tokens: number } }).usage;
-  const dados = JSON.parse(texto) as DadosBrutosNF;
+  const parsed = JSON.parse(texto) as unknown;
+  const dados = garantirShapeDadosBrutosNF(parsed);
 
   return {
     dados,
     tokensIn: usage?.input_tokens ?? 0,
     tokensOut: usage?.output_tokens ?? 0,
   };
+}
+
+/** Shape check mínimo depois do JSON.parse. `strict: true` do Structured
+ *  Output já garante no decoder, mas se o SDK mudar ou o modelo fizer
+ *  fallback, chegamos aqui sem os campos — melhor explodir no servidor
+ *  (action captura e audita) do que passar undefined pro frontend. */
+function garantirShapeDadosBrutosNF(parsed: unknown): DadosBrutosNF {
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("Resposta da IA não é um objeto JSON válido.");
+  }
+  const obj = parsed as Record<string, unknown>;
+  for (const campo of SCHEMA_DADOS_NF.required) {
+    if (!(campo in obj)) {
+      throw new Error(`Resposta da IA sem campo obrigatório: ${campo}`);
+    }
+  }
+  if (typeof obj.confianca_baixa !== "boolean") {
+    throw new Error("Resposta da IA com confianca_baixa inválida (esperado boolean).");
+  }
+  return obj as unknown as DadosBrutosNF;
 }
