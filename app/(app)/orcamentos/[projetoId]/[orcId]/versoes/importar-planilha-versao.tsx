@@ -80,7 +80,7 @@ export function ImportarPlanilhaVersao({
     modeloPlanilha === "internacional"
       ? "Envie o arquivo .xlsx no modelo internacional."
       : modeloPlanilha === "mensal"
-        ? "Envie a planilha exportada deste orçamento ou a planilha interna da agência, com um bloco por mês."
+        ? "Envie a planilha exportada deste orçamento ou a planilha interna da agência, com um bloco por mês — ou a planilha de um mês só, que você repete nos meses do orçamento."
         : "Envie o arquivo .xlsx no formato padrão da agência.";
   const destino = sobrescreve
     ? "O conteúdo atual da versão será substituído pelo da planilha."

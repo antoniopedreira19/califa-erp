@@ -18,7 +18,13 @@ import { mesDoRotulo } from "../calculos/meses-trimestre";
 import { parsePlanilhaProjeto } from "./parser-projeto";
 import { parseOficial } from "./parser-oficial";
 import { planejarSecao, type GrupoAtual, type ItemAtual } from "./diff-projeto";
-import { casarBlocosComMeses, conferirMesesDaSecao } from "./meses-da-planilha";
+import {
+  abaSemBlocoDeMes,
+  casarBlocosComMeses,
+  conferirMesesDaSecao,
+  mesesDaAbaParaGravar,
+} from "./meses-da-planilha";
+import { montarPreviewDaAba } from "./preview-da-aba";
 
 const it = (id: string, nome: string, tipo: any, unit: number, qt = 1, dm = 1) => ({
   id,
@@ -317,21 +323,144 @@ test("a planilha interna (aba SUL) entra pelos títulos dos meses", async () => 
   }
 
   // Versão com outubro e novembro só: dezembro está no trimestre e a
-  // versão não tem — recusa.
+  // versão não tem — fica de fora, com aviso (decisão 158; antes recusava).
   const semDezembro = casarBlocosComMeses(parsed.grupos, parsed.meses, ["2026-10-01", "2026-11-01"]);
-  assert.equal(semDezembro.ok, false);
-  if (!semDezembro.ok) assert.match(semDezembro.message, /traz dezembro de 2026, que o orçamento não tem/);
+  assert.ok(semDezembro.ok);
+  if (semDezembro.ok) {
+    assert.deepEqual(semDezembro.grupos.map((g) => g.mes), ["2026-10-01", "2026-11-01"]);
+    assert.ok(
+      semDezembro.avisos.some((a) => /"DEZEMBRO" ficou de fora: o orçamento não tem dezembro/.test(a.motivo)),
+      JSON.stringify(semDezembro.avisos),
+    );
+  }
+
+  // Versão de um mês só (o Always On mês a mês): entra só outubro.
+  const soOutubro = casarBlocosComMeses(parsed.grupos, parsed.meses, ["2026-10-01"]);
+  assert.ok(soOutubro.ok);
+  if (soOutubro.ok) assert.deepEqual(soOutubro.grupos.map((g) => [g.nome, g.mes]), [["EQUIPE", "2026-10-01"]]);
+
+  // Mês da versão sem bloco na planilha continua recusando.
+  const semBlocoDeDezembro = casarBlocosComMeses(
+    parsed.grupos.filter((g) => g.mes_numero !== 12),
+    parsed.meses.filter((m) => m.numero !== 12),
+    ["2026-10-01", "2026-11-01", "2026-12-01"],
+  );
+  assert.equal(semBlocoDeDezembro.ok, false);
+  if (!semBlocoDeDezembro.ok) assert.match(semBlocoDeDezembro.message, /falta dezembro de 2026/);
 });
 
-test("planilha sem blocos de mês não entra no orçamento mensal", async () => {
+/** Uma aba de UM mês, sem título de mês — a planilha do AON (decisão 158). */
+async function abaDeUmMes(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Padrão");
-  ws.addRow(["CATEGORIA", "ITEM", "R$", "QT", "D/M", "TT"]);
-  ws.addRow(["Equipe", "Coordenador", 12000, 1, 1, 12000, "B"]);
-  const parsed = await parseOficial(Buffer.from(await wb.xlsx.writeBuffer()), { mensal: true });
+  const ws = wb.addWorksheet("AON - PILOTO");
+  ws.addRow(["Stand By", "PROPOSTA - CLIENTE", "", "", "", "", "FATURAMENTO", 30000]);
+  ws.addRow(["", "", "", "", "ORÇAMENTO", "ORÇAMENTO", "ORÇAMENTO", "", "", "PLANEJADO"]);
+  ws.addRow(["PLANILHA", "ITEM", "", "", "R$", "QT", "DIAS", "TT", "", "R$", "QT", "DIAS", "TT"]);
+  ws.addRow(["", "EQUIPE", "PESSOA", "CONTRATO"]);
+  ws.addRow(["EQUIPE", "Analista de Mídia", "TBD", "", 6000, 1, 1, 6000, "B", 4000, 1, 1, 4000]);
+  ws.addRow(["EQUIPE", "Analista de BI", "TBD", "Freela", 6000, 1, 1, 6000, "B", 6000, 1, 1, 6000]);
+  ws.addRow(["", " VERBAS DO PROJETO"]);
+  ws.addRow(["VERBA", "Plataforma", "-", "", 3000, 1, 1, 3000, "B", 3000, 1, 1, 3000]);
+  ws.addRow(["", "", "", "", "SUB-TOTAL B", "", "", 15000, "B"]);
+  ws.addRow(["", "Limite Faturamento", "", "", "HONORÁRIOS", "", "", 1950]);
+  ws.addRow(["", "", "", "", "FATURAMENTO", "", "", 21000]);
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+const TRIMESTRE = ["2026-10-01", "2026-11-01", "2026-12-01"];
+
+test("aba sem título de mês: repete nos meses ou entra só no primeiro (decisão 158)", async () => {
+  const parsed = await parseOficial(await abaDeUmMes(), { mensal: true });
   assert.equal(parsed.modelo, "nacional");
-  const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, ["2026-10-01"]);
-  assert.equal(casados.ok, false);
+  assert.ok(abaSemBlocoDeMes(parsed));
+  assert.deepEqual(parsed.grupos.map((g) => [g.nome, g.itens.length]), [["EQUIPE", 2], ["VERBA", 1]]);
+  // Sozinho, o casamento continua recusando a aba sem bloco.
+  assert.equal(casarBlocosComMeses(parsed.grupos, parsed.meses, ["2026-10-01"]).ok, false);
+
+  // Orçamento de três meses: sem escolha, não grava.
+  const semEscolha = mesesDaAbaParaGravar(parsed, TRIMESTRE, null);
+  assert.equal(semEscolha.ok, false);
+  if (!semEscolha.ok) assert.match(semEscolha.message, /Escolha se os itens se repetem/);
+
+  const todos = mesesDaAbaParaGravar(parsed, TRIMESTRE, "todos");
+  assert.ok(todos.ok);
+  if (todos.ok) {
+    assert.equal(todos.parsed.modelo, "mensal");
+    assert.deepEqual(
+      todos.parsed.grupos.map((g) => [g.nome, g.mes, g.ordem, g.itens.length]),
+      [
+        ["EQUIPE", "2026-10-01", 1, 2],
+        ["VERBA", "2026-10-01", 2, 1],
+        ["EQUIPE", "2026-11-01", 3, 2],
+        ["VERBA", "2026-11-01", 4, 1],
+        ["EQUIPE", "2026-12-01", 5, 2],
+        ["VERBA", "2026-12-01", 6, 1],
+      ],
+    );
+    assert.equal(todos.parsed.linhas_importadas, 9);
+  }
+
+  const primeiro = mesesDaAbaParaGravar(parsed, TRIMESTRE, "primeiro");
+  assert.ok(primeiro.ok);
+  if (primeiro.ok) {
+    assert.deepEqual(primeiro.parsed.grupos.map((g) => g.mes), ["2026-10-01", "2026-10-01"]);
+    assert.equal(primeiro.parsed.linhas_importadas, 3);
+  }
+
+  // Orçamento de um mês: entra nele, sem pergunta.
+  const umMes = mesesDaAbaParaGravar(parsed, ["2026-10-01"], null);
+  assert.ok(umMes.ok);
+  if (umMes.ok) assert.deepEqual(umMes.parsed.grupos.map((g) => g.mes), ["2026-10-01", "2026-10-01"]);
+});
+
+test("a tela recebe as leituras de cada opção da aba sem título de mês (decisão 158)", async () => {
+  const parsed = await parseOficial(await abaDeUmMes(), { mensal: true });
+  const contexto = { modelo: "mensal" as const, anterior: null, honorarios: null };
+
+  const tres = montarPreviewDaAba(parsed, { ...contexto, mesesDestino: TRIMESTRE });
+  assert.ok(tres.ok);
+  if (tres.ok) {
+    // Antes da escolha, a aba como está: um mês, sem o nome do mês.
+    assert.deepEqual(tres.preview.grupos.map((g) => [g.nome, g.itens_count]), [["EQUIPE", 2], ["VERBA", 1]]);
+    assert.ok(tres.semBloco);
+    assert.deepEqual(tres.semBloco!.meses, TRIMESTRE);
+    assert.equal(tres.semBloco!.todos.grupos.length, 6);
+    assert.equal(tres.semBloco!.todos.grupos.reduce((s, g) => s + g.total_bruto, 0), 45000);
+    assert.equal(tres.semBloco!.primeiro!.grupos.length, 2);
+    assert.ok(tres.semBloco!.todos.grupos.every((g) => /·/.test(g.nome)));
+  }
+
+  const um = montarPreviewDaAba(parsed, { ...contexto, mesesDestino: ["2026-10-01"] });
+  assert.ok(um.ok);
+  if (um.ok) {
+    assert.equal(um.semBloco!.primeiro, null);
+    assert.equal(um.preview.grupos.length, 2);
+    assert.ok(um.preview.grupos.every((g) => /·/.test(g.nome)));
+  }
+
+  // Fora do mensal, nada muda: a aba é a planilha nacional de sempre.
+  const nacional = montarPreviewDaAba(parsed, { ...contexto, modelo: "nacional", mesesDestino: null });
+  assert.ok(nacional.ok);
+  if (nacional.ok) assert.equal(nacional.semBloco, null);
+});
+
+test("planilha com blocos de mês segue como antes, com ou sem opção (decisão 158)", async () => {
+  const { buffer } = await exportar([{ ...secaoFee, titulo: undefined }]);
+  const parsed = await parseOficial(buffer, { mensal: true });
+  assert.equal(abaSemBlocoDeMes(parsed), false);
+  for (const opcao of [null, "todos", "primeiro"] as const) {
+    const r = mesesDaAbaParaGravar(parsed, TRIMESTRE, opcao);
+    assert.ok(r.ok);
+    if (r.ok) assert.deepEqual(r.parsed.grupos.map((g) => g.grupo_id), ["g-out", "g-out-v", "g-nov", "g-dez"]);
+  }
+  const preview = montarPreviewDaAba(parsed, {
+    modelo: "mensal",
+    anterior: null,
+    honorarios: null,
+    mesesDestino: TRIMESTRE,
+  });
+  assert.ok(preview.ok);
+  if (preview.ok) assert.equal(preview.semBloco, null);
 });
 
 test("QT 0 é aceito: item listado sem cobrança no mês (15/09/2026)", async () => {

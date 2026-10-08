@@ -5418,3 +5418,22 @@ aplicada na hora combinada com a frente do Antonio, junto da
   `esquecerPagina` (`components/voltar/estado.ts`).
 - Teste no TES-P001/26: `-28`, `-29` e `-30` criados e excluídos (os três
   códigos ficam guardados). Ver decisão 148.
+
+## ⚠️ Nota de 2026-10-08 — planilha de um mês só no Fee e no Always On, e mês a mais fica de fora (decisão 158)
+
+- **Aba sem título de mês** no "Importar planilha" da versão de Fee ou
+  Always On: lida como um mês. Com vários meses, a pergunta "Meses" no
+  resumo — "Repetir em outubro, novembro e dezembro" ou "Só em outubro"
+  (os outros ficam vazios e seguram a aprovação). Nada vem marcado; até a
+  escolha, a tabela mostra "Grupos da aba · um mês", a pergunta do
+  planejado espera e o botão fica travado. Com um mês só, entra direto,
+  com aviso. O servidor recusa gravar sem a escolha.
+- **Mês a mais na planilha fica de fora com aviso** ("O bloco … ficou de
+  fora: o orçamento não tem novembro.") em vez de recusar. Mês do orçamento
+  sem bloco continua recusando. A importação do projeto não mudou.
+- **"Usar o planejado da planilha" vem marcado** em toda importação
+  (revisão da 076; de 05/10 a 08/10 nada vinha marcado).
+- Caso que motivou: UNM-P001/26-01 (a GP digitou outubro à mão; o job já
+  existe e a versão não aceita mais importação).
+- Teste no **TES-P001/26-33 · ZZ Teste 158 planilha de um mês** (Always On,
+  hoje só com outubro, v1 com 12 itens da planilha de teste). Ver a 158.
