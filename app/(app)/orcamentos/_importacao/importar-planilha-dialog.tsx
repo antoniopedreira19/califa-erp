@@ -315,9 +315,14 @@ export function ImportarPlanilhaDialog({
           </div>
         )}
 
+        {/* Lado a lado a partir de 1440 px de janela. Abaixo disso as tabelas
+            não cabem nas duas colunas (as colunas de nome chegavam a largura
+            zero em 1024 px e os títulos invadiam os vizinhos): a tabela de
+            abas vai para cima do resumo e o modal rola como um todo
+            (08/10/2026). */}
         {conferindo && envio && (
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,34fr)_minmax(0,36fr)]">
-            <div className="min-h-0 space-y-4 overflow-y-auto border-r border-border p-6">
+          <div className="min-h-0 flex-1 overflow-y-auto min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,34fr)_minmax(0,36fr)] min-[1440px]:overflow-hidden">
+            <div className="space-y-4 border-b border-border p-6 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto min-[1440px]:border-b-0 min-[1440px]:border-r">
               <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
                 <FileSpreadsheet className="mt-0.5 h-5 w-5 shrink-0 text-california-red" />
                 <div className="min-w-0 flex-1">
@@ -332,7 +337,7 @@ export function ImportarPlanilhaDialog({
               </div>
               <TabelaDeAbas abas={leitura.abas} selecionada={aba} onSelecionar={escolherAba} />
             </div>
-            <div className="min-h-0 space-y-5 overflow-y-auto p-6">
+            <div className="space-y-5 p-6 min-[1440px]:min-h-0 min-[1440px]:overflow-y-auto">
               {erro && (
                 <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />

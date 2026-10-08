@@ -253,7 +253,7 @@ export function ResumoDaAba({
           </colgroup>
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
-              <th className={cn(TH, "whitespace-nowrap px-4 text-left")}>
+              <th className={cn(TH, "truncate px-4 text-left")}>
                 {perguntaMeses && !opcaoMeses ? "Grupos da aba · um mês" : "Grupos que serão criados"}
               </th>
               <th className={cn(TH, "pr-3 text-right")}>Itens</th>
