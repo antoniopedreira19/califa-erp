@@ -839,6 +839,13 @@ export function GerarPPDrawer({
         valorPP={valorPP}
         compacta={compacta}
         disabled={pending}
+        anexoPath={a.path || null}
+        anexoMimetype={a.mime}
+        fornecedores={fornecedores}
+        fornecedorAtualId={fornecedorId || null}
+        fornecedorAtualNome={fornecedores.find((f) => f.id === fornecedorId)?.nome ?? null}
+        servicoAtual={servico}
+        onUsarDescricao={(d) => setServico(d)}
       />
     );
   }

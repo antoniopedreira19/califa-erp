@@ -465,6 +465,9 @@ export function EnvioDialog({
         obrigatorio
         compacta={compacta}
         disabled={pending}
+        anexoPath={a.path || null}
+        anexoMimetype={a.mime}
+        fornecedorAtualNome={nomeDoFornecedor}
       />
     );
   }
