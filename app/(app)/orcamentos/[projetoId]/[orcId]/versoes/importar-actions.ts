@@ -23,7 +23,12 @@ import {
 } from "@/lib/importacao/planejado-anterior";
 import type { CategoriaModeloPlanilha, PlanejadoAntesDoSave } from "@/lib/types";
 import { baixarEnvio, descartarEnvio, type EnvioDaPlanilha } from "@/lib/importacao/envio";
-import type { PreviewDaAba, PreviewResult } from "@/lib/importacao/tipos-da-importacao";
+import type {
+  OpcaoDosMeses,
+  PreviewDaAba,
+  PreviewResult,
+  SemBlocoDeMes,
+} from "@/lib/importacao/tipos-da-importacao";
 import { montarPreviewDaAba } from "@/lib/importacao/preview-da-aba";
 import {
   abaSugerida,
@@ -33,7 +38,7 @@ import {
   type AbaLida,
   type AbaResumo,
 } from "@/lib/importacao/abas-do-arquivo";
-import { casarBlocosComMeses } from "@/lib/importacao/meses-da-planilha";
+import { abaSemBlocoDeMes, mesesDaAbaParaGravar } from "@/lib/importacao/meses-da-planilha";
 import {
   copiarMesesEntreVersoes,
   criarMesesDoPeriodo,
@@ -60,6 +65,10 @@ export interface EntradaDaGravacao {
   aba: string;
   /** De onde vem o planejado. Sem versão anterior, vale a planilha. */
   origem_planejado: "anterior" | "planilha";
+  /** Aba sem título de mês no Fee e no Always On (decisão 158): os itens
+   *  se repetem em todos os meses ou entram só no primeiro. Obrigatória
+   *  nesse caso quando o orçamento tem mais de um mês; ignorada nos outros. */
+  meses?: OpcaoDosMeses | null;
 }
 
 export type ConfirmResult =
@@ -335,6 +344,7 @@ export async function previewImportacao(
   }
 
   const previews: Record<string, PreviewDaAba> = {};
+  const semBloco: Record<string, SemBlocoDeMes> = {};
   const abas: AbaResumo[] = lidas.map((lida) => {
     const r = montarPreviewDaAba(lida.parsed, {
       modelo: check.modelo,
@@ -355,6 +365,7 @@ export async function previewImportacao(
       };
     }
     previews[lida.nome] = r.preview;
+    if (r.semBloco) semBloco[lida.nome] = r.semBloco;
     return { nome: lida.nome, visivel: lida.visivel, legivel: true, motivo: null, ...totaisDaAba(r.parsed) };
   });
 
@@ -375,6 +386,7 @@ export async function previewImportacao(
     abas: ordenarAbas(abas),
     sugerida,
     previews,
+    semBloco,
   };
 }
 
@@ -429,7 +441,12 @@ export async function confirmarImportacao(
     };
   }
 
-  const recusaConfirmar = recusaPorModelo(parsed.modelo, check.modelo);
+  // A aba sem título de mês do mensal é lida como um mês (decisão 158),
+  // não como planilha do modelo nacional.
+  const recusaConfirmar =
+    check.modelo === "mensal" && abaSemBlocoDeMes(parsed)
+      ? null
+      : recusaPorModelo(parsed.modelo, check.modelo);
   if (recusaConfirmar) return { ok: false, message: recusaConfirmar };
 
   // Planejado: da vigente ou da planilha. Lido ANTES de criar a versão
@@ -442,20 +459,9 @@ export async function confirmarImportacao(
   if (check.modelo === "mensal") {
     const destino = mesesDeDestino(anteriorConfirmar, check.periodo);
     if (!destino.ok) return { ok: false, message: destino.message };
-    const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, destino.datas);
+    const casados = mesesDaAbaParaGravar(parsed, destino.datas, entrada.meses ?? null);
     if (!casados.ok) return { ok: false, message: casados.message };
-    parsed = {
-      ...parsed,
-      grupos: casados.grupos,
-      warnings: [...parsed.warnings, ...casados.avisos],
-      // A contagem segue os meses aceitos: item de bloco fora do trimestre
-      // não entra, e a confirmação não pode prometer mais itens do que grava.
-      linhas_importadas: casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-      linhas_ignoradas:
-        parsed.linhas_ignoradas +
-        parsed.linhas_importadas -
-        casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-    };
+    parsed = casados.parsed;
     datasDoMensal = destino.datas;
   }
   const origemPlanejado: OrigemDoPlanejado = anteriorConfirmar
@@ -814,34 +820,29 @@ export async function sobrescreverVersaoComPlanilha(
 
   // Antes de apagar qualquer coisa: planilha do modelo errado não troca o
   // conteúdo da versão (decisão 072).
-  const recusaSobrescrever = recusaPorModelo(parsed.modelo, check.modelo);
+  const recusaSobrescrever =
+    check.modelo === "mensal" && abaSemBlocoDeMes(parsed)
+      ? null
+      : recusaPorModelo(parsed.modelo, check.modelo);
   if (recusaSobrescrever) return { ok: false, message: recusaSobrescrever };
 
   // Planejado: o desta versão ou o da planilha. Lido ANTES de apagar.
   const anteriorSobrescrever = await versaoAnterior(orcamentoId, tenantId, versaoId);
 
   // Mensal (decisão 078): os meses são os da própria versão. Casados ANTES
-  // de apagar qualquer coisa — mês a mais ou a menos não troca o conteúdo.
+  // de apagar qualquer coisa — mês da versão sem bloco não troca o
+  // conteúdo; mês que a versão não tem fica de fora (decisão 158).
   const mesIdDaVersao = new Map(
     (anteriorSobrescrever?.meses ?? []).map((m) => [m.mes, m.id]),
   );
   if (check.modelo === "mensal") {
-    const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, [
-      ...mesIdDaVersao.keys(),
-    ]);
+    const casados = mesesDaAbaParaGravar(
+      parsed,
+      [...mesIdDaVersao.keys()],
+      entrada.meses ?? null,
+    );
     if (!casados.ok) return { ok: false, message: casados.message };
-    parsed = {
-      ...parsed,
-      grupos: casados.grupos,
-      warnings: [...parsed.warnings, ...casados.avisos],
-      // A contagem segue os meses aceitos: item de bloco fora do trimestre
-      // não entra, e a confirmação não pode prometer mais itens do que grava.
-      linhas_importadas: casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-      linhas_ignoradas:
-        parsed.linhas_ignoradas +
-        parsed.linhas_importadas -
-        casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-    };
+    parsed = casados.parsed;
   }
   const origemPlanejado: OrigemDoPlanejado = anteriorSobrescrever
     ? origemDoPlanejado(entrada)
