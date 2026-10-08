@@ -26,7 +26,13 @@ As duas dimensões são independentes (palavras do Tiago): o CNPJ da California 
    - vem como CNPJ tomador da NF;
    - é com ele que a nota é conferida;
    - é o CNPJ da conta que paga (pendência abaixo).
-3. **O CNPJ vem escolhido pela regional** do job, configurada em Cadastros › Impostos › CNPJs emissores › "CNPJ da PP por regional" (SS → GoCrazy, pedido do Tiago). Sem configuração, vale o CNPJ da empresa gerencial do job (Hitlab → Hitlab, Agência California → California) e, por último, o da empresa principal. Sempre se pode trocar na PP.
+3. **O CNPJ vem escolhido pela regional** do job, configurada em Cadastros › Impostos › CNPJs emissores › "CNPJ da PP por regional" (SS → GoCrazy, pedido do Tiago). Sem configuração, vale o CNPJ da empresa gerencial do job (Hitlab → Hitlab, Agência California → California) e, por último, o da empresa principal. Sempre se pode trocar na PP. A relação, nas palavras do Tiago (08/10/2026), e conferida no formulário (AMB-1026/26 abre com GoCrazy; ANI-1004/26, da CCH, com California):
+
+   | Empresa emissora (CNPJ) | Empresa gerencial e regional do job |
+   |---|---|
+   | GoCrazy | Agência California, regional SS (São Sebastião) |
+   | California | Agência California, demais regionais; CCH, todas as regionais |
+   | Hitlab | Hitlab |
 4. **Nota em outro CNPJ não barra** (resposta do Tiago):
    - na NF, aviso em vermelho: "A nota está no CNPJ X, mas a PP é do CNPJ Y. Se a nota veio errada, peça outra ao fornecedor; enviada assim, o financeiro decide na aprovação.";
    - no envio, um pop-up "Enviar com a nota em outro CNPJ?", com "Voltar" e "Sim, enviar". O servidor confere de novo e registra na auditoria (`nota_em_outro_cnpj_confirmada`);
@@ -46,6 +52,13 @@ As duas dimensões são independentes (palavras do Tiago): o CNPJ da California 
 3. **O que a aprovação faz com a nota em outro CNPJ**: hoje o financeiro só vê o aviso; a decisão (corrigir o tomador, rejeitar, aprovar assim) é dele, sem regra no sistema.
 4. **O logo do PDF** continua o da California para todo CNPJ.
 5. **A PP-00144** (ANI-1004/26, job da CCH) foi gerada com "CCH LTDA · CNPJ 00.000.000/0000-00" no PDF. Com a regra nova, cancelar e gerar de novo.
+6. **Casos antigos fora da relação, para o Tiago verificar o ocorrido** (levantados em 08/10/2026, com os documentos abertos um a um). Por decisão dele, **nada foi alterado**: a empresa emissora gravada fica como está.
+   - **Empresa emissora gravada diferente da relação:** PP-00141 (AMB-1022/26) e PP-00145 (AMB-1019/26), da regional SS, gravadas como California no preenchimento de 07/10 (não tinham NF). Os documentos (fatura 1907 e duplicata 42029) vieram contra a GoCrazy.
+   - **Jobs da Hitlab com o documento contra outro CNPJ:** PP-00043 (AMB-1002/26, NF 90 contra a California), PP-00049 (AMB-1002/26, NF 87 contra a GoCrazy), PP-00090 (UER-1002/26, NF 7408 contra a California, com ISS retido em Salvador) e PP-00045 (AMB-1002/26, relatório de passagens com cliente California; não é documento fiscal). A PP-00043 e a PP-00049 têm o mesmo fornecedor, valor e serviço com NFs diferentes: confirmar que não é o mesmo serviço pago duas vezes.
+   - **Notas contra o cliente:** PP-00069 a PP-00077 (AMB-1001/26, Hitlab, cachês, aprovadas) têm NF com tomador AMBEV S.A., que cita a California "aos cuidados", pelo CNPJ 19.437.976/0003-16 (estabelecimento que não está no cadastro de impostos). Aguarda o Tiago dizer como esses cachês são pagos.
+   - **Teste:** a PP-00146 (TES-1014/26) fica com GoCrazy, escolhida à mão no teste, como exemplo de troca manual.
+   - **Não conferidas:** PP-00105, 00106, 00107, 00123, 00126 e 00133 (geradas, com NF anexada sem tomador) serão conferidas no envio; recibo do Airbnb (PP-00044), cotação (PP-00086) e comprovante Pix (PP-00093) não têm tomador.
+   - **Dentro da relação:** as 10 PPs da SS (documentos contra a GoCrazy, apesar do PDF antigo com California), 16 documentos de NE e RJ (California) e PP-00089 e PP-00113 (Hitlab).
 
 ## Testado (07/10/2026)
 
