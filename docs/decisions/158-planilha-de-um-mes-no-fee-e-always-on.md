@@ -101,3 +101,10 @@ mensal.
   entrou só com outubro e dois avisos; a planilha da GP entrou direto, com
   o aviso do mês único. A pasta de envios ficou vazia depois de cada
   gravação.
+- Com o **arquivo original da GP**, sem nenhuma alteração ("AON
+  Unimed.xlsx", 114.469 bytes), no mesmo orçamento de volta com outubro a
+  dezembro: as duas abas no formato, "Repetir" e 12 itens com R$ 21.363,72
+  de orçado em cada mês (conferido no banco), e a versão liberada para
+  aprovar. A cópia que o Tiago editou ("OUTUBRO DE  2026" na A2 da aba "12
+  MESES") lê a aba "PILOTO" com a pergunta e mostra a "12 MESES" fora do
+  formato, com "falta novembro de 2026 e dezembro de 2026".
