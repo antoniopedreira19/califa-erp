@@ -6784,7 +6784,7 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
   - TES-1007/26 (todo em save): texto novo do custo e Rentabilidade R$ 0,00;
   - TES-1004/26 (consome R$ 1.000): Rentabilidade R$ 1.600,00 · 22,99%, igual ao "Resultado op. (planejado)" do cabeçalho (R$ 1.600,00 · 23,0%);
   - abertura do TES-1012/26: R$ 32.000,00 = 139.182,30 − 27.182,30 − 80.000,00.
-- **Fica para depois:** não há no banco um job aberto com faturamento zero e consumo de save. O aviso "pago com saldo em save" do job aberto foi conferido pelo valor que a página passa ao formulário, e não pela tela. O orçamento `TES-P001/26-26 · Teste aviso job pago por save` (v1 aprovada, sem job) está pronto para esse teste.
+- **Conferido na tela em 08/10/2026** no TES-1023/26, o job aberto pago só por save (ver a nota de 2026-10-08). Até ali o aviso "pago com saldo em save" do job aberto tinha sido conferido só pelo valor que a página passa ao formulário, porque não havia no banco um job aberto com faturamento zero e consumo de save.
 
 ## ⚠️ Nota de 2026-10-07 (3) — o save que vem com o job é aprovado na abertura (decisão 155)
 
@@ -6894,3 +6894,26 @@ Achados no protótipo da aprovação do save dentro da abertura, testados no TES
   aba ganhou o quadro "CNPJ da PP por regional" (SS → GoCrazy).
 - Falta preencher os dados da GoCrazy, e a baixa ainda não confere a conta
   contra o CNPJ da PP (pendências da decisão 156).
+
+## ⚠️ Nota de 2026-10-08 — aviso do job aberto pago por save conferido na tela
+
+Fecha o "Fica para depois" da nota de 2026-10-07 (2). O código é o do
+`b3c0be05`; nada mudou nele.
+
+- **O job de teste:** TES-1023/26 · Teste aviso job pago por save, do
+  orçamento `TES-P001/26-26`. Nasceu pelos fluxos da tela:
+  - uma linha Cenografia tipo B de R$ 5.000,00, toda paga pelo save do
+    TES-1007/26;
+  - faturamento previsto R$ 0,00, valor do job R$ 6.959,12, custo previsto
+    R$ 4.000,00;
+  - aberto no financeiro em 07/10, com o consumo aprovado na abertura
+    (decisão 155). O saldo do TES-1007/26 foi todo consumido.
+- **Conferido logado como administrador, em `/financeiro/jobs/[id]`:**
+  - **TES-1023/26:** a página manda `saveConsumido: 5000` ao formulário.
+    O bloco de recebimento diz "Este job é pago com saldo em save de outro
+    job — o cliente já pagou por ele numa nota anterior…", e o "pago
+    diretamente pelo cliente ao fornecedor" não aparece.
+  - **TES-1024/26** (orçamento inteiro em save): o cartão de custo e o
+    aviso âmbar mostram o texto de "Todas as linhas estão em save".
+- **Continua sem conferir na tela:** o texto de save junto com itens de
+  calha BV. Não há job assim no banco.
