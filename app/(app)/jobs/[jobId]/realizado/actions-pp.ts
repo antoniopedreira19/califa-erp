@@ -1842,6 +1842,35 @@ export async function signedUrlAnexo(
 }
 
 /**
+ * URL assinada de um anexo da PP a emitir (decisão 153, entrega 3): a
+ * conferência lado a lado do formulário mostra os arquivos já salvos. Os
+ * que acabaram de subir a tela mostra pelo próprio arquivo.
+ */
+export async function signedUrlAnexoAEmitir(
+  anexo_id: string,
+): Promise<Result<{ url: string }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: anexo } = await supabase
+    .from("pedidos_compra_a_emitir_anexos")
+    .select("arquivo_path")
+    .eq("id", anexo_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!anexo) return { ok: false, message: "Anexo não encontrado." };
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(anexo.arquivo_path, PDF_TTL_SEGUNDOS);
+
+  if (error || !data)
+    return { ok: false, message: error?.message ?? "Falha URL" };
+  return { ok: true, url: data.signedUrl };
+}
+
+/**
  * O que falta nos anexos para enviar (decisão 152): pelo menos um arquivo;
  * o tipo de cada um; o número dos documentos; e, em cada NF, número,
  * emissão, valor, CNPJ tomador e a parte desta PP. A soma das partes vai

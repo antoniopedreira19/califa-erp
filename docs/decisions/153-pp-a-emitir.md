@@ -1,9 +1,8 @@
 # 153 — PP a emitir: a PP é revisada antes de gerar e não se edita depois
 
 **Data:** 2026-10-07
-**Status:** entregas 1 e 2 aceitas e no ar (07/10/2026). A entrega 3 (a
-conferência lado a lado na produção) está desenhada e aprovada, e vem
-depois. ⚠️ Exceção da [157](157-prazo-de-envio-da-pp.md) (07/10/2026): a
+**Status:** entregas 1 e 2 aceitas e no ar (07/10/2026); entrega 3 (a
+conferência lado a lado na produção) no ar em 08/10/2026. ⚠️ Exceção da [157](157-prazo-de-envio-da-pp.md) (07/10/2026): a
 PP gerada que perdeu o prazo de envio tem o vencimento atualizado, sem
 cancelar e refazer.
 **Quem decidiu:** Tiago, de 06 a 07/10/2026, a partir do protótipo
@@ -100,12 +99,39 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
 - PP-00131 reprovada → "Cancelar e refazer" pela aba Pedidos de Produção.
 - Pré-abertura vista no TES-1012/26 (só a tela, nada gravado).
 
-## Entrega 3 (por fazer)
+## Entrega 3 — os documentos lado a lado (08/10/2026)
 
-A conferência lado a lado, igual à do Contas a Pagar (`pp-tela.tsx`): no
-envio, "Ver PP e documentos lado a lado" abre o PDF da PP, o documento à
-vista e a coluna "Documentos e dados"; no formulário, só o documento e os
-dados ("Voltar ao formulário").
+O desenho da 11ª rodada do protótipo, igual à tela da PP no Contas a Pagar
+(`pp-tela.tsx`):
+
+| Onde | Como abre | O que mostra | Rodapé |
+|---|---|---|---|
+| Envio ao financeiro | "Ver PP e documentos lado a lado", ao lado de "Anexos", ou o olho de um cartão (abre já nele) | O PDF da PP, o documento à vista (1, 2, 3… no cabeçalho) e a coluna "Documentos e dados" | "Voltar ao resumo" e "Enviar ao financeiro" — o mesmo envio; o "acima do planejado" aparece no aviso da tela |
+| Formulário da PP a emitir | "Ver documentos lado a lado", acima da área de anexar, ou o olho de um cartão | O documento à vista e a coluna; sem o PDF da PP, que ainda não existe | "Voltar ao formulário" |
+
+- A coluna "Documentos e dados": a área de anexar, a lista numerada com a
+  situação de cada documento ("Escolha o tipo", "NF · falta preencher",
+  "NF 7001", "Recibo 55") e os campos SÓ do documento à vista — o tipo e, na
+  NF, os dados dela (os mesmos campos do cartão, em duas colunas); nos
+  outros, o número. "Anterior" e "Próximo" percorrem a lista; o arquivo novo
+  vira o documento à vista.
+- O estado é o de quem abre: o que se preenche na tela aparece no
+  formulário ou no envio ao voltar, e vice-versa.
+- O arquivo que acabou de subir aparece pelo próprio arquivo; o já gravado,
+  por URL assinada (`signedUrlAnexo` no envio, `signedUrlAnexoAEmitir` —
+  nova — no formulário).
+- Camadas: a tela é `FullscreenContent` (z-55), como no Contas a Pagar; a
+  pergunta do CNPJ da nota (decisão 156) e o "Corrigir a NF" da outra PP
+  passaram a z-60, para abrirem por cima dela. ESC e "Fechar" fecham só a
+  tela. O véu é mais escuro que o do Contas a Pagar (0,92 contra 0,82),
+  porque aqui a tela abre por cima do formulário e o texto dele vazava.
+- O painel de documento saiu de `pp-tela.tsx` para
+  `components/documentos/painel-documento.tsx` (o Contas a Pagar usa o
+  mesmo); o componente da tela é `conferencia-dos-documentos.tsx`.
+- Testado no TES-1014/26: PP-00147 criada com um PDF de NF fictícia e uma
+  imagem de recibo, tipos e dados preenchidos pela tela, gerada e enviada
+  pelo rodapé da tela (com o "acima do planejado"); anexo já salvo de uma PP
+  a emitir aberto pela URL assinada; o Contas a Pagar segue igual.
 
 ## Respostas do Tiago (07/10/2026, depois da entrega)
 
@@ -125,10 +151,12 @@ dados ("Voltar ao formulário").
    exclusão lógica de sempre. A função da errata (decisão 151) não mudou.
    Testado numa transação desfeita: a PP a emitir do Motion no TES-1014/26
    passou de não excluída para excluída.
-4. **A calha da planilha mostrando a PP a emitir:** o Tiago quer ver antes
-   ("me mostre como ficaria"). Protótipo à parte.
+4. **A calha da planilha mostrando a PP a emitir:** protótipo com três
+   opções (https://claude.ai/artifact/EGEEMJHc2h3tHwfsUzHX35). Em 08/10 o
+   Tiago respondeu "Não gostei, pode manter como está": a calha não muda.
 5. **Refazer com a mesma NF:** "devemos poder refazer a PP com a NF, e
    associá-la com a NF, visto que estará substituindo a anterior". É o que
    já acontece: o anexo volta na PP a emitir e o envio liga a PP nova à
    mesma nota. Os dados da nota seguem travados para a produção (resposta 6
-   da 152); quem corrige é o financeiro, na aprovação.
+   da 152); quem corrige é o financeiro, na aprovação. Confirmado em 08/10
+   ("Faça ao recomendado").

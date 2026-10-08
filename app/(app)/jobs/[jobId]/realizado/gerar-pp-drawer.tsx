@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import {
   X,
   AlertTriangle,
+  Columns2,
   Pencil,
   Plus,
 } from "lucide-react";
@@ -68,7 +69,9 @@ import {
   reservarPedidoCompra,
   salvarPPAEmitir,
   prefixoAnexosPPAEmitir,
+  signedUrlAnexoAEmitir,
 } from "./actions-pp";
+import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
   ListaDeAnexos,
   NfDoAnexo,
@@ -389,6 +392,12 @@ export function GerarPPDrawer({
     anexos.filter((a) => a.tipo === "nota_fiscal").map((a) => a.nf.numero),
     ppId,
   );
+  /** Os documentos lado a lado (decisão 153, entrega 3), abertos num
+   *  documento. Sem o PDF da PP: a PP a emitir ainda não tem. */
+  const [ladoALado, setLadoALado] = React.useState<{ foco: string | null } | null>(null);
+  React.useEffect(() => {
+    if (!open) setLadoALado(null);
+  }, [open]);
   /** A PP rejeitada que esta PP a emitir refaz, com o motivo (decisão 153). */
   const refaz = aEmitirEditando?.refaz ?? null;
   const travaDaAbertura = textoAguardaAbertura(statusDoJob);
@@ -811,6 +820,28 @@ export function GerarPPDrawer({
   }, [open, router]);
 
   if (!open || !itemRealizadoId) return null;
+
+  /** Os campos da NF de um arquivo — na lista e, `compacta`, na coluna da
+   *  tela lado a lado. */
+  function camposDaNf(id: string, compacta: boolean) {
+    const a = anexos.find((x) => x.id === id);
+    if (!a) return null;
+    return (
+      <NfDoAnexo
+        nf={a.nf}
+        onMudar={(parte) => mudarNf(id, parte)}
+        faltas={[]}
+        idBase={`${compacta ? "conferencia" : "pp-nf"}-${id}`}
+        tomadores={tomadores}
+        tomadorEsperado={cnpjId || null}
+        empresaNome={nomeDoCnpj}
+        existente={notaExistenteDe(existentes, a.nf.numero)}
+        valorPP={valorPP}
+        compacta={compacta}
+        disabled={pending}
+      />
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1315,6 +1346,20 @@ export function GerarPPDrawer({
                 </p>
               ) : (
                 <>
+                  {/* Decisão 153, entrega 3: os documentos lado a lado, como
+                      no Contas a Pagar. */}
+                  {anexos.length > 0 && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setLadoALado({ foco: itensDaLista(anexos)[0]?.id ?? null })}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+                      >
+                        <Columns2 className="h-3.5 w-3.5" />
+                        Ver documentos lado a lado
+                      </button>
+                    </div>
+                  )}
                   <ZonaDeAnexos id="pp-arquivos" pronto={!!uploadPrefix} onArquivos={subir} />
                   {avisoDosAnexos && (
                     <p className="text-[11.5px] font-semibold text-california-red">{avisoDosAnexos}</p>
@@ -1326,24 +1371,8 @@ export function GerarPPDrawer({
                     onRemover={remover}
                     tipoInvalido={() => false}
                     disabled={pending}
-                    renderNf={(id) => {
-                      const a = anexos.find((x) => x.id === id);
-                      if (!a) return null;
-                      return (
-                        <NfDoAnexo
-                          nf={a.nf}
-                          onMudar={(parte) => mudarNf(id, parte)}
-                          faltas={[]}
-                          idBase={`pp-nf-${id}`}
-                          tomadores={tomadores}
-                          tomadorEsperado={cnpjId || null}
-                          empresaNome={nomeDoCnpj}
-                          existente={notaExistenteDe(existentes, a.nf.numero)}
-                          valorPP={valorPP}
-                          disabled={pending}
-                        />
-                      );
-                    }}
+                    onVer={(id) => setLadoALado({ foco: id })}
+                    renderNf={(id) => camposDaNf(id, false)}
                   />
                   <ResumoDasNfs
                     valores={anexos
@@ -1528,6 +1557,44 @@ export function GerarPPDrawer({
             router.refresh();
           }}
         />
+        {/* Decisão 153, entrega 3: os documentos e os dados lado a lado. O
+            estado é o deste formulário. */}
+        {!verbaProducao && (
+          <ConferenciaDosDocumentos
+            open={ladoALado !== null}
+            onOpenChange={(o) => !o && setLadoALado(null)}
+            codigo="PP a emitir"
+            selo={editando ? "Em edição" : "Nova"}
+            descricao="Documentos e dados — lado a lado. O PDF da PP aparece aqui depois de gerar."
+            ppIdDoPdf={null}
+            anexos={anexos}
+            focar={ladoALado?.foco ?? null}
+            urlDoGravado={signedUrlAnexoAEmitir}
+            prontoParaAnexar={!!uploadPrefix}
+            onArquivos={subir}
+            onTipo={(id, t) => mudar(id, { tipo: t })}
+            onNumero={(id, numero) => mudar(id, { numero })}
+            onRemover={remover}
+            renderNf={(id) => camposDaNf(id, true)}
+            mostrarFaltas={false}
+            obrigatorio={false}
+            valorPP={valorPP}
+            moeda="BRL"
+            aviso={avisoDosAnexos}
+            onFecharAviso={() => setAvisoDosAnexos(null)}
+            rodapeEsquerda="Para salvar e gerar, os anexos são opcionais; no envio ao financeiro, todos os campos são obrigatórios."
+            rodape={
+              <button
+                type="button"
+                onClick={() => setLadoALado(null)}
+                className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-foreground hover:bg-white/90"
+              >
+                Voltar ao formulário
+              </button>
+            }
+            disabled={pending}
+          />
+        )}
       </DrawerContent>
     </Dialog>
   );
