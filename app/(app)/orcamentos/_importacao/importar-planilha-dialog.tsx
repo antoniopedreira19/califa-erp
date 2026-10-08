@@ -13,7 +13,12 @@ import { cn } from "@/lib/utils";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 import type { EnvioDaPlanilha } from "@/lib/importacao/envio";
 import { LIMITE_PLANILHA_ROTULO } from "@/lib/importacao/limites";
-import type { PreviewResult } from "@/lib/importacao/tipos-da-importacao";
+import type {
+  OpcaoDosMeses,
+  PreviewResult,
+  SemBlocoDeMes,
+} from "@/lib/importacao/tipos-da-importacao";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { enviarPlanilha } from "./enviar-planilha";
 import { descartarEnvioPlanilha } from "./envio-actions";
 import { FormatoDaPlanilha } from "./formato-da-planilha";
@@ -30,7 +35,9 @@ import { ResumoDaAba, perguntaOPlanejado, type OrigemDoPlanejado } from "./resum
  *  2. **Enviando / Lendo** — o arquivo sobe direto para o Storage (até
  *     10 MB) e o servidor lê todas as abas.
  *  3. **Conferir** — a tabela de abas à esquerda (1C) e o resumo da aba
- *     escolhida à direita, com os totais na lista de grupos.
+ *     escolhida à direita, com os totais na lista de grupos. Na aba sem
+ *     título de mês do Fee e do Always On, o resumo pergunta antes em que
+ *     meses os itens entram (decisão 158).
  *  4. **"Tem certeza?"** — só quando a gravação apaga alguma coisa (a
  *     versão tem itens): um pop-up por cima do modal diz o que sai e o que
  *     entra. Versão vazia grava direto.
@@ -44,6 +51,9 @@ export interface GravacaoDaPlanilha {
   envio: EnvioDaPlanilha;
   aba: string;
   origem_planejado: OrigemDoPlanejado;
+  /** Aba sem título de mês (decisão 158): onde os itens entram. `null`
+   *  quando a aba tem bloco de mês ou o modelo não é o mensal. */
+  meses: OpcaoDosMeses | null;
 }
 
 type Etapa = "arquivo" | "enviando" | "lendo" | "conferir" | "gravando";
@@ -92,9 +102,13 @@ export function ImportarPlanilhaDialog({
   const [envio, setEnvio] = React.useState<EnvioDaPlanilha | null>(null);
   const [leitura, setLeitura] = React.useState<Leitura | null>(null);
   const [aba, setAba] = React.useState("");
-  // De onde vem o planejado (decisão 076). Nada vem marcado — nem pelo
-  // arquivo, como era até 05/10/2026: quem importa lê e escolhe.
-  const [origem, setOrigem] = React.useState<OrigemDoPlanejado | null>(null);
+  // De onde vem o planejado (decisão 076). Vem marcado "Usar o planejado da
+  // planilha" (decisão 158, 08/10/2026); de 05/10 a 08/10 nada vinha
+  // marcado. Quem quer o da versão troca a opção.
+  const [origem, setOrigem] = React.useState<OrigemDoPlanejado | null>("planilha");
+  // Aba sem título de mês (decisão 158): nada vem marcado — quem importa
+  // escolhe se os itens se repetem nos meses ou entram só no primeiro.
+  const [meses, setMeses] = React.useState<OpcaoDosMeses | null>(null);
   const [certeza, setCerteza] = React.useState(false);
   const [arrastando, setArrastando] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -115,7 +129,8 @@ export function ImportarPlanilhaDialog({
     setEnvio(null);
     setLeitura(null);
     setAba("");
-    setOrigem(null);
+    setOrigem("planilha");
+    setMeses(null);
     setCerteza(false);
     setArrastando(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -158,15 +173,17 @@ export function ImportarPlanilhaDialog({
     }
     setLeitura(lida);
     setAba(lida.sugerida);
-    setOrigem(null);
+    setOrigem("planilha");
+    setMeses(null);
     setEtapa("conferir");
   }
 
-  // Outra aba é outra planilha: a escolha do planejado recomeça.
+  // Outra aba é outra planilha: as escolhas recomeçam.
   function escolherAba(nome: string) {
     if (!leitura || nome === aba) return;
     setAba(nome);
-    setOrigem(null);
+    setOrigem("planilha");
+    setMeses(null);
   }
 
   const apaga =
@@ -179,7 +196,13 @@ export function ImportarPlanilhaDialog({
     setErro(null);
     setEtapa("gravando");
     // Sem a pergunta (sem versão anterior, ou Interno), vale a planilha.
-    const r = await gravar({ envio, aba, origem_planejado: origem ?? "planilha" });
+    // A aba sem título de mês num orçamento de um mês só entra nele.
+    const r = await gravar({
+      envio,
+      aba,
+      origem_planejado: origem ?? "planilha",
+      meses: perguntaMeses ? meses : semBloco ? "todos" : null,
+    });
     if (!r.ok) {
       setErro(r.message);
       setEtapa("conferir");
@@ -191,9 +214,24 @@ export function ImportarPlanilhaDialog({
     onOpenChange(false);
   }
 
-  const preview = leitura?.previews[aba] ?? null;
+  // Aba sem título de mês (decisão 158): a leitura de cada opção vem
+  // pronta. Antes da escolha, a tabela mostra a aba como está (um mês) e a
+  // pergunta do planejado espera — o casamento com a versão depende dos
+  // meses.
+  const semBloco: SemBlocoDeMes | null = leitura?.semBloco[aba] ?? null;
+  const perguntaMeses = !!semBloco && semBloco.meses.length > 1;
+  const previewDaAba = leitura?.previews[aba] ?? null;
+  const preview =
+    previewDaAba && perguntaMeses
+      ? meses
+        ? (semBloco![meses] ?? previewDaAba)
+        : { ...previewDaAba, planejado: { ...previewDaAba.planejado, versao_anterior: null } }
+      : previewDaAba;
   const conferindo = etapa === "conferir" && leitura && preview;
-  const faltaEscolher = !!preview && perguntaOPlanejado(preview, interno) && origem === null;
+  const faltaEscolher =
+    !!preview &&
+    ((perguntaMeses && meses === null) ||
+      (perguntaOPlanejado(preview, interno) && origem === null));
 
   return (
     <Dialog open={open} onOpenChange={mudarAberto}>
@@ -308,6 +346,9 @@ export function ImportarPlanilhaDialog({
                 interno={interno}
                 mensal={modeloPlanilha === "mensal"}
                 mostrarHonorarios={mostrarHonorarios}
+                semBloco={semBloco}
+                opcaoMeses={meses}
+                onOpcaoMeses={setMeses}
               />
             </div>
           </div>
@@ -348,6 +389,13 @@ export function ImportarPlanilhaDialog({
                   </DialogTitle>
                   <DialogDescription className="leading-relaxed">
                     {confirmacaoTexto(confirmarSubstituicao, preview.grupos.length, preview.grupos.reduce((s, g) => s + g.itens_count, 0), aba)}
+                    {perguntaMeses && meses && (
+                      <span className="mt-1 block">
+                        {meses === "todos"
+                          ? `Os itens da aba se repetem em ${listaDeMeses(semBloco!.meses)}.`
+                          : `Os itens da aba entram só em ${nomeDoMes(semBloco!.meses[0])}; ${listaDeMeses(semBloco!.meses.slice(1))} ${semBloco!.meses.length === 2 ? "fica vazio" : "ficam vazios"}.`}
+                      </span>
+                    )}
                   </DialogDescription>
                   {confirmarSubstituicao.bvs > 0 && (
                     <p className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-[13px] text-california-red">
@@ -389,4 +437,12 @@ function confirmacaoTexto(
   aba: string,
 ): string {
   return `Esta versão perde ${plural(atual.grupos, "grupo", "grupos")} e ${plural(atual.itens, "item", "itens")}, e recebe no lugar ${plural(gruposNovos, "grupo", "grupos")} e ${plural(itensNovos, "item", "itens")} da aba ${aba}. Não há como desfazer.`;
+}
+
+/** "outubro, novembro e dezembro". */
+function listaDeMeses(isos: string[]): string {
+  const nomes = [...isos].sort().map(nomeDoMes);
+  return nomes.length <= 1
+    ? nomes.join("")
+    : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
 }

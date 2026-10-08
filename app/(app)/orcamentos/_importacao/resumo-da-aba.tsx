@@ -5,7 +5,12 @@ import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
-import type { PreviewDaAba } from "@/lib/importacao/tipos-da-importacao";
+import type {
+  OpcaoDosMeses,
+  PreviewDaAba,
+  SemBlocoDeMes,
+} from "@/lib/importacao/tipos-da-importacao";
+import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { ORCADO, PLANEJADO, RENTAB_VALOR } from "@/app/(app)/_planilha/blocos";
 
 /**
@@ -16,6 +21,9 @@ import { ORCADO, PLANEJADO, RENTAB_VALOR } from "@/app/(app)/_planilha/blocos";
  * a linha de total, embaixo das colunas que ela soma. Rentabilidade em R$ e
  * em %, na conta da tela da versão (`calcularRentabilidade`: sobre o
  * orçado, travessão sem planejado), e em grafite, como nas planilhas.
+ *
+ * Aba sem título de mês no Fee e no Always On (decisão 158): a pergunta
+ * "Meses" vem antes de tudo, e a do planejado só depois dela.
  */
 
 export type OrigemDoPlanejado = "anterior" | "planilha";
@@ -25,16 +33,27 @@ function porcento(orcado: number, planejado: number): string {
   return percentual === null ? "—" : `${percentual.toFixed(1).replace(".", ",")}%`;
 }
 
+/** "outubro, novembro e dezembro". */
+function listaDeMeses(isos: string[]): string {
+  const nomes = [...isos].sort().map(nomeDoMes);
+  return nomes.length <= 1
+    ? nomes.join("")
+    : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
+
+/** Uma opção de rádio do resumo. `grupo` separa as perguntas na página. */
 function OpcaoPlanejado({
   marcado,
   onEscolher,
   titulo,
   detalhe,
+  grupo = "origem-planejado",
 }: {
   marcado: boolean;
   onEscolher: () => void;
   titulo: string;
   detalhe: string;
+  grupo?: string;
 }) {
   return (
     <label
@@ -45,7 +64,7 @@ function OpcaoPlanejado({
     >
       <input
         type="radio"
-        name="origem-planejado"
+        name={grupo}
         checked={marcado}
         onChange={onEscolher}
         className="mt-0.5 accent-california-red"
@@ -71,8 +90,17 @@ export function ResumoDaAba({
   interno,
   mensal,
   mostrarHonorarios,
+  semBloco,
+  opcaoMeses,
+  onOpcaoMeses,
 }: {
   preview: PreviewDaAba;
+  /** Aba sem título de mês no Fee e no Always On (decisão 158). `null` nas
+   *  outras. */
+  semBloco: SemBlocoDeMes | null;
+  /** Onde os itens da aba sem título de mês entram. `null` antes da escolha. */
+  opcaoMeses: OpcaoDosMeses | null;
+  onOpcaoMeses: (opcao: OpcaoDosMeses) => void;
   /** `null` enquanto quem importa não escolheu: nada vem marcado (05/10/2026). */
   origemPlanejado: OrigemDoPlanejado | null;
   onOrigemPlanejado: (origem: OrigemDoPlanejado) => void;
@@ -104,6 +132,11 @@ export function ResumoDaAba({
   const semPar = p.total_itens - p.casadas;
   const { ajustes, ignoradas } = preview.avisos_total;
   const TH = "py-2 text-[10px] font-semibold uppercase tracking-wider";
+  const perguntaMeses = !!semBloco && semBloco.meses.length > 1;
+  const [primeiroMes, ...outrosMeses] = semBloco ? [...semBloco.meses].sort() : [];
+  const itensDaAba = semBloco?.primeiro
+    ? semBloco.primeiro.grupos.reduce((s, g) => s + g.itens_count, 0)
+    : 0;
 
   return (
     <div className="space-y-5">
@@ -115,6 +148,44 @@ export function ResumoDaAba({
         <p className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
           <b className="text-foreground">Orçamento Interno.</b> Toda linha entra como F · Interno, com
           o planejado igual ao orçado — o tipo de custo e o bloco PLANEJADO da planilha não são usados.
+        </p>
+      )}
+
+      {perguntaMeses && semBloco && (
+        <fieldset className="space-y-2 rounded-xl border border-border p-4">
+          <legend className="px-1 text-xs font-semibold text-foreground">Meses</legend>
+          <p className="px-1 pb-1 text-xs leading-relaxed text-muted-foreground">
+            A aba não tem título de mês, como “{nomeDoMes(primeiroMes).toUpperCase()} DE{" "}
+            {primeiroMes.slice(0, 4)}”: os itens dela são de um mês só. Em que meses do orçamento eles
+            entram?
+          </p>
+          <OpcaoPlanejado
+            grupo="opcao-meses"
+            marcado={opcaoMeses === "todos"}
+            onEscolher={() => onOpcaoMeses("todos")}
+            titulo={`Repetir em ${listaDeMeses(semBloco.meses)}`}
+            detalhe={`Os mesmos ${itensDaAba} ${itensDaAba === 1 ? "item" : "itens"} em cada mês — ${
+              itensDaAba * semBloco.meses.length
+            } no total. Depois, cada mês se ajusta na sua aba.`}
+          />
+          <OpcaoPlanejado
+            grupo="opcao-meses"
+            marcado={opcaoMeses === "primeiro"}
+            onEscolher={() => onOpcaoMeses("primeiro")}
+            titulo={`Só em ${nomeDoMes(primeiroMes)}`}
+            detalhe={`${maiuscula(listaDeMeses(outrosMeses))} ${
+              outrosMeses.length === 1 ? "fica vazio" : "ficam vazios"
+            }, para preencher na tela — o “Copiar itens de outro mês” traz os de ${nomeDoMes(
+              primeiroMes,
+            )}. Mês sem item segura a aprovação.`}
+          />
+        </fieldset>
+      )}
+
+      {semBloco && semBloco.meses.length === 1 && (
+        <p className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <b className="text-foreground">A aba não tem título de mês.</b> Os itens entram em{" "}
+          {nomeDoMes(semBloco.meses[0])}, o único mês deste orçamento.
         </p>
       )}
 
@@ -182,7 +253,9 @@ export function ResumoDaAba({
           </colgroup>
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
-              <th className={cn(TH, "whitespace-nowrap px-4 text-left")}>Grupos que serão criados</th>
+              <th className={cn(TH, "whitespace-nowrap px-4 text-left")}>
+                {perguntaMeses && !opcaoMeses ? "Grupos da aba · um mês" : "Grupos que serão criados"}
+              </th>
               <th className={cn(TH, "pr-3 text-right")}>Itens</th>
               <th className={cn(TH, "pr-3 text-right", ORCADO.texto)}>Orçado</th>
               <th className={cn(TH, "pr-3 text-right", PLANEJADO.texto)}>Planejado</th>
@@ -278,4 +351,8 @@ export function ResumoDaAba({
       )}
     </div>
   );
+}
+
+function maiuscula(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

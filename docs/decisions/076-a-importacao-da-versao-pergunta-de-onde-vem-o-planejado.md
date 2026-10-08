@@ -1,7 +1,7 @@
 # 076 — A importação da versão pergunta de onde vem o planejado
 
 **Data:** 2026-09-14
-**Status:** aceita (revisada em 2026-10-05: nada vem marcado)
+**Status:** aceita (revisada em 2026-10-05: nada vem marcado; e em 2026-10-08, pela [158](158-planilha-de-um-mes-no-fee-e-always-on.md): o planejado da planilha vem marcado)
 **Contexto:** a planilha que vai para o cliente só tem o orçado. Ele mexe,
 devolve, e a agência precisa de uma versão nova com o orçado dele **e o
 planejado que ela já tinha montado**. O "Importar" do projeto já fazia isso
@@ -22,8 +22,9 @@ nacional e para o internacional ([072](072-orcamento-internacional.md)).
 >   herda o planejado dela, com a categoria e a marca de save; a linha sem
 >   par entra zerada.
 >
-> **Nenhuma das duas vem marcada:** quem importa lê e escolhe, e o botão de
-> gravar só libera depois da escolha (revisão de 05/10/2026, abaixo).
+> **"Usar o planejado da planilha" vem marcada;** quem quer o da versão
+> troca a opção (revisão de 08/10/2026, abaixo). De 05/10 a 08/10 nenhuma
+> vinha marcada.
 
 Decisões do Tiago em 14/09/2026:
 
@@ -57,6 +58,16 @@ sem ler.
   vale a planilha e o botão já vem liberado.
 - O servidor não mudou: `origem_planejado` continua `"anterior" |
   "planilha"`, e a tela só manda depois da escolha.
+
+## ⚠️ Revisão de 2026-10-08 — o planejado da planilha vem marcado
+
+Pedido do Tiago, junto da [158](158-planilha-de-um-mes-no-fee-e-always-on.md)
+(planilha de um mês só no Fee e no Always On): **"Usar o planejado da
+planilha" vem marcada em toda importação**. O botão de gravar já nasce
+liberado; quem quer manter o da versão troca a opção. Trocar de aba volta
+à opção da planilha. A ordem das opções, o quadro e o servidor ficam como
+estavam. Na aba sem título de mês, a pergunta do planejado só aparece
+depois da pergunta dos meses.
 
 ## A visão agregada fica de fora
 

@@ -335,7 +335,9 @@ function Regras({ modelo, interno }: { modelo: CategoriaModeloPlanilha; interno:
       <>
         <Regra n={1} titulo="Um bloco por mês,">
           com o título do mês: “OUTUBRO DE 2026” na planilha exportada ou “OUTUBRO - …” na
-          planilha interna. Os grupos do bloco entram naquele mês.
+          planilha interna. Os grupos do bloco entram naquele mês. Aba sem nenhum título de mês
+          vale para um mês só: ao conferir, você escolhe se os itens se repetem em todos os meses ou
+          entram só no primeiro.
         </Regra>
         <Regra n={3} titulo={interno ? "A coluna G é ignorada:" : "A coluna G é o tipo de custo:"}>
           {interno
@@ -346,8 +348,8 @@ function Regras({ modelo, interno }: { modelo: CategoriaModeloPlanilha; interno:
           {VAZIOS}
         </Regra>
         <Regra n={4} titulo="Os meses não mudam pela planilha:">
-          mês que o orçamento não tem, ou mês do orçamento sem bloco, recusa a importação.
-          Crie ou apague meses em “Editar meses”. O fechamento de cada mês é ignorado.
+          mês que o orçamento não tem fica de fora, com aviso; mês do orçamento sem bloco recusa a
+          importação. Crie ou apague meses em “Editar meses”. O fechamento de cada mês é ignorado.
         </Regra>
       </>
     ) : (

@@ -240,8 +240,9 @@ O que mudou:
 - **Exportação pelo projeto:** o mensal sai **só com outros mensais** — a
   regra "modelos não se misturam" da 072. Orçamentos de **trimestres
   diferentes** saem e voltam juntos, cada um com os seus meses.
-- **Os meses não mudam pela planilha:** bloco de mês que a versão não tem,
-  ou mês da versão sem bloco, recusa o orçamento. Criar ou apagar mês
+- **Os meses não mudam pela planilha:** mês da versão sem bloco recusa o
+  orçamento. Bloco de mês que a versão não tem fica de fora, com aviso
+  (até 08/10/2026 recusava; ver a nota da 158 abaixo). Criar ou apagar mês
   continua só pelo "Editar meses". Dentro do mês, a regra de sempre.
 - **Planilha interna** (blocos "OUTUBRO - …", como a aba SUL) também entra
   pelo "Importar planilha" da versão, casada pelo **nome do mês**; bloco de
@@ -370,3 +371,12 @@ projeto cada linha nomeia o orçamento ("0-0001/26-09 · Outubro de 2026").
 - `20260915100001_quantidade_orcada_aceita_zero.sql` — troca
   `itens_quantidade_positiva` (> 0) por `itens_quantidade_nao_negativa`
   (>= 0) em `versoes_orcamento_itens`. Alarga a regra: nada é regravado.
+
+## ⚠️ Nota de 2026-10-08 — planilha de um mês só e mês a mais (decisão 158)
+
+No "Importar planilha" da versão: a aba sem nenhum título de mês é lida
+como um mês, e quem importa escolhe se os itens se repetem em todos os
+meses ou entram só no primeiro (no orçamento de um mês, entra direto); e o
+bloco de um mês que o orçamento não tem fica de fora com aviso, em vez de
+recusar a planilha. A importação do projeto continua exigindo os meses
+exatos da vigente. Ver [158](158-planilha-de-um-mes-no-fee-e-always-on.md).

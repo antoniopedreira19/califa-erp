@@ -46,6 +46,25 @@ export interface PreviewDaAba {
   linhas_ignoradas: number;
 }
 
+/**
+ * Onde entram os itens de uma aba sem título de mês, no orçamento de Fee
+ * ou Always On (decisão 158): repetidos em todos os meses do orçamento, ou
+ * só no primeiro.
+ */
+export type OpcaoDosMeses = "todos" | "primeiro";
+
+/** A aba sem título de mês, com as leituras de cada opção prontas — a
+ *  tela troca de opção sem voltar ao servidor (decisão 158). */
+export interface SemBlocoDeMes {
+  /** Os meses do orçamento (`YYYY-MM-01`), em ordem. */
+  meses: string[];
+  /** Os itens repetidos em cada mês. No orçamento de um mês só, é a única
+   *  leitura, e não há pergunta. */
+  todos: PreviewDaAba;
+  /** Os itens só no primeiro mês. `null` no orçamento de um mês só. */
+  primeiro: PreviewDaAba | null;
+}
+
 export type PreviewResult =
   | {
       ok: true;
@@ -54,8 +73,12 @@ export type PreviewResult =
       abas: AbaResumo[];
       /** A que vem marcada. */
       sugerida: string;
-      /** Resumo de cada aba legível, pelo nome. */
+      /** Resumo de cada aba legível, pelo nome. Na aba sem título de mês
+       *  de um orçamento de vários meses, é a aba como está (um mês). */
       previews: Record<string, PreviewDaAba>;
+      /** As abas sem título de mês no Fee e no Always On (decisão 158),
+       *  pelo nome. Vazio nos outros modelos e nas abas com bloco de mês. */
+      semBloco: Record<string, SemBlocoDeMes>;
     }
   | { ok: false; message: string };
 
