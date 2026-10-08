@@ -178,7 +178,9 @@ export function CorrigirNfDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !pending && onOpenChange(o)}>
-      <DialogContent className="max-w-[680px] gap-0 p-0">
+      {/* z-60: abre por cima do painel do item, do envio e da tela lado a
+          lado do envio (z-55, decisão 153, entrega 3). */}
+      <DialogContent className="z-[60] max-w-[680px] gap-0 p-0" overlayClassName="z-[60]">
         <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
           <DialogTitle className="text-[17px]">
             Corrigir a NF da <span className="font-mono">{alvo.codigo}</span>

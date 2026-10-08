@@ -4886,3 +4886,19 @@ código publicado logo depois (`3305751`).
   corte antecipado só no servidor local. Em 08/10, a PP a emitir que perdeu o
   prazo, no TES-1001/26 (antecedência subida só no servidor local): aviso no
   cartão, recusa na geração, aviso e trava no formulário, correção para 20/11.
+
+## ⚠️ Nota de 2026-10-08 — os documentos da PP lado a lado na produção (decisão 153, entrega 3)
+
+- No envio ao financeiro, "Ver PP e documentos lado a lado" (ou o olho de um
+  cartão) abre o PDF da PP, o documento à vista e a coluna "Documentos e
+  dados", como a tela da PP no Contas a Pagar. Dá para preencher tudo e
+  enviar dali ("Voltar ao resumo" volta ao pop-up).
+- No formulário da PP a emitir, "Ver documentos lado a lado" abre o
+  documento e os dados, sem o PDF da PP ("Voltar ao formulário").
+- Componente `realizado/conferencia-dos-documentos.tsx`; o painel de
+  documento saiu de `pp-tela.tsx` para `components/documentos/painel-documento.tsx`.
+  Nova action `signedUrlAnexoAEmitir`. A pergunta do CNPJ (156) e o
+  "Corrigir a NF" subiram para z-60.
+- Testado no TES-1014/26 (PP-00147). Respostas do Tiago de 08/10: a calha
+  da planilha não muda; refazer com a mesma NF segue como está.
+

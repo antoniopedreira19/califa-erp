@@ -8,7 +8,7 @@
  */
 
 import * as React from "react";
-import { AlertTriangle, Lock, Pencil, Send, X } from "lucide-react";
+import { AlertTriangle, Columns2, Lock, Pencil, Send, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,13 @@ import {
   type AnexoDaPPNaLista,
   type PPAEmitir,
 } from "@/lib/types";
-import { enviarPedidoCompraAoFinanceiro, prefixoAnexosPedidoCompra, type AcimaDoPlanejado } from "./actions-pp";
+import {
+  enviarPedidoCompraAoFinanceiro,
+  prefixoAnexosPedidoCompra,
+  signedUrlAnexo,
+  type AcimaDoPlanejado,
+} from "./actions-pp";
+import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
   ListaDeAnexos,
   NfDoAnexo,
@@ -354,6 +360,9 @@ export function EnvioDialog({
   /** Decisão 156: notas em outro CNPJ que não o da PP — o "tem certeza?". */
   const [tomadorPergunta, setTomadorPergunta] = React.useState<Array<{ numero: string; tomador: string }> | null>(null);
   const [tomadorConfirmado, setTomadorConfirmado] = React.useState(false);
+  /** A PP e os documentos lado a lado (decisão 153, entrega 3), aberta num
+   *  documento. */
+  const [ladoALado, setLadoALado] = React.useState<{ foco: string | null } | null>(null);
 
   // Cada abertura começa no que a PP tem gravado.
   const ppId = pp?.id ?? null;
@@ -365,6 +374,7 @@ export function EnvioDialog({
     setCorrigindo(null);
     setTomadorPergunta(null);
     setTomadorConfirmado(false);
+    setLadoALado(null);
     setAviso(null);
     setAnexos(pp.anexos.map((a) => anexoEmEdicao(a, tomadorEsperado)));
     setPrefixo(null);
@@ -434,6 +444,50 @@ export function EnvioDialog({
 
   const nfsDaLista = anexos.filter((a) => a.status === "ok" && a.tipo === "nota_fiscal");
 
+  /** Os campos da NF de um arquivo — na lista e, `compacta`, na coluna da
+   *  tela lado a lado. */
+  function camposDaNf(id: string, compacta: boolean) {
+    if (!pp) return null;
+    const a = anexos.find((x) => x.id === id);
+    if (!a) return null;
+    return (
+      <NfDoAnexo
+        nf={a.nf}
+        onMudar={(parte) => mudarNf(id, parte)}
+        faltas={tentou ? faltasDaNf(a.nf, pp.valor) : []}
+        idBase={`${compacta ? "conferencia" : "envio"}-${id}`}
+        tomadores={tomadores}
+        tomadorEsperado={tomadorEsperado}
+        empresaNome={nomeDaEmpresa}
+        existente={notaExistenteDe(existentes, a.nf.numero)}
+        valorPP={pp.valor}
+        onCorrigirOutraPP={setCorrigindo}
+        obrigatorio
+        compacta={compacta}
+        disabled={pending}
+      />
+    );
+  }
+
+  const botaoEnviar = (
+    <button
+      type="button"
+      onClick={() => enviar(confirmando !== null)}
+      disabled={pending || (!pp.verbaProducao && prefixo === null)}
+      className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
+    >
+      <Send className="h-3.5 w-3.5" />
+      {pending ? "Enviando…" : confirmando ? "Sim, enviar" : "Enviar ao financeiro"}
+    </button>
+  );
+  const textoAcimaDoPlanejado = confirmando ? (
+    <>
+      Enviar PP acima do planejado? Este item está com {formatCurrency(confirmando.emPPsDepois, moeda)} em PPs,{" "}
+      {formatCurrency(confirmando.excedente, moeda)} acima do planejado de {formatCurrency(confirmando.planejado, moeda)}.
+      Enviar {pp.codigo} ao financeiro é registrado no seu nome.
+    </>
+  ) : null;
+
   return (
     <Dialog open onOpenChange={(o) => !pending && onOpenChange(o)}>
       <DialogContent className="max-w-[680px] gap-0 p-0">
@@ -464,7 +518,19 @@ export function EnvioDialog({
           )}
           {!pp.verbaProducao && (
             <>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Anexos</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Anexos</p>
+                {/* Decisão 153, entrega 3: a PP e os documentos lado a lado,
+                    como no Contas a Pagar. */}
+                <button
+                  type="button"
+                  onClick={() => setLadoALado({ foco: itensDaLista(anexos)[0]?.id ?? null })}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+                >
+                  <Columns2 className="h-3.5 w-3.5" />
+                  Ver PP e documentos lado a lado
+                </button>
+              </div>
               <ZonaDeAnexos id={`envio-arquivos-${pp.id}`} pronto={prefixo !== null} onArquivos={subir} />
               <ListaDeAnexos
                 itens={itensDaLista(anexos)}
@@ -478,26 +544,8 @@ export function EnvioDialog({
                   return tentou && !!a && a.tipo !== "nota_fiscal" && !(a.numero ?? "").trim();
                 }}
                 disabled={pending}
-                renderNf={(id) => {
-                  const a = anexos.find((x) => x.id === id);
-                  if (!a) return null;
-                  return (
-                    <NfDoAnexo
-                      nf={a.nf}
-                      onMudar={(parte) => mudarNf(id, parte)}
-                      faltas={tentou ? faltasDaNf(a.nf, pp.valor) : []}
-                      idBase={`envio-${id}`}
-                      tomadores={tomadores}
-                      tomadorEsperado={tomadorEsperado}
-                      empresaNome={nomeDaEmpresa}
-                      existente={notaExistenteDe(existentes, a.nf.numero)}
-                      valorPP={pp.valor}
-                      onCorrigirOutraPP={setCorrigindo}
-                      obrigatorio
-                      disabled={pending}
-                    />
-                  );
-                }}
+                onVer={(id) => setLadoALado({ foco: id })}
+                renderNf={(id) => camposDaNf(id, false)}
               />
               <ResumoDasNfs valores={nfsDaLista.map((a) => parteDaNf(a.nf))} valorPP={pp.valor} />
             </>
@@ -527,15 +575,7 @@ export function EnvioDialog({
           >
             Voltar
           </button>
-          <button
-            type="button"
-            onClick={() => enviar(confirmando !== null)}
-            disabled={pending || (!pp.verbaProducao && prefixo === null)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
-          >
-            <Send className="h-3.5 w-3.5" />
-            {pending ? "Enviando…" : confirmando ? "Sim, enviar" : "Enviar ao financeiro"}
-          </button>
+          {botaoEnviar}
         </div>
         {/* Decisão 156: a nota em outro CNPJ que não o da PP — o financeiro
             decide na aprovação. */}
@@ -560,12 +600,65 @@ export function EnvioDialog({
           cancelLabel="Voltar"
           variant="destructive"
           pending={pending}
+          contentClassName="z-[60]"
+          overlayClassName="z-[60]"
           onConfirm={() => {
             setTomadorConfirmado(true);
             setTomadorPergunta(null);
             enviar(confirmando !== null, true);
           }}
         />
+        {/* Decisão 153, entrega 3: a PP, os documentos e os dados lado a
+            lado. O estado é o deste envio: o que se preenche lá aparece aqui. */}
+        {!pp.verbaProducao && (
+          <ConferenciaDosDocumentos
+            open={ladoALado !== null}
+            onOpenChange={(o) => !o && setLadoALado(null)}
+            codigo={pp.codigo}
+            selo="Gerada"
+            descricao="Pedido, documentos e dados — lado a lado"
+            ppIdDoPdf={pp.id}
+            anexos={anexos}
+            focar={ladoALado?.foco ?? null}
+            urlDoGravado={signedUrlAnexo}
+            prontoParaAnexar={prefixo !== null}
+            onArquivos={subir}
+            onTipo={(id, t) => mudar(id, { tipo: t })}
+            onNumero={(id, numero) => mudar(id, { numero })}
+            onRemover={remover}
+            renderNf={(id) => camposDaNf(id, true)}
+            mostrarFaltas={tentou}
+            obrigatorio
+            valorPP={pp.valor}
+            moeda={moeda}
+            aviso={textoAcimaDoPlanejado ?? erro ?? aviso}
+            onFecharAviso={() => {
+              if (confirmando) setConfirmando(null);
+              setErro(null);
+              setAviso(null);
+            }}
+            rodapeEsquerda={
+              <>
+                {nomeDoFornecedor} ·{" "}
+                <strong className="font-semibold text-white">{formatCurrency(pp.valor, moeda)}</strong> · todos os campos
+                são obrigatórios para enviar
+              </>
+            }
+            rodape={
+              <>
+                <button
+                  type="button"
+                  onClick={() => setLadoALado(null)}
+                  className="rounded-lg border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                >
+                  Voltar ao resumo
+                </button>
+                {botaoEnviar}
+              </>
+            }
+            disabled={pending}
+          />
+        )}
         {/* A outra PP com a mesma nota, corrigida daqui: a nota volta a ser
             buscada e o que sobra dela para esta PP se atualiza. */}
         <CorrigirNfDialog
