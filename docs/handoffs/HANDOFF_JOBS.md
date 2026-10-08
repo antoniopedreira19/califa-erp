@@ -4902,3 +4902,28 @@ código publicado logo depois (`3305751`).
 - Testado no TES-1014/26 (PP-00147). Respostas do Tiago de 08/10: a calha
   da planilha não muda; refazer com a mesma NF segue como está.
 
+## ⚠️ Nota de 2026-10-08 (2) — o "Ver PP" mostra as NFs, e "Visualizar" abre a tela do financeiro (decisões 152 e 136)
+
+- **Ficha "Ver PP"** (`pps/ver-pp-drawer.tsx`, planilha → PPs do item → Ver
+  formulário): os anexos viram o cartão do envio, travado — tipo do arquivo
+  e, na NF, número, emissão, valor, CNPJ tomador, "Valor nesta PP" e
+  "Também na PP-…", com "Registrada pelo financeiro em …" ou "Informada no
+  envio…". Nos outros tipos, o número do documento.
+- Os dados vêm de `carregarPPParaVisualizar` (`pps/actions-visualizar.ts`),
+  chamada ao abrir a ficha, com a consulta e o mapeamento do Contas a Pagar:
+  as notas são as do cadastro (o que o financeiro corrige); até a resposta,
+  a cópia no anexo. Freelancer: sempre a cópia (não lê o cadastro).
+- **"Ver PDF da PP" → "Visualizar"**: abre a `PPTela` do Contas a Pagar com
+  `somenteLeitura` (carregada por `next/dynamic` só no clique). Sem rodapé
+  de aprovação, NF sem edição, sem a aba Chat (ela exige o
+  `ChatPPsProvider`; o `PPDossie` usa `useChatPPsOpcional`), "Origem no job"
+  para `/jobs/…`. Fechar e Esc voltam à ficha.
+- Rodapé da ficha: "Fechar" à esquerda; "Visualizar" e "Cancelar PP" à
+  direita. `VerPPDrawer` ganhou a prop `tomadores` (CNPJs do job, até a
+  consulta voltar).
+- Testado logado como administrador, no TES-1014/26: PP-00143 (NF 9019 de
+  R$ 400, R$ 200 nesta PP, também na PP-00142, em avaliação) e PP-00129 (NF
+  9001 registrada, R$ 6.000 de R$ 10.000, e boleto 77); no TES-1008/26,
+  PP-00087 (anexo antigo sem tipo, imagem). O Contas a Pagar seguiu igual
+  (Chat, NF editável, Rejeitar e "Seguir para a aprovação"). Não testado com
+  login de produtor, GP ou freelancer: a RLS foi conferida no banco.

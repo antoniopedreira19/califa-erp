@@ -19,6 +19,12 @@
  *  • o grupo "Nota fiscal do fornecedor", logo depois de "Anexos": o
  *    número que a produção informou no anexo, e a data de emissão, o valor
  *    e o CNPJ tomador, que o financeiro registra conferindo a nota ao lado.
+ *
+ * Produção (08/10/2026): a mesma coluna, na leitura da tela da PP aberta
+ * pelo "Visualizar" do job (`somenteLeitura`). As notas aparecem como a
+ * produção informou no envio, ou como o financeiro registrou; o que é
+ * instrução ao financeiro sai; a aba Chat só existe onde há o chat de PPs
+ * do financeiro (a produção conversa pelo botão do job).
  */
 
 import * as React from "react";
@@ -63,7 +69,7 @@ import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { qualJanela } from "@/lib/calculos/janelas-pagamento";
 import type { PPRow } from "./pedidos-compra-list";
-import { useChatPPs } from "./chat/chat-pps-provider";
+import { useChatPPsOpcional } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
 import { abrirThreadPPs, marcarConversaPPsLida } from "./chat/actions";
 import type { ThreadPPsDoJob } from "@/lib/data/chat-pps-conversas";
@@ -92,6 +98,9 @@ function iconePorMime(nome: string) {
 
 export type AbaDossie = "dados" | "chat";
 
+/** O CNPJ tomador das notas: o que a coluna mostra do cadastro de impostos. */
+export type EstabelecimentoDaNota = Pick<FiscalEstabelecimento, "id" | "nome" | "cnpj" | "ativo">;
+
 export function PPDossie({
   pp,
   aba,
@@ -103,6 +112,7 @@ export function PPDossie({
   nfs,
   onNf,
   estabelecimentos,
+  somenteLeitura = false,
 }: {
   pp: PPRow;
   aba: AbaDossie;
@@ -118,9 +128,16 @@ export function PPDossie({
   nfs: NfEmConferencia[] | null;
   onNf: (nf: NfEmConferencia) => void;
   /** Os CNPJs do cadastro de impostos — o CNPJ tomador da NF. */
-  estabelecimentos: FiscalEstabelecimento[];
+  estabelecimentos: EstabelecimentoDaNota[];
+  /** A produção lendo a PP pelo "Visualizar" do job: nada se edita, e
+   *  nada do que é instrução ao financeiro aparece. */
+  somenteLeitura?: boolean;
 }) {
-  const { conversas, zerarNaoLidas, recarregar, podeEnviar } = useChatPPs();
+  // Fora do Contas a Pagar não há o chat de PPs do financeiro: sem ele,
+  // a coluna fica só com "Dados".
+  const chat = useChatPPsOpcional();
+  const conversas = chat?.conversas ?? [];
+  const zerarNaoLidas = chat?.zerarNaoLidas;
   const [thread, setThread] = React.useState<ThreadPPsDoJob | null>(null);
 
   const conversa = conversas.find((c) => c.jobId === pp.job_id);
@@ -131,7 +148,7 @@ export function PPDossie({
   // recarrega quando a última mensagem do job muda (o provider avisa pelo
   // realtime). Só quando a aba está aberta — fio fechado não consome.
   React.useEffect(() => {
-    if (aba !== "chat") return;
+    if (aba !== "chat" || !zerarNaoLidas) return;
     let ativo = true;
     zerarNaoLidas(pp.job_id);
     (async () => {
@@ -164,12 +181,14 @@ export function PPDossie({
         <Aba ativa={aba === "dados"} onClick={() => onAba("dados")}>
           Dados
         </Aba>
-        <Aba ativa={aba === "chat"} onClick={() => onAba("chat")} badge={naoLidas}>
-          Chat
-        </Aba>
+        {chat && (
+          <Aba ativa={aba === "chat"} onClick={() => onAba("chat")} badge={naoLidas}>
+            Chat
+          </Aba>
+        )}
       </div>
 
-      {aba === "dados" ? (
+      {aba === "dados" || !chat ? (
         <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto p-3.5">
           {/* A justificativa abre o dossiê (decisão 077) — por isso o
               vencimento perdeu o amarelo: dois alertas disputariam o olho. */}
@@ -188,7 +207,7 @@ export function PPDossie({
             </div>
           )}
 
-          <Estados pp={pp} />
+          <Estados pp={pp} somenteLeitura={somenteLeitura} />
 
           <Grupo rotulo={pp.verba_producao ? "Responsável" : "Fornecedor"}>
             <p className="text-[13px] font-semibold leading-snug">
@@ -225,9 +244,10 @@ export function PPDossie({
 
           <Grupo rotulo="Origem no job">
             {/* O job na página do FINANCEIRO, não na da produção: o
-                financeiro não sai do módulo (decisão 099, item 20). */}
+                financeiro não sai do módulo (decisão 099, item 20). Na
+                leitura da produção, a página do job dela. */}
             <Link
-              href={`/financeiro/jobs/${pp.job_id}`}
+              href={somenteLeitura ? `/jobs/${pp.job_id}` : `/financeiro/jobs/${pp.job_id}`}
               prefetch={false}
               className="inline-flex items-center gap-1 text-[13px] font-semibold leading-snug text-california-red hover:underline"
             >
@@ -359,6 +379,7 @@ export function PPDossie({
             nfs={nfs}
             onNf={onNf}
             estabelecimentos={estabelecimentos}
+            somenteLeitura={somenteLeitura}
             onVer={(anexoId) => {
               const i = pp.anexos.findIndex((a) => a.id === anexoId);
               if (i >= 0) onAnexo(i);
@@ -377,8 +398,8 @@ export function PPDossie({
             jobId={pp.job_id}
             thread={thread}
             onThread={setThread}
-            podeEnviar={podeEnviar}
-            onEnviou={() => void recarregar()}
+            podeEnviar={chat.podeEnviar}
+            onEnviou={() => void chat.recarregar()}
           />
         </div>
       )}
@@ -520,8 +541,10 @@ function Grupo({
   );
 }
 
-/** Cancelamento, rejeição e pagamento — só aparecem no estado que os criou. */
-function Estados({ pp }: { pp: PPRow }) {
+/** Cancelamento, rejeição e pagamento — só aparecem no estado que os criou.
+ *  Na leitura da produção, as linhas que dizem ao financeiro o que fazer
+ *  nesta tela saem. */
+function Estados({ pp, somenteLeitura }: { pp: PPRow; somenteLeitura: boolean }) {
   if (pp.status === "cancelada") {
     return (
       <Caixa tom="vermelho" titulo="Cancelada">
@@ -575,13 +598,19 @@ function Estados({ pp }: { pp: PPRow }) {
       <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
         <Lock className="h-3.5 w-3.5 flex-none" />
         <span>
-          Aprovada — já é título a pagar. Para devolvê-la à produção, use
-          &ldquo;Reprovar PP&rdquo; no rodapé.
+          {somenteLeitura ? (
+            "Aprovada pelo financeiro — já é título a pagar."
+          ) : (
+            <>
+              Aprovada — já é título a pagar. Para devolvê-la à produção, use
+              &ldquo;Reprovar PP&rdquo; no rodapé.
+            </>
+          )}
         </span>
       </div>
     );
   }
-  if (pp.status !== "em_avaliacao") {
+  if (pp.status !== "em_avaliacao" && !somenteLeitura) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
         <Lock className="h-3.5 w-3.5 flex-none" />
@@ -759,6 +788,11 @@ function isoDoDia(d: Date): string {
  * fiscal). Grade de 2 × 2 nos 310 px da coluna: a coluna da esquerda
  * (número e valor) é a estreita; a da direita (data e CNPJ), a que precisa
  * de largura.
+ *
+ * Na leitura da produção (08/10/2026), nada se edita, e entram também as
+ * notas ainda não registradas — o que a produção informou no envio. Fica
+ * de fora só a nota sem dado nenhum (anexo marcado NF antes da decisão
+ * 152, que nunca recebeu data nem valor).
  */
 function NotasFiscaisDoFornecedor({
   pp,
@@ -766,23 +800,30 @@ function NotasFiscaisDoFornecedor({
   nfs,
   onNf,
   estabelecimentos,
+  somenteLeitura,
   onVer,
 }: {
   pp: PPRow;
   notas: NotasFiscaisDaLinhaPP | null;
   nfs: NfEmConferencia[] | null;
   onNf: (nf: NfEmConferencia) => void;
-  estabelecimentos: FiscalEstabelecimento[];
+  estabelecimentos: EstabelecimentoDaNota[];
+  somenteLeitura: boolean;
   /** Abre o arquivo da nota no painel do meio. */
   onVer: (anexoId: string) => void;
 }) {
   if (!notas) return null;
-  const editavel = pp.status === "em_avaliacao" && nfs !== null;
-  // Fora da avaliação: só as notas que o financeiro registrou.
+  const editavel = !somenteLeitura && pp.status === "em_avaliacao" && nfs !== null;
+  // Fora da avaliação: só as notas que o financeiro registrou. Na leitura
+  // da produção, também as que ela informou no envio.
   const lista: Array<{ nota: NotaDaLinhaPP; nf: NfEmConferencia }> = editavel
     ? notas.notas.map((nota, i) => ({ nota, nf: nfs[i] }))
     : notas.notas
-        .filter((nota) => nota.registrada)
+        .filter((nota) =>
+          somenteLeitura
+            ? nota.registrada !== null || nota.emissao !== null || nota.valor !== null
+            : nota.registrada,
+        )
         .map((nota) => ({ nota, nf: nfInicial(nota, null) }));
   if (lista.length === 0) return null;
 
@@ -828,7 +869,9 @@ function NotasFiscaisDoFornecedor({
       ) : (
         !editavel && (
           <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-            Registrado pelo financeiro na aprovação.
+            {somenteLeitura && !notas.conferidas_em
+              ? "Informado pela produção no envio. O financeiro confere na aprovação."
+              : "Registrado pelo financeiro na aprovação."}
           </p>
         )
       )}
@@ -860,7 +903,7 @@ function FichaDaNota({
   editavel: boolean;
   onNf: (nf: NfEmConferencia) => void;
   onVer: () => void;
-  estabelecimentos: FiscalEstabelecimento[];
+  estabelecimentos: EstabelecimentoDaNota[];
 }) {
   // O CNPJ é o que se confere com a nota; o nome fica na lista.
   const cnpjDoTomador = (id: string) => {
