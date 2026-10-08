@@ -8,14 +8,24 @@ import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
 import { recusaPorModelo, type ParseResultado } from "./parser-oficial";
 import { motivoDaAbaSemItens } from "./abas-do-arquivo";
-import { casarBlocosComMeses } from "./meses-da-planilha";
+import {
+  abaSemBlocoDeMes,
+  comBlocosSinteticos,
+  mesesDaAbaParaGravar,
+  mesesDaOpcao,
+} from "./meses-da-planilha";
 import { casarComAnterior } from "./planejado-anterior";
 import type { GrupoAtual, ItemAtual } from "./diff-projeto";
-import type { PreviewDaAba } from "./tipos-da-importacao";
+import type { OpcaoDosMeses, PreviewDaAba, SemBlocoDeMes } from "./tipos-da-importacao";
 
 /**
  * O resumo de UMA aba lida, como a tela mostra. `null` quando a aba não
  * entra: a mensagem vai para a coluna do motivo na tabela de abas.
+ *
+ * `semBloco` vem preenchido na aba sem título de mês do Fee e do Always On
+ * (decisão 158): as leituras de cada opção de meses, prontas. Com mais de
+ * um mês, `preview` e `parsed` são a aba como está (um mês), que a tela
+ * mostra até a escolha.
  */
 export function montarPreviewDaAba(
   lida: ParseResultado,
@@ -28,30 +38,45 @@ export function montarPreviewDaAba(
     /** O que a versão vai receber; o editor do orçamento manda `null`. */
     honorarios: { percentual: number; clienteNome: string } | null;
   },
-): { ok: true; preview: PreviewDaAba; parsed: ParseResultado } | { ok: false; motivo: string } {
+):
+  | { ok: true; preview: PreviewDaAba; parsed: ParseResultado; semBloco: SemBlocoDeMes | null }
+  | { ok: false; motivo: string } {
+  // Aba sem título de mês no mensal (decisão 158): antes da recusa pelo
+  // modelo, que a trataria como planilha nacional.
+  const mesesDoOrcamento = contexto.mesesDestino ? [...contexto.mesesDestino].sort() : [];
+  if (contexto.modelo === "mensal" && mesesDoOrcamento.length > 0 && abaSemBlocoDeMes(lida)) {
+    const ler = (opcao: OpcaoDosMeses) => {
+      const meses = mesesDaOpcao(mesesDoOrcamento, opcao);
+      return montarPreviewDaAba(comBlocosSinteticos(lida, meses), { ...contexto, mesesDestino: meses });
+    };
+    const todos = ler("todos");
+    if (!todos.ok) return todos;
+    if (mesesDoOrcamento.length === 1) {
+      return { ...todos, semBloco: { meses: mesesDoOrcamento, todos: todos.preview, primeiro: null } };
+    }
+    const primeiro = ler("primeiro");
+    if (!primeiro.ok) return primeiro;
+    const comoEsta = montarPreviewDaAba(lida, { ...contexto, modelo: lida.modelo, mesesDestino: null });
+    if (!comoEsta.ok) return comoEsta;
+    return {
+      ...comoEsta,
+      semBloco: { meses: mesesDoOrcamento, todos: todos.preview, primeiro: primeiro.preview },
+    };
+  }
+
   // Modelo errado é recusado antes de qualquer contagem (decisão 072).
   const recusa = recusaPorModelo(lida.modelo, contexto.modelo);
   if (recusa) return { ok: false, motivo: recusa };
   if (lida.grupos.length === 0) return { ok: false, motivo: motivoDaAbaSemItens(lida) };
 
   let parsed = lida;
-  // Mensal: cada bloco da planilha num mês da versão; meses a mais ou a
-  // menos recusam (decisão 078, 15/09/2026).
+  // Mensal: cada bloco da planilha num mês da versão. Mês do orçamento sem
+  // bloco recusa; mês que o orçamento não tem fica de fora, com aviso
+  // (decisão 078, revista pela 158).
   if (contexto.mesesDestino) {
-    const casados = casarBlocosComMeses(parsed.grupos, parsed.meses, contexto.mesesDestino);
+    const casados = mesesDaAbaParaGravar(parsed, contexto.mesesDestino, null);
     if (!casados.ok) return { ok: false, motivo: casados.message };
-    parsed = {
-      ...parsed,
-      grupos: casados.grupos,
-      warnings: [...parsed.warnings, ...casados.avisos],
-      // A contagem segue os meses aceitos: item de bloco fora do trimestre
-      // não entra, e a confirmação não pode prometer mais itens do que grava.
-      linhas_importadas: casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-      linhas_ignoradas:
-        parsed.linhas_ignoradas +
-        parsed.linhas_importadas -
-        casados.grupos.reduce((s, g) => s + g.itens.length, 0),
-    };
+    parsed = casados.parsed;
     if (parsed.grupos.length === 0) {
       return { ok: false, motivo: "Nenhum item nos meses do orçamento." };
     }
@@ -67,6 +92,7 @@ export function montarPreviewDaAba(
   return {
     ok: true,
     parsed,
+    semBloco: null,
     preview: {
       aba: parsed.aba,
       grupos: parsed.grupos.map((g, gi) => ({

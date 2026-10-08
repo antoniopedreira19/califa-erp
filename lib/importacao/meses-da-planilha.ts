@@ -1,10 +1,12 @@
 import type { ImportacaoWarning } from "@/lib/types";
 import {
   mesesDoTrimestre,
+  nomeDoMes,
   rotuloMes,
   trimestreDe,
 } from "@/lib/calculos/meses-trimestre";
-import type { ParseGrupo, ParseMes } from "./parser-oficial";
+import type { ParseGrupo, ParseMes, ParseResultado } from "./parser-oficial";
+import type { OpcaoDosMeses } from "./tipos-da-importacao";
 
 /**
  * Os blocos de mês de uma planilha contra os meses da versão — orçamento
@@ -16,8 +18,17 @@ import type { ParseGrupo, ParseMes } from "./parser-oficial";
  * regra de sempre (linha nova, alterada, apagada).
  *
  * A planilha interna da agência tem os doze meses do ano: bloco de mês fora
- * do trimestre do orçamento é **ignorado com aviso** — só o mês DO trimestre
- * que a versão não tem é que recusa.
+ * do trimestre do orçamento é **ignorado com aviso**.
+ *
+ * Decisão 158 (08/10/2026), na importação da VERSÃO:
+ *  - mês da planilha que o orçamento não tem, mesmo dentro do trimestre,
+ *    também fica de fora com aviso — entram só os meses do orçamento. Mês
+ *    do orçamento sem bloco na planilha continua recusando;
+ *  - a aba sem nenhum título de mês é lida como UM mês, e quem importa
+ *    escolhe se os itens se repetem em todos os meses ou entram só no
+ *    primeiro (`mesesDaAbaParaGravar`).
+ * A importação do PROJETO (`conferirMesesDaSecao`) segue exata: ela lê a
+ * exportação do ERP, que sai sempre com os meses da versão.
  *
  * Funções puras: quem chama traz a leitura e os meses (`YYYY-MM-01`).
  */
@@ -100,7 +111,6 @@ export function casarBlocosComMeses(
 
   const avisos: ImportacaoWarning[] = [];
   const aceitos = new Set<string>();
-  const aMais: string[] = [];
   const repetidos: string[] = [];
 
   for (const bloco of blocos) {
@@ -113,8 +123,14 @@ export function casarBlocosComMeses(
       });
       continue;
     }
+    // Decisão 158: o mês do trimestre que o orçamento não tem fica de fora,
+    // como o de outro trimestre — antes recusava a planilha inteira.
     if (!daVersao.includes(data)) {
-      aMais.push(data);
+      avisos.push({
+        linha: bloco.linha_xlsx,
+        motivo: `O bloco "${bloco.rotulo}" ficou de fora: o orçamento não tem ${nomeDoMes(data)}.`,
+        severidade: "ignorada",
+      });
       continue;
     }
     if (aceitos.has(data)) {
@@ -131,10 +147,10 @@ export function casarBlocosComMeses(
     };
   }
   const faltando = daVersao.filter((d) => !aceitos.has(d));
-  if (aMais.length > 0 || faltando.length > 0) {
+  if (faltando.length > 0) {
     return {
       ok: false,
-      message: mensagemDosMeses(aMais, faltando, "nada foi importado."),
+      message: mensagemDosMeses([], faltando, "nada foi importado."),
     };
   }
 
@@ -155,4 +171,96 @@ export function casarBlocosComMeses(
     .map((g, idx) => ({ ...g, ordem: idx + 1 }));
 
   return { ok: true, grupos: dosMeses, avisos };
+}
+
+// ---------- aba sem título de mês (decisão 158) ----------
+
+/**
+ * A aba tem itens no layout nacional e nenhum título de mês nem marca
+ * `mes:` — a planilha de UM mês que o GP monta para o Always On. Planilha
+ * internacional continua recusada pelo modelo.
+ */
+export function abaSemBlocoDeMes(lida: ParseResultado): boolean {
+  return (
+    lida.modelo === "nacional" &&
+    lida.meses.length === 0 &&
+    lida.grupos.length > 0 &&
+    lida.grupos.every((g) => g.mes === null && g.mes_numero === null)
+  );
+}
+
+/**
+ * A aba lida como se tivesse um bloco para cada mês pedido: os grupos se
+ * repetem, mês a mês, com o mês preenchido. Daí em diante é o caminho de
+ * sempre (`casarBlocosComMeses`), que confere e numera.
+ */
+export function comBlocosSinteticos(lida: ParseResultado, meses: string[]): ParseResultado {
+  const ordenados = [...meses].sort();
+  let ordem = 0;
+  return {
+    ...lida,
+    modelo: "mensal",
+    meses: ordenados.map((mes) => ({
+      numero: Number(mes.slice(5, 7)),
+      ano: Number(mes.slice(0, 4)),
+      mes,
+      rotulo: rotuloMes(mes),
+      linha_xlsx: 0,
+    })),
+    grupos: ordenados.flatMap((mes) =>
+      lida.grupos.map((g) => ({
+        ...g,
+        mes,
+        mes_numero: Number(mes.slice(5, 7)),
+        ordem: ++ordem,
+        itens: g.itens.map((it) => ({ ...it })),
+      })),
+    ),
+    linhas_importadas: lida.linhas_importadas * ordenados.length,
+  };
+}
+
+/** Os meses que recebem a aba sem título de mês, pela opção escolhida. */
+export function mesesDaOpcao(daVersao: string[], opcao: OpcaoDosMeses): string[] {
+  const ordenados = [...daVersao].sort();
+  return opcao === "primeiro" ? ordenados.slice(0, 1) : ordenados;
+}
+
+/**
+ * A leitura de uma aba do mensal pronta para gravar na versão: a aba sem
+ * título de mês passa pela opção escolhida, e todas passam pelo casamento
+ * com os meses da versão. A contagem segue os meses aceitos: item de bloco
+ * que ficou de fora não entra, e a confirmação não promete mais do que grava.
+ */
+export function mesesDaAbaParaGravar(
+  parsed: ParseResultado,
+  daVersao: string[],
+  opcao: OpcaoDosMeses | null,
+): { ok: true; parsed: ParseResultado } | { ok: false; message: string } {
+  let lida = parsed;
+  let meses = daVersao;
+  if (abaSemBlocoDeMes(parsed) && daVersao.length > 0) {
+    if (daVersao.length > 1 && opcao === null) {
+      return {
+        ok: false,
+        message:
+          "A aba não tem título de mês. Escolha se os itens se repetem em todos os meses do orçamento ou entram só no primeiro. Nada foi importado.",
+      };
+    }
+    meses = mesesDaOpcao(daVersao, opcao ?? "todos");
+    lida = comBlocosSinteticos(parsed, meses);
+  }
+  const casados = casarBlocosComMeses(lida.grupos, lida.meses, meses);
+  if (!casados.ok) return { ok: false, message: casados.message };
+  const aceitos = casados.grupos.reduce((s, g) => s + g.itens.length, 0);
+  return {
+    ok: true,
+    parsed: {
+      ...lida,
+      grupos: casados.grupos,
+      warnings: [...lida.warnings, ...casados.avisos],
+      linhas_importadas: aceitos,
+      linhas_ignoradas: lida.linhas_ignoradas + lida.linhas_importadas - aceitos,
+    },
+  };
 }

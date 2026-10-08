@@ -101,6 +101,9 @@ export async function lerPlanilhaDoRascunho(entrada: EntradaDoRascunho): Promise
     abas: ordenarAbas(abas),
     sugerida,
     previews,
+    // Orçamento mensal não nasce por aqui: nenhuma aba é lida como um mês
+    // a repetir (decisão 158).
+    semBloco: {},
   };
 }
 
