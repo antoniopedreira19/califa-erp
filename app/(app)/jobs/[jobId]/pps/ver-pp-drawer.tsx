@@ -20,20 +20,36 @@
  *
  * Nada aqui grava, exceto o "Cancelar PP" do rodapé, que é a mesma action
  * e a mesma confirmação do painel "Destrinchar realizado".
+ *
+ * 08/10/2026 (pedido do Tiago, com print da PP-00084):
+ *
+ *   * **os anexos mostram o que foi informado no envio** — o tipo de cada
+ *     arquivo e, na NF, número, data de emissão, valor, CNPJ tomador e a
+ *     parte desta PP, no mesmo cartão do envio, travado. Os dados vêm do
+ *     cadastro da nota (`carregarPPParaVisualizar`), que é o que o
+ *     financeiro corrige; até a consulta voltar, da cópia no anexo;
+ *   * **"Ver PDF da PP" virou "Visualizar"**: abre a tela lado a lado do
+ *     Contas a Pagar — a mesma, `PPTela`, em leitura —, com o PDF da PP,
+ *     o documento anexado e os dados na coluna da direita;
+ *   * **"Fechar" foi para a esquerda** do rodapé; "Visualizar" e
+ *     "Cancelar PP", para a direita.
  */
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   X,
   FileText,
   Eye,
   AlertCircle,
+  AlertTriangle,
   Ban,
   Lock,
   Check,
   Clock,
   History,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -45,20 +61,40 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import {
+  documentoTipoLabel,
   podeCancelarPP,
+  type AnexoDaPPNaLista,
   type PedidoCompraNaLista,
   type PPEvento,
   type PPEventoTipo,
   situacaoDaVerba,
   situacaoVerbaLabel,
 } from "@/lib/types";
-import { PPStatusChip } from "./pp-status-chip";
+import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import {
-  signedUrlPdf,
+  nfInicial,
+  notasFiscaisDaLinhaPP,
+  parteDaNota,
+  type NotaDaLinhaPP,
+} from "@/lib/fiscal/nf-da-pp";
+import type { PPRow } from "@/app/(app)/financeiro/contas-a-pagar/pedidos-compra-list";
+import type { EstabelecimentoDaNota } from "@/app/(app)/financeiro/contas-a-pagar/pp-dossie";
+import { PPStatusChip } from "./pp-status-chip";
+import { carregarPPParaVisualizar } from "./actions-visualizar";
+import {
   signedUrlPdfParcela,
   signedUrlAnexo,
   cancelarPedidoCompra,
 } from "../realizado/actions-pp";
+import { ResumoDasNfs, type TomadorDaNf } from "../realizado/anexos-da-pp";
+
+/** A tela lado a lado do Contas a Pagar, só quando alguém clica em
+ *  "Visualizar": ela traz o dossiê, o chat e a aprovação do financeiro,
+ *  que o job não precisa carregar de saída. */
+const PPTela = dynamic(
+  () => import("@/app/(app)/financeiro/contas-a-pagar/pp-tela").then((m) => m.PPTela),
+  { ssr: false },
+);
 
 interface Props {
   open: boolean;
@@ -73,6 +109,9 @@ interface Props {
   itemDescricao: string;
   valorPlanejado: number;
   emPPsEmitidas: number;
+  /** Os CNPJs tomadores do job, para o CNPJ das notas até a consulta da
+   *  PP voltar (ela traz o cadastro inteiro, inativos inclusive). */
+  tomadores: TomadorDaNf[];
   /** Cancelar no rodapé. `false` esconde o botão — quem só lê o job (o
    *  financeiro, o job encerrado) não cancela nada daqui. */
   podeCancelar: boolean;
@@ -442,6 +481,7 @@ export function VerPPDrawer({
   itemDescricao,
   valorPlanejado,
   emPPsEmitidas,
+  tomadores,
   podeCancelar,
   onMensagem,
 }: Props) {
@@ -449,13 +489,41 @@ export function VerPPDrawer({
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
   const [confirmandoCancelar, setConfirmandoCancelar] = React.useState(false);
+  /** A PP no formato da tela do financeiro: as notas do cadastro aqui, e
+   *  a tela lado a lado no "Visualizar". O `ppId` impede que os dados de
+   *  uma PP apareçam na ficha de outra. */
+  const [dados, setDados] = React.useState<{
+    ppId: string;
+    pp: PPRow;
+    estabelecimentos: EstabelecimentoDaNota[];
+  } | null>(null);
+  const [erroDosDados, setErroDosDados] = React.useState<string | null>(null);
+  const [ladoALado, setLadoALado] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
       setErro(null);
       setConfirmandoCancelar(false);
+      setLadoALado(false);
     }
   }, [open]);
+
+  // Carrega ao abrir a ficha, e não no clique: as notas aparecem com o
+  // que o financeiro registrou, e o "Visualizar" abre sem espera.
+  const ppId = open ? (pp?.id ?? null) : null;
+  React.useEffect(() => {
+    if (!ppId) return;
+    let vivo = true;
+    setErroDosDados(null);
+    carregarPPParaVisualizar(ppId).then((res) => {
+      if (!vivo) return;
+      if (res.ok) setDados({ ppId, pp: res.pp, estabelecimentos: res.estabelecimentos });
+      else setErroDosDados(res.message);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [ppId]);
 
   /** Todo documento passa por uma URL assinada de validade curta — o
    *  bucket é privado. */
@@ -493,6 +561,26 @@ export function VerPPDrawer({
   const parcelas = pp.parcelas ?? [];
   const anexos = pp.anexos ?? [];
   const passos = passosDaPP(pp);
+  const dadosDestaPP = dados?.ppId === pp.id ? dados : null;
+  // As notas desta PP, uma por anexo do tipo NF: as do cadastro, quando a
+  // consulta voltou; até lá, a cópia que o anexo guarda.
+  const notas: NotaDaLinhaPP[] =
+    (dadosDestaPP
+      ? dadosDestaPP.pp.notas_fiscais?.notas
+      : notasFiscaisDaLinhaPP({
+          id: pp.id,
+          verba_producao: pp.verba_producao,
+          nf_registrada_em: null,
+          anexos: anexos.map((a) => ({ ...a, nota: null })),
+        })?.notas) ?? [];
+  const notaDoAnexo = new Map(notas.map((n) => [n.anexo_id, n]));
+  const cnpjDoTomador = (id: string | null): { nome: string; cnpj: string } | null => {
+    if (!id) return null;
+    const e = dadosDestaPP?.estabelecimentos.find((x) => x.id === id);
+    if (e) return { nome: e.nome, cnpj: formatarCnpj(e.cnpj) };
+    const t = tomadores.find((x) => x.id === id);
+    return t ? { nome: t.nome, cnpj: t.cnpj } : null;
+  };
   const cancelavel = podeCancelarPP(pp.status);
   const motivoSemCancelar =
     pp.status === "aprovada"
@@ -788,30 +876,26 @@ export function VerPPDrawer({
                   : "Sem anexos nesta PP."}
               </p>
             ) : (
-              anexos.map((anexo) => (
-                <div
-                  key={anexo.id}
-                  className="flex items-center gap-2 rounded border border-border bg-white px-3 py-2 text-xs"
-                >
-                  <FileText className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-                  <span className="min-w-0 flex-1 leading-snug">
-                    {anexo.arquivo_nome_original}
-                  </span>
-                  <span className="flex-none text-muted-foreground">
-                    {formatarTamanho(anexo.arquivo_tamanho_bytes)}
-                  </span>
-                  <button
-                    type="button"
-                    title="Abrir anexo"
-                    aria-label={`Abrir ${anexo.arquivo_nome_original}`}
-                    onClick={() => abrir(signedUrlAnexo(anexo.id))}
+              <ul className="space-y-2">
+                {anexos.map((anexo) => (
+                  <AnexoLido
+                    key={anexo.id}
+                    anexo={anexo}
+                    nota={notaDoAnexo.get(anexo.id) ?? null}
+                    pp={pp}
+                    cnpjDoTomador={cnpjDoTomador}
+                    onAbrir={() => abrir(signedUrlAnexo(anexo.id))}
                     disabled={pending}
-                    className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                  >
-                    <Eye className="h-3 w-3" />
-                  </button>
-                </div>
-              ))
+                  />
+                ))}
+              </ul>
+            )}
+            {/* A soma das notas × o valor da PP, como no envio. */}
+            {notas.some((n) => n.valor !== null) && (
+              <ResumoDasNfs
+                valores={notas.filter((n) => n.valor !== null).map((n) => parteDaNota(nfInicial(n, null)))}
+                valorPP={Number(pp.valor ?? 0)}
+              />
             )}
           </div>
 
@@ -888,15 +972,30 @@ export function VerPPDrawer({
           </div>
         </div>
 
+        {/* "Fechar" à esquerda; à direita, "Visualizar" e "Cancelar PP"
+            (Tiago, 08/10/2026). */}
         <div className="flex items-center gap-2 border-t border-border px-6 py-4">
           <button
             type="button"
-            onClick={() => abrir(signedUrlPdf(pp.id))}
-            disabled={pending}
+            onClick={() => onOpenChange(false)}
+            className="mr-auto rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white hover:bg-california-red-hover"
+          >
+            Fechar
+          </button>
+          {/* A tela lado a lado do Contas a Pagar, em leitura: o PDF da PP,
+              o documento anexado e os dados. Espera a PP carregar. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (dadosDestaPP) setLadoALado(true);
+              else if (erroDosDados) setErro(erroDosDados);
+            }}
+            disabled={pending || (!dadosDestaPP && !erroDosDados)}
+            title={dadosDestaPP || erroDosDados ? "Ver a PP e os documentos lado a lado" : "Carregando a PP…"}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2 text-[13px] font-semibold hover:bg-muted disabled:opacity-50"
           >
             <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-            Ver PDF da PP
+            Visualizar
           </button>
           {/* A mesma regra do painel: em avaliação e rejeitada ainda voltam
               atrás; aprovada é título a pagar e paga precisaria de estorno.
@@ -918,13 +1017,6 @@ export function VerPPDrawer({
               Cancelar PP
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="ml-auto rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white hover:bg-california-red-hover"
-          >
-            Fechar
-          </button>
         </div>
 
         <ConfirmDialog
@@ -945,8 +1037,207 @@ export function VerPPDrawer({
           pending={pending}
           onConfirm={cancelar}
         />
+
+        {/* Fechar a tela volta para esta ficha. */}
+        {dadosDestaPP && (
+          <PPTela
+            somenteLeitura
+            pp={dadosDestaPP.pp}
+            estabelecimentos={dadosDestaPP.estabelecimentos}
+            open={ladoALado}
+            onOpenChange={setLadoALado}
+          />
+        )}
       </DrawerContent>
     </Dialog>
+  );
+}
+
+/**
+ * Um anexo da PP como o envio ao financeiro o mostrou — o mesmo cartão,
+ * travado (08/10/2026): o tipo do arquivo e, na NF, os dados da nota logo
+ * abaixo dele (decisão 152); nos outros tipos, o número do documento. O
+ * olho abre o arquivo numa aba nova, como antes.
+ */
+function AnexoLido({
+  anexo,
+  nota,
+  pp,
+  cnpjDoTomador,
+  onAbrir,
+  disabled,
+}: {
+  anexo: AnexoDaPPNaLista;
+  /** A nota deste anexo, quando ele é do tipo NF. */
+  nota: NotaDaLinhaPP | null;
+  pp: PedidoCompraNaLista;
+  cnpjDoTomador: (id: string | null) => { nome: string; cnpj: string } | null;
+  onAbrir: () => void;
+  disabled: boolean;
+}) {
+  const Icone = anexo.arquivo_mimetype?.startsWith("image/") ? ImageIcon : FileText;
+  const rotulo = "text-[11px] font-medium text-muted-foreground";
+  const nf = nota ? nfInicial(nota, null) : null;
+  const tomador = cnpjDoTomador(nota?.tomador ?? null);
+  // Decisão 156: a nota em outro CNPJ que não o da PP — a produção
+  // confirmou no envio, e o financeiro decide na aprovação.
+  const emOutroCnpj =
+    !!nota?.tomador && !!pp.estabelecimento_id && nota.tomador !== pp.estabelecimento_id;
+  const registradaNaOutra =
+    nota?.registrada?.na_pp && nota.registrada.na_pp !== pp.codigo ? nota.registrada.na_pp : null;
+
+  return (
+    <li className="overflow-hidden rounded-xl border border-border bg-white">
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-muted/60">
+          <Icone className="h-4 w-4 text-california-red" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className="truncate text-[13px] font-medium text-foreground"
+            title={anexo.arquivo_nome_original}
+          >
+            {anexo.arquivo_nome_original}
+          </p>
+          <p className="truncate text-[11.5px] text-muted-foreground">
+            {formatarTamanho(anexo.arquivo_tamanho_bytes)}
+          </p>
+        </div>
+        {anexo.documento_tipo && (
+          <span
+            title="Tipo do documento"
+            className="flex h-8 w-[136px] flex-none items-center rounded-lg border border-border bg-muted/40 px-2 text-xs text-foreground"
+          >
+            {documentoTipoLabel(anexo.documento_tipo)}
+          </span>
+        )}
+        <button
+          type="button"
+          title="Abrir anexo"
+          aria-label={`Abrir ${anexo.arquivo_nome_original}`}
+          onClick={onAbrir}
+          disabled={disabled}
+          className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+        >
+          <Eye className="h-3 w-3" />
+        </button>
+      </div>
+
+      {anexo.documento_tipo === "nota_fiscal" && nota && nf && (
+        <div className="space-y-1.5 border-t border-border px-3 pb-3 pt-2.5">
+          <div className="grid grid-cols-[100px_148px_132px_minmax(0,1fr)] gap-x-2 gap-y-2">
+            <DadoDaNf rotulo="Número da NF" mono>
+              {nf.numero || "—"}
+            </DadoDaNf>
+            <DadoDaNf rotulo="Data de emissão">{formatData(nota.emissao)}</DadoDaNf>
+            <DadoDaNf rotulo="Valor da NF" mono>
+              {nota.valor !== null ? formatCurrency(nota.valor, "BRL") : "—"}
+            </DadoDaNf>
+            <DadoDaNf rotulo="CNPJ tomador" mono title={tomador?.nome}>
+              {tomador?.cnpj ?? "—"}
+            </DadoDaNf>
+          </div>
+
+          {nf.cobre_outra && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={rotulo}>Valor nesta PP</span>
+              <span className="flex h-8 w-[132px] items-center rounded-lg border border-border bg-muted/40 px-2 font-mono text-xs font-semibold">
+                {formatCurrency(nf.valor_na_pp, "BRL")}
+              </span>
+              {nota.valor !== null && (
+                <span className="text-[11px] text-muted-foreground">
+                  de {formatCurrency(nota.valor, "BRL")} da nota
+                </span>
+              )}
+            </div>
+          )}
+
+          {nota.outras_pps.length > 0 && (
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Também na{" "}
+              {nota.outras_pps.map((o, i) => (
+                <React.Fragment key={o.codigo}>
+                  {i > 0 && ", "}
+                  <span className="font-mono">{o.codigo}</span> ({formatCurrency(o.valor_na_pp, "BRL")})
+                </React.Fragment>
+              ))}
+              .
+            </p>
+          )}
+
+          {nota.registrada ? (
+            <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+              <Lock className="mt-0.5 h-3 w-3 flex-none" />
+              <span>
+                {/* Horário com fuso: o dia é o local, não o de UTC. */}
+                Registrada pelo financeiro em{" "}
+                {new Date(nota.registrada.em).toLocaleDateString("pt-BR")}
+                {registradaNaOutra ? (
+                  <>
+                    , na aprovação da <span className="font-mono">{registradaNaOutra}</span>
+                  </>
+                ) : null}
+                .
+              </span>
+            </p>
+          ) : (
+            pp.status === "em_avaliacao" && (
+              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+                <Lock className="mt-0.5 h-3 w-3 flex-none" />
+                <span>Informada no envio. O financeiro confere na aprovação.</span>
+              </p>
+            )
+          )}
+
+          {emOutroCnpj && (
+            <p className="flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug text-california-red">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+              <span>
+                A nota está no CNPJ {tomador?.nome ?? "—"}; a PP é do CNPJ{" "}
+                {cnpjDoTomador(pp.estabelecimento_id)?.nome ?? "—"}.
+              </span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {anexo.documento_tipo && anexo.documento_tipo !== "nota_fiscal" && (
+        <div className="flex items-center gap-2 border-t border-border px-3 py-2">
+          <span className={rotulo}>Número do documento</span>
+          <span className="flex h-8 w-44 items-center rounded-lg border border-border bg-muted/40 px-2 font-mono text-xs">
+            {anexo.documento_numero?.trim() || "—"}
+          </span>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** Um dado da NF, na caixa travada do tamanho do campo do envio. */
+function DadoDaNf({
+  rotulo,
+  children,
+  mono,
+  title,
+}: {
+  rotulo: string;
+  children: React.ReactNode;
+  mono?: boolean;
+  title?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <span className="text-[11px] font-medium text-muted-foreground">{rotulo}</span>
+      <div
+        title={title}
+        className={cn(
+          "flex h-8 items-center truncate rounded-lg border border-border bg-muted/40 px-2 text-xs text-foreground",
+          mono && "font-mono",
+        )}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 

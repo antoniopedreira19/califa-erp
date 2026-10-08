@@ -2374,6 +2374,7 @@ export function JobItemRealizadoTable({
               itemDescricao={itemAtual?.item ?? ""}
               valorPlanejado={planejadoAtual}
               emPPsEmitidas={emPPs}
+              tomadores={tomadoresDaNf}
               // Cancelar daqui segue o mesmo gate de gerar e enviar: o
               // servidor confere de novo, mas o botão não aparece para
               // quem só lê o job.

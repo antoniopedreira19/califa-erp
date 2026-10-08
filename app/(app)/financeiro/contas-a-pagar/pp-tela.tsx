@@ -28,6 +28,13 @@
  * NF do fornecedor em conferência — a coluna "Dados da PP" edita, ao lado
  * da nota, e o pop-up de aprovação usa (base das retenções e mês do
  * crédito de PIS/COFINS).
+ *
+ * Produção (08/10/2026): o "Visualizar" do "Ver PP" do job abre ESTA tela,
+ * a mesma, em leitura (`somenteLeitura`) — pedido do Tiago: "visualização
+ * exatamente igual à que já temos, utilize a mesma". Sai só o que é do
+ * financeiro: o rodapé de aprovar, rejeitar e reprovar (e os pop-ups
+ * deles), e a edição da NF na coluna da direita, que mostra os dados como
+ * a produção informou ou o financeiro registrou.
  */
 
 import * as React from "react";
@@ -63,7 +70,7 @@ import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
 import { nfInicial, type NfEmConferencia, type RegistroDaNota } from "@/lib/fiscal/nf-da-pp";
 import type { PPRow } from "./pedidos-compra-list";
-import { PPDossie, type AbaDossie } from "./pp-dossie";
+import { PPDossie, type AbaDossie, type EstabelecimentoDaNota } from "./pp-dossie";
 import { AprovarPPDialog } from "./aprovar-pp-dialog";
 import { AprovarPrestacaoDialog } from "./aprovar-prestacao-dialog";
 import { ultimaCorrecaoDaNf, ultimoEnvioDaPP, ultimoEnvioDaPrestacao } from "@/lib/data/eventos-da-pp";
@@ -81,25 +88,36 @@ import {
 /** Qual painel está sozinho na tela. `null` = os três juntos. */
 type Expandido = "pp" | "anexo" | null;
 
-export function PPTela({
-  pp,
-  open,
-  onOpenChange,
-  cartoes,
-  tipos,
-  subtipos,
-  fiscal,
-}: {
-  pp: PPRow | null;
-  open: boolean;
-  onOpenChange: (aberto: boolean) => void;
+/** O que só a tela do financeiro recebe: o que a aprovação usa. */
+interface PropsDoFinanceiro {
+  somenteLeitura?: false;
   tenantId: string;
   cartoes: CartaoOption[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
   /** Módulo fiscal: cadastro de impostos, notas dos jobs e últimas retenções. */
   fiscal: FiscalDaAprovacaoPP;
-}) {
+}
+
+/** A produção só lê: basta o CNPJ das notas (o tomador). */
+interface PropsDaLeitura {
+  somenteLeitura: true;
+  estabelecimentos: EstabelecimentoDaNota[];
+}
+
+export function PPTela(
+  props: {
+    pp: PPRow | null;
+    open: boolean;
+    onOpenChange: (aberto: boolean) => void;
+  } & (PropsDoFinanceiro | PropsDaLeitura),
+) {
+  const { pp, open, onOpenChange } = props;
+  /** Null na leitura da produção: sem aprovação, rejeição nem reprovação. */
+  const financeiro = props.somenteLeitura ? null : props;
+  const estabelecimentos = props.somenteLeitura
+    ? props.estabelecimentos
+    : props.fiscal.cadastro.estabelecimentos;
   const router = useRouter();
   const [urlPdf, setUrlPdf] = React.useState<string | null>(null);
   const [urlAnexo, setUrlAnexo] = React.useState<string | null>(null);
@@ -219,16 +237,21 @@ export function PPTela({
   const anexoEhImagem =
     anexo != null && /\.(png|jpe?g|webp|gif)$/i.test(anexo.arquivo_nome_original);
   // Módulo fiscal: as NFs desta PP como estão na conferência (null = a PP
-  // não tem NF anexada, ou é verba de produção).
+  // não tem NF anexada, ou é verba de produção). Conferência é do
+  // financeiro: na leitura da produção não há nenhuma.
   // Decisão 156: a nota é do CNPJ da PP, não da empresa gerencial.
-  const tomadorPadrao =
-    pp.estabelecimento_id ?? fiscal.tomadorPadraoPorEmpresa[pp.empresa_id] ?? fiscal.tomadorPadraoGeral;
-  const editadasDestaPP = nfsEditadas?.ppId === pp.id ? nfsEditadas.porAnexo : {};
-  const nfsDaTela: NfEmConferencia[] | null = pp.notas_fiscais
-    ? pp.notas_fiscais.notas.map(
-        (n) => editadasDestaPP[n.anexo_id] ?? nfInicial(n, tomadorPadrao),
-      )
+  const tomadorPadrao = financeiro
+    ? pp.estabelecimento_id ??
+      financeiro.fiscal.tomadorPadraoPorEmpresa[pp.empresa_id] ??
+      financeiro.fiscal.tomadorPadraoGeral
     : null;
+  const editadasDestaPP = nfsEditadas?.ppId === pp.id ? nfsEditadas.porAnexo : {};
+  const nfsDaTela: NfEmConferencia[] | null =
+    financeiro && pp.notas_fiscais
+      ? pp.notas_fiscais.notas.map(
+          (n) => editadasDestaPP[n.anexo_id] ?? nfInicial(n, tomadorPadrao),
+        )
+      : null;
   // A nota que outra PP já registrou: o crédito e o ISS retido dela já
   // estão na Apuração. A registrada por esta mesma PP (aprovação que falhou
   // depois de gravar as notas) volta a ser decidida aqui.
@@ -491,7 +514,8 @@ export function PPTela({
                     notas={pp.notas_fiscais}
                     nfs={nfsDaTela}
                     onNf={editarNota}
-                    estabelecimentos={fiscal.cadastro.estabelecimentos}
+                    estabelecimentos={estabelecimentos}
+                    somenteLeitura={!financeiro}
                   />
                 </div>
               ) : (
@@ -499,7 +523,9 @@ export function PPTela({
               ))}
           </div>
 
-          {emAvaliacao && (
+          {/* Aprovar, rejeitar e reprovar são do financeiro: a leitura da
+              produção não tem rodapé. */}
+          {financeiro && emAvaliacao && (
             <div className="flex flex-none flex-wrap items-center gap-2.5 pt-3">
               <span className="mr-auto text-xs text-white/70">
                 Vencimento negociado pela produção:{" "}
@@ -532,7 +558,7 @@ export function PPTela({
             </div>
           )}
 
-          {aprovada && (
+          {financeiro && aprovada && (
             <div className="flex flex-none flex-wrap items-center gap-2.5 pt-3">
               <span className="mr-auto text-xs text-white/70">
                 Aprovada — já é título a pagar. A produção não cancela daqui:
@@ -550,7 +576,7 @@ export function PPTela({
             </div>
           )}
 
-          {prestacaoEmAvaliacao && pp.prestacao && (
+          {financeiro && prestacaoEmAvaliacao && pp.prestacao && (
             <div className="flex flex-none flex-wrap items-center gap-2.5 pt-3">
               <span className="mr-auto text-xs text-white/70">
                 Prestação enviada
@@ -591,206 +617,210 @@ export function PPTela({
         </FullscreenContent>
       </Dialog>
 
-      <AprovarPPDialog
-        open={aprovarAberto}
-        onOpenChange={setAprovarAberto}
-        pp={{
-          id: pp.id,
-          codigo: pp.codigo,
-          valor: pp.valor,
-          vencimentoOriginal: pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento,
-          parcelas: Math.max(pp.parcelas.length, 1),
-          pagamentoForaDoCadastro: pp.pagamento_fora_do_cadastro,
-          envio: ultimoEnvioDaPP(pp.eventos),
-          correcaoDaNf: ultimaCorrecaoDaNf(pp.eventos),
-          cnpjDaPP: fiscal.cadastro.estabelecimentos.find((e) => e.id === pp.estabelecimento_id) ?? null,
-          emitidaPorNome: pp.emitida_por_nome,
-          gpResponsavelNome: pp.job_responsavel_nome,
-          // Módulo fiscal: o que as retenções e o crédito precisam.
-          fornecedorNome: pp.fornecedor_nome,
-          regimeDoFornecedor: pp.regime_do_fornecedor?.regime ?? null,
-          nfs: nfsDaTela,
-          registroDeOutraPP,
-          ultimaRetencao: fiscal.ultimasRetencoes[pp.fornecedor_id] ?? null,
-        }}
-        cadastro={fiscal.cadastro}
-        cartoes={cartoes}
-        tipos={tipos}
-        subtipos={subtipos}
-        onAprovada={handleAprovada}
-      />
+      {financeiro && (
+        <>
+          <AprovarPPDialog
+            open={aprovarAberto}
+            onOpenChange={setAprovarAberto}
+            pp={{
+              id: pp.id,
+              codigo: pp.codigo,
+              valor: pp.valor,
+              vencimentoOriginal: pp.parcelas[0]?.data_vencimento ?? pp.prazo_pagamento,
+              parcelas: Math.max(pp.parcelas.length, 1),
+              pagamentoForaDoCadastro: pp.pagamento_fora_do_cadastro,
+              envio: ultimoEnvioDaPP(pp.eventos),
+              correcaoDaNf: ultimaCorrecaoDaNf(pp.eventos),
+              cnpjDaPP: financeiro.fiscal.cadastro.estabelecimentos.find((e) => e.id === pp.estabelecimento_id) ?? null,
+              emitidaPorNome: pp.emitida_por_nome,
+              gpResponsavelNome: pp.job_responsavel_nome,
+              // Módulo fiscal: o que as retenções e o crédito precisam.
+              fornecedorNome: pp.fornecedor_nome,
+              regimeDoFornecedor: pp.regime_do_fornecedor?.regime ?? null,
+              nfs: nfsDaTela,
+              registroDeOutraPP,
+              ultimaRetencao: financeiro.fiscal.ultimasRetencoes[pp.fornecedor_id] ?? null,
+            }}
+            cadastro={financeiro.fiscal.cadastro}
+            cartoes={financeiro.cartoes}
+            tipos={financeiro.tipos}
+            subtipos={financeiro.subtipos}
+            onAprovada={handleAprovada}
+          />
 
-      {/* `z-[60]`: aberto de dentro da tela cheia, que está em `z-[55]`. */}
-      <ConfirmDialog
-        contentClassName="z-[60]"
-        overlayClassName="z-[60]"
-        open={askRejeitar}
-        onOpenChange={(o) => {
-          setAskRejeitar(o);
-          if (!o) setMotivo("");
-        }}
-        title={`Rejeitar ${pp.codigo}?`}
-        description={
-          <div className="space-y-2">
-            <p>
-              A produção vê o motivo e refaz a PP: esta é cancelada e volta como
-              PP a emitir, para gerar uma PP nova, com outro código.
-            </p>
-            <div>
-              <label htmlFor="pp-tela-motivo" className="text-xs font-medium">
-                Motivo * (mín. 10 caracteres)
-              </label>
-              <textarea
-                id="pp-tela-motivo"
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                maxLength={500}
-                rows={3}
-                className="mt-1 w-full rounded border border-border p-2 text-sm"
-                placeholder="Ex: valor 3,6% acima do planejado. Renegociar com o fornecedor ou anexar aprovação do cliente antes de reenviar."
-              />
-            </div>
-          </div>
-        }
-        confirmLabel="Rejeitar"
-        variant="destructive"
-        pending={pending}
-        confirmDisabled={motivo.trim().length < 10}
-        confirmDisabledReason={
-          motivo.trim().length < 10
-            ? "Escreva o motivo (mín. 10 caracteres) para liberar a rejeição."
-            : undefined
-        }
-        onConfirm={handleConfirmarRejeitar}
-      />
+          {/* `z-[60]`: aberto de dentro da tela cheia, que está em `z-[55]`. */}
+          <ConfirmDialog
+            contentClassName="z-[60]"
+            overlayClassName="z-[60]"
+            open={askRejeitar}
+            onOpenChange={(o) => {
+              setAskRejeitar(o);
+              if (!o) setMotivo("");
+            }}
+            title={`Rejeitar ${pp.codigo}?`}
+            description={
+              <div className="space-y-2">
+                <p>
+                  A produção vê o motivo e refaz a PP: esta é cancelada e volta como
+                  PP a emitir, para gerar uma PP nova, com outro código.
+                </p>
+                <div>
+                  <label htmlFor="pp-tela-motivo" className="text-xs font-medium">
+                    Motivo * (mín. 10 caracteres)
+                  </label>
+                  <textarea
+                    id="pp-tela-motivo"
+                    value={motivo}
+                    onChange={(e) => setMotivo(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    className="mt-1 w-full rounded border border-border p-2 text-sm"
+                    placeholder="Ex: valor 3,6% acima do planejado. Renegociar com o fornecedor ou anexar aprovação do cliente antes de reenviar."
+                  />
+                </div>
+              </div>
+            }
+            confirmLabel="Rejeitar"
+            variant="destructive"
+            pending={pending}
+            confirmDisabled={motivo.trim().length < 10}
+            confirmDisabledReason={
+              motivo.trim().length < 10
+                ? "Escreva o motivo (mín. 10 caracteres) para liberar a rejeição."
+                : undefined
+            }
+            onConfirm={handleConfirmarRejeitar}
+          />
 
-      <AprovarPrestacaoDialog
-        open={aprovarPrestacaoAberto}
-        onOpenChange={setAprovarPrestacaoAberto}
-        prestacao={
-          pp.prestacao
-            ? {
-                id: pp.id,
-                codigo: pp.codigo,
-                valor: pp.valor,
-                gasto: pp.prestacao.valor_gasto,
-                saldo: pp.prestacao.valor_devolvido,
-                documentos: pp.prestacao.documentos.length,
-                centroDeCusto:
-                  tipos.find((t) => t.id === pp.plano_conta_tipo_id)?.nome ??
-                  "Custo Operacional",
-                // Sem evento (prestação anterior ao histórico), a coluna
-                // da prestação ainda diz quem fechou e quando.
-                envio: ultimoEnvioDaPrestacao(pp.eventos) ?? {
-                  por_nome: pp.prestacao.enviada_por_nome,
-                  em: pp.prestacao.enviada_em,
-                  reenviada: false,
-                },
-                responsavelVerbaNome: pp.responsavel_nome,
-                gpResponsavelNome: pp.job_responsavel_nome,
-              }
-            : null
-        }
-        onAprovada={(mensagem) => {
-          setAprovarPrestacaoAberto(false);
-          handleAprovada(mensagem);
-        }}
-      />
+          <AprovarPrestacaoDialog
+            open={aprovarPrestacaoAberto}
+            onOpenChange={setAprovarPrestacaoAberto}
+            prestacao={
+              pp.prestacao
+                ? {
+                    id: pp.id,
+                    codigo: pp.codigo,
+                    valor: pp.valor,
+                    gasto: pp.prestacao.valor_gasto,
+                    saldo: pp.prestacao.valor_devolvido,
+                    documentos: pp.prestacao.documentos.length,
+                    centroDeCusto:
+                      financeiro.tipos.find((t) => t.id === pp.plano_conta_tipo_id)?.nome ??
+                      "Custo Operacional",
+                    // Sem evento (prestação anterior ao histórico), a coluna
+                    // da prestação ainda diz quem fechou e quando.
+                    envio: ultimoEnvioDaPrestacao(pp.eventos) ?? {
+                      por_nome: pp.prestacao.enviada_por_nome,
+                      em: pp.prestacao.enviada_em,
+                      reenviada: false,
+                    },
+                    responsavelVerbaNome: pp.responsavel_nome,
+                    gpResponsavelNome: pp.job_responsavel_nome,
+                  }
+                : null
+            }
+            onAprovada={(mensagem) => {
+              setAprovarPrestacaoAberto(false);
+              handleAprovada(mensagem);
+            }}
+          />
 
-      {/* `z-[60]`: aberto de dentro da tela cheia, que está em `z-[55]`. */}
-      <ConfirmDialog
-        contentClassName="z-[60]"
-        overlayClassName="z-[60]"
-        open={askReprovar}
-        onOpenChange={(o) => {
-          setAskReprovar(o);
-          if (!o) setMotivo("");
-        }}
-        title={`Reprovar a prestação de ${pp.codigo}?`}
-        description={
-          <div className="space-y-3">
-            <p>
-              A prestação volta para a produção, que vê o motivo, corrige os
-              documentos e reenvia. Nenhum estorno é criado.
-            </p>
-            <div>
-              <label htmlFor="pp-tela-motivo-prestacao" className="text-xs font-medium">
-                Motivo * (mín. 10 caracteres)
-              </label>
-              <textarea
-                id="pp-tela-motivo-prestacao"
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                maxLength={500}
-                rows={3}
-                className="mt-1 w-full rounded border border-border p-2 text-sm"
-                placeholder="Ex: a NF 889 está ilegível e o recibo não tem data. Reenvie os dois."
-              />
-            </div>
-          </div>
-        }
-        confirmLabel="Reprovar prestação"
-        variant="destructive"
-        pending={pending}
-        confirmDisabled={motivo.trim().length < 10}
-        confirmDisabledReason={
-          motivo.trim().length < 10
-            ? "Escreva o motivo (mín. 10 caracteres) para liberar a reprovação."
-            : undefined
-        }
-        onConfirm={handleConfirmarReprovar}
-      />
+          {/* `z-[60]`: aberto de dentro da tela cheia, que está em `z-[55]`. */}
+          <ConfirmDialog
+            contentClassName="z-[60]"
+            overlayClassName="z-[60]"
+            open={askReprovar}
+            onOpenChange={(o) => {
+              setAskReprovar(o);
+              if (!o) setMotivo("");
+            }}
+            title={`Reprovar a prestação de ${pp.codigo}?`}
+            description={
+              <div className="space-y-3">
+                <p>
+                  A prestação volta para a produção, que vê o motivo, corrige os
+                  documentos e reenvia. Nenhum estorno é criado.
+                </p>
+                <div>
+                  <label htmlFor="pp-tela-motivo-prestacao" className="text-xs font-medium">
+                    Motivo * (mín. 10 caracteres)
+                  </label>
+                  <textarea
+                    id="pp-tela-motivo-prestacao"
+                    value={motivo}
+                    onChange={(e) => setMotivo(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    className="mt-1 w-full rounded border border-border p-2 text-sm"
+                    placeholder="Ex: a NF 889 está ilegível e o recibo não tem data. Reenvie os dois."
+                  />
+                </div>
+              </div>
+            }
+            confirmLabel="Reprovar prestação"
+            variant="destructive"
+            pending={pending}
+            confirmDisabled={motivo.trim().length < 10}
+            confirmDisabledReason={
+              motivo.trim().length < 10
+                ? "Escreva o motivo (mín. 10 caracteres) para liberar a reprovação."
+                : undefined
+            }
+            onConfirm={handleConfirmarReprovar}
+          />
 
-      {/* Reprovar a PP já aprovada (decisão 083). */}
-      <ConfirmDialog
-        contentClassName="z-[60]"
-        overlayClassName="z-[60]"
-        open={askReprovarPP}
-        onOpenChange={(o) => {
-          setAskReprovarPP(o);
-          if (!o) setMotivoPP("");
-        }}
-        title={`Reprovar ${pp.codigo}?`}
-        description={
-          <div className="space-y-3">
-            <p>
-              A PP sai de Títulos a Pagar e volta para a produção, que vê o
-              motivo e refaz a PP (com outro código) ou só a cancela. As datas escolhidas na
-              aprovação são desfeitas; o vencimento negociado com o fornecedor
-              fica.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Parcela já paga ou em fatura de cartão fechada impede a
-              reprovação — nesses casos, estorne a baixa ou reabra a fatura
-              antes.
-            </p>
-            <div>
-              <label htmlFor="pp-tela-motivo-pp" className="text-xs font-medium">
-                Motivo * (mín. 10 caracteres)
-              </label>
-              <textarea
-                id="pp-tela-motivo-pp"
-                value={motivoPP}
-                onChange={(e) => setMotivoPP(e.target.value)}
-                maxLength={500}
-                rows={3}
-                className="mt-1 w-full rounded border border-border p-2 text-sm"
-                placeholder="Ex: a produção pediu para segurar — o fornecedor mudou o escopo."
-              />
-            </div>
-          </div>
-        }
-        confirmLabel="Reprovar PP"
-        variant="destructive"
-        pending={pending}
-        confirmDisabled={motivoPP.trim().length < 10}
-        confirmDisabledReason={
-          motivoPP.trim().length < 10
-            ? "Escreva o motivo (mín. 10 caracteres) para liberar a reprovação."
-            : undefined
-        }
-        onConfirm={handleConfirmarReprovarPP}
-      />
+          {/* Reprovar a PP já aprovada (decisão 083). */}
+          <ConfirmDialog
+            contentClassName="z-[60]"
+            overlayClassName="z-[60]"
+            open={askReprovarPP}
+            onOpenChange={(o) => {
+              setAskReprovarPP(o);
+              if (!o) setMotivoPP("");
+            }}
+            title={`Reprovar ${pp.codigo}?`}
+            description={
+              <div className="space-y-3">
+                <p>
+                  A PP sai de Títulos a Pagar e volta para a produção, que vê o
+                  motivo e refaz a PP (com outro código) ou só a cancela. As datas escolhidas na
+                  aprovação são desfeitas; o vencimento negociado com o fornecedor
+                  fica.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Parcela já paga ou em fatura de cartão fechada impede a
+                  reprovação — nesses casos, estorne a baixa ou reabra a fatura
+                  antes.
+                </p>
+                <div>
+                  <label htmlFor="pp-tela-motivo-pp" className="text-xs font-medium">
+                    Motivo * (mín. 10 caracteres)
+                  </label>
+                  <textarea
+                    id="pp-tela-motivo-pp"
+                    value={motivoPP}
+                    onChange={(e) => setMotivoPP(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    className="mt-1 w-full rounded border border-border p-2 text-sm"
+                    placeholder="Ex: a produção pediu para segurar — o fornecedor mudou o escopo."
+                  />
+                </div>
+              </div>
+            }
+            confirmLabel="Reprovar PP"
+            variant="destructive"
+            pending={pending}
+            confirmDisabled={motivoPP.trim().length < 10}
+            confirmDisabledReason={
+              motivoPP.trim().length < 10
+                ? "Escreva o motivo (mín. 10 caracteres) para liberar a reprovação."
+                : undefined
+            }
+            onConfirm={handleConfirmarReprovarPP}
+          />
+        </>
+      )}
     </>
   );
 }

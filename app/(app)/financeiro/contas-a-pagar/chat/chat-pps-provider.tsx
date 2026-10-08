@@ -38,6 +38,12 @@ export function useChatPPs(): Ctx {
   return ctx;
 }
 
+/** Null fora do `<ChatPPsProvider>`: a tela da PP aberta pela produção
+ *  (o "Visualizar" do job) não tem o chat do financeiro. */
+export function useChatPPsOpcional(): Ctx | null {
+  return React.useContext(ChatPPsContext);
+}
+
 export function ChatPPsProvider({
   conversasIniciais,
   podeEnviar,

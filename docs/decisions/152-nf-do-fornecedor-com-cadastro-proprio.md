@@ -3,7 +3,9 @@
 **Data:** 2026-10-07
 **Status:** aceita e no ar (07/10/2026); revista no mesmo dia — a parte da
 NF numa PP vai até o valor da PP, e a NF da PP em avaliação se corrige sem o
-financeiro aprovar (ver "Revisão de 07/10/2026")
+financeiro aprovar (ver "Revisão de 07/10/2026"); em 08/10/2026 o "Ver PP"
+da produção passou a mostrar as NFs, e o "Visualizar" abre a tela lado a
+lado do financeiro, em leitura (ver a nota no fim de "Na produção")
 **Quem decidiu:** Tiago, em 07/10/2026, junto da aprovação do protótipo da
 PP a emitir (decisão 153). As respostas seguiram a recomendação que
 acompanhava cada pergunta.
@@ -51,6 +53,35 @@ individualmente."
 - No envio, `ligar_notas_fiscais_da_pp` liga cada anexo NF à sua nota: cria
   a nova ou liga à existente **sem mudar os dados dela**, e confere a soma
   das partes.
+
+⚠️ **O "Ver PP" mostra as NFs, e o "Visualizar" é a tela do financeiro
+(2026-10-08).** Pedido do Tiago, com o print da PP-00084 em avaliação: na
+ficha da PP já enviada (planilha → PPs do item → Ver formulário), ver os
+dados da NF anexada.
+- **Anexos:** cada arquivo no cartão do envio, travado — o tipo e, na NF,
+  número, data de emissão, valor (o total), CNPJ tomador e, quando a nota
+  cobre outra PP, "Valor nesta PP" e "Também na PP-…". Embaixo, "Registrada
+  pelo financeiro em …" (na aprovação de outra PP, ela é citada) ou, em
+  avaliação, "Informada no envio. O financeiro confere na aprovação.". Nota
+  em outro CNPJ que não o da PP, o aviso vermelho da decisão 156. Nos outros
+  tipos, o número do documento. Anexo antigo sem tipo fica como era.
+- **De onde vem:** `carregarPPParaVisualizar` (action nova em
+  `jobs/[jobId]/pps/actions-visualizar.ts`), ao abrir a ficha, com a
+  consulta e o mapeamento do Contas a Pagar (`SELECT_PP_DO_FINANCEIRO`,
+  `mapearPPsDoFinanceiro`): o dado é o do **cadastro da nota**, que o
+  financeiro corrige. Até ela voltar, a cópia no anexo. O freelancer não lê o
+  cadastro (RLS): para ele, sempre a cópia no anexo.
+- **"Ver PDF da PP" virou "Visualizar"** e abre a `PPTela` do Contas a
+  Pagar — a mesma — com `somenteLeitura`: PDF da PP, documento anexo e a
+  coluna "Dados". Sai o que é do financeiro: o rodapé de aprovar, rejeitar e
+  reprovar, a edição da NF e a frase "use Reprovar PP no rodapé". A aba Chat
+  só existe onde há o chat do financeiro (o provider do Contas a Pagar); a
+  produção conversa pelo botão do job. "Origem no job" leva à página do job
+  da produção. Fechar ou Esc devolve à ficha.
+- **Rodapé da ficha:** "Fechar" à esquerda; "Visualizar" e "Cancelar PP" à
+  direita.
+- Sem migration: a produção já lia tudo isso (RLS de `pedidos_compra`,
+  `pedidos_compra_anexos`, `fornecedores` e `fiscal_estabelecimentos`).
 
 ## No financeiro (Contas a Pagar)
 
