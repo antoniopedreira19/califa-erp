@@ -4880,4 +4880,6 @@ código publicado logo depois (`3305751`).
 - Peças de tela em `realizado/prazo-de-envio-pp.tsx`; regra em
   `lib/calculos/janelas-pagamento.ts`, com teste. Sem migration.
 - Testado no TES-1008/26 (PP-00088 → 09/11, PP-00122 → 20/11 e 21/12), com o
-  corte antecipado só no servidor local.
+  corte antecipado só no servidor local. Em 08/10, a PP a emitir que perdeu o
+  prazo, no TES-1001/26 (antecedência subida só no servidor local): aviso no
+  cartão, recusa na geração, aviso e trava no formulário, correção para 20/11.
