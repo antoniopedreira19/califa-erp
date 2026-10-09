@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // A versão publicada, fixada no build: a aba compara a dela com a que
+  // /api/versao devolve e avisa que há versão nova (09/10/2026 —
+  // components/aviso-de-versao-nova.tsx). Fora da Vercel fica "local".
+  env: {
+    VERSAO_DO_SISTEMA:
+      process.env.VERCEL_DEPLOYMENT_ID ||
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+      "local",
+  },
   experimental: {
     typedRoutes: false,
     // pdfmake + pdfkit sao Node-only e usados em server actions.

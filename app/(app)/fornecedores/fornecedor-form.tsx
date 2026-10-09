@@ -84,6 +84,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BANCOS_FEBRABAN } from "@/lib/dados/bancos-febraban";
 import { onlyDigits, cn } from "@/lib/utils";
+import { consultarCnpj } from "@/lib/consulta-cnpj";
 import type {
   Fornecedor,
   TipoPessoa,
@@ -588,33 +589,28 @@ export function FornecedorForm({
     await preencherViaCnpj(digits);
   }
 
-  // BrasilAPI: consulta o CNPJ na Receita Federal e preenche nome fantasia,
-  // razão social, CEP e endereço. Regra "só campo vazio" respeita o que
-  // já foi digitado à mão. Se a Receita retornar situação != ATIVA, avisa.
+  // Consulta o CNPJ na Receita (BrasilAPI, e o CNPJ.ws quando ela falha —
+  // `lib/consulta-cnpj.ts`) e preenche nome fantasia, razão social, CEP e
+  // endereço. Regra "só campo vazio" respeita o que já foi digitado à mão.
+  // Se a Receita retornar situação != ATIVA, avisa.
   async function preencherViaCnpj(cnpjDigits: string) {
     setCnpjLoading(true);
     setCnpjError(null);
     setCnpjWarning(null);
-    const ctrl = new AbortController();
-    // BrasilAPI bate na Receita, é mais lenta que ViaCEP (500ms a 2s típico).
-    const to = setTimeout(() => ctrl.abort(), 6000);
 
     try {
-      const r = await fetch(
-        `https://brasilapi.com.br/api/cnpj/v1/${cnpjDigits}`,
-        { signal: ctrl.signal },
-      );
-      if (r.status === 404) {
+      const resultado = await consultarCnpj(cnpjDigits);
+      if (resultado.status === "nao_encontrado") {
         setCnpjError("CNPJ não encontrado na Receita Federal.");
         return;
       }
-      if (!r.ok) {
+      if (resultado.status === "falhou") {
         setCnpjError(
           "Não foi possível consultar o CNPJ agora, preencha manualmente.",
         );
         return;
       }
-      const data = await r.json();
+      const data = resultado.dados;
 
       const situacao = String(
         data.descricao_situacao_cadastral ?? "",
@@ -680,7 +676,6 @@ export function FornecedorForm({
         "Não foi possível consultar o CNPJ agora, preencha manualmente.",
       );
     } finally {
-      clearTimeout(to);
       setCnpjLoading(false);
     }
   }
@@ -694,7 +689,7 @@ export function FornecedorForm({
     }
   }
 
-  /** "115786468-2" digitado inteiro na conta (ou "1234-5" na agência): o
+  /** "12345678-9" digitado inteiro na conta (ou "1234-5" na agência): o
    *  número fica na caixa e o dígito vai para a casinha ao lado, se ela
    *  estiver vazia. Sem isso o servidor juntava tudo num número só e
    *  cobrava o dígito que a pessoa achava ter digitado (09/10/2026). */
