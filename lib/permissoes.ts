@@ -134,7 +134,16 @@ export const permissoes = {
    *  099, revista em 24/09/2026): administrador ou qualquer GP. O produtor
    *  não mexe no save. O banco confere de novo (`save_pode_mexer_no_job`). */
   "jobs.consumir_save":           ["administrador", "gerente_producao"],
-  "jobs.criar_errata":            ["administrador", "gerente_producao", "produtor"],
+  /** Registrar a errata — é o que a manda ao financeiro (decisão 159,
+   *  08/10/2026): o GP e o administrador. Até ali o produtor estava aqui,
+   *  mas a tela nunca lhe mostrou o botão; o banco agora confere de novo
+   *  (`registrar_errata_do_job`). */
+  "jobs.criar_errata":            ["administrador", "gerente_producao"],
+  /** Preparar a errata e deixá-la PRONTA PARA ENVIO, editar e descartar a
+   *  pronta (decisão 159): o produtor faz a errata, e um GP a revisa e
+   *  envia. O GP e o administrador entram para descartar a pronta. A RLS de
+   *  `jobs_erratas_prontas` confere os mesmos três papéis. */
+  "jobs.preparar_errata":         ["administrador", "gerente_producao", "produtor"],
   /** Gerar, editar e cancelar PP. O freelancer entrou em 06/10/2026
    *  (Tiago, revisão da decisão 136): faz o mesmo que o produtor — gera,
    *  edita e cancela a PP ainda não enviada —, só nos jobs dos projetos em

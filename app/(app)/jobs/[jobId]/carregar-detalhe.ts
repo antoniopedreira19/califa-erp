@@ -44,6 +44,7 @@ import type {
   ItemPlanilhaJob,
   JobItemRealizado,
   JobErrataComItens,
+  ErrataPronta,
   JobAlteracaoFinanceiroComItens,
   PrevisaoDaAlteracao,
   EnvioDaAlteracao,
@@ -178,6 +179,7 @@ export async function carregarDetalheDoJob(
     tomadoresRes,
     itensDaVersaoRes,
     cnpjDaRegionalRes,
+    errataProntaRes,
   ] = await Promise.all([
     supabase
       .from("versoes_orcamento_grupos")
@@ -252,7 +254,9 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs_erratas")
       .select(
-        "*, autor:profiles!created_by(nome), itens:jobs_erratas_itens(*)",
+        // `preparador`: quem preparou a errata que o GP enviou (decisão 159).
+        // As duas FKs para `profiles` pedem a dica da coluna.
+        "*, autor:profiles!created_by(nome), preparador:profiles!preparada_por(nome), itens:jobs_erratas_itens(*)",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -430,6 +434,20 @@ export async function carregarDetalheDoJob(
           .eq("regional_id", raw.regional_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    // A errata pronta para envio (decisão 159): no máximo uma por job — o
+    // índice único parcial garante. A RLS só a mostra a quem faz errata
+    // (administrador, GP e produtor); o financeiro recebe nada.
+    supabase
+      .from("jobs_erratas_prontas")
+      .select(
+        "id, conteudo, descricao, resumo, valor_job_antes, valor_job_depois, " +
+          "faturamento_previsto_antes, faturamento_previsto_depois, preparada_em, " +
+          "preparador:profiles!preparada_por(nome)",
+      )
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("situacao", "pronta")
+      .maybeSingle(),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -786,6 +804,32 @@ export async function carregarDetalheDoJob(
   for (const c of categoriasRes.data ?? []) categoriasMap.set(c.id, c.nome);
 
   if (erratasRes.error) console.error("[job.erratas]", erratasRes.error.message);
+  if (errataProntaRes.error) {
+    console.error("[job.errata_pronta]", errataProntaRes.error.message);
+  }
+  const prontaRaw = errataProntaRes.data as any;
+  const errataPronta: ErrataPronta | null = prontaRaw
+    ? {
+        id: prontaRaw.id,
+        conteudo: {
+          alteracoes: prontaRaw.conteudo?.alteracoes ?? [],
+          novas: prontaRaw.conteudo?.novas ?? [],
+          cancelamentos: prontaRaw.conteudo?.cancelamentos ?? [],
+        },
+        descricao: prontaRaw.descricao ?? null,
+        resumo: prontaRaw.resumo,
+        preparadaPorNome: prontaRaw.preparador?.nome ?? "—",
+        preparadaEm: prontaRaw.preparada_em,
+        valorJob: {
+          antes: Number(prontaRaw.valor_job_antes),
+          depois: Number(prontaRaw.valor_job_depois),
+        },
+        faturamento: {
+          antes: Number(prontaRaw.faturamento_previsto_antes),
+          depois: Number(prontaRaw.faturamento_previsto_depois),
+        },
+      }
+    : null;
   const erratas: JobErrataComItens[] = (erratasRes.data ?? []).map((e: any) => ({
     ...e,
     custo_orcado_antes: Number(e.custo_orcado_antes ?? 0),
@@ -803,6 +847,7 @@ export async function carregarDetalheDoJob(
         ? Number(e.faturamento_previsto_depois)
         : null,
     autor_nome: e.autor?.nome ?? null,
+    preparada_por_nome: e.preparador?.nome ?? null,
     itens: (e.itens ?? []).map((i: any) => ({
       ...i,
       valor_unitario_de: Number(i.valor_unitario_de ?? 0),
@@ -1553,6 +1598,15 @@ export async function carregarDetalheDoJob(
     papelCorrigeNf: pode(session.activeRole, "jobs.corrigir_nf_pp"),
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
+    // Errata (decisão 159): o GP e o administrador registram — mandam ao
+    // financeiro; o produtor prepara e deixa a errata pronta para envio. O
+    // status do job a seção confere (`jobAceitaAcoesPlanilha`).
+    papelNaErrata: pode(session.activeRole, "jobs.criar_errata")
+      ? ("registra" as const)
+      : pode(session.activeRole, "jobs.preparar_errata")
+        ? ("prepara" as const)
+        : null,
+    errataPronta,
   };
 }
 

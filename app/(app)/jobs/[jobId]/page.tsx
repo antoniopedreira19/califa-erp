@@ -144,6 +144,8 @@ export default async function JobDetailPage({
     etapasDoJob,
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
+    papelNaErrata,
+    errataPronta,
   } = detalhe;
 
 
@@ -353,6 +355,8 @@ export default async function JobDetailPage({
               valorJobAtual={totaisJob.valorJob}
               faturamentoPrevistoAtual={totaisJob.faturamentoPrevisto}
               moeda={versaoAprovada.moeda}
+              // A errata pronta para envio (decisão 159) entra no topo.
+              pronta={errataPronta}
             />
 
             {/* As edições do orçado feitas pelo financeiro (decisão 115):
@@ -372,6 +376,10 @@ export default async function JobDetailPage({
             edicaoDoFinanceiro={null}
             // O job como foi aberto (decisão 151): o Totais do job inteiro.
             aberturaDoJob={aberturaDoJob}
+            // Decisão 159: o GP registra a errata; o produtor a deixa
+            // pronta para envio.
+            papelNaErrata={papelNaErrata}
+            errataPronta={errataPronta}
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
@@ -489,6 +497,8 @@ export default async function JobDetailPage({
         orcamentoHref={`/orcamentos/${job.projeto_id}/${job.orcamento_id}?v=${job.versao_orcamento_aprovada_id}`}
         podeEnviarFaturamento={podeEnviarFaturamento}
         aberturaEmRevisao={job.abertura_em_revisao}
+        // Errata pronta parada trava o envio para faturamento (decisão 159).
+        errataProntaParada={errataPronta !== null}
         faturamentoPrevisto={totaisJob.faturamentoPrevisto}
         // Dos itens, e não da coluna `jobs.faturamento_save_previsto`: a
         // coluna é espelho denormalizado, e o drawer não pode divergir da

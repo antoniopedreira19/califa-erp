@@ -67,6 +67,9 @@ async function PlanilhaDaOrigemCarregada({
       edicaoDoFinanceiro={null}
       // A planilha da origem é anterior à abertura (decisão 151).
       aberturaDoJob={null}
+      // Em leitura: ninguém faz errata aqui (decisão 159).
+      papelNaErrata={null}
+      errataPronta={null}
       interno={detalhe.interno}
       savePorItem={detalhe.savePorItem}
       saldosDeSave={[]}

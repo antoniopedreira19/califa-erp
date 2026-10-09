@@ -58,6 +58,10 @@ interface Props {
    * envio de PPs ao financeiro (decisão 040).
    */
   aberturaEmRevisao?: boolean;
+  /** O job tem uma errata pronta para envio (decisão 159): o envio para
+   *  faturamento espera ela ir ao financeiro ou ser descartada — senão a
+   *  nota sairia sem a correção. O servidor confere de novo. */
+  errataProntaParada: boolean;
   faturamentoPrevisto: number;
   /** Quanto do faturamento previsto é saldo em save. */
   faturamentoSavePrevisto?: number;
@@ -194,6 +198,11 @@ function textoConsumosAguardando(itens: string[]): string {
 
 /** Trilha Faturamento com a revisão da abertura pendente — sem link: a
  *  produção não navega para o financeiro (decisão 099 §20). */
+/** A errata pronta para envio parada (decisão 159). O mesmo texto da
+ *  action `enviarJobParaFaturamento`. */
+const TEXTO_ERRATA_PRONTA =
+  "Este job tem uma errata pronta para envio. Envie-a ao financeiro ou descarte-a na Planilha Interna antes de enviar para faturamento.";
+
 const TEXTO_REVISAO_PENDENTE =
   "Uma errata ou um pedido de save mexeu no job depois da abertura, e o financeiro ainda não reconferiu a abertura. O envio para faturamento volta quando a revisão for salva.";
 
@@ -223,6 +232,7 @@ export function BarraAcoesJob({
   orcamentoHref,
   podeEnviarFaturamento,
   aberturaEmRevisao = false,
+  errataProntaParada,
   faturamentoPrevisto,
   faturamentoSavePrevisto = 0,
   pagoSoPorSave = false,
@@ -291,9 +301,11 @@ export function BarraAcoesJob({
       ? textoConsumosAguardando(saves.consumosAguardando)
       : saves.consumosNaoEnviados.length > 0
         ? textoConsumosNaoEnviados(saves.consumosNaoEnviados)
-        : aberturaEmRevisao
-          ? TEXTO_REVISAO_PENDENTE
-          : null;
+        : errataProntaParada
+          ? TEXTO_ERRATA_PRONTA
+          : aberturaEmRevisao
+            ? TEXTO_REVISAO_PENDENTE
+            : null;
 
   // Modelo mensal: a barra de faturamento por mês (design aprovado em
   // 14/09/2026) é a trilha de faturamento, com a de encerramento abaixo.

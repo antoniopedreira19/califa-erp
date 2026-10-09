@@ -29,9 +29,18 @@ interface Props {
    *  com o motivo no `title`. Hoje só existe um: o envio para faturamento
    *  já congelou o valor da nota (decisão 028, nota de 27/08/2026). */
   travadoPor?: string | null;
+  /** O job tem uma errata pronta para envio (decisão 159): o botão abre
+   *  ela, e o rótulo diz isso — "Revisar errata pronta" para quem envia,
+   *  "Editar errata pronta" para quem preparou. */
+  rotuloDaPronta?: string | null;
 }
 
-export function AlterarOrcadoButton({ ativo, onAlternar, travadoPor }: Props) {
+export function AlterarOrcadoButton({
+  ativo,
+  onAlternar,
+  travadoPor,
+  rotuloDaPronta,
+}: Props) {
   const travado = Boolean(travadoPor);
   return (
     <button
@@ -49,7 +58,7 @@ export function AlterarOrcadoButton({ ativo, onAlternar, travadoPor }: Props) {
       )}
     >
       <PencilLine className="h-3.5 w-3.5 text-california-red" />
-      {ativo ? "Realizando errata" : "Realizar errata"}
+      {ativo ? "Realizando errata" : (rotuloDaPronta ?? "Realizar errata")}
     </button>
   );
 }

@@ -183,6 +183,9 @@ export type AuditAction =
   | "item_versao.planejado_corrigido_na_devolucao"
   | "job.realizado_atualizado"
   | "job.errata_registrada"
+  // Decisão 159: a errata pronta para envio (o produtor prepara, o GP envia).
+  | "job.errata_pronta_salva"
+  | "job.errata_pronta_descartada"
   // "Editar orçado" do financeiro (decisão 115): os valores do orçado, sem
   // aprovação, com as previsões e o envio sem nota acompanhando.
   | "job.orcado_alterado_financeiro"

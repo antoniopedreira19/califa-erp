@@ -13,7 +13,7 @@
  */
 
 import * as React from "react";
-import { FilePenLine, X, Undo2 } from "lucide-react";
+import { FilePenLine, X, Undo2, Send } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 
 interface ParDeValores {
@@ -32,6 +32,13 @@ interface Props {
   onDesfazer: () => void;
   podeDesfazer: boolean;
   onConfirmar: () => void;
+  /** Quem está na errata (decisão 159): o GP e o administrador REGISTRAM —
+   *  enviam ao financeiro; o produtor PREPARA — deixa a errata pronta para
+   *  um GP enviar. */
+  modo: "registra" | "prepara";
+  /** A errata aberta é uma errata pronta para envio: quem a preparou e
+   *  quando. `null` na errata começada agora. */
+  pronta: { autorNome: string; quando: string } | null;
 }
 
 /** Custo que sobe é laranja, custo que desce é verde — a mesma leitura do
@@ -98,7 +105,22 @@ export function ErrataBarra({
   onConfirmar,
   onDesfazer,
   podeDesfazer,
+  modo,
+  pronta,
 }: Props) {
+  const prepara = modo === "prepara";
+  // O título diz de onde a errata veio; o texto de apoio, o que o botão
+  // principal faz — cada papel tem a sua consequência.
+  const titulo = pronta
+    ? prepara
+      ? "Errata pronta em edição"
+      : "Errata pronta para envio"
+    : "Errata em edição";
+  const apoio = prepara
+    ? "Deixar pronta salva a errata no job para um GP revisar e enviar ao financeiro. Até o envio, nada muda no job."
+    : pronta
+      ? `Preparada por ${pronta.autorNome} em ${pronta.quando}. Confirmar registra a errata, atualiza o faturamento previsto e devolve o job ao mural de abertura.`
+      : "Confirmar registra a errata, atualiza o faturamento previsto e devolve o job ao mural de abertura.";
   return (
     // `sticky` e não `fixed`: a barra pertence à planilha, e a sidebar do
     // app não pode ficar por baixo dela. Fica colada no pé da janela
@@ -111,11 +133,10 @@ export function ErrataBarra({
           </div>
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-foreground">
-              Errata em edição · {resumo}
+              {titulo} · {resumo}
             </p>
             <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-              Confirmar registra a errata, atualiza o faturamento previsto e
-              devolve o job ao mural de abertura.
+              {apoio}
             </p>
           </div>
         </div>
@@ -138,13 +159,21 @@ export function ErrataBarra({
               <Undo2 className="h-3.5 w-3.5" />
               Desfazer
             </button>
+            {/* Na errata pronta, "Descartar" daria a entender que a errata
+                pronta vai embora: aqui ele só sai do modo errata, e a
+                pronta continua como estava. Descartar a pronta é pela faixa. */}
             <button
               type="button"
               onClick={onDescartar}
+              title={
+                pronta
+                  ? "Sai da errata sem guardar o que mudou agora. A errata pronta continua como estava."
+                  : undefined
+              }
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-[#d7d7d7] hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
-              Descartar
+              {pronta ? "Fechar" : "Descartar"}
             </button>
             <button
               type="button"
@@ -152,8 +181,12 @@ export function ErrataBarra({
               disabled={!temMudanca}
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <FilePenLine className="h-3.5 w-3.5" />
-              Confirmar errata
+              {prepara ? <Send className="h-3.5 w-3.5" /> : <FilePenLine className="h-3.5 w-3.5" />}
+              {prepara
+                ? pronta
+                  ? "Salvar errata pronta"
+                  : "Deixar pronta para envio"
+                : "Confirmar errata"}
             </button>
           </div>
         </div>

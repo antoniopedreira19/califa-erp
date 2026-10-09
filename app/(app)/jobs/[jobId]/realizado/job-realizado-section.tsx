@@ -106,16 +106,21 @@ import {
   somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
 import { useRascunhoErrata } from "./errata-rascunho";
+import { ErrataProntaFaixa, quandoDaPronta } from "./errata-pronta-faixa";
 import type { FechamentoDaAbertura } from "@/lib/calculos/abertura-do-job";
 import { ErrataBarra } from "./errata-barra";
 import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
-import { registrarErrata } from "./actions-errata";
+import {
+  registrarErrata,
+  salvarErrataPronta,
+  descartarErrataPronta,
+} from "./actions-errata";
 import {
   calcularResultadoOperacional,
   calcularTotaisVersao,
 } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
-import { jobAceitaAcoesPlanilha } from "@/lib/types";
+import { jobAceitaAcoesPlanilha, type ErrataPronta, type JobStatus } from "@/lib/types";
 import { definirModoErrata } from "../modo-errata";
 import {
   nomeDoMes,
@@ -310,6 +315,16 @@ interface Props {
    *  mudou. `null` antes da abertura. Obrigatória pelo mesmo motivo de
    *  `interno`. */
   aberturaDoJob: FechamentoDaAbertura | null;
+  /** Quem faz o quê na errata (decisão 159): o GP e o administrador
+   *  REGISTRAM — a errata vai ao financeiro na hora; o produtor PREPARA —
+   *  deixa a errata pronta para um GP enviar. `null` = não faz errata
+   *  (financeiro, freelancer, telas de leitura). O status do job é
+   *  conferido aqui. Obrigatória pelo mesmo motivo de `interno`. */
+  papelNaErrata: "registra" | "prepara" | null;
+  /** A errata pronta para envio do job, se houver (uma por job). `null`
+   *  onde ela não se vê (financeiro). Obrigatória pelo mesmo motivo de
+   *  `interno`. */
+  errataPronta: ErrataPronta | null;
 }
 
 export function JobRealizadoSection({
@@ -353,6 +368,8 @@ export function JobRealizadoSection({
   confirmarSaidaParaOrcamento,
   edicaoDoFinanceiro,
   aberturaDoJob,
+  papelNaErrata,
+  errataPronta,
 }: Props) {
   const router = useRouter();
 
@@ -403,6 +420,15 @@ export function JobRealizadoSection({
   // do projeto perguntam antes de descartar (decisão 108). O rascunho só
   // existe na memória da tela.
   const [saidaDaErrata, setSaidaDaErrata] = React.useState<string | null>(null);
+  // Decisão 159: o produtor PREPARA a errata (deixa pronta para envio) e o
+  // GP a REGISTRA. `abertaDaPronta` diz que o modo errata no ar é a errata
+  // pronta reaberta — o envio a consome, e "Fechar" não a apaga.
+  const prepara = papelNaErrata === "prepara";
+  const [abertaDaPronta, setAbertaDaPronta] = React.useState(false);
+  const [descartandoPronta, setDescartandoPronta] = React.useState(false);
+  const [descartePendente, setDescartePendente] = React.useState(false);
+  const [erroDescarte, setErroDescarte] = React.useState<string | null>(null);
+  const prontaAberta = abertaDaPronta ? errataPronta : null;
   useProtegerSaida(errata.ativo && errata.temMudanca, (href) => setSaidaDaErrata(href));
 
   // Quem ainda não disse se sai mais PP (decisão 052) — o alcance do
@@ -515,15 +541,63 @@ export function JobRealizadoSection({
   async function confirmarErrata(descricao: string) {
     setSalvando(true);
     setErroErrata(null);
-    const r = await registrarErrata(job.id, errata.payload(descricao));
+    const { descricao: _descricao, ...conteudo } = errata.payload(descricao);
+    void _descricao;
+    // Quem prepara grava a errata pronta para envio (decisão 159); quem
+    // registra envia ao financeiro — e, se a errata veio da pronta, a
+    // consome no mesmo passo.
+    const r = prepara
+      ? await salvarErrataPronta(job.id, {
+          errataProntaId: errataPronta?.id ?? null,
+          descricao: descricao === "" ? null : descricao,
+          ...conteudo,
+        })
+      : await registrarErrata(job.id, {
+          descricao,
+          ...conteudo,
+          errataProntaId: prontaAberta?.id ?? null,
+        });
     setSalvando(false);
     if (!r.ok) {
       setErroErrata(r.message);
       return;
     }
     setConfirmando(false);
+    setAbertaDaPronta(false);
     errata.descartar();
     router.refresh();
+  }
+
+  async function confirmarDescarteDaPronta() {
+    if (!errataPronta) return;
+    setDescartePendente(true);
+    setErroDescarte(null);
+    const r = await descartarErrataPronta(job.id, errataPronta.id);
+    setDescartePendente(false);
+    if (!r.ok) {
+      setErroDescarte(r.message);
+      return;
+    }
+    setDescartandoPronta(false);
+    router.refresh();
+  }
+
+  /** Liga o modo errata — com a errata pronta, se o job tiver uma (decisão
+   *  159): só existe uma por vez, e quem abre continua dela. */
+  function abrirErrata() {
+    // A errata é edição do Orçado: o bloco volta à tela junto com ela,
+    // esteja escondido ou não.
+    setOrcadoVisivel(true);
+    setErroErrata(null);
+    setAbertaDaPronta(errataPronta !== null);
+    errata.ligar(errataPronta?.conteudo ?? null);
+  }
+
+  /** Sai do modo errata sem gravar. A errata pronta, se havia, fica como
+   *  estava: descartá-la é pela faixa. */
+  function fecharErrata() {
+    setAbertaDaPronta(false);
+    errata.descartar();
   }
 
   // Recolher agrupamento, igual à planilha do orçamento: o subtotal e a
@@ -572,7 +646,12 @@ export function JobRealizadoSection({
   );
   const todosOsMesesEnviados =
     faturamentoMensal.length > 0 && mesesEnviados.size === faturamentoMensal.length;
-  const podeErrata = podeAcoes && !jaEnviadoParaFaturamento && !todosOsMesesEnviados;
+  // Decisão 159: a errata deixou de seguir `podeAcoes` (que continua
+  // valendo para o BV) — o produtor também a faz, deixando-a pronta para
+  // envio. Continua exigindo o job aberto.
+  const errataLiberada =
+    papelNaErrata !== null && jobAceitaAcoesPlanilha(job.status as JobStatus);
+  const podeErrata = errataLiberada && !jaEnviadoParaFaturamento && !todosOsMesesEnviados;
 
   // "Editar orçado" do financeiro (decisão 115): até a primeira nota ou o
   // encerramento — o encerrado chega com `travadoPor`, montado pela página.
@@ -1079,6 +1158,22 @@ export function JobRealizadoSection({
         </div>
       )}
 
+      {/* A errata pronta para envio (decisão 159): some enquanto a errata
+          está aberta — quem fala no rodapé é a barra dela. */}
+      {errataPronta && errataLiberada && !errata.ativo && (
+        <ErrataProntaFaixa
+          pronta={errataPronta}
+          modo={prepara ? "prepara" : "registra"}
+          moeda={versao.moeda}
+          travadoPor={motivoErrataTravada}
+          onAbrir={abrirErrata}
+          onDescartar={() => {
+            setErroDescarte(null);
+            setDescartandoPronta(true);
+          }}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ClipboardList className="h-4 w-4 text-california-red" />
@@ -1176,19 +1271,23 @@ export function JobRealizadoSection({
                 {linhasNaoEnviadas.length === 1 ? "save" : "saves"} para aprovação
               </button>
             )}
-          {podeAcoes && (
+          {errataLiberada && (
             <AlterarOrcadoButton
               ativo={errata.ativo}
               travadoPor={motivoErrataTravada}
+              rotuloDaPronta={
+                errataPronta
+                  ? prepara
+                    ? "Editar errata pronta"
+                    : "Revisar errata pronta"
+                  : null
+              }
               onAlternar={() => {
                 if (errata.ativo) {
-                  errata.descartar();
+                  fecharErrata();
                   return;
                 }
-                // A errata é edição do Orçado: o bloco volta à tela
-                // junto com ela, esteja escondido ou não.
-                setOrcadoVisivel(true);
-                errata.ligar();
+                abrirErrata();
               }}
             />
           )}
@@ -1360,11 +1459,19 @@ export function JobRealizadoSection({
       <ConfirmDialog
         open={saidaDaErrata !== null}
         onOpenChange={(aberto) => !aberto && setSaidaDaErrata(null)}
-        title={modoFinanceiro ? "Sair sem gravar a alteração?" : "Sair sem registrar a errata?"}
+        title={
+          modoFinanceiro
+            ? "Sair sem gravar a alteração?"
+            : prepara
+              ? "Sair sem salvar a errata?"
+              : "Sair sem registrar a errata?"
+        }
         description={
           modoFinanceiro
             ? "A edição do orçado ainda não foi confirmada e será descartada."
-            : "As alterações da errata ainda não foram registradas e serão descartadas."
+            : prepara
+              ? "As alterações da errata ainda não foram salvas e serão descartadas."
+              : "As alterações da errata ainda não foram registradas e serão descartadas."
         }
         confirmLabel="Sair e descartar"
         cancelLabel={modoFinanceiro ? "Continuar editando" : "Continuar na errata"}
@@ -1372,7 +1479,7 @@ export function JobRealizadoSection({
         onConfirm={() => {
           const destino = saidaDaErrata;
           setSaidaDaErrata(null);
-          errata.descartar();
+          fecharErrata();
           if (destino) router.push(destino);
         }}
       />
@@ -1424,15 +1531,51 @@ export function JobRealizadoSection({
             depois: totaisDepois.valorJob,
           }}
           moeda={versao.moeda}
-          onDescartar={errata.descartar}
+          onDescartar={fecharErrata}
           onDesfazer={errata.desfazer}
           podeDesfazer={errata.podeDesfazer}
           onConfirmar={() => {
             setErroErrata(null);
             setConfirmando(true);
           }}
+          modo={prepara ? "prepara" : "registra"}
+          pronta={
+            prontaAberta
+              ? {
+                  autorNome: prontaAberta.preparadaPorNome,
+                  quando: quandoDaPronta(prontaAberta.preparadaEm),
+                }
+              : null
+          }
         />
       )}
+
+      <ConfirmDialog
+        open={descartandoPronta}
+        onOpenChange={(aberto) => {
+          if (!descartePendente) setDescartandoPronta(aberto);
+        }}
+        title="Descartar a errata pronta?"
+        description={
+          <>
+            <p>
+              {errataPronta && !prepara
+                ? `A errata preparada por ${errataPronta.preparadaPorNome} sai do job sem ir ao financeiro.`
+                : "A errata pronta para envio sai do job. Nada foi enviado ao financeiro."}
+            </p>
+            {erroDescarte && (
+              <p role="alert" className="mt-2 text-california-red">
+                {erroDescarte}
+              </p>
+            )}
+          </>
+        }
+        confirmLabel="Descartar errata"
+        cancelLabel="Voltar"
+        variant="destructive"
+        pending={descartePendente}
+        onConfirm={confirmarDescarteDaPronta}
+      />
 
       <EdicaoFinanceiroConfirmarDialog
         open={confirmando && modoFinanceiro}
@@ -1491,6 +1634,16 @@ export function JobRealizadoSection({
         salvando={salvando}
         erro={erroErrata}
         onConfirmar={confirmarErrata}
+        modo={prepara ? "prepara" : "registra"}
+        pronta={
+          prontaAberta
+            ? {
+                autorNome: prontaAberta.preparadaPorNome,
+                quando: quandoDaPronta(prontaAberta.preparadaEm),
+                descricao: prontaAberta.descricao,
+              }
+            : null
+        }
       />
     </div>
   );

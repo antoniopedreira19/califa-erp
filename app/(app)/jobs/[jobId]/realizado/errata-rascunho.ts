@@ -21,10 +21,14 @@
  * abertura do job. A linha nova entra com o planejado zerado, a existente
  * guarda o dela, e a linha "removida" passa a ser CANCELADA — fica na
  * planilha com o orçado zerado e o planejado intacto.
+ *
+ * Desde 08/10/2026 (decisão 159) o rascunho também abre a errata PRONTA
+ * PARA ENVIO: o produtor a deixa pronta, e quem a abre de novo (ele, ou o
+ * GP que vai enviar) continua dela — `ligar(conteudo)`.
  */
 
 import * as React from "react";
-import type { ItemPlanilhaJob, TipoCusto } from "@/lib/types";
+import type { ConteudoErrata, ItemPlanilhaJob, TipoCusto } from "@/lib/types";
 
 /** Campos das células da errata. Os três do bloco Planejado continuam aqui
  *  porque a tabela desenha as células dele pelo mesmo caminho, mas desde a
@@ -117,7 +121,9 @@ export interface RascunhoErrata {
   /** Job de serviço Interno (decisão 105): tipo sempre F · Interno e o
    *  planejado igual ao orçado — a tabela não abre nenhum dos dois. */
   interno: boolean;
-  ligar: () => void;
+  /** Liga o modo errata. Com `conteudo`, abre a errata pronta para envio
+   *  (decisão 159) já aplicada na planilha: quem abre continua dela. */
+  ligar: (conteudo?: ConteudoErrata | null) => void;
   /** Sai do modo errata e joga fora tudo que foi digitado. */
   descartar: () => void;
   /** Volta um passo do rascunho. Cada ação estrutural (linha nova, linha
@@ -157,33 +163,9 @@ export interface RascunhoErrata {
   resumo: string;
   /** Toda linha nova precisa de nome antes de a errata poder ser gravada. */
   faltaNomear: boolean;
-  payload: (descricao: string) => {
-    descricao: string;
-    alteracoes: Array<{
-      job_item_orcado_id: string;
-      valor_unitario: number;
-      quantidade: number;
-      dias_meses: number;
-      tipo_custo: TipoCusto;
-      valor_unitario_planejado: number;
-      quantidade_planejada: number;
-      dias_meses_planejado: number;
-    }>;
-    novas: Array<{
-      grupo_id: string;
-      item: string;
-      tipo_custo: TipoCusto;
-      linha_vermelha: boolean;
-      valor_unitario: number;
-      quantidade: number;
-      dias_meses: number;
-      valor_unitario_planejado: number;
-      quantidade_planejada: number;
-      dias_meses_planejado: number;
-    }>;
-    /** Linhas que a errata cancela (decisão 151). */
-    cancelamentos: string[];
-  };
+  /** O que vai à action: o conteúdo da errata (o mesmo que a errata
+   *  pronta guarda) e a descrição. */
+  payload: (descricao: string) => ConteudoErrata & { descricao: string };
 }
 
 export function useRascunhoErrata(
@@ -249,19 +231,57 @@ export function useRascunhoErrata(
     seqRef.current = 0;
   }, []);
 
-  const ligar = React.useCallback(() => {
+  const ligar = React.useCallback((conteudo?: ConteudoErrata | null) => {
     // Semeia TODAS as linhas de uma vez. Semear sob demanda deixaria o
     // input sem valor inicial no primeiro caractere digitado.
     const inicial: Record<string, EdicaoLinha> = {};
     for (const i of itensSalvos) inicial[i.id] = edicaoDoItem(i);
+    // A errata pronta para envio (decisão 159) entra por cima do salvo: a
+    // linha corrigida volta com os números dela, a nova volta como linha
+    // nova do rascunho e a cancelada, cancelada. Linha que sumiu do job ou
+    // foi cancelada desde então fica de fora — o servidor confere tudo de
+    // novo no envio.
+    const porOrcadoId = new Map(itensSalvos.map((i) => [i.orcado_id, i]));
+    for (const a of conteudo?.alteracoes ?? []) {
+      const salvo = porOrcadoId.get(a.job_item_orcado_id);
+      if (!salvo || salvo.cancelada_em || !inicial[salvo.id]) continue;
+      inicial[salvo.id] = {
+        ...inicial[salvo.id],
+        unitario: paraEdicao(a.valor_unitario),
+        quantidade: paraEdicao(a.quantidade),
+        diasMeses: paraEdicao(a.dias_meses),
+        // No Interno o tipo não muda (decisão 105).
+        tipo: interno ? salvo.tipo_custo : a.tipo_custo,
+      };
+    }
+    let seq = 0;
+    const novasDaPronta: LinhaNovaRascunho[] = (conteudo?.novas ?? []).map((n) => {
+      seq += 1;
+      return {
+        chave: `nova:${seq}`,
+        grupoId: n.grupo_id,
+        item: n.item,
+        vermelha: n.linha_vermelha,
+        unitario: paraEdicao(n.valor_unitario),
+        quantidade: paraEdicao(n.quantidade),
+        diasMeses: paraEdicao(n.dias_meses),
+        // O planejado da linha nova não conta (decisão 151); o `?? 0` cobre
+        // pronta gravada sem ele.
+        planUnitario: paraEdicao(n.valor_unitario_planejado ?? 0),
+        planQuantidade: paraEdicao(n.quantidade_planejada ?? 1),
+        planDiasMeses: paraEdicao(n.dias_meses_planejado ?? 1),
+        tipo: n.tipo_custo,
+      };
+    });
+    const ativas = new Set(itensSalvos.filter((i) => !i.cancelada_em).map((i) => i.id));
     setEdicoes(inicial);
-    setNovas([]);
-    setCanceladas([]);
+    setNovas(novasDaPronta);
+    setCanceladas((conteudo?.cancelamentos ?? []).filter((id) => ativas.has(id)));
     setHistorico([]);
     alvoRef.current = null;
-    seqRef.current = 0;
+    seqRef.current = seq;
     setAtivo(true);
-  }, [itensSalvos]);
+  }, [itensSalvos, interno]);
 
   const descartar = React.useCallback(() => {
     setAtivo(false);
