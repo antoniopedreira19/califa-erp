@@ -10,6 +10,13 @@ Revê a [127](127-pp-com-pagamento-fora-do-cadastro.md) no ponto da remessa
 CNAB e usa o histórico de eventos da PP da
 [136](136-qualquer-gp-age-e-o-autor-fica-registrado.md).
 
+> ⚠️ **Revisão de 2026-10-09 ([161](161-pp-por-boleto-ou-chave-aleatoria.md)):**
+> a PP fora do cadastro pode ser paga por **boleto**. Essa não entra na
+> remessa (o gerador não tem o segmento J): a lista nem a mostra, e
+> `resolverOrigem` recusa a parcela ("pague pelo boleto anexado"). O cartão
+> mostra "Boleto · Pagar pelo boleto anexado", e o motivo só aparece nas PPs
+> antigas que o trazem.
+
 ---
 
 ## 1. O pedido

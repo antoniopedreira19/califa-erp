@@ -1168,6 +1168,7 @@ export function JobPPsSection({
               fornecedorId: ppEnviando.fornecedor_id ?? null,
               verbaProducao: ppEnviando.verba_producao === true,
               anexos: ppEnviando.anexos ?? [],
+              pagaPorBoleto: ppEnviando.pagamento_fora_do_cadastro?.meio === "boleto",
             } satisfies PPParaEnviar
           }
           onOpenChange={(o) => !o && setPpEnviando(null)}

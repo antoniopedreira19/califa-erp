@@ -91,6 +91,8 @@ function extractInput(formData: FormData) {
     // PIX
     pix_tipo: formData.get("pix_tipo"),
     pix_chave: formData.get("pix_chave"),
+    // Decisão 161: "Sem conta nem PIX" (ausente = não mexe).
+    sem_dados_pagamento: formData.get("sem_dados_pagamento"),
 
     // Módulo fiscal (02/10/2026): regime tributário da pessoa jurídica
     regime_tributario: formData.get("regime_tributario"),
@@ -299,6 +301,8 @@ async function inserirFornecedor(
       regime_tributario: parsed.data.regime_tributario,
       regime_consulta: parsed.data.regime_consulta,
       declaracao_simples_anexada: Boolean(parsed.data.declaracao_simples_path),
+      // Decisão 161: sem conta nem PIX — a PP pede boleto ou chave aleatória.
+      sem_dados_pagamento: parsed.data.sem_dados_pagamento === true,
     },
   });
 
@@ -588,6 +592,10 @@ async function atualizarComSchema(
       // Módulo fiscal: o regime decide a retenção na aprovação da PP.
       regime_tributario: parsed.data.regime_tributario,
       regime_consulta: parsed.data.regime_consulta,
+      // Decisão 161 (ausente = a tela não mandou, a marcação não mudou).
+      ...(parsed.data.sem_dados_pagamento !== undefined && {
+        sem_dados_pagamento: parsed.data.sem_dados_pagamento,
+      }),
       ...(arquivoMudou && {
         declaracao_simples_arquivo: !arquivoDepois
           ? "retirado"

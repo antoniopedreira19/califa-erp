@@ -148,6 +148,9 @@ export interface PPDoItem {
    *  deixou a PP para o GP enviar. Obrigatórios pelo mesmo motivo do trio. */
   prontaParaEnvioEm: string | null;
   prontaParaEnvioPorNome: string | null;
+  /** Decisão 161: paga por boleto — o envio exige o boleto e a nota.
+   *  Obrigatório pelo mesmo motivo do trio. */
+  pagaPorBoleto: boolean;
 }
 
 interface Props {
@@ -577,6 +580,7 @@ export function PainelPPsItem({
                     // A PP a emitir ainda não é PP: nada a enviar.
                     prontaParaEnvioEm: null,
                     prontaParaEnvioPorNome: null,
+                    pagaPorBoleto: a.dados.pagamento_fora_do_cadastro?.meio === "boleto",
                   }}
                   moeda={moeda}
                   codigo={<SeloPPAEmitir refaz={a.refaz?.codigo ?? null} />}
@@ -1015,6 +1019,7 @@ export function PainelPPsItem({
                 fornecedorId: enviando.fornecedorId,
                 verbaProducao: enviando.verbaProducao,
                 anexos: enviando.anexos,
+                pagaPorBoleto: enviando.pagaPorBoleto,
               } satisfies PPParaEnviar
             }
             onOpenChange={(o) => !o && setEnviando(null)}

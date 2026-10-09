@@ -106,7 +106,9 @@ export function NovoFornecedorDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[calc(100vh-64px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="flex-none flex-row items-start gap-4 space-y-0 border-b border-border px-6 pb-[18px] pt-6">
+        {/* `pr-14`: o X do pop-up fica no canto (right-4) e caía em cima do
+            seletor PJ/PF (09/10/2026). */}
+        <DialogHeader className="flex-none flex-row items-start gap-4 space-y-0 border-b border-border pb-[18px] pl-6 pr-14 pt-6">
           <span className="mt-0.5 hidden flex-none text-california-red sm:block">
             <Building2 className="h-4 w-4" />
           </span>

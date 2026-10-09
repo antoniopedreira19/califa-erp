@@ -13,6 +13,12 @@ rodadas no mesmo dia.
 > só até essa data. O cartão ganhou "Pedido por" (tela da PP) e aparece
 > também na baixa.
 
+> ⚠️ **Revisão de 2026-10-09 ([161](161-pp-por-boleto-ou-chave-aleatoria.md)):**
+> as opções fora do cadastro passaram a ser **chave aleatória** (só esse
+> tipo de chave) e **boleto**; "Outra conta" saiu da tela (o banco ainda
+> aceita `conta` para o legado) e **o motivo deixou de existir** — a PP nova
+> grava o motivo vazio. A marcação de aprovação continua obrigatória.
+
 Continua a [067](067-o-campo-de-fornecedor-busca-limpa-e-edita.md), que criou a
 foto dos dados de pagamento na PP, e usa as réguas de formato da
 [101](101-dados-de-pagamento-no-formato-da-remessa.md).

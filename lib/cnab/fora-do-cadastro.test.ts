@@ -86,3 +86,14 @@ test("não altera o objeto do cadastro", () => {
   assert.equal(cadastro.pixChave, "34567890000130");
   assert.equal(cadastro.conta, "56789");
 });
+
+test("boleto nunca entra no arquivo (decisão 161)", () => {
+  const boleto: PagamentoForaDoCadastroDaPP = {
+    ...outroPix,
+    meio: "boleto",
+    motivo: null,
+    pix_tipo: null,
+    pix_chave: null,
+  };
+  assert.throws(() => aplicarForaDoCadastroNaRemessa(cadastro, boleto), /boleto/);
+});

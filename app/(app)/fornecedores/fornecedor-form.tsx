@@ -10,9 +10,9 @@
  *   * **Um cartão, quatro seções**, cada uma com a sua explicação numa
  *     coluna à esquerda e o selo que diz se ela trava ou não o cadastro.
  *     Eram cinco cartões soltos, todos com o mesmo peso.
- *   * **Banco e PIX viraram abas** com selo "preenchido". As duas ficam
- *     montadas — trocar de aba não perde o que foi digitado —, e o selo
- *     é o que responde "já dá para salvar?" sem rolar a tela.
+ *   * **Banco e PIX** com selo "preenchido" — eram abas; desde a decisão
+ *     161 (09/10/2026) são dois blocos sempre à vista, porque a produção
+ *     achava que só dava para cadastrar um dos dois.
  *   * **O endereço nasce recolhido** e não trava nada (decisão do Tiago,
  *     09/09/2026). Abre sozinho quando o fornecedor já tem endereço.
  *   * **O rodapé conta o que falta**, ao vivo, e o botão só acende quando
@@ -44,6 +44,12 @@
  * estado, então editar pelo pop-up não apaga nada. E Lucro Real ou
  * Presumido perdeu a nota azul; a do Simples, que fala da declaração, sai
  * do cadastro rápido.
+ *
+ * Decisão 161 (09/10/2026): conta e PIX em dois blocos sempre à vista, e a
+ * marcação "Sem conta nem PIX no cadastro" para o fornecedor que manda boleto
+ * ou chave aleatória a cada PP. Marcada, os dois blocos ficam apagados, o
+ * rodapé deixa de cobrar conta ou PIX e o salvar grava os dois vazios (o
+ * servidor e a CHECK do banco repetem a regra).
  */
 
 import * as React from "react";
@@ -443,10 +449,10 @@ export function FornecedorForm({
     fornecedor?.declaracao_simples_path ?? null,
   );
 
-  /** Qual aba do pagamento está à vista. Abre no PIX quando é só o que o
-   *  fornecedor tem — senão o cadastro pareceria vazio. */
-  const [aba, setAba] = React.useState<"banco" | "pix">(
-    fornecedor?.pix_tipo && !fornecedor?.banco_codigo ? "pix" : "banco",
+  /** Decisão 161: o fornecedor não tem conta nem PIX fixos — a cada PP ele
+   *  manda boleto ou chave aleatória. */
+  const [semDadosPagamento, setSemDadosPagamento] = React.useState<boolean>(
+    fornecedor?.sem_dados_pagamento ?? false,
   );
 
   /** O endereço nasce recolhido, e já aberto em quem tem endereço. */
@@ -766,7 +772,16 @@ export function FornecedorForm({
   if (!emailOk) pendencias.push("e-mail");
   if (!telOk) pendencias.push("telefone");
   // O veículo de mídia nasce sem conta (decisão 147).
-  if (!ehVeiculo && !bancoOk && !pixOk) pendencias.push("conta bancária ou chave PIX");
+  if (!ehVeiculo && !bancoOk && !pixOk && !semDadosPagamento)
+    pendencias.push("conta bancária ou chave PIX (ou marque “Sem conta nem PIX”)");
+  /** Algo digitado na conta ou no PIX: com a marcação, sai no salvar. */
+  const temAlgumDadoDePagamento = Boolean(
+    bancoCodigo ||
+      (campos.agencia ?? "").trim() ||
+      (campos.conta ?? "").trim() ||
+      pixTipo ||
+      pixChave.trim(),
+  );
 
   const travadoPorDuplicado = Boolean(duplicado) && !isEdit;
   const pronto = pendencias.length === 0 && !travadoPorDuplicado;
@@ -862,6 +877,15 @@ export function FornecedorForm({
     formData.set("tipo_conta", tipoConta);
     formData.set("pix_tipo", pixTipo);
     formData.set("pix_chave", pixChave);
+    // Decisão 161: marcado, conta e PIX vão vazios (o servidor zera de novo).
+    formData.set("sem_dados_pagamento", semDadosPagamento ? "true" : "false");
+    if (semDadosPagamento) {
+      for (const campo of [
+        "banco_codigo", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta", "pix_tipo", "pix_chave",
+      ]) {
+        formData.set(campo, "");
+      }
+    }
     formData.set("cpf_cnpj", onlyDigits(formData.get("cpf_cnpj")?.toString() ?? ""));
     formData.set("telefone", onlyDigits(formData.get("telefone")?.toString() ?? ""));
     formData.set("cep", onlyDigits(formData.get("cep")?.toString() ?? ""));
@@ -936,32 +960,32 @@ export function FornecedorForm({
     </div>
   );
 
-  /** A aba do pagamento: ícone, nome e o selo de preenchido. */
-  const abaBotao = (
-    chave: "banco" | "pix",
+  /** Um bloco do pagamento — conta ou PIX —, sempre à vista, com o selo de
+   *  preenchido no cabeçalho (decisão 161). Com "Sem conta nem PIX", apaga. */
+  const blocoDePagamento = (
     Icone: typeof Landmark,
     rotulo: string,
     completo: boolean,
+    conteudo: React.ReactNode,
   ) => (
-    <button
-      type="button"
-      onClick={() => setAba(chave)}
-      aria-pressed={aba === chave}
+    <div
       className={cn(
-        "flex items-center gap-2 rounded-[10px] border px-3.5 py-3 text-[13.5px] font-semibold transition-all",
-        aba === chave
-          ? "border-california-red bg-california-red/[0.05] text-foreground ring-[3px] ring-california-red/[0.08]"
-          : "border-border bg-white text-muted-foreground hover:text-foreground",
+        "overflow-hidden rounded-xl border border-border bg-white transition-opacity",
+        semDadosPagamento && "pointer-events-none opacity-45",
       )}
+      aria-disabled={semDadosPagamento || undefined}
     >
-      <Icone className="h-[15px] w-[15px] flex-none" />
-      {rotulo}
-      {completo && (
-        <span className="ml-auto inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-emerald-700">
-          preenchido
-        </span>
-      )}
-    </button>
+      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-2.5">
+        <Icone className="h-[15px] w-[15px] flex-none text-muted-foreground" />
+        <span className="text-[13.5px] font-semibold">{rotulo}</span>
+        {completo && !semDadosPagamento && (
+          <span className="ml-auto inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-emerald-700">
+            preenchido
+          </span>
+        )}
+      </div>
+      <div className="p-4">{conteudo}</div>
+    </div>
   );
 
   return (
@@ -1254,27 +1278,22 @@ export function FornecedorForm({
             descricao={
               ehVeiculo
                 ? "Opcional por enquanto: vai ser exigido para gerar a PP do repasse, nas linhas A · Repasse."
-                : "Conta bancária ou chave PIX — pelo menos uma das duas. Cadastre as duas sempre que houver."
+                : "Cadastre conta e PIX sempre que houver; uma das duas já basta. Sem nenhuma, marque “Sem conta nem PIX”."
             }
             descricaoNoDialog={
               ehVeiculo
                 ? "Opcional por enquanto: vai ser exigido para gerar a PP do repasse, nas linhas A · Repasse."
-                : "Uma das duas basta. Cadastre as duas sempre que houver."
+                : "Cadastre as duas sempre que houver. Uma delas já basta."
             }
             selo={ehVeiculo ? "opcional" : "obrigatorio"}
             emDialog={emDialog}
           >
-            <div className="flex flex-col gap-[18px]">
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {abaBotao("banco", Landmark, "Conta bancária", bancoOk)}
-                {abaBotao("pix", Zap, "Chave PIX", pixOk)}
-              </div>
-
-              {/* As duas ficam montadas: trocar de aba não pode apagar o
-                  que já foi digitado na outra. */}
-              <div
-                className={cn("grid grid-cols-12 gap-4", aba !== "banco" && "hidden")}
-              >
+            <div className="flex flex-col gap-3">
+              {blocoDePagamento(
+                Landmark,
+                "Conta bancária",
+                bancoOk,
+                <div className="grid grid-cols-12 gap-4">
                 <Campo
                   label="Banco"
                   name="banco_codigo"
@@ -1372,10 +1391,12 @@ export function FornecedorForm({
                   </Select>
                 </Campo>
               </div>
-
-              <div
-                className={cn("grid grid-cols-12 gap-4", aba !== "pix" && "hidden")}
-              >
+              )}
+              {blocoDePagamento(
+                Zap,
+                "Chave PIX",
+                pixOk,
+                <div className="grid grid-cols-12 gap-4">
                 <Campo
                   label="Tipo de chave"
                   name="pix_tipo"
@@ -1454,6 +1475,27 @@ export function FornecedorForm({
                   )}
                 </Campo>
               </div>
+              )}
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-dashed border-border bg-white px-4 py-3 hover:border-california-red/40">
+                <Checkbox
+                  checked={semDadosPagamento}
+                  onCheckedChange={(v) => setSemDadosPagamento(v === true)}
+                  className="mt-0.5"
+                  aria-label="Sem conta nem PIX no cadastro"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-[13px] font-semibold">Sem conta nem PIX no cadastro</span>
+                  <span className="text-[11.5px] leading-snug text-muted-foreground">
+                    A cada PP, ele manda boleto ou chave aleatória.
+                  </span>
+                </span>
+              </label>
+              {semDadosPagamento && temAlgumDadoDePagamento && (
+                <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+                  <span>Ao salvar, a conta e a chave PIX digitadas saem do cadastro.</span>
+                </div>
+              )}
             </div>
           </Secao>
 

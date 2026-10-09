@@ -28,9 +28,11 @@ export interface VeiculoDaTela {
   usadoEm: string[];
 }
 
-/** Sem conta e sem PIX: o veículo grava, mas a PP do repasse vai pedir. */
+/** Sem conta e sem PIX: o veículo grava, mas a PP do repasse vai pedir.
+ *  Marcado "Sem conta nem PIX" (decisão 161) o cadastro está completo — a
+ *  PP pede boleto ou chave aleatória —, e o selo não aparece. */
 function semPagamento(f: Fornecedor): boolean {
-  return !f.banco_codigo && !f.pix_chave;
+  return !f.sem_dados_pagamento && !f.banco_codigo && !f.pix_chave;
 }
 
 const TODOS = "todos";

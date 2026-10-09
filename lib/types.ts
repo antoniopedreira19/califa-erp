@@ -117,8 +117,10 @@ export type CadastroStatus = "ativo" | "inativo";
 export type TipoContaBancariaFornecedor = "corrente" | "poupanca" | "pagamento";
 export type PixTipoChave = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria";
 
-/** O meio que uma PP troca quando não paga pelo cadastro (decisão 127). */
-export type MeioForaDoCadastro = "pix" | "conta";
+/** O meio que uma PP troca quando não paga pelo cadastro (decisão 127).
+ *  Desde a decisão 161 (09/10/2026) a tela oferece só chave aleatória
+ *  (`pix`) e `boleto`; `conta` fica para o legado (nenhuma PP o usou). */
+export type MeioForaDoCadastro = "pix" | "conta" | "boleto";
 
 /**
  * O pagamento fora do cadastro de uma PP, como as telas o leem (decisão
@@ -135,7 +137,9 @@ export interface PedidoForaDoCadastro {
 
 export interface PagamentoForaDoCadastroDaPP {
   meio: MeioForaDoCadastro;
-  motivo: string;
+  /** Opcional desde a decisão 161: o motivo é o meio que o fornecedor
+   *  escolheu. As PPs anteriores guardam o que foi digitado. */
+  motivo: string | null;
   pix_tipo: PixTipoChave | null;
   pix_chave: string | null;
   banco_codigo: string | null;
@@ -259,6 +263,10 @@ export interface Fornecedor {
   /** O arquivo da declaração de optante do Simples, no bucket privado
    *  `fornecedores` (`<tenant>/declaracoes/<uuid>-<nome>`, decisão 142). */
   declaracao_simples_path: string | null;
+  /** Decisão 161: sem conta nem PIX fixos — a cada PP o fornecedor manda
+   *  um boleto ou uma chave aleatória. Marcado, conta e PIX ficam vazios
+   *  (CHECK `fornecedores_sem_dados_pagamento_vazio`). */
+  sem_dados_pagamento: boolean;
 }
 
 // ---------- Task 007: projetos ----------
@@ -2586,7 +2594,7 @@ export interface DadosDaPPAEmitir {
   /** Decisão 127, no formato do envio (`pagamentoParaEnvio`). */
   pagamento_fora_do_cadastro: {
     meio: MeioForaDoCadastro;
-    motivo: string;
+    motivo: string | null;
     pix_tipo: PixTipoChave | null;
     pix_chave: string | null;
     banco_codigo: string | null;

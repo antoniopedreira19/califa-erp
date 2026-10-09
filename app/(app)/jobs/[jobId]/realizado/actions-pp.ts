@@ -127,6 +127,8 @@ function fornecedorDoDocumento(
  *  é o rastro de para onde o dinheiro foi mandado, e por quê. */
 function auditoriaDoForaDoCadastro(fora: PagamentoForaDoCadastro | null) {
   if (!fora) return null;
+  // Decisão 161: o boleto não tem dado digitado — o arquivo vai nos anexos.
+  if (fora.meio === "boleto") return { meio: fora.meio };
   return fora.meio === "pix"
     ? { meio: fora.meio, motivo: fora.motivo, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave }
     : {
@@ -188,8 +190,8 @@ const dadosBaseSchema = z.object({
       verba_producao: z.literal(false),
       fornecedor_id: z.string().uuid(),
       responsavel_verba_id: z.null().optional(),
-      // Decisão 127: outro PIX ou outra conta só nesta PP. Null = paga
-      // pelo cadastro, como toda PP até 29/09/2026.
+      // Decisão 127: o meio só nesta PP — desde a decisão 161, chave
+      // aleatória ou boleto. Null = paga pelo cadastro.
       pagamento_fora_do_cadastro: pagamentoForaDoCadastroSchema.nullable().optional(),
     }),
     z.object({
@@ -862,6 +864,9 @@ async function renderizarDocumentoDaPP(args: {
   /** A data de emissão impressa. Ausente = agora (a geração); o
    *  "Atualizar vencimento" (decisão 157) mantém a da PP. */
   emitidaEm?: string;
+  /** Decisão 161: a PP paga por boleto — o PDF troca a linha do PIX por
+   *  "Pagamento: Boleto". */
+  pagamentoPorBoleto?: boolean;
 }): Promise<{ path: string; buffer: Buffer }> {
   // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
   // seus side-effects de inicialização do resto do módulo.
@@ -879,6 +884,7 @@ async function renderizarDocumentoDaPP(args: {
       created_at: args.emitidaEm ?? new Date().toISOString(),
       verba_producao: args.pp.verba_producao,
     },
+    pagamentoPorBoleto: args.pagamentoPorBoleto === true,
     empresa: args.empresa as never,
     fornecedor: (args.fornecedor ?? null) as never,
     responsavelVerbaNome: args.responsavelVerbaNome,
@@ -993,7 +999,7 @@ function pedirConfirmacaoAcimaDoPlanejado(
  */
 export async function resumoDoPagamentoDoFornecedor(
   fornecedorId: string,
-): Promise<Result<{ resumo: string | null }>> {
+): Promise<Result<{ resumo: string | null; semDadosPagamento: boolean }>> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "jobs.emitir_pp");
   if (!gate.ok) return gate;
@@ -1003,14 +1009,21 @@ export async function resumoDoPagamentoDoFornecedor(
   const supabase = createClient();
   const { data, error } = await supabase
     .from("fornecedores")
-    .select(COLUNAS_DE_PAGAMENTO)
+    .select(`${COLUNAS_DE_PAGAMENTO}, sem_dados_pagamento`)
     .eq("id", fornecedorId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
   if (error) return { ok: false, message: "Não foi possível ler o cadastro do fornecedor." };
+  const semDadosPagamento =
+    (data as { sem_dados_pagamento?: boolean } | null)?.sem_dados_pagamento === true;
   return {
     ok: true,
-    resumo: resumoDoCadastroDePagamento((data as DadosDePagamento | null) ?? null),
+    resumo: semDadosPagamento
+      ? null
+      : resumoDoCadastroDePagamento((data as DadosDePagamento | null) ?? null),
+    // Decisão 161: o formulário tira "Cadastro do fornecedor" de quem não
+    // tem conta nem PIX, e a PP precisa escolher chave aleatória ou boleto.
+    semDadosPagamento,
   };
 }
 
@@ -1218,6 +1231,18 @@ async function finalizarPedidoCompraImpl(
 
   if (!d.verba_producao && !fornRes.data)
     return { ok: false, message: "Fornecedor inválido ou inativo." };
+  // Decisão 161: fornecedor sem conta nem PIX no cadastro só sai com chave
+  // aleatória ou boleto — a tela já tira "Cadastro do fornecedor" dele.
+  if (
+    !d.verba_producao &&
+    (fornRes.data as { sem_dados_pagamento?: boolean } | null)?.sem_dados_pagamento === true &&
+    !foraDoCadastroDe(d)
+  ) {
+    return {
+      ok: false,
+      message: "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória ou boleto.",
+    };
+  }
   if (d.verba_producao && !responsavelRes.data)
     return { ok: false, message: "Responsável inválido ou não encontrado." };
   if (!empRes.data)
@@ -1409,6 +1434,7 @@ async function finalizarPedidoCompraImpl(
       // O cabeçalho é o do CNPJ da PP, não o da gerencial (decisão 156).
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
+      pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
       responsavelVerbaNome: d.verba_producao
         ? (responsavelRes.data?.nome ?? "")
         : null,
@@ -1876,10 +1902,25 @@ export async function signedUrlAnexoAEmitir(
  * emissão, valor, CNPJ tomador e a parte desta PP. A soma das partes vai
  * até o valor da PP (revisão da 152, 07/10/2026; o banco confere de novo em
  * `_conferir_partes_da_nota`). Null = nada.
+ *
+ * Decisão 161: a PP paga por boleto exige também o boleto (tipo Boleto) e a
+ * nota (NF ou recibo) — o boleto não substitui a nota.
  */
-function faltaNosAnexosDoEnvio(anexos: AnexoUploaded[], valorPP: number): string | null {
+function faltaNosAnexosDoEnvio(
+  anexos: AnexoUploaded[],
+  valorPP: number,
+  exigeBoleto: boolean,
+): string | null {
   if (anexos.length === 0) {
     return "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.";
+  }
+  if (exigeBoleto) {
+    if (!anexos.some((a) => a.documento_tipo === "nota_fiscal" || a.documento_tipo === "recibo")) {
+      return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
+    }
+    if (!anexos.some((a) => a.documento_tipo === "boleto")) {
+      return "Esta PP é paga por boleto: anexe o boleto, com o tipo Boleto.";
+    }
   }
   for (const a of anexos) {
     if (!a.documento_tipo) return `Escolha o tipo de “${a.nome_original}”.`;
@@ -2051,7 +2092,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, estabelecimento_id, prazo_pagamento, created_at, anexos:pedidos_compra_anexos(id)",
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, estabelecimento_id, prazo_pagamento, created_at, pagamento_fora_do_cadastro_meio, anexos:pedidos_compra_anexos(id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -2067,6 +2108,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       estabelecimento_id: string | null;
       prazo_pagamento: string;
       created_at: string;
+      pagamento_fora_do_cadastro_meio: string | null;
       anexos: Array<{ id: string }> | null;
     }>();
 
@@ -2134,7 +2176,11 @@ export async function enviarPedidoCompraAoFinanceiro(
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
     anexosDoPedido = parsed.data;
-    const falta = faltaNosAnexosDoEnvio(anexosDoPedido, Number(ppRow.valor ?? 0));
+    const falta = faltaNosAnexosDoEnvio(
+      anexosDoPedido,
+      Number(ppRow.valor ?? 0),
+      ppRow.pagamento_fora_do_cadastro_meio === "boleto",
+    );
     if (falta) return { ok: false, message: falta };
   }
 
@@ -2308,7 +2354,7 @@ export async function deixarPPProntaParaEnvio(
 
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
-    .select("id, codigo, job_id, item_realizado_id, status, valor, verba_producao")
+    .select("id, codigo, job_id, item_realizado_id, status, valor, verba_producao, pagamento_fora_do_cadastro_meio")
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -2319,6 +2365,7 @@ export async function deixarPPProntaParaEnvio(
       status: PPStatus;
       valor: number | string;
       verba_producao: boolean;
+      pagamento_fora_do_cadastro_meio: string | null;
     }>();
 
   if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
@@ -2345,7 +2392,11 @@ export async function deixarPPProntaParaEnvio(
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
     anexosDoPedido = parsed.data;
-    const falta = faltaNosAnexosDoEnvio(anexosDoPedido, Number(ppRow.valor ?? 0));
+    const falta = faltaNosAnexosDoEnvio(
+      anexosDoPedido,
+      Number(ppRow.valor ?? 0),
+      ppRow.pagamento_fora_do_cadastro_meio === "boleto",
+    );
     if (falta) return { ok: false, message: falta };
     const erroAnexos = await gravarAnexosDoEnvio(
       supabase,
@@ -3265,6 +3316,9 @@ export async function atualizarVencimentoDaPP(
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoPdf,
+      pagamentoPorBoleto:
+        (ppBruta as { pagamento_fora_do_cadastro_meio?: string | null }).pagamento_fora_do_cadastro_meio ===
+        "boleto",
       responsavelVerbaNome: pp.verba_producao
         ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
         : null,

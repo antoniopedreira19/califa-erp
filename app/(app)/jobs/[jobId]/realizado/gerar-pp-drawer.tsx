@@ -73,6 +73,7 @@ import {
 } from "./actions-pp";
 import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
+  ExigidosNoEnvio,
   ListaDeAnexos,
   NfDoAnexo,
   ResumoDasNfs,
@@ -1037,6 +1038,35 @@ export function GerarPPDrawer({
                 )}
               </div>
 
+              {/* Decisão 156: a "Empresa emissora" é o CNPJ da PP — sai no
+                  PDF e é contra ele que o fornecedor emite a nota. A empresa
+                  gerencial vem do job e não se escolhe. Desde a decisão 161
+                  ela vem ANTES do fornecedor (pedido do Tiago, 09/10/2026):
+                  primeiro quem contrata, depois quem recebe. */}
+              <div>
+                <label className="text-xs font-medium">Empresa emissora *</label>
+                <Select value={cnpjId || undefined} onValueChange={setCnpjId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha o CNPJ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tomadores.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.nome} · <span className="font-mono">{t.cnpj}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  A nota do fornecedor vem neste CNPJ. Empresa gerencial do job:{" "}
+                  {(() => {
+                    const g = empresas.find((e) => e.id === empresaId);
+                    return g ? (g.nome_fantasia ?? g.razao_social) : "—";
+                  })()}
+                  .
+                </p>
+              </div>
+
               {/* Fornecedor (modo normal) ou Responsável (modo verba) */}
               {verbaProducao ? (
                 <div>
@@ -1154,33 +1184,6 @@ export function GerarPPDrawer({
                   )}
                 </div>
               )}
-
-              {/* Decisão 156: a "Empresa emissora" é o CNPJ da PP — sai no
-                  PDF e é contra ele que o fornecedor emite a nota. A empresa
-                  gerencial vem do job e não se escolhe. */}
-              <div>
-                <label className="text-xs font-medium">Empresa emissora *</label>
-                <Select value={cnpjId || undefined} onValueChange={setCnpjId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolha o CNPJ" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tomadores.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.nome} · <span className="font-mono">{t.cnpj}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  A nota do fornecedor vem neste CNPJ. Empresa gerencial do job:{" "}
-                  {(() => {
-                    const g = empresas.find((e) => e.id === empresaId);
-                    return g ? (g.nome_fantasia ?? g.razao_social) : "—";
-                  })()}
-                  .
-                </p>
-              </div>
 
               {/* Prazo e Parcelas dividem a linha: o prazo é o vencimento
                   da 1ª parcela, e o seletor ao lado diz em quantas vezes o
@@ -1367,6 +1370,8 @@ export function GerarPPDrawer({
                       </button>
                     </div>
                   )}
+                  {/* Decisão 161: paga por boleto, o envio exige o boleto e a nota. */}
+                  {pagamento.escolha === "boleto" && <ExigidosNoEnvio anexos={anexos} />}
                   <ZonaDeAnexos id="pp-arquivos" pronto={!!uploadPrefix} onArquivos={subir} />
                   {avisoDosAnexos && (
                     <p className="text-[11.5px] font-semibold text-california-red">{avisoDosAnexos}</p>

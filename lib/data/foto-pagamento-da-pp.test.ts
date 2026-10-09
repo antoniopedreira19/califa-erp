@@ -1,7 +1,8 @@
 /**
  * Pagamento fora do cadastro (decisão 127): a foto troca SÓ o meio
  * escolhido, o asterisco da 067 ignora esse meio, e o schema grava a chave
- * no formato da remessa.
+ * no formato da remessa. Decisão 161: só chave aleatória ou boleto, sem
+ * motivo; o boleto mantém o cadastro na foto e não acende o asterisco.
  *
  * Rodar: `npm run test:foto-pp`.
  */
@@ -132,23 +133,26 @@ test("o schema grava a chave no formato da remessa e zera o outro meio", () => {
   assert.equal(evp.pix_chave, "7c1e9a52-3b4d-4f8e-9a61-2d5c8b0e4f13");
   assert.equal(evp.banco_codigo, null);
 
-  const tel = pagamentoForaDoCadastroSchema.parse({
-    meio: "pix",
-    motivo: "Chave temporária do fornecedor",
-    pix_tipo: "telefone",
-    pix_chave: "11987654321",
-  });
-  assert.equal(tel.pix_chave, "+5511987654321");
+  // Decisão 161: sem motivo — o que vier é descartado.
+  assert.equal(evp.motivo, null);
 });
 
-test("o schema recusa motivo curto, chave torta e conta incompleta", () => {
-  const curto = pagamentoForaDoCadastroSchema.safeParse({
+test("o schema aceita o boleto sem dado nenhum (decisão 161)", () => {
+  const boleto = pagamentoForaDoCadastroSchema.parse({ meio: "boleto" });
+  assert.equal(boleto.meio, "boleto");
+  assert.equal(boleto.motivo, null);
+  assert.equal(boleto.pix_tipo, null);
+  assert.equal(boleto.pix_chave, null);
+  assert.equal(boleto.banco_codigo, null);
+});
+
+test("o schema recusa chave que não é aleatória, chave torta e outra conta", () => {
+  const cnpj = pagamentoForaDoCadastroSchema.safeParse({
     meio: "pix",
-    motivo: "temp",
     pix_tipo: "cnpj",
     pix_chave: "34567890000130",
   });
-  assert.equal(curto.success, false);
+  assert.equal(cnpj.success, false);
 
   const torta = pagamentoForaDoCadastroSchema.safeParse({
     meio: "pix",
@@ -166,6 +170,28 @@ test("o schema recusa motivo curto, chave torta e conta incompleta", () => {
     conta: "0012345",
   });
   assert.equal(conta.success, false);
+});
+
+test("boleto mantém o cadastro na foto e não acende o asterisco (decisão 161)", () => {
+  const boleto = pagamentoForaDoCadastroSchema.parse({ meio: "boleto" });
+  assert.deepEqual(aplicarPagamentoForaDoCadastro(cadastro, boleto), cadastro);
+  const pp = {
+    ...tirarFoto(cadastro, boleto),
+    dados_pagamento_congelados_em: "2026-10-09T10:00:00Z",
+    status: "em_avaliacao",
+    pagamento_fora_do_cadastro_meio: "boleto",
+    pagamento_fora_do_cadastro_motivo: null,
+  };
+  // O cadastro inteiro mudou depois: no boleto, nada dele é pagamento.
+  assert.equal(
+    cadastroMudouDepoisDaFoto(pp, { ...cadastro, conta: "99999", pix_chave: "11222333000181" }),
+    false,
+  );
+  const lido = lerPagamentoForaDoCadastro(pp);
+  assert.equal(lido?.meio, "boleto");
+  assert.equal(lido?.motivo, null);
+  assert.equal(lido?.pix_chave, null);
+  assert.equal(lido?.conta, null);
 });
 
 test("o resumo do cadastro mostra o PIX, ou a conta quando não há PIX", () => {

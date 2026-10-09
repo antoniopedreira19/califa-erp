@@ -6959,3 +6959,23 @@ financeiro". Regra completa na §9 da decisão 115.
   "Falta R$ 10.000,00", fechada pelo "Distribuir". O job foi aberto e
   gravou as previsões e a foto nº 1 com os números novos. O job ficou
   aberto, no projeto TES-F001/26.
+
+## ⚠️ Nota de 2026-10-09 (2) — PP por boleto, fornecedor sem conta nem PIX (decisão 161)
+
+- **Cadastro de fornecedor e de veículo**: conta e PIX deixaram de ser abas
+  e viraram dois blocos sempre à vista, e entrou a marcação **"Sem conta nem
+  PIX no cadastro"** (`fornecedores.sem_dados_pagamento`, migration
+  `20261009200001`, com CHECK que impede conta ou PIX junto da marcação).
+  Marcada, o salvar grava conta e PIX vazios; a auditoria leva a marcação.
+  A página "Novo fornecedor" diz "o pagamento" em vez de "uma forma de
+  pagamento". Na lista de Veículos, o veículo marcado não mostra o selo
+  "Sem pagamento".
+- **PP por boleto no financeiro**: o cartão "Fora do cadastro" mostra
+  "Boleto · Pagar pelo boleto anexado" e a aprovação continua pedindo a
+  marcação "Aprovar pagamento fora do cadastro". A foto do pagamento é o
+  cadastro, e o asterisco da 067 não acende. O motivo só aparece nas PPs
+  antigas.
+- **Remessa**: a parcela de PP por boleto não aparece na lista da remessa e
+  `resolverOrigem` a recusa ("pague pelo boleto anexado") — o gerador não
+  tem o segmento J. `aplicarForaDoCadastroNaRemessa` lança erro se um boleto
+  chegar até ela (`npm run test:cnab-fora` cobre).
