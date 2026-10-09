@@ -694,6 +694,31 @@ export function FornecedorForm({
     }
   }
 
+  /** "115786468-2" digitado inteiro na conta (ou "1234-5" na agência): o
+   *  número fica na caixa e o dígito vai para a casinha ao lado, se ela
+   *  estiver vazia. Sem isso o servidor juntava tudo num número só e
+   *  cobrava o dígito que a pessoa achava ter digitado (09/10/2026). */
+  function separarDigito(
+    e: React.FocusEvent<HTMLInputElement>,
+    campoDv: "agencia_dv" | "conta_dv",
+  ) {
+    const partes = e.currentTarget.value.trim().match(/^(\d+)\s*[-–]\s*([0-9xX])$/);
+    const dv = formRef.current?.elements.namedItem(campoDv);
+    if (!partes || !(dv instanceof HTMLInputElement) || dv.value.trim()) return;
+    e.currentTarget.value = partes[1];
+    dv.value = partes[2].toUpperCase();
+    relerCampos();
+  }
+
+  /** O erro do dígito aparece embaixo da caixa da agência ou da conta:
+   *  a casinha do dígito não tem espaço próprio para a mensagem. */
+  const errosComDigito = (campo: "agencia" | "conta") => ({
+    [campo]: [
+      ...(fieldErrors[campo] ?? []),
+      ...(fieldErrors[`${campo}_dv`] ?? []),
+    ],
+  });
+
   /** "Usar CPF/CNPJ do cadastro" — escreve o documento na chave PIX. */
   function usarDocumentoNaChave() {
     const raw = cpfCnpjRef.current?.value ?? "";
@@ -771,8 +796,29 @@ export function FornecedorForm({
   if (!docOk) pendencias.push(ehPj ? "CNPJ" : "CPF");
   if (!emailOk) pendencias.push("e-mail");
   if (!telOk) pendencias.push("telefone");
+  // Conta começada e incompleta: o servidor recusa mesmo com o PIX
+  // preenchido. Em 09/10/2026 o rodapé dizia "Pronto para criar", o GP
+  // salvava e voltava "Dígito da conta obrigatório" sem lugar na tela.
+  const faltaNaConta: string[] = [];
+  if (!bancoCodigo) faltaNaConta.push("banco");
+  if (!(campos.agencia ?? "").trim()) faltaNaConta.push("agência");
+  if (!(campos.conta ?? "").trim()) faltaNaConta.push("conta");
+  if (!(campos.conta_dv ?? "").trim()) faltaNaConta.push("dígito da conta");
+  if (!tipoConta.trim()) faltaNaConta.push("tipo de conta");
+  const contaComecada =
+    !semDadosPagamento &&
+    faltaNaConta.length > 0 &&
+    Boolean(
+      bancoCodigo ||
+        (campos.agencia ?? "").trim() ||
+        (campos.agencia_dv ?? "").trim() ||
+        (campos.conta ?? "").trim() ||
+        (campos.conta_dv ?? "").trim() ||
+        tipoConta.trim(),
+    );
+  if (contaComecada) pendencias.push(...faltaNaConta);
   // O veículo de mídia nasce sem conta (decisão 147).
-  if (!ehVeiculo && !bancoOk && !pixOk && !semDadosPagamento)
+  else if (!ehVeiculo && !bancoOk && !pixOk && !semDadosPagamento)
     pendencias.push("conta bancária ou chave PIX (ou marque “Sem conta nem PIX”)");
   /** Algo digitado na conta ou no PIX: com a marcação, sai no salvar. */
   const temAlgumDadoDePagamento = Boolean(
@@ -837,7 +883,15 @@ export function FornecedorForm({
           setAvisoPagamento({ formData, ...res.pedeConfirmacaoPagamento });
           return;
         }
-        setError(res.message);
+        // Erro de campo sem lugar na tela entra no aviso, para nunca sobrar
+        // "Verifique os campos destacados" sem nada destacado (09/10/2026).
+        const semLugar = Object.entries(res.fieldErrors ?? {})
+          .filter(
+            ([campo, msgs]) =>
+              msgs?.length && !document.querySelector(`[data-field="${campo}"]`),
+          )
+          .flatMap(([, msgs]) => msgs ?? []);
+        setError([res.message, ...semLugar].join(" "));
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
         if (res.duplicado) setDuplicado(res.duplicado);
         const firstField = res.fieldErrors ? Object.keys(res.fieldErrors)[0] : null;
@@ -1315,14 +1369,19 @@ export function FornecedorForm({
                 <Campo
                   label="Agência"
                   name="agencia"
-                  errors={fieldErrors}
+                  errors={errosComDigito("agencia")}
                   className="col-span-6 sm:col-span-4"
                 >
-                  <div className="flex h-11 items-center overflow-hidden rounded-lg border border-border bg-white transition-colors focus-within:border-california-red focus-within:ring-2 focus-within:ring-california-red/15 hover:border-california-red/40">
+                  <div className={cn(
+                      "flex h-11 items-center overflow-hidden rounded-lg border border-border bg-white transition-colors focus-within:border-california-red focus-within:ring-2 focus-within:ring-california-red/15 hover:border-california-red/40",
+                      erroClasses("agencia") || erroClasses("agencia_dv"),
+                    )}>
                     <input
                       name="agencia"
                       inputMode="numeric"
-                      maxLength={5}
+                      // Folga para o "-dígito", que sai daqui ao sair do campo.
+                      maxLength={7}
+                      onBlur={(e) => separarDigito(e, "agencia_dv")}
                       defaultValue={fornecedor?.agencia ?? ""}
                       placeholder="0000"
                       className="h-full min-w-0 flex-1 border-0 bg-transparent px-3.5 text-sm tabular-nums outline-none placeholder:text-muted-foreground/60"
@@ -1330,6 +1389,7 @@ export function FornecedorForm({
                     <span className="text-sm text-muted-foreground/40">/</span>
                     <input
                       name="agencia_dv"
+                      data-field="agencia_dv"
                       maxLength={1}
                       defaultValue={fornecedor?.agencia_dv ?? ""}
                       placeholder="0"
@@ -1342,14 +1402,19 @@ export function FornecedorForm({
                 <Campo
                   label="Conta"
                   name="conta"
-                  errors={fieldErrors}
+                  errors={errosComDigito("conta")}
                   className="col-span-6 sm:col-span-4"
                 >
-                  <div className="flex h-11 items-center overflow-hidden rounded-lg border border-border bg-white transition-colors focus-within:border-california-red focus-within:ring-2 focus-within:ring-california-red/15 hover:border-california-red/40">
+                  <div className={cn(
+                      "flex h-11 items-center overflow-hidden rounded-lg border border-border bg-white transition-colors focus-within:border-california-red focus-within:ring-2 focus-within:ring-california-red/15 hover:border-california-red/40",
+                      erroClasses("conta") || erroClasses("conta_dv"),
+                    )}>
                     <input
                       name="conta"
                       inputMode="numeric"
-                      maxLength={12}
+                      // Folga para o "-dígito", que sai daqui ao sair do campo.
+                      maxLength={14}
+                      onBlur={(e) => separarDigito(e, "conta_dv")}
                       defaultValue={fornecedor?.conta ?? ""}
                       placeholder="00000000"
                       className="h-full min-w-0 flex-1 border-0 bg-transparent px-3.5 text-sm tabular-nums outline-none placeholder:text-muted-foreground/60"
@@ -1357,6 +1422,7 @@ export function FornecedorForm({
                     <span className="text-sm text-muted-foreground/40">/</span>
                     <input
                       name="conta_dv"
+                      data-field="conta_dv"
                       maxLength={1}
                       defaultValue={fornecedor?.conta_dv ?? ""}
                       placeholder="0"
