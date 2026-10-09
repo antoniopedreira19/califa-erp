@@ -66,3 +66,34 @@ save à versão, o que `cancelarEnvioParaAbertura` (057) faz.
   `aberto → cancelado` para GP e produtor — precisa ser ajustada antes de
   aplicar.~~ Fechada no mesmo dia pela decisão 117: a guarda foi ajustada
   (sem `aberto → cancelado`) e aplicada.
+
+## ⚠️ Caso pontual (2026-10-09) — ANI-1004/26 cancelado depois da abertura
+
+A abertura do **ANI-1004/26 "ANI SP | AON Outubro"** (R$ 180.000, aberto
+pela Priscila em 07/10) saiu errada: o orçamento cobria só outubro, e o GP
+refez o trabalho como **ANI-1012/26 "ANI SP | AON 4T"** (R$ 540.000, outubro
+a dezembro, aberto em 09/10). Com os dois abertos, outubro contava duas
+vezes no fluxo de caixa e no fiscal (R$ 180 mil de recebimento, R$ 55,6 mil
+de custo e R$ 35 mil de imposto).
+
+Como nenhuma tela cancela job aberto, o Tiago pediu a correção **pelo MCP**,
+uma vez só:
+
+- Antes de gravar, a transação conferiu: job ainda `aberto`; a única PP
+  (PP-00144, verba de R$ 500) já estava `cancelada`; sem envio de
+  faturamento, nota, lançamento, recebimento antes da NF ou desembolso.
+- `jobs.status` foi de `aberto` para `cancelado`. A guarda
+  `jobs_guarda_escrita_direta` só vale para `authenticated` e não barra o
+  MCP.
+- As previsões da abertura (custo, recebimento, imposto, competência)
+  **ficaram gravadas**. Elas saem das contas pelo status: `vw_fluxo_caixa`
+  e `vw_job_rentabilidade` deixaram de listar o job, conferido logo depois.
+- O projeto financeiro **ANI-F003/26 "Always ON SP"**, que só tinha esse
+  job, ficou **inativo** (`ativo = false`). O job novo usa o ANI-F006/26.
+- O orçamento **ANI-P005/26-01** continua em `job_criado`, como histórico.
+- Auditoria: `job.cancelado_apos_abertura`, em nome do Tiago, com o motivo
+  e o job substituto.
+
+Isso **não** é o "Cancelar job" do financeiro: a regra de cima continua
+valendo. Se acontecer de novo, a saída é construir a tela com action
+própria, não repetir a correção pelo MCP.
