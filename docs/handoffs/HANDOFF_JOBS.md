@@ -4995,3 +4995,31 @@ código publicado logo depois (`3305751`).
   como administrador.
 - Ficou no TES-1014/26: a PP-00148 em avaliação no financeiro (R$ 120,
   FORNECEDOR TESTE LTDA) e a NF 9160 no cadastro de notas.
+
+## ⚠️ Nota de 2026-10-09 (2) — PP por boleto ou chave aleatória; Empresa emissora antes do fornecedor (decisão 161)
+
+- O campo **Pagamento** do formulário da PP virou `Cadastro do fornecedor |
+  Chave aleatória | Boleto` (`pagamento-da-pp-field.tsx`). "Outro PIX" passou
+  a aceitar só chave aleatória e mudou de nome; "Outra conta" e o campo
+  **Motivo** saíram. Com Boleto, a linha diz "Anexe o boleto abaixo, com o
+  tipo Boleto" e os anexos mostram **"Exigidos no envio: NF · Boleto"**
+  (`ExigidosNoEnvio`, em `anexos-da-pp.tsx`), também no pop-up de envio.
+- O envio ao financeiro e o "Deixar pronta para envio" (decisão 160)
+  recusam a PP por boleto sem o anexo do tipo Boleto e sem a nota (NF ou
+  recibo) — na tela (`faltaNosAnexosParaEnviar`, que ganhou o parâmetro
+  `exigeBoleto`) e no servidor (`faltaNosAnexosDoEnvio`). O campo
+  `pagaPorBoleto` atravessa `PPDoItem` e `PPParaEnviar` como obrigatório.
+- **Fornecedor marcado "Sem conta nem PIX"**: "Cadastro do fornecedor" fica
+  riscado e a PP pede chave aleatória ou boleto; a geração recusa sem um dos
+  dois (`finalizarPedidoCompraImpl`). O resumo do cadastro
+  (`resumoDoPagamentoDoFornecedor`) devolve `semDadosPagamento`.
+- O PDF troca a linha do PIX por **"Pagamento: Boleto"** na PP por boleto
+  (`renderizarDocumentoDaPP` → `pagamentoPorBoleto`), na geração e no
+  "Atualizar vencimento".
+- A **Empresa emissora** subiu para antes do Fornecedor (e do Responsável,
+  na verba).
+- O "X" do pop-up "Novo fornecedor" e do "Novo veículo" da planilha de mídia
+  caía sobre o seletor PJ/PF: o cabeçalho ganhou `pr-14`.
+- Testado no TES-1025/26 (PP-00149 por boleto, com o PDF conferido; PP-00150
+  por chave aleatória com o ZZ Veículo Teste 150 A marcado), as duas
+  canceladas no fim. Detalhes na decisão 161.

@@ -14,7 +14,11 @@
  *   que carrega a própria chave e não repete o cartão do dossiê.
  *
  * O PDF não tem nada disto: o documento sai igual ao de sempre, só com a
- * chave (ou a conta) escolhida.
+ * chave (ou a conta) escolhida — ou, no boleto, "Boleto" na linha do PIX.
+ *
+ * Decisão 161 (09/10/2026): o meio pode ser `boleto` (sem dado: paga-se
+ * pelo boleto anexado) e o motivo virou opcional — a PP nova não tem; a
+ * linha só aparece nas PPs antigas que o trazem.
  */
 
 import { AlertTriangle, Check } from "lucide-react";
@@ -42,14 +46,16 @@ export const ROTULO_CONTA: Record<TipoContaBancariaFornecedor, string> = {
   pagamento: "Pagamento",
 };
 
-/** "PIX · Aleatória" ou "ITAÚ UNIBANCO". */
+/** "PIX · Aleatória", "Boleto" ou "ITAÚ UNIBANCO". */
 export function meioLegivel(p: PagamentoForaDoCadastroDaPP): string {
+  if (p.meio === "boleto") return "Boleto";
   if (p.meio === "pix") return p.pix_tipo ? `PIX · ${ROTULO_PIX[p.pix_tipo]}` : "PIX";
   return p.banco_codigo ? nomeCurtoDoBanco(p.banco_codigo, p.banco_nome) : "Conta";
 }
 
 /** A chave, ou agência e conta — o que se digita no banco para pagar. */
 export function destinoLegivel(p: PagamentoForaDoCadastroDaPP): string {
+  if (p.meio === "boleto") return "Pagar pelo boleto anexado";
   if (p.meio === "pix") return chavePixLegivel(p.pix_tipo, p.pix_chave);
   const tipo = p.tipo_conta ? ROTULO_CONTA[p.tipo_conta] : "Conta";
   return `Ag. ${p.agencia ?? ""}${p.agencia_dv ? `-${p.agencia_dv}` : ""} · ${tipo} ${p.conta ?? ""}-${p.conta_dv ?? ""}`;
@@ -85,7 +91,7 @@ export function PagamentoForaDoCadastroCartao({
       <p className="mt-1 break-words font-mono text-[12.5px] font-semibold leading-snug tracking-[-0.01em]">
         {destinoLegivel(pagamento)}
       </p>
-      {!semMotivo && (
+      {!semMotivo && pagamento.motivo && (
         <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{pagamento.motivo}</p>
       )}
       {pedido && (

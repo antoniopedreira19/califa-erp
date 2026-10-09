@@ -564,6 +564,14 @@ async function resolverOrigem(
         message: "Pagamento fora do cadastro sem a aprovação do financeiro.",
       };
     }
+    // Decisão 161: a remessa ainda não paga boleto (o segmento J não existe
+    // no gerador). A PP paga por boleto sai pelo boleto anexado.
+    if (foraDoCadastro?.meio === "boleto") {
+      return {
+        ok: false,
+        message: "PP paga por boleto: pague pelo boleto anexado, fora da remessa.",
+      };
+    }
     if (data.pago_em) return { ok: false, message: "Parcela já baixada." };
     if (pp.status !== "aprovada" && pp.status !== "pago") {
       return { ok: false, message: "PP não aprovada." };

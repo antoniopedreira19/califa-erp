@@ -35,6 +35,7 @@ import {
   NfDoAnexo,
   ResumoDasNfs,
   ZonaDeAnexos,
+  ExigidosNoEnvio,
   anexoEmEdicao,
   anexoParaEnvio,
   faltaNosAnexosParaEnviar,
@@ -313,6 +314,8 @@ export interface PPParaEnviar {
   fornecedorId: string | null;
   verbaProducao: boolean;
   anexos: AnexoDaPPNaLista[];
+  /** Decisão 161: paga por boleto — o envio exige o boleto e a nota. */
+  pagaPorBoleto: boolean;
 }
 
 /**
@@ -412,7 +415,7 @@ export function EnvioDialog({
   function enviar(confirmado: boolean, tomadorOk: boolean = tomadorConfirmado) {
     if (!pp) return;
     setTentou(true);
-    const falta = faltaNosAnexosParaEnviar(anexos, pp.valor, existentes);
+    const falta = faltaNosAnexosParaEnviar(anexos, pp.valor, existentes, pp.pagaPorBoleto);
     if (falta && !pp.verbaProducao) {
       setErro(falta);
       return;
@@ -576,6 +579,7 @@ export function EnvioDialog({
               {/* O "Ver PP e documentos lado a lado" virou o "Verificar" do
                   rodapé (pedido do Tiago, 08/10/2026). */}
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Anexos</p>
+              {pp.pagaPorBoleto && <ExigidosNoEnvio anexos={anexos} />}
               <ZonaDeAnexos id={`envio-arquivos-${pp.id}`} pronto={prefixo !== null} onArquivos={subir} />
               <ListaDeAnexos
                 itens={itensDaLista(anexos)}

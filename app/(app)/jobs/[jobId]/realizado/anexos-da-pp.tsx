@@ -25,6 +25,7 @@
 import * as React from "react";
 import {
   AlertTriangle,
+  Check,
   Eye,
   FileText,
   Image as ImageIcon,
@@ -987,6 +988,39 @@ function ListaDePPs({ pps }: { pps: NotaExistente["pps"] }) {
  *  PP. Passar do valor da PP barra o envio (vermelho); ficar abaixo só
  *  avisa (amarelo). Com uma nota, só a frase quando não bate; com várias, a
  *  soma. */
+/**
+ * O que o envio vai exigir quando a PP é paga por boleto (decisão 161): a
+ * nota (NF ou recibo) e o boleto, cada um com ✓ quando já tem arquivo do
+ * tipo. Fica no formulário da PP e no pop-up de envio, acima da área de
+ * anexos. Sem boleto, não aparece — a regra de sempre não muda.
+ */
+export function ExigidosNoEnvio({ anexos }: { anexos: AnexoEmEdicao[] }) {
+  const ok = anexos.filter((a) => a.status === "ok");
+  const itens: Array<[string, boolean]> = [
+    ["NF", ok.some((a) => a.tipo === "nota_fiscal" || a.tipo === "recibo")],
+    ["Boleto", ok.some((a) => a.tipo === "boleto")],
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
+      <span className="text-muted-foreground">Exigidos no envio:</span>
+      {itens.map(([rotulo, tem]) => (
+        <span
+          key={rotulo}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold",
+            tem
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-border bg-white text-muted-foreground",
+          )}
+        >
+          {tem && <Check className="h-3 w-3" strokeWidth={3} />}
+          {rotulo}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function ResumoDasNfs({ valores, valorPP }: { valores: number[]; valorPP: number }) {
   if (valores.length === 0) return null;
   const soma = Math.round(valores.reduce((t, v) => t + (v || 0), 0) * 100) / 100;
@@ -1133,6 +1167,8 @@ export function faltaNosAnexosParaEnviar(
   anexos: AnexoEmEdicao[],
   valorPP: number,
   existentes: Record<string, NotaExistente>,
+  /** Decisão 161: a PP paga por boleto exige o boleto e a nota. */
+  exigeBoleto: boolean,
 ): string | null {
   const ok = anexos.filter((a) => a.status === "ok");
   if (anexos.some((a) => a.status === "uploading" || a.status === "selecionado")) {
@@ -1143,6 +1179,12 @@ export function faltaNosAnexosParaEnviar(
   if (semTipo) return `Escolha o tipo de “${semTipo.nome}”.`;
   const semNumero = ok.find((a) => a.tipo !== "nota_fiscal" && !(a.numero ?? "").trim());
   if (semNumero) return `Preencha o número do documento de “${semNumero.nome}”.`;
+  if (exigeBoleto && !ok.some((a) => a.tipo === "nota_fiscal" || a.tipo === "recibo")) {
+    return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
+  }
+  if (exigeBoleto && !ok.some((a) => a.tipo === "boleto")) {
+    return "Esta PP é paga por boleto: anexe o boleto, com o tipo Boleto.";
+  }
   const nfs = ok.filter((a) => a.tipo === "nota_fiscal");
   return faltaNasNfs(
     nfs.map((a) => ({ nome: a.nome, nf: a.nf })),

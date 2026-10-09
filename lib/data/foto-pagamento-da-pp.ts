@@ -59,12 +59,13 @@ export const COLUNAS_DE_PAGAMENTO =
 
 /**
  * O que a produção escolhe no formulário quando a PP não paga pelo
- * cadastro: UM meio (PIX ou conta) e o motivo. Já validado e normalizado
- * por `pagamentoForaDoCadastroSchema`.
+ * cadastro: UM meio. Desde a decisão 161, chave aleatória (`pix`) ou
+ * `boleto`, sem motivo; `conta` e o motivo ficam para as PPs anteriores.
+ * Já validado e normalizado por `pagamentoForaDoCadastroSchema`.
  */
 export interface PagamentoForaDoCadastro {
   meio: MeioForaDoCadastro;
-  motivo: string;
+  motivo: string | null;
   pix_tipo: PixTipoChave | null;
   pix_chave: string | null;
   banco_codigo: string | null;
@@ -75,10 +76,16 @@ export interface PagamentoForaDoCadastro {
   tipo_conta: TipoContaBancariaFornecedor | null;
 }
 
-/** Os campos de cada meio — o que "trocar o meio" troca, e mais nada. */
+/** Os campos de cada meio — o que "trocar o meio" troca, e mais nada. No
+ *  boleto (decisão 161) nada do cadastro é pagamento: todos ficam de fora
+ *  da conta do asterisco. */
 const CAMPOS_DO_MEIO: Record<MeioForaDoCadastro, Array<keyof DadosDePagamento>> = {
   pix: ["pix_tipo", "pix_chave"],
   conta: ["banco_codigo", "banco_nome", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta"],
+  boleto: [
+    "banco_codigo", "banco_nome", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta",
+    "pix_tipo", "pix_chave",
+  ],
 };
 
 /**
@@ -104,7 +111,9 @@ export function aplicarPagamentoForaDoCadastro(
     pix_tipo: cadastro?.pix_tipo ?? null,
     pix_chave: cadastro?.pix_chave ?? null,
   };
-  if (!fora) return base;
+  // Boleto (decisão 161): o documento continua o de sempre, com o cadastro
+  // como está; o PDF só troca a linha do PIX por "Boleto".
+  if (!fora || fora.meio === "boleto") return base;
   if (fora.meio === "pix") {
     return { ...base, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave };
   }
@@ -138,9 +147,10 @@ export function camposDoPagamentoForaDoCadastro(
 }
 
 /**
- * Da PP gravada para a tela: o meio, o motivo e SÓ os dados do meio
- * trocado — o que o dossiê, a ficha e o formulário de edição mostram.
- * Null = a PP paga pelo cadastro.
+ * Da PP gravada para a tela: o meio, o motivo (opcional desde a decisão
+ * 161) e SÓ os dados do meio trocado — o que o dossiê, a ficha e o
+ * formulário de edição mostram. No boleto não há dado nenhum. Null = a PP
+ * paga pelo cadastro.
  */
 export function lerPagamentoForaDoCadastro(
   pp: Partial<FotoDePagamentoDaPP> & {
@@ -149,20 +159,21 @@ export function lerPagamentoForaDoCadastro(
   },
 ): PagamentoForaDoCadastroDaPP | null {
   const meio = pp.pagamento_fora_do_cadastro_meio;
-  if (meio !== "pix" && meio !== "conta") return null;
+  if (meio !== "pix" && meio !== "conta" && meio !== "boleto") return null;
   const pix = meio === "pix";
+  const conta = meio === "conta";
   return {
     meio,
-    motivo: pp.pagamento_fora_do_cadastro_motivo ?? "",
+    motivo: pp.pagamento_fora_do_cadastro_motivo?.trim() || null,
     pix_tipo: pix ? (pp.fornecedor_pix_tipo ?? null) : null,
     pix_chave: pix ? (pp.fornecedor_pix_chave ?? null) : null,
-    banco_codigo: pix ? null : (pp.fornecedor_banco_codigo ?? null),
-    banco_nome: pix ? null : (pp.fornecedor_banco_nome ?? null),
-    agencia: pix ? null : (pp.fornecedor_agencia ?? null),
-    agencia_dv: pix ? null : (pp.fornecedor_agencia_dv ?? null),
-    conta: pix ? null : (pp.fornecedor_conta ?? null),
-    conta_dv: pix ? null : (pp.fornecedor_conta_dv ?? null),
-    tipo_conta: pix ? null : (pp.fornecedor_tipo_conta ?? null),
+    banco_codigo: conta ? (pp.fornecedor_banco_codigo ?? null) : null,
+    banco_nome: conta ? (pp.fornecedor_banco_nome ?? null) : null,
+    agencia: conta ? (pp.fornecedor_agencia ?? null) : null,
+    agencia_dv: conta ? (pp.fornecedor_agencia_dv ?? null) : null,
+    conta: conta ? (pp.fornecedor_conta ?? null) : null,
+    conta_dv: conta ? (pp.fornecedor_conta_dv ?? null) : null,
+    tipo_conta: conta ? (pp.fornecedor_tipo_conta ?? null) : null,
   };
 }
 
@@ -240,7 +251,7 @@ export function cadastroMudouDepoisDaFoto(
   // é do cadastro entra na conta.
   const meio = pp.pagamento_fora_do_cadastro_meio;
   const ignorados =
-    meio === "pix" || meio === "conta" ? CAMPOS_DO_MEIO[meio] : [];
+    meio === "pix" || meio === "conta" || meio === "boleto" ? CAMPOS_DO_MEIO[meio] : [];
   return (Object.keys(foto) as Array<keyof DadosDePagamento>)
     .filter((campo) => !ignorados.includes(campo))
     .some((campo) => (foto[campo] ?? null) !== (cadastro[campo] ?? null));

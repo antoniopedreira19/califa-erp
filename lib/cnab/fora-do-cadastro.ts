@@ -14,6 +14,9 @@ import type { PagamentoForaDoCadastroDaPP } from "@/lib/types";
  *   cai no meio do cadastro que a PP trocou;
  * - **a forma vem da PP**, e não do seletor PIX/TED do diálogo.
  *
+ * Boleto (decisão 161) não chega aqui: `resolverOrigem` recusa a parcela
+ * antes ("pague pelo boleto anexado"), porque o gerador não tem segmento J.
+ *
  * Função pura, sem banco: `npm run test:cnab-fora` cobre as trocas.
  */
 
@@ -33,6 +36,10 @@ export function aplicarForaDoCadastroNaRemessa<T extends MeiosDoDestinatario>(
   dados: T,
   fora: PagamentoForaDoCadastroDaPP,
 ): { dados: T; forma: "pix" | "banco" } {
+  if (fora.meio === "boleto") {
+    // Barrado antes, em `resolverOrigem`: chegar aqui é defeito.
+    throw new Error("PP paga por boleto não entra na remessa.");
+  }
   if (fora.meio === "pix") {
     return {
       forma: "pix",

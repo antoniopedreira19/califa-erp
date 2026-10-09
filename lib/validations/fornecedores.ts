@@ -15,7 +15,10 @@ import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
  *      é a chave que impede cadastro repetido, e e-mail e telefone são o
  *      que o financeiro usa para cobrar a nota.
  *   2. **Um bloco de pagamento completo**, banco OU PIX. Bloco começado e
- *      não terminado continua inválido, nos dois casos.
+ *      não terminado continua inválido, nos dois casos. Desde a decisão
+ *      161 (09/10/2026), a marcação **"Sem conta nem PIX"** dispensa os
+ *      dois: o fornecedor manda boleto ou chave aleatória a cada PP, e o
+ *      cadastro grava conta e PIX vazios.
  *
  * O que ficou OPCIONAL: o **endereço** inteiro. Ele era obrigatório e
  * travava o cadastro de quem só tinha os dados de pagamento à mão; segue
@@ -135,6 +138,12 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
       z.enum(["cpf", "cnpj", "email", "telefone", "aleatoria"]).nullable().optional(),
     ),
     pix_chave: z.preprocess(nullIfEmpty, z.string().nullable().optional()),
+    // Decisão 161: "Sem conta nem PIX". O formulário manda "true"/"false";
+    // AUSENTE não mexe na marcação (`undefined` some do update).
+    sem_dados_pagamento: z.preprocess(
+      (v) => (v === null || v === undefined ? undefined : v === true || v === "true"),
+      z.boolean().optional(),
+    ),
 
     // === módulo fiscal (02/10/2026): regime tributário da pessoa jurídica ===
     regime_tributario: z.preprocess(
@@ -197,6 +206,11 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
       }
     }
 
+    // Decisão 161: marcado "Sem conta nem PIX", o cadastro não guarda conta
+    // nem chave — o `transform` do fim zera os dois blocos, e nada deles
+    // precisa ser conferido.
+    if (data.sem_dados_pagamento === true) return;
+
     // --- Banco tradicional: se qualquer campo, todos os obrigatórios ---
     const bancoParcial =
       data.banco_codigo || data.agencia || data.agencia_dv || data.conta || data.conta_dv || data.tipo_conta;
@@ -252,7 +266,7 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
       ctx.addIssue({
         code: "custom",
         path: ["banco_codigo"],
-        message: "Preencha os dados bancários OU o PIX (pelo menos um).",
+        message: "Preencha os dados bancários OU o PIX, ou marque “Sem conta nem PIX”.",
       });
     }
   })
@@ -266,8 +280,23 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
     // escolhido sendo o indicado ou não: é o que mantém o aviso de
     // "alterado manualmente" depois de salvar.
     const indicou = regime && data.regime_consultado_em ? data.regime_consulta ?? null : null;
+    // Decisão 161: sem conta nem PIX, os dois blocos vão vazios — a CHECK
+    // `fornecedores_sem_dados_pagamento_vazio` repete a regra no banco.
+    const semDados = data.sem_dados_pagamento === true;
     return {
       ...data,
+      ...(semDados
+        ? {
+            banco_codigo: null,
+            agencia: null,
+            agencia_dv: null,
+            conta: null,
+            conta_dv: null,
+            tipo_conta: null,
+            pix_tipo: null,
+            pix_chave: null,
+          }
+        : {}),
       regime_tributario: regime,
       regime_consulta: indicou,
       regime_consultado_em: indicou ? data.regime_consultado_em ?? null : null,

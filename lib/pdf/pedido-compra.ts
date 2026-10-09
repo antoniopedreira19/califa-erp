@@ -154,6 +154,9 @@ interface Dados {
      * `responsavelVerbaNome` no lugar do nome do fornecedor. */
     verba_producao?: boolean;
   };
+  /** Decisão 161: a PP paga por boleto. O documento continua o de sempre;
+   *  só a linha do PIX vira "Pagamento: Boleto". */
+  pagamentoPorBoleto?: boolean;
   empresa: Empresa;
   /** Null quando `pp.verba_producao === true` — não há fornecedor. */
   fornecedor: Fornecedor | null;
@@ -197,6 +200,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     cliente,
     responsavelNome,
     parcelas,
+    pagamentoPorBoleto,
   } = dados;
 
   const parcelada = parcelas.length > 1;
@@ -483,12 +487,19 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 { text: "CNPJ/CPF:", bold: true, fontSize: 8 },
                 { text: fmtCPFCNPJ(fornecedor?.cpf_cnpj ?? null), fontSize: 8 },
               ],
-              [
-                { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
-                { text: fornecedor?.pix_tipo ?? "", fontSize: 8 },
-                { text: "Chave PIX:", bold: true, fontSize: 8 },
-                { text: fornecedor?.pix_chave ?? "", fontSize: 8 },
-              ],
+              pagamentoPorBoleto
+                ? [
+                    { text: "Pagamento:", bold: true, fontSize: 8 },
+                    { text: "Boleto", bold: true, colSpan: 3, fontSize: 8 },
+                    { text: "" },
+                    { text: "" },
+                  ]
+                : [
+                    { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
+                    { text: fornecedor?.pix_tipo ?? "", fontSize: 8 },
+                    { text: "Chave PIX:", bold: true, fontSize: 8 },
+                    { text: fornecedor?.pix_chave ?? "", fontSize: 8 },
+                  ],
               [
                 { text: "E-mail:", bold: true, fontSize: 8 },
                 {
