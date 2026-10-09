@@ -377,6 +377,22 @@ três opções — só entre tipos com PP, qualquer tipo, nenhum —, respondeu:
   O desfazer voltou tudo ao centavo. Card no financeiro e na produção com
   "Tipo de custo" e "B · Bi-trib. → A · Direto"; card no fio da
   Comunicação.
+- **TES-1025/26, na abertura, de ponta a ponta** (criado para o teste em
+  09/10/2026 pelo "Enviar Job para Abertura" do "Orçamento de Teste",
+  TES-P001/26-01, versão 4): no formulário da abertura, o recebimento foi
+  dividido em R$ 100.000,00 (30/10) e R$ 42.620,85 (29/11), e o projeto,
+  escolhido. Na aba Planilha Interna, o Item 2 (A, R$ 15.000, planejado
+  R$ 10.000) foi para B. De volta à aba Abertura do Job, sem recarregar:
+  faturamento R$ 142.620,85 → R$ 161.261,34, parcelas → R$ 113.069,96 e
+  R$ 48.191,38 (mesmas datas, mesma proporção), impostos R$ 25.900,85 →
+  R$ 20.713,20 + R$ 8.828,14, custo previsto R$ 84.000 → R$ 94.000 e a
+  curva parada em R$ 84.000 com "Falta R$ 10.000,00" — o "Distribuir" a
+  fechou em 2 × R$ 47.000. O projeto continuou escolhido. O job foi aberto
+  com esses números: previsões, `custo_previsto_total` e a foto nº 1 de
+  `jobs_aberturas` gravados com os valores novos; `valor_job_abertura` e
+  `faturamento_previsto_abertura` ficaram com os do envio, como o §3,
+  item 8, manda. O Item 1, A com um BV "a negociar" vindo da versão, ficou
+  com o Tipo travado e o motivo "Linha com BV".
 - **TES-1014/26:** na linha Produtor, com PP, o Tipo não abre e mostra o
   motivo; o R$ Unit. abre. Saída sem gravar.
 - **AMB-1029/26** (job real, na fila da abertura): a Flávia de A para AR no
@@ -391,4 +407,5 @@ três opções — só entre tipos com PP, qualquer tipo, nenhum —, respondeu:
   mesma que a action consulta.
 
 Ficaram 2 entradas de teste em Alterações do Financeiro no TES-1013/26 (a
-troca e o desfazer).
+troca e o desfazer) e 1 no TES-1025/26, que ficou aberto no financeiro
+(projeto TES-F001/26, contas "Conta Teste") com o Item 2 em B.
