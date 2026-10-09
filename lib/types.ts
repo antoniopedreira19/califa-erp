@@ -1558,6 +1558,11 @@ export function jobEstaCongelado(status: JobStatus): boolean {
  * fica no banco, com o código JOB-NNNN queimado. "Antes da abertura" é não
  * ter `data_abertura_financeiro`: o cancelamento depois da abertura (sem
  * tela hoje) não entra nesta regra.
+ *
+ * O módulo de Jobs vai além (decisão 163): lá NENHUM job cancelado aparece,
+ * antes ou depois da abertura, e o filtro é `status <> 'cancelado'`. Este
+ * recorte fica para quem precisa distinguir os dois casos — o financeiro,
+ * o save e as travas do projeto (116 e 122).
  */
 export function jobCanceladoAntesDaAbertura(job: {
   status: JobStatus | string;

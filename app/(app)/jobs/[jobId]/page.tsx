@@ -17,7 +17,6 @@ import {
   jobEstaCongelado,
   jobAceitaRealizado,
   jobAceitaAcoesPlanilha,
-  jobCanceladoAntesDaAbertura,
   PP_STATUS_EM_ABERTO,
   BV_SITUACAO_EM_ABERTO, jobStatusBadgeClasses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -84,10 +83,10 @@ export default async function JobDetailPage({
   const detalhe = await carregarDetalheDoJob(session, params.jobId);
   if (!detalhe) notFound();
 
-  // Cancelado antes da abertura (decisão 113): não é mais job, voltou a ser
-  // só o orçamento — que o cancelamento já devolveu a "aprovado". Quem
-  // chega por link antigo vai para lá.
-  if (jobCanceladoAntesDaAbertura(detalhe.job)) {
+  // Job cancelado não existe no módulo de Jobs (decisões 113 e 163). Antes
+  // da abertura, o orçamento voltou a "aprovado"; depois dela, o orçamento
+  // aparece como "Cancelado". Quem chega por link antigo vai para lá.
+  if (detalhe.job.status === "cancelado") {
     redirect(`/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}`);
   }
 

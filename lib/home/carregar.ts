@@ -14,10 +14,7 @@ import {
   Receipt,
   Wallet,
 } from "lucide-react";
-import {
-  FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
-  type SessionContext,
-} from "@/lib/types";
+import { type SessionContext } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import {
   impedimentosDosJobs,
@@ -530,14 +527,14 @@ export async function carregarHomeFreelancer(
         .eq("tenant_id", tenantId)
         .is("total_realizado", null),
       // TODO: migrar pra join com jobs_chat_leituras pra contar so "nao lidas" de verdade
-      // Sem o job cancelado antes da abertura (decisão 113): ele não é mais
-      // job, e a lista de Jobs não o mostra.
+      // Sem o job cancelado, antes ou depois da abertura (decisões 113 e
+      // 163): ele não é mais job, e a lista de Jobs não o mostra.
       supabase
         .from("jobs_mensagens")
         .select("id, job:jobs!inner(id)", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
         .neq("autor_id", session.profile.id)
-        .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA, { referencedTable: "job" }),
+        .neq("job.status", "cancelado"),
     ]);
 
   const pendencias: CardPendencia[] = [
@@ -645,8 +642,8 @@ export async function carregarHomeGerenteProducao(
           .eq("tenant_id", tenantId)
           .in("job.projeto_id", projetoIds)
           .neq("autor_id", userId)
-          // Sem o job cancelado antes da abertura (decisão 113).
-          .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA, { referencedTable: "job" }),
+          // Sem o job cancelado (decisões 113 e 163).
+          .neq("job.status", "cancelado"),
     // CONTEXTO KPI: jobs em andamento nos meus projetos
     // "aberto" + "em_producao" (enum real)
     semProjetos
@@ -792,8 +789,8 @@ export async function carregarHomeProdutor(
           .eq("tenant_id", tenantId)
           .in("job.projeto_id", projetoIds)
           .neq("autor_id", userId)
-          // Sem o job cancelado antes da abertura (decisão 113).
-          .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA, { referencedTable: "job" }),
+          // Sem o job cancelado (decisões 113 e 163).
+          .neq("job.status", "cancelado"),
     // KPI CONTEXTO: jobs em andamento no time
     // "aberto" + "em_producao" (enum real)
     semProjetos
@@ -806,8 +803,8 @@ export async function carregarHomeProdutor(
           .in("status", ["aberto", "em_producao"]),
     // KPI ESTRITO: PPs que eu emiti este mes
     // Adendo §9: "emitida_em" nao existe → usar "created_at"
-    // Sem as PPs do job cancelado antes da abertura (decisão 113): o job
-    // voltou a ser só orçamento, e as PPs dele estão todas canceladas.
+    // Sem as PPs do job cancelado (decisões 113 e 163): o job não existe
+    // mais na produção, e as PPs dele estão todas canceladas.
     supabase
       .from("pedidos_compra")
       .select("id, job:jobs!inner(id)", { count: "exact", head: true })
@@ -815,7 +812,7 @@ export async function carregarHomeProdutor(
       .eq("emitida_por", userId)
       .gte("created_at", primeiro + "T00:00:00")
       .lte("created_at", ultimo + "T23:59:59")
-      .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA, { referencedTable: "job" }),
+      .neq("job.status", "cancelado"),
   ]);
 
   const pendencias: CardPendencia[] = [

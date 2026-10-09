@@ -182,6 +182,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 160 | [A PP fica "Pronta para envio", e o GP a envia pela aba Pedidos de Produção](160-pp-pronta-para-envio-e-envio-pela-aba.md) | 2026-10-09 |
 | 161 | [A PP paga por boleto ou chave aleatória, e o fornecedor pode não ter conta nem PIX no cadastro](161-pp-por-boleto-ou-chave-aleatoria.md) | 2026-10-09 |
 | 162 | [A errata organiza a planilha do job: ordem, agrupamento novo, renomeado e o vazio que sai](162-organizar-a-planilha-do-job-na-errata.md) | 2026-10-09 |
+| 163 | [Job cancelado sai do módulo de Jobs e só aparece em Orçamentos](163-job-cancelado-sai-do-modulo-de-jobs.md) | 2026-10-09 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -194,4 +195,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 163**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 164**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

@@ -228,6 +228,7 @@ export default async function OrcamentoDetailPage({
     servicosRes,
     jobRes,
     reservadoRes,
+    canceladoAposAberturaRes,
     regionaisProjRes,
     respProjRes,
     cidadesIniciais,
@@ -320,6 +321,17 @@ export default async function OrcamentoDetailPage({
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle<JobReservado>(),
+    // Job cancelado DEPOIS da abertura (decisão 163): some do módulo de
+    // Jobs, e o orçamento, que segue em `job_criado`, aparece aqui como
+    // "Cancelado". Só a contagem; o cancelado antes da abertura devolve o
+    // orçamento a `aprovado` (057) e não entra.
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("orcamento_id", params.orcId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "cancelado")
+      .not("data_abertura_financeiro", "is", null),
     // Opções de Regional e GP do orçamento: saem do cadastro do projeto.
     supabase
       .from("projeto_regionais")
@@ -384,6 +396,16 @@ export default async function OrcamentoDetailPage({
   const orcamento = orcamentoRaw as Orcamento;
   const job = jobRes.data ?? null;
   const temJobAtivo = job !== null;
+  // O que a tela diz do orçamento (decisão 163): em `job_criado`, sem job
+  // vivo e com o job cancelado depois da abertura, ele é "Cancelado" — a
+  // mesma leitura do funil na lista do projeto (`estagioFunil`). O status
+  // gravado não muda; as travas continuam lendo `orcamento.status`.
+  const statusExibido: Orcamento["status"] =
+    orcamento.status === "job_criado" &&
+    !job &&
+    (canceladoAposAberturaRes.count ?? 0) > 0
+      ? "cancelado"
+      : orcamento.status;
   // Decisão 128: com o job devolvido, os dados do orçamento e o planejado
   // se corrigem sem cancelar a aprovação.
   const jobDevolvido =
@@ -518,7 +540,7 @@ export default async function OrcamentoDetailPage({
     ? "Seu papel não permite editar orçamentos."
     : podeCriarVersao
       ? undefined
-      : `Orçamento ${orcamentoStatusLabel(orcamento.status).toLowerCase()} não aceita novas versões.`;
+      : `Orçamento ${orcamentoStatusLabel(statusExibido).toLowerCase()} não aceita novas versões.`;
 
   // ONDA 2 — depende da aba selecionada (e do job, já conhecido).
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
@@ -806,8 +828,8 @@ export default async function OrcamentoDetailPage({
         <div className="mt-5">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{orcamento.nome}</h1>
-            <Badge className={cn("border", statusBadgeClasses(orcamento.status))}>
-              {orcamentoStatusLabel(orcamento.status)}
+            <Badge className={cn("border", statusBadgeClasses(statusExibido))}>
+              {orcamentoStatusLabel(statusExibido)}
             </Badge>
             <OrcamentoEditorDrawer
               projetoId={params.projetoId}
@@ -833,7 +855,7 @@ export default async function OrcamentoDetailPage({
                     ? "Orçamento arquivado — reative para editar."
                     : "Projeto arquivado — reative o projeto para editar."
                   : protegido
-                    ? `Bloqueado em ${orcamentoStatusLabel(orcamento.status).toLowerCase()} — alterações via fluxo de aprovação/job.`
+                    ? `Bloqueado em ${orcamentoStatusLabel(statusExibido).toLowerCase()} — alterações via fluxo de aprovação/job.`
                     : undefined
               }
             />
@@ -943,7 +965,7 @@ export default async function OrcamentoDetailPage({
           <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             Este orçamento está em estado protegido (
-            <strong className="text-foreground">{orcamentoStatusLabel(orcamento.status)}</strong>
+            <strong className="text-foreground">{orcamentoStatusLabel(statusExibido)}</strong>
             ).{" "}
             {/* Aprovado ainda aceita versão nova, que edita (decisão 023 §7;
                 Tiago, 07/10/2026): o aviso não pode dizer o contrário. */}
@@ -1017,6 +1039,7 @@ export default async function OrcamentoDetailPage({
           podeCriarVersao={podeCriarVersao}
           motivoBloqueio={motivoBloqueio}
           arquivado={arquivado}
+          jobCancelado={statusExibido === "cancelado"}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
@@ -1081,6 +1104,7 @@ function VersaoSelecionada({
   podeCriarVersao,
   motivoBloqueio,
   arquivado,
+  jobCancelado,
   meses,
   mesPedido,
   fechamentoDaCopia,
@@ -1127,6 +1151,11 @@ function VersaoSelecionada({
   motivoBloqueio?: string;
   /** Orçamento ou projeto arquivado (decisão 118): a aba vira consulta. */
   arquivado: boolean;
+  /** O job deste orçamento foi cancelado depois da abertura (decisão 163):
+   *  o orçamento aparece como "Cancelado" e, como o arquivado, não se
+   *  desaprova nem vai de novo para abertura — o servidor já recusava os
+   *  dois. */
+  jobCancelado: boolean;
   /** Meses da versão (modelo mensal, decisão 078); vazio nos demais. */
   meses: VersaoOrcamentoMes[];
   /** `?mes=` da URL. */
@@ -1419,7 +1448,7 @@ function VersaoSelecionada({
                 : null
             }
           />
-          {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && (
+          {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && !jobCancelado && (
             <AprovacaoActions
               versaoId={versao.id}
               versaoLabel={`v${versao.numero_versao}`}
@@ -1598,8 +1627,9 @@ function VersaoSelecionada({
       )}
 
       {/* Arquivado (decisão 118) não se aprova nem vira job: a barra de
-          aprovação e abertura não tem o que oferecer. */}
-      {!arquivado && (
+          aprovação e abertura não tem o que oferecer. O orçamento do job
+          cancelado depois da abertura também não (decisão 163). */}
+      {!arquivado && !jobCancelado && (
       <FluxoAbertura
         versaoId={versao.id}
         versaoLabel={`v${versao.numero_versao}`}
