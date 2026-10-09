@@ -165,8 +165,13 @@ const LINHAS: readonly Linha[] = [
   { modulo: "Jobs", item: "Gerar e consumir Save no job",
     permissoes: { criar: "jobs.consumir_save" },
   },
-  { modulo: "Jobs", item: "Criar errata",
+  // Decisão 159: o produtor prepara a errata e a deixa pronta; quem a
+  // envia ao financeiro é o GP.
+  { modulo: "Jobs", item: "Enviar errata ao financeiro",
     permissoes: { criar: "jobs.criar_errata" },
+  },
+  { modulo: "Jobs", item: "Deixar errata pronta para envio",
+    permissoes: { criar: "jobs.preparar_errata" },
   },
   { modulo: "Jobs", item: "Emitir Pedido de Pagamento (PP)",
     permissoes: { criar: "jobs.emitir_pp" },

@@ -3,10 +3,21 @@
 import * as React from "react";
 import { History, ArrowRight, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { tipoCustoLabel, type JobErrataComItens, type JobErrataItem } from "@/lib/types";
+import {
+  tipoCustoLabel,
+  type ErrataPronta,
+  type JobErrataComItens,
+  type JobErrataItem,
+} from "@/lib/types";
+import { quandoDaPronta } from "./realizado/errata-pronta-faixa";
 
 interface Props {
+  /** `preparada_por_nome`: a errata veio de uma errata pronta para envio
+   *  (decisão 159) — quem preparou; o autor é quem enviou. */
   erratas: JobErrataComItens[];
+  /** A errata pronta para envio do job, se houver: entra no topo da lista,
+   *  sem os números ainda — ela não mexeu no job. */
+  pronta: ErrataPronta | null;
   /** Valor do job congelado na abertura. */
   valorJobAbertura: number | null;
   /** Faturamento previsto congelado na abertura. `null` nos jobs que já
@@ -58,6 +69,7 @@ export function ErratasCard({
   valorJobAtual,
   faturamentoPrevistoAtual,
   moeda,
+  pronta,
 }: Props) {
   // Primeira aberta, como no design.
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({});
@@ -145,7 +157,30 @@ export function ErratasCard({
         </div>
       </div>
 
-      {vazio && (
+      {pronta && (
+        <div className="grid w-full grid-cols-[96px_1fr_auto_auto_20px] items-center gap-4 border-b border-border/60 px-6 py-3.5">
+          <span className="font-mono text-[11.5px] text-muted-foreground">
+            {quandoDaPronta(pronta.preparadaEm).slice(0, 10)}
+          </span>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate text-[13.5px] font-semibold leading-tight">
+              {pronta.descricao ?? "Errata sem descrição"}
+            </span>
+            <span className="text-[11.5px] text-muted-foreground">
+              {pronta.resumo} · preparada por {pronta.preparadaPorNome}
+            </span>
+          </div>
+          <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">
+            Aguardando o envio por um GP
+          </span>
+          <span className="inline-flex items-center whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-amber-800">
+            Pronta para envio
+          </span>
+          <span />
+        </div>
+      )}
+
+      {vazio && !pronta && (
         <p className="px-6 py-5 text-sm text-muted-foreground">
           Nenhuma errata registrada. Alterações no orçado do job são feitas pelo
           botão <strong className="text-foreground">Realizar errata</strong>, na
@@ -183,6 +218,9 @@ export function ErratasCard({
                   {e.itens.length}{" "}
                   {e.itens.length === 1 ? "item" : "itens"}
                   {e.autor_nome ? ` · ${e.autor_nome}` : ""}
+                  {e.preparada_por_nome && (
+                    <span> · preparada por {e.preparada_por_nome}</span>
+                  )}
                 </span>
               </div>
               <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">

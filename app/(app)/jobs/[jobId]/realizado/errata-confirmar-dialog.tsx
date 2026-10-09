@@ -11,10 +11,16 @@
  *
  * Do design `Planilha Interna - Alterar Orcado (Errata).dc.html` (projeto
  * Claude Design `69342d83`), 27/08/2026.
+ *
+ * Desde a decisão 159 (08/10/2026) o pop-up tem dois modos: quem REGISTRA
+ * (GP e administrador) envia ao financeiro, com a descrição obrigatória;
+ * quem PREPARA (o produtor) deixa a errata pronta para envio, com a
+ * descrição opcional. Aberto a partir da errata pronta, o campo já vem com
+ * a descrição que ela trouxe.
  */
 
 import * as React from "react";
-import { AlertCircle, FilePenLine, Landmark } from "lucide-react";
+import { AlertCircle, FilePenLine, Landmark, Send, UserCheck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +54,13 @@ interface Props {
   salvando: boolean;
   erro: string | null;
   onConfirmar: (descricao: string) => void;
+  /** Decisão 159: o GP e o administrador REGISTRAM (enviam ao financeiro,
+   *  descrição obrigatória); o produtor PREPARA — deixa a errata pronta
+   *  para envio, com a descrição opcional. */
+  modo: "registra" | "prepara";
+  /** A errata é uma errata pronta para envio: quem preparou, quando e a
+   *  descrição que deixou (o campo já abre com ela). */
+  pronta: { autorNome: string; quando: string; descricao: string | null } | null;
 }
 
 function corDoDelta(delta: number): string {
@@ -141,16 +154,22 @@ export function ErrataConfirmarDialog({
   salvando,
   erro,
   onConfirmar,
+  modo,
+  pronta,
 }: Props) {
+  const prepara = modo === "prepara";
   const [descricao, setDescricao] = React.useState("");
 
   // Zera a cada abertura: o texto de uma errata não pode vazar para a
   // seguinte, e reabrir depois de um erro tem que ser um recomeço limpo.
+  // A errata pronta é a exceção: o campo abre com a descrição que ela
+  // trouxe, para o GP corrigir em vez de reescrever (decisão 159).
   React.useEffect(() => {
-    if (open) setDescricao("");
-  }, [open]);
+    if (open) setDescricao(pronta?.descricao ?? "");
+  }, [open, pronta]);
 
-  const descricaoOk = descricao.trim().length >= 5;
+  // Para quem prepara a descrição é opcional: o GP escreve no envio.
+  const descricaoOk = prepara || descricao.trim().length >= 5;
   const podeConfirmar =
     descricaoOk && !faltaNomear && !salvando && mudancas.length > 0;
 
@@ -163,10 +182,23 @@ export function ErrataConfirmarDialog({
               <FilePenLine className="h-4.5 w-4.5 text-california-red" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-[19px]">Confirmar errata</DialogTitle>
+              <DialogTitle className="text-[19px]">
+                {prepara
+                  ? pronta
+                    ? "Salvar errata pronta"
+                    : "Deixar errata pronta para envio"
+                  : "Confirmar errata"}
+              </DialogTitle>
               <DialogDescription className="pt-1.5 text-[13px] leading-relaxed">
                 {jobCodigo} · {jobNome} · {resumo}
               </DialogDescription>
+              {pronta && (
+                <p className="pt-1 text-[12px] text-muted-foreground">
+                  Preparada por{" "}
+                  <strong className="font-semibold text-foreground">{pronta.autorNome}</strong>{" "}
+                  em {pronta.quando}
+                </p>
+              )}
             </div>
           </div>
         </DialogHeader>
@@ -243,21 +275,38 @@ export function ErrataConfirmarDialog({
             />
           </section>
 
-          {/* A consequência que não está nos números */}
-          <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
-            <Landmark className="mt-0.5 h-4 w-4 flex-none text-california-red" />
-            <div className="space-y-1">
-              <p className="text-[12.5px] font-semibold text-foreground">
-                Confirmar devolve o job ao mural de abertura
-              </p>
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                O financeiro revisa a abertura com os números novos — previsão
-                de recebimento ({formatCurrency(faturamento.depois, moeda)}),
-                curva de desembolso do custo planejado e competência. O envio
-                para faturamento fica bloqueado até essa revisão ser salva.
-              </p>
+          {/* A consequência que não está nos números. Para quem prepara, a
+              consequência é outra: nada muda no job até um GP enviar. */}
+          {prepara ? (
+            <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
+              <UserCheck className="mt-0.5 h-4 w-4 flex-none text-california-red" />
+              <div className="space-y-1">
+                <p className="text-[12.5px] font-semibold text-foreground">
+                  Um GP revisa e envia ao financeiro
+                </p>
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  A errata fica salva no job, pronta para envio. Só quando um GP
+                  confirmar é que o faturamento previsto muda e o job volta ao
+                  mural de abertura. Até lá, você pode editá-la ou descartá-la.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
+              <Landmark className="mt-0.5 h-4 w-4 flex-none text-california-red" />
+              <div className="space-y-1">
+                <p className="text-[12.5px] font-semibold text-foreground">
+                  Confirmar devolve o job ao mural de abertura
+                </p>
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  O financeiro revisa a abertura com os números novos — previsão
+                  de recebimento ({formatCurrency(faturamento.depois, moeda)}),
+                  curva de desembolso do custo planejado e competência. O envio
+                  para faturamento fica bloqueado até essa revisão ser salva.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Descrição */}
           <div className="space-y-1.5">
@@ -268,9 +317,15 @@ export function ErrataConfirmarDialog({
               >
                 Descrição da errata
               </label>
-              <span className="text-[10.5px] font-semibold uppercase tracking-wider text-california-red">
-                obrigatória
-              </span>
+              {prepara ? (
+                <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  opcional
+                </span>
+              ) : (
+                <span className="text-[10.5px] font-semibold uppercase tracking-wider text-california-red">
+                  obrigatória
+                </span>
+              )}
             </div>
             <Textarea
               id="descricao-errata"
@@ -281,12 +336,28 @@ export function ErrataConfirmarDialog({
               autoFocus
               placeholder="Ex.: Iluminação renegociada com o fornecedor depois da visita técnica ao espaço."
             />
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Vai para o histórico de erratas, para o fio da Comunicação e para
-              a fila de abertura do financeiro — com autor, data e hora. O
-              orçado aprovado da versão não muda: a errata fica registrada
-              sobre ele.
-            </p>
+            {prepara ? (
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Se ficar em branco, o GP escreve no envio. Ele também pode
+                corrigir o que você deixar aqui.
+              </p>
+            ) : (
+              <>
+                {pronta && (
+                  <p className="text-[11px] font-medium leading-relaxed text-foreground">
+                    {pronta.descricao
+                      ? `Escrita por ${pronta.autorNome}. Você pode corrigir antes de confirmar.`
+                      : `${pronta.autorNome} deixou a errata sem descrição. Escreva antes de confirmar.`}
+                  </p>
+                )}
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Vai para o histórico de erratas, para o fio da Comunicação e para
+                  a fila de abertura do financeiro — com autor, data e hora. O
+                  orçado aprovado da versão não muda: a errata fica registrada
+                  sobre ele.
+                </p>
+              </>
+            )}
           </div>
 
           {faltaNomear && (
@@ -324,8 +395,16 @@ export function ErrataConfirmarDialog({
               disabled={!podeConfirmar}
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <FilePenLine className="h-3.5 w-3.5" />
-              {salvando ? "Registrando…" : "Confirmar errata"}
+              {prepara ? <Send className="h-3.5 w-3.5" /> : <FilePenLine className="h-3.5 w-3.5" />}
+              {prepara
+                ? salvando
+                  ? "Salvando…"
+                  : pronta
+                    ? "Salvar errata pronta"
+                    : "Deixar pronta para envio"
+                : salvando
+                  ? "Registrando…"
+                  : "Confirmar errata"}
             </button>
           </div>
         </div>

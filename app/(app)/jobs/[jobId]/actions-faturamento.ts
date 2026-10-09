@@ -410,6 +410,42 @@ export async function enviarJobParaFaturamento(
     };
   }
 
+  // Errata pronta para envio parada (decisão 159): o produtor corrigiu o
+  // orçado e a correção ainda não foi ao financeiro. Enviar agora faria a
+  // nota sair sem ela. Volta quando um GP enviar a errata ou a descartar.
+  const { data: prontaParada, error: prontaErr } = await supabase
+    .from("jobs_erratas_prontas")
+    .select("id")
+    .eq("job_id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("situacao", "pronta")
+    .maybeSingle();
+  if (prontaErr) {
+    console.error("[faturamento.errata_pronta]", prontaErr.message);
+    return {
+      ok: false,
+      message: "Não foi possível conferir a errata pronta do job. Tente de novo.",
+    };
+  }
+  if (prontaParada) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        acao_tentada: "job.enviado_faturamento",
+        motivo: "errata_pronta_parada",
+        errata_pronta_id: (prontaParada as { id: string }).id,
+      },
+    });
+    return {
+      ok: false,
+      message:
+        "Este job tem uma errata pronta para envio. Envie-a ao financeiro ou descarte-a na Planilha Interna antes de enviar para faturamento.",
+    };
+  }
+
   // O valor a faturar é relido aqui, nunca o do navegador: o faturamento
   // previsto do job no envio único, ou o faturamento DO MÊS recalculado dos
   // itens da cópia do job (com as erratas) no modelo mensal.

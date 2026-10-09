@@ -451,6 +451,9 @@ export default async function AbrirJobNoFinanceiroPage({
             confirmarSaidaParaOrcamento
             // Antes da abertura não há "inicial" e "atual" (decisão 151).
             aberturaDoJob={null}
+            // O financeiro não faz errata (decisão 159).
+            papelNaErrata={null}
+            errataPronta={null}
             edicaoDoFinanceiro={
               pode(session.activeRole, "jobs.editar_orcado_financeiro")
                 ? { travadoPor: null, mesesComNota: [], recebimento: [], envios: [] }

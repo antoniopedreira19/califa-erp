@@ -194,6 +194,7 @@ test("Freelancer edita realizado, NAO edita metadata do job", () => {
 
 test("Freelancer NAO cria errata nem consome Save", () => {
   assert.equal(pode("freelancer", "jobs.criar_errata"), false);
+  assert.equal(pode("freelancer", "jobs.preparar_errata"), false);
   assert.equal(pode("freelancer", "jobs.consumir_save"), false);
 });
 
@@ -225,6 +226,7 @@ test("Financeiro NAO edita metadata nem realizado, mas ABRE job no financeiro", 
   assert.equal(pode("financeiro", "jobs.editar_metadata"), false);
   assert.equal(pode("financeiro", "jobs.editar_realizado"), false);
   assert.equal(pode("financeiro", "jobs.criar_errata"), false);
+  assert.equal(pode("financeiro", "jobs.preparar_errata"), false);
   assert.equal(pode("financeiro", "jobs.enviar_faturamento"), false);
   assert.equal(pode("financeiro", "jobs.encerrar"), false);
   // A abertura financeira do job (via /financeiro/abertura-de-job) e SIM
@@ -274,13 +276,16 @@ test("Só Administrador e GP enviam o job para abertura (Tiago, 22/09/2026)", ()
   assert.deepEqual(envia, new Set<AppRole>(["administrador", "gerente_producao"]));
 });
 
-test("Produtor faz TUDO em job/orcamento menos aprovar/enviar_faturamento/encerrar", () => {
+test("Produtor faz TUDO em job/orcamento menos aprovar/enviar_faturamento/encerrar/enviar errata", () => {
   assert.equal(pode("produtor", "orcamentos.criar"), true);
   assert.equal(pode("produtor", "orcamentos.duplicar"), true);
   assert.equal(pode("produtor", "orcamentos.exportar"), true);
   assert.equal(pode("produtor", "jobs.editar_metadata"), true);
   assert.equal(pode("produtor", "jobs.editar_realizado"), true);
-  assert.equal(pode("produtor", "jobs.criar_errata"), true);
+  // Decisão 159 (08/10/2026): o produtor prepara a errata e a deixa pronta
+  // para envio; quem a registra (manda ao financeiro) é o GP.
+  assert.equal(pode("produtor", "jobs.criar_errata"), false);
+  assert.equal(pode("produtor", "jobs.preparar_errata"), true);
   assert.equal(pode("produtor", "jobs.emitir_pp"), true);
   assert.equal(pode("produtor", "jobs.cancelar_pp"), true);
   // Nao aprova, e nao mexe no save (24/09/2026)

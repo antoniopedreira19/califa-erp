@@ -4927,3 +4927,30 @@ código publicado logo depois (`3305751`).
   PP-00087 (anexo antigo sem tipo, imagem). O Contas a Pagar seguiu igual
   (Chat, NF editável, Rejeitar e "Seguir para a aprovação"). Não testado com
   login de produtor, GP ou freelancer: a RLS foi conferida no banco.
+
+## ⚠️ Nota de 2026-10-08 (3) — o produtor deixa a errata pronta para envio, e o GP a envia (decisão 159)
+
+- O produtor passou a ver **"Realizar errata"**. Na barra da errata o botão
+  dele é **"Deixar pronta para envio"**, e a descrição é opcional. Nada
+  muda no job até um GP enviar: o orçado, o faturamento previsto e o mural
+  do financeiro seguem como estavam.
+- A errata pronta aparece numa **faixa no topo da Planilha Interna** (quem
+  preparou, quando, resumo, descrição e o valor do job antes e depois) e no
+  topo do card de Erratas, com o selo "Pronta para envio". O produtor tem
+  "Editar errata" e "Descartar"; o GP, "Revisar e enviar" e "Descartar".
+- O GP abre a mesma errata na planilha, pode mexer nela, e o pop-up já
+  traz a descrição do produtor para ele corrigir — para o GP ela é
+  obrigatória. A errata enviada mostra "· preparada por …" no card.
+- Uma errata pronta por job; com ela parada, "Realizar errata" abre ela, e
+  o **envio para faturamento fica travado** até ela ser enviada ou
+  descartada.
+- Registrar errata agora é só do GP e do administrador também no servidor
+  e no banco (`jobs.criar_errata` sem o produtor; `registrar_errata_do_job`
+  confere o papel). Permissão nova `jobs.preparar_errata`. Tabela nova
+  `jobs_erratas_prontas` e coluna `jobs_erratas.preparada_por`, migration
+  `20261008600001`.
+- Aviso ao GP fora da página do job ficou para a fase de notificações.
+- Testado no TES-1014/26 com o Produtor Teste Claude e o administrador
+  (registro completo na decisão). Ficou no job a linha "Frete teste 159"
+  de R$ 120 e a foto nº 2 da abertura.
+

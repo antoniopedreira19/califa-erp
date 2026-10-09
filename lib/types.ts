@@ -2170,6 +2170,10 @@ export interface JobErrata {
   faturamento_previsto_depois: number | null;
   created_by: string | null;
   created_at: string;
+  /** Decisão 159: quem preparou a errata que o GP enviou (a errata pronta
+   *  para envio). `null` na errata feita e enviada pela mesma pessoa. O
+   *  autor continua em `created_by`. */
+  preparada_por: string | null;
 }
 
 /** O que a errata fez com a linha. `removida` só existe no histórico:
@@ -2236,7 +2240,60 @@ export interface JobErrataItem {
 /** Errata com os itens e o autor, como o card do histórico precisa. */
 export interface JobErrataComItens extends JobErrata {
   autor_nome: string | null;
+  /** Nome de quem preparou (decisão 159). `null` quando `preparada_por` é. */
+  preparada_por_nome: string | null;
   itens: JobErrataItem[];
+}
+
+// ---------- Errata pronta para envio (decisão 159) ----------
+// O produtor faz a errata e a deixa PRONTA PARA ENVIO; um GP (ou o
+// administrador) a revisa e envia ao financeiro. Até o envio a pronta não
+// mexe no job. Uma por job (`jobs_erratas_prontas`).
+
+/** O que a errata decide, sem a descrição — o formato que vai à action
+ *  `registrarErrata` e o que a pronta guarda em `conteudo`. */
+export interface ConteudoErrata {
+  alteracoes: Array<{
+    job_item_orcado_id: string;
+    valor_unitario: number;
+    quantidade: number;
+    dias_meses: number;
+    tipo_custo: TipoCusto;
+    valor_unitario_planejado: number;
+    quantidade_planejada: number;
+    dias_meses_planejado: number;
+  }>;
+  novas: Array<{
+    grupo_id: string;
+    item: string;
+    tipo_custo: TipoCusto;
+    linha_vermelha: boolean;
+    valor_unitario: number;
+    quantidade: number;
+    dias_meses: number;
+    valor_unitario_planejado: number;
+    quantidade_planejada: number;
+    dias_meses_planejado: number;
+  }>;
+  /** Linhas que a errata cancela (decisão 151). */
+  cancelamentos: string[];
+}
+
+/** A errata pronta para envio do job, como a página a recebe. */
+export interface ErrataPronta {
+  id: string;
+  conteudo: ConteudoErrata;
+  /** Opcional para quem prepara; o GP escreve ou corrige no envio. */
+  descricao: string | null;
+  /** "2 linhas alteradas · 1 linha nova", gravado junto. */
+  resumo: string;
+  preparadaPorNome: string;
+  /** ISO. A última gravação — quem editou a pronta passa a ser o autor. */
+  preparadaEm: string;
+  /** A conta no momento em que foi deixada pronta. No envio vale a conta
+   *  de novo, com a planilha de então. */
+  valorJob: { antes: number; depois: number };
+  faturamento: { antes: number; depois: number };
 }
 
 // ---------- Alterações do financeiro (decisão 115) ----------

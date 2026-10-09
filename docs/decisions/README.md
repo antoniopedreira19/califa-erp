@@ -178,6 +178,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 156 | [O CNPJ da PP é separado da empresa gerencial](156-cnpj-da-pp-separado-da-gerencial.md) | 2026-10-07 |
 | 157 | [A PP chega ao financeiro até 15 dias antes da janela de pagamento](157-prazo-de-envio-da-pp.md) | 2026-10-07 |
 | 158 | [Planilha de um mês só no Fee e no Always On](158-planilha-de-um-mes-no-fee-e-always-on.md) | 2026-10-08 |
+| 159 | [O produtor deixa a errata pronta para envio, e o GP a envia ao financeiro](159-errata-pronta-para-envio.md) | 2026-10-08 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -190,4 +191,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 159**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 160**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

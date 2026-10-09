@@ -284,16 +284,9 @@ const novaSchema = z.object({
   ...planejadoSchema,
 });
 
-const payloadSchema = z.object({
-  // A "Descrição da errata" do pop-up. Grava em `titulo`, que é a coluna
-  // que o card do histórico e o fio da Comunicação já leem. O teto subiu
-  // de 200 para 500 em 27/08/2026, quando o campo deixou de ser um título
-  // curto e passou a ser a explicação inteira.
-  descricao: z
-    .string()
-    .trim()
-    .min(5, "A descrição da errata precisa de pelo menos 5 caracteres.")
-    .max(500, "A descrição da errata passa de 500 caracteres."),
+/** O que a errata decide, sem a descrição. É também o que a errata pronta
+ *  para envio guarda (decisão 159). */
+const conteudoSchema = z.object({
   alteracoes: z.array(alteracaoSchema).default([]),
   novas: z.array(novaSchema).default([]),
   /** Linhas que a errata CANCELA (decisão 151): ficam com o orçado zerado
@@ -304,9 +297,38 @@ const payloadSchema = z.object({
   remocoes: z.array(z.string().uuid()).default([]),
 });
 
+const payloadSchema = conteudoSchema.extend({
+  // A "Descrição da errata" do pop-up. Grava em `titulo`, que é a coluna
+  // que o card do histórico e o fio da Comunicação já leem. O teto subiu
+  // de 200 para 500 em 27/08/2026, quando o campo deixou de ser um título
+  // curto e passou a ser a explicação inteira.
+  descricao: z
+    .string()
+    .trim()
+    .min(5, "A descrição da errata precisa de pelo menos 5 caracteres.")
+    .max(500, "A descrição da errata passa de 500 caracteres."),
+  /** A errata pronta para envio que este envio consome (decisão 159). A
+   *  função do banco a dá por enviada na mesma transação. */
+  errataProntaId: z.string().uuid().nullable().optional(),
+});
+
+/** A errata pronta para envio (decisão 159): o mesmo conteúdo, com a
+ *  descrição opcional. */
+const prontaSchema = conteudoSchema.extend({
+  errataProntaId: z.string().uuid().nullable(),
+  descricao: z
+    .string()
+    .trim()
+    .max(500, "A descrição da errata passa de 500 caracteres.")
+    .nullable()
+    .transform((d) => (d === null || d === "" ? null : d)),
+});
+
 export type AlteracaoErrata = z.infer<typeof alteracaoSchema>;
 export type NovaLinhaErrata = z.infer<typeof novaSchema>;
 export type PayloadErrata = z.input<typeof payloadSchema>;
+export type PayloadErrataPronta = z.input<typeof prontaSchema>;
+type ConteudoValidado = z.output<typeof conteudoSchema>;
 
 /** Valor monetário gravado sempre com 2 casas, como `jobs.valor_total`. */
 function dinheiro(n: number): number {
@@ -410,6 +432,12 @@ function planejadoDaErrata(
  * Grava a errata antes de aplicar: ela guarda a fotografia de custo e
  * faturamento dos dois lados, mais o efeito de cada linha. Isso mantém o
  * histórico legível mesmo que as regras de honorários ou imposto mudem.
+ *
+ * Desde a decisão 159 (08/10/2026) registrar é do GP e do administrador —
+ * é o que manda a errata ao financeiro. O produtor deixa a errata PRONTA
+ * PARA ENVIO (`salvarErrataPronta`), e o GP a envia por aqui, com
+ * `errataProntaId`. As travas e a conta moram em `montarErrata`, que as
+ * duas actions usam.
  */
 export async function registrarErrata(
   jobId: string,
@@ -427,10 +455,338 @@ export async function registrarErrata(
       message: parsed.error.issues[0]?.message ?? "Dados inválidos.",
     };
   }
-  const { descricao, alteracoes, novas } = parsed.data;
+  const { descricao } = parsed.data;
+  const errataProntaId = parsed.data.errataProntaId ?? null;
+
+  const montada = await montarErrata(
+    session,
+    jobId,
+    parsed.data,
+    descricao,
+    "job.errata_registrada",
+  );
+  if (!montada.ok) return montada;
+  const { mudancas, antes, depois, perderamBv, devolveAoMural } = montada;
+
+  const { data: gravada, error: gravarErr } = await supabase.rpc(
+    "registrar_errata_do_job",
+    {
+      p_job_id: jobId,
+      // A errata pronta que este envio consome (decisão 159): a função a dá
+      // por enviada na mesma transação, e recusa errata nova enquanto o job
+      // tiver uma pronta parada.
+      p: { ...montada.p, errata_pronta_id: errataProntaId },
+    },
+  );
+
+  if (gravarErr || !gravada) {
+    console.error("[errata.gravar]", gravarErr?.message);
+    // P0001 é mensagem nossa, escrita para a tela (as travas do banco).
+    const doBanco =
+      gravarErr?.code === "P0001" && gravarErr.message ? ` ${gravarErr.message}` : "";
+    return {
+      ok: false,
+      message: `Não foi possível registrar a errata, e nada foi gravado.${doBanco}`,
+    };
+  }
+
+  const resultado = gravada as {
+    errata_id: string;
+    bvs_cancelados: Array<{ id: string; valor: number; job_item_orcado_id: string }>;
+  };
+  const errata = { id: resultado.errata_id };
+
+  for (const bv of resultado.bvs_cancelados ?? []) {
+    const m = perderamBv.find((x) => x.copiaId === bv.job_item_orcado_id);
+    await logAuditEvent({
+      acao: "item_bv.cancelado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "item_bv",
+      entidadeId: bv.id,
+      metadata: {
+        job_item_orcado_id: bv.job_item_orcado_id,
+        item: m?.itemNome ?? null,
+        valor: bv.valor,
+        motivo: "errata_mudou_tipo_de_custo",
+        errata_id: errata.id,
+        tipo_de: m?.tipoDe ?? null,
+        tipo_para: m?.tipoPara ?? null,
+      },
+    });
+  }
+
+  const contar = (a: ErrataAcao) =>
+    mudancas.filter((m) => m.acao === a).length;
+
+  await logAuditEvent({
+    acao: "job.errata_registrada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+    metadata: {
+      errata_id: errata.id,
+      descricao,
+      // Decisão 159: a errata veio da pronta para envio.
+      errata_pronta_id: errataProntaId,
+      itens_alterados: contar("alterada"),
+      itens_novos: contar("nova"),
+      itens_cancelados: contar("cancelada"),
+      linhas_vermelhas: mudancas.filter(
+        (m) => m.acao === "nova" && m.linhaVermelha,
+      ).length,
+      devolveu_ao_mural: devolveAoMural,
+      valor_job_antes: antes.valorJob,
+      valor_job_depois: depois.valorJob,
+      faturamento_previsto_antes: antes.faturamentoPrevisto,
+      faturamento_previsto_depois: depois.faturamentoPrevisto,
+    },
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/financeiro/jobs/${jobId}`);
+  revalidatePath("/financeiro/abertura-de-job");
+  return { ok: true, errataId: errata.id };
+}
+
+/**
+ * Deixa a errata PRONTA PARA ENVIO (decisão 159, 08/10/2026), ou atualiza
+ * a que o job já tem.
+ *
+ * O produtor faz a errata, mas quem a envia ao financeiro é um GP. A pronta
+ * passa pelas MESMAS travas da errata (`montarErrata`: job aberto, mês já
+ * enviado, PP no financeiro, save, BV…) — o produtor fica sabendo na hora
+ * que uma linha não entra, e não só quando o GP tentar enviar. No envio
+ * tudo é conferido de novo, com o job de então.
+ *
+ * Nada no job muda aqui: o orçado, o faturamento previsto e o mural do
+ * financeiro seguem como estavam. Uma pronta por job — o banco garante
+ * pelo índice único.
+ */
+export async function salvarErrataPronta(
+  jobId: string,
+  payload: PayloadErrataPronta,
+): Promise<{ ok: true; errataProntaId: string } | Err> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.preparar_errata");
+  if (!gate.ok) return gate;
+  const supabase = createClient();
+
+  const parsed = prontaSchema.safeParse(payload);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Dados inválidos.",
+    };
+  }
+  const { descricao, errataProntaId } = parsed.data;
+
+  const montada = await montarErrata(
+    session,
+    jobId,
+    parsed.data,
+    descricao ?? "",
+    "job.errata_pronta_salva",
+  );
+  if (!montada.ok) return montada;
+  const { antes, depois, mudancas } = montada;
+
+  const conteudo = {
+    alteracoes: parsed.data.alteracoes,
+    novas: parsed.data.novas,
+    cancelamentos: Array.from(
+      new Set([...parsed.data.cancelamentos, ...parsed.data.remocoes]),
+    ),
+  };
+  const numeros = {
+    conteudo,
+    descricao,
+    resumo: resumoDasMudancas(mudancas),
+    custo_orcado_antes: dinheiro(antes.subtotalGeral),
+    custo_orcado_depois: dinheiro(depois.subtotalGeral),
+    valor_job_antes: dinheiro(antes.valorJob),
+    valor_job_depois: dinheiro(depois.valorJob),
+    faturamento_previsto_antes: dinheiro(antes.faturamentoPrevisto),
+    faturamento_previsto_depois: dinheiro(depois.faturamentoPrevisto),
+    // Quem gravou por último passa a ser quem preparou.
+    preparada_por: session.profile.id,
+    preparada_em: new Date().toISOString(),
+  };
+
+  let id: string;
+  if (errataProntaId) {
+    const { data, error } = await supabase
+      .from("jobs_erratas_prontas")
+      .update(numeros)
+      .eq("id", errataProntaId)
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("situacao", "pronta")
+      .select("id")
+      .maybeSingle();
+    if (error) {
+      console.error("[errata_pronta.atualizar]", error.message);
+      return { ok: false, message: "Não foi possível salvar a errata pronta. Tente de novo." };
+    }
+    if (!data) {
+      return {
+        ok: false,
+        message:
+          "Esta errata pronta já foi enviada ao financeiro ou descartada. Recarregue a página para ver como o job ficou.",
+      };
+    }
+    id = data.id as string;
+  } else {
+    const { data, error } = await supabase
+      .from("jobs_erratas_prontas")
+      .insert({
+        ...numeros,
+        tenant_id: session.activeTenant.id,
+        job_id: jobId,
+        created_by: session.profile.id,
+      })
+      .select("id")
+      .single();
+    if (error || !data) {
+      // 23505: o índice de uma pronta por job — outra pessoa deixou uma
+      // pronta enquanto esta tela estava aberta.
+      if (error?.code === "23505") {
+        return {
+          ok: false,
+          message:
+            "Este job já tem uma errata pronta para envio, feita por outra pessoa enquanto você editava. Recarregue a página e continue dela.",
+        };
+      }
+      console.error("[errata_pronta.criar]", error?.message);
+      return { ok: false, message: "Não foi possível salvar a errata pronta. Tente de novo." };
+    }
+    id = data.id as string;
+  }
+
+  await logAuditEvent({
+    acao: "job.errata_pronta_salva",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+    metadata: {
+      errata_pronta_id: id,
+      atualizou: errataProntaId !== null,
+      descricao,
+      resumo: numeros.resumo,
+      valor_job_antes: numeros.valor_job_antes,
+      valor_job_depois: numeros.valor_job_depois,
+    },
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true, errataProntaId: id };
+}
+
+/**
+ * Descarta a errata pronta para envio (decisão 159): qualquer produtor, GP
+ * ou administrador. A linha fica no banco como `descartada`, com quem e
+ * quando — nada é apagado. Nada foi ao financeiro, então nada mais muda.
+ */
+export async function descartarErrataPronta(
+  jobId: string,
+  errataProntaId: string,
+): Promise<{ ok: true } | Err> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.preparar_errata");
+  if (!gate.ok) return gate;
+  const supabase = createClient();
+
+  if (!z.string().uuid().safeParse(errataProntaId).success) {
+    return { ok: false, message: "Errata pronta inválida." };
+  }
+
+  const { data, error } = await supabase
+    .from("jobs_erratas_prontas")
+    .update({
+      situacao: "descartada",
+      descartada_por: session.profile.id,
+      descartada_em: new Date().toISOString(),
+    })
+    .eq("id", errataProntaId)
+    .eq("job_id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("situacao", "pronta")
+    .select("id, resumo, descricao")
+    .maybeSingle();
+  if (error) {
+    console.error("[errata_pronta.descartar]", error.message);
+    return { ok: false, message: "Não foi possível descartar a errata pronta. Tente de novo." };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      message:
+        "Esta errata pronta já foi enviada ao financeiro ou descartada. Recarregue a página para ver como o job ficou.",
+    };
+  }
+
+  await logAuditEvent({
+    acao: "job.errata_pronta_descartada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+    metadata: {
+      errata_pronta_id: errataProntaId,
+      resumo: (data as { resumo: string }).resumo,
+      descricao: (data as { descricao: string | null }).descricao,
+    },
+  });
+
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true };
+}
+
+/** "2 linhas alteradas · 1 linha nova" — o mesmo texto do rascunho da tela. */
+function resumoDasMudancas(mudancas: Mudanca[]): string {
+  const conta = (a: ErrataAcao) => mudancas.filter((m) => m.acao === a).length;
+  const partes: string[] = [];
+  const alt = conta("alterada");
+  const nov = conta("nova");
+  const can = conta("cancelada");
+  if (alt) partes.push(`${alt} ${alt === 1 ? "linha alterada" : "linhas alteradas"}`);
+  if (nov) partes.push(`${nov} ${nov === 1 ? "linha nova" : "linhas novas"}`);
+  if (can) partes.push(`${can} ${can === 1 ? "linha cancelada" : "linhas canceladas"}`);
+  return partes.join(" · ");
+}
+
+type Sessao = Awaited<ReturnType<typeof requireSession>>;
+
+interface ErrataMontada {
+  ok: true;
+  /** O `p` de `registrar_errata_do_job`, sem a errata pronta. */
+  p: Record<string, unknown>;
+  mudancas: Mudanca[];
+  antes: ReturnType<typeof totaisDoFinanceiro>;
+  depois: ReturnType<typeof totaisDoFinanceiro>;
+  perderamBv: Mudanca[];
+  devolveAoMural: boolean;
+}
+
+/**
+ * Confere e monta a errata, sem gravar nada (decisão 159): todas as travas
+ * e a conta de antes e depois que `registrarErrata` fazia antes de chamar o
+ * banco. A errata pronta para envio passa pelo mesmo caminho, para o
+ * produtor saber na hora que uma linha não entra.
+ *
+ * `acaoTentada` é o que a auditoria de `acao_negada` registra quando o job
+ * não aceita errata.
+ */
+async function montarErrata(
+  session: Sessao,
+  jobId: string,
+  conteudo: ConteudoValidado,
+  descricao: string,
+  acaoTentada: "job.errata_registrada" | "job.errata_pronta_salva",
+): Promise<ErrataMontada | Err> {
+  const supabase = createClient();
+  const { alteracoes, novas } = conteudo;
   // `remocoes` é de aba aberta antes da decisão 151: vale como cancelamento.
   const cancelamentos = Array.from(
-    new Set([...parsed.data.cancelamentos, ...parsed.data.remocoes]),
+    new Set([...conteudo.cancelamentos, ...conteudo.remocoes]),
   );
 
   if (alteracoes.length + novas.length + cancelamentos.length === 0) {
@@ -459,7 +815,7 @@ export async function registrarErrata(
       entidadeTipo: "job",
       entidadeId: jobId,
       metadata: {
-        acao_tentada: "job.errata_registrada",
+        acao_tentada: acaoTentada,
         motivo: "status_bloqueia_edicao",
         status_atual: job.status,
       },
@@ -990,7 +1346,10 @@ export async function registrarErrata(
   const depois = totaisDoFinanceiro(depoisItens, base);
   const espelhos = espelhosDe(depois);
 
-  // ---- Grava tudo numa transação só (24/09/2026) ----
+  // ---- O pacote de `registrar_errata_do_job` (24/09/2026) ----
+  //
+  // Montado aqui e gravado por `registrarErrata` (decisão 159: a errata
+  // pronta passa pelas mesmas travas e não grava nada disto).
   //
   // `registrar_errata_do_job` faz as gravações que esta action fazia uma a
   // uma, na mesma ordem — a errata, as linhas novas com a âncora de
@@ -1052,155 +1411,91 @@ export async function registrarErrata(
   // ainda não revisada (decisão do Tiago, 14/09/2026); a função cuida disso.
   const devolveAoMural = job.data_abertura_financeiro !== null;
 
-  const { data: gravada, error: gravarErr } = await supabase.rpc(
-    "registrar_errata_do_job",
-    {
-      p_job_id: jobId,
-      p: {
-        errata: {
-          // A "Descrição da errata" do pop-up mora em `titulo`: é a coluna
-          // que o histórico e o chat já liam.
-          titulo: descricao,
-          // Duas casas em tudo que é dinheiro: `jobs.valor_total` e
-          // `valor_job_abertura` também são gravados assim, e sem isso o
-          // card de Erratas mostra o mesmo delta com 1 centavo de diferença.
-          custo_orcado_antes: dinheiro(antes.subtotalGeral),
-          custo_orcado_depois: dinheiro(depois.subtotalGeral),
-          valor_job_antes: dinheiro(antes.valorJob),
-          valor_job_depois: dinheiro(depois.valorJob),
-          faturamento_previsto_antes: dinheiro(antes.faturamentoPrevisto),
-          faturamento_previsto_depois: dinheiro(depois.faturamentoPrevisto),
-        },
-        novas: linhasNovas,
-        itens: mudancas.map((m) => ({
-          // A linha nova ganha id dentro da função; o item da errata aponta
-          // para ela pela chave. A cancelada continua existindo, então o
-          // item aponta para ela como na correção.
-          ...(m.acao === "nova"
-            ? { chave_nova: chaveDaNova.get(m) }
-            : { job_item_orcado_id: m.copiaId }),
-          acao: m.acao,
-          linha_vermelha: m.linhaVermelha,
-          grupo_id: m.grupoId,
-          item_nome: m.itemNome,
-          grupo_nome: m.grupoNome,
-          tipo_custo_de: m.tipoDe,
-          tipo_custo_para: m.tipoPara,
-          valor_unitario_de: m.unitarioDe,
-          valor_unitario_para: m.unitarioPara,
-          quantidade_de: m.qtdDe,
-          quantidade_para: m.qtdPara,
-          dias_meses_de: m.dmDe,
-          dias_meses_para: m.dmPara,
-          total_de: dinheiro(m.totalDe),
-          total_para: dinheiro(m.totalPara),
-          valor_unitario_planejado_de: m.planUnitDe,
-          valor_unitario_planejado_para: m.planUnitPara,
-          quantidade_planejada_de: m.planQtdDe,
-          quantidade_planejada_para: m.planQtdPara,
-          dias_meses_planejado_de: m.planDmDe,
-          dias_meses_planejado_para: m.planDmPara,
-          total_planejado_de: dinheiro(m.planTotalDe),
-          total_planejado_para: dinheiro(m.planTotalPara),
-          efeito_valor_job: dinheiro(m.efeito.valorJob),
-          efeito_faturamento_previsto: dinheiro(m.efeito.faturamentoPrevisto),
+  return {
+    ok: true,
+    p: {
+      errata: {
+        // A "Descrição da errata" do pop-up mora em `titulo`: é a coluna
+        // que o histórico e o chat já liam.
+        titulo: descricao,
+        // Duas casas em tudo que é dinheiro: `jobs.valor_total` e
+        // `valor_job_abertura` também são gravados assim, e sem isso o
+        // card de Erratas mostra o mesmo delta com 1 centavo de diferença.
+        custo_orcado_antes: dinheiro(antes.subtotalGeral),
+        custo_orcado_depois: dinheiro(depois.subtotalGeral),
+        valor_job_antes: dinheiro(antes.valorJob),
+        valor_job_depois: dinheiro(depois.valorJob),
+        faturamento_previsto_antes: dinheiro(antes.faturamentoPrevisto),
+        faturamento_previsto_depois: dinheiro(depois.faturamentoPrevisto),
+      },
+      novas: linhasNovas,
+      itens: mudancas.map((m) => ({
+        // A linha nova ganha id dentro da função; o item da errata aponta
+        // para ela pela chave. A cancelada continua existindo, então o
+        // item aponta para ela como na correção.
+        ...(m.acao === "nova"
+          ? { chave_nova: chaveDaNova.get(m) }
+          : { job_item_orcado_id: m.copiaId }),
+        acao: m.acao,
+        linha_vermelha: m.linhaVermelha,
+        grupo_id: m.grupoId,
+        item_nome: m.itemNome,
+        grupo_nome: m.grupoNome,
+        tipo_custo_de: m.tipoDe,
+        tipo_custo_para: m.tipoPara,
+        valor_unitario_de: m.unitarioDe,
+        valor_unitario_para: m.unitarioPara,
+        quantidade_de: m.qtdDe,
+        quantidade_para: m.qtdPara,
+        dias_meses_de: m.dmDe,
+        dias_meses_para: m.dmPara,
+        total_de: dinheiro(m.totalDe),
+        total_para: dinheiro(m.totalPara),
+        valor_unitario_planejado_de: m.planUnitDe,
+        valor_unitario_planejado_para: m.planUnitPara,
+        quantidade_planejada_de: m.planQtdDe,
+        quantidade_planejada_para: m.planQtdPara,
+        dias_meses_planejado_de: m.planDmDe,
+        dias_meses_planejado_para: m.planDmPara,
+        total_planejado_de: dinheiro(m.planTotalDe),
+        total_planejado_para: dinheiro(m.planTotalPara),
+        efeito_valor_job: dinheiro(m.efeito.valorJob),
+        efeito_faturamento_previsto: dinheiro(m.efeito.faturamentoPrevisto),
+      })),
+      alteradas: mudancas
+        .filter((m) => m.acao === "alterada")
+        .map((m) => ({
+          id: m.copiaId,
+          tipo_custo: m.tipoPara,
+          valor_unitario_orcado: m.unitarioPara,
+          quantidade_orcada: m.qtdPara,
+          dias_meses_orcado: m.dmPara,
+          // O planejado que já estava lá (decisão 151): gravar o mesmo
+          // número é inócuo, e o trigger tem a última palavra em save e
+          // no Interno.
+          valor_unitario_planejado: m.planUnitPara,
+          quantidade_planejada: m.planQtdPara,
+          dias_meses_planejado: m.planDmPara,
         })),
-        alteradas: mudancas
-          .filter((m) => m.acao === "alterada")
-          .map((m) => ({
-            id: m.copiaId,
-            tipo_custo: m.tipoPara,
-            valor_unitario_orcado: m.unitarioPara,
-            quantidade_orcada: m.qtdPara,
-            dias_meses_orcado: m.dmPara,
-            // O planejado que já estava lá (decisão 151): gravar o mesmo
-            // número é inócuo, e o trigger tem a última palavra em save e
-            // no Interno.
-            valor_unitario_planejado: m.planUnitPara,
-            quantidade_planejada: m.planQtdPara,
-            dias_meses_planejado: m.planDmPara,
-          })),
-        // Decisão 151: a linha não sai mais — a função zera o unitário,
-        // grava a marca de cancelada e dá as PPs dela por concluídas. As
-        // situações travadas (PP, BV, save) foram barradas lá em cima.
-        canceladas: mudancas
-          .filter((m) => m.acao === "cancelada")
-          .map((m) => m.copiaId),
-        bv_cancelar: perderamBv.map((m) => m.copiaId),
-        // `jobs.valor_total` é o Valor do Job; os dois números acompanham
-        // o orçado e precisam andar juntos, senão a listagem mostra um par
-        // que não fecha com a planilha do job.
-        espelhos,
-        devolve_ao_mural: devolveAoMural,
-      },
+      // Decisão 151: a linha não sai mais — a função zera o unitário,
+      // grava a marca de cancelada e dá as PPs dela por concluídas. As
+      // situações travadas (PP, BV, save) foram barradas lá em cima.
+      canceladas: mudancas
+        .filter((m) => m.acao === "cancelada")
+        .map((m) => m.copiaId),
+      bv_cancelar: perderamBv.map((m) => m.copiaId),
+      // `jobs.valor_total` é o Valor do Job; os dois números acompanham
+      // o orçado e precisam andar juntos, senão a listagem mostra um par
+      // que não fecha com a planilha do job.
+      espelhos,
+      devolve_ao_mural: devolveAoMural,
     },
-  );
-
-  if (gravarErr || !gravada) {
-    console.error("[errata.gravar]", gravarErr?.message);
-    // P0001 é mensagem nossa, escrita para a tela (as travas do banco).
-    const doBanco =
-      gravarErr?.code === "P0001" && gravarErr.message ? ` ${gravarErr.message}` : "";
-    return {
-      ok: false,
-      message: `Não foi possível registrar a errata, e nada foi gravado.${doBanco}`,
-    };
-  }
-
-  const resultado = gravada as {
-    errata_id: string;
-    bvs_cancelados: Array<{ id: string; valor: number; job_item_orcado_id: string }>;
+    mudancas,
+    antes,
+    depois,
+    perderamBv,
+    devolveAoMural,
   };
-  const errata = { id: resultado.errata_id };
-
-  for (const bv of resultado.bvs_cancelados ?? []) {
-    const m = perderamBv.find((x) => x.copiaId === bv.job_item_orcado_id);
-    await logAuditEvent({
-      acao: "item_bv.cancelado",
-      tenantId: session.activeTenant.id,
-      entidadeTipo: "item_bv",
-      entidadeId: bv.id,
-      metadata: {
-        job_item_orcado_id: bv.job_item_orcado_id,
-        item: m?.itemNome ?? null,
-        valor: bv.valor,
-        motivo: "errata_mudou_tipo_de_custo",
-        errata_id: errata.id,
-        tipo_de: m?.tipoDe ?? null,
-        tipo_para: m?.tipoPara ?? null,
-      },
-    });
-  }
-
-  const contar = (a: ErrataAcao) =>
-    mudancas.filter((m) => m.acao === a).length;
-
-  await logAuditEvent({
-    acao: "job.errata_registrada",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "job",
-    entidadeId: jobId,
-    metadata: {
-      errata_id: errata.id,
-      descricao,
-      itens_alterados: contar("alterada"),
-      itens_novos: contar("nova"),
-      itens_cancelados: contar("cancelada"),
-      linhas_vermelhas: mudancas.filter(
-        (m) => m.acao === "nova" && m.linhaVermelha,
-      ).length,
-      devolveu_ao_mural: devolveAoMural,
-      valor_job_antes: antes.valorJob,
-      valor_job_depois: depois.valorJob,
-      faturamento_previsto_antes: antes.faturamentoPrevisto,
-      faturamento_previsto_depois: depois.faturamentoPrevisto,
-    },
-  });
-
-  revalidatePath(`/jobs/${jobId}`);
-  revalidatePath(`/financeiro/jobs/${jobId}`);
-  revalidatePath("/financeiro/abertura-de-job");
-  return { ok: true, errataId: errata.id };
 }
 
 /**

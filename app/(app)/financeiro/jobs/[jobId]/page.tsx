@@ -715,6 +715,8 @@ export default async function JobNoFinanceiroPage({
                 totaisJob.faturamentoPrevisto
               }
               moeda={versaoAprovada.moeda}
+              // A errata pronta não foi ao financeiro (decisão 159).
+              pronta={null}
             />
 
             {/* O histórico do "Editar orçado" (decisão 115). Só existe
@@ -782,6 +784,9 @@ export default async function JobNoFinanceiroPage({
               edicaoDoFinanceiro={edicaoDoFinanceiro}
               // O job como foi aberto (decisão 151): o mesmo da página de Jobs.
               aberturaDoJob={aberturaDoJob}
+              // O financeiro não faz errata nem vê a pronta (decisão 159).
+              papelNaErrata={null}
+              errataPronta={null}
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}
