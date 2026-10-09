@@ -263,12 +263,26 @@ export function mesesDaAbaParaGravar(
   if (!casados.ok) return { ok: false, message: casados.message };
   const aceitos = casados.grupos.reduce((s, g) => s + g.itens.length, 0);
   const honorarios = honorariosDosMeses(casados.blocosAceitos);
+  // Aviso de linha de um bloco que ficou de fora não é desta versão: a
+  // planilha interna traz o ano inteiro, e o TT de fevereiro não interessa
+  // a um orçamento de outubro a dezembro (08/10/2026).
+  const deFora = new Set(lida.meses.filter((b) => !casados.blocosAceitos.includes(b)));
+  const blocoDaLinha = (linha: number): ParseMes | null => {
+    let atual: ParseMes | null = null;
+    for (const b of lida.meses) if (b.linha_xlsx <= linha) atual = b;
+    return atual;
+  };
+  const avisosDaAba = lida.warnings.filter((w) => {
+    if (w.linha === 0) return true;
+    const bloco = blocoDaLinha(w.linha);
+    return bloco === null || !deFora.has(bloco);
+  });
   return {
     ok: true,
     parsed: {
       ...lida,
       grupos: casados.grupos,
-      warnings: [...lida.warnings, ...casados.avisos, ...honorarios.avisos],
+      warnings: [...avisosDaAba, ...casados.avisos, ...honorarios.avisos],
       linhas_importadas: aceitos,
       linhas_ignoradas: lida.linhas_ignoradas + lida.linhas_importadas - aceitos,
       // O % dos meses que entram; sem nenhum, o primeiro que a aba trouxer.

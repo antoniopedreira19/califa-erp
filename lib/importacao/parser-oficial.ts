@@ -252,6 +252,11 @@ function toNumber(v: unknown): { ok: boolean; n: number } {
   return { ok: false, n: 0 };
 }
 
+/** "R$ 7.000,00" — para as mensagens de aviso. */
+function brl(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function letra(col: number): string {
   return String.fromCharCode(64 + col); // 1 → 'A'
 }
@@ -397,14 +402,28 @@ interface Colunas {
   rs: number;
   qt: number;
   dm: number;
+  /** TT do orçado: só serve ao aviso do TT que não bate com a conta. */
+  tt: number;
   tipo: number;
   prs: number;
   pqt: number;
   pdm: number;
+  /** TT do planejado, idem. */
+  ptt: number;
 }
 
 /** As do modelo e da exportação do ERP. */
-const COLUNAS_PADRAO: Colunas = { rs: 3, qt: 4, dm: 5, tipo: 7, prs: 8, pqt: 9, pdm: 10 };
+const COLUNAS_PADRAO: Colunas = {
+  rs: 3,
+  qt: 4,
+  dm: 5,
+  tt: 6,
+  tipo: 7,
+  prs: 8,
+  pqt: 9,
+  pdm: 10,
+  ptt: 11,
+};
 
 /**
  * Onde estão R$, QT, D/M (ou DIAS), o tipo e o planejado, pelo cabeçalho.
@@ -426,7 +445,8 @@ function colunasDoCabecalho(cells: string[]): Colunas {
   const prs = achar(["r$"], tt);
   const pqt = prs ? (achar(["qt"], prs) ?? prs + 1) : COLUNAS_PADRAO.pqt;
   const pdm = prs ? (achar(["d/m", "dias"], pqt) ?? pqt + 1) : COLUNAS_PADRAO.pdm;
-  return { rs, qt, dm, tipo: tt + 1, prs: prs ?? COLUNAS_PADRAO.prs, pqt, pdm };
+  const ptt = prs ? (achar(["tt"], pdm) ?? pdm + 1) : COLUNAS_PADRAO.ptt;
+  return { rs, qt, dm, tt, tipo: tt + 1, prs: prs ?? COLUNAS_PADRAO.prs, pqt, pdm, ptt };
 }
 
 /** A aba tem cabeçalho e ao menos um título de mês (ou a marca `mes:`). */
@@ -657,6 +677,45 @@ export async function parseOficial(
     return lido.n;
   }
 
+  /**
+   * O TT da planilha que não bate com R$ × QT × D/M (08/10/2026). O ERP
+   * grava a conta e não lê a coluna TT — mas a planilha às vezes traz o TT
+   * digitado à mão (na aba SUL da Ânima, QT 0 com TT de R$ 7.000,00), e o
+   * total da versão sai diferente do da planilha sem ninguém saber por quê.
+   * Só avisa: a linha entra com a conta, como sempre. TT vazio, texto ou
+   * fórmula sem resultado não é conferido.
+   */
+  function conferirTt(
+    row: ExcelJS.Row,
+    rowNumber: number,
+    item: ParseItem,
+    colTt: number,
+    colTtPlanejado: number | null,
+  ) {
+    const conferir = (col: number, conta: number, rotulo: string) => {
+      const tt = toNumber(row.getCell(col).value);
+      if (!tt.ok || Math.round(tt.n * 100) === Math.round(conta * 100)) return;
+      warnings.push({
+        linha: rowNumber,
+        coluna: letra(col),
+        motivo: `${rotulo} da planilha é ${brl(tt.n)}, mas R$ × QT × D/M dá ${brl(conta)} — a linha entra com a conta.`,
+        severidade: "ajuste",
+      });
+    };
+    conferir(
+      colTt,
+      item.valor_unitario_orcado * item.quantidade_orcada * item.dias_meses_orcado,
+      "O TT",
+    );
+    if (colTtPlanejado !== null) {
+      conferir(
+        colTtPlanejado,
+        item.valor_unitario_planejado * item.quantidade_planejada * item.dias_meses_planejado,
+        "O TT planejado",
+      );
+    }
+  }
+
   /** Uma linha da planilha internacional, depois do cabeçalho. */
   function lerLinhaInternacional(
     cells: string[],
@@ -726,7 +785,7 @@ export async function parseOficial(
       return temPlanejado && v.ok && v.n > 0 ? v.n : 0;
     };
 
-    grupoAtual.itens.push({
+    const item: ParseItem = {
       ordem: grupoAtual.itens.length + 1,
       item_id: marcaDe(marcasDaLinha, "it:"),
       item: colB,
@@ -741,7 +800,10 @@ export async function parseOficial(
       dias_meses_planejado: planejado(10),
       planilha_origem: null,
       linha_xlsx: rowNumber,
-    });
+    };
+    grupoAtual.itens.push(item);
+    // TT BRL na G. O planejado internacional não tem TT conferido.
+    conferirTt(row, rowNumber, item, 7, null);
     linhasImportadas++;
   }
 
@@ -1045,7 +1107,7 @@ export async function parseOficial(
     const qtdPlanejada = hEhId ? semPlanejado : toNumber(colI);
     const dmPlanejado = hEhId ? semPlanejado : toNumber(colJ);
 
-    grupoAtual.itens.push({
+    const item: ParseItem = {
       ordem: grupoAtual.itens.length + 1,
       item_id: marcaDe(marcasDaLinha, "it:"),
       item: nomeItem,
@@ -1061,7 +1123,11 @@ export async function parseOficial(
         dmPlanejado.ok && dmPlanejado.n > 0 ? dmPlanejado.n : 0,
       planilha_origem: null,
       linha_xlsx: rowNumber,
-    });
+    };
+    grupoAtual.itens.push(item);
+    // O planejado só se confere quando a planilha o traz: na exportação do
+    // ERP a coluna é do id oculto, e no Interno o planejado é o orçado.
+    conferirTt(row, rowNumber, item, col.tt, hEhId || tipoFixo ? null : col.ptt);
     linhasImportadas++;
   });
 
