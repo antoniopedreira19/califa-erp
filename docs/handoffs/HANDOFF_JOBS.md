@@ -5055,3 +5055,34 @@ código publicado logo depois (`3305751`).
   antiga). Agora o sistema avisa quando sai versão nova, e a consulta do
   CNPJ tem o CNPJ.ws de reserva quando a BrasilAPI cai — ver
   [2026-10-09-aviso-de-versao-e-cnpj-reserva.md](2026-10-09-aviso-de-versao-e-cnpj-reserva.md).
+
+## ⚠️ Nota de 2026-10-09 (4) — A errata organiza a planilha: ordem, agrupamento novo, renomeado e o vazio que sai (decisão 162)
+
+- **O pedido:** reordenar os itens da Planilha Interna do job como no
+  orçamento (decisão 104) e renomear agrupamentos — **só dentro da
+  errata**, que também cria agrupamento e tira o que ficou vazio. Protótipo
+  aprovado: https://claude.ai/artifact/Exc6EikwGzVbx9i1ZNry1z.
+- **Na errata:** alça (⋮⋮) no recuo do item e Alt + ↑ ↓ (o item troca de
+  agrupamento; no mensal, dentro do mês); lápis no nome do agrupamento;
+  "Novo grupo" no pé da planilha; o agrupamento que ficou vazio mostra
+  "Ele sai quando a errata for confirmada." e sai sozinho. Desfazer volta
+  cada passo. Pop-up, barra, histórico e Comunicação mostram "O que muda
+  na organização".
+- **Errata que só reorganiza** devolve o job ao mural como qualquer
+  errata; o financeiro vê "Nenhum valor alterado · itens reorganizados" na
+  fila, a caixa "Nenhum valor foi alterado" no Resumo da errata e o aviso
+  na revisão da abertura. Demonstração com os componentes reais:
+  https://claude.ai/artifact/KATBEZ9Kt9TqpJFWLqomNJ.
+- **Banco** (migration `20261009300001`): `jobs_grupos` (os agrupamentos do
+  job, copiados da versão; backfill de 361 nos 95 jobs que existiam),
+  `jobs_itens_orcado.job_grupo_id` (não nulo) com o gatilho
+  `jio_grupo_do_job` mantendo `grupo_id` na âncora da versão (o mês não
+  muda), `jobs_erratas.estrutura`, `registrar_errata_do_job` com a
+  organização, e as funções de save guardando o nome do job. A versão
+  aprovada não muda.
+- **Quem lê o agrupamento do job agora:** a página do job (e as telas do
+  financeiro que a reusam), a exportação interna, a visão agregada de
+  jobs, a conferência da abertura, a conferência de saves e a alteração do
+  financeiro (decisão 115).
+- Regra num lugar só: `lib/calculos/organizacao-errata.ts` (7 testes:
+  `node --import tsx --test lib/calculos/organizacao-errata.test.ts`).

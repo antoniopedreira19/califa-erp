@@ -10,6 +10,7 @@ import {
   type SaveAprovacaoTipo,
 } from "@/lib/types";
 import { grupoDoPedido } from "@/lib/data/saves";
+import { resumoDaEstrutura } from "@/lib/calculos/organizacao-errata";
 
 /**
  * Monta a thread de Comunicação do job.
@@ -325,19 +326,43 @@ export function montarThreadChat(
       };
     });
 
-    if (e.faturamento_previsto_depois !== null) {
+    // Decisão 162: o que a errata mudou na organização da planilha. A que
+    // só reorganizou não mexe em valor, e o card diz isso em vez de repetir
+    // números que não mudaram.
+    const estrutura = e.estrutura ?? [];
+    const soOrganizacao = e.itens.length === 0 && estrutura.length > 0;
+    for (const m of estrutura) {
       linhas.push({
-        texto: "Novo faturamento previsto",
-        valor: moeda(e.faturamento_previsto_depois, moedaCode),
-        tom: "neutro",
+        texto:
+          m.tipo === "grupo_novo"
+            ? `Agrupamento novo · ${m.nome}`
+            : m.tipo === "grupo_renomeado"
+              ? `Agrupamento renomeado · ${m.de} → ${m.para}`
+              : m.tipo === "grupo_removido"
+                ? `Agrupamento removido · ${m.nome} (ficou vazio)`
+                : m.tipo === "item_movido"
+                  ? `Item movido · ${m.item}: ${m.de} → ${m.para}`
+                  : `Ordem · itens de ${m.grupo} em outra ordem`,
+        valor: "",
+        tom: "texto",
       });
     }
 
-    linhas.push({
-      texto: "Novo valor do job",
-      valor: moeda(e.valor_job_depois, moedaCode),
-      tom: "neutro",
-    });
+    if (!soOrganizacao) {
+      if (e.faturamento_previsto_depois !== null) {
+        linhas.push({
+          texto: "Novo faturamento previsto",
+          valor: moeda(e.faturamento_previsto_depois, moedaCode),
+          tom: "neutro",
+        });
+      }
+
+      linhas.push({
+        texto: "Novo valor do job",
+        valor: moeda(e.valor_job_depois, moedaCode),
+        tom: "neutro",
+      });
+    }
 
     // O resumo conta o que a errata FEZ; a descrição, por que ela foi
     // feita. Até 27/08/2026 os dois moravam no mesmo `titulo` e o card
@@ -352,30 +377,34 @@ export function montarThreadChat(
     if (nNovas) partes.push(`${nNovas} ${nNovas === 1 ? "linha nova" : "linhas novas"}`);
     if (nRem) partes.push(`${nRem} ${nRem === 1 ? "linha removida" : "linhas removidas"}`);
     if (nCan) partes.push(`${nCan} ${nCan === 1 ? "linha cancelada" : "linhas canceladas"}`);
+    const organizacao = resumoDaEstrutura(estrutura);
 
     itens.push({
       tipo: "sistema",
       id: `errata-${e.id}`,
-      icone: soTipo ? "tags" : "file-pen-line",
-      cor: soTipo ? "bege" : delta >= 0 ? "verde" : "vermelho",
+      icone: soTipo || soOrganizacao ? "tags" : "file-pen-line",
+      cor: soTipo || soOrganizacao ? "bege" : delta >= 0 ? "verde" : "vermelho",
       titulo: `Errata registrada · ${dataCurta(e.created_at)}`,
       quando: dataHora(e.created_at),
-      resumo:
-        partes.length > 0
-          ? `${partes.join(" · ")} · orçado ${moeda(e.custo_orcado_depois, moedaCode)}.`
+      resumo: soOrganizacao
+        ? `Nenhum valor alterado · ${organizacao.join(" · ")}.`
+        : partes.length > 0
+          ? `${[...partes, ...organizacao].join(" · ")} · orçado ${moeda(e.custo_orcado_depois, moedaCode)}.`
           : `${e.itens.length} ${
               e.itens.length === 1
                 ? "item orçado alterado"
                 : "itens orçados alterados"
             }.`,
-      valor: comSinal(delta, moedaCode),
+      valor: soOrganizacao ? null : comSinal(delta, moedaCode),
       valorTom: delta >= 0 ? "positivo" : "negativo",
       linhas,
       descricao: { rotulo: "Descrição da errata", texto: e.titulo, autor: e.autor_nome },
       nota:
         abertura.aberturaFinanceiroEm &&
         e.created_at > abertura.aberturaFinanceiroEm
-          ? "Job devolvido ao mural de abertura para revisão de recebimento e custos."
+          ? soOrganizacao
+            ? "Job devolvido ao mural de abertura, sem mudança de valor: os itens só foram reorganizados."
+            : "Job devolvido ao mural de abertura para revisão de recebimento e custos."
           : null,
       em: e.created_at,
     });

@@ -20,7 +20,7 @@
  */
 
 import * as React from "react";
-import { AlertCircle, FilePenLine, Landmark, Send, UserCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, FilePenLine, Landmark, Send, UserCheck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -31,7 +31,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ERRATA } from "@/app/(app)/_planilha/blocos";
-import type { MudancaErrata } from "./errata-rascunho";
+import type { MudancaDeEstrutura, MudancaErrata } from "./errata-rascunho";
 
 interface ParDeValores {
   antes: number;
@@ -45,6 +45,8 @@ interface Props {
   jobNome: string;
   resumo: string;
   mudancas: MudancaErrata[];
+  /** O que a errata muda na organização da planilha (decisão 162). */
+  estrutura: MudancaDeEstrutura[];
   orcado: ParDeValores;
   faturamento: ParDeValores;
   valorJob: ParDeValores;
@@ -139,6 +141,58 @@ function LinhaDeValor({
   );
 }
 
+/** Uma mudança de organização, com a pastilha no estilo das linhas. */
+export function LinhaDeEstrutura({ m }: { m: MudancaDeEstrutura }) {
+  const seta = <ArrowRight className="h-3 w-3 flex-none text-[#c9c9c9]" />;
+  switch (m.tipo) {
+    case "grupo_novo":
+      return (
+        <>
+          <span className={ERRATA.tagNova}>Grupo novo</span>
+          <span className="truncate text-[12.5px] font-semibold text-foreground">{m.nome}</span>
+        </>
+      );
+    case "grupo_renomeado":
+      return (
+        <>
+          <span className={ERRATA.tagAlterada}>Renomeado</span>
+          <span className="truncate text-[12.5px] text-muted-foreground line-through">{m.de}</span>
+          {seta}
+          <span className="truncate text-[12.5px] font-semibold text-foreground">{m.para}</span>
+        </>
+      );
+    case "grupo_removido":
+      return (
+        <>
+          <span className={ERRATA.tagRemovida}>Grupo removido</span>
+          <span className="truncate text-[12.5px] text-foreground">{m.nome}</span>
+          <span className="text-[11px] text-muted-foreground">· ficou vazio</span>
+        </>
+      );
+    case "item_movido":
+      return (
+        <>
+          <span className={ERRATA.tagAlterada}>Movido</span>
+          <span className="truncate text-[12.5px] text-foreground">{m.item}</span>
+          <span className="flex min-w-0 flex-none items-center gap-1.5 text-[11.5px] text-muted-foreground">
+            {m.de}
+            {seta}
+            <span className="font-semibold text-foreground">{m.para}</span>
+          </span>
+        </>
+      );
+    case "ordem":
+      return (
+        <>
+          <span className={ERRATA.tagAlterada}>Ordem</span>
+          <span className="truncate text-[12.5px] text-foreground">
+            Itens de <strong className="font-semibold">{m.grupo}</strong> em outra ordem
+          </span>
+        </>
+      );
+  }
+}
+
 export function ErrataConfirmarDialog({
   open,
   onOpenChange,
@@ -146,6 +200,7 @@ export function ErrataConfirmarDialog({
   jobNome,
   resumo,
   mudancas,
+  estrutura,
   orcado,
   faturamento,
   valorJob,
@@ -170,8 +225,12 @@ export function ErrataConfirmarDialog({
 
   // Para quem prepara a descrição é opcional: o GP escreve no envio.
   const descricaoOk = prepara || descricao.trim().length >= 5;
+  // A errata que só reorganiza a planilha (decisão 162) não muda número
+  // nenhum: o pop-up não mostra o bloco de valores. Ela devolve o job ao
+  // mural como qualquer errata, e o financeiro vê que nenhum valor mudou.
+  const soOrganizacao = mudancas.length === 0 && estrutura.length > 0;
   const podeConfirmar =
-    descricaoOk && !faltaNomear && !salvando && mudancas.length > 0;
+    descricaoOk && !faltaNomear && !salvando && (mudancas.length > 0 || estrutura.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -205,6 +264,7 @@ export function ErrataConfirmarDialog({
 
         <div className="space-y-4 pt-1">
           {/* O que muda no orçado */}
+          {mudancas.length > 0 && (
           <section className="rounded-xl border border-border">
             <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
               O que muda no orçado
@@ -258,8 +318,27 @@ export function ErrataConfirmarDialog({
               })}
             </ul>
           </section>
+          )}
+
+          {/* O que muda na organização (decisão 162): mover, renomear,
+              criar agrupamento, e o que ficou vazio sai. Não muda valor. */}
+          {estrutura.length > 0 && (
+            <section className="rounded-xl border border-border">
+              <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                O que muda na organização
+              </h3>
+              <ul className="divide-y divide-border">
+                {estrutura.map((m) => (
+                  <li key={`${m.tipo}:${m.chave}`} className="flex items-center gap-2 px-3.5 py-2">
+                    <LinhaDeEstrutura m={m} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* Os números */}
+          {!soOrganizacao && (
           <section className="rounded-xl border border-border px-3.5 py-2">
             <LinhaDeValor rotulo="Total do orçado" par={orcado} moeda={moeda} />
             <LinhaDeValor
@@ -274,6 +353,7 @@ export function ErrataConfirmarDialog({
               forte
             />
           </section>
+          )}
 
           {/* A consequência que não está nos números. Para quem prepara, a
               consequência é outra: nada muda no job até um GP enviar. */}
@@ -285,9 +365,9 @@ export function ErrataConfirmarDialog({
                   Um GP revisa e envia ao financeiro
                 </p>
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  A errata fica salva no job, pronta para envio. Só quando um GP
-                  confirmar é que o faturamento previsto muda e o job volta ao
-                  mural de abertura. Até lá, você pode editá-la ou descartá-la.
+                  {soOrganizacao
+                    ? "A errata fica salva no job, pronta para envio. Só quando um GP confirmar é que a planilha muda e o job volta ao mural de abertura, sem mudança de valor. Até lá, você pode editá-la ou descartá-la."
+                    : "A errata fica salva no job, pronta para envio. Só quando um GP confirmar é que o faturamento previsto muda e o job volta ao mural de abertura. Até lá, você pode editá-la ou descartá-la."}
                 </p>
               </div>
             </div>
@@ -298,12 +378,20 @@ export function ErrataConfirmarDialog({
                 <p className="text-[12.5px] font-semibold text-foreground">
                   Confirmar devolve o job ao mural de abertura
                 </p>
-                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  O financeiro revisa a abertura com os números novos — previsão
-                  de recebimento ({formatCurrency(faturamento.depois, moeda)}),
-                  curva de desembolso do custo planejado e competência. O envio
-                  para faturamento fica bloqueado até essa revisão ser salva.
-                </p>
+                {soOrganizacao ? (
+                  <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                    Nenhum valor muda: o financeiro vê que os itens só foram
+                    reorganizados. O envio para faturamento fica bloqueado até a
+                    revisão da abertura ser registrada.
+                  </p>
+                ) : (
+                  <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                    O financeiro revisa a abertura com os números novos — previsão
+                    de recebimento ({formatCurrency(faturamento.depois, moeda)}),
+                    curva de desembolso do custo planejado e competência. O envio
+                    para faturamento fica bloqueado até essa revisão ser salva.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -351,10 +439,9 @@ export function ErrataConfirmarDialog({
                   </p>
                 )}
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Vai para o histórico de erratas, para o fio da Comunicação e para
-                  a fila de abertura do financeiro — com autor, data e hora. O
-                  orçado aprovado da versão não muda: a errata fica registrada
-                  sobre ele.
+                  {soOrganizacao
+                    ? "Vai para o histórico de erratas, para o fio da Comunicação e para a fila de abertura do financeiro, que vê que nenhum valor mudou — com autor, data e hora. A versão aprovada não muda: os nomes e a ordem novos valem só no job."
+                    : "Vai para o histórico de erratas, para o fio da Comunicação e para a fila de abertura do financeiro — com autor, data e hora. O orçado aprovado da versão não muda: a errata fica registrada sobre ele."}
                 </p>
               </>
             )}

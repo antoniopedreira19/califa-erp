@@ -208,7 +208,7 @@ export async function registrarAlteracaoDoFinanceiro(
     supabase
       .from("jobs_itens_orcado")
       .select(
-        "id, item, grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, em_save, save_consumido, cancelada_em",
+        "id, item, grupo_id, job_grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, em_save, save_consumido, cancelada_em",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
@@ -218,10 +218,12 @@ export async function registrarAlteracaoDoFinanceiro(
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .in("situacao", ["aguardando", "recusado"]),
+    // Os agrupamentos do JOB (decisão 162): o nome que vai para o histórico
+    // é o que a planilha mostra; o mês é o mesmo da âncora na versão.
     supabase
-      .from("versoes_orcamento_grupos")
+      .from("jobs_grupos")
       .select("id, nome, mes_id")
-      .eq("versao_orcamento_id", job.versao_orcamento_aprovada_id)
+      .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
     supabase
       .from("jobs_previsao_recebimento")
@@ -393,7 +395,7 @@ export async function registrarAlteracaoDoFinanceiro(
         message: `"${atual.item}" tem save. Linha com save não entra na edição do orçado — o save muda pelo pop-up da coluna Save.`,
       };
     }
-    const mes = mesDaLinha(atual.grupo_id);
+    const mes = mesDaLinha(atual.job_grupo_id);
     if (mensal && mes && mesesComNota.has(mes.slice(0, 7))) {
       const nome = nomeDoMes(mes);
       return {
@@ -405,7 +407,7 @@ export async function registrarAlteracaoDoFinanceiro(
       id: atual.id,
       item: atual.item,
       grupoId: atual.grupo_id,
-      grupoNome: grupoPorId.get(atual.grupo_id)?.nome ?? "—",
+      grupoNome: grupoPorId.get(atual.job_grupo_id)?.nome ?? "—",
       mes,
       tipoDe,
       tipoPara,

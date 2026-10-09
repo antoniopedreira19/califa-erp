@@ -144,6 +144,12 @@ export function FilaAbertura({
               {formatPeriodo(l.data_inicio_prevista, l.data_fim_prevista)}
             </span>
             <MarcaDeSave saves={l.saves} itens={l.planilha_itens} />
+            {/* Decisão 162: a errata só reorganizou a planilha. */}
+            {l.revisao?.soOrganizacao && (
+              <span className="inline-flex w-fit items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-[1px] text-[10.5px] font-semibold text-emerald-800">
+                Nenhum valor alterado · itens reorganizados
+              </span>
+            )}
           </div>
         </td>
         <td className="px-4 py-3.5">

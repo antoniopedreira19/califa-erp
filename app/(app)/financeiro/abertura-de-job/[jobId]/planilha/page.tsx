@@ -7,6 +7,7 @@ import type {
   Categoria,
   ItemBv,
   ItemPlanilhaJob,
+  JobGrupo,
   JobItemRealizado,
   VersaoOrcamentoGrupo,
 } from "@/lib/types";
@@ -93,13 +94,16 @@ export default async function PlanilhaDaAberturaPage({
 
   const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes, mesesRes] =
     await Promise.all([
+    // Os agrupamentos do JOB (decisão 162), como na aba do job: a errata
+    // renomeia, cria e tira agrupamento. O removido não aparece.
     supabase
-      .from("versoes_orcamento_grupos")
+      .from("jobs_grupos")
       .select("*")
-      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("job_id", params.jobId)
       .eq("tenant_id", session.activeTenant.id)
+      .is("removido_em", null)
       .order("ordem", { ascending: true })
-      .returns<VersaoOrcamentoGrupo[]>(),
+      .returns<JobGrupo[]>(),
     // Orçado vem da CÓPIA do job, como na aba do job: a errata altera a
     // cópia e a versão aprovada continua sendo o que o cliente aprovou.
     supabase
@@ -156,9 +160,23 @@ export default async function PlanilhaDaAberturaPage({
   // ordem dos meses — como na visão agregada do orçamento.
   const meses = mesesRes.data ?? [];
   const mesDoId = new Map(meses.map((m) => [m.id, m.mes]));
+  // No formato que a planilha já conhecia (decisão 162).
+  const gruposDoJob: VersaoOrcamentoGrupo[] = (gruposRes.data ?? []).map((g) => ({
+    id: g.id,
+    tenant_id: g.tenant_id,
+    versao_orcamento_id: versaoAprovadaId,
+    nome: g.nome,
+    ordem: g.ordem,
+    mes_id: g.mes_id ?? null,
+    meio: null,
+    forma_compra: null,
+    formato: null,
+    created_at: g.created_at,
+    updated_at: g.updated_at,
+  }));
   const grupos =
     planilha.modeloPlanilha === "mensal" && meses.length > 0
-      ? [...(gruposRes.data ?? [])]
+      ? [...gruposDoJob]
           .sort((a, b) => {
             const ma = (a.mes_id && mesDoId.get(a.mes_id)) || "";
             const mb = (b.mes_id && mesDoId.get(b.mes_id)) || "";
@@ -168,14 +186,15 @@ export default async function PlanilhaDaAberturaPage({
             const mes = g.mes_id ? mesDoId.get(g.mes_id) : undefined;
             return mes ? { ...g, nome: `${g.nome} · ${rotuloMesCurto(mes)}` } : g;
           })
-      : (gruposRes.data ?? []);
+      : gruposDoJob;
 
   const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => ({
     id: it.id,
     orcado_id: it.id,
     item_versao_id: it.item_versao_id ?? null,
     linha_vermelha: it.linha_vermelha === true,
-    grupo_id: it.grupo_id,
+    // O agrupamento do job (decisão 162), o mesmo da aba do job.
+    grupo_id: it.job_grupo_id ?? it.grupo_id,
     ordem: Number(it.ordem ?? 0),
     item: it.item,
     tipo_custo: it.tipo_custo,

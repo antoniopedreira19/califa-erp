@@ -83,3 +83,7 @@ de reordenação com "Salvar ordem", **C** número da posição com um quadro
 - A planilha interna do **job** (errata e travas próprias).
 - Levar um item para **outro orçamento** na visão agregada: cada card tem a
   sua planilha, e o adaptador recusa.
+
+> ⚠️ **Planilha do job (2026-10-09).** A planilha interna do job ganhou a
+> mesma alça, só dentro da errata, com agrupamentos próprios do job
+> (renomear, criar, e o vazio sai na confirmação). Ver a decisão 162.

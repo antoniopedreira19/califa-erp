@@ -19,7 +19,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { FilePenLine } from "lucide-react";
+import { FilePenLine, ListTree } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,8 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import type { FilaLinha, SaveFilaLinha } from "./fila-list";
 import { IconeSave, rotuloDoSave } from "./icone-save";
+import { LinhaDeEstrutura } from "@/app/(app)/jobs/[jobId]/realizado/errata-confirmar-dialog";
+import { resumoDaEstrutura } from "@/lib/calculos/organizacao-errata";
 
 function dataHora(iso: string): string {
   const d = new Date(iso);
@@ -171,6 +173,26 @@ export function ResumoErrataDialog({
             </DialogHeader>
 
             <div className="space-y-4 pt-1">
+              {/* Decisão 162: a errata só reorganizou a planilha. Ela devolve
+                  o job ao mural como qualquer errata, e o financeiro sabe de
+                  cara que não há número novo para conferir. */}
+              {r.soOrganizacao && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3">
+                  <ListTree className="mt-0.5 h-4 w-4 flex-none text-emerald-700" />
+                  <div className="space-y-1">
+                    <p className="text-[12.5px] font-semibold text-emerald-900">
+                      Nenhum valor foi alterado
+                    </p>
+                    <p className="text-[11.5px] leading-relaxed text-emerald-900/80">
+                      {quantas > 1 ? "As erratas só reorganizaram" : "A errata só reorganizou"} a
+                      planilha do job: itens mudaram de lugar ou de agrupamento, ou
+                      agrupamentos foram renomeados. Faturamento, valor do job e
+                      custos seguem os mesmos.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {unica && (
                 <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
@@ -205,10 +227,36 @@ export function ResumoErrataDialog({
                     Linhas afetadas
                   </span>
                   <span className="text-[12.5px] font-semibold text-foreground">
-                    {linhasAfetadas(r)}
+                    {r.soOrganizacao ? "nenhuma" : linhasAfetadas(r)}
                   </span>
                 </div>
+                {r.organizacao.length > 0 && (
+                  <div className="flex items-center justify-between gap-4 py-1.5">
+                    <span className="text-[12.5px] text-muted-foreground">
+                      Organização
+                    </span>
+                    <span className="text-right text-[12.5px] font-semibold text-foreground">
+                      {resumoDaEstrutura(r.organizacao).join(" · ")}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {/* O que mudou na organização, como o GP confirmou. */}
+              {r.organizacao.length > 0 && (
+                <div className="rounded-xl border border-border">
+                  <p className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    O que mudou na organização
+                  </p>
+                  <ul className="divide-y divide-border">
+                    {r.organizacao.map((m, k) => (
+                      <li key={`${m.tipo}:${m.chave}:${k}`} className="flex items-center gap-2 px-3.5 py-2">
+                        <LinhaDeEstrutura m={m} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Com mais de uma, cada errata na ordem em que aconteceu —
                   o topo é o efeito somado, isto é o que aconteceu. */}
@@ -236,7 +284,9 @@ export function ResumoErrataDialog({
                         </p>
                         <p className="mt-0.5 text-[11.5px] text-muted-foreground">
                           {e.autorNome ?? "—"} · {dataHora(e.em)} ·{" "}
-                          {linhasAfetadas(e)}
+                          {e.soOrganizacao
+                            ? `nenhum valor alterado · ${resumoDaEstrutura(e.organizacao).join(" · ")}`
+                            : linhasAfetadas(e)}
                         </p>
                         <p className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] text-muted-foreground">
                           <span>
@@ -298,6 +348,14 @@ export function ResumoErrataDialog({
                 </div>
               )}
 
+              {r.soOrganizacao ? (
+                <p className="text-[12px] leading-relaxed text-muted-foreground">
+                  Como nenhum número mudou, na tela de abertura basta conferir e
+                  terminar em &ldquo;Registrar revisão de abertura&rdquo;. O job
+                  segue aberto; o faturamento fica bloqueado até a revisão ser
+                  registrada.
+                </p>
+              ) : (
               <p className="text-[12px] leading-relaxed text-muted-foreground">
                 Na tela de abertura você reconfere{" "}
                 <strong className="font-semibold text-foreground">
@@ -318,6 +376,7 @@ export function ResumoErrataDialog({
                 revisão de abertura&rdquo;. O job segue aberto; o faturamento
                 fica bloqueado até a revisão ser registrada.
               </p>
+              )}
 
               <div className="flex justify-end gap-2 pt-1">
                 <button

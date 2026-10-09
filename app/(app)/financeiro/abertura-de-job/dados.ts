@@ -6,6 +6,7 @@ import {
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import type {
   CategoriaModeloPlanilha,
+  MudancaDeEstrutura,
   OrigemDeSave,
   SaveAprovacaoMomento,
   SaveAprovacaoTipo,
@@ -250,6 +251,11 @@ export interface ErrataDaRevisao {
    *  errata fica no histórico, e a revisão mostra que ela não conta.
    *  `null` na errata comum e no pedido que ainda vale. */
   pedidoQueNaoVale: "cancelado" | "recusado" | null;
+  /** Decisão 162: o que a errata mudou na organização da planilha (item
+   *  movido, agrupamento novo, renomeado, removido), com os nomes. */
+  organizacao: MudancaDeEstrutura[];
+  /** A errata só reorganizou a planilha: nenhum valor mudou. */
+  soOrganizacao: boolean;
 }
 
 /**
@@ -285,6 +291,11 @@ export interface RevisaoDeErrata {
   linhasRemovidas: number;
   /** Linhas canceladas (decisão 151): ficam com o orçado zerado. */
   linhasCanceladas: number;
+  /** Decisão 162: a organização da planilha que as erratas mudaram. */
+  organizacao: MudancaDeEstrutura[];
+  /** Todas as erratas da revisão só reorganizaram a planilha: nenhum valor
+   *  mudou. O financeiro vê isso no mural e na revisão. */
+  soOrganizacao: boolean;
 }
 
 export interface TotaisPlanilhaJob {
@@ -652,6 +663,8 @@ function resumirRevisao(
     linhasNovas: soma("linhasNovas"),
     linhasRemovidas: soma("linhasRemovidas"),
     linhasCanceladas: soma("linhasCanceladas"),
+    organizacao: erratas.flatMap((e) => e.organizacao),
+    soOrganizacao: erratas.length > 0 && erratas.every((e) => e.soOrganizacao),
   };
 }
 
@@ -686,7 +699,7 @@ async function revisoesPendentes(
       .from("jobs_erratas")
       .select(
         "id, job_id, titulo, created_at, valor_job_antes, valor_job_depois, " +
-          "faturamento_previsto_antes, faturamento_previsto_depois, " +
+          "faturamento_previsto_antes, faturamento_previsto_depois, estrutura, " +
           "autor:profiles!created_by(nome), itens:jobs_erratas_itens(acao)",
       )
       .eq("tenant_id", tenantId)
@@ -783,6 +796,10 @@ async function revisoesPendentes(
       linhasCanceladas: conta("cancelada"),
       deSave: pedidosPorErrata.has(e.id),
       pedidoQueNaoVale: naoVale.get(e.id) ?? null,
+      // Decisão 162: errata sem linha de valor e com organização é a que
+      // só reorganizou a planilha — o mural diz que nenhum valor mudou.
+      organizacao: (e.estrutura ?? []) as MudancaDeEstrutura[],
+      soOrganizacao: itens.length === 0 && (e.estrutura ?? []).length > 0,
     });
     porJob.set(e.job_id, lista);
   }
@@ -823,7 +840,9 @@ export async function savesDaConferencia(
   const { data, error } = await supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, job_id, item, total_orcado, em_save, save_consumido, ordem, grupo:versoes_orcamento_grupos!jobs_itens_orcado_grupo_id_fkey(nome, ordem, mes:versoes_orcamento_meses!versoes_orcamento_grupos_mes_da_mesma_versao_fkey(mes))",
+      // O agrupamento do JOB (decisão 162): o nome e a ordem que as erratas
+      // deram. As dicas de FK seguem obrigatórias pelo mesmo motivo acima.
+      "id, job_id, item, total_orcado, em_save, save_consumido, ordem, grupo:jobs_grupos!jobs_itens_orcado_job_grupo_id_fkey(nome, ordem, mes:versoes_orcamento_meses!jobs_grupos_mes_id_fkey(mes))",
     )
     .eq("tenant_id", tenantId)
     .in("job_id", jobIds)

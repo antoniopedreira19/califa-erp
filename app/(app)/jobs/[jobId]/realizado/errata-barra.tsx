@@ -39,6 +39,9 @@ interface Props {
   /** A errata aberta é uma errata pronta para envio: quem a preparou e
    *  quando. `null` na errata começada agora. */
   pronta: { autorNome: string; quando: string } | null;
+  /** A errata só reorganiza a planilha (decisão 162): nenhum valor muda. Ela
+   *  devolve o job ao mural como qualquer errata. */
+  soOrganizacao: boolean;
 }
 
 /** Custo que sobe é laranja, custo que desce é verde — a mesma leitura do
@@ -107,6 +110,7 @@ export function ErrataBarra({
   podeDesfazer,
   modo,
   pronta,
+  soOrganizacao,
 }: Props) {
   const prepara = modo === "prepara";
   // O título diz de onde a errata veio; o texto de apoio, o que o botão
@@ -116,11 +120,14 @@ export function ErrataBarra({
       ? "Errata pronta em edição"
       : "Errata pronta para envio"
     : "Errata em edição";
+  const consequencia = soOrganizacao
+    ? "Confirmar registra a errata e devolve o job ao mural de abertura. Nenhum valor muda: os itens só são reorganizados."
+    : "Confirmar registra a errata, atualiza o faturamento previsto e devolve o job ao mural de abertura.";
   const apoio = prepara
     ? "Deixar pronta salva a errata no job para um GP revisar e enviar ao financeiro. Até o envio, nada muda no job."
     : pronta
-      ? `Preparada por ${pronta.autorNome} em ${pronta.quando}. Confirmar registra a errata, atualiza o faturamento previsto e devolve o job ao mural de abertura.`
-      : "Confirmar registra a errata, atualiza o faturamento previsto e devolve o job ao mural de abertura.";
+      ? `Preparada por ${pronta.autorNome} em ${pronta.quando}. ${consequencia}`
+      : consequencia;
   return (
     // `sticky` e não `fixed`: a barra pertence à planilha, e a sidebar do
     // app não pode ficar por baixo dela. Fica colada no pé da janela
