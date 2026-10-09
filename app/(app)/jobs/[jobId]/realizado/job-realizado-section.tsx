@@ -499,7 +499,7 @@ export function JobRealizadoSection({
   );
 
   // ---- "Editar orçado" do financeiro (decisão 115) ----------------------
-  // As linhas mexidas (só os valores do orçado contam) e o que acompanha:
+  // As linhas mexidas (os valores do orçado e o tipo) e o que acompanha:
   // o envio ainda sem nota e a previsão de recebimento, parcela a parcela,
   // pela MESMA conta que a action grava (`distribuirDelta`).
   const linhasDoFinanceiro = React.useMemo(
@@ -526,6 +526,7 @@ export function JobRealizadoSection({
         valor_unitario: l.valorUnitarioPara,
         quantidade: l.quantidadePara,
         dias_meses: l.diasMesesPara,
+        tipo_custo: l.tipoCustoPara,
       })),
     });
     setSalvando(false);

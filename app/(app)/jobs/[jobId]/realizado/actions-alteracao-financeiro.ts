@@ -5,9 +5,12 @@
  *
  * Irmã de `registrarErrata`, com as respostas do Tiago de 28/09/2026:
  *
- * - **Só os valores** do orçado — R$ unitário, QT e D/M (P1). Tipo de custo,
- *   linha nova, linha cancelada, linha vermelha e planejado continuam sendo
- *   da errata da produção.
+ * - **Os valores** do orçado — R$ unitário, QT e D/M (P1) — e, desde
+ *   08/10/2026, o **tipo de custo**, para qualquer tipo, enquanto nada foi
+ *   lançado no item: sem PP (de qualquer situação, a emitir inclusive) e
+ *   sem BV (Tiago: "do mesmo modo que com a realização de erratas"). Linha
+ *   nova, linha cancelada, linha vermelha e planejado continuam sendo da
+ *   errata da produção; no Interno o tipo é sempre F · Interno.
  * - **Linha com PP já no financeiro é editável** (P2), ao contrário da
  *   errata (decisão 040). Linha com save não: o save tem porta própria, e o
  *   banco recusa de todo jeito (`save_trava_linha_job`).
@@ -39,7 +42,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
-import { calcularEfeitoDaMudanca } from "@/lib/calculos/versao-totais";
+import { calcularEfeitoDaMudanca, TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import { faturamentoPorMes } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { itensParaOFinanceiro } from "@/lib/calculos/save-financeiro";
@@ -51,7 +54,12 @@ import {
   type LinhaDoEspelho,
 } from "@/lib/data/espelhos-do-job";
 import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
-import { distribuirDelta as distribuir, emReais as dinheiro } from "@/lib/calculos/alteracao-financeiro";
+import {
+  distribuirDelta as distribuir,
+  emReais as dinheiro,
+  motivoDoTipoTravado,
+  type LancamentoNaLinha,
+} from "@/lib/calculos/alteracao-financeiro";
 import {
   JOB_STATUS_ABERTO,
   type EnvioDaAlteracao,
@@ -67,6 +75,9 @@ const linhaSchema = z.object({
   valor_unitario: z.number().nonnegative(),
   quantidade: z.number().nonnegative(),
   dias_meses: z.number().nonnegative(),
+  /** O tipo de custo da linha depois da alteração. Ausente = o mesmo de
+   *  hoje: é o payload de uma aba aberta antes de 08/10/2026. */
+  tipo_custo: z.enum(TIPOS_CUSTO).optional(),
 });
 
 const payloadSchema = z.object({
@@ -326,7 +337,8 @@ export async function registrarAlteracaoDoFinanceiro(
     grupoId: string;
     grupoNome: string;
     mes: string | null;
-    tipo: TipoCusto;
+    tipoDe: TipoCusto;
+    tipoPara: TipoCusto;
     unitDe: number;
     unitPara: number;
     qtdDe: number;
@@ -346,7 +358,14 @@ export async function registrarAlteracaoDoFinanceiro(
     const unitDe = Number(atual.valor_unitario_orcado ?? 0);
     const qtdDe = Number(atual.quantidade_orcada ?? 0);
     const dmDe = Number(atual.dias_meses_orcado ?? 0);
-    if (l.valor_unitario === unitDe && l.quantidade === qtdDe && l.dias_meses === dmDe) {
+    const tipoDe = atual.tipo_custo as TipoCusto;
+    const tipoPara = l.tipo_custo ?? tipoDe;
+    if (
+      l.valor_unitario === unitDe &&
+      l.quantidade === qtdDe &&
+      l.dias_meses === dmDe &&
+      tipoPara === tipoDe
+    ) {
       continue;
     }
     // Linha cancelada por errata (decisão 151): o orçado dela fica zerado.
@@ -388,7 +407,8 @@ export async function registrarAlteracaoDoFinanceiro(
       grupoId: atual.grupo_id,
       grupoNome: grupoPorId.get(atual.grupo_id)?.nome ?? "—",
       mes,
-      tipo: atual.tipo_custo as TipoCusto,
+      tipoDe,
+      tipoPara,
       unitDe,
       unitPara: l.valor_unitario,
       qtdDe,
@@ -401,7 +421,35 @@ export async function registrarAlteracaoDoFinanceiro(
   }
 
   if (mudancas.length === 0) {
-    return { ok: false, message: "Nenhum valor foi alterado." };
+    return { ok: false, message: "Nenhuma linha foi alterada." };
+  }
+
+  // ---- A troca de tipo: só enquanto nada foi lançado no item ----
+  // Pela função do banco, que vê as PPs de todas as empresas: a RLS de
+  // `pedidos_compra` filtra por empresa, e a trava não pode depender do que
+  // o usuário enxerga. A gravação confere de novo, na transação.
+  const trocasDeTipo = mudancas.filter((m) => m.tipoPara !== m.tipoDe);
+  if (trocasDeTipo.length > 0) {
+    const { data: lancamentos, error: lancErr } = await supabase.rpc(
+      "lancamentos_nas_linhas_do_job",
+      { p_ids: trocasDeTipo.map((m) => m.id) },
+    );
+    if (lancErr) {
+      console.error("[alteracao-financeiro.lancamentos]", lancErr.message);
+      return {
+        ok: false,
+        message: "Não foi possível conferir as PPs e os BVs das linhas. Tente de novo.",
+      };
+    }
+    const lancamentoPorId = new Map(
+      ((lancamentos ?? []) as Array<{ job_item_orcado_id: string; lancamento: string | null }>).map(
+        (r) => [r.job_item_orcado_id, r.lancamento as LancamentoNaLinha | null],
+      ),
+    );
+    for (const m of trocasDeTipo) {
+      const lancamento = lancamentoPorId.get(m.id);
+      if (lancamento) return { ok: false, message: motivoDoTipoTravado(lancamento, m.item) };
+    }
   }
 
   // ---- Os números do financeiro, antes e depois ----
@@ -409,7 +457,14 @@ export async function registrarAlteracaoDoFinanceiro(
   const mudancaPorId = new Map(mudancas.map((m) => [m.id, m]));
   const itensDepois: LinhaDoEspelho[] = base.itens.map((i) => {
     const m = mudancaPorId.get(i.id);
-    return m ? { ...i, total_orcado: m.totalPara, valor_unitario_orcado: m.unitPara } : i;
+    return m
+      ? {
+          ...i,
+          tipo_custo: m.tipoPara,
+          total_orcado: m.totalPara,
+          valor_unitario_orcado: m.unitPara,
+        }
+      : i;
   });
   const depois = totaisDoFinanceiro(itensDepois, base);
   const espelhos = espelhosDe(depois);
@@ -517,8 +572,8 @@ export async function registrarAlteracaoDoFinanceiro(
   // total que não bate com as linhas.
   const efeitos = mudancas.map((m) =>
     calcularEfeitoDaMudanca(
-      { total: m.totalDe, tipoCusto: m.tipo },
-      { total: m.totalPara, tipoCusto: m.tipo },
+      { total: m.totalDe, tipoCusto: m.tipoDe },
+      { total: m.totalPara, tipoCusto: m.tipoPara },
       base.percentualHonorarios,
       base.percentualImposto,
       base.internacional,
@@ -566,7 +621,8 @@ export async function registrarAlteracaoDoFinanceiro(
             item_nome: m.item,
             grupo_nome: m.grupoNome,
             mes: m.mes,
-            tipo_custo: m.tipo,
+            tipo_custo: m.tipoDe,
+            tipo_custo_para: m.tipoPara,
             valor_unitario_de: m.unitDe,
             valor_unitario_para: m.unitPara,
             quantidade_de: m.qtdDe,
@@ -584,6 +640,7 @@ export async function registrarAlteracaoDoFinanceiro(
           valor_unitario_orcado: m.unitPara,
           quantidade_orcada: m.qtdPara,
           dias_meses_orcado: m.dmPara,
+          tipo_custo: m.tipoPara,
         })),
         envios: [...enviosNovos.values()].map((e) => ({ id: e.id, valor_faturado: e.valor_faturado })),
         parcelas_envio: [...enviosNovos.values()].flatMap((e) =>
@@ -620,6 +677,11 @@ export async function registrarAlteracaoDoFinanceiro(
       alteracao_id: alteracaoId,
       motivo,
       itens_alterados: mudancas.length,
+      tipos_alterados: trocasDeTipo.map((m) => ({
+        job_item_orcado_id: m.id,
+        de: m.tipoDe,
+        para: m.tipoPara,
+      })),
       valor_job_antes: dinheiro(antes.valorJob),
       valor_job_depois: dinheiro(depois.valorJob),
       faturamento_previsto_antes: fatAntes,

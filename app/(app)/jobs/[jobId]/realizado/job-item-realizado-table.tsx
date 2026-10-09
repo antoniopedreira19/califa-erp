@@ -29,6 +29,11 @@ import {
   contarPendentes,
 } from "@/lib/calculos/pps-item";
 import { ppChegouAoFinanceiro } from "@/lib/types";
+import {
+  lancamentoNaLinha,
+  motivoDoTipoTravado,
+  type LancamentoNaLinha,
+} from "@/lib/calculos/alteracao-financeiro";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
@@ -226,9 +231,11 @@ interface Props {
    *  em que os papéis entrarem, e para o gate nascer num lugar só. */
   podeEditarLinhas?: boolean;
   /** Quem está editando o orçado (decisão 115). `financeiro` é o "Editar
-   *  orçado" da tela do job no financeiro: só os valores do orçado abrem
-   *  (P1) — tipo de custo não, e não há linha nova nem vermelha — e a linha
-   *  com PP já no financeiro também abre (P2), ao contrário da errata. */
+   *  orçado" da tela do job no financeiro: abrem os valores do orçado (P1)
+   *  e, desde 08/10/2026, o tipo de custo da linha sem nada lançado (sem
+   *  PP, PP a emitir ou BV); não há linha nova nem vermelha. Os valores da
+   *  linha com PP já no financeiro também abrem (P2), ao contrário da
+   *  errata. */
   modoDaEdicao?: "errata" | "financeiro";
   /** Menu "Exibir" (decisão 045). Default: a planilha de sempre — os
    *  três blocos, sem colunas de rentabilidade. Escondido, o ORÇADO sai
@@ -918,6 +925,24 @@ export function JobItemRealizadoTable({
     return modoDaEdicao === "financeiro" ? new Set<string>() : travadas;
   }, [todosOsItens, realizadosMap, ppsPorItemId, modoDaEdicao]);
 
+  /** Na edição do financeiro, o tipo de custo só abre na linha sem nada
+   *  lançado (Tiago, 08/10/2026): o que cada linha já tem, pelo mesmo
+   *  recorte que o servidor confere (`lancamentos_nas_linhas_do_job`). */
+  const lancamentoPorLinha = React.useMemo(() => {
+    const mapa = new Map<string, LancamentoNaLinha>();
+    if (modoDaEdicao !== "financeiro") return mapa;
+    for (const it of todosOsItens) {
+      const realizadoId = realizadosMap.get(it.id)?.id;
+      const lancamento = lancamentoNaLinha({
+        pps: realizadoId ? (ppsPorItemId.get(realizadoId) ?? []) : [],
+        aEmitir: realizadoId ? (aEmitirPorItemId.get(realizadoId)?.length ?? 0) : 0,
+        bvs: bvsPorItem[it.id] ?? [],
+      });
+      if (lancamento) mapa.set(it.id, lancamento);
+    }
+    return mapa;
+  }, [modoDaEdicao, todosOsItens, realizadosMap, ppsPorItemId, aEmitirPorItemId, bvsPorItem]);
+
   /** Linhas que a errata não toca por causa do save (decisão 099 §15),
    *  com o motivo de cada uma. O servidor tem a mesma trava. */
   const travadasPorSave = React.useMemo(() => {
@@ -993,10 +1018,15 @@ export function JobItemRealizadoTable({
         return null;
       }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
-      // No Interno o tipo é sempre F · Interno (decisão 105); na edição do
-      // financeiro o tipo não é dele (decisão 115, P1).
+      // No Interno o tipo é sempre F · Interno (decisão 105). Na edição do
+      // financeiro, só na linha sem nada lançado, e nunca na vermelha, que
+      // é da errata (revisão da decisão 115, 08/10/2026).
       if (coluna === "tipo_custo") {
-        return errata.interno || modoDaEdicao === "financeiro" ? null : "lista";
+        if (errata.interno) return null;
+        if (modoDaEdicao === "financeiro") {
+          return item.linha_vermelha || lancamentoPorLinha.has(rowId) ? null : "lista";
+        }
+        return "lista";
       }
       if (
         coluna === "valor_unitario_orcado" ||
@@ -1016,7 +1046,15 @@ export function JobItemRealizadoTable({
       }
       return null;
     },
-    [editando, errata, itemPorId, travadasPorPP, travadasPorSave, modoDaEdicao],
+    [
+      editando,
+      errata,
+      itemPorId,
+      travadasPorPP,
+      travadasPorSave,
+      modoDaEdicao,
+      lancamentoPorLinha,
+    ],
   );
 
   /** Cria a linha nova e já abre a descrição dela — é o que o input
@@ -1391,6 +1429,8 @@ export function JobItemRealizadoTable({
                         ? MOTIVO_TRAVA_PP
                         : (travadasPorSave.get(item.id) ?? null);
                     const travada = motivoDaTrava !== null;
+                    // O que trava o TIPO na edição do financeiro (só lá).
+                    const lancamento = lancamentoPorLinha.get(item.id);
                     const abertaAqui = (campo: string) =>
                       aberta?.rowId === item.id && aberta.campo === campo;
                     const sementeDe = (campo: string) =>
@@ -1559,6 +1599,14 @@ export function JobItemRealizadoTable({
                             nav={nav("tipo_custo")}
                             moldura={moldura("tipo_custo")}
                             className={classeNeutra}
+                            // Na edição do financeiro, por que o tipo desta
+                            // linha não abre (revisão da decisão 115).
+                            title={
+                              editando && modoDaEdicao === "financeiro"
+                                ? (motivoDaTrava ??
+                                  (lancamento ? motivoDoTipoTravado(lancamento) : undefined))
+                                : undefined
+                            }
                           >
                             <Badge variant="outline">{item.tipo_custo}</Badge>
                           </CelulaJob>

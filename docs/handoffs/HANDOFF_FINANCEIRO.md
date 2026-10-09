@@ -6030,8 +6030,8 @@ Antonio, e o código publicado logo depois (`3305751`).
   primeira nota emitida, parcial ou total, ou o encerramento, o que vier
   antes (no mensal, a trava da nota é por mês: só o mês com nota trava).
   No encerrado e no finalizado o botão aparece travado, com o motivo.
-  Edita só R$ Unit., QT e D/M do orçado. Linha com PP abre; linha com save
-  não.
+  Edita R$ Unit., QT e D/M do orçado e, desde 08/10/2026, o tipo de custo
+  (ver a nota de 2026-10-09). Linha com PP abre; linha com save não.
 - ⚠️ **Na abertura (28/09, depois da primeira entrega):** o botão passou a
   existir também na aba Planilha da tela da abertura, a pedido do Tiago.
   Ali o formulário da aba Abertura do Job acompanha a edição: faturamento,
@@ -6917,3 +6917,37 @@ Fecha o "Fica para depois" da nota de 2026-10-07 (2). O código é o do
     aviso âmbar mostram o texto de "Todas as linhas estão em save".
 - **Continua sem conferir na tela:** o texto de save junto com itens de
   calha BV. Não há job assim no banco.
+
+## ⚠️ Nota de 2026-10-09 — "Editar orçado" troca também o tipo de custo (revisão da decisão 115)
+
+Pedido do Tiago em 08/10/2026, com o AMB-1029/26 na tela "Abrir job no
+financeiro". Regra completa na §9 da decisão 115.
+
+- **A coluna Tipo abre no "Editar orçado"**, na abertura e no job aberto,
+  com a mesma lista da errata (A a FI). Só na linha **sem nada lançado**:
+  sem PP (qualquer situação), sem PP a emitir e sem BV; cancelados não
+  contam. Na linha com lançamento o Tipo não abre, e o motivo aparece ao
+  passar o mouse. Os valores da linha com PP continuam abrindo (P2).
+  Interno, linha vermelha, cancelada, com save e mês com nota seguem
+  fechados.
+- **Acompanham** os números do job, a previsão de recebimento, os impostos
+  e o envio sem nota, como na edição de valor. A curva de desembolso não:
+  quando o tipo entra ou sai dos que geram PP, o pop-up avisa quanto o
+  custo previsto mudou e onde ajustar a curva.
+- **O registro:** o pop-up mostra o de → para do tipo; o card "Alterações
+  do Financeiro" ganha o selo "Tipo de custo" e o de → para na coluna Tipo;
+  o fio da Comunicação diz "Tipo de custo · item: A · Direto → A ·
+  Repasse".
+- **Banco:** migration `20261008800001` — coluna
+  `jobs_alteracoes_financeiro_itens.tipo_custo_para` (as 32 linhas antigas
+  receberam o próprio tipo), função `lancamentos_nas_linhas_do_job`
+  (SECURITY DEFINER, porque a RLS das PPs filtra por empresa) e
+  `registrar_alteracao_do_financeiro` gravando o tipo e recusando a troca
+  com lançamento e no Interno.
+- **Conferido:** no TES-1013/26, B → A e de volta, pela tela, com os números
+  batendo ao centavo com a conta feita antes (faturamento R$ 1.391,82 →
+  R$ 149,12, envio e recebimento acompanhando, carimbo do envio intacto);
+  no TES-1014/26, a trava na linha com PP; no AMB-1029/26, o pop-up da
+  Flávia de A para AR (R$ 3.303,72 → R$ 8.803,72; custo previsto
+  +R$ 5.500,00), descartado sem gravar; no banco, com rollback, as recusas
+  com PP e no Interno e a gravação na fila da abertura.

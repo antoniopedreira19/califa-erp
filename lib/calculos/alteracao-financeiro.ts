@@ -7,6 +7,7 @@
  */
 
 import type { ItemPlanilhaJob, TipoCusto } from "@/lib/types";
+import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 
 /** Dinheiro sempre com 2 casas, como `jobs.valor_total`. */
 export function emReais(n: number): number {
@@ -42,7 +43,8 @@ export interface LinhaAlteradaPeloFinanceiro {
   id: string;
   item: string;
   grupoId: string;
-  tipoCusto: TipoCusto;
+  tipoCustoDe: TipoCusto;
+  tipoCustoPara: TipoCusto;
   valorUnitarioDe: number;
   valorUnitarioPara: number;
   quantidadeDe: number;
@@ -51,12 +53,36 @@ export interface LinhaAlteradaPeloFinanceiro {
   diasMesesPara: number;
   totalDe: number;
   totalPara: number;
+  /** O planejado da linha, que a edição não muda (só no Interno, em que o
+   *  banco o faz espelhar o orçado). É ele que entra no custo previsto
+   *  quando o tipo gera PP. */
+  planejadoDe: number;
+  planejadoPara: number;
+}
+
+/**
+ * Quanto o custo previsto do job (o planejado dos tipos que geram PP,
+ * decisão 004) muda com a edição. A curva de desembolso não acompanha
+ * (decisão 115): o pop-up avisa, para o financeiro ajustá-la no Editar
+ * registro. Muda quando o tipo entra ou sai dos tipos com PP, e no Interno,
+ * em que o planejado segue o orçado.
+ */
+export function deltaDoCustoPrevisto(linhas: LinhaAlteradaPeloFinanceiro[]): number {
+  return emReais(
+    linhas.reduce(
+      (s, l) =>
+        s +
+        (tipoGeraDesembolso(l.tipoCustoPara) ? l.planejadoPara : 0) -
+        (tipoGeraDesembolso(l.tipoCustoDe) ? l.planejadoDe : 0),
+      0,
+    ),
+  );
 }
 
 /**
  * As linhas que a edição mexeu, comparando o rascunho com o que está
- * salvo. Só os três valores do orçado contam (P1): tipo e planejado não
- * são do financeiro.
+ * salvo. Contam os três valores do orçado (P1) e, desde 08/10/2026, o tipo
+ * de custo; o planejado não é do financeiro.
  */
 export function linhasAlteradasPeloFinanceiro(
   salvos: ItemPlanilhaJob[],
@@ -73,12 +99,20 @@ export function linhasAlteradasPeloFinanceiro(
     const unitPara = Number(para.valor_unitario_orcado ?? 0);
     const qtdPara = Number(para.quantidade_orcada ?? 0);
     const dmPara = Number(para.dias_meses_orcado ?? 0);
-    if (unitDe === unitPara && qtdDe === qtdPara && dmDe === dmPara) continue;
+    if (
+      unitDe === unitPara &&
+      qtdDe === qtdPara &&
+      dmDe === dmPara &&
+      de.tipo_custo === para.tipo_custo
+    ) {
+      continue;
+    }
     lista.push({
       id: de.id,
       item: de.item,
       grupoId: de.grupo_id,
-      tipoCusto: de.tipo_custo,
+      tipoCustoDe: de.tipo_custo,
+      tipoCustoPara: para.tipo_custo,
       valorUnitarioDe: unitDe,
       valorUnitarioPara: unitPara,
       quantidadeDe: qtdDe,
@@ -87,7 +121,48 @@ export function linhasAlteradasPeloFinanceiro(
       diasMesesPara: dmPara,
       totalDe: Number(de.total_orcado ?? 0),
       totalPara: unitPara * qtdPara * dmPara,
+      planejadoDe: Number(de.total_planejado ?? 0),
+      planejadoPara: Number(para.total_planejado ?? 0),
     });
   }
   return lista;
+}
+
+/**
+ * O que já foi lançado numa linha do job, para a troca de tipo de custo no
+ * "Editar orçado" do financeiro (revisão da decisão 115, 08/10/2026): o
+ * Tiago pediu que, "do mesmo modo que com a realização de erratas, só será
+ * possível realizar modificações enquanto nada tiver sido adicionado no
+ * item". PP de qualquer situação, PP a emitir e BV contam; cancelados, não.
+ * É o mesmo recorte de `lancamentos_nas_linhas_do_job`, no banco.
+ */
+export type LancamentoNaLinha = "pp" | "pp_a_emitir" | "bv";
+
+export function lancamentoNaLinha(linha: {
+  /** Status das PPs da linha. */
+  pps: ReadonlyArray<{ status: string }>;
+  /** PPs a emitir ainda abertas (decisão 153). */
+  aEmitir: number;
+  /** Situação dos BVs da linha. */
+  bvs: ReadonlyArray<{ situacao: string }>;
+}): LancamentoNaLinha | null {
+  if (linha.pps.some((pp) => pp.status !== "cancelada")) return "pp";
+  if (linha.aEmitir > 0) return "pp_a_emitir";
+  if (linha.bvs.some((bv) => bv.situacao !== "cancelado")) return "bv";
+  return null;
+}
+
+const NOME_DO_LANCAMENTO: Record<LancamentoNaLinha, string> = {
+  pp: "Pedido de Produção",
+  pp_a_emitir: "PP a emitir",
+  bv: "BV",
+};
+
+/** Por que o tipo de custo da linha não abre. Com o nome do item, é a
+ *  recusa da action; sem ele, o `title` da célula na planilha. */
+export function motivoDoTipoTravado(lancamento: LancamentoNaLinha, item?: string): string {
+  const nome = NOME_DO_LANCAMENTO[lancamento];
+  return item
+    ? `"${item}" já tem ${nome}: o tipo de custo só muda enquanto nada foi lançado no item. Os valores do orçado continuam editáveis.`
+    : `Linha com ${nome}: o tipo de custo só muda enquanto nada foi lançado no item. Os valores do orçado continuam editáveis.`;
 }

@@ -16,6 +16,10 @@
  * Só existe depois da primeira alteração (Tiago, 28/09/2026): sem nenhuma,
  * a aba Informações fica como era.
  *
+ * Desde 08/10/2026 o financeiro também troca o tipo de custo: a coluna Tipo
+ * mostra o de → para e o selo diz "Tipo de custo" quando só ele mudou, como
+ * no card de Erratas.
+ *
  * Do protótipo aprovado em 28/09/2026 (artifact `Re8sXDJpj8gzEk1tnCrt48`).
  */
 
@@ -205,12 +209,23 @@ export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
                       {a.itens.map((i) => {
                         const qtdMudou =
                           i.quantidade_de !== i.quantidade_para || i.dias_meses_de !== i.dias_meses_para;
+                        const tipoMudou = i.tipo_custo !== i.tipo_custo_para;
+                        const soTipo =
+                          tipoMudou &&
+                          i.valor_unitario_de === i.valor_unitario_para &&
+                          !qtdMudou;
                         return (
                           <tr key={i.id} className="border-t border-border">
                             <td className="py-2.5 pr-2 align-top">
-                              <span className="inline-flex items-center whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700">
-                                Valor
-                              </span>
+                              {soTipo ? (
+                                <span className="inline-flex items-center whitespace-nowrap rounded-full border border-[#ddd6c9] bg-[#f1f0ec] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground">
+                                  Tipo de custo
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700">
+                                  Valor
+                                </span>
+                              )}
                             </td>
                             <td className="px-2 py-2.5 align-top">
                               <div className="flex flex-col gap-0.5">
@@ -222,9 +237,21 @@ export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
                               </div>
                             </td>
                             <td className="px-2 py-2.5 align-top">
-                              <span className="inline-flex items-center rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-muted-foreground">
-                                {tipoCustoLabel(i.tipo_custo)}
-                              </span>
+                              {tipoMudou ? (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-muted-foreground line-through">
+                                    {tipoCustoLabel(i.tipo_custo)}
+                                  </span>
+                                  <ArrowRight className="h-3 w-3 text-[#c9c9c9]" />
+                                  <span className="inline-flex items-center rounded-full border border-[#ddd6c9] bg-[#f1f0ec] px-2 py-0.5 text-[10.5px] font-semibold">
+                                    {tipoCustoLabel(i.tipo_custo_para)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-muted-foreground">
+                                  {tipoCustoLabel(i.tipo_custo)}
+                                </span>
+                              )}
                             </td>
                             <td className="px-2 py-2.5 text-right align-top">
                               <div className="flex flex-wrap items-center justify-end gap-1.5">
