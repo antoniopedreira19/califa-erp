@@ -5023,3 +5023,30 @@ código publicado logo depois (`3305751`).
 - Testado no TES-1025/26 (PP-00149 por boleto, com o PDF conferido; PP-00150
   por chave aleatória com o ZZ Veículo Teste 150 A marcado), as duas
   canceladas no fim. Detalhes na decisão 161.
+
+## ⚠️ Nota de 2026-10-09 (3) — Cadastro de fornecedor: o dígito da conta faltando não aparecia na tela
+
+- **O caso:** um GP cadastrava fornecedor pelo "Novo fornecedor" da PP com
+  PIX completo e a conta digitada como `115786468-2`, sem nada na casinha
+  do dígito. O rodapé dizia "Pronto para criar", o servidor recusava com
+  `conta_dv: Dígito da conta obrigatório.` e a tela só mostrava
+  "Verifique os campos destacados", sem nada destacado. A única mensagem
+  à vista era a da consulta do CNPJ ("Não foi possível consultar o CNPJ
+  agora"), e o GP achou que o problema era o CNPJ. A consulta falhava
+  porque a BrasilAPI estava fora do ar para CNPJs fora do cache dela
+  (HTTP 500, origem `minhareceita.org` em 503) — isso não trava o
+  cadastro.
+- **Correção** (`fornecedor-form.tsx`, vale também para o pop-up da PP e
+  para o veículo de mídia):
+  1. Conta começada e incompleta entra no rodapé ("Falta dígito da
+     conta.") e trava o botão, como o servidor já fazia — mesmo com o PIX
+     preenchido. A regra do servidor não mudou.
+  2. O erro do dígito da agência e da conta aparece embaixo da caixa, com
+     a moldura vermelha, e a tela rola até ele.
+  3. "Número-dígito" digitado inteiro na conta ou na agência se separa ao
+     sair do campo: o dígito vai para a casinha, se ela estiver vazia.
+  4. Erro do servidor de um campo sem lugar na tela entra no aviso de
+     cima, junto do "Verifique os campos destacados".
+- Testado em `/fornecedores/novo` e no "Novo fornecedor" da PP do
+  TES-1025/26, com o envio forçado pelo console para ver o erro do
+  servidor. Nada gravado.
