@@ -250,9 +250,10 @@ export interface Fornecedor {
 
   // Módulo fiscal (02/10/2026): regime tributário, da consulta do CNPJ.
   regime_tributario: RegimeTributarioFornecedor | null;
-  /** O regime que a consulta do CNPJ indicou (decisão 142). Diferente de
-   *  `regime_tributario` = alterado manualmente. */
-  regime_consulta: RegimeTributarioFornecedor | null;
+  /** O regime que a consulta do CNPJ indicou (decisão 142): Simples, MEI
+   *  ou `normal` (nenhum dos dois — a Receita não diz se é Real ou
+   *  Presumido). Diferente de `regime_tributario` = alterado manualmente. */
+  regime_consulta: "normal" | "simples" | "mei" | null;
   /** A data de opção pelo Simples ou pelo MEI que a consulta trouxe
    *  ("AAAA-MM-DD"); nula no regime normal ou sem a data (decisão 142). */
   regime_desde: string | null;
@@ -267,6 +268,10 @@ export interface Fornecedor {
    *  um boleto ou uma chave aleatória. Marcado, conta e PIX ficam vazios
    *  (CHECK `fornecedores_sem_dados_pagamento_vazio`). */
   sem_dados_pagamento: boolean;
+  /** Decisão 166: a subclasse do CNAE 2.3 (7 dígitos, sem pontuação),
+   *  obrigatória na pessoa jurídica. Nula = cadastro anterior a 09/10/2026,
+   *  que ainda não passou pela revisão: a PP dele não é gerada. */
+  cnae: string | null;
 }
 
 // ---------- Task 007: projetos ----------
@@ -4474,7 +4479,10 @@ export interface ColaboradorFeriasLancamento {
 // aprovação da PP e o fornecedor passam a registrar. Migration
 // 20261002100001_fiscal_cadastro_e_dados_da_nf.sql.
 
-export type RegimeTributarioFornecedor = "normal" | "simples" | "mei";
+/** Decisão 166 (09/10/2026): Lucro Real e Lucro Presumido separados.
+ *  `normal` é o legado "Lucro Real ou Presumido" — não se escolhe mais, e é
+ *  o que a consulta do CNPJ indica quando não é Simples nem MEI. */
+export type RegimeTributarioFornecedor = "lucro_real" | "lucro_presumido" | "simples" | "mei" | "normal";
 
 export type RegimeTributarioPJ = "lucro_real" | "lucro_presumido";
 

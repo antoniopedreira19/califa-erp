@@ -42,6 +42,7 @@ import {
 import { aplicarConclusaoDoItem } from "./conclusao-item";
 import { cnpjPadraoDaPP, empresaDoDocumento, type CnpjDoDocumento } from "@/lib/fiscal/cnpj-da-pp";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
+import { listarPendencias, pendenciasDoCadastroFiscal } from "@/lib/fiscal/regime-do-fornecedor";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
 // puxa pdfmake, que tem side-effects de inicialização que falham em runtime
 // serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
@@ -2999,6 +3000,10 @@ export async function listarPessoasParaVerba(): Promise<Result<{ pessoas: Pessoa
  * 153). A geração é a de sempre (`finalizarPedidoCompraImpl`): código, PDF,
  * parcelas, anexos (com a NF de cada um) e a marca da última PP do item. O
  * job aguardando abertura ou devolvido pelo financeiro não gera.
+ *
+ * Decisão 166: nem a PP de fornecedor pessoa jurídica sem regime
+ * tributário (ou com o legado "Lucro Real ou Presumido") ou sem CNAE. A PP
+ * a emitir fica salva, esperando o cadastro.
  */
 export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: string }>> {
   const session = await requireSession();
@@ -3061,6 +3066,32 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
   if (travada) return { ok: false, message: travada };
   if (typeof linha.ultima_pp_do_item !== "boolean") {
     return { ok: false, message: "Abra a PP a emitir e responda se esta é a última PP deste item." };
+  }
+
+  // Decisão 166: o cadastro do fornecedor precisa do regime e do CNAE.
+  // Vale para a PP comum e para a verba de um terceiro (decisão 164).
+  const fornecedorDaPP = usaFornecedor(linha.dados) ? linha.dados.fornecedor_id ?? null : null;
+  if (fornecedorDaPP) {
+    const { data: cadastro } = await supabase
+      .from("fornecedores")
+      .select("nome, tipo_pessoa, regime_tributario, cnae")
+      .eq("id", fornecedorDaPP)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ nome: string; tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
+    const falta = pendenciasDoCadastroFiscal(cadastro);
+    if (falta.length > 0) {
+      const completa =
+        pode(session.activeRole, "cadastros.fornecedores.editar") ||
+        pode(session.activeRole, "cadastros.fornecedores.inline");
+      return {
+        ok: false,
+        message: `O cadastro de ${cadastro?.nome ?? "fornecedor"} está incompleto: falta ${listarPendencias(falta)}. ${
+          completa
+            ? "Clique em Editar e no lápis ao lado do fornecedor para completar."
+            : "Peça ao financeiro para completar o cadastro."
+        }`,
+      };
+    }
   }
 
   const num = (v: number | string | null) => (v === null || v === "" ? null : Number(v));

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isValidCnpj, isValidCpf, onlyDigits } from "@/lib/utils";
 import { problemaDaChavePix } from "@/lib/pix";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
+import { cnaeExiste } from "@/lib/fiscal/cnaes";
 
 /**
  * Schema de fornecedor (PF ou PJ).
@@ -37,6 +38,12 @@ import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
  * regime escolhido. E o arquivo da declaração: o caminho no bucket
  * `fornecedores`, que a action confere ser da pasta do tenant. Trocar o
  * regime não tira o arquivo do cadastro; só o ✕ do formulário tira.
+ *
+ * Decisão 166 (09/10/2026): na pessoa jurídica, o **regime** e o **CNAE**
+ * passam a ser obrigatórios. Lucro Real e Lucro Presumido se escolhem em
+ * separado; o legado "Lucro Real ou Presumido" (`normal`) não se grava
+ * mais — só a consulta do CNPJ o indica. O CNAE é uma subclasse do CNAE 2.3
+ * (`lib/fiscal/cnaes.ts`), em 7 dígitos.
  */
 
 const UFS_BRASIL = [
@@ -146,13 +153,21 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
     ),
 
     // === módulo fiscal (02/10/2026): regime tributário da pessoa jurídica ===
+    // Decisão 166: Real e Presumido separados; o legado `normal` não se
+    // grava mais. Obrigatório na pessoa jurídica (superRefine).
     regime_tributario: z.preprocess(
       nullIfEmpty,
-      z.enum(["normal", "simples", "mei"], {
-        errorMap: () => ({ message: "Regime tributário inválido." }),
+      z.enum(["lucro_real", "lucro_presumido", "simples", "mei"], {
+        errorMap: () => ({ message: "Escolha Lucro Real, Lucro Presumido, Simples Nacional ou MEI." }),
       })
         .nullable()
         .optional(),
+    ),
+    // Decisão 166: a subclasse do CNAE, em 7 dígitos (a pontuação sai).
+    // Obrigatório na pessoa jurídica (superRefine).
+    cnae: z.preprocess(
+      (v) => (typeof v === "string" ? nullIfEmpty(onlyDigits(v)) : v),
+      z.string().regex(/^\d{7}$/, "CNAE inválido: escolha um da lista.").nullable().optional(),
     ),
     regime_consultado_em: z.preprocess(
       nullIfEmpty,
@@ -193,6 +208,18 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
     ),
   })
   .superRefine((data, ctx) => {
+    // --- Decisão 166: regime e CNAE da pessoa jurídica ---
+    if (data.tipo_pessoa === "juridica") {
+      if (!data.regime_tributario) {
+        ctx.addIssue({ code: "custom", path: ["regime_tributario"], message: "Escolha o regime tributário." });
+      }
+      if (!data.cnae) {
+        ctx.addIssue({ code: "custom", path: ["cnae"], message: "Escolha o CNAE." });
+      } else if (!cnaeExiste(data.cnae)) {
+        ctx.addIssue({ code: "custom", path: ["cnae"], message: "CNAE inválido: escolha um da lista." });
+      }
+    }
+
     // --- Documento do fornecedor (CPF/CNPJ) ---
     if (data.cpf_cnpj) {
       if (data.tipo_pessoa === "fisica") {
@@ -298,6 +325,7 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
           }
         : {}),
       regime_tributario: regime,
+      cnae: data.tipo_pessoa === "juridica" ? data.cnae ?? null : null,
       regime_consulta: indicou,
       regime_consultado_em: indicou ? data.regime_consultado_em ?? null : null,
       regime_desde: indicou === "simples" || indicou === "mei" ? data.regime_desde ?? null : null,
@@ -328,3 +356,45 @@ export type FornecedorInput = z.infer<typeof fornecedorSchema>;
  * cadastro rápido usam, e porque ele diz de onde a exigência veio.
  */
 export const fornecedorCompletoSchema = fornecedorSchema;
+
+/**
+ * Decisão 166: o cadastro antigo completado por quem gera PP e não edita
+ * fornecedor (GP, produtor, freelancer). Só o regime e o CNAE — o resto do
+ * cadastro continua com o financeiro —, e a consulta do CNPJ que os
+ * sugeriu, inteira como no cadastro.
+ */
+export const cadastroFiscalSchema = z
+  .object({
+    regime_tributario: z.enum(["lucro_real", "lucro_presumido", "simples", "mei"], {
+      errorMap: () => ({ message: "Escolha o regime tributário." }),
+    }),
+    cnae: z.preprocess(
+      (v) => (typeof v === "string" ? onlyDigits(v) : v),
+      z
+        .string({ required_error: "Escolha o CNAE." })
+        .regex(/^\d{7}$/, "Escolha o CNAE.")
+        .refine(cnaeExiste, "CNAE inválido: escolha um da lista."),
+    ),
+    regime_consultado_em: z.preprocess(
+      nullIfEmpty,
+      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data da consulta do CNPJ inválida.").nullable().optional(),
+    ),
+    regime_consulta: z.preprocess(
+      nullIfEmpty,
+      z.enum(["normal", "simples", "mei"]).nullable().optional(),
+    ),
+    regime_desde: z.preprocess(
+      nullIfEmpty,
+      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de opção pelo Simples ou pelo MEI inválida.").nullable().optional(),
+    ),
+  })
+  .transform((data) => {
+    const indicou = data.regime_consultado_em ? data.regime_consulta ?? null : null;
+    return {
+      regime_tributario: data.regime_tributario,
+      cnae: data.cnae,
+      regime_consulta: indicou,
+      regime_consultado_em: indicou ? data.regime_consultado_em ?? null : null,
+      regime_desde: indicou === "simples" || indicou === "mei" ? data.regime_desde ?? null : null,
+    };
+  });

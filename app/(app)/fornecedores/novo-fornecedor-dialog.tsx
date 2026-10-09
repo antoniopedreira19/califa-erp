@@ -16,6 +16,10 @@
  *  Dialog centrado, e não drawer: quem o abre já é um drawer à direita
  *  (o da PP), e dois drawers brigariam pelo mesmo lado. O drawer de trás
  *  continua montado, com o que a pessoa já digitou.
+ *
+ *  Decisão 166 (09/10/2026): `somentePendentes` é o lápis de quem gera PP e
+ *  não edita fornecedor, com o cadastro sem regime ou sem CNAE. O cadastro
+ *  aparece inteiro, só os dois campos se mexem, e o tipo de pessoa trava.
  */
 
 import * as React from "react";
@@ -76,6 +80,7 @@ export function NovoFornecedorDialog({
   onSalvo,
   nomeInicial,
   contexto = "pp",
+  somentePendentes = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -91,7 +96,10 @@ export function NovoFornecedorDialog({
   nomeInicial?: string;
   /** Qual formulário ficou atrás — só o texto do cabeçalho muda. */
   contexto?: ContextoCadastro;
+  /** Decisão 166: só o regime e o CNAE se mexem (ver o comentário do topo). */
+  somentePendentes?: boolean;
 }) {
+  const soPendentes = somentePendentes && Boolean(fornecedor);
   const editando = Boolean(fornecedor);
   const onde = CONTEXTO[contexto];
 
@@ -117,7 +125,9 @@ export function NovoFornecedorDialog({
               {editando ? "Editar cadastro do fornecedor" : "Novo fornecedor"}
             </DialogTitle>
             <DialogDescription className="mt-1 text-[12.5px] leading-snug">
-              {editando
+              {soPendentes
+                ? `Complete o que está em vermelho e salve para voltar ${onde.para}. Os outros dados, só o financeiro altera.`
+                : editando
                 ? `Salvar volta ${onde.para} com este fornecedor ainda escolhido. O que você digitou ${onde.oQueFicouAtras} continua lá.`
                 : `Ao criar, ele já fica selecionado ${onde.em}. O que você digitou ${onde.oQueFicouAtras} continua lá.`}
             </DialogDescription>
@@ -126,13 +136,14 @@ export function NovoFornecedorDialog({
           {/* O tipo de pessoa manda nos rótulos do formulário inteiro
               (Nome fantasia/Nome, CNPJ/CPF) — por isso fica aqui em cima,
               onde se lê antes de começar a preencher. */}
-          <div className="flex-none">
+          <div className={cn("flex-none", soPendentes && "pointer-events-none opacity-50")}>
             <div className="inline-flex gap-[3px] rounded-[10px] border border-border bg-muted/40 p-[3px]">
               {(["juridica", "fisica"] as const).map((tp) => (
                 <button
                   type="button"
                   key={tp}
                   onClick={() => setTipoPessoa(tp)}
+                  disabled={soPendentes}
                   aria-pressed={tipoPessoa === tp}
                   title={tp === "juridica" ? "Pessoa Jurídica" : "Pessoa Física"}
                   className={cn(
@@ -157,6 +168,7 @@ export function NovoFornecedorDialog({
             fornecedor={fornecedor}
             nomeInicial={nomeInicial}
             modo="dialog"
+            somentePendentes={soPendentes}
             tipoPessoa={tipoPessoa}
             onTipoPessoaChange={setTipoPessoa}
             onCancelar={() => onOpenChange(false)}

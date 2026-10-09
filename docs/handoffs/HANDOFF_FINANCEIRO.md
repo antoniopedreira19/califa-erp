@@ -6996,3 +6996,22 @@ financeiro". Regra completa na §9 da decisão 115.
   financeiro escolhe em "Como vai ser pago", como na verba de produção. A
   verba de um terceiro traz o pagamento do fornecedor (cadastro, chave
   aleatória ou boleto) e pode ir na remessa; sem retenção, como toda verba.
+
+## ⚠️ Nota de 2026-10-09 (4) — Regime e CNAE obrigatórios no cadastro de fornecedor (decisão 166)
+
+- O cadastro de fornecedor e de veículo exige, na pessoa jurídica, o
+  **regime tributário** — Lucro Real e Lucro Presumido agora são opções
+  separadas; o legado "Lucro Real ou Presumido" (`normal`) não se escolhe
+  mais — e o **CNAE** (`fornecedores.cnae`, a lista inteira do IBGE em
+  `lib/fiscal/cnaes.ts`, com busca). A consulta do CNPJ preenche o CNAE
+  principal e, no Simples e no MEI, o regime.
+- O cadastro antigo (sem CNAE) abre com o regime vazio na tela, "Antes: …"
+  embaixo e os campos que faltam em vermelho; o banco guarda o regime antigo
+  até alguém salvar.
+- **Aprovação da PP**: o regime continua vindo do cadastro. Real e
+  Presumido aparecem pelo nome ("Lucro Real", "Lucro Presumido") e seguem a
+  regra de retenção do regime normal (`nf-da-pp.ts`, `calculos.ts`).
+- Em 09/10/2026, os 31 fornecedores sem regime que tinham PP lançada
+  receberam o regime pela consulta do CNPJ (15 Simples, 9 MEI, 7 "Lucro Real
+  ou Presumido"); os 9 que já tinham bateram com a consulta. Migration
+  `20261009500002`.

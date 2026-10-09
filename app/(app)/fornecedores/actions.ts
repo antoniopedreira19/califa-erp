@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { pode } from "@/lib/permissoes";
 import {
+  cadastroFiscalSchema,
   fornecedorSchema,
   fornecedorCompletoSchema,
   fornecedorVeiculoSchema,
@@ -24,7 +25,9 @@ import type { PixTipoChave } from "@/lib/types";
 import {
   BUCKET_DO_FORNECEDOR,
   caminhoDaDeclaracao,
+  cadastroSemRevisao,
   declaracaoDoTenant,
+  pendenciasDoCadastroFiscal,
   recusaDoArquivoDaDeclaracao,
 } from "@/lib/fiscal/regime-do-fornecedor";
 
@@ -103,6 +106,8 @@ function extractInput(formData: FormData) {
     regime_consulta: formData.get("regime_consulta"),
     regime_desde: formData.get("regime_desde"),
     declaracao_simples_path: formData.get("declaracao_simples_path"),
+    // Decisão 166: o CNAE da pessoa jurídica.
+    cnae: formData.get("cnae"),
   };
 }
 
@@ -300,6 +305,7 @@ async function inserirFornecedor(
       // Módulo fiscal: o regime decide a retenção na aprovação da PP.
       regime_tributario: parsed.data.regime_tributario,
       regime_consulta: parsed.data.regime_consulta,
+      cnae: parsed.data.cnae,
       declaracao_simples_anexada: Boolean(parsed.data.declaracao_simples_path),
       // Decisão 161: sem conta nem PIX — a PP pede boleto ou chave aleatória.
       sem_dados_pagamento: parsed.data.sem_dados_pagamento === true,
@@ -592,6 +598,7 @@ async function atualizarComSchema(
       // Módulo fiscal: o regime decide a retenção na aprovação da PP.
       regime_tributario: parsed.data.regime_tributario,
       regime_consulta: parsed.data.regime_consulta,
+      cnae: parsed.data.cnae,
       // Decisão 161 (ausente = a tela não mandou, a marcação não mudou).
       ...(parsed.data.sem_dados_pagamento !== undefined && {
         sem_dados_pagamento: parsed.data.sem_dados_pagamento,
@@ -604,6 +611,109 @@ async function atualizarComSchema(
             : "anexado",
         declaracao_simples_path_anterior: arquivoAntes,
       }),
+    },
+  });
+
+  revalidatePath("/fornecedores");
+  revalidatePath(`/fornecedores/${id}`);
+  return { ok: true, id };
+}
+
+// ---------------------------------------------------------------------------
+// Decisão 166: regime e CNAE para gerar PP
+// ---------------------------------------------------------------------------
+
+/**
+ * O que falta no cadastro do fornecedor para gerar PP: o regime (o legado
+ * "Lucro Real ou Presumido" conta como falta) e o CNAE, na pessoa jurídica.
+ * O formulário da PP pergunta ao escolher o fornecedor e de novo depois de
+ * cada edição do cadastro; `gerarPPDaPPAEmitir` confere no servidor.
+ */
+export async function pendenciasDoCadastroDoFornecedor(
+  id: string,
+): Promise<{ ok: true; falta: string[] } | { ok: false; message: string }> {
+  const session = await requireSession();
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("fornecedores")
+    .select("tipo_pessoa, regime_tributario, cnae")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
+  if (error || !data) return { ok: false, message: "Fornecedor não encontrado." };
+  return { ok: true, falta: pendenciasDoCadastroFiscal(data) };
+}
+
+/**
+ * O lápis do campo Fornecedor da PP, para quem gera PP e não edita
+ * fornecedor (GP, produtor e freelancer): o cadastro inteiro aparece, mas
+ * só o regime e o CNAE se gravam — o resto continua com o financeiro. E só
+ * enquanto o cadastro estiver pendente (sem CNAE, sem regime ou com o
+ * legado): cadastro completo, só quem edita fornecedor altera.
+ */
+export async function completarCadastroFiscalDoFornecedor(
+  id: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarCriarFornecedor(session);
+  if (!gate.ok) return gate;
+
+  const parsed = cadastroFiscalSchema.safeParse({
+    regime_tributario: formData.get("regime_tributario"),
+    cnae: formData.get("cnae"),
+    regime_consulta: formData.get("regime_consulta"),
+    regime_desde: formData.get("regime_desde"),
+    regime_consultado_em: formData.get("regime_consultado_em"),
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Verifique os campos destacados.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+  const { data: antes, error: erroAoLer } = await supabase
+    .from("fornecedores")
+    .select("tipo_pessoa, regime_tributario, cnae")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
+  if (erroAoLer || !antes) return { ok: false, message: "Fornecedor não encontrado." };
+  if (antes.tipo_pessoa !== "juridica") {
+    return { ok: false, message: "Pessoa física não tem regime tributário nem CNAE." };
+  }
+  if (!cadastroSemRevisao(antes) && pendenciasDoCadastroFiscal(antes).length === 0) {
+    return {
+      ok: false,
+      message: "O cadastro deste fornecedor já está completo. Para alterá-lo, fale com o financeiro.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("fornecedores")
+    .update(parsed.data)
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
+  if (error) {
+    console.error("[fornecedores.completar]", error.message);
+    return { ok: false, message: "Não foi possível salvar. Tente novamente." };
+  }
+
+  await logAuditEvent({
+    acao: "fornecedor.editado",
+    tenantId,
+    entidadeTipo: "fornecedor",
+    entidadeId: id,
+    metadata: {
+      acao: "cadastro_fiscal_completado",
+      regime_tributario_antes: antes.regime_tributario,
+      regime_tributario: parsed.data.regime_tributario,
+      cnae: parsed.data.cnae,
+      regime_consulta: parsed.data.regime_consulta,
     },
   });
 

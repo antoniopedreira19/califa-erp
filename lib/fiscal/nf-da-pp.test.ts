@@ -285,6 +285,27 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
   assert.equal(rotuloCurtoDoRegime(null), "regime não informado");
 });
 
+test("decisão 166: Lucro Real e Lucro Presumido aparecem pelo nome, conferidos pela consulta", () => {
+  const presumido = regimeDoFornecedorDaPP(false, {
+    regime_tributario: "lucro_presumido",
+    regime_consulta: "normal",
+    regime_consultado_em: "2026-10-09",
+    declaracao_simples_recebida: null,
+  });
+  assert.ok(presumido);
+  assert.equal(textoDoRegime(presumido), "Lucro Presumido · consulta do CNPJ em 09/10/2026");
+  assert.equal(rotuloCurtoDoRegime("lucro_real"), "Lucro Real");
+  assert.equal(rotuloCurtoDoRegime("lucro_presumido"), "Lucro Presumido");
+  // A consulta disse Simples e o cadastro diz Lucro Real: sem a data.
+  const trocado = regimeDoFornecedorDaPP(false, {
+    regime_tributario: "lucro_real",
+    regime_consulta: "simples",
+    regime_consultado_em: "2026-10-09",
+    declaracao_simples_recebida: null,
+  });
+  assert.equal(trocado?.consultado_em, null);
+});
+
 test("regime do fornecedor: a data da consulta só acompanha o regime que ela indicou (decisão 142)", () => {
   // Trocado à mão: a consulta disse normal e o cadastro diz Simples.
   const trocado = regimeDoFornecedorDaPP(false, {

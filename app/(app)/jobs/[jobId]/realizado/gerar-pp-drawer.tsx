@@ -13,6 +13,13 @@
  * Os anexos (decisão 152): área de arrastar, cartões brancos com o mais
  * novo em cima, tipo obrigatório que nasce vazio e, na NF, os dados dela
  * logo abaixo do arquivo. Aqui são opcionais; o envio cobra todos.
+ *
+ * Decisão 166 (09/10/2026): fornecedor PJ sem regime tributário (ou com o
+ * legado "Lucro Real ou Presumido") ou sem CNAE não gera PP. O aviso
+ * vermelho embaixo do campo diz o que falta e aponta o lápis; "Gerar PP"
+ * trava, e "Salvar" continua — a PP a emitir espera o cadastro. Quem não
+ * edita fornecedor (GP, produtor, freelancer) ganha o lápis só nesse caso, e
+ * ele abre o cadastro inteiro com só os dois campos editáveis.
  */
 
 import * as React from "react";
@@ -68,7 +75,11 @@ import {
   vencimentoAceitaEnvio,
   vencimentosNasJanelas,
 } from "@/lib/calculos/janelas-pagamento";
-import { carregarFornecedor } from "@/app/(app)/fornecedores/actions";
+import {
+  carregarFornecedor,
+  pendenciasDoCadastroDoFornecedor,
+} from "@/app/(app)/fornecedores/actions";
+import { listarPendencias } from "@/lib/fiscal/regime-do-fornecedor";
 import {
   listarPessoasParaVerba,
   reservarPedidoCompra,
@@ -271,6 +282,35 @@ export function GerarPPDrawer({
   const [pagamento, setPagamento] =
     React.useState<PagamentoDaPPEstado>(PAGAMENTO_PELO_CADASTRO);
   const [faltaPagamento, setFaltaPagamento] = React.useState(false);
+  // Decisão 166: o que falta no cadastro do fornecedor escolhido (regime e
+  // CNAE da pessoa jurídica) — na PP comum e na verba de um terceiro, que
+  // pagam um fornecedor. Relido depois de cada edição do cadastro.
+  const [faltaNoCadastro, setFaltaNoCadastro] = React.useState<string[]>([]);
+  const [versaoDoCadastro, setVersaoDoCadastro] = React.useState(0);
+  React.useEffect(() => {
+    if (!fornecedorId || !usaFornecedor) {
+      setFaltaNoCadastro([]);
+      return;
+    }
+    let vivo = true;
+    pendenciasDoCadastroDoFornecedor(fornecedorId).then((r) => {
+      if (vivo) setFaltaNoCadastro(r.ok ? r.falta : []);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [fornecedorId, usaFornecedor, versaoDoCadastro]);
+  const cadastroIncompleto = usaFornecedor && Boolean(fornecedorId) && faltaNoCadastro.length > 0;
+  /** Quem não edita fornecedor completa o cadastro pendente pelo lápis: o
+   *  cadastro inteiro aparece, mas só o regime e o CNAE se mexem. */
+  const completaPeloLapis = !podeEditarFornecedor && podeCadastrarFornecedor && cadastroIncompleto;
+  const temLapis = podeEditarFornecedor || completaPeloLapis;
+  const [soPendentesAberto, setSoPendentesAberto] = React.useState(false);
+  const travaDoCadastro = cadastroIncompleto
+    ? temLapis
+      ? "Complete o cadastro do fornecedor para gerar a PP."
+      : "O financeiro precisa completar o cadastro do fornecedor para a PP ser gerada."
+    : null;
   // Cadastro rápido de fornecedor (04/09/2026, decisão 048). O combo vem
   // do server component, então o fornecedor que acabou de nascer só
   // chegaria nele depois do `router.refresh()`; enquanto isso ele mora
@@ -685,6 +725,10 @@ export function GerarPPDrawer({
       setErro(travaDaAbertura);
       return;
     }
+    if (gerar && travaDoCadastro) {
+      setErro(travaDoCadastro);
+      return;
+    }
     // A data salva que perdeu o prazo de envio ainda se salva, mas não gera
     // PP (decisão 157) — o servidor diria o mesmo na revisão.
     if (gerar && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
@@ -997,10 +1041,13 @@ export function GerarPPDrawer({
                         para editar é `cadastros.fornecedores.editar`, do
                         administrador e do financeiro. Por isso o gate segue o
                         papel do botão, e não o botão. */}
-                    {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
+                    {(fornecedorId ? temLapis : podeCadastrarFornecedor) && (
                     <button
                       type="button"
                       onClick={() => {
+                        // Decisão 166: quem não edita fornecedor abre o
+                        // cadastro pendente só para completar.
+                        setSoPendentesAberto(Boolean(fornecedorId) && completaPeloLapis);
                         setNomeSugerido("");
                         setFornecedorEditando(
                           fornecedorId ? fornecedorId : null,
@@ -1018,7 +1065,10 @@ export function GerarPPDrawer({
                           ? "Editar cadastro do fornecedor"
                           : "Cadastrar fornecedor"
                       }
-                      className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                      className={cn(
+                        "inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50",
+                        cadastroIncompleto && "border-california-red/60 ring-[3px] ring-california-red/15",
+                      )}
                     >
                       {fornecedorId ? (
                         <Pencil className="h-4 w-4" />
@@ -1028,6 +1078,26 @@ export function GerarPPDrawer({
                     </button>
                     )}
                   </div>
+                  {cadastroIncompleto ? (
+                    <div
+                      role="status"
+                      className="mt-2 flex items-start gap-2 rounded-lg border border-california-red/30 bg-california-red/[0.06] px-3 py-2 text-[12px] leading-snug text-california-red"
+                    >
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+                      <span>
+                        <b className="font-semibold">Cadastro incompleto:</b> falta{" "}
+                        {listarPendencias(faltaNoCadastro)}.{" "}
+                        {temLapis ? (
+                          <>
+                            Clique no lápis <Pencil className="mb-0.5 inline h-3 w-3" aria-label="lápis" /> ao
+                            lado para completar e gerar a PP.
+                          </>
+                        ) : (
+                          <>Peça ao financeiro para completar; até lá a PP não é gerada.</>
+                        )}
+                      </span>
+                    </div>
+                  ) : (
                   <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
                     {fornecedorId
                       ? podeEditarFornecedor
@@ -1037,6 +1107,7 @@ export function GerarPPDrawer({
                       ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
                       : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
                   </p>
+                  )}
                   {fornecedorId && (
                     <div className="mt-3">
                       <PagamentoDaPPField
@@ -1642,10 +1713,11 @@ export function GerarPPDrawer({
                   pending ||
                   !ppId ||
                   travaDaAbertura !== null ||
+                  cadastroIncompleto ||
                   anexos.some((a) => a.status === "uploading") ||
                   faltaQuemRecebe
                 }
-                title={travaDaAbertura ?? undefined}
+                title={travaDaAbertura ?? travaDoCadastro ?? undefined}
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-semibold",
                   travaDaAbertura
@@ -1657,8 +1729,16 @@ export function GerarPPDrawer({
               </button>
             </div>
             <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">
-              {travaDaAbertura && <AlertTriangle className="mt-0.5 h-3 w-3 flex-none text-amber-600" />}
+              {(travaDaAbertura || travaDoCadastro) && (
+                <AlertTriangle
+                  className={cn(
+                    "mt-0.5 h-3 w-3 flex-none",
+                    travaDaAbertura ? "text-amber-600" : "text-california-red",
+                  )}
+                />
+              )}
               {travaDaAbertura ??
+                (travaDoCadastro ? `${travaDoCadastro} “Salvar” guarda a PP a emitir enquanto isso.` : null) ??
                 "“Salvar” guarda a PP a emitir para editar depois; “Gerar PP” salva e mostra a revisão antes de gerar. O envio ao financeiro é no painel do item."}
             </p>
           </div>
@@ -1687,8 +1767,10 @@ export function GerarPPDrawer({
           // lista do servidor.
           onSalvo={() => {
             setFornecedorEditando(null);
+            setVersaoDoCadastro((v) => v + 1);
             router.refresh();
           }}
+          somentePendentes={soPendentesAberto}
         />
         {/* Decisão 153, entrega 3: os documentos e os dados lado a lado. O
             estado é o deste formulário. */}

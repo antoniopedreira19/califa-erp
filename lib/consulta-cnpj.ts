@@ -1,7 +1,7 @@
 /**
  * A consulta pública do CNPJ no cadastro de fornecedor: razão social,
- * endereço e o regime (opção pelo Simples e pelo MEI — ver
- * `lib/fiscal/regime-do-fornecedor.ts`).
+ * endereço, o regime (opção pelo Simples e pelo MEI) e os CNAEs, principal
+ * e secundários (decisão 166) — ver `lib/fiscal/regime-do-fornecedor.ts`.
  *
  * BrasilAPI primeiro; quando ela falha, o CNPJ.ws (09/10/2026). Nesse dia a
  * BrasilAPI respondia 500 para todo CNPJ fora do cache dela (a origem,
@@ -42,6 +42,9 @@ export interface RespostaDoCnpj {
   opcao_pelo_mei?: boolean | null;
   data_opcao_pelo_simples?: string | null;
   data_opcao_pelo_mei?: string | null;
+  /** Decisão 166: o CNAE principal (a BrasilAPI manda número: 5911102). */
+  cnae_fiscal?: number | string | null;
+  cnaes_secundarios?: Array<{ codigo?: number | string | null }> | null;
 }
 
 export type ConsultaDoCnpj =
@@ -90,6 +93,11 @@ export function respostaDoCnpjWs(resposta: unknown): RespostaDoCnpj | null {
     opcao_pelo_mei: simples ? sim(simples.mei) : false,
     data_opcao_pelo_simples: simples ? data(simples.data_opcao_simples) : null,
     data_opcao_pelo_mei: simples ? data(simples.data_opcao_mei) : null,
+    // Decisão 166: o CNPJ.ws manda o CNAE como `id` ("5911102").
+    cnae_fiscal: texto(objeto(estabelecimento.atividade_principal)?.id) || null,
+    cnaes_secundarios: Array.isArray(estabelecimento.atividades_secundarias)
+      ? (estabelecimento.atividades_secundarias as unknown[]).map((a) => ({ codigo: texto(objeto(a)?.id) || null }))
+      : [],
   };
 }
 

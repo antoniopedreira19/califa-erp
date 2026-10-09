@@ -16,8 +16,8 @@ export default async function NovoFornecedorPage() {
           Novo fornecedor
         </h1>
         <p className="mt-1 max-w-[52ch] text-[13.5px] text-muted-foreground">
-          Nome, CPF/CNPJ, contato e o pagamento são obrigatórios — endereço
-          e observações podem ficar para depois.
+          Nome, CPF/CNPJ, regime tributário, CNAE, contato e o pagamento são
+          obrigatórios — endereço e observações podem ficar para depois.
         </p>
       </div>
 
