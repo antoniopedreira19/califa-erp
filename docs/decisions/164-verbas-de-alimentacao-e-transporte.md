@@ -92,7 +92,8 @@ acesso ao sistema; 218 freelas na planilha, 69 trabalhando, 14 já no RH
   lá e a tabela `freelas` sai. Até lá, freela novo entra por carga (sem
   tela de cadastro).
 - **Nome social**: a lista mostra o nome completo, como o RH; o nome social
-  da planilha (muitas vezes um apelido) só entra na busca. Fica com o
-  Tiago decidir se algum caso deve aparecer pelo nome social.
+  da planilha (muitas vezes um apelido) só entra na busca. O Tiago decidiu
+  em 09/10/2026 manter o nome completo por enquanto; o caso volta quando o
+  RH tiver os freelas.
 - Plano de contas próprio para alimentação e transporte: o centro de custo
   segue o de toda PP (escolhido pelo financeiro na aprovação).
