@@ -214,7 +214,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("pedidos_compra")
       .select(
-        "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), responsavel:profiles!responsavel_verba_id(nome), " +
+        "*, emitido:profiles!emitida_por(nome), enviado:profiles!enviada_financeiro_por(nome), pronto:profiles!pronta_para_envio_por(nome), responsavel:profiles!responsavel_verba_id(nome), " +
           // O tipo, o número e a NF de cada anexo (decisões 152 e 153): o
           // envio ao financeiro abre com eles.
           "anexos:pedidos_compra_anexos(id, arquivo_path, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, created_at, documento_tipo, documento_numero, nota_fiscal_id, nf_data_emissao, nf_valor, nf_tomador_estabelecimento_id, nf_valor_na_pp), " +
@@ -745,6 +745,8 @@ export async function carregarDetalheDoJob(
     valor: Number(pp.valor),
     emitida_por_nome: pp.emitido?.nome ?? null,
     enviada_financeiro_por_nome: pp.enviado?.nome ?? null,
+    // Decisão 160: quem deixou a PP pronta para o GP enviar.
+    pronta_para_envio_por_nome: pp.pronto?.nome ?? null,
     item_nome: itemPorItemRealizadoId.get(pp.item_realizado_id) ?? null,
     grupo_nome: grupoPorItemRealizadoId.get(pp.item_realizado_id) ?? null,
     parcelas: (pp.parcelas ?? [])

@@ -213,6 +213,9 @@ export type AuditAction =
   | "pedido_compra.gerada"
   | "pedido_compra.editada"
   | "pedido_compra.enviada_financeiro"
+  // Decisão 160: o produtor/freelancer conferiu os documentos e deixou a PP
+  // pronta para o GP enviar.
+  | "pedido_compra.pronta_para_envio"
   | "pedido_compra.cancelada"
   | "pedido_compra.prazo_financeiro_atualizado"
   | "pedido_compra.paga"

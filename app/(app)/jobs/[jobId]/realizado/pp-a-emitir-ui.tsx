@@ -8,7 +8,7 @@
  */
 
 import * as React from "react";
-import { AlertTriangle, Columns2, Lock, Pencil, Send, X } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, Columns2, Lock, Pencil, Send, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ import {
   type PPAEmitir,
 } from "@/lib/types";
 import {
+  deixarPPProntaParaEnvio,
   enviarPedidoCompraAoFinanceiro,
   prefixoAnexosPedidoCompra,
   signedUrlAnexo,
@@ -319,8 +320,15 @@ export interface PPParaEnviar {
  * dela: o envio é onde os documentos entram. Todo campo é obrigatório aqui
  * — o tipo de cada arquivo, o número dos documentos e os dados de cada NF.
  * Acima do planejado, o "tem certeza?" vem antes de gravar.
+ *
+ * Dois modos (08/10/2026): o GP ENVIA; o produtor e o freelancer, que não
+ * enviam (decisão 136), conferem os mesmos documentos com as mesmas regras e
+ * deixam a PP "Pronta para envio" — o GP a envia pela aba Pedidos de
+ * Produção, com o pop-up já preenchido. O "tem certeza?" acima do planejado
+ * e o da nota em outro CNPJ ficam para o envio, que é quando o GP decide.
  */
 export function EnvioDialog({
+  modo,
   pp,
   onOpenChange,
   nomeDoFornecedor,
@@ -332,6 +340,9 @@ export function EnvioDialog({
   moeda,
   onEnviada,
 }: {
+  /** "enviar": o GP manda ao financeiro. "preparar": o produtor deixa
+   *  pronta para o GP enviar. */
+  modo: "enviar" | "preparar";
   pp: PPParaEnviar | null;
   onOpenChange: (o: boolean) => void;
   nomeDoFornecedor: string;
@@ -343,8 +354,10 @@ export function EnvioDialog({
   tomadorPorEmpresa: Record<string, string>;
   nomeDaEmpresaDe: (empresaId: string) => string;
   moeda: string;
+  /** Depois de gravar — enviada ao financeiro ou deixada pronta, conforme o modo. */
   onEnviada: (codigo: string) => void;
 }) {
+  const preparar = modo === "preparar";
   const [prefixo, setPrefixo] = React.useState<string | null>(null);
   const { anexos, setAnexos, subir, remover, mudar, mudarNf, aviso, setAviso } = useAnexosEmEdicao(
     prefixo,
@@ -402,6 +415,22 @@ export function EnvioDialog({
     const falta = faltaNosAnexosParaEnviar(anexos, pp.valor, existentes);
     if (falta && !pp.verbaProducao) {
       setErro(falta);
+      return;
+    }
+    if (preparar) {
+      setErro(null);
+      const alvo = pp;
+      startTransition(async () => {
+        const res = await deixarPPProntaParaEnvio(
+          alvo.id,
+          anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+        );
+        if (!res.ok) {
+          setErro(res.message);
+          return;
+        }
+        onEnviada(res.codigo);
+      });
       return;
     }
     // Decisão 156: nota em outro CNPJ não barra — pede o "tem certeza?".
@@ -479,8 +508,16 @@ export function EnvioDialog({
       disabled={pending || (!pp.verbaProducao && prefixo === null)}
       className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
     >
-      <Send className="h-3.5 w-3.5" />
-      {pending ? "Enviando…" : confirmando ? "Sim, enviar" : "Enviar ao financeiro"}
+      {preparar ? <ClipboardCheck className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+      {preparar
+        ? pending
+          ? "Gravando…"
+          : "Deixar pronta para envio"
+        : pending
+          ? "Enviando…"
+          : confirmando
+            ? "Sim, enviar"
+            : "Enviar ao financeiro"}
     </button>
   );
   const textoAcimaDoPlanejado = confirmando ? (
@@ -495,13 +532,28 @@ export function EnvioDialog({
     <Dialog open onOpenChange={(o) => !pending && onOpenChange(o)}>
       <DialogContent className="max-w-[680px] gap-0 p-0">
         <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
-          <DialogTitle className="text-[17px]">
-            Enviar <span className="font-mono">{pp.codigo}</span> ao financeiro
-          </DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-relaxed">
-            {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}. A
-            PP não muda mais; aqui entram os documentos do fornecedor. Todos os campos são obrigatórios para enviar.
-          </DialogDescription>
+          {preparar ? (
+            <>
+              <DialogTitle className="text-[17px]">
+                Deixar <span className="font-mono">{pp.codigo}</span> pronta para envio
+              </DialogTitle>
+              <DialogDescription className="text-[12.5px] leading-relaxed">
+                {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.
+                Confira os documentos do fornecedor: o GP envia a PP ao financeiro pela aba Pedidos de Produção. Todos os
+                campos são obrigatórios.
+              </DialogDescription>
+            </>
+          ) : (
+            <>
+              <DialogTitle className="text-[17px]">
+                Enviar <span className="font-mono">{pp.codigo}</span> ao financeiro
+              </DialogTitle>
+              <DialogDescription className="text-[12.5px] leading-relaxed">
+                {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.
+                A PP não muda mais; aqui entram os documentos do fornecedor. Todos os campos são obrigatórios para enviar.
+              </DialogDescription>
+            </>
+          )}
         </DialogHeader>
         <div className="relative max-h-[70vh] space-y-3 overflow-y-auto px-6 py-4">
           {(erro || aviso) && (
@@ -521,19 +573,9 @@ export function EnvioDialog({
           )}
           {!pp.verbaProducao && (
             <>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Anexos</p>
-                {/* Decisão 153, entrega 3: a PP e os documentos lado a lado,
-                    como no Contas a Pagar. */}
-                <button
-                  type="button"
-                  onClick={() => setLadoALado({ foco: itensDaLista(anexos)[0]?.id ?? null })}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
-                >
-                  <Columns2 className="h-3.5 w-3.5" />
-                  Ver PP e documentos lado a lado
-                </button>
-              </div>
+              {/* O "Ver PP e documentos lado a lado" virou o "Verificar" do
+                  rodapé (pedido do Tiago, 08/10/2026). */}
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Anexos</p>
               <ZonaDeAnexos id={`envio-arquivos-${pp.id}`} pronto={prefixo !== null} onArquivos={subir} />
               <ListaDeAnexos
                 itens={itensDaLista(anexos)}
@@ -569,7 +611,10 @@ export function EnvioDialog({
             </div>
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-6 py-3">
+        {/* "Voltar" no canto esquerdo e "Verificar" — a PP, os documentos e
+            os dados lado a lado (decisão 153, entrega 3) — ao lado do envio
+            (pedido do Tiago, 08/10/2026). */}
+        <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/30 px-6 py-3">
           <button
             type="button"
             onClick={() => (confirmando ? setConfirmando(null) : onOpenChange(false))}
@@ -578,7 +623,20 @@ export function EnvioDialog({
           >
             Voltar
           </button>
-          {botaoEnviar}
+          <div className="flex items-center gap-2">
+            {!pp.verbaProducao && (
+              <button
+                type="button"
+                onClick={() => setLadoALado({ foco: itensDaLista(anexos)[0]?.id ?? null })}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red disabled:opacity-50"
+              >
+                <Columns2 className="h-3.5 w-3.5" />
+                Verificar
+              </button>
+            )}
+            {botaoEnviar}
+          </div>
         </div>
         {/* Decisão 156: a nota em outro CNPJ que não o da PP — o financeiro
             decide na aprovação. */}
@@ -644,7 +702,7 @@ export function EnvioDialog({
               <>
                 {nomeDoFornecedor} ·{" "}
                 <strong className="font-semibold text-white">{formatCurrency(pp.valor, moeda)}</strong> · todos os campos
-                são obrigatórios para enviar
+                são obrigatórios {preparar ? "para deixar pronta" : "para enviar"}
               </>
             }
             rodape={
