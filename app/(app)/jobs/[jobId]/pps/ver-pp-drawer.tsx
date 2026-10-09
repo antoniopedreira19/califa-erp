@@ -599,8 +599,11 @@ export function VerPPDrawer({
           </DialogTitle>
           <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
             <Lock className="h-3 w-3 flex-none" />
-            Somente leitura — a PP já foi enviada ao financeiro e não é mais
-            editável.
+            {/* Desde a decisão 160 a ficha abre também da PP gerada (pela
+                aba Pedidos de Produção). */}
+            {pp.status === "gerada"
+              ? "Somente leitura — a PP gerada não se edita mais; os documentos do fornecedor entram no envio."
+              : "Somente leitura — a PP já foi enviada ao financeiro e não é mais editável."}
           </p>
         </DialogHeader>
 

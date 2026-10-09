@@ -2243,7 +2243,7 @@ export function JobItemRealizadoTable({
           : aberturaEmRevisao
             ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
             : !papelEnviaPP
-              ? "Só o GP envia PP ao financeiro. Gere a PP e peça a um GP para enviá-la."
+              ? "Só o GP envia PP ao financeiro. Confira os documentos e deixe a PP pronta para envio: o GP a envia pela aba Pedidos de Produção."
               : null;
 
         return (
@@ -2285,6 +2285,8 @@ export function JobItemRealizadoTable({
                 anexos: pp.anexos,
                 substitui: pp.substitui,
                 motivoRejeicao: pp.motivo_rejeicao ?? null,
+                prontaParaEnvioEm: pp.pronta_para_envio_em,
+                prontaParaEnvioPorNome: pp.pronta_para_envio_por_nome,
               }))}
               aEmitir={aEmitirDoItem}
               statusDoJob={statusDoJob}
@@ -2300,6 +2302,8 @@ export function JobItemRealizadoTable({
               }
               onRefeita={(id) => setEditarQuandoChegar(id)}
               podeRefazer={papelEnviaPP}
+              // Decisão 160: sem o papel, o envio vira "Deixar pronta para envio".
+              papelEnviaPP={papelEnviaPP}
               nomeDoFornecedor={(id) => (id ? nomeDoFornecedor(fornecedores, id) : "—")}
               nomeDoResponsavel={(id) => responsaveis.find((r) => r.id === id)?.nome ?? "—"}
               nomeDaEmpresa={(id) => {

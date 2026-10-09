@@ -2279,6 +2279,125 @@ export async function enviarPedidoCompraAoFinanceiro(
   return { ok: true, codigo: ppRow.codigo };
 }
 
+/**
+ * "Deixar pronta para envio" (decisão 160, 09/10/2026).
+ *
+ * O produtor e o freelancer geram a PP mas não a enviam (decisão 136). Com
+ * esta action eles conferem os documentos no MESMO pop-up do envio, com as
+ * mesmas regras — o tipo de cada arquivo e os dados de cada NF obrigatórios
+ * (decisão 152) —, e em vez de mandar ao financeiro deixam a PP pronta: os
+ * anexos ficam gravados como o pop-up mandou, e a PP ganha a marca
+ * `pronta_para_envio_em/por`. O GP a vê na aba Pedidos de Produção e envia
+ * com o pop-up já preenchido.
+ *
+ * A PP continua "gerada", e quem preparou pode reabrir e gravar de novo até
+ * o GP enviar. Ficam para o envio, que é quando o GP decide: o "tem
+ * certeza?" acima do planejado, o da nota em outro CNPJ (decisão 156), o
+ * prazo de envio (decisão 157), a abertura em revisão (decisão 040) e a
+ * ligação das NFs ao cadastro de notas (`ligar_notas_fiscais_da_pp`).
+ *
+ * Quem e quando são gravados pelo gatilho `trg_pp_carimba_pronta_para_envio`
+ * com o usuário da sessão; o gatilho também recusa a marca fora da PP gerada.
+ */
+export async function deixarPPProntaParaEnvio(
+  pp_id: string,
+  anexosDoEnvio?: z.input<typeof anexoUploadedSchema>[],
+): Promise<Result<{ codigo: string }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: ppRow, error: ppErr } = await supabase
+    .from("pedidos_compra")
+    .select("id, codigo, job_id, item_realizado_id, status, valor, verba_producao")
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      codigo: string;
+      job_id: string;
+      item_realizado_id: string;
+      status: PPStatus;
+      valor: number | string;
+      verba_producao: boolean;
+    }>();
+
+  if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
+  if (ppRow.status !== "gerada") {
+    return {
+      ok: false,
+      message:
+        ppRow.status === "cancelada"
+          ? "PP cancelada não fica pronta para envio."
+          : `${ppRow.codigo} já está no financeiro.`,
+    };
+  }
+
+  // Os mesmos gates de gerar, editar e cancelar: job aceita PP e o papel
+  // emite PP (`jobs.emitir_pp`).
+  const gate = await checarGatesRealizado(ppRow.item_realizado_id);
+  if (!gate.ok) return gate;
+  const { job } = gate;
+
+  // Os documentos, com as regras do envio (decisão 152). A verba de
+  // produção sai sem nota: só a marca.
+  let anexosDoPedido: AnexoUploaded[] = [];
+  if (!ppRow.verba_producao) {
+    const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
+    if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
+    anexosDoPedido = parsed.data;
+    const falta = faltaNosAnexosDoEnvio(anexosDoPedido, Number(ppRow.valor ?? 0));
+    if (falta) return { ok: false, message: falta };
+    const erroAnexos = await gravarAnexosDoEnvio(
+      supabase,
+      session.activeTenant.id,
+      session.profile.id,
+      job.id,
+      pp_id,
+      anexosDoPedido,
+    );
+    if (erroAnexos) return { ok: false, message: erroAnexos };
+  }
+
+  // `.eq("status", "gerada")`: se o GP enviou no meio, nada muda aqui.
+  const { data: marcada, error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      pronta_para_envio_em: new Date().toISOString(),
+      pronta_para_envio_por: session.profile.id,
+    })
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "gerada")
+    .select("id");
+
+  if (updErr) {
+    console.error("[pp.pronta_para_envio]", updErr.message);
+    return { ok: false, message: "Não foi possível deixar a PP pronta para envio. Tente de novo." };
+  }
+  if (!marcada || marcada.length === 0) {
+    return { ok: false, message: `${ppRow.codigo} já tinha saído de gerada.` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.pronta_para_envio",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: {
+      pp_codigo: ppRow.codigo,
+      job_id: job.id,
+      item_realizado_id: ppRow.item_realizado_id,
+      papel: session.activeRole,
+      verba_producao: ppRow.verba_producao,
+      anexos: anexosDoPedido.length,
+      notas_fiscais: anexosDoPedido.filter((a) => a.documento_tipo === "nota_fiscal").length,
+    },
+  });
+
+  revalidatePath(`/jobs/${job.id}`);
+  return { ok: true, codigo: ppRow.codigo };
+}
+
 // ⚠️ Decisão 153 (07/10/2026): a edição da PP gerada
 // (`editarPedidoCompraGerada`) saiu. Depois de gerada, a PP não se edita
 // mais; para mudar algo, cancela e gera outra a partir de uma PP a emitir.

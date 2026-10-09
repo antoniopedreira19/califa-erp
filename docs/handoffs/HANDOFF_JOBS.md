@@ -4954,3 +4954,44 @@ código publicado logo depois (`3305751`).
   (registro completo na decisão). Ficou no job a linha "Frete teste 159"
   de R$ 120 e a foto nº 2 da abertura.
 
+
+## ⚠️ Nota de 2026-10-09 — a PP fica "Pronta para envio", e o GP a envia pela aba Pedidos de Produção (decisão 160)
+
+- O produtor e o freelancer passaram a ter **"Deixar pronta para envio"** no
+  painel do item, no lugar do "Enviar ao financeiro" apagado. O botão abre o
+  mesmo pop-up do envio, com as mesmas regras (tipo de cada arquivo e dados
+  da NF obrigatórios), e grava os documentos sem mandar ao financeiro. A PP
+  continua "gerada", com a marca "Pronta para envio · quem · quando"; o botão
+  vira "Editar conferência" até o GP enviar. O aviso do painel diz o caminho.
+- A **aba Pedidos de Produção** ganhou a trilha só de ícones (enviar, ver
+  formulário, cancelar — só os que valem na linha, colados), o olho abrindo a
+  PP ao lado dos documentos (a tela do Contas a Pagar em leitura), a marca
+  âmbar "Pronta para envio" embaixo do status, o chip de filtro e a contagem
+  no cartão. O avião só aparece para GP e administrador, e só na PP gerada
+  com arquivo anexado; abre o pop-up já preenchido com o que o produtor
+  conferiu.
+- **Filtro e ordem pelo título de cada coluna**, como no Excel
+  (`components/ui/filtro-de-coluna.tsx`): busca dentro da coluna, lista de
+  valores com contagem, árvore de blocos na Origem (a etiqueta do bloco na
+  linha filtra), faixa no Valor, barra "Mostrando X de Y". A busca geral
+  continua.
+- **Pop-up de envio** (aba e painel): "Voltar" no canto esquerdo e
+  "Verificar" (a PP e os documentos lado a lado) ao lado do envio, no lugar
+  do "Ver PP e documentos lado a lado".
+- A ficha "Ver formulário" da PP gerada diz "a PP gerada não se edita mais".
+- Banco: `pedidos_compra.pronta_para_envio_em/por` e o gatilho
+  `trg_pp_carimba_pronta_para_envio` (só PP gerada; quem e quando pela
+  sessão), migration `20261009100001`. Action `deixarPPProntaParaEnvio`.
+- Testado no TES-1014/26, no servidor do worktree: o Produtor Teste Claude
+  gerou a **PP-00148** (R$ 120, linha "Frete teste 159", arquivo sem tipo),
+  bateu na trava "Escolha o tipo…", marcou NF 9160, usou "Verificar" e
+  "Editar conferência" e deixou pronta; a aba dele mostrou a marca, sem
+  avião. O administrador viu a marca e o avião na aba, o pop-up abriu
+  preenchido, passou pelo "tem certeza?" acima do planejado e enviou. No
+  banco: em avaliação, enviada pelo administrador, pronta pelo produtor, NF
+  ligada ao cadastro no envio. A trava do gatilho foi conferida em transação
+  desfeita (PP enviada recusa; autor forjado vira o da sessão). Filtros,
+  árvore (EQUIPE/LOGÍSTICA), atalho da etiqueta, olho e ficha conferidos
+  como administrador.
+- Ficou no TES-1014/26: a PP-00148 em avaliação no financeiro (R$ 120,
+  FORNECEDOR TESTE LTDA) e a NF 9160 no cadastro de notas.

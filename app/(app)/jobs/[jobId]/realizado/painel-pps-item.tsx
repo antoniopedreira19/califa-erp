@@ -61,6 +61,8 @@ import {
   Trash2,
   FilePenLine,
   CalendarClock,
+  ClipboardCheck,
+  PencilLine,
 } from "lucide-react";
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -142,6 +144,10 @@ export interface PPDoItem {
   /** A PP rejeitada que esta substitui ("Cancelar e refazer"). */
   substitui: string | null;
   motivoRejeicao: string | null;
+  /** "Pronta para envio" (08/10/2026): o produtor conferiu os documentos e
+   *  deixou a PP para o GP enviar. Obrigatórios pelo mesmo motivo do trio. */
+  prontaParaEnvioEm: string | null;
+  prontaParaEnvioPorNome: string | null;
 }
 
 interface Props {
@@ -199,6 +205,10 @@ interface Props {
   onRefeita: (aEmitirId: string) => void;
   /** Quem refaz a rejeitada é quem envia (decisão 136). */
   podeRefazer: boolean;
+  /** O papel envia ao financeiro (`jobs.enviar_pp`, decisão 136). Sem ele —
+   *  produtor e freelancer —, o botão do envio vira "Deixar pronta para
+   *  envio" (08/10/2026). */
+  papelEnviaPP: boolean;
   /** Nomes para os cartões e os pop-ups da PP a emitir. */
   nomeDoFornecedor: (id: string | null) => string;
   nomeDoResponsavel: (id: string | null) => string;
@@ -241,6 +251,7 @@ export function PainelPPsItem({
   onEditarAEmitir,
   onRefeita,
   podeRefazer,
+  papelEnviaPP,
   nomeDoFornecedor,
   nomeDoResponsavel,
   nomeDaEmpresa,
@@ -260,6 +271,9 @@ export function PainelPPsItem({
   const [revisando, setRevisando] = React.useState<PPAEmitir | null>(null);
   const [erroDaRevisao, setErroDaRevisao] = React.useState<string | null>(null);
   const [enviando, setEnviando] = React.useState<PPDoItem | null>(null);
+  /** O pop-up dos documentos serve aos dois: o GP envia; o produtor e o
+   *  freelancer deixam pronta para o GP enviar (08/10/2026). */
+  const [modoDoEnvio, setModoDoEnvio] = React.useState<"enviar" | "preparar">("enviar");
   const [excluindo, setExcluindo] = React.useState<PPAEmitir | null>(null);
   const [refazendo, setRefazendo] = React.useState<PPDoItem | null>(null);
   /** Revisão da decisão 152: a NF da PP em avaliação, corrigida sem aprovar. */
@@ -406,6 +420,15 @@ export function PainelPPsItem({
    *  planejado vem dentro dele. */
   function pedirEnvio(pp: PPDoItem) {
     setErro(null);
+    setModoDoEnvio("enviar");
+    setEnviando(pp);
+  }
+
+  /** O produtor confere os documentos com as regras do envio e deixa a PP
+   *  pronta; reabre quantas vezes quiser até o GP enviar. */
+  function pedirPreparo(pp: PPDoItem) {
+    setErro(null);
+    setModoDoEnvio("preparar");
     setEnviando(pp);
   }
 
@@ -551,6 +574,9 @@ export function PainelPPsItem({
                     anexos: [],
                     substitui: null,
                     motivoRejeicao: null,
+                    // A PP a emitir ainda não é PP: nada a enviar.
+                    prontaParaEnvioEm: null,
+                    prontaParaEnvioPorNome: null,
                   }}
                   moeda={moeda}
                   codigo={<SeloPPAEmitir refaz={a.refaz?.codigo ?? null} />}
@@ -622,6 +648,11 @@ export function PainelPPsItem({
                 // A nota entra no pop-up do envio (decisão 152).
                 const podeEnviar =
                   podeAgir && !envioBloqueadoPor && !travaDaAbertura && !prazoPerdido;
+                // Quem não envia deixa pronta para o GP (08/10/2026). Vale
+                // até com a abertura em revisão ou o prazo perdido: preparar
+                // não manda nada ao financeiro.
+                const preparar = podeAgir && !papelEnviaPP;
+                const pronta = pp.prontaParaEnvioEm !== null;
                 return (
                   <CartaoPP
                     key={pp.id}
@@ -630,7 +661,23 @@ export function PainelPPsItem({
                     // Na PP ainda no job, o lugar da situação é do botão de
                     // enviar — a situação já está no título do bloco.
                     direita={
-                      podeAgir ? (
+                      preparar ? (
+                        <button
+                          type="button"
+                          onClick={() => pedirPreparo(pp)}
+                          disabled={pending || travaDaAbertura !== null}
+                          title={travaDaAbertura ?? (pronta ? "Reabrir a conferência: o GP ainda não enviou." : undefined)}
+                          className={cn(
+                            "inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border px-2.5 py-1 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                            pronta
+                              ? "border-border bg-white text-foreground hover:border-california-red/40 hover:text-california-red"
+                              : "border-california-red bg-california-red text-white hover:bg-california-red-hover",
+                          )}
+                        >
+                          {pronta ? <PencilLine className="h-3 w-3" /> : <ClipboardCheck className="h-3 w-3" />}
+                          {pronta ? "Editar conferência" : "Deixar pronta para envio"}
+                        </button>
+                      ) : podeAgir ? (
                         <button
                           type="button"
                           onClick={() => pedirEnvio(pp)}
@@ -677,8 +724,25 @@ export function PainelPPsItem({
                       </>
                     }
                     aviso={
-                      semNF || pp.substitui || prazoPerdido ? (
+                      semNF || pp.substitui || prazoPerdido || pronta ? (
                         <span className="flex flex-col gap-1">
+                          {pronta && (
+                            <span className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
+                              <ClipboardCheck className="mt-0.5 h-3 w-3 shrink-0" />
+                              <span>
+                                <strong className="font-semibold">Pronta para envio</strong>
+                                {pp.prontaParaEnvioPorNome ? ` · ${pp.prontaParaEnvioPorNome}` : ""} ·{" "}
+                                {new Date(pp.prontaParaEnvioEm as string).toLocaleString("pt-BR", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                                {preparar ? " · o GP envia pela aba Pedidos de Produção" : ""}
+                              </span>
+                            </span>
+                          )}
                           {prazoPerdido && (
                             <AtualizarVencimento
                               ppId={pp.id}
@@ -940,6 +1004,7 @@ export function PainelPPsItem({
         {/* Decisão 152: o envio com os documentos do fornecedor. */}
         {enviando && (
           <EnvioDialog
+            modo={modoDoEnvio}
             pp={
               {
                 id: enviando.id,
@@ -962,7 +1027,11 @@ export function PainelPPsItem({
             moeda={moeda}
             onEnviada={(codigo) => {
               setEnviando(null);
-              onMensagem?.(`${codigo} enviada ao financeiro.`);
+              onMensagem?.(
+                modoDoEnvio === "preparar"
+                  ? `${codigo} pronta para envio. O GP envia pela aba Pedidos de Produção.`
+                  : `${codigo} enviada ao financeiro.`,
+              );
               router.refresh();
             }}
           />

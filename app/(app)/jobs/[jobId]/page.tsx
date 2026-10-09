@@ -462,6 +462,19 @@ export default async function JobDetailPage({
             podeEnviar={podeEnviarPP}
             papelEnviaPP={papelEnviaPP}
             podePrestarContas={ppsQuePossoPrestarContas}
+            // Decisão 160: o envio, o formulário e a PP ao lado dos
+            // documentos também pela aba — com o que o painel do item usa.
+            statusDoJob={job.status}
+            aberturaEmRevisao={job.abertura_em_revisao}
+            tomadoresDaNf={tomadoresDaNf}
+            tomadorPorEmpresa={tomadorPorEmpresa}
+            empresas={empresas}
+            planejadoPorItem={Object.fromEntries(
+              itens.flatMap((it) => {
+                const realizado = realizadosMap.get(it.id);
+                return realizado ? [[realizado.id, Number(it.total_planejado ?? 0)]] : [];
+              }),
+            )}
           />
         }
         ppsChat={

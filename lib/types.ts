@@ -1822,6 +1822,12 @@ export interface PedidoCompra {
    *  (02/09/2026). Nulos enquanto gerada. */
   enviada_financeiro_em: string | null;
   enviada_financeiro_por: string | null;
+  /** "Pronta para envio" (decisão 160): o produtor ou o freelancer conferiu
+   *  os documentos no painel do item e deixou a PP para o GP enviar. A PP
+   *  segue "gerada"; a marca fica depois do envio, como registro. Null na
+   *  PP que ninguém deixou pronta. */
+  pronta_para_envio_em: string | null;
+  pronta_para_envio_por: string | null;
   /** A FOTO dos dados de pagamento do fornecedor, tirada no envio ao
    *  financeiro (decisão 067, 09/09/2026). O financeiro paga por ela, e
    *  não pelo cadastro ao vivo: desde que o campo de fornecedor ganhou o
@@ -2653,6 +2659,9 @@ export interface PedidoCompraNaLista extends PedidoCompra {
   /** A PP rejeitada que esta substitui ("Cancelar e refazer", decisão 153).
    *  Null na PP comum. Obrigatório, como os campos abaixo. */
   substitui: string | null;
+  /** Quem deixou a PP pronta para envio (decisão 160). Obrigatório: null
+   *  na PP sem a marca. */
+  pronta_para_envio_por_nome: string | null;
   /** Perfil do responsável pela verba, quando verba_producao = true. */
   responsavel?: { nome: string | null } | null;
   /** O ASTERISCO da decisão 067: o cadastro do fornecedor mudou de banco,
