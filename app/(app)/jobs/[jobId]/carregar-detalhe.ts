@@ -23,7 +23,6 @@ import { itemPrecisaDeConclusao } from "@/lib/calculos/pps-item";
 import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
-  FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
   jobAceitaRealizado,
   jobAceitaEnvioParaFaturamento,
   jobAceitaAcoesPlanilha,
@@ -341,14 +340,15 @@ export async function carregarDetalheDoJob(
       .order("nome"),
     // Irmãos do job na ficha: o projeto é o guarda-chuva, e quem abre um
     // job quer ver de relance o que mais corre debaixo dele. Coberta pelo
-    // índice `idx_jobs_projeto`; quatro colunas, sem embed. O cancelado
-    // antes da abertura não é mais job (decisão 113) e fica de fora.
+    // índice `idx_jobs_projeto`; quatro colunas, sem embed. Job cancelado,
+    // antes ou depois da abertura, não é mais job (decisões 113 e 163) e
+    // fica de fora.
     supabase
       .from("jobs")
       .select("id, codigo, nome, status, faturamento_enviado_em")
       .eq("projeto_id", raw.projeto_id)
       .eq("tenant_id", session.activeTenant.id)
-      .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA)
+      .neq("status", "cancelado")
       // Ordem de criação, e não a do código: desde a decisão 114 o código
       // começa pela sigla do cliente, e o texto não diz mais a ordem.
       .order("created_at", { ascending: true }),

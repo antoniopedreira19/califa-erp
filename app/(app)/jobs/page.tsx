@@ -3,11 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { pode } from "@/lib/permissoes";
-import {
-  FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA,
-  JOB_STATUS_ABERTO,
-  jobStatusExibido,
-} from "@/lib/types";
+import { JOB_STATUS_ABERTO, jobStatusExibido } from "@/lib/types";
 import {
   impedimentosDosJobs,
   podeEncerrar,
@@ -91,9 +87,10 @@ export default async function JobsPage({
         "empresa:empresas(id, razao_social, nome_fantasia)",
     )
     .eq("tenant_id", session.activeTenant.id)
-    // O cancelado antes da abertura voltou a ser só orçamento (decisão
-    // 113): sai da lista, da busca, das contagens e do total do projeto.
-    .or(FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA)
+    // Job cancelado não existe no módulo de Jobs, antes ou depois da
+    // abertura (decisões 113 e 163): sai da lista, da busca, das contagens
+    // e do total do projeto. Ele só aparece como "Cancelado" em Orçamentos.
+    .neq("status", "cancelado")
     // Ordem de criação, e não a do código: desde a decisão 114 o código
     // começa pela sigla do cliente, e o texto não diz mais a ordem.
     .order("created_at", { ascending: true });

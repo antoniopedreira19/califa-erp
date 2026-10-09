@@ -117,3 +117,12 @@ envio grava (`20260902160002`, com backfill das PPs anteriores).
 - **A exportação da planilha do job** (`/api/jobs/[jobId]/export`) não
   confere o status. Só a página do job tinha o botão, e ela agora
   redireciona.
+
+## ⚠️ Revisão (2026-10-09) — na produção, sai todo job cancelado
+
+A [163](163-job-cancelado-sai-do-modulo-de-jobs.md) estende a regra 2: no
+módulo de Jobs não existe job cancelado, **antes ou depois** da abertura.
+Isso vale para a lista, a página do job, os "Jobs do projeto" e as
+contagens da home. O orçamento de um job cancelado depois da abertura
+aparece como "Cancelado" em Orçamentos. O recorte "antes da abertura"
+desta decisão continua no financeiro, no save e nas travas do projeto.

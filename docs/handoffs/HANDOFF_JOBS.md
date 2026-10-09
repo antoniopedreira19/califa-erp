@@ -5086,3 +5086,20 @@ código publicado logo depois (`3305751`).
   financeiro (decisão 115).
 - Regra num lugar só: `lib/calculos/organizacao-errata.ts` (7 testes:
   `node --import tsx --test lib/calculos/organizacao-errata.test.ts`).
+
+## ⚠️ Nota de 2026-10-09 (5) — Job cancelado sai do módulo de Jobs, antes ou depois da abertura (decisão 163)
+
+- **Por quê:** o ANI-1004/26 foi cancelado depois de aberto (correção
+  pontual pelo MCP, nota de 09/10 na decisão 020). O filtro da 113 só
+  escondia o cancelado sem `data_abertura_financeiro`, e o 1004 seguia na
+  lista com o selo "Cancelado". O cabeçalho do ANI-P005/26 dizia
+  "2 JOBS · R$ 720.000,00".
+- **Lista de Jobs, página do job, "Jobs do projeto" e home** (mensagens no
+  chat e "PPs emitidas por mim"): o filtro passou a ser
+  `status <> 'cancelado'`. O link de um job cancelado leva ao orçamento
+  dele. A faixa do projeto e a agregada já filtravam assim.
+- **Conferido no navegador (servidor do worktree, logado como
+  administrador):** o ANI-P005/26 mostra "1 JOB · R$ 540.000,00", só com o
+  ANI-1012/26. O link do ANI-1004/26 cai no orçamento ANI-P005/26-01 com o
+  selo "Cancelado". A página do ANI-1012/26 não cita o 1004.
+- O financeiro não muda: as listas dele já deixavam o cancelado de fora.

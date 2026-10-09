@@ -5471,3 +5471,17 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Avisos de linha de meses que ficam de fora da versão não aparecem mais
   na conferência.
 
+
+## ⚠️ Nota de 2026-10-09 — Orçamento do job cancelado depois da abertura aparece como "Cancelado" (decisão 163)
+
+- Na página do orçamento, quando ele está em `job_criado`, não tem job
+  vivo e tem um job cancelado **depois** da abertura, o selo, o "Bloqueado
+  em…", o aviso de estado protegido e o motivo de não aceitar versão nova
+  dizem "Cancelado". O status gravado continua `job_criado`. A lista do
+  projeto e a agregada já diziam "Cancelado" pelo funil.
+- A barra da versão deixa de oferecer "Cancelar aprovação" e "Enviar Job
+  para Abertura" nesse orçamento, como no arquivado. O servidor já
+  recusava os dois.
+- Caso único em 09/10/2026: ANI-P005/26-01 (job ANI-1004/26). O
+  ANI-P005/26-02, com o job vivo ANI-1012/26, continua "Job criado" com
+  "Ver job ANI-1012/26".
