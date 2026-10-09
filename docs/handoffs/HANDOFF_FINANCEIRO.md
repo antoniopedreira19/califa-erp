@@ -6951,3 +6951,11 @@ financeiro". Regra completa na §9 da decisão 115.
   Flávia de A para AR (R$ 3.303,72 → R$ 8.803,72; custo previsto
   +R$ 5.500,00), descartado sem gravar; no banco, com rollback, as recusas
   com PP e no Interno e a gravação na fila da abertura.
+- **Na abertura, de ponta a ponta (TES-1025/26, criado para o teste):** com
+  o recebimento já dividido em R$ 100.000,00 + R$ 42.620,85, o Item 2 foi
+  de A para B. O formulário da aba Abertura do Job acompanhou sem
+  recarregar — parcelas R$ 113.069,96 + R$ 48.191,38, impostos
+  R$ 20.713,20 + R$ 8.828,14, custo previsto R$ 94.000 — e a curva pediu
+  "Falta R$ 10.000,00", fechada pelo "Distribuir". O job foi aberto e
+  gravou as previsões e a foto nº 1 com os números novos. O job ficou
+  aberto, no projeto TES-F001/26.
