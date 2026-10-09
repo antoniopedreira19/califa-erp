@@ -8,15 +8,17 @@ import type { FeriasLancamentoStatus } from "@/lib/types";
 import { AbaPainel } from "./aba-painel";
 import { AbaSolicitacoes } from "./aba-solicitacoes";
 import { AbaQuadro } from "./aba-quadro";
+import { AbaPagamentos } from "./aba-pagamentos";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "painel" | "quadro" | "solicitacoes";
+type Tab = "painel" | "quadro" | "solicitacoes" | "pagamentos";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "painel", label: "Painel" },
   { key: "quadro", label: "Quadro" },
   { key: "solicitacoes", label: "Solicitações" },
+  { key: "pagamentos", label: "Pagamentos" },
 ];
 
 export default async function FeriasPage({
@@ -76,12 +78,13 @@ export default async function FeriasPage({
           statusFiltro={normalizarStatus(searchParams.status)}
         />
       )}
+      {tab === "pagamentos" && <AbaPagamentos tenantId={tenantId} />}
     </div>
   );
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = ["painel", "quadro", "solicitacoes"];
+  const vals: Tab[] = ["painel", "quadro", "solicitacoes", "pagamentos"];
   return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
 }
 

@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { calcularValoresLancamentoPJ } from "@/lib/ferias/calcular-valores";
+import { criarFolhasDePagamentoDeFerias } from "@/lib/ferias/criar-folhas-pagamento";
 import {
   gerarReciboFeriasPdf,
   type FormatoRecibo,
@@ -90,6 +91,26 @@ export async function aprovarLancamento(
     return { ok: false, message: "Falha ao aprovar: " + updErr.message };
   }
 
+  // Cria folha(s) de pagamento. Lançamento retroativo é pulado.
+  const colabInfo = await supabase
+    .from("colaboradores")
+    .select("id, tipo_contratacao")
+    .eq("id", lanc.colaborador_id)
+    .maybeSingle();
+  if (colabInfo.data) {
+    const resFolhas = await criarFolhasDePagamentoDeFerias({
+      lancamento: lanc,
+      colaborador: colabInfo.data as {
+        id: string;
+        tipo_contratacao: import("@/lib/types").TipoContratacao;
+      },
+      actorUserId: session.profile.id,
+    });
+    if (resFolhas.erro) {
+      console.warn("[rh.ferias.aprovar.folhas]", resFolhas.erro);
+    }
+  }
+
   await logAuditEvent({
     acao: "ferias.lancamento.aprovado",
     tenantId,
@@ -104,6 +125,7 @@ export async function aprovarLancamento(
 
   revalidatePath("/rh/ferias");
   revalidatePath("/perfil");
+  revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true, id: lanc.id };
 }
 
@@ -346,6 +368,35 @@ export async function lancarDiretoPeloRh(
     };
   }
 
+  // Cria folha(s) de pagamento. Lançamento retroativo (data_inicio < hoje)
+  // é pulado dentro da função — não cria folha pra pagamento histórico.
+  const colabInfo = await supabase
+    .from("colaboradores")
+    .select("id, tipo_contratacao")
+    .eq("id", dados.colaborador_id)
+    .maybeSingle();
+  if (colabInfo.data) {
+    const resFolhas = await criarFolhasDePagamentoDeFerias({
+      lancamento: {
+        id: lanc.id as string,
+        tenant_id: tenantId,
+        colaborador_id: dados.colaborador_id,
+        tipo: dados.tipo,
+        data_inicio: dados.data_inicio,
+        data_fim: dados.data_fim,
+        dias,
+      },
+      colaborador: colabInfo.data as {
+        id: string;
+        tipo_contratacao: import("@/lib/types").TipoContratacao;
+      },
+      actorUserId: session.profile.id,
+    });
+    if (resFolhas.erro) {
+      console.warn("[rh.ferias.lancamento_direto.folhas]", resFolhas.erro);
+    }
+  }
+
   await logAuditEvent({
     acao: "ferias.lancamento.lancado_direto_pelo_rh",
     tenantId,
@@ -360,6 +411,7 @@ export async function lancarDiretoPeloRh(
 
   revalidatePath("/rh/ferias");
   revalidatePath("/perfil");
+  revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true, id: lanc.id };
 }
 
