@@ -5027,7 +5027,7 @@ código publicado logo depois (`3305751`).
 ## ⚠️ Nota de 2026-10-09 (3) — Cadastro de fornecedor: o dígito da conta faltando não aparecia na tela
 
 - **O caso:** um GP cadastrava fornecedor pelo "Novo fornecedor" da PP com
-  PIX completo e a conta digitada como `115786468-2`, sem nada na casinha
+  PIX completo e a conta digitada com o dígito junto (`número-dígito`), sem nada na casinha
   do dígito. O rodapé dizia "Pronto para criar", o servidor recusava com
   `conta_dv: Dígito da conta obrigatório.` e a tela só mostrava
   "Verifique os campos destacados", sem nada destacado. A única mensagem
@@ -5050,3 +5050,8 @@ código publicado logo depois (`3305751`).
 - Testado em `/fornecedores/novo` e no "Novo fornecedor" da PP do
   TES-1025/26, com o envio forçado pelo console para ver o erro do
   servidor. Nada gravado.
+- ⚠️ **Mesmo dia, depois do deploy:** a GP tentou de novo numa aba aberta
+  antes da correção e continuou travada (a aba fica presa à versão
+  antiga). Agora o sistema avisa quando sai versão nova, e a consulta do
+  CNPJ tem o CNPJ.ws de reserva quando a BrasilAPI cai — ver
+  [2026-10-09-aviso-de-versao-e-cnpj-reserva.md](2026-10-09-aviso-de-versao-e-cnpj-reserva.md).

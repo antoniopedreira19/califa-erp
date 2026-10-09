@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { Sidebar } from "@/components/sidebar";
 import { RastroDeNavegacao } from "@/components/voltar/rastro-de-navegacao";
+import { AvisoDeVersaoNova } from "@/components/aviso-de-versao-nova";
 
 export default async function AppLayout({
   children,
@@ -24,6 +25,7 @@ export default async function AppLayout({
 
     return (
       <div className="min-h-screen bg-background">
+        <AvisoDeVersaoNova />
         <main>
           <div className="px-5 py-6 md:px-8 md:py-8 max-w-[1680px] mx-auto">
             {children}
@@ -44,6 +46,9 @@ export default async function AppLayout({
       <Suspense fallback={null}>
         <RastroDeNavegacao />
       </Suspense>
+      {/* "O sistema foi atualizado": a aba aberta antes de um deploy fica
+          na versão antiga até recarregar. */}
+      <AvisoDeVersaoNova />
       {/* pl-[76px] = largura colapsada da sidebar.
           Ao hover, ela expande POR CIMA do conteúdo.
 

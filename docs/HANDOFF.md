@@ -100,6 +100,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-10-09 | Aviso de versão nova em todas as telas + consulta de CNPJ com reserva (CNPJ.ws) no cadastro de fornecedor | [2026-10-09-aviso-de-versao-e-cnpj-reserva.md](handoffs/2026-10-09-aviso-de-versao-e-cnpj-reserva.md) |
 | 2026-10-03 | /perfil redesign (hero + 9 cards) + cleanup total das notificações de férias | [2026-10-03-perfil-redesign-e-cleanup-notificacoes.md](handoffs/2026-10-03-perfil-redesign-e-cleanup-notificacoes.md) |
 | 2026-10-02 | RH · Vínculo colaborador ↔ usuário (task 010) — convidar + vincular + alterar role + desvincular | [2026-10-02-rh-vinculo-colab-usuario.md](handoffs/2026-10-02-rh-vinculo-colab-usuario.md) |
 | 2026-10-02 | RH · Subsistema de Férias usável de ponta a ponta (S1-S8, import histórico, task 009 perf, redesign UI) | [2026-10-02-rh-ferias-usavel.md](handoffs/2026-10-02-rh-ferias-usavel.md) |

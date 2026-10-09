@@ -5,7 +5,8 @@
  *
  * Lucro Real ou Presumido (o valor `normal`), Simples Nacional ou MEI: preenchido
  * pela consulta do CNPJ que o cadastro novo já faz na BrasilAPI (os campos
- * de opção pelo Simples e pelo MEI) e editável. É o regime que diz, na
+ * de opção pelo Simples e pelo MEI; o CNPJ.ws é a reserva desde 09/10/2026,
+ * convertido para os mesmos campos em `lib/consulta-cnpj.ts`) e editável. É o regime que diz, na
  * aprovação da PP, se há retenção na fonte.
  *
  * A consulta do CNPJ fica guardada inteira, valha ou não o regime gravado:
