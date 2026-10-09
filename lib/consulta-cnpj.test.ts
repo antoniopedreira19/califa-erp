@@ -51,6 +51,8 @@ test("MEI no CNPJ.ws vira MEI desde a data de opção, como na BrasilAPI", () =>
     em: HOJE,
     regime: "mei",
     desde: "2024-07-21",
+    cnaePrincipal: null,
+    cnaesSecundarios: [],
   });
 });
 
@@ -102,6 +104,24 @@ test("endereço e nomes nos campos da BrasilAPI; o que falta vai vazio", () => {
       uf: "SC",
     },
   );
+});
+
+test("decisão 166: o CNAE principal e os secundários do CNPJ.ws chegam com 7 dígitos", () => {
+  const base = respostaWs(null);
+  const dados = respostaDoCnpjWs({
+    ...base,
+    estabelecimento: {
+      ...base.estabelecimento,
+      atividade_principal: { id: "5911102", subclasse: "5911-1/02", descricao: "Produção de filmes para publicidade" },
+      atividades_secundarias: [
+        { id: "7420004", subclasse: "7420-0/04", descricao: "Filmagem de festas e eventos" },
+        { id: "0111301", subclasse: "0111-3/01", descricao: "Cultivo de arroz" },
+      ],
+    },
+  });
+  const consulta = consultaDaRespostaDoCnpj(dados, CNPJ, HOJE);
+  assert.equal(consulta?.cnaePrincipal, "5911102");
+  assert.deepEqual(consulta?.cnaesSecundarios, ["7420004", "0111301"]);
 });
 
 test("resposta sem estabelecimento (erro, corpo vazio) não vira dado", () => {

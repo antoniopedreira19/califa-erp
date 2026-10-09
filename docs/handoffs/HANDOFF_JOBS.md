@@ -5160,3 +5160,23 @@ código publicado logo depois (`3305751`).
 - **Resíduo de teste:** PP-00158 e PP-00159 canceladas no TES-1025/26; o
   freela "ZZ Freela Teste 164" ficou inativo (a PP cancelada aponta para
   ele); a PP a emitir de produção do teste foi excluída.
+
+## ⚠️ Nota de 2026-10-09 (7) — PP travada para fornecedor sem regime ou sem CNAE (decisão 166)
+
+- O formulário da PP (`gerar-pp-drawer.tsx`, no `campoFornecedor` — PP
+  comum e verba de um terceiro, decisão 164) pergunta ao servidor o que
+  falta no cadastro do fornecedor escolhido
+  (`pendenciasDoCadastroDoFornecedor`): na pessoa jurídica, o regime (o
+  legado "Lucro Real ou Presumido" conta como falta) e o CNAE. Faltando, um
+  aviso **vermelho** embaixo do campo diz o quê e aponta o lápis; o lápis
+  ganha contorno vermelho e o **"Gerar PP" trava**. O **"Salvar" continua**:
+  a PP a emitir espera o cadastro. Relido depois de cada edição do cadastro.
+- **GP, produtor e freelancer** (que não editam fornecedor) ganham o lápis
+  só com o cadastro pendente: ele abre o cadastro inteiro com só o regime e
+  o CNAE editáveis (`somentePendentes` em `NovoFornecedorDialog` e
+  `FornecedorForm`), gravados por `completarCadastroFiscalDoFornecedor`.
+- No servidor, `gerarPPDaPPAEmitir` recusa com "O cadastro de … está
+  incompleto: falta …", que a revisão da PP a emitir mostra. PP já gerada
+  não muda de caminho.
+- No mesmo dia, o regime dos 31 fornecedores sem regime que tinham PP
+  lançada foi preenchido pela consulta do CNPJ (migration `20261009500002`).

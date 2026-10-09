@@ -55,7 +55,8 @@ export interface RegimeDoFornecedorDaPP {
   declaracao_simples_recebida: boolean;
 }
 
-const REGIMES: readonly RegimeTributarioFornecedor[] = ["normal", "simples", "mei"];
+/** Decisão 166: Real e Presumido separados; `normal` é o legado. */
+const REGIMES: readonly RegimeTributarioFornecedor[] = ["lucro_real", "lucro_presumido", "normal", "simples", "mei"];
 
 /** Null na verba de produção (não há fornecedor) e quando o cadastro não informou. */
 export function regimeDoFornecedorDaPP(
@@ -76,9 +77,13 @@ export function regimeDoFornecedorDaPP(
   // ela indicou. Sem `regime_consulta` (gravado antes da 142), a data só
   // existia com o regime indicado.
   const indicou = fornecedor.regime_consulta ?? fornecedor.regime_tributario;
+  // Decisão 166: a consulta diz "nenhum dos dois" (`normal`); ela confere
+  // Real e Presumido.
+  const normal = (r: string | null) => r === "normal" || r === "lucro_real" || r === "lucro_presumido";
+  const confere = indicou === regime || (normal(indicou) && normal(regime));
   return {
     regime,
-    consultado_em: indicou === regime ? fornecedor.regime_consultado_em ?? null : null,
+    consultado_em: confere ? fornecedor.regime_consultado_em ?? null : null,
     declaracao_simples_recebida: fornecedor.declaracao_simples_recebida === true,
   };
 }
@@ -258,12 +263,18 @@ export function textoDoRegime(r: RegimeDoFornecedorDaPP): string {
         ? r.declaracao_simples_recebida
           ? "Optante do Simples Nacional · declaração recebida"
           : "Optante do Simples Nacional"
-        : "Lucro Real ou Presumido";
+        : r.regime === "lucro_real"
+          ? "Lucro Real"
+          : r.regime === "lucro_presumido"
+            ? "Lucro Presumido"
+            : "Lucro Real ou Presumido";
   return r.consultado_em ? `${texto} · consulta do CNPJ em ${dataBr(r.consultado_em)}` : texto;
 }
 
 /** Ao lado do nome do fornecedor, na linha das retenções do pop-up. */
 export function rotuloCurtoDoRegime(regime: RegimeTributarioFornecedor | null): string {
+  if (regime === "lucro_real") return "Lucro Real";
+  if (regime === "lucro_presumido") return "Lucro Presumido";
   if (regime === "normal") return "Lucro Real ou Presumido";
   if (regime === "simples") return "optante do Simples";
   if (regime === "mei") return "MEI";

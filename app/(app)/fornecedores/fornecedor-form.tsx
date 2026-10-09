@@ -50,6 +50,16 @@
  * ou chave aleatória a cada PP. Marcada, os dois blocos ficam apagados, o
  * rodapé deixa de cobrar conta ou PIX e o salvar grava os dois vazios (o
  * servidor e a CHECK do banco repetem a regra).
+ *
+ * Decisão 166 (09/10/2026): na pessoa jurídica o **regime** (Lucro Real e
+ * Lucro Presumido agora separados) e o **CNAE** (a lista do IBGE inteira,
+ * com busca) são obrigatórios. A consulta do CNPJ preenche o CNAE principal
+ * e, no Simples e no MEI, o regime. O cadastro antigo, que ainda não tem
+ * CNAE, abre com o regime vazio na tela ("Antes: …") e os dois campos
+ * marcados em vermelho, e consulta o CNPJ sozinho para sugerir. Aberto pelo
+ * lápis da PP por quem não edita fornecedor (`somentePendentes`), o
+ * cadastro aparece inteiro, mas só o regime e o CNAE se mexem — e se gravam
+ * pela action própria, que não toca no resto.
  */
 
 import * as React from "react";
@@ -98,16 +108,22 @@ import {
   NOTA_DO_REGIME,
   REGIMES_DO_FORNECEDOR,
   ROTULO_DO_REGIME,
+  cadastroSemRevisao,
+  cnaeDepoisDaConsulta,
   consultaDaRespostaDoCnpj,
   consultaDoCadastro,
+  consultaDoCnpj,
   consultaParaGravar,
+  origemDoCnae,
   origemDoRegime,
+  pendenciasDoCadastroFiscal,
   regimeDepoisDaConsulta,
   type ConsultaDoRegime,
 } from "@/lib/fiscal/regime-do-fornecedor";
 import {
   atualizarFornecedor,
   atualizarVeiculoFornecedor,
+  completarCadastroFiscalDoFornecedor,
   criarFornecedor,
   criarFornecedorRapido,
   criarVeiculoFornecedor,
@@ -117,6 +133,7 @@ import {
   type FornecedorResumo,
 } from "./actions";
 import { CampoArquivoDaDeclaracao, useArquivoDaDeclaracao } from "./declaracao-simples";
+import { CampoCnae } from "./campo-cnae";
 
 const UFS: UF[] = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
@@ -216,12 +233,18 @@ function PixChaveInput({
 // Peças do desenho: a seção com explicação à esquerda, e o campo com dica
 // ---------------------------------------------------------------------------
 
+/** `inert` tira o bloco do clique e do Tab; o React 18 só o passa adiante
+ *  como texto ("" = ligado). Decisão 166: o resto do cadastro, travado no
+ *  lápis da PP de quem não edita fornecedor. */
+const TRAVADO = { inert: "", "aria-disabled": true } as unknown as React.HTMLAttributes<HTMLDivElement>;
+
 function Secao({
   titulo,
   descricao,
   descricaoNoDialog,
   selo,
   emDialog,
+  travado,
   children,
 }: {
   titulo: string;
@@ -231,6 +254,8 @@ function Secao({
   descricaoNoDialog?: string;
   selo: "obrigatorio" | "opcional";
   emDialog: boolean;
+  /** Apagada e sem clique (decisão 166). */
+  travado?: boolean;
   children: React.ReactNode;
 }) {
   const seloEl = (
@@ -252,7 +277,10 @@ function Secao({
   // "Fornecedores - Novo Cadastro na PP").
   if (emDialog) {
     return (
-      <div className="flex flex-col gap-3.5 px-6 py-[22px]">
+      <div
+        {...(travado ? TRAVADO : {})}
+        className={cn("flex flex-col gap-3.5 px-6 py-[22px]", travado && "select-none opacity-50")}
+      >
         <div className="flex flex-wrap items-baseline gap-2.5">
           <h3 className="text-[13.5px] font-bold tracking-tight">{titulo}</h3>
           {seloEl}
@@ -268,7 +296,13 @@ function Secao({
   }
 
   return (
-    <div className="grid gap-6 px-7 py-7 md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8">
+    <div
+      {...(travado ? TRAVADO : {})}
+      className={cn(
+        "grid gap-6 px-7 py-7 md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8",
+        travado && "select-none opacity-50",
+      )}
+    >
       <div>
         <h3 className="text-[14.5px] font-bold tracking-tight">{titulo}</h3>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -290,11 +324,14 @@ function Campo({
   acao,
   errors,
   className,
+  travado,
   children,
 }: {
   label: string;
   name: string;
   required?: boolean;
+  /** Apagado e sem clique (decisão 166). */
+  travado?: boolean;
   /** Texto curto à direita do rótulo ("Opcional", "para cobrar a nota"). */
   hint?: React.ReactNode;
   /** Um link no lugar da dica ("Usar CNPJ do cadastro"). */
@@ -305,7 +342,11 @@ function Campo({
 }) {
   const msgs = errors[name];
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)} data-field={name}>
+    <div
+      {...(travado ? TRAVADO : {})}
+      className={cn("flex min-w-0 flex-col gap-1.5", travado && "select-none opacity-50", className)}
+      data-field={name}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <Label htmlFor={name} className="whitespace-nowrap text-[12.5px] font-semibold">
           {label}
@@ -364,6 +405,11 @@ interface Props {
    *  mesmo formulário, com o pagamento opcional, gravado pelas actions do
    *  veículo. Na página, Cancelar e Criar voltam para Cadastros › Veículos. */
   variante?: "fornecedor" | "veiculo";
+  /** Decisão 166: o lápis do campo Fornecedor da PP, aberto por quem gera PP
+   *  e não edita fornecedor. O cadastro aparece inteiro, mas só o regime e o
+   *  CNAE se mexem, e se gravam por `completarCadastroFiscalDoFornecedor`.
+   *  Só vale com o cadastro pendente; completo, o formulário é o de sempre. */
+  somentePendentes?: boolean;
 }
 
 export function FornecedorForm({
@@ -377,6 +423,7 @@ export function FornecedorForm({
   onSelecionarExistente,
   onSalvo,
   variante = "fornecedor",
+  somentePendentes = false,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(fornecedor);
@@ -433,9 +480,25 @@ export function FornecedorForm({
   /** Módulo fiscal: o regime tributário da pessoa jurídica. Controlado,
    *  como o tipo de conta: entra no envio pelo `formData.set` do
    *  `handleSubmit`. */
+  //
+  // Decisão 166: o cadastro antigo (sem CNAE) abre com o regime vazio na
+  // tela — o banco guarda o antigo até a revisão, porque a aprovação das PPs
+  // já enviadas o lê —, e o legado "Lucro Real ou Presumido" também abre
+  // vazio, para escolher um dos dois. O texto embaixo diz o que havia.
+  const emRevisao = cadastroSemRevisao(fornecedor);
+  const regimeGravado = fornecedor?.regime_tributario ?? null;
+  const regimeAntes = emRevisao || regimeGravado === "normal" ? regimeGravado : null;
   const [regime, setRegime] = React.useState<RegimeTributarioFornecedor | null>(
-    fornecedor?.regime_tributario ?? null,
+    regimeAntes ? null : regimeGravado,
   );
+  /** Decisão 166: o CNAE da pessoa jurídica (7 dígitos). Controlado, como o
+   *  regime. */
+  const [cnae, setCnae] = React.useState<string | null>(fornecedor?.cnae ?? null);
+  /** O cadastro abriu sem regime, com o legado ou sem CNAE: o que falta fica
+   *  em vermelho até ser preenchido. */
+  const abriuIncompleto = pendenciasDoCadastroFiscal(fornecedor).length > 0;
+  /** O lápis da PP de quem não edita fornecedor, com o cadastro pendente. */
+  const soPendentes = somentePendentes && Boolean(fornecedor) && abriuIncompleto;
   /** O que a consulta do CNPJ disse do regime, e de qual CNPJ. Muda só com
    *  uma consulta nova; na edição, abre com a que o cadastro gravou. */
   const [consultaRegime, setConsultaRegime] = React.useState<ConsultaDoRegime | null>(
@@ -664,9 +727,11 @@ export function FornecedorForm({
       // Simples e pelo MEI, e desde quando). Entra no campo vazio ou no
       // lugar do que veio de uma consulta anterior; o escolhido à mão fica,
       // e o aviso âmbar diz o que a consulta indicou.
+      // Decisão 166: a mesma consulta traz o CNAE, com a mesma régua.
       const consulta = consultaDaRespostaDoCnpj(data, cnpjDigits, hojeEmSaoPauloIso());
       if (consulta) {
         setRegime((atual) => regimeDepoisDaConsulta(atual, consultaRegime, consulta.regime));
+        setCnae((atual) => cnaeDepoisDaConsulta(atual, consultaRegime, consulta));
         setConsultaRegime(consulta);
       }
 
@@ -727,6 +792,18 @@ export function FornecedorForm({
     }
     setPixChave(raw);
   }
+
+  // Decisão 166: o cadastro que abriu incompleto consulta o CNPJ sozinho, e
+  // a consulta sugere o que sabe (o CNAE e, no Simples ou no MEI, o regime)
+  // nos campos vazios — quem revisa confere e salva.
+  React.useEffect(() => {
+    const doc = onlyDigits(fornecedor?.cpf_cnpj ?? "");
+    if (abriuIncompleto && fornecedor?.tipo_pessoa === "juridica" && doc.length === 14) {
+      void preencherViaCnpj(doc);
+    }
+    // Só na abertura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // PIX repetido, com folga para terminar de digitar
   React.useEffect(() => {
@@ -789,6 +866,9 @@ export function FornecedorForm({
   const pendencias: string[] = [];
   if (!nomeOk) pendencias.push(ehPj ? "nome fantasia" : "nome");
   if (!docOk) pendencias.push(ehPj ? "CNPJ" : "CPF");
+  // Decisão 166: regime e CNAE na pessoa jurídica.
+  if (ehPj && !regime) pendencias.push("regime tributário");
+  if (ehPj && !cnae) pendencias.push("CNAE");
   if (!emailOk) pendencias.push("e-mail");
   if (!telOk) pendencias.push("telefone");
   // Conta começada e incompleta: o servidor recusa mesmo com o PIX
@@ -815,6 +895,11 @@ export function FornecedorForm({
   // O veículo de mídia nasce sem conta (decisão 147).
   else if (!ehVeiculo && !bancoOk && !pixOk && !semDadosPagamento)
     pendencias.push("conta bancária ou chave PIX (ou marque “Sem conta nem PIX”)");
+  // Decisão 166: no lápis de quem só completa, o rodapé cobra só os dois.
+  if (soPendentes) {
+    const fiscais = pendencias.filter((p) => p === "regime tributário" || p === "CNAE");
+    pendencias.splice(0, pendencias.length, ...fiscais);
+  }
   /** Algo digitado na conta ou no PIX: com a marcação, sai no salvar. */
   const temAlgumDadoDePagamento = Boolean(
     bancoCodigo ||
@@ -840,7 +925,10 @@ export function FornecedorForm({
   // Módulo fiscal: de onde veio o regime à vista, para o texto embaixo do
   // campo. A consulta só vale para o CNPJ que foi consultado.
   const cnpjAtual = onlyDigits(campos.cpf_cnpj ?? initialDoc);
-  const origemRegime = ehPj ? origemDoRegime(regime, consultaRegime, cnpjAtual) : null;
+  const origemRegime = ehPj ? origemDoRegime(regime, consultaRegime, cnpjAtual, regimeAntes) : null;
+  const origemCnae = ehPj ? origemDoCnae(cnae, consultaRegime, cnpjAtual) : null;
+  /** Vermelho no campo que falta, no cadastro que abriu incompleto. */
+  const marcaFalta = "border-california-red ring-[3px] ring-california-red/10";
 
   /** Grava e trata a resposta. Separado do `onSubmit` porque o "tem
    *  certeza?" dos dados de pagamento (decisão 067) reenvia o MESMO
@@ -853,7 +941,9 @@ export function FornecedorForm({
       formData.get("declaracao_simples_path")?.toString() || null,
     );
     startTransition(async () => {
-      const res: ActionResult | undefined = await (ehVeiculo
+      const res: ActionResult | undefined = await (soPendentes
+        ? completarCadastroFiscalDoFornecedor(fornecedor!.id, formData)
+        : ehVeiculo
         ? isEdit
           ? atualizarVeiculoFornecedor(fornecedor!.id, formData, confirmarPagamento)
           : // Pela página de Cadastros a action redireciona para a lista.
@@ -944,6 +1034,7 @@ export function FornecedorForm({
     // Simples (o servidor confere de novo). O arquivo da declaração vai
     // sempre: trocar o regime não o tira do cadastro, só o ✕.
     formData.set("regime_tributario", ehPj ? regime ?? "" : "");
+    formData.set("cnae", ehPj ? cnae ?? "" : "");
     const consulta = consultaParaGravar(
       ehPj ? consultaRegime : null,
       formData.get("cpf_cnpj")?.toString() ?? "",
@@ -1111,6 +1202,7 @@ export function FornecedorForm({
                 label={ehPj ? "Nome fantasia" : "Nome"}
                 name="nome"
                 required
+                travado={soPendentes}
                 errors={fieldErrors}
                 className="col-span-12 sm:col-span-7"
               >
@@ -1127,6 +1219,7 @@ export function FornecedorForm({
                 label={ehPj ? "CNPJ" : "CPF"}
                 name="cpf_cnpj"
                 required
+                travado={soPendentes}
                 hint={
                   duplicado && !isEdit
                     ? "já cadastrado"
@@ -1184,6 +1277,7 @@ export function FornecedorForm({
                   label="Razão social"
                   name="razao_social"
                   hint="Opcional"
+                  travado={soPendentes}
                   errors={fieldErrors}
                   // Módulo fiscal: divide a linha com o regime tributário
                   // (era col-span-12).
@@ -1205,6 +1299,12 @@ export function FornecedorForm({
                 <Campo
                   label="Regime tributário"
                   name="regime_tributario"
+                  required
+                  hint={
+                    abriuIncompleto && !regime ? (
+                      <span className="font-semibold text-california-red">pendente</span>
+                    ) : undefined
+                  }
                   errors={fieldErrors}
                   className="col-span-12 sm:col-span-5"
                 >
@@ -1215,7 +1315,7 @@ export function FornecedorForm({
                     <SelectTrigger
                       id="regime_tributario"
                       aria-label="Regime tributário"
-                      className={erroClasses("regime_tributario")}
+                      className={cn(erroClasses("regime_tributario"), abriuIncompleto && !regime && marcaFalta)}
                     >
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
@@ -1231,7 +1331,11 @@ export function FornecedorForm({
                     <span
                       className={cn(
                         "text-[11px] leading-snug",
-                        origemRegime.alterado ? "text-amber-700" : "text-muted-foreground",
+                        origemRegime.pendente
+                          ? "text-california-red"
+                          : origemRegime.alterado
+                            ? "text-amber-700"
+                            : "text-muted-foreground",
                       )}
                     >
                       {origemRegime.texto}
@@ -1285,11 +1389,54 @@ export function FornecedorForm({
                 </div>
               )}
 
+              {/* Decisão 166: o CNAE, obrigatório na pessoa jurídica. A lista
+                  é a do IBGE inteira, com busca; os CNAEs que a consulta do
+                  CNPJ trouxe sobem para o topo. */}
+              {ehPj && (
+                <Campo
+                  label="CNAE"
+                  name="cnae"
+                  required
+                  hint={
+                    abriuIncompleto && !cnae ? (
+                      <span className="font-semibold text-california-red">pendente</span>
+                    ) : undefined
+                  }
+                  errors={fieldErrors}
+                  className="col-span-12"
+                >
+                  <CampoCnae
+                    id="cnae"
+                    value={cnae}
+                    onChange={setCnae}
+                    consulta={consultaDoCnpj(consultaRegime, cnpjAtual)}
+                    invalido={Boolean(fieldErrors.cnae?.length)}
+                    falta={abriuIncompleto && !cnae}
+                    disabled={pending}
+                  />
+                  {origemCnae ? (
+                    <span
+                      className={cn(
+                        "text-[11px] leading-snug",
+                        origemCnae.alterado ? "text-amber-700" : "text-muted-foreground",
+                      )}
+                    >
+                      {origemCnae.texto}
+                    </span>
+                  ) : abriuIncompleto && !cnae ? (
+                    <span className="text-[11px] leading-snug text-california-red">
+                      Cadastro sem CNAE: escolha a atividade do fornecedor.
+                    </span>
+                  ) : null}
+                </Campo>
+              )}
+
               <Campo
                 label="E-mail"
                 name="email"
                 required
                 hint="para cobrar a nota"
+                travado={soPendentes}
                 errors={fieldErrors}
                 className="col-span-12 sm:col-span-7"
               >
@@ -1304,6 +1451,7 @@ export function FornecedorForm({
               <Campo
                 label="Telefone"
                 name="telefone"
+                travado={soPendentes}
                 required
                 errors={fieldErrors}
                 className="col-span-12 sm:col-span-5"
@@ -1324,6 +1472,7 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Pagamento"
+            travado={soPendentes}
             descricao={
               ehVeiculo
                 ? "Opcional por enquanto: vai ser exigido para gerar a PP do repasse, nas linhas A · Repasse."
@@ -1567,6 +1716,7 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Endereço"
+            travado={soPendentes}
             descricao="Usado na nota fiscal. Nada aqui bloqueia o cadastro."
             descricaoNoDialog="Usado na nota fiscal. Nada aqui é obrigatório."
             selo="opcional"
@@ -1720,6 +1870,7 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Observações"
+            travado={soPendentes}
             descricao="Especialidade, prazo habitual, quem indicou."
             descricaoNoDialog="Especialidade, prazo habitual, quem indicou."
             selo="opcional"

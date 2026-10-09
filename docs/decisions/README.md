@@ -184,6 +184,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 162 | [A errata organiza a planilha do job: ordem, agrupamento novo, renomeado e o vazio que sai](162-organizar-a-planilha-do-job-na-errata.md) | 2026-10-09 |
 | 163 | [Job cancelado sai do módulo de Jobs e só aparece em Orçamentos](163-job-cancelado-sai-do-modulo-de-jobs.md) | 2026-10-09 |
 | 164 | [Verba de Alimentação e Verba de Transporte, com titular do RH, freela ou terceiro](164-verbas-de-alimentacao-e-transporte.md) | 2026-10-09 |
+| 165 | *Reservada* — filtro e ordem pelo título da coluna nas listas (frente do filtro por coluna, ainda não publicada) | 2026-10-09 |
+| 166 | [Regime tributário (Real e Presumido separados) e CNAE obrigatórios no fornecedor, e a PP travada para cadastro incompleto](166-regime-e-cnae-do-fornecedor.md) | 2026-10-09 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -196,4 +198,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 165**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 167**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

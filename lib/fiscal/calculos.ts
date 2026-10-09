@@ -127,7 +127,9 @@ export function impostosDaNota(
 // Retenções na fonte da PP (decididas na aprovação; a baixa chega com elas)
 // ---------------------------------------------------------------------------
 
-export type RegimeDoFornecedor = "normal" | "simples" | "mei";
+/** Decisão 166: Lucro Real, Lucro Presumido e o legado `normal` têm a mesma
+ *  regra de retenção; só Simples e MEI não sofrem. */
+export type RegimeDoFornecedor = "lucro_real" | "lucro_presumido" | "normal" | "simples" | "mei";
 
 export interface ParametrosDeRetencao {
   csrf_pis: number;
