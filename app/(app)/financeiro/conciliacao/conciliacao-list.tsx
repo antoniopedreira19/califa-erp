@@ -13,15 +13,126 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { abrirDocumentoDoLancamento } from "./actions-documento";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type CelulaDaColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
+
+/**
+ * As colunas do extrato que filtram e ordenam pelo título, como no Excel
+ * (pedido do Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). Servem
+ * à planilha da conciliação e à fatura do cartão (`fatura-extrato.tsx`),
+ * que têm as MESMAS colunas: a fatura é o extrato da conta-espelho.
+ *
+ * Ficam SEM filtro e sem ordem:
+ *   * Saldo (aqui) e Acumulado (na fatura): é o saldo CORRENTE do extrato,
+ *     que só existe na ordem do banco. Com filtro ou ordem, cada linha
+ *     continua mostrando o saldo dela no extrato — não se recalcula sobre
+ *     o que sobrou, porque esse número não existiria no banco;
+ *   * o botão de detalhes (ⓘ) e, na fatura, a coluna Ação.
+ *
+ * O período (de/até) continua no SERVIDOR: os títulos filtram dentro do
+ * período carregado.
+ *
+ * Linhas expansíveis (o pagamento da fatura de cartão e a guia de imposto):
+ * o filtro olha só a linha de cima — o lançamento do banco. As sublinhas
+ * acompanham a linha delas: aparecem inteiras quando ela fica, e não
+ * levantam a linha quando só elas bateriam (o fornecedor de um item de
+ * dentro da fatura não acha o pagamento da fatura).
+ */
+export function colunasDoExtrato<L extends Omit<LancamentoLinha, "saldo">>({
+  descricao,
+  empresa = (l) => l.empresa_nome,
+}: {
+  /** O texto da coluna Descrição, como a tabela mostra. */
+  descricao: (l: L) => string;
+  /** O texto da coluna Empresa ("Múltiplas" na guia rateada). */
+  empresa?: (l: L) => string | null;
+}): ColunaFiltravel<L>[] {
+  return [
+    { chave: "data", rotulo: "Data", tipo: "data", celula: (l) => celulaData(l.data_movimento) },
+    {
+      chave: "credito",
+      rotulo: "Crédito",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (l) => celulaValor(l.credito, formatMoney),
+    },
+    {
+      chave: "debito",
+      rotulo: "Débito",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (l) => celulaValor(l.debito, formatMoney),
+    },
+    { chave: "descricao", rotulo: "Descrição", tipo: "texto", celula: (l) => celulaTexto(descricao(l)) },
+    { chave: "fornecedor", rotulo: "Fornecedor", tipo: "texto", celula: (l) => celulaTexto(l.fornecedor_nome) },
+    {
+      // O código do job. A linha "Múltiplos" (o recebimento que cobre mais
+      // de um job) entra em CADA job dela: marcar TES-1001/26 traz também
+      // a nota que cobre TES-1001/26 e TES-1002/26. "Não Vinculado" é um
+      // valor da lista, no fim.
+      chave: "job",
+      rotulo: "Job",
+      tipo: "texto",
+      celula: (l): CelulaDaColuna | CelulaDaColuna[] => {
+        const j = derivarJobParaColuna({ ...l, saldo: 0 } as LancamentoLinha);
+        if (j.tipo === "link") return celulaTexto(j.codigo);
+        if (j.tipo === "multi") {
+          const codigos = [...new Set(l.origens.flatMap((o) => (o.job_id && o.codigo ? [o.codigo] : [])))];
+          return codigos.map((c) => ({ ...celulaTexto(c), busca: `${c} Múltiplos` }));
+        }
+        return { valor: "", rotulo: "Não Vinculado", ordem: "￿" };
+      },
+    },
+    {
+      // Árvore centro de custo ▸ subtipo: o centro marca todos os subtipos.
+      chave: "centro",
+      rotulo: "Centro de Custo",
+      tipo: "texto",
+      celula: (l) => ({
+        valor: `${l.tipo_nome} · ${l.subtipo_nome}`,
+        rotulo: l.subtipo_nome || "(sem subtipo)",
+        ordem: `${l.tipo_nome} · ${l.subtipo_nome}`,
+        busca: `${l.tipo_nome} ${l.subtipo_nome}`,
+        grupo: l.tipo_nome,
+      }),
+      rotuloSemGrupo: "(sem centro de custo)",
+    },
+    {
+      chave: "trimestre",
+      rotulo: "Trimestre",
+      tipo: "texto",
+      alinhar: "center",
+      celula: (l) => celulaTexto(trimestreDe(l.data_movimento)),
+    },
+    { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (l) => celulaTexto(empresa(l)) },
+  ];
+}
+
+/** Os títulos do extrato mantêm a caixa da tabela (sem o espaçamento
+ *  largo que o botão do filtro traz). */
+const TITULO = "tracking-normal";
 
 export function ConciliacaoList({
   linhas,
   highlight,
   detalhesFatura = {},
   detalhesImposto = {},
+  contexto = "",
 }: {
   linhas: LancamentoLinha[];
   highlight?: string;
+  /** A conta e o período que a página carregou: trocar qualquer um zera os
+   *  filtros dos títulos, porque os lançamentos são outros (decisão 165). */
+  contexto?: string;
   /** Por id do lançamento: o que o pagamento de uma fatura de cartão abre
    *  — centro de custo → itens (decisão 093, entrega 3). */
   detalhesFatura?: Record<string, DetalheDaFatura>;
@@ -57,6 +168,26 @@ export function ConciliacaoList({
     }
   }, [highlight, linhas]);
 
+  // As colunas que filtram (a Empresa da guia rateada diz "Múltiplas",
+  // como a célula). Os detalhes das guias não mudam depois da carga.
+  const COLUNAS = React.useMemo(
+    () =>
+      colunasDoExtrato<LancamentoLinha>({
+        descricao: (l) => limparPrefixoDescricao(l.descricao, l.origem),
+        empresa: (l) =>
+          l.empresa_nome ?? ((detalhesImposto[l.id]?.empresas ?? 0) > 1 ? "Múltiplas" : null),
+      }),
+    [detalhesImposto],
+  );
+  const colunas = useFiltrosDeColuna(linhas, COLUNAS, { guardarEm: "conciliacao-extrato", contexto });
+  // Os créditos e débitos do que sobrou — o rodapé que só aparece com
+  // filtro. Os cartões de cima continuam os do período: saldo anterior +
+  // créditos − débitos = saldo final, que é o que se bate com o banco.
+  const somaDoFiltro = colunas.visiveis.reduce(
+    (s, l) => ({ credito: s.credito + l.credito, debito: s.debito + l.debito }),
+    { credito: 0, debito: 0 },
+  );
+
   if (linhas.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border py-16 text-center">
@@ -68,6 +199,20 @@ export function ConciliacaoList({
   }
 
   return (
+    <>
+    {colunas.ativo && (
+      <div>
+        {/* "do período": o filtro dos títulos age dentro do período de/até
+            escolhido em cima, que é lido no servidor. */}
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="lançamento do período"
+          plural="lançamentos do período"
+          onLimpar={colunas.limpar}
+        />
+      </div>
+    )}
     <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full min-w-[1200px] text-sm">
         <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
@@ -77,21 +222,34 @@ export function ConciliacaoList({
               Origem, Documento e rateio/save moveram pro botão de detalhes
               (ⓘ) — a coluna Origem/Rateado inline poluía sem necessidade. */}
           <tr>
-            <th className="px-3 py-2 text-left">Data</th>
-            <th className="px-3 py-2 text-right">Crédito</th>
-            <th className="px-3 py-2 text-right">Débito</th>
-            <th className="px-3 py-2 text-right">Saldo</th>
-            <th className="px-3 py-2 text-left">Descrição</th>
-            <th className="px-3 py-2 text-left">Fornecedor</th>
-            <th className="px-3 py-2 text-left">Job</th>
-            <th className="px-3 py-2 text-left">Centro de Custo</th>
-            <th className="px-3 py-2 text-center">Trimestre</th>
-            <th className="px-3 py-2 text-left">Empresa</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("data", TITULO)}</th>
+            <th className="px-3 py-2 text-right">{colunas.titulo("credito", TITULO)}</th>
+            <th className="px-3 py-2 text-right">{colunas.titulo("debito", TITULO)}</th>
+            {/* Saldo corrente: sem filtro e sem ordem (ver `colunasDoExtrato`). */}
+            <th
+              className="px-3 py-2 text-right"
+              title={colunas.ativo ? "Saldo do extrato: não muda com o filtro nem com a ordem dos títulos." : undefined}
+            >
+              Saldo
+            </th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("descricao", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("fornecedor", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("job", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("centro", TITULO)}</th>
+            <th className="px-3 py-2 text-center">{colunas.titulo("trimestre", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("empresa", TITULO)}</th>
             <th className="w-10 px-3 py-2 text-center" aria-label="Detalhes" />
           </tr>
         </thead>
         <tbody>
-          {linhas.map((l) => {
+          {colunas.visiveis.length === 0 && (
+            <tr>
+              <td colSpan={11} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                Nenhum lançamento com esse filtro.
+              </td>
+            </tr>
+          )}
+          {colunas.visiveis.map((l) => {
             const estornada = l.estornada;
             const temSave = l.origens.some((o) => o.tipo === "save");
             const temRateio = l.rateio.length > 1;
@@ -250,8 +408,32 @@ export function ConciliacaoList({
             );
           })}
         </tbody>
+        {/* Só com filtro: quanto entrou e saiu nos lançamentos que sobraram
+            (o "Total do filtro" da página inicial da conciliação). Sem
+            filtro, os cartões de cima já dizem o do período. */}
+        {colunas.filtrando && colunas.visiveis.length > 0 && (
+          <tfoot className="border-t-2 border-border bg-muted/30">
+            <tr>
+              <td className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold">
+                Total do filtro
+              </td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold text-emerald-700">
+                {somaDoFiltro.credito > 0 ? formatMoney(somaDoFiltro.credito) : ""}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold text-california-red">
+                {somaDoFiltro.debito > 0 ? formatMoney(somaDoFiltro.debito) : ""}
+              </td>
+              <td />
+              <td colSpan={7} className="px-3 py-2.5 text-xs text-muted-foreground">
+                {colunas.visiveis.length} de {colunas.total}{" "}
+                {colunas.total === 1 ? "lançamento" : "lançamentos"} do período
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
+    </>
   );
 }
 

@@ -184,7 +184,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 162 | [A errata organiza a planilha do job: ordem, agrupamento novo, renomeado e o vazio que sai](162-organizar-a-planilha-do-job-na-errata.md) | 2026-10-09 |
 | 163 | [Job cancelado sai do módulo de Jobs e só aparece em Orçamentos](163-job-cancelado-sai-do-modulo-de-jobs.md) | 2026-10-09 |
 | 164 | [Verba de Alimentação e Verba de Transporte, com titular do RH, freela ou terceiro](164-verbas-de-alimentacao-e-transporte.md) | 2026-10-09 |
-| 165 | *Reservada* — filtro e ordem pelo título da coluna nas listas (frente do filtro por coluna, ainda não publicada) | 2026-10-09 |
+| 165 | [Filtro e ordem pelo título da coluna, como no Excel, nas listas do ERP](165-filtro-por-coluna-nas-listas.md) | 2026-10-09 |
 | 166 | [Regime tributário (Real e Presumido separados) e CNAE obrigatórios no fornecedor, e a PP travada para cadastro incompleto](166-regime-e-cnae-do-fornecedor.md) | 2026-10-09 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em

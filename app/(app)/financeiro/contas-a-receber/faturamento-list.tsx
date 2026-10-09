@@ -72,6 +72,14 @@ import {
   cancelarRecebimentoAntesNf,
   registrarRecebimentoAntesNf,
 } from "./actions-recebimento-antes-nf";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 // ---------------------------------------------------------------------------
 // Tipos das linhas
@@ -261,6 +269,140 @@ function agruparPorNota(rows: FaturamentoPendenteRow[]): LinhaDaFila[] {
   for (const l of linhas) l.parcelas.sort((a, b) => a.parcela_numero - b.parcela_numero);
   return linhas;
 }
+
+// ---------------------------------------------------------------------------
+// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
+// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
+// ---------------------------------------------------------------------------
+
+/**
+ * Uma linha da tabela: uma nota a faturar (as parcelas de uma nota do envio,
+ * ou um BV) ou uma nota já emitida, em verde. As duas populações usam as
+ * MESMAS colunas: o filtro de um título vale para as duas de uma vez.
+ */
+type LinhaDaTabela = { tipo: "pendente"; l: LinhaDaFila } | { tipo: "faturado"; f: FaturadoRow };
+
+/** O selo da coluna Origem. */
+function origemDaLinha(x: LinhaDaTabela): string {
+  if (x.tipo === "faturado") return "Faturado";
+  return x.l.p.origem_tipo === "bv" ? "BV" : "Job";
+}
+const ORDEM_DA_ORIGEM = ["Job", "BV", "Faturado"];
+
+/** O cliente, como o filtro "Cliente" de cima chama: o BV vem com o
+ *  fornecedor, rotulado — é dele que a nota cobra. */
+function contraparteDaLinha(x: LinhaDaTabela): string {
+  const bv = x.tipo === "faturado" ? x.f.origem_tipo === "bv" : x.l.p.origem_tipo === "bv";
+  const nome = x.tipo === "faturado" ? x.f.contraparte_nome : x.l.p.contraparte_nome;
+  return bv ? `${nome} (fornecedor)` : nome;
+}
+
+/** O que a coluna "Job / descrição" mostra em negrito. */
+function descricaoDaLinha(x: LinhaDaTabela): string {
+  if (x.tipo === "pendente") return x.l.p.descricao;
+  return [...new Set(x.f.itens.map((i) => i.descricao.split(" — ")[0]))].join(" + ");
+}
+
+const COLUNAS: ColunaFiltravel<LinhaDaTabela>[] = [
+  {
+    chave: "origem",
+    rotulo: "Origem",
+    tipo: "texto",
+    // Job, BV e Faturado: a lista na ordem da tela (pendentes antes).
+    celula: (x) => ({ ...celulaTexto(origemDaLinha(x)), ordemNaLista: ORDEM_DA_ORIGEM.indexOf(origemDaLinha(x)) }),
+  },
+  {
+    // Filtra pela descrição; a busca da coluna acha também pelo código do
+    // job, pelo mês do job mensal e por quem mandou.
+    chave: "descricao",
+    rotulo: "Job / descrição",
+    tipo: "texto",
+    celula: (x) => {
+      const texto = descricaoDaLinha(x);
+      const extra =
+        x.tipo === "pendente"
+          ? [
+              x.l.p.codigo ?? "",
+              x.l.p.mes_referencia ? rotuloMes(x.l.p.mes_referencia) : "",
+              x.l.p.autor_nome ?? "",
+            ]
+          : [...x.f.itens.map((i) => i.codigo), ...x.f.autores.map((a) => a.nome)];
+      return { ...celulaTexto(texto), busca: [texto, ...extra].join(" ") };
+    },
+  },
+  {
+    // A busca da coluna acha também pelo CNPJ da nota.
+    chave: "cliente",
+    rotulo: "Cliente",
+    tipo: "texto",
+    celula: (x) => {
+      const nome = contraparteDaLinha(x);
+      const cnpj = x.tipo === "pendente" ? x.l.p.cnpj_tomador : x.f.cnpj_tomador;
+      return { ...celulaTexto(nome), busca: `${nome} ${cnpj ? `${formatCnpj(cnpj)} ${cnpj}` : ""}` };
+    },
+  },
+  {
+    chave: "valor",
+    rotulo: "Valor",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (x) => celulaValor(x.tipo === "pendente" ? x.l.valor : x.f.valor_total, formatMoney),
+  },
+  {
+    chave: "jaFaturado",
+    rotulo: "Já faturado",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (x) => celulaValor(x.tipo === "pendente" ? x.l.jaFaturado : x.f.valor_total, formatMoney),
+  },
+  {
+    // A nota emitida não tem saldo (a célula mostra "—"): vale zero.
+    chave: "saldo",
+    rotulo: "Saldo a faturar",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (x) => celulaValor(x.tipo === "pendente" ? x.l.saldo : 0, formatMoney),
+  },
+  {
+    // "1/2" é a nota 1 de 2 do envio; na nota emitida, "3x" são as parcelas.
+    chave: "nota",
+    rotulo: "Nota",
+    tipo: "texto",
+    celula: (x) => {
+      if (x.tipo === "faturado") {
+        const t = x.f.qtd_parcelas > 1 ? `${x.f.qtd_parcelas}x` : "1/1";
+        return { ...celulaTexto(t), ordem: 1000 + x.f.qtd_parcelas };
+      }
+      const ordem = x.l.p.nota_ordem ?? 1;
+      const total = x.l.p.nota_total ?? 1;
+      const venc = x.l.parcelas.length > 1 ? ` ${x.l.parcelas.length} venc.` : "";
+      return { ...celulaTexto(`${ordem}/${total}`), ordem: total * 10 + ordem, busca: `${ordem}/${total}${venc}` };
+    },
+  },
+  {
+    // O primeiro vencimento — o que a célula mostra em cima.
+    chave: "vencimento",
+    rotulo: "Vencimento",
+    tipo: "data",
+    celula: (x) => celulaData(x.tipo === "pendente" ? x.l.primeiroVencimento : x.f.primeiro_vencimento),
+  },
+  {
+    // O botão da linha: "Faturar" na nota a faturar, "NF <número>" na
+    // emitida — é o único lugar da linha com o número da nota.
+    chave: "acao",
+    rotulo: "Ação",
+    tipo: "texto",
+    alinhar: "right",
+    celula: (x) => {
+      if (x.tipo === "pendente") return { ...celulaTexto("Faturar"), ordem: -1 };
+      const n = Number(x.f.numero_nf.replace(/\D/g, ""));
+      return { ...celulaTexto(`NF ${x.f.numero_nf}`), ordem: Number.isFinite(n) ? n : 0 };
+    },
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Componente
@@ -508,7 +650,7 @@ export function FaturamentoList({
 
   const q = busca.trim().toLowerCase();
 
-  const visiveis = React.useMemo(
+  const pendentesDoTopo = React.useMemo(
     () =>
       pendentes.filter((p) => {
         if (filtroFat === "faturados") return false;
@@ -523,7 +665,7 @@ export function FaturamentoList({
     [pendentes, filtroContraparte, filtroFat, q],
   );
 
-  const faturadosVisiveis = React.useMemo(
+  const faturadosDoTopo = React.useMemo(
     () =>
       faturados.filter((f) => {
         if (filtroFat === "pendentes") return false;
@@ -541,7 +683,50 @@ export function FaturamentoList({
   );
 
   // Uma linha por nota do envio (decisão 123); o BV segue sozinho.
-  const linhasVisiveis = React.useMemo(() => agruparPorNota(visiveis), [visiveis]);
+  const linhasDoTopo = React.useMemo(() => agruparPorNota(pendentesDoTopo), [pendentesDoTopo]);
+
+  /** As notas a faturar e as emitidas numa lista só, depois dos filtros de
+   *  CIMA (cliente, Tudo/A faturar/Faturados e busca): os filtros dos
+   *  títulos vêm depois e valem para as duas. */
+  const doTopo = React.useMemo<LinhaDaTabela[]>(
+    () => [
+      ...linhasDoTopo.map((l) => ({ tipo: "pendente" as const, l })),
+      ...faturadosDoTopo.map((f) => ({ tipo: "faturado" as const, f })),
+    ],
+    [linhasDoTopo, faturadosDoTopo],
+  );
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-receber-faturamento" });
+  // A separação continua: as notas a faturar em cima, as emitidas (verdes)
+  // embaixo. Com ordem pelo título, cada uma das duas vem naquela ordem.
+  const linhasVisiveis = React.useMemo(
+    () => colunas.visiveis.flatMap((x) => (x.tipo === "pendente" ? [x.l] : [])),
+    [colunas.visiveis],
+  );
+  const faturadosVisiveis = React.useMemo(
+    () => colunas.visiveis.flatMap((x) => (x.tipo === "faturado" ? [x.f] : [])),
+    [colunas.visiveis],
+  );
+
+  // Faturamento Agrupado: a nota que um título tira da lista sai da
+  // seleção, como na baixa em lote (`useSelecao`) — a NF agrupada nunca
+  // leva uma nota que não está na tela por causa de um filtro escondido no
+  // título. As que a busca e o cliente de cima escondem ficam como sempre.
+  const escondidasPeloTitulo = React.useMemo(() => {
+    const vistas = new Set(linhasVisiveis.map((l) => l.chave));
+    return linhasDoTopo.filter((l) => !vistas.has(l.chave)).map((l) => l.chave);
+  }, [linhasDoTopo, linhasVisiveis]);
+  const chaveDasEscondidas = escondidasPeloTitulo.join("|");
+  React.useEffect(() => {
+    if (escondidasPeloTitulo.length === 0) return;
+    setSel((atual) => {
+      if (!escondidasPeloTitulo.some((k) => atual[k])) return atual;
+      const proximo = { ...atual };
+      for (const k of escondidasPeloTitulo) delete proximo[k];
+      return proximo;
+    });
+    // `chaveDasEscondidas` resume a lista, que é um array novo a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDasEscondidas]);
 
   const selecionados = React.useMemo(
     () => pendentes.filter((p) => sel[chaveLinha(p)]),
@@ -823,6 +1008,18 @@ export function FaturamentoList({
         )}
       </div>
 
+      {/* Quantas notas os filtros dos títulos deixaram (o mesmo aviso da aba
+          PPs): o filtro mora escondido no título. */}
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="nota"
+          plural="notas"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       {/* Tabela.
           O botão `i` fica FORA do frame, na calha à direita — mesmo padrão
           do "Gerar PP" da planilha interna, a pedido do Tiago (o protótipo
@@ -851,27 +1048,39 @@ export function FaturamentoList({
                   </button>
                 </th>
               )}
-              <th className="w-[70px] px-4 py-3 font-semibold">Origem</th>
-              <th className="min-w-[300px] px-4 py-3 font-semibold">Job / descrição</th>
-              <th className="min-w-[150px] px-4 py-3 font-semibold">Cliente</th>
-              <th className="px-4 py-3 text-right font-semibold">Valor</th>
-              <th className="px-4 py-3 text-right font-semibold">Já faturado</th>
-              <th className="px-4 py-3 text-right font-semibold">Saldo a faturar</th>
-              <th className="w-[72px] px-3 py-3 font-semibold">Nota</th>
-              <th className="w-[110px] px-4 py-3 font-semibold">Vencimento</th>
-              <th className="w-[150px] px-4 py-3 text-right font-semibold">Ação</th>
+              <th className="w-[70px] px-4 py-3 font-semibold">{colunas.titulo("origem")}</th>
+              <th className="min-w-[300px] px-4 py-3 font-semibold">{colunas.titulo("descricao")}</th>
+              <th className="min-w-[150px] px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
+              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("jaFaturado")}</th>
+              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("saldo")}</th>
+              <th className="w-[72px] px-3 py-3 font-semibold">{colunas.titulo("nota")}</th>
+              <th className="w-[110px] px-4 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
+              <th className="w-[150px] px-4 py-3 text-right font-semibold">{colunas.titulo("acao")}</th>
               {/* A calha não é coluna: largura zero, e o botão sai do frame. */}
               <th className="w-0 p-0" />
             </tr>
           </thead>
           <tbody>
-            {linhasVisiveis.length === 0 && faturadosVisiveis.length === 0 && (
+            {doTopo.length === 0 && (
               <tr>
                 <td
                   colSpan={modoSelecao ? 10 : 9}
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   Nada aguardando faturamento com esses filtros.
+                </td>
+              </tr>
+            )}
+            {/* Vazio por causa dos títulos: a tabela fica, com os títulos,
+                para desfazer. */}
+            {doTopo.length > 0 && colunas.visiveis.length === 0 && (
+              <tr>
+                <td
+                  colSpan={modoSelecao ? 10 : 9}
+                  className="px-4 py-12 text-center text-sm text-muted-foreground"
+                >
+                  Nenhuma nota com esse filtro.
                 </td>
               </tr>
             )}

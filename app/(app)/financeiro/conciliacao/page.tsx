@@ -275,6 +275,7 @@ export default async function ConciliacaoPage({
                 highlight={highlight}
                 detalhesFatura={detalhesFatura}
                 detalhesImposto={detalhesImposto}
+                contexto={`${contaId}|${dataDe}|${dataAte}`}
               />
             </>
           )}

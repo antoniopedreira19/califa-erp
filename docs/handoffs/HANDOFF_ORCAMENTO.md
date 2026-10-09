@@ -5485,3 +5485,22 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - Caso único em 09/10/2026: ANI-P005/26-01 (job ANI-1004/26). O
   ANI-P005/26-02, com o job vivo ANI-1012/26, continua "Job criado" com
   "Ver job ANI-1012/26".
+
+## ⚠️ Nota de 2026-10-10 — Filtro e ordem pelo título da coluna na lista de Projetos & Orçamentos (decisão 165)
+
+- **A regra** está na decisão 165: o título da coluna filtra e ordena (o
+  cartão da aba PPs), os filtros de cima continuam e valem antes, a lista
+  guarda a intenção ("só estes" × "todos menos estes", inclusive o grupo
+  inteiro da árvore), e filtros e ordem ficam na aba do navegador, por tela.
+  A conta mora em `lib/calculos/filtro-de-coluna.ts` (12 testes:
+  `node --import tsx --test lib/calculos/filtro-de-coluna.test.ts`); o
+  gancho é `useFiltrosDeColuna` em `components/ui/filtro-de-coluna.tsx`.
+- **Na lista:** os 12 títulos filtram. Marca, Regional e GP têm vários
+  valores por projeto: o projeto aparece se ALGUM estiver marcado. Início é
+  árvore mês ▸ dia. As quatro colunas do funil passaram de 112/104/88/88 px
+  para 128/116/104/96 px, para o título com o funil caber; o Nome fica com
+  ~240 px. Os Selects de Cliente, Marca, Regional, Ano e Status ficam.
+- **Conferido no navegador (servidor do worktree, logado como
+  administrador):** desmarcar AMBEV na Marca deixou 52 de 56 projetos; a
+  Ages, segunda marca de um projeto da Ânima, não tirou o projeto. Depois de
+  recarregar, o funil da Marca voltou ligado.

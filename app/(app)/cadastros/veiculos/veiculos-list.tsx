@@ -21,6 +21,12 @@ import { formatDocumento, formatTelefone } from "@/lib/utils";
 import { MEIOS } from "@/lib/midia/meios";
 import type { Fornecedor } from "@/lib/types";
 import { inativarFornecedor, reativarFornecedor } from "@/app/(app)/fornecedores/actions";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaTexto,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 export interface VeiculoDaTela {
   fornecedor: Fornecedor;
@@ -37,6 +43,68 @@ function semPagamento(f: Fornecedor): boolean {
 
 const TODOS = "todos";
 
+/**
+ * As colunas que filtram e ordenam pelo título, como no Excel (sugestão aprovada em
+ * 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). A coluna das ações
+ * (Inativar/Reativar) não filtra.
+ */
+const COLUNAS: ColunaFiltravel<VeiculoDaTela>[] = [
+  {
+    chave: "nome",
+    rotulo: "Nome",
+    tipo: "texto",
+    // A busca da coluna acha pela razão social também, como a de cima.
+    celula: ({ fornecedor: f }) => ({ ...celulaTexto(f.nome), busca: `${f.nome} ${f.razao_social ?? ""}` }),
+  },
+  {
+    // Vários meios por veículo: passa se ALGUM estiver marcado. A lista
+    // segue a ordem dos meios da Mídia Off; o "Ainda não usado" vai ao fim.
+    chave: "usado",
+    rotulo: "Usado em",
+    tipo: "texto",
+    celula: ({ usadoEm }) =>
+      usadoEm.length === 0
+        ? { ...celulaTexto(null), rotulo: "Ainda não usado", ordemNaLista: MEIOS.length }
+        : usadoEm.map((m) => ({
+            ...celulaTexto(m),
+            ordemNaLista: MEIOS.findIndex((x) => x.nome === m),
+          })),
+  },
+  {
+    chave: "documento",
+    rotulo: "Documento",
+    tipo: "texto",
+    celula: ({ fornecedor: f }) =>
+      f.cpf_cnpj ? { ...celulaTexto(formatDocumento(f.cpf_cnpj)), busca: `${formatDocumento(f.cpf_cnpj)} ${f.cpf_cnpj}` } : celulaTexto(null),
+  },
+  {
+    // Árvore E-mail ▸ endereço e Telefone ▸ número: os dois da célula. A
+    // ordem é pelo e-mail (o de cima na célula); sem e-mail, pelo telefone.
+    chave: "contato",
+    rotulo: "Contato",
+    tipo: "texto",
+    celula: ({ fornecedor: f }) => {
+      const valores = [
+        ...(f.email ? [{ ...celulaTexto(f.email, `1 ${f.email}`), grupo: "E-mail" }] : []),
+        ...(f.telefone
+          ? [{ ...celulaTexto(formatTelefone(f.telefone), `2 ${f.telefone}`), grupo: "Telefone" }]
+          : []),
+      ];
+      return valores.length > 0 ? valores : { ...celulaTexto(null), grupo: "" };
+    },
+    rotuloSemGrupo: "(sem contato)",
+  },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    // Perto da borda direita: o cartão abre centrado embaixo do título para
+    // não passar da tela (o título continua à esquerda).
+    alinhar: "center",
+    celula: ({ fornecedor: f }) => celulaTexto(f.status === "ativo" ? "Ativo" : "Inativo"),
+  },
+];
+
 export function VeiculosList({ veiculos }: { veiculos: VeiculoDaTela[] }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
@@ -45,7 +113,9 @@ export function VeiculosList({ veiculos }: { veiculos: VeiculoDaTela[] }) {
   const [pending, startTransition] = React.useTransition();
   const [askInativar, setAskInativar] = React.useState<{ id: string; nome: string } | null>(null);
 
-  const filtered = React.useMemo(() => {
+  /** Os veículos que passam nos filtros de CIMA (busca, meio, inativos).
+   *  Os filtros dos títulos vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     const digitos = q.replace(/\D/g, "");
     return veiculos.filter(({ fornecedor: f, usadoEm }) => {
@@ -59,6 +129,9 @@ export function VeiculosList({ veiculos }: { veiculos: VeiculoDaTela[] }) {
       );
     });
   }, [veiculos, busca, meio, mostrarInativos]);
+
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "cadastro-veiculos" });
+  const filtered = colunas.visiveis;
 
   const ativos = veiculos.filter((v) => v.fornecedor.status === "ativo").length;
   const inativos = veiculos.length - ativos;
@@ -126,15 +199,25 @@ export function VeiculosList({ veiculos }: { veiculos: VeiculoDaTela[] }) {
         </div>
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="veículo"
+          plural="veículos"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Usado em</TableHead>
-              <TableHead>Documento</TableHead>
-              <TableHead>Contato</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{colunas.titulo("nome")}</TableHead>
+              <TableHead>{colunas.titulo("usado")}</TableHead>
+              <TableHead>{colunas.titulo("documento")}</TableHead>
+              <TableHead>{colunas.titulo("contato")}</TableHead>
+              <TableHead>{colunas.titulo("status")}</TableHead>
               <TableHead className="w-[80px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -142,7 +225,9 @@ export function VeiculosList({ veiculos }: { veiculos: VeiculoDaTela[] }) {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                  Nenhum resultado.
+                  {/* Vazia pelos títulos, a tabela fica (com os títulos,
+                      para desfazer) e diz que foi o filtro. */}
+                  {doTopo.length === 0 ? "Nenhum resultado." : "Nenhum veículo com esse filtro."}
                 </TableCell>
               </TableRow>
             )}

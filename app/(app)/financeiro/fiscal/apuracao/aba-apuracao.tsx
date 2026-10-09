@@ -33,6 +33,14 @@ import { aprovarGuiasPeloCalculado } from "./actions";
 import type { DadosDaApuracao, EstabelecimentoDaTela, GuiaDaTela, PJDaTela } from "./dados";
 import { MemoriaDialog } from "./memoria-dialog";
 import { Nota, ResumoItem, fimDoPeriodo, moeda, nomeGuia, situacaoDa, somaGrupo } from "./ui";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 const ORDEM: Record<string, number> = { ISS: 1, PIS: 2, COFINS: 3, ISS_RET: 4, CSRF: 5, IRRF: 6, IRPJ: 7, CSLL: 8 };
 
@@ -41,6 +49,115 @@ interface Periodo {
   rotulo: string;
   trimestral: boolean;
   guias: GuiaDaTela[];
+}
+
+// ---------------------------------------------------------------------------
+// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
+// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
+// ---------------------------------------------------------------------------
+
+/** O texto do selo da coluna Situação (`situacaoDa`, em `./ui`). */
+function rotuloDaSituacao(g: GuiaDaTela): string {
+  if (g.estado === "em_curso") return "Em curso";
+  if (g.estado === "a_aprovar") return g.apurado > 0 ? "A aprovar" : "A confirmar";
+  if (g.estado === "diferenca") return "Diferença";
+  return "Aprovada";
+}
+/** A lista da Situação na ordem da aprovação. */
+const ORDEM_DA_SITUACAO = ["Em curso", "A aprovar", "A confirmar", "Diferença", "Aprovada"];
+
+/** Os valores das colunas, como `LinhaGuia` calcula. Créditos e retidos
+ *  vêm com sinal negativo na memória: o filtro e a ordem usam o valor
+ *  abatido, positivo (o "de / até" só aceita valor positivo). */
+function valoresDaGuia(g: GuiaDaTela) {
+  const baseRotulo = g.periodo === "trimestral" ? g.memoria.filter((m) => m.grupo === "base").slice(-1)[0] : null;
+  return {
+    base: baseRotulo ? baseRotulo.valor : g.base,
+    debito: somaGrupo(g, ["debito"]),
+    creditos: Math.abs(somaGrupo(g, ["credito", "rateio_credito"])),
+    retido: Math.abs(somaGrupo(g, ["retido", "saldo", "compensacao"])),
+    aprovado: r2(g.aprovacoes.reduce((s, a) => s + a.valor_guia, 0)),
+  };
+}
+
+function colunasDaApuracao(
+  pjPorId: Map<string, PJDaTela>,
+  estabPorId: Map<string, EstabelecimentoDaTela>,
+  ordemPj: (id: string) => number,
+  ordemEstab: (id: string | null) => number,
+): ColunaFiltravel<GuiaDaTela>[] {
+  return [
+    {
+      // Árvore PJ ▸ guia: a PJ (a faixa da tabela) marca todas as guias
+      // dela. A busca acha também pelo CNPJ/local e pelo código do DARF.
+      chave: "guia",
+      rotulo: "Guia",
+      tipo: "texto",
+      rotuloSemGrupo: "(sem PJ)",
+      celula: (g) => {
+        const estab = g.estabelecimento_id ? estabPorId.get(g.estabelecimento_id) : undefined;
+        const pj = pjPorId.get(g.empresa_contabil_id)?.nome ?? "";
+        const rotulo = `${nomeGuia(g)}${estab ? ` · ${estab.municipio}` : ""}`;
+        return {
+          valor: `${g.empresa_contabil_id}|${rotulo}`,
+          rotulo,
+          ordem: rotulo,
+          // A lista na ordem da tabela: PJ, tributo, estabelecimento.
+          ordemNaLista:
+            ordemPj(g.empresa_contabil_id) * 10000 + (ORDEM[g.tributo] ?? 99) * 100 + ordemEstab(g.estabelecimento_id),
+          busca: `${rotulo} ${estab ? `${estab.nome} ${estab.municipio}-${estab.uf}` : g.local} ${pj}`,
+          grupo: pj,
+        };
+      },
+    },
+    { chave: "base", rotulo: "Base", tipo: "valor", faixa: true, alinhar: "right", celula: (g) => celulaValor(valoresDaGuia(g).base, moeda) },
+    { chave: "debito", rotulo: "Débito", tipo: "valor", faixa: true, alinhar: "right", celula: (g) => celulaValor(valoresDaGuia(g).debito, moeda) },
+    {
+      chave: "creditos",
+      rotulo: "(−) Créditos",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (g) => celulaValor(valoresDaGuia(g).creditos, moeda),
+    },
+    {
+      chave: "retido",
+      rotulo: "(−) Retido / saldo",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (g) => celulaValor(valoresDaGuia(g).retido, moeda),
+    },
+    {
+      chave: "apurado",
+      rotulo: "(=) Apurado",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (g) => celulaValor(g.apurado, moeda),
+    },
+    {
+      // Sem aprovação a célula mostra "—": vale zero ("de R$ 0,01" tira).
+      chave: "aprovada",
+      rotulo: "Guia aprovada",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (g) => celulaValor(valoresDaGuia(g).aprovado, moeda),
+    },
+    { chave: "vencimento", rotulo: "Vencimento", tipo: "data", alinhar: "center", celula: (g) => celulaData(g.vencimento) },
+    {
+      // A lista na ordem da aprovação; as linhas, de A a Z pelo rótulo.
+      chave: "situacao",
+      rotulo: "Situação",
+      tipo: "texto",
+      alinhar: "center",
+      celula: (g) => ({
+        ...celulaTexto(rotuloDaSituacao(g)),
+        ordemNaLista: ORDEM_DA_SITUACAO.indexOf(rotuloDaSituacao(g)),
+      }),
+    },
+  ];
 }
 
 export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
@@ -97,6 +214,33 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
     return g.estabelecimento_id ? estabPorId.get(g.estabelecimento_id)?.nome ?? g.local : pjPorId.get(g.empresa_contabil_id)?.nome ?? g.local;
   }
 
+  const ordemPj = (id: string) => {
+    const i = pjs.findIndex((p) => p.id === id);
+    return i < 0 ? 999 : i;
+  };
+  const ordemEstab = (id: string | null) => (id ? estabelecimentos.findIndex((e) => e.id === id) : -1);
+  /** As guias da competência escolhida (o filtro de CIMA), na ordem fixa
+   *  PJ → tributo → estabelecimento. Os filtros dos títulos vêm depois.
+   *  (Calculada antes dos `return` de erro e de vazio: os ganchos não podem
+   *  ficar depois deles.) */
+  const listaDoTopo = React.useMemo(
+    () =>
+      [...(periodo?.guias ?? [])].sort(
+        (a, b) =>
+          ordemPj(a.empresa_contabil_id) - ordemPj(b.empresa_contabil_id) ||
+          (ORDEM[a.tributo] ?? 99) - (ORDEM[b.tributo] ?? 99) ||
+          ordemEstab(a.estabelecimento_id) - ordemEstab(b.estabelecimento_id),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [periodo, pjs, estabelecimentos],
+  );
+  const colunasDaTabela = React.useMemo(
+    () => colunasDaApuracao(pjPorId, estabPorId, ordemPj, ordemEstab),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pjPorId, estabPorId],
+  );
+  const colunas = useFiltrosDeColuna(listaDoTopo, colunasDaTabela, { guardarEm: "fiscal-apuracao" });
+
   if (dados.erro) {
     return (
       <Nota tom="ambar" icone={<AlertTriangle className="h-3.5 w-3.5" />}>
@@ -122,22 +266,19 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
     );
   }
 
-  const ordemPj = (id: string) => {
-    const i = pjs.findIndex((p) => p.id === id);
-    return i < 0 ? 999 : i;
-  };
-  const ordemEstab = (id: string | null) => (id ? estabelecimentos.findIndex((e) => e.id === id) : -1);
-  const lista = [...periodo.guias].sort(
-    (a, b) =>
-      ordemPj(a.empresa_contabil_id) - ordemPj(b.empresa_contabil_id) ||
-      (ORDEM[a.tributo] ?? 99) - (ORDEM[b.tributo] ?? 99) ||
-      ordemEstab(a.estabelecimento_id) - ordemEstab(b.estabelecimento_id),
-  );
+  // As guias que passam também nos títulos. O resumo (apurado, a aprovar,
+  // vence primeiro) e o "Aprovar as N guias pelo valor calculado" seguem
+  // esta lista: o lote nunca aprova uma guia que o filtro escondeu.
+  // Com ordem pelo título, as guias se ordenam DENTRO da PJ; as PJs ficam
+  // na ordem do cadastro (a faixa de cada uma diz o regime da apuração).
+  const lista = colunas.visiveis;
   const aAprovar = lista.filter((g) => g.estado === "a_aprovar");
   const comDiferenca = lista.filter((g) => g.estado === "diferenca");
   const apurado = r2(lista.reduce((s, g) => s + g.apurado, 0));
   const proxima = [...aAprovar, ...comDiferenca].sort((a, b) => a.vencimento.localeCompare(b.vencimento))[0];
-  const emCurso = lista.some((g) => g.estado === "em_curso");
+  // "Em curso" é da competência, não das guias que o filtro deixou: o
+  // rótulo "Apurado até hoje (estimativa)" e o aviso não somem com o filtro.
+  const emCurso = listaDoTopo.some((g) => g.estado === "em_curso");
   const fim = fimDoPeriodo(periodo.trimestral ? "trimestral" : "mensal", periodo.id);
   const guiaAberta = aberta ? guias.find((g) => g.chave === aberta) ?? null : null;
   const pjsDaLista = [...new Set(lista.map((g) => g.empresa_contabil_id))].sort((a, b) => ordemPj(a) - ordemPj(b));
@@ -270,23 +411,43 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
 
       {avisoDosFatos}
 
+      {/* Quantas guias os filtros dos títulos deixaram (o mesmo aviso da aba
+          PPs): o filtro mora escondido no título. */}
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="guia"
+          plural="guias"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="w-[21%] px-3 py-3 text-left font-semibold">Guia</th>
-              <th className="w-[9%] px-3 py-3 text-right font-semibold">Base</th>
-              <th className="w-[9%] px-3 py-3 text-right font-semibold">Débito</th>
-              <th className="w-[10%] px-3 py-3 text-right font-semibold">(−) Créditos</th>
-              <th className="w-[10%] px-3 py-3 text-right font-semibold">(−) Retido / saldo</th>
-              <th className="w-[9%] px-3 py-3 text-right font-semibold">(=) Apurado</th>
-              <th className="w-[9%] px-3 py-3 text-right font-semibold">Guia aprovada</th>
-              <th className="w-[8%] px-2 py-3 font-semibold">Vencimento</th>
-              <th className="w-[7%] px-2 py-3 font-semibold">Situação</th>
+              <th className="w-[21%] px-3 py-3 text-left font-semibold">{colunas.titulo("guia")}</th>
+              <th className="w-[9%] px-3 py-3 text-right font-semibold">{colunas.titulo("base")}</th>
+              <th className="w-[9%] px-3 py-3 text-right font-semibold">{colunas.titulo("debito")}</th>
+              <th className="w-[10%] px-3 py-3 text-right font-semibold">{colunas.titulo("creditos")}</th>
+              <th className="w-[10%] px-3 py-3 text-right font-semibold">{colunas.titulo("retido")}</th>
+              <th className="w-[9%] px-3 py-3 text-right font-semibold">{colunas.titulo("apurado")}</th>
+              <th className="w-[9%] px-3 py-3 text-right font-semibold">{colunas.titulo("aprovada")}</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
+              <th className="w-[7%] px-2 py-3 font-semibold">{colunas.titulo("situacao")}</th>
               <th className="w-[8%] px-3 py-3 font-semibold">Ação</th>
             </tr>
           </thead>
           <tbody>
+            {/* Vazio por causa dos títulos: a tabela fica, para desfazer. */}
+            {lista.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  Nenhuma guia com esse filtro.
+                </td>
+              </tr>
+            )}
             {pjsDaLista.map((pjId) => {
               const p = pjPorId.get(pjId);
               const doPj = lista.filter((g) => g.empresa_contabil_id === pjId);

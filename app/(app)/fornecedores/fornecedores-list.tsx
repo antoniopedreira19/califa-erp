@@ -19,9 +19,82 @@ import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { formatDocumento, formatTelefone } from "@/lib/utils";
 import type { Fornecedor } from "@/lib/types";
 import { inativarFornecedor, reativarFornecedor } from "./actions";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaTexto,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 function fornecedorIncompleto(f: Fornecedor): boolean {
   return !f.cep || (!f.banco_codigo && !f.pix_chave);
+}
+
+/**
+ * As colunas que filtram e ordenam pelo título, como no Excel (decisão 165 —
+ * o mesmo filtro da aba PPs do job). As colunas dependem de quem é veículo
+ * (o selo do Nome); a das ações (Inativar/Reativar) não filtra.
+ */
+function colunasDosFornecedores(ehVeiculo: Set<string>): ColunaFiltravel<Fornecedor>[] {
+  return [
+    {
+      // A busca da coluna acha pela razão social e pelos selos da célula:
+      // "incompletos" lista quem falta CEP ou conta/PIX.
+      chave: "nome",
+      rotulo: "Nome",
+      tipo: "texto",
+      celula: (f) => ({
+        ...celulaTexto(f.nome),
+        busca: [
+          f.nome,
+          f.razao_social ?? "",
+          fornecedorIncompleto(f) ? "Dados incompletos" : "",
+          ehVeiculo.has(f.id) ? "Veículo" : "",
+        ].join(" "),
+      }),
+    },
+    {
+      chave: "tipo",
+      rotulo: "Tipo",
+      tipo: "texto",
+      celula: (f) => celulaTexto(f.tipo_pessoa === "fisica" ? "PF" : "PJ"),
+    },
+    {
+      // Acha com ou sem a pontuação.
+      chave: "documento",
+      rotulo: "Documento",
+      tipo: "texto",
+      celula: (f) =>
+        f.cpf_cnpj
+          ? { ...celulaTexto(formatDocumento(f.cpf_cnpj)), busca: `${formatDocumento(f.cpf_cnpj)} ${f.cpf_cnpj}` }
+          : celulaTexto(null),
+    },
+    {
+      // Árvore E-mail ▸ endereço e Telefone ▸ número: os dois da célula. A
+      // ordem é pelo e-mail (o de cima na célula); sem e-mail, pelo telefone.
+      chave: "contato",
+      rotulo: "Contato",
+      tipo: "texto",
+      celula: (x) => {
+        const valores = [
+          ...(x.email ? [{ ...celulaTexto(x.email, `1 ${x.email}`), grupo: "E-mail" }] : []),
+          ...(x.telefone
+            ? [{ ...celulaTexto(formatTelefone(x.telefone), `2 ${x.telefone}`), grupo: "Telefone" }]
+            : []),
+        ];
+        return valores.length > 0 ? valores : { ...celulaTexto(null), grupo: "" };
+      },
+      rotuloSemGrupo: "(sem contato)",
+    },
+    {
+      chave: "status",
+      rotulo: "Status",
+      tipo: "texto",
+      // Perto da borda direita: o cartão abre centrado embaixo do título.
+      alinhar: "center",
+      celula: (x) => celulaTexto(x.status === "ativo" ? "Ativo" : "Inativo"),
+    },
+  ];
 }
 
 export function FornecedoresList({
@@ -42,7 +115,9 @@ export function FornecedoresList({
     { id: string; nome: string } | null
   >(null);
 
-  const filtered = React.useMemo(() => {
+  /** Os fornecedores que passam nos filtros de CIMA (busca, inativos). Os
+   *  filtros dos títulos vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return fornecedores.filter((f) => {
       if (!mostrarInativos && f.status !== "ativo") return false;
@@ -55,6 +130,10 @@ export function FornecedoresList({
       );
     });
   }, [fornecedores, busca, mostrarInativos]);
+
+  const colunasDaTabela = React.useMemo(() => colunasDosFornecedores(ehVeiculo), [ehVeiculo]);
+  const colunas = useFiltrosDeColuna(doTopo, colunasDaTabela, { guardarEm: "cadastro-fornecedores" });
+  const filtered = colunas.visiveis;
 
   const ativos = fornecedores.filter((f) => f.status === "ativo").length;
   const inativos = fornecedores.length - ativos;
@@ -107,15 +186,25 @@ export function FornecedoresList({
         </div>
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="fornecedor"
+          plural="fornecedores"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-soft">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Documento</TableHead>
-              <TableHead>Contato</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{colunas.titulo("nome")}</TableHead>
+              <TableHead>{colunas.titulo("tipo")}</TableHead>
+              <TableHead>{colunas.titulo("documento")}</TableHead>
+              <TableHead>{colunas.titulo("contato")}</TableHead>
+              <TableHead>{colunas.titulo("status")}</TableHead>
               <TableHead className="w-[80px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -123,7 +212,9 @@ export function FornecedoresList({
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                  Nenhum resultado.
+                  {/* Vazia pelos títulos, a tabela fica (com os títulos,
+                      para desfazer) e diz que foi o filtro. */}
+                  {doTopo.length === 0 ? "Nenhum resultado." : "Nenhum fornecedor com esse filtro."}
                 </TableCell>
               </TableRow>
             )}

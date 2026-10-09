@@ -46,6 +46,14 @@ import {
   somaMeses,
   valorCurto,
 } from "./calendario-datas";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 const TODAS = "Todas";
 const TODOS = "Todos";
@@ -73,7 +81,6 @@ const COR_SEM_SERVICO = "#8a8a8a";
 
 type Visao = "mes" | "ativos";
 type Agrupamento = "nenhum" | "gp" | "cliente" | "regional" | "categoria" | "servico";
-type Ordem = "evento" | "fim" | "inicio" | "custo" | "valor";
 
 const AGRUPAMENTOS: { valor: Agrupamento; rotulo: string }[] = [
   { valor: "nenhum", rotulo: "Sem agrupamento" },
@@ -84,15 +91,60 @@ const AGRUPAMENTOS: { valor: Agrupamento; rotulo: string }[] = [
   { valor: "categoria", rotulo: "Agrupar por categoria" },
 ];
 
-const ORDENS: { valor: Ordem; rotulo: string }[] = [
-  { valor: "evento", rotulo: "Proximidade do evento" },
-  { valor: "fim", rotulo: "Ordenar por fim" },
-  { valor: "inicio", rotulo: "Ordenar por início" },
-  { valor: "custo", rotulo: "Ordenar por custo previsto" },
-  { valor: "valor", rotulo: "Ordenar por valor do job" },
+const servicoDe = (j: JobAberto) => j.servico_nome ?? SEM_SERVICO;
+
+/**
+ * As colunas da lista "Jobs ativos numa data" que filtram e ordenam pelo
+ * título, como no Excel (sugestão aprovada em 09/10/2026, decisão 165 — o mesmo filtro da aba PPs
+ * do job). O título passa a ser a ORDEM da lista: o Select "Ordenação" sai.
+ * Sem título ordenando, vale a ordem que ele tinha por padrão, a
+ * proximidade do evento.
+ *
+ * Evento mostra a distância ("em 5d", "há 3d") a partir do dia escolhido;
+ * o filtro e a ordem são pela DATA do evento, em árvore mês ▸ dia.
+ */
+const COLUNAS_ATIVOS: ColunaFiltravel<JobAberto>[] = [
+  {
+    chave: "job",
+    rotulo: "Job",
+    tipo: "texto",
+    // Ordena pelo código; a busca da coluna acha pelo nome também.
+    celula: (j) => ({ ...celulaTexto(`${j.codigo} · ${j.nome}`, j.codigo), busca: `${j.codigo} ${j.nome}` }),
+  },
+  { chave: "categoria", rotulo: "Categoria", tipo: "texto", celula: (j) => celulaTexto(j.categoria_nome) },
+  {
+    chave: "servico",
+    rotulo: "Serviço",
+    tipo: "texto",
+    // O job sem serviço tem o mesmo nome da legenda.
+    celula: (j) => (j.servico_nome ? celulaTexto(j.servico_nome) : { ...celulaTexto(null), rotulo: SEM_SERVICO }),
+  },
+  { chave: "regional", rotulo: "Reg.", tipo: "texto", celula: (j) => celulaTexto(j.regional_nome) },
+  { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (j) => celulaTexto(j.cliente_nome) },
+  { chave: "gp", rotulo: "GP", tipo: "texto", celula: (j) => celulaTexto(j.responsavel_nome) },
+  { chave: "evento", rotulo: "Evento", tipo: "data", celula: (j) => celulaData(j.data_evento) },
+  { chave: "inicio", rotulo: "Início", tipo: "data", celula: (j) => celulaData(j.data_inicio_prevista) },
+  { chave: "fim", rotulo: "Fim", tipo: "data", celula: (j) => celulaData(j.data_fim_prevista) },
+  {
+    chave: "custo",
+    rotulo: "Custo previsto",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (j) => celulaValor(j.custos, numeroBr),
+  },
+  {
+    chave: "valor",
+    rotulo: "Valor do job",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (j) => celulaValor(j.valor_total, numeroBr),
+  },
 ];
 
-const servicoDe = (j: JobAberto) => j.servico_nome ?? SEM_SERVICO;
+/** O título do calendário mantém o espaçamento das letras da faixa. */
+const TITULO = "tracking-[0.07em]";
 
 /**
  * O job está EM ANDAMENTO nessa data?
@@ -155,7 +207,6 @@ export function CalendarioJobs({
   const [regional, setRegional] = React.useState(TODAS);
   const [gp, setGp] = React.useState(TODOS);
   const [agrupamento, setAgrupamento] = React.useState<Agrupamento>("nenhum");
-  const [ordem, setOrdem] = React.useState<Ordem>("evento");
   const [fechados, setFechados] = React.useState<Set<string>>(new Set());
 
   // ---------------------------------------------------------------- cores
@@ -281,9 +332,14 @@ export function CalendarioJobs({
   const q = busca.trim().toLowerCase();
   const temFiltro = !!q || regional !== TODAS || gp !== TODOS;
 
-  const filtrados = React.useMemo(
-    () =>
-      ativosNoDia.filter(
+  // Já na ordem padrão — a proximidade do evento, que era o padrão do
+  // Select "Ordenação" —: sem título ordenando, é a ordem da lista; com
+  // título, ela desempata (a ordenação do título é estável).
+  const filtrados = React.useMemo(() => {
+    const distanciaDoEvento = (j: JobAberto) =>
+      j.data_evento ? Math.abs(diasEntre(dia, j.data_evento)) : Number.MAX_SAFE_INTEGER;
+    return ativosNoDia
+      .filter(
         (j) =>
           (regional === TODAS || j.regional_nome === regional) &&
           (gp === TODOS || j.responsavel_nome === gp) &&
@@ -291,9 +347,18 @@ export function CalendarioJobs({
             `${j.codigo} ${j.nome} ${j.cliente_nome ?? ""} ${j.responsavel_nome ?? ""}`
               .toLowerCase()
               .includes(q)),
-      ),
-    [ativosNoDia, regional, gp, q],
-  );
+      )
+      .sort(
+        (a, b) =>
+          distanciaDoEvento(a) - distanciaDoEvento(b) ||
+          (a.data_fim_prevista ?? "").localeCompare(b.data_fim_prevista ?? ""),
+      );
+  }, [ativosNoDia, regional, gp, q, dia]);
+
+  // Os títulos filtram DEPOIS da busca e dos Combobox de cima.
+  const colunas = useFiltrosDeColuna(filtrados, COLUNAS_ATIVOS, { guardarEm: "abertura-calendario-ativos" });
+  /** O que passa em tudo, já na ordem — a base dos grupos e do rodapé. */
+  const visiveis = colunas.visiveis;
 
   const grupos = React.useMemo(() => {
     const chave = (j: JobAberto): string => {
@@ -304,55 +369,42 @@ export function CalendarioJobs({
       return j.categoria_nome ?? "Sem categoria";
     };
 
-    const distanciaDoEvento = (j: JobAberto) =>
-      j.data_evento ? Math.abs(diasEntre(dia, j.data_evento)) : Number.MAX_SAFE_INTEGER;
-
-    const ordenar = (arr: JobAberto[]) =>
-      arr.slice().sort((a, b) => {
-        if (ordem === "fim")
-          return (a.data_fim_prevista ?? "").localeCompare(b.data_fim_prevista ?? "");
-        if (ordem === "inicio")
-          return (a.data_inicio_prevista ?? "").localeCompare(
-            b.data_inicio_prevista ?? "",
-          );
-        if (ordem === "custo") return b.custos - a.custos;
-        if (ordem === "valor") return (b.valor_total ?? 0) - (a.valor_total ?? 0);
-        return (
-          distanciaDoEvento(a) - distanciaDoEvento(b) ||
-          (a.data_fim_prevista ?? "").localeCompare(b.data_fim_prevista ?? "")
-        );
-      });
-
+    // `visiveis` já vem na ordem (a do título, ou a proximidade do evento),
+    // e os grupos guardam a ordem de chegada.
     if (agrupamento === "nenhum") {
-      return filtrados.length
+      return visiveis.length
         ? [
             {
               rotulo: "Todos os jobs ativos",
-              jobs: ordenar(filtrados),
-              total: filtrados.reduce((s, j) => s + j.custos, 0),
+              jobs: visiveis,
+              total: visiveis.reduce((s, j) => s + j.custos, 0),
             },
           ]
         : [];
     }
 
     const mapa = new Map<string, JobAberto[]>();
-    for (const j of filtrados) {
+    for (const j of visiveis) {
       const k = chave(j);
       const lista = mapa.get(k);
       if (lista) lista.push(j);
       else mapa.set(k, [j]);
     }
-    return Array.from(mapa.entries())
-      .map(([rotulo, lista]) => ({
-        rotulo,
-        jobs: ordenar(lista),
-        total: lista.reduce((s, j) => s + j.custos, 0),
-      }))
-      .sort(
-        (a, b) =>
-          b.jobs.length - a.jobs.length || a.rotulo.localeCompare(b.rotulo, "pt-BR"),
-      );
-  }, [filtrados, agrupamento, ordem, dia]);
+    const lista = Array.from(mapa.entries()).map(([rotulo, lista]) => ({
+      rotulo,
+      jobs: lista,
+      total: lista.reduce((s, j) => s + j.custos, 0),
+    }));
+    // Com ordem pelo título, o grupo entra na posição do seu primeiro job
+    // (o `Map` guarda a ordem de chegada): ordenar por GP de A a Z, agrupado
+    // por GP, põe os grupos em ordem alfabética. Sem título, a ordem de
+    // sempre: o grupo maior primeiro.
+    if (colunas.ordenacao) return lista;
+    return lista.sort(
+      (a, b) =>
+        b.jobs.length - a.jobs.length || a.rotulo.localeCompare(b.rotulo, "pt-BR"),
+    );
+  }, [visiveis, agrupamento, colunas.ordenacao]);
 
   const terminandoEm7 = ativosNoDia.filter(
     (j) => j.data_fim_prevista && diasEntre(dia, j.data_fim_prevista) <= 7,
@@ -822,18 +874,9 @@ export function CalendarioJobs({
                 ))}
               </SelectContent>
             </Select>
-            <Select value={ordem} onValueChange={(v) => setOrdem(v as Ordem)}>
-              <SelectTrigger aria-label="Ordenação" className={classeCampo}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ORDENS.map((o) => (
-                  <SelectItem key={o.valor} value={o.valor}>
-                    {o.rotulo}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* O Select "Ordenação" saiu: a ordem passa ao título das
+                colunas, e sem título ordenando vale a proximidade do evento
+                (sugestão aprovada em 09/10/2026, decisão 165). */}
             {temFiltro && (
               <button type="button" onClick={limparFiltros} className={classeBotao}>
                 <X className="h-3 w-3" />
@@ -842,23 +885,38 @@ export function CalendarioJobs({
             )}
           </div>
 
+          {colunas.ativo && (
+            <BarraDosFiltrosDeColuna
+              visiveis={colunas.visiveis.length}
+              total={colunas.total}
+              singular="job"
+              plural="jobs"
+              onLimpar={colunas.limpar}
+            />
+          )}
+
           <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
             <div className="max-h-[560px] overflow-auto [scrollbar-gutter:stable]">
-              <div className="sticky top-0 z-[4] flex h-[38px] min-w-[1120px] items-stretch border-b border-border bg-[#fbfbfa]/95 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground backdrop-blur">
-                <span className="flex min-w-0 flex-[1.5] items-center pl-3.5">Job</span>
-                <span className="flex w-[118px] shrink-0 items-center">Categoria</span>
-                <span className="flex w-[104px] shrink-0 items-center">Serviço</span>
-                <span className="flex w-12 shrink-0 items-center">Reg.</span>
-                <span className="flex min-w-0 flex-1 items-center pr-3.5">Cliente</span>
-                <span className="flex min-w-0 flex-1 items-center pr-3.5">GP</span>
-                <span className="flex w-[70px] shrink-0 items-center">Evento</span>
-                <span className="flex w-[74px] shrink-0 items-center">Início</span>
-                <span className="flex w-[74px] shrink-0 items-center">Fim</span>
-                <span className="flex w-[108px] shrink-0 items-center justify-end pr-1">
-                  Custo previsto
+              {/* Larguras: com o funil (+16 px), "Custo previsto" e "Valor do
+                  job" quebravam em duas linhas. Medido no WebKit: rótulo de 97 px
+                  + 16 do funil + 4 do `pr-1` → 118 px (era 108); 82 px + 16 +
+                  14 do `pr-3.5` = 112 → 114 px, com 2 px de folga (era 108).
+                  A linha (`LinhaAtiva`) e o `min-w` acompanham: 1120 → 1136. */}
+              <div className="sticky top-0 z-[4] flex h-[38px] min-w-[1136px] items-stretch border-b border-border bg-[#fbfbfa]/95 text-[10px] font-bold uppercase tracking-[0.07em] text-muted-foreground backdrop-blur">
+                <span className="flex min-w-0 flex-[1.5] items-center pl-3.5">{colunas.titulo("job", TITULO)}</span>
+                <span className="flex w-[118px] shrink-0 items-center">{colunas.titulo("categoria", TITULO)}</span>
+                <span className="flex w-[104px] shrink-0 items-center">{colunas.titulo("servico", TITULO)}</span>
+                <span className="flex w-12 shrink-0 items-center">{colunas.titulo("regional", TITULO)}</span>
+                <span className="flex min-w-0 flex-1 items-center pr-3.5">{colunas.titulo("cliente", TITULO)}</span>
+                <span className="flex min-w-0 flex-1 items-center pr-3.5">{colunas.titulo("gp", TITULO)}</span>
+                <span className="flex w-[70px] shrink-0 items-center">{colunas.titulo("evento", TITULO)}</span>
+                <span className="flex w-[74px] shrink-0 items-center">{colunas.titulo("inicio", TITULO)}</span>
+                <span className="flex w-[74px] shrink-0 items-center">{colunas.titulo("fim", TITULO)}</span>
+                <span className="flex w-[118px] shrink-0 items-center justify-end pr-1">
+                  {colunas.titulo("custo", TITULO)}
                 </span>
-                <span className="flex w-[108px] shrink-0 items-center justify-end pr-3.5">
-                  Valor do job
+                <span className="flex w-[114px] shrink-0 items-center justify-end pr-3.5">
+                  {colunas.titulo("valor", TITULO)}
                 </span>
               </div>
 
@@ -870,7 +928,11 @@ export function CalendarioJobs({
                   <p className="text-[13.5px] font-semibold">
                     {ativosNoDia.length === 0
                       ? "Nenhum job ativo nessa data."
-                      : "Nenhum job ativo nessa data com esses filtros."}
+                      : filtrados.length > 0
+                        ? // Vazia pelos títulos: a lista fica com os títulos,
+                          // para desfazer, e a barra de cima limpa.
+                          "Nenhum job ativo nessa data com esse filtro."
+                        : "Nenhum job ativo nessa data com esses filtros."}
                   </p>
                   {temFiltro && (
                     <button
@@ -891,7 +953,7 @@ export function CalendarioJobs({
                         type="button"
                         onClick={() => alternarGrupo(g.rotulo)}
                         aria-expanded={aberto}
-                        className="sticky top-[38px] z-[2] flex h-[29px] min-w-[1120px] items-center gap-2.5 whitespace-nowrap border-y border-border bg-[#f6f5f2] px-3.5 text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
+                        className="sticky top-[38px] z-[2] flex h-[29px] min-w-[1136px] items-center gap-2.5 whitespace-nowrap border-y border-border bg-[#f6f5f2] px-3.5 text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
                       >
                         <ChevronDown
                           className={cn(
@@ -928,11 +990,12 @@ export function CalendarioJobs({
             </div>
 
             <div className="flex flex-wrap items-center gap-3.5 border-t border-border bg-[#f6f5f2]/55 px-3.5 py-2.5 text-[11.5px] text-muted-foreground">
+              {/* O rodapé soma o que sobrou depois dos títulos. */}
               <span>
-                {filtrados.length} {filtrados.length === 1 ? "job" : "jobs"} ·{" "}
-                {valorCurto(filtrados.reduce((s, j) => s + j.custos, 0))} de custo
+                {visiveis.length} {visiveis.length === 1 ? "job" : "jobs"} ·{" "}
+                {valorCurto(visiveis.reduce((s, j) => s + j.custos, 0))} de custo
                 previsto ·{" "}
-                {valorCurto(filtrados.reduce((s, j) => s + (j.valor_total ?? 0), 0))}{" "}
+                {valorCurto(visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0))}{" "}
                 em valor de job
               </span>
               <span className="ml-auto inline-flex items-center gap-1.5">
@@ -1055,7 +1118,7 @@ function LinhaAtiva({
           onAbrir();
         }
       }}
-      className="flex h-[34px] min-w-[1120px] cursor-pointer items-center border-b border-[#f6f5f2] text-xs transition-colors hover:bg-[#fbfbfa]"
+      className="flex h-[34px] min-w-[1136px] cursor-pointer items-center border-b border-[#f6f5f2] text-xs transition-colors hover:bg-[#fbfbfa]"
     >
       <div className="flex min-w-0 flex-[1.5] items-center gap-2 pl-3.5 pr-4">
         <span
@@ -1126,10 +1189,10 @@ function LinhaAtiva({
       >
         {dataCurta(job.data_fim_prevista)}
       </span>
-      <span className="w-[108px] shrink-0 pr-1 text-right font-mono text-[10.5px] tabular-nums text-foreground">
+      <span className="w-[118px] shrink-0 pr-1 text-right font-mono text-[10.5px] tabular-nums text-foreground">
         {numeroBr(job.custos)}
       </span>
-      <span className="w-[108px] shrink-0 pr-3.5 text-right font-mono text-[10.5px] tabular-nums text-muted-foreground">
+      <span className="w-[114px] shrink-0 pr-3.5 text-right font-mono text-[10.5px] tabular-nums text-muted-foreground">
         {numeroBr(job.valor_total ?? 0)}
       </span>
     </div>

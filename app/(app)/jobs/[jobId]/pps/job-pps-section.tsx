@@ -53,13 +53,13 @@ import { carregarPPParaVisualizar } from "./actions-visualizar";
 import { VerPPDrawer } from "./ver-pp-drawer";
 import { PPStatusChip } from "./pp-status-chip";
 import {
+  BarraDosFiltrosDeColuna,
   FILTRO_VAZIO,
-  FiltroDeColuna,
-  filtroAtivo,
-  semAcento,
-  type DirecaoDaOrdem,
-  type FiltroDaColuna,
-  type ValorDaColuna,
+  celulaData,
+  marcaDoGrupo,
+  useFiltrosDeColuna,
+  type CelulaDaColuna,
+  type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 import { PrestarContasDrawer } from "./prestar-contas-drawer";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
@@ -120,17 +120,6 @@ type Coluna =
   | "pagamento"
   | "valor"
   | "status";
-
-/** O que a coluna mostra numa linha, a chave do valor e como ela ordena. */
-interface CelulaDaColuna {
-  valor: string;
-  rotulo: string;
-  ordem: string | number;
-  /** O texto em que a busca da coluna procura, quando não é só o rótulo. */
-  busca?: string;
-  /** O grupo do valor na lista do funil (o bloco do item). */
-  grupo?: string;
-}
 
 /** Uma linha da tabela = uma PARCELA de uma PP. `parcela: null` só
  *  acontece se o embed vier vazio — nenhuma PP fica sem parcela. */
@@ -248,10 +237,6 @@ export function JobPPsSection({
   const [pending, startTransition] = React.useTransition();
   const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [busca, setBusca] = React.useState("");
-  /** O filtro de cada coluna (o funil do título). */
-  const [filtros, setFiltros] = React.useState<Partial<Record<Coluna, FiltroDaColuna>>>({});
-  /** Uma coluna ordena por vez; sem nenhuma, vale a ordem de sempre. */
-  const [ordenacao, setOrdenacao] = React.useState<{ coluna: Coluna; direcao: DirecaoDaOrdem } | null>(null);
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
   /** A rejeitada que vai ser cancelada e refeita (decisão 153): ela não se
@@ -404,22 +389,18 @@ export function JobPPsSection({
           return { valor: nome, rotulo: nome, ordem: nome };
         }
         case "vencimento": {
-          const iso = (parcela?.data_vencimento ?? pp.prazo_pagamento).slice(0, 10);
-          return { valor: iso, rotulo: formatarData(iso), ordem: iso };
+          // Árvore mês ▸ dia, como nas outras listas (decisão 165).
+          return celulaData(parcela?.data_vencimento ?? pp.prazo_pagamento);
         }
         case "pagamento": {
           // A mesma regra da célula `DtPagamento`.
           const paga = parcela ? parcela.pago_em : pp.pago_em;
           const programada = parcela ? parcela.data_pagamento : pp.prazo_pagamento_financeiro;
-          if (paga) {
-            const iso = paga.slice(0, 10);
-            return { valor: `paga:${iso}`, rotulo: `${formatarData(iso)} · paga`, ordem: iso };
-          }
+          if (paga) return celulaData(paga, "paga");
           if (programada && (pp.status === "aprovada" || pp.status === "pago")) {
-            const iso = programada.slice(0, 10);
-            return { valor: `programada:${iso}`, rotulo: `${formatarData(iso)} · programada`, ordem: iso };
+            return celulaData(programada, "programada");
           }
-          return { valor: "", rotulo: "(sem data)", ordem: "9999-99-99" };
+          return celulaData(null);
         }
         case "valor": {
           const v = parcela ? Number(parcela.valor) : Number(pp.valor);
@@ -435,104 +416,50 @@ export function JobPPsSection({
     [fornecedoresPorId],
   );
 
-  /** A linha passa no filtro da coluna? */
-  const passa = React.useCallback(
-    (linha: LinhaPP, coluna: Coluna, f: FiltroDaColuna | undefined): boolean => {
-      if (!f || !filtroAtivo(f)) return true;
-      const c = celula(linha, coluna);
-      if (coluna === "valor") {
-        const v = Number(c.ordem);
-        if (f.de !== null && v < f.de - 0.004) return false;
-        if (f.ate !== null && v > f.ate + 0.004) return false;
-        return true;
-      }
-      const termo = semAcento(f.busca.trim());
-      if (termo && !semAcento(c.busca ?? c.rotulo).includes(termo)) return false;
-      if (f.marcados !== null && !f.marcados.includes(c.valor)) return false;
-      return true;
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  /** As colunas do funil, pela mesma conta das células. Desde a decisão
+   *  165 o filtro é o gancho comum das listas: guarda a intenção ("só
+   *  estes" ou "todos menos estes") e fica guardado na aba do navegador,
+   *  por job. */
+  const COLUNAS_PPS = React.useMemo<ColunaFiltravel<LinhaPP>[]>(
+    () => [
+      { chave: "codigo", rotulo: "Código", tipo: "texto", celula: (l) => celula(l, "codigo") },
+      { chave: "origem", rotulo: "Origem no job", tipo: "texto", celula: (l) => celula(l, "origem") },
+      { chave: "servico", rotulo: "Serviço", tipo: "texto", celula: (l) => celula(l, "servico") },
+      { chave: "fornecedor", rotulo: "Fornecedor", tipo: "texto", celula: (l) => celula(l, "fornecedor") },
+      { chave: "vencimento", rotulo: "Vencimento", tipo: "data", celula: (l) => celula(l, "vencimento") },
+      { chave: "pagamento", rotulo: "Dt. Pagamento", tipo: "data", celula: (l) => celula(l, "pagamento") },
+      {
+        chave: "valor",
+        rotulo: "Valor",
+        tipo: "valor",
+        faixa: true,
+        alinhar: "right",
+        celula: (l) => celula(l, "valor"),
+      },
+      { chave: "status", rotulo: "Status", tipo: "texto", celula: (l) => celula(l, "status") },
+    ],
     [celula],
   );
-
-  const COLUNAS: Coluna[] = ["codigo", "origem", "servico", "fornecedor", "vencimento", "pagamento", "valor", "status"];
-
-  /** Os valores de cada coluna para a lista do funil: o que sobra com os
-   *  filtros das OUTRAS colunas, como o Excel faz. */
-  const valoresDaColuna = React.useMemo(() => {
-    const r = {} as Record<Coluna, ValorDaColuna[]>;
-    for (const coluna of COLUNAS) {
-      const mapa = new Map<string, { rotulo: string; ordem: string | number; quantas: number; grupo?: string }>();
-      for (const linha of linhasBase) {
-        if (!COLUNAS.every((outra) => outra === coluna || passa(linha, outra, filtros[outra]))) continue;
-        const c = celula(linha, coluna);
-        const atual = mapa.get(c.valor);
-        if (atual) atual.quantas += 1;
-        else mapa.set(c.valor, { rotulo: c.rotulo, ordem: c.ordem, quantas: 1, grupo: c.grupo });
-      }
-      r[coluna] = [...mapa.entries()]
-        .sort(([, a], [, b]) =>
-          typeof a.ordem === "number" && typeof b.ordem === "number"
-            ? a.ordem - b.ordem
-            : String(a.ordem).localeCompare(String(b.ordem), "pt-BR"),
-        )
-        .map(([valor, x]) => ({ valor, rotulo: x.rotulo, quantas: x.quantas, grupo: x.grupo }));
-    }
-    return r;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linhasBase, filtros, celula, passa]);
-
+  const colunas = useFiltrosDeColuna(linhasBase, COLUNAS_PPS, {
+    guardarEm: "job-pps",
+    contexto: pps[0]?.job_id ?? "",
+  });
   /** As linhas da tabela: os filtros de todas as colunas e a ordem do
    *  título. Sem ordem, a de sempre (a PP mais nova em cima). */
-  const linhasVisiveis = React.useMemo<LinhaPP[]>(() => {
-    const filtradas = linhasBase.filter((linha) =>
-      COLUNAS.every((coluna) => passa(linha, coluna, filtros[coluna])),
-    );
-    if (!ordenacao) return filtradas;
-    const sinal = ordenacao.direcao === "asc" ? 1 : -1;
-    return filtradas
-      .map((linha, i) => ({ linha, i, chave: celula(linha, ordenacao.coluna).ordem }))
-      .sort((a, b) => {
-        const d =
-          typeof a.chave === "number" && typeof b.chave === "number"
-            ? a.chave - b.chave
-            : String(a.chave).localeCompare(String(b.chave), "pt-BR");
-        return d !== 0 ? d * sinal : a.i - b.i;
-      })
-      .map((x) => x.linha);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linhasBase, filtros, ordenacao, celula, passa]);
+  const linhasVisiveis = colunas.visiveis;
 
   /** A etiqueta do bloco, clicada: a Origem passa a mostrar só os itens
    *  daquele bloco. */
   function filtrarPeloBloco(bloco: string) {
-    const doBloco = Array.from(
-      new Set(
-        linhasBase
-          .filter((l) => (l.pp.grupo_nome ?? "") === bloco)
-          .map((l) => celula(l, "origem").valor),
-      ),
-    );
-    setFiltros((atual) => ({ ...atual, origem: { ...FILTRO_VAZIO, marcados: doBloco } }));
+    // O bloco inteiro (decisão 165): PP nova de um item dele também entra.
+    colunas.definir("origem", { ...FILTRO_VAZIO, marcados: [marcaDoGrupo(bloco)] });
   }
 
-  const algumFiltroDeColuna = COLUNAS.some((c) => filtroAtivo(filtros[c])) || ordenacao !== null;
+  const algumFiltroDeColuna = colunas.ativo;
 
   /** O título que filtra e ordena. */
-  function titulo(coluna: Coluna, rotulo: string, tipo: "texto" | "data" | "valor", alinhar: "left" | "right" = "left") {
-    return (
-      <FiltroDeColuna
-        rotulo={rotulo}
-        tipo={tipo}
-        faixa={coluna === "valor"}
-        valores={valoresDaColuna[coluna]}
-        filtro={filtros[coluna] ?? FILTRO_VAZIO}
-        onFiltro={(f) => setFiltros((atual) => ({ ...atual, [coluna]: f }))}
-        ordem={ordenacao?.coluna === coluna ? ordenacao.direcao : null}
-        onOrdem={(d) => setOrdenacao(d ? { coluna, direcao: d } : null)}
-        alinhar={alinhar}
-      />
-    );
+  function titulo(coluna: Coluna) {
+    return colunas.titulo(coluna);
   }
 
   React.useLayoutEffect(() => {
@@ -730,25 +657,13 @@ export function JobPPsSection({
           tira todos de uma vez: o filtro mora escondido no título, e é
           fácil esquecer um ligado (08/10/2026). */}
       {algumFiltroDeColuna && (
-        <div
-          className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-3.5 py-2 text-[12px] text-muted-foreground"
-        >
-          <span>
-            Mostrando <strong className="text-foreground">{linhasVisiveis.length}</strong> de {linhasBase.length}{" "}
-            {linhasBase.length === 1 ? "linha" : "linhas"} · filtros e ordem pelos títulos das colunas
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setFiltros({});
-              setOrdenacao(null);
-            }}
-            className="inline-flex items-center gap-1 font-semibold text-california-red hover:underline"
-          >
-            <X className="h-3.5 w-3.5" />
-            Limpar filtros e ordem
-          </button>
-        </div>
+        <BarraDosFiltrosDeColuna
+          visiveis={linhasVisiveis.length}
+          total={linhasBase.length}
+          singular="linha"
+          plural="linhas"
+          onLimpar={colunas.limpar}
+        />
       )}
 
       {erro && (
@@ -782,14 +697,14 @@ export function JobPPsSection({
               </colgroup>
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  <th className="px-3.5 py-2.5 text-left">{titulo("codigo", "Código", "texto")}</th>
-                  <th className="px-3.5 py-2.5 text-left">{titulo("origem", "Origem no job", "texto")}</th>
-                  <th className="px-3.5 py-2.5 text-left">{titulo("servico", "Serviço", "texto")}</th>
-                  <th className="px-3.5 py-2.5 text-left">{titulo("fornecedor", "Fornecedor", "texto")}</th>
-                  <th className="px-3.5 py-2.5 text-left">{titulo("vencimento", "Vencimento", "data")}</th>
-                  <th className="px-3.5 py-2.5 text-left">{titulo("pagamento", "Dt. Pagamento", "data")}</th>
-                  <th className="px-3.5 py-2.5 text-right">{titulo("valor", "Valor", "valor", "right")}</th>
-                  <th className="px-3.5 py-2.5 text-left">{titulo("status", "Status", "texto")}</th>
+                  <th className="px-3.5 py-2.5 text-left">{titulo("codigo")}</th>
+                  <th className="px-3.5 py-2.5 text-left">{titulo("origem")}</th>
+                  <th className="px-3.5 py-2.5 text-left">{titulo("servico")}</th>
+                  <th className="px-3.5 py-2.5 text-left">{titulo("fornecedor")}</th>
+                  <th className="px-3.5 py-2.5 text-left">{titulo("vencimento")}</th>
+                  <th className="px-3.5 py-2.5 text-left">{titulo("pagamento")}</th>
+                  <th className="px-3.5 py-2.5 text-right">{titulo("valor")}</th>
+                  <th className="px-3.5 py-2.5 text-left">{titulo("status")}</th>
                   <th className="px-3.5 py-2.5" />
                 </tr>
               </thead>

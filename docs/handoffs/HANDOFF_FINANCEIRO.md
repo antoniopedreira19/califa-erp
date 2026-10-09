@@ -7015,3 +7015,42 @@ financeiro". Regra completa na §9 da decisão 115.
   receberam o regime pela consulta do CNPJ (15 Simples, 9 MEI, 7 "Lucro Real
   ou Presumido"); os 9 que já tinham bateram com a consulta. Migration
   `20261009500002`.
+
+## ⚠️ Nota de 2026-10-10 — Filtro e ordem pelo título da coluna nas listas do financeiro e nos cadastros (decisão 165)
+
+- **A regra** está na decisão 165: o título da coluna filtra e ordena (o
+  cartão da aba PPs), os filtros de cima continuam e valem antes, a lista
+  guarda a intenção ("só estes" × "todos menos estes", inclusive o grupo
+  inteiro da árvore), e filtros e ordem ficam na aba do navegador, por tela.
+  A conta mora em `lib/calculos/filtro-de-coluna.ts` (12 testes:
+  `node --import tsx --test lib/calculos/filtro-de-coluna.test.ts`); o
+  gancho é `useFiltrosDeColuna` em `components/ui/filtro-de-coluna.tsx`.
+- **Telas:** Abertura de Job (fila, Visualizar Jobs nas duas arrumações,
+  Calendário › Jobs ativos numa data — o Select "Ordenação" saiu), Contas a
+  Pagar (Títulos, PPs, Desembolsos, Recorrências, Folhas, capa e fatura do
+  Cartão), Contas a Receber (Faturamento e Títulos), Conciliação (contas,
+  planilha do banco e títulos), Fiscal (Apuração e Impostos) e os cadastros
+  de Clientes, Fornecedores e Veículos. Desembolsos, Recorrências, Folhas,
+  Clientes e Fornecedores são da frente do Antonio; o Tiago autorizou.
+- **Comportamento que mudou:** na Apuração, "Aprovar as N guias pelo valor
+  calculado" aprova só as guias visíveis (antes, a competência inteira). Os
+  totais de Visualizar Jobs e o subtotal das contas bancárias seguem o
+  filtro; os resumos de caixa não. A planilha do banco e a fatura do cartão
+  ganham o rodapé "Total do filtro". Trocar conta, período ou fatura zera.
+- **Larguras:** Títulos a Pagar, Parcela 5% → 6% e Título 16% → 15%;
+  Calendário, Custo previsto 118 px e Valor do job 114 px.
+- **Conferido no navegador (logado como administrador):**
+  - Visualizar Jobs: desmarcar "Aguardando envio" no Faturamento deixou 8
+    de 58, os totais acompanharam, e o filtro seguiu no "Por job".
+  - Títulos a Pagar: sem "PPs" na Origem, "Pagos" mostrou 1 de 11 (só o
+    título que não é PP); "só Avulsos" não mostrou nada em "Pagos" (nenhum
+    avulso pago). PPs: sem "Em avaliação", o chip "Aprovadas" mostrou as 17.
+  - Cartão ZZ Teste: Fornecedor filtrado mostrou "Total do filtro · 0 de 2
+    itens"; a competência anterior abriu sem filtro.
+  - Conciliação (Conta Teste): sem setembro, 1 de 3 lançamentos com "Total
+    do filtro"; trocar o "de" zerou. Títulos filtraram pelo Tipo.
+  - Fiscal, Contas a Receber, Calendário, fila, Clientes, Fornecedores
+    ("incompletos" na busca do Nome achou 7 de 54) e Veículos filtraram,
+    ordenaram e limparam.
+  - Recorrências e Folhas não têm dado no banco hoje; ficaram conferidas
+    só no protótipo (https://claude.ai/artifact/KG3njc42J14gkMDfepzRtP).

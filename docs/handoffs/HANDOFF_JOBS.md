@@ -5180,3 +5180,25 @@ código publicado logo depois (`3305751`).
   não muda de caminho.
 - No mesmo dia, o regime dos 31 fornecedores sem regime que tinham PP
   lançada foi preenchido pela consulta do CNPJ (migration `20261009500002`).
+
+## ⚠️ Nota de 2026-10-10 — Filtro e ordem pelo título da coluna na lista de Jobs e na aba PPs (decisão 165)
+
+- **A regra** está na decisão 165: o título da coluna filtra e ordena (o
+  cartão da aba PPs), os filtros de cima continuam e valem antes, a lista
+  guarda a intenção ("só estes" × "todos menos estes", inclusive o grupo
+  inteiro da árvore), e filtros e ordem ficam na aba do navegador, por tela.
+  A conta mora em `lib/calculos/filtro-de-coluna.ts` (12 testes:
+  `node --import tsx --test lib/calculos/filtro-de-coluna.test.ts`); o
+  gancho é `useFiltrosDeColuna` em `components/ui/filtro-de-coluna.tsx`.
+- **Lista de Jobs:** os 10 títulos filtram; a faixa do projeto soma só os
+  jobs que sobraram, e com ordem pelo título os jobs se ordenam dentro do
+  projeto e o projeto sobe com o seu primeiro job. Valor total 136 → 152 px
+  (o título com a seta e o funil não cabia). Os Selects de Status, Marca,
+  Regional e Empresa ficam (escolha do Tiago).
+- **Aba PPs do job:** deixou a conta à mão e passou a usar o gancho. Ganhou a
+  intenção guardada, Vencimento e Dt. Pagamento em árvore mês ▸ dia e o
+  guardado por job (`contexto` = o job). A etiqueta do bloco na célula
+  filtra o bloco INTEIRO (PP nova de um item dele também entra).
+- **Conferido no navegador:** Jobs filtrou, ordenou e limpou; no
+  TES-1014/26, desmarcar EQUIPE na Origem deixou 4 de 10 linhas e a
+  etiqueta LOGÍSTICA marcou só o bloco.

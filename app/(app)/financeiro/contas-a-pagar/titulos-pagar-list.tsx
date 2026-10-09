@@ -42,7 +42,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { DevolverFolhaDialog } from "./devolver-folha-dialog";
-import { verbaAguardaProducao } from "@/lib/types";
+import { situacaoVerbaLabel, verbaAguardaProducao } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -95,6 +95,15 @@ import {
   ORIGENS_PAGAR_NO_LOTE,
   type OrigemPagarNoLote,
 } from "@/lib/financeiro/baixa-em-lote";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type CelulaDaColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 // ---------------------------------------------------------------------------
 // Tipo da linha
@@ -476,6 +485,128 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
+// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
+// ---------------------------------------------------------------------------
+
+/** O texto do status, como o selo da linha mostra (inclusive o da verba). */
+function rotuloDoStatus(r: TituloRow): string {
+  if (r.verba_situacao) return situacaoVerbaLabel(r.verba_situacao);
+  const pago = r.status === "pago";
+  if (r.origem === "pp_devolucao_verba") return pago ? "Devolvido" : "Devolução pendente";
+  return pago ? "Pago" : ehParcial(r) ? "Parcial" : "A pagar";
+}
+
+/** A lista do funil de Status na ordem do caminho do título, não de A a Z. */
+const ORDEM_DO_STATUS = [
+  "A pagar",
+  "Parcial",
+  "Devolução pendente",
+  "Aguardando prestação",
+  "Prestação reprovada",
+  "Prestação em avaliação",
+  "Concluída",
+  "Pago",
+  "Devolvido",
+];
+
+/** Célula de texto com o rótulo do vazio da coluna ("(sem job)"). */
+function celulaOuVazio(texto: string | null | undefined, vazio: string): CelulaDaColuna {
+  const t = texto?.trim() ?? "";
+  return t && t !== "—" ? celulaTexto(t) : { valor: "", rotulo: vazio, ordem: "\uffff" };
+}
+
+/**
+ * As colunas que filtram e ordenam. Ficam de fora a caixa da baixa em lote
+ * e a coluna Ação (só botões).
+ *
+ * A ordem da tela é fixa — urgente primeiro, depois a data de pagamento (o
+ * pago mais recente antes, em "Pagos"). Sem ordem pelo título, vale ela; com
+ * ordem pelo título, vale SÓ a do título (o urgente não fura a ordem: o selo
+ * "Urgente" continua na linha). Empate no título mantém a ordem de sempre.
+ */
+const COLUNAS: ColunaFiltravel<TituloRow>[] = [
+  { chave: "data", rotulo: "Data Pgto.", tipo: "data", alinhar: "center", celula: (r) => celulaData(r.data_pagamento) },
+  { chave: "venc", rotulo: "Venc. Orig.", tipo: "data", alinhar: "center", celula: (r) => celulaData(r.venc_original) },
+  {
+    chave: "titulo",
+    rotulo: "Título",
+    tipo: "texto",
+    // A busca da coluna acha também pela NF ("NF 602") e pelo selo Urgente.
+    celula: (r) => ({
+      ...celulaTexto(r.descricao),
+      busca: [
+        r.descricao,
+        r.nf_numero ? `NF ${r.nf_numero}` : "",
+        r.urgente && r.status === "a_pagar" ? "Urgente" : "",
+      ].join(" "),
+    }),
+  },
+  {
+    chave: "fornecedor",
+    rotulo: "Fornecedor",
+    tipo: "texto",
+    celula: (r) => celulaOuVazio(r.fornecedor_nome, "(sem fornecedor)"),
+  },
+  {
+    chave: "job",
+    rotulo: "Job",
+    tipo: "texto",
+    // Código e nome, como a célula; ordena pelo código.
+    celula: (r) =>
+      r.job_codigo && r.job_codigo !== "—"
+        ? { ...celulaTexto(`${r.job_codigo} ${r.job_nome}`.trim()), ordem: r.job_codigo }
+        : { valor: "", rotulo: "(sem job)", ordem: "\uffff" },
+  },
+  {
+    // Árvore tipo ▸ código, como os chips de origem: "PPs ▸ PP-00118".
+    chave: "origem",
+    rotulo: "Origem",
+    tipo: "texto",
+    alinhar: "center",
+    celula: (r) => {
+      const i = CHIP_ORIGEM.findIndex((c) => c.key === r.origem);
+      return {
+        valor: r.origem_label,
+        rotulo: r.origem_label,
+        ordem: `${i}|${r.origem_label}`,
+        grupo: CHIP_ORIGEM[i]?.label ?? "",
+      };
+    },
+  },
+  {
+    // Com o sinal da tela: o estorno de verba é negativo.
+    chave: "valor",
+    rotulo: "Valor",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (r) => celulaValor(valorComSinal(r), formatMoney),
+  },
+  {
+    chave: "parcela",
+    rotulo: "Parcela",
+    // Lista dos valores ("1/3"), ordem de número: do menor para o maior.
+    tipo: "valor",
+    alinhar: "center",
+    celula: (r) => {
+      const t = `${r.parcela_numero}/${r.parcela_total}`;
+      return { valor: t, rotulo: t, ordem: r.parcela_numero * 1000 + r.parcela_total };
+    },
+  },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    alinhar: "center",
+    celula: (r) => ({
+      ...celulaTexto(rotuloDoStatus(r)),
+      ordemNaLista: ORDEM_DO_STATUS.indexOf(rotuloDoStatus(r)),
+    }),
+  },
+];
+
 interface Props {
   /** Base bruta — inclui a_pagar e pago (não cartão). Filtro é interno. */
   rows: TituloRow[];
@@ -626,7 +757,9 @@ export function TitulosPagarList({
     };
   }, [rows, busca, casaBusca, casaPeriodo]);
 
-  const filtrados = React.useMemo(() => {
+  /** O que passa nos filtros de CIMA (status, origem, busca, período), na
+   *  ordem de sempre. Os filtros dos títulos vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rows
       .filter((r) => {
@@ -661,6 +794,13 @@ export function TitulosPagarList({
         );
       });
   }, [rows, filtroOrigem, busca, casaBusca, casaPeriodo, statusFiltro]);
+
+  // Os filtros e a ordem dos títulos das colunas. `filtrados` é o que a
+  // tabela mostra — e é dele que a baixa em lote tira os elegíveis: o
+  // "selecionar todos" do cabeçalho só marca o que o filtro deixou, e o
+  // título que some do filtro sai da seleção (`useSelecao`).
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-titulos" });
+  const filtrados = colunas.visiveis;
 
   // Baixa em lote (pedido do Tiago, 02/10/2026): marcar vários títulos da
   // lista e dar baixa de uma vez. A seleção vale para o que está na tela:
@@ -889,6 +1029,8 @@ export function TitulosPagarList({
               onCriadaParaBaixa={(id) => {
                 setFiltroOrigem("todas");
                 setBusca("");
+                // O lançamento novo tem de aparecer: os títulos também limpam.
+                colunas.limpar();
                 setBaixarAposCriar(id);
               }}
               trigger={
@@ -999,7 +1141,24 @@ export function TitulosPagarList({
           A 1ª coluna é a seleção da baixa em lote (02/10/2026), da largura
           da coluna de caixas da remessa CNAB (`w-10`). Título e Fornecedor
           cederam 5% para ela: com as porcentagens somando 100% e mais 40px
-          fixos, a tabela passaria da largura da página. */}
+          fixos, a tabela passaria da largura da página.
+
+          Filtro pelo título (09/10/2026): o botão do título soma 16 px (a
+          seta do funil) e, com a coluna ordenada, mais 14 px (a seta da
+          ordem). Só "Parcela" não cabia: em 5% (≈ 83 px, 67 px úteis) o
+          "PARCELA" com as duas setas pede 84 px e invadia o Status. Ela foi
+          a 6% (≈ 100 px) e o Título, que quebra linha, cedeu o 1% (16% →
+          15%). As outras colunas cabem com folga, medidas a 1838 px. */}
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="título"
+          plural="títulos"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full table-fixed text-sm">
           <thead>
@@ -1009,20 +1168,29 @@ export function TitulosPagarList({
               <th className="w-10 py-3 pl-4 pr-2 font-semibold">
                 <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
-              <th className="w-[9%] px-2 py-3 font-semibold">Data Pgto.</th>
-              <th className="w-[8%] px-2 py-3 font-semibold">Venc. Orig.</th>
-              <th className="w-[16%] px-3 py-3 text-left font-semibold">Título</th>
-              <th className="w-[13%] px-3 py-3 text-left font-semibold">Fornecedor</th>
-              <th className="w-[12%] px-2 py-3 text-left font-semibold">Job</th>
-              <th className="w-[9%] px-2 py-3 font-semibold">Origem</th>
-              <th className="w-[9%] px-3 py-3 text-right font-semibold">Valor</th>
-              <th className="w-[5%] px-2 py-3 font-semibold">Parcela</th>
-              <th className="w-[7%] px-2 py-3 font-semibold">Status</th>
+              <th className="w-[9%] px-2 py-3 font-semibold">{colunas.titulo("data")}</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">{colunas.titulo("venc")}</th>
+              <th className="w-[15%] px-3 py-3 text-left font-semibold">{colunas.titulo("titulo")}</th>
+              <th className="w-[13%] px-3 py-3 text-left font-semibold">{colunas.titulo("fornecedor")}</th>
+              <th className="w-[12%] px-2 py-3 text-left font-semibold">{colunas.titulo("job")}</th>
+              <th className="w-[9%] px-2 py-3 font-semibold">{colunas.titulo("origem")}</th>
+              <th className="w-[9%] px-3 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+              <th className="w-[6%] px-2 py-3 font-semibold">{colunas.titulo("parcela")}</th>
+              <th className="w-[7%] px-2 py-3 font-semibold">{colunas.titulo("status")}</th>
               <th className="w-[7%] px-3 py-3 font-semibold">Ação</th>
             </tr>
           </thead>
           <tbody>
-            {filtrados.length === 0 && (
+            {/* Vazio pelos filtros dos títulos: a tabela fica, com os
+                títulos, para desfazer. */}
+            {doTopo.length > 0 && filtrados.length === 0 && (
+              <tr>
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  Nenhum título com esse filtro.
+                </td>
+              </tr>
+            )}
+            {doTopo.length === 0 && (
               <tr>
                 <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0

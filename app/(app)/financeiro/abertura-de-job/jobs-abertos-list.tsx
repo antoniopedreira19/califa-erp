@@ -9,6 +9,14 @@ import { jobStatusBadgeClasses, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
 import { compararCodigosDeJob } from "@/lib/codigos/jobs";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 const TODOS = "Todos";
 
@@ -63,6 +71,88 @@ function noChip(j: JobAberto, chip: Chip): boolean {
   if (chip === "aguardando_faturamento") return aguardandoFaturamento(j);
   return j.situacao_faturamento === chip;
 }
+
+/** A ordem das situações no filtro do Faturamento: a da esteira. */
+const ORDEM_DA_SITUACAO = [
+  "sem_faturamento",
+  "aguardando_envio",
+  "enviado",
+  "faturado",
+  "inadimplente",
+  "liquidado",
+] as const;
+
+/** O projeto do FINANCEIRO, com o da produção de reserva — o mesmo da faixa. */
+function projetoDoJob(j: JobAberto): string {
+  const codigo = j.projeto_financeiro_codigo ?? j.projeto_codigo ?? "";
+  const nome = j.projeto_financeiro_nome ?? j.projeto_nome ?? "";
+  return `${codigo} ${nome}`.trim();
+}
+
+/**
+ * As colunas que filtram e ordenam pelo título, como no Excel (pedido do
+ * Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). As duas
+ * arrumações usam as MESMAS colunas: o filtro feito "Por projeto" continua
+ * valendo "Por job". Na lista "Por job", o título Job é o filtro do Nome
+ * (a busca da coluna acha pelo código também).
+ */
+const COLUNAS: ColunaFiltravel<JobAberto>[] = [
+  { chave: "codigo", rotulo: "Código", tipo: "texto", celula: (j) => celulaTexto(j.codigo) },
+  {
+    chave: "nome",
+    rotulo: "Nome",
+    tipo: "texto",
+    celula: (j) => ({ ...celulaTexto(j.nome), busca: `${j.nome} ${j.nome_producao} ${j.codigo}` }),
+  },
+  {
+    chave: "projeto",
+    rotulo: "Projeto",
+    tipo: "texto",
+    // Árvore cliente ▸ projeto: o cliente marca todos os projetos dele.
+    celula: (j) => ({ ...celulaTexto(projetoDoJob(j)), grupo: j.cliente_nome ?? "" }),
+    rotuloSemGrupo: "(sem cliente)",
+  },
+  { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (j) => celulaTexto(j.cliente_nome) },
+  { chave: "gp", rotulo: "GP responsável", tipo: "texto", celula: (j) => celulaTexto(j.responsavel_nome) },
+  { chave: "abertura", rotulo: "Abertura", tipo: "data", celula: (j) => celulaData(j.data_abertura_financeiro) },
+  {
+    chave: "valor",
+    rotulo: "Valor total",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (j) => celulaValor(j.valor_total, (n) => formatCurrency(n)),
+  },
+  {
+    // Lista das situações (o selo da célula); a ordem é pelo valor.
+    chave: "faturamento",
+    rotulo: "Faturamento",
+    tipo: "valor",
+    alinhar: "right",
+    celula: (j) => ({
+      valor: j.situacao_faturamento,
+      rotulo: SITUACAO_META[j.situacao_faturamento].rotulo,
+      ordem: j.valor_faturamento ?? 0,
+      ordemNaLista: ORDEM_DA_SITUACAO.indexOf(j.situacao_faturamento),
+    }),
+  },
+  {
+    chave: "recebimentos",
+    rotulo: "Recebimentos",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (j) => celulaValor(j.recebimentos, (n) => formatCurrency(n)),
+  },
+  {
+    chave: "custos",
+    rotulo: "Custos",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (j) => celulaValor(j.custos, (n) => formatCurrency(n)),
+  },
+];
 
 interface GrupoProjeto {
   /** Id do projeto DO FINANCEIRO (ou do de produção, no fallback). */
@@ -295,7 +385,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     },
   ];
 
-  const filtroAtivo =
+  const filtroDeCima =
     busca.trim() !== "" ||
     chip !== "todos" ||
     regional !== TODOS ||
@@ -303,8 +393,9 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     produto !== TODOS ||
     ano !== TODOS;
 
-  /** Os jobs que passam nos filtros — a base das DUAS visões. */
-  const visiveis = React.useMemo(() => {
+  /** Os jobs que passam nos filtros de CIMA. Os filtros dos títulos vêm
+   *  depois, sobre esta lista — e valem para as DUAS arrumações. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
 
     return linhas.filter((j) => {
@@ -323,6 +414,11 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     });
   }, [linhas, busca, chip, regional, gp, produto, ano]);
 
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "abertura-visualizar-jobs" });
+  /** Os jobs que passam em tudo — a base das DUAS visões e dos totais. */
+  const visiveis = colunas.visiveis;
+  const filtroAtivo = filtroDeCima || colunas.filtrando;
+
   const grupos = React.useMemo<GrupoProjeto[]>(() => {
     // Agrupa pelo projeto DO FINANCEIRO — é a arrumação desta aba, e ela
     // é independente da produção (decisão do Tiago, 20/08/2026). Job
@@ -338,6 +434,8 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     }
 
     const out: GrupoProjeto[] = [];
+    // Com ordem pelo título, os jobs de cada projeto vêm naquela ordem e o
+    // projeto entra na posição do seu primeiro job.
     for (const [projetoId, jobs] of porProjeto) {
       const primeiro = jobs[0];
       out.push({
@@ -355,10 +453,11 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
         temProjetoFinanceiro: primeiro.projeto_financeiro_id !== null,
       });
     }
+    if (colunas.ordenacao) return out;
     return out.sort((a, b) =>
       (a.codigo ?? "").localeCompare(b.codigo ?? "", "pt-BR"),
     );
-  }, [visiveis, filtroAtivo, fechados]);
+  }, [visiveis, filtroAtivo, fechados, colunas.ordenacao]);
 
   /**
    * A lista corrida da visão "Por job": abertura mais recente primeiro,
@@ -367,7 +466,9 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
    */
   const linhasPorJob = React.useMemo(
     () =>
-      visiveis
+      colunas.ordenacao
+        ? visiveis
+        : visiveis
         .slice()
         .sort(
           (a, b) =>
@@ -375,7 +476,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
               a.data_abertura_financeiro ?? "",
             ) || compararCodigosDeJob(b.codigo, a.codigo),
         ),
-    [visiveis],
+    [visiveis, colunas.ordenacao],
   );
 
   const totalVisivel = visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0);
@@ -613,28 +714,32 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
         </div>
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="job"
+          plural="jobs"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       {modo === "projeto" ? (
         <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
           <table className="w-full min-w-[1320px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                 <th className="w-8 px-2 py-3" aria-label="Expandir" />
-                <th className="px-4 py-3 font-semibold">Código</th>
-                <th className="px-4 py-3 font-semibold">Nome</th>
-                <th className="px-4 py-3 font-semibold">Projeto</th>
-                <th className="px-4 py-3 font-semibold">Cliente</th>
-                <th className="px-4 py-3 font-semibold">GP responsável</th>
-                <th className="px-4 py-3 font-semibold">Abertura</th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Valor total
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Faturamento
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Recebimentos
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">Custos</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("nome")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("projeto")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("abertura")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("recebimentos")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("custos")}</th>
               </tr>
             </thead>
             <tbody>
@@ -815,21 +920,15 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
           <table className="w-full min-w-[1180px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Job</th>
-                <th className="px-4 py-3 font-semibold">Projeto</th>
-                <th className="px-4 py-3 font-semibold">Cliente</th>
-                <th className="px-4 py-3 font-semibold">GP responsável</th>
-                <th className="px-4 py-3 font-semibold">Abertura</th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Valor total
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Faturamento
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Recebimentos
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">Custos</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("nome", undefined, "Job")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("projeto")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("abertura")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("recebimentos")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("custos")}</th>
               </tr>
             </thead>
             <tbody>

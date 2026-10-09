@@ -301,6 +301,7 @@ export function CartaoFatura({
 
           <FaturaExtrato
             itens={extrato.itens}
+            contexto={`${tela.cartaoId}|${tela.competencia}`}
             titulosPorChave={titulosPorChave}
             onVerBaixa={(t) => {
               setErroAcao(null);
