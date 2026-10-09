@@ -12,6 +12,8 @@
  * - o campo obrigatório: "Motivo da alteração".
  *
  * Do protótipo aprovado em 28/09/2026 (artifact `Re8sXDJpj8gzEk1tnCrt48`).
+ * Desde 08/10/2026 o tipo de custo também muda: a linha mostra o de → para,
+ * e o pop-up avisa quando o custo previsto muda sem a curva acompanhar.
  */
 
 import * as React from "react";
@@ -22,6 +24,7 @@ import {
   CheckCircle2,
   FilePenLine,
   Send,
+  Wallet,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,7 +36,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ERRATA } from "@/app/(app)/_planilha/blocos";
-import type { LinhaAlteradaPeloFinanceiro } from "@/lib/calculos/alteracao-financeiro";
+import {
+  deltaDoCustoPrevisto,
+  type LinhaAlteradaPeloFinanceiro,
+} from "@/lib/calculos/alteracao-financeiro";
+import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import { tipoCustoLabel } from "@/lib/types";
 
 interface ParDeValores {
   antes: number;
@@ -185,6 +193,14 @@ export function EdicaoFinanceiroConfirmarDialog({
 
   const podeConfirmar = motivo.trim().length >= 5 && !salvando && mudancas.length > 0;
 
+  // A troca de tipo (08/10/2026) mexe no que a planilha mostra além do
+  // orçado: o realizado de A e D é o próprio orçado, e o dos tipos com PP é
+  // a soma das PPs; e o custo previsto é o planejado dos tipos com PP.
+  const trocaDeCalha = mudancas.some(
+    (m) => tipoGeraDesembolso(m.tipoCustoDe) !== tipoGeraDesembolso(m.tipoCustoPara),
+  );
+  const deltaCusto = deltaDoCustoPrevisto(mudancas);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-[620px] overflow-y-auto">
@@ -210,19 +226,37 @@ export function EdicaoFinanceiroConfirmarDialog({
             <ul className="divide-y divide-border">
               {mudancas.map((m) => {
                 const delta = (Math.round(m.totalPara * 100) - Math.round(m.totalDe * 100)) / 100;
+                const tipoMudou = m.tipoCustoDe !== m.tipoCustoPara;
                 return (
                   <li key={m.id} className="flex items-center justify-between gap-3 px-3.5 py-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className={ERRATA.tagAlterada}>Alterada</span>
                       <span className="truncate text-[12.5px] text-foreground">{m.item}</span>
+                      {tipoMudou && (
+                        <span
+                          title={`Tipo de custo: ${tipoCustoLabel(m.tipoCustoDe)} → ${tipoCustoLabel(m.tipoCustoPara)}`}
+                          className="inline-flex flex-none items-center gap-1 rounded-full border border-[#ddd6c9] bg-[#f1f0ec] px-2 py-0.5 font-mono text-[10.5px] font-semibold text-foreground"
+                        >
+                          <span className="text-muted-foreground line-through">{m.tipoCustoDe}</span>
+                          <ArrowRight className="h-2.5 w-2.5 text-[#a8a29e]" />
+                          {m.tipoCustoPara}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-baseline gap-2 whitespace-nowrap font-mono text-[11.5px]">
-                      <span className="text-muted-foreground">{formatCurrency(m.totalDe, moeda)}</span>
-                      <span className="text-muted-foreground">→</span>
-                      <span className="text-foreground">{formatCurrency(m.totalPara, moeda)}</span>
-                      <span className={cn("font-bold", corDoDelta(delta))}>
-                        {comSinal(delta, moeda)}
-                      </span>
+                      {delta === 0 ? (
+                        // Só o tipo mudou: o orçado da linha é o mesmo.
+                        <span className="text-foreground">{formatCurrency(m.totalPara, moeda)}</span>
+                      ) : (
+                        <>
+                          <span className="text-muted-foreground">{formatCurrency(m.totalDe, moeda)}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="text-foreground">{formatCurrency(m.totalPara, moeda)}</span>
+                          <span className={cn("font-bold", corDoDelta(delta))}>
+                            {comSinal(delta, moeda)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </li>
                 );
@@ -248,10 +282,29 @@ export function EdicaoFinanceiroConfirmarDialog({
                   : "Não passa pela produção e não devolve o job ao mural de abertura. A planilha, os Totais e o cabeçalho do job mudam assim que você confirmar; "}
                 {planejadoAcompanha
                   ? "no serviço Interno o planejado acompanha o orçado, e o realizado fica como está."
-                  : "o planejado e o realizado ficam como estão."}
+                  : trocaDeCalha && !naAbertura
+                    ? "o planejado fica como está, e o realizado da linha que troca de tipo passa a seguir o tipo novo: em A e D é o orçado; nos tipos com PP, a soma das PPs."
+                    : "o planejado e o realizado ficam como estão."}
               </p>
             </div>
           </div>
+
+          {Math.round(deltaCusto * 100) !== 0 && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
+              <Wallet className="mt-0.5 h-4 w-4 flex-none text-california-red" />
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-[12.5px] font-semibold text-foreground">
+                  O custo previsto muda {comSinal(deltaCusto, moeda)}, e a curva
+                  de desembolso não acompanha
+                </p>
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  {naAbertura
+                    ? "O custo previsto é o planejado das linhas com PP. Ajuste o cronograma de desembolsos na aba Abertura do Job antes de abrir o job: a abertura confere a soma contra o custo previsto."
+                    : "O custo previsto é o planejado das linhas com PP. Para a curva nova, ajuste as datas no Editar registro, na aba Abertura do Job, que confere a soma contra o custo previsto."}
+                </p>
+              </div>
+            </div>
+          )}
 
           {envio.length > 0 && (
             <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">

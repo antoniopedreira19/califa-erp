@@ -388,11 +388,28 @@ export function montarThreadChat(
   for (const a of alteracoesFinanceiro) {
     const delta = a.valor_job_depois - a.valor_job_antes;
     const n = a.itens.length;
-    const linhas: ChatLinha[] = a.itens.map((i) => ({
-      texto: `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`,
-      valor: comSinal(i.efeito_valor_job, moedaCode),
-      tom: i.efeito_valor_job >= 0 ? "positivo" : "negativo",
-    }));
+    const linhas: ChatLinha[] = a.itens.map((i) => {
+      // O tipo de custo também muda desde 08/10/2026.
+      const tipo =
+        i.tipo_custo !== i.tipo_custo_para
+          ? `${tipoCustoLabel(i.tipo_custo)} → ${tipoCustoLabel(i.tipo_custo_para)}`
+          : null;
+      const valor =
+        i.total_de !== i.total_para
+          ? `${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`
+          : null;
+      const texto =
+        tipo && valor
+          ? `Tipo de custo e valor · ${i.item_nome}: ${tipo} · ${valor}`
+          : tipo
+            ? `Tipo de custo · ${i.item_nome}: ${tipo}`
+            : `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`;
+      return {
+        texto,
+        valor: comSinal(i.efeito_valor_job, moedaCode),
+        tom: i.efeito_valor_job >= 0 ? "positivo" : "negativo",
+      };
+    });
     linhas.push({
       texto: "Novo faturamento previsto",
       valor: moeda(a.faturamento_previsto_depois, moedaCode),

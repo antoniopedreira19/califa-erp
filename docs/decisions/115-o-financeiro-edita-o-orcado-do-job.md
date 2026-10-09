@@ -5,8 +5,14 @@
 **Migrations:** `20260928300001_alteracoes_do_financeiro.sql`,
 `20260928300002_alteracao_financeiro_curva_do_interno.sql` (desfeita pela
 seguinte),
-`20260928300003_alteracao_financeiro_so_recebimento_e_trava_no_encerramento.sql`
-e `20260928300004_alteracao_financeiro_na_abertura_do_job.sql`.
+`20260928300003_alteracao_financeiro_so_recebimento_e_trava_no_encerramento.sql`,
+`20260928300004_alteracao_financeiro_na_abertura_do_job.sql` e, na revisão
+de 08/10/2026 (o tipo de custo), `20261008800001_alteracao_financeiro_troca_tipo_de_custo.sql`.
+
+> ⚠️ **Revisada em 08/10/2026 — o financeiro também troca o tipo de
+> custo.** Até aqui o "Editar orçado" mexia só em R$ Unit., QT e D/M, e o
+> tipo era da errata (§3, item 4). Agora o tipo muda também, para qualquer
+> tipo, enquanto nada foi lançado no item. Ver §9.
 
 ---
 
@@ -88,10 +94,14 @@ Com a entrega no main, ainda no mesmo dia:
    Interno, que não tem nota. O devolvido à produção (`rejeitado_financeiro`)
    não edita. No modelo mensal (decisão 078) a trava da nota é por mês: as
    linhas do mês com nota não abrem; as dos outros meses, sim.
-4. **O quê:** R$ Unit., QT e D/M do orçado. Tipo de custo, linha nova,
-   linha vermelha e planejado continuam sendo da errata. Linha com PP é
-   editável (P2). **Linha com save não:** o save tem porta própria (o
-   pop-up da coluna Save), e o banco já recusa (`save_trava_linha_job`).
+4. **O quê:** R$ Unit., QT e D/M do orçado e, desde 08/10/2026, o **tipo
+   de custo**, enquanto nada foi lançado no item (§9). Linha nova, linha
+   vermelha e planejado continuam sendo da errata. Os valores da linha com
+   PP são editáveis (P2). **Linha com save não:** o save tem porta própria
+   (o pop-up da coluna Save), e o banco já recusa (`save_trava_linha_job`).
+
+   > ⚠️ **08/10/2026:** este item dizia que o tipo de custo era só da
+   > errata. Deixou de ser — ver §9.
 5. **Motivo obrigatório**, de 5 a 500 caracteres.
 6. **Sem aprovação e sem revisão da abertura:** vale na hora.
    `abertura_em_revisao` não muda, e o envio para faturamento não trava.
@@ -136,6 +146,13 @@ Com a entrega no main, ainda no mesmo dia:
    Ali o custo previsto muda e a curva não: se o financeiro quiser a curva
    nova, ajusta no Editar registro da aba Abertura do Job, que confere a
    soma contra o custo previsto.
+
+   > ⚠️ **08/10/2026:** com a troca de tipo, duas coisas deste item mudam
+   > na linha trocada: o **realizado** passa a seguir o tipo novo (em A e D
+   > é o orçado; nos tipos com PP, a soma das PPs), e o **custo previsto**
+   > muda quando o tipo entra ou sai dos que geram PP. A curva continua sem
+   > acompanhar, pela mesma regra do Interno; o pop-up avisa quanto o custo
+   > previsto mudou e onde ajustar a curva.
 9. **O registro:** cada confirmação vira uma linha de
    `jobs_alteracoes_financeiro`, com as linhas em
    `jobs_alteracoes_financeiro_itens`. É histórico imutável: sem UPDATE nem
@@ -166,6 +183,8 @@ em produção) e a das parcelas do envio que já viraram nota:
 | Status fora da janela (no banco) | "O orçado só é editado pelo financeiro na abertura do job ou com o job aberto: depois do encerramento, não muda mais." |
 | Previsão de recebimento vazia que precisaria andar | "O job abriu sem faturamento previsto e não tem previsão de recebimento para acompanhar a alteração. Valor novo precisa de data: peça a errata à produção, que devolve o job para a revisão da abertura." (e a variante do mês, no mensal) |
 | Parcela do envio que zeraria | "Com essa alteração, uma parcela do envio para faturamento ficaria zerada ou negativa, e o envio não aceita parcela sem valor." |
+| Troca de tipo em linha com PP, PP a emitir ou BV (na action e no banco; 08/10/2026) | "\"Item\" já tem Pedido de Produção: o tipo de custo só muda enquanto nada foi lançado no item." (ou "PP a emitir", ou "BV") |
+| Troca de tipo no serviço Interno (no banco; 08/10/2026) | "No serviço Interno o tipo de custo é sempre F · Interno." |
 
 Na tela, o botão fica desabilitado, com o motivo, no job encerrado e no
 job com nota — no mensal, só quando todos os meses têm nota. As linhas do
@@ -279,3 +298,97 @@ teste e o desfazer): 6 no TES-1013/26, 4 no TES-1002/26, 2 no TES-1009/26
 e 2 no TES-1014/26. O histórico é imutável. O TES-1014/26 ficou na fila
 da abertura, com os valores do orçamento aprovado, para quem quiser
 repetir o teste.
+
+## 9. A revisão de 08/10/2026: o tipo de custo
+
+### O pedido
+
+Nas palavras do Tiago, em 08/10/2026, com um print do AMB-1029/26 na tela
+"Abrir job no financeiro" (influenciadores, todas as linhas em A):
+
+> Quero que também seja possível modificar o tipo de custo em "Editar
+> Orçado" pelo financeiro
+
+Perguntado se a linha que já tem PP podia trocar de tipo (60 linhas de
+jobs abertos tinham PP ativa naquele dia, 23 com PP aprovada ou paga), com
+três opções — só entre tipos com PP, qualquer tipo, nenhum —, respondeu:
+
+> Qualquer tipo, porém, do mesmo modo que com a realização de erratas, só
+> será possível realizar modificações enquanto nada tiver sido adicionado
+> no item.
+
+### A regra
+
+1. **Qualquer tipo**, de A a FI, na abertura e no job aberto, nas mesmas
+   telas e janelas do §3.
+2. **Só enquanto nada foi lançado no item:** sem PP (gerada, em avaliação,
+   aprovada, paga ou rejeitada), sem PP a emitir (decisão 153) e sem BV (a
+   negociar, confirmado ou recebido). PP e BV **cancelados não contam**.
+   Foi a leitura do "nada tiver sido adicionado no item"; a errata, que ele
+   citou, trava a linha com PP já no financeiro e a troca de tipo com BV
+   confirmado.
+3. **Os valores da linha com PP continuam editáveis** (P2). A trava nova é
+   só do tipo.
+4. **Continuam fechados:** o Interno (sempre F · Interno, decisão 105), a
+   linha vermelha, a linha cancelada, a linha com save e o mês com nota no
+   mensal — como os valores.
+5. **O que acompanha** é o mesmo do §3, item 7: números do job, previsão
+   de recebimento, impostos e envio sem nota, pela conta do financeiro com
+   o tipo novo. A **curva de desembolso não acompanha** (§3, item 8): quando
+   o tipo entra ou sai dos que geram PP, o custo previsto muda pelo
+   planejado da linha, e o pop-up diz quanto e onde ajustar a curva (na
+   abertura, o cronograma de desembolsos; no job aberto, o Editar
+   registro).
+6. **Como fica no AMB-1029/26** se a Flávia (R$ 5.500) sai de A, com 13% de
+   honorários e 19,53% de imposto: faturamento previsto R$ 3.303,72 → AR
+   R$ 8.803,72 · B R$ 10.138,56 · C R$ 9.250,03; valor do job R$ 23.753,72
+   → AR igual · B R$ 25.088,56 · C R$ 24.200,03. Em AR e B o custo previsto
+   sobe R$ 5.500.
+
+### Onde mora
+
+- **Na tela:** a coluna Tipo abre no "Editar orçado" com a mesma lista da
+  errata. Na linha com lançamento ela não abre, e o motivo aparece ao
+  passar o mouse ("Linha com Pedido de Produção: o tipo de custo só muda
+  enquanto nada foi lançado no item. Os valores do orçado continuam
+  editáveis."). O pop-up mostra o de → para do tipo na linha; o card
+  "Alterações do Financeiro" ganha o selo "Tipo de custo" e o de → para na
+  coluna Tipo, como o card de Erratas; o fio da Comunicação diz "Tipo de
+  custo · item: A · Direto → A · Repasse".
+- **Na action** (`registrarAlteracaoDoFinanceiro`): `tipo_custo` opcional
+  em cada linha (ausente = o mesmo, para aba aberta antes da revisão);
+  confere os lançamentos pela função do banco antes de qualquer conta.
+- **No banco** (`20261008800001`):
+  `jobs_alteracoes_financeiro_itens.tipo_custo_para` (as 32 linhas que já
+  existiam receberam o próprio tipo); `lancamentos_nas_linhas_do_job`,
+  SECURITY DEFINER porque a RLS de `pedidos_compra` filtra por empresa e a
+  trava não pode depender do que o usuário enxerga; e
+  `registrar_alteracao_do_financeiro` grava o tipo e recusa a troca com
+  lançamento e no Interno (o trigger regravaria F · Interno).
+
+### Conferência (08 e 09/10/2026)
+
+- **TES-1013/26** (aberto, uma linha B de R$ 1.000, enviado e sem nota),
+  pela tela: B → A e de volta. O pop-up mostrou e o banco gravou
+  faturamento R$ 1.391,82 → R$ 149,12, valor do job → R$ 1.149,12,
+  recebimento → R$ 149,12, imposto R$ 271,82 → R$ 29,12 e o envio com
+  parcelas de R$ 1.000 / 195,91 / 195,91 → R$ 107,14 / 20,99 / 20,99, com o
+  carimbo do envio intacto — os números calculados antes pela mesma conta.
+  O desfazer voltou tudo ao centavo. Card no financeiro e na produção com
+  "Tipo de custo" e "B · Bi-trib. → A · Direto"; card no fio da
+  Comunicação.
+- **TES-1014/26:** na linha Produtor, com PP, o Tipo não abre e mostra o
+  motivo; o R$ Unit. abre. Saída sem gravar.
+- **AMB-1029/26** (job real, na fila da abertura): a Flávia de A para AR no
+  rascunho; o pop-up mostrou R$ 3.303,72 → R$ 8.803,72, valor do job igual
+  e "O custo previsto muda +R$ 5.500,00". Descartado, sem gravar.
+- **Simulações no banco, como usuário logado e com rollback:** a função
+  recusa a troca na linha com PP (TES-1014/26) e no Interno (CAL-1001/26);
+  aceita a troca na fila da abertura (AMB-1029/26); a função de leitura
+  devolve "pp" e "bv" nas linhas certas. Nada ficou gravado.
+- A chamada direta da action, pelo console, foi barrada pelo modo
+  automático da sessão: a trava foi conferida na função do banco, que é a
+  mesma que a action consulta.
+
+Ficaram 2 entradas de teste em Alterações do Financeiro no TES-1013/26 (a
+troca e o desfazer).

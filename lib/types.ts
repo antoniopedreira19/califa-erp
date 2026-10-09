@@ -2350,7 +2350,11 @@ export interface JobAlteracaoFinanceiroItem {
   grupo_nome: string;
   /** Mês da linha no modelo mensal (decisão 078); nulo nos outros. */
   mes: string | null;
+  /** O tipo de custo ANTES da alteração. */
   tipo_custo: TipoCusto;
+  /** O tipo DEPOIS (revisão da decisão 115, 08/10/2026); igual a
+   *  `tipo_custo` quando só o valor mudou. */
+  tipo_custo_para: TipoCusto;
   valor_unitario_de: number;
   valor_unitario_para: number;
   quantidade_de: number;
