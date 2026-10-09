@@ -28,7 +28,7 @@ import type {
   PPEvento,
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
-import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
+import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba, situacaoVerbaLabel } from "@/lib/types";
 import type { TipoVerba, TitularDaVerbaTipo } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
@@ -40,6 +40,14 @@ import {
   type EnvioDaPP,
 } from "@/lib/data/eventos-da-pp";
 import { formatDataHoraListaBr } from "@/lib/formatar-data-hora";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 export interface PPRow {
   id: string;
@@ -269,6 +277,148 @@ const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
   { key: "todas", label: "Todas" },
 ];
 
+// ---------------------------------------------------------------------------
+// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
+// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
+// ---------------------------------------------------------------------------
+
+/** O texto do status, como o selo da linha (a verba paga mostra a situação). */
+function rotuloDoStatus(r: PPRow): string {
+  const verba = situacaoDaVerba(r);
+  return verba ? situacaoVerbaLabel(verba) : ppStatusLabel(r.status);
+}
+
+/** A lista do funil de Status na ordem da esteira da PP, não de A a Z. */
+const ORDEM_DO_STATUS = [
+  "Em avaliação",
+  "Aprovada",
+  "Pago",
+  "Aguardando prestação",
+  "Prestação em avaliação",
+  "Prestação reprovada",
+  "Devolução pendente",
+  "Concluída",
+  "Rejeitado",
+  "Cancelada",
+];
+
+/**
+ * As colunas. No chip "Prestações" quatro títulos mudam de sentido —
+ * Emissão vira "Enviada em", Prazo original vira "Gasto" e Parcela vira
+ * "Saldo"; Valor só muda de nome ("Verba", o mesmo número). As três que
+ * mudam de sentido têm chave própria em cada modo: o filtro feito em
+ * "Emissão" não vale sobre a data de envio da prestação, e volta quando
+ * o chip sai de Prestações. Código, Fornecedor, Job, Enviada por, Valor e
+ * Status seguem filtrando nos dois modos.
+ */
+function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
+  const envio = (r: PPRow) =>
+    prestacoes ? ultimoEnvioDaPrestacao(r.eventos) : ultimoEnvioDaPP(r.eventos);
+  return [
+    {
+      chave: "codigo",
+      rotulo: "Código",
+      tipo: "texto",
+      // A busca da coluna acha também pelos selos da célula.
+      celula: (r) => ({
+        ...celulaTexto(r.codigo),
+        busca: [
+          r.codigo,
+          r.urgente && (r.status === "em_avaliacao" || r.status === "aprovada") ? "Urgente" : "",
+          r.verba_producao ? "Verba" : "",
+        ].join(" "),
+      }),
+    },
+    {
+      chave: "fornecedor",
+      rotulo: "Fornecedor",
+      tipo: "texto",
+      celula: (r) =>
+        celulaTexto(
+          // A mesma conta da célula (decisão 164: o tipo da verba e o titular).
+          nomeContraparteBRPP({
+            verba_producao: r.verba_producao,
+            tipo_verba: r.tipo_verba,
+            verba_titular_nome: r.responsavel_nome,
+            fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null,
+            responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null,
+          }),
+        ),
+    },
+    {
+      chave: "job",
+      rotulo: "Job",
+      tipo: "texto",
+      celula: (r) => ({ ...celulaTexto(`${r.job_codigo} ${r.job_nome}`.trim()), ordem: r.job_codigo }),
+    },
+    prestacoes
+      ? {
+          chave: "prestacao_enviada",
+          rotulo: "Enviada em",
+          tipo: "data",
+          celula: (r) => celulaData(r.prestacao?.enviada_em ?? null),
+        }
+      : { chave: "emissao", rotulo: "Emissão", tipo: "data", celula: (r) => celulaData(r.created_at) },
+    {
+      // Filtra por quem enviou; ordena por quando (o último envio).
+      chave: "enviada_por",
+      rotulo: "Enviada por",
+      tipo: "data",
+      celula: (r) => {
+        const e = envio(r);
+        return { ...celulaTexto(e?.por_nome ?? null), ordem: e?.em ?? "" };
+      },
+    },
+    {
+      chave: "valor",
+      rotulo: prestacoes ? "Verba" : "Valor",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (r) => celulaValor(r.valor, formatMoney),
+    },
+    prestacoes
+      ? {
+          chave: "gasto",
+          rotulo: "Gasto",
+          tipo: "valor",
+          faixa: true,
+          celula: (r) => celulaValor(r.prestacao?.valor_gasto ?? 0, formatMoney),
+        }
+      : { chave: "prazo", rotulo: "Prazo original", tipo: "data", celula: (r) => celulaData(r.prazo_pagamento) },
+    prestacoes
+      ? {
+          chave: "saldo",
+          rotulo: "Saldo",
+          tipo: "valor",
+          faixa: true,
+          celula: (r) => celulaValor(r.prestacao?.valor_devolvido ?? 0, formatMoney),
+        }
+      : {
+          // O que a célula mostra: "1/N".
+          chave: "parcela",
+          rotulo: "Parcela",
+          // Lista dos valores ("1/3"), ordem de número: do menor para o maior.
+          tipo: "valor",
+          celula: (r) => {
+            const n = Math.max(r.parcelas.length, 1);
+            return { valor: `1/${n}`, rotulo: `1/${n}`, ordem: n };
+          },
+        },
+    {
+      chave: "status",
+      rotulo: "Status",
+      tipo: "texto",
+      celula: (r) => ({
+        ...celulaTexto(rotuloDoStatus(r)),
+        ordemNaLista: ORDEM_DO_STATUS.indexOf(rotuloDoStatus(r)),
+      }),
+    },
+  ];
+}
+const COLUNAS_PP = colunasDoModo(false);
+const COLUNAS_PRESTACOES = colunasDoModo(true);
+
 interface PedidosCompraListProps {
   rows: PPRow[];
   tenantId: string;
@@ -325,7 +475,9 @@ export function PedidosCompraList({
     return c;
   }, [rowsPorRegional]);
 
-  const filtrados = React.useMemo(() => {
+  /** O que passa nos filtros de CIMA (regional, chip e busca). Os filtros
+   *  dos títulos vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rowsPorRegional.filter((r) => {
       if (filtro === "prestacoes") {
@@ -343,9 +495,22 @@ export function PedidosCompraList({
     });
   }, [rowsPorRegional, filtro, busca]);
 
+  const prestacoes = filtro === "prestacoes";
+  const COLUNAS = prestacoes ? COLUNAS_PRESTACOES : COLUNAS_PP;
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-pps" });
+  const filtrados = colunas.visiveis;
+  /** A ordem guardada pode ser de uma coluna que este modo não tem
+   *  (ordenou por Emissão e foi para Prestações): aí ela não vale, e a
+   *  barra não aparece por causa dela. */
+  const ordemValendo =
+    colunas.ordenacao !== null && COLUNAS.some((c) => c.chave === colunas.ordenacao!.coluna);
+  const barraAtiva = colunas.filtrando || ordemValendo;
+
   /** As urgentes em avaliação sobem para o topo, com faixa própria, seja
    *  qual for a ordem do resto (decisão 077). Busca e filtros continuam
-   *  valendo para elas. */
+   *  valendo para elas — os dos títulos também. Com ordem pelo título, as
+   *  urgentes se ordenam entre elas, e as demais embaixo da faixa "Demais
+   *  PPs": a urgente não desce para o meio da lista. */
   const [urgentes, demais] = React.useMemo(() => {
     const topo = (r: PPRow) => r.urgente && r.status === "em_avaliacao";
     return [filtrados.filter(topo), filtrados.filter((r) => !topo(r))];
@@ -409,28 +574,53 @@ export function PedidosCompraList({
         </div>
       </div>
 
+      {barraAtiva && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="PP"
+          plural="PPs"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="px-4 py-3 font-semibold">Código</th>
-              <th className="px-4 py-3 font-semibold">Fornecedor</th>
-              <th className="px-4 py-3 font-semibold">Job</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("fornecedor")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("job")}</th>
               {/* No filtro de prestações as colunas contam a prestação:
                   quando chegou, a verba, o gasto e o saldo (decisão 081). */}
-              <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Enviada em" : "Emissão"}</th>
+              <th className="px-4 py-3 font-semibold">
+                {colunas.titulo(prestacoes ? "prestacao_enviada" : "emissao")}
+              </th>
               {/* Decisão 136: qualquer GP envia, então o financeiro vê
                   quem enviou — e, no reenvio, quem mandou de volta. No
                   filtro de prestações, quem enviou a prestação. */}
-              <th className="px-4 py-3 font-semibold">Enviada por</th>
-              <th className="px-4 py-3 font-semibold text-right">{filtro === "prestacoes" ? "Verba" : "Valor"}</th>
-              <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Gasto" : "Prazo original"}</th>
-              <th className="px-4 py-3 font-semibold">{filtro === "prestacoes" ? "Saldo" : "Parcela"}</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("enviada_por")}</th>
+              <th className="px-4 py-3 font-semibold text-right">{colunas.titulo("valor")}</th>
+              <th className="px-4 py-3 font-semibold">
+                {colunas.titulo(prestacoes ? "gasto" : "prazo")}
+              </th>
+              <th className="px-4 py-3 font-semibold">
+                {colunas.titulo(prestacoes ? "saldo" : "parcela")}
+              </th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("status")}</th>
             </tr>
           </thead>
           <tbody>
-            {filtrados.length === 0 && (
+            {/* Vazio pelos filtros dos títulos: a tabela fica, com os
+                títulos, para desfazer. */}
+            {doTopo.length > 0 && filtrados.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  Nenhum Pedido de Produção com esse filtro.
+                </td>
+              </tr>
+            )}
+            {doTopo.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0

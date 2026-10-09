@@ -98,6 +98,14 @@ import {
   useSelecao,
   type TituloParaLote,
 } from "@/components/financeiro/baixa-em-lote";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 export interface TituloRow {
   id: string;
@@ -282,6 +290,121 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
+// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
+// ---------------------------------------------------------------------------
+
+/** O selo da coluna Status — o mesmo texto da pastilha da linha. */
+function statusDoTitulo(r: TituloRow, inadimplente: boolean): string {
+  if (r.status === "cancelado") return "Cancelado";
+  if (r.status === "pago") return r.origem === "transferencia" ? "Transferida" : "Recebido";
+  if (ehParcial(r)) return "Parcial";
+  if (inadimplente) return "Inadimplente";
+  return r.origem === "transferencia" ? "A transferir" : "Em aberto";
+}
+/** A lista do Status na ordem da cobrança, não a alfabética. */
+const ORDEM_DO_STATUS = ["Em aberto", "A transferir", "Inadimplente", "Parcial", "Recebido", "Transferida", "Cancelado"];
+
+/** O tipo do título, como a coluna Nota fiscal escreve embaixo do número. */
+function tipoDoTitulo(r: TituloRow): string {
+  if (r.origem === "nf") return "Nota fiscal";
+  if (r.origem === "rendimento") return "Rendimento";
+  if (r.origem === "transferencia") return "Transferência";
+  return "Recebimento avulso";
+}
+const ORDEM_DO_TIPO = ["Nota fiscal", "Recebimento avulso", "Rendimento", "Transferência"];
+
+/** A data que a coluna "Data de recebimento" mostra; nula sem baixa. */
+function dataDeRecebimento(r: TituloRow): string | null {
+  const ultima = r.baixas[r.baixas.length - 1] ?? null;
+  if (r.status === "pago") return r.pago_em ?? ultima?.data ?? null;
+  if (ehParcial(r)) return ultima?.data ?? null;
+  return null;
+}
+
+function colunasDosTitulos(estaInadimplente: (r: TituloRow) => boolean): ColunaFiltravel<TituloRow>[] {
+  return [
+    { chave: "vencimento", rotulo: "Vencimento", tipo: "data", celula: (r) => celulaData(r.data_vencimento) },
+    {
+      chave: "previsao",
+      rotulo: "Previsão de recebimento",
+      tipo: "data",
+      celula: (r) => celulaData(r.data_previsao_recebimento),
+    },
+    {
+      // Árvore tipo ▸ número: "Nota fiscal" marca todas as NFs; o
+      // recebimento avulso, o rendimento e a transferência vêm pelo código.
+      chave: "nota",
+      rotulo: "Nota fiscal",
+      tipo: "texto",
+      celula: (r) => {
+        const tipo = tipoDoTitulo(r);
+        if (r.origem === "nf") {
+          return {
+            valor: `NF ${r.fat_numero_nf}`,
+            rotulo: `NF ${r.fat_numero_nf}`,
+            // O número como número: "NF 99" antes de "NF 100".
+            ordem: `0|${r.fat_numero_nf.replace(/\D/g, "").padStart(12, "0")}`,
+            busca: `NF ${r.fat_numero_nf} emitida ${formatDate(r.fat_data_emissao)}`,
+            grupo: tipo,
+          };
+        }
+        const codigo = r.codigo_avulsa ?? "—";
+        return {
+          valor: codigo,
+          rotulo: codigo,
+          ordem: `${ORDEM_DO_TIPO.indexOf(tipo)}|${codigo}`,
+          busca: `${codigo} ${tipo}`,
+          grupo: tipo,
+        };
+      },
+    },
+    { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (r) => celulaTexto(r.contraparte_nome) },
+    {
+      // Vários jobs numa nota agrupada: a linha passa se ALGUM estiver
+      // marcado. No título sem nota, a coluna mostra a descrição.
+      chave: "jobs",
+      rotulo: "Jobs cobertos",
+      tipo: "texto",
+      celula: (r) => (r.jobs_cobertos.length ? r.jobs_cobertos.map((j) => celulaTexto(j)) : celulaTexto("")),
+    },
+    {
+      chave: "recebimento",
+      rotulo: "Data de recebimento",
+      tipo: "data",
+      celula: (r) => celulaData(dataDeRecebimento(r)),
+    },
+    {
+      chave: "valor",
+      rotulo: "Valor",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (r) => celulaValor(r.valor, formatMoney),
+    },
+    {
+      chave: "parcela",
+      rotulo: "Parcela",
+      tipo: "texto",
+      celula: (r) => ({
+        ...celulaTexto(`${r.numero_parcela}/${r.total_parcelas}`),
+        ordem: r.total_parcelas * 1000 + r.numero_parcela,
+      }),
+    },
+    {
+      // A lista na ordem da cobrança; as linhas, de A a Z pelo rótulo.
+      chave: "status",
+      rotulo: "Status",
+      tipo: "texto",
+      celula: (r) => {
+        const rotulo = statusDoTitulo(r, estaInadimplente(r));
+        return { ...celulaTexto(rotulo), ordemNaLista: ORDEM_DO_STATUS.indexOf(rotulo) };
+      },
+    },
+  ];
+}
+
 /** NF agrupada junta os contatos de todos os jobs — sem repetir o mesmo. */
 function dedupContatos(lista: ContatoCobranca[]): ContatoCobranca[] {
   const vistos = new Set<string>();
@@ -396,7 +519,9 @@ export function TitulosList({
     [rows, estaInadimplente],
   );
 
-  const visiveis = React.useMemo(
+  /** Os títulos que passam no filtro de CIMA (os chips de status). Os
+   *  filtros dos títulos das colunas vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(
     () =>
       rows.filter((r) => {
         if (filtroStatus === "abertos") {
@@ -409,6 +534,11 @@ export function TitulosList({
       }),
     [rows, filtroStatus, estaInadimplente],
   );
+  const colunasDaTabela = React.useMemo(() => colunasDosTitulos(estaInadimplente), [estaInadimplente]);
+  const colunas = useFiltrosDeColuna(doTopo, colunasDaTabela, { guardarEm: "contas-a-receber-titulos" });
+  /** Os títulos que passam em tudo, na ordem do título escolhido (sem
+   *  nenhum, a de sempre: pelo vencimento). A seleção do lote sai daqui. */
+  const visiveis = colunas.visiveis;
 
   // Baixa em lote (pedido do Tiago, 02/10/2026). A caixa do cabeçalho marca
   // só os visíveis (o filtro de status vale), e quem sai da lista sai da
@@ -612,6 +742,18 @@ export function TitulosList({
         </button>
       </div>
 
+      {/* Quantos títulos os filtros dos títulos das colunas deixaram (o mesmo
+          aviso da aba PPs): o filtro mora escondido no título. */}
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="título"
+          plural="títulos"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       {/* A caixa reserva 46px à direita para a calha, e o botão `i` mora numa
           célula de largura ZERO — a calha nunca alarga a tabela
           (`app/(app)/_planilha/calha.tsx`). */}
@@ -626,19 +768,15 @@ export function TitulosList({
               <th className="w-10 px-3 py-3 text-center">
                 <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
-              <th className="w-[150px] px-3.5 py-3 font-semibold">Vencimento</th>
-              <th className="w-[150px] px-3.5 py-3 font-semibold">
-                Previsão de recebimento
-              </th>
-              <th className="w-[130px] px-4 py-3 font-semibold">Nota fiscal</th>
-              <th className="min-w-[140px] px-4 py-3 font-semibold">Cliente</th>
-              <th className="min-w-[250px] px-4 py-3 font-semibold">Jobs cobertos</th>
-              <th className="w-[130px] px-3.5 py-3 font-semibold">
-                Data de recebimento
-              </th>
-              <th className="px-4 py-3 text-right font-semibold">Valor</th>
-              <th className="w-[72px] px-3 py-3 font-semibold">Parcela</th>
-              <th className="w-[96px] px-3.5 py-3 font-semibold">Status</th>
+              <th className="w-[150px] px-3.5 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
+              <th className="w-[150px] px-3.5 py-3 font-semibold">{colunas.titulo("previsao")}</th>
+              <th className="w-[130px] px-4 py-3 font-semibold">{colunas.titulo("nota")}</th>
+              <th className="min-w-[140px] px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
+              <th className="min-w-[250px] px-4 py-3 font-semibold">{colunas.titulo("jobs")}</th>
+              <th className="w-[130px] px-3.5 py-3 font-semibold">{colunas.titulo("recebimento")}</th>
+              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+              <th className="w-[72px] px-3 py-3 font-semibold">{colunas.titulo("parcela")}</th>
+              <th className="w-[96px] px-3.5 py-3 font-semibold">{colunas.titulo("status")}</th>
               <th className="w-[110px] px-4 py-3 text-right font-semibold">Ação</th>
               <th className="w-0 p-0" />
             </tr>
@@ -652,7 +790,10 @@ export function TitulosList({
                 >
                   {rows.length === 0
                     ? "Nenhum título a receber ainda. Emita uma NF na aba Faturamento."
-                    : "Nenhum título com esse status."}
+                    : doTopo.length === 0
+                      ? "Nenhum título com esse status."
+                      : // Vazio por causa dos títulos: a tabela fica, para desfazer.
+                        "Nenhum título com esse filtro."}
                 </td>
               </tr>
             )}

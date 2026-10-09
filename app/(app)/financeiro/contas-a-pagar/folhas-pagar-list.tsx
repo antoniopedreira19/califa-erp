@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { MultiSelectRegionais } from "@/components/ui/multi-select-regionais";
 import {
@@ -23,8 +23,14 @@ import {
   rotuloTipoPix,
   type ColaboradorPagamento,
 } from "@/lib/financeiro/colaboradores-pagamento";
-import { cn } from "@/lib/utils";
 import { RevisarFolhaDrawer } from "./revisar-folha-drawer";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 const NOMES_MES = [
   "Janeiro",
@@ -88,8 +94,6 @@ const ORDEM_TIPO: TipoContratacao[] = ["pj", "mei", "clt_recibo", "clt", "estagi
  */
 const HUB = "__hub__";
 
-type Ordenacao = { campo: "nome" | "valor"; direcao: "asc" | "desc" };
-
 function regionaisDaLinha(l: FolhaLinhaFinanceiro): string[] {
   return [...new Set(l.alocacoes.map((a) => a.regional_id))];
 }
@@ -104,6 +108,116 @@ function formatBRL(v: number): string {
     currency: "BRL",
   }).format(v);
 }
+
+/** O número da competência: 202609 para setembro de 2026. */
+function chaveCompetencia(l: FolhaLinhaFinanceiro): number {
+  return l.competencia_ano * 100 + l.competencia_mes;
+}
+
+/** A ordem dos status no funil: a da esteira (o RH envia, o financeiro devolve). */
+const ORDEM_DO_STATUS: FolhaLinhaStatus[] = ["rascunho", "enviada", "pendente_correcao", "aprovada", "paga"];
+
+/** O selo da coluna Pagamento, em texto — é por ele que a coluna filtra. */
+function rotuloDoPagamento(c: ColaboradorPagamento): string {
+  const forma = formaDePagamento(c);
+  if (forma === "pix" && c.pix_tipo) return `PIX · ${rotuloTipoPix(c.pix_tipo)}`;
+  if (forma === "conta") return "TED";
+  return "Sem dados";
+}
+
+/**
+ * As colunas que filtram e ordenam pelo título, como no Excel (pedido do
+ * Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). Substituem o
+ * cabeçalho que só ordenava (Colaborador e Valor).
+ *
+ * A competência continua agrupando: com ordem por outro título, as linhas
+ * se ordenam DENTRO de cada competência, e a competência mais recente
+ * segue em cima. Só o título Competência inverte a ordem delas.
+ */
+const COLUNAS: ColunaFiltravel<FolhaLinhaFinanceiro>[] = [
+  {
+    chave: "competencia",
+    rotulo: "Competência",
+    tipo: "data",
+    // Lista com a mais recente em cima, como a tabela.
+    celula: (l) => ({
+      valor: String(chaveCompetencia(l)),
+      rotulo: `${NOMES_MES[l.competencia_mes - 1]}/${l.competencia_ano}`,
+      ordem: chaveCompetencia(l),
+      ordemNaLista: -chaveCompetencia(l),
+    }),
+  },
+  {
+    chave: "colaborador",
+    rotulo: "Colaborador",
+    tipo: "texto",
+    // A busca da coluna acha pela função também, como a busca de cima.
+    celula: (l) => ({
+      ...celulaTexto(l.colaborador.nome),
+      busca: `${l.colaborador.nome} ${l.colaborador.funcao}`,
+    }),
+  },
+  {
+    chave: "alocacao",
+    rotulo: "Alocação",
+    tipo: "texto",
+    // Árvore empresa ▸ regional. A linha do rateio em várias regionais é
+    // um valor só ("Hub"), como no filtro de regionais de cima (pedido do
+    // Tiago, 30/09/2026) — e não uma entrada em cada regional do rateio.
+    // Na lista: as empresas em ordem alfabética, com o Hub no topo de cada
+    // uma, e o rateio entre empresas por último.
+    celula: (l) => {
+      const nomes = [...new Set(l.alocacoes.map((a) => a.empresa_nome))];
+      const empresas = nomes.join(" + ");
+      if (regionaisDaLinha(l).length > 1) {
+        return {
+          valor: `hub|${empresas}`,
+          rotulo: "Hub · várias regionais",
+          ordem: `${nomes.length > 1 ? 2 : 1} ${empresas} 0`,
+          grupo: empresas,
+        };
+      }
+      const a = l.alocacoes[0];
+      if (!a) return { ...celulaTexto(null), grupo: "" };
+      return {
+        valor: `${a.empresa_id}|${a.regional_id}`,
+        rotulo: a.regional_nome,
+        ordem: `1 ${a.empresa_nome} 1 ${a.regional_nome}`,
+        grupo: a.empresa_nome,
+      };
+    },
+    rotuloSemGrupo: "(sem alocação)",
+  },
+  {
+    chave: "pagamento",
+    rotulo: "Pagamento",
+    tipo: "texto",
+    celula: (l) => celulaTexto(rotuloDoPagamento(l.colaborador)),
+  },
+  {
+    chave: "valor",
+    rotulo: "Valor",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (l) => celulaValor(Number(l.salario_base), formatBRL),
+  },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    // Última coluna, encostada na borda: o cartão abre centrado embaixo do
+    // título para não passar da tela (o título continua à esquerda).
+    alinhar: "center",
+    celula: (l) => ({
+      ...celulaTexto(folhaLinhaStatusLabel(l.status)),
+      ordemNaLista: ORDEM_DO_STATUS.indexOf(l.status),
+    }),
+  },
+];
+
+/** O título da folha é em caixa normal: o botão do filtro não muda isso. */
+const TITULO = "normal-case tracking-normal";
 
 export function FolhasPagarList({
   linhas,
@@ -120,10 +234,6 @@ export function FolhasPagarList({
   const [origem, setOrigem] = React.useState<OrigemFiltro>("todas");
   // Vazio = todas as regionais, como no filtro da aba de PPs.
   const [regionaisFiltro, setRegionaisFiltro] = React.useState<string[]>([]);
-  const [ordenacao, setOrdenacao] = React.useState<Ordenacao>({
-    campo: "nome",
-    direcao: "asc",
-  });
   // Pelo id, e não pelo objeto: depois de um refresh (salvar o pagamento,
   // por exemplo) o painel mostra a linha atualizada.
   const [revisandoId, setRevisandoId] = React.useState<string | null>(null);
@@ -181,47 +291,45 @@ export function FolhasPagarList({
     return ORDEM_TIPO.filter((t) => presentes.has(t));
   }, [linhas]);
 
-  const filtradas = React.useMemo(() => {
+  /** As linhas que passam nos filtros de CIMA, na ordem de sempre:
+   *  competência mais recente primeiro, como vem do servidor; dentro dela,
+   *  o nome de A a Z, sem distinguir acento ("Álvaro" fica entre os A). Os
+   *  filtros dos títulos vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return linhasPorRegional.filter((l) => {
-      if (status !== "todos" && l.status !== status) return false;
-      if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo) return false;
-      if (origem !== "todas" && l.origem !== origem) return false;
-      if (!q) return true;
-      return (
-        l.colaborador.nome.toLowerCase().includes(q) ||
-        l.colaborador.funcao.toLowerCase().includes(q)
+    return linhasPorRegional
+      .filter((l) => {
+        if (status !== "todos" && l.status !== status) return false;
+        if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo) return false;
+        if (origem !== "todas" && l.origem !== origem) return false;
+        if (!q) return true;
+        return (
+          l.colaborador.nome.toLowerCase().includes(q) ||
+          l.colaborador.funcao.toLowerCase().includes(q)
+        );
+      })
+      .sort(
+        (a, b) =>
+          chaveCompetencia(b) - chaveCompetencia(a) ||
+          a.colaborador.nome.localeCompare(b.colaborador.nome, "pt-BR", { sensitivity: "base" }),
       );
-    });
   }, [linhasPorRegional, busca, status, tipo, origem]);
 
-  // Competência mais recente primeiro, como vem do servidor; dentro dela, a
-  // ordem escolhida. Nome sem distinguir acento: "Álvaro" fica entre os A.
-  const ordenadas = React.useMemo(() => {
-    const fator = ordenacao.direcao === "asc" ? 1 : -1;
-    return [...filtradas].sort((a, b) => {
-      const competencia =
-        b.competencia_ano * 100 + b.competencia_mes - (a.competencia_ano * 100 + a.competencia_mes);
-      if (competencia !== 0) return competencia;
-      const nome = a.colaborador.nome.localeCompare(b.colaborador.nome, "pt-BR", {
-        sensitivity: "base",
-      });
-      if (ordenacao.campo === "valor") {
-        const valor = Number(a.salario_base) - Number(b.salario_base);
-        return valor !== 0 ? valor * fator : nome;
-      }
-      return nome * fator;
-    });
-  }, [filtradas, ordenacao]);
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-folhas" });
+  /** O que passa em tudo — a base da tabela e da soma do canto. */
+  const filtradas = colunas.visiveis;
 
-  function trocarOrdenacao(campo: Ordenacao["campo"]) {
-    setOrdenacao((o) =>
-      o.campo === campo
-        ? { campo, direcao: o.direcao === "asc" ? "desc" : "asc" }
-        : // Nome começa de A a Z; valor, do maior para o menor.
-          { campo, direcao: campo === "nome" ? "asc" : "desc" },
-    );
-  }
+  // A competência continua agrupando: com ordem por outro título, a lista
+  // volta para a competência mais recente em cima, e o título escolhido
+  // ordena DENTRO de cada uma (a ordenação é estável). Só o título
+  // Competência inverte a ordem das competências.
+  const ordenadas = React.useMemo(
+    () =>
+      colunas.ordenacao?.coluna === "competencia"
+        ? filtradas
+        : [...filtradas].sort((a, b) => chaveCompetencia(b) - chaveCompetencia(a)),
+    [filtradas, colunas.ordenacao],
+  );
 
   const contagem = React.useMemo(() => {
     const c = { enviada: 0, pendente_correcao: 0 };
@@ -334,35 +442,37 @@ export function FolhasPagarList({
         </p>
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="linha"
+          plural="linhas"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
-                Competência
+                {colunas.titulo("competencia", TITULO)}
               </th>
-              <CabecalhoOrdenavel
-                rotulo="Colaborador"
-                campo="nome"
-                ordenacao={ordenacao}
-                onTrocar={trocarOrdenacao}
-              />
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Alocação
+                {colunas.titulo("colaborador", TITULO)}
+              </th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                {colunas.titulo("alocacao", TITULO)}
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">
-                Pagamento
+                {colunas.titulo("pagamento", TITULO)}
               </th>
-              <CabecalhoOrdenavel
-                rotulo="Valor"
-                campo="valor"
-                ordenacao={ordenacao}
-                onTrocar={trocarOrdenacao}
-                align="right"
-                className="w-40"
-              />
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">
+                {colunas.titulo("valor", TITULO)}
+              </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">
-                Status
+                {colunas.titulo("status", TITULO)}
               </th>
             </tr>
           </thead>
@@ -420,7 +530,11 @@ export function FolhasPagarList({
                   colSpan={6}
                   className="px-4 py-8 text-center text-sm text-muted-foreground"
                 >
-                  Nenhuma linha corresponde aos filtros.
+                  {/* Vazia pelos títulos, a tabela fica (com os títulos,
+                      para desfazer) e diz que foi o filtro. */}
+                  {doTopo.length === 0
+                    ? "Nenhuma linha corresponde aos filtros."
+                    : "Nenhuma linha com esse filtro."}
                 </td>
               </tr>
             )}
@@ -440,55 +554,6 @@ export function FolhasPagarList({
         />
       )}
     </div>
-  );
-}
-
-/** Cabeçalho que ordena ao clicar, no desenho do relatório de Faturamento. */
-function CabecalhoOrdenavel({
-  rotulo,
-  campo,
-  ordenacao,
-  onTrocar,
-  align = "left",
-  className,
-}: {
-  rotulo: string;
-  campo: Ordenacao["campo"];
-  ordenacao: Ordenacao;
-  onTrocar: (campo: Ordenacao["campo"]) => void;
-  align?: "left" | "right";
-  className?: string;
-}) {
-  const ativo = ordenacao.campo === campo;
-  return (
-    <th
-      aria-sort={ativo ? (ordenacao.direcao === "asc" ? "ascending" : "descending") : "none"}
-      className={cn(
-        "px-4 py-3 font-medium text-muted-foreground",
-        align === "right" ? "text-right" : "text-left",
-        className,
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => onTrocar(campo)}
-        className={cn(
-          "inline-flex items-center gap-1.5 transition-colors hover:text-foreground",
-          ativo && "text-foreground",
-        )}
-      >
-        {rotulo}
-        {ativo ? (
-          ordenacao.direcao === "asc" ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : (
-            <ArrowDown className="h-3 w-3" />
-          )
-        ) : (
-          <ArrowUpDown className="h-3 w-3 opacity-40" />
-        )}
-      </button>
-    </th>
   );
 }
 

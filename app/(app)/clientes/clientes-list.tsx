@@ -19,6 +19,60 @@ import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { formatCnpj, formatTelefone } from "@/lib/utils";
 import type { Cliente } from "@/lib/types";
 import { inativarCliente, reativarCliente } from "./actions";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaTexto,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
+
+/**
+ * As colunas que filtram e ordenam pelo título, como no Excel (decisão 165 —
+ * o mesmo filtro da aba PPs do job). A coluna das ações (Inativar/Reativar)
+ * não filtra.
+ */
+const COLUNAS: ColunaFiltravel<Cliente>[] = [
+  {
+    // A busca da coluna acha pela razão social também, como a de cima.
+    chave: "nome",
+    rotulo: "Nome fantasia",
+    tipo: "texto",
+    celula: (c) => ({ ...celulaTexto(c.nome_fantasia), busca: `${c.nome_fantasia} ${c.razao_social ?? ""}` }),
+  },
+  { chave: "codigo", rotulo: "Código", tipo: "texto", celula: (c) => celulaTexto(c.codigo_curto) },
+  {
+    // Acha com ou sem a pontuação.
+    chave: "cnpj",
+    rotulo: "CNPJ",
+    tipo: "texto",
+    celula: (c) => (c.cnpj ? { ...celulaTexto(formatCnpj(c.cnpj)), busca: `${formatCnpj(c.cnpj)} ${c.cnpj}` } : celulaTexto(null)),
+  },
+  {
+    // Árvore E-mail ▸ endereço e Telefone ▸ número: os dois da célula. A
+    // ordem é pelo e-mail (o de cima na célula); sem e-mail, pelo telefone.
+    chave: "contato",
+    rotulo: "Contato",
+    tipo: "texto",
+    celula: (x) => {
+      const valores = [
+        ...(x.email ? [{ ...celulaTexto(x.email, `1 ${x.email}`), grupo: "E-mail" }] : []),
+        ...(x.telefone
+          ? [{ ...celulaTexto(formatTelefone(x.telefone), `2 ${x.telefone}`), grupo: "Telefone" }]
+          : []),
+      ];
+      return valores.length > 0 ? valores : { ...celulaTexto(null), grupo: "" };
+    },
+    rotuloSemGrupo: "(sem contato)",
+  },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    // Perto da borda direita: o cartão abre centrado embaixo do título.
+    alinhar: "center",
+    celula: (x) => celulaTexto(x.status === "ativo" ? "Ativo" : "Inativo"),
+  },
+];
 
 export function ClientesList({ clientes }: { clientes: Cliente[] }) {
   const router = useRouter();
@@ -29,7 +83,9 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
     { id: string; nome: string } | null
   >(null);
 
-  const filtered = React.useMemo(() => {
+  /** Os clientes que passam nos filtros de CIMA (busca, inativos). Os
+   *  filtros dos títulos vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return clientes.filter((c) => {
       if (!mostrarInativos && c.status !== "ativo") return false;
@@ -43,6 +99,9 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
       );
     });
   }, [clientes, busca, mostrarInativos]);
+
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "cadastro-clientes" });
+  const filtered = colunas.visiveis;
 
   const ativos = clientes.filter((c) => c.status === "ativo").length;
   const inativos = clientes.length - ativos;
@@ -95,15 +154,25 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
         </div>
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="cliente"
+          plural="clientes"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-soft">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nome fantasia</TableHead>
-              <TableHead className="px-4 py-3 font-semibold">Código</TableHead>
-              <TableHead>CNPJ</TableHead>
-              <TableHead>Contato</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{colunas.titulo("nome")}</TableHead>
+              <TableHead className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</TableHead>
+              <TableHead>{colunas.titulo("cnpj")}</TableHead>
+              <TableHead>{colunas.titulo("contato")}</TableHead>
+              <TableHead>{colunas.titulo("status")}</TableHead>
               <TableHead className="w-[80px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -111,7 +180,9 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                  Nenhum resultado.
+                  {/* Vazia pelos títulos, a tabela fica (com os títulos,
+                      para desfazer) e diz que foi o filtro. */}
+                  {doTopo.length === 0 ? "Nenhum resultado." : "Nenhum cliente com esse filtro."}
                 </TableCell>
               </TableRow>
             )}

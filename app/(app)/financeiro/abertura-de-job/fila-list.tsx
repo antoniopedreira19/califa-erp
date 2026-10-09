@@ -17,6 +17,13 @@ import { ResumoErrataDialog } from "./resumo-errata-dialog";
 import { AprovarSaveDialog } from "./aprovar-save-dialog";
 import { RecusarSaveDialog } from "./recusar-save-dialog";
 import { IconeSave, rotuloDoSave } from "./icone-save";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 export interface FilaLinha extends JobNaFila {
   /** "há 2 horas" — calculado no server para não divergir na hidratação. */
@@ -31,6 +38,75 @@ export interface SaveFilaLinha extends SaveNaFila {
   /** "há 2 horas" — calculado no server, como o da fila. */
   enviado_em_label: string;
 }
+
+/** Uma linha da tabela da fila: um pedido de save ou um job (errata ou
+ *  abertura nova). As três faixas usam as mesmas colunas. */
+type LinhaDaFila = { tipo: "save"; s: SaveFilaLinha } | { tipo: "job"; l: FilaLinha };
+
+/** O botão da linha — é por ele que a coluna Abertura filtra. */
+function acaoDaLinha(x: LinhaDaFila): string {
+  if (x.tipo === "save") return x.s.tipo === "gera" ? "Aprovar save" : "Aprovar consumo";
+  return x.l.revisao !== null ? "Revisar abertura" : "Abrir job";
+}
+const ORDEM_DA_ACAO = ["Aprovar save", "Aprovar consumo", "Revisar abertura", "Abrir job"];
+
+/** As colunas que filtram e ordenam pelo título, como no Excel (pedido do
+ *  Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). */
+const COLUNAS: ColunaFiltravel<LinhaDaFila>[] = [
+  {
+    chave: "codigo",
+    rotulo: "Código",
+    tipo: "texto",
+    celula: (x) => celulaTexto(x.tipo === "save" ? x.s.jobCodigo : x.l.codigo),
+  },
+  { chave: "job", rotulo: "Job", tipo: "texto", celula: (x) => celulaTexto(x.tipo === "save" ? x.s.jobNome : x.l.nome) },
+  {
+    chave: "projeto",
+    rotulo: "Projeto · Cliente",
+    tipo: "texto",
+    // Árvore cliente ▸ projeto: o cliente marca todos os projetos dele.
+    celula: (x) => {
+      const [codigo, nome, cliente] =
+        x.tipo === "save"
+          ? [x.s.projetoCodigo, x.s.projetoNome, x.s.clienteNome]
+          : [x.l.projeto_codigo, x.l.projeto_nome, x.l.cliente_nome];
+      return { ...celulaTexto(`${codigo ?? ""} ${nome ?? ""}`.trim()), grupo: cliente ?? "" };
+    },
+    rotuloSemGrupo: "(sem cliente)",
+  },
+  {
+    chave: "gp",
+    rotulo: "GP responsável",
+    tipo: "texto",
+    celula: (x) => celulaTexto(x.tipo === "save" ? x.s.responsavelNome : x.l.responsavel_nome),
+  },
+  {
+    chave: "valor",
+    rotulo: "Valor total",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (x) => celulaValor(x.tipo === "save" ? x.s.valor : x.l.valor_total, (n) => formatCurrency(n)),
+  },
+  {
+    // Filtra por quem mandou; ordena por quando (a ordem de chegada).
+    chave: "enviado",
+    rotulo: "Enviado por",
+    tipo: "data",
+    celula: (x) => {
+      const nome = x.tipo === "save" ? x.s.enviadoPorNome : x.l.enviado_por_label;
+      const quando = x.tipo === "save" ? x.s.enviadoEm : (x.l.revisao?.erratas.at(-1)?.em ?? x.l.enviado_em);
+      return { ...celulaTexto(nome), ordem: quando ?? "" };
+    },
+  },
+  {
+    chave: "acao",
+    rotulo: "Abertura",
+    tipo: "texto",
+    alinhar: "right",
+    celula: (x) => ({ ...celulaTexto(acaoDaLinha(x)), ordemNaLista: ORDEM_DA_ACAO.indexOf(acaoDaLinha(x)) }),
+  },
+];
 
 export function FilaAbertura({
   linhas,
@@ -51,7 +127,7 @@ export function FilaAbertura({
   const [recusandoSaveId, setRecusandoSaveId] = React.useState<string | null>(null);
 
   const q = busca.trim().toLowerCase();
-  const visiveis = React.useMemo(() => {
+  const jobsDaBusca = React.useMemo(() => {
     if (!q) return linhas;
     return linhas.filter((l) =>
       [l.codigo, l.nome, l.projeto_codigo, l.projeto_nome, l.cliente_nome]
@@ -64,7 +140,7 @@ export function FilaAbertura({
 
   // A busca acha o save pelo job (os mesmos campos das outras faixas) e
   // também pelo item da linha.
-  const savesVisiveis = React.useMemo(() => {
+  const savesDaBusca = React.useMemo(() => {
     if (!q) return saves;
     return saves.filter((s) =>
       [
@@ -81,6 +157,26 @@ export function FilaAbertura({
         .includes(q),
     );
   }, [saves, q]);
+
+  /** Saves e jobs numa lista só: os filtros dos títulos valem para as
+   *  três faixas de uma vez. */
+  const doTopo = React.useMemo<LinhaDaFila[]>(
+    () => [
+      ...savesDaBusca.map((s) => ({ tipo: "save" as const, s })),
+      ...jobsDaBusca.map((l) => ({ tipo: "job" as const, l })),
+    ],
+    [savesDaBusca, jobsDaBusca],
+  );
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "abertura-fila" });
+  // As faixas continuam; com ordem pelo título, cada faixa vem naquela ordem.
+  const savesVisiveis = React.useMemo(
+    () => colunas.visiveis.flatMap((x) => (x.tipo === "save" ? [x.s] : [])),
+    [colunas.visiveis],
+  );
+  const visiveis = React.useMemo(
+    () => colunas.visiveis.flatMap((x) => (x.tipo === "job" ? [x.l] : [])),
+    [colunas.visiveis],
+  );
 
   // Três faixas na MESMA tabela, e nenhuma cor nova. Saves em cima (design
   // da decisão 099): é o pedido pontual, que se resolve numa conferência
@@ -108,7 +204,9 @@ export function FilaAbertura({
   const aprovandoSave = saves.find((s) => s.id === aprovandoSaveId) ?? null;
   const recusandoSave = saves.find((s) => s.id === recusandoSaveId) ?? null;
 
-  const vazio = visiveis.length + savesVisiveis.length === 0;
+  // Vazio de verdade é a fila vazia ou a BUSCA sem resultado. Se foram os
+  // filtros dos títulos, a tabela fica (com os títulos, para desfazer).
+  const vazio = doTopo.length === 0;
   const comFaixas =
     [savesVisiveis.length, erratas.length, novas.length].filter((n) => n > 0)
       .length >= 2;
@@ -328,20 +426,28 @@ export function FilaAbertura({
         )}
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="linha"
+          plural="linhas"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       {!vazio ? (
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Código</th>
-                <th className="px-4 py-3 font-semibold">Job</th>
-                <th className="px-4 py-3 font-semibold">Projeto · Cliente</th>
-                <th className="px-4 py-3 font-semibold">GP responsável</th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Valor total
-                </th>
-                <th className="px-4 py-3 font-semibold">Enviado por</th>
-                <th className="px-4 py-3 text-right font-semibold">Abertura</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("job")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("projeto")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("enviado")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("acao")}</th>
               </tr>
             </thead>
             <tbody>
@@ -365,6 +471,13 @@ export function FilaAbertura({
               {novas.map((l) => (
                 <Linha key={l.id} l={l} />
               ))}
+              {colunas.visiveis.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    Nenhuma linha com esse filtro.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

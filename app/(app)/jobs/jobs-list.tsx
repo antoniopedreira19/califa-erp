@@ -27,6 +27,14 @@ import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn } from "@/lib/utils";
 import { jobStatusLabel, type JobStatusExibido, jobStatusBadgeClasses } from "@/lib/types";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 export interface JobRow {
   id: string;
@@ -115,7 +123,9 @@ function ColunasDaLista() {
       {/* Início */}
       <col className="w-[112px]" />
       {/* Valor total */}
-      <col className="w-[136px]" />
+      {/* 152 px (eram 136): o título "Valor total" com o funil do filtro
+          e a seta da ordem não cabia numa linha. */}
+      <col className="w-[152px]" />
       {/* Status: cabe o selo mais largo, "Rejeitado pelo financeiro"
           (182 px). */}
       <col className="w-[216px]" />
@@ -125,6 +135,38 @@ function ColunasDaLista() {
 
 /** Para o `colSpan` da faixa do projeto, que cobre a tabela inteira. */
 const TOTAL_DE_COLUNAS = 11;
+
+/** Ordem do Status na lista do filtro: a da esteira, não a alfabética. */
+const ORDEM_DO_STATUS: JobStatusExibido[] = [...STATUS_FILTROS, "cancelado"];
+
+/** As colunas que filtram e ordenam pelo título, como no Excel (pedido do
+ *  Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). */
+const COLUNAS: ColunaFiltravel<JobRow>[] = [
+  { chave: "codigo", rotulo: "Código", tipo: "texto", celula: (j) => celulaTexto(j.codigo) },
+  { chave: "nome", rotulo: "Nome", tipo: "texto", celula: (j) => celulaTexto(j.nome) },
+  { chave: "empresa", rotulo: "Empresa", tipo: "texto", alinhar: "center", celula: (j) => celulaTexto(j.empresa_nome) },
+  { chave: "marca", rotulo: "Marca", tipo: "texto", celula: (j) => celulaTexto(j.produto) },
+  { chave: "regional", rotulo: "Regional", tipo: "texto", celula: (j) => celulaTexto(j.regional_nome) },
+  { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (j) => celulaTexto(j.cliente_nome) },
+  { chave: "responsavel", rotulo: "Responsável", tipo: "texto", celula: (j) => celulaTexto(j.responsavel_nome) },
+  { chave: "inicio", rotulo: "Início", tipo: "data", alinhar: "center", celula: (j) => celulaData(j.data_inicio_prevista) },
+  {
+    chave: "valor",
+    rotulo: "Valor total",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (j) => celulaValor(j.valor_total, (n) => formatMoney(n)),
+  },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    alinhar: "center",
+    // A lista na ordem da esteira; as linhas, de A a Z pelo rótulo.
+    celula: (j) => ({ ...celulaTexto(jobStatusLabel(j.status)), ordemNaLista: ORDEM_DO_STATUS.indexOf(j.status) }),
+  },
+];
 
 interface GrupoProjeto {
   projetoId: string;
@@ -204,29 +246,11 @@ export function JobsList({
     );
   }, [rows]);
 
-  const gruposPorProjeto = React.useMemo(() => {
-    const map = new Map<string, JobRow[]>();
-    for (const r of rows) {
-      const arr = map.get(r.projeto_id) ?? [];
-      arr.push(r);
-      map.set(r.projeto_id, arr);
-    }
-    return map;
-  }, [rows]);
-
-  const grupos = React.useMemo<GrupoProjeto[]>(() => {
+  /** Os jobs que passam nos filtros de CIMA (chave, Selects, busca). Os
+   *  filtros dos títulos vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    // "Meus" também conta como filtro ativo: com ele ligado o grupo tem
-    // que abrir, senão esconde justamente o job que sobrou.
-    const filtroAtivo =
-      meus ||
-      statusFiltro !== "todos" ||
-      produtoFiltro !== "todos" ||
-      regionalFiltro !== "todas" ||
-      q !== "" ||
-      empresaFiltro !== "todas";
-
-    function combina(r: JobRow): boolean {
+    return rows.filter((r) => {
       // "Meu" é o job em que sou o GP responsável OU o produtor. Só com o
       // GP, o produtor abria a lista em "Meus" e não via nenhum job seu
       // (corrigido em 03/10/2026).
@@ -244,46 +268,63 @@ export function JobsList({
         r.codigo.toLowerCase().includes(q) ||
         r.nome.toLowerCase().includes(q)
       );
-    }
+    });
+  }, [rows, meus, usuarioId, statusFiltro, produtoFiltro, regionalFiltro, empresaFiltro, busca]);
 
-    // Projetos ordenados pelo job mais antigo do grupo, e os jobs pela
-    // criação. Era pelo código até a decisão 114 — com JOB-NNNN dava na
-    // mesma; com a sigla do cliente na frente, não dá mais.
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "jobs" });
+
+  const grupos = React.useMemo<GrupoProjeto[]>(() => {
+    // "Meus" também conta como filtro ativo: com ele ligado o grupo tem
+    // que abrir, senão esconde justamente o job que sobrou.
+    const filtroAtivo =
+      meus ||
+      busca.trim() !== "" ||
+      statusFiltro !== "todos" ||
+      produtoFiltro !== "todos" ||
+      regionalFiltro !== "todas" ||
+      empresaFiltro !== "todas" ||
+      colunas.filtrando;
+
+    // Sem ordem pelo título: projetos pelo job mais antigo do grupo, e os
+    // jobs pela criação. Era pelo código até a decisão 114 — com JOB-NNNN
+    // dava na mesma; com a sigla do cliente na frente, não dá mais.
+    // Com ordem pelo título: os jobs de cada projeto naquela ordem, e o
+    // projeto na posição do seu primeiro job — ordenar o Valor total do
+    // maior para o menor sobe o projeto do maior job.
     const porCriacao = (a: JobRow, b: JobRow) =>
       a.criado_em.localeCompare(b.criado_em);
-    const ordenados = Array.from(gruposPorProjeto.entries())
-      .map(([projetoId, jobsDoGrupo]) => ({
-        projetoId,
-        jobs: [...jobsDoGrupo].sort(porCriacao),
-      }))
-      .sort((a, b) => porCriacao(a.jobs[0], b.jobs[0]));
+    const base = colunas.ordenacao
+      ? colunas.visiveis
+      : [...colunas.visiveis].sort(porCriacao);
+    const porProjeto = new Map<string, JobRow[]>();
+    for (const j of base) {
+      const arr = porProjeto.get(j.projeto_id) ?? [];
+      arr.push(j);
+      porProjeto.set(j.projeto_id, arr);
+    }
+    const ordenados = Array.from(porProjeto.entries());
+    if (!colunas.ordenacao) ordenados.sort(([, a], [, b]) => porCriacao(a[0], b[0]));
 
-    const out: GrupoProjeto[] = [];
-
-    for (const { projetoId, jobs } of ordenados) {
-      const visiveis = jobs.filter(combina);
-      if (visiveis.length === 0) continue;
-
+    return ordenados.map(([projetoId, jobs]) => {
       const primeiro = jobs[0];
-      out.push({
+      return {
         projetoId,
         codigo: primeiro.projeto_codigo,
         nome: primeiro.projeto_nome,
         cliente: primeiro.cliente_nome,
         descricao: primeiro.projeto_descricao,
-        jobs: visiveis,
-        total: visiveis.reduce((s, j) => s + (j.valor_total ?? 0), 0),
+        jobs,
+        total: jobs.reduce((s, j) => s + (j.valor_total ?? 0), 0),
         // Com filtro ativo o grupo abre sempre: fechado ele esconderia
         // justamente o job que o filtro encontrou.
         aberto: filtroAtivo ? true : !fechadosIds.has(projetoId),
-      });
-    }
-
-    return out;
+      };
+    });
   }, [
-    gruposPorProjeto,
+    colunas.visiveis,
+    colunas.ordenacao,
+    colunas.filtrando,
     meus,
-    usuarioId,
     statusFiltro,
     produtoFiltro,
     regionalFiltro,
@@ -417,6 +458,18 @@ export function JobsList({
         </div>
       </div>
 
+      {/* Quantos jobs os filtros dos títulos deixaram (o mesmo aviso da aba
+          PPs): o filtro mora escondido no título. */}
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="job"
+          plural="jobs"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       {/* Tabela */}
       <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
         {/* Abaixo de 1500 px a tabela rola na horizontal em vez de espremer
@@ -426,19 +479,19 @@ export function JobsList({
           <thead>
             <tr className="border-b border-border bg-muted/60 text-left text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               <th className="w-8 px-2 py-3" aria-label="Expandir" />
-              <th className="px-4 py-3 font-semibold">Código</th>
-              <th className="px-4 py-3 font-semibold">Nome</th>
-              <th className="px-4 py-3 text-center font-semibold">Empresa</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("nome")}</th>
+              <th className="px-4 py-3 text-center font-semibold">{colunas.titulo("empresa")}</th>
               {/* Sem coluna Projeto (05/10/2026): o projeto já está na
                   faixa de cada grupo, e repetir em toda linha tirava
                   largura do Nome. */}
-              <th className="px-4 py-3 font-semibold">Marca</th>
-              <th className="px-4 py-3 font-semibold">Regional</th>
-              <th className="px-4 py-3 font-semibold">Cliente</th>
-              <th className="px-4 py-3 font-semibold">Responsável</th>
-              <th className="px-4 py-3 text-center font-semibold">Início</th>
-              <th className="px-4 py-3 text-right font-semibold">Valor total</th>
-              <th className="px-4 py-3 text-center font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("marca")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("regional")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("responsavel")}</th>
+              <th className="px-4 py-3 text-center font-semibold">{colunas.titulo("inicio")}</th>
+              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+              <th className="px-4 py-3 text-center font-semibold">{colunas.titulo("status")}</th>
             </tr>
           </thead>
           <tbody>
@@ -690,6 +743,7 @@ export function JobsList({
                 setRegionalFiltro("todas");
                 setEmpresaFiltro("todas");
                 setBusca("");
+                colunas.limpar();
               }}
               className="mt-1 rounded-lg border border-border bg-white px-3.5 py-1.5 text-xs font-semibold hover:border-california-red/40 hover:text-california-red"
             >

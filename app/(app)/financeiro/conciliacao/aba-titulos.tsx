@@ -64,6 +64,14 @@ import {
   type Lado,
   type Linha,
 } from "./linhas-da-aba";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 // ---------------------------------------------------------------------------
 // Datas e dinheiro
@@ -96,6 +104,55 @@ const CHIPS_TIPO: Array<{ key: FiltroTipo; label: string }> = [
   { key: "pagar", label: "A pagar" },
   { key: "receber", label: "A receber" },
   { key: "imposto", label: "Impostos" },
+];
+
+/** O texto do chip da coluna Tipo (`ChipTipo`), na ordem da lista. */
+const ROTULO_DO_LADO: Record<Lado, string> = { pagar: "A pagar", receber: "A receber", imposto: "Imposto" };
+const ORDEM_DO_LADO: Lado[] = ["pagar", "receber", "imposto"];
+
+/**
+ * As colunas que filtram e ordenam pelo título, como no Excel (pedido do
+ * Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). Ficam sem filtro
+ * a caixa da seleção e a Ação (o mesmo "Baixar" em toda linha).
+ *
+ * Valor filtra e ordena pelo que FALTA (o número grande da célula), sem o
+ * sinal: "de / até" vale para o que entra e para o que sai.
+ */
+const COLUNAS: ColunaFiltravel<Linha>[] = [
+  { chave: "vencimento", rotulo: "Vencimento", tipo: "data", alinhar: "center", celula: (l) => celulaData(l.vencimento) },
+  {
+    chave: "tipo",
+    rotulo: "Tipo",
+    tipo: "texto",
+    alinhar: "center",
+    celula: (l) => ({
+      ...celulaTexto(ROTULO_DO_LADO[l.lado]),
+      ordemNaLista: ORDEM_DO_LADO.indexOf(l.lado),
+    }),
+  },
+  {
+    // A busca da coluna acha pela referência também (PP-00127, NF 602…).
+    chave: "titulo",
+    rotulo: "Título",
+    tipo: "texto",
+    celula: (l) => ({ ...celulaTexto(l.titulo), busca: `${l.titulo} ${l.referencia}` }),
+  },
+  { chave: "contraparte", rotulo: "Contraparte", tipo: "texto", celula: (l) => celulaTexto(l.contraparte === "—" ? "" : l.contraparte) },
+  { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (l) => celulaTexto(l.empresa === "—" ? "" : l.empresa) },
+  {
+    chave: "job",
+    rotulo: "Job",
+    tipo: "texto",
+    celula: (l) => ({ ...celulaTexto(l.job?.codigo), busca: `${l.job?.codigo ?? ""} ${l.job?.titulo ?? ""}` }),
+  },
+  {
+    chave: "valor",
+    rotulo: "Valor",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (l) => celulaValor(l.aberto, formatMoney),
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -154,7 +211,15 @@ export function AbaTitulos({
     receber: base.filter((l) => l.lado === "receber").length,
     imposto: base.filter((l) => l.lado === "imposto").length,
   };
-  const filtrados = tipo === "todos" ? base : base.filter((l) => l.lado === tipo);
+  // Memo: o filtro dos títulos recalcula as células quando a lista muda.
+  const doTopo = React.useMemo(
+    () => (tipo === "todos" ? base : base.filter((l) => l.lado === tipo)),
+    [base, tipo],
+  );
+  // Os filtros dos títulos vêm DEPOIS do vencimento, da busca e do tipo —
+  // as contagens dos chips continuam as de hoje.
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "conciliacao-titulos" });
+  const filtrados = colunas.visiveis;
 
   // A baixa em lote, como nas listas: a seleção vale para o que está na
   // tela (filtros valendo), e o título que some do filtro, ou que foi
@@ -252,6 +317,16 @@ export function AbaTitulos({
         ))}
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="título"
+          plural="títulos"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full table-fixed text-sm">
           <thead>
@@ -261,13 +336,13 @@ export function AbaTitulos({
                     — da origem já marcada. */}
                 <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
-              <th className="w-[8%] px-2 py-3 font-semibold">Vencimento</th>
-              <th className="w-[8%] px-2 py-3 font-semibold">Tipo</th>
-              <th className="w-[24%] px-3 py-3 text-left font-semibold">Título</th>
-              <th className="w-[17%] px-3 py-3 text-left font-semibold">Contraparte</th>
-              <th className="w-[10%] px-3 py-3 text-left font-semibold">Empresa</th>
-              <th className="w-[11%] px-2 py-3 text-left font-semibold">Job</th>
-              <th className="w-[12%] px-3 py-3 text-right font-semibold">Valor</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">{colunas.titulo("tipo")}</th>
+              <th className="w-[24%] px-3 py-3 text-left font-semibold">{colunas.titulo("titulo")}</th>
+              <th className="w-[17%] px-3 py-3 text-left font-semibold">{colunas.titulo("contraparte")}</th>
+              <th className="w-[10%] px-3 py-3 text-left font-semibold">{colunas.titulo("empresa")}</th>
+              <th className="w-[11%] px-2 py-3 text-left font-semibold">{colunas.titulo("job")}</th>
+              <th className="w-[12%] px-3 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
               <th className="w-[7%] px-3 py-3 font-semibold">Ação</th>
             </tr>
           </thead>
@@ -277,7 +352,10 @@ export function AbaTitulos({
                 <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {linhas.length === 0
                     ? "Nenhum título aguardando baixa."
-                    : "Nenhum título encontrado com esses filtros."}
+                    : doTopo.length > 0
+                      ? // Foram os títulos das colunas: a tabela fica, com eles, para desfazer.
+                        "Nenhum título com esse filtro."
+                      : "Nenhum título encontrado com esses filtros."}
                 </td>
               </tr>
             )}

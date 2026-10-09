@@ -12,6 +12,14 @@ import type {
 } from "@/lib/types";
 import { ContaRecorrenteDrawer } from "./conta-recorrente-drawer";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 // ---------------------------------------------------------------------------
 // Tipos exportados
@@ -75,6 +83,64 @@ function formatMoney(n: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
+// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). Fica de fora só a coluna
+// Ações (o link "Ver detalhes").
+// ---------------------------------------------------------------------------
+
+/** Em ordem alfabética: "de A a Z" põe Anual, Mensal e Quinzenal nessa
+ *  ordem, e o dia (ou dia e mês) ordena como número dentro de cada uma. */
+const FREQUENCIAS: Array<[FrequenciaRecorrencia, string]> = [
+  ["anual", "Anual"],
+  ["mensal", "Mensal"],
+  ["quinzenal", "Quinzenal"],
+];
+
+/** Ordena pelo tipo e, dentro dele, pelo dia — "dia 3" antes de "dia 10". */
+function ordemDaFrequencia(r: RecorrenteRow): number {
+  const tipo = FREQUENCIAS.findIndex(([f]) => f === r.frequencia);
+  const dia =
+    r.frequencia === "mensal"
+      ? (r.dia_do_mes ?? 0)
+      : r.frequencia === "quinzenal"
+        ? (r.dia_quinzena_1 ?? 0)
+        : (r.dia_do_ano_mes ?? 0) * 100 + (r.dia_do_ano_dia ?? 0);
+  return tipo * 10000 + dia;
+}
+
+const COLUNAS: ColunaFiltravel<RecorrenteRow>[] = [
+  { chave: "descricao", rotulo: "Descrição", tipo: "texto", celula: (r) => celulaTexto(r.descricao) },
+  {
+    // Árvore tipo ▸ dia, como a célula: "Mensal ▸ Mensal · dia 5".
+    chave: "frequencia",
+    rotulo: "Frequência",
+    tipo: "texto",
+    celula: (r) => ({
+      ...celulaTexto(formatFrequenciaResumo(r)),
+      ordem: ordemDaFrequencia(r),
+      grupo: FREQUENCIAS.find(([f]) => f === r.frequencia)?.[1] ?? "",
+    }),
+  },
+  { chave: "proxima", rotulo: "Próxima data", tipo: "data", celula: (r) => celulaData(r.proxima_data) },
+  { chave: "fornecedor", rotulo: "Fornecedor", tipo: "texto", celula: (r) => celulaTexto(r.fornecedor_nome) },
+  { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (r) => celulaTexto(r.empresa_nome) },
+  {
+    chave: "valor",
+    rotulo: "Valor",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (r) => celulaValor(r.valor, formatMoney),
+  },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    celula: (r) => ({ ...celulaTexto(r.ativo ? "Ativa" : "Parada"), ordemNaLista: r.ativo ? 0 : 1 }),
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Props do componente
 // ---------------------------------------------------------------------------
 
@@ -114,7 +180,9 @@ export function RecorrentesList({
   const [busca, setBusca] = React.useState("");
   const [ativoFiltro, setAtivoFiltro] = React.useState<AtivoFiltro>("ativas");
 
-  const filtered = React.useMemo(() => {
+  /** O que passa nos filtros de CIMA (chip e busca). Os dos títulos vêm
+   *  depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rows.filter((r) => {
       if (ativoFiltro === "ativas" && !r.ativo) return false;
@@ -126,6 +194,8 @@ export function RecorrentesList({
       );
     });
   }, [rows, busca, ativoFiltro]);
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-recorrencias" });
+  const filtered = colunas.visiveis;
 
   return (
     <div className="space-y-4">
@@ -184,8 +254,19 @@ export function RecorrentesList({
         />
       </div>
 
-      {/* Tabela ou empty state */}
-      {filtered.length === 0 ? (
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="recorrência"
+          plural="recorrências"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
+      {/* Tabela ou empty state. O vazio pelos filtros dos títulos não troca
+          a tabela pelo aviso: ela fica, com os títulos, para desfazer. */}
+      {doTopo.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border py-16 text-center">
           <p className="text-sm text-muted-foreground">
             {rows.length === 0
@@ -198,17 +279,26 @@ export function RecorrentesList({
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 text-left">Descrição</th>
-                <th className="px-3 py-2 text-left">Frequência</th>
-                <th className="px-3 py-2 text-left">Próxima data</th>
-                <th className="px-3 py-2 text-left">Fornecedor</th>
-                <th className="px-3 py-2 text-left">Empresa</th>
-                <th className="px-3 py-2 text-right">Valor</th>
-                <th className="px-3 py-2 text-left">Status</th>
+                {/* `tracking-normal`: o cabeçalho desta tabela não tem o
+                    espaçamento largo que o botão do título traz. */}
+                <th className="px-3 py-2 text-left">{colunas.titulo("descricao", "tracking-normal")}</th>
+                <th className="px-3 py-2 text-left">{colunas.titulo("frequencia", "tracking-normal")}</th>
+                <th className="px-3 py-2 text-left">{colunas.titulo("proxima", "tracking-normal")}</th>
+                <th className="px-3 py-2 text-left">{colunas.titulo("fornecedor", "tracking-normal")}</th>
+                <th className="px-3 py-2 text-left">{colunas.titulo("empresa", "tracking-normal")}</th>
+                <th className="px-3 py-2 text-right">{colunas.titulo("valor", "tracking-normal")}</th>
+                <th className="px-3 py-2 text-left">{colunas.titulo("status", "tracking-normal")}</th>
                 <th className="px-3 py-2 text-left">Ações</th>
               </tr>
             </thead>
             <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                    Nenhuma recorrência com esse filtro.
+                  </td>
+                </tr>
+              )}
               {filtered.map((r) => (
                 <tr
                   key={r.id}

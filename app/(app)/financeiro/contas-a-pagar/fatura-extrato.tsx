@@ -21,12 +21,26 @@ import { cn } from "@/lib/utils";
 import type { ItemDaFatura } from "@/lib/data/fatura-cartao-extrato";
 import {
   DetalhesPopover,
+  colunasDoExtrato,
   derivarJobParaColuna,
   limparPrefixoDescricao,
   trimestreDe,
 } from "@/app/(app)/financeiro/conciliacao/conciliacao-list";
 import type { TituloRow } from "./titulos-pagar-list";
 import { limparDescricaoDaFatura } from "@/lib/cartoes/descricao-fatura";
+import { BarraDosFiltrosDeColuna, useFiltrosDeColuna } from "@/components/ui/filtro-de-coluna";
+
+/** As colunas que filtram e ordenam pelo título (pedido do Tiago,
+ *  09/10/2026): as MESMAS da planilha da conciliação, com a descrição da
+ *  fatura. Acumulado (o saldo corrente da fatura), detalhes e Ação ficam
+ *  sem filtro — ver `colunasDoExtrato`. */
+const COLUNAS = colunasDoExtrato<ItemDaFatura>({
+  descricao: (l) => descricaoDaFatura(l.descricao, l.origem),
+});
+
+/** Os títulos mantêm a caixa da tabela (sem o espaçamento largo que o
+ *  botão do filtro traz). */
+const TITULO = "tracking-normal";
 
 /** A chave que liga a linha do extrato ao título de onde ela veio. */
 export function chaveDoTitulo(t: TituloRow): string | null {
@@ -49,12 +63,18 @@ export function FaturaExtrato({
   titulosPorChave,
   onVerBaixa,
   onEstornarCompra,
+  contexto = "",
 }: {
   itens: ItemDaFatura[];
+  /** O cartão e a competência: trocar de fatura zera os filtros dos
+   *  títulos, porque os itens são outros (decisão 165). */
+  contexto?: string;
   titulosPorChave: Map<string, TituloRow>;
   onVerBaixa: (t: TituloRow) => void;
   onEstornarCompra: (t: TituloRow) => void;
 }) {
+  const colunas = useFiltrosDeColuna(itens, COLUNAS, { guardarEm: "contas-a-pagar-cartao-fatura", contexto });
+
   if (itens.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border py-16 text-center">
@@ -67,28 +87,55 @@ export function FaturaExtrato({
   }
 
   const total = itens.length ? itens[itens.length - 1].acumulado : 0;
+  // Com filtro, o rodapé soma o que sobrou (débitos − créditos, como o
+  // acumulado), e diz "Total do filtro" — como a página inicial da
+  // conciliação. Os quatro números de cima continuam os da fatura.
+  const totalDoFiltro = colunas.visiveis.reduce((s, l) => s + l.debito - l.credito, 0);
 
   return (
+    <>
+    {colunas.ativo && (
+      <BarraDosFiltrosDeColuna
+        visiveis={colunas.visiveis.length}
+        total={colunas.total}
+        singular="item da fatura"
+        plural="itens da fatura"
+        onLimpar={colunas.limpar}
+      />
+    )}
     <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full min-w-[1200px] text-sm">
         <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
           <tr>
-            <th className="px-3 py-2 text-left">Data</th>
-            <th className="px-3 py-2 text-right">Crédito</th>
-            <th className="px-3 py-2 text-right">Débito</th>
-            <th className="px-3 py-2 text-right">Acumulado</th>
-            <th className="px-3 py-2 text-left">Descrição</th>
-            <th className="px-3 py-2 text-left">Fornecedor</th>
-            <th className="px-3 py-2 text-left">Job</th>
-            <th className="px-3 py-2 text-left">Centro de Custo</th>
-            <th className="px-3 py-2 text-center">Trimestre</th>
-            <th className="px-3 py-2 text-left">Empresa</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("data", TITULO)}</th>
+            <th className="px-3 py-2 text-right">{colunas.titulo("credito", TITULO)}</th>
+            <th className="px-3 py-2 text-right">{colunas.titulo("debito", TITULO)}</th>
+            {/* Acumulado: o saldo corrente da fatura — sem filtro e sem ordem. */}
+            <th
+              className="px-3 py-2 text-right"
+              title={colunas.ativo ? "Acumulado da fatura: não muda com o filtro nem com a ordem dos títulos." : undefined}
+            >
+              Acumulado
+            </th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("descricao", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("fornecedor", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("job", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("centro", TITULO)}</th>
+            <th className="px-3 py-2 text-center">{colunas.titulo("trimestre", TITULO)}</th>
+            <th className="px-3 py-2 text-left">{colunas.titulo("empresa", TITULO)}</th>
             <th className="w-10 px-3 py-2 text-center" aria-label="Detalhes" />
             <th className="w-20 px-2 py-2 text-center">Ação</th>
           </tr>
         </thead>
         <tbody>
-          {itens.map((l) => {
+          {colunas.visiveis.length === 0 && (
+            <tr>
+              <td colSpan={12} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                Nenhum item com esse filtro.
+              </td>
+            </tr>
+          )}
+          {colunas.visiveis.map((l) => {
             const pendente = l.papel === "pendente";
             const titulo = l.origem_item
               ? titulosPorChave.get(`${l.origem_item.tipo}:${l.origem_item.id}`) ?? null
@@ -199,16 +246,19 @@ export function FaturaExtrato({
         <tfoot className="border-t-2 border-border bg-muted/30">
           <tr>
             <td className="px-3 py-2.5 text-xs font-semibold" colSpan={3}>
-              Total da fatura · {itens.length} {itens.length === 1 ? "item" : "itens"}
+              {colunas.filtrando
+                ? `Total do filtro · ${colunas.visiveis.length} de ${itens.length} ${itens.length === 1 ? "item" : "itens"}`
+                : `Total da fatura · ${itens.length} ${itens.length === 1 ? "item" : "itens"}`}
             </td>
             <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-sm font-bold">
-              {formatMoney(total)}
+              {formatMoney(colunas.filtrando ? totalDoFiltro : total)}
             </td>
             <td colSpan={8} />
           </tr>
         </tfoot>
       </table>
     </div>
+    </>
   );
 }
 

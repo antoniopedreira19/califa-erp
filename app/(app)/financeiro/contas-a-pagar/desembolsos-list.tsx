@@ -9,6 +9,14 @@ import { desembolsoStatusLabel } from "@/lib/types";
 import { AprovarDesembolsoDialog } from "./aprovar-desembolso-dialog";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { RejeitarDesembolsoDialog, type ModoDialog } from "./rejeitar-desembolso-dialog";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 // ---------- Tipo da row (vindo do SELECT com joins) ----------
 
@@ -68,6 +76,47 @@ const FILTROS: Array<{ key: FiltroStatus; label: string }> = [
   { key: "todas", label: "Todos" },
 ];
 
+// ---------- Filtro e ordem pelo título da coluna ----------
+//
+// Como no Excel (pedido do Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do
+// job). Fica de fora só a coluna Ações (botões).
+
+/** A lista do funil de Status na ordem da esteira, não de A a Z. */
+const ORDEM_DO_STATUS: DesembolsoStatus[] = ["em_avaliacao", "aprovada", "pago", "rejeitada", "cancelada"];
+
+const COLUNAS: ColunaFiltravel<DesembolsoRow>[] = [
+  {
+    chave: "codigo",
+    rotulo: "Código",
+    tipo: "texto",
+    // A célula mostra o código e a descrição: a busca da coluna acha pelos dois.
+    celula: (r) => ({ ...celulaTexto(r.codigo), busca: `${r.codigo} ${r.descricao}` }),
+  },
+  { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (r) => celulaTexto(r.empresa_nome === "—" ? "" : r.empresa_nome) },
+  { chave: "fornecedor", rotulo: "Fornecedor", tipo: "texto", celula: (r) => celulaTexto(r.fornecedor_nome === "—" ? "" : r.fornecedor_nome) },
+  {
+    chave: "valor",
+    rotulo: "Valor",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (r) => celulaValor(r.valor, formatMoney),
+  },
+  { chave: "criador", rotulo: "Criado por", tipo: "texto", celula: (r) => celulaTexto(r.criador_nome === "—" ? "" : r.criador_nome) },
+  { chave: "criacao", rotulo: "Criação", tipo: "data", celula: (r) => celulaData(r.created_at) },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    celula: (r) => ({
+      ...celulaTexto(desembolsoStatusLabel(r.status)),
+      // A busca acha também pelo motivo da rejeição ou do cancelamento.
+      busca: `${desembolsoStatusLabel(r.status)} ${r.motivo_rejeicao ?? ""} ${r.motivo_cancelamento ?? ""}`,
+      ordemNaLista: ORDEM_DO_STATUS.indexOf(r.status),
+    }),
+  },
+];
+
 // ---------- Componente principal ----------
 
 interface DesembolsosContasPagarListProps {
@@ -95,10 +144,13 @@ export function DesembolsosContasPagarList({ rows,
     return c;
   }, [rows]);
 
-  const filtrados = React.useMemo(() => {
+  /** O que passa no chip de cima. Os filtros dos títulos vêm depois. */
+  const doTopo = React.useMemo(() => {
     if (filtro === "todas") return rows;
     return rows.filter((r) => r.status === filtro);
   }, [rows, filtro]);
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-desembolsos" });
+  const filtrados = colunas.visiveis;
 
   function abrirDialog(desembolso: DesembolsoRow, tipo: "aprovar" | "rejeitar" | "cancelar") {
     setDialog({ desembolso, tipo });
@@ -163,23 +215,42 @@ export function DesembolsosContasPagarList({ rows,
         })}
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="pedido"
+          plural="pedidos"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       {/* Tabela */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="px-4 py-3 font-semibold">Código</th>
-              <th className="px-4 py-3 font-semibold">Empresa</th>
-              <th className="px-4 py-3 font-semibold">Fornecedor</th>
-              <th className="px-4 py-3 font-semibold text-right">Valor</th>
-              <th className="px-4 py-3 font-semibold">Criado por</th>
-              <th className="px-4 py-3 font-semibold">Criação</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("empresa")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("fornecedor")}</th>
+              <th className="px-4 py-3 font-semibold text-right">{colunas.titulo("valor")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("criador")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("criacao")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("status")}</th>
               <th className="px-4 py-3 font-semibold">Ações</th>
             </tr>
           </thead>
           <tbody>
-            {filtrados.length === 0 && (
+            {/* Vazio pelos filtros dos títulos: a tabela fica, com os
+                títulos, para desfazer. */}
+            {doTopo.length > 0 && filtrados.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  Nenhum pedido de desembolso com esse filtro.
+                </td>
+              </tr>
+            )}
+            {doTopo.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0

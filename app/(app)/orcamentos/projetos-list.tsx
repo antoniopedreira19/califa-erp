@@ -23,6 +23,14 @@ import { cn } from "@/lib/utils";
 import type { Cliente, ProjetoStatus } from "@/lib/types";
 import { ChaveMeusTodos } from "@/components/ui/chave-meus-todos";
 import { projetoStatusLabel } from "@/lib/types";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  useFiltrosDeColuna,
+  type CelulaDaColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 export interface ProjetoRow {
   id: string;
@@ -110,12 +118,14 @@ function ColunasDaLista() {
       <col className="w-[172px]" />
       {/* Início */}
       <col className="w-[112px]" />
-      {/* Orçamentos, Aprovados, Enviados e Abertos: cabe o título, com o
-          respiro menor de `FUNIL_PX`. */}
-      <col className="w-[112px]" />
+      {/* Orçamentos, Aprovados, Enviados e Abertos: cabe o título com o
+          funil do filtro, com o respiro menor de `FUNIL_PX`. Eram 112, 104,
+          88 e 88 px; o funil pede 16 px a mais por título, e o Nome fica
+          com ~240 px. */}
+      <col className="w-[128px]" />
+      <col className="w-[116px]" />
       <col className="w-[104px]" />
-      <col className="w-[88px]" />
-      <col className="w-[88px]" />
+      <col className="w-[96px]" />
       {/* Status: cabe o selo mais largo, "Arquivado" (87 px). */}
       <col className="w-[120px]" />
     </colgroup>
@@ -129,6 +139,34 @@ const FUNIL_PX = "px-2";
 
 /** Para o `colSpan` da linha de lista vazia, que cobre a tabela inteira. */
 const TOTAL_DE_COLUNAS = 12;
+
+/** Uma célula por item da coluna de vários valores (marcas, regionais,
+ *  GPs): o projeto passa no filtro se ALGUM item estiver marcado. */
+function varios(nomes: string[]): CelulaDaColuna | CelulaDaColuna[] {
+  return nomes.length === 0 ? celulaTexto(null) : nomes.map((n) => celulaTexto(n));
+}
+
+/** Contagem do funil: a lista mostra os números, do menor ao maior. */
+function contagem(n: number): CelulaDaColuna {
+  return { valor: String(n), rotulo: n === 0 ? "0 (—)" : String(n), ordem: n };
+}
+
+/** As colunas que filtram e ordenam pelo título, como no Excel (pedido do
+ *  Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). */
+const COLUNAS: ColunaFiltravel<ProjetoRow>[] = [
+  { chave: "codigo", rotulo: "Código", tipo: "texto", celula: (p) => celulaTexto(p.codigo) },
+  { chave: "nome", rotulo: "Nome", tipo: "texto", celula: (p) => celulaTexto(p.nome) },
+  { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (p) => celulaTexto(p.cliente_nome) },
+  { chave: "marca", rotulo: "Marca", tipo: "texto", celula: (p) => varios(p.marcas.map((m) => m.nome)) },
+  { chave: "regional", rotulo: "Regional", tipo: "texto", celula: (p) => varios(p.regionais.map((r) => r.nome)) },
+  { chave: "gp", rotulo: "GP Responsável", tipo: "texto", celula: (p) => varios(p.gps) },
+  { chave: "inicio", rotulo: "Início", tipo: "data", celula: (p) => celulaData(p.data_inicio_prevista) },
+  { chave: "orcamentos", rotulo: "Orçamentos", tipo: "valor", alinhar: "center", celula: (p) => contagem(p.orcamentos_count) },
+  { chave: "aprovados", rotulo: "Aprovados", tipo: "valor", alinhar: "center", celula: (p) => contagem(p.aprovados_count) },
+  { chave: "enviados", rotulo: "Enviados", tipo: "valor", alinhar: "center", celula: (p) => contagem(p.enviados_count) },
+  { chave: "abertos", rotulo: "Abertos", tipo: "valor", alinhar: "center", celula: (p) => contagem(p.abertos_count) },
+  { chave: "status", rotulo: "Status", tipo: "texto", celula: (p) => celulaTexto(projetoStatusLabel(p.status)) },
+];
 
 /** Contador "+N" das colunas com mais de um valor (Marca, Regional, GP):
  *  o primeiro aparece inteiro e o resto vai no título. `flex-none` para o
@@ -212,7 +250,9 @@ export function ProjetosList({
     [meusProjetoIds],
   );
 
-  const filtrados = React.useMemo(() => {
+  /** Os projetos que passam nos filtros de CIMA. Os filtros dos títulos
+   *  vêm depois, sobre esta lista. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return projetos.filter((p) => {
       if (meus && !meusIds.has(p.id)) return false;
@@ -249,6 +289,9 @@ export function ProjetosList({
     anoFiltro,
     statusFiltro,
   ]);
+
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "orcamentos" });
+  const filtrados = colunas.visiveis;
 
   return (
     <div className="space-y-4">
@@ -331,6 +374,16 @@ export function ProjetosList({
         </Select>
       </div>
 
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="projeto"
+          plural="projetos"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
         {/* Abaixo de 1500 px a tabela rola na horizontal em vez de espremer
             o Nome. Era `overflow-hidden`: o que passava da largura sumia. */}
@@ -338,18 +391,18 @@ export function ProjetosList({
           <ColunasDaLista />
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="px-4 py-3 font-semibold">Código</th>
-              <th className="px-4 py-3 font-semibold">Nome</th>
-              <th className="px-4 py-3 font-semibold">Cliente</th>
-              <th className="px-4 py-3 font-semibold">Marca</th>
-              <th className="px-4 py-3 font-semibold">Regional</th>
-              <th className="px-4 py-3 font-semibold">GP Responsável</th>
-              <th className="px-4 py-3 font-semibold">Início</th>
-              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Orçamentos</th>
-              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Aprovados</th>
-              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Enviados</th>
-              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>Abertos</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("nome")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("marca")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("regional")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("inicio")}</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>{colunas.titulo("orcamentos")}</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>{colunas.titulo("aprovados")}</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>{colunas.titulo("enviados")}</th>
+              <th className={cn(FUNIL_PX, "py-3 font-semibold text-center")}>{colunas.titulo("abertos")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("status")}</th>
             </tr>
           </thead>
           <tbody>

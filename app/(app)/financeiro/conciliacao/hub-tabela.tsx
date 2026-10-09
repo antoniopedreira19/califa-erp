@@ -18,6 +18,81 @@ import { ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { dataCurta, hrefExtrato, TIPO_CONTA_LABEL, type ContaResumo } from "./hub-periodo";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
+
+/**
+ * As colunas que filtram e ordenam pelo título, como no Excel (sugestão aprovada em
+ * 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). Fica sem
+ * filtro só a seta da linha. A empresa contábil é a faixa do grupo, não
+ * coluna: quem filtra empresa é a busca de cima, como hoje.
+ */
+const COLUNAS: ColunaFiltravel<ContaResumo>[] = [
+  {
+    // A busca da coluna acha pelo tipo e pela agência/conta também.
+    chave: "conta",
+    rotulo: "Conta",
+    tipo: "texto",
+    celula: (c) => ({
+      ...celulaTexto(c.nome),
+      busca: `${c.nome} ${TIPO_CONTA_LABEL[c.tipo] ?? c.tipo} ${c.agenciaConta ?? ""}`,
+    }),
+  },
+  { chave: "banco", rotulo: "Banco", tipo: "texto", celula: (c) => celulaTexto(c.banco) },
+  {
+    chave: "situacao",
+    rotulo: "Situação",
+    tipo: "texto",
+    celula: (c) => ({ ...celulaTexto(c.ativa ? "Ativa" : "Inativa"), ordemNaLista: c.ativa ? 0 : 1 }),
+  },
+  { chave: "ultimo", rotulo: "Último mov.", tipo: "data", alinhar: "right", celula: (c) => celulaData(c.ultimoMovimento) },
+  {
+    // Contagem: a lista mostra os números, e "—" para a conta sem lançamento.
+    chave: "lancamentos",
+    rotulo: "Lanç.",
+    tipo: "valor",
+    alinhar: "right",
+    celula: (c) => ({
+      valor: String(c.lancamentosPeriodo),
+      rotulo: c.lancamentosPeriodo ? String(c.lancamentosPeriodo) : "—",
+      ordem: c.lancamentosPeriodo,
+    }),
+  },
+  {
+    chave: "entradas",
+    rotulo: "Entradas",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (c) => celulaValor(c.creditosPeriodo, formatCurrency),
+  },
+  {
+    chave: "saidas",
+    rotulo: "Saídas",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (c) => celulaValor(c.debitosPeriodo, formatCurrency),
+  },
+  {
+    chave: "saldo",
+    rotulo: "Saldo atual",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (c) => celulaValor(c.saldoAtual, formatCurrency),
+  },
+];
+
+/** Os títulos desta tabela são em caixa normal, sem o espaçamento largo:
+ *  o botão do filtro segue o desenho dela. */
+const TITULO = "normal-case tracking-normal";
 
 export function HubTabela({
   contas,
@@ -39,9 +114,10 @@ export function HubTabela({
 }) {
   const [busca, setBusca] = React.useState("");
 
-  const grupos = React.useMemo(() => {
+  /** As contas que passam na busca de cima. Os títulos filtram depois. */
+  const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    const filtradas = q
+    return q
       ? contas.filter(
           (c) =>
             c.nome.toLowerCase().includes(q) ||
@@ -49,6 +125,11 @@ export function HubTabela({
             c.empresaContabil.toLowerCase().includes(q),
         )
       : contas;
+  }, [contas, busca]);
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "conciliacao-contas" });
+
+  const grupos = React.useMemo(() => {
+    const filtradas = colunas.visiveis;
 
     const mapa = new Map<string, ContaResumo[]>();
     for (const c of filtradas) {
@@ -72,10 +153,17 @@ export function HubTabela({
           lancamentos: ativas.reduce((a, c) => a + c.lancamentosPeriodo, 0),
         };
       })
-      .sort((a, b) => b.saldo - a.saldo || a.empresa.localeCompare(b.empresa));
-  }, [contas, busca]);
+      // Com ordem pelo título, as contas vêm naquela ordem dentro da
+      // empresa, e a empresa entra na posição da sua primeira conta (o
+      // `Map` guarda a ordem de chegada). Sem ordem, a de sempre: a empresa
+      // de maior saldo primeiro.
+      .sort((a, b) =>
+        colunas.ordenacao ? 0 : b.saldo - a.saldo || a.empresa.localeCompare(b.empresa),
+      );
+  }, [colunas.visiveis, colunas.ordenacao]);
 
-  const filtrando = busca.trim().length > 0;
+  // A busca OU um título filtrando: o rodapé vira "Total do filtro".
+  const filtrando = busca.trim().length > 0 || colunas.filtrando;
   const vistas = grupos.reduce(
     (a, g) => a + g.contas.filter((c) => c.ativa).length,
     0,
@@ -109,7 +197,19 @@ export function HubTabela({
         />
       </div>
 
-      {grupos.length === 0 ? (
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="conta"
+          plural="contas"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
+      {/* Vazio de verdade é a BUSCA sem resultado. Se foram os títulos, a
+          tabela fica (com eles, para desfazer). */}
+      {doTopo.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border py-12 text-center">
           <p className="text-sm text-muted-foreground">
             Nenhuma conta corresponde à busca.
@@ -121,33 +221,42 @@ export function HubTabela({
             <thead className="border-b border-border bg-muted/40">
               <tr>
                 <th className="min-w-[220px] px-4 py-3 text-left font-medium text-muted-foreground">
-                  Conta
+                  {colunas.titulo("conta", TITULO)}
                 </th>
                 <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">
-                  Banco
+                  {colunas.titulo("banco", TITULO)}
                 </th>
                 <th className="w-28 whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">
-                  Situação
+                  {colunas.titulo("situacao", TITULO)}
                 </th>
                 <th className="w-24 whitespace-nowrap px-3 py-3 text-right font-medium text-muted-foreground">
-                  Último mov.
+                  {colunas.titulo("ultimo", TITULO)}
                 </th>
                 <th className="w-16 px-3 py-3 text-right font-medium text-muted-foreground">
-                  Lanç.
+                  {colunas.titulo("lancamentos", TITULO)}
                 </th>
                 <th className="w-36 whitespace-nowrap px-3 py-3 text-right font-medium text-muted-foreground">
-                  Entradas
+                  {colunas.titulo("entradas", TITULO)}
                 </th>
                 <th className="w-36 whitespace-nowrap px-3 py-3 text-right font-medium text-muted-foreground">
-                  Saídas
+                  {colunas.titulo("saidas", TITULO)}
                 </th>
                 <th className="w-40 whitespace-nowrap px-4 py-3 text-right font-medium text-muted-foreground">
-                  Saldo atual
+                  {colunas.titulo("saldo", TITULO)}
                 </th>
                 <th className="w-10 px-2 py-3" />
               </tr>
             </thead>
 
+            {grupos.length === 0 && (
+              <tbody>
+                <tr>
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    Nenhuma conta com esse filtro.
+                  </td>
+                </tr>
+              </tbody>
+            )}
             {grupos.map((g) => (
               <tbody key={g.empresa}>
                 <tr className="border-y border-border bg-muted/20">

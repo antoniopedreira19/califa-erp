@@ -36,7 +36,15 @@ import {
   useSelecao,
   type TituloParaLote,
 } from "@/components/financeiro/baixa-em-lote";
-import { LinkAnexo } from "@/components/financeiro/anexo-de-imposto";
+import { LinkAnexo, nomeDoAnexo } from "@/components/financeiro/anexo-de-imposto";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 import type { DadosDosImpostos, ImpostoDaLista } from "./dados";
 import {
   AvulsoDialog,
@@ -65,6 +73,111 @@ function statusDo(t: ImpostoDaLista, hoje: string): Status {
 
 /** Em aberto: nem pago, nem cancelado. */
 const estaEmAberto = (t: ImpostoDaLista) => t.status === "a_pagar";
+
+// ---------------------------------------------------------------------------
+// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
+// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
+// ---------------------------------------------------------------------------
+
+const ROTULO_DO_STATUS: Record<Status, string> = {
+  a_pagar: "A pagar",
+  vencido: "Vencido",
+  pago: "Pago",
+  cancelado: "Cancelado",
+};
+const ORDEM_DO_STATUS: Status[] = ["a_pagar", "vencido", "pago", "cancelado"];
+
+const ROTULO_DA_ORIGEM = { apuracao: "Apuração", diferenca: "Complementar", avulso: "Avulso" } as const;
+const ORDEM_DA_ORIGEM = ["apuracao", "diferenca", "avulso"];
+
+/** A competência na ordem do tempo: o trimestre entra depois do último mês
+ *  dele ("2026-T4" → "2026-12z"). */
+function ordemDaCompetencia(c: string): string {
+  const t = /^(\d{4})-T(\d)$/.exec(c);
+  return t ? `${t[1]}-${String(Number(t[2]) * 3).padStart(2, "0")}z` : c;
+}
+
+function colunasDosImpostos(hoje: string): ColunaFiltravel<ImpostoDaLista>[] {
+  return [
+    { chave: "vencimento", rotulo: "Vencimento", tipo: "data", alinhar: "center", celula: (t) => celulaData(t.vencimento) },
+    {
+      // O imposto (o título); a busca acha também pelo DARF, pela cota, pelo
+      // município da guia municipal e pela descrição do avulso.
+      chave: "imposto",
+      rotulo: "Imposto",
+      tipo: "texto",
+      celula: (t) => ({
+        ...celulaTexto(t.titulo),
+        busca: [
+          t.titulo,
+          t.cota_numero ? `cota ${t.cota_numero}/${t.cota_total}` : "",
+          t.codigo_receita ? `DARF ${t.codigo_receita}` : "",
+          t.municipio ?? "",
+          t.origem === "avulso" ? t.descricao : "",
+        ].join(" "),
+      }),
+    },
+    {
+      // Árvore PJ ▸ o nome que a célula mostra em cima: a PJ (as guias
+      // federais, pelo CNPJ da matriz) e cada estabelecimento (as guias
+      // municipais). A PJ marca todos de uma vez; a busca acha pelo CNPJ.
+      chave: "cnpj",
+      rotulo: "CNPJ",
+      tipo: "texto",
+      rotuloSemGrupo: "(sem PJ)",
+      celula: (t) => ({
+        valor: `${t.local}|${t.cnpj}`,
+        rotulo: t.local,
+        ordem: `${t.local === t.pj ? "0" : "1"}${t.local}`,
+        busca: `${t.local} ${t.cnpj} ${t.pj}`,
+        grupo: t.pj,
+      }),
+    },
+    {
+      chave: "competencia",
+      rotulo: "Competência",
+      tipo: "texto",
+      alinhar: "center",
+      celula: (t) => ({ ...celulaTexto(t.rotulo_competencia), ordem: ordemDaCompetencia(t.competencia) }),
+    },
+    {
+      chave: "origem",
+      rotulo: "Origem",
+      tipo: "texto",
+      alinhar: "center",
+      celula: (t) => ({ ...celulaTexto(ROTULO_DA_ORIGEM[t.origem]), ordemNaLista: ORDEM_DA_ORIGEM.indexOf(t.origem) }),
+    },
+    {
+      chave: "valor",
+      rotulo: "Valor",
+      tipo: "valor",
+      faixa: true,
+      alinhar: "right",
+      celula: (t) => celulaValor(t.valor, moeda),
+    },
+    {
+      // Com ou sem a guia anexada; a busca acha pelo nome do arquivo.
+      chave: "guia",
+      rotulo: "Guia",
+      tipo: "texto",
+      celula: (t) => ({
+        ...celulaTexto(t.guia_path ? "Com guia" : "Sem guia"),
+        busca: `${t.guia_path ? `com guia ${nomeDoAnexo(t.guia_path)}` : "sem guia"}${t.comprovante_path ? " comprovante" : ""}`,
+      }),
+    },
+    {
+      // A lista na ordem do pagamento; as linhas, de A a Z pelo rótulo.
+      chave: "status",
+      rotulo: "Status",
+      tipo: "texto",
+      alinhar: "center",
+      celula: (t) => {
+        const s = statusDo(t, hoje);
+        return { ...celulaTexto(ROTULO_DO_STATUS[s]), ordemNaLista: ORDEM_DO_STATUS.indexOf(s) };
+      },
+    },
+  ];
+}
 
 export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const router = useRouter();
@@ -112,19 +225,33 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
           .toLowerCase()
           .includes(q)),
   );
-  const filtrados = base
-    .filter((t) => {
-      const s = statusDo(t, hoje);
-      if (filtro === "a_pagar") return s === "a_pagar" || s === "vencido";
-      if (filtro === "vencidos") return s === "vencido";
-      if (filtro === "pagos") return s === "pago";
-      return true;
-    })
-    .sort((a, b) =>
-      filtro === "pagos"
-        ? (b.pago_em ?? "").localeCompare(a.pago_em ?? "")
-        : a.vencimento.localeCompare(b.vencimento),
-    );
+  /** Os impostos que passam nos filtros de CIMA (status, PJ e busca). Os
+   *  filtros dos títulos das colunas vêm depois, sobre esta lista. */
+  // Memorizada: o gancho dos títulos recalcula as células quando a lista muda.
+  const doTopo = React.useMemo(
+    () =>
+      base
+        .filter((t) => {
+          const s = statusDo(t, hoje);
+          if (filtro === "a_pagar") return s === "a_pagar" || s === "vencido";
+          if (filtro === "vencidos") return s === "vencido";
+          if (filtro === "pagos") return s === "pago";
+          return true;
+        })
+        .sort((a, b) =>
+          filtro === "pagos"
+            ? (b.pago_em ?? "").localeCompare(a.pago_em ?? "")
+            : a.vencimento.localeCompare(b.vencimento),
+        ),
+    // `base` sai de `titulos`, `pjFiltro` e `q`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [titulos, pjFiltro, q, filtro, hoje],
+  );
+  const colunasDaTabela = React.useMemo(() => colunasDosImpostos(hoje), [hoje]);
+  const colunas = useFiltrosDeColuna(doTopo, colunasDaTabela, { guardarEm: "fiscal-impostos" });
+  /** Os impostos que passam em tudo, na ordem do título escolhido (sem
+   *  nenhum, a de sempre). A seleção do lote sai daqui: só o que está na tela. */
+  const filtrados = colunas.visiveis;
 
   const abertos = titulos.filter(estaEmAberto);
   const limite = somaDias(hoje, 7);
@@ -242,6 +369,18 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
         </div>
       )}
 
+      {/* Quantos impostos os filtros dos títulos deixaram (o mesmo aviso da
+          aba PPs): o filtro mora escondido no título. */}
+      {colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="imposto"
+          plural="impostos"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full table-fixed text-sm">
           <thead>
@@ -249,14 +388,14 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
               <th className="w-[3%] py-3 pl-4 pr-1 font-semibold">
                 <CaixaDoCabecalho {...selecao.cabecalho} />
               </th>
-              <th className="w-[8%] px-2 py-3 font-semibold">Vencimento</th>
-              <th className="w-[19%] px-3 py-3 text-left font-semibold">Imposto</th>
-              <th className="w-[15%] px-3 py-3 text-left font-semibold">CNPJ</th>
-              <th className="w-[10%] px-2 py-3 font-semibold">Competência</th>
-              <th className="w-[9%] px-2 py-3 font-semibold">Origem</th>
-              <th className="w-[10%] px-3 py-3 text-right font-semibold">Valor</th>
-              <th className="w-[10%] px-3 py-3 text-left font-semibold">Guia</th>
-              <th className="w-[7%] px-2 py-3 font-semibold">Status</th>
+              <th className="w-[8%] px-2 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
+              <th className="w-[19%] px-3 py-3 text-left font-semibold">{colunas.titulo("imposto")}</th>
+              <th className="w-[15%] px-3 py-3 text-left font-semibold">{colunas.titulo("cnpj")}</th>
+              <th className="w-[10%] px-2 py-3 font-semibold">{colunas.titulo("competencia")}</th>
+              <th className="w-[9%] px-2 py-3 font-semibold">{colunas.titulo("origem")}</th>
+              <th className="w-[10%] px-3 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+              <th className="w-[10%] px-3 py-3 text-left font-semibold">{colunas.titulo("guia")}</th>
+              <th className="w-[7%] px-2 py-3 font-semibold">{colunas.titulo("status")}</th>
               <th className="w-[9%] px-3 py-3 font-semibold">Ação</th>
             </tr>
           </thead>
@@ -266,7 +405,10 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
                 <td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {titulos.length === 0
                     ? "Nenhum imposto a pagar ainda. Aprove uma guia na Apuração ou crie um lançamento avulso."
-                    : "Nenhum imposto encontrado com esses filtros."}
+                    : doTopo.length === 0
+                      ? "Nenhum imposto encontrado com esses filtros."
+                      : // Vazio por causa dos títulos: a tabela fica, para desfazer.
+                        "Nenhum imposto com esse filtro."}
                 </td>
               </tr>
             )}

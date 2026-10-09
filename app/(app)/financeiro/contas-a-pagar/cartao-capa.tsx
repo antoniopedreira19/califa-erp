@@ -13,8 +13,83 @@ import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
 import { lerCompetencia, rotuloCurto } from "@/lib/cartoes/competencia";
 import type { CartaoDaCapa } from "./cartao-tab";
+import {
+  BarraDosFiltrosDeColuna,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
 
 const LIMITE_GRADE = 5;
+
+const ORDEM_DO_STATUS = ["aberta", "fechada", "sem fatura"];
+
+/**
+ * As colunas da lista (seis cartões ou mais) que filtram e ordenam pelo
+ * título, como no Excel (pedido do Tiago, 09/10/2026, decisão 165 — o mesmo filtro da
+ * aba PPs do job). A grade de cards (até cinco) não tem título: fica como
+ * está. Fica sem filtro a Ação (o mesmo "Abrir" em toda linha).
+ */
+const COLUNAS: ColunaFiltravel<CartaoDaCapa>[] = [
+  {
+    // A busca da coluna acha pelo banco e pelos dígitos também, como a
+    // busca de cima.
+    chave: "cartao",
+    rotulo: "Cartão",
+    tipo: "texto",
+    celula: (c) => ({
+      ...celulaTexto(c.cartao.nome),
+      busca: `${c.cartao.nome} ${c.cartao.banco} ${c.cartao.ultimos_4_digitos}`,
+    }),
+  },
+  {
+    // A competência é um mês: a lista em ordem de calendário.
+    chave: "competencia",
+    rotulo: "Competência",
+    tipo: "data",
+    alinhar: "center",
+    celula: (c) =>
+      c.emCurso
+        ? { valor: c.emCurso.competencia, rotulo: rotuloDaCompetencia(c.emCurso.competencia), ordem: c.emCurso.competencia }
+        : { valor: "", rotulo: "(sem fatura)", ordem: "9999-99" },
+  },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    alinhar: "center",
+    celula: (c) => {
+      const s = c.emCurso?.status ?? "sem fatura";
+      return { ...celulaTexto(s), ordemNaLista: ORDEM_DO_STATUS.indexOf(s) };
+    },
+  },
+  {
+    chave: "itens",
+    rotulo: "Itens",
+    tipo: "valor",
+    alinhar: "right",
+    celula: (c) =>
+      c.emCurso
+        ? {
+            valor: String(c.emCurso.qtd_itens),
+            rotulo: `${c.emCurso.qtd_itens} ${c.emCurso.qtd_itens === 1 ? "item" : "itens"}`,
+            ordem: c.emCurso.qtd_itens,
+          }
+        : { valor: "", rotulo: "(sem fatura)", ordem: -1 },
+  },
+  {
+    chave: "total",
+    rotulo: "Fatura em curso",
+    tipo: "valor",
+    faixa: true,
+    alinhar: "right",
+    celula: (c) => celulaValor(c.emCurso?.total ?? 0, formatCurrency),
+  },
+];
+
+/** Os títulos desta tabela não têm o espaçamento largo do botão do filtro. */
+const TITULO = "tracking-normal";
 
 export interface FiltroDaCapa {
   busca: string;
@@ -48,6 +123,25 @@ export function CartaoCapa({
     0,
   );
 
+  // A busca e "Só com fatura aberta" vêm antes; os títulos filtram depois.
+  // (Calculado antes da saída de "nenhum cartão": gancho não fica atrás de
+  // `return`.)
+  const q = busca.trim().toLowerCase();
+  const doTopo = React.useMemo(
+    () =>
+      capa.filter((c) => {
+        if (soAbertas && c.emCurso?.status !== "aberta") return false;
+        if (!q) return true;
+        return (
+          c.cartao.nome.toLowerCase().includes(q) ||
+          c.cartao.banco.toLowerCase().includes(q) ||
+          c.cartao.ultimos_4_digitos.includes(q)
+        );
+      }),
+    [capa, soAbertas, q],
+  );
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-cartao-capa" });
+
   if (capa.length === 0) {
     return (
       <div className="space-y-4">
@@ -64,16 +158,8 @@ export function CartaoCapa({
   }
 
   const lista = capa.length > LIMITE_GRADE;
-  const q = busca.trim().toLowerCase();
-  const visiveis = capa.filter((c) => {
-    if (soAbertas && c.emCurso?.status !== "aberta") return false;
-    if (!q) return true;
-    return (
-      c.cartao.nome.toLowerCase().includes(q) ||
-      c.cartao.banco.toLowerCase().includes(q) ||
-      c.cartao.ultimos_4_digitos.includes(q)
-    );
-  });
+  // Na grade não há título para filtrar: ela mostra o que passou em cima.
+  const visiveis = lista ? colunas.visiveis : doTopo;
 
   return (
     <div
@@ -117,13 +203,25 @@ export function CartaoCapa({
         </div>
       </div>
 
+      {lista && colunas.ativo && (
+        <BarraDosFiltrosDeColuna
+          visiveis={colunas.visiveis.length}
+          total={colunas.total}
+          singular="cartão"
+          plural="cartões"
+          onLimpar={colunas.limpar}
+        />
+      )}
+
       {!lista ? (
         <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
           {visiveis.map((c) => (
             <CardCartao key={c.cartao.id} item={c} onAbrir={() => onAbrir(c.cartao.id)} />
           ))}
         </div>
-      ) : visiveis.length === 0 ? (
+      ) : doTopo.length === 0 ? (
+        // Vazio da busca e do "Só com fatura aberta". Se foram os títulos,
+        // a tabela fica (com eles, para desfazer).
         <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
           Nenhum cartão corresponde ao filtro.
         </div>
@@ -132,15 +230,22 @@ export function CartaoCapa({
           <table className="w-full min-w-[900px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-4 py-2.5 text-left">Cartão</th>
-                <th className="px-3 py-2.5 text-center">Competência</th>
-                <th className="px-3 py-2.5 text-center">Status</th>
-                <th className="px-3 py-2.5 text-right">Itens</th>
-                <th className="px-3 py-2.5 text-right">Fatura em curso</th>
+                <th className="px-4 py-2.5 text-left">{colunas.titulo("cartao", TITULO)}</th>
+                <th className="px-3 py-2.5 text-center">{colunas.titulo("competencia", TITULO)}</th>
+                <th className="px-3 py-2.5 text-center">{colunas.titulo("status", TITULO)}</th>
+                <th className="px-3 py-2.5 text-right">{colunas.titulo("itens", TITULO)}</th>
+                <th className="px-3 py-2.5 text-right">{colunas.titulo("total", TITULO)}</th>
                 <th className="w-24 px-3 py-2.5 text-center">Ação</th>
               </tr>
             </thead>
             <tbody>
+              {visiveis.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    Nenhum cartão com esse filtro.
+                  </td>
+                </tr>
+              )}
               {visiveis.map((c) => (
                 <tr
                   key={c.cartao.id}
