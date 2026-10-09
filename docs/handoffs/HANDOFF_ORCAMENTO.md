@@ -5463,3 +5463,11 @@ aplicada na hora combinada com a frente do Antonio, junto da
   Unicuritiba" tem QT 0 com TT digitado (R$ 7.000,00/mês) — o ERP usa
   R$ × QT × D/M. Afeta o ANI-P008/26-01 (em revisão): QT 0 nos três meses.
 
+## ⚠️ Nota de 2026-10-08 (4) — aviso do TT que não bate com R$ × QT × D/M (revisão da decisão 158)
+
+- A importação avisa a linha cujo TT (orçado ou planejado) difere de
+  R$ × QT × D/M — o TT digitado à mão, como a Unicuritiba da aba SUL. A
+  linha continua entrando com a conta.
+- Avisos de linha de meses que ficam de fora da versão não aparecem mais
+  na conferência.
+

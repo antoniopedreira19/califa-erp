@@ -1,7 +1,7 @@
 # 158 — Planilha de um mês só no Fee e no Always On
 
 **Data:** 2026-10-08
-**Status:** aceita e implementada (08/10/2026; revista no mesmo dia: o % de honorários lido da fórmula).
+**Status:** aceita e implementada (08/10/2026; revista no mesmo dia: o % de honorários lido da fórmula e o aviso do TT que não bate com a conta).
 **Quem decidiu:** Tiago, em 08/10/2026, depois do protótipo navegável ("Planilha de um mês") e da planilha que uma GP não conseguiu importar.
 **Revê:** a [078](078-orcamento-mensal-fee-e-always-on.md) (os meses não mudam pela planilha) e a [076](076-a-importacao-da-versao-pergunta-de-onde-vem-o-planejado.md) (de onde vem o planejado, revista em 05/10: nada vinha marcado).
 **Migration:** nenhuma. A regra é de código.
@@ -151,3 +151,32 @@ e chega a R$ 0, então o orçado do mês ficou R$ 7.000,00 abaixo
 (R$ 114.555,25 contra R$ 121.555,25). Na mesma planilha, a fórmula de
 honorários de outubro está quebrada (`*13%G448`), e o fechamento do mês dá
 erro.
+
+## ⚠️ Revisão de 2026-10-08 — aviso do TT que não bate com a conta
+
+Pedido do Tiago, pelo caso "Social Media Unicuritiba" acima: o ERP grava
+R$ × QT × D/M e nunca leu a coluna TT, e a diferença com a planilha passava
+calada.
+
+- **A importação confere o TT de cada linha com R$ × QT × D/M** e avisa
+  quando os dois diferem, em centavos: "O TT da planilha é R$ 7.000,00, mas
+  R$ × QT × D/M dá R$ 0,00 — a linha entra com a conta." É um ajuste: a
+  linha continua entrando com a conta, como sempre.
+- **Orçado e planejado**: no nacional, o TT do orçado na F e o do
+  planejado na K; no mensal, as colunas TT pelo cabeçalho (na aba SUL, I e
+  N); no internacional, o TT BRL na G (o planejado internacional não é
+  conferido).
+- **Não confere**: TT vazio, texto ou fórmula sem resultado; o planejado da
+  exportação para o cliente (a coluna é do id oculto) e o do Interno (o
+  planejado é o orçado).
+- **Os avisos de linha dos meses que ficam de fora não aparecem**: a
+  planilha interna traz o ano inteiro, e uma linha de fevereiro não é da
+  versão de outubro a dezembro. Vale para todo aviso de linha, não só o do
+  TT.
+
+Conferido: `lib/importacao/tt-digitado.test.ts` (nacional, internacional,
+Interno e mensal com o filtro dos meses); nas planilhas reais, a da GP
+avisa exatamente as três linhas da Unicuritiba (L325, L366 e L410, coluna
+I) e a antiga e as da AON não avisam nada no 4º trimestre; no navegador,
+logado, o modal do "Teste 2" mostra "3 ajustes" com as três linhas, sem
+gravar.
