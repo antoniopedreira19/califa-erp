@@ -1804,6 +1804,62 @@ export interface JobItemRealizado {
 // Tabela e colunas seguem `pedidos_compra` por compatibilidade; o nome
 // visível ao usuário é "Pedido de Produção", igual ao PDF emitido.
 
+/** Os tipos de verba (decisão 164). */
+export type TipoVerba = "producao" | "alimentacao" | "transporte";
+
+/** De onde vem o titular da verba de alimentação ou de transporte: um
+ *  colaborador do RH, um freela (lista provisória) ou um terceiro com
+ *  cadastro de fornecedor. */
+export type TitularDaVerbaTipo = "colaborador" | "freela" | "fornecedor";
+
+/** O tipo da verba de uma PP; null fora da verba. A verba gravada antes da
+ *  decisão 164 (sem `tipo_verba`) é de produção. */
+export function tipoDaVerba(pp: {
+  verba_producao?: boolean | null;
+  tipo_verba?: TipoVerba | null;
+}): TipoVerba | null {
+  if (!pp.verba_producao) return null;
+  return pp.tipo_verba ?? "producao";
+}
+
+/** "Verba de Produção", "Verba de Alimentação", "Verba de Transporte". */
+export function rotuloDaVerba(tipo: TipoVerba): string {
+  return tipo === "alimentacao"
+    ? "Verba de Alimentação"
+    : tipo === "transporte"
+      ? "Verba de Transporte"
+      : "Verba de Produção";
+}
+
+/** O nome da verba no meio da frase: "verba de alimentação". */
+export function rotuloDaVerbaMinusculo(tipo: TipoVerba): string {
+  return rotuloDaVerba(tipo).toLowerCase();
+}
+
+/** A verba de alimentação e a de transporte têm titular (colaborador,
+ *  freela ou terceiro); a de produção tem responsável (um usuário). */
+export function verbaTemTitular(tipo: TipoVerba | null): boolean {
+  return tipo === "alimentacao" || tipo === "transporte";
+}
+
+/** O nome do campo de quem recebe a verba. */
+export function rotuloDeQuemRecebeAVerba(tipo: TipoVerba): string {
+  return verbaTemTitular(tipo) ? "Titular da verba" : "Responsável";
+}
+
+/** O nome de quem recebe a verba: o titular guardado na PP (alimentação e
+ *  transporte) ou o responsável (produção). */
+export function nomeDeQuemRecebeAVerba(pp: {
+  verba_producao?: boolean | null;
+  tipo_verba?: TipoVerba | null;
+  verba_titular_nome?: string | null;
+  responsavel?: { nome?: string | null } | null;
+}): string | null {
+  const tipo = tipoDaVerba(pp);
+  if (!tipo) return null;
+  return verbaTemTitular(tipo) ? (pp.verba_titular_nome ?? null) : (pp.responsavel?.nome ?? null);
+}
+
 export interface PedidoCompra {
   id: string;
   tenant_id: string;
@@ -1865,9 +1921,19 @@ export interface PedidoCompra {
    *  só vira aprovada com ela (CHECK `pp_fora_do_cadastro_aprovado`). */
   pagamento_fora_do_cadastro_aprovado_por: string | null;
   pagamento_fora_do_cadastro_aprovado_em: string | null;
-  // Verba de Produção (subtipo de PP — pago ao responsável em vez do fornecedor)
+  // Verba (subtipo de PP — adiantamento com prestação de contas). Desde a
+  // decisão 164 o booleano vale para os três tipos de verba.
   verba_producao: boolean;
   responsavel_verba_id: string | null;
+  /** Decisão 164: producao, alimentacao ou transporte. Null fora da verba
+   *  (e na verba de produção gravada pela versão anterior). */
+  tipo_verba: TipoVerba | null;
+  /** Decisão 164: na alimentação e no transporte, de onde vem o titular. */
+  verba_titular_tipo: TitularDaVerbaTipo | null;
+  verba_colaborador_id: string | null;
+  verba_freela_id: string | null;
+  /** O nome do titular no momento da PP (alimentação e transporte). */
+  verba_titular_nome: string | null;
   // Fase 2
   status: PPStatus;
   prazo_pagamento_financeiro: string | null;
@@ -2649,6 +2715,11 @@ export interface DadosDaPPAEmitir {
   verba_producao: boolean;
   fornecedor_id: string | null;
   responsavel_verba_id: string | null;
+  /** Decisão 164. Ausentes na PP a emitir salva antes dela (= produção). */
+  tipo_verba?: TipoVerba | null;
+  verba_titular_tipo?: TitularDaVerbaTipo | null;
+  /** O colaborador ou o freela escolhido (o terceiro vai em fornecedor_id). */
+  verba_titular_id?: string | null;
   /** Decisão 127, no formato do envio (`pagamentoParaEnvio`). */
   pagamento_fora_do_cadastro: {
     meio: MeioForaDoCadastro;
@@ -2693,6 +2764,10 @@ export interface PPAEmitir {
   verba_producao: boolean;
   fornecedor_id: string | null;
   responsavel_verba_id: string | null;
+  /** Decisão 164 (as colunas da tabela; nulas fora da verba nova). */
+  tipo_verba: TipoVerba | null;
+  verba_titular_tipo: TitularDaVerbaTipo | null;
+  verba_titular_nome: string | null;
   servico: string;
   valor: number;
   dados: DadosDaPPAEmitir;
@@ -2947,20 +3022,26 @@ export interface PPVerbaPrestacaoAnexo {
 /**
  * Rótulo da contraparte de uma PP.
  *
- * Quando é Verba de Produção, o "fornecedor" é o responsável pela verba,
- * e o rótulo vira "Verba de Produção — {Nome do responsável}". Nas PPs
- * normais, retorna a razão social ou o nome do fornecedor.
+ * Quando é verba, o "fornecedor" é quem recebe a verba, e o rótulo vira
+ * "Verba de Produção — {Nome do responsável}" (ou "Verba de Alimentação —
+ * {titular}", decisão 164). Nas PPs normais, retorna a razão social ou o
+ * nome do fornecedor.
  *
  * Centraliza a decisão para garantir que qualquer lista de PP exiba o
  * mesmo texto — sem divergência entre contas-a-pagar, chat e painel.
  */
 export function nomeContraparteBRPP(pp: {
   verba_producao?: boolean | null;
+  tipo_verba?: TipoVerba | null;
+  verba_titular_nome?: string | null;
   fornecedor?: { nome?: string | null; razao_social?: string | null } | null;
   responsavel?: { nome?: string | null } | null;
 }): string {
-  if (pp.verba_producao) {
-    return `Verba de Produção — ${pp.responsavel?.nome ?? "sem responsável"}`;
+  const tipo = tipoDaVerba(pp);
+  if (tipo) {
+    const nome =
+      nomeDeQuemRecebeAVerba(pp) ?? (verbaTemTitular(tipo) ? "sem titular" : "sem responsável");
+    return `${rotuloDaVerba(tipo)} — ${nome}`;
   }
   return pp.fornecedor?.razao_social ?? pp.fornecedor?.nome ?? "";
 }

@@ -42,6 +42,8 @@ import {
   documentoTipoLabel,
   nomeContraparteBRPP,
   ppStatusLabel,
+  rotuloDaVerbaMinusculo,
+  rotuloDeQuemRecebeAVerba,
   situacaoDaVerba,
   type FiscalEstabelecimento,
 } from "@/lib/types";
@@ -209,10 +211,20 @@ export function PPDossie({
 
           <Estados pp={pp} somenteLeitura={somenteLeitura} />
 
-          <Grupo rotulo={pp.verba_producao ? "Responsável" : "Fornecedor"}>
+          <Grupo
+            rotulo={
+              pp.tipo_verba
+                ? pp.verba_titular_tipo === "fornecedor"
+                  ? "Titular da verba (terceiro)"
+                  : rotuloDeQuemRecebeAVerba(pp.tipo_verba)
+                : "Fornecedor"
+            }
+          >
             <p className="text-[13px] font-semibold leading-snug">
               {nomeContraparteBRPP({
                 verba_producao: pp.verba_producao,
+                tipo_verba: pp.tipo_verba,
+                verba_titular_nome: pp.responsavel_nome,
                 fornecedor: pp.fornecedor_nome ? { nome: pp.fornecedor_nome } : null,
                 responsavel: pp.responsavel_nome ? { nome: pp.responsavel_nome } : null,
               })}
@@ -468,7 +480,7 @@ function Historico({ pp }: { pp: PPRow }) {
             // vermelho de alerta (Tiago, 14/09/2026).
             pp.verba_producao ? (
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Aprovada sem documento — PP de verba de produção.
+                Aprovada sem documento — PP de {rotuloDaVerbaMinusculo(pp.tipo_verba ?? "producao")}.
               </p>
             ) : (
               <p className="mt-1 text-[11px] font-semibold text-california-red">

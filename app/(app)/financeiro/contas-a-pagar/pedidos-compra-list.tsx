@@ -29,6 +29,7 @@ import type {
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
+import type { TipoVerba, TitularDaVerbaTipo } from "@/lib/types";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
 import type { NotasFiscaisDaLinhaPP, RegimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
@@ -138,9 +139,15 @@ export interface PPRow {
    */
   plano_conta_tipo_id: string | null;
   plano_conta_subtipo_id: string | null;
-  /** Verdadeiro quando a PP é do tipo Verba de Produção. */
+  /** Verdadeiro quando a PP é de verba (produção, alimentação ou transporte). */
   verba_producao: boolean;
-  /** Nome do responsável pela verba — preenchido quando verba_producao = true. */
+  /** Decisão 164: o tipo da verba; null fora da verba. Obrigatório, como os
+   *  campos abaixo: opcional, o `.map` o descartaria em silêncio. */
+  tipo_verba: TipoVerba | null;
+  /** De onde vem o titular (alimentação e transporte). */
+  verba_titular_tipo: TitularDaVerbaTipo | null;
+  /** Quem recebe a verba: o responsável (produção) ou o titular
+   *  (alimentação e transporte). Null fora da verba. */
   responsavel_nome: string | null;
   /**
    * Prestação de contas da verba (decisão 081): enviada pela produção,
@@ -481,7 +488,7 @@ export function PedidosCompraList({
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {nomeContraparteBRPP({ verba_producao: r.verba_producao, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
+                  {nomeContraparteBRPP({ verba_producao: r.verba_producao, tipo_verba: r.tipo_verba, verba_titular_nome: r.responsavel_nome, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
                   {/* Asterisco da decisão 067. Aqui ele importa mais que na
                       aba de títulos: é nesta tela que a PP é aprovada, e
                       aprovar é o passo em que dá tempo de conferir a conta

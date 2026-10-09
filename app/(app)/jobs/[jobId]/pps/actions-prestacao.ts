@@ -99,7 +99,7 @@ export async function prefixoUploadPrestacao(
     .maybeSingle();
   if (!pp) return { ok: false, message: "PP não encontrada." };
   if (!pp.verba_producao) {
-    return { ok: false, message: "Esta PP não é de verba de produção." };
+    return { ok: false, message: "Esta PP não é de verba." };
   }
   return {
     ok: true,

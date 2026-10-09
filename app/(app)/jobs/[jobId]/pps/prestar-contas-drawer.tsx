@@ -44,6 +44,10 @@ import {
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
+  nomeDeQuemRecebeAVerba,
+  rotuloDaVerba,
+  rotuloDeQuemRecebeAVerba,
+  tipoDaVerba,
   type PPAnexoMimetype,
   type PedidoCompraNaLista,
 } from "@/lib/types";
@@ -400,7 +404,10 @@ export function PrestarContasDrawer({
 
             <div className="grid grid-cols-3 gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Verba</p>
+                {/* Decisão 164: o tipo da verba, e quem a recebe. */}
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {rotuloDaVerba(tipoDaVerba(ppAtual) ?? "producao")}
+                </p>
                 <p className="font-mono text-[13px] font-bold">{formatCurrency(Number(ppAtual.valor), "BRL")}</p>
               </div>
               <div>
@@ -408,8 +415,10 @@ export function PrestarContasDrawer({
                 <p className="font-mono text-[13px] font-bold">{formatarData(ppAtual.pago_em)}</p>
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Responsável</p>
-                <p className="truncate text-[13px] font-semibold">{ppAtual.responsavel?.nome ?? "—"}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {rotuloDeQuemRecebeAVerba(tipoDaVerba(ppAtual) ?? "producao")}
+                </p>
+                <p className="truncate text-[13px] font-semibold">{nomeDeQuemRecebeAVerba(ppAtual) ?? "—"}</p>
               </div>
             </div>
 

@@ -241,8 +241,8 @@ export function EnviarEncerramentoDialog({
                 {verbasEmAberto.length > 0 && (
                   <p className="text-muted-foreground">
                     {verbasEmAberto.length === 1
-                      ? "1 verba de produção ainda não concluída"
-                      : `${verbasEmAberto.length} verbas de produção ainda não concluídas`}
+                      ? "1 verba ainda não concluída"
+                      : `${verbasEmAberto.length} verbas ainda não concluídas`}
                     :{" "}
                     {verbasEmAberto
                       .map((v) => `${v.codigo} (${situacaoVerbaLabel(v.situacao).toLowerCase()})`)

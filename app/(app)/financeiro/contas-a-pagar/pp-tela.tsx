@@ -64,7 +64,7 @@ import {
   enderecoParaVisualizar,
 } from "@/components/documentos/painel-documento";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ppStatusLabel, situacaoDaVerba, type PPStatus } from "@/lib/types";
+import { ppStatusLabel, situacaoDaVerba, verbaTemTitular, type PPStatus } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
@@ -715,6 +715,7 @@ export function PPTela(
                       reenviada: false,
                     },
                     responsavelVerbaNome: pp.responsavel_nome,
+                    rotuloQuemRecebe: verbaTemTitular(pp.tipo_verba) ? "Titular da verba" : "Responsável pela verba",
                     gpResponsavelNome: pp.job_responsavel_nome,
                   }
                 : null

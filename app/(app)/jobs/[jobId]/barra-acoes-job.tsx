@@ -597,7 +597,7 @@ function TrilhaEncerramento({
   }
   if (verbasEmAberto.length > 0) {
     partes.push(
-      `${verbasEmAberto.length === 1 ? "1 verba de produção não concluída" : `${verbasEmAberto.length} verbas de produção não concluídas`} (${codigos(verbasEmAberto.map((v) => v.codigo))})`,
+      `${verbasEmAberto.length === 1 ? "1 verba não concluída" : `${verbasEmAberto.length} verbas não concluídas`} (${codigos(verbasEmAberto.map((v) => v.codigo))})`,
     );
   }
   if (bvsEmAberto.length > 0) {

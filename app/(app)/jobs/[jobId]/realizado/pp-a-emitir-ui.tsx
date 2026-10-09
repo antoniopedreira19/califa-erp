@@ -19,6 +19,8 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   documentoTipoLabel,
+  rotuloDaVerba,
+  verbaTemTitular,
   type AnexoDaPPNaLista,
   type PPAEmitir,
 } from "@/lib/types";
@@ -148,6 +150,16 @@ export function RevisaoDialog({
   const novoTotal = Math.round((emitidasAntes + aEmitir.valor) * 100) / 100;
   const acima = Math.round((novoTotal - planejado) * 100) / 100;
   const parcelas = Math.max(d.parcelas.length, 1);
+  // Decisão 164: o tipo da verba e o nome de quem recebe. A PP a emitir de
+  // antes dela não tem o tipo: é produção.
+  const tipoVerba = d.verba_producao ? (d.tipo_verba ?? aEmitir.tipo_verba ?? "producao") : null;
+  const rotuloDeQuemRecebe = !tipoVerba
+    ? "Fornecedor"
+    : verbaTemTitular(tipoVerba)
+      ? aEmitir.verba_titular_tipo === "fornecedor"
+        ? "Titular da verba (terceiro)"
+        : "Titular da verba"
+      : "Responsável";
   const linhas: Array<[string, React.ReactNode]> = [
     ...(aEmitir.refaz
       ? ([
@@ -159,7 +171,8 @@ export function RevisaoDialog({
           ],
         ] as Array<[string, React.ReactNode]>)
       : []),
-    [d.verba_producao ? "Responsável" : "Fornecedor", nomeDoFornecedor],
+    ...(tipoVerba ? ([["Verba", rotuloDaVerba(tipoVerba)]] as Array<[string, React.ReactNode]>) : []),
+    [rotuloDeQuemRecebe, nomeDoFornecedor],
     ["Serviço", d.servico],
     [
       "Valor",

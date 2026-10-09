@@ -2416,6 +2416,8 @@ export function JobItemRealizadoTable({
                 status: pp.status,
                 fornecedorNome: nomeContraparteBRPP({
                   verba_producao: pp.verba_producao,
+                  tipo_verba: pp.tipo_verba,
+                  verba_titular_nome: pp.verba_titular_nome,
                   fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
                   responsavel: pp.responsavel,
                 }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
@@ -2555,6 +2557,8 @@ export function JobItemRealizadoTable({
                 ppVendo
                   ? nomeContraparteBRPP({
                       verba_producao: ppVendo.verba_producao,
+                      tipo_verba: ppVendo.tipo_verba,
+                      verba_titular_nome: ppVendo.verba_titular_nome,
                       fornecedor: ppVendo.fornecedor_id
                         ? {
                             nome: nomeDoFornecedor(

@@ -32,6 +32,7 @@ import {
   PP_STATUS_EM_ABERTO,
   situacaoDaVerba,
   verbaPendenteNoEncerramento,
+  verbaTemTitular,
   BV_SITUACAO_EM_ABERTO,
 } from "@/lib/types";
 import type {
@@ -403,6 +404,7 @@ export async function carregarDetalheDoJob(
       .from("pedidos_compra_a_emitir")
       .select(
         "id, job_id, item_realizado_id, empresa_id, verba_producao, fornecedor_id, responsavel_verba_id, " +
+          "tipo_verba, verba_titular_tipo, verba_titular_nome, " +
           "servico, valor, dados, ultima_pp_do_item, pp_id, created_at, updated_at, " +
           "criada:profiles!criada_por(nome), refaz:pedidos_compra!refaz_pp_id(id, codigo, motivo_rejeicao), " +
           "anexos:pedidos_compra_a_emitir_anexos(id, arquivo_path, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, " +
@@ -685,6 +687,9 @@ export async function carregarDetalheDoJob(
       verba_producao: r.verba_producao === true,
       fornecedor_id: r.fornecedor_id ?? null,
       responsavel_verba_id: r.responsavel_verba_id ?? null,
+      tipo_verba: r.verba_producao === true ? (r.tipo_verba ?? "producao") : null,
+      verba_titular_tipo: r.verba_titular_tipo ?? null,
+      verba_titular_nome: r.verba_titular_nome ?? null,
       servico: r.servico,
       valor: Number(r.valor ?? 0),
       dados: r.dados,
@@ -1495,16 +1500,27 @@ export async function carregarDetalheDoJob(
   );
   // Quem presta contas de cada verba: o responsável por ela, qualquer GP
   // ou um administrador (decisão 136; até 01/10/2026 era o GP responsável
-  // do job, decisão 081). A função do banco checa de novo; aqui é só para
-  // mostrar o botão a quem pode.
+  // do job, decisão 081). Na alimentação e no transporte (decisão 164) o
+  // titular pode nem ter acesso ao sistema: presta contas o administrador,
+  // o GP, o produtor ou o freela do job (quem vê o job é do projeto). A
+  // função do banco checa de novo; aqui é só para mostrar o botão a quem pode.
   const ppsQuePossoPrestarContas = ppsDoJob
-    .filter(
-      (pp) =>
-        pp.verba_producao &&
-        (session.activeRole === "administrador" ||
+    .filter((pp) => {
+      if (!pp.verba_producao) return false;
+      if (verbaTemTitular(pp.tipo_verba)) {
+        return (
+          session.activeRole === "administrador" ||
           session.activeRole === "gerente_producao" ||
-          pp.responsavel_verba_id === session.profile.id),
-    )
+          session.activeRole === "produtor" ||
+          session.activeRole === "freelancer"
+        );
+      }
+      return (
+        session.activeRole === "administrador" ||
+        session.activeRole === "gerente_producao" ||
+        pp.responsavel_verba_id === session.profile.id
+      );
+    })
     .map((pp) => pp.id);
   // Confirmar o BV é do GP e do administrador (decisão 080). Lançar e
   // negociar seguem em `podeAcoesPlanilha`, para quem pode mexer no job.

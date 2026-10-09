@@ -63,6 +63,10 @@ import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento
 import {
   documentoTipoLabel,
   podeCancelarPP,
+  rotuloDaVerba,
+  rotuloDaVerbaMinusculo,
+  rotuloDeQuemRecebeAVerba,
+  tipoDaVerba,
   type AnexoDaPPNaLista,
   type PedidoCompraNaLista,
   type PPEvento,
@@ -699,11 +703,13 @@ export function VerPPDrawer({
                   )}
                 />
               </span>
+              {/* Decisão 164: o switch passou a se chamar "Verba", com o tipo
+                  ao lado. */}
               <span className="text-sm font-medium text-muted-foreground">
-                Verba de Produção
+                Verba
               </span>
               <span className="ml-auto text-[11px] text-muted-foreground">
-                {pp.verba_producao ? "Pago ao responsável interno" : "Não"}
+                {tipoDaVerba(pp) ? rotuloDaVerba(tipoDaVerba(pp)!) : "Não"}
               </span>
             </div>
 
@@ -747,7 +753,13 @@ export function VerPPDrawer({
 
             <div>
               <CampoLido
-                rotulo={pp.verba_producao ? "Responsável" : "Fornecedor"}
+                rotulo={
+                  tipoDaVerba(pp)
+                    ? pp.verba_titular_tipo === "fornecedor"
+                      ? "Titular da verba (terceiro)"
+                      : rotuloDeQuemRecebeAVerba(tipoDaVerba(pp)!)
+                    : "Fornecedor"
+                }
               >
                 {contraparteNome || "—"}
                 {pp.cadastro_do_fornecedor_mudou && (
@@ -874,8 +886,8 @@ export function VerPPDrawer({
             </h3>
             {anexos.length === 0 ? (
               <p className="rounded border border-dashed border-border p-3 text-[12.5px] text-muted-foreground">
-                {pp.verba_producao
-                  ? "Verba de produção sai sem anexo — as notas entram na prestação de contas."
+                {tipoDaVerba(pp)
+                  ? `${rotuloDaVerbaMinusculo(tipoDaVerba(pp)!).replace(/^v/, "V")} sai sem anexo — as notas entram na prestação de contas.`
                   : "Sem anexos nesta PP."}
               </p>
             ) : (

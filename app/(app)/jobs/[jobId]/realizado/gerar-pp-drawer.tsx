@@ -39,8 +39,12 @@ import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import {
   PP_URGENTE_JUSTIFICATIVA_MIN,
+  rotuloDaVerbaMinusculo,
+  verbaTemTitular,
   type Fornecedor,
   type PPAEmitir,
+  type TipoVerba,
+  type TitularDaVerbaTipo,
 } from "@/lib/types";
 import {
   valorDaPPPorUnidade,
@@ -66,11 +70,19 @@ import {
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFornecedor } from "@/app/(app)/fornecedores/actions";
 import {
+  listarPessoasParaVerba,
   reservarPedidoCompra,
   salvarPPAEmitir,
   prefixoAnexosPPAEmitir,
   signedUrlAnexoAEmitir,
 } from "./actions-pp";
+import type { PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
+import {
+  CaixaTerceiro,
+  TipoDaVerbaField,
+  TitularDaVerbaField,
+  itensDasPessoas,
+} from "./titular-da-verba-field";
 import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
   ExigidosNoEnvio,
@@ -120,7 +132,7 @@ interface Props {
   }>;
   /** As empresas gerenciais: só o nome da do job aparece (decisão 156). */
   empresas: Array<{ id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }>;
-  /** Membros ativos do tenant — exibidos quando switch Verba de Produção está ON. */
+  /** Membros ativos do tenant — o Responsável da verba de produção. */
   responsaveis: Array<{ id: string; nome: string }>;
   /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
    *  action já barrava, mas o GP preenchia o cadastro inteiro para só
@@ -234,9 +246,25 @@ export function GerarPPDrawer({
   const [uploadPrefix, setUploadPrefix] = React.useState<string | null>(null);
   const [erro, setErro] = React.useState<string | null>(null);
 
-  // Switch Verba de Produção: OFF (default) → fornecedor obrigatório;
-  // ON → responsável interno obrigatório, fornecedor escondido.
-  const [verbaProducao, setVerbaProducao] = React.useState(false);
+  // Switch "Verba" (decisão 164): desligado (padrão) → fornecedor
+  // obrigatório; ligado → verba de produção (responsável interno), de
+  // alimentação ou de transporte (titular: colaborador, freela ou um
+  // terceiro com cadastro de fornecedor). `verbaProducao` segue valendo "é
+  // verba", de qualquer tipo, como no resto do formulário e no banco.
+  const [tipoVerba, setTipoVerba] = React.useState<TipoVerba | null>(null);
+  const verbaProducao = tipoVerba !== null;
+  const verbaComTitular = verbaTemTitular(tipoVerba);
+  /** O colaborador ou o freela escolhido, e de onde ele veio. */
+  const [titularId, setTitularId] = React.useState("");
+  const [titularOrigem, setTitularOrigem] = React.useState<TitularDaVerbaTipo | null>(null);
+  /** "Terceiro (fornecedor)": a verba vai para um fornecedor, com o
+   *  pagamento do fornecedor (não é o padrão). */
+  const [titularTerceiro, setTitularTerceiro] = React.useState(false);
+  /** A PP paga um fornecedor: a PP comum e a verba de um terceiro. */
+  const usaFornecedor = !verbaProducao || (verbaComTitular && titularTerceiro);
+  /** A lista de colaboradores e freelas, pedida na primeira verba nova. */
+  const [pessoas, setPessoas] = React.useState<PessoaParaVerba[] | null>(null);
+  const pedindoPessoas = React.useRef(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
   // Pagamento fora do cadastro (decisão 127). Trocar de fornecedor volta
   // para o cadastro: a chave ou a conta digitada era do anterior.
@@ -446,7 +474,15 @@ export function GerarPPDrawer({
     if (aEmitirEditando) {
       // A PP a emitir abre inteira, como foi salva (decisão 153).
       const d = aEmitirEditando.dados;
-      setVerbaProducao(d.verba_producao);
+      // A PP a emitir de antes da decisão 164 não tem o tipo: é produção.
+      setTipoVerba(d.verba_producao ? (d.tipo_verba ?? aEmitirEditando.tipo_verba ?? "producao") : null);
+      setTitularTerceiro(d.verba_titular_tipo === "fornecedor");
+      setTitularOrigem(
+        d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela" ? d.verba_titular_tipo : null,
+      );
+      setTitularId(
+        d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela" ? (d.verba_titular_id ?? "") : "",
+      );
       setFornecedorId(d.fornecedor_id ?? "");
       setPagamento(
         estadoDoPagamento(
@@ -491,7 +527,10 @@ export function GerarPPDrawer({
       return;
     }
 
-    setVerbaProducao(false);
+    setTipoVerba(null);
+    setTitularId("");
+    setTitularOrigem(null);
+    setTitularTerceiro(false);
     setFornecedorId("");
     setPagamento(PAGAMENTO_PELO_CADASTRO);
     setResponsavelId("");
@@ -524,6 +563,26 @@ export function GerarPPDrawer({
     // a PP a emitir inteira) só seriam relidas numa sessão nova.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, itemRealizadoId, chaveSessao]);
+
+  // A lista de colaboradores e freelas (decisão 164) vem quando a verba
+  // nova aparece no formulário, uma vez só: ela não viaja com a página.
+  React.useEffect(() => {
+    if (!open || !verbaComTitular || pessoas !== null || pedindoPessoas.current) return;
+    pedindoPessoas.current = true;
+    listarPessoasParaVerba().then((res) => {
+      pedindoPessoas.current = false;
+      if (res.ok) setPessoas(res.pessoas);
+      else setErro(res.message);
+    });
+  }, [open, verbaComTitular, pessoas]);
+  const itensDoTitular = React.useMemo(
+    () =>
+      itensDasPessoas(
+        pessoas,
+        titularId ? { id: titularId, nome: aEmitirEditando?.verba_titular_nome ?? null } : null,
+      ),
+    [pessoas, titularId, aEmitirEditando],
+  );
 
   // DESABILITADO — o cleanup automatico estava disparando entre upload e
   // finalizar (quando ppId mudava por qualquer re-render), apagando os
@@ -642,8 +701,12 @@ export function GerarPPDrawer({
   function validar(): boolean {
     setErro(null);
     if (!ppId || !itemRealizadoId) return false;
-    if (verbaProducao && !responsavelId) {
+    if (tipoVerba === "producao" && !responsavelId) {
       setErro("Escolha um responsável.");
+      return false;
+    }
+    if (verbaComTitular && !titularTerceiro && !titularId) {
+      setErro("Escolha o titular da verba.");
       return false;
     }
     if (ultimaPP === null) {
@@ -655,11 +718,11 @@ export function GerarPPDrawer({
       refUltimaPP.current?.scrollIntoView({ block: "center" });
       return false;
     }
-    if (!verbaProducao && !fornecedorId) {
+    if (usaFornecedor && !fornecedorId) {
       setErro("Escolha um fornecedor.");
       return false;
     }
-    if (!verbaProducao) {
+    if (usaFornecedor) {
       const problema = problemaDoPagamento(pagamento);
       if (problema) {
         setFaltaPagamento(true);
@@ -772,20 +835,43 @@ export function GerarPPDrawer({
           urgente_justificativa: urgente ? justificativa.trim() : null,
           parcelas: parcelasEnvio,
         };
-        const dados = verbaProducao
+        const dados = !tipoVerba
           ? {
-              ...dadosBase,
-              verba_producao: true as const,
-              responsavel_verba_id: responsavelId,
-              fornecedor_id: null,
-            }
-          : {
               ...dadosBase,
               verba_producao: false as const,
               fornecedor_id: fornecedorId,
               responsavel_verba_id: null,
               pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
-            };
+            }
+          : !verbaComTitular
+            ? {
+                ...dadosBase,
+                verba_producao: true as const,
+                tipo_verba: tipoVerba,
+                responsavel_verba_id: responsavelId,
+                fornecedor_id: null,
+              }
+            : titularTerceiro
+              ? {
+                  // Decisão 164: o terceiro é um fornecedor, com o pagamento dele.
+                  ...dadosBase,
+                  verba_producao: true as const,
+                  tipo_verba: tipoVerba,
+                  verba_titular_tipo: "fornecedor" as const,
+                  fornecedor_id: fornecedorId,
+                  verba_titular_id: null,
+                  responsavel_verba_id: null,
+                  pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
+                }
+              : {
+                  ...dadosBase,
+                  verba_producao: true as const,
+                  tipo_verba: tipoVerba,
+                  verba_titular_tipo: titularOrigem,
+                  verba_titular_id: titularId,
+                  fornecedor_id: null,
+                  responsavel_verba_id: null,
+                };
         const res = await salvarPPAEmitir(
           ppId,
           itemRealizadoId,
@@ -820,6 +906,14 @@ export function GerarPPDrawer({
     }
   }, [open, router]);
 
+  /** Falta escolher quem recebe: o fornecedor, o responsável ou o titular. */
+  const faltaQuemRecebe =
+    tipoVerba === "producao"
+      ? !responsavelId
+      : verbaComTitular && !titularTerceiro
+        ? !titularId
+        : !fornecedorId;
+
   if (!open || !itemRealizadoId) return null;
 
   /** Os campos da NF de um arquivo — na lista e, `compacta`, na coluna da
@@ -848,6 +942,113 @@ export function GerarPPDrawer({
         servicoAtual={servico}
         onUsarDescricao={(d) => setServico(d)}
       />
+    );
+  }
+
+  /** O campo Fornecedor (combo, +/lápis e Pagamento). A verba de um
+   *  terceiro (decisão 164) usa o mesmo, com a caixa no canto do rótulo. */
+  function campoFornecedor(noRotulo: React.ReactNode) {
+    return (
+                <div className={noRotulo ? "relative" : undefined}>
+                  <label className="text-xs font-medium">Fornecedor *</label>
+                  {noRotulo}
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      {/* Combo com busca desde 09/09/2026 (desenho "PP -
+                          Campo Fornecedor"): a lista passou de dezenas de
+                          nomes, e rolar um Select para achar um deles
+                          custava mais que digitar. Procura por nome E por
+                          documento, que é o que separa homônimos. */}
+                      <Combobox
+                        items={itensFornecedor}
+                        value={fornecedorId || null}
+                        onChange={(v) => {
+                          setFornecedorId(v ?? "");
+                          setPagamento(PAGAMENTO_PELO_CADASTRO);
+                          setFaltaPagamento(false);
+                        }}
+                        placeholder="Escolha o fornecedor"
+                        buscaPlaceholder="Escreva o nome ou o documento"
+                        limpavel
+                        acaoSemResultado={
+                          podeCadastrarFornecedor
+                            ? {
+                                rotulo: (busca) =>
+                                  `Cadastrar “${busca}” como novo fornecedor`,
+                                onClick: (busca) => {
+                                  setNomeSugerido(busca);
+                                  setFornecedorEditando(null);
+                                  setNovoFornecedorOpen(true);
+                                },
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+                    {/* O MESMO botão, dois papéis: "+" cadastra sem sair
+                        da PP (decisão 048); com um fornecedor escolhido
+                        ele vira o lápis e abre o cadastro dele para
+                        revisão. O ✕ de dentro do campo é o caminho de
+                        volta para o "+".
+
+                        São duas permissões diferentes (18/09/2026): criar
+                        aqui é `cadastros.fornecedores.inline`, que o GP e
+                        o produtor têm porque a PP é o fluxo deles; abrir
+                        para editar é `cadastros.fornecedores.editar`, do
+                        administrador e do financeiro. Por isso o gate segue o
+                        papel do botão, e não o botão. */}
+                    {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNomeSugerido("");
+                        setFornecedorEditando(
+                          fornecedorId ? fornecedorId : null,
+                        );
+                        setNovoFornecedorOpen(true);
+                      }}
+                      disabled={pending}
+                      title={
+                        fornecedorId
+                          ? "Editar cadastro do fornecedor"
+                          : "Cadastrar fornecedor"
+                      }
+                      aria-label={
+                        fornecedorId
+                          ? "Editar cadastro do fornecedor"
+                          : "Cadastrar fornecedor"
+                      }
+                      className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
+                    >
+                      {fornecedorId ? (
+                        <Pencil className="h-4 w-4" />
+                      ) : (
+                        <Plus className="h-[17px] w-[17px]" />
+                      )}
+                    </button>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                    {fornecedorId
+                      ? podeEditarFornecedor
+                        ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
+                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o administrador."
+                      : podeCadastrarFornecedor
+                      ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
+                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
+                  </p>
+                  {fornecedorId && (
+                    <div className="mt-3">
+                      <PagamentoDaPPField
+                        fornecedorId={fornecedorId}
+                        valor={pagamento}
+                        onChange={setPagamento}
+                        destacarFalta={faltaPagamento}
+                        disabled={pending}
+                      />
+                    </div>
+                  )}
+                </div>
     );
   }
 
@@ -930,38 +1131,23 @@ export function GerarPPDrawer({
                 Fornecedor & Empresa
               </h3>
 
-              {/* Switch Verba de Produção */}
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={verbaProducao}
-                  onClick={() => {
-                    setVerbaProducao((v) => {
-                      if (!v) setFornecedorId(""); // vai ligar: limpa fornecedor
-                      else setResponsavelId("");   // vai desligar: limpa responsável
-                      return !v;
-                    });
-                  }}
-                  className={cn(
-                    "relative inline-flex h-5 w-9 flex-none items-center rounded-full border-2 border-transparent transition-colors",
-                    verbaProducao ? "bg-california-red" : "bg-muted-foreground/30",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
-                      verbaProducao ? "translate-x-4" : "translate-x-0",
-                    )}
-                  />
-                </button>
-                <span className="text-sm font-medium">Verba de Produção</span>
-                {verbaProducao && (
-                  <span className="ml-auto text-[11px] text-muted-foreground">
-                    Pago ao responsável interno
-                  </span>
-                )}
-              </label>
+              {/* O switch "Verba" e qual verba (decisão 164). Trocar de tipo
+                  limpa quem recebe, como o switch fazia. */}
+              <TipoDaVerbaField
+                tipo={tipoVerba}
+                onChange={(t) => {
+                  if (t === tipoVerba) return;
+                  setFornecedorId("");
+                  setResponsavelId("");
+                  setTitularId("");
+                  setTitularOrigem(null);
+                  setTitularTerceiro(false);
+                  setPagamento(PAGAMENTO_PELO_CADASTRO);
+                  setFaltaPagamento(false);
+                  setTipoVerba(t);
+                }}
+                disabled={pending}
+              />
 
               {/* Valor desta PP — as mesmas colunas do item na planilha.
                   Fica logo abaixo do switch porque primeiro se decide se é
@@ -1068,7 +1254,40 @@ export function GerarPPDrawer({
               </div>
 
               {/* Fornecedor (modo normal) ou Responsável (modo verba) */}
-              {verbaProducao ? (
+              {verbaComTitular && !titularTerceiro ? (
+                <TitularDaVerbaField
+                  itens={itensDoTitular}
+                  carregando={pessoas === null}
+                  titularId={titularId}
+                  onTitular={(id) => {
+                    setTitularId(id);
+                    setTitularOrigem(pessoas?.find((p) => p.id === id)?.origem ?? null);
+                  }}
+                  terceiro={false}
+                  onTerceiro={(v) => {
+                    setTitularTerceiro(v);
+                    setTitularId("");
+                    setTitularOrigem(null);
+                    setFornecedorId("");
+                    setPagamento(PAGAMENTO_PELO_CADASTRO);
+                    setFaltaPagamento(false);
+                  }}
+                  disabled={pending}
+                />
+              ) : verbaComTitular ? (
+                campoFornecedor(
+                  <CaixaTerceiro
+                    marcado
+                    onChange={(v) => {
+                      setTitularTerceiro(v);
+                      setFornecedorId("");
+                      setPagamento(PAGAMENTO_PELO_CADASTRO);
+                      setFaltaPagamento(false);
+                    }}
+                    disabled={pending}
+                  />,
+                )
+              ) : verbaProducao ? (
                 <div>
                   <label className="text-xs font-medium">Responsável *</label>
                   <Combobox
@@ -1084,105 +1303,7 @@ export function GerarPPDrawer({
                   />
                 </div>
               ) : (
-                <div>
-                  <label className="text-xs font-medium">Fornecedor *</label>
-                  <div className="flex items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      {/* Combo com busca desde 09/09/2026 (desenho "PP -
-                          Campo Fornecedor"): a lista passou de dezenas de
-                          nomes, e rolar um Select para achar um deles
-                          custava mais que digitar. Procura por nome E por
-                          documento, que é o que separa homônimos. */}
-                      <Combobox
-                        items={itensFornecedor}
-                        value={fornecedorId || null}
-                        onChange={(v) => {
-                          setFornecedorId(v ?? "");
-                          setPagamento(PAGAMENTO_PELO_CADASTRO);
-                          setFaltaPagamento(false);
-                        }}
-                        placeholder="Escolha o fornecedor"
-                        buscaPlaceholder="Escreva o nome ou o documento"
-                        limpavel
-                        acaoSemResultado={
-                          podeCadastrarFornecedor
-                            ? {
-                                rotulo: (busca) =>
-                                  `Cadastrar “${busca}” como novo fornecedor`,
-                                onClick: (busca) => {
-                                  setNomeSugerido(busca);
-                                  setFornecedorEditando(null);
-                                  setNovoFornecedorOpen(true);
-                                },
-                              }
-                            : undefined
-                        }
-                      />
-                    </div>
-                    {/* O MESMO botão, dois papéis: "+" cadastra sem sair
-                        da PP (decisão 048); com um fornecedor escolhido
-                        ele vira o lápis e abre o cadastro dele para
-                        revisão. O ✕ de dentro do campo é o caminho de
-                        volta para o "+".
-
-                        São duas permissões diferentes (18/09/2026): criar
-                        aqui é `cadastros.fornecedores.inline`, que o GP e
-                        o produtor têm porque a PP é o fluxo deles; abrir
-                        para editar é `cadastros.fornecedores.editar`, do
-                        administrador e do financeiro. Por isso o gate segue o
-                        papel do botão, e não o botão. */}
-                    {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNomeSugerido("");
-                        setFornecedorEditando(
-                          fornecedorId ? fornecedorId : null,
-                        );
-                        setNovoFornecedorOpen(true);
-                      }}
-                      disabled={pending}
-                      title={
-                        fornecedorId
-                          ? "Editar cadastro do fornecedor"
-                          : "Cadastrar fornecedor"
-                      }
-                      aria-label={
-                        fornecedorId
-                          ? "Editar cadastro do fornecedor"
-                          : "Cadastrar fornecedor"
-                      }
-                      className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06] disabled:opacity-50"
-                    >
-                      {fornecedorId ? (
-                        <Pencil className="h-4 w-4" />
-                      ) : (
-                        <Plus className="h-[17px] w-[17px]" />
-                      )}
-                    </button>
-                    )}
-                  </div>
-                  <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                    {fornecedorId
-                      ? podeEditarFornecedor
-                        ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
-                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o administrador."
-                      : podeCadastrarFornecedor
-                      ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
-                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
-                  </p>
-                  {fornecedorId && (
-                    <div className="mt-3">
-                      <PagamentoDaPPField
-                        fornecedorId={fornecedorId}
-                        valor={pagamento}
-                        onChange={setPagamento}
-                        destacarFalta={faltaPagamento}
-                        disabled={pending}
-                      />
-                    </div>
-                  )}
-                </div>
+                campoFornecedor(null)
               )}
 
               {/* Prazo e Parcelas dividem a linha: o prazo é o vencimento
@@ -1345,14 +1466,14 @@ export function GerarPPDrawer({
                 sem anexo: as notas entram na prestação de contas. */}
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {verbaProducao
-                  ? "Anexos (não exigidos na verba de produção)"
+                {tipoVerba
+                  ? `Anexos (não exigidos na ${rotuloDaVerbaMinusculo(tipoVerba)})`
                   : "Anexos (obrigatórios para o envio ao financeiro)"}
               </h3>
-              {verbaProducao ? (
+              {tipoVerba ? (
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  Verba de produção é adiantamento: a PP sai antes de existir nota e as notas entram na prestação de
-                  contas.
+                  {rotuloDaVerbaMinusculo(tipoVerba).replace(/^v/, "V")} é adiantamento: a PP sai antes de existir nota
+                  e as notas entram na prestação de contas.
                 </p>
               ) : (
                 <>
@@ -1503,7 +1624,7 @@ export function GerarPPDrawer({
                   pending ||
                   !ppId ||
                   anexos.some((a) => a.status === "uploading") ||
-                  (verbaProducao ? !responsavelId : !fornecedorId)
+                  faltaQuemRecebe
                 }
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50",
@@ -1522,7 +1643,7 @@ export function GerarPPDrawer({
                   !ppId ||
                   travaDaAbertura !== null ||
                   anexos.some((a) => a.status === "uploading") ||
-                  (verbaProducao ? !responsavelId : !fornecedorId)
+                  faltaQuemRecebe
                 }
                 title={travaDaAbertura ?? undefined}
                 className={cn(
