@@ -291,8 +291,13 @@ export function PainelPPsItem({
   // Prazo de envio (decisão 157).
   const feriados = useFeriadosNacionais();
   const hoje = hojeEmSaoPauloIso();
+  // Decisão 164: na alimentação e no transporte, o titular guardado na PP.
   const contraparte = (a: PPAEmitir) =>
-    a.verba_producao ? nomeDoResponsavel(a.responsavel_verba_id) : nomeDoFornecedor(a.fornecedor_id);
+    !a.verba_producao
+      ? nomeDoFornecedor(a.fornecedor_id)
+      : a.verba_titular_nome
+        ? a.verba_titular_nome
+        : nomeDoResponsavel(a.responsavel_verba_id);
 
   React.useEffect(() => {
     if (!open) {

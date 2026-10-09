@@ -172,7 +172,7 @@ export async function carregarNfsDaPPParaCorrigir(ppId: unknown): Promise<Result
     return { ok: false, message: `A NF só se corrige com a PP em avaliação no financeiro; a ${pp.codigo} não está.` };
   }
   if (pp.verba_producao || !pp.fornecedor_id) {
-    return { ok: false, message: "Verba de produção não tem nota fiscal." };
+    return { ok: false, message: "Verba não tem nota fiscal." };
   }
   const nfs = (pp.anexos ?? [])
     .filter((a) => a.documento_tipo === "nota_fiscal")

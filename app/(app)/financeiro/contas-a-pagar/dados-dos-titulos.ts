@@ -12,8 +12,15 @@
  * continuam nas listas, que são de quem os desenha.
  */
 
-import { situacaoDaVerba } from "@/lib/types";
-import type { DocumentoTipo, FormaPagamento, PlanoContaTipo, PPStatus } from "@/lib/types";
+import { nomeDeQuemRecebeAVerba, situacaoDaVerba, tipoDaVerba } from "@/lib/types";
+import type {
+  DocumentoTipo,
+  FormaPagamento,
+  PlanoContaTipo,
+  PPStatus,
+  TipoVerba,
+  TitularDaVerbaTipo,
+} from "@/lib/types";
 import {
   notasFiscaisDaLinhaPP,
   numerosDasNotas,
@@ -64,6 +71,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
+        tipo_verba, verba_titular_tipo, verba_titular_nome,
         enviada_financeiro_em, aprovada_em, anexos_na_aprovacao,
         urgente, urgente_justificativa, urgente_em,
         forma_pagamento, cartao_credito_id,
@@ -149,6 +157,7 @@ export const SELECT_DEVOLUCAO_DE_VERBA = `
         pago_em, pago_por,
         pp:pedidos_compra!pedido_compra_id(id, codigo, servico, job_id,
           plano_conta_tipo_id, plano_conta_subtipo_id,
+          verba_producao, tipo_verba, verba_titular_nome,
           responsavel:profiles!responsavel_verba_id(nome),
           job:jobs(id, codigo, nome)
         )
@@ -228,6 +237,9 @@ export function mapearPPsDoFinanceiro(
     motivo_rejeicao: string | null;
     pago_em: string | null;
     verba_producao: boolean;
+    tipo_verba: TipoVerba | null;
+    verba_titular_tipo: TitularDaVerbaTipo | null;
+    verba_titular_nome: string | null;
     dados_pagamento_congelados_em: string | null;
     pagamento_fora_do_cadastro_meio: string | null;
     pagamento_fora_do_cadastro_motivo: string | null;
@@ -366,7 +378,11 @@ export function mapearPPsDoFinanceiro(
     plano_conta_tipo_id: r.plano_conta_tipo_id ?? null,
     plano_conta_subtipo_id: r.plano_conta_subtipo_id ?? null,
     verba_producao: r.verba_producao ?? false,
-    responsavel_nome: r.responsavel?.nome ?? null,
+    // Decisão 164: o tipo da verba, e quem a recebe — o responsável na
+    // produção, o titular guardado na PP na alimentação e no transporte.
+    tipo_verba: tipoDaVerba(r),
+    verba_titular_tipo: r.verba_titular_tipo ?? null,
+    responsavel_nome: nomeDeQuemRecebeAVerba(r),
     // Prestação da verba e estorno do saldo, no formato único (decisão 081).
     prestacao: prestacaoDaVerba(r.prestacao),
     devolucao: devolucaoDaVerba(r.devolucao),
@@ -556,7 +572,10 @@ export function montarTitulosAPagar(e: {
         origem: "pp",
         origem_label: pp.codigo,
         descricao: pp.servico,
-        fornecedor_nome: pp.fornecedor_nome || "—",
+        // A verba paga a uma pessoa não tem fornecedor: o título diz para
+        // quem é, como o estorno da verba (decisão 164).
+        fornecedor_nome:
+          pp.fornecedor_nome || (pp.verba_producao && pp.responsavel_nome ? `Verba — ${pp.responsavel_nome}` : "—"),
         cadastro_do_fornecedor_mudou: pp.cadastro_do_fornecedor_mudou,
         job_codigo: pp.job_codigo || "—",
         job_nome: pp.job_nome,
@@ -899,6 +918,9 @@ export function montarTitulosAPagar(e: {
       job_id: string | null;
       plano_conta_tipo_id: string | null;
       plano_conta_subtipo_id: string | null;
+      verba_producao: boolean | null;
+      tipo_verba: TipoVerba | null;
+      verba_titular_nome: string | null;
       responsavel: { nome: string } | null;
       job: { id: string; codigo: string; nome: string } | null;
     } | null;
@@ -914,8 +936,8 @@ export function montarTitulosAPagar(e: {
       // "Estorno de verba" desde a decisão 081 (pergunta 6a). Nas telas ele
       // é despesa negativa; no banco segue positivo e, na baixa, entrada.
       descricao: `Estorno de verba ${dev.pp?.codigo ?? ""} — ${dev.pp?.servico ?? ""}`,
-      fornecedor_nome: dev.pp?.responsavel?.nome
-        ? `Verba — ${dev.pp.responsavel.nome}`
+      fornecedor_nome: dev.pp && nomeDeQuemRecebeAVerba(dev.pp)
+        ? `Verba — ${nomeDeQuemRecebeAVerba(dev.pp)}`
         : "",
       job_codigo: dev.pp?.job?.codigo ?? "—",
       job_nome: dev.pp?.job?.nome ?? "",

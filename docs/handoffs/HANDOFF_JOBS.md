@@ -5103,3 +5103,60 @@ código publicado logo depois (`3305751`).
   ANI-1012/26. O link do ANI-1004/26 cai no orçamento ANI-P005/26-01 com o
   selo "Cancelado". A página do ANI-1012/26 não cita o 1004.
 - O financeiro não muda: as listas dele já deixavam o cancelado de fora.
+
+## ⚠️ Nota de 2026-10-09 (6) — Verba de Alimentação e Verba de Transporte (decisão 164)
+
+- **Por quê:** a produção adianta verba de alimentação e de transporte a
+  quem está no job — colaborador do RH, freela ou, fora do padrão, um
+  terceiro. A verba de produção só aceitava um usuário do sistema.
+- **Formulário da PP** (`gerar-pp-drawer.tsx` +
+  `titular-da-verba-field.tsx`): o switch virou "Verba", com Produção ·
+  Alimentação · Transporte ao lado (ligar cai em Produção). Na alimentação e
+  no transporte, o campo é **"Titular da verba"**: uma lista só
+  (colaboradores do RH e freelas trabalhando, agrupados), carregada quando a
+  verba nova aparece (`listarPessoasParaVerba`, pela função
+  `pessoas_para_verba`). A caixa "Terceiro (fornecedor)" troca para o campo
+  Fornecedor de sempre, com o pagamento do fornecedor. Para a pessoa, sem
+  campo de pagamento: o financeiro decide na aprovação.
+- **Servidor** (`actions-pp.ts`): `tipo_verba`, `verba_titular_tipo` e
+  `verba_titular_id` no schema, com as combinações num `superRefine`;
+  `nomeDoTitularDaVerba` confere o titular contra a mesma lista e guarda o
+  nome na PP (`verba_titular_nome`); `colunasDaVerba` monta as colunas da
+  PP e da PP a emitir. "Cancelar e refazer" e "Atualizar vencimento" levam
+  o tipo e o titular.
+- **Prestação de contas:** na alimentação e no transporte, administrador,
+  GP, produtor ou o freela do job (o titular pode não ter acesso). A
+  produção segue como era. Tela (`carregar-detalhe.ts`) e banco
+  (`enviar_prestacao_verba`) com a mesma regra.
+- **Onde aparece o tipo e o titular:** painel do item e revisão da PP a
+  emitir (linha "Verba"), aba de PPs ("Verba de alimentação · Fulano"),
+  "Ver PP" (switch "Verba" + tipo, "Titular da verba"), prestação de contas,
+  chat de PPs, planilha interna e PDF (layout da verba com "Titular da
+  verba"; o terceiro sai no layout do fornecedor com a linha "Natureza").
+  Os textos do encerramento dizem "verba" (valem para os três tipos).
+- **Banco** (migrations `20261009400001` e `20261009400002`): colunas do
+  tipo e do titular em `pedidos_compra` e `pedidos_compra_a_emitir`, CHECKs
+  de coerência novas, pagamento fora do cadastro para toda PP com
+  fornecedor, tabela `freelas` (provisória, até o RH ter os seus), função
+  `pessoas_para_verba` e `enviar_prestacao_verba` nova. A carga dos 69
+  freelas foi pelo MCP, fora do repositório (tem CPF).
+- **Conferido no navegador (Chrome do Tiago, servidor do worktree, como
+  administrador, no TES-1025/26):** a lista do titular traz 280 pessoas
+  (211 do RH e 69 freelas) nos dois grupos, e a busca pelo nome social
+  acha o freela; a Verba de Alimentação para um freela (PP-00158) e a de
+  Transporte para o "Fornecedor Teste" como terceiro (PP-00159) foram
+  salvas, revisadas ("Verba" e "Titular da verba" na revisão) e geradas,
+  com as colunas certas no banco; o PDF da primeira sai com "Titular da
+  verba", "DADOS DO TITULAR DA VERBA", a natureza e "Assinatura do Titular
+  da Verba", sem dados bancários; o da segunda, no desenho do fornecedor,
+  com os dados bancários e a linha "Natureza". Aba de PPs, "Ver PP" e
+  "Visualizar" mostram o tipo e o titular. A verba de produção salva,
+  reabre e exclui como antes. O Contas a Pagar do financeiro carrega com as
+  colunas novas, e as verbas de produção seguem "Verba de Produção — nome".
+- **Não conferido na tela:** a prestação de contas por produtor e freela
+  (precisa de verba paga; a regra está na função aplicada) e a parcela
+  "Verba — nome" em Títulos a Pagar (não há verba aprovada com parcela
+  aberta hoje).
+- **Resíduo de teste:** PP-00158 e PP-00159 canceladas no TES-1025/26; o
+  freela "ZZ Freela Teste 164" ficou inativo (a PP cancelada aponta para
+  ele); a PP a emitir de produção do teste foi excluída.

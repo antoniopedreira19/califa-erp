@@ -6979,3 +6979,20 @@ financeiro". Regra completa na §9 da decisão 115.
   `resolverOrigem` a recusa ("pague pelo boleto anexado") — o gerador não
   tem o segmento J. `aplicarForaDoCadastroNaRemessa` lança erro se um boleto
   chegar até ela (`npm run test:cnab-fora` cobre).
+
+## ⚠️ Nota de 2026-10-09 (3) — Verba de Alimentação e Verba de Transporte (decisão 164)
+
+- **Listas e dossiê:** "Verba de Alimentação — Fulano" / "Verba de
+  Transporte — Fulano" no lugar de "Verba de Produção — …"; o rótulo do
+  dossiê é "Titular da verba" (ou "Titular da verba (terceiro)").
+  `dados-dos-titulos.ts` lê `tipo_verba`, `verba_titular_tipo` e
+  `verba_titular_nome`, e `responsavel_nome` passa a ser quem recebe a verba
+  (o responsável na produção, o titular nas outras).
+- **Títulos a Pagar:** a parcela da verba paga a uma pessoa mostra "Verba —
+  Fulano" (antes "—"), como o estorno já mostrava.
+- **Aprovação da prestação:** a referência diz "Titular da verba: …" na
+  alimentação e no transporte.
+- **Pagamento:** a verba paga a uma pessoa não traz meio de pagamento — o
+  financeiro escolhe em "Como vai ser pago", como na verba de produção. A
+  verba de um terceiro traz o pagamento do fornecedor (cadastro, chave
+  aleatória ou boleto) e pode ir na remessa; sem retenção, como toda verba.

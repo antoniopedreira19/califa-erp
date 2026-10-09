@@ -222,7 +222,7 @@ export async function impedimentosDosJobs(
   if (verbasRes.error) {
     console.error("[impedimentos.verbas]", verbasRes.error.message);
     for (const imp of mapa.values()) {
-      imp.verbasEmAberto.push({ codigo: "Verbas de produção", situacao: "aguardando_prestacao" });
+      imp.verbasEmAberto.push({ codigo: "Verbas", situacao: "aguardando_prestacao" });
     }
   } else {
     for (const pp of (verbasRes.data ?? []) as any[]) {

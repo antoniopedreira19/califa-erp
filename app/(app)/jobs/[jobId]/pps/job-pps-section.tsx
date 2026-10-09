@@ -25,9 +25,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
+  nomeDeQuemRecebeAVerba,
   podeCancelarPP,
   ppStatusLabel,
+  rotuloDaVerbaMinusculo,
   situacaoVerbaLabel,
+  tipoDaVerba,
   type PedidoCompraNaLista,
   type PedidoCompraParcela,
   type PPStatus,
@@ -392,8 +395,11 @@ export function JobPPsSection({
         case "servico":
           return { valor: pp.servico, rotulo: pp.servico, ordem: pp.servico };
         case "fornecedor": {
-          const nome = pp.verba_producao
-            ? `Verba de produção${pp.responsavel?.nome ? ` · ${pp.responsavel.nome}` : ""}`
+          // Decisão 164: o tipo da verba e quem a recebe.
+          const tipo = tipoDaVerba(pp);
+          const quem = nomeDeQuemRecebeAVerba(pp);
+          const nome = tipo
+            ? `${rotuloDaVerbaMinusculo(tipo).replace(/^v/, "V")}${quem ? ` · ${quem}` : ""}`
             : ((pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—");
           return { valor: nome, rotulo: nome, ordem: nome };
         }
@@ -913,8 +919,10 @@ export function JobPPsSection({
                     <td className="px-3.5 py-2.5 align-middle text-[12.5px] text-muted-foreground">
                       {pp.verba_producao ? (
                         <span className="line-clamp-2 leading-snug">
-                          <span className="italic">Verba de produção</span>
-                          {pp.responsavel?.nome ? ` · ${pp.responsavel.nome}` : ""}
+                          <span className="italic">
+                            {rotuloDaVerbaMinusculo(tipoDaVerba(pp) ?? "producao").replace(/^v/, "V")}
+                          </span>
+                          {nomeDeQuemRecebeAVerba(pp) ? ` · ${nomeDeQuemRecebeAVerba(pp)}` : ""}
                         </span>
                       ) : (
                         <span className="line-clamp-2 leading-snug">
@@ -1173,9 +1181,11 @@ export function JobPPsSection({
           }
           onOpenChange={(o) => !o && setPpEnviando(null)}
           nomeDoFornecedor={
-            (ppEnviando.fornecedor_id
-              ? fornecedoresPorId[ppEnviando.fornecedor_id]
-              : null) ?? "—"
+            (ppEnviando.verba_producao
+              ? nomeDeQuemRecebeAVerba(ppEnviando)
+              : ppEnviando.fornecedor_id
+                ? fornecedoresPorId[ppEnviando.fornecedor_id]
+                : null) ?? "—"
           }
           nomeDaEmpresa={
             tomadoresDaNf.find((t) => t.id === ppEnviando.estabelecimento_id)
@@ -1203,7 +1213,7 @@ export function JobPPsSection({
         contraparteNome={
           ppVendo
             ? ppVendo.verba_producao
-              ? (ppVendo.responsavel?.nome ?? "—")
+              ? (nomeDeQuemRecebeAVerba(ppVendo) ?? "—")
               : ((ppVendo.fornecedor_id ? fornecedoresPorId[ppVendo.fornecedor_id] : null) ?? "—")
             : ""
         }

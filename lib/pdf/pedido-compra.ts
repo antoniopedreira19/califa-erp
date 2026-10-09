@@ -15,7 +15,9 @@ import type {
   Job,
   Projeto,
   Cliente,
+  TipoVerba,
 } from "@/lib/types";
+import { rotuloDaVerba, rotuloDeQuemRecebeAVerba, verbaTemTitular } from "@/lib/types";
 // Logo embed como base64: em serverless Vercel, `public/` não é copiado
 // pro filesystem da função runtime (ENOENT). Base64 no bundle resolve.
 import { LOGO_ICON_BASE64 } from "./logo-base64";
@@ -153,6 +155,10 @@ interface Dados {
      * omite os DADOS BANCÁRIOS (verba é interna, não paga fornecedor) e usa
      * `responsavelVerbaNome` no lugar do nome do fornecedor. */
     verba_producao?: boolean;
+    /** Decisão 164: o tipo da verba. Ausente = produção. Na alimentação e
+     *  no transporte o bloco diz "Titular da verba"; o terceiro (com
+     *  fornecedor) sai no desenho do fornecedor, com os dados bancários. */
+    tipo_verba?: TipoVerba | null;
   };
   /** Decisão 161: a PP paga por boleto. O documento continua o de sempre;
    *  só a linha do PIX vira "Pagamento: Boleto". */
@@ -206,10 +212,20 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   const parcelada = parcelas.length > 1;
   const primeira = parcelas[0];
 
-  const isVerba = pp.verba_producao === true;
+  // A verba paga a uma pessoa (o responsável na produção; o titular na
+  // alimentação e no transporte). A verba de um terceiro (decisão 164) tem
+  // fornecedor e sai no desenho do fornecedor, com a linha "Natureza".
+  const tipoVerba: TipoVerba | null = pp.verba_producao === true ? (pp.tipo_verba ?? "producao") : null;
+  const isVerba = tipoVerba !== null && !fornecedor;
+  const rotuloQuemRecebe = tipoVerba ? rotuloDeQuemRecebeAVerba(tipoVerba) : "Responsável";
+  const naturezaDaVerba = tipoVerba
+    ? verbaTemTitular(tipoVerba)
+      ? `${rotuloDaVerba(tipoVerba)} — adiantamento sob responsabilidade de quem está nomeado acima, com prestação de contas ao final.`
+      : "Verba de Produção — o dinheiro fica sob responsabilidade do funcionário nomeado acima e será prestado contas ao final."
+    : "";
 
   // Nome do contraparte pra usar nos blocos de identificação. Em verba,
-  // é o responsável interno; nas demais, o fornecedor externo.
+  // é quem recebe a verba; nas demais, o fornecedor externo.
   const nomeContraparte = isVerba
     ? (responsavelVerbaNome ?? "")
     : (fornecedor?.razao_social ?? fornecedor?.nome ?? "");
@@ -316,7 +332,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
             stack: [
               lv("Cliente", cliente.nome_fantasia),
               lv(
-                isVerba ? "Responsável" : "Fornecedor",
+                isVerba ? rotuloQuemRecebe : "Fornecedor",
                 nomeContraparte,
               ),
               lv("Marca", job.produto ?? ""),
@@ -584,7 +600,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
             [
               { text: "Natureza:", bold: true, fontSize: 8 },
               {
-                text: "Verba de Produção — o dinheiro fica sob responsabilidade do funcionário nomeado acima e será prestado contas ao final.",
+                text: naturezaDaVerba,
                 fontSize: 8,
               },
             ],
@@ -643,6 +659,16 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
               { text: "" },
               { text: "" },
             ],
+            ...(tipoVerba
+              ? [
+                  [
+                    { text: "Natureza:", bold: true, fontSize: 8 },
+                    { text: naturezaDaVerba, colSpan: 3, fontSize: 8 },
+                    { text: "" },
+                    { text: "" },
+                  ] as TableCell[],
+                ]
+              : []),
           ],
         },
         layout: BORDA,
@@ -677,7 +703,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
               },
               {
                 text: isVerba
-                  ? "Assinatura do Responsável"
+                  ? tipoVerba && verbaTemTitular(tipoVerba)
+                    ? "Assinatura do Titular da Verba"
+                    : "Assinatura do Responsável"
                   : "Assinatura do Fornecedor",
                 alignment: "center",
                 fontSize: 8,
@@ -739,7 +767,13 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     ...bancariosBloco,
     ...parcelasBloco,
     valorBlock,
-    secaoHeader(isVerba ? "DADOS DO RESPONSÁVEL" : "DADOS DO FORNECEDOR"),
+    secaoHeader(
+      isVerba
+        ? tipoVerba && verbaTemTitular(tipoVerba)
+          ? "DADOS DO TITULAR DA VERBA"
+          : "DADOS DO RESPONSÁVEL"
+        : "DADOS DO FORNECEDOR",
+    ),
     contraparteTable,
     { text: "", margin: [0, 6, 0, 0] }, // espaço antes das assinaturas
     assinaturasTable,

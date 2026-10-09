@@ -17,6 +17,7 @@ import {
   type PPDaSublinha,
 } from "@/lib/exportacao/interna-do-job";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
+import { nomeDeQuemRecebeAVerba, rotuloDaVerba, tipoDaVerba } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -113,7 +114,8 @@ export async function GET(
         .from("pedidos_compra")
         .select(
           "id, codigo, status, item_realizado_id, valor, valor_unitario, quantidade, dias_meses, " +
-            "verba_producao, fornecedor:fornecedores(nome), responsavel:profiles!responsavel_verba_id(nome), " +
+            "verba_producao, tipo_verba, verba_titular_nome, " +
+            "fornecedor:fornecedores(nome), responsavel:profiles!responsavel_verba_id(nome), " +
             "prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(valor_devolvido)",
         )
         .eq("job_id", params.jobId)
@@ -159,7 +161,11 @@ export async function GET(
       valor_unitario: Number(pp.valor_unitario ?? 0),
       quantidade: Number(pp.quantidade ?? 0),
       dias_meses: Number(pp.dias_meses ?? 0),
-      pagoA: pp.verba_producao ? (responsavel ?? "Verba de produção") : fornecedor,
+      // Decisão 164: na alimentação e no transporte, o titular guardado na PP.
+      pagoA: pp.verba_producao
+        ? (nomeDeQuemRecebeAVerba({ ...pp, responsavel: responsavel ? { nome: responsavel } : null }) ??
+          rotuloDaVerba(tipoDaVerba(pp) ?? "producao"))
+        : fornecedor,
       valorDevolvido: Number(primeiro<any>(pp.prestacao)?.valor_devolvido ?? 0),
     });
     ppsPorItem.set(itemId, doItem);

@@ -111,7 +111,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     }
     if (imp.verbasEmAberto.length > 0) {
       partes.push(
-        `${imp.verbasEmAberto.length} ${imp.verbasEmAberto.length === 1 ? "verba de produção não concluída" : "verbas de produção não concluídas"} (${imp.verbasEmAberto
+        `${imp.verbasEmAberto.length} ${imp.verbasEmAberto.length === 1 ? "verba não concluída" : "verbas não concluídas"} (${imp.verbasEmAberto
           .map((v) => `${v.codigo}: ${situacaoVerbaLabel(v.situacao).toLowerCase()}`)
           .join(", ")})`,
       );

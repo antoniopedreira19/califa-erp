@@ -23,6 +23,8 @@ export type PPParaThreadChat = Pick<
   | "valor"
   | "fornecedor_id"
   | "verba_producao"
+  | "tipo_verba"
+  | "verba_titular_nome"
   | "prazo_pagamento"
   | "enviada_financeiro_em"
   | "created_at"
@@ -110,6 +112,8 @@ export function montarThreadChatPPs(
     const fornecedorLookup = pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null;
     const fornecedorNome = nomeContraparteBRPP({
       verba_producao: pp.verba_producao,
+      tipo_verba: pp.tipo_verba,
+      verba_titular_nome: pp.verba_titular_nome,
       fornecedor: fornecedorLookup ? { nome: fornecedorLookup } : null,
       responsavel: pp.responsavel,
     }) || "Fornecedor";
@@ -212,9 +216,11 @@ export function montarThreadChatPPs(
     const contraparte =
       nomeContraparteBRPP({
         verba_producao: pp.verba_producao,
+        tipo_verba: pp.tipo_verba,
+        verba_titular_nome: pp.verba_titular_nome,
         fornecedor: null,
         responsavel: pp.responsavel,
-      }) || "Verba de produção";
+      }) || "Verba";
     const gastoFmt = moeda(pr.valor_gasto, moedaCode);
     const saldoFmt = moeda(pr.valor_devolvido, moedaCode);
     if (pr.status === "em_avaliacao") {

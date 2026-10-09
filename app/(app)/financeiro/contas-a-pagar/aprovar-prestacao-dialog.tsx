@@ -38,6 +38,9 @@ export interface PrestacaoParaAprovar {
    *  responsável pela verba, qualquer GP ou um administrador. */
   envio: EnvioDaPP | null;
   responsavelVerbaNome: string | null;
+  /** "Responsável pela verba" (produção) ou "Titular da verba"
+   *  (alimentação e transporte, decisão 164). */
+  rotuloQuemRecebe: string;
   gpResponsavelNome: string | null;
 }
 
@@ -119,7 +122,7 @@ export function AprovarPrestacaoDialog({
               rotulo={alvo.envio.reenviada ? "Prestação reenviada por" : "Prestação enviada por"}
               nome={alvo.envio.por_nome}
               em={alvo.envio.em}
-              referencia={`Responsável pela verba: ${alvo.responsavelVerbaNome ?? "—"} · GP responsável do job: ${alvo.gpResponsavelNome ?? "—"}`}
+              referencia={`${alvo.rotuloQuemRecebe}: ${alvo.responsavelVerbaNome ?? "—"} · GP responsável do job: ${alvo.gpResponsavelNome ?? "—"}`}
             />
           )}
         </DialogHeader>
