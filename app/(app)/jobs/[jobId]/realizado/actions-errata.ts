@@ -30,8 +30,17 @@ import type {
   JobStatus,
   ErrataAcao,
   CategoriaModeloPlanilha,
+  MudancaDeEstrutura,
 } from "@/lib/types";
 import { jobAceitaAcoesPlanilha } from "@/lib/types";
+import {
+  erroDoNomeDoGrupo,
+  gruposQueSaem,
+  mudancasDeEstrutura,
+  resumoDaEstrutura,
+  type GrupoDaOrganizacao,
+  type Organizacao,
+} from "@/lib/calculos/organizacao-errata";
 
 type Ok = { ok: true; errataId: string };
 type Err = { ok: false; message: string };
@@ -268,8 +277,17 @@ const alteracaoSchema = z.object({
   ...planejadoSchema,
 });
 
+/** O agrupamento de uma linha: o id de um agrupamento do job, ou a chave de
+ *  um criado nesta errata (`grupo-novo:N`, decisão 162). */
+const refDoGrupo = z
+  .string()
+  .refine(
+    (v) => z.string().uuid().safeParse(v).success || /^grupo-novo:\d+$/.test(v),
+    "Agrupamento inválido.",
+  );
+
 const novaSchema = z.object({
-  grupo_id: z.string().uuid(),
+  grupo_id: refDoGrupo,
   item: z
     .string()
     .trim()
@@ -295,6 +313,30 @@ const conteudoSchema = z.object({
   /** O nome antigo, de uma aba aberta antes da decisão 151. Vale como
    *  cancelamento: a errata não apaga mais linha. */
   remocoes: z.array(z.string().uuid()).default([]),
+  /** A organização da planilha (decisão 162): agrupamento novo, renomeado
+   *  e a sequência das linhas. Quem sai (o que ficou vazio) o servidor
+   *  decide. Ausente na errata que não mexe nela. */
+  estrutura: z
+    .object({
+      grupos_novos: z
+        .array(
+          z.object({
+            chave: z.string().regex(/^grupo-novo:\d+$/),
+            nome: z.string(),
+            mes_id: z.string().uuid().nullable(),
+          }),
+        )
+        .default([]),
+      grupos_renomeados: z
+        .array(z.object({ grupo_id: z.string().uuid(), nome: z.string() }))
+        .default([]),
+      ordem: z
+        .array(z.object({ item: z.string().min(1), grupo: refDoGrupo }))
+        .nullable()
+        .default(null),
+    })
+    .nullable()
+    .optional(),
 });
 
 const payloadSchema = conteudoSchema.extend({
@@ -345,7 +387,12 @@ interface Mudanca {
   /** `null` só na linha nova, que ainda não tem id. */
   copiaId: string | null;
   itemNome: string;
+  /** O agrupamento da VERSÃO (a âncora): é o que o histórico da errata
+   *  guarda em `jobs_erratas_itens.grupo_id`. */
   grupoId: string | null;
+  /** O agrupamento do JOB onde a linha fica (decisão 162): o id, ou a
+   *  chave de um agrupamento criado nesta errata. */
+  grupoDoJob: string | null;
   grupoNome: string;
   linhaVermelha: boolean;
   tipoDe: TipoCusto;
@@ -534,6 +581,9 @@ export async function registrarErrata(
       linhas_vermelhas: mudancas.filter(
         (m) => m.acao === "nova" && m.linhaVermelha,
       ).length,
+      // Decisão 162: a organização da planilha, e se a errata foi só isso.
+      organizacao: montada.estrutura.map((m) => m.tipo),
+      so_organizacao: mudancas.length === 0,
       devolveu_ao_mural: devolveAoMural,
       valor_job_antes: antes.valorJob,
       valor_job_depois: depois.valorJob,
@@ -588,7 +638,7 @@ export async function salvarErrataPronta(
     "job.errata_pronta_salva",
   );
   if (!montada.ok) return montada;
-  const { antes, depois, mudancas } = montada;
+  const { antes, depois, mudancas, estrutura } = montada;
 
   const conteudo = {
     alteracoes: parsed.data.alteracoes,
@@ -596,11 +646,14 @@ export async function salvarErrataPronta(
     cancelamentos: Array.from(
       new Set([...parsed.data.cancelamentos, ...parsed.data.remocoes]),
     ),
+    // A organização da planilha (decisão 162), como a tela a pediu: quem
+    // abre a pronta de novo continua dela.
+    estrutura: parsed.data.estrutura ?? null,
   };
   const numeros = {
     conteudo,
     descricao,
-    resumo: resumoDasMudancas(mudancas),
+    resumo: resumoDasMudancas(mudancas, estrutura),
     custo_orcado_antes: dinheiro(antes.subtotalGeral),
     custo_orcado_depois: dinheiro(depois.subtotalGeral),
     valor_job_antes: dinheiro(antes.valorJob),
@@ -740,8 +793,9 @@ export async function descartarErrataPronta(
   return { ok: true };
 }
 
-/** "2 linhas alteradas · 1 linha nova" — o mesmo texto do rascunho da tela. */
-function resumoDasMudancas(mudancas: Mudanca[]): string {
+/** "2 linhas alteradas · 1 linha nova · 1 item movido" — o mesmo texto do
+ *  rascunho da tela, com a organização (decisão 162) depois dos valores. */
+function resumoDasMudancas(mudancas: Mudanca[], estrutura: MudancaDeEstrutura[]): string {
   const conta = (a: ErrataAcao) => mudancas.filter((m) => m.acao === a).length;
   const partes: string[] = [];
   const alt = conta("alterada");
@@ -750,6 +804,7 @@ function resumoDasMudancas(mudancas: Mudanca[]): string {
   if (alt) partes.push(`${alt} ${alt === 1 ? "linha alterada" : "linhas alteradas"}`);
   if (nov) partes.push(`${nov} ${nov === 1 ? "linha nova" : "linhas novas"}`);
   if (can) partes.push(`${can} ${can === 1 ? "linha cancelada" : "linhas canceladas"}`);
+  partes.push(...resumoDaEstrutura(estrutura));
   return partes.join(" · ");
 }
 
@@ -760,6 +815,8 @@ interface ErrataMontada {
   /** O `p` de `registrar_errata_do_job`, sem a errata pronta. */
   p: Record<string, unknown>;
   mudancas: Mudanca[];
+  /** O que a errata muda na organização da planilha (decisão 162). */
+  estrutura: MudancaDeEstrutura[];
   antes: ReturnType<typeof totaisDoFinanceiro>;
   depois: ReturnType<typeof totaisDoFinanceiro>;
   perderamBv: Mudanca[];
@@ -789,7 +846,12 @@ async function montarErrata(
     new Set([...conteudo.cancelamentos, ...conteudo.remocoes]),
   );
 
-  if (alteracoes.length + novas.length + cancelamentos.length === 0) {
+  // A errata pode só organizar a planilha (decisão 162).
+  const est = conteudo.estrutura ?? null;
+  const pediuOrganizacao =
+    est !== null &&
+    (est.grupos_novos.length > 0 || est.grupos_renomeados.length > 0 || est.ordem !== null);
+  if (alteracoes.length + novas.length + cancelamentos.length === 0 && !pediuOrganizacao) {
     return { ok: false, message: "Nenhuma alteração informada." };
   }
 
@@ -891,7 +953,7 @@ async function montarErrata(
     supabase
       .from("jobs_itens_orcado")
       .select(
-        "id, item_versao_id, item, grupo_id, ordem, tipo_custo, linha_vermelha, " +
+        "id, item_versao_id, item, grupo_id, job_grupo_id, ordem, tipo_custo, linha_vermelha, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
           "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
           "em_save, save_consumido, cancelada_em",
@@ -933,19 +995,40 @@ async function montarErrata(
 
   const porId = new Map(itensAtuais.map((i: any) => [i.id as string, i]));
 
-  // Nome do grupo entra congelado no histórico.
-  const { data: grupos } = await supabase
-    .from("versoes_orcamento_grupos")
-    .select("id, nome, mes_id")
-    .eq("versao_orcamento_id", job.versao_orcamento_aprovada_id)
-    .eq("tenant_id", session.activeTenant.id);
-  const nomeDoGrupo = new Map(
-    (grupos ?? []).map((g: any) => [g.id as string, g.nome as string]),
+  // Os agrupamentos do JOB (decisão 162), inclusive os que saíram em
+  // erratas anteriores — a âncora deles serve ao agrupamento novo do mês.
+  // O nome que entra congelado no histórico é o do job, já com o que esta
+  // errata renomeia.
+  const { data: gruposDoJob, error: gruposErr } = await supabase
+    .from("jobs_grupos")
+    .select("id, nome, mes_id, grupo_versao_id, ordem, removido_em")
+    .eq("job_id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .order("ordem", { ascending: true })
+    .returns<GrupoDoJobLido[]>();
+  if (gruposErr || !gruposDoJob) {
+    return { ok: false, message: "Não foi possível ler os agrupamentos do job." };
+  }
+  const organizacao = montarOrganizacao(
+    gruposDoJob,
+    (itensAtuais as any[]).map((i) => ({
+      id: i.id as string,
+      job_grupo_id: i.job_grupo_id as string,
+      item: i.item as string,
+      ordem: Number(i.ordem ?? 0),
+    })),
+    novas.map((n) => ({ grupo_id: n.grupo_id, item: n.item })),
+    est,
   );
+  if (!organizacao.ok) return organizacao;
+  /** O nome final do agrupamento em que a linha termina. */
+  const nomeFinalDaLinha = (id: string, grupoAtual: string) =>
+    organizacao.nomeDe(organizacao.grupoFinalDaLinha(id) ?? grupoAtual) ?? "—";
 
   // Modelo mensal (decisão 078): errata não toca linha de mês já enviado
   // para faturamento — nem corrige, nem remove, nem cria linha nova num
-  // grupo desse mês. Os outros meses seguem editáveis.
+  // grupo desse mês, nem mexe na organização dele (decisão 162). Os outros
+  // meses seguem editáveis.
   if (mensal) {
     let enviados: Set<string>;
     try {
@@ -965,20 +1048,18 @@ async function montarErrata(
       const mesDoId = new Map(
         (mesesDaVersao ?? []).map((m: any) => [m.id as string, m.mes as string]),
       );
-      const mesDoGrupo = new Map(
-        (grupos ?? []).map((g: any) => [
-          g.id as string,
-          g.mes_id ? (mesDoId.get(g.mes_id) ?? null) : null,
-        ]),
-      );
+      // O mês pelo agrupamento do JOB (o mesmo da âncora na versão), que
+      // também cobre o agrupamento criado nesta errata.
       const tocados = new Set<string>();
-      const conferir = (grupoId: string | undefined) => {
-        const mes = grupoId ? mesDoGrupo.get(grupoId) : null;
+      const conferir = (grupoDoJob: string | undefined) => {
+        const mesId = grupoDoJob ? organizacao.mesDe(grupoDoJob) : null;
+        const mes = mesId ? (mesDoId.get(mesId) ?? null) : null;
         if (mes && enviados.has(mes)) tocados.add(mes);
       };
-      for (const alt of alteracoes) conferir(porId.get(alt.job_item_orcado_id)?.grupo_id);
-      for (const id of cancelamentos) conferir(porId.get(id)?.grupo_id);
+      for (const alt of alteracoes) conferir(porId.get(alt.job_item_orcado_id)?.job_grupo_id);
+      for (const id of cancelamentos) conferir(porId.get(id)?.job_grupo_id);
       for (const nova of novas) conferir(nova.grupo_id);
+      for (const g of organizacao.gruposTocados) conferir(g);
       if (tocados.size > 0) {
         return {
           ok: false,
@@ -1072,7 +1153,8 @@ async function montarErrata(
       copiaId: atual.id,
       itemNome: atual.item,
       grupoId: atual.grupo_id,
-      grupoNome: nomeDoGrupo.get(atual.grupo_id) ?? "—",
+      grupoDoJob: atual.job_grupo_id,
+      grupoNome: nomeFinalDaLinha(atual.id, atual.job_grupo_id),
       linhaVermelha: atual.linha_vermelha === true,
       tipoDe,
       tipoPara: alt.tipo_custo,
@@ -1143,7 +1225,8 @@ async function montarErrata(
         copiaId: atual.id,
         itemNome: atual.item,
         grupoId: atual.grupo_id,
-        grupoNome: nomeDoGrupo.get(atual.grupo_id) ?? "—",
+        grupoDoJob: atual.job_grupo_id,
+        grupoNome: nomeFinalDaLinha(atual.id, atual.job_grupo_id),
         linhaVermelha: atual.linha_vermelha === true,
         tipoDe: tipo,
         tipoPara: tipo,
@@ -1175,13 +1258,17 @@ async function montarErrata(
   }
 
   // ---- 3. Linhas novas ----
-  for (const nova of novas) {
-    if (!nomeDoGrupo.has(nova.grupo_id)) {
+  for (const [k, nova] of novas.entries()) {
+    // O agrupamento do job (ou o novo desta errata) já foi conferido em
+    // `montarOrganizacao`; a âncora na versão vai para o histórico.
+    const ancora = organizacao.ancoraDe(nova.grupo_id);
+    if (!ancora) {
       return {
         ok: false,
-        message: "Uma das linhas novas aponta para um grupo que não é deste orçamento.",
+        message: "Uma das linhas novas aponta para um agrupamento que não é deste job.",
       };
     }
+    const grupoDaNova = organizacao.grupoFinalDaLinha(`nova:${k + 1}`) ?? nova.grupo_id;
 
     // A vermelha é zerada por definição, e o banco cobra isso. Zerar aqui
     // evita que um payload adulterado passe um orçado pela porta dos
@@ -1201,8 +1288,9 @@ async function montarErrata(
       acao: "nova",
       copiaId: null,
       itemNome: nova.item,
-      grupoId: nova.grupo_id,
-      grupoNome: nomeDoGrupo.get(nova.grupo_id) ?? "—",
+      grupoId: organizacao.ancoraDe(grupoDaNova) ?? ancora,
+      grupoDoJob: grupoDaNova,
+      grupoNome: organizacao.nomeDe(grupoDaNova) ?? "—",
       linhaVermelha: nova.linha_vermelha,
       tipoDe: nova.tipo_custo,
       tipoPara: nova.tipo_custo,
@@ -1229,8 +1317,9 @@ async function montarErrata(
     });
   }
 
-  if (mudancas.length === 0) {
-    return { ok: false, message: "Nenhum valor foi alterado." };
+  // A errata que só organiza a planilha não muda valor (decisão 162).
+  if (mudancas.length === 0 && organizacao.lista.length === 0) {
+    return { ok: false, message: "Nenhuma alteração informada." };
   }
 
   // ---- Trava de linha com save (decisão 099, §15) ----
@@ -1361,17 +1450,19 @@ async function montarErrata(
   // policies e as travas de banco (save, linha vermelha…).
   //
   // A ordem das linhas novas continua sendo decidida aqui: a última do
-  // grupo + 1, uma a uma.
+  // agrupamento + 1, uma a uma. Quando a errata reorganiza a planilha
+  // (decisão 162), a sequência inteira vem em `estrutura.ordem` e vale por
+  // cima disto. O agrupamento é o do JOB, ou a chave de um novo.
   const ordemPorGrupo = new Map<string, number>();
   for (const i of itensAtuais as any[]) {
-    const atual = ordemPorGrupo.get(i.grupo_id) ?? 0;
-    ordemPorGrupo.set(i.grupo_id, Math.max(atual, Number(i.ordem ?? 0)));
+    const atual = ordemPorGrupo.get(i.job_grupo_id) ?? 0;
+    ordemPorGrupo.set(i.job_grupo_id, Math.max(atual, Number(i.ordem ?? 0)));
   }
   const chaveDaNova = new Map<Mudanca, string>();
   const linhasNovas = mudancas
     .filter((x) => x.acao === "nova")
     .map((m, k) => {
-      const grupoId = m.grupoId as string;
+      const grupoId = m.grupoDoJob as string;
       const ordem = (ordemPorGrupo.get(grupoId) ?? 0) + 1;
       ordemPorGrupo.set(grupoId, ordem);
       const chave = `nova-${k}`;
@@ -1489,12 +1580,262 @@ async function montarErrata(
       // que não fecha com a planilha do job.
       espelhos,
       devolve_ao_mural: devolveAoMural,
+      // A organização da planilha (decisão 162): renomeados, novos, a
+      // sequência das linhas e os agrupamentos que ficaram vazios. `null`
+      // quando a errata não mexe nela.
+      estrutura: organizacao.paraFuncao,
     },
     mudancas,
+    estrutura: organizacao.lista,
     antes,
     depois,
     perderamBv,
     devolveAoMural,
+  };
+}
+
+// ---- A organização da planilha (decisão 162) ------------------------------
+
+interface GrupoDoJobLido {
+  id: string;
+  nome: string;
+  mes_id: string | null;
+  grupo_versao_id: string;
+  ordem: number;
+  removido_em: string | null;
+}
+
+interface LinhaDoJobLida {
+  id: string;
+  job_grupo_id: string;
+  item: string;
+  ordem: number;
+}
+
+type EstruturaPedida = NonNullable<ConteudoValidado["estrutura"]>;
+
+/** O pacote de `registrar_errata_do_job` para a organização. */
+interface EstruturaParaFuncao {
+  grupos_renomeados: Array<{ id: string; nome: string }>;
+  grupos_novos: Array<{ chave: string; nome: string; ancora: string }>;
+  ordem: Array<
+    { id: string; grupo: string; ordem: number } | { chave_nova: string; grupo: string; ordem: number }
+  > | null;
+  grupos_removidos: string[];
+  resumo: MudancaDeEstrutura[];
+}
+
+type OrganizacaoMontada =
+  | Err
+  | {
+      ok: true;
+      /** O que muda, como o pop-up e o histórico mostram. */
+      lista: MudancaDeEstrutura[];
+      /** O nome final do agrupamento (id do job ou chave nova). */
+      nomeDe: (ref: string) => string | undefined;
+      /** A âncora na versão de um agrupamento (id do job ou chave nova). */
+      ancoraDe: (ref: string) => string | undefined;
+      /** O mês de um agrupamento (id do job ou chave nova). */
+      mesDe: (ref: string) => string | null;
+      /** O agrupamento do job em que a linha termina. */
+      grupoFinalDaLinha: (id: string) => string | undefined;
+      /** Os agrupamentos que a organização toca — no mensal, o mês deles
+       *  não pode estar enviado para faturamento. */
+      gruposTocados: string[];
+      paraFuncao: EstruturaParaFuncao | null;
+    };
+
+/**
+ * Confere e monta a organização que a errata pede, contra o job como ele
+ * está no banco (decisão 162). A regra do que muda e de quem sai é a mesma
+ * da tela (`lib/calculos/organizacao-errata`). O servidor decide sozinho os
+ * agrupamentos que saem: os que ficaram vazios nesta errata.
+ *
+ * `novas` são as linhas novas do pedido, na ordem: a N-ésima é `nova:N` na
+ * sequência que vem da tela.
+ */
+function montarOrganizacao(
+  grupos: GrupoDoJobLido[],
+  linhas: LinhaDoJobLida[],
+  novas: Array<{ grupo_id: string; item: string }>,
+  est: EstruturaPedida | null | undefined,
+): OrganizacaoMontada {
+  const vivos = grupos.filter((g) => g.removido_em === null);
+  const vivoPorId = new Map(vivos.map((g) => [g.id, g]));
+
+  // ---- Renomeados ----
+  const renomes = new Map<string, string>();
+  for (const r of est?.grupos_renomeados ?? []) {
+    if (!vivoPorId.has(r.grupo_id)) {
+      return { ok: false, message: "Um dos agrupamentos renomeados não é deste job. Recarregue a página." };
+    }
+    renomes.set(r.grupo_id, r.nome.trim());
+  }
+
+  // ---- Novos: a âncora é um agrupamento da versão do mesmo mês ----
+  const novosGrupos: Array<{ chave: string; nome: string; mesId: string | null; ancora: string }> = [];
+  for (const n of est?.grupos_novos ?? []) {
+    if (novosGrupos.some((x) => x.chave === n.chave)) {
+      return { ok: false, message: "A lista de agrupamentos novos veio repetida. Recarregue a página." };
+    }
+    const doMes = grupos.find((g) => (g.mes_id ?? null) === (n.mes_id ?? null));
+    if (!doMes) {
+      return { ok: false, message: "O mês do agrupamento novo não é deste job." };
+    }
+    novosGrupos.push({
+      chave: n.chave,
+      nome: n.nome.trim(),
+      mesId: n.mes_id ?? null,
+      ancora: doMes.grupo_versao_id,
+    });
+  }
+
+  const finais: GrupoDaOrganizacao[] = [
+    ...vivos.map((g) => ({ id: g.id, nome: renomes.get(g.id) ?? g.nome, mesId: g.mes_id ?? null })),
+    ...novosGrupos.map((n) => ({ id: n.chave, nome: n.nome, mesId: n.mesId })),
+  ];
+  const finalPorRef = new Map(finais.map((g) => [g.id, g]));
+  for (const g of finais) {
+    if (!renomes.has(g.id) && vivoPorId.has(g.id)) continue;
+    const erro = erroDoNomeDoGrupo(g.nome, g.mesId, finais, g.id);
+    if (erro) return { ok: false, message: `${erro} (${g.nome.trim() || "sem nome"})` };
+  }
+
+  // ---- Antes: a planilha como está, na ordem da tela ----
+  const posDoGrupo = new Map(vivos.map((g, k) => [g.id, k]));
+  const linhasAntes = [...linhas].sort(
+    (a, b) =>
+      (posDoGrupo.get(a.job_grupo_id) ?? 1e9) - (posDoGrupo.get(b.job_grupo_id) ?? 1e9) ||
+      a.ordem - b.ordem ||
+      a.id.localeCompare(b.id),
+  );
+  const antes: Organizacao = {
+    grupos: vivos.map((g) => ({ id: g.id, nome: g.nome, mesId: g.mes_id ?? null })),
+    linhas: linhasAntes.map((l) => ({ id: l.id, grupoId: l.job_grupo_id, item: l.item })),
+  };
+
+  // As linhas novas: `nova:N` e o agrupamento onde nasceram.
+  const novasNoGrupo = new Map<string, string>();
+  for (const [k, n] of novas.entries()) {
+    if (!finalPorRef.has(n.grupo_id)) {
+      return { ok: false, message: "Uma das linhas novas aponta para um agrupamento que não é deste job." };
+    }
+    novasNoGrupo.set(`nova:${k + 1}`, n.grupo_id);
+  }
+  const itemDaNova = (chave: string) => novas[Number(chave.slice("nova:".length)) - 1]?.item ?? "";
+
+  // ---- Depois ----
+  let linhasDepois: Organizacao["linhas"];
+  const grupoAntes = new Map(linhasAntes.map((l) => [l.id, l.job_grupo_id]));
+  const nomeDaLinha = new Map(linhasAntes.map((l) => [l.id, l.item]));
+  if (est?.ordem) {
+    const vistos = new Set<string>();
+    linhasDepois = [];
+    for (const o of est.ordem) {
+      if (vistos.has(o.item)) {
+        return { ok: false, message: "A nova ordem repete uma linha. Recarregue a página." };
+      }
+      vistos.add(o.item);
+      const destino = finalPorRef.get(o.grupo);
+      if (!destino) {
+        return { ok: false, message: "Uma linha foi levada para um agrupamento que não é deste job." };
+      }
+      const nova = novasNoGrupo.get(o.item);
+      if (nova !== undefined) {
+        if (nova !== o.grupo) {
+          return { ok: false, message: "Uma linha nova veio em dois agrupamentos. Recarregue a página." };
+        }
+        linhasDepois.push({ id: o.item, grupoId: o.grupo, item: itemDaNova(o.item) });
+        continue;
+      }
+      const de = grupoAntes.get(o.item);
+      if (de === undefined) {
+        return { ok: false, message: "A nova ordem tem uma linha que não é deste job. Recarregue a página." };
+      }
+      if ((vivoPorId.get(de)?.mes_id ?? null) !== destino.mesId) {
+        return { ok: false, message: "Uma linha não muda de mês: leve-a para um agrupamento do mesmo mês." };
+      }
+      linhasDepois.push({ id: o.item, grupoId: o.grupo, item: nomeDaLinha.get(o.item) ?? "" });
+    }
+    if (vistos.size !== linhasAntes.length + novas.length) {
+      return { ok: false, message: "A nova ordem deixou linhas de fora. Recarregue a página." };
+    }
+  } else {
+    // Sem nova ordem: cada linha fica onde está, e a nova vai para o fim
+    // do agrupamento dela.
+    linhasDepois = finais.flatMap((g) => [
+      ...antes.linhas.filter((l) => l.grupoId === g.id),
+      ...[...novasNoGrupo.entries()]
+        .filter(([, grupo]) => grupo === g.id)
+        .map(([chave]) => ({ id: chave, grupoId: g.id, item: itemDaNova(chave) })),
+    ]);
+  }
+  const depois: Organizacao = { grupos: finais, linhas: linhasDepois };
+
+  const saem = new Set(gruposQueSaem(antes, depois));
+  const lista = mudancasDeEstrutura(antes, depois, novasNoGrupo);
+  const grupoFinal = new Map(linhasDepois.map((l) => [l.id, l.grupoId]));
+
+  const tocados = new Set<string>();
+  for (const m of lista) {
+    if (m.tipo === "item_movido") {
+      const de = grupoAntes.get(m.chave);
+      if (de) tocados.add(de);
+      const para = grupoFinal.get(m.chave);
+      if (para) tocados.add(para);
+    } else if (m.tipo === "ordem") {
+      tocados.add(m.chave.slice("ordem:".length));
+    } else {
+      tocados.add(m.chave);
+    }
+  }
+
+  const ancoraPorRef = new Map<string, string>([
+    ...vivos.map((g): [string, string] => [g.id, g.grupo_versao_id]),
+    ...novosGrupos.map((n): [string, string] => [n.chave, n.ancora]),
+  ]);
+
+  let paraFuncao: EstruturaParaFuncao | null = null;
+  if (lista.length > 0) {
+    // A sequência inteira, numerada 1..N grupo por grupo, como a versão.
+    const posFinal = new Map(finais.map((g, k) => [g.id, k]));
+    const sequencia = linhasDepois
+      .map((l, k) => ({ l, k }))
+      .sort((a, b) => (posFinal.get(a.l.grupoId) ?? 0) - (posFinal.get(b.l.grupoId) ?? 0) || a.k - b.k)
+      .map(({ l }) => l);
+    const mexeuNaOrdem = lista.some((m) => m.tipo === "item_movido" || m.tipo === "ordem");
+    paraFuncao = {
+      grupos_renomeados: [...renomes.entries()]
+        .filter(([id, nome]) => vivoPorId.get(id)?.nome.trim() !== nome)
+        .map(([id, nome]) => ({ id, nome })),
+      grupos_novos: novosGrupos
+        .filter((n) => !saem.has(n.chave))
+        .map((n) => ({ chave: n.chave, nome: n.nome, ancora: n.ancora })),
+      ordem: mexeuNaOrdem
+        ? sequencia.map((l, k) =>
+            novasNoGrupo.has(l.id)
+              ? {
+                  chave_nova: `nova-${Number(l.id.slice("nova:".length)) - 1}`,
+                  grupo: l.grupoId,
+                  ordem: k + 1,
+                }
+              : { id: l.id, grupo: l.grupoId, ordem: k + 1 },
+          )
+        : null,
+      grupos_removidos: [...saem].filter((id) => vivoPorId.has(id)),
+      resumo: lista,
+    };
+  }
+
+  return {
+    ok: true,
+    lista,
+    nomeDe: (ref) => finalPorRef.get(ref)?.nome.trim(),
+    ancoraDe: (ref) => ancoraPorRef.get(ref),
+    mesDe: (ref) => finalPorRef.get(ref)?.mesId ?? vivoPorId.get(ref)?.mes_id ?? null,
+    grupoFinalDaLinha: (id) => grupoFinal.get(id),
+    gruposTocados: [...tocados],
+    paraFuncao,
   };
 }
 

@@ -25,10 +25,43 @@
  * Desde 08/10/2026 (decisão 159) o rascunho também abre a errata PRONTA
  * PARA ENVIO: o produtor a deixa pronta, e quem a abre de novo (ele, ou o
  * GP que vai enviar) continua dela — `ligar(conteudo)`.
+ *
+ * Desde 09/10/2026 (decisão 162) a errata também ORGANIZA a planilha: o
+ * item muda de lugar pela alça (como no orçamento, decisão 104) e pode
+ * trocar de agrupamento; o agrupamento se renomeia e nasce; o que ficar
+ * vazio sai na confirmação. Nada disso mexe em valor, e tudo fica no
+ * rascunho até a errata ser confirmada, com o mesmo Desfazer. Os
+ * agrupamentos são os do JOB (`jobs_grupos`): a versão aprovada continua
+ * como o cliente aprovou. A regra mora em `lib/calculos/organizacao-errata`.
  */
 
 import * as React from "react";
-import type { ConteudoErrata, ItemPlanilhaJob, TipoCusto } from "@/lib/types";
+import type {
+  ConteudoErrata,
+  EstruturaDaErrata,
+  ItemPlanilhaJob,
+  MudancaDeEstrutura,
+  TipoCusto,
+  VersaoOrcamentoGrupo,
+} from "@/lib/types";
+import { moverNaLista } from "@/lib/calculos/ordem-itens";
+import {
+  erroDoNomeDoGrupo,
+  gruposQueSaem as calcularGruposQueSaem,
+  mudancasDeEstrutura,
+  resumoDaEstrutura,
+  type Organizacao,
+} from "@/lib/calculos/organizacao-errata";
+
+/** O agrupamento como a errata o deixa. */
+export interface GrupoDaErrata extends VersaoOrcamentoGrupo {
+  /** O nome gravado no job; `null` no agrupamento criado nesta errata. */
+  nomeSalvo: string | null;
+}
+
+export type { MudancaDeEstrutura };
+
+const PREFIXO_GRUPO_NOVO = "grupo-novo:";
 
 /** Campos das células da errata. Os três do bloco Planejado continuam aqui
  *  porque a tabela desenha as células dele pelo mesmo caminho, mas desde a
@@ -166,6 +199,26 @@ export interface RascunhoErrata {
   /** O que vai à action: o conteúdo da errata (o mesmo que a errata
    *  pronta guarda) e a descrição. */
   payload: (descricao: string) => ConteudoErrata & { descricao: string };
+
+  // ---- Organização da planilha (09/10/2026) --------------------------
+  /** Os agrupamentos como a errata os deixa, na ordem da tela. Sem errata,
+   *  os do job. */
+  grupos: GrupoDaErrata[];
+  /** Muda o item de lugar — `indice` conta entre os itens do grupo de
+   *  destino SEM ele, como a linha de inserção do arrasto mede. */
+  moverItem: (chave: string, grupoId: string, indice: number) => void;
+  /** Devolve o erro, ou `null` quando renomeou. */
+  renomearGrupo: (grupoId: string, nome: string) => string | null;
+  /** Cria o agrupamento no fim da ordem (do mês, no mensal). */
+  criarGrupo: (
+    nome: string,
+    mesId: string | null,
+  ) => { ok: true; id: string } | { ok: false; erro: string };
+  /** Os agrupamentos que saem quando a errata for confirmada: os que
+   *  ficaram vazios nela (e o novo deixado vazio, que não chega a nascer). */
+  gruposQueSaem: string[];
+  ehGrupoNovo: (grupoId: string) => boolean;
+  estrutura: MudancaDeEstrutura[];
 }
 
 export function useRascunhoErrata(
@@ -173,12 +226,26 @@ export function useRascunhoErrata(
   /** Job de serviço Interno (decisão 105): linha nova nasce F · Interno e o
    *  planejado acompanha o orçado, como o banco vai gravar. */
   interno: boolean,
+  /** Os agrupamentos do job, na ordem. */
+  gruposSalvos: VersaoOrcamentoGrupo[],
 ): RascunhoErrata {
   const [ativo, setAtivo] = React.useState(false);
   const [edicoes, setEdicoes] = React.useState<Record<string, EdicaoLinha>>({});
   const [novas, setNovas] = React.useState<LinhaNovaRascunho[]>([]);
   // Linhas que já existiam e que esta errata cancela (decisão 151).
   const [canceladas, setCanceladas] = React.useState<string[]>([]);
+  // A organização: os agrupamentos do rascunho (renomeados, novos, sem os
+  // removidos), a sequência dos itens na tela e o grupo de quem mudou de
+  // grupo. `sequencia` nula = a ordem salva; item que não está nela (linha
+  // nova criada depois de um movimento) vai para o fim do grupo dele.
+  const gruposIniciais = React.useMemo<GrupoDaErrata[]>(
+    () => gruposSalvos.map((g) => ({ ...g, nomeSalvo: g.nome })),
+    [gruposSalvos],
+  );
+  const [grupos, setGrupos] = React.useState<GrupoDaErrata[]>(gruposIniciais);
+  const [sequencia, setSequencia] = React.useState<string[] | null>(null);
+  const [grupoDoItem, setGrupoDoItem] = React.useState<Record<string, string>>({});
+  const seqGrupoRef = React.useRef(0);
   // ⚠️ Ref, e não state. A chave da linha nova só precisa ser única — ela
   // não é lida na renderização, é gravada dentro da própria linha. Como
   // state ela virou bug: `setNovas` era chamado DENTRO do updater de
@@ -194,19 +261,35 @@ export function useRascunhoErrata(
   // A digitação COALESCE: só tira foto quando o alvo (linha + campo) muda.
   // Sem isso o Cmd+Z voltaria uma tecla por vez, e o que o usuário quer
   // desfazer é "a alteração daquela célula", não "o último caractere".
-  const [historico, setHistorico] = React.useState<
-    { edicoes: Record<string, EdicaoLinha>; novas: LinhaNovaRascunho[]; canceladas: string[] }[]
-  >([]);
+  type Foto = {
+    edicoes: Record<string, EdicaoLinha>;
+    novas: LinhaNovaRascunho[];
+    canceladas: string[];
+    grupos: GrupoDaErrata[];
+    sequencia: string[] | null;
+    grupoDoItem: Record<string, string>;
+  };
+  const [historico, setHistorico] = React.useState<Foto[]>([]);
   const alvoRef = React.useRef<string | null>(null);
-  const atualRef = React.useRef({ edicoes, novas, canceladas });
-  atualRef.current = { edicoes, novas, canceladas };
+  const atualRef = React.useRef<Foto>({ edicoes, novas, canceladas, grupos, sequencia, grupoDoItem });
+  atualRef.current = { edicoes, novas, canceladas, grupos, sequencia, grupoDoItem };
 
   const fotografar = React.useCallback((alvo: string | null) => {
     // `alvo` null = ação estrutural, sempre vira passo.
     if (alvo !== null && alvo === alvoRef.current) return;
     alvoRef.current = alvo;
-    const { edicoes: e, novas: n, canceladas: c } = atualRef.current;
-    setHistorico((h) => [...h.slice(-19), { edicoes: { ...e }, novas: [...n], canceladas: [...c] }]);
+    const a = atualRef.current;
+    setHistorico((h) => [
+      ...h.slice(-19),
+      {
+        edicoes: { ...a.edicoes },
+        novas: [...a.novas],
+        canceladas: [...a.canceladas],
+        grupos: [...a.grupos],
+        sequencia: a.sequencia ? [...a.sequencia] : null,
+        grupoDoItem: { ...a.grupoDoItem },
+      },
+    ]);
   }, []);
 
   const desfazer = React.useCallback(() => {
@@ -216,6 +299,9 @@ export function useRascunhoErrata(
       setEdicoes(anterior.edicoes);
       setNovas(anterior.novas);
       setCanceladas(anterior.canceladas);
+      setGrupos(anterior.grupos);
+      setSequencia(anterior.sequencia);
+      setGrupoDoItem(anterior.grupoDoItem);
       // O próximo caractere digitado volta a valer como passo novo.
       alvoRef.current = null;
       return h.slice(0, -1);
@@ -226,10 +312,19 @@ export function useRascunhoErrata(
     setEdicoes({});
     setNovas([]);
     setCanceladas([]);
+    setGrupos(gruposIniciais);
+    setSequencia(null);
+    setGrupoDoItem({});
     setHistorico([]);
     alvoRef.current = null;
     seqRef.current = 0;
-  }, []);
+    seqGrupoRef.current = 0;
+  }, [gruposIniciais]);
+
+  // Fora da errata os agrupamentos acompanham o que vem gravado.
+  React.useEffect(() => {
+    if (!ativo) setGrupos(gruposIniciais);
+  }, [ativo, gruposIniciais]);
 
   const ligar = React.useCallback((conteudo?: ConteudoErrata | null) => {
     // Semeia TODAS as linhas de uma vez. Semear sob demanda deixaria o
@@ -274,14 +369,45 @@ export function useRascunhoErrata(
       };
     });
     const ativas = new Set(itensSalvos.filter((i) => !i.cancelada_em).map((i) => i.id));
+    // A organização da errata pronta: renomeados e removidos que ainda
+    // existem, os novos com as chaves de volta (`grupo-novo:1`…) e a
+    // sequência dos itens. Grupo que sumiu do job desde então fica de fora
+    // e o item volta ao dele — o servidor confere de novo no envio.
+    const est = conteudo?.estrutura ?? null;
+    const renomes = new Map((est?.grupos_renomeados ?? []).map((r) => [r.grupo_id, r.nome]));
+    const base = gruposIniciais[0];
+    const gruposDaPronta: GrupoDaErrata[] = [
+      ...gruposIniciais
+        .map((g) => (renomes.has(g.id) ? { ...g, nome: renomes.get(g.id)! } : g)),
+      ...(est?.grupos_novos ?? []).map((n, k): GrupoDaErrata => ({
+        ...(base as GrupoDaErrata),
+        id: n.chave,
+        nome: n.nome,
+        ordem: 10_000 + k,
+        mes_id: n.mes_id,
+        meio: null,
+        forma_compra: null,
+        formato: null,
+        nomeSalvo: null,
+      })),
+    ];
+    const idsDosGrupos = new Set(gruposDaPronta.map((g) => g.id));
+    const grupoDaPronta: Record<string, string> = {};
+    for (const o of est?.ordem ?? []) {
+      if (idsDosGrupos.has(o.grupo)) grupoDaPronta[o.item] = o.grupo;
+    }
     setEdicoes(inicial);
     setNovas(novasDaPronta);
     setCanceladas((conteudo?.cancelamentos ?? []).filter((id) => ativas.has(id)));
+    setGrupos(gruposDaPronta);
+    setSequencia(est?.ordem ? est.ordem.map((o) => o.item) : null);
+    setGrupoDoItem(grupoDaPronta);
     setHistorico([]);
     alvoRef.current = null;
     seqRef.current = seq;
+    seqGrupoRef.current = est?.grupos_novos.length ?? 0;
     setAtivo(true);
-  }, [itensSalvos, interno]);
+  }, [itensSalvos, interno, gruposIniciais]);
 
   const descartar = React.useCallback(() => {
     setAtivo(false);
@@ -499,8 +625,137 @@ export function useRascunhoErrata(
       };
     });
 
-    return [...vivos, ...criadas];
-  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno]);
+    // A organização: quem mudou de grupo vai para o novo (se ele ainda
+    // existe no rascunho), e a lista sai na sequência da tela. A tela
+    // agrupa mantendo a ordem desta lista, então ordenar aqui basta.
+    const idsDosGrupos = new Set(grupos.map((g) => g.id));
+    const todas = [...vivos, ...criadas].map((i) => {
+      const g = grupoDoItem[i.id];
+      return g && g !== i.grupo_id && idsDosGrupos.has(g) ? { ...i, grupo_id: g } : i;
+    });
+    if (!sequencia) return todas;
+    const posicao = new Map(sequencia.map((chave, k) => [chave, k]));
+    return todas
+      .map((i, k) => ({ i, k }))
+      .sort(
+        (a, b) =>
+          (posicao.get(a.i.id) ?? Number.MAX_SAFE_INTEGER) -
+            (posicao.get(b.i.id) ?? Number.MAX_SAFE_INTEGER) || a.k - b.k,
+      )
+      .map(({ i }, k) => ({ ...i, ordem: k + 1 }));
+  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno, grupos, grupoDoItem, sequencia]);
+
+  // A lista mais recente, para as ações de organização lerem sem esperar
+  // o próximo render.
+  const itensRef = React.useRef(itens);
+  itensRef.current = itens;
+
+  /** Os agrupamentos com os itens, como a tela os mostra. */
+  const naTela = React.useCallback(
+    () =>
+      atualRef.current.grupos.map((g) => ({
+        id: g.id,
+        itens: itensRef.current.filter((i) => i.grupo_id === g.id).map((i) => ({ id: i.id })),
+      })),
+    [],
+  );
+
+  const moverItem = React.useCallback(
+    (chave: string, grupoId: string, indice: number) => {
+      const movido = moverNaLista(naTela(), chave, grupoId, indice);
+      if (!movido) return;
+      fotografar(null);
+      setSequencia(movido.flatMap((g) => g.itens.map((i) => i.id)));
+      setGrupoDoItem((m) => ({ ...m, [chave]: grupoId }));
+    },
+    [naTela, fotografar],
+  );
+
+  /** Os agrupamentos de pé, no formato da regra comum. */
+  const comoOrganizacao = React.useCallback(
+    (lista: GrupoDaErrata[]) =>
+      lista.map((g) => ({ id: g.id, nome: g.nome, mesId: g.mes_id ?? null })),
+    [],
+  );
+
+  const renomearGrupo = React.useCallback(
+    (grupoId: string, nome: string): string | null => {
+      const lista = atualRef.current.grupos;
+      const grupo = lista.find((g) => g.id === grupoId);
+      if (!grupo) return "Grupo não encontrado.";
+      if (nome.trim() === grupo.nome) return null;
+      const erro = erroDoNomeDoGrupo(nome, grupo.mes_id ?? null, comoOrganizacao(lista), grupoId);
+      if (erro) return erro;
+      fotografar(null);
+      setGrupos((atual) => atual.map((g) => (g.id === grupoId ? { ...g, nome: nome.trim() } : g)));
+      return null;
+    },
+    [comoOrganizacao, fotografar],
+  );
+
+  const criarGrupo = React.useCallback(
+    (nome: string, mesId: string | null): { ok: true; id: string } | { ok: false; erro: string } => {
+      const lista = atualRef.current.grupos;
+      const erro = erroDoNomeDoGrupo(nome, mesId, comoOrganizacao(lista), null);
+      if (erro) return { ok: false, erro };
+      fotografar(null);
+      seqGrupoRef.current += 1;
+      const id = `${PREFIXO_GRUPO_NOVO}${seqGrupoRef.current}`;
+      const base = lista[0] ?? gruposIniciais[0];
+      setGrupos((atual) => [
+        ...atual,
+        {
+          ...(base as GrupoDaErrata),
+          id,
+          nome: nome.trim(),
+          ordem: Math.max(0, ...atual.map((g) => g.ordem)) + 1,
+          mes_id: mesId,
+          meio: null,
+          forma_compra: null,
+          formato: null,
+          nomeSalvo: null,
+        },
+      ]);
+      return { ok: true, id };
+    },
+    [comoOrganizacao, fotografar, gruposIniciais],
+  );
+
+  const ehGrupoNovo = React.useCallback(
+    (grupoId: string) => grupoId.startsWith(PREFIXO_GRUPO_NOVO),
+    [],
+  );
+
+  /** A planilha antes e depois, no formato da regra comum: é ela que diz
+   *  o que mudou na organização e quem sai na confirmação. */
+  const antesDepois = React.useMemo(() => {
+    const antes: Organizacao = {
+      grupos: gruposIniciais.map((g) => ({ id: g.id, nome: g.nome, mesId: g.mes_id ?? null })),
+      linhas: itensSalvos.map((i) => ({ id: i.id, grupoId: i.grupo_id, item: i.item })),
+    };
+    const depois: Organizacao = {
+      grupos: grupos.map((g) => ({ id: g.id, nome: g.nome, mesId: g.mes_id ?? null })),
+      linhas: itens.map((i) => ({ id: i.id, grupoId: i.grupo_id, item: i.item })),
+    };
+    return { antes, depois };
+  }, [gruposIniciais, itensSalvos, grupos, itens]);
+
+  const gruposQueSaem = React.useMemo(
+    () => (ativo ? calcularGruposQueSaem(antesDepois.antes, antesDepois.depois) : []),
+    [ativo, antesDepois],
+  );
+
+  const estrutura = React.useMemo<MudancaDeEstrutura[]>(
+    () =>
+      ativo
+        ? mudancasDeEstrutura(
+            antesDepois.antes,
+            antesDepois.depois,
+            new Map(novas.map((n) => [n.chave, n.grupoId])),
+          )
+        : [],
+    [ativo, antesDepois, novas],
+  );
 
   const mudancas = React.useMemo<MudancaErrata[]>(() => {
     if (!ativo) return [];
@@ -585,10 +840,41 @@ export function useRascunhoErrata(
     if (alt) partes.push(`${alt} ${alt === 1 ? "linha alterada" : "linhas alteradas"}`);
     if (nov) partes.push(`${nov} ${nov === 1 ? "linha nova" : "linhas novas"}`);
     if (can) partes.push(`${can} ${can === 1 ? "linha cancelada" : "linhas canceladas"}`);
+    // A organização vem depois dos valores (decisão 162).
+    partes.push(...resumoDaEstrutura(estrutura));
     return partes.length > 0 ? partes.join(" · ") : "nenhuma alteração ainda";
-  }, [mudancas]);
+  }, [mudancas, estrutura]);
 
   const faltaNomear = novas.some((n) => n.item.trim() === "");
+
+  /** A organização no formato gravado. As chaves provisórias são
+   *  renumeradas pela posição na lista (`nova:1`, `grupo-novo:1`…), que é
+   *  como `ligar` as remonta ao reabrir a errata pronta. */
+  const estruturaDoPayload = React.useCallback((): EstruturaDaErrata | null => {
+    if (estrutura.length === 0) return null;
+    const chaveDaNova = new Map(novas.map((n, k) => [n.chave, `nova:${k + 1}`]));
+    const saem = new Set(gruposQueSaem);
+    // O grupo novo deixado vazio não chega a nascer: fica fora da lista.
+    const novosGrupos = grupos.filter((g) => g.nomeSalvo === null && !saem.has(g.id));
+    const chaveDoGrupo = new Map(novosGrupos.map((g, k) => [g.id, `${PREFIXO_GRUPO_NOVO}${k + 1}`]));
+    const mexeuNaOrdem = estrutura.some((m) => m.tipo === "item_movido" || m.tipo === "ordem");
+    return {
+      grupos_novos: novosGrupos.map((g) => ({
+        chave: chaveDoGrupo.get(g.id)!,
+        nome: g.nome,
+        mes_id: g.mes_id ?? null,
+      })),
+      grupos_renomeados: grupos
+        .filter((g) => g.nomeSalvo !== null && g.nome !== g.nomeSalvo)
+        .map((g) => ({ grupo_id: g.id, nome: g.nome })),
+      ordem: mexeuNaOrdem
+        ? itens.map((i) => ({
+            item: chaveDaNova.get(i.id) ?? i.id,
+            grupo: chaveDoGrupo.get(i.grupo_id) ?? i.grupo_id,
+          }))
+        : null,
+    };
+  }, [estrutura, novas, grupos, gruposQueSaem, itens]);
 
   const payload = React.useCallback(
     (descricao: string) => {
@@ -628,8 +914,16 @@ export function useRascunhoErrata(
         alteracoes,
         novas: novas.map((n) => {
           const criada = criadasPorChave.get(n.chave);
+          const saem = new Set(gruposQueSaem);
+          const novosGrupos = grupos.filter((g) => g.nomeSalvo === null && !saem.has(g.id));
+          const posDoGrupo = novosGrupos.findIndex((g) => g.id === (criada?.grupo_id ?? n.grupoId));
           return {
-            grupo_id: n.grupoId,
+            // O grupo onde a linha FICOU (ela pode ter mudado de lugar); o
+            // grupo novo vai pela chave renumerada.
+            grupo_id:
+              posDoGrupo >= 0
+                ? `${PREFIXO_GRUPO_NOVO}${posDoGrupo + 1}`
+                : (criada?.grupo_id ?? n.grupoId),
             item: n.item.trim(),
             tipo_custo: n.tipo,
             linha_vermelha: n.vermelha,
@@ -642,9 +936,10 @@ export function useRascunhoErrata(
           };
         }),
         cancelamentos: canceladas,
+        estrutura: estruturaDoPayload(),
       };
     },
-    [itens, itensSalvos, novas, canceladas],
+    [itens, itensSalvos, novas, canceladas, estruturaDoPayload, grupos, gruposQueSaem],
   );
 
   return {
@@ -667,9 +962,16 @@ export function useRascunhoErrata(
     ehNova,
     itens,
     mudancas,
-    temMudanca: mudancas.length > 0,
+    temMudanca: mudancas.length > 0 || estrutura.length > 0,
     resumo,
     faltaNomear,
     payload,
+    grupos,
+    moverItem,
+    renomearGrupo,
+    criarGrupo,
+    gruposQueSaem,
+    ehGrupoNovo,
+    estrutura,
   };
 }

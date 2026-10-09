@@ -917,6 +917,43 @@ export async function enviarJobParaAbertura(
     };
   }
 
+  // 6b-zero. Os agrupamentos do job (decisão 162): a cópia dos da versão,
+  //          inclusive os vazios — é o que a Planilha Interna mostra, e é
+  //          o que a errata renomeia, cria e tira. A versão aprovada não
+  //          muda. Cada linha copiada logo abaixo cai no agrupamento do
+  //          job que copia o dela (gatilho `jio_grupo_do_job`).
+  const { data: gruposDaVersao, error: errGruposVersao } = await supabase
+    .from("versoes_orcamento_grupos")
+    .select("id, nome, ordem, mes_id")
+    .eq("versao_orcamento_id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+  if (errGruposVersao) {
+    console.error("[abertura.copia_grupos_select]", errGruposVersao.message);
+    return {
+      ok: false,
+      message: "Job criado, mas a planilha interna não foi montada. Avise o suporte.",
+    };
+  }
+  if ((gruposDaVersao ?? []).length > 0) {
+    const { error: errGruposCopia } = await supabase.from("jobs_grupos").insert(
+      (gruposDaVersao ?? []).map((g: any) => ({
+        tenant_id: session.activeTenant.id,
+        job_id: novo.id,
+        grupo_versao_id: g.id,
+        mes_id: g.mes_id ?? null,
+        nome: g.nome,
+        ordem: g.ordem,
+      })),
+    );
+    if (errGruposCopia) {
+      console.error("[abertura.copia_grupos_insert]", errGruposCopia.message);
+      return {
+        ok: false,
+        message: "Job criado, mas a planilha interna não foi montada. Avise o suporte.",
+      };
+    }
+  }
+
   if ((itensDaVersao ?? []).length > 0) {
     const { data: copiaCriada, error: errCopia } = await supabase.from("jobs_itens_orcado").insert(
       (itensDaVersao ?? []).map((i: any) => ({

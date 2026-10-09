@@ -79,17 +79,20 @@ export async function GET(
   const versaoId = raw.versao_orcamento_aprovada_id as string;
   const [gruposRes, itensRes, realizadosRes, ppsRes, bvsRes, mesesRes] =
     await Promise.all([
+      // Os agrupamentos do JOB (decisão 162): com os nomes e a ordem que as
+      // erratas deram. O removido não sai na planilha.
       supabase
-        .from("versoes_orcamento_grupos")
+        .from("jobs_grupos")
         .select("id, nome, ordem, mes_id")
-        .eq("versao_orcamento_id", versaoId)
+        .eq("job_id", params.jobId)
         .eq("tenant_id", tenantId)
+        .is("removido_em", null)
         .order("ordem", { ascending: true }),
       // O orçado do job é a CÓPIA (com as erratas), não a versão aprovada.
       supabase
         .from("jobs_itens_orcado")
         .select(
-          "id, grupo_id, ordem, item, tipo_custo, linha_vermelha, " +
+          "id, grupo_id, job_grupo_id, ordem, item, tipo_custo, linha_vermelha, " +
             "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
             "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
             "em_save, save_consumido, cancelada_em",
@@ -182,7 +185,8 @@ export async function GET(
       orcado_id: it.id,
       item_versao_id: null,
       linha_vermelha: it.linha_vermelha === true,
-      grupo_id: it.grupo_id,
+      // O agrupamento do job (decisão 162), o mesmo da tela.
+      grupo_id: it.job_grupo_id ?? it.grupo_id,
       ordem: Number(it.ordem ?? 0),
       item: it.item,
       tipo_custo: it.tipo_custo,

@@ -2011,7 +2011,13 @@ export interface JobItemOrcado {
   linha_vermelha: boolean;
   /** Errata que criou esta linha. `null` na linha vinda da versão. */
   errata_origem_id: string | null;
+  /** O agrupamento da VERSÃO — a âncora do agrupamento do job (decisão
+   *  162). O banco o mantém igual à âncora de `job_grupo_id`, e é dele que
+   *  sai o mês da linha. Para mostrar a planilha, use `job_grupo_id`. */
   grupo_id: string;
+  /** O agrupamento do job em que a linha aparece (`jobs_grupos`, decisão
+   *  162). A errata o troca; a versão aprovada não muda. */
+  job_grupo_id: string;
   ordem: number;
   item: string;
   tipo_custo: TipoCusto;
@@ -2188,6 +2194,29 @@ export interface JobErrata {
    *  para envio). `null` na errata feita e enviada pela mesma pessoa. O
    *  autor continua em `created_by`. */
   preparada_por: string | null;
+  /** Decisão 162: o que a errata mudou na organização da planilha, com os
+   *  nomes daquele momento. `null` na errata que não mexeu nela. */
+  estrutura: MudancaDeEstrutura[] | null;
+}
+
+/** Um agrupamento da Planilha Interna do job (`jobs_grupos`, decisão 162).
+ *  Nasce como cópia do agrupamento da versão aprovada; a errata o renomeia,
+ *  cria outros e tira o que ficou vazio (`removido_em`). */
+export interface JobGrupo {
+  id: string;
+  tenant_id: string;
+  job_id: string;
+  /** A âncora na versão aprovada: o agrupamento copiado, ou um do mesmo
+   *  mês. As linhas do agrupamento levam esta âncora em `grupo_id`. */
+  grupo_versao_id: string;
+  mes_id: string | null;
+  nome: string;
+  ordem: number;
+  criado_na_errata_id: string | null;
+  removido_em: string | null;
+  removido_na_errata_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** O que a errata fez com a linha. `removida` só existe no histórico:
@@ -2291,7 +2320,31 @@ export interface ConteudoErrata {
   }>;
   /** Linhas que a errata cancela (decisão 151). */
   cancelamentos: string[];
+  /** Decisão 162: a organização da planilha. Ausente (ou nula) quando a
+   *  errata não mexe nela — e na pronta gravada antes de 09/10/2026. */
+  estrutura?: EstruturaDaErrata | null;
 }
+
+/** O que a errata decide sobre a ORGANIZAÇÃO da planilha (decisão 162).
+ *  As chaves provisórias seguem a posição na lista: `nova:N` é a N-ésima
+ *  linha de `novas`, `grupo-novo:N` o N-ésimo de `grupos_novos`. Os
+ *  agrupamentos que ficam vazios saem sozinhos: quem decide é o servidor. */
+export interface EstruturaDaErrata {
+  grupos_novos: Array<{ chave: string; nome: string; mes_id: string | null }>;
+  grupos_renomeados: Array<{ grupo_id: string; nome: string }>;
+  /** A sequência inteira das linhas, agrupamento por agrupamento. `null`
+   *  quando nenhuma linha mudou de lugar. */
+  ordem: Array<{ item: string; grupo: string }> | null;
+}
+
+/** Uma mudança na organização da planilha (decisão 162), como o pop-up, o
+ *  histórico e o financeiro a mostram. Os nomes ficam congelados. */
+export type MudancaDeEstrutura =
+  | { tipo: "grupo_novo"; chave: string; nome: string }
+  | { tipo: "grupo_renomeado"; chave: string; de: string; para: string }
+  | { tipo: "grupo_removido"; chave: string; nome: string }
+  | { tipo: "item_movido"; chave: string; item: string; de: string; para: string }
+  | { tipo: "ordem"; chave: string; grupo: string };
 
 /** A errata pronta para envio do job, como a página a recebe. */
 export interface ErrataPronta {

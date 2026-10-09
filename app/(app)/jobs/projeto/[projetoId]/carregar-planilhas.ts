@@ -78,16 +78,20 @@ export async function carregarPlanilhasDosJobs(
   // Planilha Interna do job — a versão aprovada segue congelada.
   const [gruposRes, itensRes, realizadosRes, categoriasRes, bvsRes, mesesRes] =
     await Promise.all([
+    // Os agrupamentos de cada JOB (decisão 162): a errata renomeia, cria
+    // e tira agrupamento, e a visão agregada mostra o mesmo que a Planilha
+    // Interna de cada job.
     supabase
-      .from("versoes_orcamento_grupos")
-      .select("id, nome, versao_orcamento_id, ordem, mes_id")
+      .from("jobs_grupos")
+      .select("id, nome, job_id, ordem, mes_id")
       .eq("tenant_id", tenantId)
-      .in("versao_orcamento_id", versaoIds)
+      .in("job_id", jobIds)
+      .is("removido_em", null)
       .order("ordem", { ascending: true }),
     supabase
       .from("jobs_itens_orcado")
       .select(
-        "id, job_id, item_versao_id, grupo_id, ordem, item, tipo_custo, categoria_id, " +
+        "id, job_id, item_versao_id, grupo_id, job_grupo_id, ordem, item, tipo_custo, categoria_id, " +
           "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, " +
           "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, " +
           "bv_liquido_planejado, em_save, save_consumido",
@@ -161,22 +165,22 @@ export async function carregarPlanilhasDosJobs(
   // Modelo mensal (decisão 078): o bloco do job mostra o trimestre inteiro,
   // então o grupo leva o mês no nome e os grupos seguem a ordem dos meses.
   // Grupo sem mês (os outros modelos) fica como sempre foi.
-  const gruposPorVersao = new Map<
+  const gruposPorJob = new Map<
     string,
     { id: string; nome: string; mes: string; ordem: number }[]
   >();
   for (const g of (gruposRes.data ?? []) as any[]) {
     const mes = g.mes_id ? mesDoId.get(g.mes_id) : undefined;
-    const arr = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
+    const arr = gruposPorJob.get(g.job_id) ?? [];
     arr.push({
       id: g.id,
       nome: mes ? `${g.nome} · ${rotuloMesCurto(mes)}` : g.nome,
       mes: mes ?? "",
       ordem: Number(g.ordem ?? 0),
     });
-    gruposPorVersao.set(g.versao_orcamento_id, arr);
+    gruposPorJob.set(g.job_id, arr);
   }
-  for (const arr of gruposPorVersao.values()) {
+  for (const arr of gruposPorJob.values()) {
     arr.sort((a, b) =>
       a.mes === b.mes ? a.ordem - b.ordem : a.mes.localeCompare(b.mes),
     );
@@ -233,12 +237,11 @@ export async function carregarPlanilhasDosJobs(
     // nas linhas `A` e `D`. Mesma regra da Planilha Interna.
     const jobAberto =
       j.status !== "aguardando_abertura" && j.status !== "rejeitado_financeiro";
-    const gruposDaVersao =
-      gruposPorVersao.get(j.versao_orcamento_aprovada_id) ?? [];
+    const gruposDoJob = gruposPorJob.get(j.id) ?? [];
 
-    const grupos: GrupoPlanilhaProjeto[] = gruposDaVersao.map((g) => {
+    const grupos: GrupoPlanilhaProjeto[] = gruposDoJob.map((g) => {
       const itens: ItemPlanilhaProjeto[] = itensDoJob
-        .filter((it) => it.grupo_id === g.id)
+        .filter((it) => it.job_grupo_id === g.id)
         .map((it) => {
           const real = realizadosPorCopia.get(it.id);
           const tipo = it.tipo_custo as TipoCusto;

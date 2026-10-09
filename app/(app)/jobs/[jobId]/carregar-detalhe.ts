@@ -41,6 +41,7 @@ import type {
   JobStatus,
   Regional,
   VersaoOrcamentoGrupo,
+  JobGrupo,
   ItemPlanilhaJob,
   JobItemRealizado,
   JobErrataComItens,
@@ -181,13 +182,16 @@ export async function carregarDetalheDoJob(
     cnpjDaRegionalRes,
     errataProntaRes,
   ] = await Promise.all([
+    // Os agrupamentos do JOB (decisão 162): a cópia dos da versão, com o
+    // que as erratas renomearam, criaram e tiraram. O removido não aparece.
     supabase
-      .from("versoes_orcamento_grupos")
+      .from("jobs_grupos")
       .select("*")
-      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
+      .is("removido_em", null)
       .order("ordem", { ascending: true })
-      .returns<VersaoOrcamentoGrupo[]>(),
+      .returns<JobGrupo[]>(),
     // Orçado vem da CÓPIA do job, não da versão: a errata altera a cópia e
     // a versão aprovada continua sendo o que o cliente aprovou.
     supabase
@@ -453,7 +457,23 @@ export async function carregarDetalheDoJob(
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
   const meses = mesesRes.data ?? [];
 
-  const grupos = (gruposRes.data ?? []) as VersaoOrcamentoGrupo[];
+  // A planilha do job agrupa pelos agrupamentos do JOB (decisão 162), no
+  // formato que a tela já conhecia. `versao_orcamento_id` é o da versão
+  // aprovada; o mês vem do agrupamento do job (o mesmo da âncora).
+  const grupos: VersaoOrcamentoGrupo[] = (gruposRes.data ?? []).map((g) => ({
+    id: g.id,
+    tenant_id: g.tenant_id,
+    versao_orcamento_id: versaoAprovadaId,
+    nome: g.nome,
+    ordem: g.ordem,
+    mes_id: g.mes_id ?? null,
+    meio: null,
+    forma_compra: null,
+    formato: null,
+    created_at: g.created_at,
+    updated_at: g.updated_at,
+  }));
+  if (gruposRes.error) console.error("[job.grupos]", gruposRes.error.message);
   if (itensRes.error) console.error("[job.orcado]", itensRes.error.message);
   if (bvsRes.error) console.error("[job.bvs]", bvsRes.error.message);
   if (envioFaturamentoRes.error) {
@@ -540,7 +560,9 @@ export async function carregarDetalheDoJob(
     orcado_id: it.id,
     item_versao_id: it.item_versao_id ?? null,
     linha_vermelha: it.linha_vermelha === true,
-    grupo_id: it.grupo_id,
+    // O agrupamento do JOB (decisão 162) — o que a tela mostra. O da
+    // versão (`grupo_id` no banco) é só a âncora do mês.
+    grupo_id: it.job_grupo_id ?? it.grupo_id,
     ordem: Number(it.ordem ?? 0),
     item: it.item,
     tipo_custo: it.tipo_custo,
@@ -817,6 +839,8 @@ export async function carregarDetalheDoJob(
           alteracoes: prontaRaw.conteudo?.alteracoes ?? [],
           novas: prontaRaw.conteudo?.novas ?? [],
           cancelamentos: prontaRaw.conteudo?.cancelamentos ?? [],
+          // A organização da planilha (decisão 162); nula na pronta antiga.
+          estrutura: prontaRaw.conteudo?.estrutura ?? null,
         },
         descricao: prontaRaw.descricao ?? null,
         resumo: prontaRaw.resumo,

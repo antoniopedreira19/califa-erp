@@ -21,6 +21,17 @@ import type { TomadorDaNf } from "./anexos-da-pp";
 import { textoAguardaAbertura } from "./pp-a-emitir-ui";
 import { nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
+import {
+  NomeDoGrupoNaErrata,
+  NovoGrupoNaErrata,
+} from "@/app/(app)/jobs/[jobId]/realizado/grupo-da-errata";
+import {
+  AlcaDaLinha,
+  LinhaDeInsercao,
+  REALCE_ALVO_DO_ARRASTO,
+  useArrastoDeLinhas,
+} from "@/app/(app)/_planilha/arrastar-linha";
+import { destinoPorTecla } from "@/lib/calculos/ordem-itens";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { PainelPPsItem } from "./painel-pps-item";
 import { VerPPDrawer } from "../pps/ver-pp-drawer";
@@ -37,7 +48,7 @@ import {
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
-import { ERRATA, SAVE } from "@/app/(app)/_planilha/blocos";
+import { ERRATA, LINHA_NOVO_GRUPO, SAVE } from "@/app/(app)/_planilha/blocos";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
   parseNumero,
@@ -237,6 +248,9 @@ interface Props {
    *  linha com PP já no financeiro também abrem (P2), ao contrário da
    *  errata. */
   modoDaEdicao?: "errata" | "financeiro";
+  /** O mês desta tabela no modelo mensal — é nele que o grupo criado na
+   *  errata nasce. `null` fora do mensal. */
+  mesDoTrecho?: string | null;
   /** Menu "Exibir" (decisão 045). Default: a planilha de sempre — os
    *  três blocos, sem colunas de rentabilidade. Escondido, o ORÇADO sai
    *  da grade inteira; ligada, cada rentabilidade entra como as duas
@@ -429,21 +443,28 @@ function CelulaJob({
   moldura,
   className,
   title,
+  alca,
   children,
 }: {
   nav: NavDaCelula;
   moldura: string;
   className?: string;
   title?: string;
+  /** A alça de arrastar do item, no recuo de 30px (decisão 104) — só na
+   *  errata, que é onde a planilha do job se reorganiza. */
+  alca?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { className: navClasse, ...handlers } = nav;
   return (
     <td
-      className={cn("px-3 text-xs align-middle", className, navClasse)}
+      className={cn("px-3 text-xs align-middle", alca && "relative", className, navClasse)}
       title={title}
+      // A linha de inserção do arrasto começa aqui, no recuo do item.
+      data-arrasto-inicio={alca ? "" : undefined}
       {...handlers}
     >
+      {alca}
       <Miolo moldura={moldura}>{children}</Miolo>
     </td>
   );
@@ -702,11 +723,16 @@ export function JobItemRealizadoTable({
   errata,
   podeEditarLinhas = true,
   modoDaEdicao = "errata",
+  mesDoTrecho = null,
   orcadoVisivel = true,
   rentabPlanejadaVisivel = false,
   rentabRealizadaVisivel = false,
 }: Props) {
   const editando = errata?.ativo === true;
+  /** A errata organiza a planilha (09/10/2026): mover item, renomear,
+   *  criar e remover agrupamento. Só na errata — o "Editar orçado" do
+   *  financeiro mexe em valor, não em organização. */
+  const organizando = editando && modoDaEdicao === "errata";
   /** Quais colunas a grade desenha. Vai para o `colgroup`, para o piso
    *  de largura e para todos os `colSpan` de linha inteira — os três têm
    *  que sair da MESMA fonte, senão a tabela desalinha sem erro. */
@@ -1116,6 +1142,57 @@ export function JobItemRealizadoTable({
     );
   }, []);
 
+  // ---- ORGANIZAR NA ERRATA (09/10/2026) -------------------------------
+  // O mesmo gesto da planilha do orçamento (decisão 104): a alça no recuo
+  // do item, a linha vermelha de inserção, o fantasma, Alt + ↑ ↓. A
+  // diferença é o destino — aqui o movimento vai para o RASCUNHO da
+  // errata, e não ao banco: o Desfazer é o da errata.
+  const [recemMovido, setRecemMovido] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!recemMovido) return;
+    const t = setTimeout(() => setRecemMovido(null), 1600);
+    return () => clearTimeout(t);
+  }, [recemMovido]);
+
+  function moverItemPara(itemId: string, grupoId: string, indice: number) {
+    if (!organizando || !errata) return;
+    errata.moverItem(itemId, grupoId, indice);
+    setRecemMovido(itemId);
+  }
+
+  const arrasto = useArrastoDeLinhas({
+    container: wrapperRef,
+    onSoltar: (itemId, alvo) => moverItemPara(itemId, alvo.grupoId, alvo.indice),
+    // Clique na alça, sem arrastar: seleciona o item — de onde o Alt + ↑ ↓
+    // já anda.
+    onClicar: (itemId) => {
+      selecao.selecionar({ linhaId: itemId, coluna: "item" });
+      selecao.focar();
+    },
+  });
+
+  /** Alt + ↑ ↓ muda o item selecionado de lugar; o resto é da seleção. Na
+   *  ponta do grupo ele passa para o vizinho, que abre se estava recolhido. */
+  function aoTeclar(e: React.KeyboardEvent) {
+    const vertical = e.key === "ArrowUp" || e.key === "ArrowDown";
+    const emCampo =
+      e.target instanceof Element &&
+      e.target.closest("input, textarea, select, [contenteditable]") !== null;
+    if (organizando && errata && vertical && e.altKey && !e.ctrlKey && !e.metaKey && !emCampo && aberta === null) {
+      const cel = selecao.celula;
+      if (cel && itemPorId.has(cel.linhaId)) {
+        e.preventDefault();
+        const alvo = destinoPorTecla(grupos, cel.linhaId, e.key === "ArrowUp" ? -1 : 1);
+        if (alvo) {
+          if (!estaAberto(alvo.grupoId)) onAlternarGrupo(alvo.grupoId);
+          moverItemPara(cel.linhaId, alvo.grupoId, alvo.indice);
+        }
+        return;
+      }
+    }
+    selecao.onKeyDown(e);
+  }
+
 
   return (
     <>
@@ -1127,9 +1204,10 @@ export function JobItemRealizadoTable({
         // O card recebe as teclas da seleção; sem anel — a moldura da
         // célula é o foco visível.
         tabIndex={0}
-        onKeyDown={selecao.onKeyDown}
+        onKeyDown={aoTeclar}
         className="relative outline-none"
       >
+      {organizando && <LinhaDeInsercao ref={arrasto.linhaRef} />}
       {/* A alça da coluna Save — mesma da planilha do orçamento, no
           lado oposto ao da calha de BV e PP. */}
       {onAlternarSave && (
@@ -1243,7 +1321,16 @@ export function JobItemRealizadoTable({
                       rentabilidade ocupando o vão vazio de PLANEJADO e
                       REALIZADO. Era um `tfoot` de duas linhas por card;
                       agora é uma linha só. */}
-                  <tr data-calha={`g:${grupo.id}`} className="h-10">
+                  <tr
+                    data-calha={`g:${grupo.id}`}
+                    // Área de soltura do arrasto na errata: da linha deste
+                    // grupo até a do próximo. Recolhido ou vazio, o item
+                    // vai para o fim dele.
+                    data-arrasto-cab={organizando ? grupo.id : undefined}
+                    data-arrasto-qtd={organizando ? grupo.itens.length : undefined}
+                    data-arrasto-nome={organizando ? grupo.nome : undefined}
+                    className={cn("h-10", organizando && REALCE_ALVO_DO_ARRASTO)}
+                  >
                     <td
                       colSpan={colunasDoRotuloJob(colunas)}
                       className={LINHA_GRUPO_NOME}
@@ -1267,10 +1354,20 @@ export function JobItemRealizadoTable({
                             )}
                           />
                         </button>
-                        <TruncateTooltip
-                          text={grupo.nome}
-                          className="text-[13.5px] font-bold tracking-[-0.01em] text-foreground"
-                        />
+                        {organizando && errata ? (
+                          <NomeDoGrupoNaErrata
+                            nome={grupo.nome}
+                            nomeSalvo={
+                              errata.grupos.find((g) => g.id === grupo.id)?.nomeSalvo ?? null
+                            }
+                            onRenomear={(nome) => errata.renomearGrupo(grupo.id, nome)}
+                          />
+                        ) : (
+                          <TruncateTooltip
+                            text={grupo.nome}
+                            className="text-[13.5px] font-bold tracking-[-0.01em] text-foreground"
+                          />
+                        )}
                         <span className="flex-none whitespace-nowrap text-[11px] text-muted-foreground">
                           {grupo.itens.length}{" "}
                           {grupo.itens.length === 1 ? "item" : "itens"}
@@ -1404,6 +1501,13 @@ export function JobItemRealizadoTable({
                         className="py-5 pl-[30px] pr-3 text-xs text-muted-foreground"
                       >
                         Sem itens neste grupo.
+                        {/* Decisão 162: o grupo que ficou vazio na errata
+                            sai quando ela for confirmada. */}
+                        {organizando && errata?.gruposQueSaem.includes(grupo.id) && (
+                          <span className="font-semibold text-foreground">
+                            {" "}Ele sai quando a errata for confirmada.
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -1469,9 +1573,18 @@ export function JobItemRealizadoTable({
                       <tr
                         key={item.id}
                         data-calha={`i:${item.id}`}
+                        // Na errata toda linha muda de lugar — a cancelada,
+                        // a vermelha e a que tem PP no financeiro também:
+                        // mudar de lugar não mexe em valor.
+                        data-arrasto-item={organizando ? item.id : undefined}
+                        data-arrasto-grupo={organizando ? grupo.id : undefined}
                         className={cn(
                           ALTURA_LINHA,
-                          "border-b border-border",
+                          "group/linha border-b border-border",
+                          "[&>td]:transition-shadow [&>td]:duration-700",
+                          organizando && arrasto.arrastando === item.id && "opacity-40",
+                          recemMovido === item.id &&
+                            "[&>td]:shadow-[inset_0_0_0_999px_rgba(231,75,86,0.14)]",
                           item.linha_vermelha && ERRATA.linhaVermelha,
                           saveVisivel &&
                             classesDaLinhaComSave(
@@ -1517,6 +1630,22 @@ export function JobItemRealizadoTable({
                             nav={nav("item")}
                             moldura={moldura("item")}
                             className={cn("pl-[30px]", classeNeutra)}
+                            alca={
+                              organizando ? (
+                                <AlcaDaLinha
+                                  rotulo={item.item || "o item"}
+                                  onPointerDown={(e) =>
+                                    arrasto.iniciar(e, {
+                                      id: item.id,
+                                      grupoId: grupo.id,
+                                      rotulo: item.item || "Item sem nome",
+                                      tipo: item.tipo_custo,
+                                      detalhe: formatCurrency(Number(item.total_orcado ?? 0), moeda),
+                                    })
+                                  }
+                                />
+                              ) : undefined
+                            }
                           >
                             <div className="flex min-w-0 items-center gap-1.5">
                               {editando && motivoDaTrava && (
@@ -1816,6 +1945,27 @@ export function JobItemRealizadoTable({
                 </React.Fragment>
               );
             })}
+
+            {/* "Novo grupo" na errata — depois do último grupo e antes do
+                total, que é onde o grupo novo vai nascer. Mesma linha
+                tracejada da planilha do orçamento. */}
+            {organizando && errata && (
+              <tr>
+                <td colSpan={totalDeColunasJob(colunas)} className={LINHA_NOVO_GRUPO}>
+                  <div className="flex items-center gap-2.5">
+                    <NovoGrupoNaErrata
+                      onCriar={(nome) => {
+                        const r = errata.criarGrupo(nome, mesDoTrecho);
+                        return r.ok ? null : r.erro;
+                      }}
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      o grupo novo entra aqui, no fim da ordem
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
 
           <tfoot>

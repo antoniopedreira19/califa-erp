@@ -10,6 +10,7 @@ import {
   type JobErrataItem,
 } from "@/lib/types";
 import { quandoDaPronta } from "./realizado/errata-pronta-faixa";
+import { LinhaDeEstrutura } from "./realizado/errata-confirmar-dialog";
 
 interface Props {
   /** `preparada_por_nome`: a errata veio de uma errata pronta para envio
@@ -190,6 +191,8 @@ export function ErratasCard({
 
       {erratas.map((e) => {
         const aberta = !!abertas[e.id];
+        // A organização da planilha que a errata mudou (decisão 162).
+        const estrutura = e.estrutura ?? [];
         const deltaErrata = e.valor_job_depois - e.valor_job_antes;
         const deltaErrataFat =
           e.faturamento_previsto_antes === null ||
@@ -215,8 +218,15 @@ export function ErratasCard({
                   {e.titulo}
                 </span>
                 <span className="text-[11.5px] text-muted-foreground">
-                  {e.itens.length}{" "}
-                  {e.itens.length === 1 ? "item" : "itens"}
+                  {e.itens.length > 0 &&
+                    `${e.itens.length} ${e.itens.length === 1 ? "item" : "itens"}`}
+                  {e.itens.length > 0 && estrutura.length > 0 && " · "}
+                  {estrutura.length > 0 && (
+                    <span>
+                      {estrutura.length}{" "}
+                      {estrutura.length === 1 ? "mudança" : "mudanças"} na organização
+                    </span>
+                  )}
                   {e.autor_nome ? ` · ${e.autor_nome}` : ""}
                   {e.preparada_por_nome && (
                     <span> · preparada por {e.preparada_por_nome}</span>
@@ -254,6 +264,21 @@ export function ErratasCard({
 
             {aberta && (
               <div className="border-t border-border bg-muted/30 px-6 pb-4 pt-1.5">
+                {estrutura.length > 0 && (
+                  <div className="pb-2 pt-2.5">
+                    <p className="pb-1.5 text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Organização da planilha
+                    </p>
+                    <ul className="flex flex-col gap-1.5">
+                      {estrutura.map((m) => (
+                        <li key={`${m.tipo}:${m.chave}`} className="flex items-center gap-2">
+                          <LinhaDeEstrutura m={m} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {e.itens.length > 0 && (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[860px] border-collapse">
                     <thead>
@@ -431,6 +456,7 @@ export function ErratasCard({
                     </tfoot>
                   </table>
                 </div>
+                )}
               </div>
             )}
           </div>

@@ -388,7 +388,9 @@ export function JobRealizadoSection({
   // então o rascunho tem que morar no ancestral comum dos três. Antes de
   // 27/08/2026 isto era um drawer com uma segunda tabela, e o problema não
   // existia porque nada da tela reagia.
-  const rascunho = useRascunhoErrata(itens, interno);
+  // Os agrupamentos entram no rascunho desde 09/10/2026: a errata também
+  // organiza a planilha (ordem, agrupamento novo, renomeado e removido).
+  const rascunho = useRascunhoErrata(itens, interno, grupos);
   // O "Editar orçado" do financeiro (decisão 115) é o MESMO rascunho, com o
   // escopo dele: o planejado nunca abre. Tipo, linha nova e a trava de PP
   // ficam com a tabela (`modoDaEdicao`).
@@ -603,7 +605,8 @@ export function JobRealizadoSection({
 
   // Recolher agrupamento, igual à planilha do orçamento: o subtotal e a
   // rentabilidade continuam à vista, que é o que justifica recolher.
-  const gruposIds = React.useMemo(() => grupos.map((g) => g.id), [grupos]);
+  // Os do rascunho: o agrupamento criado na errata também recolhe.
+  const gruposIds = React.useMemo(() => errata.grupos.map((g) => g.id), [errata.grupos]);
   const recolher = useGruposRecolhiveis(gruposIds);
 
   // SAVE — a coluna nasce recolhida na alça lateral e só abre sozinha
@@ -869,15 +872,17 @@ export function JobRealizadoSection({
   // novas e sem as removidas. É o que faz a planilha, o card de Totais e a
   // barra do rodapé mostrarem o mesmo número enquanto se digita.
   const gruposDaPlanilha = React.useMemo<GrupoDoJob[]>(() => {
+    // Os agrupamentos também vêm do rascunho: renomeados, criados e sem
+    // os removidos na errata. Fora dela são os do job.
     const porGrupo = new Map<string, ItemPlanilhaJob[]>();
-    for (const g of grupos) porGrupo.set(g.id, []);
+    for (const g of errata.grupos) porGrupo.set(g.id, []);
     for (const it of errata.itens) porGrupo.get(it.grupo_id)?.push(it);
-    return grupos.map((g) => ({
+    return errata.grupos.map((g) => ({
       id: g.id,
       nome: g.nome,
       itens: porGrupo.get(g.id) ?? [],
     }));
-  }, [grupos, errata.itens]);
+  }, [errata.grupos, errata.itens]);
 
   // MODELO MENSAL (decisão 078): a planilha do job se reparte nos meses da
   // versão aprovada. O mês mora no GRUPO da versão, e o item do job aponta
@@ -888,7 +893,7 @@ export function JobRealizadoSection({
     modeloPlanilha === "mensal" && meses.length > 0 && hrefPlanilha !== undefined;
   const dadosDosMeses = React.useMemo(() => {
     if (!mensal) return [];
-    const mesDoGrupo = new Map(grupos.map((g) => [g.id, g.mes_id]));
+    const mesDoGrupo = new Map(errata.grupos.map((g) => [g.id, g.mes_id]));
     return meses.map((m) => {
       const gruposDoMes = gruposDaPlanilha.filter(
         (g) => mesDoGrupo.get(g.id) === m.id,
@@ -915,7 +920,7 @@ export function JobRealizadoSection({
         resultadoGeral: resultado.resultadoGeral,
       };
     });
-  }, [mensal, meses, grupos, gruposDaPlanilha, paraTotais]);
+  }, [mensal, meses, errata.grupos, gruposDaPlanilha, paraTotais]);
   // Sem `?mes=`, abre no primeiro mês — como a planilha do orçamento.
   const mesSelecionado =
     !mensal || mesPedido === "trimestre"
@@ -1042,6 +1047,8 @@ export function JobRealizadoSection({
     gruposDoTrecho: GrupoDoJob[],
     rotuloTotal?: string,
     mesFechado = false,
+    /** Mês do trecho no mensal: é nele que o grupo novo da errata nasce. */
+    mesId: string | null = null,
   ) {
     // Um card para a planilha inteira — antes era um por grupo. Sem
     // `overflow-hidden`: a calha de ações precisa escapar do frame, e são
@@ -1097,6 +1104,7 @@ export function JobRealizadoSection({
               : undefined
           }
           modoDaEdicao={modoFinanceiro ? "financeiro" : "errata"}
+          mesDoTrecho={mesId}
           podeEditarLinhas={!modoFinanceiro}
           orcadoVisivel={orcadoVisivel}
           rentabPlanejadaVisivel={rentabPlanejada}
@@ -1389,8 +1397,9 @@ export function JobRealizadoSection({
                 mesSelecionado.grupos,
                 `Total de ${nomeDoMes(mesSelecionado.mes.mes)}`,
                 mesTravado(mesSelecionado.mes.id),
+                mesSelecionado.mes.id,
               )}
-              <DicasDeTeclado editavel={errata.ativo} />
+              <DicasDeTeclado editavel={errata.ativo} moverLinha={errata.ativo && !modoFinanceiro} />
               {cardDeTotais(
                 mesSelecionado.itens,
                 false,
@@ -1418,10 +1427,11 @@ export function JobRealizadoSection({
                     d.grupos,
                     `Total de ${nomeDoMes(d.mes.mes)}`,
                     mesTravado(d.mes.id),
+                    d.mes.id,
                   ),
                 }))}
               />
-              <DicasDeTeclado editavel={errata.ativo} />
+              <DicasDeTeclado editavel={errata.ativo} moverLinha={errata.ativo && !modoFinanceiro} />
               {cardDeTotais(
                 dadosDosMeses.flatMap((d) => d.itens),
                 true,
@@ -1436,7 +1446,7 @@ export function JobRealizadoSection({
           {tabela(gruposDaPlanilha)}
           {/* Fora do card, como na planilha do orçamento. Fora da errata a
               planilha é só leitura: só as setas. */}
-          <DicasDeTeclado editavel={errata.ativo} />
+          <DicasDeTeclado editavel={errata.ativo} moverLinha={errata.ativo && !modoFinanceiro} />
           {cardDeTotais(errata.itens, true)}
         </>
       )}
@@ -1522,6 +1532,7 @@ export function JobRealizadoSection({
       {errata.ativo && !modoFinanceiro && (
         <ErrataBarra
           resumo={errata.resumo}
+          soOrganizacao={errata.mudancas.length === 0 && errata.estrutura.length > 0}
           temMudanca={errata.temMudanca}
           faturamento={{
             antes: totaisAntes.faturamentoPrevisto,
@@ -1618,6 +1629,7 @@ export function JobRealizadoSection({
         jobNome={job.nome}
         resumo={errata.resumo}
         mudancas={errata.mudancas}
+        estrutura={errata.estrutura}
         orcado={{
           antes: totaisAntes.subtotalGeral,
           depois: totaisDepois.subtotalGeral,

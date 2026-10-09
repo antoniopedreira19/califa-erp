@@ -50,6 +50,7 @@ import type { RevisaoDeErrata } from "../dados";
 import { formatDataBr, formatDataHoraBr } from "../formatos";
 import type { AprovacaoDeSave } from "../aprovacao-save";
 import { IconeSave } from "../icone-save";
+import { resumoDaEstrutura } from "@/lib/calculos/organizacao-errata";
 
 /** "08/09/2026 · 03:30 · Tiago Mendonça" */
 function quandoEQuem(foto: FotoDaAbertura): string {
@@ -261,6 +262,8 @@ export function ResumoDaAberturaAnterior({
           linhasNovas: erratas.reduce((t, e) => t + e.linhasNovas, 0),
           linhasRemovidas: erratas.reduce((t, e) => t + e.linhasRemovidas, 0),
           linhasCanceladas: erratas.reduce((t, e) => t + e.linhasCanceladas, 0),
+          organizacao: erratas.flatMap((e) => e.organizacao),
+          soOrganizacao: erratas.length > 0 && erratas.every((e) => e.soOrganizacao),
         }
       : revisao;
   const gera = aprovacaoSave?.tipo === "gera";
@@ -275,9 +278,9 @@ export function ResumoDaAberturaAnterior({
             : "Revisão da abertura após errata"}
         </span>
         <span className="text-[12.5px] text-muted-foreground">
-          reconfira previsão de recebimento, curva de desembolso e
-          competência sobre os números novos — a data e o usuário da
-          abertura não mudam
+          {outras?.soOrganizacao && !aprovacaoSave
+            ? "nenhum valor foi alterado — registre a revisão para liberar o faturamento; a data e o usuário da abertura não mudam"
+            : "reconfira previsão de recebimento, curva de desembolso e competência sobre os números novos — a data e o usuário da abertura não mudam"}
         </span>
       </div>
 
@@ -377,14 +380,30 @@ export function ResumoDaAberturaAnterior({
                 </span>
               )}
               {e.autorNome ? ` · ${e.autorNome}` : ""} ·{" "}
-              {formatDataHoraBr(e.em)} · faturamento previsto{" "}
-              <span className="font-mono line-through">
-                {formatCurrency(e.faturamentoAntes ?? 0)}
-              </span>{" "}
-              <span className="font-mono font-semibold text-foreground">
-                {formatCurrency(e.faturamentoDepois ?? 0)}
-              </span>{" "}
-              · {linhasAfetadas(e)}
+              {formatDataHoraBr(e.em)} ·{" "}
+              {/* Decisão 162: a errata que só reorganizou a planilha não tem
+                  número novo — o financeiro lê isso aqui, sem conferir. */}
+              {e.soOrganizacao ? (
+                <>
+                  <span className="font-semibold text-emerald-800">
+                    nenhum valor alterado: os itens só foram reorganizados
+                  </span>{" "}
+                  ({resumoDaEstrutura(e.organizacao).join(" · ")})
+                </>
+              ) : (
+                <>
+                  faturamento previsto{" "}
+                  <span className="font-mono line-through">
+                    {formatCurrency(e.faturamentoAntes ?? 0)}
+                  </span>{" "}
+                  <span className="font-mono font-semibold text-foreground">
+                    {formatCurrency(e.faturamentoDepois ?? 0)}
+                  </span>{" "}
+                  · {linhasAfetadas(e)}
+                  {e.organizacao.length > 0 &&
+                    ` · ${resumoDaEstrutura(e.organizacao).join(" · ")}`}
+                </>
+              )}
             </li>
           ))}
         </ol>
