@@ -843,7 +843,9 @@ export function CalendarioJobs({
               value={regional}
               onChange={(v) => setRegional(v ?? TODAS)}
               buscaPlaceholder="Escreva o nome da regional"
-              className={classeCampo}
+              // Largura própria (10/10/2026): o Combobox e o Select são
+              // `w-full`, e sem ela cada campo ocupava uma linha inteira.
+              className={cn(classeCampo, "w-[180px]")}
             />
             <Combobox
               ariaLabel="GP"
@@ -854,7 +856,7 @@ export function CalendarioJobs({
               value={gp}
               onChange={(v) => setGp(v ?? TODOS)}
               buscaPlaceholder="Escreva o nome do GP"
-              className={classeCampo}
+              className={cn(classeCampo, "w-[220px]")}
             />
             <Select
               value={agrupamento}
@@ -863,7 +865,7 @@ export function CalendarioJobs({
                 setFechados(new Set());
               }}
             >
-              <SelectTrigger aria-label="Agrupamento" className={classeCampo}>
+              <SelectTrigger aria-label="Agrupamento" className={cn(classeCampo, "w-[190px]")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -953,7 +955,9 @@ export function CalendarioJobs({
                         type="button"
                         onClick={() => alternarGrupo(g.rotulo)}
                         aria-expanded={aberto}
-                        className="sticky top-[38px] z-[2] flex h-[29px] min-w-[1136px] items-center gap-2.5 whitespace-nowrap border-y border-border bg-[#f6f5f2] px-3.5 text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
+                        // `w-full` (10/10/2026): botão não estica como `div`,
+                        // e a faixa parava antes da coluna Evento.
+                        className="sticky top-[38px] z-[2] flex h-[29px] w-full min-w-[1136px] items-center gap-2.5 whitespace-nowrap border-y border-border bg-[#f6f5f2] px-3.5 text-[11px] font-bold uppercase tracking-[0.07em] text-muted-foreground"
                       >
                         <ChevronDown
                           className={cn(
