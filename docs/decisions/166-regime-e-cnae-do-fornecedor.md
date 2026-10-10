@@ -1,7 +1,7 @@
 # 166 — Regime tributário (Real e Presumido separados) e CNAE obrigatórios no fornecedor, e a PP travada para cadastro incompleto
 
 **Data:** 2026-10-09
-**Status:** aceita e implementada (09/10/2026).
+**Status:** aceita e implementada (09/10/2026); revista em 10/10/2026 (§6: o GP edita o cadastro pendente inteiro).
 **Quem decidiu:** Tiago, em 09/10/2026, sobre o protótipo "Regime e CNAE" (3 versões, com dois ajustes pedidos nos comentários).
 **Revê:** a regra do regime do módulo fiscal (entrega 1, 02/10/2026) e a [142](142-modulo-fiscal-pontos-remanescentes.md) §5 ("Lucro Real ou Presumido" numa opção só).
 **Completa:** a [150](150-cadastro-de-veiculos.md) (o veículo usa o mesmo formulário do fornecedor) e a [153](153-pp-a-emitir.md) (a PP a emitir e o "Gerar PP").
@@ -41,7 +41,7 @@ e a PP travada enquanto o cadastro antigo não for regularizado.
 5. **A PP não é gerada com o cadastro incompleto** (sem regime, com o legado
    ou sem CNAE). Vale para a PP comum e para a verba de alimentação ou de
    transporte paga a um terceiro (decisão 164), que também paga um
-   fornecedor. No formulário da PP, um aviso vermelho embaixo do
+   fornecedor (confirmado pelo Tiago em 10/10/2026). No formulário da PP, um aviso vermelho embaixo do
    fornecedor diz o que falta e aponta o lápis; o "Gerar PP" trava. O
    **"Salvar" continua**: a PP a emitir espera o cadastro. O servidor recusa
    a geração (`gerarPPDaPPAEmitir`), e a revisão da PP a emitir mostra a
@@ -49,10 +49,12 @@ e a PP travada enquanto o cadastro antigo não for regularizado.
 6. **O lápis para quem gera PP.** Administrador e financeiro já tinham o
    lápis, que abre o cadastro inteiro. GP, produtor e freelancer não editam
    fornecedor: com o cadastro incompleto, o lápis aparece para eles e abre o
-   **cadastro inteiro**, com só o regime e o CNAE editáveis — o resto
-   apagado e travado, e o PJ/PF também. A gravação é de uma action própria,
-   que só aceita o cadastro pendente e só grava os dois campos (e a
-   consulta). Completo, só quem edita fornecedor altera.
+   **cadastro inteiro, todo editável** — se eles virem outro erro no
+   cadastro, corrigem também (Tiago, 10/10/2026; a primeira versão travava
+   tudo menos regime e CNAE). O servidor aceita a edição de quem tem o
+   cadastro rápido da PP enquanto o cadastro estiver pendente; completo, só
+   administrador e financeiro alteram. O aviso das PPs já no financeiro ao
+   trocar conta ou PIX (decisão 067) vale igual.
 7. **Pendência é vermelha**: o aviso da PP (fundo e texto), o contorno do
    lápis, o ícone do rodapé, a borda dos campos que faltam e as frases
    embaixo deles. O âmbar fica para o que não é pendência ("Alterado
@@ -81,11 +83,11 @@ fora). A BrasilAPI estava fora; os 40 vieram do CNPJ.ws, a reserva.
 | Regime das PPs já lançadas | migration `20261009500002` (só preenche o vazio) |
 | Lista do CNAE | `lib/fiscal/cnaes.ts` (IBGE, 09/10/2026); carregada sob demanda pelo campo |
 | Regras puras (pendências, consulta, textos) | `lib/fiscal/regime-do-fornecedor.ts` |
-| Obrigatoriedade e CNAE da lista | `lib/validations/fornecedores.ts` (`fornecedorSchema`, `cadastroFiscalSchema`) |
+| Obrigatoriedade e CNAE da lista | `lib/validations/fornecedores.ts` (`fornecedorSchema`) |
 | CNAE na consulta do CNPJ | `lib/consulta-cnpj.ts` (BrasilAPI `cnae_fiscal`; CNPJ.ws `atividade_principal`) |
-| Pendências e o "completar" do GP | `pendenciasDoCadastroDoFornecedor` e `completarCadastroFiscalDoFornecedor` em `app/(app)/fornecedores/actions.ts` |
+| Pendências e quem edita o cadastro pendente | `pendenciasDoCadastroDoFornecedor` e `checarEditarFornecedor` (dentro de `atualizarComSchema`) em `app/(app)/fornecedores/actions.ts` |
 | Campo do CNAE | `app/(app)/fornecedores/campo-cnae.tsx` |
-| Formulário (revisão, vermelho, só os pendentes) | `fornecedor-form.tsx` (`somentePendentes`) e `novo-fornecedor-dialog.tsx` |
+| Formulário (revisão e vermelho) | `fornecedor-form.tsx` e `novo-fornecedor-dialog.tsx` |
 | Aviso e trava na PP | `gerar-pp-drawer.tsx`; servidor em `gerarPPDaPPAEmitir` (`actions-pp.ts`) |
 | Rótulos na aprovação da PP | `lib/fiscal/nf-da-pp.ts` (`textoDoRegime`, `rotuloCurtoDoRegime`) |
 
@@ -126,3 +128,22 @@ do projeto TES-P001/26:
 - "Novo fornecedor" e "Novo veículo" com o texto novo e os dois campos.
 - `node --import tsx --test` em `regime-do-fornecedor`, `nf-da-pp` e
   `consulta-cnpj`: 50 testes passam. tsc e lint limpos.
+
+### Revisão de 10/10/2026: o GP edita o cadastro pendente inteiro
+
+O modo "só os pendentes" (campos travados com `inert` e a action
+`completarCadastroFiscalDoFornecedor`) saiu. O lápis do GP, do produtor e do
+freelancer abre o mesmo formulário do administrador, e a permissão passou
+para o servidor: `checarEditarFornecedor` deixa quem tem
+`cadastros.fornecedores.inline` salvar enquanto o cadastro estiver pendente
+e recusa o completo ("O cadastro deste fornecedor já está completo…",
+auditado como `acao_negada`). Testes: 49 (saiu o do esquema próprio).
+
+Conferido em 10/10/2026, logado como "GP Teste Claude" (link mágico
+autorizado pelo Tiago; TES-1001/26 passado a ele e devolvido no fim): num
+fornecedor real pendente, o lápis abriu o cadastro inteiro, sem campo
+travado, com regime e CNAE em vermelho; cancelado sem salvar. Pela action
+direta, como GP: no cadastro pendente a permissão passou (o formulário vazio
+foi recusado pela validação, nada gravado); no Fornecedor Teste, completo,
+veio "O cadastro deste fornecedor já está completo…" e o `acao_negada` ficou
+na auditoria.

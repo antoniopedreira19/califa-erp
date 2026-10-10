@@ -5202,3 +5202,19 @@ código publicado logo depois (`3305751`).
 - **Conferido no navegador:** Jobs filtrou, ordenou e limpou; no
   TES-1014/26, desmarcar EQUIPE na Origem deixou 4 de 10 linhas e a
   etiqueta LOGÍSTICA marcou só o bloco.
+
+## ⚠️ Nota de 2026-10-10 (2) — O lápis do GP abre o cadastro pendente inteiro, todo editável (revisão da decisão 166)
+
+- A primeira versão da decisão 166 abria, para o GP, o produtor e o
+  freelancer, o cadastro do fornecedor pendente com tudo travado menos regime
+  e CNAE. O Tiago pediu o cadastro inteiro editável: se eles virem outro erro
+  no cadastro, corrigem também.
+- O lápis do campo Fornecedor da PP continua aparecendo para eles só com o
+  cadastro pendente (sem regime, com o legado ou sem CNAE), e agora abre o
+  mesmo formulário do administrador. O modo `somentePendentes` e a action
+  `completarCadastroFiscalDoFornecedor` saíram.
+- No servidor, `atualizarComSchema` usa `checarEditarFornecedor`: quem tem
+  `cadastros.fornecedores.editar` edita sempre; quem tem só o cadastro rápido
+  (`.inline`) edita enquanto o cadastro estiver pendente.
+- A trava da PP continua valendo também para a verba de alimentação ou de
+  transporte paga a um terceiro — confirmado pelo Tiago.

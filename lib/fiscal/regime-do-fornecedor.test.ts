@@ -25,7 +25,7 @@ import {
   regimeDepoisDaConsulta,
   type ConsultaDoRegime,
 } from "./regime-do-fornecedor";
-import { cadastroFiscalSchema, fornecedorSchema } from "@/lib/validations/fornecedores";
+import { fornecedorSchema } from "@/lib/validations/fornecedores";
 
 const CNPJ = "64582932000172";
 const OUTRO_CNPJ = "11222333000181";
@@ -479,27 +479,6 @@ test("decisão 166: na pessoa jurídica, regime e CNAE são obrigatórios, e o C
   assert.ok(ok.success);
   // A pontuação sai: o banco guarda 7 dígitos.
   assert.equal(ok.data.cnae, "5911102");
-});
-
-test("decisão 166: completar o cadastro grava só regime, CNAE e a consulta", () => {
-  const r = cadastroFiscalSchema.safeParse({
-    regime_tributario: "simples",
-    cnae: "5911-1/02",
-    regime_consulta: "simples",
-    regime_desde: "2019-01-01",
-    regime_consultado_em: HOJE,
-    nome: "não entra",
-  });
-  assert.ok(r.success);
-  assert.deepEqual(r.data, {
-    regime_tributario: "simples",
-    cnae: "5911102",
-    regime_consulta: "simples",
-    regime_consultado_em: HOJE,
-    regime_desde: "2019-01-01",
-  });
-  assert.ok(!cadastroFiscalSchema.safeParse({ regime_tributario: "normal", cnae: "5911102" }).success);
-  assert.ok(!cadastroFiscalSchema.safeParse({ regime_tributario: "mei", cnae: "" }).success);
 });
 
 test("sem os campos do regime (quem não os manda), tudo nulo, sem declaração e sem mexer no arquivo", () => {

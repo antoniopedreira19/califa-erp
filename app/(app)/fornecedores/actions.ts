@@ -8,7 +8,6 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { pode } from "@/lib/permissoes";
 import {
-  cadastroFiscalSchema,
   fornecedorSchema,
   fornecedorCompletoSchema,
   fornecedorVeiculoSchema,
@@ -208,6 +207,45 @@ async function checarCriarFornecedor(
 ): ReturnType<typeof checarPermissao> {
   if (pode(session.activeRole, "cadastros.fornecedores.editar")) return { ok: true };
   return checarPermissao(session, "cadastros.fornecedores.inline");
+}
+
+/**
+ * Quem edita um fornecedor: quem tem `cadastros.fornecedores.editar`
+ * (administrador e financeiro), sempre; e quem tem o cadastro rápido da PP
+ * (`.inline`: GP, produtor e freelancer) enquanto o cadastro estiver
+ * pendente para gerar PP — sem regime, com o legado "Lucro Real ou
+ * Presumido" ou sem CNAE (decisão 166). É o lápis do campo Fornecedor da
+ * PP, e com ele o cadastro inteiro se edita (Tiago, 10/10/2026: "se ele
+ * verificar algum erro em outro item, poderá modificá-lo também").
+ */
+async function checarEditarFornecedor(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  id: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (pode(session.activeRole, "cadastros.fornecedores.editar")) return { ok: true };
+  if (!pode(session.activeRole, "cadastros.fornecedores.inline")) {
+    return checarPermissao(session, "cadastros.fornecedores.editar");
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("tipo_pessoa, regime_tributario, cnae")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
+  if (data && (cadastroSemRevisao(data) || pendenciasDoCadastroFiscal(data).length > 0)) {
+    return { ok: true };
+  }
+  const negado = await checarPermissao(session, "cadastros.fornecedores.editar", {
+    motivo: "cadastro_completo",
+    fornecedor_id: id,
+  });
+  return negado.ok
+    ? negado
+    : {
+        ok: false,
+        message: "O cadastro deste fornecedor já está completo. Para alterá-lo, fale com o financeiro.",
+      };
 }
 
 async function inserirFornecedor(
@@ -504,7 +542,8 @@ async function atualizarComSchema(
   schema: typeof fornecedorSchema | typeof fornecedorVeiculoSchema,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.fornecedores.editar");
+  // Decisão 166: o GP, o produtor e o freelancer editam o cadastro pendente.
+  const gate = await checarEditarFornecedor(session, id);
   if (!gate.ok) return gate;
   const parsed = schema.safeParse(extractInput(formData));
 
@@ -642,84 +681,6 @@ export async function pendenciasDoCadastroDoFornecedor(
     .maybeSingle<{ tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
   if (error || !data) return { ok: false, message: "Fornecedor não encontrado." };
   return { ok: true, falta: pendenciasDoCadastroFiscal(data) };
-}
-
-/**
- * O lápis do campo Fornecedor da PP, para quem gera PP e não edita
- * fornecedor (GP, produtor e freelancer): o cadastro inteiro aparece, mas
- * só o regime e o CNAE se gravam — o resto continua com o financeiro. E só
- * enquanto o cadastro estiver pendente (sem CNAE, sem regime ou com o
- * legado): cadastro completo, só quem edita fornecedor altera.
- */
-export async function completarCadastroFiscalDoFornecedor(
-  id: string,
-  formData: FormData,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const gate = await checarCriarFornecedor(session);
-  if (!gate.ok) return gate;
-
-  const parsed = cadastroFiscalSchema.safeParse({
-    regime_tributario: formData.get("regime_tributario"),
-    cnae: formData.get("cnae"),
-    regime_consulta: formData.get("regime_consulta"),
-    regime_desde: formData.get("regime_desde"),
-    regime_consultado_em: formData.get("regime_consultado_em"),
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      message: "Verifique os campos destacados.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-
-  const tenantId = session.activeTenant.id;
-  const supabase = createClient();
-  const { data: antes, error: erroAoLer } = await supabase
-    .from("fornecedores")
-    .select("tipo_pessoa, regime_tributario, cnae")
-    .eq("id", id)
-    .eq("tenant_id", tenantId)
-    .maybeSingle<{ tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
-  if (erroAoLer || !antes) return { ok: false, message: "Fornecedor não encontrado." };
-  if (antes.tipo_pessoa !== "juridica") {
-    return { ok: false, message: "Pessoa física não tem regime tributário nem CNAE." };
-  }
-  if (!cadastroSemRevisao(antes) && pendenciasDoCadastroFiscal(antes).length === 0) {
-    return {
-      ok: false,
-      message: "O cadastro deste fornecedor já está completo. Para alterá-lo, fale com o financeiro.",
-    };
-  }
-
-  const { error } = await supabase
-    .from("fornecedores")
-    .update(parsed.data)
-    .eq("id", id)
-    .eq("tenant_id", tenantId);
-  if (error) {
-    console.error("[fornecedores.completar]", error.message);
-    return { ok: false, message: "Não foi possível salvar. Tente novamente." };
-  }
-
-  await logAuditEvent({
-    acao: "fornecedor.editado",
-    tenantId,
-    entidadeTipo: "fornecedor",
-    entidadeId: id,
-    metadata: {
-      acao: "cadastro_fiscal_completado",
-      regime_tributario_antes: antes.regime_tributario,
-      regime_tributario: parsed.data.regime_tributario,
-      cnae: parsed.data.cnae,
-      regime_consulta: parsed.data.regime_consulta,
-    },
-  });
-
-  revalidatePath("/fornecedores");
-  revalidatePath(`/fornecedores/${id}`);
-  return { ok: true, id };
 }
 
 // ---------------------------------------------------------------------------

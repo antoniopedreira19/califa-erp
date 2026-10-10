@@ -7071,3 +7071,11 @@ financeiro". Regra completa na §9 da decisão 115.
   ganhou `w-full`. Conferido logado: os quatro campos na mesma linha e a
   faixa com a largura do cabeçalho.
 
+## ⚠️ Nota de 2026-10-10 (3) — GP, produtor e freelancer editam o fornecedor pendente (revisão da decisão 166)
+
+- Enquanto o cadastro do fornecedor estiver pendente para gerar PP (sem
+  regime, com o legado "Lucro Real ou Presumido" ou sem CNAE), quem gera PP
+  edita o cadastro inteiro pelo lápis do campo Fornecedor da PP — conta e
+  PIX inclusive. Completo, só administrador e financeiro alteram, como antes.
+- O aviso das PPs já no financeiro ao trocar conta ou PIX (decisão 067) vale
+  para eles também: a PP enviada continua pagando pela foto que guardou.
