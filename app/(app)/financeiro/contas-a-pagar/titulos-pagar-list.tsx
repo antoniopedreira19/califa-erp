@@ -1377,15 +1377,22 @@ export function TitulosPagarList({
                   )}>
                     {/* Despesa negativa (decisão 081, 8a). */}
                     {r.origem === "pp_devolucao_verba" ? `−${formatMoney(r.valor)}` : formatMoney(r.valor)}
+                    {/* As linhas de baixo quebram entre as partes, nunca no
+                        meio de um valor (10/10/2026): numa linha só, "pago
+                        R$ 10.000,00 · falta R$ 6.000,00" passava da coluna
+                        e invadia a Parcela, porque a célula é `nowrap`. */}
                     {parcial && (
-                      <span className="block text-[10.5px] font-medium text-sky-700">
-                        pago {formatMoney(r.baixado)} · falta{" "}
-                        <b className="font-semibold">{formatMoney(faltaPagar(r))}</b>
+                      <span className="block whitespace-normal text-[10.5px] font-medium text-sky-700">
+                        <span className="whitespace-nowrap">pago {formatMoney(r.baixado)}</span>{" "}
+                        <span className="whitespace-nowrap">
+                          · falta <b className="font-semibold">{formatMoney(faltaPagar(r))}</b>
+                        </span>
                       </span>
                     )}
                     {retido > 0 && (
-                      <span className="block text-[10.5px] font-medium text-muted-foreground">
-                        {formatMoney(retido)} retidos · a recolher
+                      <span className="block whitespace-normal text-[10.5px] font-medium text-muted-foreground">
+                        <span className="whitespace-nowrap">{formatMoney(retido)} retidos</span>{" "}
+                        <span className="whitespace-nowrap">· a recolher</span>
                       </span>
                     )}
                     {estornos.length > 0 && (

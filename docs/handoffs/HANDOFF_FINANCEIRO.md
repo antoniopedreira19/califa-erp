@@ -7054,3 +7054,20 @@ financeiro". Regra completa na §9 da decisão 115.
     ordenaram e limparam.
   - Recorrências e Folhas não têm dado no banco hoje; ficaram conferidas
     só no protótipo (https://claude.ai/artifact/KG3njc42J14gkMDfepzRtP).
+
+## ⚠️ Nota de 2026-10-10 (2) — três defeitos de tela antigos, achados na decisão 165
+
+- **Títulos a Pagar:** no título parcialmente pago, "pago R$ … · falta
+  R$ …" passava da coluna Valor e invadia a Parcela (a célula é `nowrap`).
+  Agora a linha quebra entre as partes, nunca no meio de um valor; o mesmo
+  para "… retidos · a recolher". Conferido no protótipo montado com o
+  código do worktree (não há título parcial nem com retenção no banco hoje):
+  as duas linhas terminam dentro da coluna e o "1/2" fica livre.
+- **Calendário de Jobs › Jobs ativos numa data:** Regional, GP e
+  Agrupamento ocupavam uma linha inteira cada (Combobox e Select são
+  `w-full` e o campo não tinha largura). Agora 180, 220 e 190 px, na mesma
+  linha da busca. E a faixa do grupo ("Todos os jobs ativos · 6") parava
+  antes da coluna Evento: era um `<button>`, que não estica como `div`;
+  ganhou `w-full`. Conferido logado: os quatro campos na mesma linha e a
+  faixa com a largura do cabeçalho.
+
