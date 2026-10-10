@@ -56,10 +56,10 @@
  * com busca) são obrigatórios. A consulta do CNPJ preenche o CNAE principal
  * e, no Simples e no MEI, o regime. O cadastro antigo, que ainda não tem
  * CNAE, abre com o regime vazio na tela ("Antes: …") e os dois campos
- * marcados em vermelho, e consulta o CNPJ sozinho para sugerir. Aberto pelo
- * lápis da PP por quem não edita fornecedor (`somentePendentes`), o
- * cadastro aparece inteiro, mas só o regime e o CNAE se mexem — e se gravam
- * pela action própria, que não toca no resto.
+ * marcados em vermelho, e consulta o CNPJ sozinho para sugerir. Aberto
+ * pelo lápis da PP por quem não edita fornecedor (GP, produtor, freelancer),
+ * o cadastro pendente se edita inteiro — o servidor aceita enquanto ele
+ * estiver pendente (`checarEditarFornecedor`).
  */
 
 import * as React from "react";
@@ -123,7 +123,6 @@ import {
 import {
   atualizarFornecedor,
   atualizarVeiculoFornecedor,
-  completarCadastroFiscalDoFornecedor,
   criarFornecedor,
   criarFornecedorRapido,
   criarVeiculoFornecedor,
@@ -233,18 +232,12 @@ function PixChaveInput({
 // Peças do desenho: a seção com explicação à esquerda, e o campo com dica
 // ---------------------------------------------------------------------------
 
-/** `inert` tira o bloco do clique e do Tab; o React 18 só o passa adiante
- *  como texto ("" = ligado). Decisão 166: o resto do cadastro, travado no
- *  lápis da PP de quem não edita fornecedor. */
-const TRAVADO = { inert: "", "aria-disabled": true } as unknown as React.HTMLAttributes<HTMLDivElement>;
-
 function Secao({
   titulo,
   descricao,
   descricaoNoDialog,
   selo,
   emDialog,
-  travado,
   children,
 }: {
   titulo: string;
@@ -254,8 +247,6 @@ function Secao({
   descricaoNoDialog?: string;
   selo: "obrigatorio" | "opcional";
   emDialog: boolean;
-  /** Apagada e sem clique (decisão 166). */
-  travado?: boolean;
   children: React.ReactNode;
 }) {
   const seloEl = (
@@ -277,10 +268,7 @@ function Secao({
   // "Fornecedores - Novo Cadastro na PP").
   if (emDialog) {
     return (
-      <div
-        {...(travado ? TRAVADO : {})}
-        className={cn("flex flex-col gap-3.5 px-6 py-[22px]", travado && "select-none opacity-50")}
-      >
+      <div className="flex flex-col gap-3.5 px-6 py-[22px]">
         <div className="flex flex-wrap items-baseline gap-2.5">
           <h3 className="text-[13.5px] font-bold tracking-tight">{titulo}</h3>
           {seloEl}
@@ -296,13 +284,7 @@ function Secao({
   }
 
   return (
-    <div
-      {...(travado ? TRAVADO : {})}
-      className={cn(
-        "grid gap-6 px-7 py-7 md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8",
-        travado && "select-none opacity-50",
-      )}
-    >
+    <div className="grid gap-6 px-7 py-7 md:grid-cols-[minmax(0,208px)_minmax(0,1fr)] md:gap-8">
       <div>
         <h3 className="text-[14.5px] font-bold tracking-tight">{titulo}</h3>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -324,14 +306,11 @@ function Campo({
   acao,
   errors,
   className,
-  travado,
   children,
 }: {
   label: string;
   name: string;
   required?: boolean;
-  /** Apagado e sem clique (decisão 166). */
-  travado?: boolean;
   /** Texto curto à direita do rótulo ("Opcional", "para cobrar a nota"). */
   hint?: React.ReactNode;
   /** Um link no lugar da dica ("Usar CNPJ do cadastro"). */
@@ -342,11 +321,7 @@ function Campo({
 }) {
   const msgs = errors[name];
   return (
-    <div
-      {...(travado ? TRAVADO : {})}
-      className={cn("flex min-w-0 flex-col gap-1.5", travado && "select-none opacity-50", className)}
-      data-field={name}
-    >
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)} data-field={name}>
       <div className="flex items-baseline justify-between gap-2">
         <Label htmlFor={name} className="whitespace-nowrap text-[12.5px] font-semibold">
           {label}
@@ -405,11 +380,6 @@ interface Props {
    *  mesmo formulário, com o pagamento opcional, gravado pelas actions do
    *  veículo. Na página, Cancelar e Criar voltam para Cadastros › Veículos. */
   variante?: "fornecedor" | "veiculo";
-  /** Decisão 166: o lápis do campo Fornecedor da PP, aberto por quem gera PP
-   *  e não edita fornecedor. O cadastro aparece inteiro, mas só o regime e o
-   *  CNAE se mexem, e se gravam por `completarCadastroFiscalDoFornecedor`.
-   *  Só vale com o cadastro pendente; completo, o formulário é o de sempre. */
-  somentePendentes?: boolean;
 }
 
 export function FornecedorForm({
@@ -423,7 +393,6 @@ export function FornecedorForm({
   onSelecionarExistente,
   onSalvo,
   variante = "fornecedor",
-  somentePendentes = false,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(fornecedor);
@@ -497,8 +466,6 @@ export function FornecedorForm({
   /** O cadastro abriu sem regime, com o legado ou sem CNAE: o que falta fica
    *  em vermelho até ser preenchido. */
   const abriuIncompleto = pendenciasDoCadastroFiscal(fornecedor).length > 0;
-  /** O lápis da PP de quem não edita fornecedor, com o cadastro pendente. */
-  const soPendentes = somentePendentes && Boolean(fornecedor) && abriuIncompleto;
   /** O que a consulta do CNPJ disse do regime, e de qual CNPJ. Muda só com
    *  uma consulta nova; na edição, abre com a que o cadastro gravou. */
   const [consultaRegime, setConsultaRegime] = React.useState<ConsultaDoRegime | null>(
@@ -895,11 +862,6 @@ export function FornecedorForm({
   // O veículo de mídia nasce sem conta (decisão 147).
   else if (!ehVeiculo && !bancoOk && !pixOk && !semDadosPagamento)
     pendencias.push("conta bancária ou chave PIX (ou marque “Sem conta nem PIX”)");
-  // Decisão 166: no lápis de quem só completa, o rodapé cobra só os dois.
-  if (soPendentes) {
-    const fiscais = pendencias.filter((p) => p === "regime tributário" || p === "CNAE");
-    pendencias.splice(0, pendencias.length, ...fiscais);
-  }
   /** Algo digitado na conta ou no PIX: com a marcação, sai no salvar. */
   const temAlgumDadoDePagamento = Boolean(
     bancoCodigo ||
@@ -941,9 +903,7 @@ export function FornecedorForm({
       formData.get("declaracao_simples_path")?.toString() || null,
     );
     startTransition(async () => {
-      const res: ActionResult | undefined = await (soPendentes
-        ? completarCadastroFiscalDoFornecedor(fornecedor!.id, formData)
-        : ehVeiculo
+      const res: ActionResult | undefined = await (ehVeiculo
         ? isEdit
           ? atualizarVeiculoFornecedor(fornecedor!.id, formData, confirmarPagamento)
           : // Pela página de Cadastros a action redireciona para a lista.
@@ -1202,7 +1162,6 @@ export function FornecedorForm({
                 label={ehPj ? "Nome fantasia" : "Nome"}
                 name="nome"
                 required
-                travado={soPendentes}
                 errors={fieldErrors}
                 className="col-span-12 sm:col-span-7"
               >
@@ -1219,7 +1178,6 @@ export function FornecedorForm({
                 label={ehPj ? "CNPJ" : "CPF"}
                 name="cpf_cnpj"
                 required
-                travado={soPendentes}
                 hint={
                   duplicado && !isEdit
                     ? "já cadastrado"
@@ -1277,7 +1235,6 @@ export function FornecedorForm({
                   label="Razão social"
                   name="razao_social"
                   hint="Opcional"
-                  travado={soPendentes}
                   errors={fieldErrors}
                   // Módulo fiscal: divide a linha com o regime tributário
                   // (era col-span-12).
@@ -1436,7 +1393,6 @@ export function FornecedorForm({
                 name="email"
                 required
                 hint="para cobrar a nota"
-                travado={soPendentes}
                 errors={fieldErrors}
                 className="col-span-12 sm:col-span-7"
               >
@@ -1451,7 +1407,6 @@ export function FornecedorForm({
               <Campo
                 label="Telefone"
                 name="telefone"
-                travado={soPendentes}
                 required
                 errors={fieldErrors}
                 className="col-span-12 sm:col-span-5"
@@ -1472,7 +1427,6 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Pagamento"
-            travado={soPendentes}
             descricao={
               ehVeiculo
                 ? "Opcional por enquanto: vai ser exigido para gerar a PP do repasse, nas linhas A · Repasse."
@@ -1716,7 +1670,6 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Endereço"
-            travado={soPendentes}
             descricao="Usado na nota fiscal. Nada aqui bloqueia o cadastro."
             descricaoNoDialog="Usado na nota fiscal. Nada aqui é obrigatório."
             selo="opcional"
@@ -1870,7 +1823,6 @@ export function FornecedorForm({
           {/* ---------------------------------------------------------- */}
           <Secao
             titulo="Observações"
-            travado={soPendentes}
             descricao="Especialidade, prazo habitual, quem indicou."
             descricaoNoDialog="Especialidade, prazo habitual, quem indicou."
             selo="opcional"

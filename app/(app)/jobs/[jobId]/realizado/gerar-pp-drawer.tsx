@@ -19,7 +19,7 @@
  * vermelho embaixo do campo diz o que falta e aponta o lápis; "Gerar PP"
  * trava, e "Salvar" continua — a PP a emitir espera o cadastro. Quem não
  * edita fornecedor (GP, produtor, freelancer) ganha o lápis só nesse caso, e
- * ele abre o cadastro inteiro com só os dois campos editáveis.
+ * ele abre o cadastro inteiro, todo editável (Tiago, 10/10/2026).
  */
 
 import * as React from "react";
@@ -301,11 +301,11 @@ export function GerarPPDrawer({
     };
   }, [fornecedorId, usaFornecedor, versaoDoCadastro]);
   const cadastroIncompleto = usaFornecedor && Boolean(fornecedorId) && faltaNoCadastro.length > 0;
-  /** Quem não edita fornecedor completa o cadastro pendente pelo lápis: o
-   *  cadastro inteiro aparece, mas só o regime e o CNAE se mexem. */
+  /** Quem não edita fornecedor ganha o lápis com o cadastro pendente: ele
+   *  abre o cadastro inteiro, todo editável, e o servidor aceita enquanto o
+   *  cadastro estiver pendente. */
   const completaPeloLapis = !podeEditarFornecedor && podeCadastrarFornecedor && cadastroIncompleto;
   const temLapis = podeEditarFornecedor || completaPeloLapis;
-  const [soPendentesAberto, setSoPendentesAberto] = React.useState(false);
   const travaDoCadastro = cadastroIncompleto
     ? temLapis
       ? "Complete o cadastro do fornecedor para gerar a PP."
@@ -1045,9 +1045,6 @@ export function GerarPPDrawer({
                     <button
                       type="button"
                       onClick={() => {
-                        // Decisão 166: quem não edita fornecedor abre o
-                        // cadastro pendente só para completar.
-                        setSoPendentesAberto(Boolean(fornecedorId) && completaPeloLapis);
                         setNomeSugerido("");
                         setFornecedorEditando(
                           fornecedorId ? fornecedorId : null,
@@ -1770,7 +1767,6 @@ export function GerarPPDrawer({
             setVersaoDoCadastro((v) => v + 1);
             router.refresh();
           }}
-          somentePendentes={soPendentesAberto}
         />
         {/* Decisão 153, entrega 3: os documentos e os dados lado a lado. O
             estado é o deste formulário. */}
