@@ -1,8 +1,7 @@
-import Link from "next/link";
-import { UserRound, Plus, UserPlus } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { SeletorCompetenciaInline } from "./seletor-competencia-inline";
-import type { ColaboradorBasico } from "@/lib/queries/beneficios";
+import { UserRound } from "lucide-react";
+import { AcoesColaborador } from "./acoes-colaborador";
+import type { ColaboradorBasico, VinculoDoColaborador } from "@/lib/queries/beneficios";
+import type { BeneficioTipo } from "@/lib/types";
 
 const TIPO_LABEL: Record<string, string> = {
   pj: "PJ",
@@ -19,18 +18,33 @@ const formatarData = (iso: string | null) => {
   return `${d}/${m}/${a}`;
 };
 
+type BeneficioOpcao = {
+  id: string;
+  nome: string;
+  tipo: BeneficioTipo;
+  beneficio_base_id: string | null;
+};
+
 export function HeaderColaborador({
   colaborador,
   colaboradorId,
   ano,
   mes,
+  beneficios,
+  vinculosAtivos,
+  colaboradorTemCpf,
+  colaboradorTemDataNasc,
 }: {
   colaborador: ColaboradorBasico;
   colaboradorId: string;
   ano: number;
   mes: number;
+  beneficios: BeneficioOpcao[];
+  vinculosAtivos: VinculoDoColaborador[];
+  colaboradorTemCpf: boolean;
+  colaboradorTemDataNasc: boolean;
 }) {
-  const descricao = [
+  const meta = [
     TIPO_LABEL[colaborador.tipo_contratacao] ?? colaborador.tipo_contratacao,
     colaborador.funcao,
     `Admissão ${formatarData(colaborador.data_admissao)}`,
@@ -38,45 +52,36 @@ export function HeaderColaborador({
     .filter(Boolean)
     .join(" · ");
 
-  const paramsVinculo = new URLSearchParams();
-  paramsVinculo.set("tab", "vinculos");
-  paramsVinculo.set("ano", String(ano));
-  paramsVinculo.set("mes", String(mes));
-  paramsVinculo.set("novo", "vinculo");
-
-  const paramsDep = new URLSearchParams();
-  paramsDep.set("tab", "dependentes");
-  paramsDep.set("ano", String(ano));
-  paramsDep.set("mes", String(mes));
-  paramsDep.set("novo", "dependente");
-
   return (
-    <PageHeader
-      eyebrow="RH · Benefícios"
-      title={colaborador.nome}
-      description={descricao}
-      icon={UserRound}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <SeletorCompetenciaInline ano={ano} mes={mes} />
-          <Link
-            href={`/rh/beneficios/colaborador/${colaboradorId}?${paramsVinculo.toString()}`}
-            prefetch={false}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Benefício
-          </Link>
-          <Link
-            href={`/rh/beneficios/colaborador/${colaboradorId}?${paramsDep.toString()}`}
-            prefetch={false}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-california-red px-3 text-sm font-medium text-white hover:bg-california-red/90"
-          >
-            <UserPlus className="h-4 w-4" />
-            Novo Dependente
-          </Link>
+    <div className="space-y-3 mb-6">
+      <p className="text-xs font-semibold uppercase tracking-wider text-california-red">
+        RH · Benefícios
+      </p>
+      <div className="flex items-start justify-between gap-6 flex-wrap">
+        {/* Lado esquerdo: ícone + nome + meta */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="rounded-lg bg-california-red/10 p-2 shrink-0">
+            <UserRound className="h-5 w-5 text-california-red" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              {colaborador.nome}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">{meta}</p>
+          </div>
         </div>
-      }
-    />
+
+        {/* Lado direito: competência + botões */}
+        <AcoesColaborador
+          colaboradorId={colaboradorId}
+          ano={ano}
+          mes={mes}
+          beneficios={beneficios}
+          vinculosAtivos={vinculosAtivos}
+          colaboradorTemCpf={colaboradorTemCpf}
+          colaboradorTemDataNasc={colaboradorTemDataNasc}
+        />
+      </div>
+    </div>
   );
 }

@@ -31,8 +31,6 @@ export default async function ColaboradorBeneficiosPage({
     tab?: string;
     ano?: string;
     mes?: string;
-    novo?: string;
-    voltarA?: string;
   };
 }) {
   const session = await requireSession();
@@ -45,7 +43,6 @@ export default async function ColaboradorBeneficiosPage({
   const ano = Number(searchParams.ano) || hoje.getFullYear();
   const mes = Number(searchParams.mes) || hoje.getMonth() + 1;
   const tab = normalizarTab(searchParams.tab);
-  const novo = searchParams.novo;
 
   const [colaborador, vinculos, dependentes, breakdown, catalogo] =
     await Promise.all([
@@ -70,7 +67,6 @@ export default async function ColaboradorBeneficiosPage({
       beneficio_base_id: b.beneficio_base_id,
     }));
 
-  // URL base pra links que preservam competência
   const base = new URLSearchParams();
   base.set("ano", String(ano));
   base.set("mes", String(mes));
@@ -84,6 +80,10 @@ export default async function ColaboradorBeneficiosPage({
         colaboradorId={params.id}
         ano={ano}
         mes={mes}
+        beneficios={beneficiosAtivos}
+        vinculosAtivos={vinculosAtivos}
+        colaboradorTemCpf={!!colaborador.cpf}
+        colaboradorTemDataNasc={!!colaborador.data_nascimento}
       />
 
       <TabsNav
@@ -94,10 +94,7 @@ export default async function ColaboradorBeneficiosPage({
 
       {tab === "vinculos" && (
         <TabVinculos
-          colaboradorId={params.id}
           vinculos={vinculos}
-          beneficios={beneficiosAtivos}
-          mostrandoForm={novo === "vinculo"}
           colaboradorTemCpf={!!colaborador.cpf}
           colaboradorTemDataNasc={!!colaborador.data_nascimento}
         />
@@ -105,10 +102,8 @@ export default async function ColaboradorBeneficiosPage({
 
       {tab === "dependentes" && (
         <TabDependentes
-          colaboradorId={params.id}
           dependentes={dependentes}
           vinculosAtivos={vinculosAtivos}
-          mostrandoForm={novo === "dependente"}
         />
       )}
 
