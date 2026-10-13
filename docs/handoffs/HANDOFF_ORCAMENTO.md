@@ -5554,3 +5554,26 @@ aplicada na hora combinada com a frente do Antonio, junto da
   financeiro" (ou encerrado, ou finalizado) e "Acompanhe pelo módulo de
   Jobs"; o "Cancelar envio" só aparece antes da abertura
   (`fluxo-abertura.tsx`, `jobPassouDaAbertura`).
+
+## ⚠️ Nota de 2026-10-13 (2) — GP e produtor fora do papel nos jobs abertos: mapa e primeira correção
+
+- **Mapa (só leitura, 13/10/2026):** dos 50 jobs reais vivos (fora
+  cancelados e o projeto de teste), 27 tinham GP ou produtor fora do papel:
+  12 com o GP como produtor do próprio job, 11 com uma administradora como
+  produtora, 3 com uma freelancer como produtora e 1 com uma produtora como
+  GP (AMB-1008/26). Mais 2 com o usuário de teste "GP Teste" como GP
+  (AMB-1003/26 e AMB-1007/26), que a conferência por papel não pegou porque
+  ele tem o papel GP.
+- **Corrigido pelo MCP, a pedido do Tiago** (migration `20261013900001`):
+  o GP dos três jobs (AMB-1003, AMB-1007 e AMB-1008/26) e dos três
+  orçamentos deles passou para o GP que o Tiago indicou. No AMB-P005/26,
+  que só tinha o GP Teste, o GP novo entrou no lugar dele como GP
+  Responsável e em `projetos.responsavel_id`. Sete linhas `*.gp_corrigido`
+  em `audit_events`.
+- **Ficou como estava, aguardando o Tiago:** os 12 jobs com o GP como
+  produtor, os 14 com administradora ou freelancer como produtora, a
+  produtora que segue como GP Responsável do AMB-P003/26 e os 2 produtores
+  GP Responsáveis do DEE-P001/26.
+- **Varredura de usuários de teste em dados reais** (jobs, orçamentos,
+  projetos e PPs): só o "Freelancer Teste" na Equipe do NOV-P004/26.
+
