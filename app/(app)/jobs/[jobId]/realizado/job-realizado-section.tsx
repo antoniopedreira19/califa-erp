@@ -135,6 +135,8 @@ import type {
 } from "@/lib/calculos/faturamento-por-mes";
 import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PlanilhaMidiaDoJob } from "./planilha-midia-do-job";
+import type { MidiaDoDetalhe } from "../carregar-detalhe";
 import { useProtegerSaida } from "@/components/voltar/estado";
 
 const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
@@ -170,6 +172,7 @@ function dataBr(iso: string): string {
 
 /** O texto da situação do mês na régua — o mesmo da barra do rodapé. */
 const ROTULO_DA_SITUACAO: Record<SituacaoDoMes, string> = {
+  em_veiculacao: "Em veiculação",
   a_enviar: "A enviar",
   na_fila: "Na fila do financeiro",
   faturado_parcial: "Faturado parcial",
@@ -325,6 +328,10 @@ interface Props {
    *  onde ela não se vê (financeiro). Obrigatória pelo mesmo motivo de
    *  `interno`. */
   errataPronta: ErrataPronta | null;
+  /** Mídia Off (decisão 167): a planilha do job é a de mídia, só leitura.
+   *  `null` nos outros modelos. Obrigatória pelo mesmo motivo de
+   *  `interno`. */
+  midia: MidiaDoDetalhe | null;
 }
 
 export function JobRealizadoSection({
@@ -370,6 +377,7 @@ export function JobRealizadoSection({
   aberturaDoJob,
   papelNaErrata,
   errataPronta,
+  midia,
 }: Props) {
   const router = useRouter();
 
@@ -1137,6 +1145,61 @@ export function JobRealizadoSection({
         titulo={titulo}
         subtitulo={subtitulo}
         abertura={jobInteiro ? aberturaDoJob : null}
+      />
+    );
+  }
+
+  // Mídia Off (decisão 167, entrega 2): a planilha do job é a de mídia, só
+  // leitura. Depois de todos os hooks — o resto do componente não roda para
+  // ela. A régua diz a situação do faturamento de cada mês.
+  if (midia) {
+    const enviados = faturamentoMensal.filter((m) => m.envio !== null).length;
+    const comFaturamento = faturamentoMensal.filter((m) => m.faturamento > 0.004).length;
+    return (
+      <PlanilhaMidiaDoJob
+        job={job}
+        nomeJob={nomeJob}
+        versao={versao}
+        meses={meses}
+        grupos={grupos}
+        midia={midia}
+        mesPedido={mesPedido}
+        hrefPlanilha={hrefPlanilha ?? `/jobs/${job.id}?aba=planilha`}
+        linkDaVersao={
+          confirmarSaidaParaOrcamento ? (
+            <LinkSaidaDeModulo
+              href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+              modulo="Orçamentos"
+              descricao="A versão aprovada mora no módulo de Orçamentos — não existe cópia dela no financeiro. Você sai desta tela para abri-la."
+              className="text-xs text-california-red hover:underline"
+            >
+              Ver versão aprovada
+            </LinkSaidaDeModulo>
+          ) : (
+            <Link
+              href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
+              prefetch={false}
+              className="text-xs text-california-red hover:underline"
+            >
+              Ver versão aprovada →
+            </Link>
+          )
+        }
+        detalheDoMes={Object.fromEntries(
+          faturamentoMensal.map((m) => [
+            m.mes.slice(0, 7),
+            m.situacao === "em_veiculacao" && m.ultimaVeiculacao
+              ? `Em veiculação até ${dataBr(m.ultimaVeiculacao).slice(0, 5)}`
+              : ROTULO_DA_SITUACAO[m.situacao],
+          ]),
+        )}
+        detalheCampanha={
+          job.status === "aguardando_abertura" || job.status === "rejeitado_financeiro"
+            ? "Job aguardando abertura"
+            : enviados === 0
+              ? "Nenhum mês enviado"
+              : `${enviados} de ${comFaturamento} ${comFaturamento === 1 ? "mês enviado" : "meses enviados"}`
+        }
       />
     );
   }

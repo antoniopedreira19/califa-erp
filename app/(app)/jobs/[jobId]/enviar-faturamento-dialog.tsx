@@ -276,6 +276,12 @@ interface Props {
   /** O job já foi encerrado (decisão 087): o envio continua aceito, mas
    *  nenhum mês segue editável — a confirmação não pode dizer o contrário. */
   jobEncerrado?: boolean;
+  /** Mídia Off (decisão 167): é o último mês, e o envio também ENCERRA o
+   *  job — o servidor confere as pendências e encerra na mesma ação. */
+  encerraOJob?: boolean;
+  /** Mídia Off (decisão 167): o job ainda não tem errata nem save, e a
+   *  confirmação não fala deles. */
+  midiaOff?: boolean;
 }
 
 /** O que a página do job passa às barras para o formulário de envio. */
@@ -310,6 +316,8 @@ export function EnviarFaturamentoDialog({
   rotuloBotao,
   botaoContorno = false,
   jobEncerrado = false,
+  encerraOJob = false,
+  midiaOff = false,
 }: Props) {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
@@ -724,12 +732,16 @@ export function EnviarFaturamentoDialog({
           <DialogHeader className="border-b border-border p-6 pr-12">
             <DialogTitle>
               {mes
-                ? `Enviar ${mes.nome} de ${jobCodigo} para faturamento`
+                ? encerraOJob
+                  ? `Enviar ${mes.nome} de ${jobCodigo} para faturamento e encerrar o job`
+                  : `Enviar ${mes.nome} de ${jobCodigo} para faturamento`
                 : `Enviar ${jobCodigo} para faturamento`}
             </DialogTitle>
             <DialogDescription>
               {mes
-                ? `${comMaiuscula(mes.nome)} entra na fila de faturamento do financeiro com estas informações. O valor total vem do faturamento de ${mes.nome} na planilha e não é editável aqui.`
+                ? `${comMaiuscula(mes.nome)} entra na fila de faturamento do financeiro com estas informações. O valor total vem do faturamento de ${mes.nome} na planilha e não é editável aqui.${
+                    encerraOJob ? " É o último mês da campanha: o envio também encerra o job." : ""
+                  }`
                 : "O job entra na fila de faturamento do financeiro com estas informações. O valor total vem do faturamento previsto e não é editável aqui."}
             </DialogDescription>
           </DialogHeader>
@@ -1253,7 +1265,9 @@ export function EnviarFaturamentoDialog({
         contentClassName="sm:max-w-[560px]"
         title={
           mes
-            ? `Enviar ${mes.nome} de ${jobCodigo} para faturamento?`
+            ? encerraOJob
+              ? `Enviar ${mes.nome} e encerrar ${jobCodigo}?`
+              : `Enviar ${mes.nome} de ${jobCodigo} para faturamento?`
             : `Enviar ${jobCodigo} para faturamento?`
         }
         description={
@@ -1306,14 +1320,18 @@ export function EnviarFaturamentoDialog({
                   o que o envio fecha é a errata e o consumo de save (decisão
                   099 §14, 22/09/2026). */}
               {mes
-                ? jobEncerrado
+                ? encerraOJob
+                  ? "O envio é definitivo e encerra o job: depois dele o job não aceita edição, PP nem BV."
+                  : jobEncerrado
                   ? "O envio é definitivo. O job já está encerrado: nenhum mês aceita errata nem save."
+                  : midiaOff
+                  ? `O envio de ${mes.nome} é definitivo; os outros meses seguem a enviar.`
                   : `O envio é definitivo: errata e consumo de save de ${mes.nome} ficam travados, e os outros meses seguem editáveis.`
                 : "O envio é definitivo: depois dele não há mais errata nem consumo de save neste job."}
             </span>
           </span>
         }
-        confirmLabel="Sim, enviar"
+        confirmLabel={encerraOJob ? "Sim, enviar e encerrar" : "Sim, enviar"}
         pending={pending}
         onConfirm={handleEnviar}
       />

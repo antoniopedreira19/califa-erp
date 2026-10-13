@@ -186,7 +186,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 164 | [Verba de Alimentação e Verba de Transporte, com titular do RH, freela ou terceiro](164-verbas-de-alimentacao-e-transporte.md) | 2026-10-09 |
 | 165 | [Filtro e ordem pelo título da coluna, como no Excel, nas listas do ERP](165-filtro-por-coluna-nas-listas.md) | 2026-10-09 |
 | 166 | [Regime tributário (Real e Presumido separados) e CNAE obrigatórios no fornecedor, e a PP travada para cadastro incompleto](166-regime-e-cnae-do-fornecedor.md) | 2026-10-09 |
-| 167 | *Reservada* — job da Mídia Off (worktree `midia-off`, ainda fora do `main` em 13/10/2026) | — |
+| 167 | [Job da Mídia Off, entrega 2: abrir e faturar por mês, e o último envio encerra o job](167-job-da-midia-off-abrir-e-faturar.md) | 2026-10-13 |
 | 168 | [Produtor Responsável só lista quem tem o papel Produtor, e GP e Produtor aceitam digitação](168-produtor-responsavel-so-papel-produtor.md) | 2026-10-13 |
 | 169 | [Cancelamento de job aberto: a produção pede, o financeiro decide na Abertura de Job](169-cancelamento-de-job-aberto.md) | 2026-10-13 |
 

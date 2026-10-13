@@ -107,10 +107,11 @@ interface Props {
    *  par válido. Obrigatória. */
   parServicoCategoria: string | null;
   /** Mídia Off: a barra fala em meios e linhas, e o envio para abertura
-   *  ainda não existe (chega na entrega do job). */
+   *  segue o do Fee e do Always On — período travado e recebimento por mês
+   *  (decisão 167). */
   midiaOff: boolean;
-  /** Modelo mensal: início e fim vêm do período do orçamento, e o modal os
-   *  mostra travados (Tiago, 14/09/2026). */
+  /** Modelo mensal e Mídia Off: início e fim vêm do período do orçamento, e
+   *  o modal os mostra travados (Tiago, 14/09/2026; decisão 167). */
   periodoTravado: boolean;
   /** Serviço Interno (decisão 149): sem recebimento, pelo serviço. */
   servicoInterno: boolean;
@@ -247,11 +248,6 @@ export function FluxoAbertura({
     linhasSemVeiculo,
   });
   const aprovada = versaoStatus === "aprovada";
-  // Mídia Off (decisão 147, entrega 1): o orçamento vai até a aprovação; o
-  // job dela — PPs, PI, faturamento por mês — é a próxima entrega.
-  const aberturaIndisponivel = midiaOff
-    ? "O envio da Mídia Off para abertura fica disponível na próxima entrega."
-    : null;
   // `devolvida` (decisão 057): o financeiro rejeitou a abertura. O job
   // continua existindo — o reenvio refaz o formulário sobre ele —, mas a
   // barra volta a oferecer o envio, como na etapa `aprovada`.
@@ -545,9 +541,7 @@ export function FluxoAbertura({
                 · valores travados para edição
               </span>
               <span className="text-xs text-muted-foreground">
-                {aberturaIndisponivel
-                  ? aberturaIndisponivel
-                  : codigoReservado
+                {codigoReservado
                   ? podeEnviarAbertura
                     ? `Próximo passo: reenviar o job ${codigoReservado} para o financeiro`
                     : `Próximo passo: o GP reenvia o job ${codigoReservado} para o financeiro`
@@ -648,9 +642,7 @@ export function FluxoAbertura({
             <button
               type="button"
               onClick={abrirFormulario}
-              disabled={aberturaIndisponivel !== null}
-              title={aberturaIndisponivel ?? undefined}
-              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-sm disabled:hover:bg-california-red"
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
             >
               Enviar Job para Abertura
               <ArrowRight className="h-4 w-4" />

@@ -5219,6 +5219,46 @@ código publicado logo depois (`3305751`).
 - A trava da PP continua valendo também para a verba de alimentação ou de
   transporte paga a um terceiro — confirmado pelo Tiago.
 
+## ⚠️ Nota de 2026-10-13 — Job da Mídia Off: abre, fatura por mês e encerra com o último envio (decisão 167)
+
+- **O job de Mídia Off existe** (entrega 2 de 4). O envio para abertura
+  segue o do Fee e do Always On: período travado, Data Evento "Não se
+  aplica", uma data de recebimento por mês com faturamento (até 24 meses).
+  O job grava `valor_total`, `faturamento_previsto` e os `_abertura` pela
+  conta da mídia, e a cópia (`jobs_itens_orcado`) leva o veículo e a
+  veiculação da linha (migration `20261013500001`).
+- **Planilha Interna = a planilha da mídia, só leitura** (`PlanilhaMidiaDoJob`,
+  modo `doJob` da `PlanilhaMidiaOff`), com a régua "Meses do job". A
+  `JobRealizadoSection` devolve essa planilha cedo quando `midia` não é
+  nulo: errata, "Editar orçado", calha de PP e exportação não aparecem.
+- **Faturamento por mês, depois da veiculação do mês.** Situação nova
+  `em_veiculacao` ("Em veiculação até dd/mm"): o mês libera no dia seguinte
+  à última veiculação das linhas dele (maior dia com inserção ou maior fim de
+  período). `enviarJobParaFaturamento` confere de novo
+  (`conferirEnvioDoMesDaMidia`).
+- **O envio do último mês encerra o job.** O botão vira "Enviar {mês} e
+  encerrar o job"; só passa sem pendência de encerramento, e depois do envio
+  a action chama `encerrarJob` (com tudo enviado, o banco grava
+  `finalizado`). A trilha "Encerramento" da Mídia Off não tem botão, só
+  pendências — exceto se o encerramento falhar depois do envio: com todos os
+  meses enviados, o botão volta.
+- **Linha A · Repasse sem PP é pendência** ("N linhas A · Repasse sem a PP
+  do repasse"): até a entrega 3 (PP do repasse), job com Repasse não envia
+  o último mês. Job só com A · Direto fecha o ciclo.
+- **Travas no servidor** (`travaDoJobDeMidia`): errata, errata pronta, PP
+  (reserva e PP a emitir) e "Editar orçado" recusam o job de mídia;
+  `/api/jobs/[jobId]/export` responde 400.
+- **Testado** no TES-1026/26 (mídia com Repasse, nov–dez/2026) e no
+  TES-1027/26 (só A · Direto, ago–set/2026: enviou agosto, depois "Enviar
+  setembro e encerrar o job" → `finalizado`).
+- **Realizado da mídia** (Tiago, 13/10/2026): A · Direto = a nota do
+  veículo; A · Repasse = as PPs do repasse (`realizadoDaLinhaMidia`). Vale
+  no cabeçalho do job e na visão agregada (`carregar-planilhas.ts`, onde o
+  planejado da linha também é a nota).
+- **Em aberto:** o relatório de Rentabilidade mostra "—" no job de mídia
+  sem custo, e o BV no A · Direto da mídia (ver a 167, "Para conferir
+  depois").
+
 ## ⚠️ Nota de 2026-10-13 — Cancelamento de job aberto (decisão 169)
 
 - **Menu "⋯" no cabeçalho do job aberto** (ao lado de "Editar"), para o GP e

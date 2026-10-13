@@ -20,10 +20,15 @@
  * aprovação conta o pedido que está aprovando. É a mesma regra do
  * faturamento previsto do formulário; sem ela, com um consumo aguardando,
  * o imposto sairia sobre uma base e o faturamento sobre outra.
+ *
+ * Na Mídia Off (decisão 167) o imposto é a alíquota da versão sobre os
+ * HONORÁRIOS (`fechamentoDosItens`), de dentro deles — a mesma conta do
+ * card de Totais da mídia. A mídia não tem save.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import { fechamentoDosItens, parametrosDaVersao } from "@/lib/calculos/midia-off";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { itensParaOFinanceiro } from "@/lib/calculos/save-financeiro";
 import { pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
@@ -53,7 +58,7 @@ export async function impostoDoJob(
     supabase
       .from("jobs")
       .select(
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
+        "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), " +
           "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
       )
       .eq("tenant_id", tenantId)
@@ -84,6 +89,23 @@ export async function impostoDoJob(
   const job = jobRes.data as any;
   const versao = job?.versao ?? null;
   if (!versao) return null;
+
+  if (job?.orcamento?.categoria?.modelo_planilha === "midia_off") {
+    const f = fechamentoDosItens(
+      ((itensRes.data ?? []) as any[]).map((i) => ({
+        tipo_custo: i.tipo_custo as string,
+        total_orcado: Number(i.total_orcado ?? 0),
+      })),
+      parametrosDaVersao(versao),
+    );
+    return {
+      impostoPrevisto: emCentavos(f.imposto),
+      aliquotaImposto: Number(versao.percentual_imposto ?? 0),
+      aliquotaIntTaxes: null,
+      valorJob: f.valorJob,
+      deducoesDoResultado: f.imposto,
+    };
+  }
 
   // Qual fechamento: pela categoria do ORÇAMENTO, nunca a do job
   // (decisão 072) — a mesma função da planilha interna.
