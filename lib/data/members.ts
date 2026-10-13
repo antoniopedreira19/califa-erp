@@ -29,3 +29,27 @@ export async function listActiveMembers(
 
   return (data ?? []) as Pick<Profile, "id" | "nome">[];
 }
+
+/**
+ * Só os membros ativos com o papel Produtor — a lista do campo "Produtor
+ * Responsável" do orçamento e do envio para abertura. Até 13/10/2026 o
+ * campo listava todos os membros ativos (97 pessoas, com financeiro, RH e
+ * GPs). Quem já está gravado sem ter o papel continua aparecendo na
+ * edição: cada tela acrescenta o nome gravado à lista.
+ */
+export async function listarProdutoresAtivos(
+  tenantId: string,
+): Promise<Pick<Profile, "id" | "nome">[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc("produtores_ativos_do_tenant", {
+    p_tenant_id: tenantId,
+  });
+
+  if (error) {
+    console.error("[members.produtores]", error.message);
+    return [];
+  }
+
+  return (data ?? []) as Pick<Profile, "id" | "nome">[];
+}

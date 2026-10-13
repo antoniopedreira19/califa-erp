@@ -8,7 +8,7 @@ import { FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
-import { listActiveMembers } from "@/lib/data/members";
+import { listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
 import {
   orcamentoStatusLabel,
@@ -348,7 +348,8 @@ export default async function OrcamentoDetailPage({
     // cadastro comporta o Brasil inteiro — o resto vem do servidor a cada
     // digitação (`buscarCidades`, mesmo limite).
     listarCidadesIniciais(session.activeTenant.id),
-    listActiveMembers(session.activeTenant.id),
+    // Só quem tem o papel Produtor (13/10/2026).
+    listarProdutoresAtivos(session.activeTenant.id),
     supabase
       .from("categorias")
       .select("*")
@@ -485,7 +486,10 @@ export default async function OrcamentoDetailPage({
   >[];
 
   // As mesmas listas do editor do orçamento, para o envio para abertura
-  // (decisão 135), com quem já está gravado no orçamento.
+  // (decisão 135), com quem já está gravado no orçamento. A de produtores
+  // vale também para o editor: desde 13/10/2026 a lista só tem o papel
+  // Produtor, e o orçamento gravado com um GP ou um freelancer como
+  // produtor abriria o campo vazio.
   const gpsDoEnvio = comQuemEstaNoOrcamento(
     gpsDoProjeto,
     orcamentoRaw?.gp_responsavel_id,
@@ -843,7 +847,7 @@ export default async function OrcamentoDetailPage({
               cidadesIniciais={cidadesIniciais}
               cidadeAtual={cidadeAtual}
               gpsDoProjeto={gpsDoProjeto}
-              produtores={produtores}
+              produtores={produtoresDoEnvio}
               projetoNome={projetoRaw.nome}
               projetoCodigo={projetoRaw.codigo}
               disabled={protegido && !correcaoLiberada}

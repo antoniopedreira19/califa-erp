@@ -5504,3 +5504,24 @@ aplicada na hora combinada com a frente do Antonio, junto da
   administrador):** desmarcar AMBEV na Marca deixou 52 de 56 projetos; a
   Ages, segunda marca de um projeto da Ânima, não tirou o projeto. Depois de
   recarregar, o funil da Marca voltou ligado.
+
+## ⚠️ Nota de 2026-10-13 — Produtor Responsável só com o papel Produtor, e GP e Produtor com busca (decisão 168)
+
+- **A regra** está na decisão 168. O campo listava os 97 membros ativos; agora
+  lista os 31 com o papel Produtor (`produtores_ativos_do_tenant`, migration
+  `20261013600001`). Vale no Novo orçamento, no editor, no "Criar orçamento
+  de job" da agregada e no envio para abertura.
+- **Quem já está gravado fica:** a página do orçamento acrescenta o produtor
+  gravado à lista do editor (antes só o envio fazia isso), e o servidor só
+  confere o papel quando o produtor muda.
+- **GP e Produtor viraram `Combobox`** (busca sem acento, lista com no mínimo
+  280px). Nos orçamentos antigos com GP, freelancer ou administrador como
+  produtor nada muda até alguém trocar o nome.
+- **Conferido no navegador (logado como administrador, projetos TES):** a
+  lista do Novo orçamento trouxe os mesmos 31 nomes do banco; a busca sem
+  acento achou o nome acentuado; o editor do TES-P001/26-33 abriu com o
+  administrador gravado como produtor e 32 nomes, e salvou sem mudança; a
+  ação chamada pelo console com o GP Teste Claude como produtor foi recusada,
+  sem gravar; o envio para abertura do TES-P001/26-08 filtrou pela busca
+  (fechado sem enviar); a agregada do TES-P001/26 listou 31.
+

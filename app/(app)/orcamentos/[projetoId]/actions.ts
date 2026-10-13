@@ -335,6 +335,37 @@ async function assertRegionalEGpDoProjeto(
 }
 
 /**
+ * O produtor responsável precisa ter o papel Produtor (13/10/2026) — a mesma
+ * lista do campo, `produtores_ativos_do_tenant`. Só confere quando o
+ * produtor muda: os orçamentos gravados antes com um GP, um freelancer ou
+ * um administrador como produtor seguem editáveis sem trocar ninguém.
+ */
+async function assertProdutor(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  produtorId: string,
+  produtorAtual: string | null,
+): Promise<{ ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string[]> }> {
+  if (produtorId === produtorAtual) return { ok: true };
+
+  const { data, error } = await supabase.rpc("produtores_ativos_do_tenant", {
+    p_tenant_id: tenantId,
+  });
+  if (error) {
+    console.error("[orcamentos.produtor]", error.message);
+    return { ok: false, message: "Não foi possível conferir o produtor responsável." };
+  }
+  if (!((data ?? []) as { id: string }[]).some((p) => p.id === produtorId)) {
+    return {
+      ok: false,
+      message: "O produtor escolhido não tem o papel Produtor. Selecione outro.",
+      fieldErrors: { produtor_id: ["Escolha um usuário com o papel Produtor."] },
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Cria o orçamento (com a v1 junto) e REDIRECIONA para ele.
  *
  * Retorno `ActionResult | void`: `redirect()` no servidor não devolve
@@ -461,14 +492,18 @@ async function criarOrcamentoComV1(
     if (recusa) return recusa;
   }
 
-  const vinculo = await assertRegionalEGpDoProjeto(
-    supabase,
-    projetoId,
-    session.activeTenant.id,
-    parsed.data.regional_id,
-    parsed.data.gp_responsavel_id,
-  );
+  const [vinculo, produtor] = await Promise.all([
+    assertRegionalEGpDoProjeto(
+      supabase,
+      projetoId,
+      session.activeTenant.id,
+      parsed.data.regional_id,
+      parsed.data.gp_responsavel_id,
+    ),
+    assertProdutor(supabase, session.activeTenant.id, parsed.data.produtor_id, null),
+  ]);
   if (!vinculo.ok) return vinculo;
+  if (!produtor.ok) return produtor;
 
   let codigo: string;
   try {
@@ -665,7 +700,7 @@ export async function atualizarOrcamento(
   const { data: atual } = await supabase
     .from("orcamentos")
     .select(
-      "status, arquivado_em, servico_id, categoria_id, data_inicio_prevista, data_fim_prevista, " +
+      "status, arquivado_em, servico_id, categoria_id, produtor_id, data_inicio_prevista, data_fim_prevista, " +
         // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
         "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
         "servico:categorias_dominio!servico_id(investimento_interno)",
@@ -678,6 +713,7 @@ export async function atualizarOrcamento(
       arquivado_em: string | null;
       servico_id: string | null;
       categoria_id: string | null;
+      produtor_id: string | null;
       data_inicio_prevista: string | null;
       data_fim_prevista: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
@@ -712,14 +748,23 @@ export async function atualizarOrcamento(
     };
   }
 
-  const vinculo = await assertRegionalEGpDoProjeto(
-    supabase,
-    projetoId,
-    session.activeTenant.id,
-    parsed.data.regional_id,
-    parsed.data.gp_responsavel_id,
-  );
+  const [vinculo, produtor] = await Promise.all([
+    assertRegionalEGpDoProjeto(
+      supabase,
+      projetoId,
+      session.activeTenant.id,
+      parsed.data.regional_id,
+      parsed.data.gp_responsavel_id,
+    ),
+    assertProdutor(
+      supabase,
+      session.activeTenant.id,
+      parsed.data.produtor_id,
+      atual.produtor_id,
+    ),
+  ]);
   if (!vinculo.ok) return vinculo;
+  if (!produtor.ok) return produtor;
 
   // O par serviço × categoria só é conferido quando muda: os orçamentos
   // antigos com serviço Fee e categoria nacional ficam como estão

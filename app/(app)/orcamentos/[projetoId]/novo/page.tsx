@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { listActiveMembers } from "@/lib/data/members";
+import { listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
 import type { CategoriaDominio, Profile, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
@@ -67,7 +67,8 @@ export default async function NovoOrcamentoPage({
       // Só as primeiras cidades: o combobox busca o resto no servidor a
       // cada digitação. O cadastro comporta o Brasil inteiro.
       listarCidadesIniciais(session.activeTenant.id),
-      listActiveMembers(session.activeTenant.id),
+      // Só quem tem o papel Produtor (13/10/2026).
+      listarProdutoresAtivos(session.activeTenant.id),
     ]);
 
   if (!projeto) notFound();

@@ -413,11 +413,11 @@ export async function enviarJobParaAbertura(
           .eq("tenant_id", session.activeTenant.id)
           .maybeSingle<{ profile_id: string }>()
       : Promise.resolve({ data: { profile_id: parsed.data.gp_responsavel_id }, error: null }),
-    // A mesma fonte da lista do modal (`listActiveMembers`): ler
-    // `tenant_members` direto mostraria só a própria linha para quem não
-    // é administrador.
+    // A mesma fonte da lista do modal (`listarProdutoresAtivos`, só o
+    // papel Produtor desde 13/10/2026): ler `tenant_members` direto
+    // mostraria só a própria linha para quem não é administrador.
     produtorMudou
-      ? supabase.rpc("membros_ativos_do_tenant", { p_tenant_id: session.activeTenant.id })
+      ? supabase.rpc("produtores_ativos_do_tenant", { p_tenant_id: session.activeTenant.id })
       : Promise.resolve({ data: [{ id: parsed.data.produtor_id }], error: null }),
   ]);
 
@@ -459,8 +459,8 @@ export async function enviarJobParaAbertura(
   ) {
     return {
       ok: false,
-      message: "O produtor escolhido não está entre os usuários ativos. Selecione outro.",
-      fieldErrors: { produtor_id: ["Escolha um usuário ativo."] },
+      message: "O produtor escolhido não tem o papel Produtor. Selecione outro.",
+      fieldErrors: { produtor_id: ["Escolha um usuário com o papel Produtor."] },
     };
   }
 

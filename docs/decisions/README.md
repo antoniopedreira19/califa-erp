@@ -186,6 +186,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 164 | [Verba de Alimentação e Verba de Transporte, com titular do RH, freela ou terceiro](164-verbas-de-alimentacao-e-transporte.md) | 2026-10-09 |
 | 165 | [Filtro e ordem pelo título da coluna, como no Excel, nas listas do ERP](165-filtro-por-coluna-nas-listas.md) | 2026-10-09 |
 | 166 | [Regime tributário (Real e Presumido separados) e CNAE obrigatórios no fornecedor, e a PP travada para cadastro incompleto](166-regime-e-cnae-do-fornecedor.md) | 2026-10-09 |
+| 167 | *Reservada* — job da Mídia Off (worktree `midia-off`, ainda fora do `main` em 13/10/2026) | — |
+| 168 | [Produtor Responsável só lista quem tem o papel Produtor, e GP e Produtor aceitam digitação](168-produtor-responsavel-so-papel-produtor.md) | 2026-10-13 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -198,4 +200,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 167**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 169**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
