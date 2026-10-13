@@ -57,7 +57,7 @@ export function TabBreakdown({
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Breakdown — {MESES[mes - 1]}/{ano}
+        Cálculo — {MESES[mes - 1]}/{ano}
       </h3>
 
       {semFaixa && (
