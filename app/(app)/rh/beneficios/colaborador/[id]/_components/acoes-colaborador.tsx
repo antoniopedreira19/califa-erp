@@ -5,17 +5,14 @@ import { Plus, UserPlus } from "lucide-react";
 import { SeletorCompetenciaInline } from "./seletor-competencia-inline";
 import { ModalNovoVinculo } from "./modal-novo-vinculo";
 import { ModalNovoDependente } from "./modal-novo-dependente";
-import type { VinculoDoColaborador } from "@/lib/queries/beneficios";
-import type { BeneficioTipo } from "@/lib/types";
-
-type BeneficioOpcao = {
-  id: string;
-  nome: string;
-  tipo: BeneficioTipo;
-  beneficio_base_id: string | null;
-};
+import type {
+  BeneficioCompleto,
+  ColaboradorBasico,
+  VinculoDoColaborador,
+} from "@/lib/queries/beneficios";
 
 export function AcoesColaborador({
+  colaborador,
   colaboradorId,
   ano,
   mes,
@@ -24,10 +21,11 @@ export function AcoesColaborador({
   colaboradorTemCpf,
   colaboradorTemDataNasc,
 }: {
+  colaborador: ColaboradorBasico;
   colaboradorId: string;
   ano: number;
   mes: number;
-  beneficios: BeneficioOpcao[];
+  beneficios: BeneficioCompleto[];
   vinculosAtivos: VinculoDoColaborador[];
   colaboradorTemCpf: boolean;
   colaboradorTemDataNasc: boolean;
@@ -69,6 +67,9 @@ export function AcoesColaborador({
         onOpenChange={setModalVinculoAberto}
         colaboradorId={colaboradorId}
         beneficios={beneficios}
+        dataNascimentoTitular={colaborador.data_nascimento}
+        ano={ano}
+        mes={mes}
       />
 
       <ModalNovoDependente
