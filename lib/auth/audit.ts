@@ -176,6 +176,15 @@ export type AuditAction =
   // aprovação" do job devolvido), canceladas de dentro do pop-up. Cada PP
   // tem também o seu `pedido_compra.cancelada`.
   | "job.pps_canceladas_no_cancelamento_do_envio"
+  // Decisão 169: o cancelamento do job JÁ ABERTO. A produção pede (e pode
+  // retirar), as PPs que travavam o pedido se cancelam no pop-up dele, e o
+  // financeiro aprova ou recusa. `job.cancelado_apos_abertura` é a mesma
+  // ação gravada no caso pontual do ANI-1004/26 (09/10/2026, pelo MCP).
+  | "job.cancelamento_solicitado"
+  | "job.cancelamento_retirado"
+  | "job.pps_canceladas_no_pedido_de_cancelamento"
+  | "job.cancelamento_recusado"
+  | "job.cancelado_apos_abertura"
   // Decisão 128: o envio depois do "Cancelar aprovação" da devolução volta
   // com o código do job cancelado; e o planejado da versão aprovada se
   // corrige com o job devolvido, na versão e na cópia do job.

@@ -5525,3 +5525,19 @@ aplicada na hora combinada com a frente do Antonio, junto da
   sem gravar; o envio para abertura do TES-P001/26-08 filtrou pela busca
   (fechado sem enviar); a agregada do TES-P001/26 listou 31.
 
+## ⚠️ Nota de 2026-10-13 — "Job cancelado" com rastro, e o banner do job já aberto (decisão 169)
+
+- **Orçamento cujo job foi cancelado depois da abertura:** o selo e os
+  avisos de estado dizem "Job cancelado", e a versão que gerou o job mostra a
+  faixa `FaixaJobCancelado` (`rastro-do-cancelamento.tsx`): motivo da
+  produção, observação do financeiro, histórico dos pedidos (aberto,
+  solicitado, retirado, recusado, aprovado, PPs canceladas) e o que saiu do
+  fluxo de caixa.
+- **Lista de orçamentos do projeto:** "Job Cancelado" e o código do job
+  riscado na coluna Código (`OrcamentoRow.jobCanceladoCodigo`).
+- **Defeito corrigido (existia desde 31/07):** com o job já aberto pelo
+  financeiro, o banner da versão dizia "Aguardando abertura pelo financeiro"
+  e a barra oferecia "Cancelar envio à abertura". Agora diz "Job aberto pelo
+  financeiro" (ou encerrado, ou finalizado) e "Acompanhe pelo módulo de
+  Jobs"; o "Cancelar envio" só aparece antes da abertura
+  (`fluxo-abertura.tsx`, `jobPassouDaAbertura`).

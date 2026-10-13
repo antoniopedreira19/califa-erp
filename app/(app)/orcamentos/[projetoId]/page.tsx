@@ -403,6 +403,18 @@ export default async function ProjetoDetailPage({
       const vivo = jobVivoDoOrcamento(jobsPorOrcamento.get(o.id) ?? []);
       return vivo ? { id: vivo.id, codigo: vivo.codigo } : null;
     })(),
+    // Decisão 169: sem job vivo e com o job cancelado depois da abertura, o
+    // orçamento é "Job Cancelado", e a coluna Código mostra o código dele
+    // riscado — antes ele sumia, e o "Cancelado" se confundia com o do
+    // orçamento cancelado.
+    jobCanceladoCodigo: (() => {
+      const jobs = jobsPorOrcamento.get(o.id) ?? [];
+      if (jobVivoDoOrcamento(jobs)) return null;
+      const cancelado = jobs
+        .filter((j) => j.status === "cancelado" && j.aberto_no_financeiro)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      return cancelado ? cancelado.codigo : null;
+    })(),
   }));
 
   // Arquivado (decisão 118) e cancelado ficam fora do seletor de

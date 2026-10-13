@@ -8,6 +8,7 @@ import {
   impedimentosDosJobs,
   podeEncerrar,
 } from "@/lib/data/impedimentos-encerramento";
+import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
 import { JobsList, type JobRow } from "./jobs-list";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -128,9 +129,12 @@ export default async function JobsPage({
   // TODO: filtro=pps_rejeitadas — join com pedidos_compra; deixar sem filtro por ora
   // TODO: filtro=minhas_pps — join com pedidos_compra; deixar sem filtro por ora
 
-  const [jobsRes, empresas] = await Promise.all([
+  // Os jobs com pedido de cancelamento no financeiro levam o selo
+  // "Cancelamento solicitado" (decisão 169). Leitura do índice parcial.
+  const [jobsRes, empresas, comPedidoDeCancelamento] = await Promise.all([
     jobsQuery,
     listEmpresasAtivas(session.activeTenant.id),
+    jobsComCancelamentoPendente(supabase, session.activeTenant.id),
   ]);
 
   if (jobsRes.error) console.error("[jobs.list]", jobsRes.error.message);
@@ -160,7 +164,11 @@ export default async function JobsPage({
     nome: r.nome,
     // O selo e o filtro da lista usam o status exibido: "Em faturamento" é
     // o aberto com o envio completo (decisão 094).
-    status: jobStatusExibido(r.status, r.faturamento_enviado_em ?? null),
+    status: jobStatusExibido(
+      r.status,
+      r.faturamento_enviado_em ?? null,
+      comPedidoDeCancelamento.has(r.id),
+    ),
     valor_total: r.valor_total !== null ? Number(r.valor_total) : null,
     data_inicio_prevista: r.data_inicio_prevista,
     projeto_id: r.projeto_id,

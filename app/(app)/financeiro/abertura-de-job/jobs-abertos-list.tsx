@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronRight, FolderTree, List, Search } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
-import { jobStatusBadgeClasses, jobStatusLabel } from "@/lib/types";
+import { jobStatusBadgeClasses, jobStatusExibido, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
 import { compararCodigosDeJob } from "@/lib/codigos/jobs";
@@ -302,6 +302,9 @@ function CelulaFaturamento({ j }: { j: JobAberto }) {
 
 /** Nome do job com o selo de status, quando ele não é `aberto`. */
 function NomeDoJob({ j }: { j: JobAberto }) {
+  // O pedido de cancelamento no ar também ganha selo (decisão 169): o job
+  // está parado, esperando a decisão na fila.
+  const status = jobStatusExibido(j.status, null, j.cancelamento_pendente);
   return (
     <div className="flex flex-col gap-0.5">
       <span className="flex flex-wrap items-center gap-2">
@@ -310,16 +313,16 @@ function NomeDoJob({ j }: { j: JobAberto }) {
             encerrados, sem esta marca não dá para distinguir um do
             outro. Um badge em toda linha seria ruído — a maioria é
             aberta. */}
-        {j.status !== "aberto" && (
+        {status !== "aberto" && (
           <span
             className={cn(
               "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em]",
               // Mesma cor do selo em todo o sistema (decisão 087): encerrado
               // violeta — a cor que esta marca já tinha — e finalizado verde.
-              jobStatusBadgeClasses(j.status),
+              jobStatusBadgeClasses(status),
             )}
           >
-            {jobStatusLabel(j.status)}
+            {jobStatusLabel(status)}
           </span>
         )}
       </span>

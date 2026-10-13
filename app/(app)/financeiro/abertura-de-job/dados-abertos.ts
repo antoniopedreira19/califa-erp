@@ -8,6 +8,7 @@ import {
 } from "@/lib/data/faturamento-por-job";
 import { caixaPorJob, CAIXA_VAZIO } from "@/lib/data/caixa-por-job";
 import { servicoPorOrcamento } from "@/lib/data/servicos";
+import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
 
 export type { SituacaoFaturamento };
 
@@ -38,6 +39,9 @@ export interface JobAberto {
    * job encerrado de um em andamento.
    */
   status: JobStatus;
+  /** Pedido de cancelamento no ar (decisão 169): a linha leva o selo
+   *  "Cancelamento solicitado". Obrigatório, como manda o CLAUDE.md. */
+  cancelamento_pendente: boolean;
   valor_total: number | null;
   data_abertura_financeiro: string | null;
   /** A PRIMEIRA competência do rateio — o que `jobs` guarda. */
@@ -198,7 +202,7 @@ export async function listarJobsDoFinanceiro(
   // `lib/data/faturamento-por-job` — a visão agregada do projeto usa a
   // MESMA classificação, e duas cópias dela divergiriam na primeira nota
   // cancelada. Em paralelo, nunca em série (`docs/PERFORMANCE.md`).
-  const [jobsRes, esteira, caixa, servicos, servicosRes, rateiosRes] =
+  const [jobsRes, esteira, caixa, servicos, servicosRes, rateiosRes, comPedidoDeCancelamento] =
     await Promise.all([
       supabase
         .from("jobs")
@@ -223,6 +227,8 @@ export async function listarJobsDoFinanceiro(
         .from("jobs_competencias")
         .select("job_id, ano")
         .eq("tenant_id", tenantId),
+      // Os jobs com pedido de cancelamento no ar (decisão 169).
+      jobsComCancelamentoPendente(supabase, tenantId),
     ]);
 
   const { data, error } = jobsRes;
@@ -265,6 +271,7 @@ export async function listarJobsDoFinanceiro(
       nome: nomeDoJobNoFinanceiro(j),
       nome_producao: j.nome,
       status: j.status as JobStatus,
+      cancelamento_pendente: comPedidoDeCancelamento.has(j.id),
       valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
       data_abertura_financeiro: j.data_abertura_financeiro,
       competencia_trimestre: j.competencia_trimestre,

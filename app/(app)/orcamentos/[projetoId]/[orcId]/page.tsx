@@ -69,6 +69,11 @@ import {
   type JobExistente,
 } from "./versoes/[versaoId]/fluxo-abertura";
 import type { PPQueTravaOEnvio } from "./versoes/[versaoId]/pps-que-travam";
+import {
+  montarRastroDoCancelamento,
+  type RastroDoCancelamento,
+} from "@/lib/data/cancelamentos";
+import { FaixaJobCancelado } from "./rastro-do-cancelamento";
 import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
 import {
   faturamentoPorMesDoFinanceiro,
@@ -323,15 +328,18 @@ export default async function OrcamentoDetailPage({
       .maybeSingle<JobReservado>(),
     // Job cancelado DEPOIS da abertura (decisão 163): some do módulo de
     // Jobs, e o orçamento, que segue em `job_criado`, aparece aqui como
-    // "Cancelado". Só a contagem; o cancelado antes da abertura devolve o
-    // orçamento a `aprovado` (057) e não entra.
+    // "Job cancelado" (decisão 169), com o rastro do pedido. O cancelado
+    // antes da abertura devolve o orçamento a `aprovado` (057) e não entra.
     supabase
       .from("jobs")
-      .select("id", { count: "exact", head: true })
+      .select("id, codigo, data_abertura_financeiro")
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "cancelado")
-      .not("data_abertura_financeiro", "is", null),
+      .not("data_abertura_financeiro", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string; codigo: string; data_abertura_financeiro: string | null }>(),
     // Opções de Regional e GP do orçamento: saem do cadastro do projeto.
     supabase
       .from("projeto_regionais")
@@ -404,9 +412,23 @@ export default async function OrcamentoDetailPage({
   const statusExibido: Orcamento["status"] =
     orcamento.status === "job_criado" &&
     !job &&
-    (canceladoAposAberturaRes.count ?? 0) > 0
+    canceladoAposAberturaRes.data
       ? "cancelado"
       : orcamento.status;
+  // Decisão 169: o orçamento do job cancelado depois da abertura é "Job
+  // cancelado" — o "Cancelado" do orçamento sozinho é outra coisa.
+  const jobCanceladoAposAbertura =
+    statusExibido === "cancelado" && orcamento.status === "job_criado"
+      ? canceladoAposAberturaRes.data ?? null
+      : null;
+  const rotuloDoStatus = jobCanceladoAposAbertura
+    ? "Job cancelado"
+    : orcamentoStatusLabel(statusExibido);
+  // O rastro do pedido (decisão 169). Só no orçamento cancelado: as duas
+  // leituras dependem do job, e a página comum não paga por elas.
+  const rastroDoCancelamento = jobCanceladoAposAbertura
+    ? await montarRastroDoCancelamento(supabase, session.activeTenant.id, jobCanceladoAposAbertura)
+    : null;
   // Decisão 128: com o job devolvido, os dados do orçamento e o planejado
   // se corrigem sem cancelar a aprovação.
   const jobDevolvido =
@@ -544,7 +566,7 @@ export default async function OrcamentoDetailPage({
     ? "Seu papel não permite editar orçamentos."
     : podeCriarVersao
       ? undefined
-      : `Orçamento ${orcamentoStatusLabel(statusExibido).toLowerCase()} não aceita novas versões.`;
+      : `Orçamento ${rotuloDoStatus.toLowerCase()} não aceita novas versões.`;
 
   // ONDA 2 — depende da aba selecionada (e do job, já conhecido).
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
@@ -833,7 +855,7 @@ export default async function OrcamentoDetailPage({
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{orcamento.nome}</h1>
             <Badge className={cn("border", statusBadgeClasses(statusExibido))}>
-              {orcamentoStatusLabel(statusExibido)}
+              {rotuloDoStatus}
             </Badge>
             <OrcamentoEditorDrawer
               projetoId={params.projetoId}
@@ -859,7 +881,7 @@ export default async function OrcamentoDetailPage({
                     ? "Orçamento arquivado — reative para editar."
                     : "Projeto arquivado — reative o projeto para editar."
                   : protegido
-                    ? `Bloqueado em ${orcamentoStatusLabel(statusExibido).toLowerCase()} — alterações via fluxo de aprovação/job.`
+                    ? `Bloqueado em ${rotuloDoStatus.toLowerCase()} — alterações via fluxo de aprovação/job.`
                     : undefined
               }
             />
@@ -969,7 +991,7 @@ export default async function OrcamentoDetailPage({
           <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             Este orçamento está em estado protegido (
-            <strong className="text-foreground">{orcamentoStatusLabel(statusExibido)}</strong>
+            <strong className="text-foreground">{rotuloDoStatus}</strong>
             ).{" "}
             {/* Aprovado ainda aceita versão nova, que edita (decisão 023 §7;
                 Tiago, 07/10/2026): o aviso não pode dizer o contrário. */}
@@ -1044,6 +1066,7 @@ export default async function OrcamentoDetailPage({
           motivoBloqueio={motivoBloqueio}
           arquivado={arquivado}
           jobCancelado={statusExibido === "cancelado"}
+          rastroDoCancelamento={rastroDoCancelamento}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
@@ -1109,6 +1132,7 @@ function VersaoSelecionada({
   motivoBloqueio,
   arquivado,
   jobCancelado,
+  rastroDoCancelamento,
   meses,
   mesPedido,
   fechamentoDaCopia,
@@ -1160,6 +1184,9 @@ function VersaoSelecionada({
    *  desaprova nem vai de novo para abertura — o servidor já recusava os
    *  dois. */
   jobCancelado: boolean;
+  /** O rastro do cancelamento depois da abertura (decisão 169): a faixa
+   *  "Job cancelado" na versão que gerou o job. Nulo nos outros casos. */
+  rastroDoCancelamento: RastroDoCancelamento | null;
   /** Meses da versão (modelo mensal, decisão 078); vazio nos demais. */
   meses: VersaoOrcamentoMes[];
   /** `?mes=` da URL. */
@@ -1484,6 +1511,12 @@ function VersaoSelecionada({
             : null
         }
       />
+
+      {/* O rastro do cancelamento depois da abertura (decisão 169), na
+          versão que gerou o job — junto das outras faixas de estado. */}
+      {rastroDoCancelamento && versao.id === orcamento.versao_aprovada_id && (
+        <FaixaJobCancelado rastro={rastroDoCancelamento} />
+      )}
 
       {/* Modelo mensal (decisão 078): régua de meses, planilha do mês ou
           vista do trimestre. O "Importar planilha" da versão fica na régua,

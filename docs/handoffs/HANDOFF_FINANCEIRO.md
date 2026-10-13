@@ -7079,3 +7079,24 @@ financeiro". Regra completa na §9 da decisão 115.
   PIX inclusive. Completo, só administrador e financeiro alteram, como antes.
 - O aviso das PPs já no financeiro ao trocar conta ou PIX (decisão 067) vale
   para eles também: a PP enviada continua pagando pela foto que guardou.
+
+## ⚠️ Nota de 2026-10-13 — Cancelamentos na Abertura de Job (decisão 169)
+
+- **Faixa "Cancelamentos"** no topo da fila "Jobs aguardando abertura",
+  antes de erratas e aberturas novas, com "Revisar cancelamento"
+  (`cancelamento-na-fila.tsx`, dados em `cancelamentos.ts`). A contagem da
+  aba e o resumo ("1 cancelamento a decidir") somam os pedidos.
+- **Pop-up de revisão:** quem pediu e o motivo, dados do job com a regional,
+  "O que o cancelamento desfaz" (recebimento, custo e impostos previstos, e o
+  projeto financeiro que fica inativo) e "Visualizar job", que abre
+  `/financeiro/jobs/[jobId]?aba=planilha&revisar=…` na Planilha Interna, com
+  a faixa do pedido. O Voltar de lá reabre o pop-up (`?revisar=` na fila).
+- **Recusar** pede justificativa; **Aprovar** abre a confirmação com a
+  observação opcional. A aprovação (`aprovar_cancelamento_do_job`) põe o job
+  em `cancelado`, deixa as previsões gravadas (o fluxo de caixa já ignora o
+  cancelado), inativa o projeto financeiro sem outro job vivo e guarda a foto
+  do que saiu das contas.
+- **Visualizar Jobs** e a página do job no financeiro mostram o selo
+  "Cancelamento solicitado" enquanto o pedido está pendente.
+- O card da Central Financeira (`app/(app)/financeiro/page.tsx`) **não** conta
+  os pedidos: ficou de fora de propósito.
