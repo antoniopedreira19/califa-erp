@@ -169,6 +169,13 @@ export const permissoes = {
    *  negociar o BV continua em `jobs.editar`; confirmar é do GP. */
   "jobs.confirmar_bv":            ["administrador", "gerente_producao"],
   "jobs.encerrar":                ["administrador", "gerente_producao"],
+  /** Pedir o cancelamento do job JÁ ABERTO (decisão 169): o GP e o
+   *  administrador, os mesmos do "Cancelar aprovação". Retirar o pedido
+   *  também. O banco confere de novo (`solicitar_cancelamento_do_job`). */
+  "jobs.solicitar_cancelamento":  ["administrador", "gerente_producao"],
+  /** Aprovar ou recusar o pedido de cancelamento, na fila da Abertura de Job
+   *  (decisão 169). O banco confere de novo (`aprovar_cancelamento_do_job`). */
+  "jobs.decidir_cancelamento":    ["administrador", "financeiro"],
   /** Abrir job no financeiro — via /financeiro/abertura-de-job. */
   "jobs.abrir_financeiro":        ["administrador", "financeiro"],
   /** "Editar orçado" da Planilha Interna do job no financeiro (decisão

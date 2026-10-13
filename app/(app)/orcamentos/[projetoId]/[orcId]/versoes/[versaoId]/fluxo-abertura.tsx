@@ -45,8 +45,9 @@ type Modal = "aprovar" | "form" | "envio" | "cancelar_envio" | null;
 export interface JobExistente {
   id: string;
   codigo: string;
-  /** Só os dois status de pré-abertura chegam aqui na prática: o job
-   *  aberto vira `enviada` do mesmo jeito, e o cancelado nem é lido. */
+  /** Qualquer status vivo — o cancelado nem é lido. O job já aberto cai na
+   *  etapa `enviada` como o que aguarda abertura, mas a barra e o banner o
+   *  dizem aberto (`jobPassouDaAbertura`, 13/10/2026). */
   status: JobStatus;
   /** O que o financeiro escreveu ao devolver (decisão 057). */
   motivo_rejeicao: string | null;
@@ -261,6 +262,11 @@ export function FluxoAbertura({
     : aprovada
       ? "aprovada"
       : "rascunho";
+  // O job que o financeiro JÁ ABRIU também cai em `enviada` — o "Ver dados
+  // do job" vale igual —, mas a barra não pode dizer "aguardando abertura"
+  // nem oferecer "Cancelar envio à abertura", que o servidor recusa. Era
+  // assim desde 31/07/2026 e apareceu no protótipo da decisão 169.
+  const jobJaAberto = jobPassouDaAbertura(job);
   // O que o formulário e a confirmação mostram (decisão 099, §11):
   // - reenvio do job devolvido: o fechamento da cópia, que é o que será
   //   gravado;
@@ -558,12 +564,14 @@ export function FluxoAbertura({
                 <span className="font-mono font-semibold text-foreground">
                   {job.codigo}
                 </span>{" "}
-                enviado para abertura
+                {jobJaAberto ? situacaoDoJobAberto(job.status) : "enviado para abertura"}
               </span>
               <span className="text-xs text-muted-foreground">
                 {job.data_prevista_faturamento
                   ? `${variosRecebimentos ? "Primeiro recebimento" : "Recebimento"} previsto para ${formatarData(job.data_prevista_faturamento)}`
-                  : "Aguardando abertura pelo financeiro"}
+                  : jobJaAberto
+                    ? "Acompanhe pelo módulo de Jobs"
+                    : "Aguardando abertura pelo financeiro"}
               </span>
             </>
           )}
@@ -611,8 +619,9 @@ export function FluxoAbertura({
               financeiro. No job devolvido ele saiu em 29/09/2026 (decisão
               128): a correção se faz com o job vivo, e o que muda o orçado
               passa pelo "Cancelar aprovação" da versão, que guarda o
-              código. */}
-          {etapa === "enviada" && (
+              código. Com o job já aberto, também não: o servidor recusa, e
+              o cancelamento dele é o pedido da página do job (decisão 169). */}
+          {etapa === "enviada" && !jobJaAberto && (
             <button
               type="button"
               onClick={() => {
@@ -890,11 +899,17 @@ export function BannersEstado({
           </div>
           <div className="min-w-0">
             <p className="text-[15px] font-semibold">
-              Job enviado para abertura ·{" "}
+              {/* O job já aberto não está "enviado para abertura" (corrigido
+                  em 13/10/2026, junto da decisão 169). */}
+              {jobPassouDaAbertura(job)
+                ? `Job ${situacaoDoJobAberto(job.status)} · `
+                : "Job enviado para abertura · "}
               <span className="font-mono">{job.codigo}</span>
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Aguardando abertura pelo financeiro
+              {jobPassouDaAbertura(job)
+                ? "Acompanhe pelo módulo de Jobs"
+                : "Aguardando abertura pelo financeiro"}
               {job.data_prevista_faturamento
                 ? ` · ${
                     // Fee e Always On (decisão 149): uma data por mês, e a
@@ -961,6 +976,22 @@ function FaixaCorrecao({
       </div>
     </div>
   );
+}
+
+/** O job que o financeiro já abriu (aberto, encerrado, finalizado): não
+ *  está mais "enviado para abertura". */
+function jobPassouDaAbertura(job: JobExistente | null): boolean {
+  return (
+    job !== null && job.status !== "aguardando_abertura" && job.status !== "rejeitado_financeiro"
+  );
+}
+
+/** "aberto pelo financeiro", "encerrado", "finalizado" — a frase da barra e
+ *  do banner para o job que já passou da abertura. */
+function situacaoDoJobAberto(status: JobStatus): string {
+  if (status === "encerrado") return "encerrado";
+  if (status === "finalizado") return "finalizado";
+  return "aberto pelo financeiro";
 }
 
 function formatarData(iso: string | null | undefined): string {

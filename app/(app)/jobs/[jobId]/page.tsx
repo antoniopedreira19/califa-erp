@@ -38,6 +38,13 @@ import { ErratasCard } from "./erratas-card";
 import { AlteracoesFinanceiroCard } from "./alteracoes-financeiro-card";
 import { JobChatSection } from "./comunicacao/job-chat-section";
 import { carregarDetalheDoJob } from "./carregar-detalhe";
+import { cancelamentoDoJob, travaDoCancelamento } from "@/lib/data/cancelamentos";
+import { MenuDoJob } from "./cancelamento/menu-do-job";
+import type { PPDoPedido } from "./cancelamento/solicitar-cancelamento-dialog";
+import {
+  FaixaCancelamentoRecusado,
+  FaixaCancelamentoSolicitado,
+} from "./cancelamento/faixas-do-cancelamento";
 
 import { montarThreadChat } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
@@ -80,7 +87,17 @@ export default async function JobDetailPage({
       ? searchParams.aba
       : "info";
 
-  const detalhe = await carregarDetalheDoJob(session, params.jobId);
+  // O pedido de cancelamento (decisão 169) corre junto do detalhe: são
+  // leituras independentes. A trava só interessa a quem pode pedir.
+  const supabaseDoPedido = createClient();
+  const podePedirCancelamento = pode(session.activeRole, "jobs.solicitar_cancelamento");
+  const [detalhe, cancelamento, travaDoPedido] = await Promise.all([
+    carregarDetalheDoJob(session, params.jobId),
+    cancelamentoDoJob(supabaseDoPedido, session.activeTenant.id, params.jobId),
+    podePedirCancelamento
+      ? travaDoCancelamento(supabaseDoPedido, params.jobId)
+      : Promise.resolve(null),
+  ]);
   if (!detalhe) notFound();
 
   // Job cancelado não existe no módulo de Jobs (decisões 113 e 163). Antes
@@ -160,7 +177,27 @@ export default async function JobDetailPage({
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   // O selo do cabeçalho: "Em faturamento" é o aberto com o envio completo
   // (decisão 094). As travas continuam lendo `job.status`.
-  const statusExibido = jobStatusExibido(job.status, job.faturamento_enviado_em);
+  // Com o pedido de cancelamento no financeiro (decisão 169) o job fica
+  // parado: o selo diz isso, e nada novo nasce nele — as portas abaixo se
+  // fecham na tela, e os gatilhos do banco as fecham de novo.
+  const jobAberto = job.status === "aberto" || job.status === "em_producao";
+  const comPedido = cancelamento.pendente !== null && jobAberto;
+  const statusExibido = jobStatusExibido(job.status, job.faturamento_enviado_em, comPedido);
+  // O menu "⋯" do pedido: GP e administrador, job já aberto pelo financeiro
+  // e sem pedido no ar.
+  const mostraMenuDoJob =
+    podePedirCancelamento && jobAberto && !comPedido && job.data_abertura_financeiro !== null;
+  const ppsDoPedido: PPDoPedido[] = ppsDoJob
+    .filter((pp) => pp.status !== "cancelada")
+    .map((pp) => ({
+      id: pp.id,
+      codigo: pp.codigo,
+      quem: pp.verba_producao
+        ? "Verba de produção"
+        : (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—",
+      valor: Number(pp.valor ?? 0),
+      status: pp.status as PPDoPedido["status"],
+    }));
 
   return (
     <div className="space-y-6">
@@ -208,6 +245,14 @@ export default async function JobDetailPage({
                     responsaveis={responsaveis}
                   />
                 )}
+              {mostraMenuDoJob && (
+                <MenuDoJob
+                  jobId={job.id}
+                  jobCodigo={job.codigo}
+                  pps={ppsDoPedido}
+                  travaForaDasPPs={travaDoPedido}
+                />
+              )}
             </div>
           </div>
 
@@ -271,6 +316,25 @@ export default async function JobDetailPage({
         </div>
       )}
 
+      {/* O pedido de cancelamento no ar e a recusa ainda não lida (decisão
+          169), no mesmo lugar da devolução da abertura. */}
+      {comPedido && cancelamento.pendente && (
+        <FaixaCancelamentoSolicitado
+          pedido={cancelamento.pendente}
+          podeRetirar={podePedirCancelamento}
+        />
+      )}
+      {!comPedido && jobAberto && cancelamento.recusaNaoVista && (
+        <FaixaCancelamentoRecusado
+          pedido={cancelamento.recusaNaoVista}
+          podeDispensar={
+            session.activeRole === "administrador" ||
+            session.activeRole === "gerente_producao" ||
+            session.activeRole === "produtor"
+          }
+        />
+      )}
+
       <JobTabs
         abaInicial={abaInicial}
         info={
@@ -317,7 +381,11 @@ export default async function JobDetailPage({
                 dataInicio: raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: raw.projeto?.data_fim_prevista ?? null,
               }}
-              jobsDoProjeto={jobsDoProjeto}
+              jobsDoProjeto={
+                comPedido
+                  ? jobsDoProjeto.map((j) => (j.id === job.id ? { ...j, status: statusExibido } : j))
+                  : jobsDoProjeto
+              }
               jobAtualId={job.id}
               jobLinkSuffix={jobLinkSuffix}
               gpNome={raw.responsavel?.nome ?? null}
@@ -377,7 +445,7 @@ export default async function JobDetailPage({
             aberturaDoJob={aberturaDoJob}
             // Decisão 159: o GP registra a errata; o produtor a deixa
             // pronta para envio.
-            papelNaErrata={papelNaErrata}
+            papelNaErrata={comPedido ? null : papelNaErrata}
             errataPronta={errataPronta}
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
@@ -432,13 +500,13 @@ export default async function JobDetailPage({
             itens={itens}
             realizadosMap={realizadosMap}
             categoriasMap={categoriasMap}
-            podeAcoes={podeAcoesPlanilha}
-            podeMexerNoSave={podeMexerNoSave}
+            podeAcoes={podeAcoesPlanilha && !comPedido}
+            podeMexerNoSave={podeMexerNoSave && !comPedido}
             podeExportarInterna={podeExportarInterna}
-            podeGerarPP={podeGerarPP}
-            papelEnviaPP={papelEnviaPP}
+            podeGerarPP={podeGerarPP && !comPedido}
+            papelEnviaPP={papelEnviaPP && !comPedido}
             papelCorrigeNf={papelCorrigeNf}
-            podeConfirmarBv={podeConfirmarBv}
+            podeConfirmarBv={podeConfirmarBv && !comPedido}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             aberturaEmRevisao={job.abertura_em_revisao}
             ppsPorItemId={ppsPorItemId}
@@ -457,9 +525,9 @@ export default async function JobDetailPage({
           <JobPPsSection
             pps={ppsDoJob}
             fornecedoresPorId={fornecedoresPorId}
-            editable={podeGerarPP}
-            podeEnviar={podeEnviarPP}
-            papelEnviaPP={papelEnviaPP}
+            editable={podeGerarPP && !comPedido}
+            podeEnviar={podeEnviarPP && !comPedido}
+            papelEnviaPP={papelEnviaPP && !comPedido}
             podePrestarContas={ppsQuePossoPrestarContas}
             // Decisão 160: o envio, o formulário e a PP ao lado dos
             // documentos também pela aba — com o que o painel do item usa.
@@ -507,7 +575,7 @@ export default async function JobDetailPage({
         jobCodigo={job.codigo}
         status={job.status}
         orcamentoHref={`/orcamentos/${job.projeto_id}/${job.orcamento_id}?v=${job.versao_orcamento_aprovada_id}`}
-        podeEnviarFaturamento={podeEnviarFaturamento}
+        podeEnviarFaturamento={podeEnviarFaturamento && !comPedido}
         aberturaEmRevisao={job.abertura_em_revisao}
         // Errata pronta parada trava o envio para faturamento (decisão 159).
         errataProntaParada={errataPronta !== null}
@@ -530,7 +598,8 @@ export default async function JobDetailPage({
         podeEnviarFaturamentoMensal={detalhe.podeEnviarFaturamentoMensal}
         faturamentoEnvioUnico={detalhe.faturamentoEnvioUnico}
         fechamento={detalhe.fechamento}
-        podeEncerrar={detalhe.podeEncerrar}
+        podeEncerrar={detalhe.podeEncerrar && !comPedido}
+        cancelamentoPendente={comPedido}
         // Os pedidos de save que seguram faturamento e encerramento
         // (decisão 099) saem do mesmo save da Planilha Interna.
         savePorItem={detalhe.savePorItem}

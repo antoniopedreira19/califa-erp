@@ -5218,3 +5218,24 @@ código publicado logo depois (`3305751`).
   (`.inline`) edita enquanto o cadastro estiver pendente.
 - A trava da PP continua valendo também para a verba de alimentação ou de
   transporte paga a um terceiro — confirmado pelo Tiago.
+
+## ⚠️ Nota de 2026-10-13 — Cancelamento de job aberto (decisão 169)
+
+- **Menu "⋯" no cabeçalho do job aberto** (ao lado de "Editar"), para o GP e
+  o administrador: "Solicitar cancelamento" abre o pop-up do pedido
+  (`cancelamento/solicitar-cancelamento-dialog.tsx`), com o motivo e, se
+  houver, as PPs vivas para cancelar antes ("Cancelar as N PPs", padrão da
+  143). PP aprovada ou paga, envio para faturamento, lançamento, recebimento
+  antes da NF, desembolso e save travam o pedido
+  (`trava_do_cancelamento_do_job`).
+- **Pedido pendente:** selo "Cancelamento solicitado" (calculado por
+  `jobStatusExibido`, o status continua `aberto`), faixa âmbar com "Retirar
+  pedido" e a barra de faturamento e encerramento reduzida a uma linha. PP,
+  errata, save, envio para faturamento e encerramento ficam escondidos na
+  tela e barrados no banco (`guarda_job_com_cancelamento_pendente`).
+- **Recusado:** faixa vermelha com a justificativa do financeiro e
+  "Dispensar aviso" (GP, produtor e administrador).
+- **Aprovado:** o job sai do módulo (163). A lista de Jobs ganhou o filtro de
+  status "Cancelamento solicitado".
+- Dados em `lib/data/cancelamentos.ts`; actions em
+  `app/(app)/jobs/[jobId]/actions-cancelamento.ts`.

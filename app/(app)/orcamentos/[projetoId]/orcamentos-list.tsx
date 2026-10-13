@@ -44,6 +44,10 @@ export interface OrcamentoRow {
    *  da base de dados e confundia a produção (29/09/2026). `null` sem job
    *  ou só com job cancelado. Obrigatório de propósito (CLAUDE.md). */
   job: { id: string; codigo: string } | null;
+  /** Decisão 169: o código do job cancelado DEPOIS da abertura, quando não
+   *  há job vivo. A linha vira "Job Cancelado" e mostra o código riscado.
+   *  Obrigatório de propósito (CLAUDE.md). */
+  jobCanceladoCodigo: string | null;
 }
 
 type FiltroArquivo = "ativos" | "arquivados" | "todos";
@@ -127,6 +131,13 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
                   >
                     {o.job.codigo}
                   </Link>
+                ) : o.jobCanceladoCodigo ? (
+                  <span
+                    title="Job cancelado"
+                    className="font-semibold text-muted-foreground/70 line-through"
+                  >
+                    {o.jobCanceladoCodigo}
+                  </span>
                 ) : (
                   <span className="font-sans text-muted-foreground">—</span>
                 )}
@@ -151,7 +162,11 @@ export function OrcamentosList({ projetoId, orcamentos }: Props) {
                   </Badge>
                 ) : (
                   <Badge className={cn("border", estagioFunilBadgeClasses(o.estagio))}>
-                    {estagioFunilLabel(o.estagio)}
+                    {/* "Job Cancelado" no lugar do "Cancelado" do funil
+                        quando quem foi cancelado é o job (decisão 169). */}
+                    {o.jobCanceladoCodigo && o.estagio === "cancelado"
+                      ? "Job Cancelado"
+                      : estagioFunilLabel(o.estagio)}
                   </Badge>
                 )}
               </td>

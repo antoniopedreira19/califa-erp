@@ -91,6 +91,10 @@ interface Props {
    *  o encerramento — a barra só explica; `enviarParaFaturamento` e
    *  `encerrarJob` refazem a conta no servidor. */
   savePorItem: Record<string, EstadoSaveDaLinha>;
+  /** O job tem pedido de cancelamento no financeiro (decisão 169): a barra
+   *  vira uma linha só, como antes da abertura — faturamento e encerramento
+   *  esperam a decisão. Os gatilhos do banco recusam os dois de novo. */
+  cancelamentoPendente: boolean;
 }
 
 /** Uma linha com save ou consumo nunca enviado para aprovação. `comRecusa`:
@@ -248,11 +252,27 @@ export function BarraAcoesJob({
   totais,
   podeEncerrar,
   savePorItem,
+  cancelamentoPendente,
 }: Props) {
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
   // design tem UMA barra com três estados, não duas empilhadas.
   const errataAberta = useModoErrataAtivo();
   if (errataAberta) return null;
+
+  if (cancelamentoPendente) {
+    return (
+      <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-xs text-muted-foreground">
+            Cancelamento aguardando o financeiro, na Abertura de Job.
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Faturamento e encerramento voltam se o pedido for retirado ou recusado.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const duasTrilhas =
     fechamento !== null &&

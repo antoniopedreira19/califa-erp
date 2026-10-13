@@ -1699,13 +1699,22 @@ export function jobAceitaEnvioDePP(status: JobStatus): boolean {
  * O par dele é o `encerrado` (encerrado sem o envio completo). Com as duas
  * ações feitas o banco grava `finalizado`. O módulo Jobs não olha a nota:
  * se o job foi faturado é controle do financeiro.
+ *
+ * "Cancelamento solicitado" (decisão 169, 13/10/2026) segue a mesma ideia:
+ * é o job aberto com um pedido de cancelamento no financeiro
+ * (`jobs_cancelamentos` pendente). O status gravado continua `aberto` até a
+ * aprovação; quem para o job enquanto isso são os gatilhos do banco.
  */
-export type JobStatusExibido = JobStatus | "em_faturamento";
+export type JobStatusExibido = JobStatus | "em_faturamento" | "cancelamento_solicitado";
 
 export function jobStatusExibido(
   status: JobStatus,
   faturamentoEnviadoEm: string | null,
+  cancelamentoPendente = false,
 ): JobStatusExibido {
+  if (cancelamentoPendente && (status === "aberto" || status === "em_producao")) {
+    return "cancelamento_solicitado";
+  }
   return status === "aberto" && faturamentoEnviadoEm !== null
     ? "em_faturamento"
     : status;
@@ -1713,6 +1722,8 @@ export function jobStatusExibido(
 
 export function jobStatusLabel(s: JobStatusExibido): string {
   switch (s) {
+    case "cancelamento_solicitado":
+      return "Cancelamento solicitado";
     case "em_faturamento":
       return "Em faturamento";
     case "aguardando_abertura":
@@ -1741,6 +1752,10 @@ export function jobStatusLabel(s: JobStatusExibido): string {
  */
 export function jobStatusBadgeClasses(status: JobStatusExibido): string {
   switch (status) {
+    // Âmbar mais forte que o do "Em produção" (que saiu do fluxo): o job
+    // está parado, esperando o financeiro (decisão 169).
+    case "cancelamento_solicitado":
+      return "border-amber-300 bg-amber-50 text-amber-800";
     case "aberto":
       return "border-blue-200 bg-blue-50 text-blue-700";
     // Laranja: a única cor da paleta de selos ainda livre que não se confunde
@@ -2437,6 +2452,35 @@ export interface ErrataPronta {
    *  de novo, com a planilha de então. */
   valorJob: { antes: number; depois: number };
   faturamento: { antes: number; depois: number };
+}
+
+// ---------- Cancelamento de job aberto (decisão 169) ----------
+// A produção pede, o financeiro aprova ou recusa na Abertura de Job. Tabela
+// `jobs_cancelamentos`; a escrita é só pelas funções `*_cancelamento_do_job`.
+
+export type SituacaoDoCancelamento = "pendente" | "retirado" | "recusado" | "aprovado";
+
+/** Uma linha de `jobs_cancelamentos`, com os nomes de quem agiu. */
+export interface CancelamentoDoJob {
+  id: string;
+  jobId: string;
+  situacao: SituacaoDoCancelamento;
+  motivo: string;
+  solicitadoPorNome: string;
+  /** ISO. */
+  solicitadoEm: string;
+  retiradoEm: string | null;
+  retiradoPorNome: string | null;
+  decididoPorNome: string | null;
+  decididoEm: string | null;
+  /** Recusa: a justificativa do financeiro. Aprovação: a observação. */
+  justificativa: string | null;
+  avisoDispensadoEm: string | null;
+  /** Foto, na aprovação, do que saiu das contas. Nulos antes dela. */
+  recebimentoPrevisto: number | null;
+  custoPrevisto: number | null;
+  impostosPrevistos: number | null;
+  projetoFinanceiroInativadoCodigo: string | null;
 }
 
 // ---------- Alterações do financeiro (decisão 115) ----------

@@ -452,3 +452,10 @@ test("Enviar PP ao financeiro é do GP e do administrador (decisão 136)", () =>
   // Gerar continua com o produtor.
   assert.equal(pode("produtor", "jobs.emitir_pp"), true);
 });
+
+test("Cancelamento de job aberto: a produção pede (GP e administrador), o financeiro decide (decisão 169)", () => {
+  const pede = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.solicitar_cancelamento")));
+  assert.deepEqual(pede, new Set<AppRole>(["administrador", "gerente_producao"]));
+  const decide = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.decidir_cancelamento")));
+  assert.deepEqual(decide, new Set<AppRole>(["administrador", "financeiro"]));
+});
