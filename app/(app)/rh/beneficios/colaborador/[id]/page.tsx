@@ -6,7 +6,7 @@ import {
   listarVinculosDoColaborador,
   listarDependentesDoColaborador,
   custoMensalDoColaborador,
-  listarBeneficiosDoCatalogo,
+  listarBeneficiosCompletos,
 } from "@/lib/queries/beneficios";
 import { HeaderColaborador } from "./_components/header-colaborador";
 import { TabsNav, type AbaColaborador } from "./_components/tabs-nav";
@@ -50,7 +50,7 @@ export default async function ColaboradorBeneficiosPage({
       listarVinculosDoColaborador({ tenantId, colaboradorId: params.id }),
       listarDependentesDoColaborador({ tenantId, colaboradorId: params.id }),
       custoMensalDoColaborador({ ano, mes, colaboradorId: params.id }),
-      listarBeneficiosDoCatalogo({ tenantId }),
+      listarBeneficiosCompletos({ tenantId }),
     ]);
 
   if (!colaborador) {
@@ -58,14 +58,7 @@ export default async function ColaboradorBeneficiosPage({
   }
 
   const vinculosAtivos = vinculos.filter((v) => v.data_fim === null);
-  const beneficiosAtivos = catalogo
-    .filter((b) => b.ativo)
-    .map((b) => ({
-      id: b.id,
-      nome: b.nome,
-      tipo: b.tipo,
-      beneficio_base_id: b.beneficio_base_id,
-    }));
+  const beneficiosAtivos = catalogo.filter((b) => b.ativo);
 
   const base = new URLSearchParams();
   base.set("ano", String(ano));

@@ -1,7 +1,10 @@
 import { UserRound } from "lucide-react";
 import { AcoesColaborador } from "./acoes-colaborador";
-import type { ColaboradorBasico, VinculoDoColaborador } from "@/lib/queries/beneficios";
-import type { BeneficioTipo } from "@/lib/types";
+import type {
+  BeneficioCompleto,
+  ColaboradorBasico,
+  VinculoDoColaborador,
+} from "@/lib/queries/beneficios";
 
 const TIPO_LABEL: Record<string, string> = {
   pj: "PJ",
@@ -18,13 +21,6 @@ const formatarData = (iso: string | null) => {
   return `${d}/${m}/${a}`;
 };
 
-type BeneficioOpcao = {
-  id: string;
-  nome: string;
-  tipo: BeneficioTipo;
-  beneficio_base_id: string | null;
-};
-
 export function HeaderColaborador({
   colaborador,
   colaboradorId,
@@ -39,7 +35,7 @@ export function HeaderColaborador({
   colaboradorId: string;
   ano: number;
   mes: number;
-  beneficios: BeneficioOpcao[];
+  beneficios: BeneficioCompleto[];
   vinculosAtivos: VinculoDoColaborador[];
   colaboradorTemCpf: boolean;
   colaboradorTemDataNasc: boolean;
@@ -73,6 +69,7 @@ export function HeaderColaborador({
 
         {/* Lado direito: competência + botões */}
         <AcoesColaborador
+          colaborador={colaborador}
           colaboradorId={colaboradorId}
           ano={ano}
           mes={mes}
