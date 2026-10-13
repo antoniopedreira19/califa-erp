@@ -13,14 +13,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  comAContaDaMidia,
   composicao,
   contaDaLinha,
+  desembolsoDaMidia,
+  diaSeguinte,
   diasDoMes,
   fechamentoDosItens,
   fechar,
   lerNumero,
   linhaDoItem,
+  mesEmVeiculacao,
   quantidadeDaLinha,
+  ultimaVeiculacaoDoMes,
   type LinhaMidia,
   type MeioDaVersao,
   type ParametrosMidia,
@@ -191,4 +196,75 @@ test("período da campanha: sem a trava do trimestre, com teto de 24 meses", () 
   assert.match(erroDoPeriodoDaCampanha(null, "2026-09-30") ?? "", /início e o fim/);
   assert.match(erroDoPeriodoDaCampanha("2026-09-30", "2026-07-01") ?? "", /posterior/);
   assert.match(erroDoPeriodoDaCampanha("2026-01-01", "2062-01-01") ?? "", /24 meses/);
+});
+
+// ---- O job da Mídia Off (decisão 167) -------------------------------------
+
+test("última veiculação: o maior dia com inserção e o maior fim de período", () => {
+  // Grade com inserção nos dias 2 e 10, e um dia zerado depois deles.
+  assert.equal(
+    ultimaVeiculacaoDoMes("2026-11-01", [
+      { insercoes_por_dia: { "2": 3, "10": 4, "28": 0 }, data_fim: null },
+    ]),
+    "2026-11-10",
+  );
+  // O período que cruza o mês entra no mês em que começa, e o fim conta.
+  assert.equal(
+    ultimaVeiculacaoDoMes("2026-11-01", [
+      { insercoes_por_dia: { "5": 1 }, data_fim: null },
+      { insercoes_por_dia: null, data_fim: "2026-12-06" },
+    ]),
+    "2026-12-06",
+  );
+  assert.equal(ultimaVeiculacaoDoMes("2026-11-01", []), null);
+});
+
+test("o mês libera no dia seguinte à última veiculação", () => {
+  assert.equal(diaSeguinte("2026-11-10"), "2026-11-11");
+  assert.equal(diaSeguinte("2026-12-31"), "2027-01-01");
+  assert.equal(mesEmVeiculacao("2026-11-01", "2026-11-10", "2026-11-10"), true);
+  assert.equal(mesEmVeiculacao("2026-11-01", "2026-11-10", "2026-11-11"), false);
+  // Sem data nas linhas, vale o fim do mês.
+  assert.equal(mesEmVeiculacao("2026-11-01", null, "2026-11-30"), true);
+  assert.equal(mesEmVeiculacao("2026-11-01", null, "2026-12-01"), false);
+});
+
+test("desembolso: só a nota dos veículos em A · Repasse", () => {
+  const itens = [
+    { tipo_custo: "A", total_orcado: 2000 },
+    { tipo_custo: "AR", total_orcado: 20000 },
+  ];
+  assert.equal(desembolsoDaMidia(itens, P20), 16000);
+  assert.equal(desembolsoDaMidia([{ tipo_custo: "A", total_orcado: 2000 }], P20), 0);
+});
+
+test("os campos planos do job pela conta da mídia", () => {
+  const p: ParametrosMidia = { honorarios: 12, imposto: 19.53, base: "negociado", veiculo: 80 };
+  const f = fechamentoDosItens(
+    [
+      { tipo_custo: "A", total_orcado: 2000 },
+      { tipo_custo: "A", total_orcado: 5000 },
+    ],
+    p,
+  );
+  const t = comAContaDaMidia(
+    {
+      honorarios: 0,
+      imposto: 0,
+      intTaxes: 9,
+      intTransactionCosts: 9,
+      deducoesDoResultado: 0,
+      faturamentoPrevisto: 0,
+      valorJob: 0,
+      outro: "fica",
+    },
+    f,
+  );
+  assert.equal(t.valorJob, 6440);
+  assert.equal(t.faturamentoPrevisto, 840);
+  assert.equal(t.honorarios, 840);
+  assert.equal(Math.round(t.imposto * 100) / 100, 164.05);
+  assert.equal(t.deducoesDoResultado, t.imposto);
+  assert.equal(t.intTaxes, 0);
+  assert.equal(t.outro, "fica");
 });

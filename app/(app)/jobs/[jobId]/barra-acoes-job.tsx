@@ -91,6 +91,11 @@ interface Props {
    *  o encerramento — a barra só explica; `enviarParaFaturamento` e
    *  `encerrarJob` refazem a conta no servidor. */
   savePorItem: Record<string, EstadoSaveDaLinha>;
+  /** Mídia Off (decisão 167): o envio do ÚLTIMO mês encerra o job junto
+   *  (Tiago, 13/10/2026). A trilha "Encerramento" deixa de ter botão e só
+   *  mostra as pendências, que travam esse último envio. Obrigatória:
+   *  opcional, uma regra nova sumiria calada (CLAUDE.md). */
+  encerraComOUltimoMes: boolean;
 }
 
 /** Uma linha com save ou consumo nunca enviado para aprovação. `comRecusa`:
@@ -248,6 +253,7 @@ export function BarraAcoesJob({
   totais,
   podeEncerrar,
   savePorItem,
+  encerraComOUltimoMes,
 }: Props) {
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
   // design tem UMA barra com três estados, não duas empilhadas.
@@ -287,6 +293,7 @@ export function BarraAcoesJob({
       podeEncerrar={podeEncerrar}
       saves={saves}
       aberturaEmRevisao={aberturaEmRevisao}
+      junto={encerraComOUltimoMes}
     />
   );
 
@@ -321,7 +328,14 @@ export function BarraAcoesJob({
         contextoDoEnvio={contextoDoEnvio}
         moeda={moeda}
         trilhaEncerramento={trilhaEncerramento}
-        jobEncerrado={status === "encerrado"}
+        jobEncerrado={status === "encerrado" || status === "finalizado"}
+        // Mídia Off (decisão 167): o último envio encerra o job, e as
+        // pendências do encerramento travam esse envio.
+        encerraComOUltimoMes={
+          encerraComOUltimoMes && fechamento
+            ? { pendencias: pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, true) }
+            : null
+        }
       />
     );
   }
@@ -529,6 +543,7 @@ function TrilhaEncerramento({
   podeEncerrar,
   saves,
   aberturaEmRevisao,
+  junto,
 }: {
   jobId: string;
   jobCodigo: string;
@@ -540,6 +555,9 @@ function TrilhaEncerramento({
    *  enviadas (decisão 099 §17). */
   saves: PendenciasDeSave;
   aberturaEmRevisao: boolean;
+  /** Mídia Off (decisão 167): o job encerra junto com o envio do último
+   *  mês — a trilha só mostra as pendências. */
+  junto: boolean;
 }) {
   const [aberto, setAberto] = React.useState(false);
   const encerrado = status === "encerrado" || status === "finalizado";
@@ -558,7 +576,7 @@ function TrilhaEncerramento({
           <TextoTrilha>
             {fechamento.encerradoEm ? (
               <>
-                Enviado para encerramento em{" "}
+                {junto ? "Encerrado com o envio do último mês, em" : "Enviado para encerramento em"}{" "}
                 <strong className={MONO}>
                   {new Date(fechamento.encerradoEm).toLocaleDateString("pt-BR")}
                 </strong>
@@ -583,6 +601,91 @@ function TrilhaEncerramento({
     );
   }
 
+  const partes = pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, junto);
+  const liberado = partes.length === 0;
+  // Mídia Off: o encerramento sai com o envio do último mês, e a trilha não
+  // tem botão — a não ser que todos os meses já tenham ido e o job, por
+  // algum motivo, não tenha encerrado (o caminho de volta).
+  const semBotao = junto && fechamento.mesesSemEnvio.length > 0;
+
+  const botao = (
+    <button
+      type="button"
+      onClick={() => setAberto(true)}
+      disabled={!liberado}
+      className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <Send className="h-4 w-4" />
+      Enviar job para encerramento
+    </button>
+  );
+
+  return (
+    <>
+      <TrilhaBarra
+        rotulo="Encerramento"
+        separada
+        acoes={
+          !podeEncerrar || semBotao ? null : liberado ? (
+            botao
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>{botao}</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                Resolva as pendências ao lado antes de enviar
+              </TooltipContent>
+            </Tooltip>
+          )
+        }
+      >
+        {liberado ? (
+          <span className="inline-flex items-center whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+            Liberado
+          </span>
+        ) : (
+          <span className="inline-flex items-center whitespace-nowrap rounded-full border border-california-red/25 bg-california-red/5 px-2 py-0.5 text-[11px] font-semibold text-california-red">
+            {partes.length === 1 ? "1 pendência" : `${partes.length} pendências`}
+          </span>
+        )}
+        <TextoTrilha>
+          {semBotao
+            ? liberado
+              ? "Nenhuma pendência: o job encerra junto com o envio do último mês."
+              : `${maiuscula(partes.join(" · "))}. O job encerra junto com o envio do último mês.`
+            : liberado
+              ? "Nenhuma PP em aberto, nenhum BV a receber, todos os itens marcados."
+              : `${maiuscula(partes.join(" · "))}.`}
+        </TextoTrilha>
+      </TrilhaBarra>
+      {liberado && !semBotao && (
+        <EnviarEncerramentoDialog
+          jobId={jobId}
+          jobCodigo={jobCodigo}
+          modo="enviar"
+          fechamento={fechamento}
+          totais={totais}
+          open={aberto}
+          onOpenChange={setAberto}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * O que ainda trava o encerramento, em frases — a trilha "Encerramento" e,
+ * na Mídia Off (decisão 167), o envio do último mês, que encerra junto.
+ * `junto`: na mídia, o item de custo sem a marca é a linha A · Repasse sem
+ * a PP do repasse (entrega 3).
+ */
+function pendenciasDoEncerramento(
+  fechamento: FechamentoDoJob,
+  saves: PendenciasDeSave,
+  aberturaEmRevisao: boolean,
+  junto: boolean,
+): string[] {
   const { ppsEmAberto, ppsAEmitir, verbasEmAberto, bvsEmAberto, itensSemMarcacao } = fechamento;
   const partes: string[] = [];
   if (ppsEmAberto.length > 0) {
@@ -607,9 +710,13 @@ function TrilhaEncerramento({
   }
   if (itensSemMarcacao.length > 0) {
     partes.push(
-      itensSemMarcacao.length === 1
-        ? "1 item de custo ainda não disse se sai mais PP"
-        : `${itensSemMarcacao.length} itens de custo ainda não disseram se sai mais PP`,
+      junto
+        ? itensSemMarcacao.length === 1
+          ? "1 linha A · Repasse sem a PP do repasse"
+          : `${itensSemMarcacao.length} linhas A · Repasse sem a PP do repasse`
+        : itensSemMarcacao.length === 1
+          ? "1 item de custo ainda não disse se sai mais PP"
+          : `${itensSemMarcacao.length} itens de custo ainda não disseram se sai mais PP`,
     );
   }
   // Decisão 099 §17: depois do encerramento o save não muda mais, e um
@@ -636,68 +743,7 @@ function TrilhaEncerramento({
   if (aberturaEmRevisao) {
     partes.push("revisão da abertura pendente no financeiro");
   }
-  const liberado = partes.length === 0;
-
-  const botao = (
-    <button
-      type="button"
-      onClick={() => setAberto(true)}
-      disabled={!liberado}
-      className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <Send className="h-4 w-4" />
-      Enviar job para encerramento
-    </button>
-  );
-
-  return (
-    <>
-      <TrilhaBarra
-        rotulo="Encerramento"
-        separada
-        acoes={
-          !podeEncerrar ? null : liberado ? (
-            botao
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>{botao}</span>
-              </TooltipTrigger>
-              <TooltipContent>
-                Resolva as pendências ao lado antes de enviar
-              </TooltipContent>
-            </Tooltip>
-          )
-        }
-      >
-        {liberado ? (
-          <span className="inline-flex items-center whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-            Liberado
-          </span>
-        ) : (
-          <span className="inline-flex items-center whitespace-nowrap rounded-full border border-california-red/25 bg-california-red/5 px-2 py-0.5 text-[11px] font-semibold text-california-red">
-            {partes.length === 1 ? "1 pendência" : `${partes.length} pendências`}
-          </span>
-        )}
-        <TextoTrilha>
-          {liberado
-            ? "Nenhuma PP em aberto, nenhum BV a receber, todos os itens marcados."
-            : `${maiuscula(partes.join(" · "))}.`}
-        </TextoTrilha>
-      </TrilhaBarra>
-      {liberado && (
-        <EnviarEncerramentoDialog
-          jobId={jobId}
-          jobCodigo={jobCodigo}
-          modo="enviar"
-          fechamento={fechamento}
-          totais={totais}
-          open={aberto}
-          onOpenChange={setAberto}
-        />
-      )}
-    </>
-  );
+  return partes;
 }
 
 /** A barra de uma linha, antes da abertura e no job cancelado. */
