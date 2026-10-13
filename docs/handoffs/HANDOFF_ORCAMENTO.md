@@ -5525,3 +5525,15 @@ aplicada na hora combinada com a frente do Antonio, junto da
   sem gravar; o envio para abertura do TES-P001/26-08 filtrou pela busca
   (fechado sem enviar); a agregada do TES-P001/26 listou 31.
 
+## ⚠️ Nota de 2026-10-13 (2) — "Enviar Job para Abertura" liberado na Mídia Off (decisão 167)
+
+- O botão e a action (`enviarJobParaAbertura`) aceitam a Mídia Off. O
+  formulário trava início e fim no período da campanha, mostra a Data
+  Evento "Não se aplica" e pede uma data de recebimento por mês com
+  faturamento, com o faturamento do mês pela conta da mídia
+  (`faturamentoPorMes(..., midia)`). O limite de meses do recebimento
+  passou de 3 para 24 (`lib/validations/abertura-job.ts`).
+- O fechamento do envio (faturamento previsto e valor do job) é o da mídia,
+  e o reenvio do job devolvido também (`lib/data/espelhos-do-job.ts`).
+- Testado no `TES-P001/26-21 · ZZ Teste Mídia Off 147` (virou TES-1026/26)
+  e no `TES-P001/26-34 · ZZ Teste Mídia Off 167 encerra` (TES-1027/26).

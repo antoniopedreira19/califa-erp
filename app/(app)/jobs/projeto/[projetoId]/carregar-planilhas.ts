@@ -2,6 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
+  comAContaDaMidia,
+  fechamentoDosItens,
+  parametrosDaVersao,
+} from "@/lib/calculos/midia-off";
+import {
   blocosDoItem,
   realizadoVemDasPPs,
   somarBlocosDosItens,
@@ -54,7 +59,8 @@ export async function carregarPlanilhasDosJobs(
         // Os quatro da cadeia internacional e o modelo da categoria do
         // ORÇAMENTO (decisão 072): cada job do projeto fecha pela sua
         // cadeia, e o consolidado soma os fechamentos.
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
+        // Os dois últimos são as condições da Mídia Off (decisão 167).
+        "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), " +
           "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("tenant_id", tenantId)
@@ -322,17 +328,7 @@ export async function carregarPlanilhasDosJobs(
 
     // Mesma função da tela da versão e do card de Totais do job: o
     // fechamento do projeto é a soma dos fechamentos, não uma conta nova.
-    const {
-      subtotaisPorTipo,
-      subtotalGeral,
-      honorarios,
-      imposto,
-      intTaxes,
-      intTransactionCosts,
-      faturamentoPrevisto,
-      valorJob,
-      save: quebraSave,
-    } = calcularTotaisVersao(
+    const totaisNacionais = calcularTotaisVersao(
       itensDoJob.map((it) => ({
         tipo_custo: it.tipo_custo as TipoCusto,
         total_orcado: num(it.total_orcado),
@@ -345,6 +341,31 @@ export async function carregarPlanilhasDosJobs(
       percentualImposto,
       configDaPlanilha(modeloPlanilha, j.versao ?? {}).internacional,
     );
+    // Mídia Off (decisão 167): o job fecha pela conta da mídia, como no
+    // cabeçalho dele — e o custo planejado são as notas dos veículos.
+    const fechamentoMidia =
+      modeloPlanilha === "midia_off" && j.versao
+        ? fechamentoDosItens(
+            itensDoJob.map((it) => ({ tipo_custo: it.tipo_custo, total_orcado: it.total_orcado })),
+            parametrosDaVersao({
+              percentual_honorarios: j.versao.percentual_honorarios ?? 0,
+              percentual_imposto: j.versao.percentual_imposto ?? 0,
+              base_honorarios: j.versao.base_honorarios ?? null,
+              percentual_veiculo: j.versao.percentual_veiculo ?? null,
+            }),
+          )
+        : null;
+    const {
+      subtotaisPorTipo,
+      subtotalGeral,
+      honorarios,
+      imposto,
+      intTaxes,
+      intTransactionCosts,
+      faturamentoPrevisto,
+      valorJob,
+      save: quebraSave,
+    } = fechamentoMidia ? comAContaDaMidia(totaisNacionais, fechamentoMidia) : totaisNacionais;
 
     return {
       id: j.id,
@@ -376,7 +397,14 @@ export async function carregarPlanilhasDosJobs(
         );
         return {
           orcadoRentabilidade: soma.orcadoRentabilidade,
-          planejado: soma.planejado,
+          planejado: fechamentoMidia
+            ? {
+                bruto: fechamentoMidia.custoPlanejado,
+                deducaoBv: 0,
+                liquido: fechamentoMidia.custoPlanejado,
+                bvPendente: false,
+              }
+            : soma.planejado,
           realizado: soma.realizado,
         };
       })(),

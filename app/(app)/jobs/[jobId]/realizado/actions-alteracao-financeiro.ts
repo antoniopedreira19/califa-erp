@@ -60,6 +60,7 @@ import {
   motivoDoTipoTravado,
   type LancamentoNaLinha,
 } from "@/lib/calculos/alteracao-financeiro";
+import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
 import {
   JOB_STATUS_ABERTO,
   type EnvioDaAlteracao,
@@ -155,6 +156,8 @@ export async function registrarAlteracaoDoFinanceiro(
   const { motivo, linhas } = parsed.data;
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
+  const travaMidia = await travaDoJobDeMidia(supabase, tenantId, jobId, "alteracao");
+  if (travaMidia) return { ok: false, message: travaMidia };
 
   // ---- O job: na abertura, ou aberto e ainda não encerrado ----
   const { data: job, error: jobErr } = await supabase

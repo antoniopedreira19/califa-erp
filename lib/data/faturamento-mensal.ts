@@ -18,6 +18,7 @@ import {
   faturamentoPorMes,
   type FaturamentoDoMes,
 } from "@/lib/calculos/faturamento-por-mes";
+import { parametrosDaVersao, type ParametrosMidia } from "@/lib/calculos/midia-off";
 import { mesesDaVersaoQuery } from "./meses-versao";
 import { pedidosParaFinanceiroDoJob } from "./saves";
 import { itensParaOFinanceiro } from "@/lib/calculos/save-financeiro";
@@ -31,6 +32,7 @@ export async function lerFaturamentoPorMesDoJob(
     percentualHonorarios,
     percentualImposto,
     contar,
+    midia = null,
   }: {
     tenantId: string;
     jobId: string;
@@ -39,6 +41,8 @@ export async function lerFaturamentoPorMesDoJob(
     percentualImposto: number;
     /** Pedidos de save que contam como aprovados (a revisão que aprova). */
     contar: string[];
+    /** Mídia Off (decisão 167): cada mês fecha pela conta da mídia. */
+    midia?: ParametrosMidia | null;
   },
 ): Promise<FaturamentoDoMes[] | null> {
   const [mesesRes, gruposRes, itensRes, pedidos] = await Promise.all([
@@ -81,14 +85,19 @@ export async function lerFaturamentoPorMesDoJob(
     itens as Parameters<typeof faturamentoPorMes>[2],
     percentualHonorarios,
     percentualImposto,
+    null,
+    midia,
   );
 }
 
 /**
  * O mesmo, partindo só do id do job: descobre o modelo pela categoria do
- * orçamento e só lê os meses quando ele é mensal. `meses` nulo num job
- * mensal é leitura que falhou; o retorno nulo é o job que não se leu.
+ * orçamento e só lê os meses quando ele fatura por mês. `meses` nulo num
+ * job mensal é leitura que falhou; o retorno nulo é o job que não se leu.
  * Serve à abertura do financeiro (previsão de recebimento por mês).
+ *
+ * `mensal` quer dizer "fatura por mês": o Fee e o Always On (decisão 078) e,
+ * desde a decisão 167, a Mídia Off — esta pela conta da mídia.
  */
 export async function lerFaturamentoMensalPeloJob(
   supabase: SupabaseClient,
@@ -101,7 +110,7 @@ export async function lerFaturamentoMensalPeloJob(
     .from("jobs")
     .select(
       "id, versao_orcamento_aprovada_id, " +
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto), " +
+        "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_veiculo, base_honorarios), " +
         // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
         "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
@@ -113,6 +122,8 @@ export async function lerFaturamentoMensalPeloJob(
       versao: {
         percentual_honorarios: number | string | null;
         percentual_imposto: number | string | null;
+        percentual_veiculo: number | string | null;
+        base_honorarios: string | null;
       } | null;
       orcamento: { categoria: { modelo_planilha: string } | null } | null;
     }>();
@@ -120,7 +131,8 @@ export async function lerFaturamentoMensalPeloJob(
     if (error) console.error("[faturamento-mensal.job]", error.message);
     return null;
   }
-  if (job.orcamento?.categoria?.modelo_planilha !== "mensal") {
+  const modelo = job.orcamento?.categoria?.modelo_planilha;
+  if (modelo !== "mensal" && modelo !== "midia_off") {
     return { mensal: false, meses: null };
   }
   if (!job.versao_orcamento_aprovada_id || !job.versao) {
@@ -133,6 +145,15 @@ export async function lerFaturamentoMensalPeloJob(
     percentualHonorarios: Number(job.versao.percentual_honorarios ?? 0),
     percentualImposto: Number(job.versao.percentual_imposto ?? 0),
     contar,
+    midia:
+      modelo === "midia_off"
+        ? parametrosDaVersao({
+            percentual_honorarios: job.versao.percentual_honorarios ?? 0,
+            percentual_imposto: job.versao.percentual_imposto ?? 0,
+            base_honorarios: job.versao.base_honorarios,
+            percentual_veiculo: job.versao.percentual_veiculo,
+          })
+        : null,
   });
   return { mensal: true, meses };
 }

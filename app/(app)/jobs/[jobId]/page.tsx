@@ -379,6 +379,7 @@ export default async function JobDetailPage({
             // pronta para envio.
             papelNaErrata={papelNaErrata}
             errataPronta={errataPronta}
+            midia={detalhe.midia}
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
@@ -525,7 +526,12 @@ export default async function JobDetailPage({
           contatosCobranca,
         }}
         moeda={versaoAprovada.moeda}
-        faturamentoPorMes={detalhe.modeloPlanilha === "mensal"}
+        // Fee, Always On e Mídia Off faturam mês a mês (decisões 078 e 167).
+        faturamentoPorMes={
+          detalhe.modeloPlanilha === "mensal" || detalhe.modeloPlanilha === "midia_off"
+        }
+        // Mídia Off (decisão 167): o envio do último mês encerra o job.
+        encerraComOUltimoMes={detalhe.midia !== null}
         faturamentoMensal={detalhe.faturamentoMensal}
         podeEnviarFaturamentoMensal={detalhe.podeEnviarFaturamentoMensal}
         faturamentoEnvioUnico={detalhe.faturamentoEnvioUnico}
@@ -549,6 +555,8 @@ export default async function JobDetailPage({
           modeloPlanilha: detalhe.modeloPlanilha,
           internacional: detalhe.internacional,
           moedaEstrangeira: detalhe.moedaEstrangeira,
+          // Mídia Off: o card de Totais do encerramento é o da mídia.
+          midia: detalhe.midia?.params ?? null,
         }}
       />
     </div>

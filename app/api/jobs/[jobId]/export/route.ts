@@ -76,6 +76,15 @@ export async function GET(
       { status: 400 },
     );
   }
+  // Mídia Off (decisão 167): a planilha do job é a da mídia, e as contas
+  // daqui são as nacionais. A exportação dela fica para outra entrega; a
+  // tela do job não mostra o botão.
+  if (raw.orcamento?.categoria?.modelo_planilha === "midia_off") {
+    return NextResponse.json(
+      { error: "A planilha do job de Mídia Off ainda não se exporta." },
+      { status: 400 },
+    );
+  }
 
   const versaoId = raw.versao_orcamento_aprovada_id as string;
   const [gruposRes, itensRes, realizadosRes, ppsRes, bvsRes, mesesRes] =

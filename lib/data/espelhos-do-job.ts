@@ -28,6 +28,12 @@ import {
   type MesDoJob,
 } from "@/lib/calculos/faturamento-por-mes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import {
+  comAContaDaMidia,
+  fechamentoDosItens,
+  parametrosDaVersao,
+  type ParametrosMidia,
+} from "@/lib/calculos/midia-off";
 import type { CategoriaModeloPlanilha, TipoCusto } from "@/lib/types";
 
 /** Uma linha do orçado do job, com o id de `jobs_itens_orcado`. */
@@ -59,7 +65,11 @@ export interface BaseDosEspelhos {
   percentualImposto: number;
   internacional: ParametrosInternacionais | null;
   modeloPlanilha: CategoriaModeloPlanilha;
-  /** Só no modelo mensal; nulo nos outros. */
+  /** As condições da Mídia Off (decisão 167): com elas a conta é a da
+   *  mídia, não a nacional. Nulo nos outros modelos. */
+  midia: ParametrosMidia | null;
+  /** Só nos modelos que faturam por mês (mensal e Mídia Off); nulo nos
+   *  outros. */
   mensal: MesesDoEspelho | null;
 }
 
@@ -101,7 +111,7 @@ export async function lerBaseDosEspelhos(
       .select(
         // ⚠️ Dicas de FK obrigatórias: há duas FKs entre jobs e
         // versoes_orcamento, e duas entre versoes_orcamento e orcamentos.
-        "id, versao_orcamento_aprovada_id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+        "id, versao_orcamento_aprovada_id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
       )
       .eq("id", jobId)
       .eq("tenant_id", tenantId)
@@ -115,6 +125,8 @@ export async function lerBaseDosEspelhos(
           int_transaction_costs: number;
           moeda_estrangeira: string | null;
           cambio_compra: number | null;
+          percentual_veiculo: number | string | null;
+          base_honorarios: string | null;
         } | null;
         orcamento: { categoria: { modelo_planilha: CategoriaModeloPlanilha } | null } | null;
       }>(),
@@ -155,12 +167,19 @@ export async function lerBaseDosEspelhos(
     },
   );
 
+  const midia =
+    planilha.modeloPlanilha === "midia_off" && job.versao
+      ? parametrosDaVersao(job.versao)
+      : null;
+
   // Modelo mensal: os meses, o mês de cada agrupamento e os meses já
   // enviados — só para a parte de save dos meses enviados (`totaisParaRpc`).
+  // A Mídia Off também fatura por mês (decisão 167): o reenvio do job
+  // devolvido confere a data de recebimento de cada mês por aqui.
   let mensal: MesesDoEspelho | null = null;
   if (
     opcoes.comMeses !== false &&
-    planilha.modeloPlanilha === "mensal" &&
+    (planilha.modeloPlanilha === "mensal" || midia) &&
     job.versao_orcamento_aprovada_id
   ) {
     const versaoId = job.versao_orcamento_aprovada_id;
@@ -211,6 +230,7 @@ export async function lerBaseDosEspelhos(
       percentualImposto: Number(job.versao?.percentual_imposto ?? 0),
       internacional: planilha.internacional,
       modeloPlanilha: planilha.modeloPlanilha,
+      midia,
       mensal,
     },
   };
@@ -229,7 +249,7 @@ export function totaisDoFinanceiro(
   contar: string[] = [],
 ): VersaoTotais {
   const vistos = itensParaOFinanceiro(itens, base.pedidos, contar);
-  return calcularTotaisVersao(
+  const totais = calcularTotaisVersao(
     vistos.map((i) => ({
       tipo_custo: i.tipo_custo,
       total_orcado: i.total_orcado,
@@ -240,6 +260,8 @@ export function totaisDoFinanceiro(
     base.percentualImposto,
     base.internacional,
   );
+  // Mídia Off (decisão 167): valor do job e faturamento pela conta da mídia.
+  return base.midia ? comAContaDaMidia(totais, fechamentoDosItens(vistos, base.midia)) : totais;
 }
 
 /** Os três espelhos a partir do fechamento. */
@@ -278,6 +300,8 @@ export function savesDosMesesEnviados(
     })),
     base.percentualHonorarios,
     base.percentualImposto,
+    null,
+    base.midia,
   );
   return porMes
     .filter((m) => mensal.enviados.includes(m.mes))
@@ -311,6 +335,8 @@ export function faturamentoPorMesDoFinanceiro(
     })),
     base.percentualHonorarios,
     base.percentualImposto,
+    null,
+    base.midia,
   );
 }
 

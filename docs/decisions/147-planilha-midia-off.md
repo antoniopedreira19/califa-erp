@@ -46,7 +46,7 @@ O veículo é um fornecedor — ele recebe o PI, emite a nota e, no A · Repasse
 
 ## Entrega 1: até aprovar
 
-- O orçamento vai até a aprovação. "Enviar Job para Abertura" fica desligado na Mídia Off ("disponível na próxima entrega"), na tela e no servidor.
+- O orçamento vai até a aprovação. "Enviar Job para Abertura" fica desligado na Mídia Off ("disponível na próxima entrega"), na tela e no servidor. *(Liberado na 167, em 13/10/2026.)*
 - Exportar e importar planilha ficam desligados, na tela e no servidor.
 - Visão agregada: o orçamento de Mídia Off aparece só para consulta, com o atalho "Editar na tela do orçamento". Ele entra nos três indicadores do topo (pela conta da mídia) e fica fora do quadro de Totais, que é o da planilha nacional. Orçamento de Mídia Off não nasce pela agregada nem pelo lote.
 - A planilha de Mídia Off não se converte na de outra categoria, nem o contrário: quem precisa trocar cria um orçamento novo.
@@ -60,6 +60,8 @@ Conferido no navegador em 06/10/2026, gravando no banco, no orçamento `TES-P001
 ## Próxima entrega (o job)
 
 Abertura com a conta da mídia, PPs do repasse, AP e PI por veículo e mês, errata, cancelamento da veiculação, faturamento por mês e encerramento.
+
+> ⚠️ **13/10/2026 — mudou na [167](167-job-da-midia-off-abrir-e-faturar.md):** o "Enviar Job para Abertura" da Mídia Off está liberado (tela e servidor). O job abre com a conta da mídia, fatura mês a mês depois da veiculação de cada mês, e o envio do último mês encerra o job. PP do repasse, AP e PI, errata e cancelamento da veiculação seguem para as entregas 3 a 5.
 
 ## ⚠️ Revisão de 2026-10-07 — versão nova de orçamento aprovado edita
 
