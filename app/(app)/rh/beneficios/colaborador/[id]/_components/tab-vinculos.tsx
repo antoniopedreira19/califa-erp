@@ -11,20 +11,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { VinculoDoColaborador } from "@/lib/queries/beneficios";
-import type { BeneficioModoCusteio, BeneficioTipo } from "@/lib/types";
+import type { BeneficioModoCusteio } from "@/lib/types";
 import { coresBeneficio } from "@/lib/beneficios/cores";
 import {
   encerrarVinculo,
   mudarModoCusteio,
 } from "@/lib/actions/beneficios/vinculos";
-import { FormVinculoInline } from "./form-vinculo-inline";
-
-type BeneficioOpcao = {
-  id: string;
-  nome: string;
-  tipo: BeneficioTipo;
-  beneficio_base_id: string | null;
-};
 
 const MODO_LABEL: Record<BeneficioModoCusteio, string> = {
   rateado: "Rateado 60/40",
@@ -38,17 +30,11 @@ const formatarData = (iso: string) => {
 };
 
 export function TabVinculos({
-  colaboradorId,
   vinculos,
-  beneficios,
-  mostrandoForm,
   colaboradorTemCpf,
   colaboradorTemDataNasc,
 }: {
-  colaboradorId: string;
   vinculos: VinculoDoColaborador[];
-  beneficios: BeneficioOpcao[];
-  mostrandoForm: boolean;
   colaboradorTemCpf: boolean;
   colaboradorTemDataNasc: boolean;
 }) {
@@ -74,14 +60,7 @@ export function TabVinculos({
         </div>
       )}
 
-      {mostrandoForm && (
-        <FormVinculoInline
-          colaboradorId={colaboradorId}
-          beneficios={beneficios}
-        />
-      )}
-
-      {ativos.length === 0 && encerrados.length === 0 && !mostrandoForm && (
+      {ativos.length === 0 && encerrados.length === 0 && (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center text-sm text-muted-foreground">
           Nenhum vínculo cadastrado. Clique em “Novo Benefício” no topo.
         </div>
