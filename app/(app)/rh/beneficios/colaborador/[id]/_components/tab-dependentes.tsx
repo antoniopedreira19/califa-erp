@@ -20,7 +20,6 @@ import {
   incluirDepEmPlano,
   removerDepDePlano,
 } from "@/lib/actions/beneficios/dependentes";
-import { FormDependenteInline } from "./form-dependente-inline";
 
 const formatarData = (iso: string) => {
   const [a, m, d] = iso.split("-");
@@ -34,15 +33,11 @@ const formatarCpf = (c: string) => {
 };
 
 export function TabDependentes({
-  colaboradorId,
   dependentes,
   vinculosAtivos,
-  mostrandoForm,
 }: {
-  colaboradorId: string;
   dependentes: DependenteComPlanos[];
   vinculosAtivos: VinculoDoColaborador[];
-  mostrandoForm: boolean;
 }) {
   const ativos = dependentes.filter(
     (d) => d.ativo && d.data_fim === null,
@@ -53,9 +48,7 @@ export function TabDependentes({
 
   return (
     <div className="space-y-5">
-      {mostrandoForm && <FormDependenteInline colaboradorId={colaboradorId} />}
-
-      {ativos.length === 0 && inativos.length === 0 && !mostrandoForm && (
+      {ativos.length === 0 && inativos.length === 0 && (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center text-sm text-muted-foreground">
           Nenhum dependente cadastrado. Clique em “Novo Dependente” no topo.
         </div>
