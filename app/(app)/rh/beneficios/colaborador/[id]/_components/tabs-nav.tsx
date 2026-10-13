@@ -5,7 +5,7 @@ export type AbaColaborador = "vinculos" | "dependentes" | "breakdown";
 const TABS: { key: AbaColaborador; label: string }[] = [
   { key: "vinculos", label: "Vínculos" },
   { key: "dependentes", label: "Dependentes" },
-  { key: "breakdown", label: "Breakdown da competência" },
+  { key: "breakdown", label: "Cálculo do mês" },
 ];
 
 export function TabsNav({
