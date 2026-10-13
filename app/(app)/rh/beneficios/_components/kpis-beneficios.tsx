@@ -27,14 +27,14 @@ export function KpisBeneficios({ kpis }: { kpis: BeneficioKpisTenant }) {
       />
       <KpiCard
         icon={Building2}
-        label="Custo mensal — California"
+        label="Custo mensal"
         value={formatarBrl(Number(kpis.custo_total_empresa))}
         hint="o que a empresa paga nesta competência"
         accent="emerald"
       />
       <KpiCard
         icon={UserRound}
-        label="Desconto mensal — colaboradores"
+        label="Desconto mensal"
         value={formatarBrl(Number(kpis.custo_total_colaboradores))}
         hint="total que sai da folha dos colaboradores"
         accent="amber"
