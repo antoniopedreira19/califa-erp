@@ -5255,9 +5255,9 @@ código publicado logo depois (`3305751`).
   veículo; A · Repasse = as PPs do repasse (`realizadoDaLinhaMidia`). Vale
   no cabeçalho do job e na visão agregada (`carregar-planilhas.ts`, onde o
   planejado da linha também é a nota).
-- **Em aberto:** o relatório de Rentabilidade mostra "—" no job de mídia
-  sem custo, e o BV no A · Direto da mídia (ver a 167, "Para conferir
-  depois").
+- **Relatório de Rentabilidade:** o job de mídia sem A · Repasse mostra o
+  resultado mesmo sem custo (decisão 167 §11). O BV no A · Direto da mídia
+  fica para a entrega 3 (ver a 167, "Para conferir depois").
 
 ## ⚠️ Nota de 2026-10-13 — Cancelamento de job aberto (decisão 169)
 

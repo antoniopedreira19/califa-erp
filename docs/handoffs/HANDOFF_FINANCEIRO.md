@@ -7100,8 +7100,11 @@ financeiro". Regra completa na §9 da decisão 115.
   migration `20261013500002`): no job de mídia, imposto = alíquota ×
   honorários (o realizado, nos meses enviados) e custo = as PPs do
   repasse; o A · Direto fica fora do custo. Os outros jobs não mudaram
-  (59 linhas conferidas iguais). Sem custo, o relatório mostra "—" — o job
-  de mídia só com A · Direto fica assim por enquanto (em aberto na 167).
+  (59 linhas conferidas iguais). O job de mídia **sem A · Repasse** mostra o
+  resultado mesmo sem custo (coluna `resultado_sem_custo`, migration
+  `20261013500003`; `computarResultado`): TES-1027/26 = R$ 675,95 e 80,5%
+  (÷ faturamento, a base do relatório). Com Repasse, "—" até a PP do
+  repasse. O Tiago revisa a base do % quando tratar dos relatórios.
 
 ## ⚠️ Nota de 2026-10-13 — Cancelamentos na Abertura de Job (decisão 169)
 

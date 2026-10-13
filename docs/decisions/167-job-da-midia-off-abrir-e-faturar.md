@@ -5,7 +5,7 @@
 **Quem decidiu:** Tiago, em 07 e 13/10/2026, sobre o plano do job em quatro entregas e o protótipo da entrega 2 (https://claude.ai/artifact/FrKQYCiCbjGtPyQ2TAveyR).
 **Continua:** a [147](147-planilha-midia-off.md) (a planilha e a conta da mídia, até a aprovação) e a [150](150-cadastro-de-veiculos.md) (o veículo).
 **Segue o modelo de:** a [078](078-orcamento-mensal-fee-e-always-on.md) e a [149](149-envio-para-abertura-por-tipo-de-job.md) (Fee e Always On: um envio de faturamento e uma data de recebimento por mês).
-**Migrations:** `20261013500001_job_da_midia_off_guarda_o_veiculo.sql` e `20261013500002_rentabilidade_da_midia_off.sql`.
+**Migrations:** `20261013500001_job_da_midia_off_guarda_o_veiculo.sql`, `20261013500002_rentabilidade_da_midia_off.sql` e `20261013500003_resultado_sem_custo_da_midia_off.sql`.
 
 ## O que aconteceu
 
@@ -142,15 +142,37 @@ nulas fora da Mídia Off.
   realizado R$ 5.600,00 no TES-1027/26 e realizado R$ 12.320,00 (só as
   notas do A · Direto) no TES-1026/26; a view, imposto R$ 164,05 e custo 0
   no TES-1027/26.
+- Depois da decisão 11: no relatório de Rentabilidade, o TES-1027/26
+  mostra faturamento R$ 840,00, resultado R$ 675,95 e 80,5%; o TES-1026/26
+  segue com "—" (tem Repasse e ainda não tem PP).
+
+## O relatório de Rentabilidade e o "—" (13/10/2026)
+
+11. O relatório só mostrava resultado com custo
+    (`calcularResultadoOperacional`: custo zero dá "—"). Com o A · Direto
+    fora do custo, o job de mídia só com A · Direto ficava sempre com "—".
+    O Tiago escolheu (opção 1): **manter a regra do relatório também na
+    mídia** — resultado ÷ faturamento, a base que a spec do relatório
+    (`docs/superpowers/specs/2026-08-28-relatorio-rentabilidade-design.md`,
+    §3.2) usa para todos os jobs — e mostrar o resultado mesmo sem custo no
+    job de Mídia Off **sem A · Repasse**. Com Repasse, o "—" segue até a PP
+    do repasse. Migration `20261013500003` (coluna `resultado_sem_custo` na
+    view) e `computarResultado` (`lib/relatorios/rentabilidade.ts`).
+    - O resultado em R$ é o mesmo da página do job (R$ 675,95 no
+      TES-1027/26); o percentual muda pelo divisor: 10,5% na página do job
+      (÷ valor do job), 80,5% no relatório (÷ faturamento). O Tiago vai
+      revisar a base do relatório quando tratar dos relatórios.
 
 ## Para conferir depois
 
-- **Relatório de Rentabilidade sem resultado.** O relatório só mostra
-  resultado com custo (`calcularResultadoOperacional`: custo zero dá "—";
-  decisão 045, "realizada só com PP"). Com o A · Direto fora do custo, o
-  job de mídia só com A · Direto aparece sempre com "—", e o com Repasse
-  até a PP do repasse. Levado ao Tiago em 13/10/2026.
-- **BV no A · Direto da mídia** — pedido do Tiago em 13/10/2026; o
-  desenho (onde se lança, se trava o encerramento junto com o último mês)
-  ainda vai ser combinado.
+- **A base do % do relatório** (faturamento × valor do job) — o Tiago
+  revisa quando tratar dos relatórios.
+- **Relatório nacional com A · Direto:** o R$ do relatório fica abaixo do
+  da página do job pelo principal do A · Direto, que a view tira do
+  faturamento mas mantém no custo (DEE-1001/26: R$ 336.000), contra a §3.2
+  da spec do relatório. É do relatório do Antonio; levado ao Tiago em
+  13/10/2026, sem mudança.
+- **BV no A · Direto da mídia** — pedido do Tiago em 13/10/2026; fica para
+  a entrega 3 (PP do repasse), com protótipo antes, decidindo também se o
+  BV trava o encerramento junto com o último mês.
 - A exportação da planilha interna do job de mídia.
