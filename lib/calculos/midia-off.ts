@@ -408,6 +408,28 @@ export function desembolsoDaMidia(
   return Math.round(contaDoNegociado(negociadoRepasse, p).notaVeiculo * 100) / 100;
 }
 
+/** A nota do veículo de uma linha: o custo PLANEJADO dela na mídia. */
+export function notaDoVeiculo(negociado: number | string | null, p: ParametrosMidia): number {
+  return Math.round(contaDoNegociado(Number(negociado ?? 0), p).notaVeiculo * 100) / 100;
+}
+
+/**
+ * O custo REALIZADO de uma linha do job de Mídia Off (Tiago, 13/10/2026):
+ * no A · Direto, a nota do veículo — o mesmo critério do A nacional, que
+ * espelha o planejado; no A · Repasse, as PPs do repasse (entrega 3).
+ * Zero antes da abertura no financeiro, como no nacional.
+ */
+export function realizadoDaLinhaMidia(
+  tipo: string,
+  negociado: number | string | null,
+  somaDasPPs: number,
+  p: ParametrosMidia,
+  jobAberto: boolean,
+): number {
+  if (!jobAberto) return 0;
+  return tipo === "AR" ? somaDasPPs : notaDoVeiculo(negociado, p);
+}
+
 /**
  * Os campos planos do fechamento nacional (`VersaoTotais`) trocados pelos da
  * conta da mídia. Quem grava e mostra os números do job — os espelhos de

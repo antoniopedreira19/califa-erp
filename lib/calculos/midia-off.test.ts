@@ -24,7 +24,9 @@ import {
   lerNumero,
   linhaDoItem,
   mesEmVeiculacao,
+  notaDoVeiculo,
   quantidadeDaLinha,
+  realizadoDaLinhaMidia,
   ultimaVeiculacaoDoMes,
   type LinhaMidia,
   type MeioDaVersao,
@@ -236,6 +238,16 @@ test("desembolso: só a nota dos veículos em A · Repasse", () => {
   ];
   assert.equal(desembolsoDaMidia(itens, P20), 16000);
   assert.equal(desembolsoDaMidia([{ tipo_custo: "A", total_orcado: 2000 }], P20), 0);
+});
+
+test("realizado da linha: nota do veículo no A · Direto, PPs no A · Repasse", () => {
+  // P20: veículo 80%.
+  assert.equal(notaDoVeiculo(2000, P20), 1600);
+  assert.equal(realizadoDaLinhaMidia("A", 2000, 999, P20, true), 1600);
+  assert.equal(realizadoDaLinhaMidia("AR", 20000, 0, P20, true), 0);
+  assert.equal(realizadoDaLinhaMidia("AR", 20000, 16000, P20, true), 16000);
+  // Antes da abertura no financeiro não há realizado.
+  assert.equal(realizadoDaLinhaMidia("A", 2000, 0, P20, false), 0);
 });
 
 test("os campos planos do job pela conta da mídia", () => {

@@ -5251,6 +5251,10 @@ código publicado logo depois (`3305751`).
 - **Testado** no TES-1026/26 (mídia com Repasse, nov–dez/2026) e no
   TES-1027/26 (só A · Direto, ago–set/2026: enviou agosto, depois "Enviar
   setembro e encerrar o job" → `finalizado`).
-- **Em aberto:** o relatório de Rentabilidade e o realizado da visão
-  agregada ainda tratam o job de mídia pela regra nacional (ver a 167,
-  "Para conferir depois").
+- **Realizado da mídia** (Tiago, 13/10/2026): A · Direto = a nota do
+  veículo; A · Repasse = as PPs do repasse (`realizadoDaLinhaMidia`). Vale
+  no cabeçalho do job e na visão agregada (`carregar-planilhas.ts`, onde o
+  planejado da linha também é a nota).
+- **Em aberto:** o relatório de Rentabilidade mostra "—" no job de mídia
+  sem custo, e o BV no A · Direto da mídia (ver a 167, "Para conferir
+  depois").
