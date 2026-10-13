@@ -70,6 +70,7 @@ import {
   vencimentosNasJanelas,
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFeriadosNacionais } from "@/lib/data/feriados-nacionais";
+import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
 
 const BUCKET = "pedidos-compra";
 const PDF_TTL_SEGUNDOS = 3600;
@@ -1214,6 +1215,9 @@ async function reservarPedidoCompraImpl(
   if (!gate.ok) return gate;
 
   const { job, session, item, supabase } = gate;
+
+  const travaMidia = await travaDoJobDeMidia(supabase, session.activeTenant.id, job.id, "pp");
+  if (travaMidia) return { ok: false, message: travaMidia };
 
   // Linha com save não gera PP (decisão 099). Barrar já na reserva evita o
   // upload de anexos de uma PP que não vai existir.
@@ -2748,6 +2752,9 @@ export async function salvarPPAEmitir(
   if (!gate.ok) return gate;
   const { item, job, supabase } = gate;
   const tenantId = session.activeTenant.id;
+
+  const travaMidia = await travaDoJobDeMidia(supabase, tenantId, job.id, "pp");
+  if (travaMidia) return { ok: false, message: travaMidia };
 
   const comSave = await barrarPPEmLinhaComSave(supabase, tenantId, item);
   if (comSave) return comSave;

@@ -811,6 +811,7 @@ export default async function JobNoFinanceiroPage({
               // O financeiro não faz errata nem vê a pronta (decisão 159).
               papelNaErrata={null}
               errataPronta={null}
+              midia={detalhe.midia}
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}

@@ -7080,6 +7080,29 @@ financeiro". Regra completa na §9 da decisão 115.
 - O aviso das PPs já no financeiro ao trocar conta ou PIX (decisão 067) vale
   para eles também: a PP enviada continua pagando pela foto que guardou.
 
+## ⚠️ Nota de 2026-10-13 — Abertura do job de Mídia Off (decisão 167)
+
+- O job de Mídia Off chega à fila de abertura. Os números são os da conta
+  da mídia: **custo previsto** = as notas dos veículos em A · Repasse ("…que
+  a California paga — no A · Direto o veículo cobra do cliente"; zero no job
+  só com A · Direto, que abre sem curva); **impostos previstos** = alíquota ×
+  honorários ("…sobre os honorários"); **recebimento** = uma parcela por mês,
+  com o faturamento de cada mês.
+- `custoPrevistoDoFinanceiro`, `abrirJobNoFinanceiro` e `impostoDoJob`
+  leem a mídia por `lerMidiaDoJob` / `lerFechamentoMidiaDoJob`
+  (`lib/data/midia-do-job.ts`). A aba Planilha Interna da abertura e do job
+  no financeiro mostra a planilha da mídia, só leitura.
+- O "Editar orçado" não vale para o job de mídia nesta entrega (o servidor
+  recusa; a tela não mostra).
+- O envio de faturamento do job de mídia chega por mês, e o do último mês
+  encerra o job junto.
+- **Relatórios de Rentabilidade e de Faturamento** (`vw_job_rentabilidade`,
+  migration `20261013500002`): no job de mídia, imposto = alíquota ×
+  honorários (o realizado, nos meses enviados) e custo = as PPs do
+  repasse; o A · Direto fica fora do custo. Os outros jobs não mudaram
+  (59 linhas conferidas iguais). Sem custo, o relatório mostra "—" — o job
+  de mídia só com A · Direto fica assim por enquanto (em aberto na 167).
+
 ## ⚠️ Nota de 2026-10-13 — Cancelamentos na Abertura de Job (decisão 169)
 
 - **Faixa "Cancelamentos"** no topo da fila "Jobs aguardando abertura",

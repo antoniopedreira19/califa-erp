@@ -27,6 +27,8 @@ import {
   type TipoCusto,
 } from "@/lib/types";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import { desembolsoDaMidia } from "@/lib/calculos/midia-off";
+import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
 import { gerarCodigoProjetoFinanceiro } from "@/lib/codigos/projetos-financeiro";
 import { consumoDasPrevisoes } from "./consumo";
 import { registrarFotoDaAbertura } from "./fotos";
@@ -246,7 +248,7 @@ async function conferirRecebimentoPorMes(
   if (!leitura.mensal) {
     if (linhas.some((l) => l.mes)) {
       return {
-        erro: "Só job de Fee ou Always On tem previsão de recebimento por mês.",
+        erro: "Só job de Fee, Always On ou Mídia Off tem previsão de recebimento por mês.",
       };
     }
     return {
@@ -438,29 +440,41 @@ export async function abrirJobNoFinanceiro(
   if (refsErro) return { ok: false, message: refsErro };
 
   // ---------- Custo previsto: relido do banco, não do formulário ----------
-  const { data: itens, error: itensErro } = await supabase
-    .from("jobs_itens_orcado")
-    .select("tipo_custo, total_planejado")
-    .eq("job_id", jobId)
-    .eq("tenant_id", session.activeTenant.id);
+  const [itensRes, midiaDoJob] = await Promise.all([
+    supabase
+      .from("jobs_itens_orcado")
+      .select("tipo_custo, total_planejado, total_orcado")
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id),
+    lerMidiaDoJob(supabase, session.activeTenant.id, jobId),
+  ]);
+  const { data: itens, error: itensErro } = itensRes;
 
-  if (itensErro) {
-    console.error("[abertura-job.planejado]", itensErro.message);
+  if (itensErro || !midiaDoJob.ok) {
+    if (itensErro) console.error("[abertura-job.planejado]", itensErro.message);
     return { ok: false, message: "Não foi possível ler a planilha do job." };
   }
 
-  const custoPrevisto = emCentavos(
-    (itens ?? []).reduce(
-      (
-        s,
-        i: { tipo_custo: TipoCusto; total_planejado: number | string | null },
-      ) =>
-        tipoGeraDesembolso(i.tipo_custo)
-          ? s + Number(i.total_planejado ?? 0)
-          : s,
-      0,
-    ),
-  );
+  // Mídia Off (decisão 167): a California desembolsa a nota dos veículos em
+  // A · Repasse — o planejado da linha é o negociado, e o veículo só
+  // recebe a parte dele.
+  const custoPrevisto = midiaDoJob.midia
+    ? desembolsoDaMidia(
+        (itens ?? []) as { tipo_custo: string; total_orcado: number | string | null }[],
+        midiaDoJob.midia,
+      )
+    : emCentavos(
+        (itens ?? []).reduce(
+          (
+            s,
+            i: { tipo_custo: TipoCusto; total_planejado: number | string | null },
+          ) =>
+            tipoGeraDesembolso(i.tipo_custo)
+              ? s + Number(i.total_planejado ?? 0)
+              : s,
+          0,
+        ),
+      );
 
   const semDesembolso = custoPrevisto <= 0;
 

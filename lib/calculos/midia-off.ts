@@ -389,6 +389,120 @@ export function limitesDoMes(mes: string): { inicio: string; fim: string } {
   return { inicio: `${m7}-01`, fim: `${m7}-${String(ultimo).padStart(2, "0")}` };
 }
 
+// ---- O job da Mídia Off (decisão 167) ------------------------------------
+
+/**
+ * O que a California desembolsa num job de Mídia Off: a nota dos veículos
+ * em A · Repasse (no A · Direto o veículo cobra direto do cliente). É o
+ * "custo previsto" da abertura no financeiro — no nacional, o planejado dos
+ * tipos com PP; aqui o planejado da linha é o negociado, e o veículo só
+ * recebe a parte dele.
+ */
+export function desembolsoDaMidia(
+  itens: ReadonlyArray<{ tipo_custo: string; total_orcado: number | string | null }>,
+  p: ParametrosMidia,
+): number {
+  const negociadoRepasse = itens
+    .filter((i) => i.tipo_custo === "AR")
+    .reduce((s, i) => s + Number(i.total_orcado ?? 0), 0);
+  return Math.round(contaDoNegociado(negociadoRepasse, p).notaVeiculo * 100) / 100;
+}
+
+/** A nota do veículo de uma linha: o custo PLANEJADO dela na mídia. */
+export function notaDoVeiculo(negociado: number | string | null, p: ParametrosMidia): number {
+  return Math.round(contaDoNegociado(Number(negociado ?? 0), p).notaVeiculo * 100) / 100;
+}
+
+/**
+ * O custo REALIZADO de uma linha do job de Mídia Off (Tiago, 13/10/2026):
+ * no A · Direto, a nota do veículo — o mesmo critério do A nacional, que
+ * espelha o planejado; no A · Repasse, as PPs do repasse (entrega 3).
+ * Zero antes da abertura no financeiro, como no nacional.
+ */
+export function realizadoDaLinhaMidia(
+  tipo: string,
+  negociado: number | string | null,
+  somaDasPPs: number,
+  p: ParametrosMidia,
+  jobAberto: boolean,
+): number {
+  if (!jobAberto) return 0;
+  return tipo === "AR" ? somaDasPPs : notaDoVeiculo(negociado, p);
+}
+
+/**
+ * Os campos planos do fechamento nacional (`VersaoTotais`) trocados pelos da
+ * conta da mídia. Quem grava e mostra os números do job — os espelhos de
+ * `jobs`, o cabeçalho, a barra de faturamento — lê só estes campos; a quebra
+ * por tipo e os lados (`faturamento`, `job`, `cliente`) não valem na mídia e
+ * ninguém os lê lá.
+ */
+export function comAContaDaMidia<
+  T extends {
+    honorarios: number;
+    imposto: number;
+    intTaxes: number;
+    intTransactionCosts: number;
+    deducoesDoResultado: number;
+    faturamentoPrevisto: number;
+    valorJob: number;
+  },
+>(totais: T, f: FechamentoMidia): T {
+  return {
+    ...totais,
+    honorarios: f.honorarios,
+    imposto: f.imposto,
+    intTaxes: 0,
+    intTransactionCosts: 0,
+    deducoesDoResultado: f.imposto,
+    faturamentoPrevisto: f.faturamentoPrevisto,
+    valorJob: f.valorJob,
+  };
+}
+
+// ---- Fim da veiculação (decisão 167) -------------------------------------
+
+/**
+ * A última veiculação de um mês do job: o maior dia com inserção das linhas
+ * de grade e o maior fim das linhas de período. O fim pode cair no mês
+ * seguinte — a linha que cruza o mês entra inteira no mês em que começa
+ * (p17) —, e é ele que conta. O faturamento do mês só libera DEPOIS dela
+ * (Tiago, 07 e 13/10/2026). `null` sem data nenhuma nas linhas.
+ */
+export function ultimaVeiculacaoDoMes(
+  mes: string,
+  linhas: ReadonlyArray<{
+    insercoes_por_dia: Record<string, number | string> | null;
+    data_fim: string | null;
+  }>,
+): string | null {
+  const m7 = mes.slice(0, 7);
+  let ultima: string | null = null;
+  for (const l of linhas) {
+    for (const [dia, n] of Object.entries(l.insercoes_por_dia ?? {})) {
+      if (!(Number(n) > 0)) continue;
+      const iso = `${m7}-${String(Number(dia)).padStart(2, "0")}`;
+      if (ultima === null || iso > ultima) ultima = iso;
+    }
+    const fim = l.data_fim ? l.data_fim.slice(0, 10) : null;
+    if (fim && (ultima === null || fim > ultima)) ultima = fim;
+  }
+  return ultima;
+}
+
+/** O dia seguinte, `YYYY-MM-DD`: quando o faturamento do mês libera. */
+export function diaSeguinte(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** O mês ainda está em veiculação em `hoje` (`YYYY-MM-DD`)? Sem data nas
+ *  linhas, vale o último dia do mês. */
+export function mesEmVeiculacao(mes: string, ultima: string | null, hoje: string): boolean {
+  return hoje <= (ultima ?? limitesDoMes(mes).fim);
+}
+
 // ---- Leitura de números digitados ----------------------------------------
 
 /** "1.234,56" ou "1234,56" → número. Vazio ou inválido → null. */

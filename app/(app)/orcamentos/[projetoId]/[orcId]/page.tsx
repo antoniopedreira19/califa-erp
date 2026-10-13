@@ -643,9 +643,10 @@ export default async function OrcamentoDetailPage({
     // abertura, a cópia é o que acabou de ser enviado ("Ver dados do job").
     job?.status === "rejeitado_financeiro" || job?.status === "aguardando_abertura"
       ? lerBaseDosEspelhos(supabase, session.activeTenant.id, job.id, {
-          // O mensal pede a data de recebimento de cada mês pelo
-          // faturamento da cópia (decisão 149); os outros não leem meses.
-          comMeses: modeloDoOrcamento === "mensal",
+          // O mensal e a Mídia Off pedem a data de recebimento de cada mês
+          // pelo faturamento da cópia (decisões 149 e 167); os outros não
+          // leem meses.
+          comMeses: modeloDoOrcamento === "mensal" || modeloDoOrcamento === "midia_off",
         })
       : Promise.resolve(null),
     // PPs que travam o "Cancelar aprovação" do job devolvido e o "Cancelar
@@ -1318,12 +1319,13 @@ function VersaoSelecionada({
     ? fechamentoMidia.faturamentoPrevisto
     : totais.faturamentoPrevisto;
 
-  // Envio para abertura do Fee e do Always On (decisão 149): os meses e o
-  // faturamento de cada um, na MESMA origem do fechamento que o formulário
-  // mostra — a cópia do job quando ela existe, a versão antes do envio.
-  // Nulo fora do mensal: é isso que mantém a Data Evento e a data única.
+  // Envio para abertura do Fee e do Always On (decisão 149) e da Mídia Off
+  // (decisão 167): os meses e o faturamento de cada um, na MESMA origem do
+  // fechamento que o formulário mostra — a cópia do job quando ela existe,
+  // a versão antes do envio. Nulo fora deles: é isso que mantém a Data
+  // Evento e a data única.
   const mesesDoEnvio =
-    planilha.modeloPlanilha === "mensal"
+    planilha.modeloPlanilha === "mensal" || midiaOff
       ? (
           porMesDaCopia ??
           faturamentoPorMes(
@@ -1333,6 +1335,7 @@ function VersaoSelecionada({
             Number(versao.percentual_honorarios),
             Number(versao.percentual_imposto),
             planilha.internacional,
+            paramsMidia,
           )
         ).map((m) => ({ mes: m.mes, faturamento: m.faturamento }))
       : null;
@@ -1698,7 +1701,7 @@ function VersaoSelecionada({
         linhasSemVeiculo={midiaOff ? itens.filter((i) => !i.fornecedor_id).length : null}
         parServicoCategoria={parServicoCategoria}
         midiaOff={midiaOff}
-        periodoTravado={planilha.modeloPlanilha === "mensal"}
+        periodoTravado={planilha.modeloPlanilha === "mensal" || midiaOff}
         servicoInterno={interno}
         mesesDoEnvio={mesesDoEnvio}
         custoPlanejado={custoPlanejado}
