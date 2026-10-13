@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -530,33 +531,26 @@ export function EnviarJobModal({
                 : "Opções vindas dos responsáveis do projeto."
             }
           >
-            <Select
-              value={dados.gpId}
-              onValueChange={(v) => onChange({ gpId: v })}
+            {/* Combobox, não Select: digitar acha o nome, como no
+                formulário do orçamento (13/10/2026). */}
+            <Combobox
+              ariaLabel="GP Responsável"
+              items={gpsDoProjeto.map((p) => ({ value: p.id, label: p.nome }))}
+              value={dados.gpId || null}
+              onChange={(v) => onChange({ gpId: v ?? "" })}
               disabled={gpsDoProjeto.length === 0}
-            >
-              <SelectTrigger
-                className={cn(
-                  erroDe("gp_responsavel_id") &&
-                    "border-california-red ring-2 ring-california-red/15",
-                )}
-              >
-                <SelectValue
-                  placeholder={
-                    gpsDoProjeto.length === 0
-                      ? "Projeto sem responsável cadastrado"
-                      : "Selecione o GP responsável"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {gpsDoProjeto.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder={
+                gpsDoProjeto.length === 0
+                  ? "Projeto sem responsável cadastrado"
+                  : "Selecione o GP responsável"
+              }
+              buscaPlaceholder="Escreva o nome"
+              className={cn(
+                COMBOBOX_COMO_SELECT,
+                erroDe("gp_responsavel_id") &&
+                  "border-california-red ring-2 ring-california-red/15",
+              )}
+            />
           </Campo>
 
           <Campo
@@ -622,26 +616,19 @@ export function EnviarJobModal({
             erro={erroDe("produtor_id")}
             apoio="Se alterar, o orçamento é atualizado na confirmação."
           >
-            <Select
-              value={dados.produtorId}
-              onValueChange={(v) => onChange({ produtorId: v })}
-            >
-              <SelectTrigger
-                className={cn(
-                  erroDe("produtor_id") &&
-                    "border-california-red ring-2 ring-california-red/15",
-                )}
-              >
-                <SelectValue placeholder="Selecione o produtor responsável" />
-              </SelectTrigger>
-              <SelectContent>
-                {produtores.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              ariaLabel="Produtor Responsável"
+              items={produtores.map((p) => ({ value: p.id, label: p.nome }))}
+              value={dados.produtorId || null}
+              onChange={(v) => onChange({ produtorId: v ?? "" })}
+              placeholder="Selecione o produtor responsável"
+              buscaPlaceholder="Escreva o nome"
+              className={cn(
+                COMBOBOX_COMO_SELECT,
+                erroDe("produtor_id") &&
+                  "border-california-red ring-2 ring-california-red/15",
+              )}
+            />
           </Campo>
 
           {/* Linha 5 — início, fim e o evento. */}

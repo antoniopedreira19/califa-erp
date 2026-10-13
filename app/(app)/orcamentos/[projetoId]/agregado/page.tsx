@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { saveDaVersao, saldosDeSaveDoCliente } from "@/lib/data/saves";
 import type { SaldoDeSave } from "@/lib/data/saves";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
-import { listActiveMembers } from "@/lib/data/members";
+import { listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
@@ -151,7 +151,9 @@ export default async function OrcamentosAgregadoPage({
       .eq("status", "ativo")
       .order("nome")
       .returns<{ id: string; nome: string }[]>(),
-    listActiveMembers(tenantId),
+    // Só quem tem o papel Produtor (13/10/2026): a lista serve apenas ao
+    // formulário de orçamento novo.
+    listarProdutoresAtivos(tenantId),
     supabase
       .from("projeto_regionais")
       .select("regional_id, regional:regionais(id, nome)")

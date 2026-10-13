@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Lock } from "lucide-react";
@@ -93,8 +94,9 @@ interface Props {
   cidadeAtual?: CidadeOption | null;
   /** GP responsável sai dos responsáveis do projeto. */
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
-  /** Produtor sai de todos os membros ativos — o time de produção ainda
-   *  não está modelado como papel próprio. */
+  /** Só quem tem o papel Produtor (`listarProdutoresAtivos`, 13/10/2026).
+   *  Na edição, quem chama acrescenta o produtor já gravado, se ele não
+   *  tiver o papel — senão o campo abriria vazio. */
   produtores: Pick<Profile, "id" | "nome">[];
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -111,6 +113,12 @@ interface Props {
   /** Rótulo do botão de envio. O padrão serve à tela de sempre. */
   rotuloSubmit?: string;
 }
+
+/** A lista de GP e de produtor nunca fica mais estreita que 280px. No
+ *  editor lateral o campo tem metade da gaveta, e a lista na largura dele
+ *  cortava os nomes longos ("Mina Santana Moura An…"). */
+const LARGURA_LISTA_DE_PESSOAS =
+  "w-[max(var(--radix-popover-trigger-width),280px)]";
 
 /** Qual confirmação a troca de categoria pede, se pedir. */
 type TrocaDePlanilha = "entra_no_mensal" | "sai_do_mensal" | null;
@@ -552,28 +560,23 @@ export function OrcamentoForm({
           required
           errors={fieldErrors}
         >
-          <Select
-            value={gpId}
-            onValueChange={setGpId}
+          {/* Combobox, não Select: digitar acha o nome, como no campo de
+              cliente do projeto (13/10/2026). */}
+          <Combobox
+            id="gp_responsavel_id"
+            items={gpsDoProjeto.map((r) => ({ value: r.id, label: r.nome }))}
+            value={gpId || null}
+            onChange={(v) => setGpId(v ?? "")}
             disabled={gpsDoProjeto.length === 0}
-          >
-            <SelectTrigger className={erroClasses("gp_responsavel_id")}>
-              <SelectValue
-                placeholder={
-                  gpsDoProjeto.length === 0
-                    ? "Projeto sem responsável cadastrado"
-                    : "Selecione o GP responsável"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {gpsDoProjeto.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder={
+              gpsDoProjeto.length === 0
+                ? "Projeto sem responsável cadastrado"
+                : "Selecione o GP responsável"
+            }
+            buscaPlaceholder="Escreva o nome"
+            larguraLista={LARGURA_LISTA_DE_PESSOAS}
+            className={`${COMBOBOX_COMO_SELECT} ${erroClasses("gp_responsavel_id")}`}
+          />
           {gpsDoProjeto.length === 0 && (
             <p className="text-xs text-muted-foreground">
               As opções vêm dos responsáveis do projeto.
@@ -587,18 +590,17 @@ export function OrcamentoForm({
           required
           errors={fieldErrors}
         >
-          <Select value={produtorId} onValueChange={setProdutorId}>
-            <SelectTrigger className={erroClasses("produtor_id")}>
-              <SelectValue placeholder="Selecione o produtor responsável" />
-            </SelectTrigger>
-            <SelectContent>
-              {produtores.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            id="produtor_id"
+            items={produtores.map((r) => ({ value: r.id, label: r.nome }))}
+            value={produtorId || null}
+            onChange={(v) => setProdutorId(v ?? "")}
+            placeholder="Selecione o produtor responsável"
+            buscaPlaceholder="Escreva o nome"
+            larguraLista={LARGURA_LISTA_DE_PESSOAS}
+            alinharLista="end"
+            className={`${COMBOBOX_COMO_SELECT} ${erroClasses("produtor_id")}`}
+          />
         </Field>
 
         <Field
