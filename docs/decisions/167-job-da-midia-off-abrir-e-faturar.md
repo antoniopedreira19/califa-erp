@@ -5,7 +5,7 @@
 **Quem decidiu:** Tiago, em 07 e 13/10/2026, sobre o plano do job em quatro entregas e o protótipo da entrega 2 (https://claude.ai/artifact/FrKQYCiCbjGtPyQ2TAveyR).
 **Continua:** a [147](147-planilha-midia-off.md) (a planilha e a conta da mídia, até a aprovação) e a [150](150-cadastro-de-veiculos.md) (o veículo).
 **Segue o modelo de:** a [078](078-orcamento-mensal-fee-e-always-on.md) e a [149](149-envio-para-abertura-por-tipo-de-job.md) (Fee e Always On: um envio de faturamento e uma data de recebimento por mês).
-**Migration:** `20261013500001_job_da_midia_off_guarda_o_veiculo.sql`.
+**Migrations:** `20261013500001_job_da_midia_off_guarda_o_veiculo.sql` e `20261013500002_rentabilidade_da_midia_off.sql`.
 
 ## O que aconteceu
 
@@ -75,6 +75,17 @@ veiculados). A 2 sobe sozinha (Tiago, 07/10/2026, opção 1a).
 8. **O que o job de Mídia Off ainda não tem**, travado na tela e no
    servidor: errata (entrega 5), "Editar orçado" do financeiro (entrega 5),
    PP (entrega 3) e a exportação da planilha interna do job.
+9. **Custo realizado** (Tiago, 13/10/2026, "Nota do veículo"): no
+   A · Direto, a nota do veículo — o mesmo critério do A nacional, que
+   espelha o planejado; no A · Repasse, as PPs do repasse (zero até a
+   entrega 3). Vale no cabeçalho do job e na visão agregada do projeto, onde
+   o planejado da linha também é a nota.
+10. **Relatório de Rentabilidade** (Tiago, 13/10/2026, "Conta da mídia";
+    migration `20261013500002`): imposto previsto = alíquota × honorários;
+    imposto realizado = a mesma conta nos meses já enviados; custo = as PPs
+    do repasse — o A · Direto fica fora do custo, como já fica fora do
+    faturamento. A conta dos outros modelos não mudou (as 59 linhas não-mídia
+    da view conferidas iguais, antes e depois).
 
 ## No código
 
@@ -126,10 +137,20 @@ nulas fora da Mídia Off.
   (R$ 600,00); o job ficou `finalizado`, com "Encerrado com o envio do
   último mês" e os Totais da campanha no "Ver envio".
 
+- Depois das decisões 9 e 10: o cabeçalho do TES-1027/26 mostra o
+  realizado R$ 675,95 (10,5%), igual ao planejado; a agregada, planejado e
+  realizado R$ 5.600,00 no TES-1027/26 e realizado R$ 12.320,00 (só as
+  notas do A · Direto) no TES-1026/26; a view, imposto R$ 164,05 e custo 0
+  no TES-1027/26.
+
 ## Para conferir depois
 
-- O relatório de Rentabilidade (`vw_job_rentabilidade`) e o realizado da
-  visão agregada seguem a regra nacional para o job de mídia: imposto com
-  gross-up sobre o faturamento e o A · Direto como custo pelo orçado (o
-  negociado). Levado ao Tiago em 13/10/2026.
+- **Relatório de Rentabilidade sem resultado.** O relatório só mostra
+  resultado com custo (`calcularResultadoOperacional`: custo zero dá "—";
+  decisão 045, "realizada só com PP"). Com o A · Direto fora do custo, o
+  job de mídia só com A · Direto aparece sempre com "—", e o com Repasse
+  até a PP do repasse. Levado ao Tiago em 13/10/2026.
+- **BV no A · Direto da mídia** — pedido do Tiago em 13/10/2026; o
+  desenho (onde se lança, se trava o encerramento junto com o último mês)
+  ainda vai ser combinado.
 - A exportação da planilha interna do job de mídia.

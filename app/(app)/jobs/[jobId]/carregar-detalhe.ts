@@ -87,6 +87,7 @@ import {
 import {
   comAContaDaMidia,
   fechamentoDosItens,
+  realizadoDaLinhaMidia,
   parametrosDaVersao,
   type ParametrosMidia,
 } from "@/lib/calculos/midia-off";
@@ -1175,12 +1176,25 @@ export async function carregarDetalheDoJob(
     ),
   );
   // Mídia Off (decisão 167): o custo planejado são as notas dos veículos; o
-  // realizado (PP do repasse, inserção que não foi ao ar) chega com as
-  // entregas 3 e 5 — até lá, zero, e o cabeçalho mostra travessão.
+  // realizado é a nota no A · Direto e as PPs do repasse no A · Repasse
+  // (Tiago, 13/10/2026). A mídia ainda não tem BV.
   const custoPlanejadoJob = fechamentoMidiaJob
     ? fechamentoMidiaJob.custoPlanejado
     : blocosDoJob.planejado.bruto;
-  const custoRealizadoJob = fechamentoMidiaJob ? 0 : blocosDoJob.realizado.bruto;
+  const custoRealizadoJob = paramsMidia
+    ? itens.reduce(
+        (s, it) =>
+          s +
+          realizadoDaLinhaMidia(
+            it.tipo_custo,
+            it.total_orcado,
+            Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
+            paramsMidia,
+            jobJaAberto,
+          ),
+        0,
+      )
+    : blocosDoJob.realizado.bruto;
   const bvPlanejadoJob = fechamentoMidiaJob ? 0 : blocosDoJob.planejado.deducaoBv;
   const bvRealizadoJob = fechamentoMidiaJob ? 0 : blocosDoJob.realizado.deducaoBv;
 

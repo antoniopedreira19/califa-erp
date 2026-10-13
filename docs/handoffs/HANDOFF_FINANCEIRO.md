@@ -7096,3 +7096,9 @@ financeiro". Regra completa na §9 da decisão 115.
   recusa; a tela não mostra).
 - O envio de faturamento do job de mídia chega por mês, e o do último mês
   encerra o job junto.
+- **Relatórios de Rentabilidade e de Faturamento** (`vw_job_rentabilidade`,
+  migration `20261013500002`): no job de mídia, imposto = alíquota ×
+  honorários (o realizado, nos meses enviados) e custo = as PPs do
+  repasse; o A · Direto fica fora do custo. Os outros jobs não mudaram
+  (59 linhas conferidas iguais). Sem custo, o relatório mostra "—" — o job
+  de mídia só com A · Direto fica assim por enquanto (em aberto na 167).
