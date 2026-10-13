@@ -1169,6 +1169,9 @@ export interface LinhaJobRentabilidade {
   imposto_realizado: number;
   custo_realizado: number;
   bv_realizado: number;
+  /** Decisão 167: job de Mídia Off sem A · Repasse — o resultado aparece
+   *  mesmo sem custo (o A · Direto fica fora do custo do relatório). */
+  resultado_sem_custo: boolean;
 }
 
 /**

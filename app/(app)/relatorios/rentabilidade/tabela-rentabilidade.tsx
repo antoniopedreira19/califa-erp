@@ -21,6 +21,7 @@ interface Props {
     imposto: number;
     custo: number;
     bv: number;
+    resultadoSemCusto: boolean;
   };
 }
 
@@ -185,6 +186,7 @@ function basesDaLinha(l: LinhaJobRentabilidade, modo: ModoRentabilidade) {
     imposto: impostoDaLinha(l, modo),
     custo: l.custo_realizado,
     bv: l.bv_realizado,
+    resultadoSemCusto: l.resultado_sem_custo,
   };
 }
 function resultOpDaLinha(l: LinhaJobRentabilidade, modo: ModoRentabilidade) {

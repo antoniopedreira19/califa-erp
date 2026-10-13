@@ -35,6 +35,7 @@ const linha = (over: Partial<LinhaJobRentabilidade>): LinhaJobRentabilidade => (
   faturamento_previsto: 0, imposto_previsto: 0,
   faturamento_realizado: 0, imposto_realizado: 0,
   custo_realizado: 0, bv_realizado: 0,
+  resultado_sem_custo: false,
   ...over,
 });
 
@@ -74,6 +75,20 @@ console.log("\n=== 3. Grupo sem custo devolve resultadoGeral null ===");
   const r = agregarBases([linha({ faturamento_previsto: 10000 })], "previsto");
   assert("sem custo → resultOp null", r.resultadoOperacional === null);
   assert("sem custo → resultGeral null", r.resultadoGeral === null);
+}
+
+console.log("\n=== 3b. Mídia Off sem A · Repasse mostra o resultado sem custo (decisão 167) ===");
+{
+  // TES-1027/26: faturamento 840, imposto 164,05, custo 0.
+  const midia = linha({
+    faturamento_previsto: 840, imposto_previsto: 164.05, resultado_sem_custo: true,
+  });
+  const r = agregarBases([midia], "previsto");
+  assert("resultOp 675,95", Math.abs((r.resultadoOperacional ?? 0) - 675.95) < 0.01);
+  assert("rent 80,5% (base faturamento)", Math.abs((r.resultadoGeral ?? 0) - 80.47) < 0.01);
+  // Junto de um job nacional sem custo, o grupo segue com travessão.
+  const misto = agregarBases([midia, linha({ job_id: "j2", faturamento_previsto: 100 })], "previsto");
+  assert("grupo misto sem custo → null", misto.resultadoOperacional === null);
 }
 
 console.log("\n=== 4. Grupo faturamento zero devolve resultadoGeral null ===");

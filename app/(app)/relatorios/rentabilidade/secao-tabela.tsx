@@ -13,6 +13,7 @@ type TotalBases = {
   imposto: number;
   custo: number;
   bv: number;
+  resultadoSemCusto: boolean;
 };
 
 interface Props {

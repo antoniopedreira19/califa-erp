@@ -45,6 +45,7 @@ function computarPorModo(
     imposto: grupos.reduce((s, g) => s + g.bases.imposto, 0),
     custo: grupos.reduce((s, g) => s + g.bases.custo, 0),
     bv: grupos.reduce((s, g) => s + g.bases.bv, 0),
+    resultadoSemCusto: grupos.length > 0 && grupos.every((g) => g.bases.resultadoSemCusto),
   });
 
   return {
@@ -187,6 +188,7 @@ export default async function RentabilidadePage({ searchParams }: Props) {
     imposto: grupos.reduce((s, g) => s + g.bases.imposto, 0),
     custo: grupos.reduce((s, g) => s + g.bases.custo, 0),
     bv: grupos.reduce((s, g) => s + g.bases.bv, 0),
+    resultadoSemCusto: grupos.length > 0 && grupos.every((g) => g.bases.resultadoSemCusto),
   });
   const totalBasesA = {
     previsto: somarBases(gruposFiltrados.gruposA.previsto),
