@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { criarVinculo } from "@/lib/actions/beneficios/vinculos";
 import type { BeneficioModoCusteio } from "@/lib/types";
 import type { BeneficioCompleto } from "@/lib/queries/beneficios";
@@ -203,14 +204,19 @@ export function ModalNovoVinculo({
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-foreground">
+            <label
+              htmlFor="novo-vinculo-data-inicio"
+              className="mb-1 block text-xs font-medium text-foreground"
+            >
               Data de início
             </label>
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/20"
+            <DatePicker
+              name="data_inicio_vinculo"
+              id="novo-vinculo-data-inicio"
+              defaultValue={dataInicio}
+              onDateChange={(d) =>
+                setDataInicio(d ? d.toISOString().slice(0, 10) : "")
+              }
             />
           </div>
 
