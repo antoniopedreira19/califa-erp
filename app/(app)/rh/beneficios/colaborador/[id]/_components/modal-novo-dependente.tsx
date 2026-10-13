@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   criarDependente,
   incluirDepEmPlano,
@@ -193,15 +194,24 @@ export function ModalNovoDependente({
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-foreground">
+              <label
+                htmlFor="novo-dep-data-nasc"
+                className="mb-1 block text-xs font-medium text-foreground"
+              >
                 Data de nascimento
               </label>
-              <input
-                type="date"
-                value={dataNasc}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setDataNasc(e.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/20"
+              <DatePicker
+                name="data_nascimento_dep"
+                id="novo-dep-data-nasc"
+                defaultValue={dataNasc}
+                placeholder="dd/mm/aaaa"
+                comSeletorAnoMes
+                fromYear={1920}
+                toYear={new Date().getFullYear()}
+                dateDisabled={(d) => d > new Date()}
+                onDateChange={(d) =>
+                  setDataNasc(d ? d.toISOString().slice(0, 10) : "")
+                }
               />
             </div>
           </div>
