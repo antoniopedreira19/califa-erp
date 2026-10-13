@@ -154,19 +154,7 @@ export default async function BeneficiosPage({
               .map((b) => ({ id: b.id, nome: b.nome }))}
           />
           <KpisBeneficios kpis={kpis} />
-          <TabelaColaboradores
-            linhas={linhas}
-            ano={ano}
-            mes={mes}
-            beneficios={catalogo
-              .filter((b) => b.ativo)
-              .map((b) => ({
-                id: b.id,
-                nome: b.nome,
-                tipo: b.tipo,
-                beneficio_base_id: b.beneficio_base_id,
-              }))}
-          />
+          <TabelaColaboradores linhas={linhas} ano={ano} mes={mes} />
         </div>
       )}
 
