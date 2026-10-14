@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  ArrowRight,
   Building2,
   Loader2,
   PlayCircle,
@@ -176,13 +175,6 @@ export function BotaoAplicarBeneficios(props: { ano: number; mes: number }) {
                   Linhas CLT não são tocadas (já vêm líquidas da contabilidade).
                 </p>
               </section>
-
-              {/* Seta visual entre os passos */}
-              <div className="flex items-center justify-center">
-                <div className="rounded-full bg-muted p-2">
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </div>
 
               {/* 2. O que acontece DEPOIS (quando enviar ao financeiro) */}
               <section className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 space-y-3">
