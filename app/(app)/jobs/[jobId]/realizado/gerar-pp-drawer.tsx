@@ -792,19 +792,33 @@ export function GerarPPDrawer({
   }
 
   /**
-   * Ligar ou desligar o pagamento urgente. Desligado com uma quarta de
-   * exceções no prazo, o prazo volta para a primeira janela aberta, com o
-   * aviso (decisão 172) — a quarta só vale com urgência. A data gravada que
-   * não muda fica: quem decide se ela ainda vale é o servidor.
+   * Ligar ou desligar o pagamento urgente (decisão 172).
+   *
+   * Ligado, o prazo fica vazio (pedido do Tiago, 14/10/2026): a pessoa abre
+   * o calendário de novo e vê que as quartas de exceções ficaram
+   * disponíveis. As parcelas padrão ficam vazias até o prazo voltar; a
+   * adiada à mão fica.
+   *
+   * Desligado com uma quarta de exceções no prazo, o prazo volta para a
+   * primeira janela aberta, com o aviso — a quarta só vale com urgência.
+   * Desligado com o prazo vazio, volta para a primeira janela, como numa PP
+   * nova.
    */
   function mudarUrgencia(ligado: boolean) {
     setUrgente(ligado);
     if (!ligado) setFaltaJustificativa(false);
     if (ligado) {
       setAvisoQuarta(null);
+      mudarPrazo("");
+      setPrazoVez((v) => v + 1);
       return;
     }
-    if (prazoPagamento && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento)) {
+    if (!prazoPagamento) {
+      mudarPrazo(primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados));
+      setPrazoVez((v) => v + 1);
+      return;
+    }
+    if (ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento)) {
       const de = prazoPagamento;
       const para = primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados);
       mudarPrazo(para);
@@ -880,7 +894,7 @@ export function GerarPPDrawer({
     }
     // A data salva que perdeu o prazo de envio ainda se salva, mas não gera
     // PP (decisão 157) — o servidor diria o mesmo na revisão.
-    if (gerar && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
+    if (gerar && prazoPagamento && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
       setErro(
         `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou. Escolha outra data para gerar a PP.`,
       );
@@ -1616,6 +1630,11 @@ export function GerarPPDrawer({
                     legenda={urgente ? <LegendaDaQuarta /> : undefined}
                   />
                   <EnvioAte vencimento={prazoPagamento} feriados={feriados} />
+                  {urgente && !prazoPagamento && (
+                    <p className="text-[11px] leading-snug text-california-red">
+                      Escolha o prazo de novo: as quartas de exceções estão liberadas.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <span className="text-xs font-medium">Parcelas</span>
