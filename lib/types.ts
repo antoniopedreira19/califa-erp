@@ -4940,6 +4940,61 @@ export interface BeneficioKpisTenant {
   custo_total_colaboradores: number;
 }
 
+/**
+ * Fase 2 — Fechamento mensal.
+ * Cabeçalho da competência fechada. Enquanto reaberto_em is null, está vigente
+ * e aparece em vw_dre_despesa_pessoal_ajustada_mensal. Ver ADR 174 e spec 53.
+ */
+export interface BeneficioFechamentoMensal {
+  id: string;
+  tenant_id: string;
+  ano: number;
+  mes: number;
+  fechado_em: string;
+  fechado_por: string;
+  reaberto_em: string | null;
+  reaberto_por: string | null;
+  observacao: string | null;
+}
+
+/**
+ * Fase 2 — detalhe do fechamento. Uma linha por colaborador_beneficio ativo
+ * na competência. Imutável após inserção (sem policy/grant de UPDATE).
+ */
+export interface BeneficioFechamentoLinha {
+  id: string;
+  tenant_id: string;
+  fechamento_id: string;
+  colaborador_beneficio_id: string;
+  colaborador_id: string;
+  beneficio_id: string;
+  beneficio_nome: string;
+  beneficio_operadora: string;
+  beneficio_tipo: BeneficioTipo;
+  modo_custeio: BeneficioModoCusteio;
+  valor_titular: number;
+  valor_dependentes_total: number;
+  valor_integral: number;
+  valor_empresa: number;
+  valor_colaborador: number;
+  qtd_dependentes_na_competencia: number;
+  created_at: string;
+}
+
+/**
+ * Fase 2 — leitura da view vw_dre_despesa_pessoal_ajustada_mensal.
+ * Opção B.3 do ADR 174: o DRE deve consumir esta view (não contas_avulsas direto)
+ * para separar parte-empresa (05.002 Benefícios) do repasse colaborador (05.015 Pessoal).
+ */
+export interface DreDespesaPessoalAjustadaMensal {
+  tenant_id: string;
+  ano: number;
+  mes: number;
+  valor_bruto_beneficios: number;
+  valor_dre_beneficios: number;
+  valor_dre_pessoal_ajuste: number;
+}
+
 // ---------- Leitura de NF por IA (spec 2026-10-08-ler-nf-por-ia) ----------
 
 export interface NfExtracaoCache {

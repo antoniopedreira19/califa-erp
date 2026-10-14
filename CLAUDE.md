@@ -78,6 +78,14 @@ Regressões de performance já custaram 2 iterações completas ao projeto — a
 
 As mesmas cores estavam repetidas em 8 arquivos e já haviam divergido entre si; a visão agregada de jobs ficou 1 semana com as colunas dos Totais desalinhadas das da planilha por usar largura automática. `docs/09-identidade-visual-ui.md` tem os case studies.
 
+## DRE de pessoal e benefícios (regra transversal)
+
+**Toda query de DRE que toca Despesa com Pessoal ou Benefícios DEVE consumir `vw_dre_despesa_pessoal_ajustada_mensal`**, nunca `contas_avulsas` direto.
+
+A view faz o ajuste de repasse do colaborador conforme ADR 174 (opção B.3): a avulsa da operadora é lançada com valor cheio em "Benefícios"; a view separa a parte empresa (fica em Benefícios 05.002) da parte colaborador (soma em Despesa com Pessoal 05.015).
+
+Ignorar a view = DRE infla a conta de Benefícios em ~R$ 54 mil/mês e subavalia a conta de Pessoal no mesmo valor. Ver `docs/decisions/174-beneficios-integracao-folha-e-dre.md`.
+
 ## Ortografia em português (regra transversal)
 
 **Toda string que aparece pro usuário DEVE ter ortografia em pt-BR correta — com acentos, cedilha e til.** Sem exceção.
