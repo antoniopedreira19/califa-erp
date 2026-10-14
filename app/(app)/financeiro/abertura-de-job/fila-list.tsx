@@ -1,13 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  Check,
-  CheckCheck,
-  ClipboardCheck,
-  FilePenLine,
-  Search,
-} from "lucide-react";
+import { CheckCheck, Search } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { JobNaFila, SaveDaConferencia, SaveNaFila } from "./dados";
 import { formatPeriodo } from "./formatos";
@@ -29,6 +23,19 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
+import {
+  BotaoDaFila,
+  CelulaCodigo,
+  CelulaEnviado,
+  CelulaGp,
+  CelulaJob,
+  CelulaProjeto,
+  CLASSE_DA_CELULA,
+  CLASSE_DA_LINHA,
+  ColunasDaFila,
+  ROTULO_DO_FILTRO,
+  SeloDaFila,
+} from "./fila-celulas";
 
 export interface FilaLinha extends JobNaFila {
   /** "há 2 horas" — calculado no server para não divergir na hidratação. */
@@ -48,12 +55,18 @@ export interface SaveFilaLinha extends SaveNaFila {
  *  abertura nova). As três faixas usam as mesmas colunas. */
 type LinhaDaFila = { tipo: "save"; s: SaveFilaLinha } | { tipo: "job"; l: FilaLinha };
 
-/** O botão da linha — é por ele que a coluna Abertura filtra. */
+/** A ação da linha — é por ela que a coluna Abertura filtra. O botão diz
+ *  só "Revisar" (14/10/2026); o filtro continua com o nome inteiro. */
 function acaoDaLinha(x: LinhaDaFila): string {
-  if (x.tipo === "save") return x.s.tipo === "gera" ? "Aprovar save" : "Aprovar consumo";
-  return x.l.revisao !== null ? "Revisar abertura" : "Abrir job";
+  if (x.tipo === "save") return ROTULO_DO_FILTRO[x.s.tipo === "gera" ? "gera" : "consome"];
+  return ROTULO_DO_FILTRO[x.l.revisao !== null ? "errata" : "nova"];
 }
-const ORDEM_DA_ACAO = ["Aprovar save", "Aprovar consumo", "Revisar abertura", "Abrir job"];
+const ORDEM_DA_ACAO = [
+  ROTULO_DO_FILTRO.gera,
+  ROTULO_DO_FILTRO.consome,
+  ROTULO_DO_FILTRO.errata,
+  ROTULO_DO_FILTRO.nova,
+];
 
 /** As colunas que filtram e ordenam pelo título, como no Excel (pedido do
  *  Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). */
@@ -90,7 +103,8 @@ const COLUNAS: ColunaFiltravel<LinhaDaFila>[] = [
     rotulo: "Valor total",
     tipo: "valor",
     faixa: true,
-    alinhar: "right",
+    // À esquerda, como as colunas de texto (14/10/2026): o Valor total
+    // fica antes do botão e começa junto do título.
     celula: (x) => celulaValor(x.tipo === "save" ? x.s.valor : x.l.valor_total, (n) => formatCurrency(n)),
   },
   {
@@ -108,7 +122,8 @@ const COLUNAS: ColunaFiltravel<LinhaDaFila>[] = [
     chave: "acao",
     rotulo: "Abertura",
     tipo: "texto",
-    alinhar: "right",
+    // Centralizado sobre os botões, que têm todos a mesma largura.
+    alinhar: "center",
     celula: (x) => ({ ...celulaTexto(acaoDaLinha(x)), ordemNaLista: ORDEM_DA_ACAO.indexOf(acaoDaLinha(x)) }),
   },
 ];
@@ -240,6 +255,7 @@ export function FilaAbertura({
     const ehErrata = l.revisao !== null;
     const abrir = () =>
       ehErrata ? setRevisandoId(l.id) : setConferindoId(l.id);
+    const marca = textoDaMarcaDeSave(l.saves, l.planilha_itens);
 
     return (
       <tr
@@ -252,72 +268,46 @@ export function FilaAbertura({
             abrir();
           }
         }}
-        className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/70 focus-visible:bg-muted/70 focus-visible:outline-none"
+        className={CLASSE_DA_LINHA}
       >
-        <td className="px-4 py-3.5">
-          <span className="font-mono text-xs font-bold text-[#b3323c]">
-            {l.codigo}
-          </span>
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaCodigo codigo={l.codigo} />
         </td>
-        <td className="px-4 py-3.5">
-          <div className="flex flex-col gap-0.5">
-            <span className="font-semibold">{l.nome}</span>
-            <span className="font-mono text-[11.5px] text-muted-foreground">
-              {formatPeriodo(l.data_inicio_prevista, l.data_fim_prevista)}
-            </span>
-            <MarcaDeSave saves={l.saves} itens={l.planilha_itens} />
-            {/* Decisão 162: a errata só reorganizou a planilha. */}
-            {l.revisao?.soOrganizacao && (
-              <span className="inline-flex w-fit items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-[1px] text-[10.5px] font-semibold text-emerald-800">
-                Nenhum valor alterado · itens reorganizados
-              </span>
-            )}
-          </div>
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaJob
+            nome={l.nome}
+            periodo={formatPeriodo(l.data_inicio_prevista, l.data_fim_prevista)}
+            detalhe={marca ? { texto: marca } : null}
+            selo={
+              // Decisão 162: a errata só reorganizou a planilha.
+              l.revisao?.soOrganizacao ? (
+                <SeloDaFila tipo="reorganizada" dica="Nenhum valor alterado · itens reorganizados" />
+              ) : null
+            }
+          />
         </td>
-        <td className="px-4 py-3.5">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[13px]">
-              <span className="font-mono text-xs text-muted-foreground">
-                {l.projeto_codigo ?? "—"}
-              </span>{" "}
-              {l.projeto_nome ?? ""}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {[l.cliente_nome, l.produto].filter(Boolean).join(" · ") || "—"}
-            </span>
-          </div>
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaProjeto
+            codigo={l.projeto_codigo}
+            nome={l.projeto_nome}
+            cliente={[l.cliente_nome, l.produto].filter(Boolean).join(" · ") || "—"}
+          />
         </td>
-        <td className="px-4 py-3.5 text-muted-foreground">
-          {l.responsavel_nome ?? "—"}
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaGp nome={l.responsavel_nome} />
         </td>
-        <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums">
-          {formatCurrency(l.valor_total)}
-        </td>
-        <td className="px-4 py-3.5">
-          <QuemEnviou
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaEnviado
             nome={l.enviado_por_label}
             quando={l.enviado_em_label}
             reenvio={l.reenviado && l.revisao === null}
           />
         </td>
-        <td className="px-4 py-3.5">
-          <div className="flex items-center justify-end">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                abrir();
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-california-red-hover"
-            >
-              {ehErrata ? (
-                <FilePenLine className="h-3.5 w-3.5" />
-              ) : (
-                <ClipboardCheck className="h-3.5 w-3.5" />
-              )}
-              {ehErrata ? "Revisar abertura" : "Abrir job"}
-            </button>
-          </div>
+        <td className={`${CLASSE_DA_CELULA} whitespace-nowrap font-semibold tabular-nums`}>
+          {formatCurrency(l.valor_total)}
+        </td>
+        <td className={CLASSE_DA_CELULA}>
+          <BotaoDaFila acao={ehErrata ? "errata" : "nova"} onClick={abrir} />
         </td>
       </tr>
     );
@@ -341,59 +331,40 @@ export function FilaAbertura({
             abrir();
           }
         }}
-        className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/70 focus-visible:bg-muted/70 focus-visible:outline-none"
+        className={CLASSE_DA_LINHA}
       >
-        <td className="px-4 py-3.5">
-          <span className="font-mono text-xs font-bold text-[#b3323c]">
-            {s.jobCodigo}
-          </span>
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaCodigo codigo={s.jobCodigo} />
         </td>
-        <td className="px-4 py-3.5">
-          <div className="flex flex-col gap-0.5">
-            <span className="font-semibold">{s.jobNome}</span>
-            <span className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-              <IconeSave tipo={s.tipo} origens={s.origens.map((o) => o.codigo)} />
-              {rotuloDoSave(s.tipo, s.grupoNome, s.itemDescricao)}
-            </span>
-          </div>
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaJob
+            nome={s.jobNome}
+            periodo={null}
+            detalhe={{
+              texto: rotuloDoSave(s.tipo, s.grupoNome, s.itemDescricao),
+              icone: <IconeSave tipo={s.tipo} origens={s.origens.map((o) => o.codigo)} />,
+            }}
+          />
         </td>
-        <td className="px-4 py-3.5">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[13px]">
-              <span className="font-mono text-xs text-muted-foreground">
-                {s.projetoCodigo ?? "—"}
-              </span>{" "}
-              {s.projetoNome ?? ""}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {[s.clienteNome, s.produto].filter(Boolean).join(" · ") || "—"}
-            </span>
-          </div>
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaProjeto
+            codigo={s.projetoCodigo}
+            nome={s.projetoNome}
+            cliente={[s.clienteNome, s.produto].filter(Boolean).join(" · ") || "—"}
+          />
         </td>
-        <td className="px-4 py-3.5 text-muted-foreground">
-          {s.responsavelNome ?? "—"}
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaGp nome={s.responsavelNome} />
+        </td>
+        <td className={CLASSE_DA_CELULA}>
+          <CelulaEnviado nome={s.enviadoPorNome} quando={s.enviado_em_label} reenvio={false} />
         </td>
         {/* O valor da LINHA — o crédito ou o consumo —, não o do job. */}
-        <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums">
+        <td className={`${CLASSE_DA_CELULA} whitespace-nowrap font-semibold tabular-nums`}>
           {formatCurrency(s.valor)}
         </td>
-        <td className="px-4 py-3.5">
-          <QuemEnviou nome={s.enviadoPorNome} quando={s.enviado_em_label} reenvio={false} />
-        </td>
-        <td className="px-4 py-3.5">
-          <div className="flex items-center justify-end">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                abrir();
-              }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-california-red-hover"
-            >
-              <Check className="h-3.5 w-3.5" />
-              {s.tipo === "gera" ? "Aprovar save" : "Aprovar consumo"}
-            </button>
-          </div>
+        <td className={CLASSE_DA_CELULA}>
+          <BotaoDaFila acao={s.tipo === "gera" ? "gera" : "consome"} onClick={abrir} />
         </td>
       </tr>
     );
@@ -464,17 +435,22 @@ export function FilaAbertura({
       )}
 
       {!vazio ? (
-        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-          <table className="w-full border-collapse text-sm">
+        // Grade fixa: em janela estreita a tabela rola de lado em vez de
+        // espremer as colunas (a mesma saída de /orcamentos, 07/10/2026).
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
+          <table className="w-full min-w-[1500px] table-fixed border-collapse text-sm">
+            <ColunasDaFila />
             <thead>
               <tr className="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("job")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("projeto")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+                {/* O Valor total vem antes do botão (14/10/2026): o número
+                    fecha a linha, e as colunas de texto ficam juntas. */}
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("enviado")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("acao")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("valor")}</th>
+                <th className="px-4 py-3 text-center font-semibold">{colunas.titulo("acao")}</th>
               </tr>
             </thead>
             <tbody>
@@ -600,55 +576,21 @@ export function FilaAbertura({
   );
 }
 
-/** Coluna "Enviado por" da fila (decisão 136): quem mandou, e quando. */
-function QuemEnviou({
-  nome,
-  quando,
-  reenvio,
-}: {
-  nome: string | null;
-  quando: string;
-  reenvio: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium text-foreground">
-        {nome ?? "—"}
-        {reenvio && (
-          <span className="rounded-md border border-california-red/30 bg-california-red/5 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-california-red">
-            Reenvio
-          </span>
-        )}
-      </span>
-      <span className="text-[12px] text-muted-foreground">{quando}</span>
-    </div>
-  );
-}
-
 /**
  * O job tem save (decisão 155): a fila avisa antes da conferência, porque
  * a aprovação dos saves agora acontece no formulário da abertura. Com o
  * orçamento inteiro num modo (decisão 154), diz qual. A conta é pelas
  * linhas que a conferência já traz: todas em save, ou todas consumindo.
  */
-function MarcaDeSave({
-  saves,
-  itens,
-}: {
-  saves: SaveDaConferencia[];
-  itens: number;
-}) {
+function textoDaMarcaDeSave(saves: SaveDaConferencia[], itens: number): string | null {
   if (saves.length === 0) return null;
   const gera = saves.filter((s) => s.tipo === "gera").length;
   const consome = saves.length - gera;
   const inteiro = saves.length === itens && (gera === 0 || consome === 0);
   const origem = saves.find((s) => s.tipo === "consome")?.origens[0]?.codigo;
-  const texto = inteiro
+  return inteiro
     ? gera > 0
       ? "Orçamento inteiro em save"
       : `Orçamento inteiro pago pelo saldo do ${origem ?? "job de origem"}`
     : `${saves.length} ${saves.length === 1 ? "linha com save" : "linhas com save"}`;
-  return (
-    <span className="text-[11.5px] font-medium text-muted-foreground">{texto}</span>
-  );
 }

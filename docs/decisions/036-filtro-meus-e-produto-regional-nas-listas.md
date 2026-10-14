@@ -285,3 +285,58 @@ partia no hífen ("AMB-" em cima, "P019/26" embaixo).
 Código: só `app/(app)/orcamentos/projetos-list.tsx` (`ColunasDaLista`,
 `TOTAL_DE_COLUNAS`, `FUNIL_PX` e o `Contador` "+N", que antes se repetia
 nas três colunas). `ProjetoRow` não mudou.
+
+## ⚠️ A fila da Abertura de Job em grade fixa, com altura única (2026-10-14)
+
+O Tiago mostrou a fila "Jobs aguardando abertura" sem formatação. Medido na
+janela dele (1960 px, tabela de 1615 px), com largura automática:
+
+- as linhas tinham de 71 a 102 px;
+- o código partia no hífen ("AMB-" em cima, "1030/26" embaixo);
+- os botões mediam 100, 148 e 166 px, e o "Revisar cancelamento" quebrava
+  em duas linhas (56 px de altura);
+- os selos da coluna Job mediam 258 × 43 px ("Pedido de cancelamento ·
+  aberto em …", em duas linhas) e 242 × 23 px ("Nenhum valor alterado ·
+  itens reorganizados").
+
+**O que o Tiago aprovou, depois de um protótipo com o componente real e
+quatro rodadas:**
+
+- **Grade fixa e altura única.** `table-fixed` + `ColunasDaFila`: Código
+  128 · Job 380 · Projeto · Cliente (o resto, ~415) · GP 208 · Enviado por
+  208 · Valor total 152 · Abertura 124 px, com largura mínima de 1500 px e
+  rolagem lateral abaixo disso. Toda célula tem no máximo duas linhas: nome
+  do job, projeto, cliente e quem enviou numa linha só, com "…" e o texto
+  inteiro ao passar o mouse; o GP até duas linhas, em 13 px (o corpo do
+  nome em "Enviado por"). **Toda linha da fila tem 64 px**, nas três
+  faixas e no save. O Job tem 380 px porque ali cabe o nome mais longo da
+  fila do dia (348 px); a sobra vai para Projeto · Cliente, a coluna que
+  mais corta texto.
+- **Valor total antes do botão, alinhado à esquerda.** Era a única coluna
+  à direita, no meio de colunas de texto: o título começava num ponto e os
+  valores em outro, e o número ficava colado no "Enviado por". Agora o
+  número fecha a linha, ao lado da ação, e começa junto do título, como as
+  outras colunas. O Tiago escolheu à esquerda sabendo que os valores
+  deixam de alinhar pela vírgula.
+- **Botão de uma palavra, todos de 92 × 32 px:** "Revisar" no pedido de
+  cancelamento, no save (gerado e consumido) e na errata; "Abrir job" na
+  abertura nova. A ação inteira vem na dica ("Revisar o pedido de
+  cancelamento", "Revisar o consumo de save"...). O save ganhou o cofrinho,
+  o ícone do save do orçamento. O título "Abertura" fica centralizado sobre
+  os botões. O filtro desse título continua separando "Revisar save",
+  "Revisar consumo", "Revisar errata" e "Abrir job".
+- **Selo curto na segunda linha da coluna Job**, numa pílula de 18 px:
+  "Pedido de cancelamento" e "Nenhum valor alterado", com a frase inteira na
+  dica. A data "aberto em dd/mm/aaaa" saiu da pílula e ocupa o lugar do
+  período.
+
+**Conferido em 14/10/2026:** logado, na fila real (uma errata e duas
+aberturas novas: linhas de 64 px, botões centralizados sob o título,
+filtro da coluna Abertura, pop-ups da errata e da conferência abrindo e
+fechando); e o código implementado montado com dados fictícios para as
+faixas que a fila do dia não tinha (cancelamento, save gerado e consumido,
+reenvio, marca de save): as sete linhas com 64 px.
+
+Código: `app/(app)/financeiro/abertura-de-job/fila-celulas.tsx` (grade,
+células, botão e selo, comuns às três faixas), `fila-list.tsx` e a linha
+de `cancelamento-na-fila.tsx`. Os pop-ups não mudaram.

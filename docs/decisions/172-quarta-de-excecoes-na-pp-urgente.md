@@ -38,6 +38,13 @@ Server Actions.
 - A quarta que **também é janela** (o 08 ou o 20 numa quarta, como
   20/01/2027) segue só a regra da janela, para a data não ter duas
   datas-limite.
+- **Ligar a urgência zera o prazo** (pedido do Tiago, 14/10/2026, depois da
+  implementação): a pessoa abre o calendário de novo e vê que as quartas
+  ficaram disponíveis. Embaixo do campo vazio aparece "Escolha o prazo de
+  novo: as quartas de exceções estão liberadas."; as parcelas padrão ficam
+  em "—" até o prazo voltar (a adiada à mão fica). Vale também na edição
+  da PP a emitir e da PP gerada. Desligar com o prazo vazio volta para a
+  primeira janela, como numa PP nova.
 - **Desligar a urgência** com uma quarta no prazo devolve o prazo à
   primeira janela aberta, com o aviso "Sem urgência, a quarta dd/mm/aaaa
   não vale: o prazo voltou para dd/mm/aaaa." O servidor recusa quarta sem
@@ -151,12 +158,30 @@ financeiro e atualizar o vencimento:
   janela logo seguinte (09/11), 2ª parcela numa quarta (25/11), a quarta da
   mesma semana (14/10, "fechou em 09/10") e uma quinta-feira.
 - **Testes:** `node --import tsx --test lib/calculos/janelas-pagamento.test.ts`
-  — 16 testes, 8 deles novos. `tsc` e `eslint` dos arquivos alterados limpos.
+  — 17 testes, 9 deles da 172. `tsc` e `eslint` dos arquivos alterados limpos.
 
-**Não exercitado no navegador:** a edição de uma PP gerada com quarta (173)
-— passa pelo mesmo formulário e pelo mesmo validador do servidor — e o
-"Atualizar vencimento" da PP sem urgência, que não mudou (a lista de 6
-janelas).
+**Conferido depois, no mesmo dia (TES-1001/26 · Item 5):**
+
+- **Ligar a urgência zera o prazo:** no formulário novo, o prazo 09/11 ficou
+  vazio, com a frase embaixo e as parcelas em "—"; o calendário abriu em
+  outubro com as quartas 21 e 28; com 21/10, as parcelas voltaram (20/11 e
+  21/12). Desligar com a quarta → 09/11 com o aviso; religar → vazio;
+  desligar com o prazo vazio → 09/11, parcelas 08/12 e 08/01.
+- **Edição da PP gerada (173) com quarta:** a PP-00179 (Fornecedor Teste,
+  2 parcelas, 09/11 · 08/12, sem urgência) foi editada pelo lápis do
+  painel: ligar a urgência zerou o prazo; com 21/10 a 2ª foi para 20/11; a
+  revisão "Salvar as alterações da PP-00179?" mostrou "2 parcelas, a 1ª em
+  21/10/2026", e o banco ficou com 21/10 · 20/11, urgente e editada. Por
+  fora da tela, `editarPPGerada` recusou a quarta sem urgência e a 2ª
+  parcela em 09/11, sem gravar. A PP-00179 foi cancelada pela tela.
+- **Defeito encontrado e corrigido:** limpar o prazo (o "×" do campo)
+  levava as parcelas seguintes para datas de 1970, porque a regra das
+  parcelas calculava a partir de uma data vazia. Agora, sem prazo, as datas
+  padrão ficam vazias (`primeiraDataDaProximaParcela("")` devolve vazio) e a
+  parcela sem a anterior aparece travada em "—".
+
+**Não exercitado no navegador:** o "Atualizar vencimento" da PP sem
+urgência, que não mudou (a lista de 6 janelas).
 
 ## Protótipo
 

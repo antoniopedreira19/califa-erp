@@ -93,6 +93,12 @@ export const PLANEJADO: Bloco = {
   bordaAbre: "border-l-2 border-l-[#a7f3d0]",
 };
 
+/** Selo "Planejado" do card Alterações do Financeiro: a linha em que só o
+ *  planejado mudou (revisão da decisão 115, 14/10/2026). Mesma forma dos
+ *  selos "Valor" e "Tipo de custo" do card, na cor do PLANEJADO. */
+export const SELO_PLANEJADO =
+  "inline-flex items-center whitespace-nowrap rounded-full border border-[#a7f3d0] bg-[#ecfdf5] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#047857]";
+
 /** Laranja — o terceiro momento da mesma linha, o que de fato saiu. */
 export const REALIZADO: Bloco = {
   faixa:

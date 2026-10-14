@@ -546,6 +546,41 @@ export default async function JobDetailPage({
                 return realizado ? [[realizado.id, Number(it.total_planejado ?? 0)]] : [];
               }),
             )}
+            // Decisão 173: a PP gerada se edita também pela aba, no mesmo
+            // formulário do painel do item — com o que o painel recebe.
+            edicaoDaPP={
+              podeGerarPP && !comPedido
+                ? {
+                    jobId: job.id,
+                    jobEmpresaId: job.empresa_id ?? "",
+                    fornecedores,
+                    empresas,
+                    podeCadastrarFornecedor,
+                    podeEditarFornecedor,
+                    cnpjPadraoDaPP,
+                    itens: Object.fromEntries(
+                      itens.flatMap((it) => {
+                        const realizado = realizadosMap.get(it.id);
+                        return realizado
+                          ? [
+                              [
+                                realizado.id,
+                                {
+                                  nome: it.item,
+                                  planejado: Number(it.total_planejado ?? 0),
+                                  unitario: Number(it.valor_unitario_planejado ?? 0),
+                                  quantidade: Number(it.quantidade_planejada ?? 0),
+                                  diasMeses: Number(it.dias_meses_planejado ?? 0),
+                                  concluido: realizado.pps_concluidas_em != null,
+                                },
+                              ],
+                            ]
+                          : [];
+                      }),
+                    ),
+                  }
+                : null
+            }
           />
         }
         ppsChat={
