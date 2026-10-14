@@ -54,7 +54,7 @@ export function CardsPorOperadora(props: {
               <dt className="text-muted-foreground">Vencimento:</dt>
               <dd className="text-right">{formatarData(op.avulsa_vencimento)}</dd>
             </dl>
-            {op.avulsa_id && (
+            {op.avulsa_id ? (
               <Link
                 href={`/financeiro/contas-a-pagar/avulsa/${op.avulsa_id}`}
                 prefetch={false}
@@ -63,6 +63,10 @@ export function CardsPorOperadora(props: {
                 Ver avulsa {op.avulsa_codigo ? `(${op.avulsa_codigo})` : ""}
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-2">
+                Avulsa será criada quando a folha for enviada ao financeiro.
+              </p>
             )}
           </div>
         ))}

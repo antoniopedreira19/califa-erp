@@ -39,7 +39,7 @@ export function BotaoAplicarBeneficios(props: { ano: number; mes: number }) {
     const linhasOp = p.porOperadora
       .map(
         (op) =>
-          `• ${op.operadora}: ${brl(op.valorIntegral)} (vence ${formatarData(op.dataVencimento)})`,
+          `• ${op.operadora}: ${brl(op.valorIntegral)} (venceria ${formatarData(op.dataVencimento)})`,
       )
       .join("\n");
     const texto = [
@@ -47,11 +47,12 @@ export function BotaoAplicarBeneficios(props: { ano: number; mes: number }) {
       ``,
       `Isso vai:`,
       `• Reduzir ${brl(p.totalColaborador)} das linhas PJ (${p.qtdVinculos} vínculos).`,
-      `• Gerar avulsas:`,
-      linhasOp,
-      `• Marcar a competência como fechada em Benefícios.`,
+      `• Fechar a competência de benefícios (snapshot congelado).`,
       ``,
-      `Depois disso, não dá pra reaplicar sem desaplicar primeiro.`,
+      `As avulsas abaixo serão criadas quando a folha for enviada ao financeiro:`,
+      linhasOp,
+      ``,
+      `Enquanto não enviar, dá pra desaplicar e refazer sem efeito no financeiro.`,
     ].join("\n");
 
     if (!confirm(texto)) return;

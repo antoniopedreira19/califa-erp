@@ -17,10 +17,10 @@ export function BotaoDesaplicarBeneficios(props: { fechamentoId: string }) {
       "",
       "Isso vai:",
       "• Reverter a redução de salário nas linhas PJ.",
-      "• Apagar as avulsas geradas (SulAmerica + Bradesco).",
+      "• Apagar as avulsas de benefícios (se já geradas pelo Enviar).",
       "• Marcar a competência como reaberta.",
       "",
-      "Só funciona se nenhuma avulsa foi paga.",
+      "Só funciona se nenhuma avulsa de benefício foi paga.",
     ].join("\n");
     if (!confirm(texto)) return;
     startTransition(async () => {

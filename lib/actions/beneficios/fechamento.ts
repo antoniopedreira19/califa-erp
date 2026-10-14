@@ -68,11 +68,6 @@ export async function aplicarBeneficios(args: {
     totalEmpresa: Number(row.total_empresa),
     totalColaborador: Number(row.total_colaborador),
     folhaLinhasAfetadas: Number(row.folha_linhas_afetadas),
-    avulsas: (row.avulsas ?? []).map((a: { id: string; operadora: string; valor: number }) => ({
-      id: a.id,
-      operadora: a.operadora,
-      valor: Number(a.valor),
-    })),
   };
 
   await logAuditEvent({
@@ -87,7 +82,6 @@ export async function aplicarBeneficios(args: {
       total_empresa: resultado.totalEmpresa,
       total_colaborador: resultado.totalColaborador,
       folha_linhas_afetadas: resultado.folhaLinhasAfetadas,
-      avulsas: resultado.avulsas,
     },
   });
 

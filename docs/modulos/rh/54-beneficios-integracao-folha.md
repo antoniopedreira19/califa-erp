@@ -2,7 +2,8 @@
 
 > Spec detalhado da Fase 3 do subsistema de Benefícios. Continua [`50-beneficios.md`](50-beneficios.md), implementa a arquitetura decidida em [ADR 174](../../decisions/174-beneficios-integracao-folha-e-dre.md), e consome a infra da Fase 2 ([`53-beneficios-fechamento-mensal.md`](53-beneficios-fechamento-mensal.md)).
 
-**Status:** aprovado em 2026-10-14. Aguarda implementação.
+**Status:** aprovado em 2026-10-14. Implementado em 2026-10-14.
+**Revisão (2026-10-14):** fluxo ajustado após feedback do usuário — "Aplicar descontos" não cria mais avulsas; isso virou responsabilidade do "Enviar ao financeiro" (portão único RH→Financeiro). Migration `20261014000004_beneficios_fase3_fluxo_portao_unico` + commit "Fase 3 S6" aplicam a mudança. Seções §3.5, §4.1 e §5.1 descrevem o fluxo revisado.
 **Decisões origem:** ADR 174 (§1.1-1.6) + brainstorm 14/10 (B1-B8 em §2 abaixo).
 **Entrada:** Fase 2 em produção (tabelas de fechamento, função de cálculo, view do DRE, colunas de vencimento em `beneficios`).
 **Saída:** botão "Aplicar descontos" funcional na página da competência da folha + tab Fechamentos read-only em `/rh/beneficios`.
