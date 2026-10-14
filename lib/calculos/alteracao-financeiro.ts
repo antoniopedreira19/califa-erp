@@ -53,19 +53,36 @@ export interface LinhaAlteradaPeloFinanceiro {
   diasMesesPara: number;
   totalDe: number;
   totalPara: number;
-  /** O planejado da linha, que a edição não muda (só no Interno, em que o
-   *  banco o faz espelhar o orçado). É ele que entra no custo previsto
-   *  quando o tipo gera PP. */
+  /** O planejado da linha. Muda com o job na fila da abertura (revisão de
+   *  14/10/2026) e no Interno, em que o banco o faz espelhar o orçado;
+   *  depois da abertura, fica. É ele que entra no custo previsto quando o
+   *  tipo gera PP. */
   planejadoDe: number;
   planejadoPara: number;
+  planUnitarioDe: number;
+  planUnitarioPara: number;
+  planQuantidadeDe: number;
+  planQuantidadePara: number;
+  planDiasMesesDe: number;
+  planDiasMesesPara: number;
+}
+
+/** A linha mudou o planejado — R$ Unit., QT ou D/M. */
+export function planejadoMudou(l: LinhaAlteradaPeloFinanceiro): boolean {
+  return (
+    l.planUnitarioDe !== l.planUnitarioPara ||
+    l.planQuantidadeDe !== l.planQuantidadePara ||
+    l.planDiasMesesDe !== l.planDiasMesesPara
+  );
 }
 
 /**
  * Quanto o custo previsto do job (o planejado dos tipos que geram PP,
  * decisão 004) muda com a edição. A curva de desembolso não acompanha
  * (decisão 115): o pop-up avisa, para o financeiro ajustá-la no Editar
- * registro. Muda quando o tipo entra ou sai dos tipos com PP, e no Interno,
- * em que o planejado segue o orçado.
+ * registro. Muda quando o tipo entra ou sai dos tipos com PP, quando o
+ * planejado de uma linha com PP muda (na fila da abertura) e no Interno, em
+ * que o planejado segue o orçado.
  */
 export function deltaDoCustoPrevisto(linhas: LinhaAlteradaPeloFinanceiro[]): number {
   return emReais(
@@ -81,8 +98,10 @@ export function deltaDoCustoPrevisto(linhas: LinhaAlteradaPeloFinanceiro[]): num
 
 /**
  * As linhas que a edição mexeu, comparando o rascunho com o que está
- * salvo. Contam os três valores do orçado (P1) e, desde 08/10/2026, o tipo
- * de custo; o planejado não é do financeiro.
+ * salvo. Contam os três valores do orçado (P1), desde 08/10/2026 o tipo de
+ * custo e, desde 14/10/2026, os três do planejado — que o rascunho só deixa
+ * mudar com o job na fila da abertura. No Interno o planejado anda com o
+ * orçado, e a linha já conta pelo orçado.
  */
 export function linhasAlteradasPeloFinanceiro(
   salvos: ItemPlanilhaJob[],
@@ -99,11 +118,20 @@ export function linhasAlteradasPeloFinanceiro(
     const unitPara = Number(para.valor_unitario_orcado ?? 0);
     const qtdPara = Number(para.quantidade_orcada ?? 0);
     const dmPara = Number(para.dias_meses_orcado ?? 0);
+    const planUnitDe = Number(de.valor_unitario_planejado ?? 0);
+    const planQtdDe = Number(de.quantidade_planejada ?? 0);
+    const planDmDe = Number(de.dias_meses_planejado ?? 0);
+    const planUnitPara = Number(para.valor_unitario_planejado ?? 0);
+    const planQtdPara = Number(para.quantidade_planejada ?? 0);
+    const planDmPara = Number(para.dias_meses_planejado ?? 0);
     if (
       unitDe === unitPara &&
       qtdDe === qtdPara &&
       dmDe === dmPara &&
-      de.tipo_custo === para.tipo_custo
+      de.tipo_custo === para.tipo_custo &&
+      planUnitDe === planUnitPara &&
+      planQtdDe === planQtdPara &&
+      planDmDe === planDmPara
     ) {
       continue;
     }
@@ -123,6 +151,12 @@ export function linhasAlteradasPeloFinanceiro(
       totalPara: unitPara * qtdPara * dmPara,
       planejadoDe: Number(de.total_planejado ?? 0),
       planejadoPara: Number(para.total_planejado ?? 0),
+      planUnitarioDe: planUnitDe,
+      planUnitarioPara: planUnitPara,
+      planQuantidadeDe: planQtdDe,
+      planQuantidadePara: planQtdPara,
+      planDiasMesesDe: planDmDe,
+      planDiasMesesPara: planDmPara,
     });
   }
   return lista;
