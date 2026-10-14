@@ -145,18 +145,22 @@ export async function importarFolhaContabilidade(input: {
   const preview: ResumoImportacaoLinha[] = [];
 
   // Match por CPF contra o cadastro.
-  const cpfs = parsed.linhas.map((l) => l.cpf);
+  // CPF no banco está formatado ("200.000.001-00") mas o parser devolve só
+  // dígitos ("00000000000") — não dá pra fazer .in() direto. Puxamos todos
+  // os colaboradores do tenant (~200) e normalizamos o CPF do banco antes
+  // de montar o Map. 200 linhas × ~5 campos é uma query trivial.
   const { data: colabs } = await supabase
     .from("colaboradores")
     .select("id, nome, cpf_cnpj, tipo_contratacao")
-    .eq("tenant_id", tenantId)
-    .in("cpf_cnpj", cpfs);
+    .eq("tenant_id", tenantId);
 
   const porCpf = new Map(
-    (colabs ?? []).map((c) => [
-      String(c.cpf_cnpj ?? "").replace(/\D/g, ""),
-      c as { id: string; nome: string; cpf_cnpj: string; tipo_contratacao: TipoContratacao },
-    ]),
+    (colabs ?? [])
+      .filter((c) => c.cpf_cnpj)
+      .map((c) => [
+        String(c.cpf_cnpj).replace(/\D/g, ""),
+        c as { id: string; nome: string; cpf_cnpj: string; tipo_contratacao: TipoContratacao },
+      ]),
   );
 
   // Linhas já gravadas nesta competência com origem='contabilidade' (pra decidir criar/atualizar/ignorar).
