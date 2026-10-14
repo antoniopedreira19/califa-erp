@@ -33,15 +33,29 @@ const ORDEM_TIPO: TipoContratacao[] = [
   "socio",
 ];
 
+/** Item renderizado na coluna Alocação. "hub" = colaborador segue o rateio
+ *  padrão da empresa daquele ano (compacto). "regional" = linha específica. */
+export type AlocacaoDisplay =
+  | { tipo: "hub"; empresa_nome: string }
+  | {
+      tipo: "regional";
+      empresa_nome: string;
+      regional_nome: string;
+      percentual: string;
+    };
+
 export type FolhaLinha = {
   id: string;
   salario_base: string;
+  /** Desconto de benefícios aplicado (string de numeric; "0" quando não há). */
+  desconto_beneficios: string;
   status: FolhaLinhaStatus;
   origem: FolhaOrigem;
   motivo_pendencia: string | null;
   colaborador: {
     id: string;
     nome: string;
+    cpf: string | null;
     funcao: string;
     tipo_contratacao: TipoContratacao;
     nivel_codigo: string | null;
@@ -54,6 +68,9 @@ export type FolhaLinha = {
     empresa_nome: string;
     regional_nome: string;
   }[];
+  /** Alocações já formatadas pra exibição (com detecção de rateio padrão → Hub).
+   *  Computado no server. */
+  alocacoes_display: AlocacaoDisplay[];
   /** NF anexada pra (colab, competência)? Só relevante quando a linha
    *  exige NF (origem=california + tipo in pj/mei/clt_recibo). */
   tem_nf: boolean;
@@ -294,26 +311,37 @@ export function FolhaCompetenciaView({
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {l.colaborador.funcao}
-                    {l.colaborador.nivel_codigo
-                      ? ` · ${l.colaborador.nivel_codigo}`
-                      : ""}
+                    {" · "}
+                    {tipoContratacaoLabel(l.colaborador.tipo_contratacao)}
                   </div>
+                  {l.colaborador.cpf && (
+                    <div className="text-[11px] font-mono text-muted-foreground mt-0.5">
+                      {formatarCpf(l.colaborador.cpf)}
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {l.alocacoes.map((a) => (
-                    <div key={a.id}>
-                      {a.empresa_nome} · {a.regional_nome} ·{" "}
-                      <span className="tabular-nums font-medium">
-                        {Number(a.percentual).toFixed(2).replace(".", ",")}%
-                      </span>
-                    </div>
-                  ))}
+                  {l.alocacoes_display.map((a, i) =>
+                    a.tipo === "hub" ? (
+                      <div key={`${a.empresa_nome}-${i}`}>
+                        {a.empresa_nome} ·{" "}
+                        <span className="font-medium">Hub</span>
+                      </div>
+                    ) : (
+                      <div key={`${a.empresa_nome}-${a.regional_nome}-${i}`}>
+                        {a.empresa_nome} · {a.regional_nome} ·{" "}
+                        <span className="tabular-nums font-medium">
+                          {Number(a.percentual).toFixed(2).replace(".", ",")}%
+                        </span>
+                      </div>
+                    ),
+                  )}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(Number(l.salario_base))}
+                <td className="px-4 py-3 text-right tabular-nums">
+                  <ValorCell
+                    liquido={Number(l.salario_base)}
+                    desconto={Number(l.desconto_beneficios)}
+                  />
                 </td>
                 <td className="px-4 py-3">
                   <BadgeStatus status={l.status} />
@@ -504,5 +532,46 @@ function BadgeStatus({ status }: { status: FolhaLinhaStatus }) {
     >
       {folhaLinhaStatusLabel(status)}
     </span>
+  );
+}
+
+/** Formata CPF só-dígitos pra "xxx.xxx.xxx-xx". */
+function formatarCpf(cpf: string): string {
+  const d = cpf.replace(/\D/g, "");
+  if (d.length !== 11) return cpf;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+const brlFmt = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+/** Célula do Valor. Sem desconto: um valor só, grande. Com desconto: 3 linhas
+ *  (bruto, desconto em vermelho, líquido em negrito). */
+function ValorCell({
+  liquido,
+  desconto,
+}: {
+  liquido: number;
+  desconto: number;
+}) {
+  if (desconto <= 0) {
+    return <span className="font-semibold">{brlFmt.format(liquido)}</span>;
+  }
+  const bruto = liquido + desconto;
+  return (
+    <div className="space-y-0.5 text-right">
+      <div className="text-xs text-muted-foreground">
+        Bruto <span className="tabular-nums">{brlFmt.format(bruto)}</span>
+      </div>
+      <div className="text-xs text-california-red">
+        Desc. <span className="tabular-nums">−{brlFmt.format(desconto)}</span>
+      </div>
+      <div className="font-semibold">
+        <span className="text-[10px] text-muted-foreground mr-1">Líquido</span>
+        <span className="tabular-nums">{brlFmt.format(liquido)}</span>
+      </div>
+    </div>
   );
 }
