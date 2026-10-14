@@ -192,24 +192,42 @@ Padrão idêntico ao de Férias.
 
 ## 7. Fases futuras
 
-### Fase 2 — Fechamento mensal
-- Snapshot auditável da competência (congela resultado da `fn_beneficios_custo_mensal`).
-- Estados: "aberta" → "fechada".
-- Linha de ajuste manual (retroativo, descontado em rescisão, 1º boleto).
-- Relatório comparativo: snapshot do sistema vs. fatura real da operadora (upload de CSV).
-- Esforço estimado: 2 sessões.
+Arquitetura das Fases 2, 3 e 4 fechada em **[ADR 174](../../decisions/174-beneficios-integracao-folha-e-dre.md)** (2026-10-14). O conteúdo abaixo é um resumo; o ADR é a fonte-verdade.
 
-### Fase 3 — Integração com folha
-- Snapshot fechado da Fase 2 vira input da folha mensal.
-- Cada vínculo ativo gera uma linha de desconto na folha CLT/PJ do colaborador (via `folhas_pagamento` quando o motor da folha for implementado) **ou** uma conta avulsa classificada no subtipo "Benefícios 002" para a California pagar a operadora.
-- Depende de o motor da folha estar implementado.
-- Esforço estimado: 2 sessões após motor da folha pronto.
+### Fase 1.5 — Vista do colaborador ✅ IMPLEMENTADA
+Card "Meus benefícios" em `/perfil` mostra planos ativos + modo de custeio + dependentes + breakdown do mês. Entregue junto com Fase 1.
 
-### Fase 1.5 — Vista do colaborador
-- Aba "Meus benefícios" dentro de `/perfil`.
-- Lê os próprios vínculos, dependentes e desconto mensal.
-- Permite ao colaborador cadastrar/editar os próprios dependentes (com confirmação do RH antes de incluir em plano).
-- Esforço estimado: 1 sessão.
+### Fase 2 — Fechamento mensal (a fazer)
+
+Spec detalhado: `docs/modulos/rh/53-beneficios-fechamento-mensal.md` (a criar no início da fase).
+
+- **2 tabelas novas**: `beneficio_fechamento_mensal` (status aberta/fechada + auditoria) + `beneficio_fechamento_linha` (snapshot congelado — 1 linha por vínculo ativo com valor_integral, valor_empresa, valor_colaborador, valor_deps).
+- **2 colunas novas em `beneficios`**: `dia_vencimento_fatura` (int) + `vencimento_mes_seguinte` (bool, default true). SulAmerica: dia 5 mês seguinte. Bradesco: dia 29 mês seguinte.
+- **View SQL** `vw_dre_despesa_pessoal_ajustada_mensal` — aplica o ajuste do repasse (ver ADR 174 §2). Criada já na Fase 2 mesmo sem DRE existir, como âncora.
+- **UI**: botão "Fechar competência" na página `/rh/beneficios` + histórico de fechamentos.
+- **Server actions**: `fecharCompetencia(ano, mes)` + `reabrirFechamento(ano, mes)` (só se nenhuma avulsa foi gerada ainda).
+- **Esforço estimado**: 2 sessões.
+
+### Fase 3 — Integração com folha (a fazer)
+
+Spec detalhado: `docs/modulos/rh/54-beneficios-integracao-folha.md` (a criar no início da fase).
+
+**Precondição**: SulAmerica e Bradesco cadastrados como fornecedores.
+
+- **1 coluna nova em `contas_avulsas`**: `beneficio_fechamento_id` (FK rastreando qual fechamento gerou a avulsa).
+- **1 coluna nova em `folhas_pagamento`**: `desconto_beneficios` (quanto foi subtraído do salario_base via "Aplicar"; auditoria).
+- **UI**: terceiro checkpoint "Benefícios aplicados" na página da competência da folha (`/rh/folhas/[competencia]`), ao lado de "PJ gerada" e "CLT importada".
+- **Server actions**:
+  - `aplicarBeneficios(ano, mes)` — fecha competência de benefícios, reduz `salario_base` das linhas PJ, cria 2 avulsas (SulAmerica + Bradesco) com valor cheio da fatura.
+  - `desaplicarBeneficios(ano, mes)` — reverte tudo (enquanto nenhuma linha da folha foi enviada ao financeiro e nenhuma avulsa foi paga).
+- **CLT não entra** (contabilidade já aplicou desconto no PDF).
+- **Esforço estimado**: 2 sessões.
+
+### Fase 4 — Integração com DRE (quando módulo DRE for criado)
+
+Nada a implementar no subsistema de Benefícios diretamente. A view `vw_dre_despesa_pessoal_ajustada_mensal` da Fase 2 fica pronta pra ser consumida.
+
+**Quando o módulo DRE for implementado**, DEVE consumir essa view para as linhas de "Pessoal/PJ" e "Benefícios" do DRE. Ler `contas_avulsas` ou `folhas_pagamento` direto, sem passar pela view, resulta em despesa de Benefícios inflada em ~R$ 50-60k/mês (o repasse dos colaboradores). Ver ADR 174 §2.
 
 ## 8. Decisões travadas
 
