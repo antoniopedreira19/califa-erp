@@ -47,7 +47,8 @@ Nas palavras do Tiago:
    Abertura de Job". O status gravado continua `aberto`, como o "Em
    faturamento" da 094: o selo é calculado.
 3. **Fila do financeiro.** Na Abertura de Job, a faixa **"Cancelamentos"**
-   vem antes de erratas e aberturas novas, com "Revisar cancelamento". O
+   vem antes de erratas e aberturas novas, com o botão "Revisar" (era
+   "Revisar cancelamento" até 14/10/2026 — nota de 14/10 na decisão 036). O
    pop-up mostra quem pediu e o motivo, os dados do job (com a regional),
    **o que o cancelamento desfaz** (recebimento, custo e impostos previstos,
    e o projeto financeiro que fica inativo quando só tinha esse job) e

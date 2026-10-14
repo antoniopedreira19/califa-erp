@@ -36,6 +36,17 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { formatDataAsHoraBr } from "./formatos";
 import type { CancelamentoNaFila } from "./cancelamentos";
 import { aprovarCancelamentoDoJob, recusarCancelamentoDoJob } from "./actions-cancelamento";
+import {
+  BotaoDaFila,
+  CelulaCodigo,
+  CelulaEnviado,
+  CelulaGp,
+  CelulaJob,
+  CelulaProjeto,
+  CLASSE_DA_CELULA,
+  CLASSE_DA_LINHA,
+  SeloDaFila,
+} from "./fila-celulas";
 
 /** Um pedido da faixa, com o "há 2 horas" pronto (calculado no servidor). */
 export interface CancelamentoDaFila extends CancelamentoNaFila {
@@ -63,6 +74,7 @@ export function LinhaCancelamentoNaFila({
   c: CancelamentoDaFila;
   onAbrir: () => void;
 }) {
+  const abertoEm = c.abertoEm ? formatDataAsHoraBr(c.abertoEm).slice(0, 10) : null;
   return (
     <tr
       role="button"
@@ -74,56 +86,48 @@ export function LinhaCancelamentoNaFila({
           onAbrir();
         }
       }}
-      className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors last:border-0 hover:bg-muted/70 focus-visible:bg-muted/70 focus-visible:outline-none"
+      className={CLASSE_DA_LINHA}
     >
-      <td className="px-4 py-3.5">
-        <span className="font-mono text-xs font-bold text-[#b3323c]">{c.codigo}</span>
+      <td className={CLASSE_DA_CELULA}>
+        <CelulaCodigo codigo={c.codigo} />
       </td>
-      <td className="px-4 py-3.5">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-semibold">{c.nome}</span>
-          <span className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-[1px] text-[10.5px] font-semibold text-amber-800">
-            <Ban className="h-3 w-3" />
-            Pedido de cancelamento
-            {c.abertoEm ? ` · aberto em ${formatDataAsHoraBr(c.abertoEm).slice(0, 10)}` : ""}
-          </span>
-        </div>
+      <td className={CLASSE_DA_CELULA}>
+        <CelulaJob
+          nome={c.nome}
+          // A data saiu da pílula (14/10/2026) e ocupa o lugar do período.
+          periodo={
+            abertoEm ? (
+              <>
+                <span className="font-sans">aberto em</span> {abertoEm}
+              </>
+            ) : null
+          }
+          selo={
+            <SeloDaFila
+              tipo="cancelamento"
+              dica={`Pedido de cancelamento${abertoEm ? ` · job aberto em ${abertoEm}` : ""}`}
+            />
+          }
+        />
       </td>
-      <td className="px-4 py-3.5">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[13px]">
-            <span className="font-mono text-xs text-muted-foreground">{c.projetoCodigo ?? "—"}</span>{" "}
-            {c.projetoNome ?? ""}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {[c.clienteNome, c.produto].filter(Boolean).join(" · ") || "—"}
-          </span>
-        </div>
+      <td className={CLASSE_DA_CELULA}>
+        <CelulaProjeto
+          codigo={c.projetoCodigo}
+          nome={c.projetoNome}
+          cliente={[c.clienteNome, c.produto].filter(Boolean).join(" · ") || "—"}
+        />
       </td>
-      <td className="px-4 py-3.5 text-muted-foreground">{c.responsavelNome ?? "—"}</td>
-      <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums">
+      <td className={CLASSE_DA_CELULA}>
+        <CelulaGp nome={c.responsavelNome} />
+      </td>
+      <td className={CLASSE_DA_CELULA}>
+        <CelulaEnviado nome={c.pedido.solicitadoPorNome} quando={c.enviado_em_label} reenvio={false} />
+      </td>
+      <td className={`${CLASSE_DA_CELULA} whitespace-nowrap font-semibold tabular-nums`}>
         {formatCurrency(c.valorTotal)}
       </td>
-      <td className="px-4 py-3.5">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-foreground">{c.pedido.solicitadoPorNome}</span>
-          <span className="text-[12px] text-muted-foreground">{c.enviado_em_label}</span>
-        </div>
-      </td>
-      <td className="px-4 py-3.5">
-        <div className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAbrir();
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-california-red-hover"
-          >
-            <Ban className="h-3.5 w-3.5" />
-            Revisar cancelamento
-          </button>
-        </div>
+      <td className={CLASSE_DA_CELULA}>
+        <BotaoDaFila acao="cancelamento" onClick={onAbrir} />
       </td>
     </tr>
   );
