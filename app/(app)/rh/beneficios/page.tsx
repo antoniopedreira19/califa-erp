@@ -9,25 +9,29 @@ import {
   listarColaboradoresComBeneficios,
   listarBeneficiosDoCatalogo,
   listarBeneficiosCompletos,
+  listarFechamentos,
+  listarAnosComFechamento,
 } from "@/lib/queries/beneficios";
 import type { BeneficioModoCusteio } from "@/lib/types";
 import { KpisBeneficios } from "./_components/kpis-beneficios";
 import { FiltrosQuadro } from "./_components/filtros-quadro";
 import { TabelaColaboradores } from "./_components/tabela-colaboradores";
 import { TabCatalogo } from "./_components/tab-catalogo";
+import { TabFechamentos } from "./_components/tab-fechamentos";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "quadro" | "catalogo";
+type Tab = "quadro" | "catalogo" | "fechamentos";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "quadro", label: "Quadro" },
   { key: "catalogo", label: "Catálogo" },
+  { key: "fechamentos", label: "Fechamentos" },
 ];
 
 function normalizarTab(valor: string | undefined): Tab {
-  // Compatibilidade: tab "colaboradores" (legada) vira "quadro"
   if (valor === "catalogo") return "catalogo";
+  if (valor === "fechamentos") return "fechamentos";
   return "quadro";
 }
 
@@ -54,6 +58,7 @@ export default async function BeneficiosPage({
     busca?: string;
     beneficioId?: string;
     modoCusteio?: string;
+    anoFechamento?: string;
   };
 }) {
   const session = await requireSession();
@@ -74,34 +79,46 @@ export default async function BeneficiosPage({
     tenantId: session.activeTenant.id,
   });
 
+  const anoFechamento = Number(searchParams.anoFechamento) || hoje.getFullYear();
+
   // Carrega dados específicos de cada tab em paralelo
-  const [kpis, linhas, catalogoCompleto] = await Promise.all([
-    tab === "quadro"
-      ? kpisTenantBeneficios({
-          tenantId: session.activeTenant.id,
-          ano,
-          mes,
-        })
-      : Promise.resolve({
-          qtde_vinculos_saude: 0,
-          qtde_vinculos_dental: 0,
-          custo_total_empresa: 0,
-          custo_total_colaboradores: 0,
-        }),
-    tab === "quadro"
-      ? listarColaboradoresComBeneficios({
-          tenantId: session.activeTenant.id,
-          ano,
-          mes,
-          busca,
-          beneficioId,
-          modoCusteio,
-        })
-      : Promise.resolve([]),
-    tab === "catalogo"
-      ? listarBeneficiosCompletos({ tenantId: session.activeTenant.id })
-      : Promise.resolve([]),
-  ]);
+  const [kpis, linhas, catalogoCompleto, fechamentos, anosFechamento] =
+    await Promise.all([
+      tab === "quadro"
+        ? kpisTenantBeneficios({
+            tenantId: session.activeTenant.id,
+            ano,
+            mes,
+          })
+        : Promise.resolve({
+            qtde_vinculos_saude: 0,
+            qtde_vinculos_dental: 0,
+            custo_total_empresa: 0,
+            custo_total_colaboradores: 0,
+          }),
+      tab === "quadro"
+        ? listarColaboradoresComBeneficios({
+            tenantId: session.activeTenant.id,
+            ano,
+            mes,
+            busca,
+            beneficioId,
+            modoCusteio,
+          })
+        : Promise.resolve([]),
+      tab === "catalogo"
+        ? listarBeneficiosCompletos({ tenantId: session.activeTenant.id })
+        : Promise.resolve([]),
+      tab === "fechamentos"
+        ? listarFechamentos({
+            tenantId: session.activeTenant.id,
+            ano: anoFechamento,
+          })
+        : Promise.resolve([]),
+      tab === "fechamentos"
+        ? listarAnosComFechamento({ tenantId: session.activeTenant.id })
+        : Promise.resolve([] as number[]),
+    ]);
 
   return (
     <div className="space-y-6 max-w-[1480px] mx-auto">
@@ -159,6 +176,14 @@ export default async function BeneficiosPage({
       )}
 
       {tab === "catalogo" && <TabCatalogo beneficios={catalogoCompleto} />}
+
+      {tab === "fechamentos" && (
+        <TabFechamentos
+          ano={anoFechamento}
+          fechamentos={fechamentos}
+          anosDisponiveis={anosFechamento}
+        />
+      )}
     </div>
   );
 }
