@@ -5414,6 +5414,11 @@ código publicado logo depois (`3305751`).
   original do dossiê, só na PP urgente.
 - **Testado** no TES-1001/26 · Item 5 (detalhes na decisão 172). Resíduo:
   PP-00170 (verba de produção, "GP Teste"), rejeitada e cancelada.
+- **Revisão do mesmo dia:** ligar a urgência zera o prazo (`mudarUrgencia`
+  no `gerar-pp-drawer.tsx`), com a frase "Escolha o prazo de novo…"; sem
+  prazo, as parcelas padrão ficam vazias (antes, limpar o prazo pelo "×"
+  levava as parcelas para 1970). Testado também na edição da PP gerada
+  (173): PP-00179, cancelada no fim.
 
 ## ⚠️ Nota de 2026-10-14 — Sem "Editar" no job, o botão "Equipe" e a chave do produtor (decisão 174)
 
