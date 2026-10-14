@@ -57,6 +57,8 @@ todos**, inclusive o administrador.
 5. **A chave é da pessoa, não do lugar:** trocar o Produtor Responsável
    desliga a chave (gatilho). Fora da função, ela não muda (o mesmo
    gatilho barra a escrita direta).
+6. **Job encerrado ou finalizado:** a chave fica como está (não sai mais
+   PP dele). A tela a mostra travada e o servidor recusa a mudança.
 
 ## O pop-up
 
@@ -86,6 +88,19 @@ todos**, inclusive o administrador.
   Equipe, para os dois lugares mostrarem a mesma coisa.
 - Auditoria: `projeto.equipe_alterada`, `job.envio_de_pp_do_produtor_ligado`
   e `job.envio_de_pp_do_produtor_desligado`.
+
+## Conferido no navegador (14/10/2026)
+
+No TES-1023/26 (Produtor Responsável: "Produtor Teste"), logado como
+administrador: o job sem "Editar" e com o botão "Equipe"; a chave ligada e
+salva (auditoria `job.envio_de_pp_do_produtor_ligado`); o "GP Teste" posto e
+tirado da equipe (dois `projeto.equipe_alterada`); na visão agregada, a
+tabela dos 12 jobs com a chave do TES-1023/26 ligada e as dos finalizados
+(TES-1009 e TES-1027) travadas, e a chave desligada de novo — nenhuma ficou
+ligada. O "Editar projeto" de Orçamentos mostra a mesma equipe. A tela do
+produtor com a chave foi conferida só pelo banco (simulando o login dele, em
+transação desfeita): ele não liga a própria chave, não escreve a coluna
+direto, e com a chave ligada pelo administrador passa a enviar.
 
 ## Números de 14/10/2026 (fora do projeto de teste)
 

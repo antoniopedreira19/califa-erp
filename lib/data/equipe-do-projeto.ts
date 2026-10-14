@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { AppRole } from "@/lib/types";
+import { jobEstaCongelado, type AppRole, type JobStatus } from "@/lib/types";
 
 /**
  * A Equipe do projeto, como o pop-up "Equipe" mostra (decisão 174).
@@ -47,6 +47,8 @@ export interface JobNaEquipe {
   produtorId: string | null;
   /** A chave do envio de PP pelo Produtor Responsável (decisão 174). */
   produtorEnviaPP: boolean;
+  /** Encerrado ou finalizado: não sai mais PP, e a chave fica parada. */
+  congelado: boolean;
 }
 
 export interface EquipeDoProjeto {
@@ -103,7 +105,7 @@ export async function carregarEquipeDoProjeto(
       supabase
         .from("jobs")
         .select(
-          "id, codigo, nome, responsavel_id, produtor_id, produtor_envia_pp",
+          "id, codigo, nome, status, responsavel_id, produtor_id, produtor_envia_pp",
         )
         .eq("projeto_id", projetoId)
         .eq("tenant_id", tenantId)
@@ -133,6 +135,7 @@ export async function carregarEquipeDoProjeto(
     responsavel_id: string | null;
     produtor_id: string | null;
     produtor_envia_pp: boolean | null;
+    status: JobStatus;
   }>;
   const ativos = (
     (membrosRes.data ?? []) as Array<{
@@ -221,6 +224,7 @@ export async function carregarEquipeDoProjeto(
       gpId: j.responsavel_id,
       produtorId: j.produtor_id,
       produtorEnviaPP: j.produtor_envia_pp === true,
+      congelado: jobEstaCongelado(j.status),
     })),
     acrescimos,
     candidatos: ativos.filter((p) => !motivos.has(p.id)),
