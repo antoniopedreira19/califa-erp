@@ -86,7 +86,10 @@ function somaDaSecao(
 export async function importarFolhaContabilidade(input: {
   ano: number;
   mes: number;
-  arquivoBuffer: ArrayBuffer;
+  // Uint8Array (não ArrayBuffer): Server Actions do Next.js 14+ só aceitam
+  // TypedArrays como built-in. ArrayBuffer puro cai no path de "classes or
+  // null prototypes" e quebra o encodeReply dos args.
+  arquivoBuffer: Uint8Array;
   arquivoNome: string;
   dryRun?: boolean;
 }): Promise<ActionResult<ResumoImportacao>> {
@@ -294,23 +297,17 @@ export async function importarFolhaContabilidade(input: {
   const ignorarCount = preview.filter((p) => p.acao === "ignorar").length;
 
   if (input.dryRun) {
-    // Sanitiza pra plain object: workaround pro erro "Only plain objects... can be
-    // passed to Server Actions". Alguma propriedade do parse ou do Supabase vem com
-    // null prototype em runtime e quebra o encodeReply do React. JSON.parse/stringify
-    // garante que tudo vira literal.
-    return JSON.parse(
-      JSON.stringify({
-        ok: true,
-        importacao_id: null,
-        linhas_total: parsed.linhas.length,
-        linhas_criadas: criarPreview.length,
-        linhas_atualizadas: atualizarPreview.length,
-        linhas_ignoradas: ignorarCount,
-        warnings,
-        totalizadores_pdf,
-        preview,
-      }),
-    );
+    return {
+      ok: true,
+      importacao_id: null,
+      linhas_total: parsed.linhas.length,
+      linhas_criadas: criarPreview.length,
+      linhas_atualizadas: atualizarPreview.length,
+      linhas_ignoradas: ignorarCount,
+      warnings,
+      totalizadores_pdf,
+      preview,
+    };
   }
 
   // Modo real: cria/atualiza linhas em folhas_pagamento.
@@ -467,19 +464,17 @@ export async function importarFolhaContabilidade(input: {
     `/rh/folhas/${input.ano}-${String(input.mes).padStart(2, "0")}`,
   );
 
-  return JSON.parse(
-    JSON.stringify({
-      ok: true,
-      importacao_id: importacao?.id ?? null,
-      linhas_total: parsed.linhas.length,
-      linhas_criadas: criarPreview.length,
-      linhas_atualizadas: atualizarPreview.length,
-      linhas_ignoradas: ignorarCount,
-      warnings,
-      totalizadores_pdf,
-      preview,
-    }),
-  );
+  return {
+    ok: true,
+    importacao_id: importacao?.id ?? null,
+    linhas_total: parsed.linhas.length,
+    linhas_criadas: criarPreview.length,
+    linhas_atualizadas: atualizarPreview.length,
+    linhas_ignoradas: ignorarCount,
+    warnings,
+    totalizadores_pdf,
+    preview,
+  };
 }
 
 /**

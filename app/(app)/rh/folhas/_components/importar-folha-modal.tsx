@@ -64,7 +64,10 @@ export function ImportarFolhaModal(props: ImportarFolhaModalProps) {
     if (!arquivo) return;
     setErro(null);
     startCarregando(async () => {
-      const buf = await arquivo.arrayBuffer();
+      // Uint8Array em vez de ArrayBuffer puro: Server Actions do Next.js 14+
+      // rejeitam ArrayBuffer no encodeReply dos args ("null prototypes not supported").
+      // Uint8Array é TypedArray built-in aceito.
+      const buf = new Uint8Array(await arquivo.arrayBuffer());
       const r = await importarFolhaContabilidade({
         ano: props.ano,
         mes: props.mes,
@@ -85,7 +88,10 @@ export function ImportarFolhaModal(props: ImportarFolhaModalProps) {
     if (!arquivo || !preview) return;
     setErro(null);
     startCarregando(async () => {
-      const buf = await arquivo.arrayBuffer();
+      // Uint8Array em vez de ArrayBuffer puro: Server Actions do Next.js 14+
+      // rejeitam ArrayBuffer no encodeReply dos args ("null prototypes not supported").
+      // Uint8Array é TypedArray built-in aceito.
+      const buf = new Uint8Array(await arquivo.arrayBuffer());
       const r = await importarFolhaContabilidade({
         ano: props.ano,
         mes: props.mes,
