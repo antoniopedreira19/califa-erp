@@ -324,18 +324,10 @@ function StatusBadge(props: {
       </span>
     );
   }
-  if (props.acao === "criar") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
-        <CheckCircle2 className="h-3 w-3" />
-        Encontrado — vai criar linha
-      </span>
-    );
-  }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-800">
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
       <CheckCircle2 className="h-3 w-3" />
-      Encontrado — vai atualizar
+      Encontrado
     </span>
   );
 }
