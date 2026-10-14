@@ -261,6 +261,9 @@ export default async function ProjetoDetailPage({
       aberto_no_financeiro: boolean;
     }[]
   >();
+  // GP e Produtor Responsáveis dos jobs vivos: entram na Equipe travados,
+  // como os produtores dos orçamentos (decisão 174).
+  const responsaveisDosJobs = new Set<string>();
   // Valor do job por orçamento: versão APROVADA quando existir; senão a
   // mais recente (número em negociação). Sem versão → null (travessão).
   const valorJobMap = new Map<string, number>();
@@ -287,7 +290,7 @@ export default async function ProjetoDetailPage({
         .eq("tenant_id", session.activeTenant.id),
       supabase
         .from("jobs")
-        .select("id, codigo, orcamento_id, status, created_at, data_abertura_financeiro")
+        .select("id, codigo, orcamento_id, status, created_at, data_abertura_financeiro, responsavel_id, produtor_id")
         .in("orcamento_id", orcamentoIds)
         .eq("tenant_id", session.activeTenant.id),
     ]);
@@ -301,6 +304,10 @@ export default async function ProjetoDetailPage({
       versoesPorOrcamento.set(v.orcamento_id, atuais);
     }
     for (const j of ((jobsRes.data ?? []) as any[])) {
+      if (j.status !== "cancelado") {
+        if (j.responsavel_id) responsaveisDosJobs.add(j.responsavel_id);
+        if (j.produtor_id) responsaveisDosJobs.add(j.produtor_id);
+      }
       const atuais = jobsPorOrcamento.get(j.orcamento_id) ?? [];
       atuais.push({
         id: j.id,
@@ -518,7 +525,9 @@ export default async function ProjetoDetailPage({
               responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
               marcasSelecionadas={marcasDoProjeto.map((m) => m.id)}
               equipeSelecionada={equipeManualDoProjeto}
-              produtoresDosOrcamentos={produtoresDosOrcamentos}
+              produtoresDosOrcamentos={Array.from(
+                new Set([...produtoresDosOrcamentos, ...responsaveisDosJobs]),
+              )}
               clienteTravado={clienteTravado}
             />
             )}

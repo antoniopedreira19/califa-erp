@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { nomeVersao } from "@/lib/nome-versao";
-import { pode } from "@/lib/permissoes";
+import { corrigeNfNoJob, enviaPPNoJob, pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import {
@@ -39,7 +39,6 @@ import type {
   SessionContext,
   Job,
   JobStatus,
-  Regional,
   VersaoOrcamentoGrupo,
   JobGrupo,
   ItemPlanilhaJob,
@@ -129,7 +128,7 @@ export async function carregarDetalheDoJob(
   jobId: string,
 ) {
   const supabase = createClient();
-  const [jobRes, regionaisRes, responsaveis, contatosCobranca] =
+  const [jobRes, responsaveis, contatosCobranca] =
     await Promise.all([
     // O Serviço vem do JOB (`jobs.servico_id`, gravado na abertura —
     // decisão 055, 07/09/2026), com o do ORÇAMENTO (`orcamentos.servico_id`)
@@ -145,19 +144,13 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
-    supabase
-      .from("regionais")
-      .select("id, nome, empresa_id")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      // Regional só de folha (AMBEV) não é opção de job — decisão 134.
-      .eq("disponivel_em_projetos", true)
-      .order("nome"),
+    // A lista de regionais servia ao "Editar" do job, que saiu na decisão
+    // 174: depois da abertura o job não muda.
     listActiveMembers(session.activeTenant.id),
     // Contatos que a produção informou no envio para abertura. Uma query
     // só, coberta pelo índice `idx_jobs_contatos_job`.
@@ -1035,8 +1028,6 @@ export async function carregarDetalheDoJob(
   const paramsMidia: ParametrosMidia | null =
     planilha.modeloPlanilha === "midia_off" ? parametrosDaVersao(versaoAprovada) : null;
 
-  const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
-
   const job: Job = {
     faturamento_save_previsto: Number(raw.faturamento_save_previsto ?? 0),
     abertura_em_revisao: raw.abertura_em_revisao === true,
@@ -1057,6 +1048,9 @@ export async function carregarDetalheDoJob(
     data_fim_prevista: raw.data_fim_prevista,
     responsavel_id: raw.responsavel_id,
     produtor_id: raw.produtor_id,
+    produtor_envia_pp: raw.produtor_envia_pp === true,
+    produtor_envia_pp_por: raw.produtor_envia_pp_por ?? null,
+    produtor_envia_pp_em: raw.produtor_envia_pp_em ?? null,
     valor_total: raw.valor_total !== null ? Number(raw.valor_total) : null,
     faturamento_previsto:
       raw.faturamento_previsto !== undefined &&
@@ -1632,8 +1626,11 @@ export async function carregarDetalheDoJob(
   // negociar seguem em `podeAcoesPlanilha`, para quem pode mexer no job.
   const podeConfirmarBv =
     podeAcoesPlanilha && pode(session.activeRole, "jobs.confirmar_bv");
+  // Quem envia PP deste job: o papel (decisão 136) ou o Produtor
+  // Responsável com a chave do GP (decisão 174).
+  const enviaPP = enviaPPNoJob(session.activeRole, session.profile.id, job);
   const podeEnviarPP =
-    pode(session.activeRole, "jobs.enviar_pp") &&
+    enviaPP &&
     jobAceitaEnvioDePP(job.status) &&
     job.abertura_em_revisao !== true;
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
@@ -1730,7 +1727,6 @@ export async function carregarDetalheDoJob(
     alteracoesFinanceiro,
     versaoAprovada,
     versaoLabel,
-    regionais,
     responsaveis,
     contatosCobranca,
     ppsDoJob,
@@ -1802,9 +1798,10 @@ export async function carregarDetalheDoJob(
     // O PAPEL que envia PP (decisão 136), sem olhar o estado do job: é o
     // que separa o produtor (gera, não envia, cancela só a não enviada) do
     // GP. `podeEnviarPP` acima soma a isso a abertura do job.
-    papelEnviaPP: pode(session.activeRole, "jobs.enviar_pp"),
-    // Corrigir a NF da PP em avaliação sem aprovar (revisão da decisão 152).
-    papelCorrigeNf: pode(session.activeRole, "jobs.corrigir_nf_pp"),
+    papelEnviaPP: enviaPP,
+    // Corrigir a NF da PP em avaliação sem aprovar (revisão da decisão 152);
+    // com a chave, o Produtor Responsável também (decisão 174).
+    papelCorrigeNf: corrigeNfNoJob(session.activeRole, session.profile.id, job),
     podeConfirmarBv,
     ppsQuePossoPrestarContas,
     // Errata (decisão 159): o GP e o administrador registram — mandam ao

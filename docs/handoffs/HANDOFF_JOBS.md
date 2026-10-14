@@ -5279,3 +5279,22 @@ código publicado logo depois (`3305751`).
   status "Cancelamento solicitado".
 - Dados em `lib/data/cancelamentos.ts`; actions em
   `app/(app)/jobs/[jobId]/actions-cancelamento.ts`.
+
+## ⚠️ Nota de 2026-10-14 — Sem "Editar" no job, o botão "Equipe" e a chave do produtor (decisão 174)
+
+- **O "Editar" do job saiu** (botão, `job-editor-drawer.tsx` e a action
+  `atualizarJob`): depois da abertura o job não muda. A lista de regionais
+  que só servia a ele saiu do `carregarDetalheDoJob`.
+- **Botão "Equipe"** no cabeçalho do job e ao lado do nome do projeto na
+  visão agregada (`app/(app)/jobs/_equipe/`, dados em
+  `lib/data/equipe-do-projeto.ts`). Mostra os responsáveis do job em
+  destaque e a Equipe do projeto agrupada por papel. GPs e produtores põem e
+  tiram gente (`projetos.editar_equipe`); GP e Produtor Responsáveis de
+  cada job entram sozinhos.
+- **A chave "Envia PPs ao financeiro"** no Produtor Responsável de cada job:
+  só GP e administrador mexem (`jobs.liberar_envio_pp_produtor`, função
+  `definir_envio_de_pp_do_produtor`). Ligada, `enviaPPNoJob` e
+  `corrigeNfNoJob` (`lib/permissoes.ts`) dão ao produtor a tela do GP para
+  a PP daquele job — `papelEnviaPP`, `podeEnviarPP` e `papelCorrigeNf` no
+  carregador, e os portões de `actions-pp.ts` e `actions-notas-da-pp.ts`.
+  Trocar o produtor desliga a chave (gatilho no banco).

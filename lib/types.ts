@@ -1025,6 +1025,12 @@ export interface Job {
   responsavel_id: string;
   /** Produtor responsável, herdado do orçamento na abertura. */
   produtor_id: string | null;
+  /** Decisão 174: o Produtor Responsável envia PPs deste job ao
+   *  financeiro, como o GP. Muda só pela Equipe (GP ou administrador), e
+   *  trocar o produtor desliga. */
+  produtor_envia_pp: boolean;
+  produtor_envia_pp_por: string | null;
+  produtor_envia_pp_em: string | null;
   valor_total: number | null;
   /**
    * O que a California emite nota: Σ(AR, B, C) + honorários + imposto.

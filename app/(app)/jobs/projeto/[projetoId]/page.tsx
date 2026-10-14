@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowRight,
-  ClipboardList,
-  FolderKanban,
-  Lock,
-} from "lucide-react";
+import { ArrowRight, ClipboardList, FolderKanban, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { ResumoResultado } from "@/components/resumo-resultado";
@@ -23,6 +18,9 @@ import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { AGREGADA, itensDeJobs } from "@/lib/faixa-do-projeto";
 import { carregarPlanilhasDosJobs } from "./carregar-planilhas";
 import { PlanilhasDoProjeto } from "./planilhas-do-projeto";
+import { BotaoEquipe } from "../../_equipe/equipe-dialog";
+import { carregarEquipeDoProjeto } from "@/lib/data/equipe-do-projeto";
+import { pode } from "@/lib/permissoes";
 
 export const dynamic = "force-dynamic";
 
@@ -47,19 +45,27 @@ export default async function ProjetoAgregadoPage({
 
   if (!projeto) notFound();
 
-  const { data: jobsRaw } = await supabase
-    .from("jobs")
-    .select(
-      "id, codigo, nome, status, faturamento_enviado_em, versao_orcamento_aprovada_id, " +
-        "responsavel:profiles!responsavel_id(nome), " +
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto)",
-    )
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("projeto_id", params.projetoId)
-    .neq("status", "cancelado")
-    // Ordem de criação, e não a do código: desde a decisão 114 o código
-    // começa pela sigla do cliente, e o texto não diz mais a ordem.
-    .order("created_at", { ascending: true });
+  // A Equipe do projeto (decisão 174) corre junto dos jobs.
+  const [{ data: jobsRaw }, equipe] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select(
+        "id, codigo, nome, status, faturamento_enviado_em, versao_orcamento_aprovada_id, " +
+          "responsavel:profiles!responsavel_id(nome), " +
+          "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto)",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("projeto_id", params.projetoId)
+      .neq("status", "cancelado")
+      // Ordem de criação, e não a do código: desde a decisão 114 o código
+      // começa pela sigla do cliente, e o texto não diz mais a ordem.
+      .order("created_at", { ascending: true }),
+    carregarEquipeDoProjeto(
+      supabase,
+      session.activeTenant.id,
+      params.projetoId,
+    ),
+  ]);
 
   // Nesta tela o status só vira selo e contagem, então já sai como o status
   // EXIBIDO: "Em faturamento" é o aberto com o envio completo (decisão 094).
@@ -71,12 +77,12 @@ export default async function ProjetoAgregadoPage({
       status: JobStatus;
       faturamento_enviado_em: string | null;
       versao_orcamento_aprovada_id: string;
-    responsavel: { nome: string } | null;
-    versao: {
-      moeda: string;
-      percentual_honorarios: number | string;
-      percentual_imposto: number | string;
-    } | null;
+      responsavel: { nome: string } | null;
+      versao: {
+        moeda: string;
+        percentual_honorarios: number | string;
+        percentual_imposto: number | string;
+      } | null;
     }>
   ).map((j) => ({
     ...j,
@@ -156,9 +162,27 @@ export default async function ProjetoAgregadoPage({
               <p className="font-mono text-xs font-semibold text-muted-foreground">
                 {projetoTyped.codigo}
               </p>
-              <h1 className="text-2xl font-bold tracking-tight">
-                {projetoTyped.nome}
-              </h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight">
+                  {projetoTyped.nome}
+                </h1>
+                {/* A Equipe do projeto e a chave do envio de PP de cada
+                    Produtor Responsável (decisão 174). */}
+                {equipe && (
+                  <BotaoEquipe
+                    equipe={equipe}
+                    jobId={null}
+                    podeMudarMembros={pode(
+                      session.activeRole,
+                      "projetos.editar_equipe",
+                    )}
+                    podeMudarChave={pode(
+                      session.activeRole,
+                      "jobs.liberar_envio_pp_produtor",
+                    )}
+                  />
+                )}
+              </div>
             </div>
           </div>
 
@@ -256,7 +280,10 @@ export default async function ProjetoAgregadoPage({
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {Object.entries(statusMix)
-              .map(([s, n]) => `${n} ${jobStatusLabel(s as JobStatusExibido).toLowerCase()}`)
+              .map(
+                ([s, n]) =>
+                  `${n} ${jobStatusLabel(s as JobStatusExibido).toLowerCase()}`,
+              )
               .join(" · ")}
           </p>
         </div>

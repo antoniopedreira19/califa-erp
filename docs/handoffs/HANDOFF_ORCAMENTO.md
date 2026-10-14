@@ -5607,3 +5607,9 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **Pendente:** o editor do job ("Responsável"), em commit próprio depois da
   conferência no navegador.
 
+## ⚠️ Nota de 2026-10-14 — A Equipe do projeto trava os responsáveis dos jobs (decisão 174)
+
+- No "Editar projeto", o campo Equipe passa a travar também o GP e o
+  Produtor Responsáveis de cada job vivo, como já travava o criador, os GPs
+  e os produtores dos orçamentos. É a mesma Equipe que o botão "Equipe" do
+  job e da visão agregada mostra.

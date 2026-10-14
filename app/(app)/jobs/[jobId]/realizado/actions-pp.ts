@@ -20,7 +20,7 @@ import {
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { formatCurrency } from "@/lib/utils";
-import { pode } from "@/lib/permissoes";
+import { enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
 import {
   DOCUMENTO_TIPOS,
   PP_URGENTE_JUSTIFICATIVA_MIN,
@@ -507,14 +507,16 @@ type AnexoUploaded = z.infer<typeof anexoUploadedSchema>;
 
 /**
  * Enviar (e reenviar) PP ao financeiro é do GP e do administrador (decisão
- * 136): o produtor gera, mas não envia. As actions de envio chamam este
- * DEPOIS de `checarGatesRealizado`.
+ * 136): o produtor gera, mas não envia — a não ser o Produtor Responsável
+ * do job com a chave ligada pelo GP (decisão 174). As actions de envio
+ * chamam este DEPOIS de `checarGatesRealizado`.
  */
 async function barrarEnvioPeloPapel(
   session: Awaited<ReturnType<typeof requireSession>>,
   ppId: string,
+  job: JobParaEnvioDePP,
 ): Promise<{ ok: false; message: string } | null> {
-  if (pode(session.activeRole, "jobs.enviar_pp")) return null;
+  if (enviaPPNoJob(session.activeRole, session.profile.id, job)) return null;
   await logAuditEvent({
     acao: "acao_negada",
     tenantId: session.activeTenant.id,
@@ -582,6 +584,9 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         abertura_em_revisao: boolean;
         /** A regional do job: decide o CNPJ padrão da PP (decisão 156). */
         regional_id: string | null;
+        /** Quem envia PP do job além do GP (decisão 174). */
+        produtor_id: string | null;
+        produtor_envia_pp: boolean;
       };
       supabase: ReturnType<typeof createClient>;
     }
@@ -653,7 +658,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const { data: jobRow, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, regional_id",
+      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, regional_id, produtor_id, produtor_envia_pp",
     )
     .eq("id", item.job_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -665,6 +670,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const job = {
     ...jobRow,
     abertura_em_revisao: (jobRow as any).abertura_em_revisao === true,
+    produtor_envia_pp: (jobRow as any).produtor_envia_pp === true,
   };
 
   // ⚠️ Mudou em 08/09/2026 (decisão 056). Até aqui GERAR PP exigia o job
@@ -1814,7 +1820,7 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   const { data: pp, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, tenant_id, codigo, job_id, item_realizado_id, status, jobs!inner(id, status, responsavel_id)",
+      "id, tenant_id, codigo, job_id, item_realizado_id, status, jobs!inner(id, status, responsavel_id, produtor_id, produtor_envia_pp)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1839,7 +1845,11 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
     };
   }
 
-  const job = (pp as unknown as { jobs: { status: string; responsavel_id: string | null } }).jobs;
+  const job = (
+    pp as unknown as {
+      jobs: { status: string; responsavel_id: string | null; produtor_id: string | null; produtor_envia_pp: boolean };
+    }
+  ).jobs;
   // Mesmo gate de gerar (decisão 056): quem pôde gerar a PP na
   // pré-abertura precisa poder cancelá-la lá também — senão ela ficaria
   // presa no job até a abertura, sem caminho de volta.
@@ -1849,9 +1859,10 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 
   // Decisão 136: qualquer GP (e o administrador) cancela — antes era só o
   // GP responsável do job. O produtor gera PP mas não a envia ao
-  // financeiro; por isso cancela só a que ainda não foi enviada.
+  // financeiro; por isso cancela só a que ainda não foi enviada. Com a
+  // chave do GP (decisão 174), o Produtor Responsável cancela como o GP.
   const podeCancelar =
-    pode(session.activeRole, "jobs.enviar_pp") || pp.status === "gerada";
+    enviaPPNoJob(session.activeRole, session.profile.id, job) || pp.status === "gerada";
   if (!podeCancelar) {
     await logAuditEvent({
       acao: "acao_negada",
@@ -2303,7 +2314,7 @@ export async function enviarPedidoCompraAoFinanceiro(
 
   const gate = await checarGatesRealizado(ppRow.item_realizado_id);
   if (!gate.ok) return gate;
-  const barradoNoEnvio = await barrarEnvioPeloPapel(gate.session, ppRow.id);
+  const barradoNoEnvio = await barrarEnvioPeloPapel(gate.session, ppRow.id, gate.job);
   if (barradoNoEnvio) return barradoNoEnvio;
   const { item, job } = gate;
 
@@ -3247,7 +3258,7 @@ export async function cancelarERefazerPP(
   const gate = await checarGatesRealizado(linhaPP.item_realizado_id);
   if (!gate.ok) return gate;
   // A rejeitada já esteve no financeiro: quem a refaz é quem envia (decisão 136).
-  const barrado = await barrarEnvioPeloPapel(gate.session, ppId);
+  const barrado = await barrarEnvioPeloPapel(gate.session, ppId, gate.job);
   if (barrado) return barrado;
 
   // Os mesmos dados, no formato do formulário.

@@ -160,6 +160,14 @@ export const permissoes = {
    *  da nota nesta PP, sempre; os dados da nota até o financeiro registrá-la.
    *  O banco confere de novo (`corrigir_notas_fiscais_da_pp`). */
   "jobs.corrigir_nf_pp":          ["administrador", "gerente_producao", "financeiro"],
+  /** Ligar e desligar, na Equipe do job, a chave que deixa o Produtor
+   *  Responsável enviar PPs ao financeiro como o GP (decisão 174). O banco
+   *  confere de novo (`definir_envio_de_pp_do_produtor`). */
+  "jobs.liberar_envio_pp_produtor": ["administrador", "gerente_producao"],
+  /** Pôr e tirar gente da Equipe do projeto pelo botão "Equipe" do job e
+   *  da visão agregada (decisão 174): GPs e produtores. Os mesmos papéis do
+   *  "Editar projeto" (`orcamentos.editar`). */
+  "projetos.editar_equipe":       ["administrador", "gerente_producao", "produtor"],
   /** Enviar (e reenviar, se devolvido) o job para abertura no financeiro.
    *  Só o GP (Tiago, 22/09/2026): até aqui a action não tinha gate e o
    *  produtor enviava. */
@@ -288,6 +296,33 @@ export class PermissaoNegadaError extends Error {
 export function pode(role: AppRole, recurso: Recurso): boolean {
   const rolesPermitidos = permissoes[recurso] as readonly AppRole[];
   return rolesPermitidos.includes(role);
+}
+
+/** O job, no que decide quem envia PP dele (decisão 174). */
+export interface JobParaEnvioDePP {
+  produtor_id: string | null;
+  produtor_envia_pp: boolean;
+}
+
+/** O Produtor Responsável com a chave ligada pelo GP (decisão 174). */
+export function produtorComAChave(profileId: string, job: JobParaEnvioDePP): boolean {
+  return job.produtor_envia_pp && job.produtor_id === profileId;
+}
+
+/**
+ * Envia (e reenvia) PP deste job ao financeiro: o papel (`jobs.enviar_pp`,
+ * decisão 136) ou o Produtor Responsável com a chave (decisão 174). Com a
+ * chave, a tela dele é a do GP para a PP: enviar, reenviar a rejeitada e
+ * cancelar a que está no financeiro.
+ */
+export function enviaPPNoJob(role: AppRole, profileId: string, job: JobParaEnvioDePP): boolean {
+  return pode(role, "jobs.enviar_pp") || produtorComAChave(profileId, job);
+}
+
+/** Corrige a NF da PP em avaliação: o papel (`jobs.corrigir_nf_pp`) ou o
+ *  Produtor Responsável com a chave (decisão 174). */
+export function corrigeNfNoJob(role: AppRole, profileId: string, job: JobParaEnvioDePP): boolean {
+  return pode(role, "jobs.corrigir_nf_pp") || produtorComAChave(profileId, job);
 }
 
 /**

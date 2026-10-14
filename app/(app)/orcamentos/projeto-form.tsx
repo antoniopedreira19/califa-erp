@@ -70,7 +70,8 @@ interface Props {
   /** Acréscimos manuais à Equipe já gravados (papel `equipe`). Os
    *  automáticos NÃO vêm aqui: são derivados na hora. */
   equipeSelecionada?: string[];
-  /** Quem já é produtor de algum orçamento do projeto. Entra na Equipe
+  /** Quem já é produtor de algum orçamento do projeto — e, desde a decisão
+   *  174, o GP e o Produtor Responsáveis de cada job vivo. Entra na Equipe
    *  travado, junto do criador e dos GPs. Vazio na criação — o projeto
    *  ainda não tem orçamento. */
   produtoresDosOrcamentos?: string[];
@@ -578,8 +579,9 @@ export function ProjetoForm({
             className={erroClasses("equipe_ids")}
           />
           <p className="text-xs text-muted-foreground">
-            Criador, GPs Responsáveis e produtores dos orçamentos entram
-            automaticamente e não podem ser removidos.
+            Criador, GPs Responsáveis, produtores dos orçamentos e os
+            responsáveis de cada job entram automaticamente e não podem ser
+            removidos.
           </p>
         </Field>
 
