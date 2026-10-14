@@ -416,7 +416,7 @@ export function PrestarContasDrawer({
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {rotuloDeQuemRecebeAVerba(tipoDaVerba(ppAtual) ?? "producao")}
+                  {rotuloDeQuemRecebeAVerba(ppAtual)}
                 </p>
                 <p className="truncate text-[13px] font-semibold">{nomeDeQuemRecebeAVerba(ppAtual) ?? "—"}</p>
               </div>
