@@ -6,17 +6,30 @@ import { Check, Square, Upload, Send, Loader2 } from "lucide-react";
 import { enviarCompetencia } from "../importar-actions";
 import { ImportarFolhaModal } from "./importar-folha-modal";
 import { BotaoGerarFolhaPj } from "./botao-gerar-folha-pj";
+import { BotaoAplicarBeneficios } from "./botao-aplicar-beneficios";
+import { BotaoDesaplicarBeneficios } from "./botao-desaplicar-beneficios";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
 
+export interface ChecklistBeneficiosProp {
+  aplicado: boolean;
+  fechamentoId: string | null;
+  qtdVinculos: number;
+  totalEmpresa: number;
+  totalColaborador: number;
+  totalIntegral: number;
+  avulsaPaga: boolean;
+}
+
 export interface ChecklistCompetenciaProps {
   ano: number;
   mes: number;
   pj: { linhas: number; total: number };
   clt: { linhas: number; total: number };
+  beneficios: ChecklistBeneficiosProp;
   rascunhosAEnviar: number;
   podeEditar: boolean;
 }
@@ -29,7 +42,8 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
 
   const temPj = props.pj.linhas > 0;
   const temClt = props.clt.linhas > 0;
-  const podeEnviar = temPj && temClt && props.rascunhosAEnviar > 0;
+  const temBenef = props.beneficios.aplicado;
+  const podeEnviar = temPj && temClt && temBenef && props.rascunhosAEnviar > 0;
 
   function handleEnviar() {
     if (!podeEnviar) return;
@@ -76,9 +90,11 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
                 ? "Gere a folha PJ antes."
                 : !temClt
                   ? "Importe a folha CLT antes."
-                  : props.rascunhosAEnviar === 0
-                    ? "Nenhum rascunho para enviar."
-                    : undefined
+                  : !temBenef
+                    ? "Aplique os descontos de benefícios antes de enviar."
+                    : props.rascunhosAEnviar === 0
+                      ? "Nenhum rascunho para enviar."
+                      : undefined
             }
             className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
@@ -103,7 +119,7 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         <CheckpointRow
           feito={temPj}
           rotulo="PJ gerada"
@@ -144,6 +160,27 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
                     </>
                   )
                 }
+              />
+            ) : null
+          }
+        />
+        <CheckpointRow
+          feito={temBenef}
+          rotulo="Benefícios aplicados"
+          detalhe={
+            temBenef
+              ? `${props.beneficios.qtdVinculos} vínculo${props.beneficios.qtdVinculos === 1 ? "" : "s"} · ${brl.format(props.beneficios.totalIntegral)}`
+              : "Nenhuma competência fechada ainda"
+          }
+          acao={
+            props.podeEditar && temPj && temClt && !temBenef ? (
+              <BotaoAplicarBeneficios ano={props.ano} mes={props.mes} />
+            ) : props.podeEditar &&
+              temBenef &&
+              !props.beneficios.avulsaPaga &&
+              props.beneficios.fechamentoId ? (
+              <BotaoDesaplicarBeneficios
+                fechamentoId={props.beneficios.fechamentoId}
               />
             ) : null
           }
