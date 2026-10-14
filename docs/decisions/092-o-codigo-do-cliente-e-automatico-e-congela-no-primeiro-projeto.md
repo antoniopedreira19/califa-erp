@@ -212,6 +212,10 @@ nada mais pendia do "Novo": zero faturamento, lançamento, conta avulsa ou
 desembolso. Jobs e orçamentos não guardam `cliente_id` próprio, então
 mover o projeto moveu tudo que pende dele.
 
+⚠️ **NOV é a sigla do SEBRAE e fica (Tiago, 14/10/2026).** Não é
+abreviação do nome — pela §2 seria `SEB` —, e sim o código do SEBRAE no
+sistema antigo, que o Tiago quer manter igual. Não propor a troca.
+
 ⚠️ **Menos uma coisa, que só a TELA mostrou** e virou a migration
 `20260918180004`: **`jobs.produto` é texto**, uma cópia do nome da marca
 tirada na abertura do job, e não uma FK. A varredura do banco por
