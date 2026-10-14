@@ -5376,3 +5376,28 @@ código publicado logo depois (`3305751`).
   segue "Responsável". PP-00168 cancelada depois.
 - **Não conferido na tela:** a prestação por produtor ou freela numa verba
   de produção (precisa de verba paga; a regra está na função aplicada).
+
+## ⚠️ Nota de 2026-10-14 — Quarta de exceções na PP urgente e datas das parcelas que se adiam (decisão 172)
+
+- **Prazo:** com "Pagamento urgente" ligado, o calendário do prazo acende também
+  as quartas, até a sexta anterior (ponto vermelho + legenda "Quarta de
+  exceções"); embaixo, "Quarta de exceções · envio até dd/mm/aaaa". Desligar a
+  urgência com uma quarta devolve o prazo à primeira janela, com aviso âmbar.
+  Regra em `lib/calculos/janelas-pagamento.ts` (`tipoDoPrazo`,
+  `dataLimiteDaQuarta`); `dataLimiteDeEnvio` passou a responder pela quarta.
+- **Parcelas:** a 2ª pula a janela logo depois da anterior
+  (`primeiraDataDaProximaParcela`) e, da 2ª em diante, a data abre um
+  calendário que só adia (janelas a partir da padrão), com ↺ para voltar.
+  `ParcelaLocal.ajustada` é obrigatório; `trocarDatas` saiu, entraram
+  `acomodarParcelas` e `mudarDataDaParcela` (`parcelas-da-pp.tsx`).
+- **Servidor:** `validarVencimentosNasJanelas(datas, gravadas, feriados,
+  urgente)` em todas as portas (gerar, PP a emitir, edição da 173, atualizar);
+  o envio recusa quarta sem urgência; o "Atualizar vencimento" aceita quarta
+  na PP urgente e acomoda as parcelas (`acomodarDatasDasParcelas`).
+- **Painel:** `PPDoItem.urgente` (obrigatório) leva a urgência ao
+  `AtualizarVencimento`, que na PP urgente é um calendário; sem urgência,
+  segue a lista de 6 janelas.
+- **Financeiro:** selo "✓ quarta de exceções" (vermelho) no Vencimento
+  original do dossiê, só na PP urgente.
+- **Testado** no TES-1001/26 · Item 5 (detalhes na decisão 172). Resíduo:
+  PP-00170 (verba de produção, "GP Teste"), rejeitada e cancelada.
