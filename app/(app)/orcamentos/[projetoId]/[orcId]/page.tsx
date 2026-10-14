@@ -8,7 +8,7 @@ import { FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
-import { listarProdutoresAtivos } from "@/lib/data/members";
+import { listarGpsDoProjeto, listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
 import {
   orcamentoStatusLabel,
@@ -235,7 +235,7 @@ export default async function OrcamentoDetailPage({
     reservadoRes,
     canceladoAposAberturaRes,
     regionaisProjRes,
-    respProjRes,
+    gpsDoProjeto,
     cidadesIniciais,
     produtores,
     categoriasRes,
@@ -346,11 +346,9 @@ export default async function OrcamentoDetailPage({
       .select("regional:regionais(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
-    supabase
-      .from("projeto_responsaveis")
-      .select("profile:profiles(id, nome)")
-      .eq("projeto_id", params.projetoId)
-      .eq("tenant_id", session.activeTenant.id),
+    // Só os GPs Responsáveis que podem ser GP — sem a Equipe e sem quem
+    // não tem o papel (decisão 170).
+    listarGpsDoProjeto(params.projetoId),
     // Só as primeiras cidades, e as mesmas para os dois consumidores desta
     // tela: o editor do orçamento e o combobox do modal de abertura. O
     // cadastro comporta o Brasil inteiro — o resto vem do servidor a cada
@@ -499,19 +497,12 @@ export default async function OrcamentoDetailPage({
     "id" | "nome"
   >[];
 
-  const gpsDoProjeto = ((respProjRes.data ?? []) as any[])
-    .filter((v) => v.profile)
-    .map((v) => ({ id: v.profile.id, nome: v.profile.nome }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<
-    Profile,
-    "id" | "nome"
-  >[];
-
   // As mesmas listas do editor do orçamento, para o envio para abertura
-  // (decisão 135), com quem já está gravado no orçamento. A de produtores
-  // vale também para o editor: desde 13/10/2026 a lista só tem o papel
-  // Produtor, e o orçamento gravado com um GP ou um freelancer como
-  // produtor abriria o campo vazio.
+  // (decisão 135), com quem já está gravado no orçamento. Valem também
+  // para o editor: desde 13/10/2026 as listas só têm quem tem o papel
+  // (decisões 168 e 170), e o orçamento gravado com alguém fora dele
+  // abriria o campo vazio. Assim o nome aparece, e o servidor explica a
+  // recusa.
   const gpsDoEnvio = comQuemEstaNoOrcamento(
     gpsDoProjeto,
     orcamentoRaw?.gp_responsavel_id,
@@ -869,7 +860,7 @@ export default async function OrcamentoDetailPage({
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}
               cidadeAtual={cidadeAtual}
-              gpsDoProjeto={gpsDoProjeto}
+              gpsDoProjeto={gpsDoEnvio}
               produtores={produtoresDoEnvio}
               projetoNome={projetoRaw.nome}
               projetoCodigo={projetoRaw.codigo}

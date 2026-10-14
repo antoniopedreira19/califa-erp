@@ -5577,3 +5577,33 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - **Varredura de usuários de teste em dados reais** (jobs, orçamentos,
   projetos e PPs): só o "Freelancer Teste" na Equipe do NOV-P004/26.
 
+## ⚠️ Nota de 2026-10-14 — GP só quem pode ser GP, e a trava no envio para abertura (decisão 170)
+
+- **A regra** está na decisão 170. Pode ser GP quem é membro ativo com o
+  papel GP ou Administrador (`gps_ativos_do_tenant`, 55 pessoas). O campo
+  "GPs Responsáveis" do projeto só oferece essas pessoas (a Equipe segue com
+  os 97 membros); o "GP Responsável" do orçamento só oferece os GPs
+  Responsáveis do projeto que podem ser GP (`gps_do_projeto`) — antes vinha
+  também a Equipe do projeto. O servidor confere nos dois.
+- **Trava no envio para abertura:** GP do orçamento que não pode ser GP
+  trava o envio, mesmo sem ninguém ter mexido, com o nome e o motivo. O
+  produtor não entra na trava (escolha do Tiago). Em 14/10/2026, nenhum dos
+  30 orçamentos reais que ainda passam pelo envio trava.
+- **Correção de dado (pedida pelo Tiago):** no AMB-P003/26 a produtora saiu
+  dos GPs Responsáveis e ficou na Equipe; o GP do projeto passou a ser só o
+  da migration `20261013900001` (`20261013900002`, auditoria
+  `projeto.gp_corrigido`).
+- **Conferido no navegador (logado como administrador):** Novo orçamento do
+  DEE-P001/26 ofereceu 2 GPs (sem os 2 produtores cadastrados como GP nem a
+  Equipe); "Editar projeto" do DEE-P001/26 ofereceu 57 GPs (55 + os 2
+  gravados, que podem ser tirados) e a Equipe 97, fechado sem salvar; Novo
+  projeto ofereceu 55; editor e agregada do TES-P001/26 ofereceram 2 GPs,
+  sem o administrador que está só na Equipe. Pelo console, salvar o
+  TES-P001/26-33 com uma produtora e com alguém só da Equipe como GP foi
+  recusado, e editar o TES-P001/26 com uma produtora entre os GPs foi
+  recusado com o nome dela; nada gravou. O envio com GP gravado sem o papel
+  não foi exercitado no navegador: nenhum orçamento, nem de teste, tem esse
+  estado, e criá-lo exigiria SQL direto.
+- **Pendente:** o editor do job ("Responsável"), em commit próprio depois da
+  conferência no navegador.
+

@@ -164,7 +164,11 @@ interface Props {
   /** Primeiras cidades do cadastro — o combobox do formulário busca o
    *  resto no servidor. O rótulo do card sai de `orc.cidade_nome`. */
   cidadesIniciais: CidadeOption[];
+  /** Todos os vinculados ao projeto: dá o nome do GP no card dos
+   *  orçamentos que já existem. */
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
+  /** Só os que podem ser GP (decisão 170): a lista do orçamento novo. */
+  gpsPossiveis: Pick<Profile, "id" | "nome">[];
   produtores: Pick<Profile, "id" | "nome">[];
   categoriasItem: Categoria[];
   fornecedores: FornecedorOpcao[];
@@ -281,6 +285,7 @@ export function EditorAgregado({
   regionaisDoProjeto,
   cidadesIniciais,
   gpsDoProjeto,
+  gpsPossiveis,
   produtores,
   categoriasItem,
   fornecedores,
@@ -1314,7 +1319,7 @@ export function EditorAgregado({
             servicos={servicos}
             regionaisDoProjeto={regionaisDoProjeto}
             cidadesIniciais={cidadesIniciais}
-            gpsDoProjeto={gpsDoProjeto}
+            gpsDoProjeto={gpsPossiveis}
             produtores={produtores}
             onRascunho={criarOrcamento}
             onCancel={() => setModal(null)}
