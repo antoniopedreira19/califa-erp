@@ -5332,8 +5332,17 @@ código publicado logo depois (`3305751`).
   R$ 100, total R$ 200), eventos emitida → editada → cancelada, realizado do
   item 120 → 320 → 120, auditoria com o antes e o depois. A marca "Pronta" e
   a trava de PP enviada foram conferidas numa transação desfeita, na PP-00088.
-- **Resíduo de teste:** PP-00167 cancelada no TES-1014/26, com o arquivo da
-  NF 9170 de teste.
+- **Aba Pedidos de Produção, testada em 14/10/2026** como "Produtor Teste
+  Claude" (link de acesso local), no TES-1014/26: PP-00176 (R$ 90) gerada,
+  deixada pronta para envio com a NF 9173 completa, e editada pelo lápis da
+  aba para 2 parcelas. Na aba, a PP gerada mostrou olho, "Editar" e cancelar
+  (sem a ficha); a PP-00148, enviada, só olho e ficha. O formulário abriu ali
+  mesmo, com o aviso âmbar; a revisão disse que a marca sai. No banco: marca
+  "Pronta" apagada, `editada_por` = o produtor, PDF refeito, 2 parcelas de
+  R$ 45, NF mantida, auditoria com `pronta_desfeita: true`. Cancelada pela
+  aba ao fim (realizado do item de volta a R$ 120).
+- **Resíduo de teste:** PP-00167 e PP-00176 canceladas no TES-1014/26, com os
+  arquivos das NFs 9170 e 9173 de teste.
 
 ## ⚠️ Nota de 2026-10-14 — Verba de produção com titular e a conta do RH na PP do colaborador (decisão 171)
 
