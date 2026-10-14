@@ -79,6 +79,11 @@ const linhaSchema = z.object({
   /** O tipo de custo da linha depois da alteração. Ausente = o mesmo de
    *  hoje: é o payload de uma aba aberta antes de 08/10/2026. */
   tipo_custo: z.enum(TIPOS_CUSTO).optional(),
+  /** O PLANEJADO da linha depois da alteração — só com o job na fila da
+   *  abertura (revisão de 14/10/2026). Ausente = o de hoje. */
+  valor_unitario_planejado: z.number().nonnegative().optional(),
+  quantidade_planejada: z.number().nonnegative().optional(),
+  dias_meses_planejado: z.number().nonnegative().optional(),
 });
 
 const payloadSchema = z.object({
@@ -96,6 +101,11 @@ export type PayloadAlteracaoFinanceiro = z.input<typeof payloadSchema>;
  *  encerrado e finalizado ficam de fora. */
 const MENSAGEM_JOB_ENCERRADO =
   "O job já foi encerrado: o orçado não muda mais pelo financeiro.";
+
+/** Depois da abertura o planejado é o da abertura (decisão 151); o
+ *  financeiro só o edita com o job na fila (revisão de 14/10/2026). */
+const MENSAGEM_PLANEJADO_FORA_DA_FILA =
+  "o planejado só é editado pelo financeiro com o job na fila da abertura. Depois dela, ele é o da abertura.";
 
 const MENSAGEM_JOB_COM_NOTA =
   "O job já tem nota emitida (faturamento parcial ou total): o orçado não muda mais pelo financeiro.";
@@ -162,7 +172,9 @@ export async function registrarAlteracaoDoFinanceiro(
   // ---- O job: na abertura, ou aberto e ainda não encerrado ----
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
-    .select("id, status, data_abertura_financeiro, versao_orcamento_aprovada_id")
+    .select(
+      "id, status, data_abertura_financeiro, versao_orcamento_aprovada_id, orcamento:orcamentos(servico:categorias_dominio!servico_id(investimento_interno))",
+    )
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -171,6 +183,10 @@ export async function registrarAlteracaoDoFinanceiro(
   // Na fila da abertura ainda não há previsão de recebimento, recolhimento
   // de imposto, envio nem nota: nada disso anda aqui.
   const naAbertura = job.status === "aguardando_abertura";
+  // Serviço Interno (decisão 105): o banco faz o planejado seguir o orçado.
+  const interno =
+    (job as { orcamento?: { servico?: { investimento_interno?: boolean } | null } | null })
+      .orcamento?.servico?.investimento_interno === true;
   if (
     !naAbertura &&
     (!job.data_abertura_financeiro ||
@@ -211,7 +227,7 @@ export async function registrarAlteracaoDoFinanceiro(
     supabase
       .from("jobs_itens_orcado")
       .select(
-        "id, item, grupo_id, job_grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, em_save, save_consumido, cancelada_em",
+        "id, item, grupo_id, job_grupo_id, tipo_custo, linha_vermelha, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, total_planejado, em_save, save_consumido, cancelada_em",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
@@ -352,6 +368,14 @@ export async function registrarAlteracaoDoFinanceiro(
     dmPara: number;
     totalDe: number;
     totalPara: number;
+    planUnitDe: number;
+    planUnitPara: number;
+    planQtdDe: number;
+    planQtdPara: number;
+    planDmDe: number;
+    planDmPara: number;
+    planTotalDe: number;
+    planTotalPara: number;
   }
   const mudancas: Mudanca[] = [];
 
@@ -365,13 +389,28 @@ export async function registrarAlteracaoDoFinanceiro(
     const dmDe = Number(atual.dias_meses_orcado ?? 0);
     const tipoDe = atual.tipo_custo as TipoCusto;
     const tipoPara = l.tipo_custo ?? tipoDe;
+    // O planejado: no Interno ele segue o orçado, como o banco grava; nos
+    // outros, o que veio, ou o de hoje.
+    const planUnitDe = Number(atual.valor_unitario_planejado ?? 0);
+    const planQtdDe = Number(atual.quantidade_planejada ?? 0);
+    const planDmDe = Number(atual.dias_meses_planejado ?? 0);
+    const planUnitPara = interno ? l.valor_unitario : (l.valor_unitario_planejado ?? planUnitDe);
+    const planQtdPara = interno ? l.quantidade : (l.quantidade_planejada ?? planQtdDe);
+    const planDmPara = interno ? l.dias_meses : (l.dias_meses_planejado ?? planDmDe);
+    const planejadoPedido =
+      !interno &&
+      (planUnitPara !== planUnitDe || planQtdPara !== planQtdDe || planDmPara !== planDmDe);
     if (
       l.valor_unitario === unitDe &&
       l.quantidade === qtdDe &&
       l.dias_meses === dmDe &&
-      tipoPara === tipoDe
+      tipoPara === tipoDe &&
+      !planejadoPedido
     ) {
       continue;
+    }
+    if (planejadoPedido && !naAbertura) {
+      return { ok: false, message: `"${atual.item}": ${MENSAGEM_PLANEJADO_FORA_DA_FILA}` };
     }
     // Linha cancelada por errata (decisão 151): o orçado dela fica zerado.
     if (atual.cancelada_em) {
@@ -422,6 +461,14 @@ export async function registrarAlteracaoDoFinanceiro(
       dmPara: l.dias_meses,
       totalDe: Number(atual.total_orcado ?? 0),
       totalPara: l.valor_unitario * l.quantidade * l.dias_meses,
+      planUnitDe,
+      planUnitPara,
+      planQtdDe,
+      planQtdPara,
+      planDmDe,
+      planDmPara,
+      planTotalDe: Number(atual.total_planejado ?? 0),
+      planTotalPara: planUnitPara * planQtdPara * planDmPara,
     });
   }
 
@@ -636,6 +683,14 @@ export async function registrarAlteracaoDoFinanceiro(
             dias_meses_para: m.dmPara,
             total_de: dinheiro(m.totalDe),
             total_para: dinheiro(m.totalPara),
+            valor_unitario_planejado_de: m.planUnitDe,
+            valor_unitario_planejado_para: m.planUnitPara,
+            quantidade_planejada_de: m.planQtdDe,
+            quantidade_planejada_para: m.planQtdPara,
+            dias_meses_planejado_de: m.planDmDe,
+            dias_meses_planejado_para: m.planDmPara,
+            total_planejado_de: dinheiro(m.planTotalDe),
+            total_planejado_para: dinheiro(m.planTotalPara),
             efeito_valor_job: efeitoJob[k].valor,
             efeito_faturamento_previsto: efeitoFat[k].valor,
           };
@@ -646,6 +701,16 @@ export async function registrarAlteracaoDoFinanceiro(
           quantidade_orcada: m.qtdPara,
           dias_meses_orcado: m.dmPara,
           tipo_custo: m.tipoPara,
+          // Só na fila e fora do Interno: no Interno o gatilho do banco
+          // faz o planejado seguir o orçado, e depois da abertura o
+          // planejado não se mexe (o banco recusa).
+          ...(naAbertura && !interno
+            ? {
+                valor_unitario_planejado: m.planUnitPara,
+                quantidade_planejada: m.planQtdPara,
+                dias_meses_planejado: m.planDmPara,
+              }
+            : {}),
         })),
         envios: [...enviosNovos.values()].map((e) => ({ id: e.id, valor_faturado: e.valor_faturado })),
         parcelas_envio: [...enviosNovos.values()].flatMap((e) =>
@@ -682,6 +747,19 @@ export async function registrarAlteracaoDoFinanceiro(
       alteracao_id: alteracaoId,
       motivo,
       itens_alterados: mudancas.length,
+      planejados_alterados: mudancas
+        .filter(
+          (m) =>
+            !interno &&
+            (m.planUnitDe !== m.planUnitPara ||
+              m.planQtdDe !== m.planQtdPara ||
+              m.planDmDe !== m.planDmPara),
+        )
+        .map((m) => ({
+          job_item_orcado_id: m.id,
+          de: dinheiro(m.planTotalDe),
+          para: dinheiro(m.planTotalPara),
+        })),
       tipos_alterados: trocasDeTipo.map((m) => ({
         job_item_orcado_id: m.id,
         de: m.tipoDe,

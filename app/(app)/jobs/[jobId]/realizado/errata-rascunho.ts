@@ -64,8 +64,9 @@ export type { MudancaDeEstrutura };
 const PREFIXO_GRUPO_NOVO = "grupo-novo:";
 
 /** Campos das células da errata. Os três do bloco Planejado continuam aqui
- *  porque a tabela desenha as células dele pelo mesmo caminho, mas desde a
- *  decisão 151 nenhuma delas abre. */
+ *  porque a tabela desenha as células dele pelo mesmo caminho: desde a
+ *  decisão 151 nenhuma delas abre na errata, e desde 14/10/2026 elas abrem
+ *  no "Editar orçado" do financeiro com o job na fila da abertura. */
 export type CampoErrata =
   | "unitario"
   | "quantidade"
@@ -78,8 +79,8 @@ export interface EdicaoLinha {
   unitario: string;
   quantidade: string;
   diasMeses: string;
-  /** O PLANEJADO da linha. Só leitura desde a decisão 151: a errata não
-   *  muda o planejado, e o texto aqui é ignorado. */
+  /** O PLANEJADO da linha. Na errata é só leitura desde a decisão 151, e o
+   *  texto aqui é ignorado; vale só onde `planejadoLiberado` diz que sim. */
   planUnitario: string;
   planQuantidade: string;
   planDiasMeses: string;
@@ -166,9 +167,10 @@ export interface RascunhoErrata {
   /** Há passo para voltar — o botão e o atalho ficam desligados sem isto. */
   podeDesfazer: boolean;
   edicaoDe: (chave: string) => EdicaoLinha | undefined;
-  /** O PLANEJADO desta linha aceita digitação? Nunca, desde a decisão 151
-   *  (07/10/2026): o planejado do job é o da abertura. Fica na interface
-   *  porque a tabela e a edição do financeiro perguntam por ele. */
+  /** O PLANEJADO desta linha aceita digitação? Na errata, nunca, desde a
+   *  decisão 151 (07/10/2026): o planejado do job é o da abertura. Só no
+   *  "Editar orçado" do financeiro com o job na fila da abertura
+   *  (`planejadoAberto`, 14/10/2026), nas linhas comuns. */
   planejadoLiberado: (chave: string) => boolean;
   /** Por que o planejado NÃO abre — o `title` da célula. `null` quando ele
    *  abre, ou quando a célula nem mostra número (linha vermelha). */
@@ -228,6 +230,10 @@ export function useRascunhoErrata(
   interno: boolean,
   /** Os agrupamentos do job, na ordem. */
   gruposSalvos: VersaoOrcamentoGrupo[],
+  /** O planejado das linhas abre: só no "Editar orçado" do financeiro com
+   *  o job na fila da abertura (revisão da decisão 115, 14/10/2026). Na
+   *  errata e depois da abertura, ele é o da abertura (decisão 151). */
+  planejadoAberto = false,
 ): RascunhoErrata {
   const [ativo, setAtivo] = React.useState(false);
   const [edicoes, setEdicoes] = React.useState<Record<string, EdicaoLinha>>({});
@@ -526,12 +532,24 @@ export function useRascunhoErrata(
       if (!salvo) return "Linha fora da errata.";
       if (salvo.linha_vermelha) return null;
       if (salvo.em_save) return "Linha em save não tem planejado.";
+      if (salvo.cancelada_em) return "Linha cancelada por errata: o planejado dela fica como está.";
+      // Na fila da abertura o financeiro edita o planejado (14/10/2026).
+      if (planejadoAberto) return null;
       return MOTIVO_PLANEJADO_DA_ABERTURA;
     },
-    [novas, salvosPorId, interno],
+    [novas, salvosPorId, interno, planejadoAberto],
   );
 
-  const planejadoLiberado = React.useCallback((_chave: string) => false, []);
+  const planejadoLiberado = React.useCallback(
+    (chave: string) => {
+      if (!planejadoAberto || interno) return false;
+      const salvo = salvosPorId.get(chave);
+      return (
+        !!salvo && !salvo.linha_vermelha && salvo.em_save !== true && !salvo.cancelada_em
+      );
+    },
+    [planejadoAberto, interno, salvosPorId],
+  );
 
   /** A planilha como ela ficaria depois de confirmar. */
   const itens = React.useMemo<ItemPlanilhaJob[]>(() => {
@@ -560,14 +578,21 @@ export function useRascunhoErrata(
         const dm = numeroDe(e.diasMeses, 0);
         // A errata não muda o planejado (decisão 151): fica o salvo. No
         // Interno ele acompanha o orçado, como o trigger do banco grava
-        // (decisão 105).
+        // (decisão 105). Na edição do financeiro com o job na fila, vale o
+        // digitado (14/10/2026).
         const plan = interno
           ? { u: unit, q: qtd, d: dm }
-          : {
-              u: Number(i.valor_unitario_planejado ?? 0),
-              q: Number(i.quantidade_planejada ?? 0),
-              d: Number(i.dias_meses_planejado ?? 0),
-            };
+          : planejadoLiberado(i.id)
+            ? {
+                u: numeroDe(e.planUnitario, 0),
+                q: numeroDe(e.planQuantidade, 0),
+                d: numeroDe(e.planDiasMeses, 0),
+              }
+            : {
+                u: Number(i.valor_unitario_planejado ?? 0),
+                q: Number(i.quantidade_planejada ?? 0),
+                d: Number(i.dias_meses_planejado ?? 0),
+              };
         return {
           ...i,
           tipo_custo: e.tipo,
@@ -643,7 +668,7 @@ export function useRascunhoErrata(
             (posicao.get(b.i.id) ?? Number.MAX_SAFE_INTEGER) || a.k - b.k,
       )
       .map(({ i }, k) => ({ ...i, ordem: k + 1 }));
-  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno, grupos, grupoDoItem, sequencia]);
+  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno, grupos, grupoDoItem, sequencia, planejadoLiberado]);
 
   // A lista mais recente, para as ações de organização lerem sem esperar
   // o próximo render.

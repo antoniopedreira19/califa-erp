@@ -9,7 +9,9 @@ seguinte),
 `20260928300004_alteracao_financeiro_na_abertura_do_job.sql` e, na revisão
 de 08/10/2026 (o tipo de custo), `20261008800001_alteracao_financeiro_troca_tipo_de_custo.sql`
 e, na revisão de 13/10/2026 (a edição na fila entra no valor inicial),
-`20261013800001_alteracao_na_fila_entra_na_abertura.sql`.
+`20261013800001_alteracao_na_fila_entra_na_abertura.sql`; na de 14/10/2026
+(o planejado na fila), `20261014600001_financeiro_edita_planejado_na_fila.sql`
+e a correção do AMB-1008/26, `20261014600002_amb_1008_planejado_das_influenciadoras.sql`.
 
 > ⚠️ **Revisada em 08/10/2026 — o financeiro também troca o tipo de
 > custo.** Até aqui o "Editar orçado" mexia só em R$ Unit., QT e D/M, e o
@@ -23,6 +25,11 @@ e, na revisão de 13/10/2026 (a edição na fila entra no valor inicial),
 > "inicial" × "atual". Agora a edição com o job na fila da abertura anda
 > junto com a foto: o job abre com o valor editado. Depois da abertura,
 > nada muda. Ver §10.
+
+> ⚠️ **Revisada em 14/10/2026 — o financeiro edita também o planejado na
+> fila.** Até aqui o planejado não era do financeiro (§3, item 8). Agora,
+> com o job em `aguardando_abertura`, o "Editar orçado" abre também o
+> planejado; depois da abertura ele continua travado. Ver §11.
 
 ---
 
@@ -153,7 +160,9 @@ Com a entrega no main, ainda no mesmo dia:
    `faturamento_previsto_abertura`) **depois que o job abriu** — na fila,
    ela anda junto (§10) — e a **curva de desembolso**, com o
    `custo_previsto_total`. O planejado só muda no serviço Interno (decisão
-   105), em que o banco o faz espelhar o orçado (`planejado_espelha_orcado`).
+   105), em que o banco o faz espelhar o orçado (`planejado_espelha_orcado`),
+   e, desde 14/10/2026, com o job na fila da abertura, pelo próprio
+   financeiro (§11).
    Ali o custo previsto muda e a curva não: se o financeiro quiser a curva
    nova, ajusta no Editar registro da aba Abertura do Job, que confere a
    soma contra o custo previsto.
@@ -507,3 +516,87 @@ foi de R$ 54.596,80 (17,8%) para R$ 31.290,10 (11,1%), e os grupos INFLUS
 mostram rentabilidade planejada de −R$ 16.500,00 e −R$ 3.950,00. A conta
 está certa para o job como abriu; o que fazer com esse planejado ficou
 para o Tiago decidir.
+
+> ⚠️ **Decidido em 14/10/2026.** As influenciadoras eram de outra
+> abertura: o planejado delas foi zerado (D/M 0) pelo banco, com as
+> linhas conferidas com o Tiago antes, e o financeiro passou a editar o
+> planejado na fila para o caso não se repetir. Ver §11.
+
+## 11. A revisão de 14/10/2026: o financeiro edita o planejado na fila
+
+### O pedido
+
+Sobre o AMB-1008/26 (§10): "os itens zerados deveriam estar em outras
+planilhas, o financeiro ajustou para não gerar tanto retrabalho e informou
+a abertura a fazer outra abertura com os influs. Desse modo, para que
+situações como essa possam ser facilmente resolvidas, penso que o
+financeiro deve poder editar o planejado também enquanto o job ainda não
+tiver sido aberto." E, no caso específico, zerar o planejado pelo D/M,
+"para manter as linhas e o histórico na planilha", conferindo as linhas
+antes.
+
+### A regra (confirmada pelo Tiago no mesmo dia)
+
+1. **Na fila da abertura** (`aguardando_abertura`), o "Editar orçado" abre
+   também R$ Unit., QT e D/M do **planejado**.
+2. **Depois da abertura**, o planejado continua travado — ele é o da
+   abertura (decisão 151). A célula diz "O planejado é o da abertura do
+   job: o financeiro só o edita com o job na fila da abertura.", a action
+   e a função do banco recusam.
+3. **As exceções do orçado valem:** Interno (o planejado espelha o orçado,
+   decisão 105), linha com save, linha vermelha e linha cancelada ficam
+   fechados.
+4. **Motivo obrigatório**, como antes. O pop-up passa a "O que muda na
+   planilha" e mostra o planejado de → para da linha, na cor do bloco
+   Planejado; o card "Alterações do Financeiro" ganha o selo "Planejado"
+   (quando só ele mudou) e o planejado de → para embaixo do valor orçado;
+   o fio da Comunicação diz "Planejado · item: de → para".
+5. **O custo previsto acompanha** (é o planejado dos tipos com PP); **o
+   cronograma de desembolsos não**: fica com o que o financeiro já
+   distribuiu, o formulário mostra "Falta" ou "Sobra" com o "Distribuir",
+   e a abertura não confirma até a soma bater com o custo previsto. Foi o
+   que o Tiago confirmou ao perguntar o que "a curva não acompanha"
+   queria dizer. Valor do job, faturamento, recebimento e impostos não
+   mudam com o planejado.
+
+### Onde mora
+
+- **Banco** (`20261014600001`): `jobs_alteracoes_financeiro_itens` ganha
+  o planejado de → para (R$ Unit., QT, D/M e total), nulo nas alterações
+  de antes desta revisão; `registrar_alteracao_do_financeiro` grava o
+  planejado que vem no payload e recusa a mudança fora da fila. Payload sem
+  planejado (aba aberta antes) mantém o de hoje.
+- **Tela:** `useRascunhoErrata(…, planejadoAberto)` libera o planejado das
+  linhas comuns; a seção liga com o modo financeiro e o job na fila;
+  `linhasAlteradasPeloFinanceiro` conta a linha em que só o planejado
+  mudou; a action manda o planejado só na fila e fora do Interno.
+- O selo usa `SELO_PLANEJADO`, novo em `app/(app)/_planilha/blocos.ts`.
+
+### A correção do AMB-1008/26 (`20261014600002`)
+
+As 5 linhas conferidas com o Tiago — ordem 89 a 93, grupos INFLUS -
+SALVADOR e INFLUS - RECIFE, tipo A, sem PP, BV, save nem realizado —
+tiveram o D/M do planejado de 1 para 0 (R$ 20.450,00 → R$ 0,00); R$ Unit.
+e QT ficaram. Registrada no card "Alterações do Financeiro" em nome do
+Tiago, como ele pediu, com o motivo. A migration só roda se encontrar
+exatamente essas 5 linhas. Resultado op. (planejado): R$ 31.290,10 (11,1%)
+→ R$ 51.740,10 (18,3%). Custo previsto (R$ 175.990,00), curva e fluxo de
+caixa não mudaram: o tipo A não entra neles.
+
+### Conferência (14/10/2026)
+
+- **AMB-1008/26, na tela:** os grupos INFLUS com orçado e planejado
+  zerados e sem rentabilidade negativa; cabeçalho com R$ 51.740,10; o card
+  com a entrada nova, selo "Planejado" e "D/M 1 → 0" em cada linha.
+- **De ponta a ponta, na fila (TES-1029/26, criado para o teste):** o
+  orçamento "Teste A" (TES-P001/26-07) foi aprovado e enviado à abertura
+  pela tela, renomeado "ZZ Teste 115 planejado na fila". Na aba Planilha
+  da abertura, com o "Editar orçado", o planejado do Item 2 de outubro foi
+  de R$ 8.000,00 para R$ 7.000,00: o pop-up mostrou o planejado de → para
+  e "O custo previsto muda −R$ 1.000,00"; gravou. A aba Abertura do Job
+  passou a custo previsto R$ 35.000,00 com o cronograma em R$ 36.000,00 e
+  "Sobra de R$ 1.000,00"; o card e o fio da Comunicação mostraram
+  "Planejado · Item 2: R$ 8.000,00 → R$ 7.000,00". O job ficou na fila.
+- **Depois da abertura (TES-1013/26):** no "Editar orçado" o planejado não
+  abre e mostra o motivo; saída sem gravar. Por simulação desfeita como o
+  Financeiro Teste, a função recusou a mudança do planejado.

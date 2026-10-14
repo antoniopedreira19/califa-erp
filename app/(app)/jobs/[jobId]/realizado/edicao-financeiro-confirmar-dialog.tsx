@@ -14,6 +14,8 @@
  * Do protótipo aprovado em 28/09/2026 (artifact `Re8sXDJpj8gzEk1tnCrt48`).
  * Desde 08/10/2026 o tipo de custo também muda: a linha mostra o de → para,
  * e o pop-up avisa quando o custo previsto muda sem a curva acompanhar.
+ * Desde 14/10/2026, com o job na fila da abertura, o planejado também muda:
+ * a linha mostra o planejado de → para, na cor do bloco Planejado.
  */
 
 import * as React from "react";
@@ -35,9 +37,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ERRATA } from "@/app/(app)/_planilha/blocos";
+import { ERRATA, PLANEJADO } from "@/app/(app)/_planilha/blocos";
 import {
   deltaDoCustoPrevisto,
+  planejadoMudou,
   type LinhaAlteradaPeloFinanceiro,
 } from "@/lib/calculos/alteracao-financeiro";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
@@ -200,6 +203,9 @@ export function EdicaoFinanceiroConfirmarDialog({
     (m) => tipoGeraDesembolso(m.tipoCustoDe) !== tipoGeraDesembolso(m.tipoCustoPara),
   );
   const deltaCusto = deltaDoCustoPrevisto(mudancas);
+  // O planejado só muda com o job na fila (14/10/2026); no Interno ele
+  // segue o orçado e o texto de lá já diz isso.
+  const mudaPlanejado = !planejadoAcompanha && mudancas.some(planejadoMudou);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -221,14 +227,18 @@ export function EdicaoFinanceiroConfirmarDialog({
         <div className="space-y-4 pt-1">
           <section className="rounded-xl border border-border">
             <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              O que muda no orçado
+              {mudaPlanejado ? "O que muda na planilha" : "O que muda no orçado"}
             </h3>
             <ul className="divide-y divide-border">
               {mudancas.map((m) => {
                 const delta = (Math.round(m.totalPara * 100) - Math.round(m.totalDe * 100)) / 100;
                 const tipoMudou = m.tipoCustoDe !== m.tipoCustoPara;
+                const planMudou = !planejadoAcompanha && planejadoMudou(m);
+                const deltaPlan =
+                  (Math.round(m.planejadoPara * 100) - Math.round(m.planejadoDe * 100)) / 100;
                 return (
-                  <li key={m.id} className="flex items-center justify-between gap-3 px-3.5 py-2">
+                  <li key={m.id} className="px-3.5 py-2">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className={ERRATA.tagAlterada}>Alterada</span>
                       <span className="truncate text-[12.5px] text-foreground">{m.item}</span>
@@ -244,8 +254,14 @@ export function EdicaoFinanceiroConfirmarDialog({
                       )}
                     </div>
                     <div className="flex items-baseline gap-2 whitespace-nowrap font-mono text-[11.5px]">
+                      {planMudou && (
+                        <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Orçado
+                        </span>
+                      )}
                       {delta === 0 ? (
-                        // Só o tipo mudou: o orçado da linha é o mesmo.
+                        // Só o tipo (ou só o planejado) mudou: o orçado da
+                        // linha é o mesmo.
                         <span className="text-foreground">{formatCurrency(m.totalPara, moeda)}</span>
                       ) : (
                         <>
@@ -258,6 +274,20 @@ export function EdicaoFinanceiroConfirmarDialog({
                         </>
                       )}
                     </div>
+                  </div>
+                  {planMudou && (
+                    <div className="mt-1 flex items-baseline justify-end gap-2 whitespace-nowrap font-mono text-[11.5px]">
+                      <span className={cn("font-sans text-[10px] font-semibold uppercase tracking-wider", PLANEJADO.texto)}>
+                        Planejado
+                      </span>
+                      <span className="text-muted-foreground">{formatCurrency(m.planejadoDe, moeda)}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className={PLANEJADO.texto}>{formatCurrency(m.planejadoPara, moeda)}</span>
+                      {deltaPlan !== 0 && (
+                        <span className={cn("font-bold", PLANEJADO.texto)}>{comSinal(deltaPlan, moeda)}</span>
+                      )}
+                    </div>
+                  )}
                   </li>
                 );
               })}
@@ -282,9 +312,11 @@ export function EdicaoFinanceiroConfirmarDialog({
                   : "Não passa pela produção e não devolve o job ao mural de abertura. A planilha, os Totais e o cabeçalho do job mudam assim que você confirmar; "}
                 {planejadoAcompanha
                   ? "no serviço Interno o planejado acompanha o orçado, e o realizado fica como está."
-                  : trocaDeCalha && !naAbertura
-                    ? "o planejado fica como está, e o realizado da linha que troca de tipo passa a seguir o tipo novo: em A e D é o orçado; nos tipos com PP, a soma das PPs."
-                    : "o planejado e o realizado ficam como estão."}
+                  : mudaPlanejado
+                    ? "o planejado das linhas alteradas passa a ser o novo, e o realizado fica como está."
+                    : trocaDeCalha && !naAbertura
+                      ? "o planejado fica como está, e o realizado da linha que troca de tipo passa a seguir o tipo novo: em A e D é o orçado; nos tipos com PP, a soma das PPs."
+                      : "o planejado e o realizado ficam como estão."}
               </p>
             </div>
           </div>

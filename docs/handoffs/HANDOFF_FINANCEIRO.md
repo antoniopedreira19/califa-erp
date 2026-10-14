@@ -7185,3 +7185,29 @@ decisão 115.
   financeiro. Nesses jobs, "Enviada por" pode trazer o nome do produtor, e
   ele também corrige a NF da PP em avaliação
   (`corrigir_notas_fiscais_da_pp` aceita a chave).
+
+## ⚠️ Nota de 2026-10-14 — O financeiro edita o planejado na fila da abertura (revisão da decisão 115)
+
+Pedido do Tiago em 14/10/2026, a partir do AMB-1008/26. Regra completa na
+§11 da decisão 115.
+
+- **Na fila da abertura**, o "Editar orçado" abre também R$ Unit., QT e D/M
+  do planejado. **Depois da abertura**, ele continua travado (decisão 151):
+  a célula mostra o motivo, e a action e o banco recusam. Interno, save,
+  linha vermelha e cancelada ficam fechados.
+- **O pop-up** passa a "O que muda na planilha", com o planejado de → para
+  na cor do Planejado. **O card** "Alterações do Financeiro" ganha o selo
+  "Planejado" e o de → para embaixo do valor orçado. **O fio da
+  Comunicação** diz "Planejado · item: de → para".
+- **O custo previsto acompanha; o cronograma de desembolsos não:** o
+  formulário da abertura mostra "Falta"/"Sobra" com o "Distribuir", e a
+  abertura só confirma com a soma batendo.
+- **Banco:** `20261014600001` (planejado de → para no histórico, nulo nas
+  alterações antigas; função grava e recusa fora da fila) e
+  `20261014600002` (AMB-1008/26: D/M do planejado das 5 influenciadoras de
+  1 para 0, conferidas com o Tiago, registrado no card em nome dele).
+- **Conferido:** AMB-1008/26 na tela (planejado R$ 51.740,10, 18,3%); de
+  ponta a ponta no TES-1029/26, criado para o teste e deixado na fila
+  (Item 2 de outubro de R$ 8.000,00 para R$ 7.000,00; custo previsto
+  R$ 35.000,00, cronograma com "Sobra de R$ 1.000,00"); TES-1013/26, aberto,
+  com o planejado travado; recusa do banco por simulação desfeita.

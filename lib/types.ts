@@ -2581,6 +2581,17 @@ export interface JobAlteracaoFinanceiroItem {
   dias_meses_para: number;
   total_de: number;
   total_para: number;
+  /** O PLANEJADO da linha, de → para (revisão da decisão 115, 14/10/2026:
+   *  o financeiro o edita com o job na fila da abertura). Nulo nas linhas
+   *  gravadas antes disso, quando o histórico não guardava o planejado. */
+  valor_unitario_planejado_de: number | null;
+  valor_unitario_planejado_para: number | null;
+  quantidade_planejada_de: number | null;
+  quantidade_planejada_para: number | null;
+  dias_meses_planejado_de: number | null;
+  dias_meses_planejado_para: number | null;
+  total_planejado_de: number | null;
+  total_planejado_para: number | null;
   efeito_valor_job: number;
   efeito_faturamento_previsto: number;
   created_at: string;

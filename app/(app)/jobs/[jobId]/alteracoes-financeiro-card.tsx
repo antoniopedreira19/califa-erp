@@ -8,7 +8,8 @@
  * faturamento previsto e no valor do job.
  *
  * O que muda em relação às Erratas: não há coluna de Planejado (o
- * financeiro edita só o orçado), o cabeçalho mostra a soma das alterações
+ * planejado, quando muda na fila da abertura, aparece embaixo do valor
+ * orçado), o cabeçalho mostra a soma das alterações
  * — o par "na abertura → atual" continua no card de Erratas, que é o do job
  * inteiro — e, embaixo de cada uma, o que aconteceu com o envio e a
  * previsão de recebimento.
@@ -20,6 +21,11 @@
  * mostra o de → para e o selo diz "Tipo de custo" quando só ele mudou, como
  * no card de Erratas.
  *
+ * Desde 14/10/2026, com o job na fila da abertura, o financeiro também
+ * edita o PLANEJADO: o planejado de → para aparece embaixo do valor orçado,
+ * na cor do bloco Planejado, e o selo diz "Planejado" quando só ele mudou.
+ * As alterações gravadas antes disso não guardavam o planejado.
+ *
  * Do protótipo aprovado em 28/09/2026 (artifact `Re8sXDJpj8gzEk1tnCrt48`).
  */
 
@@ -27,6 +33,7 @@ import * as React from "react";
 import { ArrowRight, ChevronRight, Landmark, TrendingDown, TrendingUp } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+import { PLANEJADO, SELO_PLANEJADO } from "@/app/(app)/_planilha/blocos";
 import {
   tipoCustoLabel,
   type JobAlteracaoFinanceiroComItens,
@@ -210,14 +217,26 @@ export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
                         const qtdMudou =
                           i.quantidade_de !== i.quantidade_para || i.dias_meses_de !== i.dias_meses_para;
                         const tipoMudou = i.tipo_custo !== i.tipo_custo_para;
-                        const soTipo =
-                          tipoMudou &&
-                          i.valor_unitario_de === i.valor_unitario_para &&
-                          !qtdMudou;
+                        const orcadoMudou =
+                          i.valor_unitario_de !== i.valor_unitario_para || qtdMudou;
+                        const soTipo = tipoMudou && !orcadoMudou;
+                        // Nulo nas alterações de antes de 14/10/2026, que não
+                        // guardavam o planejado.
+                        const planMudou =
+                          i.total_planejado_de !== null &&
+                          i.total_planejado_para !== null &&
+                          (i.valor_unitario_planejado_de !== i.valor_unitario_planejado_para ||
+                            i.quantidade_planejada_de !== i.quantidade_planejada_para ||
+                            i.dias_meses_planejado_de !== i.dias_meses_planejado_para);
+                        const soPlanejado = planMudou && !orcadoMudou && !tipoMudou;
                         return (
                           <tr key={i.id} className="border-t border-border">
                             <td className="py-2.5 pr-2 align-top">
-                              {soTipo ? (
+                              {soPlanejado ? (
+                                <span className={SELO_PLANEJADO}>
+                                  Planejado
+                                </span>
+                              ) : soTipo ? (
                                 <span className="inline-flex items-center whitespace-nowrap rounded-full border border-[#ddd6c9] bg-[#f1f0ec] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground">
                                   Tipo de custo
                                 </span>
@@ -273,6 +292,34 @@ export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
                                   {i.dias_meses_de.toLocaleString("pt-BR")} → {i.dias_meses_para.toLocaleString("pt-BR")}
                                 </p>
                               )}
+                              {planMudou && (
+                                <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1.5">
+                                  <span className={cn("text-[9.5px] font-semibold uppercase tracking-wider", PLANEJADO.texto)}>
+                                    Planejado
+                                  </span>
+                                  {/* Os valores não se separam: quando não cabe, só
+                                      o rótulo sobe. */}
+                                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                    <span className="font-mono text-xs text-muted-foreground line-through">
+                                      {formatCurrency(i.total_planejado_de ?? 0, moeda)}
+                                    </span>
+                                    <ArrowRight className="h-3 w-3 text-[#c9c9c9]" />
+                                    <span className={cn("font-mono text-xs font-semibold", PLANEJADO.texto)}>
+                                      {formatCurrency(i.total_planejado_para ?? 0, moeda)}
+                                    </span>
+                                  </span>
+                                </div>
+                              )}
+                              {planMudou &&
+                                (i.quantidade_planejada_de !== i.quantidade_planejada_para ||
+                                  i.dias_meses_planejado_de !== i.dias_meses_planejado_para) && (
+                                  <p className="mt-0.5 whitespace-nowrap font-mono text-[10.5px] text-muted-foreground">
+                                    QT {(i.quantidade_planejada_de ?? 0).toLocaleString("pt-BR")} →{" "}
+                                    {(i.quantidade_planejada_para ?? 0).toLocaleString("pt-BR")} · D/M{" "}
+                                    {(i.dias_meses_planejado_de ?? 0).toLocaleString("pt-BR")} →{" "}
+                                    {(i.dias_meses_planejado_para ?? 0).toLocaleString("pt-BR")}
+                                  </p>
+                                )}
                             </td>
                             <td className="px-2 py-2.5 text-right align-top">
                               <span
