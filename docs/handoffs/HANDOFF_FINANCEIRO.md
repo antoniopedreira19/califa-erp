@@ -7126,3 +7126,32 @@ financeiro". Regra completa na §9 da decisão 115.
   "Cancelamento solicitado" enquanto o pedido está pendente.
 - O card da Central Financeira (`app/(app)/financeiro/page.tsx`) **não** conta
   os pedidos: ficou de fora de propósito.
+
+## ⚠️ Nota de 2026-10-14 — A edição do orçado na fila da abertura entra no valor inicial (revisão da decisão 115)
+
+Pedido do Tiago em 13/10/2026, com o AMB-1030/26: o financeiro ajustou
+R$ 0,89 numa linha um minuto antes de abrir o job, e o cabeçalho mostrou
+"inicial R$ 229.998,76" × "atual R$ 230.000,00". Regra completa na §10 da
+decisão 115.
+
+- **Na fila da abertura**, a edição do orçado leva junto a foto da
+  abertura (`valor_job_abertura`, `faturamento_previsto_abertura`): o job
+  abre com o valor editado, e o cabeçalho, o card de Erratas e o
+  Resultado op. (planejado) partem dele. **Depois da abertura**, nada muda:
+  a edição aparece como "atual", como antes.
+- **O "inicial" da tela** é a versão aprovada com as edições da fila
+  aplicadas (`itensDaVersaoComAsEdicoesDaFila`), na conta do job e no
+  orçado de cada linha na abertura.
+- **Banco:** migration `20261013800001` — `registrar_alteracao_do_financeiro`
+  grava a foto quando o job está em `aguardando_abertura`, e o retroativo
+  nos 10 jobs que tiveram edição na fila (8 reais e 2 de teste), autorizado
+  pelo Tiago: AMB-1006, 1007, 1008, 1029 e 1030, ANI-1011, ASO-1004,
+  EDU-1001 (todos /26) ficaram com um valor só no cabeçalho.
+- **Conferido:** a conta, com as funções do código sobre os dados do
+  banco, reproduz o valor gravado ao centavo nos 10; a função, por
+  simulação desfeita no TES-1012/26 (fila: a foto anda) e no TES-1013/26
+  (aberto: a foto fica); a tela, logada, no AMB-1030/26, TES-1025/26,
+  TES-1014/26 (a errata continua dividindo) e AMB-1008/26.
+- **Em aberto:** no AMB-1008/26 o planejado das 5 influenciadoras zeradas na
+  fila (R$ 20.450,00) continua no custo planejado, e o Resultado op.
+  (planejado) foi de R$ 54.596,80 para R$ 31.290,10.

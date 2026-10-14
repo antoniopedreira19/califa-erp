@@ -81,7 +81,9 @@ import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
 import type { AnexoDaPPNaLista, PPAEmitir, PlanejadoAntesDoSave } from "@/lib/types";
 import {
   fechamentoDaAbertura,
+  itensDaVersaoComAsEdicoesDaFila,
   orcadoDaLinhaNaAbertura,
+  type EdicaoDaFila,
   type ItemDaVersaoNaAbertura,
 } from "@/lib/calculos/abertura-do-job";
 import {
@@ -581,15 +583,53 @@ export async function carregarDetalheDoJob(
   if (itensDaVersaoRes.error) {
     console.error("[job.itens_da_versao]", itensDaVersaoRes.error.message);
   }
+  // As edições do orçado que o financeiro fez com o job na fila: entram na
+  // foto, porque o job abriu com elas (revisão da decisão 115, 13/10/2026).
+  // Sem o histórico lido, a foto não reproduz o `valor_job_abertura` e a
+  // tela fica com o valor único.
+  const itemVersaoDaLinha = new Map<string, string>(
+    ((itensRes.data ?? []) as any[])
+      .filter((it) => it.item_versao_id)
+      .map((it) => [it.id as string, it.item_versao_id as string]),
+  );
+  const aberturaEm = raw.data_abertura_financeiro
+    ? Date.parse(raw.data_abertura_financeiro)
+    : null;
+  const edicoesDaFila: EdicaoDaFila[] =
+    aberturaEm === null
+      ? []
+      : ((alteracoesFinanceiroRes.data ?? []) as any[])
+          .filter((a) => Date.parse(a.created_at) < aberturaEm)
+          .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+          .flatMap((a) => (a.itens ?? []) as any[])
+          .flatMap((i) => {
+            const itemVersaoId = itemVersaoDaLinha.get(i.job_item_orcado_id);
+            if (!itemVersaoId) return [];
+            return [
+              {
+                itemVersaoId,
+                tipoCusto: i.tipo_custo_para ?? i.tipo_custo,
+                // A conta da coluna gerada `total_orcado` da cópia, sem
+                // arredondar: o `total_para` do histórico vem em centavos.
+                totalOrcado:
+                  Number(i.valor_unitario_para ?? 0) *
+                  Number(i.quantidade_para ?? 1) *
+                  Number(i.dias_meses_para ?? 1),
+              },
+            ];
+          });
   const itensDaVersao: ItemDaVersaoNaAbertura[] = itensDaVersaoRes.error
     ? []
-    : ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
-        id: i.id,
-        tipo_custo: i.tipo_custo,
-        total_orcado: Number(i.total_orcado ?? 0),
-        em_save: i.em_save === true,
-        save_consumido: Number(i.save_consumido ?? 0),
-      }));
+    : itensDaVersaoComAsEdicoesDaFila(
+        ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
+          id: i.id,
+          tipo_custo: i.tipo_custo,
+          total_orcado: Number(i.total_orcado ?? 0),
+          em_save: i.em_save === true,
+          save_consumido: Number(i.save_consumido ?? 0),
+        })),
+        edicoesDaFila,
+      );
   const versaoLida = itensDeVersaoLidos(itensDaVersaoRes);
   // O orçado de cada linha na abertura: 0 na que já era save na versão,
   // porque save não entra na rentabilidade (decisão 028 §9).
