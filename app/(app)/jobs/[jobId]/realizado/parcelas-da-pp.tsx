@@ -151,6 +151,15 @@ export function trocarDatas(parcelas: ParcelaLocal[], datas: string[]): ParcelaL
   return parcelas.map((p, i) => ({ ...p, data_vencimento: datas[i] }));
 }
 
+/**
+ * O R$ só se refaz quando o NÚMERO do % muda. Texto novo com o mesmo
+ * número — a saída do campo, que escreve "33,5" como "33,50", ou o "33,"
+ * no meio da digitação — só troca o texto. Antes (achado em 13/10/2026)
+ * sair do campo refazia o R$ pelo % arredondado: na divisão igual de
+ * R$ 6.000 a parcela de R$ 2.000,00 virava 1.999,80, e um R$ 2.500,00
+ * digitado (41,67%) virava 2.500,20, com a última absorvendo a diferença
+ * (138 §8).
+ */
 function mudarPercentual(
   parcelas: ParcelaLocal[],
   indice: number,
@@ -158,11 +167,11 @@ function mudarPercentual(
   valorPP: number,
 ): ParcelaLocal[] {
   return fecharNaUltima(
-    parcelas.map((p, i) =>
-      i === indice
-        ? { ...p, percentual: bruto, valor: texto((valorPP * numero(bruto)) / 100) }
-        : p,
-    ),
+    parcelas.map((p, i) => {
+      if (i !== indice) return p;
+      if (numero(bruto) === numero(p.percentual)) return { ...p, percentual: bruto };
+      return { ...p, percentual: bruto, valor: texto((valorPP * numero(bruto)) / 100) };
+    }),
     valorPP,
   );
 }

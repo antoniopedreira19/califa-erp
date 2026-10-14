@@ -4676,6 +4676,16 @@ código publicado logo depois (`3305751`).
   negativo, ou outra com R$ zerado, barra. `problemaDasParcelas(parcelas,
   valorPP)` ganhou o segundo argumento.
 
+## ⚠️ Nota de 2026-10-14 — sair do % da parcela não mexe mais no R$ (decisão 138, §8)
+
+- Clicar no % de uma parcela e sair sem digitar refazia o R$ pelo %
+  arredondado: R$ 6.000 em 3 virava 1.999,80 / 2.000,00 / 2.000,20, e um
+  R$ 2.500,00 digitado (41,67%) virava 2.500,20, com a última absorvendo a
+  diferença. A soma seguia fechando, então nada ficava vermelho.
+- Agora o R$ só se refaz quando o número do % muda (`mudarPercentual` em
+  `realizado/parcelas-da-pp.tsx`). O "33,5" continua virando "33,50" ao
+  sair. Conferido no TES-1001/26 sem gerar PP.
+
 ## ⚠️ Nota de 2026-10-03 — "Meus" da lista de jobs inclui o produtor (decisão 036)
 
 - O "Meus" de `/jobs` era só `jobs.responsavel_id` (o GP), e o produtor
