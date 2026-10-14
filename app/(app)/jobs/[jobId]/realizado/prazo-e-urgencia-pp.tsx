@@ -5,6 +5,9 @@
  * de gerar/editar PP e o de corrigir a rejeitada: o calendário que só
  * acende janelas de pagamento, o aviso da PP anterior à regra e o bloco de
  * pagamento urgente. Um lugar só, para as duas telas não divergirem.
+ *
+ * Decisão 172 (14/10/2026): com "Pagamento urgente" ligado, o calendário
+ * também acende as quartas de exceções, com um ponto e a legenda.
  */
 
 import * as React from "react";
@@ -14,8 +17,10 @@ import { cn } from "@/lib/utils";
 import {
   dataLimiteDeEnvio,
   ehJanelaDePagamento,
+  ehQuarta,
   isoParaBr,
-  primeiraJanelaComEnvioAberto,
+  primeiraDataPossivelDoPrazo,
+  tipoDoPrazo,
   vencimentoAceitaEnvio,
 } from "@/lib/calculos/janelas-pagamento";
 import { PP_URGENTE_JUSTIFICATIVA_MIN } from "@/lib/types";
@@ -23,24 +28,49 @@ import { PP_URGENTE_JUSTIFICATIVA_MIN } from "@/lib/types";
 /**
  * Predicado do `dateDisabled` do calendário: apaga o passado, todo dia
  * que não é janela e, desde a decisão 157, a janela cujo prazo de envio
- * ao financeiro já passou (15 dias antes, no dia útil anterior). A data já
- * gravada (`original`) continua clicável — é a PP anterior à regra, que
- * pode seguir com ela (pergunta 6a).
+ * ao financeiro já passou (15 dias antes, no dia útil anterior). Na PP
+ * urgente, acende também as quartas de exceções até a sexta anterior
+ * (decisão 172). A data já gravada (`original`) continua clicável — é a PP
+ * anterior à regra, que pode seguir com ela (pergunta 6a).
  */
 export function diaForaDaJanela(
   hojeIso: string,
   original?: string | null,
   feriados: string[] = [],
+  urgente = false,
 ) {
   return (date: Date) => {
     const iso = format(date, "yyyy-MM-dd");
     if (original && iso === original.slice(0, 10)) return false;
-    return (
-      iso < hojeIso ||
-      !ehJanelaDePagamento(iso) ||
-      !vencimentoAceitaEnvio(iso, hojeIso, feriados)
-    );
+    return tipoDoPrazo(iso, hojeIso, feriados, urgente) === null;
   };
+}
+
+/** Os dias que ganham o ponto no calendário: as quartas de exceções abertas
+ *  (só na PP urgente). */
+export function quartaMarcada(hojeIso: string, feriados: string[], urgente: boolean) {
+  return (date: Date) =>
+    urgente && tipoDoPrazo(format(date, "yyyy-MM-dd"), hojeIso, feriados, true) === "quarta";
+}
+
+/** A legenda do ponto, embaixo do calendário. */
+export function LegendaDaQuarta() {
+  return (
+    <p className="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+      <span className="inline-block h-[5px] w-[5px] rounded-full bg-california-red" />
+      Quarta de exceções
+    </p>
+  );
+}
+
+/** A urgência saiu com uma quarta no prazo: o prazo voltou para a janela. */
+export function AvisoQuartaSemUrgencia({ de, para }: { de: string; para: string }) {
+  return (
+    <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
+      <AlertTriangle className="mt-0.5 h-3 w-3 flex-none" />
+      Sem urgência, a quarta {isoParaBr(de)} não vale: o prazo voltou para {isoParaBr(para)}.
+    </p>
+  );
 }
 
 /**
@@ -51,33 +81,41 @@ export function AvisoPrazoDeEnvioPerdido({
   prazo,
   hojeIso,
   feriados,
+  urgente = false,
 }: {
   prazo: string;
   hojeIso: string;
   feriados: string[];
+  /** Na PP urgente, a primeira data possível pode ser uma quarta (172). */
+  urgente?: boolean;
 }) {
-  if (!prazo || !ehJanelaDePagamento(prazo)) return null;
+  // A quarta de exceções também tem data-limite (decisão 172).
+  const limite = prazo ? dataLimiteDeEnvio(prazo, feriados) : null;
+  if (!limite) return null;
   if (vencimentoAceitaEnvio(prazo, hojeIso, feriados)) return null;
-  const limite = dataLimiteDeEnvio(prazo, feriados);
   return (
     <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
       <AlertTriangle className="mt-0.5 h-3 w-3 flex-none" />
       O prazo de envio deste vencimento terminou{limite ? ` em ${isoParaBr(limite)}` : ""}. Para
-      gerar a PP, escolha a partir de {isoParaBr(primeiraJanelaComEnvioAberto(hojeIso, feriados))}.
+      gerar a PP, escolha a partir de {isoParaBr(primeiraDataPossivelDoPrazo(hojeIso, feriados, urgente))}.
     </p>
   );
 }
 
-/** Aparece só quando o prazo é o gravado e ele está fora das janelas. */
+/** Aparece só quando o prazo é o gravado e ele está fora das janelas. A
+ *  quarta de exceções da PP urgente não é "anterior à regra" (decisão 172). */
 export function AvisoPrazoForaDaJanela({
   prazo,
   original,
+  urgente = false,
 }: {
   prazo: string;
   original: string | null;
+  urgente?: boolean;
 }) {
   if (!prazo || !original || prazo !== original.slice(0, 10)) return null;
   if (ehJanelaDePagamento(prazo)) return null;
+  if (urgente && ehQuarta(prazo)) return null;
   return (
     <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
       <AlertTriangle className="mt-0.5 h-3 w-3 flex-none" />
@@ -117,8 +155,8 @@ export function UrgenciaPPField({
         <div className="min-w-0">
           <p className="text-[13px] font-semibold">Pagamento urgente</p>
           <p className="text-[11px] leading-snug text-muted-foreground">
-            Avisa o financeiro que o pagamento precisa ser adiantado. O prazo
-            continua numa janela — quem antecipa é o financeiro, na aprovação.
+            Avisa o financeiro que o pagamento precisa ser adiantado e libera as
+            quartas de exceções no prazo de pagamento.
           </p>
         </div>
         <button

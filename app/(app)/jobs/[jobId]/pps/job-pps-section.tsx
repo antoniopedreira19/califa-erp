@@ -85,8 +85,9 @@ interface Props {
   /** O papel envia PP (`jobs.enviar_pp`, decisão 136): sem ele, o
    *  cancelamento vale só para a PP ainda não enviada. */
   papelEnviaPP: boolean;
-  /** PPs de verba em que quem está logado presta contas (decisão 081):
-   *  responsável pela verba, responsável do job ou administrador. */
+  /** PPs de verba em que quem está logado presta contas (decisões 081,
+   *  164 e 171): administrador, GP, produtor ou freela do job, e o
+   *  responsável da verba de produção anterior à 171. */
   podePrestarContas: string[];
   /** O status do job e a marca de revisão da abertura (decisão 040): as
    *  portas do envio que não são do papel, nas mesmas frases do painel do

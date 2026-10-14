@@ -4,7 +4,7 @@ import { FileText, Layers, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
-import { listActiveMembers } from "@/lib/data/members";
+import { listActiveMembers, listarGpsAtivos } from "@/lib/data/members";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { escolherJobDoFunil, estagioFunil, jobVivoDoOrcamento } from "@/lib/calculos/funil";
 import {
@@ -63,7 +63,7 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, gps, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
@@ -92,6 +92,8 @@ export default async function ProjetoDetailPage({
       .eq("status", "ativo")
       .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
+    // GPs Responsáveis: só quem pode ser GP (decisão 170).
+    listarGpsAtivos(session.activeTenant.id),
     supabase
       .from("regionais")
       .select("id, nome, empresa_id")
@@ -403,6 +405,18 @@ export default async function ProjetoDetailPage({
       const vivo = jobVivoDoOrcamento(jobsPorOrcamento.get(o.id) ?? []);
       return vivo ? { id: vivo.id, codigo: vivo.codigo } : null;
     })(),
+    // Decisão 169: sem job vivo e com o job cancelado depois da abertura, o
+    // orçamento é "Job Cancelado", e a coluna Código mostra o código dele
+    // riscado — antes ele sumia, e o "Cancelado" se confundia com o do
+    // orçamento cancelado.
+    jobCanceladoCodigo: (() => {
+      const jobs = jobsPorOrcamento.get(o.id) ?? [];
+      if (jobVivoDoOrcamento(jobs)) return null;
+      const cancelado = jobs
+        .filter((j) => j.status === "cancelado" && j.aberto_no_financeiro)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      return cancelado ? cancelado.codigo : null;
+    })(),
   }));
 
   // Arquivado (decisão 118) e cancelado ficam fora do seletor de
@@ -496,6 +510,7 @@ export default async function ProjetoDetailPage({
               empresas={empresas}
               clientes={clientes}
               responsaveis={responsaveis}
+              gps={gps}
               regionais={regionais}
               produtos={produtos}
               categorias={categoriasProjeto}

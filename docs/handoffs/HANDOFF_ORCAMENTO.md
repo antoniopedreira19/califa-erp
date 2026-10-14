@@ -5525,3 +5525,89 @@ aplicada na hora combinada com a frente do Antonio, junto da
   sem gravar; o envio para abertura do TES-P001/26-08 filtrou pela busca
   (fechado sem enviar); a agregada do TES-P001/26 listou 31.
 
+## ⚠️ Nota de 2026-10-13 (2) — "Enviar Job para Abertura" liberado na Mídia Off (decisão 167)
+
+- O botão e a action (`enviarJobParaAbertura`) aceitam a Mídia Off. O
+  formulário trava início e fim no período da campanha, mostra a Data
+  Evento "Não se aplica" e pede uma data de recebimento por mês com
+  faturamento, com o faturamento do mês pela conta da mídia
+  (`faturamentoPorMes(..., midia)`). O limite de meses do recebimento
+  passou de 3 para 24 (`lib/validations/abertura-job.ts`).
+- O fechamento do envio (faturamento previsto e valor do job) é o da mídia,
+  e o reenvio do job devolvido também (`lib/data/espelhos-do-job.ts`).
+- Testado no `TES-P001/26-21 · ZZ Teste Mídia Off 147` (virou TES-1026/26)
+  e no `TES-P001/26-34 · ZZ Teste Mídia Off 167 encerra` (TES-1027/26).
+
+## ⚠️ Nota de 2026-10-13 — "Job cancelado" com rastro, e o banner do job já aberto (decisão 169)
+
+- **Orçamento cujo job foi cancelado depois da abertura:** o selo e os
+  avisos de estado dizem "Job cancelado", e a versão que gerou o job mostra a
+  faixa `FaixaJobCancelado` (`rastro-do-cancelamento.tsx`): motivo da
+  produção, observação do financeiro, histórico dos pedidos (aberto,
+  solicitado, retirado, recusado, aprovado, PPs canceladas) e o que saiu do
+  fluxo de caixa.
+- **Lista de orçamentos do projeto:** "Job Cancelado" e o código do job
+  riscado na coluna Código (`OrcamentoRow.jobCanceladoCodigo`).
+- **Defeito corrigido (existia desde 31/07):** com o job já aberto pelo
+  financeiro, o banner da versão dizia "Aguardando abertura pelo financeiro"
+  e a barra oferecia "Cancelar envio à abertura". Agora diz "Job aberto pelo
+  financeiro" (ou encerrado, ou finalizado) e "Acompanhe pelo módulo de
+  Jobs"; o "Cancelar envio" só aparece antes da abertura
+  (`fluxo-abertura.tsx`, `jobPassouDaAbertura`).
+
+## ⚠️ Nota de 2026-10-13 (2) — GP e produtor fora do papel nos jobs abertos: mapa e primeira correção
+
+- **Mapa (só leitura, 13/10/2026):** dos 50 jobs reais vivos (fora
+  cancelados e o projeto de teste), 27 tinham GP ou produtor fora do papel:
+  12 com o GP como produtor do próprio job, 11 com uma administradora como
+  produtora, 3 com uma freelancer como produtora e 1 com uma produtora como
+  GP (AMB-1008/26). Mais 2 com o usuário de teste "GP Teste" como GP
+  (AMB-1003/26 e AMB-1007/26), que a conferência por papel não pegou porque
+  ele tem o papel GP.
+- **Corrigido pelo MCP, a pedido do Tiago** (migration `20261013900001`):
+  o GP dos três jobs (AMB-1003, AMB-1007 e AMB-1008/26) e dos três
+  orçamentos deles passou para o GP que o Tiago indicou. No AMB-P005/26,
+  que só tinha o GP Teste, o GP novo entrou no lugar dele como GP
+  Responsável e em `projetos.responsavel_id`. Sete linhas `*.gp_corrigido`
+  em `audit_events`.
+- **Ficou como estava, aguardando o Tiago:** os 12 jobs com o GP como
+  produtor, os 14 com administradora ou freelancer como produtora, a
+  produtora que segue como GP Responsável do AMB-P003/26 e os 2 produtores
+  GP Responsáveis do DEE-P001/26.
+- **Varredura de usuários de teste em dados reais** (jobs, orçamentos,
+  projetos e PPs): só o "Freelancer Teste" na Equipe do NOV-P004/26.
+
+## ⚠️ Nota de 2026-10-14 — GP só quem pode ser GP, e a trava no envio para abertura (decisão 170)
+
+- **A regra** está na decisão 170. Pode ser GP quem é membro ativo com o
+  papel GP ou Administrador (`gps_ativos_do_tenant`, 55 pessoas). O campo
+  "GPs Responsáveis" do projeto só oferece essas pessoas (a Equipe segue com
+  os 97 membros); o "GP Responsável" do orçamento só oferece os GPs
+  Responsáveis do projeto que podem ser GP (`gps_do_projeto`) — antes vinha
+  também a Equipe do projeto. O servidor confere nos dois.
+- **Trava no envio para abertura:** GP do orçamento que não pode ser GP
+  trava o envio, mesmo sem ninguém ter mexido, com o nome e o motivo. O
+  produtor não entra na trava (escolha do Tiago). Em 14/10/2026, nenhum dos
+  30 orçamentos reais que ainda passam pelo envio trava.
+- **Correção de dado (pedida pelo Tiago):** no AMB-P003/26 a produtora saiu
+  dos GPs Responsáveis e ficou na Equipe; o GP do projeto passou a ser só o
+  da migration `20261013900001` (`20261013900002`, auditoria
+  `projeto.gp_corrigido`).
+- **Conferido no navegador (logado como administrador):** Novo orçamento do
+  DEE-P001/26 ofereceu 2 GPs (sem os 2 produtores cadastrados como GP nem a
+  Equipe); "Editar projeto" do DEE-P001/26 ofereceu 57 GPs (55 + os 2
+  gravados, que podem ser tirados) e a Equipe 97, fechado sem salvar; Novo
+  projeto ofereceu 55; editor e agregada do TES-P001/26 ofereceram 2 GPs,
+  sem o administrador que está só na Equipe. Pelo console, salvar o
+  TES-P001/26-33 com uma produtora e com alguém só da Equipe como GP foi
+  recusado, e editar o TES-P001/26 com uma produtora entre os GPs foi
+  recusado com o nome dela; nada gravou. O envio com GP gravado sem o papel
+  não foi exercitado no navegador: nenhum orçamento, nem de teste, tem esse
+  estado, e criá-lo exigiria SQL direto.
+- **Pendente:** o editor do job ("Responsável"), em commit próprio depois da
+  conferência no navegador.
+- **Pendências de regra (Tiago, 14/10/2026), registradas na decisão 170:** o
+  GP como produtor do próprio job (12 jobs e 10 orçamentos) e administradora
+  e freelancer como produtoras (14 jobs e 1 orçamento) ficam como estão;
+  podem mudar no futuro.
+

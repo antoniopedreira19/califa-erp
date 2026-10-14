@@ -1,6 +1,6 @@
 /**
- * Quem pode ser titular da verba de alimentação ou de transporte (decisão
- * 164): os colaboradores ativos do RH e os freelas ativos da lista
+ * Quem pode ser titular da verba — de produção, alimentação ou transporte
+ * (decisões 164 e 171): os colaboradores ativos do RH e os freelas ativos da lista
  * provisória, sem repetir quem está nos dois.
  *
  * A ficha do RH só abre para administrador e RH, e a tabela de freelas

@@ -33,6 +33,7 @@ import type {
   MudancaDeEstrutura,
 } from "@/lib/types";
 import { jobAceitaAcoesPlanilha } from "@/lib/types";
+import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
 import {
   erroDoNomeDoGrupo,
   gruposQueSaem,
@@ -494,6 +495,8 @@ export async function registrarErrata(
   const gate = await checarPermissao(session, "jobs.criar_errata");
   if (!gate.ok) return gate;
   const supabase = createClient();
+  const travaMidia = await travaDoJobDeMidia(supabase, session.activeTenant.id, jobId, "errata");
+  if (travaMidia) return { ok: false, message: travaMidia };
 
   const parsed = payloadSchema.safeParse(payload);
   if (!parsed.success) {
@@ -620,6 +623,8 @@ export async function salvarErrataPronta(
   const gate = await checarPermissao(session, "jobs.preparar_errata");
   if (!gate.ok) return gate;
   const supabase = createClient();
+  const travaMidia = await travaDoJobDeMidia(supabase, session.activeTenant.id, jobId, "errata");
+  if (travaMidia) return { ok: false, message: travaMidia };
 
   const parsed = prontaSchema.safeParse(payload);
   if (!parsed.success) {

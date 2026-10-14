@@ -1,7 +1,7 @@
 # 163 — Job cancelado sai do módulo de Jobs e só aparece em Orçamentos
 
 **Data:** 2026-10-09
-**Status:** aceita e implementada (09/10/2026).
+**Status:** aceita e implementada (09/10/2026) · **completada em 2026-10-13 pela [169](169-cancelamento-de-job-aberto.md)** — o orçamento diz "Job cancelado" e mostra o rastro do pedido.
 **Quem decidiu:** Tiago, em 09/10/2026.
 **Completa:** a [113](113-job-nao-aberto-nao-existe-no-financeiro.md), que tirava da produção só o job cancelado **antes** da abertura.
 **Migrations:** nenhuma.
@@ -60,3 +60,15 @@ situação.
   cancelado ficam gravadas. O fluxo de caixa e a rentabilidade já ignoram
   job cancelado.
 - **O "Cancelar job" do financeiro** continua sem tela (020).
+
+## ⚠️ Nota de 2026-10-13 — "Job cancelado" no lugar de "Cancelado" (decisão 169)
+
+- Na página do orçamento, o selo e os avisos de estado do orçamento cujo job
+  foi cancelado depois da abertura dizem **"Job cancelado"** — o "Cancelado"
+  sozinho se confundia com o orçamento cancelado. A versão que gerou o job
+  mostra a faixa com o motivo, a observação do financeiro e o histórico do
+  pedido.
+- Na lista de orçamentos do projeto, a linha diz **"Job Cancelado"** e a
+  coluna Código mostra o código do job riscado.
+- O "Cancelar job" do financeiro, que esta decisão dava como sem tela, agora
+  existe: é o pedido da produção aprovado na Abertura de Job (169).

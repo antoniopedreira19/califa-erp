@@ -12,6 +12,7 @@ import {
   aplicarPagamentoForaDoCadastro,
   cadastroMudouDepoisDaFoto,
   lerPagamentoForaDoCadastro,
+  pagamentoDoTitularDaPP,
   resumoDoCadastroDePagamento,
   tirarFoto,
   type DadosDePagamento,
@@ -201,4 +202,30 @@ test("o resumo do cadastro mostra o PIX, ou a conta quando não há PIX", () => 
     "ITAÚ UNIBANCO · Ag. 1234 · CC 56789-0",
   );
   assert.equal(resumoDoCadastroDePagamento(null), null);
+});
+
+// Decisão 171: a verba do colaborador sai com a conta e o PIX que o banco
+// copiou da ficha do RH, nas colunas da foto, e o CPF à parte.
+const fotoDoColaborador = {
+  verba_titular_tipo: "colaborador",
+  verba_titular_cpf: "12345678909",
+  dados_pagamento_congelados_em: "2026-10-14T10:00:00Z",
+  ...tirarFoto({ ...cadastro, pix_tipo: "cpf", pix_chave: "12345678909" }),
+};
+
+test("a verba do colaborador imprime a conta, o PIX e o CPF da foto", () => {
+  const pg = pagamentoDoTitularDaPP(fotoDoColaborador);
+  assert.equal(pg?.conta, cadastro.conta);
+  assert.equal(pg?.pix_chave, "12345678909");
+  assert.equal(pg?.cpf, "12345678909");
+});
+
+test("sem conta nem PIX na ficha, a verba do colaborador sai sem o bloco", () => {
+  assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, ...tirarFoto(null) }), null);
+});
+
+test("freela, terceiro e PP sem foto não têm pagamento do titular", () => {
+  assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, verba_titular_tipo: "freela" }), null);
+  assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, verba_titular_tipo: "fornecedor" }), null);
+  assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, dados_pagamento_congelados_em: null }), null);
 });

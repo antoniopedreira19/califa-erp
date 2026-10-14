@@ -27,7 +27,7 @@ export async function carregarLinhas(
     let query = supabase
       .from("vw_job_rentabilidade")
       .select(
-        "job_id, tenant_id, empresa_id, regional_id, cliente_id, marca_id, job_codigo, job_nome, data_abertura_financeiro, faturamento_previsto, imposto_previsto, faturamento_realizado, imposto_realizado, custo_realizado, bv_realizado",
+        "job_id, tenant_id, empresa_id, regional_id, cliente_id, marca_id, job_codigo, job_nome, data_abertura_financeiro, faturamento_previsto, imposto_previsto, faturamento_realizado, imposto_realizado, custo_realizado, bv_realizado, resultado_sem_custo",
       )
       .eq("tenant_id", tenantId)
       .gte("data_abertura_financeiro", faixa.inicio)

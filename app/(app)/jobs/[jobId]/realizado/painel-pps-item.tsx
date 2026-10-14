@@ -42,6 +42,10 @@
  *    o job aguardando abertura ou devolvido pelo financeiro, só PP a
  *    emitir. O cartão da PP a emitir não leva texto embaixo: o item pode
  *    ter muitas PPs, e o espaço é delas (Tiago, 06/10/2026).
+ *  - 13/10/2026 (decisão 173, revê a 153): a PP aguardando envio se edita
+ *    de novo, no lugar — o lápis abre o formulário com ela, e salvar passa
+ *    pela revisão. Antes do envio só o lápis; depois, só o "Ver
+ *    formulário" — nunca os dois (Tiago, 14/10/2026).
  */
 
 import * as React from "react";
@@ -138,6 +142,9 @@ export interface PPDoItem {
    *  data-limite de envio. Obrigatórios pelo mesmo motivo do trio. */
   prazoPagamento: string;
   geradaEm: string;
+  /** Pagamento urgente: o "Atualizar vencimento" oferece também as quartas
+   *  de exceções (decisão 172). Obrigatório pelo mesmo motivo do trio. */
+  urgente: boolean;
   servico: string;
   /** Os anexos gravados: o envio abre com eles. */
   anexos: AnexoDaPPNaLista[];
@@ -204,6 +211,9 @@ interface Props {
   pedidoDeRevisao: { id: string; vez: number } | null;
   /** Abre o formulário da PP a emitir. Null quando o usuário só lê. */
   onEditarAEmitir: ((a: PPAEmitir) => void) | null;
+  /** Decisão 173: abre o formulário com a PP gerada, para editar no lugar.
+   *  Null quando o usuário só lê. */
+  onEditarPP: ((pp: PPDoItem) => void) | null;
   /** "Cancelar e refazer" devolveu esta PP a emitir: o formulário abre nela. */
   onRefeita: (aEmitirId: string) => void;
   /** Quem refaz a rejeitada é quem envia (decisão 136). */
@@ -252,6 +262,7 @@ export function PainelPPsItem({
   statusDoJob,
   pedidoDeRevisao,
   onEditarAEmitir,
+  onEditarPP,
   onRefeita,
   podeRefazer,
   papelEnviaPP,
@@ -578,6 +589,7 @@ export function PainelPPsItem({
                     estabelecimentoId: a.dados.estabelecimento_id ?? cnpjPadraoDaPP,
                     prazoPagamento: a.dados.prazo_pagamento,
                     geradaEm: a.created_at,
+                    urgente: a.dados.urgente === true,
                     servico: a.servico,
                     anexos: [],
                     substitui: null,
@@ -713,7 +725,31 @@ export function PainelPPsItem({
                     }
                     botoes={
                       <>
-                        {/* A PP gerada não se edita mais (decisão 153). */}
+                        {/* Decisão 173: antes do envio, o formulário se
+                            EDITA — só o lápis; depois do envio, só se vê (o
+                            "Ver formulário" do bloco de baixo). Um ou outro,
+                            nunca os dois (Tiago, 14/10/2026). Quem só lê o
+                            job não tem o lápis e fica com a ficha. Com o job
+                            devolvido à pré-abertura, o lápis fica apagado
+                            com o motivo. */}
+                        {onEditarPP ? (
+                          <BotaoIcone
+                            titulo={travaDaAbertura ?? "Editar PP"}
+                            rotulo="Editar PP"
+                            onClick={() => onEditarPP(pp)}
+                            disabled={pending || travaDaAbertura !== null}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </BotaoIcone>
+                        ) : (
+                          <BotaoIcone
+                            titulo="Ver formulário"
+                            onClick={() => onVerFormulario(pp)}
+                            disabled={pending}
+                          >
+                            <ClipboardList className="h-3 w-3" />
+                          </BotaoIcone>
+                        )}
                         <BotaoIcone
                           titulo="Ver PDF"
                           onClick={() => verPdf(pp.id)}
@@ -754,6 +790,7 @@ export function PainelPPsItem({
                           )}
                           {prazoPerdido && (
                             <AtualizarVencimento
+                              urgente={pp.urgente}
                               ppId={pp.id}
                               codigo={pp.codigo}
                               vencimento={pp.prazoPagamento}

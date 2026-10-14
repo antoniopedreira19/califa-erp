@@ -74,6 +74,8 @@ const STATUS_FILTROS: JobStatusExibido[] = [
   "aguardando_abertura",
   "rejeitado_financeiro",
   "aberto",
+  // Decisão 169: o aberto com pedido de cancelamento no financeiro.
+  "cancelamento_solicitado",
   "em_faturamento",
   "encerrado",
   "finalizado",

@@ -3,6 +3,8 @@ import { Landmark } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { listarFilaDeAbertura, listarSavesNaFila } from "./dados";
 import { listarJobsDoFinanceiro } from "./dados-abertos";
+import { listarCancelamentosNaFila } from "./cancelamentos";
+import type { CancelamentoDaFila } from "./cancelamento-na-fila";
 import { formatEnviadoEm } from "./formatos";
 import { type FilaLinha, type SaveFilaLinha } from "./fila-list";
 import { AberturaTabs, type Aba } from "./abertura-tabs";
@@ -14,7 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function AberturaDeJobPage({
   searchParams,
 }: {
-  searchParams?: { aba?: string };
+  searchParams?: { aba?: string; revisar?: string };
 }) {
   const session = await requireSession();
   if (
@@ -26,10 +28,12 @@ export default async function AberturaDeJobPage({
 
   // Três leituras independentes — em paralelo, nunca em série
   // (`docs/PERFORMANCE.md`). A terceira é a faixa Saves (decisão 099).
-  const [fila, abertos, pedidosDeSave] = await Promise.all([
+  // A quarta é a faixa Cancelamentos (decisão 169).
+  const [fila, abertos, pedidosDeSave, pedidosDeCancelamento] = await Promise.all([
     listarFilaDeAbertura(session.activeTenant.id),
     listarJobsDoFinanceiro(session.activeTenant.id),
     listarSavesNaFila(session.activeTenant.id),
+    listarCancelamentosNaFila(session.activeTenant.id),
   ]);
 
   // "há 2 horas" é calculado aqui, no servidor, e desce como texto pronto:
@@ -38,6 +42,10 @@ export default async function AberturaDeJobPage({
   const saves: SaveFilaLinha[] = pedidosDeSave.map((s) => ({
     ...s,
     enviado_em_label: formatEnviadoEm(s.enviadoEm, agora),
+  }));
+  const cancelamentos: CancelamentoDaFila[] = pedidosDeCancelamento.map((c) => ({
+    ...c,
+    enviado_em_label: formatEnviadoEm(c.pedido.solicitadoEm, agora),
   }));
   // O job cuja revisão da abertura existe SÓ por pedidos de save aparece
   // só na faixa Saves (decisão 099): aprovar o save é registrar a revisão.
@@ -88,12 +96,17 @@ export default async function AberturaDeJobPage({
         saves={saves}
         abertos={abertos}
         hoje={hoje}
+        cancelamentos={cancelamentos}
+        revisarInicial={searchParams?.revisar ?? null}
         abaInicial={
-          searchParams?.aba === "abertos" ||
-          searchParams?.aba === "aguardando" ||
-          searchParams?.aba === "calendario"
-            ? (searchParams.aba as Aba)
-            : undefined
+          // O pop-up do pedido de cancelamento mora na fila.
+          searchParams?.revisar
+            ? "aguardando"
+            : searchParams?.aba === "abertos" ||
+                searchParams?.aba === "aguardando" ||
+                searchParams?.aba === "calendario"
+              ? (searchParams.aba as Aba)
+              : undefined
         }
       />
     </div>

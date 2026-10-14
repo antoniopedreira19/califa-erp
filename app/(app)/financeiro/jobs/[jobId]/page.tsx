@@ -3,7 +3,8 @@ import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { itensDeJobs } from "@/lib/faixa-do-projeto";
 import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, ArrowRight, FilePenLine } from "lucide-react";
+import { AlertTriangle, ArrowRight, Ban, FilePenLine } from "lucide-react";
+import { cancelamentoDoJob } from "@/lib/data/cancelamentos";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -102,7 +103,7 @@ export default async function JobNoFinanceiroPage({
    * "Aprovação de save · revisão da abertura" e os números de depois da
    * aprovação; registrar a revisão é o que aprova.
    */
-  searchParams?: { aba?: string; mes?: string; aprovarSave?: string };
+  searchParams?: { aba?: string; mes?: string; aprovarSave?: string; revisar?: string };
 }) {
   const session = await requireSession();
   if (
@@ -136,6 +137,7 @@ export default async function JobNoFinanceiroPage({
     impostoLido,
     resumoFinanceiro,
     saves,
+    cancelamento,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -206,6 +208,9 @@ export default async function JobNoFinanceiroPage({
     // O bloco "Saves deste job" em leitura: o que foi aprovado na
     // abertura, e por quem (decisão 155).
     carregarSavesDaAbertura(tenantId, params.jobId),
+    // O pedido de cancelamento no ar (decisão 169): o selo do cabeçalho e,
+    // para quem vem do "Visualizar job" da fila, a faixa da planilha.
+    cancelamentoDoJob(supabase, tenantId, params.jobId),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
@@ -412,10 +417,17 @@ export default async function JobNoFinanceiroPage({
   // só falta a produção encerrar — antes era qualquer job já enviado.
   // O selo de status é o mesmo da produção: "Em faturamento" para o aberto
   // com o envio completo (decisão 094).
+  const comPedidoDeCancelamento = cancelamento.pendente !== null;
   const statusExibido = jobStatusExibido(
     job.status as JobStatus,
     job.faturamento_enviado_em,
+    comPedidoDeCancelamento,
   );
+  // Veio do "Visualizar job" do pedido de cancelamento (decisão 169): a
+  // planilha diz por quê, como na aprovação de save, e o Voltar do topo
+  // leva de volta ao pop-up do pedido.
+  const pedidoEmRevisao =
+    cancelamento.pendente && searchParams?.revisar === job.id ? cancelamento.pendente : null;
   const aguardandoEncerramento =
     job.status === "aberto" && detalhe.faturamentoCompleto;
 
@@ -745,6 +757,18 @@ export default async function JobNoFinanceiroPage({
              pedido vem destacada. Do protótipo `prototipo-save-v2`
              (`SecaoPlanilha`, `destaque`). */
           <div className="space-y-4">
+            {pedidoEmRevisao && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+                <span className="flex items-start gap-2">
+                  <Ban className="mt-[1px] h-3.5 w-3.5 flex-none" />
+                  <span>
+                    Pedido de cancelamento na Abertura de Job, de{" "}
+                    <strong className="font-semibold">{pedidoEmRevisao.solicitadoPorNome}</strong> em{" "}
+                    {formatDataAsHoraBr(pedidoEmRevisao.solicitadoEm)}. O Voltar leva de volta ao pedido.
+                  </span>
+                </span>
+              </div>
+            )}
             {linhaEmAprovacao && aprovacaoSave && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
                 <span className="flex items-start gap-2">
@@ -787,6 +811,7 @@ export default async function JobNoFinanceiroPage({
               // O financeiro não faz errata nem vê a pronta (decisão 159).
               papelNaErrata={null}
               errataPronta={null}
+              midia={detalhe.midia}
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}

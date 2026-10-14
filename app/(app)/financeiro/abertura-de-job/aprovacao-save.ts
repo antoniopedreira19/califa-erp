@@ -26,6 +26,8 @@ import {
 } from "@/lib/data/espelhos-do-job";
 import { grupoDoPedido, pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import { desembolsoDaMidia } from "@/lib/calculos/midia-off";
+import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
 import type {
   OrigemDeSave,
   PlanejadoAntesDoSave,
@@ -194,21 +196,33 @@ export async function custoPrevistoDoFinanceiro(
   jobId: string,
   aprovando: string | null,
 ): Promise<{ ok: true; custo: number } | { ok: false; message: string }> {
-  // As duas leituras são independentes: vão juntas (docs/PERFORMANCE.md).
-  const [itensRes, pedidosRes] = await Promise.all([
+  // As leituras são independentes: vão juntas (docs/PERFORMANCE.md).
+  const [itensRes, pedidosRes, midiaDoJob] = await Promise.all([
     supabase
       .from("jobs_itens_orcado")
-      .select("id, tipo_custo, total_planejado, planejado_antes_save")
+      .select("id, tipo_custo, total_planejado, planejado_antes_save, total_orcado")
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
     pedidosParaFinanceiroDoJob(supabase, tenantId, jobId).then(
       (p) => ({ ok: true as const, p }),
       (e: Error) => ({ ok: false as const, e }),
     ),
+    lerMidiaDoJob(supabase, tenantId, jobId),
   ]);
-  if (itensRes.error || !itensRes.data) {
+  if (itensRes.error || !itensRes.data || !midiaDoJob.ok) {
     console.error("[abertura-job.custo-previsto]", itensRes.error?.message);
     return { ok: false, message: "Não foi possível ler a planilha do job." };
+  }
+  // Mídia Off (decisão 167): a nota dos veículos em A · Repasse. A mídia
+  // não tem save.
+  if (midiaDoJob.midia) {
+    return {
+      ok: true,
+      custo: desembolsoDaMidia(
+        itensRes.data as { tipo_custo: string; total_orcado: number | string | null }[],
+        midiaDoJob.midia,
+      ),
+    };
   }
   if (!pedidosRes.ok) {
     console.error(pedidosRes.e.message);

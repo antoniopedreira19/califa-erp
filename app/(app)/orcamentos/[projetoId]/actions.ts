@@ -306,13 +306,10 @@ async function assertRegionalEGpDoProjeto(
       .eq("regional_id", regionalId)
       .eq("tenant_id", tenantId)
       .maybeSingle(),
-    supabase
-      .from("projeto_responsaveis")
-      .select("profile_id")
-      .eq("projeto_id", projetoId)
-      .eq("profile_id", gpId)
-      .eq("tenant_id", tenantId)
-      .maybeSingle(),
+    // Os GPs Responsáveis que podem ser GP (decisão 170). Ler
+    // `projeto_responsaveis` direto aceitava quem está só na Equipe e quem
+    // foi cadastrado como GP do projeto sem ter o papel.
+    supabase.rpc("gps_do_projeto", { p_projeto_id: projetoId }),
   ]);
 
   if (!regRes.data) {
@@ -322,12 +319,17 @@ async function assertRegionalEGpDoProjeto(
       fieldErrors: { regional_id: ["Escolha uma das regionais do projeto."] },
     };
   }
-  if (!gpRes.data) {
+  if (gpRes.error) {
+    console.error("[orcamentos.gp]", gpRes.error.message);
+    return { ok: false, message: "Não foi possível conferir o GP responsável." };
+  }
+  if (!((gpRes.data ?? []) as { id: string }[]).some((g) => g.id === gpId)) {
     return {
       ok: false,
-      message: "GP responsável inválido para este projeto.",
+      message:
+        "O GP escolhido não é um GP Responsável do projeto com o papel GP. Selecione outro.",
       fieldErrors: {
-        gp_responsavel_id: ["Escolha um dos responsáveis do projeto."],
+        gp_responsavel_id: ["Escolha um dos GPs Responsáveis do projeto."],
       },
     };
   }

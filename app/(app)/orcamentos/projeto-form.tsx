@@ -53,7 +53,12 @@ interface Props {
   empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
   empresaPrincipalId?: string;
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
+  /** Todos os membros ativos: a lista da Equipe. */
   responsaveis: Pick<Profile, "id" | "nome">[];
+  /** Quem pode ser GP — papel GP ou Administrador (decisão 170): a lista
+   *  dos GPs Responsáveis. Quem já é GP do projeto sem poder continua
+   *  aparecendo, para quem edita poder tirá-lo. */
+  gps: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
   produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
@@ -91,6 +96,7 @@ export function ProjetoForm({
   empresaPrincipalId,
   clientes,
   responsaveis,
+  gps,
   regionais,
   produtos,
   categorias,
@@ -130,6 +136,17 @@ export function ProjetoForm({
   const [responsavelIds, setResponsavelIds] = React.useState<string[]>(
     responsaveisSelecionados ?? (projeto ? [projeto.responsavel_id] : []),
   );
+  // A lista dos GPs Responsáveis: quem pode ser GP, mais quem já estava
+  // gravado no projeto sem poder (decisão 170). Saído da lista e salvo, não
+  // volta.
+  const itensGp = React.useMemo(() => {
+    const podem = new Set(gps.map((g) => g.id));
+    const gravados = new Set(responsaveisSelecionados ?? []);
+    const legado = responsaveis.filter((r) => gravados.has(r.id) && !podem.has(r.id));
+    return [...gps, ...legado]
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      .map((r) => ({ value: r.id, label: r.nome }));
+  }, [gps, responsaveis, responsaveisSelecionados]);
   const [regionalIds, setRegionalIds] = React.useState<string[]>(
     regionaisSelecionadas ?? (projeto?.regional_id ? [projeto.regional_id] : []),
   );
@@ -508,7 +525,7 @@ export function ProjetoForm({
           errors={fieldErrors}
         >
           <MultiSelect
-            items={responsaveis.map((r) => ({ value: r.id, label: r.nome }))}
+            items={itensGp}
             value={responsavelIds}
             onChange={setResponsavelIds}
             placeholder="Selecione um ou mais GPs"

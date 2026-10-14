@@ -7,12 +7,22 @@
 seguinte),
 `20260928300003_alteracao_financeiro_so_recebimento_e_trava_no_encerramento.sql`,
 `20260928300004_alteracao_financeiro_na_abertura_do_job.sql` e, na revisão
-de 08/10/2026 (o tipo de custo), `20261008800001_alteracao_financeiro_troca_tipo_de_custo.sql`.
+de 08/10/2026 (o tipo de custo), `20261008800001_alteracao_financeiro_troca_tipo_de_custo.sql`
+e, na revisão de 13/10/2026 (a edição na fila entra no valor inicial),
+`20261013800001_alteracao_na_fila_entra_na_abertura.sql`.
 
 > ⚠️ **Revisada em 08/10/2026 — o financeiro também troca o tipo de
 > custo.** Até aqui o "Editar orçado" mexia só em R$ Unit., QT e D/M, e o
 > tipo era da errata (§3, item 4). Agora o tipo muda também, para qualquer
 > tipo, enquanto nada foi lançado no item. Ver §9.
+
+> ⚠️ **Revisada em 13/10/2026 — a edição na fila entra no valor
+> inicial.** Até aqui a foto da abertura (`valor_job_abertura`,
+> `faturamento_previsto_abertura`) ficava com o número do envio, e um
+> ajuste feito pelo financeiro antes de abrir o job aparecia como
+> "inicial" × "atual". Agora a edição com o job na fila da abertura anda
+> junto com a foto: o job abre com o valor editado. Depois da abertura,
+> nada muda. Ver §10.
 
 ---
 
@@ -140,7 +150,8 @@ Com a entrega no main, ainda no mesmo dia:
 8. **O que não muda:** o orçado aprovado da versão
    (`versoes_orcamento_itens`), o realizado, as PPs, o status de conclusão
    do A · Repasse, a foto da abertura (`valor_job_abertura`,
-   `faturamento_previsto_abertura`) e a **curva de desembolso**, com o
+   `faturamento_previsto_abertura`) **depois que o job abriu** — na fila,
+   ela anda junto (§10) — e a **curva de desembolso**, com o
    `custo_previsto_total`. O planejado só muda no serviço Interno (decisão
    105), em que o banco o faz espelhar o orçado (`planejado_espelha_orcado`).
    Ali o custo previsto muda e a curva não: se o financeiro quiser a curva
@@ -409,3 +420,90 @@ três opções — só entre tipos com PP, qualquer tipo, nenhum —, respondeu:
 Ficaram 2 entradas de teste em Alterações do Financeiro no TES-1013/26 (a
 troca e o desfazer) e 1 no TES-1025/26, que ficou aberto no financeiro
 (projeto TES-F001/26, contas "Conta Teste") com o Item 2 em B.
+
+## 10. A revisão de 13/10/2026: a edição na fila entra no valor inicial
+
+### O pedido
+
+Com o AMB-1030/26 na tela: o financeiro ajustou o Transporte Equipe de
+R$ 3.500,00 para R$ 3.500,89 às 21:48 de 08/10, abriu o job às 21:50, e o
+cabeçalho do job mostrou "Valor do job · inicial R$ 229.998,76" e "atual
+R$ 230.000,00". Pedido do Tiago: *"caso o financeiro fizesse alguma edição
+antes da abertura, esse valor viesse como o valor inicial."*
+
+### A regra
+
+1. **Edição com o job na fila da abertura** (`aguardando_abertura`): a foto
+   da abertura — `valor_job_abertura` e `faturamento_previsto_abertura` —
+   anda junto com os números do job. O job abre com o valor já editado, e
+   o "inicial" é esse valor.
+2. **Edição depois da abertura:** nada muda. A foto fica, e o cabeçalho, o
+   card de Erratas e o card de Totais continuam separando inicial e atual
+   (§3, item 8).
+3. **O Resultado op. (planejado)** usa o valor do job da abertura, então
+   também passa a contar a edição da fila.
+4. **Retroativo, nos jobs já abertos:** autorizado pelo Tiago em 13/10/2026
+   ("Sim, os 10"). Os dois campos receberam o `*_depois` da última edição
+   feita antes da abertura — em todos, o mesmo número da foto nº 1 de
+   `jobs_aberturas`:
+
+   | Job | Valor do job na abertura | Faturamento previsto na abertura |
+   |---|---|---|
+   | AMB-1006/26 | 145.000,12 → 145.000,00 | igual ao valor |
+   | AMB-1007/26 | 6.999,99 → 7.000,00 | igual ao valor |
+   | AMB-1008/26 | 307.000,02 → 283.000,00 (5 influenciadoras zeradas e o gerador ajustado) | 286.550,02 → 283.000,00 |
+   | AMB-1029/26 | 23.720,03 → 23.753,72 | 3.299,03 → 23.753,72 (5 linhas de A para AR) |
+   | AMB-1030/26 | 229.998,76 → 230.000,00 | igual ao valor |
+   | ANI-1011/26 | 135.000,02 → 135.000,00 | igual ao valor |
+   | ASO-1004/26 | 55.000,12 → 55.000,00 | igual ao valor |
+   | EDU-1001/26 | 120.000,02 → 120.000,00 | igual ao valor |
+   | TES-1014/26 | 9.464,40 (editado e desfeito: não mudou) | — |
+   | TES-1025/26 | 172.620,85 → 176.261,34 | 142.620,85 → 161.261,34 |
+
+   Nos 8 jobs reais não houve errata nem edição depois da abertura: o
+   cabeçalho passou a mostrar um valor só.
+
+### Onde mora
+
+- **Banco:** `registrar_alteracao_do_financeiro` grava os dois campos da
+  foto quando o job está em `aguardando_abertura`
+  (`20261013800001_alteracao_na_fila_entra_na_abertura.sql`, que também
+  faz o retroativo).
+- **Tela:** o "inicial" é recalculado da versão aprovada (decisão 151) e
+  conferido contra o `valor_job_abertura`. Agora a versão entra com as
+  edições da fila aplicadas — `itensDaVersaoComAsEdicoesDaFila`, em
+  `lib/calculos/abertura-do-job.ts`, alimentada em `carregarDetalheDoJob`
+  pelo histórico de `jobs_alteracoes_financeiro` anterior a
+  `data_abertura_financeiro` (a última edição de cada linha vence; o total
+  é `R$ Unit. × QT × D/M`, a mesma conta da coluna gerada). Vale para a
+  conta do job e para o orçado de cada linha na abertura, que é a base da
+  rentabilidade planejada.
+
+### Conferência (13/10/2026)
+
+- **A conta**, com as funções do código sobre os dados do banco: nos 10
+  jobs a foto com as edições da fila reproduz o `valor_job_abertura` novo
+  ao centavo; só com a versão, como era, não reproduziria em 9 deles.
+- **A função, por simulação desfeita como o usuário Financeiro Teste:** no
+  TES-1012/26 (na fila), valor do job de R$ 139.182,30 para R$ 139.200,00
+  levou junto `valor_job_abertura` e `faturamento_previsto_abertura`; no
+  TES-1013/26 (aberto), +R$ 10,00 mudou o valor do job e deixou a foto em
+  R$ 1.391,82. Nada ficou gravado.
+- **A tela, logada (14/10/2026):** AMB-1030/26 com "Valor do job
+  R$ 230.000,00" único e Resultado op. (planejado) R$ 83.001,00 (era
+  R$ 83.000,00 sobre o inicial antigo); TES-1025/26 com R$ 176.261,34 único
+  (antes, inicial R$ 172.620,85 × atual R$ 176.261,34); TES-1014/26, cuja
+  errata mudou o valor, continua dividindo inicial R$ 9.464,40 × atual
+  R$ 9.631,42; AMB-1008/26 com R$ 283.000,00 único.
+
+### O que o retroativo mostrou no AMB-1008/26
+
+As 5 influenciadoras (A · Direto) foram zeradas no orçado pela edição da
+fila (D/M 0), mas o planejado delas continua em R$ 20.450,00 — a edição do
+financeiro não mexe no planejado (§3, item 8), e o planejado é o da
+abertura (decisão 151). Com o inicial antigo, os R$ 24.000,02 delas
+compensavam esse custo; com o inicial novo, o Resultado op. (planejado)
+foi de R$ 54.596,80 (17,8%) para R$ 31.290,10 (11,1%), e os grupos INFLUS
+mostram rentabilidade planejada de −R$ 16.500,00 e −R$ 3.950,00. A conta
+está certa para o job como abriu; o que fazer com esse planejado ficou
+para o Tiago decidir.

@@ -30,6 +30,12 @@ export const SITUACAO_FATURAMENTO: Record<
   SituacaoDoMes,
   { rotulo: string; curto: string; classes: string }
 > = {
+  // Mídia Off (decisão 167): o mês ainda não passou da última veiculação.
+  em_veiculacao: {
+    rotulo: "Em veiculação",
+    curto: "Em veiculação",
+    classes: "border-sky-200 bg-sky-50 text-sky-700",
+  },
   a_enviar: {
     rotulo: "A enviar",
     curto: "A enviar",

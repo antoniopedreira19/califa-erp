@@ -114,6 +114,15 @@ Decidido em 07/10/2026 no mesmo protótipo:
   conta reproduz o `valor_job_abertura` gravado ao centavo. Se um dia não
   reproduzir (job devolvido com save mexido direto na cópia antes do
   reenvio), a foto é descartada e a tela fica como era.
+
+  > ⚠️ **A foto inclui as edições da fila (2026-10-13).** A edição do
+  > orçado que o financeiro faz com o job na fila da abertura passou a
+  > entrar no valor inicial (revisão da decisão 115, §10): o banco grava o
+  > `valor_job_abertura` já editado, e a foto é a versão aprovada **mais**
+  > essas edições (`itensDaVersaoComAsEdicoesDaFila`), na conta do job e
+  > no orçado de cada linha na abertura. A edição feita depois da abertura
+  > continua de fora. Conferido em 13/10/2026: nos 10 jobs com edição na
+  > fila a foto reproduz o valor gravado ao centavo.
 - A foto só existe depois da abertura do financeiro
   (`data_abertura_financeiro`). Antes dela não há "inicial" e "atual".
 - **Cabeçalho** (`ResumoResultado`, prop `abertura` obrigatória): divide

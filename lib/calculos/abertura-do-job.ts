@@ -14,6 +14,13 @@
  * devolvido que teve o save mexido direto na cópia antes do reenvio, por
  * exemplo), a foto é descartada e a tela fica como era: dividir o valor
  * com uma base errada seria pior do que não dividir.
+ *
+ * ⚠️ 13/10/2026 (revisão da decisão 115): a edição do orçado que o
+ * financeiro faz com o job NA FILA da abertura entra no valor inicial — o
+ * job abre com ela, e o banco grava o `valor_job_abertura` já editado. A
+ * foto passa a ser a versão aprovada MAIS essas edições
+ * (`itensDaVersaoComAsEdicoesDaFila`). A edição feita depois da abertura
+ * continua de fora: ela é "atual", como a errata.
  */
 
 import {
@@ -21,10 +28,38 @@ import {
   type ItemParaTotais,
   type ParametrosInternacionais,
 } from "@/lib/calculos/versao-totais";
+import type { TipoCusto } from "@/lib/types";
 
 /** Um item da versão aprovada, como a foto da abertura precisa dele. */
 export interface ItemDaVersaoNaAbertura extends ItemParaTotais {
   id: string;
+}
+
+/** Uma linha do orçado que o financeiro editou com o job na fila da
+ *  abertura, já no estado em que ficou. */
+export interface EdicaoDaFila {
+  /** A linha da versão que a cópia do job espelha. */
+  itemVersaoId: string;
+  tipoCusto: TipoCusto;
+  totalOrcado: number;
+}
+
+/**
+ * A versão aprovada como o job abriu: cada linha editada na fila troca o
+ * total e o tipo pelos da edição. `edicoes` vem em ordem cronológica — a
+ * última de cada linha vence. A linha da versão sem edição fica como está.
+ */
+export function itensDaVersaoComAsEdicoesDaFila(
+  itensDaVersao: ItemDaVersaoNaAbertura[],
+  edicoes: EdicaoDaFila[],
+): ItemDaVersaoNaAbertura[] {
+  if (edicoes.length === 0) return itensDaVersao;
+  const ultima = new Map<string, EdicaoDaFila>();
+  for (const e of edicoes) ultima.set(e.itemVersaoId, e);
+  return itensDaVersao.map((i) => {
+    const e = ultima.get(i.id);
+    return e ? { ...i, tipo_custo: e.tipoCusto, total_orcado: e.totalOrcado } : i;
+  });
 }
 
 /** Os números do job na abertura — o lado PLANEJADO do resultado. */
@@ -43,9 +78,10 @@ export interface FechamentoDaAbertura {
 }
 
 /**
- * Monta a foto da abertura a partir da versão aprovada. Devolve `null`
- * quando o job ainda não tem abertura gravada ou quando a conta não
- * reproduz o `valor_job_abertura` gravado no envio.
+ * Monta a foto da abertura a partir da versão aprovada (com as edições da
+ * fila, ver `itensDaVersaoComAsEdicoesDaFila`). Devolve `null` quando o job
+ * ainda não tem abertura gravada ou quando a conta não reproduz o
+ * `valor_job_abertura` gravado.
  */
 export function fechamentoDaAbertura(
   itensDaVersao: ItemDaVersaoNaAbertura[],
@@ -89,7 +125,8 @@ export function valorDoJobMudouDesdeAAbertura(
 }
 
 /** O orçado de cada linha da planilha do job na abertura, pelo id da linha
- *  da versão. A linha criada por errata não está na versão: 0. */
+ *  da versão (com as edições da fila). A linha criada por errata não está
+ *  na versão: 0. */
 export function orcadoDaLinhaNaAbertura(
   itemVersaoId: string | null,
   totalPorItemDaVersao: Map<string, number>,

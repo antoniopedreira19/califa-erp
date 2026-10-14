@@ -32,7 +32,6 @@ import {
   PP_STATUS_EM_ABERTO,
   situacaoDaVerba,
   verbaPendenteNoEncerramento,
-  verbaTemTitular,
   BV_SITUACAO_EM_ABERTO,
 } from "@/lib/types";
 import type {
@@ -81,9 +80,29 @@ import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
 import type { AnexoDaPPNaLista, PPAEmitir, PlanejadoAntesDoSave } from "@/lib/types";
 import {
   fechamentoDaAbertura,
+  itensDaVersaoComAsEdicoesDaFila,
   orcadoDaLinhaNaAbertura,
+  type EdicaoDaFila,
   type ItemDaVersaoNaAbertura,
 } from "@/lib/calculos/abertura-do-job";
+import {
+  comAContaDaMidia,
+  fechamentoDosItens,
+  realizadoDaLinhaMidia,
+  parametrosDaVersao,
+  type ParametrosMidia,
+} from "@/lib/calculos/midia-off";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import type { VersaoOrcamentoItem } from "@/lib/types";
+
+/** Mídia Off (decisão 167): o que a planilha de mídia do job precisa — as
+ *  condições da versão, as linhas da cópia no formato de linha da planilha
+ *  e o nome de cada veículo. `null` nos outros modelos. */
+export interface MidiaDoDetalhe {
+  params: ParametrosMidia;
+  linhas: VersaoOrcamentoItem[];
+  veiculos: { id: string; nome: string; meios: string[] }[];
+}
 
 /**
  * Todo o detalhe de um job, carregado uma vez e servido às duas telas
@@ -127,7 +146,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -152,6 +171,11 @@ export async function carregarDetalheDoJob(
 
   // Queries de Realizado (paralelas, dependem de raw ja carregado)
   const versaoAprovadaId = raw.versao_orcamento_aprovada_id as string;
+  // Mídia Off (decisão 167): a planilha do job é a de mídia, e ela precisa
+  // do meio de cada agrupamento (na versão) e do nome de cada veículo.
+  const ehMidiaOff =
+    (raw.orcamento as { categoria?: { modelo_planilha?: string } } | null)?.categoria
+      ?.modelo_planilha === "midia_off";
 
   const [
     gruposRes,
@@ -181,6 +205,8 @@ export async function carregarDetalheDoJob(
     itensDaVersaoRes,
     cnpjDaRegionalRes,
     errataProntaRes,
+    meiosDaVersaoRes,
+    veiculosRes,
   ] = await Promise.all([
     // Os agrupamentos do JOB (decisão 162): a cópia dos da versão, com o
     // que as erratas renomearam, criaram e tiraram. O removido não aparece.
@@ -454,6 +480,27 @@ export async function carregarDetalheDoJob(
       .eq("tenant_id", session.activeTenant.id)
       .eq("situacao", "pronta")
       .maybeSingle(),
+    // Mídia Off (decisão 167): o meio, a forma de compra e o formato de cada
+    // agrupamento da versão — os do job (decisão 162) apontam para eles.
+    ehMidiaOff
+      ? supabase
+          .from("versoes_orcamento_grupos")
+          .select("id, meio, forma_compra, formato")
+          .eq("versao_orcamento_id", versaoAprovadaId)
+          .eq("tenant_id", session.activeTenant.id)
+          .returns<{ id: string; meio: string | null; forma_compra: string | null; formato: string | null }[]>()
+      : Promise.resolve({ data: [], error: null }),
+    // E o nome dos veículos das linhas: o veículo é um fornecedor marcado
+    // (`veiculos_midia`). Inner, por embed: um job tem poucos veículos.
+    ehMidiaOff
+      ? supabase
+          .from("jobs_itens_orcado")
+          .select("fornecedor_id, veiculo:fornecedores!fornecedor_id(id, nome)")
+          .eq("job_id", jobId)
+          .eq("tenant_id", session.activeTenant.id)
+          .not("fornecedor_id", "is", null)
+          .returns<{ fornecedor_id: string; veiculo: { id: string; nome: string } | null }[]>()
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -462,19 +509,30 @@ export async function carregarDetalheDoJob(
   // A planilha do job agrupa pelos agrupamentos do JOB (decisão 162), no
   // formato que a tela já conhecia. `versao_orcamento_id` é o da versão
   // aprovada; o mês vem do agrupamento do job (o mesmo da âncora).
-  const grupos: VersaoOrcamentoGrupo[] = (gruposRes.data ?? []).map((g) => ({
-    id: g.id,
-    tenant_id: g.tenant_id,
-    versao_orcamento_id: versaoAprovadaId,
-    nome: g.nome,
-    ordem: g.ordem,
-    mes_id: g.mes_id ?? null,
-    meio: null,
-    forma_compra: null,
-    formato: null,
-    created_at: g.created_at,
-    updated_at: g.updated_at,
-  }));
+  // Na Mídia Off (decisão 167) o meio, a forma de compra e o formato vêm
+  // da âncora na versão; nos outros modelos a leitura volta vazia e eles
+  // ficam nulos, como sempre.
+  if (meiosDaVersaoRes.error) console.error("[job.meios]", meiosDaVersaoRes.error.message);
+  const meioDaVersao = new Map((meiosDaVersaoRes.data ?? []).map((g) => [g.id, g]));
+  const grupos: VersaoOrcamentoGrupo[] = (gruposRes.data ?? []).map((g) => {
+    const ancora = meioDaVersao.get(g.grupo_versao_id);
+    return {
+      id: g.id,
+      tenant_id: g.tenant_id,
+      versao_orcamento_id: versaoAprovadaId,
+      nome: g.nome,
+      ordem: g.ordem,
+      mes_id: g.mes_id ?? null,
+      meio: ancora?.meio ?? null,
+      forma_compra:
+        ancora?.forma_compra === "grade" || ancora?.forma_compra === "periodo"
+          ? ancora.forma_compra
+          : null,
+      formato: ancora?.formato ?? null,
+      created_at: g.created_at,
+      updated_at: g.updated_at,
+    };
+  });
   if (gruposRes.error) console.error("[job.grupos]", gruposRes.error.message);
   if (itensRes.error) console.error("[job.orcado]", itensRes.error.message);
   if (bvsRes.error) console.error("[job.bvs]", bvsRes.error.message);
@@ -524,15 +582,53 @@ export async function carregarDetalheDoJob(
   if (itensDaVersaoRes.error) {
     console.error("[job.itens_da_versao]", itensDaVersaoRes.error.message);
   }
+  // As edições do orçado que o financeiro fez com o job na fila: entram na
+  // foto, porque o job abriu com elas (revisão da decisão 115, 13/10/2026).
+  // Sem o histórico lido, a foto não reproduz o `valor_job_abertura` e a
+  // tela fica com o valor único.
+  const itemVersaoDaLinha = new Map<string, string>(
+    ((itensRes.data ?? []) as any[])
+      .filter((it) => it.item_versao_id)
+      .map((it) => [it.id as string, it.item_versao_id as string]),
+  );
+  const aberturaEm = raw.data_abertura_financeiro
+    ? Date.parse(raw.data_abertura_financeiro)
+    : null;
+  const edicoesDaFila: EdicaoDaFila[] =
+    aberturaEm === null
+      ? []
+      : ((alteracoesFinanceiroRes.data ?? []) as any[])
+          .filter((a) => Date.parse(a.created_at) < aberturaEm)
+          .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+          .flatMap((a) => (a.itens ?? []) as any[])
+          .flatMap((i) => {
+            const itemVersaoId = itemVersaoDaLinha.get(i.job_item_orcado_id);
+            if (!itemVersaoId) return [];
+            return [
+              {
+                itemVersaoId,
+                tipoCusto: i.tipo_custo_para ?? i.tipo_custo,
+                // A conta da coluna gerada `total_orcado` da cópia, sem
+                // arredondar: o `total_para` do histórico vem em centavos.
+                totalOrcado:
+                  Number(i.valor_unitario_para ?? 0) *
+                  Number(i.quantidade_para ?? 1) *
+                  Number(i.dias_meses_para ?? 1),
+              },
+            ];
+          });
   const itensDaVersao: ItemDaVersaoNaAbertura[] = itensDaVersaoRes.error
     ? []
-    : ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
-        id: i.id,
-        tipo_custo: i.tipo_custo,
-        total_orcado: Number(i.total_orcado ?? 0),
-        em_save: i.em_save === true,
-        save_consumido: Number(i.save_consumido ?? 0),
-      }));
+    : itensDaVersaoComAsEdicoesDaFila(
+        ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
+          id: i.id,
+          tipo_custo: i.tipo_custo,
+          total_orcado: Number(i.total_orcado ?? 0),
+          em_save: i.em_save === true,
+          save_consumido: Number(i.save_consumido ?? 0),
+        })),
+        edicoesDaFila,
+      );
   const versaoLida = itensDeVersaoLidos(itensDaVersaoRes);
   // O orçado de cada linha na abertura: 0 na que já era save na versão,
   // porque save não entra na rentabilidade (decisão 028 §9).
@@ -959,6 +1055,9 @@ export async function carregarDetalheDoJob(
     int_transaction_costs: number;
     moeda_estrangeira: string | null;
     cambio_compra: number | null;
+    // Só Mídia Off (decisão 147); nos outros ficam no padrão.
+    percentual_veiculo: number | string | null;
+    base_honorarios: string | null;
   };
 
   // Qual fechamento este job usa. Sai da categoria do ORÇAMENTO que o
@@ -970,6 +1069,10 @@ export async function carregarDetalheDoJob(
       ?.categoria?.modelo_planilha as CategoriaModeloPlanilha | undefined,
     versaoAprovada,
   );
+  // Mídia Off (decisão 167): a conta é a da mídia — `calcularTotaisVersao`
+  // somaria honorários e imposto POR CIMA do negociado.
+  const paramsMidia: ParametrosMidia | null =
+    planilha.modeloPlanilha === "midia_off" ? parametrosDaVersao(versaoAprovada) : null;
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
 
@@ -1061,18 +1164,26 @@ export async function carregarDetalheDoJob(
 
   // Resumo do cabeçalho: mesmas funções do card de Totais da Planilha
   // Interna, pra header e rodapé nunca divergirem.
-  const totaisJob = calcularTotaisVersao(
+  const totaisNacionais = calcularTotaisVersao(
     itens,
     Number(versaoAprovada.percentual_honorarios),
     Number(versaoAprovada.percentual_imposto),
     planilha.internacional,
   );
+  // Mídia Off (decisão 167): os números do job saem da conta da mídia — o
+  // cabeçalho, as Erratas, a barra de faturamento e o financeiro leem estes
+  // campos planos. A quebra por tipo não vale na mídia e ninguém a lê lá.
+  const fechamentoMidiaJob = paramsMidia ? fechamentoDosItens(itens, paramsMidia) : null;
+  const totaisJob = fechamentoMidiaJob
+    ? comAContaDaMidia(totaisNacionais, fechamentoMidiaJob)
+    : totaisNacionais;
   // O job como foi aberto (decisão 151, entrega 2): o lado PLANEJADO do
   // resultado. Só depois da abertura do financeiro — antes dela não há
   // "inicial" e "atual". `null` quando a versão não reproduz o
   // `valor_job_abertura` gravado (ver `fechamentoDaAbertura`).
+  // A Mídia Off ainda não tem errata (entrega 5): o valor não se divide.
   const aberturaDoJob =
-    raw.data_abertura_financeiro && itensDeVersaoLidos(itensDaVersaoRes)
+    !paramsMidia && raw.data_abertura_financeiro && itensDeVersaoLidos(itensDaVersaoRes)
       ? fechamentoDaAbertura(
           itensDaVersao,
           Number(versaoAprovada.percentual_honorarios),
@@ -1103,10 +1214,28 @@ export async function carregarDetalheDoJob(
       ),
     ),
   );
-  const custoPlanejadoJob = blocosDoJob.planejado.bruto;
-  const custoRealizadoJob = blocosDoJob.realizado.bruto;
-  const bvPlanejadoJob = blocosDoJob.planejado.deducaoBv;
-  const bvRealizadoJob = blocosDoJob.realizado.deducaoBv;
+  // Mídia Off (decisão 167): o custo planejado são as notas dos veículos; o
+  // realizado é a nota no A · Direto e as PPs do repasse no A · Repasse
+  // (Tiago, 13/10/2026). A mídia ainda não tem BV.
+  const custoPlanejadoJob = fechamentoMidiaJob
+    ? fechamentoMidiaJob.custoPlanejado
+    : blocosDoJob.planejado.bruto;
+  const custoRealizadoJob = paramsMidia
+    ? itens.reduce(
+        (s, it) =>
+          s +
+          realizadoDaLinhaMidia(
+            it.tipo_custo,
+            it.total_orcado,
+            Number(realizadosMap.get(it.id)?.total_realizado ?? 0),
+            paramsMidia,
+            jobJaAberto,
+          ),
+        0,
+      )
+    : blocosDoJob.realizado.bruto;
+  const bvPlanejadoJob = fechamentoMidiaJob ? 0 : blocosDoJob.planejado.deducaoBv;
+  const bvRealizadoJob = fechamentoMidiaJob ? 0 : blocosDoJob.realizado.deducaoBv;
 
   const threadChat = montarThreadChat(
     {
@@ -1190,18 +1319,22 @@ export async function carregarDetalheDoJob(
   //
   // O job encerrado ainda não faturado continua enviando (decisão 087):
   // faturamento e encerramento correm separados desde 16/09/2026.
+  //
+  // A Mídia Off também fatura mês a mês (decisão 167), pela conta dela.
+  const faturaPorMes =
+    planilha.modeloPlanilha === "mensal" || planilha.modeloPlanilha === "midia_off";
   const podeEnviarFaturamento =
     pode(session.activeRole, "jobs.enviar_faturamento") &&
     jobAceitaEnvioParaFaturamento(job.status) &&
     envioFaturamento === null &&
     totaisJob.faturamentoPrevisto > 0 &&
-    planilha.modeloPlanilha !== "mensal";
-  // O envio de cada mês (modelo mensal): mesma matriz e job aberto. Qual
-  // mês pode ir sai da barra, pela situação de cada um.
+    !faturaPorMes;
+  // O envio de cada mês (modelo mensal e Mídia Off): mesma matriz e job
+  // aberto. Qual mês pode ir sai da barra, pela situação de cada um.
   const podeEnviarFaturamentoMensal =
     pode(session.activeRole, "jobs.enviar_faturamento") &&
     jobAceitaEnvioParaFaturamento(job.status) &&
-    planilha.modeloPlanilha === "mensal";
+    faturaPorMes;
 
   // Job pago INTEIRAMENTE por saldo de save: faturamento previsto zero e
   // consumo registrado. Ele pula a etapa de faturamento e se comporta
@@ -1332,18 +1465,30 @@ export async function carregarDetalheDoJob(
   if (notasDasParcelasRes.error) {
     console.error("[job.notas-das-parcelas]", notasDasParcelasRes.error.message);
   }
-  const faturamentoMensal: MesDeFaturamento[] =
-    planilha.modeloPlanilha === "mensal"
-      ? montarFaturamentoMensal({
-          meses,
-          grupos,
-          itens,
-          percentualHonorarios: Number(versaoAprovada.percentual_honorarios),
-          percentualImposto: Number(versaoAprovada.percentual_imposto),
-          envios: enviosMensais,
-          itensDeNota: (notasDasParcelasRes.data ?? []) as unknown as ItemDeNotaDaParcela[],
-        })
-      : [];
+  const faturamentoMensal: MesDeFaturamento[] = faturaPorMes
+    ? montarFaturamentoMensal({
+        meses,
+        grupos,
+        itens,
+        percentualHonorarios: Number(versaoAprovada.percentual_honorarios),
+        percentualImposto: Number(versaoAprovada.percentual_imposto),
+        envios: enviosMensais,
+        itensDeNota: (notasDasParcelasRes.data ?? []) as unknown as ItemDeNotaDaParcela[],
+        // Mídia Off (decisão 167): a conta da mídia, e o mês só libera
+        // depois da última veiculação dele (as datas vêm da cópia do job).
+        midia: paramsMidia
+          ? {
+              params: paramsMidia,
+              hoje: hojeEmSaoPauloIso(),
+              datas: ((itensRes.data ?? []) as any[]).map((it) => ({
+                id: it.id as string,
+                insercoes_por_dia: (it.insercoes_por_dia ?? null) as Record<string, number> | null,
+                data_fim: (it.data_fim ?? null) as string | null,
+              })),
+            }
+          : null,
+      })
+    : [];
   const todosOsMesesEnviados =
     faturamentoMensal.length > 0 &&
     faturamentoMensal.every((m) => m.envio !== null || m.situacao === "sem_faturamento");
@@ -1351,7 +1496,7 @@ export async function carregarDetalheDoJob(
   // O faturamento do job que não é mensal: o envio único, as notas e a
   // situação — a trilha "Faturamento" da barra e o "Ver envio" (decisão 087).
   const faturamentoEnvioUnico: FaturamentoDoEnvioUnico | null =
-    planilha.modeloPlanilha === "mensal"
+    faturaPorMes
       ? null
       : montarFaturamentoDoEnvioUnico({
           envio: envioFaturamento,
@@ -1364,7 +1509,7 @@ export async function carregarDetalheDoJob(
   // (`jobs.faturamento_enviado_em`). Fica para o "Aguardando encerramento"
   // do cabeçalho do job no financeiro, que é quem controla a nota.
   const faturamentoCompleto =
-    planilha.modeloPlanilha === "mensal"
+    faturaPorMes
       ? todosOsMesesEnviados && saldoAFaturar <= 0.01
       : faturamentoEnvioUnico !== null &&
         (faturamentoEnvioUnico.situacao === "sem_faturamento" ||
@@ -1433,11 +1578,11 @@ export async function carregarDetalheDoJob(
           bvsEmAberto,
           itensSemMarcacao,
           semEnvio:
-            planilha.modeloPlanilha !== "mensal" &&
+            !faturaPorMes &&
             envioFaturamento === null &&
             faturamentoEnvioUnico?.situacao !== "sem_faturamento",
           mesesSemEnvio: faturamentoMensal
-            .filter((m) => m.situacao === "a_enviar")
+            .filter((m) => m.situacao === "a_enviar" || m.situacao === "em_veiculacao")
             .map((m) => nomeDoMes(m.mes)),
           // O carimbo é do banco (decisão 094). Job sem faturamento previsto
           // nunca é carimbado, mas finaliza direto no encerramento.
@@ -1498,29 +1643,22 @@ export async function carregarDetalheDoJob(
     session.activeRole,
     "cadastros.fornecedores.editar",
   );
-  // Quem presta contas de cada verba: o responsável por ela, qualquer GP
-  // ou um administrador (decisão 136; até 01/10/2026 era o GP responsável
-  // do job, decisão 081). Na alimentação e no transporte (decisão 164) o
-  // titular pode nem ter acesso ao sistema: presta contas o administrador,
-  // o GP, o produtor ou o freela do job (quem vê o job é do projeto). A
-  // função do banco checa de novo; aqui é só para mostrar o botão a quem pode.
+  // Quem presta contas da verba (decisões 164 e 171, as três verbas): o
+  // titular pode nem ter acesso ao sistema, então presta contas o
+  // administrador, o GP, o produtor ou o freela do job (quem vê o job é do
+  // projeto). O responsável da verba de produção anterior à 171 segue
+  // prestando a dele. A função do banco checa de novo; aqui é só para
+  // mostrar o botão a quem pode.
   const ppsQuePossoPrestarContas = ppsDoJob
-    .filter((pp) => {
-      if (!pp.verba_producao) return false;
-      if (verbaTemTitular(pp.tipo_verba)) {
-        return (
-          session.activeRole === "administrador" ||
+    .filter(
+      (pp) =>
+        pp.verba_producao &&
+        (session.activeRole === "administrador" ||
           session.activeRole === "gerente_producao" ||
           session.activeRole === "produtor" ||
-          session.activeRole === "freelancer"
-        );
-      }
-      return (
-        session.activeRole === "administrador" ||
-        session.activeRole === "gerente_producao" ||
-        pp.responsavel_verba_id === session.profile.id
-      );
-    })
+          session.activeRole === "freelancer" ||
+          pp.responsavel_verba_id === session.profile.id),
+    )
     .map((pp) => pp.id);
   // Confirmar o BV é do GP e do administrador (decisão 080). Lançar e
   // negociar seguem em `podeAcoesPlanilha`, para quem pode mexer no job.
@@ -1546,8 +1684,69 @@ export async function carregarDetalheDoJob(
       : Promise.resolve([]),
   ]);
 
+  // Mídia Off (decisão 167): a planilha do job é a de mídia, só leitura —
+  // as linhas da CÓPIA com as colunas da mídia (no formato de linha que a
+  // planilha lê), no agrupamento do job, e o nome de cada veículo.
+  if (veiculosRes.error) console.error("[job.veiculos]", veiculosRes.error.message);
+  const midia: MidiaDoDetalhe | null = paramsMidia
+    ? {
+        params: paramsMidia,
+        linhas: ((itensRes.data ?? []) as any[]).map(
+          (it): VersaoOrcamentoItem => ({
+            id: it.id,
+            tenant_id: it.tenant_id,
+            versao_orcamento_id: versaoAprovadaId,
+            grupo_id: it.job_grupo_id ?? it.grupo_id,
+            ordem: Number(it.ordem ?? 0),
+            planilha_origem: null,
+            item: it.item,
+            tipo_custo: it.tipo_custo,
+            valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
+            quantidade_orcada: Number(it.quantidade_orcada ?? 0),
+            dias_meses_orcado: Number(it.dias_meses_orcado ?? 0),
+            total_orcado: Number(it.total_orcado ?? 0),
+            categoria_id: it.categoria_id ?? null,
+            valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
+            quantidade_planejada: Number(it.quantidade_planejada ?? 0),
+            dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
+            total_planejado: Number(it.total_planejado ?? 0),
+            bv_liquido_planejado: null,
+            em_save: false,
+            save_consumido: 0,
+            save_marcado_por: null,
+            save_marcado_em: null,
+            planejado_antes_save: null,
+            fornecedor_id: it.fornecedor_id ?? null,
+            observacoes: null,
+            praca: it.praca ?? null,
+            peca: it.peca ?? null,
+            formato: it.formato ?? null,
+            insercoes_por_dia: it.insercoes_por_dia ?? null,
+            data_inicio: it.data_inicio ?? null,
+            data_fim: it.data_fim ?? null,
+            unidade_periodo: it.unidade_periodo ?? null,
+            valor_unitario_tabela:
+              it.valor_unitario_tabela === null ? null : Number(it.valor_unitario_tabela),
+            percentual_desconto:
+              it.percentual_desconto === null ? null : Number(it.percentual_desconto),
+            detalhe: it.detalhe ?? null,
+            created_at: it.created_at,
+            updated_at: it.updated_at,
+          }),
+        ),
+        veiculos: [
+          ...new Map(
+            (veiculosRes.data ?? [])
+              .filter((v) => v.veiculo)
+              .map((v) => [v.fornecedor_id, { id: v.fornecedor_id, nome: v.veiculo!.nome, meios: [] }]),
+          ).values(),
+        ],
+      }
+    : null;
+
   return {
     raw,
+    midia,
     savePorItem,
     saldosDeSave,
     clienteNome: raw.projeto?.cliente?.nome_fantasia ?? "—",

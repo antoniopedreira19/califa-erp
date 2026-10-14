@@ -26,6 +26,7 @@ import {
 } from "../curva";
 import { AberturaForm } from "./abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
+import { lerFechamentoMidiaDoJob } from "@/lib/data/midia-do-job";
 import { impostoDoJob } from "../imposto-previsto";
 import { JobFinanceiroTabs } from "../../jobs/[jobId]/job-financeiro-tabs";
 import { abaDaUrl } from "../../jobs/[jobId]/abas";
@@ -82,7 +83,9 @@ export default async function AbrirJobNoFinanceiroPage({
       const [projetos, faturamentoMensal, ultimoDoProjetoRes] =
         await Promise.all([
           listarProjetosFinanceiro(tenantId, carregado.job.cliente_id),
-          carregado.job.modelo_planilha_orcamento === "mensal"
+          // A Mídia Off também fatura por mês (decisão 167).
+          carregado.job.modelo_planilha_orcamento === "mensal" ||
+          carregado.job.modelo_planilha_orcamento === "midia_off"
             ? lerFaturamentoMensalPeloJob(
                 supabase,
                 tenantId,
@@ -142,6 +145,7 @@ export default async function AbrirJobNoFinanceiroPage({
     linhasDeFluxo,
     prazosDoJob,
     saves,
+    midiaDoJob,
   ] = await Promise.all([
     jobDaFila,
     // Escopo 'orcamento': a categoria do job é a que a produção escolheu
@@ -183,6 +187,9 @@ export default async function AbrirJobNoFinanceiroPage({
     carregarPrazosDosJobs(tenantId, [params.jobId]),
     // O bloco "Saves deste job" e as caixas de aprovação (decisão 155).
     carregarSavesDaAbertura(tenantId, params.jobId),
+    // Mídia Off (decisão 167): custo previsto e planejado pela conta da
+    // mídia. Nulo nos outros modelos.
+    lerFechamentoMidiaDoJob(supabase, tenantId, params.jobId),
   ]);
 
   if (!daFila || !detalhe) notFound();
@@ -233,7 +240,10 @@ export default async function AbrirJobNoFinanceiroPage({
   // relê esse mesmo número do banco antes de gravar — o que vai daqui é
   // só o que a tela precisa mostrar. Zero é legítimo: job 100% A/D abre
   // sem curva.
-  const custoPrevisto = Math.round(job.planilha_desembolso * 100) / 100;
+  // Na Mídia Off (decisão 167), a nota dos veículos em A · Repasse.
+  const custoPrevisto = midiaDoJob
+    ? midiaDoJob.desembolso
+    : Math.round(job.planilha_desembolso * 100) / 100;
 
   // Faturamento previsto = o que a California prevê receber do cliente.
   // É contra ele que as parcelas de recebimento fecham — e não contra o
@@ -258,7 +268,10 @@ export default async function AbrirJobNoFinanceiroPage({
   const rentabilidade = {
     valorJob: imposto?.valorJob ?? Number(job.valor_total ?? 0),
     deducoes: imposto?.deducoesDoResultado ?? 0,
-    custoPlanejado: Math.round(job.planilha_planejado * 100) / 100,
+    // Mídia Off: as notas de todos os veículos (decisão 147).
+    custoPlanejado: midiaDoJob
+      ? Math.round(midiaDoJob.f.custoPlanejado * 100) / 100
+      : Math.round(job.planilha_planejado * 100) / 100,
   };
 
   const baseCompetencia = job.data_inicio_prevista ?? hojeIso;
@@ -454,6 +467,7 @@ export default async function AbrirJobNoFinanceiroPage({
             // O financeiro não faz errata (decisão 159).
             papelNaErrata={null}
             errataPronta={null}
+            midia={detalhe.midia}
             edicaoDoFinanceiro={
               pode(session.activeRole, "jobs.editar_orcado_financeiro")
                 ? { travadoPor: null, mesesComNota: [], recebimento: [], envios: [] }

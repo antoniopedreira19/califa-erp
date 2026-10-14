@@ -2381,7 +2381,10 @@ export function AberturaForm({
                         ? "Linhas em save e itens de calha BV — a California não desembolsa neste job."
                         : semDesembolso
                           ? "Nenhum item de calha PP — a California não desembolsa neste job."
-                          : "Planejado dos itens que a California paga (tipos que geram PP)"}
+                          : job.modelo_planilha_orcamento === "midia_off"
+                            ? // Decisão 167: o planejado da linha de mídia é o negociado.
+                              "Notas dos veículos em A · Repasse, que a California paga — no A · Direto o veículo cobra do cliente"
+                            : "Planejado dos itens que a California paga (tipos que geram PP)"}
                   </p>
                 </div>
                 <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
@@ -2402,7 +2405,9 @@ export function AberturaForm({
                       ? "Sem faturamento pela California — não há nota, nem imposto a recolher."
                       : aliquotaIntTaxes !== null
                         ? `Imposto de ${formatPercentual(aliquotaImposto)} + taxas internacionais de ${formatPercentual(aliquotaIntTaxes)} da versão aprovada`
-                        : `Alíquota de ${formatPercentual(aliquotaImposto)} da versão aprovada, sobre o que a California fatura`}
+                        : job.modelo_planilha_orcamento === "midia_off"
+                          ? `Alíquota de ${formatPercentual(aliquotaImposto)} da versão aprovada, sobre os honorários`
+                          : `Alíquota de ${formatPercentual(aliquotaImposto)} da versão aprovada, sobre o que a California fatura`}
                   </p>
                 </div>
               </div>

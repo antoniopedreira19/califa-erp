@@ -4676,6 +4676,16 @@ código publicado logo depois (`3305751`).
   negativo, ou outra com R$ zerado, barra. `problemaDasParcelas(parcelas,
   valorPP)` ganhou o segundo argumento.
 
+## ⚠️ Nota de 2026-10-14 — sair do % da parcela não mexe mais no R$ (decisão 138, §8)
+
+- Clicar no % de uma parcela e sair sem digitar refazia o R$ pelo %
+  arredondado: R$ 6.000 em 3 virava 1.999,80 / 2.000,00 / 2.000,20, e um
+  R$ 2.500,00 digitado (41,67%) virava 2.500,20, com a última absorvendo a
+  diferença. A soma seguia fechando, então nada ficava vermelho.
+- Agora o R$ só se refaz quando o número do % muda (`mudarPercentual` em
+  `realizado/parcelas-da-pp.tsx`). O "33,5" continua virando "33,50" ao
+  sair. Conferido no TES-1001/26 sem gerar PP.
+
 ## ⚠️ Nota de 2026-10-03 — "Meus" da lista de jobs inclui o produtor (decisão 036)
 
 - O "Meus" de `/jobs` era só `jobs.responsavel_id` (o GP), e o produtor
@@ -5160,6 +5170,9 @@ código publicado logo depois (`3305751`).
 - **Resíduo de teste:** PP-00158 e PP-00159 canceladas no TES-1025/26; o
   freela "ZZ Freela Teste 164" ficou inativo (a PP cancelada aponta para
   ele); a PP a emitir de produção do teste foi excluída.
+- ⚠️ **Revisto pela decisão 171 (2026-10-14):** a verba de produção também
+  tem titular (lista, terceiro e prestação iguais às outras), e a PP do
+  colaborador traz a conta e o PIX do RH. Ver a nota de 2026-10-14.
 
 ## ⚠️ Nota de 2026-10-09 (7) — PP travada para fornecedor sem regime ou sem CNAE (decisão 166)
 
@@ -5218,3 +5231,173 @@ código publicado logo depois (`3305751`).
   (`.inline`) edita enquanto o cadastro estiver pendente.
 - A trava da PP continua valendo também para a verba de alimentação ou de
   transporte paga a um terceiro — confirmado pelo Tiago.
+
+## ⚠️ Nota de 2026-10-13 — Job da Mídia Off: abre, fatura por mês e encerra com o último envio (decisão 167)
+
+- **O job de Mídia Off existe** (entrega 2 de 4). O envio para abertura
+  segue o do Fee e do Always On: período travado, Data Evento "Não se
+  aplica", uma data de recebimento por mês com faturamento (até 24 meses).
+  O job grava `valor_total`, `faturamento_previsto` e os `_abertura` pela
+  conta da mídia, e a cópia (`jobs_itens_orcado`) leva o veículo e a
+  veiculação da linha (migration `20261013500001`).
+- **Planilha Interna = a planilha da mídia, só leitura** (`PlanilhaMidiaDoJob`,
+  modo `doJob` da `PlanilhaMidiaOff`), com a régua "Meses do job". A
+  `JobRealizadoSection` devolve essa planilha cedo quando `midia` não é
+  nulo: errata, "Editar orçado", calha de PP e exportação não aparecem.
+- **Faturamento por mês, depois da veiculação do mês.** Situação nova
+  `em_veiculacao` ("Em veiculação até dd/mm"): o mês libera no dia seguinte
+  à última veiculação das linhas dele (maior dia com inserção ou maior fim de
+  período). `enviarJobParaFaturamento` confere de novo
+  (`conferirEnvioDoMesDaMidia`).
+- **O envio do último mês encerra o job.** O botão vira "Enviar {mês} e
+  encerrar o job"; só passa sem pendência de encerramento, e depois do envio
+  a action chama `encerrarJob` (com tudo enviado, o banco grava
+  `finalizado`). A trilha "Encerramento" da Mídia Off não tem botão, só
+  pendências — exceto se o encerramento falhar depois do envio: com todos os
+  meses enviados, o botão volta.
+- **Linha A · Repasse sem PP é pendência** ("N linhas A · Repasse sem a PP
+  do repasse"): até a entrega 3 (PP do repasse), job com Repasse não envia
+  o último mês. Job só com A · Direto fecha o ciclo.
+- **Travas no servidor** (`travaDoJobDeMidia`): errata, errata pronta, PP
+  (reserva e PP a emitir) e "Editar orçado" recusam o job de mídia;
+  `/api/jobs/[jobId]/export` responde 400.
+- **Testado** no TES-1026/26 (mídia com Repasse, nov–dez/2026) e no
+  TES-1027/26 (só A · Direto, ago–set/2026: enviou agosto, depois "Enviar
+  setembro e encerrar o job" → `finalizado`).
+- **Realizado da mídia** (Tiago, 13/10/2026): A · Direto = a nota do
+  veículo; A · Repasse = as PPs do repasse (`realizadoDaLinhaMidia`). Vale
+  no cabeçalho do job e na visão agregada (`carregar-planilhas.ts`, onde o
+  planejado da linha também é a nota).
+- **Relatório de Rentabilidade:** o job de mídia sem A · Repasse mostra o
+  resultado mesmo sem custo (decisão 167 §11). O BV no A · Direto da mídia
+  fica para a entrega 3 (ver a 167, "Para conferir depois").
+
+## ⚠️ Nota de 2026-10-13 — Cancelamento de job aberto (decisão 169)
+
+- **Menu "⋯" no cabeçalho do job aberto** (ao lado de "Editar"), para o GP e
+  o administrador: "Solicitar cancelamento" abre o pop-up do pedido
+  (`cancelamento/solicitar-cancelamento-dialog.tsx`), com o motivo e, se
+  houver, as PPs vivas para cancelar antes ("Cancelar as N PPs", padrão da
+  143). PP aprovada ou paga, envio para faturamento, lançamento, recebimento
+  antes da NF, desembolso e save travam o pedido
+  (`trava_do_cancelamento_do_job`).
+- **Pedido pendente:** selo "Cancelamento solicitado" (calculado por
+  `jobStatusExibido`, o status continua `aberto`), faixa âmbar com "Retirar
+  pedido" e a barra de faturamento e encerramento reduzida a uma linha. PP,
+  errata, save, envio para faturamento e encerramento ficam escondidos na
+  tela e barrados no banco (`guarda_job_com_cancelamento_pendente`).
+- **Recusado:** faixa vermelha com a justificativa do financeiro e
+  "Dispensar aviso" (GP, produtor e administrador).
+- **Aprovado:** o job sai do módulo (163). A lista de Jobs ganhou o filtro de
+  status "Cancelamento solicitado".
+- Dados em `lib/data/cancelamentos.ts`; actions em
+  `app/(app)/jobs/[jobId]/actions-cancelamento.ts`.
+
+## ⚠️ Nota de 2026-10-14 — a PP gerada volta a se editar, no lugar (decisão 173)
+
+- **Revê a 153.** No painel do item, a PP em "Aguardando envio" tem o lápis
+  **Editar PP**. Regra do Tiago (14/10/2026): **antes do envio, só editar;
+  depois do envio, só o "Ver formulário"** — nunca os dois. Quem só lê o job
+  (sem o lápis) fica com a ficha em leitura.
+- **Formulário:** o `GerarPPDrawer` ganhou `ppGeradaEditando`; a PP gerada
+  entra pelo mesmo caminho da PP a emitir (`ppGeradaComoAEmitir`). Título
+  "Editar PP-…", aviso âmbar quando a PP está pronta para envio, e um botão só
+  ("Salvar alterações"), que abre a `RevisaoDialog` em modo `edicao` ("Salvar
+  as alterações da PP-…?", "Esta PP … (era R$ …)").
+- **Action `editarPPGerada`** (`actions-pp.ts`): as mesmas regras da geração
+  (janelas, prazo de envio — data gravada passa —, urgência, parcelas,
+  cadastro do fornecedor, CNPJ da PP, titular da verba, save, mídia). Refaz o
+  PDF antes de gravar, grava a PP só se ainda gerada, ajusta as parcelas no
+  lugar (nunca fica sem parcela), grava os anexos como o envio
+  (`conferirAnexosDaPP` + `gravarAnexosDoEnvio`), apaga a marca "Pronta para
+  envio" e carimba `editada_em`. Auditoria `pedido_compra.editada` com o antes
+  e o depois.
+- **Banco:** `pedidos_compra.editada_em/por` + gatilho `trg_pp_carimba_edicao`
+  (só PP gerada; quem e quando pela sessão; não se apaga) e o evento `editada`
+  na linha do tempo (`pp_registra_evento`). Migrations `20261013950001` e
+  `20261014950001` (a segunda só renumera: a decisão nasceu 170 e colidiu com
+  a "GP só quem pode ser GP").
+- **Textos:** a ficha da PP gerada aponta o lápis do painel; a revisão do
+  "Gerar PP" diz "A PP pode ser editada até o envio ao financeiro"; o aviso
+  de cancelar da ficha não diz mais "já está no financeiro" para a PP gerada
+  (defeito da 160).
+- **Testado** no TES-1014/26, logado como administrador, no servidor do
+  worktree: PP-00167 (linha "Frete teste 159") gerada a R$ 150, editada para
+  R$ 200 em 2 parcelas (09/11 e 08/12) com o anexo NF 9170. No banco: mesmo
+  código, PDF refeito no mesmo caminho (conferido o conteúdo: 2 parcelas de
+  R$ 100, total R$ 200), eventos emitida → editada → cancelada, realizado do
+  item 120 → 320 → 120, auditoria com o antes e o depois. A marca "Pronta" e
+  a trava de PP enviada foram conferidas numa transação desfeita, na PP-00088.
+- **Resíduo de teste:** PP-00167 cancelada no TES-1014/26, com o arquivo da
+  NF 9170 de teste.
+
+## ⚠️ Nota de 2026-10-14 — Verba de produção com titular e a conta do RH na PP do colaborador (decisão 171)
+
+- **Por quê:** a PP-00160 (verba de alimentação para uma colaboradora do
+  RH) saiu sem dados de pagamento, e a colaboradora tinha conta e PIX no RH
+  — que nem a produção nem o financeiro enxergam. O Tiago escolheu imprimir
+  a conta do RH no PDF e igualar a verba de produção às outras duas.
+- **Formulário** (`gerar-pp-drawer.tsx`): o "Responsável" saiu. As três
+  verbas usam "Titular da verba" (colaboradores do RH e freelas, ou a caixa
+  "Terceiro (fornecedor)"). A prop `responsaveis` do drawer saiu também.
+  A PP a emitir de produção salva antes abre sem titular.
+- **Servidor** (`actions-pp.ts`): toda verba nova grava titular; o schema
+  recusa `responsavel_verba_id` ("A verba de produção agora tem titular,
+  como as outras"). Na verba do colaborador, a geração lê de volta da PP a
+  foto que o banco tirou do RH (`fotoDoTitularDaPP`) e passa ao PDF
+  (`pagamentoDoTitular`). "Atualizar vencimento" refaz o PDF com a mesma
+  foto (`pagamentoDoTitularDaPP`, em `lib/data/foto-pagamento-da-pp.ts`).
+- **PDF** (`lib/pdf/pedido-compra.ts`): bloco "DADOS BANCÁRIOS DO TITULAR
+  DA VERBA PARA PAGAMENTO" quando há conta ou PIX; textos de titular nas
+  três verbas. A verba sem titular (`verba_titular_tipo` nulo) é a de
+  produção antiga e sai como foi gerada ("Responsável").
+- **Telas:** `rotuloDeQuemRecebeAVerba(pp)` e `verbaDeResponsavel(pp)` em
+  `lib/types.ts` decidem pelo registro, não pelo tipo: a verba antiga
+  mostra "Responsável". `verbaTemTitular` saiu.
+- **Prestação de contas** (`carregar-detalhe.ts` e
+  `enviar_prestacao_verba`): administrador, GP, produtor ou freela do job
+  nas três; o responsável da verba antiga segue prestando a dela.
+- **Banco** (`20261014100001`): CHECKs aceitam a produção com titular;
+  `verba_titular_cpf`; gatilho `trg_pp_foto_do_colaborador`, que copia a
+  ficha do RH na geração (e de novo, na PP gerada, se o titular mudar) e
+  não deixa a tela apagar a foto.
+- **Com a edição da PP gerada (173):** `editarPPGerada` segue a mesma
+  regra (sem responsável; titular no PDF) e, na verba do colaborador,
+  refaz o documento depois do UPDATE com a foto lida de volta
+  (`fotoDoTitularDaPP`) — o gatilho mantém a foto se o titular é o mesmo e
+  tira outra se mudou.
+- **PDFs refeitos:** PP-00160 e PP-00165 (DEE-1001/26), com
+  `scripts/refazer-pdf-verba-colaborador-171.ts`; os de antes ficaram em
+  `~/Documents/California/backups/verba-colaborador-171-2026-10-14/`.
+- **Conferido no navegador (embutido, servidor do worktree, como
+  administrador, no TES-1023/26):** PP-00168, verba de produção para o
+  colaborador de teste "Teste PJ Gerar Contrato" — formulário, caixa do
+  terceiro, revisão, foto no banco, PDF e "Ver PP"; a PP-00127 (antiga)
+  segue "Responsável". PP-00168 cancelada depois.
+- **Não conferido na tela:** a prestação por produtor ou freela numa verba
+  de produção (precisa de verba paga; a regra está na função aplicada).
+
+## ⚠️ Nota de 2026-10-14 — Quarta de exceções na PP urgente e datas das parcelas que se adiam (decisão 172)
+
+- **Prazo:** com "Pagamento urgente" ligado, o calendário do prazo acende também
+  as quartas, até a sexta anterior (ponto vermelho + legenda "Quarta de
+  exceções"); embaixo, "Quarta de exceções · envio até dd/mm/aaaa". Desligar a
+  urgência com uma quarta devolve o prazo à primeira janela, com aviso âmbar.
+  Regra em `lib/calculos/janelas-pagamento.ts` (`tipoDoPrazo`,
+  `dataLimiteDaQuarta`); `dataLimiteDeEnvio` passou a responder pela quarta.
+- **Parcelas:** a 2ª pula a janela logo depois da anterior
+  (`primeiraDataDaProximaParcela`) e, da 2ª em diante, a data abre um
+  calendário que só adia (janelas a partir da padrão), com ↺ para voltar.
+  `ParcelaLocal.ajustada` é obrigatório; `trocarDatas` saiu, entraram
+  `acomodarParcelas` e `mudarDataDaParcela` (`parcelas-da-pp.tsx`).
+- **Servidor:** `validarVencimentosNasJanelas(datas, gravadas, feriados,
+  urgente)` em todas as portas (gerar, PP a emitir, edição da 173, atualizar);
+  o envio recusa quarta sem urgência; o "Atualizar vencimento" aceita quarta
+  na PP urgente e acomoda as parcelas (`acomodarDatasDasParcelas`).
+- **Painel:** `PPDoItem.urgente` (obrigatório) leva a urgência ao
+  `AtualizarVencimento`, que na PP urgente é um calendário; sem urgência,
+  segue a lista de 6 janelas.
+- **Financeiro:** selo "✓ quarta de exceções" (vermelho) no Vencimento
+  original do dossiê, só na PP urgente.
+- **Testado** no TES-1001/26 · Item 5 (detalhes na decisão 172). Resíduo:
+  PP-00170 (verba de produção, "GP Teste"), rejeitada e cancelada.

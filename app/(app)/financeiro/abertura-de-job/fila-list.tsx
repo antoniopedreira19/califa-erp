@@ -18,6 +18,11 @@ import { AprovarSaveDialog } from "./aprovar-save-dialog";
 import { RecusarSaveDialog } from "./recusar-save-dialog";
 import { IconeSave, rotuloDoSave } from "./icone-save";
 import {
+  LinhaCancelamentoNaFila,
+  RevisarCancelamentoDialog,
+  type CancelamentoDaFila,
+} from "./cancelamento-na-fila";
+import {
   BarraDosFiltrosDeColuna,
   celulaTexto,
   celulaValor,
@@ -111,10 +116,18 @@ const COLUNAS: ColunaFiltravel<LinhaDaFila>[] = [
 export function FilaAbertura({
   linhas,
   saves,
+  cancelamentos,
+  revisarInicial,
 }: {
   linhas: FilaLinha[];
   /** A faixa Saves: os pedidos de save que aguardam o financeiro. */
   saves: SaveFilaLinha[];
+  /** A faixa Cancelamentos (decisão 169): os pedidos da produção para
+   *  cancelar job já aberto. Ficam no topo — o job está parado esperando. */
+  cancelamentos: CancelamentoDaFila[];
+  /** `?revisar=<job>` da URL: quem volta do "Visualizar job" do pedido
+   *  encontra o mesmo pop-up aberto. */
+  revisarInicial: string | null;
 }) {
   const [busca, setBusca] = React.useState("");
   const [conferindoId, setConferindoId] = React.useState<string | null>(null);
@@ -125,6 +138,13 @@ export function FilaAbertura({
   // "Voltar" traz a aprovação de volta.
   const [aprovandoSaveId, setAprovandoSaveId] = React.useState<string | null>(null);
   const [recusandoSaveId, setRecusandoSaveId] = React.useState<string | null>(null);
+  // O pedido de cancelamento em revisão, pelo id do JOB (é o que a URL leva).
+  const [revisandoCancelamentoJob, setRevisandoCancelamentoJob] = React.useState<string | null>(
+    () =>
+      revisarInicial && cancelamentos.some((c) => c.jobId === revisarInicial)
+        ? revisarInicial
+        : null,
+  );
 
   const q = busca.trim().toLowerCase();
   const jobsDaBusca = React.useMemo(() => {
@@ -206,10 +226,14 @@ export function FilaAbertura({
 
   // Vazio de verdade é a fila vazia ou a BUSCA sem resultado. Se foram os
   // filtros dos títulos, a tabela fica (com os títulos, para desfazer).
-  const vazio = doTopo.length === 0;
+  // A faixa Cancelamentos não passa pela busca nem pelos filtros dos
+  // títulos: são poucos pedidos, e cada um para um job inteiro.
+  const vazio = doTopo.length === 0 && cancelamentos.length === 0;
   const comFaixas =
-    [savesVisiveis.length, erratas.length, novas.length].filter((n) => n > 0)
+    [cancelamentos.length, savesVisiveis.length, erratas.length, novas.length].filter((n) => n > 0)
       .length >= 2;
+  const revisandoCancelamento =
+    cancelamentos.find((c) => c.jobId === revisandoCancelamentoJob) ?? null;
 
   /** Uma linha da fila. A faixa a que ela pertence decide o clique. */
   function Linha({ l }: { l: FilaLinha }) {
@@ -415,6 +439,9 @@ export function FilaAbertura({
               erratas.length > 0
                 ? `${erratas.length} ${erratas.length === 1 ? "revisão de errata" : "revisões de errata"}`
                 : null,
+              cancelamentos.length > 0
+                ? `${cancelamentos.length} ${cancelamentos.length === 1 ? "cancelamento a decidir" : "cancelamentos a decidir"}`
+                : null,
               savesVisiveis.length > 0
                 ? `${savesVisiveis.length} ${savesVisiveis.length === 1 ? "save a aprovar" : "saves a aprovar"}`
                 : null,
@@ -453,6 +480,16 @@ export function FilaAbertura({
             <tbody>
               {/* As faixas só aparecem quando há DUAS coortes ou mais. Com
                   uma só, a tabela é a de sempre e o rótulo seria ruído. */}
+              {comFaixas && cancelamentos.length > 0 && (
+                <Faixa rotulo="Cancelamentos" quantos={cancelamentos.length} />
+              )}
+              {cancelamentos.map((c) => (
+                <LinhaCancelamentoNaFila
+                  key={c.pedido.id}
+                  c={c}
+                  onAbrir={() => setRevisandoCancelamentoJob(c.jobId)}
+                />
+              ))}
               {comFaixas && savesVisiveis.length > 0 && (
                 <Faixa rotulo="Saves" quantos={savesVisiveis.length} />
               )}
@@ -471,7 +508,7 @@ export function FilaAbertura({
               {novas.map((l) => (
                 <Linha key={l.id} l={l} />
               ))}
-              {colunas.visiveis.length === 0 && (
+              {colunas.visiveis.length === 0 && cancelamentos.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                     Nenhuma linha com esse filtro.
@@ -508,6 +545,11 @@ export function FilaAbertura({
           onReprovar={() => setReprovandoId(conferindoId)}
         />
       )}
+
+      <RevisarCancelamentoDialog
+        c={revisandoCancelamento}
+        onOpenChange={(aberto) => !aberto && setRevisandoCancelamentoJob(null)}
+      />
 
       <ResumoErrataDialog
         job={revisando}
