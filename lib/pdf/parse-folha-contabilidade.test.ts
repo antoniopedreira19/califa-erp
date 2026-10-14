@@ -82,12 +82,12 @@ test("soma de todas as seções bate exatamente com o totalizador do rodapé", (
   assert.equal(soma, r.totalizadores.total_empresa);
 });
 
-test("texto sem seção Empregados dispara erro claro", () => {
+test("texto sem nenhuma linha de colaborador dispara erro claro", () => {
   const textoTruncado =
     "RELAÇÃO GERAL DOS LÍQUIDOS\nCNPJ: 19.437.976/0001-54\nCompetência: 09/2026\n";
   assert.throws(
     () => parseFolhaContabilidadeTexto(textoTruncado),
-    /seção .*Empregados.* não encontrada/i,
+    /nenhuma linha.*extra[íi]da/i,
   );
 });
 
