@@ -4995,6 +4995,56 @@ export interface DreDespesaPessoalAjustadaMensal {
   valor_dre_pessoal_ajuste: number;
 }
 
+/** Fase 3 — retorno da RPC aplicar_fechamento_beneficios. */
+export interface AplicarBeneficiosResult {
+  fechamentoId: string;
+  totalEmpresa: number;
+  totalColaborador: number;
+  qtdVinculos: number;
+  folhaLinhasAfetadas: number;
+  avulsas: Array<{ id: string; operadora: string; valor: number }>;
+}
+
+/** Fase 3 — linha da listagem de fechamentos em /rh/beneficios tab Fechamentos. */
+export interface FechamentoRow extends BeneficioFechamentoMensal {
+  fechado_por_nome: string | null;
+  total_empresa: number;
+  total_colaborador: number;
+  valor_integral: number;
+  qtd_vinculos: number;
+}
+
+/** Fase 3 — payload da página de detalhe /rh/beneficios/fechamentos/[id]. */
+export interface FechamentoDetalhe {
+  cabecalho: FechamentoRow;
+  por_operadora: Array<{
+    operadora: string;
+    qtd_vinculos: number;
+    valor_integral: number;
+    valor_empresa: number;
+    valor_colaborador: number;
+    avulsa_id: string | null;
+    avulsa_codigo: string | null;
+    avulsa_vencimento: string | null;
+    avulsa_pago_em: string | null;
+  }>;
+  linhas: BeneficioFechamentoLinha[];
+}
+
+/** Fase 3 — preview mostrado no confirm() do botão Aplicar descontos. */
+export interface PreviewAplicacao {
+  qtdVinculos: number;
+  totalEmpresa: number;
+  totalColaborador: number;
+  totalIntegral: number;
+  porOperadora: Array<{
+    operadora: string;
+    valorIntegral: number;
+    qtdVinculos: number;
+    dataVencimento: string;
+  }>;
+}
+
 // ---------- Leitura de NF por IA (spec 2026-10-08-ler-nf-por-ia) ----------
 
 export interface NfExtracaoCache {
