@@ -214,93 +214,64 @@ export function ImportarFolhaModal(props: ImportarFolhaModalProps) {
 
 function PreviewTabela(props: { preview: ResumoImportacao }) {
   const p = props.preview;
+  const brlFmt = (centavos: number) => brl.format(centavos / 100);
+  const totalGeral = p.preview.reduce((acc, l) => acc + l.valor, 0);
+  const totalEncontrados = p.preview
+    .filter((l) => l.acao !== "ignorar")
+    .reduce((acc, l) => acc + l.valor, 0);
+  const linhasEncontradas = p.linhas_criadas + p.linhas_atualizadas;
+  const linhasIgnoradas = p.linhas_ignoradas;
+
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
-        <StatBox
-          rotulo="Empregados"
-          valor={p.totalizadores_pdf.empregados?.linhas ?? 0}
-          sub={`R$ ${p.totalizadores_pdf.empregados?.total ?? "0,00"}`}
-        />
-        <StatBox
-          rotulo="Estagiários"
-          valor={p.totalizadores_pdf.estagiarios?.linhas ?? 0}
-          sub={`R$ ${p.totalizadores_pdf.estagiarios?.total ?? "0,00"}`}
-        />
-        <StatBox
-          rotulo="Contribuintes"
-          valor={p.totalizadores_pdf.contribuintes?.linhas ?? 0}
-          sub={`R$ ${p.totalizadores_pdf.contribuintes?.total ?? "0,00"}`}
-        />
-        <StatBox
-          rotulo="Total do PDF"
-          valor={p.linhas_total}
-          sub={`R$ ${p.totalizadores_pdf.total_empresa ?? "0,00"}`}
-          destaque
-        />
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs">
-        <SumAcao
-          cor="emerald"
-          rotulo="A criar"
-          valor={p.linhas_criadas}
-        />
-        <SumAcao
-          cor="amber"
-          rotulo="A atualizar"
-          valor={p.linhas_atualizadas}
-        />
-        <SumAcao
+      {/* Resumo em 1 linha, direto e visual */}
+      <div className="grid grid-cols-3 gap-2 text-sm">
+        <ResumoBox
           cor="slate"
+          rotulo="Total no PDF"
+          valor={`${p.linhas_total} linha${p.linhas_total === 1 ? "" : "s"}`}
+          sub={brlFmt(totalGeral)}
+        />
+        <ResumoBox
+          cor="emerald"
+          rotulo="A importar"
+          valor={`${linhasEncontradas} encontrad${linhasEncontradas === 1 ? "o" : "os"}`}
+          sub={brlFmt(totalEncontrados)}
+        />
+        <ResumoBox
+          cor={linhasIgnoradas > 0 ? "amber" : "slate"}
           rotulo="A ignorar"
-          valor={p.linhas_ignoradas}
+          valor={`${linhasIgnoradas} sem match`}
+          sub={linhasIgnoradas > 0 ? "não cadastrados" : "—"}
         />
       </div>
 
-      {p.warnings.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <p className="font-semibold mb-1">
-            {p.warnings.length} aviso{p.warnings.length === 1 ? "" : "s"}:
-          </p>
-          <ul className="space-y-0.5 list-disc list-inside">
-            {p.warnings.map((w, i) => (
-              <li key={i}>{w.mensagem}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
-        <table className="w-full text-xs">
-          <thead className="bg-muted sticky top-0">
+      {/* Tabela: Nome | CPF | Valor | Status */}
+      <div className="max-h-96 overflow-y-auto rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted sticky top-0 z-10">
             <tr>
-              <th className="text-left px-2 py-1.5 font-medium">Seção</th>
-              <th className="text-left px-2 py-1.5 font-medium">Nome</th>
-              <th className="text-left px-2 py-1.5 font-medium">CPF</th>
-              <th className="text-right px-2 py-1.5 font-medium">Valor</th>
-              <th className="text-left px-2 py-1.5 font-medium">Ação</th>
+              <th className="text-left px-3 py-2 font-medium">Nome (PDF)</th>
+              <th className="text-left px-3 py-2 font-medium">CPF</th>
+              <th className="text-right px-3 py-2 font-medium">Valor líquido</th>
+              <th className="text-left px-3 py-2 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
             {p.preview.map((l, i) => (
               <tr
                 key={`${l.cpf}-${i}`}
-                className={`border-t border-border ${l.acao === "ignorar" ? "opacity-60" : ""}`}
+                className="border-t border-border"
               >
-                <td className="px-2 py-1">{SECAO_LABEL[l.secao]}</td>
-                <td className="px-2 py-1 truncate max-w-[200px]">{l.nome}</td>
-                <td className="px-2 py-1 font-mono text-[11px]">{l.cpf}</td>
-                <td className="px-2 py-1 text-right tabular-nums">
-                  {brl.format(l.valor / 100)}
+                <td className="px-3 py-2 truncate max-w-[260px]">{l.nome}</td>
+                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                  {formatarCpf(l.cpf)}
                 </td>
-                <td className="px-2 py-1">
-                  <AcaoBadge acao={l.acao} />
-                  {l.motivo_ignorar && (
-                    <span className="ml-1 text-[10px] text-muted-foreground">
-                      — {l.motivo_ignorar}
-                    </span>
-                  )}
+                <td className="px-3 py-2 text-right tabular-nums font-medium">
+                  {brlFmt(l.valor)}
+                </td>
+                <td className="px-3 py-2">
+                  <StatusBadge acao={l.acao} motivo={l.motivo_ignorar} />
                 </td>
               </tr>
             ))}
@@ -311,66 +282,60 @@ function PreviewTabela(props: { preview: ResumoImportacao }) {
   );
 }
 
-function StatBox(props: {
-  rotulo: string;
-  valor: number | string;
-  sub: string;
-  destaque?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-lg border p-2 ${
-        props.destaque
-          ? "border-california-red/40 bg-california-red/5"
-          : "border-border bg-background"
-      }`}
-    >
-      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-        {props.rotulo}
-      </p>
-      <p className="mt-0.5 text-sm font-bold">{props.valor}</p>
-      <p className="text-[11px] text-muted-foreground tabular-nums">{props.sub}</p>
-    </div>
-  );
+function formatarCpf(cpf: string): string {
+  // "01505451264" → "015.054.512-64"
+  const d = cpf.replace(/\D/g, "");
+  if (d.length !== 11) return cpf;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-function SumAcao(props: {
-  cor: "emerald" | "amber" | "slate";
+function ResumoBox(props: {
+  cor: "slate" | "emerald" | "amber";
   rotulo: string;
-  valor: number;
+  valor: string;
+  sub: string;
 }) {
   const classes =
     props.cor === "emerald"
-      ? "text-emerald-700"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
       : props.cor === "amber"
-        ? "text-amber-700"
-        : "text-slate-600";
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-border bg-muted/30 text-foreground";
   return (
-    <div className="text-center">
-      <p className="text-[10px] uppercase text-muted-foreground">
+    <div className={`rounded-lg border p-3 ${classes}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
         {props.rotulo}
       </p>
-      <p className={`text-lg font-bold ${classes}`}>{props.valor}</p>
+      <p className="mt-1 text-sm font-semibold">{props.valor}</p>
+      <p className="text-xs opacity-80 tabular-nums">{props.sub}</p>
     </div>
   );
 }
 
-function AcaoBadge(props: { acao: ResumoImportacaoLinha["acao"] }) {
-  const map = {
-    criar: "bg-emerald-100 text-emerald-800",
-    atualizar: "bg-amber-100 text-amber-800",
-    ignorar: "bg-slate-200 text-slate-700",
-  } as const;
-  const label = {
-    criar: "criar",
-    atualizar: "atualizar",
-    ignorar: "ignorar",
-  } as const;
+function StatusBadge(props: {
+  acao: ResumoImportacaoLinha["acao"];
+  motivo?: string;
+}) {
+  if (props.acao === "ignorar") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+        <AlertTriangle className="h-3 w-3" />
+        Não encontrado
+      </span>
+    );
+  }
+  if (props.acao === "criar") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
+        <CheckCircle2 className="h-3 w-3" />
+        Encontrado — vai criar linha
+      </span>
+    );
+  }
   return (
-    <span
-      className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${map[props.acao]}`}
-    >
-      {label[props.acao]}
+    <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-800">
+      <CheckCircle2 className="h-3 w-3" />
+      Encontrado — vai atualizar
     </span>
   );
 }
