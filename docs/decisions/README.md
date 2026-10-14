@@ -191,7 +191,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 169 | [Cancelamento de job aberto: a produção pede, o financeiro decide na Abertura de Job](169-cancelamento-de-job-aberto.md) | 2026-10-13 |
 | 170 | [GP só quem pode ser GP: lista do projeto, lista do orçamento e trava no envio para abertura](170-gp-so-quem-pode-ser-gp.md) | 2026-10-13 |
 | 171 | [A verba de produção igual às outras (titular, lista, terceiro e prestação), e a conta do RH na PP do colaborador](171-verba-de-producao-com-titular-e-conta-do-rh.md) | 2026-10-14 |
-| 172 | *Reservada* — quarta de exceções na PP urgente e datas das parcelas que se adiam (protótipo aprovado; em implementação) | 2026-10-14 |
+| 172 | [Quarta de exceções na PP urgente, e as datas das parcelas que se adiam (revê a 077 e a 157)](172-quarta-de-excecoes-na-pp-urgente.md) | 2026-10-14 |
 | 173 | [A PP gerada volta a se editar, no lugar (revê a 153)](173-pp-gerada-volta-a-se-editar.md) | 2026-10-13 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em

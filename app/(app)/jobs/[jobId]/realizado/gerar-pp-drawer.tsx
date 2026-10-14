@@ -70,13 +70,16 @@ import {
   parcelasDaPPGravada,
   problemaDasParcelas,
   redividirParcelas,
-  trocarDatas,
+  acomodarParcelas,
+  mudarDataDaParcela,
   type ParcelaLocal,
 } from "./parcelas-da-pp";
 import {
   ehJanelaDePagamento,
+  ehQuarta,
   hojeEmSaoPauloIso,
   isoParaBr,
+  primeiraDataPossivelDoPrazo,
   primeiraJanelaComEnvioAberto,
   vencimentoAceitaEnvio,
   vencimentosNasJanelas,
@@ -123,8 +126,11 @@ import { RevisaoDialog, textoAguardaAbertura } from "./pp-a-emitir-ui";
 import {
   AvisoPrazoDeEnvioPerdido,
   AvisoPrazoForaDaJanela,
+  AvisoQuartaSemUrgencia,
+  LegendaDaQuarta,
   UrgenciaPPField,
   diaForaDaJanela,
+  quartaMarcada,
 } from "./prazo-e-urgencia-pp";
 import { EnvioAte, useFeriadosNacionais } from "./prazo-de-envio-pp";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
@@ -557,6 +563,10 @@ export function GerarPPDrawer({
 
   // Chave para forcar remontagem do DatePicker ao reabrir o drawer
   const [drawerKey, setDrawerKey] = React.useState(0);
+  // Decisão 172: desligar a urgência tira a quarta do prazo. O calendário
+  // (não controlado) remonta com a janela nova, e o aviso diz o que mudou.
+  const [prazoVez, setPrazoVez] = React.useState(0);
+  const [avisoQuarta, setAvisoQuarta] = React.useState<{ de: string; para: string } | null>(null);
 
   // Reset ao abrir — e SÓ ao abrir. A chave diz qual sessão do
   // formulário está de pé (item + gerar/editar); enquanto ela não muda,
@@ -590,6 +600,7 @@ export function GerarPPDrawer({
     setAvisoDosAnexos(null);
     setDrawerKey((k) => k + 1);
     setFaltaJustificativa(false);
+    setAvisoQuarta(null);
 
     // A PP gerada em edição (decisão 173) abre pelo mesmo caminho da PP a
     // emitir, no formato dela.
@@ -744,10 +755,9 @@ export function GerarPPDrawer({
   const numeroDeParcelas = Math.max(parcelas.length, 1);
 
   /**
-   * Trocar o número de parcelas refaz a escada: datas derivadas da janela
-   * do 1º vencimento, mês a mês (decisão 077, pergunta 5a), e divisão
-   * igual. As datas não se editam uma a uma — o que move a escada é o
-   * prazo.
+   * Trocar o número de parcelas refaz a divisão igual. As datas saem da
+   * regra da decisão 172 — cada parcela pula ao menos uma janela depois da
+   * anterior —, e as que já tinham sido adiadas à mão ficam onde estão.
    */
   function mudarNumeroDeParcelas(bruto: number) {
     const n = Math.max(1, Math.min(MAX_PARCELAS, Math.floor(bruto) || 1));
@@ -757,15 +767,49 @@ export function GerarPPDrawer({
     }
     // Mesmo número: nada muda, e os valores já ajustados ficam.
     if (n === parcelas.length) return;
-    setParcelas(montarParcelas(vencimentosNasJanelas(prazoPagamento, n), valorPP));
+    const novas = montarParcelas(vencimentosNasJanelas(prazoPagamento, n), valorPP).map((p, i) =>
+      parcelas[i]?.ajustada
+        ? { ...p, data_vencimento: parcelas[i].data_vencimento, ajustada: true }
+        : p,
+    );
+    setParcelas(acomodarParcelas(prazoPagamento, novas));
   }
 
   function mudarPrazo(iso: string) {
     setPrazoPagamento(iso);
+    setAvisoQuarta(null);
     if (parcelas.length > 0) {
-      // Mover a 1ª data reconstrói a escada: as seguintes acompanham. A
-      // divisão fica (decisão 138) — antes ela voltava a ser igual.
-      setParcelas((prev) => trocarDatas(prev, vencimentosNasJanelas(iso, prev.length)));
+      // Mover a 1ª data reconstrói a escada: as seguintes acompanham, menos
+      // a adiada à mão que ainda couber (decisão 172). A divisão fica
+      // (decisão 138) — antes ela voltava a ser igual.
+      setParcelas((prev) => acomodarParcelas(iso, prev));
+    }
+  }
+
+  /** Adiar uma parcela, ou devolvê-la à data padrão com `null` (172). */
+  function mudarDataDeUmaParcela(indice: number, iso: string | null) {
+    setParcelas((prev) => mudarDataDaParcela(prazoPagamento, prev, indice, iso));
+  }
+
+  /**
+   * Ligar ou desligar o pagamento urgente. Desligado com uma quarta de
+   * exceções no prazo, o prazo volta para a primeira janela aberta, com o
+   * aviso (decisão 172) — a quarta só vale com urgência. A data gravada que
+   * não muda fica: quem decide se ela ainda vale é o servidor.
+   */
+  function mudarUrgencia(ligado: boolean) {
+    setUrgente(ligado);
+    if (!ligado) setFaltaJustificativa(false);
+    if (ligado) {
+      setAvisoQuarta(null);
+      return;
+    }
+    if (prazoPagamento && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento)) {
+      const de = prazoPagamento;
+      const para = primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados);
+      mudarPrazo(para);
+      setAvisoQuarta({ de, para });
+      setPrazoVez((v) => v + 1);
     }
   }
 
@@ -935,20 +979,33 @@ export function GerarPPDrawer({
       );
       return false;
     }
-    // O calendário já só acende janelas; isto cobre a data digitada por
-    // outro caminho. O servidor checa de novo.
+    // O calendário já só acende janelas (e, com urgência, as quartas de
+    // exceções); isto cobre a data digitada por outro caminho. O servidor
+    // checa de novo.
+    const quartaSemUrgencia = !urgente && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento);
+    if (quartaSemUrgencia) {
+      setErro(
+        `A quarta de exceções só vale para pagamento urgente. Ligue "Pagamento urgente" ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
+      );
+      return false;
+    }
     if (
       prazoPagamento !== prazoOriginal &&
-      (prazoPagamento < hoje || !ehJanelaDePagamento(prazoPagamento))
+      (prazoPagamento < hoje ||
+        (!ehJanelaDePagamento(prazoPagamento) && !(urgente && ehQuarta(prazoPagamento))))
     ) {
       setErro(
-        "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
+        urgente
+          ? "O prazo de pagamento precisa ser, a partir de hoje, uma janela (dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte) ou uma quarta de exceções."
+          : "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
       );
       return false;
     }
     if (prazoPagamento !== prazoOriginal && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
       setErro(
-        `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
+        ehJanelaDePagamento(prazoPagamento)
+          ? `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`
+          : `A quarta ${isoParaBr(prazoPagamento)} só podia ser escolhida até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`,
       );
       return false;
     }
@@ -1550,11 +1607,13 @@ export function GerarPPDrawer({
                 <div>
                   <label className="text-xs font-medium">Prazo de pagamento *</label>
                   <DatePicker
-                    key={`prazo-${drawerKey}`}
+                    key={`prazo-${drawerKey}-${prazoVez}`}
                     name="prazo_pagamento"
                     defaultValue={prazoPagamento}
                     onDateChange={(date) => mudarPrazo(dateToIso(date))}
-                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados)}
+                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados, urgente)}
+                    diasMarcados={quartaMarcada(hoje, feriados, urgente)}
+                    legenda={urgente ? <LegendaDaQuarta /> : undefined}
                   />
                   <EnvioAte vencimento={prazoPagamento} feriados={feriados} />
                 </div>
@@ -1642,8 +1701,14 @@ export function GerarPPDrawer({
                   )}
                 </div>
               </div>
-              <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} />
-              <AvisoPrazoDeEnvioPerdido prazo={prazoPagamento} hojeIso={hoje} feriados={feriados} />
+              <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} urgente={urgente} />
+              <AvisoPrazoDeEnvioPerdido
+                prazo={prazoPagamento}
+                hojeIso={hoje}
+                feriados={feriados}
+                urgente={urgente}
+              />
+              {avisoQuarta && <AvisoQuartaSemUrgencia de={avisoQuarta.de} para={avisoQuarta.para} />}
 
               {parcelas.length > 1 && (
                 <ParcelasDaPPField
@@ -1651,16 +1716,14 @@ export function GerarPPDrawer({
                   setParcelas={setParcelas}
                   valorPP={valorPP}
                   disabled={pending}
+                  onMudarData={mudarDataDeUmaParcela}
                 />
               )}
 
               <UrgenciaPPField
                 urgente={urgente}
                 justificativa={justificativa}
-                onUrgenteChange={(ligado) => {
-                  setUrgente(ligado);
-                  if (!ligado) setFaltaJustificativa(false);
-                }}
+                onUrgenteChange={mudarUrgencia}
                 onJustificativaChange={setJustificativa}
                 destacarFalta={faltaJustificativa}
                 disabled={pending}

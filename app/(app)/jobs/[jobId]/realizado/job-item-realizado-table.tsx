@@ -2436,6 +2436,7 @@ export function JobItemRealizadoTable({
                 estabelecimentoId: pp.estabelecimento_id ?? null,
                 prazoPagamento: pp.prazo_pagamento,
                 geradaEm: pp.created_at,
+                urgente: pp.urgente === true,
                 servico: pp.servico,
                 anexos: pp.anexos,
                 substitui: pp.substitui,

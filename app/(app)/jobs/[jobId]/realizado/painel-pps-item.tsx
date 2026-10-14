@@ -142,6 +142,9 @@ export interface PPDoItem {
    *  data-limite de envio. Obrigatórios pelo mesmo motivo do trio. */
   prazoPagamento: string;
   geradaEm: string;
+  /** Pagamento urgente: o "Atualizar vencimento" oferece também as quartas
+   *  de exceções (decisão 172). Obrigatório pelo mesmo motivo do trio. */
+  urgente: boolean;
   servico: string;
   /** Os anexos gravados: o envio abre com eles. */
   anexos: AnexoDaPPNaLista[];
@@ -586,6 +589,7 @@ export function PainelPPsItem({
                     estabelecimentoId: a.dados.estabelecimento_id ?? cnpjPadraoDaPP,
                     prazoPagamento: a.dados.prazo_pagamento,
                     geradaEm: a.created_at,
+                    urgente: a.dados.urgente === true,
                     servico: a.servico,
                     anexos: [],
                     substitui: null,
@@ -786,6 +790,7 @@ export function PainelPPsItem({
                           )}
                           {prazoPerdido && (
                             <AtualizarVencimento
+                              urgente={pp.urgente}
                               ppId={pp.id}
                               codigo={pp.codigo}
                               vencimento={pp.prazoPagamento}
