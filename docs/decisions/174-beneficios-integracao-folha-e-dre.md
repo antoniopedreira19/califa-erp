@@ -1,7 +1,8 @@
 # 174 — Benefícios: integração com folha mensal e tratamento no DRE
 
 **Data:** 2026-10-14
-**Status:** aceita; aguarda implementação (Fase 2 e Fase 3 do subsistema de Benefícios).
+**Status:** aceita; Fase 2 e Fase 3 implementadas (2026-10-14).
+**Revisão (2026-10-14):** §1.1 ajustado após feedback do usuário — "Aplicar descontos" não cria mais avulsas. O portão único RH→Financeiro é o "Enviar ao financeiro" (que também gera as avulsas de operadora). Motivo: RH é 100% rascunho até confirmar envio; evita avulsa aparecer em Contas a Pagar enquanto a Kika ainda está revisando. Ver §1.1 revisado abaixo + plano `docs/modulos/rh/56-beneficios-fase-3-plano-de-execucao.md` + migration `20261014000004`.
 **Quem decidiu:** Daniel, em sessão de brainstorm (14/10/2026).
 **Contexto:** continua [`docs/modulos/rh/50-beneficios.md`](../modulos/rh/50-beneficios.md). Fase 1 (visualização) já em produção; esta decisão fecha a arquitetura das Fases 2 (fechamento mensal) e 3 (integração com folha + DRE).
 **Migrations previstas:** criadas no início da Fase 2 e da Fase 3 (ainda sem código).
@@ -28,10 +29,11 @@ Clicar em **"Aplicar descontos"** faz, numa transação:
 
 1. **Fechar a competência de benefícios** (grava snapshot em `beneficio_fechamento_mensal` + `beneficio_fechamento_linha`).
 2. **Reduzir `salario_base`** de cada linha PJ (`origem = 'california'`) pelo valor do desconto do colaborador no snapshot. Grava o valor subtraído em coluna nova `desconto_beneficios` para auditoria.
-3. **Criar duas avulsas** em `contas_avulsas`, uma por operadora, com valor cheio da fatura (soma de `valor_integral + valor_dependentes_total` de todos os vínculos ativos naquela operadora). Classificação: subtipo `05.002 Benefícios`. FK nova `beneficio_fechamento_id` liga a avulsa ao fechamento.
-4. **Marca a competência como "Benefícios aplicados ✓"**.
+3. **Marca a competência como "Benefícios aplicados ✓"**.
 
-Botão **"Desaplicar"** reverte tudo enquanto nenhuma linha da folha foi enviada ao financeiro e nenhuma avulsa foi paga. Depois disso, a reversão exige SQL manual.
+**Portão único RH→Financeiro:** o "Enviar ao financeiro" é o que cria as duas avulsas em `contas_avulsas` (uma por operadora, valor cheio da fatura, subtipo `002 Benefícios`, FK `beneficio_fechamento_id`). Isso roda no mesmo instante em que as linhas PJ+CLT da folha viram títulos. **Enquanto a Kika não enviar, o financeiro não vê nada de benefícios** — RH é 100% rascunho até a confirmação final. Precondição: o fechamento tem que estar vigente, senão o Enviar falha pedindo pra aplicar antes.
+
+Botão **"Desaplicar"** reverte tudo enquanto nenhuma avulsa foi paga. Se o Enviar ainda não rolou, não há avulsa pra apagar — só reverte folha + marca reaberto. Depois do Enviar com avulsa paga, a reversão exige estorno pelo financeiro primeiro.
 
 ### 1.2 CLT fica totalmente fora do desconto
 

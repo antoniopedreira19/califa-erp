@@ -523,6 +523,26 @@ export async function enviarCompetencia(input: {
     };
   }
 
+  // Precondição Fase 3: tem que existir fechamento vigente de benefícios na
+  // competência. O "Enviar" é o portão único RH→Financeiro: também cria as
+  // avulsas de operadora. Sem fechamento, não dá pra atravessar o portão.
+  const { data: fechamentoVigente } = await supabase
+    .from("beneficio_fechamento_mensal")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("ano", input.ano)
+    .eq("mes", input.mes)
+    .is("reaberto_em", null)
+    .maybeSingle();
+
+  if (!fechamentoVigente) {
+    return {
+      ok: false,
+      message:
+        "Aplique os descontos de benefícios antes de enviar ao financeiro.",
+    };
+  }
+
   const nowIso = new Date().toISOString();
   const { data: afetadas, error } = await supabase
     .from("folhas_pagamento")
@@ -541,6 +561,22 @@ export async function enviarCompetencia(input: {
     return { ok: false, message: `Falha ao enviar competência: ${error.message}` };
   }
 
+  // Fase 3: gera as avulsas de operadora (SulAmerica + Bradesco) no mesmo portão.
+  // Idempotente: se, por qualquer motivo, as avulsas já existirem (ex: Enviar
+  // chamado 2x), a RPC retorna as existentes sem recriar.
+  const { data: avulsasGeradas, error: errAvulsas } = await supabase.rpc(
+    "gerar_avulsas_fechamento_beneficios",
+    { p_fechamento_id: fechamentoVigente.id },
+  );
+
+  if (errAvulsas) {
+    console.error("[folha.enviar.gerar_avulsas]", errAvulsas);
+    return {
+      ok: false,
+      message: `Linhas da folha foram enviadas, mas as avulsas de benefícios falharam: ${errAvulsas.message}. Reenvie para completar.`,
+    };
+  }
+
   await logAuditEvent({
     acao: "folha_competencia.enviada",
     tenantId,
@@ -550,6 +586,8 @@ export async function enviarCompetencia(input: {
       ano: input.ano,
       mes: input.mes,
       linhas_enviadas: afetadas?.length ?? 0,
+      beneficio_fechamento_id: fechamentoVigente.id,
+      avulsas_beneficios: (avulsasGeradas as unknown[]) ?? [],
     },
   });
 
@@ -557,6 +595,7 @@ export async function enviarCompetencia(input: {
   revalidatePath(
     `/rh/folhas/${input.ano}-${String(input.mes).padStart(2, "0")}`,
   );
+  revalidatePath("/rh/beneficios");
   revalidatePath("/financeiro/contas-a-pagar");
 
   return { ok: true, linhas_enviadas: afetadas?.length ?? 0 };

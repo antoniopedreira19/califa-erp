@@ -5006,14 +5006,17 @@ export interface DreDespesaPessoalAjustadaMensal {
   valor_dre_pessoal_ajuste: number;
 }
 
-/** Fase 3 — retorno da RPC aplicar_fechamento_beneficios. */
+/**
+ * Fase 3 — retorno da RPC aplicar_fechamento_beneficios.
+ * Nota: aplicar NÃO cria mais avulsas (migrou pro enviarCompetencia como portão
+ * único RH→Financeiro). Fica só com snapshot + folha reduzida.
+ */
 export interface AplicarBeneficiosResult {
   fechamentoId: string;
   totalEmpresa: number;
   totalColaborador: number;
   qtdVinculos: number;
   folhaLinhasAfetadas: number;
-  avulsas: Array<{ id: string; operadora: string; valor: number }>;
 }
 
 /** Fase 3 — linha da listagem de fechamentos em /rh/beneficios tab Fechamentos. */
