@@ -748,9 +748,11 @@ export function JobItemRealizadoTable({
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const [painelOpen, setPainelOpen] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  /** PP a emitir aberta no formulário para edição. Null = nova (decisão
-   *  153: a PP gerada não se edita mais). */
+  /** PP a emitir aberta no formulário para edição. Null = nova. */
   const [aEmitirEditando, setAEmitirEditando] = React.useState<PPAEmitir | null>(null);
+  /** Decisão 173: a PP gerada aberta no formulário, para editar no lugar
+   *  (a 153 a tinha congelado). Exclusiva com a PP a emitir em edição. */
+  const [ppGeradaEditando, setPpGeradaEditando] = React.useState<PedidoCompraNaLista | null>(null);
   /** O "Gerar PP" do formulário: o painel abre a revisão desta PP a emitir
    *  assim que ela chega pelo refresh. */
   const [pedidoDeRevisao, setPedidoDeRevisao] = React.useState<{ id: string; vez: number } | null>(null);
@@ -2447,7 +2449,21 @@ export function JobItemRealizadoTable({
               onEditarAEmitir={
                 podeGerarPP
                   ? (a) => {
+                      setPpGeradaEditando(null);
                       setAEmitirEditando(a);
+                      setPainelOpen(false);
+                      setDrawerOpen(true);
+                    }
+                  : null
+              }
+              // Decisão 173: o lápis da PP gerada abre o mesmo formulário.
+              onEditarPP={
+                podeGerarPP
+                  ? (pp) => {
+                      const completa = ppsDoItem.find((x) => x.id === pp.id);
+                      if (!completa) return;
+                      setAEmitirEditando(null);
+                      setPpGeradaEditando(completa);
                       setPainelOpen(false);
                       setDrawerOpen(true);
                     }
@@ -2480,6 +2496,7 @@ export function JobItemRealizadoTable({
                       // dois drawers empilhados na direita brigariam pelo
                       // mesmo espaço.
                       setAEmitirEditando(null);
+                      setPpGeradaEditando(null);
                       setPainelOpen(false);
                       setDrawerOpen(true);
                     }
@@ -2505,6 +2522,7 @@ export function JobItemRealizadoTable({
                 setDrawerOpen(aberto);
                 if (!aberto) {
                   setAEmitirEditando(null);
+                  setPpGeradaEditando(null);
                   // O formulário nunca fecha tudo (04/09/2026): Gerar PP,
                   // Salvar alterações e Cancelar devolvem para o painel
                   // do item, que é de onde ele foi aberto — a PP nova
@@ -2525,12 +2543,17 @@ export function JobItemRealizadoTable({
               dmPlanejado={dmPlanejado}
               emPPsEmitidas={emPPs}
               aEmitirEditando={aEmitirEditando}
+              ppGeradaEditando={ppGeradaEditando}
               itemConcluido={itemConcluido}
               statusDoJob={statusDoJob}
               tomadores={tomadoresDaNf}
               tomadorPorEmpresa={tomadorPorEmpresa}
               cnpjPadraoDaPP={cnpjPadraoDaPP}
               onSuccess={(modo, id) => {
+                if (modo === "editada") {
+                  setToast(`${id} atualizada. O PDF foi refeito com os dados novos.`);
+                  return;
+                }
                 if (modo === "salva") {
                   setToast("PP a emitir salva. Gere a PP pelo painel do item quando quiser.");
                   return;

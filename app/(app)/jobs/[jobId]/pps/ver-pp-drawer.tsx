@@ -254,6 +254,9 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
         return { ...base, titulo: "Prestação de contas reenviada", detalhe: e.por_nome, estado: "feito" };
       case "prestacao_reprovada":
         return { ...base, titulo: "Prestação reprovada pelo financeiro", motivo: e.motivo, estado: "negado" };
+      case "editada":
+        // Decisão 173: a PP gerada editada no job, antes do envio.
+        return { ...base, titulo: "Editada", detalhe: e.por_nome, estado: "feito" };
       case "nf_corrigida":
         // Revisão da decisão 152: a NF corrigida com a PP em avaliação.
         // O motivo é o que mudou, escrito pelo banco — vai sem aspas.
@@ -604,9 +607,10 @@ export function VerPPDrawer({
           <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
             <Lock className="h-3 w-3 flex-none" />
             {/* Desde a decisão 160 a ficha abre também da PP gerada (pela
-                aba Pedidos de Produção). */}
+                aba Pedidos de Produção). Desde a 173 a gerada se edita, pelo
+                lápis do painel do item. */}
             {pp.status === "gerada"
-              ? "Somente leitura — a PP gerada não se edita mais; os documentos do fornecedor entram no envio."
+              ? "Somente leitura. Para editar, use o lápis da PP no painel do item, na Planilha Interna."
               : "Somente leitura — a PP já foi enviada ao financeiro e não é mais editável."}
           </p>
         </DialogHeader>
@@ -1041,9 +1045,16 @@ export function VerPPDrawer({
           description={
             <>
               <strong className="text-foreground">{pp.codigo}</strong> será
-              cancelada. O PDF e os anexos ficam guardados no histórico. Ela já
-              está no financeiro: cancelar a tira da fila de avaliação e ela
-              deixa de contar no realizado do item.
+              cancelada. O PDF e os anexos ficam guardados no histórico.
+              {/* Desde a decisão 160 a ficha abre também da PP gerada, que
+                  ainda não está no financeiro — como no painel do item. */}
+              {pp.status !== "gerada" && (
+                <>
+                  {" "}
+                  Ela já está no financeiro: cancelar a tira da fila de
+                  avaliação e ela deixa de contar no realizado do item.
+                </>
+              )}
             </>
           }
           confirmLabel="Cancelar PP"

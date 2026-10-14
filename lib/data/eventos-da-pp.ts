@@ -63,6 +63,8 @@ const ROTULO: Record<PPEventoTipo, string> = {
   prestacao_reprovada: "Prestação de contas reprovada",
   prestacao_aprovada: "Prestação de contas aprovada",
   nf_corrigida: "NF corrigida",
+  // Decisão 173: a PP gerada editada no job, antes do envio.
+  editada: "Editada",
 };
 
 export function rotuloDoEventoPP(t: PPEventoTipo): string {
