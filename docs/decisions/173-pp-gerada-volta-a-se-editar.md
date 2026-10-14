@@ -56,13 +56,17 @@ segue com "Cancelar e refazer".
   só o "Ver formulário"** — nunca os dois (Tiago, 14/10/2026, ao ver os dois
   ícones lado a lado na demonstração). Quem só lê o job, sem o lápis, fica
   com a ficha em leitura.
+- **Aba Pedidos de Produção** (14/10/2026, pedido do Tiago): a mesma regra.
+  Na PP gerada, o lápis "Editar PP-…" no lugar do "Ver formulário", e ele
+  abre o MESMO formulário, ali na aba. Na PP já enviada, a ficha, como antes.
 - **Formulário:** título "Editar PP-…", aviso âmbar quando a PP está pronta
   para envio, e um botão só no rodapé, "Salvar alterações", que abre a
   revisão. A prévia de "Em PPs emitidas" tira o valor de antes e soma o novo.
 - **Revisão:** "Salvar as alterações da PP-…?", com a linha "Esta PP"
   mostrando o valor de antes quando ele muda.
-- **Ficha em leitura da PP gerada:** "Somente leitura. Para editar, use o
-  lápis da PP no painel do item, na Planilha Interna."
+- **Ficha em leitura da PP gerada** (só para quem não edita, desde que o
+  lápis ocupa o lugar dela): "Somente leitura. A PP ainda não foi enviada ao
+  financeiro."
 - A revisão do "Gerar PP" deixou de dizer que a PP não se edita depois: "A
   PP pode ser editada até o envio ao financeiro."
 
@@ -81,8 +85,6 @@ segue com "Cancelar e refazer".
 
 ## Fora daqui, de propósito
 
-- Editar pela aba Pedidos de Produção: a ficha de lá aponta o lápis do
-  painel.
 - O "Atualizar vencimento" da decisão 157 continua, para quem só precisa da
   data nova.
 

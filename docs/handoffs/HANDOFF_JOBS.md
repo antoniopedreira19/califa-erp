@@ -5298,7 +5298,10 @@ código publicado logo depois (`3305751`).
 - **Revê a 153.** No painel do item, a PP em "Aguardando envio" tem o lápis
   **Editar PP**. Regra do Tiago (14/10/2026): **antes do envio, só editar;
   depois do envio, só o "Ver formulário"** — nunca os dois. Quem só lê o job
-  (sem o lápis) fica com a ficha em leitura.
+  (sem o lápis) fica com a ficha em leitura. **Na aba Pedidos de Produção, a
+  mesma regra:** o lápis no lugar do "Ver formulário" na PP gerada, abrindo
+  o mesmo `GerarPPDrawer` ali (`edicaoDaPP`, montado na `page.tsx` com o que
+  o painel recebe).
 - **Formulário:** o `GerarPPDrawer` ganhou `ppGeradaEditando`; a PP gerada
   entra pelo mesmo caminho da PP a emitir (`ppGeradaComoAEmitir`). Título
   "Editar PP-…", aviso âmbar quando a PP está pronta para envio, e um botão só
@@ -5317,7 +5320,8 @@ código publicado logo depois (`3305751`).
   na linha do tempo (`pp_registra_evento`). Migrations `20261013950001` e
   `20261014950001` (a segunda só renumera: a decisão nasceu 170 e colidiu com
   a "GP só quem pode ser GP").
-- **Textos:** a ficha da PP gerada aponta o lápis do painel; a revisão do
+- **Textos:** a ficha da PP gerada (só para quem não edita) diz "A PP ainda
+  não foi enviada ao financeiro"; a revisão do
   "Gerar PP" diz "A PP pode ser editada até o envio ao financeiro"; o aviso
   de cancelar da ficha não diz mais "já está no financeiro" para a PP gerada
   (defeito da 160).
