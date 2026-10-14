@@ -3706,7 +3706,8 @@ não aparecem mais na linha, só alimentam o modal.
   (nº 1) e cada revisão de errata ou edição livre. Imutável (sem
   update/delete). Backfill: os 25 jobs já abertos ganharam a foto nº 1
   reconstituída do estado do dia, marcada `reconstituida`.
-- **O mural chama "Revisar abertura"**, e o formulário abre editável
+- **O mural chama "Revisar abertura"** (desde 14/10/2026 o botão da fila
+  diz só "Revisar"; ver a nota dessa data), e o formulário abre editável
   (modo `revisao` do `AberturaForm`), com a errata e a abertura anterior
   na faixa do topo e "Ver abertura anterior". Termina em "Registrar
   revisão de abertura" → confirmação → **volta para a fila**. A trava das
@@ -5676,7 +5677,8 @@ Regra completa em `docs/decisions/099-aprovacao-de-save.md`.
 ### O que mudou
 
 - **Fila da Abertura de Job:** faixa "Saves · N" com os pedidos que aguardam
-  (gera ou consome), botão "Aprovar save"/"Aprovar consumo". O job cuja
+  (gera ou consome), botão "Revisar" (era "Aprovar save"/"Aprovar consumo"
+  até 14/10/2026; o pop-up continua "Aprovar save"). O job cuja
   revisão pendente é SÓ de save aparece só nessa faixa; com errata de valores
   também, aparece nas duas. O resumo ganha " · N saves a aprovar".
 - **Aprovar = registrar a revisão:** o pop-up leva a
@@ -7112,7 +7114,8 @@ financeiro". Regra completa na §9 da decisão 115.
 ## ⚠️ Nota de 2026-10-13 — Cancelamentos na Abertura de Job (decisão 169)
 
 - **Faixa "Cancelamentos"** no topo da fila "Jobs aguardando abertura",
-  antes de erratas e aberturas novas, com "Revisar cancelamento"
+  antes de erratas e aberturas novas, com o botão "Revisar" (era
+  "Revisar cancelamento" até 14/10/2026)
   (`cancelamento-na-fila.tsx`, dados em `cancelamentos.ts`). A contagem da
   aba e o resumo ("1 cancelamento a decidir") somam os pedidos.
 - **Pop-up de revisão:** quem pediu e o motivo, dados do job com a regional,
@@ -7185,3 +7188,48 @@ decisão 115.
   financeiro. Nesses jobs, "Enviada por" pode trazer o nome do produtor, e
   ele também corrige a NF da PP em avaliação
   (`corrigir_notas_fiscais_da_pp` aceita a chave).
+
+## ⚠️ Nota de 2026-10-14 — O financeiro edita o planejado na fila da abertura (revisão da decisão 115)
+
+Pedido do Tiago em 14/10/2026, a partir do AMB-1008/26. Regra completa na
+§11 da decisão 115.
+
+- **Na fila da abertura**, o "Editar orçado" abre também R$ Unit., QT e D/M
+  do planejado. **Depois da abertura**, ele continua travado (decisão 151):
+  a célula mostra o motivo, e a action e o banco recusam. Interno, save,
+  linha vermelha e cancelada ficam fechados.
+- **O pop-up** passa a "O que muda na planilha", com o planejado de → para
+  na cor do Planejado. **O card** "Alterações do Financeiro" ganha o selo
+  "Planejado" e o de → para embaixo do valor orçado. **O fio da
+  Comunicação** diz "Planejado · item: de → para".
+- **O custo previsto acompanha; o cronograma de desembolsos não:** o
+  formulário da abertura mostra "Falta"/"Sobra" com o "Distribuir", e a
+  abertura só confirma com a soma batendo.
+- **Banco:** `20261014600001` (planejado de → para no histórico, nulo nas
+  alterações antigas; função grava e recusa fora da fila) e
+  `20261014600002` (AMB-1008/26: D/M do planejado das 5 influenciadoras de
+  1 para 0, conferidas com o Tiago, registrado no card em nome dele).
+- **Conferido:** AMB-1008/26 na tela (planejado R$ 51.740,10, 18,3%); de
+  ponta a ponta no TES-1029/26, criado para o teste e deixado na fila
+  (Item 2 de outubro de R$ 8.000,00 para R$ 7.000,00; custo previsto
+  R$ 35.000,00, cronograma com "Sobra de R$ 1.000,00"); TES-1013/26, aberto,
+  com o planejado travado; recusa do banco por simulação desfeita.
+
+## ⚠️ Nota de 2026-10-14 — A fila da Abertura de Job em grade fixa, com altura única (decisão 036)
+
+Regra completa na nota de 14/10/2026 da decisão 036.
+
+- **Toda linha da fila tem 64 px**: grade fixa (`ColunasDaFila`), no
+  máximo duas linhas por célula, "…" com o texto inteiro ao passar o mouse.
+  O código do job não quebra mais.
+- **Colunas:** Código · Job · Projeto · Cliente · GP · Enviado por · Valor
+  total · Abertura. O Valor total foi para antes do botão, alinhado à
+  esquerda.
+- **Botões de 92 × 32 px:** "Revisar" (cancelamento, save e errata) e
+  "Abrir job", com a ação inteira na dica; o título "Abertura" centralizado
+  sobre eles. O filtro do título lista "Revisar save", "Revisar consumo",
+  "Revisar errata" e "Abrir job".
+- **Selos da coluna Job** em pílula de 18 px ("Pedido de cancelamento",
+  "Nenhum valor alterado"), com a frase inteira na dica.
+- Código em `fila-celulas.tsx` (novo), `fila-list.tsx` e
+  `cancelamento-na-fila.tsx`. Os pop-ups não mudaram.

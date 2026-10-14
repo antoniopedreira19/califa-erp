@@ -44,6 +44,7 @@ import {
   cancelarPedidoCompra,
 } from "../realizado/actions-pp";
 import { EnvioDialog, textoAguardaAbertura, type PPParaEnviar } from "../realizado/pp-a-emitir-ui";
+import { GerarPPDrawer } from "../realizado/gerar-pp-drawer";
 import type { TomadorDaNf } from "../realizado/anexos-da-pp";
 import { prazoDeEnvioPerdido, useFeriadosNacionais } from "../realizado/prazo-de-envio-pp";
 import { hojeEmSaoPauloIso, isoParaBr } from "@/lib/calculos/janelas-pagamento";
@@ -102,6 +103,26 @@ interface Props {
   /** O PLANEJADO de cada linha, pelo id da âncora do realizado: o cartão do
    *  topo do "Ver formulário", como no painel do item. */
   planejadoPorItem: Record<string, number>;
+  /** Decisão 173: a PP gerada se edita também pela aba, no MESMO formulário
+   *  do painel do item. Null = sem edição (quem só lê usa a ficha). */
+  edicaoDaPP: EdicaoDaPPNaAba | null;
+}
+
+/** O que o formulário da PP precisa e a aba não tinha (decisão 173). */
+export interface EdicaoDaPPNaAba {
+  jobId: string;
+  jobEmpresaId: string;
+  fornecedores: Array<{ id: string; nome: string; razao_social: string | null; cpf_cnpj?: string | null }>;
+  empresas: Array<{ id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }>;
+  podeCadastrarFornecedor: boolean;
+  podeEditarFornecedor: boolean;
+  cnpjPadraoDaPP: string | null;
+  /** Cada linha, pelo id da âncora do realizado: o nome, o planejado e a
+   *  conta dele, e se o item já está marcado como "todas as PPs geradas". */
+  itens: Record<
+    string,
+    { nome: string; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
+  >;
 }
 
 /** "aguardando_prestacao" junta verba sem prestação e prestação reprovada:
@@ -233,6 +254,7 @@ export function JobPPsSection({
   tomadorPorEmpresa,
   empresas,
   planejadoPorItem,
+  edicaoDaPP,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -255,6 +277,8 @@ export function JobPPsSection({
     React.useState<PedidoCompraNaLista | null>(null);
   /** O formulário da PP em leitura ("Ver formulário" do painel do item). */
   const [ppVendo, setPpVendo] = React.useState<PedidoCompraNaLista | null>(null);
+  /** Decisão 173: a PP gerada aberta no formulário, para editar no lugar. */
+  const [ppEditando, setPpEditando] = React.useState<PedidoCompraNaLista | null>(null);
   /** A PP ao lado dos documentos (o olho). */
   const [visualizando, setVisualizando] = React.useState<{
     pp: PPRow;
@@ -1012,7 +1036,30 @@ export function JobPPsSection({
                 </TooltipContent>
               </Tooltip>
             );
-            const formularioEl = (
+            // Decisão 173: antes do envio, só editar; depois, só ver — nunca
+            // os dois (Tiago, 14/10/2026). Quem não edita fica com a ficha.
+            const editarEl = pp.status === "gerada" && editable && edicaoDaPP && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <button
+                      type="button"
+                      onClick={() => setPpEditando(pp)}
+                      disabled={pending || textoAguardaAbertura(statusDoJob) !== null}
+                      aria-label={`Editar ${pp.codigo}`}
+                      className="inline-flex flex-none items-center justify-center rounded-[9px] border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                      style={{ width: ICONE, height: ICONE }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[300px]">
+                  {textoAguardaAbertura(statusDoJob) ?? `Editar ${pp.codigo}`}
+                </TooltipContent>
+              </Tooltip>
+            );
+            const formularioEl = !editarEl && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -1068,6 +1115,7 @@ export function JobPPsSection({
                     Tiago, 08/10/2026): sem lugar vazio quando a PP não pode
                     ser enviada. */}
                 {enviarEl}
+                {editarEl}
                 {formularioEl}
                 {prestarEl}
                 {cancelarEl}
@@ -1176,6 +1224,41 @@ export function JobPPsSection({
         pending={pending}
         onConfirm={handleCancelarConfirm}
       />
+
+      {/* Decisão 173: o mesmo formulário do painel do item, com a PP gerada.
+          Salvar passa pela revisão; o código fica e o PDF é refeito. */}
+      {edicaoDaPP && ppEditando && (() => {
+        const item = edicaoDaPP.itens[ppEditando.item_realizado_id];
+        return (
+          <GerarPPDrawer
+            open
+            onOpenChange={(aberto) => !aberto && setPpEditando(null)}
+            itemRealizadoId={ppEditando.item_realizado_id}
+            jobId={edicaoDaPP.jobId}
+            fornecedores={edicaoDaPP.fornecedores}
+            empresas={edicaoDaPP.empresas}
+            podeCadastrarFornecedor={edicaoDaPP.podeCadastrarFornecedor}
+            podeEditarFornecedor={edicaoDaPP.podeEditarFornecedor}
+            defaultEmpresaId={edicaoDaPP.jobEmpresaId}
+            itemDescricao={item?.nome ?? ppEditando.item_nome ?? ""}
+            valorPlanejado={item?.planejado ?? planejadoPorItem[ppEditando.item_realizado_id] ?? 0}
+            unitarioPlanejado={item?.unitario ?? 0}
+            quantidadePlanejada={item?.quantidade ?? 0}
+            dmPlanejado={item?.diasMeses ?? 0}
+            emPPsEmitidas={emPPsDoItem(ppEditando.item_realizado_id)}
+            aEmitirEditando={null}
+            ppGeradaEditando={ppEditando}
+            itemConcluido={item?.concluido ?? false}
+            statusDoJob={statusDoJob}
+            tomadores={tomadoresDaNf}
+            tomadorPorEmpresa={tomadorPorEmpresa}
+            cnpjPadraoDaPP={edicaoDaPP.cnpjPadraoDaPP}
+            onSuccess={(modo, codigo) => {
+              if (modo === "editada") setToast(`${codigo} atualizada. O PDF foi refeito com os dados novos.`);
+            }}
+          />
+        );
+      })()}
 
       <PrestarContasDrawer
         open={ppPrestando !== null}

@@ -341,6 +341,8 @@ export function primeiraDataPossivelDoPrazo(
  * numa janela, é a mesma janela no mês seguinte, como antes da 172.
  */
 export function primeiraDataDaProximaParcela(anteriorIso: string): string {
+  // Sem a anterior (prazo ainda vazio) não há o que calcular.
+  if (isoParaUtc(anteriorIso) === null) return "";
   return janelaSeguinte(janelaSeguinte(anteriorIso));
 }
 
@@ -355,7 +357,9 @@ export interface DataDaParcela {
  * seguinte é a primeira data possível depois da anterior — menos a adiada à
  * mão, que fica enquanto continuar possível (janela e depois da primeira
  * data possível). A adiada que ficou cedo demais, porque a anterior andou,
- * vai para a primeira data possível e volta a ser padrão.
+ * vai para a primeira data possível e volta a ser padrão. Sem prazo (o campo
+ * limpo, ou a urgência recém-ligada), as datas padrão ficam vazias e a
+ * adiada fica, até o prazo voltar.
  */
 export function acomodarDatasDasParcelas(
   prazoIso: string,

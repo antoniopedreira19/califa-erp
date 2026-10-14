@@ -5298,7 +5298,10 @@ código publicado logo depois (`3305751`).
 - **Revê a 153.** No painel do item, a PP em "Aguardando envio" tem o lápis
   **Editar PP**. Regra do Tiago (14/10/2026): **antes do envio, só editar;
   depois do envio, só o "Ver formulário"** — nunca os dois. Quem só lê o job
-  (sem o lápis) fica com a ficha em leitura.
+  (sem o lápis) fica com a ficha em leitura. **Na aba Pedidos de Produção, a
+  mesma regra:** o lápis no lugar do "Ver formulário" na PP gerada, abrindo
+  o mesmo `GerarPPDrawer` ali (`edicaoDaPP`, montado na `page.tsx` com o que
+  o painel recebe).
 - **Formulário:** o `GerarPPDrawer` ganhou `ppGeradaEditando`; a PP gerada
   entra pelo mesmo caminho da PP a emitir (`ppGeradaComoAEmitir`). Título
   "Editar PP-…", aviso âmbar quando a PP está pronta para envio, e um botão só
@@ -5317,7 +5320,8 @@ código publicado logo depois (`3305751`).
   na linha do tempo (`pp_registra_evento`). Migrations `20261013950001` e
   `20261014950001` (a segunda só renumera: a decisão nasceu 170 e colidiu com
   a "GP só quem pode ser GP").
-- **Textos:** a ficha da PP gerada aponta o lápis do painel; a revisão do
+- **Textos:** a ficha da PP gerada (só para quem não edita) diz "A PP ainda
+  não foi enviada ao financeiro"; a revisão do
   "Gerar PP" diz "A PP pode ser editada até o envio ao financeiro"; o aviso
   de cancelar da ficha não diz mais "já está no financeiro" para a PP gerada
   (defeito da 160).
@@ -5328,8 +5332,17 @@ código publicado logo depois (`3305751`).
   R$ 100, total R$ 200), eventos emitida → editada → cancelada, realizado do
   item 120 → 320 → 120, auditoria com o antes e o depois. A marca "Pronta" e
   a trava de PP enviada foram conferidas numa transação desfeita, na PP-00088.
-- **Resíduo de teste:** PP-00167 cancelada no TES-1014/26, com o arquivo da
-  NF 9170 de teste.
+- **Aba Pedidos de Produção, testada em 14/10/2026** como "Produtor Teste
+  Claude" (link de acesso local), no TES-1014/26: PP-00176 (R$ 90) gerada,
+  deixada pronta para envio com a NF 9173 completa, e editada pelo lápis da
+  aba para 2 parcelas. Na aba, a PP gerada mostrou olho, "Editar" e cancelar
+  (sem a ficha); a PP-00148, enviada, só olho e ficha. O formulário abriu ali
+  mesmo, com o aviso âmbar; a revisão disse que a marca sai. No banco: marca
+  "Pronta" apagada, `editada_por` = o produtor, PDF refeito, 2 parcelas de
+  R$ 45, NF mantida, auditoria com `pronta_desfeita: true`. Cancelada pela
+  aba ao fim (realizado do item de volta a R$ 120).
+- **Resíduo de teste:** PP-00167 e PP-00176 canceladas no TES-1014/26, com os
+  arquivos das NFs 9170 e 9173 de teste.
 
 ## ⚠️ Nota de 2026-10-14 — Verba de produção com titular e a conta do RH na PP do colaborador (decisão 171)
 
@@ -5401,6 +5414,11 @@ código publicado logo depois (`3305751`).
   original do dossiê, só na PP urgente.
 - **Testado** no TES-1001/26 · Item 5 (detalhes na decisão 172). Resíduo:
   PP-00170 (verba de produção, "GP Teste"), rejeitada e cancelada.
+- **Revisão do mesmo dia:** ligar a urgência zera o prazo (`mudarUrgencia`
+  no `gerar-pp-drawer.tsx`), com a frase "Escolha o prazo de novo…"; sem
+  prazo, as parcelas padrão ficam vazias (antes, limpar o prazo pelo "×"
+  levava as parcelas para 1970). Testado também na edição da PP gerada
+  (173): PP-00179, cancelada no fim.
 
 ## ⚠️ Nota de 2026-10-14 — Sem "Editar" no job, o botão "Equipe" e a chave do produtor (decisão 174)
 

@@ -989,6 +989,7 @@ export async function carregarDetalheDoJob(
     console.error("[job.alteracoes-financeiro]", alteracoesFinanceiroRes.error.message);
   }
   const numero = (v: unknown) => Number(v ?? 0);
+  const numeroOuNulo = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   const previsoesDaFoto = (ls: unknown): PrevisaoDaAlteracao[] =>
     ((ls ?? []) as any[]).map((l) => ({
       data_prevista: String(l.data_prevista ?? ""),
@@ -1030,6 +1031,16 @@ export async function carregarDetalheDoJob(
       dias_meses_para: numero(i.dias_meses_para),
       total_de: numero(i.total_de),
       total_para: numero(i.total_para),
+      // O planejado entrou no histórico em 14/10/2026: nas linhas de antes
+      // fica nulo, e não zero — zero diria que o planejado era zero.
+      valor_unitario_planejado_de: numeroOuNulo(i.valor_unitario_planejado_de),
+      valor_unitario_planejado_para: numeroOuNulo(i.valor_unitario_planejado_para),
+      quantidade_planejada_de: numeroOuNulo(i.quantidade_planejada_de),
+      quantidade_planejada_para: numeroOuNulo(i.quantidade_planejada_para),
+      dias_meses_planejado_de: numeroOuNulo(i.dias_meses_planejado_de),
+      dias_meses_planejado_para: numeroOuNulo(i.dias_meses_planejado_para),
+      total_planejado_de: numeroOuNulo(i.total_planejado_de),
+      total_planejado_para: numeroOuNulo(i.total_planejado_para),
       efeito_valor_job: numero(i.efeito_valor_job),
       efeito_faturamento_previsto: numero(i.efeito_faturamento_previsto),
     })),

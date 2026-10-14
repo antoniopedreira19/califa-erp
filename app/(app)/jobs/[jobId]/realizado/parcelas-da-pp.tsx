@@ -491,9 +491,13 @@ export function ParcelasDaPPField({
             </span>
             {/* A 1ª parcela é o prazo de pagamento, que se escolhe acima. Da
                 2ª em diante a data se adia à mão (decisão 172). */}
-            {i === 0 ? (
+            {i === 0 || !parcelas[i - 1].data_vencimento ? (
               <div
-                title="A 1ª parcela é o prazo de pagamento."
+                title={
+                  i === 0
+                    ? "A 1ª parcela é o prazo de pagamento."
+                    : "Escolha o prazo de pagamento primeiro."
+                }
                 className="flex h-10 items-center justify-between rounded-lg border border-border bg-muted/40 px-3 font-mono text-[13px]"
               >
                 {isoParaBr(p.data_vencimento)}

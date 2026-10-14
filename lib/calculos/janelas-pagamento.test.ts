@@ -193,6 +193,26 @@ test("as datas padrão das parcelas e o ajuste à mão", () => {
   );
 });
 
+test("sem prazo, as parcelas padrão ficam vazias e a adiada fica", () => {
+  assert.equal(primeiraDataDaProximaParcela(""), "");
+  const semPrazo = acomodarDatasDasParcelas("", [
+    { data: "2026-10-21", ajustada: false },
+    { data: "2026-12-21", ajustada: true },
+    { data: "2027-01-20", ajustada: false },
+  ]);
+  // A 3ª já se calcula a partir da adiada.
+  assert.deepEqual(semPrazo, [
+    { data: "", ajustada: false },
+    { data: "2026-12-21", ajustada: true },
+    { data: "2027-01-20", ajustada: false },
+  ]);
+  // O prazo voltou: a adiada ainda cabe e fica; as outras voltam ao padrão.
+  assert.deepEqual(
+    acomodarDatasDasParcelas("2026-10-21", semPrazo).map((x) => x.data),
+    ["2026-10-21", "2026-12-21", "2027-01-20"],
+  );
+});
+
 test("a trava do servidor nas datas das parcelas", () => {
   assert.equal(parcelaForaDaRegra(["2026-10-21", "2026-11-20", "2026-12-21"]), null);
   assert.equal(parcelaForaDaRegra(["2026-10-21", "2026-11-09"]), 2); // a janela logo seguinte

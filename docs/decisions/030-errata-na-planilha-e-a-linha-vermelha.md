@@ -74,8 +74,9 @@ números que a errata acabou de mudar.
 Enquanto a marca existe:
 
 - o job aparece no mural de abertura, numa faixa **Erratas**, com o botão
-  **Revisar abertura** (a faixa e o botão usam a mesma cor das aberturas
-  novas — a distinção é o rótulo, o ícone e o texto do botão);
+  **Revisar** (até 14/10/2026, "Revisar abertura"; ver a nota de 14/10/2026
+  na decisão 036). A faixa e o botão usam a mesma cor das aberturas novas —
+  a distinção é o rótulo da faixa, o ícone e o texto do botão;
 - o **envio para faturamento fica fechado**, na tela e na server action.
 
 **Quem encerra a revisão é salvar a abertura de novo.** Não há botão

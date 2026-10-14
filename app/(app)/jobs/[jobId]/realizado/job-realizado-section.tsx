@@ -163,7 +163,7 @@ export interface EdicaoDoFinanceiro {
 
 /** O planejado na edição do financeiro: nunca abre (decisão 115, P1). */
 const MOTIVO_PLANEJADO_DO_FINANCEIRO =
-  "Na edição do orçado pelo financeiro o planejado não muda — ele é da produção.";
+  "O planejado é o da abertura do job: o financeiro só o edita com o job na fila da abertura.";
 
 function dataBr(iso: string): string {
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -399,14 +399,16 @@ export function JobRealizadoSection({
   // existia porque nada da tela reagia.
   // Os agrupamentos entram no rascunho desde 09/10/2026: a errata também
   // organiza a planilha (ordem, agrupamento novo, renomeado e removido).
-  const rascunho = useRascunhoErrata(itens, interno, grupos);
   // O "Editar orçado" do financeiro (decisão 115) é o MESMO rascunho, com o
-  // escopo dele: o planejado nunca abre. Tipo, linha nova e a trava de PP
-  // ficam com a tabela (`modoDaEdicao`).
+  // escopo dele. O planejado abre só com o job na fila da abertura
+  // (revisão de 14/10/2026); depois dela, ele é o da abertura. Tipo, linha
+  // nova e a trava de PP ficam com a tabela (`modoDaEdicao`).
   const modoFinanceiro = edicaoDoFinanceiro !== null;
+  const planejadoNaFila = modoFinanceiro && job.status === "aguardando_abertura";
+  const rascunho = useRascunhoErrata(itens, interno, grupos, planejadoNaFila);
   const errata = React.useMemo(
     () =>
-      modoFinanceiro
+      modoFinanceiro && !planejadoNaFila
         ? {
             ...rascunho,
             planejadoLiberado: () => false,
@@ -416,7 +418,7 @@ export function JobRealizadoSection({
               interno ? rascunho.motivoPlanejadoTravado(chave) : MOTIVO_PLANEJADO_DO_FINANCEIRO,
           }
         : rascunho,
-    [modoFinanceiro, rascunho, interno],
+    [modoFinanceiro, planejadoNaFila, rascunho, interno],
   );
   // A barra de ações do job é irmã das abas e precisa sair de cena
   // enquanto a barra da errata está no ar — as duas grudam no mesmo pé de
@@ -538,6 +540,15 @@ export function JobRealizadoSection({
         quantidade: l.quantidadePara,
         dias_meses: l.diasMesesPara,
         tipo_custo: l.tipoCustoPara,
+        // Só com o job na fila e fora do Interno, em que o banco faz o
+        // planejado seguir o orçado (revisão de 14/10/2026).
+        ...(planejadoNaFila && !interno
+          ? {
+              valor_unitario_planejado: l.planUnitarioPara,
+              quantidade_planejada: l.planQuantidadePara,
+              dias_meses_planejado: l.planDiasMesesPara,
+            }
+          : {}),
       })),
     });
     setSalvando(false);

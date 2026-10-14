@@ -427,12 +427,29 @@ export function montarThreadChat(
         i.total_de !== i.total_para
           ? `${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`
           : null;
-      const texto =
+      // E o planejado, com o job na fila da abertura, desde 14/10/2026.
+      // Nulo nas alterações de antes, que não o guardavam.
+      const planejado =
+        i.total_planejado_de !== null &&
+        i.total_planejado_para !== null &&
+        (i.valor_unitario_planejado_de !== i.valor_unitario_planejado_para ||
+          i.quantidade_planejada_de !== i.quantidade_planejada_para ||
+          i.dias_meses_planejado_de !== i.dias_meses_planejado_para)
+          ? `planejado ${moeda(i.total_planejado_de, moedaCode)} → ${moeda(i.total_planejado_para, moedaCode)}`
+          : null;
+      const base =
         tipo && valor
           ? `Tipo de custo e valor · ${i.item_nome}: ${tipo} · ${valor}`
           : tipo
             ? `Tipo de custo · ${i.item_nome}: ${tipo}`
-            : `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`;
+            : valor || !planejado
+              ? `Valor · ${i.item_nome} ${moeda(i.total_de, moedaCode)} → ${moeda(i.total_para, moedaCode)}`
+              : null;
+      const texto = base
+        ? planejado
+          ? `${base} · ${planejado}`
+          : base
+        : `Planejado · ${i.item_nome}: ${moeda(i.total_planejado_de ?? 0, moedaCode)} → ${moeda(i.total_planejado_para ?? 0, moedaCode)}`;
       return {
         texto,
         valor: comSinal(i.efeito_valor_job, moedaCode),

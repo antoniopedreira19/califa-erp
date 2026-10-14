@@ -607,10 +607,10 @@ export function VerPPDrawer({
           <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
             <Lock className="h-3 w-3 flex-none" />
             {/* Desde a decisão 160 a ficha abre também da PP gerada (pela
-                aba Pedidos de Produção). Desde a 173 a gerada se edita, pelo
-                lápis do painel do item. */}
+                aba Pedidos de Produção). Desde a 173 quem edita a PP gerada
+                tem o lápis no lugar da ficha; a ficha da gerada é de quem só lê. */}
             {pp.status === "gerada"
-              ? "Somente leitura. Para editar, use o lápis da PP no painel do item, na Planilha Interna."
+              ? "Somente leitura. A PP ainda não foi enviada ao financeiro."
               : "Somente leitura — a PP já foi enviada ao financeiro e não é mais editável."}
           </p>
         </DialogHeader>
