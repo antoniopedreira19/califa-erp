@@ -4,7 +4,7 @@ import { FileText, Layers, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
-import { listActiveMembers } from "@/lib/data/members";
+import { listActiveMembers, listarGpsAtivos } from "@/lib/data/members";
 import { listEmpresasAtivas } from "@/lib/data/empresas";
 import { escolherJobDoFunil, estagioFunil, jobVivoDoOrcamento } from "@/lib/calculos/funil";
 import {
@@ -63,7 +63,7 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, gps, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
@@ -92,6 +92,8 @@ export default async function ProjetoDetailPage({
       .eq("status", "ativo")
       .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
+    // GPs Responsáveis: só quem pode ser GP (decisão 170).
+    listarGpsAtivos(session.activeTenant.id),
     supabase
       .from("regionais")
       .select("id, nome, empresa_id")
@@ -508,6 +510,7 @@ export default async function ProjetoDetailPage({
               empresas={empresas}
               clientes={clientes}
               responsaveis={responsaveis}
+              gps={gps}
               regionais={regionais}
               produtos={produtos}
               categorias={categoriasProjeto}

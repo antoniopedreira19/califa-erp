@@ -394,10 +394,12 @@ export async function enviarJobParaAbertura(
   // quem manda o payload não é obrigado a respeitá-la.
   //
   // GP e produtor (decisão 135) seguem as listas do formulário do
-  // orçamento: o GP sai dos responsáveis do projeto, o produtor dos
-  // membros ativos. O que já está no orçamento passa sem conferência —
-  // até aqui o envio o copiava sem olhar, e um GP que saiu da equipe do
-  // projeto depois não pode travar um envio que ninguém mexeu.
+  // orçamento: o GP sai dos GPs Responsáveis do projeto que podem ser GP
+  // (decisão 170), o produtor de quem tem o papel Produtor (decisão 168).
+  // O que já está no orçamento passa sem a conferência da lista — um GP
+  // que saiu da equipe do projeto depois não pode travar um envio que
+  // ninguém mexeu. O PAPEL do GP, não: o GP que não pode ser GP (nem GP
+  // nem Administrador) trava o envio, mexido ou não (decisão 170).
   const gpMudou = parsed.data.gp_responsavel_id !== orc.gp_responsavel_id;
   const produtorMudou = parsed.data.produtor_id !== orc.produtor_id;
   const [produtoRes, cidadeRes, regionalDoProjetoRes, gpDoProjetoRes, membrosRes] = await Promise.all([
@@ -422,14 +424,8 @@ export async function enviarJobParaAbertura(
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ regional_id: string }>(),
     gpMudou
-      ? supabase
-          .from("projeto_responsaveis")
-          .select("profile_id")
-          .eq("projeto_id", orc.projeto_id)
-          .eq("profile_id", parsed.data.gp_responsavel_id)
-          .eq("tenant_id", session.activeTenant.id)
-          .maybeSingle<{ profile_id: string }>()
-      : Promise.resolve({ data: { profile_id: parsed.data.gp_responsavel_id }, error: null }),
+      ? supabase.rpc("gps_do_projeto", { p_projeto_id: orc.projeto_id })
+      : supabase.rpc("gps_ativos_do_tenant", { p_tenant_id: session.activeTenant.id }),
     // A mesma fonte da lista do modal (`listarProdutoresAtivos`, só o
     // papel Produtor desde 13/10/2026): ler `tenant_members` direto
     // mostraria só a própria linha para quem não é administrador.
@@ -458,11 +454,37 @@ export async function enviarJobParaAbertura(
       fieldErrors: { regional_id: ["Regional não cadastrada no projeto."] },
     };
   }
-  if (!gpDoProjetoRes.data) {
+  if (gpDoProjetoRes.error) {
+    console.error("[abertura.gp]", gpDoProjetoRes.error.message);
+    return { ok: false, message: "Não foi possível conferir o GP responsável." };
+  }
+  if (
+    !((gpDoProjetoRes.data ?? []) as { id: string }[]).some(
+      (g) => g.id === parsed.data.gp_responsavel_id,
+    )
+  ) {
+    if (gpMudou) {
+      return {
+        ok: false,
+        message:
+          "O GP escolhido não é um GP Responsável do projeto com o papel GP. Selecione outro.",
+        fieldErrors: { gp_responsavel_id: ["Escolha um dos GPs Responsáveis do projeto."] },
+      };
+    }
+    // O GP que veio gravado no orçamento não pode ser GP: a trava que
+    // explica, com o nome (decisão 170). O nome só é lido aqui, na recusa.
+    const { data: gp } = await supabase
+      .from("profiles")
+      .select("nome")
+      .eq("id", parsed.data.gp_responsavel_id)
+      .maybeSingle<{ nome: string }>();
+    const quem = gp?.nome ?? "O GP deste orçamento";
     return {
       ok: false,
-      message: "O GP escolhido não é um dos responsáveis do projeto. Selecione outro.",
-      fieldErrors: { gp_responsavel_id: ["Escolha um dos responsáveis do projeto."] },
+      message: `${quem} não pode ser o GP do job: no cadastro de usuários, não está ativo com o papel GP. Escolha outro GP Responsável do projeto para enviar.`,
+      fieldErrors: {
+        gp_responsavel_id: [`${quem} não está ativo com o papel GP. Escolha outro.`],
+      },
     };
   }
   if (membrosRes.error) {

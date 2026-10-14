@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { listarProdutoresAtivos } from "@/lib/data/members";
+import { listarGpsDoProjeto, listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
-import type { CategoriaDominio, Profile, Regional } from "@/lib/types";
+import type { CategoriaDominio, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
 import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
@@ -23,7 +23,7 @@ export default async function NovoOrcamentoPage({
     categoriasRes,
     servicosRes,
     regionaisRes,
-    respRes,
+    gpsDoProjeto,
     cidadesIniciais,
     produtores,
   ] = await Promise.all([
@@ -59,11 +59,9 @@ export default async function NovoOrcamentoPage({
         .select("regional:regionais(id, nome)")
         .eq("projeto_id", params.projetoId)
         .eq("tenant_id", session.activeTenant.id),
-      supabase
-        .from("projeto_responsaveis")
-        .select("profile:profiles(id, nome)")
-        .eq("projeto_id", params.projetoId)
-        .eq("tenant_id", session.activeTenant.id),
+      // Só os GPs Responsáveis que podem ser GP — sem a Equipe e sem quem
+      // não tem o papel (decisão 170).
+      listarGpsDoProjeto(params.projetoId),
       // Só as primeiras cidades: o combobox busca o resto no servidor a
       // cada digitação. O cadastro comporta o Brasil inteiro.
       listarCidadesIniciais(session.activeTenant.id),
@@ -84,10 +82,6 @@ export default async function NovoOrcamentoPage({
     .map((v) => ({ id: v.regional.id, nome: v.regional.nome }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Regional, "id" | "nome">[];
 
-  const gpsDoProjeto = ((respRes.data ?? []) as any[])
-    .filter((v) => v.profile)
-    .map((v) => ({ id: v.profile.id, nome: v.profile.nome }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<Profile, "id" | "nome">[];
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
