@@ -4,126 +4,35 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { checarPermissao } from "@/lib/permissoes-server";
-import { jobSchema, rejeicaoAberturaSchema } from "@/lib/validations/jobs";
-import {
-  jobEstaCongelado,
-  jobStatusLabel,
-  type JobStatus,
-} from "@/lib/types";
+import { rejeicaoAberturaSchema } from "@/lib/validations/jobs";
+import type { JobStatus } from "@/lib/types";
 
 export type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
-// `valor_total` e `faturamento_previsto` NÃO entram aqui de propósito: os
-// dois são derivados dos itens orçados do job (ver `calcularTotaisVersao`)
-// e só são reescritos pela abertura e pelas erratas. Já existiu um campo
-// editável no drawer que gravava valor_total à mão — o JOB-0001 ficou com
-// R$ 1.000.000 sobre R$ 5.617 de itens, e o card de Totais e a listagem
-// passaram a contar histórias diferentes.
-function extractInput(formData: FormData) {
-  return {
-    nome: formData.get("nome")?.toString() ?? "",
-    produto: formData.get("produto")?.toString() ?? "",
-    regional_id: formData.get("regional_id")?.toString() ?? "",
-    cidade: formData.get("cidade")?.toString() ?? "",
-    data_inicio_prevista: formData.get("data_inicio_prevista")?.toString() ?? "",
-    data_fim_prevista: formData.get("data_fim_prevista")?.toString() ?? "",
-    responsavel_id: formData.get("responsavel_id")?.toString() ?? "",
-  };
-}
-
 function mapJobDbError(msg: string): string {
   if (msg.includes("uniq_jobs_codigo_por_tenant")) return "Já existe um job com este código.";
   if (msg.includes("uniq_jobs_por_orcamento_ativo")) return "Este orçamento já tem um job ativo.";
   if (msg.includes("jobs_datas_ordem")) return "Data fim precisa ser igual ou posterior à data início.";
-  // Trava do banco da decisão 134: o editor não confere a regional.
+  // Trava do banco da decisão 134.
   if (msg.includes("regional_nao_disponivel_em_projetos")) {
     return "Esta regional é só de folha de pagamento e não pode ser usada em jobs.";
   }
   return "Não foi possível salvar o job.";
 }
 
-export async function atualizarJob(
-  id: string,
-  formData: FormData,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const gate = await checarPermissao(session, "jobs.editar_metadata");
-  if (!gate.ok) return gate;
-  const parsed = jobSchema.safeParse(extractInput(formData));
-
-  if (!parsed.success) {
-    return {
-      ok: false,
-      message: "Verifique os campos destacados.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
-  }
-
-  const supabase = createClient();
-
-  // Job encerrado ou cancelado é histórico: nada mais nele é editado.
-  // A trava é aqui e não só no botão porque a action é o que grava.
-  const { data: atual } = await supabase
-    .from("jobs")
-    .select("status")
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ status: JobStatus }>();
-
-  if (!atual) return { ok: false, message: "Job não encontrado." };
-
-  if (jobEstaCongelado(atual.status)) {
-    await logAuditEvent({
-      acao: "acao_negada",
-      tenantId: session.activeTenant.id,
-      entidadeTipo: "job",
-      entidadeId: id,
-      metadata: {
-        acao_tentada: "job.atualizado",
-        motivo: "status_bloqueia_edicao",
-        status_atual: atual.status,
-      },
-    });
-    return {
-      ok: false,
-      message: `Job ${jobStatusLabel(atual.status).toLowerCase()} — não pode mais ser editado.`,
-    };
-  }
-
-  // Apenas campos operacionais são atualizáveis aqui — hierarquia e status têm actions próprias
-  const { error } = await supabase
-    .from("jobs")
-    .update({
-      nome: parsed.data.nome,
-      produto: parsed.data.produto,
-      regional_id: parsed.data.regional_id,
-      cidade: parsed.data.cidade,
-      data_inicio_prevista: parsed.data.data_inicio_prevista,
-      data_fim_prevista: parsed.data.data_fim_prevista,
-      responsavel_id: parsed.data.responsavel_id,
-    })
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (error) {
-    console.error("[jobs.atualizar]", error.message);
-    return { ok: false, message: mapJobDbError(error.message) };
-  }
-
-  await logAuditEvent({
-    acao: "job.atualizado",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "job",
-    entidadeId: id,
-  });
-
-  revalidatePath(`/jobs/${id}`);
-  revalidatePath("/jobs");
-  return { ok: true, id };
-}
+/**
+ * `atualizarJob` saiu daqui em 14/10/2026 (decisão 174), junto com o
+ * "Editar" da página do job: depois da abertura as informações do job não
+ * mudam (Tiago). Antes da abertura, nome, GP, produtor, cidade, regional e
+ * datas se revisam no envio para abertura, na tela do orçamento (decisão
+ * 057). Mantida exportada, ela seria uma Server Action viva — o produtor
+ * trocava pelo console o GP de um job aberto.
+ *
+ * A equipe do job (quem mais participa e quem envia PP) mora no botão
+ * "Equipe": `salvarEquipeDoProjeto`, em app/(app)/jobs/_equipe/actions.ts.
+ */
 
 /**
  * `atualizarStatusJob` saiu daqui em 28/09/2026 (revisão da decisão 020).

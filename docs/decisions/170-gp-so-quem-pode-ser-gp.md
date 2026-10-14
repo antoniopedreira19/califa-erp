@@ -75,3 +75,11 @@ os 30 têm GP com o papel GP.
   regra vale para ele — os GPs Responsáveis do projeto que podem ser GP,
   mais o gravado, com a conferência no servidor quando muda —, em commit
   próprio, depois da conferência no navegador.
+
+## ⚠️ Nota de 2026-10-14 — o editor do job saiu (decisão 174)
+
+- O "Editar" da página do job, que esta decisão deixava para um commit
+  próprio ("Responsável" listando todos os membros), saiu inteiro na
+  [174](174-equipe-do-job-e-envio-de-pp-pelo-produtor.md): depois da
+  abertura o job não muda. O GP do job só se escolhe no envio para
+  abertura, que já segue a regra daqui.

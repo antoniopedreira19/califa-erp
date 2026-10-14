@@ -28,7 +28,8 @@ import {
   calcularTotaisPlanejados,
   calcularTotaisRealizado,
 } from "@/lib/calculos/versao-totais";
-import { JobEditorDrawer } from "./job-editor-drawer";
+import { BotaoEquipe } from "../_equipe/equipe-dialog";
+import { carregarEquipeDoJob } from "@/lib/data/equipe-do-projeto";
 import { BarraAcoesJob } from "./barra-acoes-job";
 import { FichaJob } from "./ficha-job";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
@@ -91,12 +92,14 @@ export default async function JobDetailPage({
   // leituras independentes. A trava só interessa a quem pode pedir.
   const supabaseDoPedido = createClient();
   const podePedirCancelamento = pode(session.activeRole, "jobs.solicitar_cancelamento");
-  const [detalhe, cancelamento, travaDoPedido] = await Promise.all([
+  const [detalhe, cancelamento, travaDoPedido, equipe] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     cancelamentoDoJob(supabaseDoPedido, session.activeTenant.id, params.jobId),
     podePedirCancelamento
       ? travaDoCancelamento(supabaseDoPedido, params.jobId)
       : Promise.resolve(null),
+    // O botão "Equipe" (decisão 174).
+    carregarEquipeDoJob(supabaseDoPedido, session.activeTenant.id, params.jobId),
   ]);
   if (!detalhe) notFound();
 
@@ -117,7 +120,6 @@ export default async function JobDetailPage({
     erratas,
     versaoAprovada,
     versaoLabel,
-    regionais,
     responsaveis,
     contatosCobranca,
     ppsDoJob,
@@ -234,17 +236,21 @@ export default async function JobDetailPage({
               <Badge className={cn("border", statusBadgeClasses(statusExibido))}>
                 {jobStatusLabel(statusExibido)}
               </Badge>
-              {/* Encerrado e cancelado sao historico: sem edicao. Papeis
-                  sem `jobs.editar_metadata` (Financeiro, Freelancer) tambem
-                  nao veem o botao. */}
-              {!jobEstaCongelado(job.status) &&
-                pode(session.activeRole, "jobs.editar_metadata") && (
-                  <JobEditorDrawer
-                    job={job}
-                    regionais={regionais}
-                    responsaveis={responsaveis}
-                  />
-                )}
+              {/* O "Editar" saiu na decisão 174: depois da abertura, o job
+                  não muda. No lugar dele, a Equipe — membros do projeto,
+                  responsáveis do job e a chave do envio de PP pelo
+                  Produtor Responsável. */}
+              {equipe && (
+                <BotaoEquipe
+                  equipe={equipe}
+                  jobId={job.id}
+                  podeMudarMembros={pode(session.activeRole, "projetos.editar_equipe")}
+                  podeMudarChave={
+                    pode(session.activeRole, "jobs.liberar_envio_pp_produtor") &&
+                    !jobEstaCongelado(job.status)
+                  }
+                />
+              )}
               {mostraMenuDoJob && (
                 <MenuDoJob
                   jobId={job.id}

@@ -371,3 +371,13 @@ nesse ponto assim como o produtor.**
   (`jobs.ver_restrito`), mas nenhum ponto da tela do job usa esse recurso.
   O Tiago escolheu corrigir isso depois, numa entrega própria.
 
+## ⚠️ Revisão (2026-10-14) — o Produtor Responsável com a chave também envia PP (decisão 174)
+
+- Enviar PP ao financeiro continua sendo do GP e do administrador, com uma
+  exceção: na Equipe do job, o GP (ou o administrador) liga a chave "Envia
+  PPs ao financeiro" do **Produtor Responsável daquele job**. Ligada, ele
+  envia, reenvia a rejeitada, cancela a PP que está no financeiro e corrige
+  a NF em avaliação, como o GP. Ver a
+  [174](174-equipe-do-job-e-envio-de-pp-pelo-produtor.md).
+- O autor do envio continua gravado pelo gatilho: o financeiro vê o nome do
+  produtor quando foi ele quem enviou.

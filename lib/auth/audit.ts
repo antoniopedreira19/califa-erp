@@ -185,6 +185,10 @@ export type AuditAction =
   | "job.pps_canceladas_no_pedido_de_cancelamento"
   | "job.cancelamento_recusado"
   | "job.cancelado_apos_abertura"
+  // Decisão 174: a Equipe do projeto e a chave do Produtor Responsável.
+  | "projeto.equipe_alterada"
+  | "job.envio_de_pp_do_produtor_ligado"
+  | "job.envio_de_pp_do_produtor_desligado"
   // Decisão 128: o envio depois do "Cancelar aprovação" da devolução volta
   // com o código do job cancelado; e o planejado da versão aprovada se
   // corrige com o job devolvido, na versão e na cópia do job.

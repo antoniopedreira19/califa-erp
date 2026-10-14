@@ -27,6 +27,8 @@ import {
   getRolesFor,
   recursos,
   PermissaoNegadaError,
+  enviaPPNoJob,
+  corrigeNfNoJob,
   type Recurso,
 } from "./permissoes";
 import { requirePermissao } from "./permissoes-server";
@@ -458,4 +460,25 @@ test("Cancelamento de job aberto: a produção pede (GP e administrador), o fina
   assert.deepEqual(pede, new Set<AppRole>(["administrador", "gerente_producao"]));
   const decide = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.decidir_cancelamento")));
   assert.deepEqual(decide, new Set<AppRole>(["administrador", "financeiro"]));
+});
+
+test("Equipe e a chave do envio de PP pelo Produtor Responsável (decisão 174)", () => {
+  const liga = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.liberar_envio_pp_produtor")));
+  assert.deepEqual(liga, new Set<AppRole>(["administrador", "gerente_producao"]));
+  const equipe = new Set(ROLES_VALIDAS.filter((r) => pode(r, "projetos.editar_equipe")));
+  assert.deepEqual(equipe, new Set<AppRole>(["administrador", "gerente_producao", "produtor"]));
+
+  const produtor = "00000000-0000-4000-8000-0000000prod1";
+  const outro = "00000000-0000-4000-8000-0000000prod2";
+  const comChave = { produtor_id: produtor, produtor_envia_pp: true };
+  const semChave = { produtor_id: produtor, produtor_envia_pp: false };
+  // O GP envia sempre; o produtor, só o responsável e só com a chave.
+  assert.equal(enviaPPNoJob("gerente_producao", outro, semChave), true);
+  assert.equal(enviaPPNoJob("produtor", produtor, semChave), false);
+  assert.equal(enviaPPNoJob("produtor", produtor, comChave), true);
+  assert.equal(enviaPPNoJob("produtor", outro, comChave), false);
+  // A NF em avaliação, igual: o financeiro sempre, o produtor com a chave.
+  assert.equal(corrigeNfNoJob("financeiro", outro, semChave), true);
+  assert.equal(corrigeNfNoJob("produtor", produtor, semChave), false);
+  assert.equal(corrigeNfNoJob("produtor", produtor, comChave), true);
 });

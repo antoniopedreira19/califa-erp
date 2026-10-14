@@ -7126,3 +7126,10 @@ financeiro". Regra completa na §9 da decisão 115.
   "Cancelamento solicitado" enquanto o pedido está pendente.
 - O card da Central Financeira (`app/(app)/financeiro/page.tsx`) **não** conta
   os pedidos: ficou de fora de propósito.
+
+## ⚠️ Nota de 2026-10-14 — PP enviada pelo Produtor Responsável (decisão 174)
+
+- O GP pode liberar o Produtor Responsável de um job para enviar PPs ao
+  financeiro. Nesses jobs, "Enviada por" pode trazer o nome do produtor, e
+  ele também corrige a NF da PP em avaliação
+  (`corrigir_notas_fiscais_da_pp` aceita a chave).

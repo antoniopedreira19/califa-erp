@@ -17,6 +17,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { pode, produtorComAChave } from "@/lib/permissoes";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 /** A nota do cadastro com aquele número, e as PPs que ela já cobre. */
@@ -127,13 +128,42 @@ export interface PPParaCorrigirNf {
   nfs: NfDaPPParaCorrigir[];
 }
 
+/**
+ * Corrigir a NF da PP em avaliação: o papel (`jobs.corrigir_nf_pp`) ou o
+ * Produtor Responsável do job com a chave ligada pelo GP (decisão 174). Sem
+ * nenhum dos dois, `checarPermissao` grava a negativa na auditoria. O banco
+ * confere de novo (`corrigir_notas_fiscais_da_pp`).
+ */
+async function checarCorrecaoDeNf(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  ppId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (pode(session.activeRole, "jobs.corrigir_nf_pp")) return { ok: true };
+  const { data } = await createClient()
+    .from("pedidos_compra")
+    .select("jobs!inner(produtor_id, produtor_envia_pp)")
+    .eq("id", ppId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ jobs: { produtor_id: string | null; produtor_envia_pp: boolean } }>();
+  if (
+    data?.jobs &&
+    produtorComAChave(session.profile.id, {
+      produtor_id: data.jobs.produtor_id,
+      produtor_envia_pp: data.jobs.produtor_envia_pp === true,
+    })
+  ) {
+    return { ok: true };
+  }
+  return checarPermissao(session, "jobs.corrigir_nf_pp", { pp_id: ppId });
+}
+
 type ResultadoCarga = { ok: true; pp: PPParaCorrigirNf } | { ok: false; message: string };
 
 export async function carregarNfsDaPPParaCorrigir(ppId: unknown): Promise<ResultadoCarga> {
   const id = z.string().uuid().safeParse(ppId);
   if (!id.success) return { ok: false, message: "PP não encontrada." };
   const session = await requireSession();
-  const gate = await checarPermissao(session, "jobs.corrigir_nf_pp", { pp_id: id.data });
+  const gate = await checarCorrecaoDeNf(session, id.data);
   if (!gate.ok) return { ok: false, message: gate.message };
   const supabase = createClient();
   const { data: pp, error } = await supabase
@@ -232,7 +262,7 @@ export async function corrigirNfsDaPP(
   if (futura) return { ok: false, message: `A data de emissão da NF ${futura.numero} está no futuro.` };
 
   const session = await requireSession();
-  const gate = await checarPermissao(session, "jobs.corrigir_nf_pp", { pp_id: ppId });
+  const gate = await checarCorrecaoDeNf(session, ppId);
   if (!gate.ok) return { ok: false, message: gate.message };
   const supabase = createClient();
 
