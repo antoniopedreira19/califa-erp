@@ -294,17 +294,23 @@ export async function importarFolhaContabilidade(input: {
   const ignorarCount = preview.filter((p) => p.acao === "ignorar").length;
 
   if (input.dryRun) {
-    return {
-      ok: true,
-      importacao_id: null,
-      linhas_total: parsed.linhas.length,
-      linhas_criadas: criarPreview.length,
-      linhas_atualizadas: atualizarPreview.length,
-      linhas_ignoradas: ignorarCount,
-      warnings,
-      totalizadores_pdf,
-      preview,
-    };
+    // Sanitiza pra plain object: workaround pro erro "Only plain objects... can be
+    // passed to Server Actions". Alguma propriedade do parse ou do Supabase vem com
+    // null prototype em runtime e quebra o encodeReply do React. JSON.parse/stringify
+    // garante que tudo vira literal.
+    return JSON.parse(
+      JSON.stringify({
+        ok: true,
+        importacao_id: null,
+        linhas_total: parsed.linhas.length,
+        linhas_criadas: criarPreview.length,
+        linhas_atualizadas: atualizarPreview.length,
+        linhas_ignoradas: ignorarCount,
+        warnings,
+        totalizadores_pdf,
+        preview,
+      }),
+    );
   }
 
   // Modo real: cria/atualiza linhas em folhas_pagamento.
@@ -461,17 +467,19 @@ export async function importarFolhaContabilidade(input: {
     `/rh/folhas/${input.ano}-${String(input.mes).padStart(2, "0")}`,
   );
 
-  return {
-    ok: true,
-    importacao_id: importacao?.id ?? null,
-    linhas_total: parsed.linhas.length,
-    linhas_criadas: criarPreview.length,
-    linhas_atualizadas: atualizarPreview.length,
-    linhas_ignoradas: ignorarCount,
-    warnings,
-    totalizadores_pdf,
-    preview,
-  };
+  return JSON.parse(
+    JSON.stringify({
+      ok: true,
+      importacao_id: importacao?.id ?? null,
+      linhas_total: parsed.linhas.length,
+      linhas_criadas: criarPreview.length,
+      linhas_atualizadas: atualizarPreview.length,
+      linhas_ignoradas: ignorarCount,
+      warnings,
+      totalizadores_pdf,
+      preview,
+    }),
+  );
 }
 
 /**
