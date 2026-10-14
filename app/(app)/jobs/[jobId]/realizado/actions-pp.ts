@@ -2141,6 +2141,54 @@ function faltaNosAnexosDoEnvio(
  * tipo, o número e a NF atualizados. Os novos precisam estar no lugar da PP
  * no bucket — subiram pelo `prefixoAnexosPedidoCompra`.
  */
+/**
+ * Confere a lista de anexos que a tela mandou para a PP, sem gravar nada:
+ * o tamanho, e os arquivos novos no lugar da PP no bucket. A edição da PP
+ * gerada (decisão 173) confere antes de mexer na PP; o envio, logo antes de
+ * gravar os anexos.
+ */
+async function conferirAnexosDaPP(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  jobId: string,
+  ppId: string,
+  anexos: AnexoUploaded[],
+): Promise<
+  | { erro: string }
+  | { erro: null; idsAtuais: Set<string>; novos: AnexoUploaded[]; saem: Array<{ id: string; arquivo_path: string }> }
+> {
+  const prefixo = `${tenantId}/${jobId}/${ppId}/anexos/`;
+  const { data: atuais, error: atuaisErr } = await supabase
+    .from("pedidos_compra_anexos")
+    .select("id, arquivo_path")
+    .eq("pedido_compra_id", ppId)
+    .eq("tenant_id", tenantId);
+  if (atuaisErr) return { erro: `Falha ao ler os anexos: ${atuaisErr.message}` };
+  const idsAtuais = new Set((atuais ?? []).map((a) => a.id as string));
+  const novos = anexos.filter((a) => !idsAtuais.has(a.anexo_id));
+  const ficam = new Set(anexos.map((a) => a.anexo_id));
+  const saem = (atuais ?? [])
+    .filter((a) => !ficam.has(a.id as string))
+    .map((a) => ({ id: a.id as string, arquivo_path: a.arquivo_path as string }));
+
+  const somaBytes = anexos.reduce((s, a) => s + a.tamanho_bytes, 0);
+  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) return { erro: "Anexos somam mais que 25 MB." };
+  for (const a of novos) {
+    if (a.tamanho_bytes > PP_ANEXO_TAMANHO_MAX_BYTES) return { erro: `Anexo ${a.nome_original} > 8 MB.` };
+    if (!a.path.startsWith(prefixo)) return { erro: "Anexo em path inválido." };
+  }
+  if (novos.length > 0) {
+    const { data: noBucket, error: listErr } = await supabase.storage
+      .from(BUCKET)
+      .list(prefixo.replace(/\/$/, ""));
+    if (listErr) return { erro: `Falha ao listar anexos: ${listErr.message}` };
+    const nomes = new Set((noBucket ?? []).map((f) => `${prefixo}${f.name}`));
+    const faltando = novos.find((a) => !nomes.has(a.path));
+    if (faltando) return { erro: `Anexo ${faltando.nome_original} não foi encontrado no bucket. Refaça o upload.` };
+  }
+  return { erro: null, idsAtuais, novos, saem };
+}
+
 async function gravarAnexosDoEnvio(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
@@ -2150,32 +2198,9 @@ async function gravarAnexosDoEnvio(
   anexos: AnexoUploaded[],
 ): Promise<string | null> {
   const prefixo = `${tenantId}/${jobId}/${ppId}/anexos/`;
-  const { data: atuais, error: atuaisErr } = await supabase
-    .from("pedidos_compra_anexos")
-    .select("id, arquivo_path")
-    .eq("pedido_compra_id", ppId)
-    .eq("tenant_id", tenantId);
-  if (atuaisErr) return `Falha ao ler os anexos: ${atuaisErr.message}`;
-  const idsAtuais = new Set((atuais ?? []).map((a) => a.id as string));
-  const novos = anexos.filter((a) => !idsAtuais.has(a.anexo_id));
-  const ficam = new Set(anexos.map((a) => a.anexo_id));
-  const saem = (atuais ?? []).filter((a) => !ficam.has(a.id as string));
-
-  const somaBytes = anexos.reduce((s, a) => s + a.tamanho_bytes, 0);
-  if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) return "Anexos somam mais que 25 MB.";
-  for (const a of novos) {
-    if (a.tamanho_bytes > PP_ANEXO_TAMANHO_MAX_BYTES) return `Anexo ${a.nome_original} > 8 MB.`;
-    if (!a.path.startsWith(prefixo)) return "Anexo em path inválido.";
-  }
-  if (novos.length > 0) {
-    const { data: noBucket, error: listErr } = await supabase.storage
-      .from(BUCKET)
-      .list(prefixo.replace(/\/$/, ""));
-    if (listErr) return `Falha ao listar anexos: ${listErr.message}`;
-    const nomes = new Set((noBucket ?? []).map((f) => `${prefixo}${f.name}`));
-    const faltando = novos.find((a) => !nomes.has(a.path));
-    if (faltando) return `Anexo ${faltando.nome_original} não foi encontrado no bucket. Refaça o upload.`;
-  }
+  const conferencia = await conferirAnexosDaPP(supabase, tenantId, jobId, ppId, anexos);
+  if (conferencia.erro !== null) return conferencia.erro;
+  const { idsAtuais, novos, saem } = conferencia;
 
   if (saem.length > 0) {
     const { error } = await supabase
@@ -3434,7 +3459,9 @@ export async function feriadosNacionaisParaPP(): Promise<string[]> {
  * datas novas e a data de emissão de antes.
  *
  * Só vale para a PP ainda no job (`gerada`) e só quando o vencimento atual
- * já não aceita envio: fora disso a PP gerada segue sem edição (decisão 153).
+ * já não aceita envio. Desde a decisão 173 a PP gerada também se edita
+ * inteira (`editarPPGerada`); este atalho continua para quem só precisa da
+ * data nova.
  */
 export async function atualizarVencimentoDaPP(
   ppId: string,
@@ -3639,4 +3666,439 @@ export async function atualizarVencimentoDaPP(
 
   revalidatePath(`/jobs/${job.id}`);
   return { ok: true, codigo: pp.codigo, vencimento: novo };
+}
+
+/**
+ * Edita a PP que ainda está no job — status "gerada" (decisão 173,
+ * 13/10/2026). Revê a 153, que tinha congelado a PP na geração: duas
+ * produtoras travaram em quatro dias (anexar a NF de uma PP já gerada, mudar
+ * o parcelamento), e o Tiago decidiu que a PP gerada se edita inteira, no
+ * lugar.
+ *
+ * - O formulário é o mesmo da PP a emitir, com as mesmas regras da geração
+ *   (dados, janelas e prazo de envio, urgência, parcelas, cadastro do
+ *   fornecedor, CNPJ da PP, titular da verba). As datas que já estavam
+ *   gravadas passam como estão: a regra vale para a data que muda.
+ * - O código fica. O PDF é refeito por cima do anterior, com a data de
+ *   emissão de antes, e os dados de pagamento do fornecedor são congelados
+ *   de novo (decisão 067), como na geração.
+ * - Os anexos vêm na lista inteira, como no envio: os que saíram somem, os
+ *   novos entram, e os que ficaram têm o tipo e a NF atualizados. A NF só se
+ *   liga ao cadastro de notas no envio, como antes.
+ * - A marca "Pronta para envio" cai: quem preparou confere de novo.
+ * - A pergunta "Esta é a última PP deste item?" vale de novo para o item.
+ * - A linha do tempo ganha "Editada" pelo gatilho (`editada_em`).
+ *
+ * Enviada ao financeiro, a PP não muda mais: o update só pega a gerada.
+ */
+export async function editarPPGerada(
+  ppId: string,
+  dados: z.input<typeof dadosSchema>,
+  anexos: z.input<typeof anexoUploadedSchema>[],
+  ultimaPPDoItem: boolean,
+): Promise<Result<{ codigo: string }>> {
+  if (!z.string().uuid().safeParse(ppId).success) {
+    return { ok: false, message: "PP inválida. Feche o formulário e tente de novo." };
+  }
+  if (typeof ultimaPPDoItem !== "boolean") {
+    return { ok: false, message: "Responda se esta é a última PP deste item." };
+  }
+  try {
+    return await editarPPGeradaImpl(ppId, dados, anexos, ultimaPPDoItem);
+  } catch (err) {
+    console.error("[pp.editar.exception]", err);
+    return {
+      ok: false,
+      message: `Falha ao salvar a PP: ${err instanceof Error ? err.message : "erro desconhecido"}.`,
+    };
+  }
+}
+
+async function editarPPGeradaImpl(
+  ppId: string,
+  dados: z.input<typeof dadosSchema>,
+  anexos: z.input<typeof anexoUploadedSchema>[],
+  ultimaPPDoItem: boolean,
+): Promise<Result<{ codigo: string }>> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: ppRow } = await supabase
+    .from("pedidos_compra")
+    .select(
+      "id, codigo, job_id, item_realizado_id, status, pdf_path, created_at, valor, fornecedor_id, " +
+        "urgente, urgente_por, urgente_em, pronta_para_envio_em, " +
+        "parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor, pdf_path)",
+    )
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      codigo: string;
+      job_id: string;
+      item_realizado_id: string;
+      status: PPStatus;
+      pdf_path: string | null;
+      created_at: string;
+      valor: number | string;
+      fornecedor_id: string | null;
+      urgente: boolean;
+      urgente_por: string | null;
+      urgente_em: string | null;
+      pronta_para_envio_em: string | null;
+      parcelas: Array<{
+        id: string;
+        numero: number;
+        data_vencimento: string;
+        valor: number | string;
+        pdf_path: string | null;
+      }> | null;
+    }>();
+  if (!ppRow) return { ok: false, message: "PP não encontrada." };
+  if (ppRow.status !== "gerada") {
+    return {
+      ok: false,
+      message: `${ppRow.codigo} já saiu do job: depois do envio ao financeiro, a PP não se edita mais.`,
+    };
+  }
+
+  const gate = await checarGatesRealizado(ppRow.item_realizado_id);
+  if (!gate.ok) return gate;
+  const { item, job } = gate;
+
+  // As mesmas portas da geração: o job na pré-abertura ou devolvido só
+  // aceita PP a emitir, o job de mídia não tem PP pela planilha, e a linha
+  // com save não recebe PP (decisão 099).
+  const travada = geracaoTravadaPeloJob(job.status);
+  if (travada) return { ok: false, message: travada };
+  const travaMidia = await travaDoJobDeMidia(supabase, tenantId, job.id, "pp");
+  if (travaMidia) return { ok: false, message: travaMidia };
+  const comSave = await barrarPPEmLinhaComSave(supabase, tenantId, item);
+  if (comSave) return comSave;
+
+  const dadosParsed = dadosSchema.safeParse(dados);
+  if (!dadosParsed.success) {
+    return {
+      ok: false,
+      message: `Dados inválidos: ${dadosParsed.error.issues[0]?.message ?? "erro"}.`,
+    };
+  }
+  const d = dadosParsed.data;
+
+  // ---- Janelas, prazo de envio e urgência (decisões 077 e 157) ----
+  // As datas gravadas passam como estão; a data que muda segue a regra.
+  const feriados = await carregarFeriadosNacionais(supabase, tenantId);
+  const parcelasAntes = (ppRow.parcelas ?? [])
+    .slice()
+    .sort((a, b) => a.numero - b.numero)
+    .map((p) => ({ ...p, data_vencimento: p.data_vencimento.slice(0, 10), valor: Number(p.valor) }));
+  const erroJanela = validarVencimentosNasJanelas(
+    d.parcelas.map((p) => p.data_vencimento),
+    parcelasAntes.map((p) => p.data_vencimento),
+    feriados,
+  );
+  if (erroJanela) return { ok: false, message: erroJanela };
+  const urgencia = camposDeUrgencia(
+    d,
+    { urgente: ppRow.urgente, urgente_por: ppRow.urgente_por, urgente_em: ppRow.urgente_em },
+    session.profile.id,
+  );
+  if (!urgencia.ok) return urgencia;
+
+  const valor = valorDaPPPorUnidade(d.valor_unitario, d.quantidade, d.dias_meses);
+  if (valor <= 0) {
+    return { ok: false, message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado." };
+  }
+  if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
+    return {
+      ok: false,
+      message: `A soma das parcelas precisa fechar com o valor da PP (${brl(valor)}).`,
+    };
+  }
+
+  // ---- Anexos: conferidos antes de mexer em qualquer coisa ----
+  const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexos);
+  if (!anexosParsed.success) return { ok: false, message: "Formato de anexo inválido." };
+  const conferencia = await conferirAnexosDaPP(supabase, tenantId, job.id, ppId, anexosParsed.data);
+  if (conferencia.erro !== null) return { ok: false, message: conferencia.erro };
+
+  // ---- Quem recebe, a empresa e o CNPJ da PP, como na geração ----
+  const tipoVerba = tipoDaVerbaDosDados(d);
+  const pagaFornecedor = usaFornecedor(d);
+  const [fornRes, empRes, responsavelRes] = await Promise.all([
+    !pagaFornecedor
+      ? Promise.resolve({ data: null })
+      : supabase
+          .from("fornecedores")
+          .select("*")
+          .eq("id", d.fornecedor_id as string)
+          .eq("tenant_id", tenantId)
+          .eq("status", "ativo")
+          .maybeSingle(),
+    supabase
+      .from("empresas")
+      .select("id")
+      .eq("id", job.empresa_id ?? d.empresa_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+    tipoVerba === "producao"
+      ? listActiveMembers(tenantId).then((membros) => ({
+          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
+        }))
+      : Promise.resolve({ data: null }),
+  ]);
+  if (pagaFornecedor && !fornRes.data) return { ok: false, message: "Fornecedor inválido ou inativo." };
+  const cadastro = fornRes.data as
+    | ({ nome: string; tipo_pessoa: string; regime_tributario: string | null; cnae: string | null; sem_dados_pagamento?: boolean } & Record<string, unknown>)
+    | null;
+  // Decisão 161: fornecedor sem conta nem PIX só sai com chave aleatória ou boleto.
+  if (pagaFornecedor && cadastro?.sem_dados_pagamento === true && !foraDoCadastroDe(d)) {
+    return {
+      ok: false,
+      message: "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória ou boleto.",
+    };
+  }
+  // Decisão 166: o cadastro do fornecedor precisa do regime e do CNAE.
+  if (pagaFornecedor) {
+    const falta = pendenciasDoCadastroFiscal(cadastro);
+    if (falta.length > 0) {
+      const completa =
+        pode(session.activeRole, "cadastros.fornecedores.editar") ||
+        pode(session.activeRole, "cadastros.fornecedores.inline");
+      return {
+        ok: false,
+        message: `O cadastro de ${cadastro?.nome ?? "fornecedor"} está incompleto: falta ${listarPendencias(falta)}. ${
+          completa
+            ? "Clique no lápis ao lado do fornecedor para completar."
+            : "Peça ao financeiro para completar o cadastro."
+        }`,
+      };
+    }
+  }
+  if (tipoVerba === "producao" && !responsavelRes.data) {
+    return { ok: false, message: "Responsável inválido ou não encontrado." };
+  }
+  const titular = await nomeDoTitularDaVerba(
+    supabase,
+    tenantId,
+    d,
+    fornRes.data as { nome?: string | null; razao_social?: string | null } | null,
+  );
+  if (!titular.ok) return titular;
+  if (!empRes.data) return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
+  const cnpjDaPP = await cnpjDaPPNaGeracao(
+    supabase,
+    tenantId,
+    { regional_id: job.regional_id, empresa_id: job.empresa_id },
+    d.estabelecimento_id ?? null,
+  );
+  if (!cnpjDaPP.ok) return cnpjDaPP;
+
+  // ---- O PDF novo, antes de gravar: se ele falhar, nada mudou ----
+  const parcelasNovas = d.parcelas.map((p, i) => ({
+    numero: i + 1,
+    data_vencimento: p.data_vencimento,
+    valor: Number(p.valor),
+  }));
+  const contexto = await carregarContextoPdf(supabase, tenantId, job);
+  let documento: { path: string; buffer: Buffer };
+  try {
+    documento = await renderizarDocumentoDaPP({
+      tenantId,
+      jobId: job.id,
+      ppId,
+      codigo: ppRow.codigo,
+      pp: {
+        servico: d.servico,
+        quantidade: d.quantidade,
+        especificacoes: d.especificacoes ?? null,
+        valor,
+        verba_producao: d.verba_producao,
+        tipo_verba: tipoVerba,
+      },
+      empresa: cnpjDaPP.empresa,
+      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
+      pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+      responsavelVerbaNome:
+        tipoVerba === "producao"
+          ? (responsavelRes.data?.nome ?? "")
+          : tipoVerba
+            ? (titular.nome ?? "")
+            : null,
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas: parcelasNovas,
+      // A PP é a mesma: a emissão continua a da geração.
+      emitidaEm: ppRow.created_at,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Falha ao refazer o PDF: ${msg}` };
+  }
+  const caminhoDoPdf = ppRow.pdf_path || documento.path;
+
+  // ---- Grava a PP — só se ainda gerada (trava de corrida) ----
+  // A foto do pagamento é tirada de novo, junto do PDF novo (decisão 067).
+  const { data: atualizada, error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      ...colunasDaVerba(d, titular.nome),
+      empresa_id: job.empresa_id ?? d.empresa_id,
+      estabelecimento_id: cnpjDaPP.id,
+      servico: d.servico,
+      valor_unitario: d.valor_unitario,
+      quantidade: d.quantidade,
+      dias_meses: d.dias_meses,
+      especificacoes: d.especificacoes ?? null,
+      ...urgencia.campos,
+      valor,
+      prazo_pagamento: parcelasNovas[0].data_vencimento,
+      pdf_path: caminhoDoPdf,
+      ...tirarFoto(fornRes.data as DadosDePagamento | null, foraDoCadastroDe(d)),
+      dados_pagamento_congelados_em: fornRes.data ? new Date().toISOString() : null,
+      ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
+      // Decisão 173: editar desfaz o "Pronta para envio" — quem preparou
+      // confere os documentos de novo. Quem e quando da edição, o gatilho
+      // grava pela sessão.
+      pronta_para_envio_em: null,
+      editada_em: new Date().toISOString(),
+    })
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .eq("status", "gerada")
+    .select("id");
+  if (updErr) return { ok: false, message: `Falha ao salvar a PP: ${updErr.message}` };
+  if (!atualizada || atualizada.length === 0) {
+    return { ok: false, message: `${ppRow.codigo} mudou de situação enquanto você editava. Recarregue a página.` };
+  }
+
+  // ---- Parcelas no lugar: a PP nunca fica sem parcela ----
+  // As que continuam mudam de data e valor; as que sobram saem; as novas
+  // entram. A gerada não tem título nem baixa, então pode ser refeita.
+  for (const nova of parcelasNovas) {
+    const antes = parcelasAntes.find((p) => p.numero === nova.numero);
+    const { error } = antes
+      ? await supabase
+          .from("pedidos_compra_parcelas")
+          .update({ data_vencimento: nova.data_vencimento, valor: nova.valor, pdf_path: caminhoDoPdf })
+          .eq("id", antes.id)
+          .eq("tenant_id", tenantId)
+      : await supabase.from("pedidos_compra_parcelas").insert({
+          tenant_id: tenantId,
+          pedido_compra_id: ppId,
+          numero: nova.numero,
+          data_vencimento: nova.data_vencimento,
+          valor: nova.valor,
+          pdf_path: caminhoDoPdf,
+          created_by: session.profile.id,
+        });
+    if (error) {
+      return {
+        ok: false,
+        message: `A PP foi salva, mas a parcela ${nova.numero} falhou: ${error.message}. Abra a PP e salve de novo.`,
+      };
+    }
+  }
+  const sobram = parcelasAntes.filter((p) => p.numero > parcelasNovas.length);
+  if (sobram.length > 0) {
+    const { error } = await supabase
+      .from("pedidos_compra_parcelas")
+      .delete()
+      .in("id", sobram.map((p) => p.id))
+      .eq("tenant_id", tenantId);
+    if (error) {
+      return {
+        ok: false,
+        message: `A PP foi salva, mas as parcelas antigas não saíram: ${error.message}. Abra a PP e salve de novo.`,
+      };
+    }
+  }
+
+  // ---- O PDF por cima do anterior, no mesmo caminho ----
+  {
+    const { error: uploadErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(caminhoDoPdf, documento.buffer, { contentType: "application/pdf", upsert: true });
+    if (uploadErr) {
+      return {
+        ok: false,
+        message: `A PP foi salva, mas o PDF novo não subiu: ${uploadErr.message}. Abra a PP e salve de novo.`,
+      };
+    }
+  }
+  // O documento por parcela de antes da decisão 112 sai do bucket: o
+  // documento único da PP o substitui.
+  const orfaos = Array.from(
+    new Set(parcelasAntes.map((p) => p.pdf_path).filter((c): c is string => Boolean(c) && c !== caminhoDoPdf)),
+  );
+  if (orfaos.length > 0) await supabase.storage.from(BUCKET).remove(orfaos);
+
+  // ---- Os anexos, como a tela os deixou ----
+  const erroAnexos = await gravarAnexosDoEnvio(
+    supabase,
+    tenantId,
+    session.profile.id,
+    job.id,
+    ppId,
+    anexosParsed.data,
+  );
+  if (erroAnexos) return { ok: false, message: `A PP foi salva, mas os anexos não: ${erroAnexos}` };
+
+  if (!d.verba_producao) {
+    await supabase
+      .from("jobs_itens_realizado")
+      .update({ fornecedor_id: d.fornecedor_id ?? null })
+      .eq("id", ppRow.item_realizado_id)
+      .eq("tenant_id", tenantId);
+  }
+
+  // A resposta da pergunta obrigatória vale para o ITEM (decisão 052).
+  const marcacao = await aplicarConclusaoDoItem(supabase, {
+    tenantId,
+    jobId: job.id,
+    itemRealizadoId: ppRow.item_realizado_id,
+    profileId: session.profile.id,
+    papel: session.activeRole,
+    itemNome: item.item_nome,
+    concluido: ultimaPPDoItem,
+    origem: "formulario_pp",
+  });
+  if (!marcacao.ok) console.error("[pp.editar.marcacao]", marcacao.message);
+
+  // Sem esta PP: o metadata soma o valor novo por cima.
+  const emPPsSemEsta = await somaDasPPsDoItem(supabase, tenantId, ppRow.item_realizado_id, ppId);
+  await logAuditEvent({
+    acao: "pedido_compra.editada",
+    tenantId,
+    entidadeTipo: "pedido_compra",
+    entidadeId: ppId,
+    metadata: {
+      pp_codigo: ppRow.codigo,
+      decisao: 173,
+      valor_antes: Number(ppRow.valor),
+      valor,
+      valor_unitario: d.valor_unitario,
+      quantidade: d.quantidade,
+      dias_meses: d.dias_meses,
+      parcelas_antes: parcelasAntes.map((p) => ({ data: p.data_vencimento, valor: p.valor })),
+      parcelas: parcelasNovas.map((p) => ({ data: p.data_vencimento, valor: p.valor })),
+      fornecedor_antes: ppRow.fornecedor_id,
+      ...colunasDaVerba(d, titular.nome),
+      pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
+      anexos: anexosParsed.data.length,
+      anexos_novos: conferencia.novos.length,
+      anexos_removidos: conferencia.saem.length,
+      pronta_desfeita: ppRow.pronta_para_envio_em !== null,
+      planejado_do_item: item.total_planejado,
+      acima_do_planejado: passaDoPlanejado(emPPsSemEsta + valor, item.total_planejado),
+      item_realizado_id: ppRow.item_realizado_id,
+      job_id: job.id,
+    },
+  });
+
+  revalidatePath(`/jobs/${job.id}`);
+  return { ok: true, codigo: ppRow.codigo };
 }

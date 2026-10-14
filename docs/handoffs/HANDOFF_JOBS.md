@@ -5279,3 +5279,41 @@ código publicado logo depois (`3305751`).
   status "Cancelamento solicitado".
 - Dados em `lib/data/cancelamentos.ts`; actions em
   `app/(app)/jobs/[jobId]/actions-cancelamento.ts`.
+
+## ⚠️ Nota de 2026-10-14 — a PP gerada volta a se editar, no lugar (decisão 173)
+
+- **Revê a 153.** No painel do item, a PP em "Aguardando envio" tem o lápis
+  **Editar PP**. Regra do Tiago (14/10/2026): **antes do envio, só editar;
+  depois do envio, só o "Ver formulário"** — nunca os dois. Quem só lê o job
+  (sem o lápis) fica com a ficha em leitura.
+- **Formulário:** o `GerarPPDrawer` ganhou `ppGeradaEditando`; a PP gerada
+  entra pelo mesmo caminho da PP a emitir (`ppGeradaComoAEmitir`). Título
+  "Editar PP-…", aviso âmbar quando a PP está pronta para envio, e um botão só
+  ("Salvar alterações"), que abre a `RevisaoDialog` em modo `edicao` ("Salvar
+  as alterações da PP-…?", "Esta PP … (era R$ …)").
+- **Action `editarPPGerada`** (`actions-pp.ts`): as mesmas regras da geração
+  (janelas, prazo de envio — data gravada passa —, urgência, parcelas,
+  cadastro do fornecedor, CNPJ da PP, titular da verba, save, mídia). Refaz o
+  PDF antes de gravar, grava a PP só se ainda gerada, ajusta as parcelas no
+  lugar (nunca fica sem parcela), grava os anexos como o envio
+  (`conferirAnexosDaPP` + `gravarAnexosDoEnvio`), apaga a marca "Pronta para
+  envio" e carimba `editada_em`. Auditoria `pedido_compra.editada` com o antes
+  e o depois.
+- **Banco:** `pedidos_compra.editada_em/por` + gatilho `trg_pp_carimba_edicao`
+  (só PP gerada; quem e quando pela sessão; não se apaga) e o evento `editada`
+  na linha do tempo (`pp_registra_evento`). Migrations `20261013950001` e
+  `20261014950001` (a segunda só renumera: a decisão nasceu 170 e colidiu com
+  a "GP só quem pode ser GP").
+- **Textos:** a ficha da PP gerada aponta o lápis do painel; a revisão do
+  "Gerar PP" diz "A PP pode ser editada até o envio ao financeiro"; o aviso
+  de cancelar da ficha não diz mais "já está no financeiro" para a PP gerada
+  (defeito da 160).
+- **Testado** no TES-1014/26, logado como administrador, no servidor do
+  worktree: PP-00167 (linha "Frete teste 159") gerada a R$ 150, editada para
+  R$ 200 em 2 parcelas (09/11 e 08/12) com o anexo NF 9170. No banco: mesmo
+  código, PDF refeito no mesmo caminho (conferido o conteúdo: 2 parcelas de
+  R$ 100, total R$ 200), eventos emitida → editada → cancelada, realizado do
+  item 120 → 320 → 120, auditoria com o antes e o depois. A marca "Pronta" e
+  a trava de PP enviada foram conferidas numa transação desfeita, na PP-00088.
+- **Resíduo de teste:** PP-00167 cancelada no TES-1014/26, com o arquivo da
+  NF 9170 de teste.

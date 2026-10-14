@@ -1920,6 +1920,10 @@ export interface PedidoCompra {
    *  PP que ninguém deixou pronta. */
   pronta_para_envio_em: string | null;
   pronta_para_envio_por: string | null;
+  /** Decisão 173: a última edição da PP gerada — quando e quem, gravados
+   *  pelo gatilho `trg_pp_carimba_edicao`. Null na PP nunca editada. */
+  editada_em: string | null;
+  editada_por: string | null;
   /** A FOTO dos dados de pagamento do fornecedor, tirada no envio ao
    *  financeiro (decisão 067, 09/09/2026). O financeiro paga por ela, e
    *  não pelo cadastro ao vivo: desde que o campo de fornecedor ganhou o
@@ -2067,7 +2071,9 @@ export type PPEventoTipo =
   | "prestacao_aprovada"
   // Revisão da decisão 152 (07/10/2026): a NF corrigida com a PP em
   // avaliação, sem aprovar. O `motivo` diz o que mudou.
-  | "nf_corrigida";
+  | "nf_corrigida"
+  // Decisão 173 (13/10/2026): a PP gerada, ainda no job, foi editada.
+  | "editada";
 
 /**
  * Um evento do histórico da PP (decisão 136): quem fez o quê e quando.
