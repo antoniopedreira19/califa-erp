@@ -145,21 +145,23 @@ export async function importarFolhaContabilidade(input: {
   const preview: ResumoImportacaoLinha[] = [];
 
   // Match por CPF contra o cadastro.
-  // CPF no banco está formatado ("015.054.512-64") mas o parser devolve só
-  // dígitos ("01505451264") — não dá pra fazer .in() direto. Puxamos todos
-  // os colaboradores do tenant (~200) e normalizamos o CPF do banco antes
-  // de montar o Map. 200 linhas × ~5 campos é uma query trivial.
+  // A coluna real no banco é `cpf` (não "cpf_cnpj" como estava antes — bug
+  // que fazia a query retornar sempre vazio porque a coluna não existia).
+  // Valores armazenados são só dígitos ("41589196813"), igual ao formato que
+  // o parser devolve → match direto, sem normalização adicional.
+  const cpfsPdf = parsed.linhas.map((l) => l.cpf);
   const { data: colabs } = await supabase
     .from("colaboradores")
-    .select("id, nome, cpf_cnpj, tipo_contratacao")
-    .eq("tenant_id", tenantId);
+    .select("id, nome, cpf, tipo_contratacao")
+    .eq("tenant_id", tenantId)
+    .in("cpf", cpfsPdf);
 
   const porCpf = new Map(
     (colabs ?? [])
-      .filter((c) => c.cpf_cnpj)
+      .filter((c) => c.cpf)
       .map((c) => [
-        String(c.cpf_cnpj).replace(/\D/g, ""),
-        c as { id: string; nome: string; cpf_cnpj: string; tipo_contratacao: TipoContratacao },
+        String(c.cpf),
+        c as { id: string; nome: string; cpf: string; tipo_contratacao: TipoContratacao },
       ]),
   );
 
