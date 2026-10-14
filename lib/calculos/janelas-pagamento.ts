@@ -18,6 +18,11 @@
  * trata feriado: os nacionais do cadastro de feriados do Fiscal, que quem
  * chama passa. A janela em si continua como está.
  *
+ * Desde a decisão 172 (14/10/2026) a PP urgente também pode cair numa
+ * QUARTA DE EXCEÇÕES, escolhida até a sexta anterior; e a parcela seguinte
+ * pula a janela que vem logo depois da anterior, podendo ser adiada à mão.
+ * As regras estão no fim deste arquivo.
+ *
  * Datas são ISO `YYYY-MM-DD` tratadas em UTC: é dia de calendário, não
  * instante, e fuso nenhum pode empurrar um 08 para 07.
  */
@@ -171,7 +176,10 @@ export function dataLimiteDeEnvio(
   feriados: Iterable<string> = [],
 ): string | null {
   const janela = qualJanela(vencimentoIso);
-  if (janela === null) return null;
+  // Decisão 172: a quarta de exceções tem a sua data-limite, a sexta
+  // anterior. A quarta só chega gravada numa PP urgente — as portas de
+  // gravação recusam a quarta sem urgência —, então aqui basta a data.
+  if (janela === null) return dataLimiteDaQuarta(vencimentoIso, feriados);
   const ms = isoParaUtc(vencimentoIso);
   if (ms === null) return null;
   const d = new Date(ms);
@@ -245,4 +253,136 @@ export function isoParaBr(iso: string): string {
  *  fuso, depois das 21h o "hoje" já seria amanhã. */
 export function hojeEmSaoPauloIso(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+// ---------------------------------------------------------------------------
+// Quarta de exceções e datas das parcelas (decisão 172)
+// ---------------------------------------------------------------------------
+
+/** A data é uma quarta-feira? */
+export function ehQuarta(iso: string): boolean {
+  const ms = isoParaUtc(iso);
+  return ms !== null && new Date(ms).getUTCDay() === 3;
+}
+
+/**
+ * Até quando a PP com vencimento numa quarta de exceções é escolhida e
+ * chega ao financeiro: a sexta anterior (5 dias antes). Caindo em feriado
+ * nacional, volta ao dia útil anterior — a quarta 25/11/2026 tem limite na
+ * quinta 19/11, porque 20/11 é a Consciência Negra. Null = não é quarta, ou
+ * a quarta é feriado nacional (21/04/2027): não há pagamento nela.
+ */
+export function dataLimiteDaQuarta(
+  quartaIso: string,
+  feriados: Iterable<string> = [],
+): string | null {
+  if (!ehQuarta(quartaIso)) return null;
+  const uteis = conjuntoDeFeriados(feriados);
+  if (uteis.has(quartaIso.slice(0, 10))) return null;
+  let limite = isoParaUtc(quartaIso)! - 5 * DIA_MS;
+  while (!ehDiaUtil(limite, uteis)) limite -= DIA_MS;
+  return utcParaIso(limite);
+}
+
+/** Hoje a quarta ainda aceita PP urgente? */
+export function quartaDeExcecoesAberta(
+  iso: string,
+  hojeIso: string,
+  feriados: Iterable<string> = [],
+): boolean {
+  const limite = dataLimiteDaQuarta(iso, feriados);
+  return limite !== null && hojeIso.slice(0, 10) <= limite;
+}
+
+/**
+ * O que a data pode ser como prazo (1º vencimento) da PP hoje: janela com
+ * envio aberto, quarta de exceções (só com urgência) ou nada. A quarta que
+ * também é janela (o 08 ou o 20 numa quarta) segue só a regra da janela —
+ * senão a data teria duas datas-limite de envio.
+ */
+export function tipoDoPrazo(
+  iso: string,
+  hojeIso: string,
+  feriados: Iterable<string>,
+  urgente: boolean,
+): "janela" | "quarta" | null {
+  if (!iso || iso.slice(0, 10) < hojeIso.slice(0, 10)) return null;
+  const uteis = conjuntoDeFeriados(feriados);
+  if (ehJanelaDePagamento(iso) && vencimentoAceitaEnvio(iso, hojeIso, uteis)) return "janela";
+  if (urgente && !ehJanelaDePagamento(iso) && quartaDeExcecoesAberta(iso, hojeIso, uteis)) return "quarta";
+  return null;
+}
+
+/**
+ * A primeira data que o prazo da PP pode ter hoje: a primeira janela com
+ * envio aberto ou, na PP urgente, a quarta de exceções, se vier antes.
+ */
+export function primeiraDataPossivelDoPrazo(
+  hojeIso: string,
+  feriados: Iterable<string>,
+  urgente: boolean,
+): string {
+  const uteis = conjuntoDeFeriados(feriados);
+  const janela = primeiraJanelaComEnvioAberto(hojeIso, uteis);
+  if (!urgente) return janela;
+  let ms = isoParaUtc(hojeIso)!;
+  const ate = isoParaUtc(janela)!;
+  for (; ms < ate; ms += DIA_MS) {
+    const iso = utcParaIso(ms);
+    if (tipoDoPrazo(iso, hojeIso, uteis, true) === "quarta") return iso;
+  }
+  return janela;
+}
+
+/**
+ * A primeira data possível da parcela seguinte: pula a janela que vem logo
+ * depois da anterior. Parcela em 09/11 → 08/12 (pulou 20/11); quarta 21/10
+ * → 20/11 (pulou 09/11); quarta 04/11 → 20/11 (pulou 09/11). Para quem está
+ * numa janela, é a mesma janela no mês seguinte, como antes da 172.
+ */
+export function primeiraDataDaProximaParcela(anteriorIso: string): string {
+  return janelaSeguinte(janelaSeguinte(anteriorIso));
+}
+
+export interface DataDaParcela {
+  data: string;
+  /** A data foi adiada à mão (depois da primeira data possível). */
+  ajustada: boolean;
+}
+
+/**
+ * Refaz as datas das parcelas a partir do prazo: a 1ª é o prazo; cada
+ * seguinte é a primeira data possível depois da anterior — menos a adiada à
+ * mão, que fica enquanto continuar possível (janela e depois da primeira
+ * data possível). A adiada que ficou cedo demais, porque a anterior andou,
+ * vai para a primeira data possível e volta a ser padrão.
+ */
+export function acomodarDatasDasParcelas(
+  prazoIso: string,
+  parcelas: ReadonlyArray<DataDaParcela>,
+): DataDaParcela[] {
+  let anterior = prazoIso.slice(0, 10);
+  return parcelas.map((p, i) => {
+    if (i === 0) return { data: anterior, ajustada: false };
+    const minima = primeiraDataDaProximaParcela(anterior);
+    const data = p.data.slice(0, 10);
+    const fica = p.ajustada && ehJanelaDePagamento(data) && data > minima;
+    const final = fica ? data : minima;
+    anterior = final;
+    return { data: final, ajustada: fica };
+  });
+}
+
+/**
+ * As datas da 2ª parcela em diante estão certas? Cada uma é janela e não
+ * vem antes da primeira data possível depois da anterior. Devolve o número
+ * da primeira parcela errada (2, 3…) ou null. É a trava do servidor: a tela
+ * já só oferece datas assim.
+ */
+export function parcelaForaDaRegra(datas: ReadonlyArray<string>): number | null {
+  for (let i = 1; i < datas.length; i++) {
+    const data = datas[i].slice(0, 10);
+    if (!ehJanelaDePagamento(data) || data < primeiraDataDaProximaParcela(datas[i - 1])) return i + 1;
+  }
+  return null;
 }

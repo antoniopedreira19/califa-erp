@@ -5606,6 +5606,10 @@ aplicada na hora combinada com a frente do Antonio, junto da
   estado, e criá-lo exigiria SQL direto.
 - **Pendente:** o editor do job ("Responsável"), em commit próprio depois da
   conferência no navegador.
+- **Pendências de regra (Tiago, 14/10/2026), registradas na decisão 170:** o
+  GP como produtor do próprio job (12 jobs e 10 orçamentos) e administradora
+  e freelancer como produtoras (14 jobs e 1 orçamento) ficam como estão;
+  podem mudar no futuro.
 
 ## ⚠️ Nota de 2026-10-14 — A Equipe do projeto trava os responsáveis dos jobs (decisão 174)
 

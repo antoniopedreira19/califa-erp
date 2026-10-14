@@ -32,7 +32,6 @@ import {
   PP_STATUS_EM_ABERTO,
   situacaoDaVerba,
   verbaPendenteNoEncerramento,
-  verbaTemTitular,
   BV_SITUACAO_EM_ABERTO,
 } from "@/lib/types";
 import type {
@@ -80,7 +79,9 @@ import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
 import type { AnexoDaPPNaLista, PPAEmitir, PlanejadoAntesDoSave } from "@/lib/types";
 import {
   fechamentoDaAbertura,
+  itensDaVersaoComAsEdicoesDaFila,
   orcadoDaLinhaNaAbertura,
+  type EdicaoDaFila,
   type ItemDaVersaoNaAbertura,
 } from "@/lib/calculos/abertura-do-job";
 import {
@@ -574,15 +575,53 @@ export async function carregarDetalheDoJob(
   if (itensDaVersaoRes.error) {
     console.error("[job.itens_da_versao]", itensDaVersaoRes.error.message);
   }
+  // As edições do orçado que o financeiro fez com o job na fila: entram na
+  // foto, porque o job abriu com elas (revisão da decisão 115, 13/10/2026).
+  // Sem o histórico lido, a foto não reproduz o `valor_job_abertura` e a
+  // tela fica com o valor único.
+  const itemVersaoDaLinha = new Map<string, string>(
+    ((itensRes.data ?? []) as any[])
+      .filter((it) => it.item_versao_id)
+      .map((it) => [it.id as string, it.item_versao_id as string]),
+  );
+  const aberturaEm = raw.data_abertura_financeiro
+    ? Date.parse(raw.data_abertura_financeiro)
+    : null;
+  const edicoesDaFila: EdicaoDaFila[] =
+    aberturaEm === null
+      ? []
+      : ((alteracoesFinanceiroRes.data ?? []) as any[])
+          .filter((a) => Date.parse(a.created_at) < aberturaEm)
+          .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+          .flatMap((a) => (a.itens ?? []) as any[])
+          .flatMap((i) => {
+            const itemVersaoId = itemVersaoDaLinha.get(i.job_item_orcado_id);
+            if (!itemVersaoId) return [];
+            return [
+              {
+                itemVersaoId,
+                tipoCusto: i.tipo_custo_para ?? i.tipo_custo,
+                // A conta da coluna gerada `total_orcado` da cópia, sem
+                // arredondar: o `total_para` do histórico vem em centavos.
+                totalOrcado:
+                  Number(i.valor_unitario_para ?? 0) *
+                  Number(i.quantidade_para ?? 1) *
+                  Number(i.dias_meses_para ?? 1),
+              },
+            ];
+          });
   const itensDaVersao: ItemDaVersaoNaAbertura[] = itensDaVersaoRes.error
     ? []
-    : ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
-        id: i.id,
-        tipo_custo: i.tipo_custo,
-        total_orcado: Number(i.total_orcado ?? 0),
-        em_save: i.em_save === true,
-        save_consumido: Number(i.save_consumido ?? 0),
-      }));
+    : itensDaVersaoComAsEdicoesDaFila(
+        ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
+          id: i.id,
+          tipo_custo: i.tipo_custo,
+          total_orcado: Number(i.total_orcado ?? 0),
+          em_save: i.em_save === true,
+          save_consumido: Number(i.save_consumido ?? 0),
+        })),
+        edicoesDaFila,
+      );
   const versaoLida = itensDeVersaoLidos(itensDaVersaoRes);
   // O orçado de cada linha na abertura: 0 na que já era save na versão,
   // porque save não entra na rentabilidade (decisão 028 §9).
@@ -1598,29 +1637,22 @@ export async function carregarDetalheDoJob(
     session.activeRole,
     "cadastros.fornecedores.editar",
   );
-  // Quem presta contas de cada verba: o responsável por ela, qualquer GP
-  // ou um administrador (decisão 136; até 01/10/2026 era o GP responsável
-  // do job, decisão 081). Na alimentação e no transporte (decisão 164) o
-  // titular pode nem ter acesso ao sistema: presta contas o administrador,
-  // o GP, o produtor ou o freela do job (quem vê o job é do projeto). A
-  // função do banco checa de novo; aqui é só para mostrar o botão a quem pode.
+  // Quem presta contas da verba (decisões 164 e 171, as três verbas): o
+  // titular pode nem ter acesso ao sistema, então presta contas o
+  // administrador, o GP, o produtor ou o freela do job (quem vê o job é do
+  // projeto). O responsável da verba de produção anterior à 171 segue
+  // prestando a dele. A função do banco checa de novo; aqui é só para
+  // mostrar o botão a quem pode.
   const ppsQuePossoPrestarContas = ppsDoJob
-    .filter((pp) => {
-      if (!pp.verba_producao) return false;
-      if (verbaTemTitular(pp.tipo_verba)) {
-        return (
-          session.activeRole === "administrador" ||
+    .filter(
+      (pp) =>
+        pp.verba_producao &&
+        (session.activeRole === "administrador" ||
           session.activeRole === "gerente_producao" ||
           session.activeRole === "produtor" ||
-          session.activeRole === "freelancer"
-        );
-      }
-      return (
-        session.activeRole === "administrador" ||
-        session.activeRole === "gerente_producao" ||
-        pp.responsavel_verba_id === session.profile.id
-      );
-    })
+          session.activeRole === "freelancer" ||
+          pp.responsavel_verba_id === session.profile.id),
+    )
     .map((pp) => pp.id);
   // Confirmar o BV é do GP e do administrador (decisão 080). Lançar e
   // negociar seguem em `podeAcoesPlanilha`, para quem pode mexer no job.

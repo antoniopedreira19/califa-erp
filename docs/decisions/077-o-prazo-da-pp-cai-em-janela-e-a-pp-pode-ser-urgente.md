@@ -3,7 +3,10 @@
 **Data:** 2026-09-14
 **Status:** aceita. Completada pela [157](157-prazo-de-envio-da-pp.md) em
 07/10/2026: o prazo também precisa respeitar a data-limite de envio (15
-dias antes da janela).
+dias antes da janela). ⚠️ **Revista pela [172](172-quarta-de-excecoes-na-pp-urgente.md)
+em 14/10/2026:** a PP urgente também pode cair numa quarta de exceções (§5
+deixa de valer), e as datas das parcelas deixam de ser travadas — a 2ª pula
+a janela logo seguinte e pode ser adiada à mão (§3).
 **Contexto:** formulário de gerar/editar PP (`gerar-pp-drawer.tsx`),
 correção da PP rejeitada (`editar-pp-drawer.tsx`), `actions-pp.ts`, e no
 financeiro a lista de aprovação, a tela da PP e Títulos a Pagar. Pedido do

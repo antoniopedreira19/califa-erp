@@ -69,7 +69,7 @@ import {
 } from "@/lib/fiscal/nf-da-pp";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
-import { qualJanela } from "@/lib/calculos/janelas-pagamento";
+import { ehQuarta, qualJanela } from "@/lib/calculos/janelas-pagamento";
 import type { PPRow } from "./pedidos-compra-list";
 import { useChatPPsOpcional } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
@@ -171,6 +171,10 @@ export function PPDossie({
   /** O selo do vencimento: janela do 08, do 20, ou nenhuma — a PP gerada
    *  antes da regra de 14/09/2026 (decisão 077). */
   const janelaDoVencimento = vencimentoOriginal ? qualJanela(vencimentoOriginal) : null;
+  /** A quarta de exceções da PP urgente (decisão 172): selo vermelho, da
+   *  cor do "Urgente". Sem ele, a quarta cairia em "fora das janelas". */
+  const quartaDeExcecoes =
+    !janelaDoVencimento && pp.urgente && vencimentoOriginal !== "" && ehQuarta(vencimentoOriginal);
 
   return (
     // `flex-1` e não altura automática: sem ele a coluna encolhia até o
@@ -216,7 +220,7 @@ export function PPDossie({
               pp.tipo_verba
                 ? pp.verba_titular_tipo === "fornecedor"
                   ? "Titular da verba (terceiro)"
-                  : rotuloDeQuemRecebeAVerba(pp.tipo_verba)
+                  : rotuloDeQuemRecebeAVerba(pp)
                 : "Fornecedor"
             }
           >
@@ -310,6 +314,10 @@ export function PPDossie({
               (janelaDoVencimento ? (
                 <span className="flex-none rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-700">
                   ✓ janela do dia {janelaDoVencimento === 8 ? "08" : "20"}
+                </span>
+              ) : quartaDeExcecoes ? (
+                <span className="flex-none rounded-md bg-california-red/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-california-red">
+                  ✓ quarta de exceções
                 </span>
               ) : (
                 <span className="flex-none rounded-md bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">

@@ -20,6 +20,11 @@
  * trava, e "Salvar" continua — a PP a emitir espera o cadastro. Quem não
  * edita fornecedor (GP, produtor, freelancer) ganha o lápis só nesse caso, e
  * ele abre o cadastro inteiro, todo editável (Tiago, 10/10/2026).
+ *
+ * Decisão 173 (13/10/2026, revê a 153): o mesmo formulário edita a PP
+ * GERADA, no lugar (`ppGeradaEditando`). Abre com os dados e os anexos da
+ * PP; o rodapé tem só "Salvar alterações", que abre a revisão antes de
+ * gravar. O código fica, o PDF é refeito e a marca "Pronta para envio" cai.
  */
 
 import * as React from "react";
@@ -47,8 +52,9 @@ import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import {
   PP_URGENTE_JUSTIFICATIVA_MIN,
   rotuloDaVerbaMinusculo,
-  verbaTemTitular,
+  type DadosDaPPAEmitir,
   type Fornecedor,
+  type PedidoCompraNaLista,
   type PPAEmitir,
   type TipoVerba,
   type TitularDaVerbaTipo,
@@ -64,13 +70,16 @@ import {
   parcelasDaPPGravada,
   problemaDasParcelas,
   redividirParcelas,
-  trocarDatas,
+  acomodarParcelas,
+  mudarDataDaParcela,
   type ParcelaLocal,
 } from "./parcelas-da-pp";
 import {
   ehJanelaDePagamento,
+  ehQuarta,
   hojeEmSaoPauloIso,
   isoParaBr,
+  primeiraDataPossivelDoPrazo,
   primeiraJanelaComEnvioAberto,
   vencimentoAceitaEnvio,
   vencimentosNasJanelas,
@@ -81,10 +90,13 @@ import {
 } from "@/app/(app)/fornecedores/actions";
 import { listarPendencias } from "@/lib/fiscal/regime-do-fornecedor";
 import {
+  editarPPGerada,
   listarPessoasParaVerba,
+  prefixoAnexosPedidoCompra,
   reservarPedidoCompra,
   salvarPPAEmitir,
   prefixoAnexosPPAEmitir,
+  signedUrlAnexo,
   signedUrlAnexoAEmitir,
 } from "./actions-pp";
 import type { PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
@@ -110,12 +122,15 @@ import {
   useNotasExistentes,
   type TomadorDaNf,
 } from "./anexos-da-pp";
-import { textoAguardaAbertura } from "./pp-a-emitir-ui";
+import { RevisaoDialog, textoAguardaAbertura } from "./pp-a-emitir-ui";
 import {
   AvisoPrazoDeEnvioPerdido,
   AvisoPrazoForaDaJanela,
+  AvisoQuartaSemUrgencia,
+  LegendaDaQuarta,
   UrgenciaPPField,
   diaForaDaJanela,
+  quartaMarcada,
 } from "./prazo-e-urgencia-pp";
 import { EnvioAte, useFeriadosNacionais } from "./prazo-de-envio-pp";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
@@ -143,8 +158,6 @@ interface Props {
   }>;
   /** As empresas gerenciais: só o nome da do job aparece (decisão 156). */
   empresas: Array<{ id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }>;
-  /** Membros ativos do tenant — o Responsável da verba de produção. */
-  responsaveis: Array<{ id: string; nome: string }>;
   /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
    *  action já barrava, mas o GP preenchia o cadastro inteiro para só
    *  então ler "Você não tem permissão para essa ação" (18/09/2026). */
@@ -167,9 +180,11 @@ interface Props {
    *  descontado antes. Sem teto: passar do planejado não impede gerar —
    *  muda quem pode enviar. */
   emPPsEmitidas: number;
-  /** PP a emitir sendo editada. Null = uma nova (decisão 153: a PP
-   *  gerada não se edita mais). */
+  /** PP a emitir sendo editada. Null = uma nova. */
   aEmitirEditando: PPAEmitir | null;
+  /** Decisão 173: a PP GERADA sendo editada, no lugar. Exclusiva com
+   *  `aEmitirEditando`. */
+  ppGeradaEditando?: PedidoCompraNaLista | null;
   /** O item já está marcado como "todas as PPs geradas"? */
   itemConcluido: boolean;
   /** O status do job: aguardando abertura e devolvido só salvam. */
@@ -182,8 +197,9 @@ interface Props {
    *  CNPJs (`tomadores`); a empresa gerencial é a do job. */
   cnpjPadraoDaPP: string | null;
   /** "salva": guardou a PP a emitir. "revisar": guardou e o painel abre a
-   *  revisão antes de gerar (o "Gerar PP"). */
-  onSuccess?: (modo: "salva" | "revisar", id: string) => void;
+   *  revisão antes de gerar (o "Gerar PP"). "editada": salvou a edição da
+   *  PP gerada — o segundo argumento é o código dela. */
+  onSuccess?: (modo: "salva" | "revisar" | "editada", idOuCodigo: string) => void;
 }
 
 /** O teto do servidor (decisão 077, pergunta 7a): 1 a 6 nos botões e
@@ -195,6 +211,73 @@ const MAX_PARCELAS = 24;
  *  077), e antes disso hoje + 15 dias. */
 function defaultPrazoPagamento(feriados: string[] = []): string {
   return primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados);
+}
+
+/**
+ * A PP gerada no formato da PP a emitir (decisão 173): o formulário abre as
+ * duas pelo mesmo caminho. Os anexos da PP têm os mesmos campos (e mais a
+ * ligação com a nota, que só o envio grava).
+ */
+function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
+  const parcelas = (pp.parcelas ?? [])
+    .slice()
+    .sort((a, b) => a.numero - b.numero)
+    .map((p) => ({ data_vencimento: String(p.data_vencimento).slice(0, 10), valor: Number(p.valor) }));
+  const fora = pp.pagamento_fora_do_cadastro;
+  const prazo = parcelas[0]?.data_vencimento ?? String(pp.prazo_pagamento).slice(0, 10);
+  return {
+    id: pp.id,
+    job_id: pp.job_id,
+    item_realizado_id: pp.item_realizado_id,
+    empresa_id: pp.empresa_id,
+    verba_producao: pp.verba_producao,
+    fornecedor_id: pp.fornecedor_id,
+    responsavel_verba_id: pp.responsavel_verba_id,
+    tipo_verba: pp.tipo_verba,
+    verba_titular_tipo: pp.verba_titular_tipo,
+    verba_titular_nome: pp.verba_titular_nome,
+    servico: pp.servico,
+    valor: Number(pp.valor),
+    dados: {
+      empresa_id: pp.empresa_id,
+      estabelecimento_id: pp.estabelecimento_id,
+      prazo_pagamento: prazo,
+      servico: pp.servico,
+      valor_unitario: Number(pp.valor_unitario),
+      quantidade: Number(pp.quantidade),
+      dias_meses: Number(pp.dias_meses),
+      especificacoes: pp.especificacoes,
+      urgente: pp.urgente === true,
+      urgente_justificativa: pp.urgente_justificativa,
+      parcelas: parcelas.length > 0 ? parcelas : [{ data_vencimento: prazo, valor: Number(pp.valor) }],
+      verba_producao: pp.verba_producao,
+      fornecedor_id: pp.fornecedor_id,
+      responsavel_verba_id: pp.responsavel_verba_id,
+      tipo_verba: pp.tipo_verba,
+      verba_titular_tipo: pp.verba_titular_tipo,
+      verba_titular_id: pp.verba_colaborador_id ?? pp.verba_freela_id ?? null,
+      pagamento_fora_do_cadastro: fora
+        ? {
+            meio: fora.meio,
+            motivo: fora.motivo,
+            pix_tipo: fora.pix_tipo,
+            pix_chave: fora.pix_chave,
+            banco_codigo: fora.banco_codigo,
+            agencia: fora.agencia,
+            agencia_dv: fora.agencia_dv,
+            conta: fora.conta,
+            conta_dv: fora.conta_dv,
+            tipo_conta: fora.tipo_conta,
+          }
+        : null,
+    },
+    ultima_pp_do_item: null,
+    refaz: null,
+    criada_por_nome: pp.emitida_por_nome,
+    created_at: pp.created_at,
+    updated_at: pp.updated_at,
+    anexos: pp.anexos,
+  };
 }
 
 function dateToIso(date: Date | null): string {
@@ -232,7 +315,6 @@ export function GerarPPDrawer({
   jobId,
   fornecedores,
   empresas,
-  responsaveis,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   defaultEmpresaId,
@@ -244,12 +326,17 @@ export function GerarPPDrawer({
   emPPsEmitidas,
   itemConcluido,
   aEmitirEditando,
+  ppGeradaEditando = null,
   statusDoJob,
   tomadores,
   cnpjPadraoDaPP,
   onSuccess,
 }: Props) {
   const editando = aEmitirEditando !== null;
+  /** Decisão 173: editando a PP gerada, no lugar. */
+  const editandoGerada = ppGeradaEditando !== null;
+  /** O valor que a PP gerada tem hoje: ela já está em "Em PPs emitidas". */
+  const valorAntesDaEdicao = ppGeradaEditando ? Number(ppGeradaEditando.valor) : 0;
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
 
@@ -258,13 +345,12 @@ export function GerarPPDrawer({
   const [erro, setErro] = React.useState<string | null>(null);
 
   // Switch "Verba" (decisão 164): desligado (padrão) → fornecedor
-  // obrigatório; ligado → verba de produção (responsável interno), de
-  // alimentação ou de transporte (titular: colaborador, freela ou um
-  // terceiro com cadastro de fornecedor). `verbaProducao` segue valendo "é
-  // verba", de qualquer tipo, como no resto do formulário e no banco.
+  // obrigatório; ligado → verba de produção, de alimentação ou de
+  // transporte, as três com titular (decisão 171): colaborador, freela ou
+  // um terceiro com cadastro de fornecedor. `verbaProducao` segue valendo
+  // "é verba", de qualquer tipo, como no resto do formulário e no banco.
   const [tipoVerba, setTipoVerba] = React.useState<TipoVerba | null>(null);
   const verbaProducao = tipoVerba !== null;
-  const verbaComTitular = verbaTemTitular(tipoVerba);
   /** O colaborador ou o freela escolhido, e de onde ele veio. */
   const [titularId, setTitularId] = React.useState("");
   const [titularOrigem, setTitularOrigem] = React.useState<TitularDaVerbaTipo | null>(null);
@@ -272,8 +358,8 @@ export function GerarPPDrawer({
    *  pagamento do fornecedor (não é o padrão). */
   const [titularTerceiro, setTitularTerceiro] = React.useState(false);
   /** A PP paga um fornecedor: a PP comum e a verba de um terceiro. */
-  const usaFornecedor = !verbaProducao || (verbaComTitular && titularTerceiro);
-  /** A lista de colaboradores e freelas, pedida na primeira verba nova. */
+  const usaFornecedor = !verbaProducao || titularTerceiro;
+  /** A lista de colaboradores e freelas, pedida na primeira verba. */
   const [pessoas, setPessoas] = React.useState<PessoaParaVerba[] | null>(null);
   const pedindoPessoas = React.useRef(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
@@ -404,7 +490,6 @@ export function GerarPPDrawer({
   /** A pergunta agora rola com o formulário: quem tenta gerar sem
    *  responder precisa ser levado até ela (17/09/2026). */
   const refUltimaPP = React.useRef<HTMLDivElement>(null);
-  const [responsavelId, setResponsavelId] = React.useState<string>("");
   // A empresa GERENCIAL é a do job (decisão 156): não se escolhe aqui.
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   // O CNPJ da PP — a "Empresa emissora" do formulário (decisão 156).
@@ -478,6 +563,10 @@ export function GerarPPDrawer({
 
   // Chave para forcar remontagem do DatePicker ao reabrir o drawer
   const [drawerKey, setDrawerKey] = React.useState(0);
+  // Decisão 172: desligar a urgência tira a quarta do prazo. O calendário
+  // (não controlado) remonta com a janela nova, e o aviso diz o que mudou.
+  const [prazoVez, setPrazoVez] = React.useState(0);
+  const [avisoQuarta, setAvisoQuarta] = React.useState<{ de: string; para: string } | null>(null);
 
   // Reset ao abrir — e SÓ ao abrir. A chave diz qual sessão do
   // formulário está de pé (item + gerar/editar); enquanto ela não muda,
@@ -486,7 +575,7 @@ export function GerarPPDrawer({
   // `router.refresh()`, e o formulário zerava no meio do caminho
   // (04/09/2026).
   const chaveSessao = open
-    ? `${itemRealizadoId ?? ""}|${aEmitirEditando?.id ?? "nova"}`
+    ? `${itemRealizadoId ?? ""}|${aEmitirEditando?.id ?? (ppGeradaEditando ? `pp:${ppGeradaEditando.id}` : "nova")}`
     : null;
   const sessaoRef = React.useRef<string | null>(null);
   React.useEffect(() => {
@@ -503,19 +592,24 @@ export function GerarPPDrawer({
     setFaltaResposta(false);
     setFaltaPagamento(false);
     // A PP a emitir volta com a resposta que foi salva; a nova pergunta do
-    // zero (a que refaz uma rejeitada também: o item pode ter mudado).
-    setUltimaPP(aEmitirEditando?.ultima_pp_do_item ?? null);
+    // zero (a que refaz uma rejeitada também: o item pode ter mudado). A PP
+    // gerada em edição volta com o que o item diz hoje (decisão 173).
+    setUltimaPP(aEmitirEditando?.ultima_pp_do_item ?? (ppGeradaEditando ? itemConcluido : null));
     setUploadPrefix(null);
     setAnexos([]);
     setAvisoDosAnexos(null);
     setDrawerKey((k) => k + 1);
     setFaltaJustificativa(false);
+    setAvisoQuarta(null);
 
-    if (aEmitirEditando) {
+    // A PP gerada em edição (decisão 173) abre pelo mesmo caminho da PP a
+    // emitir, no formato dela.
+    const fonte = aEmitirEditando ?? (ppGeradaEditando ? ppGeradaComoAEmitir(ppGeradaEditando) : null);
+    if (fonte) {
       // A PP a emitir abre inteira, como foi salva (decisão 153).
-      const d = aEmitirEditando.dados;
+      const d = fonte.dados;
       // A PP a emitir de antes da decisão 164 não tem o tipo: é produção.
-      setTipoVerba(d.verba_producao ? (d.tipo_verba ?? aEmitirEditando.tipo_verba ?? "producao") : null);
+      setTipoVerba(d.verba_producao ? (d.tipo_verba ?? fonte.tipo_verba ?? "producao") : null);
       setTitularTerceiro(d.verba_titular_tipo === "fornecedor");
       setTitularOrigem(
         d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela" ? d.verba_titular_tipo : null,
@@ -529,7 +623,9 @@ export function GerarPPDrawer({
           d.pagamento_fora_do_cadastro ? { ...d.pagamento_fora_do_cadastro, banco_nome: null } : null,
         ),
       );
-      setResponsavelId(d.responsavel_verba_id ?? "");
+      // A verba de produção de antes da decisão 171 (PP a emitir ou PP
+      // gerada) guarda um responsável (usuário): abre sem titular, que
+      // agora é obrigatório.
       setEmpresaId(d.empresa_id);
       setCnpjId(d.estabelecimento_id ?? cnpjPadraoDaPP ?? "");
       setPrazoPagamento(d.prazo_pagamento.slice(0, 10));
@@ -547,17 +643,20 @@ export function GerarPPDrawer({
       // O % de cada parcela se refaz do R$ salvo (decisão 138).
       setParcelas(
         d.parcelas.length > 1
-          ? parcelasDaPPGravada(d.parcelas, aEmitirEditando.valor)
+          ? parcelasDaPPGravada(d.parcelas, fonte.valor)
           : [],
       );
       setAnexos(
-        aEmitirEditando.anexos.map((a) =>
+        fonte.anexos.map((a) =>
           anexoEmEdicao(a, d.estabelecimento_id ?? cnpjPadraoDaPP ?? null),
         ),
       );
-      setPpId(aEmitirEditando.id);
+      setPpId(fonte.id);
       (async () => {
-        const res = await prefixoAnexosPPAEmitir(aEmitirEditando.id);
+        // A PP gerada guarda os anexos no lugar dela (o mesmo do envio).
+        const res = ppGeradaEditando
+          ? await prefixoAnexosPedidoCompra(fonte.id)
+          : await prefixoAnexosPPAEmitir(fonte.id);
         if (!res.ok) {
           setErro(res.message);
           return;
@@ -573,7 +672,6 @@ export function GerarPPDrawer({
     setTitularTerceiro(false);
     setFornecedorId("");
     setPagamento(PAGAMENTO_PELO_CADASTRO);
-    setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
     setCnpjId(cnpjPadraoDaPP ?? "");
     setPrazoPagamento(defaultPrazoPagamento(feriadosRef.current));
@@ -605,23 +703,25 @@ export function GerarPPDrawer({
   }, [open, itemRealizadoId, chaveSessao]);
 
   // A lista de colaboradores e freelas (decisão 164) vem quando a verba
-  // nova aparece no formulário, uma vez só: ela não viaja com a página.
+  // aparece no formulário, uma vez só: ela não viaja com a página.
   React.useEffect(() => {
-    if (!open || !verbaComTitular || pessoas !== null || pedindoPessoas.current) return;
+    if (!open || !verbaProducao || pessoas !== null || pedindoPessoas.current) return;
     pedindoPessoas.current = true;
     listarPessoasParaVerba().then((res) => {
       pedindoPessoas.current = false;
       if (res.ok) setPessoas(res.pessoas);
       else setErro(res.message);
     });
-  }, [open, verbaComTitular, pessoas]);
+  }, [open, verbaProducao, pessoas]);
   const itensDoTitular = React.useMemo(
     () =>
       itensDasPessoas(
         pessoas,
-        titularId ? { id: titularId, nome: aEmitirEditando?.verba_titular_nome ?? null } : null,
+        titularId
+          ? { id: titularId, nome: (aEmitirEditando ?? ppGeradaEditando)?.verba_titular_nome ?? null }
+          : null,
       ),
-    [pessoas, titularId, aEmitirEditando],
+    [pessoas, titularId, aEmitirEditando, ppGeradaEditando],
   );
 
   // DESABILITADO — o cleanup automatico estava disparando entre upload e
@@ -647,17 +747,17 @@ export function GerarPPDrawer({
   const dmNum = parseNumeroLocal(dm);
   const valorPP = valorDaPPPorUnidade(unitNum, qtdNum, dmNum);
   // Prévia de "Em PPs emitidas" com esta PP. A PP a emitir não está na
-  // base (decisão 153): ela só conta no item quando for gerada.
-  const previaEmPPs = Math.round((emPPsEmitidas + valorPP) * 100) / 100;
+  // base (decisão 153): ela só conta no item quando for gerada. A PP gerada
+  // em edição já está, e o valor dela sai antes (decisão 173).
+  const previaEmPPs = Math.round((emPPsEmitidas - valorAntesDaEdicao + valorPP) * 100) / 100;
   const passaPlanejado = valorPP > 0 && passaDoPlanejado(previaEmPPs, valorPlanejado);
 
   const numeroDeParcelas = Math.max(parcelas.length, 1);
 
   /**
-   * Trocar o número de parcelas refaz a escada: datas derivadas da janela
-   * do 1º vencimento, mês a mês (decisão 077, pergunta 5a), e divisão
-   * igual. As datas não se editam uma a uma — o que move a escada é o
-   * prazo.
+   * Trocar o número de parcelas refaz a divisão igual. As datas saem da
+   * regra da decisão 172 — cada parcela pula ao menos uma janela depois da
+   * anterior —, e as que já tinham sido adiadas à mão ficam onde estão.
    */
   function mudarNumeroDeParcelas(bruto: number) {
     const n = Math.max(1, Math.min(MAX_PARCELAS, Math.floor(bruto) || 1));
@@ -667,15 +767,49 @@ export function GerarPPDrawer({
     }
     // Mesmo número: nada muda, e os valores já ajustados ficam.
     if (n === parcelas.length) return;
-    setParcelas(montarParcelas(vencimentosNasJanelas(prazoPagamento, n), valorPP));
+    const novas = montarParcelas(vencimentosNasJanelas(prazoPagamento, n), valorPP).map((p, i) =>
+      parcelas[i]?.ajustada
+        ? { ...p, data_vencimento: parcelas[i].data_vencimento, ajustada: true }
+        : p,
+    );
+    setParcelas(acomodarParcelas(prazoPagamento, novas));
   }
 
   function mudarPrazo(iso: string) {
     setPrazoPagamento(iso);
+    setAvisoQuarta(null);
     if (parcelas.length > 0) {
-      // Mover a 1ª data reconstrói a escada: as seguintes acompanham. A
-      // divisão fica (decisão 138) — antes ela voltava a ser igual.
-      setParcelas((prev) => trocarDatas(prev, vencimentosNasJanelas(iso, prev.length)));
+      // Mover a 1ª data reconstrói a escada: as seguintes acompanham, menos
+      // a adiada à mão que ainda couber (decisão 172). A divisão fica
+      // (decisão 138) — antes ela voltava a ser igual.
+      setParcelas((prev) => acomodarParcelas(iso, prev));
+    }
+  }
+
+  /** Adiar uma parcela, ou devolvê-la à data padrão com `null` (172). */
+  function mudarDataDeUmaParcela(indice: number, iso: string | null) {
+    setParcelas((prev) => mudarDataDaParcela(prazoPagamento, prev, indice, iso));
+  }
+
+  /**
+   * Ligar ou desligar o pagamento urgente. Desligado com uma quarta de
+   * exceções no prazo, o prazo volta para a primeira janela aberta, com o
+   * aviso (decisão 172) — a quarta só vale com urgência. A data gravada que
+   * não muda fica: quem decide se ela ainda vale é o servidor.
+   */
+  function mudarUrgencia(ligado: boolean) {
+    setUrgente(ligado);
+    if (!ligado) setFaltaJustificativa(false);
+    if (ligado) {
+      setAvisoQuarta(null);
+      return;
+    }
+    if (prazoPagamento && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento)) {
+      const de = prazoPagamento;
+      const para = primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados);
+      mudarPrazo(para);
+      setAvisoQuarta({ de, para });
+      setPrazoVez((v) => v + 1);
     }
   }
 
@@ -720,6 +854,21 @@ export function GerarPPDrawer({
     // Dois botões no mesmo formulário: quem diz qual foi é o `submitter`.
     // Enter num campo usa o primeiro, "Salvar" — o seguro.
     const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    // Decisão 173: a PP gerada em edição tem um botão só, e ele abre a
+    // revisão antes de gravar — as mesmas portas do "Gerar PP".
+    if (editandoGerada) {
+      if (travaDaAbertura) {
+        setErro(travaDaAbertura);
+        return;
+      }
+      if (travaDoCadastro) {
+        setErro(travaDoCadastro);
+        return;
+      }
+      if (!validar()) return;
+      abrirRevisaoDaEdicao();
+      return;
+    }
     const gerar = submitter?.getAttribute("data-acao") === "gerar";
     if (gerar && travaDaAbertura) {
       setErro(travaDaAbertura);
@@ -745,11 +894,7 @@ export function GerarPPDrawer({
   function validar(): boolean {
     setErro(null);
     if (!ppId || !itemRealizadoId) return false;
-    if (tipoVerba === "producao" && !responsavelId) {
-      setErro("Escolha um responsável.");
-      return false;
-    }
-    if (verbaComTitular && !titularTerceiro && !titularId) {
+    if (verbaProducao && !titularTerceiro && !titularId) {
       setErro("Escolha o titular da verba.");
       return false;
     }
@@ -834,38 +979,43 @@ export function GerarPPDrawer({
       );
       return false;
     }
-    // O calendário já só acende janelas; isto cobre a data digitada por
-    // outro caminho. O servidor checa de novo.
+    // O calendário já só acende janelas (e, com urgência, as quartas de
+    // exceções); isto cobre a data digitada por outro caminho. O servidor
+    // checa de novo.
+    const quartaSemUrgencia = !urgente && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento);
+    if (quartaSemUrgencia) {
+      setErro(
+        `A quarta de exceções só vale para pagamento urgente. Ligue "Pagamento urgente" ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
+      );
+      return false;
+    }
     if (
       prazoPagamento !== prazoOriginal &&
-      (prazoPagamento < hoje || !ehJanelaDePagamento(prazoPagamento))
+      (prazoPagamento < hoje ||
+        (!ehJanelaDePagamento(prazoPagamento) && !(urgente && ehQuarta(prazoPagamento))))
     ) {
       setErro(
-        "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
+        urgente
+          ? "O prazo de pagamento precisa ser, a partir de hoje, uma janela (dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte) ou uma quarta de exceções."
+          : "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
       );
       return false;
     }
     if (prazoPagamento !== prazoOriginal && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
       setErro(
-        `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
+        ehJanelaDePagamento(prazoPagamento)
+          ? `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`
+          : `A quarta ${isoParaBr(prazoPagamento)} só podia ser escolhida até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`,
       );
       return false;
     }
     return true;
   }
 
-  /** Salva a PP a emitir. Com `gerar`, o painel abre a revisão dela. */
-  function salvar(gerar: boolean) {
-    if (!ppId || !itemRealizadoId || ultimaPP === null) return;
+  /** Os dados do formulário no formato das actions (PP a emitir e edição
+   *  da PP gerada). */
+  function montarDados() {
     const parcelasEnvio = parcelasParaEnvio();
-
-    // Lock síncrono contra double-submit (pending do useTransition ativa 1
-    // render depois — clique duplo rápido passa pelo disabled=pending).
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-
-    startTransition(async () => {
-      try {
         const dadosBase = {
           empresa_id: empresaId,
           estabelecimento_id: cnpjId || null,
@@ -887,41 +1037,53 @@ export function GerarPPDrawer({
               responsavel_verba_id: null,
               pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
             }
-          : !verbaComTitular
+          : titularTerceiro
             ? {
+                // Decisão 164: o terceiro é um fornecedor, com o pagamento dele.
                 ...dadosBase,
                 verba_producao: true as const,
                 tipo_verba: tipoVerba,
-                responsavel_verba_id: responsavelId,
-                fornecedor_id: null,
+                verba_titular_tipo: "fornecedor" as const,
+                fornecedor_id: fornecedorId,
+                verba_titular_id: null,
+                responsavel_verba_id: null,
+                pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
               }
-            : titularTerceiro
-              ? {
-                  // Decisão 164: o terceiro é um fornecedor, com o pagamento dele.
-                  ...dadosBase,
-                  verba_producao: true as const,
-                  tipo_verba: tipoVerba,
-                  verba_titular_tipo: "fornecedor" as const,
-                  fornecedor_id: fornecedorId,
-                  verba_titular_id: null,
-                  responsavel_verba_id: null,
-                  pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
-                }
-              : {
-                  ...dadosBase,
-                  verba_producao: true as const,
-                  tipo_verba: tipoVerba,
-                  verba_titular_tipo: titularOrigem,
-                  verba_titular_id: titularId,
-                  fornecedor_id: null,
-                  responsavel_verba_id: null,
-                };
+            : {
+                ...dadosBase,
+                verba_producao: true as const,
+                tipo_verba: tipoVerba,
+                verba_titular_tipo: titularOrigem,
+                verba_titular_id: titularId,
+                fornecedor_id: null,
+                responsavel_verba_id: null,
+              };
+    return dados;
+  }
+
+  /** Os anexos que vão para as actions: só os que já subiram. Verba não
+   *  leva anexo — as notas vão na prestação de contas. */
+  function anexosParaAction() {
+    return verbaProducao ? [] : anexos.filter((a) => a.status === "ok").map(anexoParaEnvio);
+  }
+
+  /** Salva a PP a emitir. Com `gerar`, o painel abre a revisão dela. */
+  function salvar(gerar: boolean) {
+    if (!ppId || !itemRealizadoId || ultimaPP === null) return;
+
+    // Lock síncrono contra double-submit (pending do useTransition ativa 1
+    // render depois — clique duplo rápido passa pelo disabled=pending).
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
+    startTransition(async () => {
+      try {
+        const dados = montarDados();
         const res = await salvarPPAEmitir(
           ppId,
           itemRealizadoId,
           dados,
-          // Verba de produção não leva anexo: as notas vão na prestação.
-          verbaProducao ? [] : anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+          anexosParaAction(),
           ultimaPP,
         );
         if (!res.ok) {
@@ -950,13 +1112,82 @@ export function GerarPPDrawer({
     }
   }, [open, router]);
 
-  /** Falta escolher quem recebe: o fornecedor, o responsável ou o titular. */
-  const faltaQuemRecebe =
-    tipoVerba === "producao"
-      ? !responsavelId
-      : verbaComTitular && !titularTerceiro
-        ? !titularId
-        : !fornecedorId;
+  // ---- Decisão 173: a revisão antes de salvar a edição da PP gerada ----
+  const [revisaoDaEdicao, setRevisaoDaEdicao] = React.useState<PPAEmitir | null>(null);
+  const [erroDaRevisao, setErroDaRevisao] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!open) setRevisaoDaEdicao(null);
+  }, [open]);
+
+  /** A PP como vai ficar, no formato que a revisão lê. */
+  function abrirRevisaoDaEdicao() {
+    if (!ppGeradaEditando) return;
+    const dados = montarDados();
+    const base = ppGeradaComoAEmitir(ppGeradaEditando);
+    setErroDaRevisao(null);
+    setRevisaoDaEdicao({
+      ...base,
+      verba_producao: dados.verba_producao,
+      fornecedor_id: dados.fornecedor_id ?? null,
+      responsavel_verba_id: dados.responsavel_verba_id ?? null,
+      tipo_verba: "tipo_verba" in dados ? (dados.tipo_verba ?? null) : null,
+      verba_titular_tipo: "verba_titular_tipo" in dados ? (dados.verba_titular_tipo ?? null) : null,
+      servico: dados.servico,
+      valor: valorPP,
+      dados: dados as DadosDaPPAEmitir,
+      anexos: anexosParaAction().map((a) => ({
+        id: a.anexo_id,
+        arquivo_path: a.path,
+        arquivo_nome_original: a.nome_original,
+        arquivo_tamanho_bytes: a.tamanho_bytes,
+        arquivo_mimetype: a.mimetype,
+        documento_tipo: a.documento_tipo,
+        documento_numero: a.documento_numero,
+        nf_data_emissao: a.nf_data_emissao,
+        nf_valor: a.nf_valor,
+        nf_tomador_estabelecimento_id: a.nf_tomador_estabelecimento_id,
+        nf_valor_na_pp: a.nf_valor_na_pp,
+        created_at: "",
+      })),
+    });
+  }
+
+  /** O "Salvar alterações" da revisão: grava a PP gerada no lugar. */
+  function salvarEdicao() {
+    if (!ppGeradaEditando || !revisaoDaEdicao || ultimaPP === null) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    const alvo = ppGeradaEditando;
+    // O formulário não muda com a revisão aberta: os dados são os dela.
+    const dados = montarDados();
+    startTransition(async () => {
+      try {
+        const res = await editarPPGerada(alvo.id, dados, anexosParaAction(), ultimaPP);
+        if (!res.ok) {
+          setErroDaRevisao(res.message);
+          return;
+        }
+        abortedRef.current = true;
+        setRevisaoDaEdicao(null);
+        onSuccess?.("editada", res.codigo);
+        onOpenChange(false);
+      } finally {
+        submittingRef.current = false;
+      }
+    });
+  }
+
+  /** Quem recebe, pelo nome — a primeira linha da revisão. */
+  const nomeDeQuemRecebe =
+    verbaProducao && !titularTerceiro
+      ? (itensDoTitular.find((i) => i.value === titularId)?.label ?? "—")
+      : (() => {
+          const f = fornecedoresVisiveis.find((x) => x.id === fornecedorId);
+          return f ? (f.razao_social ?? f.nome) : "—";
+        })();
+
+  /** Falta escolher quem recebe: o fornecedor ou o titular. */
+  const faltaQuemRecebe = verbaProducao && !titularTerceiro ? !titularId : !fornecedorId;
 
   if (!open || !itemRealizadoId) return null;
 
@@ -1125,9 +1356,11 @@ export function GerarPPDrawer({
       <DrawerContent className="sm:max-w-2xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle>
-            {editando
-              ? `Editar PP a emitir${refaz ? ` · refaz a ${refaz.codigo}` : ""}`
-              : "Novo Pedido de Produção"}
+            {ppGeradaEditando
+              ? `Editar ${ppGeradaEditando.codigo}`
+              : editando
+                ? `Editar PP a emitir${refaz ? ` · refaz a ${refaz.codigo}` : ""}`
+                : "Novo Pedido de Produção"}
           </DialogTitle>
         </DialogHeader>
 
@@ -1146,6 +1379,13 @@ export function GerarPPDrawer({
                   A <span className="font-mono">{refaz.codigo}</span> já está cancelada. Corrija o que precisar e gere a
                   PP nova, com outro código.
                 </p>
+              </div>
+            )}
+            {/* Decisão 173: a PP pronta para envio perde a marca ao salvar. */}
+            {ppGeradaEditando?.pronta_para_envio_em && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-snug text-amber-800">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+                Esta PP está pronta para envio. Ao salvar, a marca sai e os documentos precisam ser conferidos de novo.
               </div>
             )}
             {erro && (
@@ -1206,7 +1446,6 @@ export function GerarPPDrawer({
                 onChange={(t) => {
                   if (t === tipoVerba) return;
                   setFornecedorId("");
-                  setResponsavelId("");
                   setTitularId("");
                   setTitularOrigem(null);
                   setTitularTerceiro(false);
@@ -1321,8 +1560,9 @@ export function GerarPPDrawer({
                 </p>
               </div>
 
-              {/* Fornecedor (modo normal) ou Responsável (modo verba) */}
-              {verbaComTitular && !titularTerceiro ? (
+              {/* Fornecedor (modo normal) ou Titular da verba (modo verba,
+                  as três desde a decisão 171) */}
+              {verbaProducao && !titularTerceiro ? (
                 <TitularDaVerbaField
                   itens={itensDoTitular}
                   carregando={pessoas === null}
@@ -1342,7 +1582,7 @@ export function GerarPPDrawer({
                   }}
                   disabled={pending}
                 />
-              ) : verbaComTitular ? (
+              ) : verbaProducao ? (
                 campoFornecedor(
                   <CaixaTerceiro
                     marcado
@@ -1355,21 +1595,6 @@ export function GerarPPDrawer({
                     disabled={pending}
                   />,
                 )
-              ) : verbaProducao ? (
-                <div>
-                  <label className="text-xs font-medium">Responsável *</label>
-                  <Combobox
-                    items={responsaveis.map((r) => ({
-                      value: r.id,
-                      label: r.nome,
-                    }))}
-                    value={responsavelId || null}
-                    onChange={(v) => setResponsavelId(v ?? "")}
-                    placeholder="Escolha um responsável"
-                    buscaPlaceholder="Escreva o nome"
-                    className={COMBOBOX_COMO_SELECT}
-                  />
-                </div>
               ) : (
                 campoFornecedor(null)
               )}
@@ -1382,11 +1607,13 @@ export function GerarPPDrawer({
                 <div>
                   <label className="text-xs font-medium">Prazo de pagamento *</label>
                   <DatePicker
-                    key={`prazo-${drawerKey}`}
+                    key={`prazo-${drawerKey}-${prazoVez}`}
                     name="prazo_pagamento"
                     defaultValue={prazoPagamento}
                     onDateChange={(date) => mudarPrazo(dateToIso(date))}
-                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados)}
+                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados, urgente)}
+                    diasMarcados={quartaMarcada(hoje, feriados, urgente)}
+                    legenda={urgente ? <LegendaDaQuarta /> : undefined}
                   />
                   <EnvioAte vencimento={prazoPagamento} feriados={feriados} />
                 </div>
@@ -1474,8 +1701,14 @@ export function GerarPPDrawer({
                   )}
                 </div>
               </div>
-              <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} />
-              <AvisoPrazoDeEnvioPerdido prazo={prazoPagamento} hojeIso={hoje} feriados={feriados} />
+              <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} urgente={urgente} />
+              <AvisoPrazoDeEnvioPerdido
+                prazo={prazoPagamento}
+                hojeIso={hoje}
+                feriados={feriados}
+                urgente={urgente}
+              />
+              {avisoQuarta && <AvisoQuartaSemUrgencia de={avisoQuarta.de} para={avisoQuarta.para} />}
 
               {parcelas.length > 1 && (
                 <ParcelasDaPPField
@@ -1483,16 +1716,14 @@ export function GerarPPDrawer({
                   setParcelas={setParcelas}
                   valorPP={valorPP}
                   disabled={pending}
+                  onMudarData={mudarDataDeUmaParcela}
                 />
               )}
 
               <UrgenciaPPField
                 urgente={urgente}
                 justificativa={justificativa}
-                onUrgenteChange={(ligado) => {
-                  setUrgente(ligado);
-                  if (!ligado) setFaltaJustificativa(false);
-                }}
+                onUrgenteChange={mudarUrgencia}
                 onJustificativaChange={setJustificativa}
                 destacarFalta={faltaJustificativa}
                 disabled={pending}
@@ -1675,6 +1906,45 @@ export function GerarPPDrawer({
               revisão antes de gerar (Tiago, 06/10/2026). Os dois são de
               todos que abrem o formulário; com o job na pré-abertura, só
               Salvar, e a frase diz por quê. */}
+          {ppGeradaEditando ? (
+          // Decisão 173: a PP gerada tem um botão só; ele abre a revisão.
+          <div className="flex flex-col gap-2 border-t border-border px-6 py-4">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                disabled={pending}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                data-acao="editar"
+                disabled={
+                  pending ||
+                  !ppId ||
+                  travaDaAbertura !== null ||
+                  cadastroIncompleto ||
+                  anexos.some((a) => a.status === "uploading") ||
+                  faltaQuemRecebe
+                }
+                title={travaDaAbertura ?? travaDoCadastro ?? undefined}
+                className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
+              >
+                Salvar alterações
+              </button>
+            </div>
+            <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">
+              {(travaDaAbertura || travaDoCadastro) && (
+                <AlertTriangle className="mt-0.5 h-3 w-3 flex-none text-california-red" />
+              )}
+              {travaDaAbertura ??
+                travaDoCadastro ??
+                `“Salvar alterações” mostra a revisão antes de gravar. A PP continua ${ppGeradaEditando.codigo}, e o PDF é refeito.`}
+            </p>
+          </div>
+          ) : (
           <div className="flex flex-col gap-2 border-t border-border px-6 py-4">
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button
@@ -1739,6 +2009,7 @@ export function GerarPPDrawer({
                 "“Salvar” guarda a PP a emitir para editar depois; “Gerar PP” salva e mostra a revisão antes de gerar. O envio ao financeiro é no painel do item."}
             </p>
           </div>
+          )}
         </form>
 
         <NovoFornecedorDialog
@@ -1774,13 +2045,18 @@ export function GerarPPDrawer({
           <ConferenciaDosDocumentos
             open={ladoALado !== null}
             onOpenChange={(o) => !o && setLadoALado(null)}
-            codigo="PP a emitir"
-            selo={editando ? "Em edição" : "Nova"}
-            descricao="Documentos e dados — lado a lado. O PDF da PP aparece aqui depois de gerar."
+            codigo={ppGeradaEditando?.codigo ?? "PP a emitir"}
+            selo={editando || editandoGerada ? "Em edição" : "Nova"}
+            descricao={
+              ppGeradaEditando
+                ? "Documentos e dados — lado a lado. O PDF da PP é refeito ao salvar."
+                : "Documentos e dados — lado a lado. O PDF da PP aparece aqui depois de gerar."
+            }
             ppIdDoPdf={null}
             anexos={anexos}
             focar={ladoALado?.foco ?? null}
-            urlDoGravado={signedUrlAnexoAEmitir}
+            // Os anexos da PP gerada moram nela; os da PP a emitir, na tabela dela.
+            urlDoGravado={ppGeradaEditando ? signedUrlAnexo : signedUrlAnexoAEmitir}
             prontoParaAnexar={!!uploadPrefix}
             onArquivos={subir}
             onTipo={(id, t) => mudar(id, { tipo: t })}
@@ -1793,7 +2069,11 @@ export function GerarPPDrawer({
             moeda="BRL"
             aviso={avisoDosAnexos}
             onFecharAviso={() => setAvisoDosAnexos(null)}
-            rodapeEsquerda="Para salvar e gerar, os anexos são opcionais; no envio ao financeiro, todos os campos são obrigatórios."
+            rodapeEsquerda={
+              ppGeradaEditando
+                ? "Para salvar, os anexos são opcionais; no envio ao financeiro, todos os campos são obrigatórios."
+                : "Para salvar e gerar, os anexos são opcionais; no envio ao financeiro, todos os campos são obrigatórios."
+            }
             rodape={
               <button
                 type="button"
@@ -1804,6 +2084,32 @@ export function GerarPPDrawer({
               </button>
             }
             disabled={pending}
+          />
+        )}
+        {/* Decisão 173: a revisão da edição da PP gerada, a mesma do "Gerar PP". */}
+        {ppGeradaEditando && (
+          <RevisaoDialog
+            open={revisaoDaEdicao !== null}
+            onOpenChange={(o) => {
+              if (!o && !pending) setRevisaoDaEdicao(null);
+            }}
+            aEmitir={revisaoDaEdicao}
+            nomeDoFornecedor={nomeDeQuemRecebe}
+            nomeDaEmpresa={tomadores.find((t) => t.id === cnpjId)?.nome ?? "—"}
+            tomadores={tomadores}
+            planejado={valorPlanejado}
+            emitidasAntes={Math.round((emPPsEmitidas - valorAntesDaEdicao) * 100) / 100}
+            moeda="BRL"
+            pending={pending}
+            erro={erroDaRevisao}
+            onFecharErro={() => setErroDaRevisao(null)}
+            onGerar={salvarEdicao}
+            onEditar={() => setRevisaoDaEdicao(null)}
+            edicao={{
+              codigo: ppGeradaEditando.codigo,
+              valorAntes: valorAntesDaEdicao,
+              prontaCai: ppGeradaEditando.pronta_para_envio_em !== null,
+            }}
           />
         )}
       </DrawerContent>

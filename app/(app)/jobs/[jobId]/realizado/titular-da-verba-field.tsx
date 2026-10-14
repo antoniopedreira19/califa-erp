@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * O tipo da verba e quem recebe a verba de alimentação ou de transporte
- * (decisão 164, desenho aprovado em 09/10/2026).
+ * O tipo da verba e quem recebe a verba (decisão 164, desenho aprovado em
+ * 09/10/2026; nas três verbas desde a decisão 171, 14/10/2026).
  *
  * - O switch de sempre passa a se chamar "Verba"; ligado, ao lado, escolhe
  *   Produção, Alimentação ou Transporte (ligar cai em Produção, como antes).
- * - Na alimentação e no transporte, o "Titular da verba" sai de uma lista
- *   só: colaboradores do RH e freelas trabalhando, com a busca pelo nome, a
- *   função e o nome social. A caixa "Terceiro (fornecedor)", desmarcada por
- *   padrão, troca para o campo Fornecedor de sempre (com o pagamento do
- *   fornecedor). Para a pessoa não há campo de pagamento: o financeiro
- *   decide na aprovação, como na verba de produção.
+ * - O "Titular da verba" sai de uma lista só: colaboradores do RH e freelas
+ *   trabalhando, com a busca pelo nome, a função e o nome social. A caixa
+ *   "Terceiro (fornecedor)", desmarcada por padrão, troca para o campo
+ *   Fornecedor de sempre (com o pagamento do fornecedor). Para a pessoa não
+ *   há campo de pagamento: a do colaborador sai com a conta e o PIX da
+ *   ficha do RH, copiados pelo banco (decisão 171); a do freela, sem — o
+ *   financeiro decide na aprovação.
  */
 
 import * as React from "react";

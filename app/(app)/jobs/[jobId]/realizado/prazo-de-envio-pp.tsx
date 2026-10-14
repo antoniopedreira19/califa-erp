@@ -6,12 +6,18 @@
  * anterior, se cair em fim de semana ou feriado nacional. A conta mora em
  * `lib/calculos/janelas-pagamento.ts`; aqui ficam as peças de tela que o
  * formulário e o painel de PPs dividem.
+ *
+ * Decisão 172 (14/10/2026): a quarta de exceções da PP urgente tem a sua
+ * data-limite (a sexta anterior), e o "Atualizar vencimento" da PP urgente
+ * escolhe a data num calendário com as janelas e as quartas.
  */
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Loader2 } from "lucide-react";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -21,12 +27,15 @@ import {
 } from "@/components/ui/select";
 import {
   dataLimiteDeEnvio,
+  ehJanelaDePagamento,
   isoParaBr,
   janelasComEnvioAberto,
   ppSegueOPrazoDeEnvio,
+  primeiraDataPossivelDoPrazo,
   vencimentoAceitaEnvio,
 } from "@/lib/calculos/janelas-pagamento";
 import { atualizarVencimentoDaPP, feriadosNacionaisParaPP } from "./actions-pp";
+import { LegendaDaQuarta, diaForaDaJanela, quartaMarcada } from "./prazo-e-urgencia-pp";
 
 /** Uma leitura por página: o formulário e o painel dividem a mesma. */
 let feriadosEmCache: Promise<string[]> | null = null;
@@ -68,10 +77,19 @@ export function prazoDeEnvioPerdido(
   return { limite: dataLimiteDeEnvio(pp.prazoPagamento, feriados) };
 }
 
-/** "Envio ao financeiro até 23/10/2026", embaixo do prazo do formulário. */
+/** "Envio ao financeiro até 23/10/2026", embaixo do prazo do formulário. Na
+ *  quarta de exceções: "Quarta de exceções · envio até 16/10/2026." */
 export function EnvioAte({ vencimento, feriados }: { vencimento: string; feriados: string[] }) {
   const limite = vencimento ? dataLimiteDeEnvio(vencimento, feriados) : null;
   if (!limite) return null;
+  if (!ehJanelaDePagamento(vencimento)) {
+    return (
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        <span className="font-medium text-california-red">Quarta de exceções</span> · envio até{" "}
+        {isoParaBr(limite)}.
+      </p>
+    );
+  }
   return (
     <p className="text-[11px] leading-snug text-muted-foreground">
       Envio ao financeiro até {isoParaBr(limite)}.
@@ -93,7 +111,11 @@ export function AtualizarVencimento({
   feriados,
   podeAtualizar,
   onAtualizada,
+  urgente,
 }: {
+  /** A PP é urgente: a data nova se escolhe num calendário com as janelas e
+   *  as quartas de exceções (decisão 172). Sem urgência, a lista de janelas. */
+  urgente: boolean;
   ppId: string;
   codigo: string;
   vencimento: string;
@@ -111,12 +133,16 @@ export function AtualizarVencimento({
     () => janelasComEnvioAberto(hojeIso, feriados, 6),
     [hojeIso, feriados],
   );
-  const [escolhida, setEscolhida] = React.useState<string>(janelas[0] ?? "");
+  const [escolhida, setEscolhida] = React.useState<string>(
+    urgente ? primeiraDataPossivelDoPrazo(hojeIso, feriados, true) : (janelas[0] ?? ""),
+  );
   // Os feriados chegam depois do primeiro render: a escolha que saiu da
-  // lista volta para a primeira janela aberta.
+  // lista volta para a primeira janela aberta. No calendário da PP urgente,
+  // a data fica (o servidor confere de novo).
   React.useEffect(() => {
+    if (urgente) return;
     if (!janelas.includes(escolhida)) setEscolhida(janelas[0] ?? "");
-  }, [janelas, escolhida]);
+  }, [janelas, escolhida, urgente]);
 
   function atualizar() {
     if (!escolhida) return;
@@ -142,7 +168,25 @@ export function AtualizarVencimento({
           {podeAtualizar ? " Escolha a nova data:" : ""}
         </span>
       </p>
-      {podeAtualizar && (
+      {podeAtualizar && urgente && (
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="w-[190px]">
+            <DatePicker
+              name={`novo_vencimento_${ppId}`}
+              defaultValue={escolhida}
+              onDateChange={(d) => setEscolhida(d ? format(d, "yyyy-MM-dd") : "")}
+              dateDisabled={diaForaDaJanela(hojeIso, null, feriados, true)}
+              diasMarcados={quartaMarcada(hojeIso, feriados, true)}
+              legenda={<LegendaDaQuarta />}
+              disabled={pending}
+              className="h-8 rounded-md px-2.5 text-[12px]"
+            />
+            <EnvioAte vencimento={escolhida} feriados={feriados} />
+          </div>
+          <BotaoAtualizar pending={pending} pronto={!!escolhida} onClick={atualizar} />
+        </div>
+      )}
+      {podeAtualizar && !urgente && (
         <div className="flex flex-wrap items-center gap-2">
           <Select value={escolhida} onValueChange={setEscolhida} disabled={pending}>
             <SelectTrigger
@@ -159,21 +203,35 @@ export function AtualizarVencimento({
               ))}
             </SelectContent>
           </Select>
-          <button
-            type="button"
-            onClick={atualizar}
-            disabled={pending || !escolhida}
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-foreground bg-foreground px-3 text-[11px] font-bold text-white transition-opacity hover:opacity-90",
-              (pending || !escolhida) && "opacity-60",
-            )}
-          >
-            {pending && <Loader2 className="h-3 w-3 animate-spin" />}
-            Atualizar vencimento
-          </button>
+          <BotaoAtualizar pending={pending} pronto={!!escolhida} onClick={atualizar} />
         </div>
       )}
       {erro && <p className="text-[11px] leading-snug text-california-red">{erro}</p>}
     </div>
+  );
+}
+
+function BotaoAtualizar({
+  pending,
+  pronto,
+  onClick,
+}: {
+  pending: boolean;
+  pronto: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending || !pronto}
+      className={cn(
+        "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-foreground bg-foreground px-3 text-[11px] font-bold text-white transition-opacity hover:opacity-90",
+        (pending || !pronto) && "opacity-60",
+      )}
+    >
+      {pending && <Loader2 className="h-3 w-3 animate-spin" />}
+      Atualizar vencimento
+    </button>
   );
 }

@@ -20,7 +20,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   documentoTipoLabel,
   rotuloDaVerba,
-  verbaTemTitular,
+  rotuloDeQuemRecebeAVerba,
   type AnexoDaPPNaLista,
   type PPAEmitir,
 } from "@/lib/types";
@@ -104,6 +104,10 @@ const fator = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 
  * formulário ou do painel (Tiago, 06/10/2026). Mostra o que a PP vai ser e
  * o item depois dela; Voltar fica no canto inferior esquerdo, Editar
  * reabre o formulário e Gerar PP gera.
+ *
+ * Decisão 173 (13/10/2026): a mesma revisão antes de salvar a edição de uma
+ * PP gerada (`edicao`). Muda o título, o botão ("Salvar alterações") e a
+ * linha "Esta PP", que mostra o valor de antes quando ele muda.
  */
 export function RevisaoDialog({
   open,
@@ -120,6 +124,7 @@ export function RevisaoDialog({
   onFecharErro,
   onGerar,
   onEditar,
+  edicao = null,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -138,6 +143,8 @@ export function RevisaoDialog({
   onGerar: () => void;
   /** Reabre o formulário da PP a emitir. */
   onEditar: () => void;
+  /** Decisão 173: a revisão da edição de uma PP gerada. Null = gerar. */
+  edicao?: { codigo: string; valorAntes: number; prontaCai: boolean } | null;
 }) {
   if (!aEmitir) return null;
   const d = aEmitir.dados;
@@ -151,15 +158,14 @@ export function RevisaoDialog({
   const acima = Math.round((novoTotal - planejado) * 100) / 100;
   const parcelas = Math.max(d.parcelas.length, 1);
   // Decisão 164: o tipo da verba e o nome de quem recebe. A PP a emitir de
-  // antes dela não tem o tipo: é produção.
+  // antes dela não tem o tipo: é produção. Desde a 171 as três verbas têm
+  // titular; só a de produção salva antes dela tem responsável.
   const tipoVerba = d.verba_producao ? (d.tipo_verba ?? aEmitir.tipo_verba ?? "producao") : null;
   const rotuloDeQuemRecebe = !tipoVerba
     ? "Fornecedor"
-    : verbaTemTitular(tipoVerba)
-      ? aEmitir.verba_titular_tipo === "fornecedor"
-        ? "Titular da verba (terceiro)"
-        : "Titular da verba"
-      : "Responsável";
+    : aEmitir.verba_titular_tipo === "fornecedor"
+      ? "Titular da verba (terceiro)"
+      : rotuloDeQuemRecebeAVerba(aEmitir);
   const linhas: Array<[string, React.ReactNode]> = [
     ...(aEmitir.refaz
       ? ([
@@ -235,10 +241,25 @@ export function RevisaoDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[560px] gap-0 p-0">
         <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
-          <DialogTitle className="text-[17px]">Gerar o Pedido de Produção?</DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-relaxed">
-            Depois de gerada, a PP não se edita mais. Para mudar algo, só cancelando e gerando outra. Confira:
-          </DialogDescription>
+          {edicao ? (
+            <>
+              <DialogTitle className="text-[17px]">
+                Salvar as alterações da <span className="font-mono">{edicao.codigo}</span>?
+              </DialogTitle>
+              <DialogDescription className="text-[12.5px] leading-relaxed">
+                O código continua o mesmo, e o PDF é refeito com os dados novos.
+                {edicao.prontaCai && " A marca “Pronta para envio” sai: confira os documentos de novo antes do envio."}{" "}
+                Confira:
+              </DialogDescription>
+            </>
+          ) : (
+            <>
+              <DialogTitle className="text-[17px]">Gerar o Pedido de Produção?</DialogTitle>
+              <DialogDescription className="text-[12.5px] leading-relaxed">
+                A PP pode ser editada até o envio ao financeiro. Confira:
+              </DialogDescription>
+            </>
+          )}
         </DialogHeader>
         {erro && (
           <div className="mx-6 mt-4 flex items-start justify-between gap-2 rounded-lg border border-california-red/40 bg-california-red/5 px-3 py-2 text-[12.5px] text-california-red">
@@ -262,7 +283,12 @@ export function RevisaoDialog({
         <div className="px-6 pb-4 pt-3">
           <div className="flex flex-col gap-1.5 rounded-[11px] border border-border bg-muted/40 px-3 py-2.5">
             {linhaDoTotal("PPs já emitidas nesse item", formatCurrency(emitidasAntes, moeda))}
-            {linhaDoTotal("Esta PP", `+ ${formatCurrency(aEmitir.valor, moeda)}`)}
+            {linhaDoTotal(
+              "Esta PP",
+              edicao && Math.abs(edicao.valorAntes - aEmitir.valor) > 0.004
+                ? `+ ${formatCurrency(aEmitir.valor, moeda)} (era ${formatCurrency(edicao.valorAntes, moeda)})`
+                : `+ ${formatCurrency(aEmitir.valor, moeda)}`,
+            )}
             <div className="my-0.5 border-t border-border" />
             {linhaDoTotal(
               "Novo total em PPs emitidas",
@@ -303,7 +329,7 @@ export function RevisaoDialog({
               disabled={pending}
               className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
             >
-              {pending ? "Gerando…" : "Gerar PP"}
+              {edicao ? (pending ? "Salvando…" : "Salvar alterações") : pending ? "Gerando…" : "Gerar PP"}
             </button>
           </div>
         </div>

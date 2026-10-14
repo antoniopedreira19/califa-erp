@@ -18,7 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DatePicker } from "@/components/ui/date-picker";
+import {
+  SeletorCompetenciaForm,
+  proximaCompetenciaIso,
+  competenciaLabel,
+} from "@/components/ui/seletor-competencia-form";
 import { criarVinculo } from "@/lib/actions/beneficios/vinculos";
 import type { BeneficioModoCusteio } from "@/lib/types";
 import type { BeneficioCompleto } from "@/lib/queries/beneficios";
@@ -78,9 +82,7 @@ export function ModalNovoVinculo({
     beneficios[0]?.id ?? "",
   );
   const [modo, setModo] = useState<BeneficioModoCusteio>("rateado");
-  const [dataInicio, setDataInicio] = useState<string>(
-    new Date().toISOString().slice(0, 10),
-  );
+  const [dataInicio, setDataInicio] = useState<string>(proximaCompetenciaIso());
   const [observacao, setObservacao] = useState<string>("");
 
   // Reset no abrir
@@ -88,7 +90,7 @@ export function ModalNovoVinculo({
     if (!open) return;
     setBeneficioId(beneficios[0]?.id ?? "");
     setModo("rateado");
-    setDataInicio(new Date().toISOString().slice(0, 10));
+    setDataInicio(proximaCompetenciaIso());
     setObservacao("");
     setErro(null);
   }, [open, beneficios]);
@@ -204,19 +206,13 @@ export function ModalNovoVinculo({
           )}
 
           <div>
-            <label
-              htmlFor="novo-vinculo-data-inicio"
-              className="mb-1 block text-xs font-medium text-foreground"
-            >
-              Data de início
+            <label className="mb-1 block text-xs font-medium text-foreground">
+              Entra em vigência a partir de
             </label>
-            <DatePicker
-              name="data_inicio_vinculo"
-              id="novo-vinculo-data-inicio"
-              defaultValue={dataInicio}
-              onDateChange={(d) =>
-                setDataInicio(d ? d.toISOString().slice(0, 10) : "")
-              }
+            <SeletorCompetenciaForm
+              value={dataInicio}
+              onChange={setDataInicio}
+              hint={`A fatura de ${competenciaLabel(dataInicio)} já vem com este benefício.`}
             />
           </div>
 

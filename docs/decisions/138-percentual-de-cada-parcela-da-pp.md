@@ -3,6 +3,7 @@
 **Data:** 2026-10-01
 **Decidido por:** Tiago
 **Status:** aceita — entregue em 01/10/2026; revisada em 05/10/2026 (§7)
+e em 14/10/2026 (§8)
 **Migration:** nenhuma (a PP continua gravando só o R$ de cada parcela;
 o % é do formulário)
 
@@ -151,3 +152,43 @@ primeira e depois R$ 8.500 × 1 × 1 deram R$ 2.550 + R$ 5.950; R$ 4.250
 digitado voltou a 50/50; R$ 9.000 deixou a última em −5,88% / −R$ 500 com
 a trava; apagar o D/M voltou o R$ a "—" mantendo 30/70. Nenhuma PP
 gravada.
+
+## 8. Revisão de 14/10/2026 — sair do campo de % mexia no R$
+
+Achado em 13/10/2026 (no `main` em `3a930548`). Com R$ Unit. 6.000, QT 1,
+D/M 1 e 3 parcelas, o bloco nasce com 33,33% / R$ 2.000,00, 33,33% /
+R$ 2.000,00 e 33,34% / R$ 2.000,00. **Bastava clicar no % da parcela 1 e
+clicar fora, sem digitar nada**, para o R$ dela virar 1.999,80 e o da
+última 2.000,20.
+
+A causa: ao sair do campo, o % reescreve o próprio texto ("33,5" vira
+"33,50", §2), e essa reescrita passava pela mesma conta da digitação —
+o R$ era refeito como valor da PP × % **arredondado** (6.000 × 33,33% =
+1.999,80), mesmo com o % igual ao de antes.
+
+O mesmo defeito tinha um lado pior: **o R$ digitado se perdia**. R$
+2.500,00 digitado na parcela 1 dá 41,67%; passar pelo campo de % refazia
+o R$ como 6.000 × 41,67% = 2.500,20, e a última absorvia os −R$ 0,20. A
+soma continuava fechando em 100% e no valor da PP, então nada ficava
+vermelho e a PP podia ser gerada assim. No banco, nenhuma PP gravada de
+01/10 a 13/10 tem o desvio da divisão igual; o do R$ digitado não se
+distingue pelo valor gravado.
+
+**A regra agora: o R$ só se refaz quando o número do % muda.** Texto novo
+com o mesmo número — a saída do campo, ou o "33," no meio da digitação —
+só troca o texto. Digitar outro % continua refazendo o R$, e o "33,5"
+continua virando "33,50" ao sair. A regra mora na conta
+(`mudarPercentual` em `parcelas-da-pp.tsx`), não no campo, para valer
+para qualquer caminho que chegue com o mesmo %.
+
+Conferência (14/10/2026), no TES-1001/26 · Item 3, como administrador,
+sem gerar PP (formulário cancelado; nenhuma PP nova no job):
+
+| Passo | Antes | Agora |
+|---|---|---|
+| 6.000 em 3, entrar e sair do % da parcela 1 | 1.999,80 / 2.000,00 / 2.000,20 | 2.000,00 / 2.000,00 / 2.000,00 |
+| R$ 2.500 na parcela 1 (41,67%), entrar e sair do % | 2.500,20 / 2.000,00 / 1.499,80 | 2.500,00 / 2.000,00 / 1.500,00 |
+| "33,5" no % da parcela 2 e sair | — | 33,50% / R$ 2.010,00, a última 24,83% / R$ 1.490,00 |
+
+O "antes" da primeira linha é a reprodução de 13/10; o da segunda é a
+conta do código antigo (6.000 × 41,67% = 2.500,20), não uma reprodução.

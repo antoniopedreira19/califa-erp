@@ -54,7 +54,9 @@ na Planilha Interna, e nada avisava o GP de que havia PP esperando por ele.
 - **Ver formulário**: a ficha em leitura do "Ver formulário" do painel
   (`VerPPDrawer`), com o "Visualizar" no rodapé. Para a PP gerada, o
   subtítulo diz "a PP gerada não se edita mais; os documentos do fornecedor
-  entram no envio".
+  entram no envio". ⚠️ Desde a [173](173-pp-gerada-volta-a-se-editar.md)
+  (13/10/2026) a PP gerada se edita, e o subtítulo aponta o lápis do painel
+  do item.
 - **O olho** abre a PP ao lado dos documentos, na tela do Contas a Pagar em
   leitura (a mesma do "Visualizar"). Antes abria o PDF da parcela numa aba
   nova.
