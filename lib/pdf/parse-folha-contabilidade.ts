@@ -169,37 +169,28 @@ export function parseFolhaContabilidadeTexto(texto: string): ParsedFolha {
     }
   }
 
-  // Totalizadores de quantidade (empregados/estagiários/contribuintes) são
-  // obrigatórios — se faltar algum, o parser não tem como validar a contagem.
-  if (!totEmpregadosM || !totEstagiariosM || !totContribuintesM) {
-    const faltando = [
-      !totEmpregadosM && "Empregados:",
-      !totEstagiariosM && "Estagiários:",
-      !totContribuintesM && "Contribuintes:",
-    ].filter(Boolean).join(", ");
-    throw new Error(`Totalizadores de contagem não encontrados no PDF (faltando: ${faltando}).`);
-  }
-
-  // "Total da Empresa:" tem fallback: se o pdf-parse v1 extrair o label de forma
-  // que a regex não casa (quebra de linha, whitespace unicode, etc.), calculamos
-  // o total a partir da soma das linhas já parseadas. Isso só vale se tivermos
-  // conseguido extrair alguma linha; caso contrário, falha explícita.
-  let totalEmpresaCentavos: number;
-  if (totEmpresaM) {
-    totalEmpresaCentavos = brlParaCentavos(totEmpresaM[1]);
-  } else if (linhas.length > 0) {
-    totalEmpresaCentavos = linhas.reduce((acc, l) => acc + l.valor, 0);
-  } else {
-    throw new Error(
-      "Total da Empresa não encontrado no PDF e nenhuma linha foi extraída pra calcular a soma.",
-    );
+  // Totalizadores do rodapé são SÓ CONFERÊNCIA — se o PDF for válido (CNPJ +
+  // competência + pelo menos uma linha extraída), o import roda. Se o rodapé
+  // for extraído normal, usamos; se não, computamos a partir das linhas.
+  // Essa decisão evita falhar o import inteiro por detalhe de layout do PDF
+  // que o pdf-parse v1 pode extrair de forma inconsistente.
+  if (linhas.length === 0) {
+    throw new Error("Nenhuma linha de colaborador foi extraída do PDF.");
   }
 
   const totalizadores: TotalizadoresPdf = {
-    empregados: Number(totEmpregadosM[1]),
-    estagiarios: Number(totEstagiariosM[1]),
-    contribuintes: Number(totContribuintesM[1]),
-    total_empresa: totalEmpresaCentavos,
+    empregados: totEmpregadosM
+      ? Number(totEmpregadosM[1])
+      : linhas.filter((l) => l.secao === "empregados").length,
+    estagiarios: totEstagiariosM
+      ? Number(totEstagiariosM[1])
+      : linhas.filter((l) => l.secao === "estagiarios").length,
+    contribuintes: totContribuintesM
+      ? Number(totContribuintesM[1])
+      : linhas.filter((l) => l.secao === "contribuintes").length,
+    total_empresa: totEmpresaM
+      ? brlParaCentavos(totEmpresaM[1])
+      : linhas.reduce((acc, l) => acc + l.valor, 0),
   };
 
   return {
