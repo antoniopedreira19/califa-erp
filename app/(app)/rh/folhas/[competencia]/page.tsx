@@ -267,24 +267,40 @@ export default async function FolhaCompetenciaPage({
   const linhasClt = folhasRaw.filter((l) => l.origem === "contabilidade");
   const rascunhosAEnviar = folhasRaw.filter((l) => l.status === "rascunho").length;
 
-  // Fase 3: estado do checkpoint "Benefícios aplicados"
-  const fechamentoVigente = await obterFechamentoVigenteDaCompetencia({
-    tenantId: session.activeTenant.id,
-    ano,
-    mes,
-  });
-  const avulsaPaga = fechamentoVigente
-    ? await temAvulsaPaga({ fechamentoId: fechamentoVigente.id })
-    : false;
-  const beneficiosProp = {
-    aplicado: Boolean(fechamentoVigente),
-    fechamentoId: fechamentoVigente?.id ?? null,
-    qtdVinculos: fechamentoVigente?.qtd_vinculos ?? 0,
-    totalEmpresa: fechamentoVigente?.total_empresa ?? 0,
-    totalColaborador: fechamentoVigente?.total_colaborador ?? 0,
-    totalIntegral: fechamentoVigente?.valor_integral ?? 0,
-    avulsaPaga,
+  // Fase 3: estado do checkpoint "Benefícios aplicados". Blindado em try/catch
+  // porque qualquer problema aqui NÃO deve derrubar a página inteira — melhor
+  // mostrar o checkpoint como "não aplicado" do que impedir a Kika de ver a folha.
+  let beneficiosProp = {
+    aplicado: false,
+    fechamentoId: null as string | null,
+    qtdVinculos: 0,
+    totalEmpresa: 0,
+    totalColaborador: 0,
+    totalIntegral: 0,
+    avulsaPaga: false,
   };
+  try {
+    const fechamentoVigente = await obterFechamentoVigenteDaCompetencia({
+      tenantId: session.activeTenant.id,
+      ano,
+      mes,
+    });
+    const avulsaPaga = fechamentoVigente
+      ? await temAvulsaPaga({ fechamentoId: fechamentoVigente.id })
+      : false;
+    beneficiosProp = {
+      aplicado: Boolean(fechamentoVigente),
+      fechamentoId: fechamentoVigente?.id ?? null,
+      qtdVinculos: fechamentoVigente?.qtd_vinculos ?? 0,
+      totalEmpresa: fechamentoVigente?.total_empresa ?? 0,
+      totalColaborador: fechamentoVigente?.total_colaborador ?? 0,
+      totalIntegral: fechamentoVigente?.valor_integral ?? 0,
+      avulsaPaga,
+    };
+  } catch (e) {
+    console.error("[folha.competencia.beneficios]", e);
+    // Fallback já é o beneficiosProp vazio inicial.
+  }
 
   return (
     <div className="space-y-6">
