@@ -2,6 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
+  comAContaDaMidia,
+  fechamentoDosItens,
+  notaDoVeiculo,
+  parametrosDaVersao,
+  realizadoDaLinhaMidia,
+} from "@/lib/calculos/midia-off";
+import {
   blocosDoItem,
   realizadoVemDasPPs,
   somarBlocosDosItens,
@@ -54,7 +61,8 @@ export async function carregarPlanilhasDosJobs(
         // Os quatro da cadeia internacional e o modelo da categoria do
         // ORÇAMENTO (decisão 072): cada job do projeto fecha pela sua
         // cadeia, e o consolidado soma os fechamentos.
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
+        // Os dois últimos são as condições da Mídia Off (decisão 167).
+        "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), " +
           "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
     )
     .eq("tenant_id", tenantId)
@@ -238,6 +246,30 @@ export async function carregarPlanilhasDosJobs(
     const jobAberto =
       j.status !== "aguardando_abertura" && j.status !== "rejeitado_financeiro";
     const gruposDoJob = gruposPorJob.get(j.id) ?? [];
+    // O modelo é o da categoria do ORÇAMENTO que originou o job (decisão 072).
+    const modeloPlanilha: CategoriaModeloPlanilha =
+      ((j as { orcamento?: { categoria?: { modelo_planilha?: string } } })
+        .orcamento?.categoria?.modelo_planilha as
+        | CategoriaModeloPlanilha
+        | undefined) ?? "nacional";
+    // Mídia Off (decisão 167): na linha, o planejado é a nota do veículo, e
+    // o realizado é a nota no A · Direto e as PPs no A · Repasse (Tiago,
+    // 13/10/2026). A mídia ainda não tem BV.
+    const paramsMidia =
+      modeloPlanilha === "midia_off" && j.versao
+        ? parametrosDaVersao({
+            percentual_honorarios: j.versao.percentual_honorarios ?? 0,
+            percentual_imposto: j.versao.percentual_imposto ?? 0,
+            base_honorarios: j.versao.base_honorarios ?? null,
+            percentual_veiculo: j.versao.percentual_veiculo ?? null,
+          })
+        : null;
+    const blocoDe = (bruto: number) => ({
+      bruto,
+      deducaoBv: 0,
+      liquido: bruto,
+      bvPendente: false,
+    });
 
     const grupos: GrupoPlanilhaProjeto[] = gruposDoJob.map((g) => {
       const itens: ItemPlanilhaProjeto[] = itensDoJob
@@ -249,7 +281,7 @@ export async function carregarPlanilhasDosJobs(
           // pode ter uma segunda implementação da conta, ou ela e a tela
           // do job começam a divergir. Em `A` e `D` o realizado é o
           // ORÇADO — eles não geram PP.
-          const blocos = blocosDoItem(
+          const nacional = blocosDoItem(
             {
               tipo_custo: tipo,
               total_orcado: it.total_orcado,
@@ -262,9 +294,23 @@ export async function carregarPlanilhasDosJobs(
             real?.total ?? 0,
             jobAberto,
           );
+          const blocos = paramsMidia
+            ? {
+                ...nacional,
+                planejado: blocoDe(notaDoVeiculo(it.total_orcado, paramsMidia)),
+                realizado: blocoDe(
+                  realizadoDaLinhaMidia(tipo, it.total_orcado, real?.total ?? 0, paramsMidia, jobAberto),
+                ),
+              }
+            : nacional;
           // Linha em save não tem custo: nem PP, nem espelho do orçado.
           const emSave = it.em_save === true;
           const daPP = emSave || realizadoVemDasPPs(tipo) || !jobAberto;
+          // Na mídia, a quebra do planejado (e do realizado no A · Direto)
+          // é a da nota: o unitário negociado × a parte do veículo.
+          const unitNota = paramsMidia
+            ? (num(it.valor_unitario_orcado) * paramsMidia.veiculo) / 100
+            : 0;
           return {
             id: it.id,
             nome: it.item,
@@ -277,12 +323,18 @@ export async function carregarPlanilhasDosJobs(
             orcDm: num(it.dias_meses_orcado),
             orcTotal: num(it.total_orcado),
             orcRentabilidade: blocos.orcadoRentabilidade,
-            planUnit: num(it.valor_unitario_planejado),
-            planQt: num(it.quantidade_planejada),
-            planDm: num(it.dias_meses_planejado),
+            planUnit: paramsMidia ? unitNota : num(it.valor_unitario_planejado),
+            planQt: paramsMidia ? num(it.quantidade_orcada) : num(it.quantidade_planejada),
+            planDm: paramsMidia ? num(it.dias_meses_orcado) : num(it.dias_meses_planejado),
             // A quebra do realizado descreve as PPs; em `A` e `D`, que não
             // têm PP, ela espelha o orçado, como na planilha do job.
-            realUnit: emSave ? 0 : daPP ? (real?.unit ?? 0) : num(it.valor_unitario_orcado),
+            realUnit: emSave
+              ? 0
+              : daPP
+                ? (real?.unit ?? 0)
+                : paramsMidia
+                  ? unitNota
+                  : num(it.valor_unitario_orcado),
             realQt: emSave ? 0 : daPP ? (real?.qt ?? 0) : num(it.quantidade_orcada),
             realDm: emSave ? 0 : daPP ? (real?.dm ?? 0) : num(it.dias_meses_orcado),
             planejado: blocos.planejado,
@@ -313,26 +365,10 @@ export async function carregarPlanilhasDosJobs(
 
     const percentualHonorarios = num(j.versao?.percentual_honorarios);
     const percentualImposto = num(j.versao?.percentual_imposto);
-    // O modelo é o da categoria do ORÇAMENTO que originou o job (decisão 072).
-    const modeloPlanilha: CategoriaModeloPlanilha =
-      ((j as { orcamento?: { categoria?: { modelo_planilha?: string } } })
-        .orcamento?.categoria?.modelo_planilha as
-        | CategoriaModeloPlanilha
-        | undefined) ?? "nacional";
 
     // Mesma função da tela da versão e do card de Totais do job: o
     // fechamento do projeto é a soma dos fechamentos, não uma conta nova.
-    const {
-      subtotaisPorTipo,
-      subtotalGeral,
-      honorarios,
-      imposto,
-      intTaxes,
-      intTransactionCosts,
-      faturamentoPrevisto,
-      valorJob,
-      save: quebraSave,
-    } = calcularTotaisVersao(
+    const totaisNacionais = calcularTotaisVersao(
       itensDoJob.map((it) => ({
         tipo_custo: it.tipo_custo as TipoCusto,
         total_orcado: num(it.total_orcado),
@@ -345,6 +381,25 @@ export async function carregarPlanilhasDosJobs(
       percentualImposto,
       configDaPlanilha(modeloPlanilha, j.versao ?? {}).internacional,
     );
+    // Mídia Off (decisão 167): o job fecha pela conta da mídia, como no
+    // cabeçalho dele.
+    const fechamentoMidia = paramsMidia
+      ? fechamentoDosItens(
+          itensDoJob.map((it) => ({ tipo_custo: it.tipo_custo, total_orcado: it.total_orcado })),
+          paramsMidia,
+        )
+      : null;
+    const {
+      subtotaisPorTipo,
+      subtotalGeral,
+      honorarios,
+      imposto,
+      intTaxes,
+      intTransactionCosts,
+      faturamentoPrevisto,
+      valorJob,
+      save: quebraSave,
+    } = fechamentoMidia ? comAContaDaMidia(totaisNacionais, fechamentoMidia) : totaisNacionais;
 
     return {
       id: j.id,

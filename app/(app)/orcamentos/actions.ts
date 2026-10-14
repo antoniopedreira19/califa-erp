@@ -82,6 +82,57 @@ function mapDbError(msg: string): string {
 }
 
 /**
+ * GPs Responsáveis do projeto só com quem pode ser GP: papel GP ou
+ * Administrador, ativo (decisão 170). Até 13/10/2026 o campo listava todos
+ * os membros, e três produtores viraram GP de projeto — um deles, GP de
+ * job. Na edição, quem já é GP do projeto passa sem conferência: a tela o
+ * mantém na lista, e tirá-lo é escolha de quem edita.
+ */
+async function conferirGpsResponsaveis(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  responsavelIds: string[],
+  projetoId?: string,
+): Promise<{ ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string[]> }> {
+  const [gpsRes, atuaisRes] = await Promise.all([
+    supabase.rpc("gps_ativos_do_tenant", { p_tenant_id: tenantId }),
+    projetoId
+      ? supabase
+          .from("projeto_responsaveis")
+          .select("profile_id")
+          .eq("projeto_id", projetoId)
+          .eq("tenant_id", tenantId)
+          .eq("papel", "gp")
+      : Promise.resolve({ data: [] as { profile_id: string }[], error: null }),
+  ]);
+
+  if (gpsRes.error) {
+    console.error("[projetos.gps]", gpsRes.error.message);
+    return { ok: false, message: "Não foi possível conferir os GPs Responsáveis." };
+  }
+  const podem = new Set(((gpsRes.data ?? []) as { id: string }[]).map((g) => g.id));
+  const atuais = new Set(
+    ((atuaisRes.data ?? []) as { profile_id: string }[]).map((r) => r.profile_id),
+  );
+  const fora = responsavelIds.filter((id) => !podem.has(id) && !atuais.has(id));
+  if (fora.length === 0) return { ok: true };
+
+  const { data: nomes } = await supabase
+    .from("profiles")
+    .select("nome")
+    .in("id", fora)
+    .returns<{ nome: string }[]>();
+  const quem = (nomes ?? []).map((n) => n.nome).join(", ") || "Um dos escolhidos";
+  return {
+    ok: false,
+    message: `${quem} não pode ser GP Responsável: no cadastro de usuários, não está ativo com o papel GP.`,
+    fieldErrors: {
+      responsavel_ids: ["Escolha só quem tem o papel GP ou Administrador."],
+    },
+  };
+}
+
+/**
  * A marca é cadastrada por cliente e o banco não consegue garantir que as
  * escolhidas pertencem ao cliente do projeto — a FK só aponta para
  * `cliente_produtos`. A checagem é aqui, como já acontece na abertura de
@@ -260,14 +311,18 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
   const { regional_ids, responsavel_ids, equipe_ids, produto_ids, ...campos } =
     parsed.data;
 
-  const check = await validarMarcasERegionais(
-    supabase,
-    session.activeTenant.id,
-    campos.cliente_id,
-    produto_ids,
-    regional_ids,
-  );
+  const [check, gps] = await Promise.all([
+    validarMarcasERegionais(
+      supabase,
+      session.activeTenant.id,
+      campos.cliente_id,
+      produto_ids,
+      regional_ids,
+    ),
+    conferirGpsResponsaveis(supabase, session.activeTenant.id, responsavel_ids),
+  ]);
   if (!check.ok) return check;
+  if (!gps.ok) return gps;
 
   let codigo: string;
   try {
@@ -526,14 +581,18 @@ export async function atualizarProjeto(
   const { regional_ids, responsavel_ids, equipe_ids, produto_ids, ...campos } =
     parsed.data;
 
-  const check = await validarMarcasERegionais(
-    supabase,
-    session.activeTenant.id,
-    campos.cliente_id,
-    produto_ids,
-    regional_ids,
-  );
+  const [check, gps] = await Promise.all([
+    validarMarcasERegionais(
+      supabase,
+      session.activeTenant.id,
+      campos.cliente_id,
+      produto_ids,
+      regional_ids,
+    ),
+    conferirGpsResponsaveis(supabase, session.activeTenant.id, responsavel_ids, id),
+  ]);
   if (!check.ok) return check;
+  if (!gps.ok) return gps;
 
   // Campanha saiu do formulário mas a coluna e os dados continuam.
   // Não basta o campo ser opcional no Zod: o transform devolve `null`

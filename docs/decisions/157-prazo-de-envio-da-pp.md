@@ -1,7 +1,11 @@
 # 157 — A PP chega ao financeiro até 15 dias antes da janela de pagamento
 
 **Data:** 2026-10-07
-**Status:** aceita e implementada (07/10/2026).
+**Status:** aceita e implementada (07/10/2026). ⚠️ **Revista pela
+[172](172-quarta-de-excecoes-na-pp-urgente.md) em 14/10/2026:** a quarta de
+exceções da PP urgente tem data-limite própria (a sexta anterior), §6 deixa de
+valer, e o "Atualizar vencimento" da PP urgente escolhe a data num calendário
+com as janelas e as quartas.
 **Quem decidiu:** Tiago, em 07/10/2026, a partir do "Calendário de envio de PPs" que o financeiro divulgou (janelas de agosto a dezembro de 2026, "prazo para envio: até 15 dias antes de cada janela de pagamento").
 **Completa:** a [077](077-o-prazo-da-pp-cai-em-janela-e-a-pp-pode-ser-urgente.md) (o prazo da PP só cai em janela de pagamento) e a [153](153-pp-a-emitir.md) (a PP gerada não se edita), que ganha uma exceção.
 **Migration:** nenhuma. A regra é de código; os feriados vêm do cadastro que o Fiscal já tem (`fiscal_feriados`).

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { FilaAbertura, type FilaLinha, type SaveFilaLinha } from "./fila-list";
+import type { CancelamentoDaFila } from "./cancelamento-na-fila";
 import { JobsAbertosList } from "./jobs-abertos-list";
 import { CalendarioJobs } from "./calendario-jobs";
 import type { JobAberto } from "./dados-abertos";
@@ -30,7 +31,14 @@ export function AberturaTabs({
   abertos,
   hoje,
   abaInicial,
+  cancelamentos,
+  revisarInicial,
 }: {
+  /** Os pedidos de cancelamento de job aberto (decisão 169). Contam na aba
+   *  junto dos jobs e dos saves. */
+  cancelamentos: CancelamentoDaFila[];
+  /** `?revisar=<job>`: reabre o pop-up do pedido. */
+  revisarInicial: string | null;
   fila: FilaLinha[];
   /** A faixa Saves da fila (decisão 099): pedidos que aguardam o
    *  financeiro. Contam na aba junto dos jobs. */
@@ -51,7 +59,7 @@ export function AberturaTabs({
       // Sem `?aba=` na URL, a fila vazia é o estado normal do dia a dia:
       // abrir direto em "Visualizar Jobs" poupa um clique e evita receber
       // um empty state na cara.
-      (fila.length + saves.length > 0 ? "aguardando" : "abertos"),
+      (fila.length + saves.length + cancelamentos.length > 0 ? "aguardando" : "abertos"),
   );
 
   /**
@@ -75,7 +83,7 @@ export function AberturaTabs({
     {
       key: "aguardando",
       rotulo: "Jobs aguardando abertura",
-      contagem: fila.length + saves.length,
+      contagem: fila.length + saves.length + cancelamentos.length,
     },
     // "Visualizar Jobs", e não "Jobs abertos": esta aba é a porta de
     // entrada do job já aberto no financeiro — dela se chega ao registro
@@ -130,7 +138,12 @@ export function AberturaTabs({
       </div>
 
       <div role="tabpanel" className={cn(aba === "aguardando" ? "" : "hidden")}>
-        <FilaAbertura linhas={fila} saves={saves} />
+        <FilaAbertura
+          linhas={fila}
+          saves={saves}
+          cancelamentos={cancelamentos}
+          revisarInicial={revisarInicial}
+        />
       </div>
       <div role="tabpanel" className={cn(aba === "abertos" ? "" : "hidden")}>
         <JobsAbertosList linhas={abertos} />

@@ -26,6 +26,8 @@ interface Props {
   empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
   clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
+  /** Quem pode ser GP (decisão 170) — ver o ProjetoForm. */
+  gps: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
   produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
@@ -50,6 +52,7 @@ export function ProjetoEditorDrawer({
   empresas,
   clientes,
   responsaveis,
+  gps,
   regionais,
   produtos,
   categorias,
@@ -164,6 +167,7 @@ export function ProjetoEditorDrawer({
             empresas={empresas}
             clientes={clientes}
             responsaveis={responsaveis}
+            gps={gps}
             regionais={regionais}
             produtos={produtos}
             categorias={categorias}

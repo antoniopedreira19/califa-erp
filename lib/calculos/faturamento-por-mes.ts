@@ -10,6 +10,10 @@
  *
  * Função pura: quem chama traz os itens (da cópia do job, com as erratas),
  * os grupos e os meses.
+ *
+ * A Mídia Off também fatura por mês (decisão 167), mas pela conta DELA —
+ * honorários + veículos em A · Repasse (`fechamentoDosItens`) —, e o mês só
+ * libera depois da última veiculação dele: quem chama passa `midia`.
  */
 
 import {
@@ -17,6 +21,12 @@ import {
   type ItemParaTotais,
   type ParametrosInternacionais,
 } from "./versao-totais";
+import {
+  fechamentoDosItens,
+  mesEmVeiculacao,
+  ultimaVeiculacaoDoMes,
+  type ParametrosMidia,
+} from "./midia-off";
 
 export interface MesDoJob {
   id: string;
@@ -54,12 +64,24 @@ export function faturamentoPorMes(
   percentualHonorarios: number,
   percentualImposto: number,
   internacional: ParametrosInternacionais | null = null,
+  /** Mídia Off (decisão 167): o mês fecha pela conta da mídia. */
+  midia: ParametrosMidia | null = null,
 ): FaturamentoDoMes[] {
   const mesDoGrupo = new Map(grupos.map((g) => [g.id, g.mes_id]));
   return [...meses]
     .sort((a, b) => a.mes.localeCompare(b.mes))
     .map((m) => {
       const itensDoMes = itens.filter((it) => mesDoGrupo.get(it.grupo_id) === m.id);
+      if (midia) {
+        return {
+          mesId: m.id,
+          mes: m.mes,
+          faturamento: centavos(fechamentoDosItens(itensDoMes, midia).faturamentoPrevisto),
+          // A Mídia Off não tem save (decisão 147).
+          save: 0,
+          qtdItens: itensDoMes.length,
+        };
+      }
       const totais = calcularTotaisVersao(
         itensDoMes,
         percentualHonorarios,
@@ -98,8 +120,12 @@ export function dataDeRecebimentoDoMes(mes: string, dia: number): string {
  *
  *  `sem_faturamento`: mês cuja planilha não fatura nada (só custo pago
  *  direto pelo cliente). Não tem o que enviar, e por isso não segura o
- *  encerramento nem a liquidação do job. */
+ *  encerramento nem a liquidação do job.
+ *
+ *  `em_veiculacao`: só Mídia Off (decisão 167) — o mês ainda não passou da
+ *  última veiculação dele, e o envio não libera. */
 export type SituacaoDoMes =
+  | "em_veiculacao"
   | "a_enviar"
   | "na_fila"
   | "faturado_parcial"
@@ -168,6 +194,9 @@ export interface MesDeFaturamento extends FaturamentoDoMes {
   faturado: number;
   notas: NotaDoMes[];
   situacao: SituacaoDoMes;
+  /** Só Mídia Off (decisão 167): a última veiculação do mês — o envio
+   *  libera no dia seguinte. `null` fora da mídia. */
+  ultimaVeiculacao: string | null;
 }
 
 export function situacaoDoMes(
@@ -189,6 +218,7 @@ export function montarFaturamentoMensal({
   percentualImposto,
   envios,
   itensDeNota,
+  midia = null,
 }: {
   meses: MesDoJob[];
   grupos: GrupoComMes[];
@@ -197,10 +227,23 @@ export function montarFaturamentoMensal({
   percentualImposto: number;
   envios: EnvioDoJobComParcelas[];
   itensDeNota: ItemDeNotaDaParcela[];
+  /** Mídia Off (decisão 167): a conta da mídia, o dia de hoje e as datas
+   *  de veiculação das linhas (as mesmas `itens`, pelo id). */
+  midia?: {
+    params: ParametrosMidia;
+    hoje: string;
+    datas: ReadonlyArray<{
+      id: string;
+      insercoes_por_dia: Record<string, number | string> | null;
+      data_fim: string | null;
+    }>;
+  } | null;
 }): MesDeFaturamento[] {
   const envioPorMes = new Map(
     envios.filter((e) => e.mes !== null).map((e) => [e.mes as string, e]),
   );
+  const mesDoGrupo = new Map(grupos.map((g) => [g.id, g.mes_id]));
+  const datasPorId = new Map((midia?.datas ?? []).map((d) => [d.id, d]));
 
   return faturamentoPorMes(
     meses,
@@ -208,12 +251,27 @@ export function montarFaturamentoMensal({
     itens,
     percentualHonorarios,
     percentualImposto,
+    null,
+    midia?.params ?? null,
   ).map((m) => {
     const envio = envioPorMes.get(m.mes) ?? null;
     const { faturado, notas } = notasDoEnvio(envio, itensDeNota);
+    const ultimaVeiculacao = midia
+      ? ultimaVeiculacaoDoMes(
+          m.mes,
+          itens
+            .filter((it) => mesDoGrupo.get(it.grupo_id) === m.mesId)
+            .map((it) => datasPorId.get((it as { id?: string }).id ?? ""))
+            .filter((d): d is NonNullable<typeof d> => d !== undefined),
+        )
+      : null;
     const situacao: SituacaoDoMes =
-      !envio && m.faturamento <= 0 ? "sem_faturamento" : situacaoDoMes(envio, faturado);
-    return { ...m, envio, faturado, notas, situacao };
+      !envio && m.faturamento <= 0
+        ? "sem_faturamento"
+        : !envio && midia && mesEmVeiculacao(m.mes, ultimaVeiculacao, midia.hoje)
+          ? "em_veiculacao"
+          : situacaoDoMes(envio, faturado);
+    return { ...m, envio, faturado, notas, situacao, ultimaVeiculacao };
   });
 }
 

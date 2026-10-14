@@ -6996,6 +6996,9 @@ financeiro". Regra completa na §9 da decisão 115.
   financeiro escolhe em "Como vai ser pago", como na verba de produção. A
   verba de um terceiro traz o pagamento do fornecedor (cadastro, chave
   aleatória ou boleto) e pode ir na remessa; sem retenção, como toda verba.
+- ⚠️ **Revisto pela decisão 171 (2026-10-14):** a PP de verba paga a um
+  colaborador do RH passa a trazer no PDF a conta e o PIX da ficha do RH; a
+  verba de produção também tem titular. Ver a nota de 2026-10-14.
 
 ## ⚠️ Nota de 2026-10-09 (4) — Regime e CNAE obrigatórios no cadastro de fornecedor (decisão 166)
 
@@ -7079,3 +7082,99 @@ financeiro". Regra completa na §9 da decisão 115.
   PIX inclusive. Completo, só administrador e financeiro alteram, como antes.
 - O aviso das PPs já no financeiro ao trocar conta ou PIX (decisão 067) vale
   para eles também: a PP enviada continua pagando pela foto que guardou.
+
+## ⚠️ Nota de 2026-10-13 — Abertura do job de Mídia Off (decisão 167)
+
+- O job de Mídia Off chega à fila de abertura. Os números são os da conta
+  da mídia: **custo previsto** = as notas dos veículos em A · Repasse ("…que
+  a California paga — no A · Direto o veículo cobra do cliente"; zero no job
+  só com A · Direto, que abre sem curva); **impostos previstos** = alíquota ×
+  honorários ("…sobre os honorários"); **recebimento** = uma parcela por mês,
+  com o faturamento de cada mês.
+- `custoPrevistoDoFinanceiro`, `abrirJobNoFinanceiro` e `impostoDoJob`
+  leem a mídia por `lerMidiaDoJob` / `lerFechamentoMidiaDoJob`
+  (`lib/data/midia-do-job.ts`). A aba Planilha Interna da abertura e do job
+  no financeiro mostra a planilha da mídia, só leitura.
+- O "Editar orçado" não vale para o job de mídia nesta entrega (o servidor
+  recusa; a tela não mostra).
+- O envio de faturamento do job de mídia chega por mês, e o do último mês
+  encerra o job junto.
+- **Relatórios de Rentabilidade e de Faturamento** (`vw_job_rentabilidade`,
+  migration `20261013500002`): no job de mídia, imposto = alíquota ×
+  honorários (o realizado, nos meses enviados) e custo = as PPs do
+  repasse; o A · Direto fica fora do custo. Os outros jobs não mudaram
+  (59 linhas conferidas iguais). O job de mídia **sem A · Repasse** mostra o
+  resultado mesmo sem custo (coluna `resultado_sem_custo`, migration
+  `20261013500003`; `computarResultado`): TES-1027/26 = R$ 675,95 e 80,5%
+  (÷ faturamento, a base do relatório). Com Repasse, "—" até a PP do
+  repasse. O Tiago revisa a base do % quando tratar dos relatórios.
+
+## ⚠️ Nota de 2026-10-13 — Cancelamentos na Abertura de Job (decisão 169)
+
+- **Faixa "Cancelamentos"** no topo da fila "Jobs aguardando abertura",
+  antes de erratas e aberturas novas, com "Revisar cancelamento"
+  (`cancelamento-na-fila.tsx`, dados em `cancelamentos.ts`). A contagem da
+  aba e o resumo ("1 cancelamento a decidir") somam os pedidos.
+- **Pop-up de revisão:** quem pediu e o motivo, dados do job com a regional,
+  "O que o cancelamento desfaz" (recebimento, custo e impostos previstos, e o
+  projeto financeiro que fica inativo) e "Visualizar job", que abre
+  `/financeiro/jobs/[jobId]?aba=planilha&revisar=…` na Planilha Interna, com
+  a faixa do pedido. O Voltar de lá reabre o pop-up (`?revisar=` na fila).
+- **Recusar** pede justificativa; **Aprovar** abre a confirmação com a
+  observação opcional. A aprovação (`aprovar_cancelamento_do_job`) põe o job
+  em `cancelado`, deixa as previsões gravadas (o fluxo de caixa já ignora o
+  cancelado), inativa o projeto financeiro sem outro job vivo e guarda a foto
+  do que saiu das contas.
+- **Visualizar Jobs** e a página do job no financeiro mostram o selo
+  "Cancelamento solicitado" enquanto o pedido está pendente.
+- O card da Central Financeira (`app/(app)/financeiro/page.tsx`) **não** conta
+  os pedidos: ficou de fora de propósito.
+
+## ⚠️ Nota de 2026-10-14 — A edição do orçado na fila da abertura entra no valor inicial (revisão da decisão 115)
+
+Pedido do Tiago em 13/10/2026, com o AMB-1030/26: o financeiro ajustou
+R$ 0,89 numa linha um minuto antes de abrir o job, e o cabeçalho mostrou
+"inicial R$ 229.998,76" × "atual R$ 230.000,00". Regra completa na §10 da
+decisão 115.
+
+- **Na fila da abertura**, a edição do orçado leva junto a foto da
+  abertura (`valor_job_abertura`, `faturamento_previsto_abertura`): o job
+  abre com o valor editado, e o cabeçalho, o card de Erratas e o
+  Resultado op. (planejado) partem dele. **Depois da abertura**, nada muda:
+  a edição aparece como "atual", como antes.
+- **O "inicial" da tela** é a versão aprovada com as edições da fila
+  aplicadas (`itensDaVersaoComAsEdicoesDaFila`), na conta do job e no
+  orçado de cada linha na abertura.
+- **Banco:** migration `20261013800001` — `registrar_alteracao_do_financeiro`
+  grava a foto quando o job está em `aguardando_abertura`, e o retroativo
+  nos 10 jobs que tiveram edição na fila (8 reais e 2 de teste), autorizado
+  pelo Tiago: AMB-1006, 1007, 1008, 1029 e 1030, ANI-1011, ASO-1004,
+  EDU-1001 (todos /26) ficaram com um valor só no cabeçalho.
+- **Conferido:** a conta, com as funções do código sobre os dados do
+  banco, reproduz o valor gravado ao centavo nos 10; a função, por
+  simulação desfeita no TES-1012/26 (fila: a foto anda) e no TES-1013/26
+  (aberto: a foto fica); a tela, logada, no AMB-1030/26, TES-1025/26,
+  TES-1014/26 (a errata continua dividindo) e AMB-1008/26.
+- **Em aberto:** no AMB-1008/26 o planejado das 5 influenciadoras zeradas na
+  fila (R$ 20.450,00) continua no custo planejado, e o Resultado op.
+  (planejado) foi de R$ 54.596,80 para R$ 31.290,10.
+
+## ⚠️ Nota de 2026-10-14 — A conta do RH na PP do colaborador, e a verba de produção com titular (decisão 171)
+
+- **PDF da PP de verba paga a um colaborador do RH:** ganha o bloco "DADOS
+  BANCÁRIOS DO TITULAR DA VERBA PARA PAGAMENTO" (banco, agência, conta, tipo
+  de conta, nome, CPF, tipo e chave PIX), com os dados da ficha do RH no
+  momento da geração. O financeiro paga por ele: a ficha do RH continua
+  fechada para o papel financeiro. Sem conta nem PIX no RH, e no freela, o
+  bloco não sai e o financeiro decide em "Como vai ser pago", como antes.
+- **A cópia mora na PP** (colunas da foto do fornecedor + `verba_titular_cpf`),
+  tirada por um gatilho do banco. O asterisco da decisão 067 não se aplica
+  (é só do cadastro de fornecedor).
+- **Remessa:** continua só para PP com fornecedor (decisão do Tiago: "não
+  agora"). A verba do colaborador é paga manualmente.
+- **Verba de produção:** passa a ter titular (colaborador, freela ou
+  terceiro), como as outras. Dossiê e aprovação da prestação dizem
+  "Titular da verba"; as verbas de produção anteriores seguem "Responsável
+  pela verba".
+- **PDFs refeitos em 14/10/2026:** PP-00160 (em avaliação) e PP-00165
+  (gerada), do DEE-1001/26 — só o bloco de pagamento entrou.

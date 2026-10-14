@@ -1169,6 +1169,9 @@ export interface LinhaJobRentabilidade {
   imposto_realizado: number;
   custo_realizado: number;
   bv_realizado: number;
+  /** Decisão 167: job de Mídia Off sem A · Repasse — o resultado aparece
+   *  mesmo sem custo (o A · Direto fica fora do custo do relatório). */
+  resultado_sem_custo: boolean;
 }
 
 /**
@@ -1699,13 +1702,22 @@ export function jobAceitaEnvioDePP(status: JobStatus): boolean {
  * O par dele é o `encerrado` (encerrado sem o envio completo). Com as duas
  * ações feitas o banco grava `finalizado`. O módulo Jobs não olha a nota:
  * se o job foi faturado é controle do financeiro.
+ *
+ * "Cancelamento solicitado" (decisão 169, 13/10/2026) segue a mesma ideia:
+ * é o job aberto com um pedido de cancelamento no financeiro
+ * (`jobs_cancelamentos` pendente). O status gravado continua `aberto` até a
+ * aprovação; quem para o job enquanto isso são os gatilhos do banco.
  */
-export type JobStatusExibido = JobStatus | "em_faturamento";
+export type JobStatusExibido = JobStatus | "em_faturamento" | "cancelamento_solicitado";
 
 export function jobStatusExibido(
   status: JobStatus,
   faturamentoEnviadoEm: string | null,
+  cancelamentoPendente = false,
 ): JobStatusExibido {
+  if (cancelamentoPendente && (status === "aberto" || status === "em_producao")) {
+    return "cancelamento_solicitado";
+  }
   return status === "aberto" && faturamentoEnviadoEm !== null
     ? "em_faturamento"
     : status;
@@ -1713,6 +1725,8 @@ export function jobStatusExibido(
 
 export function jobStatusLabel(s: JobStatusExibido): string {
   switch (s) {
+    case "cancelamento_solicitado":
+      return "Cancelamento solicitado";
     case "em_faturamento":
       return "Em faturamento";
     case "aguardando_abertura":
@@ -1741,6 +1755,10 @@ export function jobStatusLabel(s: JobStatusExibido): string {
  */
 export function jobStatusBadgeClasses(status: JobStatusExibido): string {
   switch (status) {
+    // Âmbar mais forte que o do "Em produção" (que saiu do fluxo): o job
+    // está parado, esperando o financeiro (decisão 169).
+    case "cancelamento_solicitado":
+      return "border-amber-300 bg-amber-50 text-amber-800";
     case "aberto":
       return "border-blue-200 bg-blue-50 text-blue-700";
     // Laranja: a única cor da paleta de selos ainda livre que não se confunde
@@ -1812,9 +1830,9 @@ export interface JobItemRealizado {
 /** Os tipos de verba (decisão 164). */
 export type TipoVerba = "producao" | "alimentacao" | "transporte";
 
-/** De onde vem o titular da verba de alimentação ou de transporte: um
- *  colaborador do RH, um freela (lista provisória) ou um terceiro com
- *  cadastro de fornecedor. */
+/** De onde vem o titular da verba: um colaborador do RH, um freela (lista
+ *  provisória) ou um terceiro com cadastro de fornecedor. Desde a decisão
+ *  171 vale para os três tipos de verba. */
 export type TitularDaVerbaTipo = "colaborador" | "freela" | "fornecedor";
 
 /** O tipo da verba de uma PP; null fora da verba. A verba gravada antes da
@@ -1841,28 +1859,39 @@ export function rotuloDaVerbaMinusculo(tipo: TipoVerba): string {
   return rotuloDaVerba(tipo).toLowerCase();
 }
 
-/** A verba de alimentação e a de transporte têm titular (colaborador,
- *  freela ou terceiro); a de produção tem responsável (um usuário). */
-export function verbaTemTitular(tipo: TipoVerba | null): boolean {
-  return tipo === "alimentacao" || tipo === "transporte";
+/** A verba de produção gerada antes da decisão 171 (14/10/2026): o
+ *  dinheiro ia para um RESPONSÁVEL, usuário do sistema, e a PP não tem
+ *  titular. Desde a 171 as três verbas têm titular (colaborador, freela ou
+ *  terceiro) — então "sem titular" é o sinal da verba antiga. As telas a
+ *  mostram como foi gravada: "Responsável". */
+export function verbaDeResponsavel(pp: {
+  verba_producao?: boolean | null;
+  verba_titular_tipo?: TitularDaVerbaTipo | null;
+  verba_titular_nome?: string | null;
+}): boolean {
+  return pp.verba_producao === true && !pp.verba_titular_tipo && !pp.verba_titular_nome;
 }
 
-/** O nome do campo de quem recebe a verba. */
-export function rotuloDeQuemRecebeAVerba(tipo: TipoVerba): string {
-  return verbaTemTitular(tipo) ? "Titular da verba" : "Responsável";
+/** O nome do campo de quem recebe a verba: "Titular da verba", ou
+ *  "Responsável" na verba de produção anterior à decisão 171. */
+export function rotuloDeQuemRecebeAVerba(pp: {
+  verba_producao?: boolean | null;
+  verba_titular_tipo?: TitularDaVerbaTipo | null;
+  verba_titular_nome?: string | null;
+}): string {
+  return verbaDeResponsavel(pp) ? "Responsável" : "Titular da verba";
 }
 
-/** O nome de quem recebe a verba: o titular guardado na PP (alimentação e
- *  transporte) ou o responsável (produção). */
+/** O nome de quem recebe a verba: o titular guardado na PP, ou o
+ *  responsável da verba de produção anterior à decisão 171. */
 export function nomeDeQuemRecebeAVerba(pp: {
   verba_producao?: boolean | null;
   tipo_verba?: TipoVerba | null;
   verba_titular_nome?: string | null;
   responsavel?: { nome?: string | null } | null;
 }): string | null {
-  const tipo = tipoDaVerba(pp);
-  if (!tipo) return null;
-  return verbaTemTitular(tipo) ? (pp.verba_titular_nome ?? null) : (pp.responsavel?.nome ?? null);
+  if (!tipoDaVerba(pp)) return null;
+  return pp.verba_titular_nome ?? pp.responsavel?.nome ?? null;
 }
 
 export interface PedidoCompra {
@@ -1902,6 +1931,10 @@ export interface PedidoCompra {
    *  PP que ninguém deixou pronta. */
   pronta_para_envio_em: string | null;
   pronta_para_envio_por: string | null;
+  /** Decisão 173: a última edição da PP gerada — quando e quem, gravados
+   *  pelo gatilho `trg_pp_carimba_edicao`. Null na PP nunca editada. */
+  editada_em: string | null;
+  editada_por: string | null;
   /** A FOTO dos dados de pagamento do fornecedor, tirada no envio ao
    *  financeiro (decisão 067, 09/09/2026). O financeiro paga por ela, e
    *  não pelo cadastro ao vivo: desde que o campo de fornecedor ganhou o
@@ -1937,8 +1970,13 @@ export interface PedidoCompra {
   verba_titular_tipo: TitularDaVerbaTipo | null;
   verba_colaborador_id: string | null;
   verba_freela_id: string | null;
-  /** O nome do titular no momento da PP (alimentação e transporte). */
+  /** O nome do titular no momento da PP (desde a decisão 171, nas três
+   *  verbas; nulo na verba de produção anterior, que tem responsável). */
   verba_titular_nome: string | null;
+  /** Decisão 171: o CPF do colaborador titular, copiado da ficha do RH pelo
+   *  banco junto com a conta e o PIX (nas colunas `fornecedor_*` da foto).
+   *  Nulo para freela, terceiro e fora da verba. */
+  verba_titular_cpf: string | null;
   // Fase 2
   status: PPStatus;
   prazo_pagamento_financeiro: string | null;
@@ -2049,7 +2087,9 @@ export type PPEventoTipo =
   | "prestacao_aprovada"
   // Revisão da decisão 152 (07/10/2026): a NF corrigida com a PP em
   // avaliação, sem aprovar. O `motivo` diz o que mudou.
-  | "nf_corrigida";
+  | "nf_corrigida"
+  // Decisão 173 (13/10/2026): a PP gerada, ainda no job, foi editada.
+  | "editada";
 
 /**
  * Um evento do histórico da PP (decisão 136): quem fez o quê e quando.
@@ -2437,6 +2477,35 @@ export interface ErrataPronta {
    *  de novo, com a planilha de então. */
   valorJob: { antes: number; depois: number };
   faturamento: { antes: number; depois: number };
+}
+
+// ---------- Cancelamento de job aberto (decisão 169) ----------
+// A produção pede, o financeiro aprova ou recusa na Abertura de Job. Tabela
+// `jobs_cancelamentos`; a escrita é só pelas funções `*_cancelamento_do_job`.
+
+export type SituacaoDoCancelamento = "pendente" | "retirado" | "recusado" | "aprovado";
+
+/** Uma linha de `jobs_cancelamentos`, com os nomes de quem agiu. */
+export interface CancelamentoDoJob {
+  id: string;
+  jobId: string;
+  situacao: SituacaoDoCancelamento;
+  motivo: string;
+  solicitadoPorNome: string;
+  /** ISO. */
+  solicitadoEm: string;
+  retiradoEm: string | null;
+  retiradoPorNome: string | null;
+  decididoPorNome: string | null;
+  decididoEm: string | null;
+  /** Recusa: a justificativa do financeiro. Aprovação: a observação. */
+  justificativa: string | null;
+  avisoDispensadoEm: string | null;
+  /** Foto, na aprovação, do que saiu das contas. Nulos antes dela. */
+  recebimentoPrevisto: number | null;
+  custoPrevisto: number | null;
+  impostosPrevistos: number | null;
+  projetoFinanceiroInativadoCodigo: string | null;
 }
 
 // ---------- Alterações do financeiro (decisão 115) ----------
@@ -3044,8 +3113,7 @@ export function nomeContraparteBRPP(pp: {
 }): string {
   const tipo = tipoDaVerba(pp);
   if (tipo) {
-    const nome =
-      nomeDeQuemRecebeAVerba(pp) ?? (verbaTemTitular(tipo) ? "sem titular" : "sem responsável");
+    const nome = nomeDeQuemRecebeAVerba(pp) ?? "sem titular";
     return `${rotuloDaVerba(tipo)} — ${nome}`;
   }
   return pp.fornecedor?.razao_social ?? pp.fornecedor?.nome ?? "";

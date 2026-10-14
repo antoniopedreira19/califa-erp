@@ -70,6 +70,7 @@ async function PlanilhaDaOrigemCarregada({
       // Em leitura: ninguém faz errata aqui (decisão 159).
       papelNaErrata={null}
       errataPronta={null}
+      midia={detalhe.midia}
       interno={detalhe.interno}
       savePorItem={detalhe.savePorItem}
       saldosDeSave={[]}

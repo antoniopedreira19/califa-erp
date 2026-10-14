@@ -29,7 +29,15 @@ export function TabelaComparativo({ visao, gruposA, gruposB, anoA, anoB }: Props
   const grupoZero = (rotulo: string): GrupoRentabilidade => ({
     chave: "",
     rotulo,
-    bases: { faturamento: 0, imposto: 0, custo: 0, bv: 0, resultadoOperacional: null, resultadoGeral: null },
+    bases: {
+      faturamento: 0,
+      imposto: 0,
+      custo: 0,
+      bv: 0,
+      resultadoSemCusto: false,
+      resultadoOperacional: null,
+      resultadoGeral: null,
+    },
     jobs: [],
     representatividadePct: 0,
   });
@@ -103,13 +111,16 @@ function somaTotal(grupos: GrupoRentabilidade[]) {
   const imposto = grupos.reduce((s, g) => s + g.bases.imposto, 0);
   const custo = grupos.reduce((s, g) => s + g.bases.custo, 0);
   const bv = grupos.reduce((s, g) => s + g.bases.bv, 0);
+  const resultadoSemCusto =
+    grupos.length > 0 && grupos.every((g) => g.bases.resultadoSemCusto);
   const { resultadoOperacional, resultadoGeral } = computarResultado({
     faturamento,
     imposto,
     custo,
     bv,
+    resultadoSemCusto,
   });
-  return { faturamento, imposto, custo, bv, resultadoOperacional, resultadoGeral };
+  return { faturamento, imposto, custo, bv, resultadoSemCusto, resultadoOperacional, resultadoGeral };
 }
 
 function ColunasBloco({

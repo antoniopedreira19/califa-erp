@@ -1,7 +1,7 @@
 # 020 — Cancelar job só existe antes da abertura
 
 **Data:** 2026-08-19
-**Status:** aceita · **revisada em 2026-09-28** — a action `atualizarStatusJob` saiu; nenhum caminho cancela job aberto (ver "Revisão" no fim)
+**Status:** aceita · **revisada em 2026-09-28** — a action `atualizarStatusJob` saiu; nenhum caminho cancela job aberto (ver "Revisão" no fim) · **revisada em 2026-10-13 pela [169](169-cancelamento-de-job-aberto.md)** — job aberto se cancela por pedido da produção aprovado pelo financeiro
 **Contexto:** aba "Informações do Job" (`/jobs/[jobId]`), handoff
 `Job - Informacoes - Cabecalho Opcoes.dc.html` / `Job - Informacoes - Barra
 de Acoes.dc.html`.
@@ -97,3 +97,17 @@ uma vez só:
 Isso **não** é o "Cancelar job" do financeiro: a regra de cima continua
 valendo. Se acontecer de novo, a saída é construir a tela com action
 própria, não repetir a correção pelo MCP.
+
+## ⚠️ Revisão (2026-10-13) — o cancelamento de job aberto ganhou tela (decisão 169)
+
+- O botão "Cancelar job" da barra continua só antes da abertura, como aqui.
+- Depois da abertura, o caminho é o da
+  [169](169-cancelamento-de-job-aberto.md): o GP (ou o administrador) pede
+  pelo menu "⋯" do job, com motivo, e o financeiro (ou o administrador)
+  aprova ou recusa na Abertura de Job. A correção pelo MCP do ANI-1004/26
+  não precisa mais se repetir.
+- O motivo desta decisão continua de pé: o módulo de Jobs não cancela job
+  aberto sozinho. Quem confere o que precisa ser desfeito é o financeiro, e
+  o pedido trava no que o sistema não sabe desfazer (PP aprovada ou paga,
+  envio para faturamento, lançamento, recebimento antes da NF, desembolso e
+  save).

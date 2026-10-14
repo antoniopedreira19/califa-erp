@@ -1,7 +1,7 @@
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
-import { listActiveMembers } from "@/lib/data/members";
+import { listActiveMembers, listarGpsAtivos } from "@/lib/data/members";
 import { listEmpresasAtivas, getEmpresaPrincipal } from "@/lib/data/empresas";
 import type { CategoriaDominio, Cliente, Regional } from "@/lib/types";
 import { ProjetoForm, type ProdutoOption } from "../projeto-form";
@@ -13,7 +13,7 @@ export default async function NovoProjetoPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clientesRes, responsaveis, regionaisRes, produtosRes, categoriasRes, empresas, principal] = await Promise.all([
+  const [clientesRes, responsaveis, gps, regionaisRes, produtosRes, categoriasRes, empresas, principal] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, nome_fantasia, codigo_curto")
@@ -21,6 +21,8 @@ export default async function NovoProjetoPage() {
       .eq("status", "ativo")
       .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
+    // GPs Responsáveis: só quem pode ser GP (decisão 170).
+    listarGpsAtivos(session.activeTenant.id),
     supabase
       .from("regionais")
       .select("id, nome, empresa_id")
@@ -76,6 +78,7 @@ export default async function NovoProjetoPage() {
           empresaPrincipalId={principal?.id}
           clientes={clientes}
           responsaveis={responsaveis}
+          gps={gps}
           regionais={regionais}
           produtos={produtos}
           categorias={categorias}

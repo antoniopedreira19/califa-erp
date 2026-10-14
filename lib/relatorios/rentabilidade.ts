@@ -18,6 +18,9 @@ export interface BasesAgregadas {
   imposto: number;
   custo: number;
   bv: number;
+  /** Todos os jobs das bases fecham o resultado sem custo (Mídia Off sem
+   *  A · Repasse, decisão 167): custo zero não vira travessão. */
+  resultadoSemCusto: boolean;
   resultadoOperacional: number | null;
   resultadoGeral: number | null;
 }
@@ -55,7 +58,19 @@ export function computarResultado(bases: {
   imposto: number;
   custo: number;
   bv: number;
+  resultadoSemCusto: boolean;
 }): { resultadoOperacional: number | null; resultadoGeral: number | null } {
+  // Mídia Off sem A · Repasse (decisão 167, Tiago, 13/10/2026): o veículo
+  // cobra direto do cliente e o A · Direto fica fora do custo do relatório,
+  // então o job nunca tem custo — e a trava do "custo zero" o deixaria
+  // sempre com travessão. O resultado sai com a mesma base do relatório.
+  if (bases.resultadoSemCusto && bases.custo - bases.bv <= 0 && bases.faturamento > 0) {
+    const resultadoOperacional = bases.faturamento - bases.imposto - (bases.custo - bases.bv);
+    return {
+      resultadoOperacional,
+      resultadoGeral: (resultadoOperacional / bases.faturamento) * 100,
+    };
+  }
   const { resultadoOperacional, resultadoGeral } = calcularResultadoOperacional(
     bases.faturamento,
     bases.imposto,
@@ -84,14 +99,16 @@ export function agregarBases(
   );
   const custo = linhas.reduce((s, l) => s + l.custo_realizado, 0);
   const bv = linhas.reduce((s, l) => s + l.bv_realizado, 0);
+  const resultadoSemCusto = linhas.length > 0 && linhas.every((l) => l.resultado_sem_custo);
 
   const { resultadoOperacional, resultadoGeral } = computarResultado({
     faturamento,
     imposto,
     custo,
     bv,
+    resultadoSemCusto,
   });
-  return { faturamento, imposto, custo, bv, resultadoOperacional, resultadoGeral };
+  return { faturamento, imposto, custo, bv, resultadoSemCusto, resultadoOperacional, resultadoGeral };
 }
 
 /**

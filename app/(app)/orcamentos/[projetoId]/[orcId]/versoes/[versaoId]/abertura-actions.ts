@@ -26,6 +26,11 @@ import {
   type ItemComGrupo,
   type MesDoJob,
 } from "@/lib/calculos/faturamento-por-mes";
+import {
+  comAContaDaMidia,
+  fechamentoDosItens,
+  parametrosDaVersao,
+} from "@/lib/calculos/midia-off";
 import { formatCurrency } from "@/lib/utils";
 import { cancelarAprovacaoVersao } from "../actions";
 import { cancelarPedidoCompra } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
@@ -214,7 +219,9 @@ export async function enviarJobParaAbertura(
       // `faturamento_previsto` e os dois `_abertura` são GRAVADOS aqui,
       // com os `_abertura` congelados para sempre. Erro de leitura vira
       // erro permanente no banco.
-      "id, status, orcamento_id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra",
+      // Os dois últimos são as condições da Mídia Off (decisão 167): a
+      // parte do veículo e a base dos honorários.
+      "id, status, orcamento_id, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios",
     )
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
@@ -230,6 +237,8 @@ export async function enviarJobParaAbertura(
       moeda_estrangeira: string | null;
       cambio_compra: number | null;
       percentual_imposto: number;
+      percentual_veiculo: number | string | null;
+      base_honorarios: string | null;
     }>();
 
   if (!versao) return { ok: false, message: "Versão não encontrada." };
@@ -263,10 +272,26 @@ export async function enviarJobParaAbertura(
     }>();
 
   if (!orc) return { ok: false, message: "Orçamento não encontrado." };
-  const mensal = orc.categoria?.modelo_planilha === "mensal";
+  // Mídia Off (decisão 167): o job tem a conta da mídia (veículo +
+  // honorários) e fatura por mês, como o Fee e o Always On. Gravar aqui o
+  // fechamento nacional deixaria `valor_total` e os `_abertura` errados para
+  // sempre — por isso a conta troca logo abaixo, no passo 4.
+  const midiaOff = orc.categoria?.modelo_planilha === "midia_off";
+  const paramsMidia = midiaOff
+    ? parametrosDaVersao({
+        percentual_honorarios: versao.percentual_honorarios ?? 0,
+        percentual_imposto: versao.percentual_imposto ?? 0,
+        base_honorarios: versao.base_honorarios,
+        percentual_veiculo: versao.percentual_veiculo,
+      })
+    : null;
+  // "Fatura por mês": uma data de recebimento por mês, sem data de evento e
+  // com as datas do job travadas no período do orçamento.
+  const mensal = orc.categoria?.modelo_planilha === "mensal" || midiaOff;
   const servicoInterno = orc.servico?.investimento_interno === true;
-  // Fee e Always On não têm data de evento (decisão 149): o que vier do
-  // formulário é descartado. Nos outros modelos ela segue obrigatória.
+  // Fee, Always On e Mídia Off não têm data de evento (decisões 149 e
+  // 167): o que vier do formulário é descartado. Nos outros modelos ela
+  // segue obrigatória.
   if (mensal) {
     parsed.data.data_evento = null;
   } else if (!parsed.data.data_evento) {
@@ -276,29 +301,21 @@ export async function enviarJobParaAbertura(
       fieldErrors: { data_evento: ["Data do evento é obrigatória."] },
     };
   }
-  // Mídia Off (decisão 147, entrega 1): o orçamento vai até a aprovação. O
-  // job dela tem conta própria (veículo + honorários, faturamento por mês)
-  // e chega na próxima entrega — gravar aqui o fechamento nacional deixaria
-  // `valor_total` e os `_abertura` errados para sempre.
-  if (orc.categoria?.modelo_planilha === "midia_off") {
-    return {
-      ok: false,
-      message: "O envio da Mídia Off para abertura fica disponível na próxima entrega.",
-    };
-  }
   // Modelo mensal (decisão 078): as datas do job são o período do
   // orçamento, que acompanha os meses — o modal as mostra travadas (Tiago,
   // 14/09/2026). Aceitar outra data aqui desalinharia job, orçamento e
-  // meses, porque o passo 5 grava as datas de volta no orçamento.
+  // meses, porque o passo 5 grava as datas de volta no orçamento. Na Mídia
+  // Off o período é o da campanha (decisão 167).
   if (
-    orc.categoria?.modelo_planilha === "mensal" &&
+    mensal &&
     (parsed.data.data_inicio_prevista !== orc.data_inicio_prevista ||
       parsed.data.data_fim_prevista !== orc.data_fim_prevista)
   ) {
     return {
       ok: false,
-      message:
-        "No Fee e no Always On, as datas de início e fim vêm do período do orçamento e não mudam no envio para abertura.",
+      message: midiaOff
+        ? "Na Mídia Off, as datas de início e fim vêm do período da campanha e não mudam no envio para abertura."
+        : "No Fee e no Always On, as datas de início e fim vêm do período do orçamento e não mudam no envio para abertura.",
       fieldErrors: {
         data_inicio_prevista: ["Definida pelo período do orçamento."],
         data_fim_prevista: ["Definida pelo período do orçamento."],
@@ -377,10 +394,12 @@ export async function enviarJobParaAbertura(
   // quem manda o payload não é obrigado a respeitá-la.
   //
   // GP e produtor (decisão 135) seguem as listas do formulário do
-  // orçamento: o GP sai dos responsáveis do projeto, o produtor dos
-  // membros ativos. O que já está no orçamento passa sem conferência —
-  // até aqui o envio o copiava sem olhar, e um GP que saiu da equipe do
-  // projeto depois não pode travar um envio que ninguém mexeu.
+  // orçamento: o GP sai dos GPs Responsáveis do projeto que podem ser GP
+  // (decisão 170), o produtor de quem tem o papel Produtor (decisão 168).
+  // O que já está no orçamento passa sem a conferência da lista — um GP
+  // que saiu da equipe do projeto depois não pode travar um envio que
+  // ninguém mexeu. O PAPEL do GP, não: o GP que não pode ser GP (nem GP
+  // nem Administrador) trava o envio, mexido ou não (decisão 170).
   const gpMudou = parsed.data.gp_responsavel_id !== orc.gp_responsavel_id;
   const produtorMudou = parsed.data.produtor_id !== orc.produtor_id;
   const [produtoRes, cidadeRes, regionalDoProjetoRes, gpDoProjetoRes, membrosRes] = await Promise.all([
@@ -405,14 +424,8 @@ export async function enviarJobParaAbertura(
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ regional_id: string }>(),
     gpMudou
-      ? supabase
-          .from("projeto_responsaveis")
-          .select("profile_id")
-          .eq("projeto_id", orc.projeto_id)
-          .eq("profile_id", parsed.data.gp_responsavel_id)
-          .eq("tenant_id", session.activeTenant.id)
-          .maybeSingle<{ profile_id: string }>()
-      : Promise.resolve({ data: { profile_id: parsed.data.gp_responsavel_id }, error: null }),
+      ? supabase.rpc("gps_do_projeto", { p_projeto_id: orc.projeto_id })
+      : supabase.rpc("gps_ativos_do_tenant", { p_tenant_id: session.activeTenant.id }),
     // A mesma fonte da lista do modal (`listarProdutoresAtivos`, só o
     // papel Produtor desde 13/10/2026): ler `tenant_members` direto
     // mostraria só a própria linha para quem não é administrador.
@@ -441,11 +454,37 @@ export async function enviarJobParaAbertura(
       fieldErrors: { regional_id: ["Regional não cadastrada no projeto."] },
     };
   }
-  if (!gpDoProjetoRes.data) {
+  if (gpDoProjetoRes.error) {
+    console.error("[abertura.gp]", gpDoProjetoRes.error.message);
+    return { ok: false, message: "Não foi possível conferir o GP responsável." };
+  }
+  if (
+    !((gpDoProjetoRes.data ?? []) as { id: string }[]).some(
+      (g) => g.id === parsed.data.gp_responsavel_id,
+    )
+  ) {
+    if (gpMudou) {
+      return {
+        ok: false,
+        message:
+          "O GP escolhido não é um GP Responsável do projeto com o papel GP. Selecione outro.",
+        fieldErrors: { gp_responsavel_id: ["Escolha um dos GPs Responsáveis do projeto."] },
+      };
+    }
+    // O GP que veio gravado no orçamento não pode ser GP: a trava que
+    // explica, com o nome (decisão 170). O nome só é lido aqui, na recusa.
+    const { data: gp } = await supabase
+      .from("profiles")
+      .select("nome")
+      .eq("id", parsed.data.gp_responsavel_id)
+      .maybeSingle<{ nome: string }>();
+    const quem = gp?.nome ?? "O GP deste orçamento";
     return {
       ok: false,
-      message: "O GP escolhido não é um dos responsáveis do projeto. Selecione outro.",
-      fieldErrors: { gp_responsavel_id: ["Escolha um dos responsáveis do projeto."] },
+      message: `${quem} não pode ser o GP do job: no cadastro de usuários, não está ativo com o papel GP. Escolha outro GP Responsável do projeto para enviar.`,
+      fieldErrors: {
+        gp_responsavel_id: [`${quem} não está ativo com o papel GP. Escolha outro.`],
+      },
     };
   }
   if (membrosRes.error) {
@@ -506,12 +545,24 @@ export async function enviarJobParaAbertura(
   // Fosse a do job, trocá-la moveria o fechamento vivo por baixo de um
   // `valor_job_abertura` que está congelado, e a tela do financeiro
   // mostraria uma errata que ninguém fez.
-  const totais = calcularTotaisVersao(
+  const totaisNacionais = calcularTotaisVersao(
     (itensBrutos ?? []) as unknown as VersaoOrcamentoItem[],
     Number(versao.percentual_honorarios ?? 0),
     Number(versao.percentual_imposto ?? 0),
     configDaPlanilha(orc.categoria?.modelo_planilha, versao).internacional,
   );
+  // Mídia Off (decisão 167): valor do job = Σ (veículo + honorários) e
+  // faturamento = honorários + veículos em A · Repasse. A mídia não tem
+  // save: a parte de save fica no zero que a conta nacional já dá.
+  const totais = paramsMidia
+    ? comAContaDaMidia(
+        totaisNacionais,
+        fechamentoDosItens(
+          (itensBrutos ?? []) as { tipo_custo: string; total_orcado: number | null }[],
+          paramsMidia,
+        ),
+      )
+    : totaisNacionais;
 
   // 4b. Reenvio do job devolvido (decisão 099, §11): os números saem da
   //     CÓPIA do job, e não da versão. Com o job devolvido a produção
@@ -560,6 +611,8 @@ export async function enviarJobParaAbertura(
         ((itensBrutos ?? []) as unknown as ItemComGrupo[]),
         Number(versao.percentual_honorarios ?? 0),
         Number(versao.percentual_imposto ?? 0),
+        null,
+        paramsMidia,
       );
     const informadas = new Map(
       parsed.data.recebimentos_por_mes.map((r) => [r.mes, r.data] as const),
@@ -904,7 +957,10 @@ export async function enviarJobParaAbertura(
   const { data: itensDaVersao, error: errItensCopia } = await supabase
     .from("versoes_orcamento_itens")
     .select(
-      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, bv_liquido_planejado, em_save, save_consumido, save_marcado_por, save_marcado_em, planejado_antes_save",
+      "id, grupo_id, ordem, item, tipo_custo, categoria_id, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, bv_liquido_planejado, em_save, save_consumido, save_marcado_por, save_marcado_em, planejado_antes_save, " +
+        // As colunas da Mídia Off (decisões 147 e 167): o veículo, a praça,
+        // a grade e o período da linha. Nulas nos outros modelos.
+        "fornecedor_id, praca, peca, formato, insercoes_por_dia, data_inicio, data_fim, unidade_periodo, valor_unitario_tabela, percentual_desconto, detalhe",
     )
     .eq("versao_orcamento_id", versaoId)
     .eq("tenant_id", session.activeTenant.id);
@@ -988,6 +1044,20 @@ export async function enviarJobParaAbertura(
         save_marcado_por: i.save_marcado_por ?? null,
         save_marcado_em: i.save_marcado_em ?? null,
         planejado_antes_save: i.planejado_antes_save ?? null,
+        // Mídia Off (decisão 167): o job guarda o veículo e a veiculação da
+        // linha — a Planilha Interna mostra a grade, e o envio de cada mês
+        // libera pela última veiculação dele.
+        fornecedor_id: i.fornecedor_id ?? null,
+        praca: i.praca ?? null,
+        peca: i.peca ?? null,
+        formato: i.formato ?? null,
+        insercoes_por_dia: i.insercoes_por_dia ?? null,
+        data_inicio: i.data_inicio ?? null,
+        data_fim: i.data_fim ?? null,
+        unidade_periodo: i.unidade_periodo ?? null,
+        valor_unitario_tabela: i.valor_unitario_tabela ?? null,
+        percentual_desconto: i.percentual_desconto ?? null,
+        detalhe: i.detalhe ?? null,
       })),
     ).select("id, item_versao_id");
 

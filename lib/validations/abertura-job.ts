@@ -125,8 +125,9 @@ export const aberturaJobSchema = z
       ])
       .transform((v) => (v === "" ? null : v)),
     // Modelo mensal (decisão 149): uma data por mês do trimestre. Vazia
-    // fora do mensal. Chega como JSON, como os contatos.
-    recebimentos_por_mes: z.array(recebimentoDoMesSchema).max(3, "No máximo 3 meses."),
+    // fora do mensal. Chega como JSON, como os contatos. A Mídia Off também
+    // recebe por mês (decisão 167), e a campanha vai até 24 meses (147).
+    recebimentos_por_mes: z.array(recebimentoDoMesSchema).max(24, "No máximo 24 meses."),
     // Obrigatório desde 03/09/2026, e só AQUI: é o texto que a produção
     // deixa para quem abre o job no financeiro. A coluna
     // `jobs.observacoes` segue nullable — 27 dos 30 jobs existentes

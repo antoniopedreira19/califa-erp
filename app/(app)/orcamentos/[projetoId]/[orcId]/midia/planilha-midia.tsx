@@ -93,6 +93,15 @@ interface Props {
   /** `?mes=` da URL: `campanha`, `2026-07` ou ausente. */
   mesPedido: string | undefined;
   readOnly: boolean;
+  /** A planilha dentro do JOB (decisão 167), só leitura: os links da régua
+   *  vão para a página do job, a régua se chama "Meses do job" e cada mês
+   *  diz a situação do faturamento dele. `null` no orçamento. */
+  doJob?: {
+    hrefBase: string;
+    /** Pelo mês, `YYYY-MM`. */
+    detalheDoMes: Record<string, string>;
+    detalheCampanha: string;
+  } | null;
 }
 
 /** Um patch que ainda não voltou do servidor. */
@@ -114,9 +123,10 @@ export function PlanilhaMidiaOff({
   params,
   mesPedido,
   readOnly,
+  doJob = null,
 }: Props) {
   const router = useRouter();
-  const base = `/orcamentos/${projetoId}/${orcamentoId}?v=${versaoId}`;
+  const base = doJob ? doJob.hrefBase : `/orcamentos/${projetoId}/${orcamentoId}?v=${versaoId}`;
 
   // ---- O que veio do servidor, no formato da planilha ----------------------
   const mesDoId = React.useMemo(() => new Map(meses.map((m) => [m.id, chaveDoMes(m.mes)])), [meses]);
@@ -623,6 +633,7 @@ export function PlanilhaMidiaOff({
       <FormatosUsados.Provider value={formatosUsados}>
         <div className="space-y-6">
           <ReguaMeses
+            titulo={doJob ? "Meses do job" : undefined}
             moeda="BRL"
             descricao={`${descricao}, a campanha inteira`}
             vocabulario="linhas"
@@ -632,13 +643,14 @@ export function PlanilhaMidiaOff({
               faturamento: fCampanha.faturamentoPrevisto,
               resultadoGeral: linhas.length ? fCampanha.resultadoGeral : null,
               href: `${base}&mes=campanha`,
+              detalhe: doJob?.detalheCampanha,
             }}
             meses={dados.map((d) => ({
               chave: d.mes,
               rotulo: rotuloMesCurto(d.iso),
               faturamento: d.f.faturamentoPrevisto,
               resultadoGeral: d.linhas.length ? d.f.resultadoGeral : null,
-              detalhe: d.linhas.length ? undefined : "Sem linhas",
+              detalhe: doJob?.detalheDoMes[d.mes] ?? (d.linhas.length ? undefined : "Sem linhas"),
               href: `${base}&mes=${d.mes}`,
             }))}
             selecionado={selecionado}

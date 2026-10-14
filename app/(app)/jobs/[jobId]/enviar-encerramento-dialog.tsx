@@ -22,6 +22,8 @@ import {
 import type { ParametrosInternacionais } from "@/lib/calculos/versao-totais";
 import type { MoedaEstrangeira } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { JobTotaisCard } from "./realizado/job-totais-card";
+import { TotaisMidia } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/midia/totais";
+import { fechamentoDosItens, type ParametrosMidia } from "@/lib/calculos/midia-off";
 import { encerrarJob } from "./actions-encerramento";
 import { listaPtBr } from "./envio-faturamento-ui";
 
@@ -69,6 +71,10 @@ export interface TotaisDoFechamento {
   modeloPlanilha: CategoriaModeloPlanilha;
   internacional: ParametrosInternacionais | null;
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** Mídia Off (decisão 167): o card de Totais é o da mídia — a conta
+   *  nacional somaria honorários e imposto por cima do negociado. `null`
+   *  nos outros modelos. */
+  midia: ParametrosMidia | null;
 }
 
 export function pendenciasDoFechamento(f: FechamentoDoJob): number {
@@ -180,7 +186,10 @@ export function EnviarEncerramentoDialog({
   const descricao =
     modo === "enviar"
       ? "Confira o fechamento antes de enviar. Depois do envio o job vira histórico: nada mais é editado, nenhuma PP é gerada e nenhum BV é lançado."
-      : `Enviado para encerramento em ${dataBrDeInstante(fechamento.encerradoEm)}${
+      : `${
+          // Mídia Off (decisão 167): o job encerra com o envio do último mês.
+          totais.midia ? "Encerrado com o envio do último mês para faturamento, em" : "Enviado para encerramento em"
+        } ${dataBrDeInstante(fechamento.encerradoEm)}${
           fechamento.encerradoPorNome ? ` por ${fechamento.encerradoPorNome}` : ""
         }. O job é histórico: estes números não mudam mais.`;
 
@@ -301,28 +310,38 @@ export function EnviarEncerramentoDialog({
             </div>
           )}
 
-          <JobTotaisCard
-            itens={totais.itens}
-            realizadosMap={totais.realizadosMap}
-            bvsPorItem={totais.bvsPorItem}
-            jobAberto={totais.jobAberto}
-            percentualHonorarios={totais.percentualHonorarios}
-            percentualImposto={totais.percentualImposto}
-            moeda={totais.moeda}
-            modeloPlanilha={totais.modeloPlanilha}
-            internacional={totais.internacional}
-            moedaEstrangeira={totais.moedaEstrangeira}
-            titulo={mensal ? "Totais do trimestre" : "Totais"}
-            subtitulo={
-              mensal
-                ? "Orçado × Planejado × Realizado · soma dos meses."
-                : "Orçado × Planejado × Realizado · valores calculados a partir dos itens."
-            }
-            somenteRealizada
-            colunasSaveAbertas
-            // O fechamento é só da ótica realizada.
-            abertura={null}
-          />
+          {totais.midia ? (
+            // Mídia Off (decisão 167): os Totais da campanha, pela conta da
+            // mídia. O realizado dela chega com as entregas 3 e 5.
+            <TotaisMidia
+              f={fechamentoDosItens(totais.itens, totais.midia)}
+              p={totais.midia}
+              titulo="Totais da campanha"
+            />
+          ) : (
+            <JobTotaisCard
+              itens={totais.itens}
+              realizadosMap={totais.realizadosMap}
+              bvsPorItem={totais.bvsPorItem}
+              jobAberto={totais.jobAberto}
+              percentualHonorarios={totais.percentualHonorarios}
+              percentualImposto={totais.percentualImposto}
+              moeda={totais.moeda}
+              modeloPlanilha={totais.modeloPlanilha}
+              internacional={totais.internacional}
+              moedaEstrangeira={totais.moedaEstrangeira}
+              titulo={mensal ? "Totais do trimestre" : "Totais"}
+              subtitulo={
+                mensal
+                  ? "Orçado × Planejado × Realizado · soma dos meses."
+                  : "Orçado × Planejado × Realizado · valores calculados a partir dos itens."
+              }
+              somenteRealizada
+              colunasSaveAbertas
+              // O fechamento é só da ótica realizada.
+              abertura={null}
+            />
+          )}
 
           {erro && (
             <p className="rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-[13px] text-california-red">

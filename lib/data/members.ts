@@ -53,3 +53,48 @@ export async function listarProdutoresAtivos(
 
   return (data ?? []) as Pick<Profile, "id" | "nome">[];
 }
+
+/**
+ * Quem pode ser GP: membro ativo com o papel GP ou Administrador (decisão
+ * 170). É a lista do campo "GPs Responsáveis" do projeto. Até 13/10/2026 o
+ * campo listava todos os membros, e produtor virava GP de projeto.
+ */
+export async function listarGpsAtivos(
+  tenantId: string,
+): Promise<Pick<Profile, "id" | "nome">[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc("gps_ativos_do_tenant", {
+    p_tenant_id: tenantId,
+  });
+
+  if (error) {
+    console.error("[members.gps]", error.message);
+    return [];
+  }
+
+  return (data ?? []) as Pick<Profile, "id" | "nome">[];
+}
+
+/**
+ * Os GPs Responsáveis do projeto que podem ser GP (decisão 170) — a lista
+ * do campo "GP Responsável" do orçamento. Ler `projeto_responsaveis` direto
+ * trazia também os acréscimos à Equipe (`papel = 'equipe'`), e quem foi
+ * cadastrado como GP do projeto sem ter o papel.
+ */
+export async function listarGpsDoProjeto(
+  projetoId: string,
+): Promise<Pick<Profile, "id" | "nome">[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc("gps_do_projeto", {
+    p_projeto_id: projetoId,
+  });
+
+  if (error) {
+    console.error("[members.gps_do_projeto]", error.message);
+    return [];
+  }
+
+  return (data ?? []) as Pick<Profile, "id" | "nome">[];
+}

@@ -8,7 +8,7 @@ import { FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
-import { listarProdutoresAtivos } from "@/lib/data/members";
+import { listarGpsDoProjeto, listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
 import {
   orcamentoStatusLabel,
@@ -69,6 +69,11 @@ import {
   type JobExistente,
 } from "./versoes/[versaoId]/fluxo-abertura";
 import type { PPQueTravaOEnvio } from "./versoes/[versaoId]/pps-que-travam";
+import {
+  montarRastroDoCancelamento,
+  type RastroDoCancelamento,
+} from "@/lib/data/cancelamentos";
+import { FaixaJobCancelado } from "./rastro-do-cancelamento";
 import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
 import {
   faturamentoPorMesDoFinanceiro,
@@ -230,7 +235,7 @@ export default async function OrcamentoDetailPage({
     reservadoRes,
     canceladoAposAberturaRes,
     regionaisProjRes,
-    respProjRes,
+    gpsDoProjeto,
     cidadesIniciais,
     produtores,
     categoriasRes,
@@ -323,26 +328,27 @@ export default async function OrcamentoDetailPage({
       .maybeSingle<JobReservado>(),
     // Job cancelado DEPOIS da abertura (decisão 163): some do módulo de
     // Jobs, e o orçamento, que segue em `job_criado`, aparece aqui como
-    // "Cancelado". Só a contagem; o cancelado antes da abertura devolve o
-    // orçamento a `aprovado` (057) e não entra.
+    // "Job cancelado" (decisão 169), com o rastro do pedido. O cancelado
+    // antes da abertura devolve o orçamento a `aprovado` (057) e não entra.
     supabase
       .from("jobs")
-      .select("id", { count: "exact", head: true })
+      .select("id, codigo, data_abertura_financeiro")
       .eq("orcamento_id", params.orcId)
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "cancelado")
-      .not("data_abertura_financeiro", "is", null),
+      .not("data_abertura_financeiro", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string; codigo: string; data_abertura_financeiro: string | null }>(),
     // Opções de Regional e GP do orçamento: saem do cadastro do projeto.
     supabase
       .from("projeto_regionais")
       .select("regional:regionais(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
-    supabase
-      .from("projeto_responsaveis")
-      .select("profile:profiles(id, nome)")
-      .eq("projeto_id", params.projetoId)
-      .eq("tenant_id", session.activeTenant.id),
+    // Só os GPs Responsáveis que podem ser GP — sem a Equipe e sem quem
+    // não tem o papel (decisão 170).
+    listarGpsDoProjeto(params.projetoId),
     // Só as primeiras cidades, e as mesmas para os dois consumidores desta
     // tela: o editor do orçamento e o combobox do modal de abertura. O
     // cadastro comporta o Brasil inteiro — o resto vem do servidor a cada
@@ -404,9 +410,23 @@ export default async function OrcamentoDetailPage({
   const statusExibido: Orcamento["status"] =
     orcamento.status === "job_criado" &&
     !job &&
-    (canceladoAposAberturaRes.count ?? 0) > 0
+    canceladoAposAberturaRes.data
       ? "cancelado"
       : orcamento.status;
+  // Decisão 169: o orçamento do job cancelado depois da abertura é "Job
+  // cancelado" — o "Cancelado" do orçamento sozinho é outra coisa.
+  const jobCanceladoAposAbertura =
+    statusExibido === "cancelado" && orcamento.status === "job_criado"
+      ? canceladoAposAberturaRes.data ?? null
+      : null;
+  const rotuloDoStatus = jobCanceladoAposAbertura
+    ? "Job cancelado"
+    : orcamentoStatusLabel(statusExibido);
+  // O rastro do pedido (decisão 169). Só no orçamento cancelado: as duas
+  // leituras dependem do job, e a página comum não paga por elas.
+  const rastroDoCancelamento = jobCanceladoAposAbertura
+    ? await montarRastroDoCancelamento(supabase, session.activeTenant.id, jobCanceladoAposAbertura)
+    : null;
   // Decisão 128: com o job devolvido, os dados do orçamento e o planejado
   // se corrigem sem cancelar a aprovação.
   const jobDevolvido =
@@ -477,19 +497,12 @@ export default async function OrcamentoDetailPage({
     "id" | "nome"
   >[];
 
-  const gpsDoProjeto = ((respProjRes.data ?? []) as any[])
-    .filter((v) => v.profile)
-    .map((v) => ({ id: v.profile.id, nome: v.profile.nome }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")) as Pick<
-    Profile,
-    "id" | "nome"
-  >[];
-
   // As mesmas listas do editor do orçamento, para o envio para abertura
-  // (decisão 135), com quem já está gravado no orçamento. A de produtores
-  // vale também para o editor: desde 13/10/2026 a lista só tem o papel
-  // Produtor, e o orçamento gravado com um GP ou um freelancer como
-  // produtor abriria o campo vazio.
+  // (decisão 135), com quem já está gravado no orçamento. Valem também
+  // para o editor: desde 13/10/2026 as listas só têm quem tem o papel
+  // (decisões 168 e 170), e o orçamento gravado com alguém fora dele
+  // abriria o campo vazio. Assim o nome aparece, e o servidor explica a
+  // recusa.
   const gpsDoEnvio = comQuemEstaNoOrcamento(
     gpsDoProjeto,
     orcamentoRaw?.gp_responsavel_id,
@@ -544,7 +557,7 @@ export default async function OrcamentoDetailPage({
     ? "Seu papel não permite editar orçamentos."
     : podeCriarVersao
       ? undefined
-      : `Orçamento ${orcamentoStatusLabel(statusExibido).toLowerCase()} não aceita novas versões.`;
+      : `Orçamento ${rotuloDoStatus.toLowerCase()} não aceita novas versões.`;
 
   // ONDA 2 — depende da aba selecionada (e do job, já conhecido).
   // `agregado` cobre TODAS as versões: é o resumo "N itens · R$ X" que o
@@ -621,9 +634,10 @@ export default async function OrcamentoDetailPage({
     // abertura, a cópia é o que acabou de ser enviado ("Ver dados do job").
     job?.status === "rejeitado_financeiro" || job?.status === "aguardando_abertura"
       ? lerBaseDosEspelhos(supabase, session.activeTenant.id, job.id, {
-          // O mensal pede a data de recebimento de cada mês pelo
-          // faturamento da cópia (decisão 149); os outros não leem meses.
-          comMeses: modeloDoOrcamento === "mensal",
+          // O mensal e a Mídia Off pedem a data de recebimento de cada mês
+          // pelo faturamento da cópia (decisões 149 e 167); os outros não
+          // leem meses.
+          comMeses: modeloDoOrcamento === "mensal" || modeloDoOrcamento === "midia_off",
         })
       : Promise.resolve(null),
     // PPs que travam o "Cancelar aprovação" do job devolvido e o "Cancelar
@@ -833,7 +847,7 @@ export default async function OrcamentoDetailPage({
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{orcamento.nome}</h1>
             <Badge className={cn("border", statusBadgeClasses(statusExibido))}>
-              {orcamentoStatusLabel(statusExibido)}
+              {rotuloDoStatus}
             </Badge>
             <OrcamentoEditorDrawer
               projetoId={params.projetoId}
@@ -846,7 +860,7 @@ export default async function OrcamentoDetailPage({
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}
               cidadeAtual={cidadeAtual}
-              gpsDoProjeto={gpsDoProjeto}
+              gpsDoProjeto={gpsDoEnvio}
               produtores={produtoresDoEnvio}
               projetoNome={projetoRaw.nome}
               projetoCodigo={projetoRaw.codigo}
@@ -859,7 +873,7 @@ export default async function OrcamentoDetailPage({
                     ? "Orçamento arquivado — reative para editar."
                     : "Projeto arquivado — reative o projeto para editar."
                   : protegido
-                    ? `Bloqueado em ${orcamentoStatusLabel(statusExibido).toLowerCase()} — alterações via fluxo de aprovação/job.`
+                    ? `Bloqueado em ${rotuloDoStatus.toLowerCase()} — alterações via fluxo de aprovação/job.`
                     : undefined
               }
             />
@@ -969,7 +983,7 @@ export default async function OrcamentoDetailPage({
           <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             Este orçamento está em estado protegido (
-            <strong className="text-foreground">{orcamentoStatusLabel(statusExibido)}</strong>
+            <strong className="text-foreground">{rotuloDoStatus}</strong>
             ).{" "}
             {/* Aprovado ainda aceita versão nova, que edita (decisão 023 §7;
                 Tiago, 07/10/2026): o aviso não pode dizer o contrário. */}
@@ -1044,6 +1058,7 @@ export default async function OrcamentoDetailPage({
           motivoBloqueio={motivoBloqueio}
           arquivado={arquivado}
           jobCancelado={statusExibido === "cancelado"}
+          rastroDoCancelamento={rastroDoCancelamento}
           meses={(mesesRes.data ?? []) as VersaoOrcamentoMes[]}
           mesPedido={mesPedido}
           fechamentoDaCopia={fechamentoDaCopia}
@@ -1109,6 +1124,7 @@ function VersaoSelecionada({
   motivoBloqueio,
   arquivado,
   jobCancelado,
+  rastroDoCancelamento,
   meses,
   mesPedido,
   fechamentoDaCopia,
@@ -1160,6 +1176,9 @@ function VersaoSelecionada({
    *  desaprova nem vai de novo para abertura — o servidor já recusava os
    *  dois. */
   jobCancelado: boolean;
+  /** O rastro do cancelamento depois da abertura (decisão 169): a faixa
+   *  "Job cancelado" na versão que gerou o job. Nulo nos outros casos. */
+  rastroDoCancelamento: RastroDoCancelamento | null;
   /** Meses da versão (modelo mensal, decisão 078); vazio nos demais. */
   meses: VersaoOrcamentoMes[];
   /** `?mes=` da URL. */
@@ -1291,12 +1310,13 @@ function VersaoSelecionada({
     ? fechamentoMidia.faturamentoPrevisto
     : totais.faturamentoPrevisto;
 
-  // Envio para abertura do Fee e do Always On (decisão 149): os meses e o
-  // faturamento de cada um, na MESMA origem do fechamento que o formulário
-  // mostra — a cópia do job quando ela existe, a versão antes do envio.
-  // Nulo fora do mensal: é isso que mantém a Data Evento e a data única.
+  // Envio para abertura do Fee e do Always On (decisão 149) e da Mídia Off
+  // (decisão 167): os meses e o faturamento de cada um, na MESMA origem do
+  // fechamento que o formulário mostra — a cópia do job quando ela existe,
+  // a versão antes do envio. Nulo fora deles: é isso que mantém a Data
+  // Evento e a data única.
   const mesesDoEnvio =
-    planilha.modeloPlanilha === "mensal"
+    planilha.modeloPlanilha === "mensal" || midiaOff
       ? (
           porMesDaCopia ??
           faturamentoPorMes(
@@ -1306,6 +1326,7 @@ function VersaoSelecionada({
             Number(versao.percentual_honorarios),
             Number(versao.percentual_imposto),
             planilha.internacional,
+            paramsMidia,
           )
         ).map((m) => ({ mes: m.mes, faturamento: m.faturamento }))
       : null;
@@ -1484,6 +1505,12 @@ function VersaoSelecionada({
             : null
         }
       />
+
+      {/* O rastro do cancelamento depois da abertura (decisão 169), na
+          versão que gerou o job — junto das outras faixas de estado. */}
+      {rastroDoCancelamento && versao.id === orcamento.versao_aprovada_id && (
+        <FaixaJobCancelado rastro={rastroDoCancelamento} />
+      )}
 
       {/* Modelo mensal (decisão 078): régua de meses, planilha do mês ou
           vista do trimestre. O "Importar planilha" da versão fica na régua,
@@ -1665,7 +1692,7 @@ function VersaoSelecionada({
         linhasSemVeiculo={midiaOff ? itens.filter((i) => !i.fornecedor_id).length : null}
         parServicoCategoria={parServicoCategoria}
         midiaOff={midiaOff}
-        periodoTravado={planilha.modeloPlanilha === "mensal"}
+        periodoTravado={planilha.modeloPlanilha === "mensal" || midiaOff}
         servicoInterno={interno}
         mesesDoEnvio={mesesDoEnvio}
         custoPlanejado={custoPlanejado}
