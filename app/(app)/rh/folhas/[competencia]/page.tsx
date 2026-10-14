@@ -17,6 +17,10 @@ import { CardsResumoFolha } from "./cards-resumo-folha";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { ChecklistCompetencia } from "../_components/checklist-competencia";
 import type { FolhaOrigem } from "@/lib/types";
+import {
+  obterFechamentoVigenteDaCompetencia,
+  temAvulsaPaga,
+} from "@/lib/queries/beneficios";
 
 export const dynamic = "force-dynamic";
 
@@ -263,6 +267,25 @@ export default async function FolhaCompetenciaPage({
   const linhasClt = folhasRaw.filter((l) => l.origem === "contabilidade");
   const rascunhosAEnviar = folhasRaw.filter((l) => l.status === "rascunho").length;
 
+  // Fase 3: estado do checkpoint "Benefícios aplicados"
+  const fechamentoVigente = await obterFechamentoVigenteDaCompetencia({
+    tenantId: session.activeTenant.id,
+    ano,
+    mes,
+  });
+  const avulsaPaga = fechamentoVigente
+    ? await temAvulsaPaga({ fechamentoId: fechamentoVigente.id })
+    : false;
+  const beneficiosProp = {
+    aplicado: Boolean(fechamentoVigente),
+    fechamentoId: fechamentoVigente?.id ?? null,
+    qtdVinculos: fechamentoVigente?.qtd_vinculos ?? 0,
+    totalEmpresa: fechamentoVigente?.total_empresa ?? 0,
+    totalColaborador: fechamentoVigente?.total_colaborador ?? 0,
+    totalIntegral: fechamentoVigente?.valor_integral ?? 0,
+    avulsaPaga,
+  };
+
   return (
     <div className="space-y-6">
       <BotaoVoltar reserva="/rh/folhas" />
@@ -285,6 +308,7 @@ export default async function FolhaCompetenciaPage({
           linhas: linhasClt.length,
           total: linhasClt.reduce((a, l) => a + Number(l.salario_base), 0),
         }}
+        beneficios={beneficiosProp}
         rascunhosAEnviar={rascunhosAEnviar}
         podeEditar={podeEditar}
       />
