@@ -6996,6 +6996,9 @@ financeiro". Regra completa na §9 da decisão 115.
   financeiro escolhe em "Como vai ser pago", como na verba de produção. A
   verba de um terceiro traz o pagamento do fornecedor (cadastro, chave
   aleatória ou boleto) e pode ir na remessa; sem retenção, como toda verba.
+- ⚠️ **Revisto pela decisão 171 (2026-10-14):** a PP de verba paga a um
+  colaborador do RH passa a trazer no PDF a conta e o PIX da ficha do RH; a
+  verba de produção também tem titular. Ver a nota de 2026-10-14.
 
 ## ⚠️ Nota de 2026-10-09 (4) — Regime e CNAE obrigatórios no cadastro de fornecedor (decisão 166)
 
@@ -7155,3 +7158,23 @@ decisão 115.
 - **Em aberto:** no AMB-1008/26 o planejado das 5 influenciadoras zeradas na
   fila (R$ 20.450,00) continua no custo planejado, e o Resultado op.
   (planejado) foi de R$ 54.596,80 para R$ 31.290,10.
+
+## ⚠️ Nota de 2026-10-14 — A conta do RH na PP do colaborador, e a verba de produção com titular (decisão 171)
+
+- **PDF da PP de verba paga a um colaborador do RH:** ganha o bloco "DADOS
+  BANCÁRIOS DO TITULAR DA VERBA PARA PAGAMENTO" (banco, agência, conta, tipo
+  de conta, nome, CPF, tipo e chave PIX), com os dados da ficha do RH no
+  momento da geração. O financeiro paga por ele: a ficha do RH continua
+  fechada para o papel financeiro. Sem conta nem PIX no RH, e no freela, o
+  bloco não sai e o financeiro decide em "Como vai ser pago", como antes.
+- **A cópia mora na PP** (colunas da foto do fornecedor + `verba_titular_cpf`),
+  tirada por um gatilho do banco. O asterisco da decisão 067 não se aplica
+  (é só do cadastro de fornecedor).
+- **Remessa:** continua só para PP com fornecedor (decisão do Tiago: "não
+  agora"). A verba do colaborador é paga manualmente.
+- **Verba de produção:** passa a ter titular (colaborador, freela ou
+  terceiro), como as outras. Dossiê e aprovação da prestação dizem
+  "Titular da verba"; as verbas de produção anteriores seguem "Responsável
+  pela verba".
+- **PDFs refeitos em 14/10/2026:** PP-00160 (em avaliação) e PP-00165
+  (gerada), do DEE-1001/26 — só o bloco de pagamento entrou.
