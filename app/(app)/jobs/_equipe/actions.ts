@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { jobEstaCongelado, type JobStatus } from "@/lib/types";
 
 /**
  * O "Salvar" do pop-up "Equipe" (decisão 174), do job e da visão agregada.
@@ -63,7 +64,7 @@ export async function salvarEquipeDoProjeto(
     supabase
       .from("jobs")
       .select(
-        "id, codigo, produtor_id, produtor_envia_pp, profiles:profiles!produtor_id(nome)",
+        "id, codigo, status, produtor_id, produtor_envia_pp, profiles:profiles!produtor_id(nome)",
       )
       .eq("projeto_id", projetoId)
       .eq("tenant_id", tenantId)
@@ -100,6 +101,7 @@ export async function salvarEquipeDoProjeto(
     codigo: string;
     produtor_id: string | null;
     produtor_envia_pp: boolean;
+    status: JobStatus;
     profiles: { nome: string } | null;
   }>;
   const jobPorId = new Map(jobs.map((j) => [j.id, j]));
@@ -111,6 +113,16 @@ export async function salvarEquipeDoProjeto(
     return {
       ok: false,
       message: "Um dos jobs não é deste projeto. Recarregue a página.",
+    };
+  }
+  // Encerrado ou finalizado não envia mais PP: a chave fica como está.
+  const parado = mudancasDeChave.find((c) =>
+    jobEstaCongelado(jobPorId.get(c.jobId)!.status),
+  );
+  if (parado) {
+    return {
+      ok: false,
+      message: `O ${jobPorId.get(parado.jobId)!.codigo} já foi encerrado: a chave não muda mais.`,
     };
   }
 

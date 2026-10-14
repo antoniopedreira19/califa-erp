@@ -445,7 +445,7 @@ function ConteudoDaEquipe({
                     <Chave
                       ligada={envia[job.id] ?? false}
                       onChange={(v) => setEnvia((e) => ({ ...e, [job.id]: v }))}
-                      pode={podeMudarChave}
+                      pode={podeMudarChave && !job.congelado}
                       rotulo="Envia PPs ao financeiro"
                     />
                   </div>
@@ -512,7 +512,7 @@ function ConteudoDaEquipe({
                             onChange={(v) =>
                               setEnvia((e) => ({ ...e, [j.id]: v }))
                             }
-                            pode={podeMudarChave}
+                            pode={podeMudarChave && !j.congelado}
                             rotulo={`Envia PPs ao financeiro · ${j.codigo}`}
                           />
                         ) : (
