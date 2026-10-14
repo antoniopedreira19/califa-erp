@@ -52,8 +52,17 @@ const RE_COMPETENCIA = /Compet[eê]ncia:\s*(\d{2})\/(\d{4})/;
 // O código é o primeiro número; o nome vai até o CPF; valor BR; data BR.
 const RE_LINHA =
   /^\s*(\d+)\s+(.+?)\s+(\d{3}\.\d{3}\.\d{3}-\d{2})\s+([\d.]+,\d{2})\s+(\d{2}\/\d{2}\/\d{4})\s*$/;
-const RE_TOTAIS =
-  /Empregados:\s*(\d+)\s+Estagi[áa]rios:\s*(\d+)\s+Contribuintes:\s*(\d+)\s+Total da Empresa:\s*([\d.,]+)/;
+// Totalizadores vêm em uma única linha no PDF:
+// "Empregados: 30 Estagiários: 2 Contribuintes: 1 Total da Empresa: 125.281,45"
+// Mas o pdf-parse v1 (pdfjs antigo) pode extrair os campos em ordem diferente ou
+// com separadores inesperados dependendo do PDF. Em vez de uma regex única e
+// frágil que exige ordem exata, procuramos cada campo isoladamente. Os cabeçalhos
+// de seção são "Empregados", "Estagiários", "Contribuintes" (SEM dois-pontos),
+// então "Empregados:" só casa no rodapé.
+const RE_TOTAL_EMPREGADOS = /Empregados\s*:\s*(\d+)/;
+const RE_TOTAL_ESTAGIARIOS = /Estagi[áa]rios\s*:\s*(\d+)/;
+const RE_TOTAL_CONTRIBUINTES = /Contribuintes\s*:\s*(\d+)/;
+const RE_TOTAL_EMPRESA = /Total da Empresa\s*:\s*([\d.,]+)/;
 
 function brlParaCentavos(s: string): number {
   const limpo = s.replace(/\./g, "").replace(",", ".");
@@ -99,8 +108,17 @@ export function parseFolhaContabilidadeTexto(texto: string): ParsedFolha {
   const idxEstagiarios = indexAfterSectionHeader(texto, "Estagiários");
   const idxContribuintes = indexAfterSectionHeader(texto, "Contribuintes");
 
-  const totMatch = texto.match(RE_TOTAIS);
-  const idxTotais = totMatch ? texto.indexOf(totMatch[0]) : texto.length;
+  // Matches independentes dos 4 campos. "Total da Empresa:" é único no PDF,
+  // então serve de âncora pra achar onde terminam os blocos de linhas.
+  const totEmpregadosM = texto.match(RE_TOTAL_EMPREGADOS);
+  const totEstagiariosM = texto.match(RE_TOTAL_ESTAGIARIOS);
+  const totContribuintesM = texto.match(RE_TOTAL_CONTRIBUINTES);
+  const totEmpresaM = texto.match(RE_TOTAL_EMPRESA);
+  const idxTotais = totEmpresaM
+    ? texto.indexOf(totEmpresaM[0])
+    : totEmpregadosM
+      ? texto.indexOf(totEmpregadosM[0])
+      : texto.length;
 
   const blocos: { secao: SecaoPdf; inicio: number; fim: number }[] = [];
 
@@ -142,14 +160,20 @@ export function parseFolhaContabilidadeTexto(texto: string): ParsedFolha {
     }
   }
 
-  if (!totMatch) {
-    throw new Error("Totalizadores do rodapé não encontrados no PDF.");
+  if (!totEmpregadosM || !totEstagiariosM || !totContribuintesM || !totEmpresaM) {
+    const faltando = [
+      !totEmpregadosM && "Empregados:",
+      !totEstagiariosM && "Estagiários:",
+      !totContribuintesM && "Contribuintes:",
+      !totEmpresaM && "Total da Empresa:",
+    ].filter(Boolean).join(", ");
+    throw new Error(`Totalizadores do rodapé não encontrados no PDF (faltando: ${faltando}).`);
   }
   const totalizadores: TotalizadoresPdf = {
-    empregados: Number(totMatch[1]),
-    estagiarios: Number(totMatch[2]),
-    contribuintes: Number(totMatch[3]),
-    total_empresa: brlParaCentavos(totMatch[4]),
+    empregados: Number(totEmpregadosM[1]),
+    estagiarios: Number(totEstagiariosM[1]),
+    contribuintes: Number(totContribuintesM[1]),
+    total_empresa: brlParaCentavos(totEmpresaM[1]),
   };
 
   return {
