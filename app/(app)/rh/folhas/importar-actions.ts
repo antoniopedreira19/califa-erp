@@ -2,6 +2,15 @@
 
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
+// NOTE: `require` em vez de `import` para evitar o debug-mode do pdf-parse
+// que roda ao carregar o módulo (tenta ler um PDF de teste e crasha o build).
+// Padrão idêntico ao uso de pdfmake no projeto.
+// pdf-parse está em serverComponentsExternalPackages (next.config.js) pra
+// não cair no bundle do server component — exige DOMMatrix que não existe
+// no runtime restrito do RSC.
+const pdfParse = require("pdf-parse") as (
+  buffer: Buffer,
+) => Promise<{ text: string }>;
 
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
@@ -116,14 +125,6 @@ export async function importarFolhaContabilidade(input: {
   }
 
   // Extrai texto e parseia.
-  // Lazy require: pdf-parse puxa pdfjs-dist (DOMMatrix/ImageData/Path2D) no
-  // top-level, que quebra o server component bundle quando esse módulo é
-  // transitivamente importado via "use server" (Next.js inline em alguns casos).
-  // Carregando aqui, só roda quando a função é chamada de verdade (handler).
-  const pdfParse = require("pdf-parse") as (
-    buffer: Buffer,
-  ) => Promise<{ text: string }>;
-
   let parsed;
   try {
     const pdfData = await pdfParse(buffer);
