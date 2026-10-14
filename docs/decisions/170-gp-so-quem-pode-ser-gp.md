@@ -65,6 +65,17 @@ os 30 têm GP com o papel GP.
   `app/(app)/orcamentos/[projetoId]/actions.ts` (criar e editar orçamento);
   a trava em `abertura-actions.ts` (envio para abertura).
 
+## Pendências (Tiago, 14/10/2026: "pode manter com uma pendência")
+
+Ficam como estão, e podem mudar no futuro:
+
+- **O GP como produtor do próprio job.** 12 jobs abertos e 10 orçamentos
+  reais em aberto têm o GP gravado também como produtor. A lista de
+  produtor (168) não oferece o GP; o que já está gravado segue valendo.
+- **Administradora e freelancer como produtoras.** 1 administradora (11 jobs
+  abertos e 1 orçamento) e 1 freelancer (3 jobs abertos) estão gravadas como
+  produtoras sem o papel Produtor. Ficam até alguém trocar o produtor.
+
 ## Fica de fora
 
 - Os GPs Responsáveis sem o papel que continuam gravados num projeto (2 no
