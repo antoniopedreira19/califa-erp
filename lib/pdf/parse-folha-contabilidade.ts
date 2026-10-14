@@ -54,15 +54,24 @@ const RE_LINHA =
   /^\s*(\d+)\s+(.+?)\s+(\d{3}\.\d{3}\.\d{3}-\d{2})\s+([\d.]+,\d{2})\s+(\d{2}\/\d{2}\/\d{4})\s*$/;
 // Totalizadores vêm em uma única linha no PDF:
 // "Empregados: 30 Estagiários: 2 Contribuintes: 1 Total da Empresa: 125.281,45"
-// Mas o pdf-parse v1 (pdfjs antigo) pode extrair os campos em ordem diferente ou
-// com separadores inesperados dependendo do PDF. Em vez de uma regex única e
-// frágil que exige ordem exata, procuramos cada campo isoladamente. Os cabeçalhos
-// de seção são "Empregados", "Estagiários", "Contribuintes" (SEM dois-pontos),
-// então "Empregados:" só casa no rodapé.
-const RE_TOTAL_EMPREGADOS = /Empregados\s*:\s*(\d+)/;
-const RE_TOTAL_ESTAGIARIOS = /Estagi[áa]rios\s*:\s*(\d+)/;
-const RE_TOTAL_CONTRIBUINTES = /Contribuintes\s*:\s*(\d+)/;
-const RE_TOTAL_EMPRESA = /Total da Empresa\s*:\s*([\d.,]+)/;
+// Mas o pdf-parse v1 (pdfjs antigo) pode extrair os campos em ordem diferente,
+// com whitespace unicode (NBSP, etc.), com quebras de linha no meio ou em
+// maiúsculas/minúsculas diferentes dependendo do PDF. Procuramos cada campo
+// isoladamente, com regexes tolerantes:
+//
+//   - `[\s ]*` em vez de `\s*`: inclui NBSP e outros whitespace unicode
+//     que `\s` do JS não cobre consistentemente.
+//   - Flag `i`: aceita qualquer caixa.
+//   - Entre palavras ("Total da Empresa"), `[\s ]+` tolera quebra de linha
+//     ou múltiplos espaços entre elas.
+//
+// Os cabeçalhos de seção são "Empregados", "Estagiários", "Contribuintes" (SEM
+// dois-pontos), então o `:` obrigatório garante que só casamos no rodapé.
+const RE_TOTAL_EMPREGADOS = /Empregados[\s ]*:[\s ]*(\d+)/i;
+const RE_TOTAL_ESTAGIARIOS = /Estagi[áa]rios[\s ]*:[\s ]*(\d+)/i;
+const RE_TOTAL_CONTRIBUINTES = /Contribuintes[\s ]*:[\s ]*(\d+)/i;
+const RE_TOTAL_EMPRESA =
+  /Total[\s ]+da[\s ]+Empresa[\s ]*:[\s ]*([\d.,]+)/i;
 
 function brlParaCentavos(s: string): number {
   const limpo = s.replace(/\./g, "").replace(",", ".");
@@ -160,20 +169,37 @@ export function parseFolhaContabilidadeTexto(texto: string): ParsedFolha {
     }
   }
 
-  if (!totEmpregadosM || !totEstagiariosM || !totContribuintesM || !totEmpresaM) {
+  // Totalizadores de quantidade (empregados/estagiários/contribuintes) são
+  // obrigatórios — se faltar algum, o parser não tem como validar a contagem.
+  if (!totEmpregadosM || !totEstagiariosM || !totContribuintesM) {
     const faltando = [
       !totEmpregadosM && "Empregados:",
       !totEstagiariosM && "Estagiários:",
       !totContribuintesM && "Contribuintes:",
-      !totEmpresaM && "Total da Empresa:",
     ].filter(Boolean).join(", ");
-    throw new Error(`Totalizadores do rodapé não encontrados no PDF (faltando: ${faltando}).`);
+    throw new Error(`Totalizadores de contagem não encontrados no PDF (faltando: ${faltando}).`);
   }
+
+  // "Total da Empresa:" tem fallback: se o pdf-parse v1 extrair o label de forma
+  // que a regex não casa (quebra de linha, whitespace unicode, etc.), calculamos
+  // o total a partir da soma das linhas já parseadas. Isso só vale se tivermos
+  // conseguido extrair alguma linha; caso contrário, falha explícita.
+  let totalEmpresaCentavos: number;
+  if (totEmpresaM) {
+    totalEmpresaCentavos = brlParaCentavos(totEmpresaM[1]);
+  } else if (linhas.length > 0) {
+    totalEmpresaCentavos = linhas.reduce((acc, l) => acc + l.valor, 0);
+  } else {
+    throw new Error(
+      "Total da Empresa não encontrado no PDF e nenhuma linha foi extraída pra calcular a soma.",
+    );
+  }
+
   const totalizadores: TotalizadoresPdf = {
     empregados: Number(totEmpregadosM[1]),
     estagiarios: Number(totEstagiariosM[1]),
     contribuintes: Number(totContribuintesM[1]),
-    total_empresa: brlParaCentavos(totEmpresaM[1]),
+    total_empresa: totalEmpresaCentavos,
   };
 
   return {
