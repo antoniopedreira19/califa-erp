@@ -20,6 +20,11 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
+  SeletorCompetenciaForm,
+  proximaCompetenciaIso,
+  competenciaLabel,
+} from "@/components/ui/seletor-competencia-form";
+import {
   criarDependente,
   incluirDepEmPlano,
 } from "@/lib/actions/beneficios/dependentes";
@@ -64,6 +69,9 @@ export function ModalNovoDependente({
   const [cpf, setCpf] = useState("");
   const [dataNasc, setDataNasc] = useState("");
   const [parentesco, setParentesco] = useState("filho");
+  const [competenciaInicio, setCompetenciaInicio] = useState<string>(
+    proximaCompetenciaIso(),
+  );
   const [vinculosSelecionados, setVinculosSelecionados] = useState<Set<string>>(
     new Set(vinculosAtivos.map((v) => v.id)),
   );
@@ -75,6 +83,7 @@ export function ModalNovoDependente({
     setCpf("");
     setDataNasc("");
     setParentesco("filho");
+    setCompetenciaInicio(proximaCompetenciaIso());
     setErro(null);
     setAviso(null);
     // Pré-selecionar todos os vínculos ativos (mais comum)
@@ -94,13 +103,14 @@ export function ModalNovoDependente({
     setErro(null);
     setAviso(null);
     start(async () => {
-      // 1) Cria o dependente
+      // 1) Cria o dependente (usa competência de início do form)
       const res = await criarDependente({
         colaboradorId,
         nome: nome.trim(),
         cpf,
         dataNascimento: dataNasc,
         parentesco,
+        dataInicio: competenciaInicio,
       });
       if (!res.ok) {
         setErro(res.message);
@@ -108,13 +118,12 @@ export function ModalNovoDependente({
       }
 
       // 2) Inclui nos planos selecionados (erros não bloqueiam — dep já foi criado)
-      const hoje = new Date().toISOString().slice(0, 10);
       const falhas: string[] = [];
       for (const vinculoId of vinculosSelecionados) {
         const inc = await incluirDepEmPlano({
           vinculoId,
           dependenteId: res.id,
-          dataInicio: hoje,
+          dataInicio: competenciaInicio,
         });
         if (!inc.ok) {
           const v = vinculosAtivos.find((x) => x.id === vinculoId);
@@ -214,6 +223,18 @@ export function ModalNovoDependente({
                 }
               />
             </div>
+          </div>
+
+          {/* Competência de início */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground">
+              Entra em vigência a partir de
+            </label>
+            <SeletorCompetenciaForm
+              value={competenciaInicio}
+              onChange={setCompetenciaInicio}
+              hint={`A fatura de ${competenciaLabel(competenciaInicio)} já vem com este dependente.`}
+            />
           </div>
 
           {/* Checkboxes de planos */}

@@ -47,6 +47,11 @@ const criarDepSchema = z.object({
       "Data de nascimento não pode ser futura.",
     ),
   parentesco: z.string().min(1, "Parentesco é obrigatório.").max(50),
+  /** Competência em que o dep passa a valer. ISO YYYY-MM-01. Default = hoje. */
+  dataInicio: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início inválida.")
+    .optional(),
   observacao: z.string().max(500).optional().nullable(),
 });
 
@@ -73,6 +78,7 @@ export async function criarDependente(
       cpf: d.cpf,
       data_nascimento: d.dataNascimento,
       parentesco: d.parentesco,
+      data_inicio: d.dataInicio ?? undefined,
       observacao: d.observacao || null,
     })
     .select("id")
