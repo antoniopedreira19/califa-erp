@@ -6,17 +6,20 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import {
+  COLUNAS_DA_FOTO_DO_TITULAR,
   COLUNAS_DE_PAGAMENTO,
   aplicarPagamentoForaDoCadastro,
   camposDoPagamentoForaDoCadastro,
   lerFoto,
   lerPagamentoForaDoCadastro,
+  pagamentoDoTitularDaPP,
   resumoDoCadastroDePagamento,
   tirarFoto,
   type DadosDePagamento,
   type FotoDePagamentoDaPP,
   type PagamentoForaDoCadastro,
 } from "@/lib/data/foto-pagamento-da-pp";
+import type { PagamentoDoTitularNoPdf } from "@/lib/pdf/pedido-compra";
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { formatCurrency } from "@/lib/utils";
@@ -24,12 +27,11 @@ import { pode } from "@/lib/permissoes";
 import {
   DOCUMENTO_TIPOS,
   PP_URGENTE_JUSTIFICATIVA_MIN,
-  verbaTemTitular,
+  verbaDeResponsavel,
   type TipoVerba,
   type TitularDaVerbaTipo,
 } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
-import { listActiveMembers } from "@/lib/data/members";
 import { carregarPessoasParaVerba, type PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
 import {
   valorDaPPPorUnidade,
@@ -113,20 +115,21 @@ function tipoDaVerbaDosDados(d: {
 }
 
 /** A PP paga um fornecedor: a de fornecedor e a verba de um terceiro
- *  (decisão 164), que usa o pagamento do fornecedor. */
+ *  (decisão 164; nas três verbas desde a 171), que usa o pagamento do
+ *  fornecedor. */
 function usaFornecedor(d: {
   verba_producao: boolean;
   tipo_verba?: TipoVerba | null;
   verba_titular_tipo?: TitularDaVerbaTipo | null;
 }): boolean {
   if (!d.verba_producao) return true;
-  return verbaTemTitular(tipoDaVerbaDosDados(d)) && d.verba_titular_tipo === "fornecedor";
+  return d.verba_titular_tipo === "fornecedor";
 }
 
 /**
  * O pagamento fora do cadastro que a PP vai gravar (decisão 127). A verba
- * paga a uma pessoa não tem (o financeiro decide na aprovação); a verba de
- * um terceiro usa o pagamento do fornecedor (decisão 164).
+ * paga a uma pessoa não tem (a do colaborador traz a conta do RH, decisão
+ * 171); a verba de um terceiro usa o pagamento do fornecedor (decisão 164).
  */
 function foraDoCadastroDe(d: {
   verba_producao: boolean;
@@ -137,13 +140,14 @@ function foraDoCadastroDe(d: {
   return usaFornecedor(d) ? (d.pagamento_fora_do_cadastro ?? null) : null;
 }
 
-/** As colunas da verba que a PP e a PP a emitir gravam (decisão 164). */
+/** As colunas da verba que a PP e a PP a emitir gravam (decisão 164).
+ *  Desde a 171 as três verbas têm titular: o responsável (usuário) só
+ *  existe na verba de produção gravada antes, e nada novo o grava. */
 function colunasDaVerba(
   d: {
     verba_producao: boolean;
     tipo_verba?: TipoVerba | null;
     fornecedor_id?: string | null;
-    responsavel_verba_id?: string | null;
     verba_titular_tipo?: TitularDaVerbaTipo | null;
     verba_titular_id?: string | null;
   },
@@ -156,18 +160,6 @@ function colunasDaVerba(
       tipo_verba: null,
       fornecedor_id: d.fornecedor_id ?? null,
       responsavel_verba_id: null,
-      verba_titular_tipo: null,
-      verba_colaborador_id: null,
-      verba_freela_id: null,
-      verba_titular_nome: null,
-    };
-  }
-  if (!verbaTemTitular(tipo)) {
-    return {
-      verba_producao: true,
-      tipo_verba: tipo,
-      fornecedor_id: null,
-      responsavel_verba_id: d.responsavel_verba_id ?? null,
       verba_titular_tipo: null,
       verba_colaborador_id: null,
       verba_freela_id: null,
@@ -188,10 +180,10 @@ function colunasDaVerba(
 }
 
 /**
- * O nome do titular da verba de alimentação ou de transporte, conferido no
- * servidor (decisão 164): o colaborador ou o freela tem de estar na lista
- * de `pessoas_para_verba` (a mesma do formulário), e o terceiro tem de ser
- * um fornecedor ativo do tenant. Null na verba de produção e fora da verba.
+ * O nome do titular da verba, conferido no servidor (decisões 164 e 171,
+ * nas três verbas): o colaborador ou o freela tem de estar na lista de
+ * `pessoas_para_verba` (a mesma do formulário), e o terceiro tem de ser um
+ * fornecedor ativo do tenant. Null fora da verba.
  */
 async function nomeDoTitularDaVerba(
   supabase: ReturnType<typeof createClient>,
@@ -205,7 +197,7 @@ async function nomeDoTitularDaVerba(
   },
   fornecedorJaLido?: { nome?: string | null; razao_social?: string | null } | null,
 ): Promise<Result<{ nome: string | null }>> {
-  if (!verbaTemTitular(tipoDaVerbaDosDados(d))) return { ok: true, nome: null };
+  if (!tipoDaVerbaDosDados(d)) return { ok: true, nome: null };
   if (d.verba_titular_tipo === "fornecedor") {
     const forn =
       fornecedorJaLido ??
@@ -313,7 +305,7 @@ const dadosBaseSchema = z.object({
     .max(MAX_PARCELAS, `No máximo ${MAX_PARCELAS} parcelas.`),
 }).and(
   // Union discriminada por verba_producao: OFF exige fornecedor; ON exige
-  // responsável. O CHECK do banco é o backstop — este schema valida antes.
+  // o titular. O CHECK do banco é o backstop — este schema valida antes.
   z.discriminatedUnion("verba_producao", [
     z.object({
       verba_producao: z.literal(false),
@@ -328,9 +320,10 @@ const dadosBaseSchema = z.object({
       // Decisão 164: produção, alimentação ou transporte. Ausente = produção
       // (a PP a emitir salva antes). As combinações estão no superRefine.
       tipo_verba: z.enum(["producao", "alimentacao", "transporte"]).nullable().optional(),
-      // Produção: o responsável, um usuário. Alimentação e transporte: o
-      // titular — colaborador ou freela em verba_titular_id, ou o terceiro
-      // em fornecedor_id, com o pagamento do fornecedor.
+      // O titular (decisão 164; nas três verbas desde a 171) — colaborador
+      // ou freela em verba_titular_id, ou o terceiro em fornecedor_id, com o
+      // pagamento do fornecedor. `responsavel_verba_id` só chega da PP a
+      // emitir de produção salva antes da 171, e é recusado no refine.
       fornecedor_id: z.string().uuid().nullable().optional(),
       responsavel_verba_id: z.string().uuid().nullable().optional(),
       verba_titular_tipo: z.enum(["colaborador", "freela", "fornecedor"]).nullable().optional(),
@@ -340,19 +333,15 @@ const dadosBaseSchema = z.object({
   ])
 );
 
-/** As combinações da verba (decisão 164). O CHECK do banco é o backstop. */
+/** As combinações da verba (decisões 164 e 171). O CHECK do banco é o
+ *  backstop. */
 const dadosSchema = dadosBaseSchema.superRefine((d, ctx) => {
   if (!d.verba_producao) return;
   const falha = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, message });
-  const tipo = d.tipo_verba ?? "producao";
-  if (!verbaTemTitular(tipo)) {
-    if (!d.responsavel_verba_id) falha("Escolha um responsável");
-    if (d.fornecedor_id || d.verba_titular_tipo || d.verba_titular_id || d.pagamento_fora_do_cadastro) {
-      falha("A verba de produção é paga ao responsável");
-    }
+  if (d.responsavel_verba_id) {
+    falha("A verba de produção agora tem titular, como as outras. Escolha o titular da verba");
     return;
   }
-  if (d.responsavel_verba_id) falha("A verba de alimentação e a de transporte têm titular, não responsável");
   if (!d.verba_titular_tipo) {
     falha("Escolha o titular da verba");
     return;
@@ -991,13 +980,33 @@ async function carregarContextoPdf(
 }
 
 /**
+ * A conta e o PIX do colaborador titular da verba, lidos da PP já gravada
+ * (decisão 171): quem copia da ficha do RH é o gatilho do banco, que a
+ * tela não alcança. Null quando a ficha não tem conta nem PIX.
+ */
+async function fotoDoTitularDaPP(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  ppId: string,
+): Promise<PagamentoDoTitularNoPdf | null> {
+  const { data, error } = await supabase
+    .from("pedidos_compra")
+    .select(COLUNAS_DA_FOTO_DO_TITULAR)
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) console.error("[pp.foto_do_titular]", error.message);
+  return data ? pagamentoDoTitularDaPP(data as Parameters<typeof pagamentoDoTitularDaPP>[0]) : null;
+}
+
+/**
  * O documento da PP, com todas as parcelas, renderizado em memória
  * (decisão 112, 28/09/2026). Até ali era um documento por parcela.
  *
  * O financeiro aprova a PP inteira e as parcelas seguem juntas para
  * Títulos a Pagar, então um papel só, com o valor e o prazo de cada
  * parcela e o total do pedido, é o que o fornecedor e o financeiro leem.
- * Verba de Produção também gera PDF, com layout adaptado — ver
+ * A verba paga a uma pessoa também gera PDF, com layout adaptado — ver
  * `lib/pdf/pedido-compra.ts`.
  *
  * Quem chama decide o que fazer com o buffer: a geração desfaz a PP se o
@@ -1015,10 +1024,14 @@ async function renderizarDocumentoDaPP(args: {
     valor: number;
     verba_producao: boolean;
     tipo_verba?: TipoVerba | null;
+    /** Decisão 171: nulo na verba = verba de produção anterior (responsável). */
+    verba_titular_tipo: TitularDaVerbaTipo | null;
   };
   empresa: unknown;
   fornecedor: unknown | null;
   responsavelVerbaNome: string | null;
+  /** Decisão 171: a conta e o PIX do colaborador titular (da foto da PP). */
+  pagamentoDoTitular: PagamentoDoTitularNoPdf | null;
   job: { codigo: string; nome: string; produto: string };
   contexto: ContextoPdf;
   parcelas: Array<{ numero: number; data_vencimento: string; valor: number }>;
@@ -1045,11 +1058,13 @@ async function renderizarDocumentoDaPP(args: {
       created_at: args.emitidaEm ?? new Date().toISOString(),
       verba_producao: args.pp.verba_producao,
       tipo_verba: args.pp.tipo_verba ?? null,
+      verba_titular_tipo: args.pp.verba_titular_tipo,
     },
     pagamentoPorBoleto: args.pagamentoPorBoleto === true,
     empresa: args.empresa as never,
     fornecedor: (args.fornecedor ?? null) as never,
     responsavelVerbaNome: args.responsavelVerbaNome,
+    pagamentoDoTitular: args.pagamentoDoTitular,
     job: args.job,
     projeto: args.contexto.projeto,
     cliente: args.contexto.cliente,
@@ -1359,13 +1374,12 @@ async function finalizarPedidoCompraImpl(
     }
   }
 
-  // Valida FKs (fornecedor OU responsável + empresa pertencem ao tenant).
-  // Verba de Produção não tem fornecedor — valida o responsável no lugar.
-  // A verba de alimentação ou de transporte valida o titular (decisão 164);
-  // a de um terceiro tem fornecedor, como a PP comum.
+  // Valida FKs (fornecedor ou titular + empresa pertencem ao tenant). A
+  // verba valida o titular (decisões 164 e 171); a de um terceiro tem
+  // fornecedor, como a PP comum.
   const tipoVerba = tipoDaVerbaDosDados(d);
   const pagaFornecedor = usaFornecedor(d);
-  const [fornRes, empRes, responsavelRes] = await Promise.all([
+  const [fornRes, empRes] = await Promise.all([
     !pagaFornecedor
       ? Promise.resolve({ data: null })
       : supabase
@@ -1383,19 +1397,6 @@ async function finalizarPedidoCompraImpl(
       .eq("id", job.empresa_id ?? d.empresa_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
-    // O responsável precisa ser membro ATIVO do tenant, e a checagem usa a
-    // MESMA fonte que a tela usa para montar a lista — senão o formulário
-    // oferece nomes que o servidor recusa.
-    //
-    // ⚠️ Corrigido em 01/09/2026: filtrava `profiles.tenant_id`, coluna que
-    // não existe. O PostgREST devolvia erro, `data` vinha nulo e TODA PP de
-    // Verba de Produção morria em "Responsável inválido ou não encontrado".
-    // O vínculo com o tenant mora em `tenant_members`.
-    tipoVerba === "producao"
-      ? listActiveMembers(session.activeTenant.id).then((membros) => ({
-          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
-        }))
-      : Promise.resolve({ data: null }),
   ]);
 
   if (pagaFornecedor && !fornRes.data)
@@ -1412,8 +1413,6 @@ async function finalizarPedidoCompraImpl(
       message: "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória ou boleto.",
     };
   }
-  if (tipoVerba === "producao" && !responsavelRes.data)
-    return { ok: false, message: "Responsável inválido ou não encontrado." };
   const titular = await nomeDoTitularDaVerba(
     supabase,
     session.activeTenant.id,
@@ -1452,8 +1451,8 @@ async function finalizarPedidoCompraImpl(
     codigo,
     item_realizado_id: itemRealizadoId,
     job_id: job.id,
-    // Verba de produção: fornecedor null, responsável preenchido. PP
-    // normal: o oposto. Alimentação e transporte: o titular (decisão 164).
+    // PP normal: o fornecedor. Verba: o titular (decisões 164 e 171) — o
+    // terceiro também em fornecedor_id.
     ...colunasDaVerba(d, titular.nome),
     empresa_id: job.empresa_id ?? d.empresa_id,
     estabelecimento_id: cnpjDaPP.id,
@@ -1578,18 +1577,24 @@ async function finalizarPedidoCompraImpl(
     };
   }
 
-  // Carrega dados enriquecidos pro PDF
-  const contexto = await carregarContextoPdf(supabase, session.activeTenant.id, job);
+  // Carrega dados enriquecidos pro PDF. Na verba do colaborador, a conta e
+  // o PIX vêm da foto que o banco acabou de tirar da ficha do RH (decisão
+  // 171) — lida de volta da PP gravada, e não da tela.
+  const [contexto, pagamentoDoTitular] = await Promise.all([
+    carregarContextoPdf(supabase, session.activeTenant.id, job),
+    d.verba_producao && d.verba_titular_tipo === "colaborador"
+      ? fotoDoTitularDaPP(supabase, session.activeTenant.id, pp_id)
+      : Promise.resolve(null),
+  ]);
 
   // ---- Um documento só, com todas as parcelas (decisão 112) ----
   // O financeiro aprova a PP inteira e as parcelas seguem juntas para
   // Títulos a Pagar: o papel é da PP, com o valor e o prazo de cada
   // parcela e o total do pedido.
   //
-  // Verba de Produção também gera PDF, mas com layout adaptado (trocado
-  // bloco Fornecedor por Responsável, omitido bloco de dados bancários) —
-  // ver `lib/pdf/pedido-compra.ts`. Vai como comprovante interno do
-  // adiantamento ao gerente.
+  // A verba paga a uma pessoa também gera PDF, com layout adaptado (bloco
+  // do titular no lugar do fornecedor; dados bancários só do colaborador,
+  // decisão 171) — ver `lib/pdf/pedido-compra.ts`.
   const parcelas = (parcelasCriadas ?? []).slice().sort((a, b) => a.numero - b.numero);
   let documento: { path: string; buffer: Buffer };
 
@@ -1606,17 +1611,14 @@ async function finalizarPedidoCompraImpl(
         valor,
         verba_producao: d.verba_producao,
         tipo_verba: tipoVerba,
+        verba_titular_tipo: d.verba_producao ? (d.verba_titular_tipo ?? null) : null,
       },
       // O cabeçalho é o do CNPJ da PP, não o da gerencial (decisão 156).
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
-      responsavelVerbaNome:
-        tipoVerba === "producao"
-          ? (responsavelRes.data?.nome ?? "")
-          : tipoVerba
-            ? (titular.nome ?? "")
-            : null,
+      responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
+      pagamentoDoTitular,
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
       contexto,
       parcelas: parcelas.map((p) => ({
@@ -3300,8 +3302,9 @@ export async function cancelarERefazerPP(
     tipo_verba: linhaPP.verba_producao ? (linhaPP.tipo_verba ?? "producao") : null,
     fornecedor_id:
       !linhaPP.verba_producao || linhaPP.verba_titular_tipo === "fornecedor" ? linhaPP.fornecedor_id : null,
-    responsavel_verba_id:
-      linhaPP.verba_producao && !verbaTemTitular(linhaPP.tipo_verba) ? linhaPP.responsavel_verba_id : null,
+    // A verba de produção anterior à 171 volta com o responsável que tinha;
+    // o formulário pede o titular antes de gerar de novo.
+    responsavel_verba_id: verbaDeResponsavel(linhaPP) ? linhaPP.responsavel_verba_id : null,
     verba_titular_tipo: linhaPP.verba_titular_tipo ?? null,
     verba_titular_id: linhaPP.verba_colaborador_id ?? linhaPP.verba_freela_id ?? null,
     pagamento_fora_do_cadastro: fora
@@ -3503,6 +3506,9 @@ export async function atualizarVencimentoDaPP(
     pdf_path: string | null;
     created_at: string;
     dados_pagamento_congelados_em: string | null;
+    /** Decisão 171: a origem do titular e o CPF do colaborador (da foto). */
+    verba_titular_tipo: TitularDaVerbaTipo | null;
+    verba_titular_cpf: string | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
   };
   if (pp.status !== "gerada") {
@@ -3551,7 +3557,7 @@ export async function atualizarVencimentoDaPP(
       : supabase.from("fornecedores").select("*").eq("id", pp.fornecedor_id).eq("tenant_id", tenantId).maybeSingle(),
     // O cabeçalho é o do CNPJ da PP (decisão 156), o mesmo da geração.
     cnpjDaPPNaGeracao(supabase, tenantId, job, pp.estabelecimento_id),
-    pp.verba_producao && !verbaTemTitular(pp.tipo_verba) && pp.responsavel_verba_id
+    verbaDeResponsavel(pp) && pp.responsavel_verba_id
       ? supabase.from("profiles").select("nome").eq("id", pp.responsavel_verba_id).maybeSingle()
       : Promise.resolve({ data: null }),
     carregarContextoPdf(supabase, tenantId, job),
@@ -3580,17 +3586,20 @@ export async function atualizarVencimentoDaPP(
         valor: Number(pp.valor),
         verba_producao: pp.verba_producao,
         tipo_verba: pp.tipo_verba,
+        verba_titular_tipo: pp.verba_titular_tipo ?? null,
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoPdf,
+      // Decisão 171: o pagamento do colaborador sai da foto da PP.
+      pagamentoDoTitular: pagamentoDoTitularDaPP(pp),
       pagamentoPorBoleto:
         (ppBruta as { pagamento_fora_do_cadastro_meio?: string | null }).pagamento_fora_do_cadastro_meio ===
         "boleto",
       responsavelVerbaNome: !pp.verba_producao
         ? null
-        : verbaTemTitular(pp.tipo_verba)
-          ? (pp.verba_titular_nome ?? "")
-          : ((responsavelRes.data as { nome?: string } | null)?.nome ?? ""),
+        : verbaDeResponsavel(pp)
+          ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
+          : (pp.verba_titular_nome ?? ""),
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
       contexto,
       parcelas: parcelasNovas,
@@ -3828,7 +3837,7 @@ async function editarPPGeradaImpl(
   // ---- Quem recebe, a empresa e o CNPJ da PP, como na geração ----
   const tipoVerba = tipoDaVerbaDosDados(d);
   const pagaFornecedor = usaFornecedor(d);
-  const [fornRes, empRes, responsavelRes] = await Promise.all([
+  const [fornRes, empRes] = await Promise.all([
     !pagaFornecedor
       ? Promise.resolve({ data: null })
       : supabase
@@ -3844,11 +3853,6 @@ async function editarPPGeradaImpl(
       .eq("id", job.empresa_id ?? d.empresa_id)
       .eq("tenant_id", tenantId)
       .maybeSingle(),
-    tipoVerba === "producao"
-      ? listActiveMembers(tenantId).then((membros) => ({
-          data: membros.find((m) => m.id === d.responsavel_verba_id) ?? null,
-        }))
-      : Promise.resolve({ data: null }),
   ]);
   if (pagaFornecedor && !fornRes.data) return { ok: false, message: "Fornecedor inválido ou inativo." };
   const cadastro = fornRes.data as
@@ -3878,9 +3882,6 @@ async function editarPPGeradaImpl(
       };
     }
   }
-  if (tipoVerba === "producao" && !responsavelRes.data) {
-    return { ok: false, message: "Responsável inválido ou não encontrado." };
-  }
   const titular = await nomeDoTitularDaVerba(
     supabase,
     tenantId,
@@ -3904,36 +3905,39 @@ async function editarPPGeradaImpl(
     valor: Number(p.valor),
   }));
   const contexto = await carregarContextoPdf(supabase, tenantId, job);
+  const argsDoDocumento = {
+    tenantId,
+    jobId: job.id,
+    ppId,
+    codigo: ppRow.codigo,
+    pp: {
+      servico: d.servico,
+      quantidade: d.quantidade,
+      especificacoes: d.especificacoes ?? null,
+      valor,
+      verba_producao: d.verba_producao,
+      tipo_verba: tipoVerba,
+      verba_titular_tipo: d.verba_producao ? (d.verba_titular_tipo ?? null) : null,
+    },
+    empresa: cnpjDaPP.empresa,
+    fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
+    pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+    // Decisão 171: a verba tem titular nas três; nada novo grava responsável.
+    responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
+    job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+    contexto,
+    parcelas: parcelasNovas,
+    // A PP é a mesma: a emissão continua a da geração.
+    emitidaEm: ppRow.created_at,
+  };
+  // Decisão 171: na verba do colaborador, a conta e o PIX são a foto que o
+  // banco tira da ficha do RH AO GRAVAR (mantida se o titular é o mesmo,
+  // tirada de novo se mudou). Este documento só confere que o PDF sai; o
+  // que sobe é refeito depois do UPDATE, com a foto lida de volta.
+  const titularColaborador = d.verba_producao && d.verba_titular_tipo === "colaborador";
   let documento: { path: string; buffer: Buffer };
   try {
-    documento = await renderizarDocumentoDaPP({
-      tenantId,
-      jobId: job.id,
-      ppId,
-      codigo: ppRow.codigo,
-      pp: {
-        servico: d.servico,
-        quantidade: d.quantidade,
-        especificacoes: d.especificacoes ?? null,
-        valor,
-        verba_producao: d.verba_producao,
-        tipo_verba: tipoVerba,
-      },
-      empresa: cnpjDaPP.empresa,
-      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
-      pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
-      responsavelVerbaNome:
-        tipoVerba === "producao"
-          ? (responsavelRes.data?.nome ?? "")
-          : tipoVerba
-            ? (titular.nome ?? "")
-            : null,
-      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
-      contexto,
-      parcelas: parcelasNovas,
-      // A PP é a mesma: a emissão continua a da geração.
-      emitidaEm: ppRow.created_at,
-    });
+    documento = await renderizarDocumentoDaPP({ ...argsDoDocumento, pagamentoDoTitular: null });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, message: `Falha ao refazer o PDF: ${msg}` };
@@ -3973,6 +3977,17 @@ async function editarPPGeradaImpl(
   if (updErr) return { ok: false, message: `Falha ao salvar a PP: ${updErr.message}` };
   if (!atualizada || atualizada.length === 0) {
     return { ok: false, message: `${ppRow.codigo} mudou de situação enquanto você editava. Recarregue a página.` };
+  }
+  if (titularColaborador) {
+    try {
+      documento = await renderizarDocumentoDaPP({
+        ...argsDoDocumento,
+        pagamentoDoTitular: await fotoDoTitularDaPP(supabase, tenantId, ppId),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, message: `A PP foi salva, mas o PDF novo falhou: ${msg}. Abra a PP e salve de novo.` };
+    }
   }
 
   // ---- Parcelas no lugar: a PP nunca fica sem parcela ----

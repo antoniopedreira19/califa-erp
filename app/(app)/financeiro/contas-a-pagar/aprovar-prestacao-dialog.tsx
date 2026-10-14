@@ -35,11 +35,12 @@ export interface PrestacaoParaAprovar {
   /** Nome do tipo do plano de contas da PP — o do estorno. */
   centroDeCusto: string;
   /** Decisão 136: o último envio da prestação. Quem presta contas é o
-   *  responsável pela verba, qualquer GP ou um administrador. */
+   *  administrador, o GP, o produtor ou o freela do job (decisões 164 e
+   *  171), e o responsável da verba de produção anterior à 171. */
   envio: EnvioDaPP | null;
   responsavelVerbaNome: string | null;
-  /** "Responsável pela verba" (produção) ou "Titular da verba"
-   *  (alimentação e transporte, decisão 164). */
+  /** "Titular da verba" (decisões 164 e 171), ou "Responsável pela verba"
+   *  na verba de produção anterior à 171. */
   rotuloQuemRecebe: string;
   gpResponsavelNome: string | null;
 }

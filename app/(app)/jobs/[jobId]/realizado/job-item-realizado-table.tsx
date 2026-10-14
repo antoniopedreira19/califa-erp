@@ -204,7 +204,8 @@ interface Props {
   cnpjPadraoDaPP: string | null;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
   empresas: Array<Pick<Empresa, "id" | "razao_social" | "nome_fantasia" | "ativo" | "principal">>;
-  /** Membros ativos do tenant — usados no combo de Responsável da Verba de Produção. */
+  /** Membros ativos do tenant — o nome de quem concluiu as PPs do item e
+   *  do responsável da verba de produção anterior à decisão 171. */
   responsaveis: Array<{ id: string; nome: string }>;
   jobEmpresaId: string;
   jobResponsavelId: string;
@@ -2534,7 +2535,6 @@ export function JobItemRealizadoTable({
               jobId={jobId}
               fornecedores={fornecedores}
               empresas={empresas}
-              responsaveis={responsaveis}
               defaultEmpresaId={jobEmpresaId}
               itemDescricao={itemAtual?.item ?? ""}
               valorPlanejado={planejadoAtual}

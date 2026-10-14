@@ -22,6 +22,7 @@ import type {
   TipoContaBancariaFornecedor,
 } from "@/lib/types";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
+import type { PagamentoDoTitularNoPdf } from "@/lib/pdf/pedido-compra";
 
 /** Os nove campos de pagamento, do jeito que o cadastro os guarda. */
 export interface DadosDePagamento {
@@ -309,4 +310,47 @@ export function nomeCurtoDoBanco(codigo: string, nome?: string | null): string {
     .replace(/\s*\(.*?\)/g, "")
     .replace(/\s+S\.?\s?A\.?$/i, "")
     .trim();
+}
+
+// ---------------------------------------------------------------------------
+// A foto do colaborador titular da verba (decisão 171, 14/10/2026)
+// ---------------------------------------------------------------------------
+
+/** As colunas que a geração lê de volta da PP recém-gravada para imprimir
+ *  o pagamento do colaborador: a foto que o banco tirou da ficha do RH. */
+export const COLUNAS_DA_FOTO_DO_TITULAR =
+  "verba_titular_tipo, verba_titular_cpf, dados_pagamento_congelados_em, " +
+  "fornecedor_banco_codigo, fornecedor_banco_nome, fornecedor_agencia, fornecedor_agencia_dv, " +
+  "fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta, fornecedor_pix_tipo, fornecedor_pix_chave";
+
+/**
+ * A conta e o PIX do colaborador titular da verba, como o PDF os imprime.
+ *
+ * Quem tira a foto é o banco (gatilho `trg_pp_foto_do_colaborador`): a
+ * ficha do RH não abre para a produção nem para o financeiro, e uma função
+ * que a tela chamasse entregaria a conta de qualquer colaborador pelo
+ * console. A foto mora nas mesmas colunas da do fornecedor, com o CPF em
+ * `verba_titular_cpf`. Null fora do colaborador, sem foto, ou sem conta e
+ * sem PIX na ficha — e aí o PDF não traz o bloco.
+ */
+export function pagamentoDoTitularDaPP(
+  pp: Partial<FotoDePagamentoDaPP> & {
+    verba_titular_tipo?: string | null;
+    verba_titular_cpf?: string | null;
+    dados_pagamento_congelados_em?: string | null;
+  },
+): PagamentoDoTitularNoPdf | null {
+  if (pp.verba_titular_tipo !== "colaborador" || !pp.dados_pagamento_congelados_em) return null;
+  if (!pp.fornecedor_conta && !pp.fornecedor_pix_chave) return null;
+  return {
+    banco_codigo: pp.fornecedor_banco_codigo ?? null,
+    banco_nome: pp.fornecedor_banco_nome ?? null,
+    agencia: pp.fornecedor_agencia ?? null,
+    conta: pp.fornecedor_conta ?? null,
+    conta_dv: pp.fornecedor_conta_dv ?? null,
+    tipo_conta: pp.fornecedor_tipo_conta ?? null,
+    pix_tipo: pp.fornecedor_pix_tipo ?? null,
+    pix_chave: pp.fornecedor_pix_chave ?? null,
+    cpf: pp.verba_titular_cpf ?? null,
+  };
 }

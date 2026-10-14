@@ -15,9 +15,12 @@ import type {
   Job,
   Projeto,
   Cliente,
+  PixTipoChave,
+  TipoContaBancariaFornecedor,
   TipoVerba,
+  TitularDaVerbaTipo,
 } from "@/lib/types";
-import { rotuloDaVerba, rotuloDeQuemRecebeAVerba, verbaTemTitular } from "@/lib/types";
+import { rotuloDaVerba } from "@/lib/types";
 // Logo embed como base64: em serverless Vercel, `public/` não é copiado
 // pro filesystem da função runtime (ENOENT). Base64 no bundle resolve.
 import { LOGO_ICON_BASE64 } from "./logo-base64";
@@ -155,10 +158,14 @@ interface Dados {
      * omite os DADOS BANCÁRIOS (verba é interna, não paga fornecedor) e usa
      * `responsavelVerbaNome` no lugar do nome do fornecedor. */
     verba_producao?: boolean;
-    /** Decisão 164: o tipo da verba. Ausente = produção. Na alimentação e
-     *  no transporte o bloco diz "Titular da verba"; o terceiro (com
+    /** Decisão 164: o tipo da verba. Ausente = produção. O terceiro (com
      *  fornecedor) sai no desenho do fornecedor, com os dados bancários. */
     tipo_verba?: TipoVerba | null;
+    /** Decisão 171: de onde vem o titular. Obrigatório: na verba, nulo é a
+     *  verba de produção anterior à 171 — que sai como foi gerada, com
+     *  "Responsável" e o texto de então. Opcional, um chamador que o
+     *  esquecesse imprimiria toda verba nova no desenho antigo. */
+    verba_titular_tipo: TitularDaVerbaTipo | null;
   };
   /** Decisão 161: a PP paga por boleto. O documento continua o de sempre;
    *  só a linha do PIX vira "Pagamento: Boleto". */
@@ -166,8 +173,13 @@ interface Dados {
   empresa: Empresa;
   /** Null quando `pp.verba_producao === true` — não há fornecedor. */
   fornecedor: Fornecedor | null;
-  /** Nome do responsável interno da verba. Obrigatório quando `pp.verba_producao === true`. */
+  /** Nome de quem recebe a verba (o titular, ou o responsável da verba de
+   *  produção anterior à decisão 171). Obrigatório quando `pp.verba_producao === true`. */
   responsavelVerbaNome?: string | null;
+  /** Decisão 171: a conta e o PIX do colaborador titular, da foto que o
+   *  banco tirou da ficha do RH. Null para freela, terceiro (que vai em
+   *  `fornecedor`) e fora da verba; sem conta nem PIX, o bloco não sai. */
+  pagamentoDoTitular: PagamentoDoTitularNoPdf | null;
   job: Pick<Job, "codigo" | "nome" | "produto">;
   /** Só a campanha: o código do projeto saiu do documento em 29/09/2026 —
    *  o código da PP é o do JOB (decisão 126). */
@@ -195,12 +207,27 @@ interface Dados {
   }>;
 }
 
+/** A conta e o PIX do colaborador titular da verba, como o PDF os imprime
+ *  (decisão 171). */
+export interface PagamentoDoTitularNoPdf {
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: TipoContaBancariaFornecedor | null;
+  pix_tipo: PixTipoChave | null;
+  pix_chave: string | null;
+  cpf: string | null;
+}
+
 export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   const {
     pp,
     empresa,
     fornecedor,
     responsavelVerbaNome,
+    pagamentoDoTitular,
     job,
     projeto,
     cliente,
@@ -212,16 +239,20 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   const parcelada = parcelas.length > 1;
   const primeira = parcelas[0];
 
-  // A verba paga a uma pessoa (o responsável na produção; o titular na
-  // alimentação e no transporte). A verba de um terceiro (decisão 164) tem
-  // fornecedor e sai no desenho do fornecedor, com a linha "Natureza".
+  // A verba paga a uma pessoa: o titular (colaborador ou freela), ou o
+  // responsável da verba de produção anterior à decisão 171. A verba de um
+  // terceiro (decisão 164) tem fornecedor e sai no desenho do fornecedor,
+  // com a linha "Natureza".
   const tipoVerba: TipoVerba | null = pp.verba_producao === true ? (pp.tipo_verba ?? "producao") : null;
   const isVerba = tipoVerba !== null && !fornecedor;
-  const rotuloQuemRecebe = tipoVerba ? rotuloDeQuemRecebeAVerba(tipoVerba) : "Responsável";
+  // Decisão 171: as três verbas têm titular. Sem titular, é a verba de
+  // produção de antes — e o documento refeito sai como foi gerado.
+  const verbaAntiga = tipoVerba !== null && !pp.verba_titular_tipo;
+  const rotuloQuemRecebe = verbaAntiga ? "Responsável" : "Titular da verba";
   const naturezaDaVerba = tipoVerba
-    ? verbaTemTitular(tipoVerba)
-      ? `${rotuloDaVerba(tipoVerba)} — adiantamento sob responsabilidade de quem está nomeado acima, com prestação de contas ao final.`
-      : "Verba de Produção — o dinheiro fica sob responsabilidade do funcionário nomeado acima e será prestado contas ao final."
+    ? verbaAntiga
+      ? "Verba de Produção — o dinheiro fica sob responsabilidade do funcionário nomeado acima e será prestado contas ao final."
+      : `${rotuloDaVerba(tipoVerba)} — adiantamento sob responsabilidade de quem está nomeado acima, com prestação de contas ao final.`
     : "";
 
   // Nome do contraparte pra usar nos blocos de identificação. Em verba,
@@ -468,17 +499,69 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     margin: [0, 0, 0, 0],
   };
 
-  // ===== 6. DADOS BANCÁRIOS DO FORNECEDOR =====
-  // Verba de Produção não paga fornecedor externo — o dinheiro vai pro
-  // caixa do responsável, então esta seção não existe pra ela.
+  // ===== 6. DADOS BANCÁRIOS DO FORNECEDOR (ou DO TITULAR DA VERBA) =====
+  // A verba paga a uma pessoa não tem fornecedor: o bloco sai com a conta
+  // e o PIX do colaborador (decisão 171), ou não sai.
   const bancoLabel = fornecedor
     ? [fornecedor.banco_codigo, fornecedor.banco_nome].filter(Boolean).join(" - ")
     : "";
   const contaCompleta = fornecedor
     ? `${fornecedor.conta ?? ""}${fornecedor.conta_dv ? "-" + fornecedor.conta_dv : ""}`
     : "";
+  // Decisão 171: a verba paga a um colaborador traz a conta e o PIX da
+  // ficha do RH, no mesmo bloco da PP de fornecedor (sem e-mail). Sem
+  // conta nem PIX no RH — e no freela, que não tem —, o bloco não sai.
+  const titularTemPagamento =
+    !!pagamentoDoTitular && (!!pagamentoDoTitular.conta || !!pagamentoDoTitular.pix_chave);
   const bancariosBloco: Content[] = isVerba
-    ? []
+    ? titularTemPagamento && pagamentoDoTitular
+      ? [
+          secaoHeader("DADOS BANCÁRIOS DO TITULAR DA VERBA PARA PAGAMENTO"),
+          {
+            table: {
+              widths: ["18%", "32%", "18%", "32%"],
+              body: [
+                [
+                  { text: "Banco:", bold: true, fontSize: 8 },
+                  {
+                    text: [pagamentoDoTitular.banco_codigo, pagamentoDoTitular.banco_nome]
+                      .filter(Boolean)
+                      .join(" - "),
+                    fontSize: 8,
+                  },
+                  { text: "Agência:", bold: true, fontSize: 8 },
+                  { text: pagamentoDoTitular.agencia ?? "", fontSize: 8 },
+                ],
+                [
+                  { text: "Conta:", bold: true, fontSize: 8 },
+                  {
+                    text: pagamentoDoTitular.conta
+                      ? `${pagamentoDoTitular.conta}${pagamentoDoTitular.conta_dv ? "-" + pagamentoDoTitular.conta_dv : ""}`
+                      : "",
+                    fontSize: 8,
+                  },
+                  { text: "Tipo de Conta:", bold: true, fontSize: 8 },
+                  { text: pagamentoDoTitular.conta ? (pagamentoDoTitular.tipo_conta ?? "") : "", fontSize: 8 },
+                ],
+                [
+                  { text: "Nome:", bold: true, fontSize: 8 },
+                  { text: nomeContraparte, fontSize: 8 },
+                  { text: "CPF:", bold: true, fontSize: 8 },
+                  { text: fmtCPFCNPJ(pagamentoDoTitular.cpf), fontSize: 8 },
+                ],
+                [
+                  { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
+                  { text: pagamentoDoTitular.pix_tipo ?? "", fontSize: 8 },
+                  { text: "Chave PIX:", bold: true, fontSize: 8 },
+                  { text: pagamentoDoTitular.pix_chave ?? "", fontSize: 8 },
+                ],
+              ],
+            },
+            layout: BORDA,
+            margin: [0, 0, 0, 0],
+          } as Content,
+        ]
+      : []
     : [
         secaoHeader("DADOS BANCÁRIOS DO FORNECEDOR PARA PAGAMENTO"),
         {
@@ -587,7 +670,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     margin: [0, 0, 0, 0],
   };
 
-  // ===== 8. DADOS DO FORNECEDOR (ou DO RESPONSÁVEL, quando verba) =====
+  // ===== 8. DADOS DO FORNECEDOR (ou DO TITULAR DA VERBA) =====
   const contraparteTable: Content = isVerba
     ? {
         table: {
@@ -703,9 +786,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
               },
               {
                 text: isVerba
-                  ? tipoVerba && verbaTemTitular(tipoVerba)
-                    ? "Assinatura do Titular da Verba"
-                    : "Assinatura do Responsável"
+                  ? verbaAntiga
+                    ? "Assinatura do Responsável"
+                    : "Assinatura do Titular da Verba"
                   : "Assinatura do Fornecedor",
                 alignment: "center",
                 fontSize: 8,
@@ -769,9 +852,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     valorBlock,
     secaoHeader(
       isVerba
-        ? tipoVerba && verbaTemTitular(tipoVerba)
-          ? "DADOS DO TITULAR DA VERBA"
-          : "DADOS DO RESPONSÁVEL"
+        ? verbaAntiga
+          ? "DADOS DO RESPONSÁVEL"
+          : "DADOS DO TITULAR DA VERBA"
         : "DADOS DO FORNECEDOR",
     ),
     contraparteTable,
