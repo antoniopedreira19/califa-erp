@@ -123,23 +123,11 @@ export async function importarFolhaContabilidade(input: {
 
   // Extrai texto e parseia.
   let parsed;
-  let textoDebug = "";
   try {
     const pdfData = await pdfParse(buffer);
-    textoDebug = pdfData.text;
     parsed = parseFolhaContabilidadeTexto(pdfData.text);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // Diagnóstico: loga o texto bruto extraído pra identificar formato que o
-    // pdf-parse v1 devolve. Remover depois que o parser estiver estável.
-    console.error("[folha.importar.pdf_parse_debug]", JSON.stringify({
-      msg,
-      arquivo: input.arquivoNome,
-      texto_tamanho: textoDebug.length,
-      texto_primeiros_300: textoDebug.slice(0, 300),
-      texto_meio_300: textoDebug.slice(Math.floor(textoDebug.length / 2), Math.floor(textoDebug.length / 2) + 300),
-      texto_ultimos_300: textoDebug.slice(-300),
-    }));
     return { ok: false, message: `Falha ao ler o PDF: ${msg}` };
   }
 
