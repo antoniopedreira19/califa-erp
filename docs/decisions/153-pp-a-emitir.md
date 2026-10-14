@@ -4,7 +4,10 @@
 **Status:** entregas 1 e 2 aceitas e no ar (07/10/2026); entrega 3 (a
 conferência lado a lado na produção) no ar em 08/10/2026. ⚠️ Exceção da [157](157-prazo-de-envio-da-pp.md) (07/10/2026): a
 PP gerada que perdeu o prazo de envio tem o vencimento atualizado, sem
-cancelar e refazer.
+cancelar e refazer. ⚠️ **Revista pela [173](173-pp-gerada-volta-a-se-editar.md)
+(13/10/2026): a PP gerada voltou a se editar, no lugar** — mesmo código, PDF
+refeito, revisão antes de gravar, e a marca "Pronta para envio" cai. O resto
+desta decisão segue valendo.
 **Quem decidiu:** Tiago, de 06 a 07/10/2026, a partir do protótipo
 interativo "Etapa antes da PP" (https://claude.ai/artifact/BkLusveQDiropTy9UBccYe,
 v1 a v17, rodadas nos comentários do artifact). "Pronto o protótipo /

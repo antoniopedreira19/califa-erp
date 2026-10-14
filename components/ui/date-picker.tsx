@@ -51,7 +51,16 @@ export interface DatePickerProps {
    *  sempre no mês dela. Uso: a data de recebimento de cada mês do Fee e do
    *  Always On abre no mês seguinte ao de referência (decisão 149). */
   mesInicial?: string;
+  /** Dias que ganham um ponto vermelho embaixo do número — a quarta de
+   *  exceções no prazo da PP urgente (decisão 172). */
+  diasMarcados?: (date: Date) => boolean;
+  /** O que fica embaixo do calendário: a legenda do ponto. */
+  legenda?: React.ReactNode;
 }
+
+/** O ponto embaixo do número; branco no dia escolhido (fundo vermelho). */
+const DIA_MARCADO =
+  "relative after:pointer-events-none after:absolute after:bottom-[3px] after:left-1/2 after:h-[4px] after:w-[4px] after:-translate-x-1/2 after:rounded-full after:bg-california-red aria-selected:after:bg-white";
 
 function parseIsoDate(iso: string | undefined): Date | null {
   if (!iso) return null;
@@ -77,6 +86,8 @@ export function DatePicker({
   fromYear,
   toYear,
   mesInicial,
+  diasMarcados,
+  legenda,
 }: DatePickerProps) {
   const [date, setDate] = React.useState<Date | null>(() => parseIsoDate(defaultValue));
   const [open, setOpen] = React.useState(false);
@@ -148,6 +159,9 @@ export function DatePicker({
             selected={date ?? undefined}
             onSelect={handleSelect}
             disabled={dateDisabled}
+            modifiers={diasMarcados ? { marcado: diasMarcados } : undefined}
+            modifiersClassNames={diasMarcados ? { marcado: DIA_MARCADO } : undefined}
+            footer={legenda}
             initialFocus
             fixedWeeks
             defaultMonth={date ?? parseIsoDate(mesInicial) ?? undefined}

@@ -10,6 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  SeletorCompetenciaForm,
+  proximaCompetenciaIso,
+  competenciaLabel,
+} from "@/components/ui/seletor-competencia-form";
 import type {
   DependenteComPlanos,
   VinculoDoColaborador,
@@ -102,6 +107,9 @@ function LinhaDependente({
   const [pending, start] = useTransition();
   const [mostrarIncluir, setMostrarIncluir] = useState(false);
   const [vinculoSelecionado, setVinculoSelecionado] = useState<string>("");
+  const [competenciaInicio, setCompetenciaInicio] = useState<string>(
+    proximaCompetenciaIso(),
+  );
   const ativo = dependente.ativo && dependente.data_fim === null;
 
   const vinculosDisponiveis = vinculosAtivos.filter(
@@ -112,11 +120,10 @@ function LinhaDependente({
   function incluir() {
     if (!vinculoSelecionado) return;
     start(async () => {
-      const hoje = new Date().toISOString().slice(0, 10);
       const res = await incluirDepEmPlano({
         vinculoId: vinculoSelecionado,
         dependenteId: dependente.id,
-        dataInicio: hoje,
+        dataInicio: competenciaInicio,
       });
       if (!res.ok) {
         alert(res.message);
@@ -124,6 +131,7 @@ function LinhaDependente({
       }
       setMostrarIncluir(false);
       setVinculoSelecionado("");
+      setCompetenciaInicio(proximaCompetenciaIso());
       router.refresh();
     });
   }
@@ -241,38 +249,62 @@ function LinhaDependente({
               </button>
             )}
             {mostrarIncluir && (
-              <div className="flex items-center gap-1">
-                <Select
-                  value={vinculoSelecionado}
-                  onValueChange={setVinculoSelecionado}
-                >
-                  <SelectTrigger className="h-7 w-[200px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vinculosDisponiveis.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.beneficio_nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <button
-                  type="button"
-                  onClick={incluir}
-                  disabled={pending}
-                  className="h-7 rounded-md bg-california-red px-2 text-xs font-medium text-white disabled:opacity-50"
-                >
-                  OK
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMostrarIncluir(false)}
-                  disabled={pending}
-                  className="h-7 rounded-md border border-border px-2 text-xs"
-                >
-                  Cancelar
-                </button>
+              <div className="basis-full">
+                <div className="mt-2 rounded-md border border-california-red/30 bg-california-red/5 p-3">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-foreground">
+                        Plano
+                      </label>
+                      <Select
+                        value={vinculoSelecionado}
+                        onValueChange={setVinculoSelecionado}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {vinculosDisponiveis.map((v) => (
+                            <SelectItem key={v.id} value={v.id}>
+                              {v.beneficio_nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-foreground">
+                        Entra em vigência a partir de
+                      </label>
+                      <SeletorCompetenciaForm
+                        value={competenciaInicio}
+                        onChange={setCompetenciaInicio}
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    A fatura de {competenciaLabel(competenciaInicio)} já virá
+                    com este dependente neste plano.
+                  </p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMostrarIncluir(false)}
+                      disabled={pending}
+                      className="rounded-md border border-border px-3 py-1.5 text-xs"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={incluir}
+                      disabled={pending || !vinculoSelecionado}
+                      className="rounded-md bg-california-red px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {pending ? "..." : "Incluir"}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

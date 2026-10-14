@@ -190,7 +190,9 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 168 | [Produtor Responsável só lista quem tem o papel Produtor, e GP e Produtor aceitam digitação](168-produtor-responsavel-so-papel-produtor.md) | 2026-10-13 |
 | 169 | [Cancelamento de job aberto: a produção pede, o financeiro decide na Abertura de Job](169-cancelamento-de-job-aberto.md) | 2026-10-13 |
 | 170 | [GP só quem pode ser GP: lista do projeto, lista do orçamento e trava no envio para abertura](170-gp-so-quem-pode-ser-gp.md) | 2026-10-13 |
-| 171 | *Reservada* — verba de produção com titular e a conta do RH na PP do colaborador (em implementação; a migration `20261014100001` já cita a 171) | 2026-10-14 |
+| 171 | [A verba de produção igual às outras (titular, lista, terceiro e prestação), e a conta do RH na PP do colaborador](171-verba-de-producao-com-titular-e-conta-do-rh.md) | 2026-10-14 |
+| 172 | [Quarta de exceções na PP urgente, e as datas das parcelas que se adiam (revê a 077 e a 157)](172-quarta-de-excecoes-na-pp-urgente.md) | 2026-10-14 |
+| 173 | [A PP gerada volta a se editar, no lugar (revê a 153)](173-pp-gerada-volta-a-se-editar.md) | 2026-10-13 |
 | 174 | [O job não se edita depois da abertura, o botão "Equipe" e o Produtor Responsável que envia PP com a chave do GP](174-equipe-do-job-e-envio-de-pp-pelo-produtor.md) | 2026-10-14 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
@@ -204,4 +206,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 175**. (172 e 173 estão em outras frentes em 14/10/2026.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 175**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

@@ -1,7 +1,10 @@
 # 164 — Verba de Alimentação e Verba de Transporte, com titular do RH, freela ou terceiro
 
 **Data:** 2026-10-09
-**Status:** aceita e implementada (09/10/2026).
+**Status:** aceita e implementada (09/10/2026). ⚠️ Revista pela
+[171](171-verba-de-producao-com-titular-e-conta-do-rh.md) em 14/10/2026: a
+verba de produção também tem titular (regras 1, 2, 3 e 5 valem para as
+três), e a PP do colaborador traz a conta e o PIX do RH (regra 4).
 **Quem decidiu:** Tiago, em 09/10/2026, sobre o protótipo "Verbas de Alimentação e de Transporte" (3 rodadas).
 **Completa:** a [081](081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md) (a prestação de contas e o estorno valem igual para os três tipos) e a [136](136-qualquer-gp-age-e-o-autor-fica-registrado.md) (quem presta contas).
 **Migrations:** `20261009400001_verbas_alimentacao_e_transporte.sql` e `20261009400002_freelas_nome_social_na_busca.sql`. A carga dos freelas foi aplicada pelo MCP e não está no repositório (tem CPF, e o repositório é público).
@@ -24,7 +27,8 @@ acesso ao sistema; 218 freelas na planilha, 69 trabalhando, 14 já no RH
 
 1. **O switch da PP passa a se chamar "Verba".** Ligado, ao lado, escolhe
    Produção, Alimentação ou Transporte; ligar cai em Produção, como antes.
-   A verba de produção não muda: responsável é um usuário (GP ou produtor).
+   A verba de produção não mudava: responsável era um usuário (GP ou
+   produtor). ⚠️ Desde a 171 (14/10/2026), ela também tem titular.
 2. **Titular da verba** (alimentação e transporte): uma lista só, com os
    colaboradores ativos do RH e os freelas trabalhando, agrupados ("Colaboradores
    (RH)" e "Freelas"), com função e contratação ou cidade embaixo do nome.
@@ -41,6 +45,8 @@ acesso ao sistema; 218 freelas na planilha, 69 trabalhando, 14 já no RH
    de pagamento do colaborador ou do freela: o financeiro decide na
    aprovação ("Como vai ser pago"), na maioria das vezes no cartão da
    empresa, o resto caso a caso — como já era a verba de produção.
+   ⚠️ Revista pela 171 (14/10/2026): a PP do **colaborador** traz no PDF a
+   conta e o PIX da ficha do RH; o freela segue sem.
 5. **Prestação de contas igual à verba de produção** (081): sem anexo na
    geração, notas na prestação, saldo vira estorno. Na alimentação e no
    transporte, **presta contas o administrador, o GP, o produtor ou o freela

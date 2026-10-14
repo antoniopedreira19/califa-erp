@@ -1,10 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { Lock } from "lucide-react";
+import { CalendarDays, Lock, RotateCcw } from "lucide-react";
+import { format, parse } from "date-fns";
 import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { dividirEmParcelas, parcelasFecham } from "@/lib/calculos/pps-item";
+import {
+  acomodarDatasDasParcelas,
+  ehJanelaDePagamento,
+  primeiraDataDaProximaParcela,
+} from "@/lib/calculos/janelas-pagamento";
 
 /**
  * Parcelamento da PP com o percentual de cada parcela (decisão 138).
@@ -23,6 +32,11 @@ import { dividirEmParcelas, parcelasFecham } from "@/lib/calculos/pps-item";
  *
  * O servidor continua recebendo só o R$ de cada parcela. O % é do
  * formulário: ao reabrir a PP ele se refaz do R$ gravado.
+ *
+ * Datas (decisão 172, 14/10/2026): a 1ª é o prazo de pagamento; cada
+ * seguinte nasce na primeira data possível — pula a janela logo depois da
+ * anterior — e pode ser ADIADA à mão no calendário (só janelas, só para
+ * depois). A adiada mostra o ↺, que volta para a data padrão.
  */
 
 export interface ParcelaLocal {
@@ -31,6 +45,9 @@ export interface ParcelaLocal {
   valor: string;
   /** % do valor da PP, também em texto cru. */
   percentual: string;
+  /** A data foi adiada à mão (decisão 172). Obrigatório: opcional, o `.map`
+   *  que monta as parcelas o descartaria em silêncio. */
+  ajustada: boolean;
 }
 
 const arredondar = (n: number) => Math.round(n * 100) / 100;
@@ -84,26 +101,35 @@ export function montarParcelas(datas: string[], valorPP: number): ParcelaLocal[]
     data_vencimento: data,
     valor: texto(valores[i]),
     percentual: texto(percentuais[i]),
+    ajustada: false,
   }));
 }
 
-/** A PP gravada reaberta para edição: o % de cada parcela sai do R$. */
+/**
+ * A PP gravada reaberta para edição: o % de cada parcela sai do R$. As
+ * datas ficam como foram gravadas; a que está depois da data padrão volta
+ * marcada como adiada (decisão 172).
+ */
 export function parcelasDaPPGravada(
   gravadas: Array<{ data_vencimento: string; valor: number }>,
   valorPP: number,
 ): ParcelaLocal[] {
+  const datas = gravadas.map((p) => p.data_vencimento.slice(0, 10));
+  const adiada = (i: number) => i > 0 && datas[i] > primeiraDataDaProximaParcela(datas[i - 1]);
   if (valorPP <= 0) {
     const percentuais = dividirEmParcelas(100, gravadas.length);
     return gravadas.map((p, i) => ({
-      data_vencimento: p.data_vencimento.slice(0, 10),
+      data_vencimento: datas[i],
       valor: texto(Number(p.valor)),
       percentual: texto(percentuais[i]),
+      ajustada: adiada(i),
     }));
   }
-  const parcelas = gravadas.map((p) => ({
-    data_vencimento: p.data_vencimento.slice(0, 10),
+  const parcelas = gravadas.map((p, i) => ({
+    data_vencimento: datas[i],
     valor: texto(Number(p.valor)),
     percentual: texto((Number(p.valor) / valorPP) * 100),
+    ajustada: adiada(i),
   }));
   return fecharNaUltima(parcelas, valorPP);
 }
@@ -146,11 +172,47 @@ export function redividirParcelas(
   );
 }
 
-/** O prazo mudou: as datas andam e a divisão fica. */
-export function trocarDatas(parcelas: ParcelaLocal[], datas: string[]): ParcelaLocal[] {
-  return parcelas.map((p, i) => ({ ...p, data_vencimento: datas[i] }));
+/**
+ * As datas refeitas a partir do prazo (decisão 172): a padrão anda junto, e
+ * a adiada à mão fica enquanto continuar possível. A divisão fica (138).
+ */
+export function acomodarParcelas(prazoIso: string, parcelas: ParcelaLocal[]): ParcelaLocal[] {
+  const datas = acomodarDatasDasParcelas(
+    prazoIso,
+    parcelas.map((p) => ({ data: p.data_vencimento, ajustada: p.ajustada })),
+  );
+  return parcelas.map((p, i) => ({
+    ...p,
+    data_vencimento: datas[i].data,
+    ajustada: datas[i].ajustada,
+  }));
 }
 
+/** Adia a parcela `indice` (ou a devolve à data padrão, com `null`). As
+ *  seguintes que ficarem cedo demais andam junto. */
+export function mudarDataDaParcela(
+  prazoIso: string,
+  parcelas: ParcelaLocal[],
+  indice: number,
+  iso: string | null,
+): ParcelaLocal[] {
+  return acomodarParcelas(
+    prazoIso,
+    parcelas.map((p, i) =>
+      i === indice ? { ...p, data_vencimento: iso ?? p.data_vencimento, ajustada: iso !== null } : p,
+    ),
+  );
+}
+
+/**
+ * O R$ só se refaz quando o NÚMERO do % muda. Texto novo com o mesmo
+ * número — a saída do campo, que escreve "33,5" como "33,50", ou o "33,"
+ * no meio da digitação — só troca o texto. Antes (achado em 13/10/2026)
+ * sair do campo refazia o R$ pelo % arredondado: na divisão igual de
+ * R$ 6.000 a parcela de R$ 2.000,00 virava 1.999,80, e um R$ 2.500,00
+ * digitado (41,67%) virava 2.500,20, com a última absorvendo a diferença
+ * (138 §8).
+ */
 function mudarPercentual(
   parcelas: ParcelaLocal[],
   indice: number,
@@ -158,11 +220,11 @@ function mudarPercentual(
   valorPP: number,
 ): ParcelaLocal[] {
   return fecharNaUltima(
-    parcelas.map((p, i) =>
-      i === indice
-        ? { ...p, percentual: bruto, valor: texto((valorPP * numero(bruto)) / 100) }
-        : p,
-    ),
+    parcelas.map((p, i) => {
+      if (i !== indice) return p;
+      if (numero(bruto) === numero(p.percentual)) return { ...p, percentual: bruto };
+      return { ...p, percentual: bruto, valor: texto((valorPP * numero(bruto)) / 100) };
+    }),
     valorPP,
   );
 }
@@ -263,6 +325,97 @@ function CampoPercentual({
   );
 }
 
+/**
+ * A data da 2ª parcela em diante (decisão 172): o calendário só acende
+ * janelas a partir da primeira data possível, então só adia. Escolher a
+ * própria data padrão desfaz o ajuste.
+ */
+function DataDaParcela({
+  valor,
+  minima,
+  ajustada,
+  numero: n,
+  disabled,
+  onMudar,
+}: {
+  valor: string;
+  minima: string;
+  ajustada: boolean;
+  numero: number;
+  disabled?: boolean;
+  onMudar: (iso: string | null) => void;
+}) {
+  const [aberto, setAberto] = React.useState(false);
+  const data = valor ? parse(valor, "yyyy-MM-dd", new Date()) : undefined;
+  return (
+    <div className="relative">
+      <Popover open={aberto} onOpenChange={setAberto}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={`Data da parcela ${n}`}
+            className={cn(
+              "flex h-10 w-full items-center justify-between rounded-lg border bg-white px-3 font-mono text-[13px] transition-colors hover:border-california-red/40 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15 disabled:opacity-50",
+              ajustada ? "border-foreground/40" : "border-border",
+            )}
+          >
+            {isoParaBr(valor)}
+            <CalendarDays
+              className={cn("h-3.5 w-3.5 text-muted-foreground/70", ajustada && !disabled && "mr-6")}
+            />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-auto p-0"
+          align="start"
+          side="bottom"
+          sideOffset={6}
+          collisionPadding={16}
+        >
+          <Calendar
+            mode="single"
+            selected={data}
+            defaultMonth={data}
+            fixedWeeks
+            initialFocus
+            disabled={(d: Date) => {
+              const iso = format(d, "yyyy-MM-dd");
+              return iso < minima || !ehJanelaDePagamento(iso);
+            }}
+            onSelect={(d?: Date) => {
+              if (!d) return;
+              const iso = format(d, "yyyy-MM-dd");
+              onMudar(iso === minima ? null : iso);
+              setAberto(false);
+            }}
+            footer={
+              <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+                Janelas a partir de {isoParaBr(minima)}
+              </p>
+            }
+          />
+        </PopoverContent>
+      </Popover>
+      {ajustada && !disabled && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Voltar a parcela ${n} para ${isoParaBr(minima)}`}
+              onClick={() => onMudar(null)}
+              className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-california-red"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Voltar para {isoParaBr(minima)}</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
 /** Caixa travada da última parcela, no desenho da data da parcela. */
 function CaixaTravada({
   children,
@@ -292,11 +445,15 @@ export function ParcelasDaPPField({
   setParcelas,
   valorPP,
   disabled,
+  onMudarData,
 }: {
   parcelas: ParcelaLocal[];
   setParcelas: React.Dispatch<React.SetStateAction<ParcelaLocal[]>>;
   valorPP: number;
   disabled?: boolean;
+  /** Adiar a data da parcela `indice` (a 2ª em diante); `null` volta para a
+   *  data padrão (decisão 172). */
+  onMudarData: (indice: number, iso: string | null) => void;
 }) {
   const n = parcelas.length;
   const totalPercentual = soma(parcelas, "percentual");
@@ -332,15 +489,26 @@ export function ParcelasDaPPField({
             <span className="font-mono text-[11px] text-muted-foreground">
               {i + 1}/{n}
             </span>
-            {/* Data travada (decisão 077, pergunta 5a): ela é a janela do
-                prazo no mês da parcela, e muda junto com ele. */}
-            <div
-              title="A data acompanha a janela do prazo de pagamento."
-              className="flex h-10 items-center justify-between rounded-lg border border-border bg-muted/40 px-3 font-mono text-[13px]"
-            >
-              {isoParaBr(p.data_vencimento)}
-              <Lock className="h-3.5 w-3.5 text-muted-foreground/70" />
-            </div>
+            {/* A 1ª parcela é o prazo de pagamento, que se escolhe acima. Da
+                2ª em diante a data se adia à mão (decisão 172). */}
+            {i === 0 ? (
+              <div
+                title="A 1ª parcela é o prazo de pagamento."
+                className="flex h-10 items-center justify-between rounded-lg border border-border bg-muted/40 px-3 font-mono text-[13px]"
+              >
+                {isoParaBr(p.data_vencimento)}
+                <Lock className="h-3.5 w-3.5 text-muted-foreground/70" />
+              </div>
+            ) : (
+              <DataDaParcela
+                valor={p.data_vencimento}
+                minima={primeiraDataDaProximaParcela(parcelas[i - 1].data_vencimento)}
+                ajustada={p.ajustada}
+                numero={i + 1}
+                disabled={disabled}
+                onMudar={(iso) => onMudarData(i, iso)}
+              />
+            )}
             {ultima ? (
               <>
                 <CaixaTravada
@@ -397,7 +565,7 @@ export function ParcelasDaPPField({
       })}
       <div className="flex items-start justify-between gap-3 border-t border-border pt-2 text-[11px]">
         <div className="flex flex-col items-start gap-0.5 text-muted-foreground">
-          <span>Mesma janela, mês a mês · a última parcela fecha os 100%</span>
+          <span>Cada parcela pula ao menos uma janela · a última fecha os 100%</span>
           {!igual && (
             <button
               type="button"
