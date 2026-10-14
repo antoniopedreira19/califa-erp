@@ -52,7 +52,6 @@ import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import {
   PP_URGENTE_JUSTIFICATIVA_MIN,
   rotuloDaVerbaMinusculo,
-  verbaTemTitular,
   type DadosDaPPAEmitir,
   type Fornecedor,
   type PedidoCompraNaLista,
@@ -153,8 +152,6 @@ interface Props {
   }>;
   /** As empresas gerenciais: só o nome da do job aparece (decisão 156). */
   empresas: Array<{ id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }>;
-  /** Membros ativos do tenant — o Responsável da verba de produção. */
-  responsaveis: Array<{ id: string; nome: string }>;
   /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
    *  action já barrava, mas o GP preenchia o cadastro inteiro para só
    *  então ler "Você não tem permissão para essa ação" (18/09/2026). */
@@ -312,7 +309,6 @@ export function GerarPPDrawer({
   jobId,
   fornecedores,
   empresas,
-  responsaveis,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   defaultEmpresaId,
@@ -343,13 +339,12 @@ export function GerarPPDrawer({
   const [erro, setErro] = React.useState<string | null>(null);
 
   // Switch "Verba" (decisão 164): desligado (padrão) → fornecedor
-  // obrigatório; ligado → verba de produção (responsável interno), de
-  // alimentação ou de transporte (titular: colaborador, freela ou um
-  // terceiro com cadastro de fornecedor). `verbaProducao` segue valendo "é
-  // verba", de qualquer tipo, como no resto do formulário e no banco.
+  // obrigatório; ligado → verba de produção, de alimentação ou de
+  // transporte, as três com titular (decisão 171): colaborador, freela ou
+  // um terceiro com cadastro de fornecedor. `verbaProducao` segue valendo
+  // "é verba", de qualquer tipo, como no resto do formulário e no banco.
   const [tipoVerba, setTipoVerba] = React.useState<TipoVerba | null>(null);
   const verbaProducao = tipoVerba !== null;
-  const verbaComTitular = verbaTemTitular(tipoVerba);
   /** O colaborador ou o freela escolhido, e de onde ele veio. */
   const [titularId, setTitularId] = React.useState("");
   const [titularOrigem, setTitularOrigem] = React.useState<TitularDaVerbaTipo | null>(null);
@@ -357,8 +352,8 @@ export function GerarPPDrawer({
    *  pagamento do fornecedor (não é o padrão). */
   const [titularTerceiro, setTitularTerceiro] = React.useState(false);
   /** A PP paga um fornecedor: a PP comum e a verba de um terceiro. */
-  const usaFornecedor = !verbaProducao || (verbaComTitular && titularTerceiro);
-  /** A lista de colaboradores e freelas, pedida na primeira verba nova. */
+  const usaFornecedor = !verbaProducao || titularTerceiro;
+  /** A lista de colaboradores e freelas, pedida na primeira verba. */
   const [pessoas, setPessoas] = React.useState<PessoaParaVerba[] | null>(null);
   const pedindoPessoas = React.useRef(false);
   const [fornecedorId, setFornecedorId] = React.useState<string>("");
@@ -489,7 +484,6 @@ export function GerarPPDrawer({
   /** A pergunta agora rola com o formulário: quem tenta gerar sem
    *  responder precisa ser levado até ela (17/09/2026). */
   const refUltimaPP = React.useRef<HTMLDivElement>(null);
-  const [responsavelId, setResponsavelId] = React.useState<string>("");
   // A empresa GERENCIAL é a do job (decisão 156): não se escolhe aqui.
   const [empresaId, setEmpresaId] = React.useState<string>(defaultEmpresaId);
   // O CNPJ da PP — a "Empresa emissora" do formulário (decisão 156).
@@ -618,7 +612,9 @@ export function GerarPPDrawer({
           d.pagamento_fora_do_cadastro ? { ...d.pagamento_fora_do_cadastro, banco_nome: null } : null,
         ),
       );
-      setResponsavelId(d.responsavel_verba_id ?? "");
+      // A verba de produção de antes da decisão 171 (PP a emitir ou PP
+      // gerada) guarda um responsável (usuário): abre sem titular, que
+      // agora é obrigatório.
       setEmpresaId(d.empresa_id);
       setCnpjId(d.estabelecimento_id ?? cnpjPadraoDaPP ?? "");
       setPrazoPagamento(d.prazo_pagamento.slice(0, 10));
@@ -665,7 +661,6 @@ export function GerarPPDrawer({
     setTitularTerceiro(false);
     setFornecedorId("");
     setPagamento(PAGAMENTO_PELO_CADASTRO);
-    setResponsavelId("");
     setEmpresaId(defaultEmpresaId);
     setCnpjId(cnpjPadraoDaPP ?? "");
     setPrazoPagamento(defaultPrazoPagamento(feriadosRef.current));
@@ -697,16 +692,16 @@ export function GerarPPDrawer({
   }, [open, itemRealizadoId, chaveSessao]);
 
   // A lista de colaboradores e freelas (decisão 164) vem quando a verba
-  // nova aparece no formulário, uma vez só: ela não viaja com a página.
+  // aparece no formulário, uma vez só: ela não viaja com a página.
   React.useEffect(() => {
-    if (!open || !verbaComTitular || pessoas !== null || pedindoPessoas.current) return;
+    if (!open || !verbaProducao || pessoas !== null || pedindoPessoas.current) return;
     pedindoPessoas.current = true;
     listarPessoasParaVerba().then((res) => {
       pedindoPessoas.current = false;
       if (res.ok) setPessoas(res.pessoas);
       else setErro(res.message);
     });
-  }, [open, verbaComTitular, pessoas]);
+  }, [open, verbaProducao, pessoas]);
   const itensDoTitular = React.useMemo(
     () =>
       itensDasPessoas(
@@ -855,11 +850,7 @@ export function GerarPPDrawer({
   function validar(): boolean {
     setErro(null);
     if (!ppId || !itemRealizadoId) return false;
-    if (tipoVerba === "producao" && !responsavelId) {
-      setErro("Escolha um responsável.");
-      return false;
-    }
-    if (verbaComTitular && !titularTerceiro && !titularId) {
+    if (verbaProducao && !titularTerceiro && !titularId) {
       setErro("Escolha o titular da verba.");
       return false;
     }
@@ -989,35 +980,27 @@ export function GerarPPDrawer({
               responsavel_verba_id: null,
               pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
             }
-          : !verbaComTitular
+          : titularTerceiro
             ? {
+                // Decisão 164: o terceiro é um fornecedor, com o pagamento dele.
                 ...dadosBase,
                 verba_producao: true as const,
                 tipo_verba: tipoVerba,
-                responsavel_verba_id: responsavelId,
-                fornecedor_id: null,
+                verba_titular_tipo: "fornecedor" as const,
+                fornecedor_id: fornecedorId,
+                verba_titular_id: null,
+                responsavel_verba_id: null,
+                pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
               }
-            : titularTerceiro
-              ? {
-                  // Decisão 164: o terceiro é um fornecedor, com o pagamento dele.
-                  ...dadosBase,
-                  verba_producao: true as const,
-                  tipo_verba: tipoVerba,
-                  verba_titular_tipo: "fornecedor" as const,
-                  fornecedor_id: fornecedorId,
-                  verba_titular_id: null,
-                  responsavel_verba_id: null,
-                  pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
-                }
-              : {
-                  ...dadosBase,
-                  verba_producao: true as const,
-                  tipo_verba: tipoVerba,
-                  verba_titular_tipo: titularOrigem,
-                  verba_titular_id: titularId,
-                  fornecedor_id: null,
-                  responsavel_verba_id: null,
-                };
+            : {
+                ...dadosBase,
+                verba_producao: true as const,
+                tipo_verba: tipoVerba,
+                verba_titular_tipo: titularOrigem,
+                verba_titular_id: titularId,
+                fornecedor_id: null,
+                responsavel_verba_id: null,
+              };
     return dados;
   }
 
@@ -1139,22 +1122,15 @@ export function GerarPPDrawer({
 
   /** Quem recebe, pelo nome — a primeira linha da revisão. */
   const nomeDeQuemRecebe =
-    tipoVerba === "producao"
-      ? (responsaveis.find((r) => r.id === responsavelId)?.nome ?? "—")
-      : verbaComTitular && !titularTerceiro
-        ? (itensDoTitular.find((i) => i.value === titularId)?.label ?? "—")
-        : (() => {
-            const f = fornecedoresVisiveis.find((x) => x.id === fornecedorId);
-            return f ? (f.razao_social ?? f.nome) : "—";
-          })();
+    verbaProducao && !titularTerceiro
+      ? (itensDoTitular.find((i) => i.value === titularId)?.label ?? "—")
+      : (() => {
+          const f = fornecedoresVisiveis.find((x) => x.id === fornecedorId);
+          return f ? (f.razao_social ?? f.nome) : "—";
+        })();
 
-  /** Falta escolher quem recebe: o fornecedor, o responsável ou o titular. */
-  const faltaQuemRecebe =
-    tipoVerba === "producao"
-      ? !responsavelId
-      : verbaComTitular && !titularTerceiro
-        ? !titularId
-        : !fornecedorId;
+  /** Falta escolher quem recebe: o fornecedor ou o titular. */
+  const faltaQuemRecebe = verbaProducao && !titularTerceiro ? !titularId : !fornecedorId;
 
   if (!open || !itemRealizadoId) return null;
 
@@ -1413,7 +1389,6 @@ export function GerarPPDrawer({
                 onChange={(t) => {
                   if (t === tipoVerba) return;
                   setFornecedorId("");
-                  setResponsavelId("");
                   setTitularId("");
                   setTitularOrigem(null);
                   setTitularTerceiro(false);
@@ -1528,8 +1503,9 @@ export function GerarPPDrawer({
                 </p>
               </div>
 
-              {/* Fornecedor (modo normal) ou Responsável (modo verba) */}
-              {verbaComTitular && !titularTerceiro ? (
+              {/* Fornecedor (modo normal) ou Titular da verba (modo verba,
+                  as três desde a decisão 171) */}
+              {verbaProducao && !titularTerceiro ? (
                 <TitularDaVerbaField
                   itens={itensDoTitular}
                   carregando={pessoas === null}
@@ -1549,7 +1525,7 @@ export function GerarPPDrawer({
                   }}
                   disabled={pending}
                 />
-              ) : verbaComTitular ? (
+              ) : verbaProducao ? (
                 campoFornecedor(
                   <CaixaTerceiro
                     marcado
@@ -1562,21 +1538,6 @@ export function GerarPPDrawer({
                     disabled={pending}
                   />,
                 )
-              ) : verbaProducao ? (
-                <div>
-                  <label className="text-xs font-medium">Responsável *</label>
-                  <Combobox
-                    items={responsaveis.map((r) => ({
-                      value: r.id,
-                      label: r.nome,
-                    }))}
-                    value={responsavelId || null}
-                    onChange={(v) => setResponsavelId(v ?? "")}
-                    placeholder="Escolha um responsável"
-                    buscaPlaceholder="Escreva o nome"
-                    className={COMBOBOX_COMO_SELECT}
-                  />
-                </div>
               ) : (
                 campoFornecedor(null)
               )}

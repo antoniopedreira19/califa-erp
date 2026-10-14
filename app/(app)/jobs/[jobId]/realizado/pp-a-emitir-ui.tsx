@@ -20,7 +20,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   documentoTipoLabel,
   rotuloDaVerba,
-  verbaTemTitular,
+  rotuloDeQuemRecebeAVerba,
   type AnexoDaPPNaLista,
   type PPAEmitir,
 } from "@/lib/types";
@@ -158,15 +158,14 @@ export function RevisaoDialog({
   const acima = Math.round((novoTotal - planejado) * 100) / 100;
   const parcelas = Math.max(d.parcelas.length, 1);
   // Decisão 164: o tipo da verba e o nome de quem recebe. A PP a emitir de
-  // antes dela não tem o tipo: é produção.
+  // antes dela não tem o tipo: é produção. Desde a 171 as três verbas têm
+  // titular; só a de produção salva antes dela tem responsável.
   const tipoVerba = d.verba_producao ? (d.tipo_verba ?? aEmitir.tipo_verba ?? "producao") : null;
   const rotuloDeQuemRecebe = !tipoVerba
     ? "Fornecedor"
-    : verbaTemTitular(tipoVerba)
-      ? aEmitir.verba_titular_tipo === "fornecedor"
-        ? "Titular da verba (terceiro)"
-        : "Titular da verba"
-      : "Responsável";
+    : aEmitir.verba_titular_tipo === "fornecedor"
+      ? "Titular da verba (terceiro)"
+      : rotuloDeQuemRecebeAVerba(aEmitir);
   const linhas: Array<[string, React.ReactNode]> = [
     ...(aEmitir.refaz
       ? ([

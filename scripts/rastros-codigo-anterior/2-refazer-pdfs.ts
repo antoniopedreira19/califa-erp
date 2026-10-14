@@ -151,7 +151,11 @@ async function main() {
           prazo_pagamento: parcelas[0]?.data_vencimento ?? pp.prazo_pagamento,
           created_at: `${aaaa}-${mm}-${dd}T12:00:00.000Z`,
           verba_producao: pp.verba_producao,
+          // Operação de 29/09/2026, anterior às decisões 164 e 171: toda
+          // verba ali era de produção, com responsável.
+          verba_titular_tipo: null,
         },
+        pagamentoDoTitular: null,
         empresa: empRes.data as never,
         fornecedor: fornecedor as never,
         responsavelVerbaNome: pp.verba_producao ? (verbaRes.data?.nome ?? "") : null,

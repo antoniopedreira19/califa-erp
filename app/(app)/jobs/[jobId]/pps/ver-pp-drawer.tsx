@@ -761,7 +761,7 @@ export function VerPPDrawer({
                   tipoDaVerba(pp)
                     ? pp.verba_titular_tipo === "fornecedor"
                       ? "Titular da verba (terceiro)"
-                      : rotuloDeQuemRecebeAVerba(tipoDaVerba(pp)!)
+                      : rotuloDeQuemRecebeAVerba(pp)
                     : "Fornecedor"
                 }
               >

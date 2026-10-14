@@ -216,7 +216,7 @@ export function PPDossie({
               pp.tipo_verba
                 ? pp.verba_titular_tipo === "fornecedor"
                   ? "Titular da verba (terceiro)"
-                  : rotuloDeQuemRecebeAVerba(pp.tipo_verba)
+                  : rotuloDeQuemRecebeAVerba(pp)
                 : "Fornecedor"
             }
           >
