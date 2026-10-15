@@ -163,7 +163,7 @@ export interface EdicaoDoFinanceiro {
 
 /** O planejado na edição do financeiro: nunca abre (decisão 115, P1). */
 const MOTIVO_PLANEJADO_DO_FINANCEIRO =
-  "O planejado é o da abertura do job: o financeiro só o edita com o job na fila da abertura.";
+  "O financeiro só edita o planejado com o job na fila da abertura. Depois dela, o planejado muda pela errata.";
 
 function dataBr(iso: string): string {
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -400,12 +400,13 @@ export function JobRealizadoSection({
   // Os agrupamentos entram no rascunho desde 09/10/2026: a errata também
   // organiza a planilha (ordem, agrupamento novo, renomeado e removido).
   // O "Editar orçado" do financeiro (decisão 115) é o MESMO rascunho, com o
-  // escopo dele. O planejado abre só com o job na fila da abertura
-  // (revisão de 14/10/2026); depois dela, ele é o da abertura. Tipo, linha
-  // nova e a trava de PP ficam com a tabela (`modoDaEdicao`).
+  // escopo dele. Na errata o planejado abre desde 15/10/2026 (volta atrás
+  // da decisão 151); no financeiro, só com o job na fila da abertura
+  // (revisão de 14/10/2026). Tipo, linha nova e a trava de PP ficam com a
+  // tabela (`modoDaEdicao`).
   const modoFinanceiro = edicaoDoFinanceiro !== null;
   const planejadoNaFila = modoFinanceiro && job.status === "aguardando_abertura";
-  const rascunho = useRascunhoErrata(itens, interno, grupos, planejadoNaFila);
+  const rascunho = useRascunhoErrata(itens, interno, grupos);
   const errata = React.useMemo(
     () =>
       modoFinanceiro && !planejadoNaFila
@@ -650,6 +651,11 @@ export function JobRealizadoSection({
   const [orcadoVisivel, setOrcadoVisivel] = React.useState(true);
   const [rentabPlanejada, setRentabPlanejada] = React.useState(false);
   const [rentabRealizada, setRentabRealizada] = React.useState(false);
+  // A linha cancelada por errata fica na planilha, zerada (decisão 151;
+  // 15/10/2026). O "Exibir" a esconde; na errata ela volta à vista, para
+  // quem corrige ver o que já saiu.
+  const [canceladasVisiveis, setCanceladasVisiveis] = React.useState(true);
+  const temCancelada = itens.some((i) => i.cancelada_em);
   // A errata exige job aberto, a porta de `AlterarOrcadoButton`, e fecha
   // com o envio para faturamento. O financeiro chega aqui com `podeAcoes`
   // falso e não faz errata: desde a decisão 115 (28/09/2026) ele edita os
@@ -1064,12 +1070,18 @@ export function JobRealizadoSection({
    *  mensal. A errata é a MESMA em todos os recortes: o rascunho mora nesta
    *  seção, e cada tabela mostra só os grupos que recebe. */
   function tabela(
-    gruposDoTrecho: GrupoDoJob[],
+    gruposRecebidos: GrupoDoJob[],
     rotuloTotal?: string,
     mesFechado = false,
     /** Mês do trecho no mensal: é nele que o grupo novo da errata nasce. */
     mesId: string | null = null,
   ) {
+    // Só a tabela esconde as canceladas: as contas (meses, Totais) seguem
+    // com a lista inteira — a cancelada é zero dos dois lados.
+    const gruposDoTrecho =
+      canceladasVisiveis || errata.ativo
+        ? gruposRecebidos
+        : gruposRecebidos.map((g) => ({ ...g, itens: g.itens.filter((i) => !i.cancelada_em) }));
     // Um card para a planilha inteira — antes era um por grupo. Sem
     // `overflow-hidden`: a calha de ações precisa escapar do frame, e são
     // os filhos que arredondam os cantos.
@@ -1311,6 +1323,27 @@ export function JobRealizadoSection({
               },
             ]}
             secoes={[
+              ...(temCancelada
+                ? [
+                    {
+                      titulo: "Linhas",
+                      itens: [
+                        {
+                          chave: "canceladas",
+                          rotulo: "Linhas canceladas",
+                          visivel: canceladasVisiveis || errata.ativo,
+                          onAlternar: errata.ativo
+                            ? undefined
+                            : () => setCanceladasVisiveis((v) => !v),
+                          dica: errata.ativo
+                            ? "Na errata as linhas canceladas ficam à vista."
+                            : undefined,
+                        },
+                      ],
+                      dica: "A linha cancelada por errata fica zerada no orçado e no planejado.",
+                    },
+                  ]
+                : []),
               {
                 titulo: "Rentabilidade",
                 itens: [

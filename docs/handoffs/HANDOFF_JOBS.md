@@ -5455,3 +5455,27 @@ código publicado logo depois (`3305751`).
 - Cada troca é uma linha em `jobs_trocas_de_responsavel` e um card na
   Comunicação (`lerTrocasDeResponsavelDoJob` no `carregarDetalheDoJob`),
   que conta como não lido para quem não trocou.
+
+## ⚠️ Nota de 2026-10-15 — A errata volta a abrir o planejado, e o job mostra só o valor de hoje (decisão 175, revê a 151)
+
+Pedido do Tiago em 14/10/2026. Regra completa na decisão 175.
+
+- **Planejado na errata:** abre na linha nova e na existente (R$ Unit., QT
+  e D/M). Fechado na vermelha, em save, na cancelada, na linha com PP no
+  financeiro e no Interno. Mudar só o planejado já conta como "alterada".
+- **Linha cancelada:** fica, com orçado e planejado zerados (função
+  `registrar_errata_do_job`, migration `20261015100001`). O "Exibir" tem
+  "Linhas canceladas" para escondê-las da tabela; na errata elas aparecem.
+- **Cabeçalho, Totais e RENTAB. planejada:** só o valor de hoje — o
+  carregador não lê mais a versão aprovada nem monta a foto da abertura. O
+  valor da abertura segue no card de Erratas e vai para o histórico de
+  versões. A linha que vira save sai do planejado.
+- **Textos:** card de Erratas "orçados, planejados e tipos de custo"; o
+  aviso do "+ Novo item" perdeu "entra com o planejado zerado"; o pop-up
+  diz "O que muda na planilha" quando o planejado muda.
+- **Conferido:** TES-1008/26 com valor único no cabeçalho; errata no
+  rascunho do TES-1025/26 (planejado de linha existente e de linha nova,
+  cancelada zerada, pop-up com o de → para), descartada; depois a mesma
+  errata registrada no TES-1025/26 — banco com planejado de/para nas três
+  linhas, Item 6 zerado nos dois lados, valor do job R$ 163.734,93 único
+  na produção e no financeiro, "Linhas canceladas" esconde e mostra.
