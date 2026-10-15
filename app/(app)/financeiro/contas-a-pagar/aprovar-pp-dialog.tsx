@@ -28,9 +28,11 @@
  *   (Tiago, 07/10/2026; até então vinham ligadas no regime normal com PIS
  *   0,65%, COFINS 3%, CSLL 1% e IRRF 1,5%). A exceção é a NF que outra PP
  *   já registrou com ISS retido (decisão 152): a chave nasce ligada só com
- *   aquele ISS. Travadas desligadas no Simples e no MEI (IN 459); sem
- *   retenção no cartão, como na baixa. Ligadas, vêm com o aviso âmbar de
- *   que só valem para serviço: nota de mercadoria não tem retenção.
+ *   aquele ISS. No Simples, só o ISS (decisão 180: a IN 459 é federal, e
+ *   o município pode exigir o ISS do optante); no MEI, travadas
+ *   desligadas; sem retenção no cartão, como na baixa. Ligadas, vêm com o
+ *   aviso âmbar de que só valem para serviço: nota de mercadoria não tem
+ *   retenção.
  * - **Crédito de PIS/COFINS** — automático pela regra, no mês da emissão
  *   da NF. Só o financeiro tira, e com motivo.
  *
@@ -59,7 +61,7 @@
  * - O parágrafo das guias virou uma tabela (guia, valor, apuração, vence).
  * - Os textos de explicação viraram dica (ícone ⓘ): o que ficou à vista é
  *   o que pede ação. O aviso de mercadoria virou o selo "Só para serviço",
- *   e a trava do Simples/MEI e do cartão, um selo com a regra na dica.
+ *   e a trava do Simples, do MEI e do cartão, um selo com a regra na dica.
  * - O crédito que não sai pela regra (CNPJ tomador no lucro presumido)
  *   mostra o motivo à vista, em uma linha.
  * - Rodapé fixo: Cancelar e Aprovar ficam sempre à vista, e só o meio rola.
@@ -117,8 +119,10 @@ import {
   parteDaNota,
   percentual,
   retencoesParaRegistrar,
+  retencaoDoRegime,
   rotuloCurtoDoRegime,
   somaDasPartes,
+  travaDoRegime,
   vencimentoDasGuiasFederais,
   type CreditoDaNf,
   type NfEmConferencia,
@@ -180,10 +184,9 @@ const TEXTO_SEM_NF = "Preencha a emissão e o valor das notas em “Dados da PP�
 const DICA_SEM_NF = "O valor é a base das retenções e a data, o mês do crédito.";
 
 /**
- * Com "Reter na fonte" ligado — o que só acontece no Lucro Real ou
- * Presumido e no fornecedor sem regime informado, porque no Simples e no
- * MEI a chave fica travada desligada. O sistema não sabe se a nota é de
- * serviço ou de mercadoria; quem olha a nota decide (Tiago, 07/10/2026).
+ * Com "Reter na fonte" ligado — o que não acontece no MEI, onde a chave
+ * fica travada desligada. O sistema não sabe se a nota é de serviço ou de
+ * mercadoria; quem olha a nota decide (Tiago, 07/10/2026).
  */
 const AVISO_RETENCAO_SO_EM_SERVICO =
   "A retenção na fonte só vale para serviço. Se a nota for de mercadoria (DANFE, NF-e), desligue: compra de mercadoria não tem retenção de PIS/COFINS/CSLL, IR nem ISS.";
@@ -264,9 +267,9 @@ export function AprovarPPDialog({
   const [semCredito, setSemCredito] = React.useState(false);
   const [motivoSemCredito, setMotivoSemCredito] = React.useState("");
   const regime = pp?.regimeDoFornecedor ?? null;
-  // Simples e MEI não sofrem retenção de PIS/COFINS/CSLL e IRRF (IN 459).
-  // Sem regime informado, segue o normal.
-  const optanteDoSimples = regime === "simples" || regime === "mei";
+  // Decisão 180: o Simples só retém o ISS; o MEI não retém nada. Sem regime
+  // informado, segue o Lucro Presumido ou Real.
+  const doRegime = retencaoDoRegime(regime);
 
   /** Cada aprovação começa SEM retenção: o financeiro liga e preenche caso
    *  a caso, olhando a nota (Tiago, 07/10/2026). A exceção é a NF que outra
@@ -274,7 +277,7 @@ export function AprovarPPDialog({
    *  com aquele ISS, que não se edita nem desliga. */
   function iniciarRetencao() {
     v.setRetem(false);
-    if (!nfs || optanteDoSimples || !issTravado) return;
+    if (!nfs || doRegime === "nenhuma" || !issTravado) return;
     v.setRetem(true);
     travarIss();
   }
@@ -282,6 +285,14 @@ export function AprovarPPDialog({
   /** O ISS da nota já registrada por outra PP volta ao valor dela. */
   function travarIss() {
     if (issTravado !== undefined) v.porAliquota("ISS", issTravado);
+  }
+
+  /** Decisão 180: o imposto que o regime não deixa reter volta ao branco
+   *  (o "Repetir" de uma retenção antiga do mesmo fornecedor). */
+  function limparTravadosPeloRegime() {
+    for (const { imposto } of IMPOSTOS_RETIDOS) {
+      if (travaDoRegime(regime, imposto)) v.porAliquota(imposto, null);
+    }
   }
 
   // Cada abertura começa limpa: o diálogo é a decisão de UMA aprovação, e
@@ -327,12 +338,12 @@ export function AprovarPPDialog({
   // ---------------------------------------------------------------------
   const incompleta = nfs ? nfs.some(nfIncompleta) : false;
   const registroDeOutra = (nf: NfEmConferencia) => pp.registroDeOutraPP[nf.anexo_id] ?? null;
-  const retencaoTravada = optanteDoSimples || noCartao;
+  const retencaoTravada = doRegime === "nenhuma" || noCartao;
   const motivoSemRetencao = noCartao
     ? "No cartão de crédito não há retenção: o item entra inteiro na fatura, como na baixa."
-    : optanteDoSimples
-      ? "Optante do Simples: sem retenção de PIS/COFINS/CSLL e IRRF (IN 459)."
-      : null;
+    : travaDoRegime(regime, "ISS");
+  // Decisão 180: no Simples a chave liga, mas só o ISS se preenche.
+  const soIss = doRegime === "so_iss" && !noCartao;
   // As guias que as retenções geram: CSRF (PIS + COFINS + CSLL) na DARF
   // 5952, IRRF na 1708, e o ISS retido na guia do município. As alíquotas
   // saem dos valores da tela, para a guia bater centavo a centavo com eles.
@@ -761,6 +772,16 @@ export function AprovarPPDialog({
                             <Dica className="h-3.5 w-3.5" texto={motivoSemRetencao} />
                           </span>
                         )}
+                        {soIss && (
+                          <span className="inline-flex flex-none items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+                            <Lock className="h-2.5 w-2.5" />
+                            Só ISS
+                            <Dica
+                              className="h-3.5 w-3.5"
+                              texto={`${travaDoRegime(regime, "PIS")} O ISS só se o município exigir, na alíquota da nota.`}
+                            />
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -799,6 +820,7 @@ export function AprovarPPDialog({
                           type="button"
                           onClick={() => {
                             v.repetir();
+                            limparTravadosPeloRegime();
                             travarIss();
                             setErro(null);
                           }}
@@ -812,6 +834,7 @@ export function AprovarPPDialog({
                     <GradeDeAliquotas
                       v={v}
                       base={base}
+                      regime={regime}
                       issTravadoPor={
                         issTravado !== undefined
                           ? `ISS da NF já registrado com a ${registroComIss?.na_pp ?? "outra PP"}`
@@ -1146,10 +1169,13 @@ function Chave({
 function GradeDeAliquotas({
   v,
   base,
+  regime,
   issTravadoPor,
 }: {
   v: EstadoDoValorDaBaixa;
   base: number;
+  /** Decisão 180: no Simples, só o ISS se edita. */
+  regime: RegimeTributarioFornecedor | null;
   /** Decisão 152: a NF já registrada por outra PP trava o ISS (o motivo). */
   issTravadoPor: string | null;
 }) {
@@ -1161,30 +1187,37 @@ function GradeDeAliquotas({
         <span className="text-right">Valor</span>
       </div>
       <div className="space-y-1 px-2.5 py-2">
-        {IMPOSTOS_RETIDOS.map(({ imposto, dica }) => (
-          <div key={imposto} className="grid grid-cols-[minmax(0,1fr)_88px_128px] items-center gap-2">
-            <span className="flex items-center gap-1 text-[12.5px] font-semibold" title={dica}>
-              {imposto}
-              {imposto === "ISS" && issTravadoPor && (
-                <Lock className="h-3 w-3 text-muted-foreground" aria-label={issTravadoPor} />
-              )}
-            </span>
-            <PercentualCompacto
-              valor={v.aliquotas[imposto]}
-              onChange={(x) => v.porAliquota(imposto, x)}
-              rotulo={`Alíquota de ${imposto}`}
-              travadoPor={imposto === "ISS" ? issTravadoPor : null}
-            />
-            <MoneyInput
-              value={v.valores[imposto]}
-              onValueChange={(x) => v.porValor(imposto, arredondar(x))}
-              aria-label={`Valor retido de ${imposto}`}
-              disabled={imposto === "ISS" && issTravadoPor !== null}
-              title={imposto === "ISS" ? (issTravadoPor ?? undefined) : undefined}
-              className="h-8 px-2 text-right text-xs"
-            />
-          </div>
-        ))}
+        {IMPOSTOS_RETIDOS.map(({ imposto, dica }) => {
+          const travadoPor = (imposto === "ISS" ? issTravadoPor : null) ?? travaDoRegime(regime, imposto);
+          return (
+            <div key={imposto} className="grid grid-cols-[minmax(0,1fr)_88px_128px] items-center gap-2">
+              <span
+                className={cn(
+                  "flex items-center gap-1 text-[12.5px] font-semibold",
+                  travadoPor && imposto !== "ISS" && "text-muted-foreground",
+                )}
+                title={dica}
+              >
+                {imposto}
+                {travadoPor && <Lock className="h-3 w-3 text-muted-foreground" aria-label={travadoPor} />}
+              </span>
+              <PercentualCompacto
+                valor={v.aliquotas[imposto]}
+                onChange={(x) => v.porAliquota(imposto, x)}
+                rotulo={`Alíquota de ${imposto}`}
+                travadoPor={travadoPor}
+              />
+              <MoneyInput
+                value={v.valores[imposto]}
+                onValueChange={(x) => v.porValor(imposto, arredondar(x))}
+                aria-label={`Valor retido de ${imposto}`}
+                disabled={travadoPor !== null}
+                title={travadoPor ?? undefined}
+                className="h-8 px-2 text-right text-xs"
+              />
+            </div>
+          );
+        })}
       </div>
       <div className="space-y-0.5 border-t border-border bg-muted/30 px-2.5 py-2 text-[12px] tabular-nums">
         <div className="flex justify-between">

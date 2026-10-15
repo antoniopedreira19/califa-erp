@@ -7305,3 +7305,16 @@ os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
   `normal`, `simples` e `mei`.
 - Na aprovação da PP (Contas a Pagar), o regime aparece como "Lucro
   Presumido ou Real" (`textoDoRegime`, `rotuloCurtoDoRegime`).
+
+## ⚠️ Nota de 2026-10-15 (5) — O optante do Simples pode ter o ISS retido na aprovação da PP (decisão 180, revê a 139)
+
+- No pop-up "Aprovar PP", a chave "Reter na fonte" do fornecedor do
+  Simples deixou de ficar travada. Ligada, só o ISS se preenche, na alíquota
+  da nota; PIS, COFINS, CSLL e IRRF ficam com cadeado (IN 459). O selo "Só
+  ISS" explica a regra na dica.
+- O MEI continua travado ("MEI: sem retenção na fonte.").
+- `aprovarPPComNotaFiscal` passou a conferir o regime do fornecedor e
+  recusa federal de Simples e qualquer retenção de MEI
+  (`retencaoForaDoRegime`, em `lib/fiscal/nf-da-pp.ts`).
+- A baixa não mudou: ela repete a retenção da aprovação e segue editável à
+  mão, sem conferir regime.

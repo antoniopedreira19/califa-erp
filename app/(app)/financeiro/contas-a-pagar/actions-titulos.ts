@@ -22,6 +22,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { notasDaPPSchema } from "@/lib/validations/nf-da-pp";
+import { regimeDoFornecedorDaPP, retencaoForaDoRegime } from "@/lib/fiscal/nf-da-pp";
 
 type Ok = { ok: true };
 type Err = { ok: false; message: string };
@@ -533,7 +534,9 @@ export async function aprovarPPComNotaFiscal(input: unknown): Promise<Result> {
   const [{ data: pp }, { data: anexosNf }] = await Promise.all([
     supabase
       .from("pedidos_compra")
-      .select("id, status, verba_producao, pagamento_fora_do_cadastro_meio")
+      .select(
+        "id, status, verba_producao, pagamento_fora_do_cadastro_meio, fornecedor:fornecedores(regime_tributario, regime_consulta, regime_consultado_em, declaracao_simples_recebida)",
+      )
       .eq("id", ppId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{
@@ -541,6 +544,12 @@ export async function aprovarPPComNotaFiscal(input: unknown): Promise<Result> {
         status: string;
         verba_producao: boolean | null;
         pagamento_fora_do_cadastro_meio: string | null;
+        fornecedor: {
+          regime_tributario: string | null;
+          regime_consulta: string | null;
+          regime_consultado_em: string | null;
+          declaracao_simples_recebida: boolean | null;
+        } | null;
       }>(),
     supabase
       .from("pedidos_compra_anexos")
@@ -575,6 +584,14 @@ export async function aprovarPPComNotaFiscal(input: unknown): Promise<Result> {
   }
 
   const d = parsedNf.data;
+  // Decisão 180: a trava do regime também no servidor — o optante do
+  // Simples só retém o ISS, e o MEI nada. O pop-up já não deixa mandar.
+  const foraDoRegime = retencaoForaDoRegime(
+    regimeDoFornecedorDaPP(false, pp.fornecedor)?.regime ?? null,
+    d.retencoes.map((r) => r.imposto),
+  );
+  if (foraDoRegime) return { ok: false, message: foraDoRegime };
+
   const { error } = await supabase.rpc("registrar_notas_fiscais_da_pp", {
     p_pp_id: ppId,
     p_notas: d.notas.map((n) => ({
