@@ -1072,12 +1072,14 @@ export function PainelPPsItem({
             tomadorPorEmpresa={tomadorPorEmpresa}
             nomeDaEmpresaDe={nomeDaEmpresa}
             moeda={moeda}
-            onEnviada={(codigo) => {
+            onEnviada={(codigo, emissora) => {
               setEnviando(null);
               onMensagem?.(
-                modoDoEnvio === "preparar"
+                (modoDoEnvio === "preparar"
                   ? `${codigo} pronta para envio. O GP envia pela aba Pedidos de Produção.`
-                  : `${codigo} enviada ao financeiro.`,
+                  : `${codigo} enviada ao financeiro.`) +
+                  // Revisão da 156: a PP passou para o CNPJ do documento.
+                  (emissora ? ` A empresa emissora passou para ${emissora.para}, o CNPJ do documento.` : ""),
               );
               router.refresh();
             }}
@@ -1090,9 +1092,15 @@ export function PainelPPsItem({
           nomeDaEmpresa={nomeDaEmpresa}
           tomadores={tomadores}
           tomadorPorEmpresa={tomadorPorEmpresa}
-          onCorrigida={(codigo) => {
+          onCorrigida={(codigo, emissora, aviso) => {
             setCorrigindoNf(null);
-            onMensagem?.(`NF da ${codigo} corrigida.`);
+            onMensagem?.(
+              aviso ??
+                `NF da ${codigo} corrigida.${
+                  // Revisão da 156: a PP passou para o CNPJ da nota corrigida.
+                  emissora ? ` A empresa emissora passou para ${emissora.para}, o CNPJ da nota.` : ""
+                }`,
+            );
             router.refresh();
           }}
         />

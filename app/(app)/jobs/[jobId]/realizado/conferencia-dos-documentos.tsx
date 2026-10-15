@@ -28,6 +28,7 @@ import { Dialog, DialogDescription, DialogTitle, FullscreenContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 import { documentoTipoLabel, type DocumentoTipo } from "@/lib/types";
+import { documentoTemCnpj } from "@/lib/fiscal/cnpj-da-pp";
 import {
   PainelDocumento,
   VazioDoPainel,
@@ -70,6 +71,7 @@ export function ConferenciaDosDocumentos({
   onNumero,
   onRemover,
   renderNf,
+  renderCnpj,
   mostrarFaltas,
   obrigatorio,
   valorPP,
@@ -104,6 +106,8 @@ export function ConferenciaDosDocumentos({
   onRemover: (id: string) => void;
   /** Os campos da NF do documento à vista, na coluna estreita. */
   renderNf: (id: string) => React.ReactNode;
+  /** "Contra qual CNPJ", na fatura e no recibo (revisão da 156). */
+  renderCnpj?: (id: string) => React.ReactNode;
   mostrarFaltas: boolean;
   obrigatorio: boolean;
   valorPP: number;
@@ -528,6 +532,10 @@ export function ConferenciaDosDocumentos({
                                     "border-california-red ring-2 ring-california-red/15",
                                 )}
                               />
+                              {/* Revisão da 156: fatura e recibo dizem contra qual CNPJ. */}
+                              {renderCnpj && documentoTemCnpj(ativo.tipo) && (
+                                <div className="mt-2">{renderCnpj(ativo.id)}</div>
+                              )}
                             </div>
                           )}
                         </>

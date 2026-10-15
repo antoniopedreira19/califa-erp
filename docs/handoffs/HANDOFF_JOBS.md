@@ -5532,3 +5532,34 @@ Regra completa na decisão 178.
   pelo servidor, revisão sem a linha "Nota fiscal", `fatura` gravado na PP a
   emitir e na PP-00199 gerada; pop-up de envio com a fatura e o número. A
   PP-00199 foi fechada sem enviar e cancelada pela tela.
+
+## ⚠️ Nota de 2026-10-16 — a empresa emissora segue o documento (revisão da decisão 156)
+
+Decidido pelo Tiago em 14 a 16/10/2026; regra completa no fim da decisão 156.
+
+- **A empresa emissora da PP é a do documento** (NF, fatura ou recibo).
+  Sem documento, vale o seletor (pré-seleção pela regional). Regra em
+  `emissoraDosDocumentos` (`lib/fiscal/cnpj-da-pp.ts`, com teste);
+  documentos em CNPJs diferentes barram.
+- **Fatura e recibo ganham "Contra qual CNPJ"** (`CnpjDoDocumento`, em
+  `anexos-da-pp.tsx`; prop `renderCnpj` na `ListaDeAnexos` e na
+  `ConferenciaDosDocumentos`), no mesmo campo da NF
+  (`nf_tomador_estabelecimento_id`). Obrigatório no envio.
+- **Formulário:** com documento, o seletor trava e diz "Definida pelo
+  documento: …"; o servidor repete a conta (`emissoraPelosAnexos`) na
+  geração, na edição e na PP a emitir.
+- **Envio e Pronta para envio:** saiu o "Enviar com a nota em outro
+  CNPJ?" (e o 4º parâmetro `confirmarTomadorDiferente`). O aviso azul
+  informa a troca; `seguirDocumentoNaPP` troca a empresa e refaz o PDF
+  depois de gravar os anexos. `ResultadoEnvio` ok traz `emissora`
+  (`TrocaDeEmissora | null`) e o `onEnviada` do `EnvioDialog` a recebe.
+- **Corrigir a NF:** `seguirDocumentosDaNotaCorrigida` aplica a regra na PP
+  e nas outras com a mesma nota; `onCorrigida(codigo, emissora, aviso)`.
+- **Linha do tempo:** evento `emissora_trocada` (gatilho
+  `trg_pp_registra_troca_de_emissora`), rótulo "Empresa emissora trocada" na
+  ficha (`ver-pp-drawer.tsx`) e no dossiê.
+- **PDF:** "Empresa gerencial" e "Regional" embaixo de "Job:"
+  (`ContextoPdf.empresaGerencial/regional`, obrigatórios no gerador).
+- Migration `20261015970001`: o evento novo, o gatilho e a troca nas 15 PPs
+  antigas confirmadas pelo Tiago. Testado como GP Teste Claude no
+  TES-1014/26 (PP-00206, deixada em avaliação).

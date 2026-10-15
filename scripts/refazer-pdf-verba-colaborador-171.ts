@@ -101,6 +101,10 @@ async function main() {
       responsavelVerbaNome: pp.verba_titular_nome,
       pagamentoDoTitular: pagamento,
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      // Script já rodado (decisão 171): o documento como era, sem as linhas
+      // da revisão da 156.
+      empresaGerencial: null,
+      regional: null,
       projeto: { campanha: projeto.campanha ?? null },
       cliente: {
         nome_fantasia: (projeto.cliente as unknown as { nome_fantasia: string } | null)?.nome_fantasia ?? "",

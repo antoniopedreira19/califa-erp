@@ -29,6 +29,7 @@ import {
   Eye,
   FileText,
   Image as ImageIcon,
+  Info,
   Loader2,
   Lock,
   Sparkles,
@@ -59,6 +60,11 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { chaveDoNumeroDaNf } from "@/lib/fiscal/nf-da-pp";
+import {
+  DOCUMENTOS_EM_CNPJS_DIFERENTES,
+  documentoTemCnpj,
+  emissoraDosDocumentos,
+} from "@/lib/fiscal/cnpj-da-pp";
 import { buscarNotasDoFornecedor, type NotaExistente } from "./actions-notas-da-pp";
 import { lerDadosDaNFPorIA } from "./actions-ler-nf";
 
@@ -331,6 +337,7 @@ export function ListaDeAnexos({
   onRemover,
   tipoInvalido,
   renderNf,
+  renderCnpj,
   obrigatorio = false,
   numeroInvalido,
   onVer,
@@ -344,6 +351,8 @@ export function ListaDeAnexos({
   tipoInvalido: (id: string) => boolean;
   /** Os campos da NF, para o arquivo do tipo NF. */
   renderNf: (id: string) => React.ReactNode;
+  /** "Contra qual CNPJ", na fatura e no recibo (revisão da 156). */
+  renderCnpj?: (id: string) => React.ReactNode;
   /** No envio, todo campo é obrigatório (com *). */
   obrigatorio?: boolean;
   numeroInvalido?: (id: string) => boolean;
@@ -422,21 +431,25 @@ export function ListaDeAnexos({
               <div className="border-t border-border px-3 pb-3 pt-2.5">{renderNf(a.id)}</div>
             )}
             {a.status === "ok" && a.tipo !== null && a.tipo !== "nota_fiscal" && (
-              <div className="flex items-center gap-2 border-t border-border px-3 py-2">
-                <label htmlFor={`num-${a.id}`} className="text-[11px] font-medium text-muted-foreground">
-                  Número do documento{obrigatorio ? " *" : ""}
-                </label>
-                <input
-                  id={`num-${a.id}`}
-                  value={a.numero ?? ""}
-                  maxLength={60}
-                  disabled={disabled}
-                  onChange={(e) => onNumero(a.id, e.target.value)}
-                  className={cn(
-                    "h-8 w-44 rounded-lg border border-border bg-white px-2 font-mono text-xs text-foreground outline-none focus:border-california-red",
-                    numeroInvalido?.(a.id) && VERMELHO,
-                  )}
-                />
+              <div className="space-y-2 border-t border-border px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <label htmlFor={`num-${a.id}`} className="text-[11px] font-medium text-muted-foreground">
+                    Número do documento{obrigatorio ? " *" : ""}
+                  </label>
+                  <input
+                    id={`num-${a.id}`}
+                    value={a.numero ?? ""}
+                    maxLength={60}
+                    disabled={disabled}
+                    onChange={(e) => onNumero(a.id, e.target.value)}
+                    className={cn(
+                      "h-8 w-44 rounded-lg border border-border bg-white px-2 font-mono text-xs text-foreground outline-none focus:border-california-red",
+                      numeroInvalido?.(a.id) && VERMELHO,
+                    )}
+                  />
+                </div>
+                {/* Revisão da 156: fatura e recibo dizem contra qual CNPJ. */}
+                {renderCnpj && documentoTemCnpj(a.tipo) && renderCnpj(a.id)}
               </div>
             )}
           </li>
@@ -638,11 +651,11 @@ export function NfDoAnexo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notaMaiorQueAPP, nf.cobreOutra]);
 
-  // Decisão 156: a comparação é com o CNPJ da PP, não com a empresa
-  // gerencial. Não barra: o envio pede "tem certeza?" e o financeiro decide.
+  // Revisão da 156 (16/10/2026): a empresa emissora segue o documento. Nota
+  // em outro CNPJ não é erro: a PP passa para ele, e o aviso só informa.
   const aviso =
     t && tomadorEsperado && t.id !== tomadorEsperado
-      ? `A nota está no CNPJ ${t.nome}, mas a PP é do CNPJ ${empresaNome}. Se a nota veio errada, peça outra ao fornecedor; enviada assim, o financeiro decide na aprovação.`
+      ? `A empresa emissora da PP passa de ${empresaNome} para ${t.nome}, o CNPJ desta nota, e o PDF é refeito.`
       : null;
 
   // A parte desta PP não cabe no que sobra da nota (ou a nota já acabou nas
@@ -962,9 +975,72 @@ export function NfDoAnexo({
       )}
 
       {aviso && (
-        <p className="flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug text-california-red">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+        <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-sky-700">
+          <Info className="mt-0.5 h-3.5 w-3.5 flex-none" />
           <span>{aviso}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Contra qual CNPJ" na fatura e no recibo (revisão da 156, 16/10/2026): o
+ * sacado da fatura, o pagador do recibo. Vem com o CNPJ da PP e a empresa
+ * emissora segue o que ficar aqui, como na NF.
+ */
+export function CnpjDoDocumento({
+  valor,
+  onChange,
+  tomadores,
+  tomadorEsperado,
+  empresaNome,
+  idBase,
+  obrigatorio = false,
+  invalido = false,
+  disabled,
+}: {
+  valor: string;
+  onChange: (id: string) => void;
+  tomadores: TomadorDaNf[];
+  /** O CNPJ da PP hoje — o aviso diz que ela passa para o do documento. */
+  tomadorEsperado: string | null;
+  empresaNome: string;
+  idBase: string;
+  obrigatorio?: boolean;
+  invalido?: boolean;
+  disabled?: boolean;
+}) {
+  const t = tomadores.find((x) => x.id === valor);
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <label htmlFor={`${idBase}-cnpj`} className="text-[11px] font-medium text-muted-foreground">
+          Contra qual CNPJ{obrigatorio ? " *" : ""}
+        </label>
+        <Select value={valor || undefined} onValueChange={onChange} disabled={disabled}>
+          <SelectTrigger
+            id={`${idBase}-cnpj`}
+            aria-label="Contra qual CNPJ o documento foi emitido"
+            className={cn("h-8 w-56 font-mono text-[11px]", invalido && VERMELHO)}
+          >
+            <SelectValue placeholder="Selecione">{t ? `${t.nome} · ${t.cnpj}` : undefined}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {tomadores.map((x) => (
+              <SelectItem key={x.id} value={x.id} className="text-xs">
+                {x.nome} · <span className="font-mono">{x.cnpj}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {t && tomadorEsperado && t.id !== tomadorEsperado && (
+        <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-sky-700">
+          <Info className="mt-0.5 h-3.5 w-3.5 flex-none" />
+          <span>
+            A empresa emissora da PP passa de {empresaNome} para {t.nome}, o CNPJ deste documento, e o PDF é refeito.
+          </span>
         </p>
       )}
     </div>
@@ -1133,7 +1209,11 @@ export function anexoEmEdicao(a: AnexoGravado, tomadorPadrao: string | null): An
           valorNaPP: parte ?? valor,
           cobreOutra: parte !== null && valor > 0 && Math.abs(parte - valor) > 0.004,
         }
-      : { ...NF_VAZIA, tomador: tomadorPadrao ?? "" },
+      : {
+          ...NF_VAZIA,
+          // Fatura e recibo guardam o CNPJ no mesmo campo (revisão da 156).
+          tomador: (documentoTemCnpj(a.documento_tipo) ? a.nf_tomador_estabelecimento_id : null) ?? tomadorPadrao ?? "",
+        },
     salvo: true,
     criadoEm: a.created_at,
   };
@@ -1152,7 +1232,8 @@ export function anexoParaEnvio(a: AnexoEmEdicao) {
     mimetype: a.mime as (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number],
     nf_data_emissao: ehNf ? a.nf.emissao || null : null,
     nf_valor: ehNf && a.nf.valor > 0 ? a.nf.valor : null,
-    nf_tomador_estabelecimento_id: ehNf ? a.nf.tomador || null : null,
+    // NF, fatura e recibo: contra qual CNPJ (revisão da 156).
+    nf_tomador_estabelecimento_id: documentoTemCnpj(a.tipo) ? a.nf.tomador || null : null,
     nf_valor_na_pp: ehNf && a.nf.cobreOutra && a.nf.valorNaPP > 0 ? a.nf.valorNaPP : null,
   };
 }
@@ -1180,6 +1261,9 @@ export function faltaNosAnexosParaEnviar(
   if (semTipo) return `Escolha o tipo de “${semTipo.nome}”.`;
   const semNumero = ok.find((a) => a.tipo !== "nota_fiscal" && !(a.numero ?? "").trim());
   if (semNumero) return `Preencha o número do documento de “${semNumero.nome}”.`;
+  const semCnpj = ok.find((a) => a.tipo !== "nota_fiscal" && documentoTemCnpj(a.tipo) && !a.nf.tomador);
+  if (semCnpj) return `Escolha contra qual CNPJ foi emitido “${semCnpj.nome}”.`;
+  if (emissoraDosDocumentos(ok.map(anexoParaEnvio)).tipo === "divergente") return DOCUMENTOS_EM_CNPJS_DIFERENTES;
   if (exigeBoleto && !ok.some((a) => !!a.tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.tipo))) {
     return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
   }

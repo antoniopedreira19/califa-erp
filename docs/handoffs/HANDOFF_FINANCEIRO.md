@@ -7318,3 +7318,23 @@ os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
   (`retencaoForaDoRegime`, em `lib/fiscal/nf-da-pp.ts`).
 - A baixa não mudou: ela repete a retenção da aprovação e segue editável à
   mão, sem conferir regime.
+
+## ⚠️ Nota de 2026-10-16 — a empresa emissora da PP segue o documento (revisão da decisão 156)
+
+- **A empresa emissora (o CNPJ da PP, quem paga) é a do documento do
+  fornecedor** — NF, fatura ou recibo. A produção não precisa mais
+  confirmar "nota em outro CNPJ": a PP passa para o CNPJ do documento, com
+  o PDF refeito e o passo "Empresa emissora trocada" na linha do tempo do
+  dossiê. Fatura e recibo agora dizem "Contra qual CNPJ".
+- **15 PPs antigas trocadas em 16/10/2026** (migration `20261015970001`,
+  confirmada pelo Tiago): PP-00141 e PP-00145 → GoCrazy; PP-00043, PP-00090
+  e PP-00045 → California; PP-00049 → GoCrazy; os cachês PP-00069 a
+  PP-00077 (AMB-1001/26) → California, que já os tinha pago em 08/10 pela
+  conta California Santander. Os PDFs antigos ficaram.
+- **Para o financeiro conferir:** a PP-00090 foi aprovada em 15/10 sem a
+  retenção do ISS de R$ 300 que a NF 7408 traz (tomadora California,
+  Salvador). As PPs ainda não pagas desta lista devem sair da conta do CNPJ
+  novo — o sistema ainda não confere a conta (pendência 2 da decisão 156).
+- **Ainda sem regra:** se, na aprovação, o financeiro registrar um tomador
+  diferente do da produção, a empresa emissora não segue sozinha; a frase
+  vermelha "A nota está no CNPJ…" continua no dossiê e na aprovação.

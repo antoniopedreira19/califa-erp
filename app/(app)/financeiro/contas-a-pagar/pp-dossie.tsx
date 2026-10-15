@@ -462,9 +462,9 @@ function Historico({ pp }: { pp: PPRow }) {
               {e.por_nome ? <span className="text-muted-foreground"> · {e.por_nome}</span> : null}
               {e.motivo && eventoPPMostraMotivo(e.evento) ? (
                 <span className="mt-0.5 block break-words text-muted-foreground">
-                  {/* Na NF corrigida, o motivo é o que mudou, escrito pelo
-                      banco: sem aspas. */}
-                  {e.evento === "nf_corrigida" ? e.motivo : <>“{e.motivo}”</>}
+                  {/* Na NF corrigida e na troca da empresa emissora, o motivo é
+                      o que mudou, escrito pelo banco: sem aspas. */}
+                  {e.evento === "nf_corrigida" || e.evento === "emissora_trocada" ? e.motivo : <>“{e.motivo}”</>}
                 </span>
               ) : null}
             </span>

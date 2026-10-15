@@ -33,6 +33,7 @@ import {
   X,
   AlertTriangle,
   Columns2,
+  Lock,
   Pencil,
   Plus,
 } from "lucide-react";
@@ -53,6 +54,7 @@ import {
   PP_URGENTE_JUSTIFICATIVA_MIN,
   rotuloDaVerbaMinusculo,
   type DadosDaPPAEmitir,
+  type DocumentoTipo,
   type Fornecedor,
   type PedidoCompraNaLista,
   type PPAEmitir,
@@ -109,6 +111,12 @@ import {
 } from "./titular-da-verba-field";
 import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
+  DOCUMENTOS_EM_CNPJS_DIFERENTES,
+  documentoTemCnpj,
+  emissoraDosDocumentos,
+} from "@/lib/fiscal/cnpj-da-pp";
+import {
+  CnpjDoDocumento,
   ExigidosNoEnvio,
   ListaDeAnexos,
   NfDoAnexo,
@@ -121,6 +129,7 @@ import {
   parteDaNf,
   useAnexosEmEdicao,
   useNotasExistentes,
+  type AnexoEmEdicao,
   type TomadorDaNf,
 } from "./anexos-da-pp";
 import { RevisaoDialog, textoAguardaAbertura } from "./pp-a-emitir-ui";
@@ -280,6 +289,14 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
     updated_at: pp.updated_at,
     anexos: pp.anexos,
   };
+}
+
+/** "NF 123", "fatura 1907", "recibo 42": o documento que definiu a empresa
+ *  emissora (revisão da 156). */
+function rotuloDoDocumento(a: AnexoEmEdicao): string {
+  const numero = (a.tipo === "nota_fiscal" ? a.nf.numero : (a.numero ?? "")).trim();
+  const tipo = a.tipo === "nota_fiscal" ? "NF" : a.tipo === "fatura" ? "fatura" : "recibo";
+  return numero ? `${tipo} ${numero}` : `${tipo} “${a.nome}”`;
 }
 
 function dateToIso(date: Date | null): string {
@@ -529,7 +546,6 @@ export function GerarPPDrawer({
   // Decisão 152: os anexos com tipo, número e, na NF, os dados dela. O
   // CNPJ tomador sugerido é o CNPJ da PP (decisão 156).
   const tomadorPadrao = cnpjId || null;
-  const nomeDoCnpj = tomadores.find((t) => t.id === cnpjId)?.nome ?? "o CNPJ da PP";
   const {
     anexos,
     setAnexos,
@@ -540,6 +556,19 @@ export function GerarPPDrawer({
     aviso: avisoDosAnexos,
     setAviso: setAvisoDosAnexos,
   } = useAnexosEmEdicao(uploadPrefix, tomadorPadrao);
+  // Revisão da 156 (16/10/2026): com nota, fatura ou recibo que diga o CNPJ,
+  // a empresa emissora é a do documento — o seletor trava e diz qual
+  // documento a definiu. Sem documento, vale o seletor (pré-seleção pela
+  // regional ou a escolha de quem preenche).
+  const pelosDocumentos = emissoraDosDocumentos(
+    verbaProducao ? [] : anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+  );
+  const emissoraEfetiva = pelosDocumentos.tipo === "documento" ? pelosDocumentos.estabelecimentoId : cnpjId;
+  const documentoDaEmissora =
+    pelosDocumentos.tipo === "documento"
+      ? anexos.find((a) => a.status === "ok" && documentoTemCnpj(a.tipo) && a.nf.tomador === emissoraEfetiva)
+      : undefined;
+  const nomeDoCnpj = tomadores.find((t) => t.id === emissoraEfetiva)?.nome ?? "o CNPJ da PP";
   const existentes = useNotasExistentes(
     verbaProducao ? null : fornecedorId || null,
     anexos.filter((a) => a.tipo === "nota_fiscal").map((a) => a.nf.numero),
@@ -932,7 +961,11 @@ export function GerarPPDrawer({
         return false;
       }
     }
-    if (!cnpjId) {
+    if (pelosDocumentos.tipo === "divergente") {
+      setErro(DOCUMENTOS_EM_CNPJS_DIFERENTES);
+      return false;
+    }
+    if (!emissoraEfetiva) {
       setErro("Escolha a empresa emissora (o CNPJ da PP).");
       return false;
     }
@@ -1031,7 +1064,7 @@ export function GerarPPDrawer({
     const parcelasEnvio = parcelasParaEnvio();
         const dadosBase = {
           empresa_id: empresaId,
-          estabelecimento_id: cnpjId || null,
+          estabelecimento_id: emissoraEfetiva || null,
           prazo_pagamento: prazoPagamento,
           servico: servico.trim(),
           valor_unitario: unitNum,
@@ -1206,6 +1239,32 @@ export function GerarPPDrawer({
 
   /** Os campos da NF de um arquivo — na lista e, `compacta`, na coluna da
    *  tela lado a lado. */
+  /** O tipo do documento. O arquivo que passa a dizer o CNPJ (NF, fatura ou
+   *  recibo) nasce com a empresa emissora de agora — a que outro documento
+   *  já definiu, ou a do seletor (revisão da 156). */
+  function mudarTipo(id: string, t: DocumentoTipo) {
+    const a = anexos.find((x) => x.id === id);
+    const passaADizer = !!a && documentoTemCnpj(t) && !documentoTemCnpj(a.tipo);
+    mudar(id, passaADizer && a ? { tipo: t, nf: { ...a.nf, tomador: emissoraEfetiva || a.nf.tomador } } : { tipo: t });
+  }
+
+  /** "Contra qual CNPJ" da fatura e do recibo (revisão da 156). */
+  function cnpjDoDocumento(id: string) {
+    const a = anexos.find((x) => x.id === id);
+    if (!a) return null;
+    return (
+      <CnpjDoDocumento
+        valor={a.nf.tomador}
+        onChange={(v) => mudarNf(id, { tomador: v })}
+        tomadores={tomadores}
+        tomadorEsperado={emissoraEfetiva || null}
+        empresaNome={nomeDoCnpj}
+        idBase={`pp-doc-${id}`}
+        disabled={pending}
+      />
+    );
+  }
+
   function camposDaNf(id: string, compacta: boolean) {
     const a = anexos.find((x) => x.id === id);
     if (!a) return null;
@@ -1216,7 +1275,7 @@ export function GerarPPDrawer({
         faltas={[]}
         idBase={`${compacta ? "conferencia" : "pp-nf"}-${id}`}
         tomadores={tomadores}
-        tomadorEsperado={cnpjId || null}
+        tomadorEsperado={emissoraEfetiva || null}
         empresaNome={nomeDoCnpj}
         existente={notaExistenteDe(existentes, a.nf.numero)}
         valorPP={valorPP}
@@ -1550,8 +1609,15 @@ export function GerarPPDrawer({
                   primeiro quem contrata, depois quem recebe. */}
               <div>
                 <label className="text-xs font-medium">Empresa emissora *</label>
-                <Select value={cnpjId || undefined} onValueChange={setCnpjId}>
-                  <SelectTrigger>
+                {/* Revisão da 156 (16/10/2026): o documento com CNPJ define
+                    a empresa emissora e o seletor trava; sem documento, vale
+                    a escolha daqui. */}
+                <Select
+                  value={emissoraEfetiva || undefined}
+                  onValueChange={setCnpjId}
+                  disabled={pelosDocumentos.tipo === "documento"}
+                >
+                  <SelectTrigger aria-label="Empresa emissora">
                     <SelectValue placeholder="Escolha o CNPJ" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1562,14 +1628,27 @@ export function GerarPPDrawer({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  A nota do fornecedor vem neste CNPJ. Empresa gerencial do job:{" "}
-                  {(() => {
-                    const g = empresas.find((e) => e.id === empresaId);
-                    return g ? (g.nome_fantasia ?? g.razao_social) : "—";
-                  })()}
-                  .
-                </p>
+                {pelosDocumentos.tipo === "divergente" ? (
+                  <p className="mt-1 text-[11px] font-semibold text-california-red">{DOCUMENTOS_EM_CNPJS_DIFERENTES}</p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {documentoDaEmissora ? (
+                      <>
+                        <Lock className="mr-1 inline h-3 w-3 align-[-1px]" />
+                        Definida pelo documento: {rotuloDoDocumento(documentoDaEmissora)}. Para mudar, corrija o CNPJ no
+                        documento.{" "}
+                      </>
+                    ) : (
+                      "Quem paga a PP. Com nota, fatura ou recibo anexado, vale o CNPJ do documento. "
+                    )}
+                    Empresa gerencial do job:{" "}
+                    {(() => {
+                      const g = empresas.find((e) => e.id === empresaId);
+                      return g ? (g.nome_fantasia ?? g.razao_social) : "—";
+                    })()}
+                    .
+                  </p>
+                )}
               </div>
 
               {/* Fornecedor (modo normal) ou Titular da verba (modo verba,
@@ -1815,13 +1894,14 @@ export function GerarPPDrawer({
                   )}
                   <ListaDeAnexos
                     itens={itensDaLista(anexos)}
-                    onTipo={(id, t) => mudar(id, { tipo: t })}
+                    onTipo={mudarTipo}
                     onNumero={(id, numero) => mudar(id, { numero })}
                     onRemover={remover}
                     tipoInvalido={() => false}
                     disabled={pending}
                     onVer={(id) => setLadoALado({ foco: id })}
                     renderNf={(id) => camposDaNf(id, false)}
+                    renderCnpj={cnpjDoDocumento}
                   />
                   <ResumoDasNfs
                     valores={anexos
@@ -2082,10 +2162,11 @@ export function GerarPPDrawer({
             urlDoGravado={ppGeradaEditando ? signedUrlAnexo : signedUrlAnexoAEmitir}
             prontoParaAnexar={!!uploadPrefix}
             onArquivos={subir}
-            onTipo={(id, t) => mudar(id, { tipo: t })}
+            onTipo={mudarTipo}
             onNumero={(id, numero) => mudar(id, { numero })}
             onRemover={remover}
             renderNf={(id) => camposDaNf(id, true)}
+            renderCnpj={cnpjDoDocumento}
             mostrarFaltas={false}
             obrigatorio={false}
             valorPP={valorPP}
@@ -2118,7 +2199,7 @@ export function GerarPPDrawer({
             }}
             aEmitir={revisaoDaEdicao}
             nomeDoFornecedor={nomeDeQuemRecebe}
-            nomeDaEmpresa={tomadores.find((t) => t.id === cnpjId)?.nome ?? "—"}
+            nomeDaEmpresa={tomadores.find((t) => t.id === emissoraEfetiva)?.nome ?? "—"}
             tomadores={tomadores}
             planejado={valorPlanejado}
             emitidasAntes={Math.round((emPPsEmitidas - valorAntesDaEdicao) * 100) / 100}

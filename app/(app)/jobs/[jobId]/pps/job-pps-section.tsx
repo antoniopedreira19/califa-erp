@@ -1160,9 +1160,14 @@ export function JobPPsSection({
           tomadorPorEmpresa={tomadorPorEmpresa}
           nomeDaEmpresaDe={nomeDaEmpresa}
           moeda="BRL"
-          onEnviada={(codigo) => {
+          onEnviada={(codigo, emissora) => {
             setPpEnviando(null);
-            setToast(`${codigo} enviada ao financeiro.`);
+            setToast(
+              `${codigo} enviada ao financeiro.${
+                // Revisão da 156: a PP passou para o CNPJ do documento.
+                emissora ? ` A empresa emissora passou para ${emissora.para}, o CNPJ do documento.` : ""
+              }`,
+            );
             router.refresh();
           }}
         />

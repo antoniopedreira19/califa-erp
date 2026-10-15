@@ -2095,7 +2095,10 @@ export type PPEventoTipo =
   // avaliação, sem aprovar. O `motivo` diz o que mudou.
   | "nf_corrigida"
   // Decisão 173 (13/10/2026): a PP gerada, ainda no job, foi editada.
-  | "editada";
+  | "editada"
+  // Revisão da decisão 156 (16/10/2026): a empresa emissora mudou — pelo
+  // documento ou na edição. O `motivo` diz de qual para qual.
+  | "emissora_trocada";
 
 /**
  * Um evento do histórico da PP (decisão 136): quem fez o quê e quando.

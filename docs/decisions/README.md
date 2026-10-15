@@ -175,7 +175,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 153 | [PP a emitir: a PP é revisada antes de gerar e não se edita depois](153-pp-a-emitir.md) | 2026-10-07 |
 | 154 | [O save do orçamento inteiro: gerar em todas as linhas ou consumir o saldo de um job](154-save-do-orcamento-inteiro.md) | 2026-10-07 |
 | 155 | [O save que vem com o job é aprovado na abertura](155-save-aprovado-na-abertura.md) | 2026-10-07 |
-| 156 | [O CNPJ da PP é separado da empresa gerencial](156-cnpj-da-pp-separado-da-gerencial.md) | 2026-10-07 |
+| 156 | [O CNPJ da PP é separado da empresa gerencial (revista em 16/10: a empresa emissora segue o documento — nota, fatura ou recibo —, e o PDF ganha a empresa gerencial e a regional)](156-cnpj-da-pp-separado-da-gerencial.md) | 2026-10-07 |
 | 157 | [A PP chega ao financeiro até 15 dias antes da janela de pagamento](157-prazo-de-envio-da-pp.md) | 2026-10-07 |
 | 158 | [Planilha de um mês só no Fee e no Always On](158-planilha-de-um-mes-no-fee-e-always-on.md) | 2026-10-08 |
 | 159 | [O produtor deixa a errata pronta para envio, e o GP a envia ao financeiro](159-errata-pronta-para-envio.md) | 2026-10-08 |
