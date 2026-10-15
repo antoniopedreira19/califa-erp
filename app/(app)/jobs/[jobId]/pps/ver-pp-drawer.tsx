@@ -266,6 +266,15 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
           detalhe: [e.por_nome, e.motivo].filter(Boolean).join(" — ") || null,
           estado: "feito",
         };
+      case "emissora_trocada":
+        // Revisão da decisão 156: a empresa emissora seguiu o documento (ou
+        // foi trocada na edição). O motivo diz de qual para qual.
+        return {
+          ...base,
+          titulo: "Empresa emissora trocada",
+          detalhe: [e.por_nome, e.motivo].filter(Boolean).join(" — ") || null,
+          estado: "feito",
+        };
       case "prestacao_aprovada":
         return i === ultimaPrestacao && situacaoVerba === "concluida"
           ? { ...base, titulo: "Concluída", detalhe: "prestação aprovada pelo financeiro", estado: "feito" }

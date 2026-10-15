@@ -185,6 +185,11 @@ interface Dados {
    *  `fornecedor`) e fora da verba; sem conta nem PIX, o bloco não sai. */
   pagamentoDoTitular: PagamentoDoTitularNoPdf | null;
   job: Pick<Job, "codigo" | "nome" | "produto">;
+  /** Revisão da 156 (16/10/2026): a empresa gerencial e a regional do job,
+   *  embaixo do "Job:". Sempre as do job, nunca as da PP. Obrigatórios: um
+   *  chamador que os esquecesse imprimiria as duas linhas em branco. */
+  empresaGerencial: string | null;
+  regional: string | null;
   /** Só a campanha: o código do projeto saiu do documento em 29/09/2026 —
    *  o código da PP é o do JOB (decisão 126). */
   projeto: Pick<Projeto, "campanha">;
@@ -396,6 +401,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
               // da base de dados (decisão 121) e o do projeto saiu também
               // (decisão 126).
               lv("Job", job.codigo),
+              // Revisão da 156: a quem o job pertence. O cabeçalho diz quem
+              // paga (a empresa emissora, a do documento).
+              ...(dados.empresaGerencial ? [lv("Empresa gerencial", dados.empresaGerencial)] : []),
+              ...(dados.regional ? [lv("Regional", dados.regional)] : []),
             ],
           },
         ],

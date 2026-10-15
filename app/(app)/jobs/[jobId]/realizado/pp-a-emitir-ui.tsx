@@ -30,9 +30,11 @@ import {
   prefixoAnexosPedidoCompra,
   signedUrlAnexo,
   type AcimaDoPlanejado,
+  type TrocaDeEmissora,
 } from "./actions-pp";
 import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
+  CnpjDoDocumento,
   ListaDeAnexos,
   NfDoAnexo,
   ResumoDasNfs,
@@ -50,7 +52,6 @@ import {
   type TomadorDaNf,
 } from "./anexos-da-pp";
 import { CorrigirNfDialog } from "./corrigir-nf-da-pp";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // ---------------------------------------------------------------------------
 // A pré-abertura: só PP a emitir
@@ -376,7 +377,9 @@ export interface PPParaEnviar {
  * enviam (decisão 136), conferem os mesmos documentos com as mesmas regras e
  * deixam a PP "Pronta para envio" — o GP a envia pela aba Pedidos de
  * Produção, com o pop-up já preenchido. O "tem certeza?" acima do planejado
- * e o da nota em outro CNPJ ficam para o envio, que é quando o GP decide.
+ * fica para o envio, que é quando o GP decide. Documento em outro CNPJ não
+ * pergunta nada: a empresa emissora segue o documento e o aviso só informa
+ * (revisão da 156, 16/10/2026).
  */
 export function EnvioDialog({
   modo,
@@ -405,8 +408,9 @@ export function EnvioDialog({
   tomadorPorEmpresa: Record<string, string>;
   nomeDaEmpresaDe: (empresaId: string) => string;
   moeda: string;
-  /** Depois de gravar — enviada ao financeiro ou deixada pronta, conforme o modo. */
-  onEnviada: (codigo: string) => void;
+  /** Depois de gravar — enviada ao financeiro ou deixada pronta, conforme o
+   *  modo. No envio, `emissora` diz se a PP passou para o CNPJ do documento. */
+  onEnviada: (codigo: string, emissora?: TrocaDeEmissora | null) => void;
 }) {
   const preparar = modo === "preparar";
   const [prefixo, setPrefixo] = React.useState<string | null>(null);
@@ -421,9 +425,6 @@ export function EnvioDialog({
   /** A outra PP com a mesma nota, em correção (revisão da decisão 152). */
   const [corrigindo, setCorrigindo] = React.useState<{ id: string; codigo: string } | null>(null);
   const [versaoDasNotas, setVersaoDasNotas] = React.useState(0);
-  /** Decisão 156: notas em outro CNPJ que não o da PP — o "tem certeza?". */
-  const [tomadorPergunta, setTomadorPergunta] = React.useState<Array<{ numero: string; tomador: string }> | null>(null);
-  const [tomadorConfirmado, setTomadorConfirmado] = React.useState(false);
   /** A PP e os documentos lado a lado (decisão 153, entrega 3), aberta num
    *  documento. */
   const [ladoALado, setLadoALado] = React.useState<{ foco: string | null } | null>(null);
@@ -436,8 +437,6 @@ export function EnvioDialog({
     setErro(null);
     setConfirmando(null);
     setCorrigindo(null);
-    setTomadorPergunta(null);
-    setTomadorConfirmado(false);
     setLadoALado(null);
     setAviso(null);
     setAnexos(pp.anexos.map((a) => anexoEmEdicao(a, tomadorEsperado)));
@@ -460,7 +459,7 @@ export function EnvioDialog({
 
   if (!pp) return null;
 
-  function enviar(confirmado: boolean, tomadorOk: boolean = tomadorConfirmado) {
+  function enviar(confirmado: boolean) {
     if (!pp) return;
     setTentou(true);
     const falta = faltaNosAnexosParaEnviar(anexos, pp.valor, existentes, pp.pagaPorBoleto);
@@ -484,17 +483,6 @@ export function EnvioDialog({
       });
       return;
     }
-    // Decisão 156: nota em outro CNPJ não barra — pede o "tem certeza?".
-    const emOutroCnpj =
-      !pp.verbaProducao && pp.estabelecimentoId
-        ? anexos
-            .filter((a) => a.status === "ok" && a.tipo === "nota_fiscal" && a.nf.tomador && a.nf.tomador !== pp.estabelecimentoId)
-            .map((a) => ({ numero: a.nf.numero.trim(), tomador: a.nf.tomador }))
-        : [];
-    if (emOutroCnpj.length > 0 && !tomadorOk) {
-      setTomadorPergunta(emOutroCnpj);
-      return;
-    }
     setErro(null);
     const alvo = pp;
     startTransition(async () => {
@@ -502,13 +490,8 @@ export function EnvioDialog({
         alvo.id,
         confirmado,
         anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
-        tomadorOk,
       );
       if (!res.ok) {
-        if (res.tomadorDiferente) {
-          setTomadorPergunta(res.tomadorDiferente.notas);
-          return;
-        }
         if (res.acimaDoPlanejado) {
           setConfirmando(res.acimaDoPlanejado);
           return;
@@ -518,8 +501,27 @@ export function EnvioDialog({
         return;
       }
       setConfirmando(null);
-      onEnviada(res.codigo);
+      onEnviada(res.codigo, res.emissora);
     });
+  }
+
+  /** "Contra qual CNPJ" da fatura e do recibo (revisão da 156). */
+  function cnpjDoDocumento(id: string) {
+    const a = anexos.find((x) => x.id === id);
+    if (!a) return null;
+    return (
+      <CnpjDoDocumento
+        valor={a.nf.tomador}
+        onChange={(v) => mudarNf(id, { tomador: v })}
+        tomadores={tomadores}
+        tomadorEsperado={tomadorEsperado}
+        empresaNome={nomeDaEmpresa}
+        idBase={`envio-${id}`}
+        obrigatorio
+        invalido={tentou && !a.nf.tomador}
+        disabled={pending}
+      />
+    );
   }
 
   const nfsDaLista = anexos.filter((a) => a.status === "ok" && a.tipo === "nota_fiscal");
@@ -643,6 +645,7 @@ export function EnvioDialog({
                 disabled={pending}
                 onVer={(id) => setLadoALado({ foco: id })}
                 renderNf={(id) => camposDaNf(id, false)}
+                renderCnpj={cnpjDoDocumento}
               />
               <ResumoDasNfs valores={nfsDaLista.map((a) => parteDaNf(a.nf))} valorPP={pp.valor} />
             </>
@@ -690,37 +693,6 @@ export function EnvioDialog({
             {botaoEnviar}
           </div>
         </div>
-        {/* Decisão 156: a nota em outro CNPJ que não o da PP — o financeiro
-            decide na aprovação. */}
-        <ConfirmDialog
-          open={tomadorPergunta !== null}
-          onOpenChange={(o) => !o && setTomadorPergunta(null)}
-          title="Enviar com a nota em outro CNPJ?"
-          description={
-            <>
-              {(tomadorPergunta ?? []).map((n, i) => (
-                <React.Fragment key={`${n.numero}-${i}`}>
-                  {i > 0 && " "}A NF {n.numero} está no CNPJ{" "}
-                  <strong className="text-foreground">{tomadores.find((t) => t.id === n.tomador)?.nome ?? "—"}</strong>.
-                </React.Fragment>
-              ))}{" "}
-              A PP é do CNPJ{" "}
-              <strong className="text-foreground">{tomadores.find((t) => t.id === pp.estabelecimentoId)?.nome ?? "—"}</strong>. O
-              financeiro decide na aprovação.
-            </>
-          }
-          confirmLabel="Sim, enviar"
-          cancelLabel="Voltar"
-          variant="destructive"
-          pending={pending}
-          contentClassName="z-[60]"
-          overlayClassName="z-[60]"
-          onConfirm={() => {
-            setTomadorConfirmado(true);
-            setTomadorPergunta(null);
-            enviar(confirmando !== null, true);
-          }}
-        />
         {/* Decisão 153, entrega 3: a PP, os documentos e os dados lado a
             lado. O estado é o deste envio: o que se preenche lá aparece aqui. */}
         {!pp.verbaProducao && (
@@ -740,6 +712,7 @@ export function EnvioDialog({
             onNumero={(id, numero) => mudar(id, { numero })}
             onRemover={remover}
             renderNf={(id) => camposDaNf(id, true)}
+            renderCnpj={cnpjDoDocumento}
             mostrarFaltas={tentou}
             obrigatorio
             valorPP={pp.valor}
