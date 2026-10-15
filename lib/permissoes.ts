@@ -77,6 +77,10 @@ export const permissoes = {
    * Inclui freelancer desde 18/09/2026 (decisao do Tiago): ele edita o
    * realizado dos jobs dele (`jobs.editar_realizado`) e esbarra no mesmo
    * fornecedor que ainda nao esta na lista.
+   *
+   * Cria E edita desde a decisao 177 (Tiago, 15/10/2026): o lapis do campo
+   * Fornecedor abre qualquer cadastro, nao so o pendente da 166. Inativar e
+   * reativar continuam na tela, com `.editar`.
    */
   "cadastros.fornecedores.inline":          ["administrador", "gerente_producao", "produtor", "freelancer"],
   /**

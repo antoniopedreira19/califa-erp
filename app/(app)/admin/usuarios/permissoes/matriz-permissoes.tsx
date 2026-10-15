@@ -60,8 +60,12 @@ const LINHAS: readonly Linha[] = [
       excluir: "cadastros.fornecedores.editar",
     },
   },
+  // Editar pelo lápis do campo entrou na decisão 177 (15/10/2026).
   { modulo: "Cadastros", item: "Fornecedor rápido dentro do PP",
-    permissoes: { criar: "cadastros.fornecedores.inline" },
+    permissoes: {
+      criar: "cadastros.fornecedores.inline",
+      editar: "cadastros.fornecedores.inline",
+    },
   },
   // Veículo de mídia é fornecedor (decisões 147 e 150): a tela de Veículos
   // grava pelas actions de fornecedores, com os mesmos gates.

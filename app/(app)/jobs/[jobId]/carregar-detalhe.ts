@@ -1517,27 +1517,25 @@ export async function carregarDetalheDoJob(
   const podeGerarPP =
     pode(session.activeRole, "jobs.emitir_pp") && jobAceitaGerarPP(job.status);
   /**
-   * O "+" e o lápis do campo Fornecedor da PP são DUAS permissões, e não
-   * uma (18/09/2026):
+   * O "+" e o lápis do campo Fornecedor da PP:
    *
    *  * criar pelo drawer é `cadastros.fornecedores.inline` — o gate mais
-   *    largo da decisão 048, que existe justamente para o GP e o produtor
-   *    cadastrarem sem sair da PP;
-   *  * abrir o cadastro para editar é `cadastros.fornecedores.editar`,
-   *    do administrador e (desde 07/10/2026) do financeiro.
+   *    largo da decisão 048, que existe justamente para a produção
+   *    cadastrar sem sair da PP;
+   *  * abrir o cadastro para editar é o mesmo `.inline` desde a decisão
+   *    177 (15/10/2026: o produtor e o freela também corrigem o cadastro),
+   *    ou `.editar`, do administrador e do financeiro, que é a tela.
    *
-   * A action barra dos dois lados de qualquer jeito. Aqui é para a pessoa
-   * não preencher o cadastro inteiro e só então ler "Você não tem
+   * A action confere de novo (`checarCadastroDeFornecedor`). Aqui é para a
+   * pessoa não preencher o cadastro inteiro e só então ler "Você não tem
    * permissão para essa ação".
    */
   const podeCadastrarFornecedor = pode(
     session.activeRole,
     "cadastros.fornecedores.inline",
   );
-  const podeEditarFornecedor = pode(
-    session.activeRole,
-    "cadastros.fornecedores.editar",
-  );
+  const podeEditarFornecedor =
+    podeCadastrarFornecedor || pode(session.activeRole, "cadastros.fornecedores.editar");
   // Quem presta contas da verba (decisões 164 e 171, as três verbas): o
   // titular pode nem ter acesso ao sistema, então presta contas o
   // administrador, o GP, o produtor ou o freela do job (quem vê o job é do

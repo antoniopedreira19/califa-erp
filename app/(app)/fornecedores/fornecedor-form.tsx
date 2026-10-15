@@ -57,9 +57,9 @@
  * e, no Simples e no MEI, o regime. O cadastro antigo, que ainda não tem
  * CNAE, abre com o regime vazio na tela ("Antes: …") e os dois campos
  * marcados em vermelho, e consulta o CNPJ sozinho para sugerir. Aberto
- * pelo lápis da PP por quem não edita fornecedor (GP, produtor, freelancer),
- * o cadastro pendente se edita inteiro — o servidor aceita enquanto ele
- * estiver pendente (`checarEditarFornecedor`).
+ * pelo lápis da PP pela produção (GP, produtor, freelancer), o cadastro se
+ * edita inteiro — pendente ou não desde a decisão 177
+ * (`checarCadastroDeFornecedor`).
  */
 
 import * as React from "react";

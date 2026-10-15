@@ -5224,7 +5224,8 @@ código publicado logo depois (`3305751`).
   no cadastro, corrigem também.
 - O lápis do campo Fornecedor da PP continua aparecendo para eles só com o
   cadastro pendente (sem regime, com o legado ou sem CNAE), e agora abre o
-  mesmo formulário do administrador. O modo `somentePendentes` e a action
+  mesmo formulário do administrador. *(Até 15/10/2026: desde a decisão 177
+  o lápis aparece com qualquer cadastro — ver a nota daquele dia.)* O modo `somentePendentes` e a action
   `completarCadastroFiscalDoFornecedor` saíram.
 - No servidor, `atualizarComSchema` usa `checarEditarFornecedor`: quem tem
   `cadastros.fornecedores.editar` edita sempre; quem tem só o cadastro rápido
@@ -5479,3 +5480,29 @@ Pedido do Tiago em 14/10/2026. Regra completa na decisão 175.
   errata registrada no TES-1025/26 — banco com planejado de/para nas três
   linhas, Item 6 zerado nos dois lados, valor do job R$ 163.734,93 único
   na produção e no financeiro, "Linhas canceladas" esconde e mostra.
+
+## ⚠️ Nota de 2026-10-15 — A produção edita o cadastro do fornecedor pelo lápis (decisão 177)
+
+Pedido do Tiago em 15/10/2026, a partir do print de uma produtora que, na
+PP-00107, não via botão ao lado do fornecedor. Regra completa na decisão 177.
+
+- **Lápis:** o administrador, o GP, o produtor e o freelancer veem o lápis
+  do campo Fornecedor da PP com qualquer fornecedor escolhido, pendente ou
+  não, e salvam o cadastro inteiro. A permissão é a mesma do "+"
+  (`cadastros.fornecedores.inline`).
+- **Servidor:** `checarCadastroDeFornecedor` (era `checarCriarFornecedor` +
+  `checarEditarFornecedor`) aceita `.editar` ou `.inline`. Vale também para
+  o lápis do BV e o do veículo da Mídia Off, que já apareciam e eram
+  recusados no cadastro completo.
+- **Fica com o financeiro e o administrador:** a tela de Fornecedores,
+  inativar e reativar.
+- **Sem migration:** a policy de UPDATE de `fornecedores` já aceitava
+  qualquer membro do tenant.
+- **Conferido** em `127.0.0.1:3177`, no TES-1014/26 (Nova PP do item
+  Produtor, fechada sem salvar), com o "Fornecedor Teste" (cadastro
+  completo): como **Produtor Teste Claude** e como **Freelancer Teste
+  Claude**, o lápis aparece com "O lápis abre o cadastro deste
+  fornecedor…", o cadastro abre editável e salva — `fornecedor.editado` na
+  auditoria com o nome e o papel de cada um. O telefone usado no teste
+  voltou ao original; o freela entrou e saiu da Equipe do TES-P001/26;
+  nenhuma PP foi criada.

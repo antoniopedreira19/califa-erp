@@ -158,9 +158,10 @@ interface Props {
   }>;
   /** As empresas gerenciais: só o nome da do job aparece (decisão 156). */
   empresas: Array<{ id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }>;
-  /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
-   *  action já barrava, mas o GP preenchia o cadastro inteiro para só
-   *  então ler "Você não tem permissão para essa ação" (18/09/2026). */
+  /** O "+" (`cadastros.fornecedores.inline`) e o lápis (`.inline` ou
+   *  `.editar`, decisão 177). Sem eles, os botões somem: a action já
+   *  barrava, mas o GP preenchia o cadastro inteiro para só então ler
+   *  "Você não tem permissão para essa ação" (18/09/2026). */
   podeCadastrarFornecedor?: boolean;
   podeEditarFornecedor?: boolean;
   defaultEmpresaId: string;
@@ -387,13 +388,10 @@ export function GerarPPDrawer({
     };
   }, [fornecedorId, usaFornecedor, versaoDoCadastro]);
   const cadastroIncompleto = usaFornecedor && Boolean(fornecedorId) && faltaNoCadastro.length > 0;
-  /** Quem não edita fornecedor ganha o lápis com o cadastro pendente: ele
-   *  abre o cadastro inteiro, todo editável, e o servidor aceita enquanto o
-   *  cadastro estiver pendente. */
-  const completaPeloLapis = !podeEditarFornecedor && podeCadastrarFornecedor && cadastroIncompleto;
-  const temLapis = podeEditarFornecedor || completaPeloLapis;
+  // O lápis abre o cadastro inteiro, todo editável. Desde a decisão 177 a
+  // produção o tem sempre, e não só com o cadastro pendente (166).
   const travaDoCadastro = cadastroIncompleto
-    ? temLapis
+    ? podeEditarFornecedor
       ? "Complete o cadastro do fornecedor para gerar a PP."
       : "O financeiro precisa completar o cadastro do fornecedor para a PP ser gerada."
     : null;
@@ -1280,13 +1278,12 @@ export function GerarPPDrawer({
                         revisão. O ✕ de dentro do campo é o caminho de
                         volta para o "+".
 
-                        São duas permissões diferentes (18/09/2026): criar
-                        aqui é `cadastros.fornecedores.inline`, que o GP e
-                        o produtor têm porque a PP é o fluxo deles; abrir
-                        para editar é `cadastros.fornecedores.editar`, do
-                        administrador e do financeiro. Por isso o gate segue o
-                        papel do botão, e não o botão. */}
-                    {(fornecedorId ? temLapis : podeCadastrarFornecedor) && (
+                        Criar aqui é `cadastros.fornecedores.inline`, que o
+                        GP, o produtor e o freela têm porque a PP é o fluxo
+                        deles; editar é o mesmo `.inline` desde a decisão
+                        177, ou `.editar` (administrador e financeiro). O
+                        gate segue o papel do botão, e não o botão. */}
+                    {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1329,7 +1326,7 @@ export function GerarPPDrawer({
                       <span>
                         <b className="font-semibold">Cadastro incompleto:</b> falta{" "}
                         {listarPendencias(faltaNoCadastro)}.{" "}
-                        {temLapis ? (
+                        {podeEditarFornecedor ? (
                           <>
                             Clique no lápis <Pencil className="mb-0.5 inline h-3 w-3" aria-label="lápis" /> ao
                             lado para completar e gerar a PP.
@@ -1344,10 +1341,10 @@ export function GerarPPDrawer({
                     {fornecedorId
                       ? podeEditarFornecedor
                         ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
-                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o administrador."
+                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o financeiro."
                       : podeCadastrarFornecedor
                       ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
-                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
+                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o financeiro."}
                   </p>
                   )}
                   {fornecedorId && (
