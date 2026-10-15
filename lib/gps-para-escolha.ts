@@ -2,7 +2,7 @@ import type { ComboboxItem } from "@/components/ui/combobox";
 
 /**
  * A lista do campo "GP Responsável" do orçamento — Novo orçamento, editor,
- * agregada e envio para abertura (decisão 175, que revisa a regra 3 da
+ * agregada e envio para abertura (decisão 176, que revisa a regra 3 da
  * 170).
  *
  * Até 15/10/2026 a lista tinha só os GPs Responsáveis do projeto. Agora tem

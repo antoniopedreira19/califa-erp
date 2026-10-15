@@ -5618,7 +5618,7 @@ aplicada na hora combinada com a frente do Antonio, junto da
   e os produtores dos orçamentos. É a mesma Equipe que o botão "Equipe" do
   job e da visão agregada mostra.
 
-## ⚠️ Nota de 2026-10-15 — O GP do orçamento pode vir de fora do projeto (decisão 175)
+## ⚠️ Nota de 2026-10-15 — O GP do orçamento pode vir de fora do projeto (decisão 176)
 
 - O campo "GP Responsável" do Novo orçamento, do editor, do orçamento novo
   da agregada e do envio para abertura lista todo membro que pode ser GP,

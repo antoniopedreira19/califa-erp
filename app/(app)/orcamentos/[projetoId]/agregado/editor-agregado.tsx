@@ -168,7 +168,7 @@ interface Props {
   /** Todos os vinculados ao projeto: dá o nome do GP no card dos
    *  orçamentos que já existem. */
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
-  /** Quem pode ser GP, os do projeto primeiro (decisões 170 e 175): a
+  /** Quem pode ser GP, os do projeto primeiro (decisões 170 e 176): a
    *  lista do orçamento novo. */
   gpsPossiveis: GpParaEscolha[];
   produtores: Pick<Profile, "id" | "nome">[];
@@ -435,7 +435,7 @@ export function EditorAgregado({
       categoria: new Map(nomesDeCategoria.map((c) => [c.id, c.nome])),
       regional: new Map(regionaisDoProjeto.map((r) => [r.id, r.nome])),
       // Com a lista inteira: o GP de fora escolhido num orçamento novo só
-      // entra nos vinculados do projeto no próximo carregamento (175).
+      // entra nos vinculados do projeto no próximo carregamento (176).
       gp: new Map(
         [...gpsPossiveis, ...gpsDoProjeto].map((g) => [g.id, g.nome]),
       ),

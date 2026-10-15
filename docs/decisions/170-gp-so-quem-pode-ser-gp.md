@@ -95,9 +95,9 @@ Ficam como estão, e podem mudar no futuro:
   abertura o job não muda. O GP do job só se escolhe no envio para
   abertura, que já segue a regra daqui.
 
-## ⚠️ Nota de 2026-10-15 — a lista de GP do orçamento tem todos os GPs (decisão 175)
+## ⚠️ Nota de 2026-10-15 — a lista de GP do orçamento tem todos os GPs (decisão 176)
 
-- A regra 3 mudou na [175](175-trocar-gp-e-produtor-do-job-aberto.md): o
+- A regra 3 mudou na [176](176-trocar-gp-e-produtor-do-job-aberto.md): o
   "GP Responsável" do orçamento (Novo orçamento, editor, agregada e envio
   para abertura) oferece **qualquer membro que pode ser GP**, os GPs do
   projeto primeiro. Quem vem de fora entra nos GPs Responsáveis do projeto

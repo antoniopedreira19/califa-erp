@@ -398,7 +398,7 @@ export async function carregarDetalheDoJob(
     mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoAprovadaId),
     // As recusas de save viram card na Comunicação (decisão 099).
     lerRecusasDeSaveDoJob(supabase, session.activeTenant.id, raw.id),
-    // As trocas do GP e do produtor viram card na Comunicação (decisão 175).
+    // As trocas do GP e do produtor viram card na Comunicação (decisão 176).
     lerTrocasDeResponsavelDoJob(supabase, session.activeTenant.id, raw.id),
     // Situação dos pedidos de CONSUMO das linhas do job: "pago só por save"
     // só vale com o consumo aprovado (decisão 099).
@@ -1291,7 +1291,7 @@ export async function carregarDetalheDoJob(
       (a) => a.created_by !== session.profile.id && (!lidaAte || a.created_at > lidaAte),
     ).length +
     recusasDeSaveNaoLidas(recusasDeSave, session.profile.id, lidaAte) +
-    // A troca do GP ou do produtor também: quem entra precisa ver (175).
+    // A troca do GP ou do produtor também: quem entra precisa ver (176).
     trocasDeResponsavelNaoLidas(trocasDeResponsavel, session.profile.id, lidaAte);
 
   // ---- Chat de PPs: thread e contador de não lidas ----

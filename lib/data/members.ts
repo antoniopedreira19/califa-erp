@@ -78,7 +78,7 @@ export async function listarGpsAtivos(
 }
 
 /**
- * A lista do campo "GP Responsável" do orçamento (decisão 175, que revisa a
+ * A lista do campo "GP Responsável" do orçamento (decisão 176, que revisa a
  * 170): os GPs Responsáveis do projeto que podem ser GP primeiro, e depois
  * todo membro ativo com o papel GP ou Administrador. Quem vem de fora entra
  * nos GPs do projeto quando o orçamento é salvo. Ler `projeto_responsaveis`

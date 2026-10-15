@@ -50,7 +50,7 @@ export interface JobNaEquipe {
   /** Encerrado ou finalizado: não sai mais PP, e a chave fica parada. */
   congelado: boolean;
   /** Aberto ou em produção: o GP e o produtor se trocam pela Equipe
-   *  (decisão 175). Antes da abertura, eles mudam no envio para abertura. */
+   *  (decisão 176). Antes da abertura, eles mudam no envio para abertura. */
   aceitaTroca: boolean;
 }
 

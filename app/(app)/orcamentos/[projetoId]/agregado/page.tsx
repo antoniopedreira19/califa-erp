@@ -166,7 +166,7 @@ export default async function OrcamentosAgregadoPage({
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId),
     // A lista do orçamento novo: quem pode ser GP, os do projeto primeiro —
-    // quem vem de fora entra no projeto ao criar (decisão 175, que revisa
+    // quem vem de fora entra no projeto ao criar (decisão 176, que revisa
     // a 170). A de cima continua dando o nome no card.
     listarGpsParaOrcamento(params.projetoId, tenantId),
     // Os orçamentos que só dependem de não ter item para sair pela lixeira

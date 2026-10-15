@@ -5439,7 +5439,7 @@ código publicado logo depois (`3305751`).
   carregador, e os portões de `actions-pp.ts` e `actions-notas-da-pp.ts`.
   Trocar o produtor desliga a chave (gatilho no banco).
 
-## ⚠️ Nota de 2026-10-15 — Trocar o GP e o Produtor Responsáveis pela Equipe (decisão 175)
+## ⚠️ Nota de 2026-10-15 — Trocar o GP e o Produtor Responsáveis pela Equipe (decisão 176)
 
 - **"Trocar"** nos cards do GP e do Produtor Responsável do pop-up "Equipe"
   do job, e um ícone por célula na tabela da visão agregada. Só GP e

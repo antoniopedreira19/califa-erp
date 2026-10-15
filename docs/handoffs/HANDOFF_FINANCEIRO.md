@@ -7234,7 +7234,7 @@ Regra completa na nota de 14/10/2026 da decisão 036.
 - Código em `fila-celulas.tsx` (novo), `fila-list.tsx` e
   `cancelamento-na-fila.tsx`. Os pop-ups não mudaram.
 
-## ⚠️ Nota de 2026-10-15 — Troca do GP ou do produtor aparece na Comunicação (decisão 175)
+## ⚠️ Nota de 2026-10-15 — Troca do GP ou do produtor aparece na Comunicação (decisão 176)
 
 - A produção troca o GP e o Produtor Responsáveis de job aberto sem passar
   pelo financeiro. A troca aparece como card automático na Comunicação do

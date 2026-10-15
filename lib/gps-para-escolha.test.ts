@@ -1,5 +1,5 @@
 /**
- * Testes da lista de GP do orçamento — decisão 175.
+ * Testes da lista de GP do orçamento — decisão 176.
  *
  * Rode com:  node --import tsx --test lib/gps-para-escolha.test.ts
  */

@@ -293,7 +293,7 @@ const ORCAMENTO_ARQUIVADO =
  * mandar outra coisa. A FK não cobre isso: ela só garante que a regional
  * existe no cadastro.
  *
- * O GP não precisa mais ser do projeto (decisão 175, que revisa a 170): o
+ * O GP não precisa mais ser do projeto (decisão 176, que revisa a 170): o
  * de fora entra nos GPs Responsáveis do projeto depois que o orçamento é
  * gravado (`incluirGpNoProjeto`).
  */
@@ -552,7 +552,7 @@ async function criarOrcamentoComV1(
     metadata: { codigo, nome: parsed.data.nome, projeto_id: projetoId },
   });
 
-  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 175). O
+  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176). O
   // orçamento já está gravado: uma falha aqui fica no log, e o próximo
   // "Salvar" ou o envio para abertura incluem de novo.
   await incluirGpNoProjeto(supabase, {
@@ -1040,7 +1040,7 @@ export async function atualizarOrcamento(
         : undefined,
   });
 
-  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 175).
+  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176).
   await incluirGpNoProjeto(supabase, {
     tenantId: session.activeTenant.id,
     projetoId,

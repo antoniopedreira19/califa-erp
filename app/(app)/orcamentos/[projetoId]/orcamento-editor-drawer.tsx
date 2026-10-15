@@ -39,7 +39,7 @@ interface Props {
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   cidadesIniciais: CidadeOption[];
   cidadeAtual: CidadeOption | null;
-  /** Quem pode ser GP: os do projeto e os outros (decisão 175). */
+  /** Quem pode ser GP: os do projeto e os outros (decisão 176). */
   gps: GpParaEscolha[];
   produtores: Pick<Profile, "id" | "nome">[];
   /** O projeto, travado no formulário como na criação. */

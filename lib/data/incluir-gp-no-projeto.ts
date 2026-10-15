@@ -4,7 +4,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 type Supabase = ReturnType<typeof createClient>;
 
 /**
- * O GP de fora entra nos GPs Responsáveis do projeto (decisão 175).
+ * O GP de fora entra nos GPs Responsáveis do projeto (decisão 176).
  *
  * O campo "GP Responsável" do orçamento oferece todo membro que pode ser GP;
  * quem ainda não é GP do projeto passa a ser quando o orçamento é criado,
@@ -47,7 +47,7 @@ export async function incluirGpNoProjeto(
       entidadeTipo: "projeto",
       entidadeId: entrada.projetoId,
       metadata: {
-        decisao: "175",
+        decisao: "176",
         gp_id: entrada.gpId,
         origem: entrada.origem,
         orcamento_id: entrada.orcamentoId,

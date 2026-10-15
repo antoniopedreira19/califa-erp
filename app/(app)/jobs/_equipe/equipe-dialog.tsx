@@ -12,7 +12,7 @@
  * GPs e produtores põem e tiram gente; quem entrou sozinho tem cadeado.
  *
  * O GP ou o administrador troca o GP e o Produtor Responsáveis de job
- * aberto ("Trocar", decisão 175), sem errata e sem o financeiro. Grava no
+ * aberto ("Trocar", decisão 176), sem errata e sem o financeiro. Grava no
  * mesmo "Salvar"; a troca do produtor desliga a chave; quem sai continua
  * na equipe pelo que já o punha nela (o orçamento, o projeto).
  */
@@ -360,7 +360,7 @@ interface PropsDoPopup {
   podeMudarMembros: boolean;
   podeMudarChave: boolean;
   /** GP ou administrador: troca o GP e o Produtor Responsáveis de job
-   *  aberto (decisão 175). */
+   *  aberto (decisão 176). */
   podeTrocarResponsaveis: boolean;
 }
 
@@ -478,7 +478,7 @@ function ConteudoDaEquipe({
           (p.papel === "gerente_producao" || p.papel === "administrador"),
       )
       .sort(ordenar);
-    // Qualquer GP ou administrador (decisão 175): quem não é GP do projeto
+    // Qualquer GP ou administrador (decisão 176): quem não é GP do projeto
     // passa a ser ao salvar.
     const doProjeto = podem.filter((p) => gpsDoProjeto.has(p.id));
     const outros = podem.filter((p) => !gpsDoProjeto.has(p.id));

@@ -396,7 +396,7 @@ export async function enviarJobParaAbertura(
   //
   // GP e produtor (decisão 135) seguem as listas do formulário do
   // orçamento: o GP sai de quem pode ser GP — os do projeto e os outros,
-  // que entram no projeto ao enviar (decisão 175, que revisa a 170) —, o
+  // que entram no projeto ao enviar (decisão 176, que revisa a 170) —, o
   // produtor de quem tem o papel Produtor (decisão 168). O que já está no
   // orçamento passa sem a conferência da lista de produtor. O PAPEL do GP,
   // não: o GP que não pode ser GP (nem GP nem Administrador) trava o envio,
@@ -839,7 +839,7 @@ export async function enviarJobParaAbertura(
       },
     });
 
-    // O GP de fora entra nos GPs Responsáveis do projeto (decisão 175). O
+    // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176). O
     // job já foi reenviado: uma falha aqui fica no log.
     await incluirGpNoProjeto(supabase, {
       tenantId: session.activeTenant.id,
@@ -1280,7 +1280,7 @@ export async function enviarJobParaAbertura(
     },
   });
 
-  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 175). O
+  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176). O
   // job já foi criado: uma falha aqui fica no log.
   await incluirGpNoProjeto(supabase, {
     tenantId: session.activeTenant.id,

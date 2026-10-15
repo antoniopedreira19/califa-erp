@@ -100,7 +100,7 @@ export async function lerRecusasDeSaveDoJob(
 }
 
 /**
- * Uma troca do GP ou do Produtor Responsável do job (decisão 175), para o
+ * Uma troca do GP ou do Produtor Responsável do job (decisão 176), para o
  * card da Comunicação. Vem de `jobs_trocas_de_responsavel`, que tem três
  * FKs para `profiles`: os nomes saem numa consulta própria, nunca por embed.
  */
@@ -315,7 +315,7 @@ export function montarThreadChat(
    */
   alteracoesFinanceiro: JobAlteracaoFinanceiroComItens[],
   /**
-   * As trocas do GP e do Produtor Responsável (decisão 175). Obrigatório
+   * As trocas do GP e do Produtor Responsável (decisão 176). Obrigatório
    * pelo mesmo motivo das recusas.
    */
   trocasDeResponsavel: TrocaDeResponsavelNoChat[],
@@ -611,7 +611,7 @@ export function montarThreadChat(
     });
   }
 
-  // ---- Um card por troca de responsável (decisão 175) ----
+  // ---- Um card por troca de responsável (decisão 176) ----
   // Sem errata e sem o financeiro: o card é o registro de quem trocou.
   for (const t of trocasDeResponsavel) {
     const notas = [
