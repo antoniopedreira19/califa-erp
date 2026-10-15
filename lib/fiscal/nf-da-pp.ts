@@ -272,6 +272,46 @@ export function rotuloCurtoDoRegime(regime: RegimeTributarioFornecedor | null): 
   return "regime não informado";
 }
 
+/**
+ * Decisão 180 (revê a 139): o que o regime do fornecedor deixa reter na
+ * aprovação. O optante do Simples não sofre retenção de PIS/COFINS/CSLL e
+ * IRRF (IN SRF 459), mas o ISS pode ser retido quando o município exige
+ * (LC 123/2006, art. 21, § 4º), na alíquota da nota. O MEI não sofre
+ * retenção. Sem regime informado, segue o Lucro Presumido ou Real.
+ */
+export type RetencaoDoRegime = "todas" | "so_iss" | "nenhuma";
+
+export function retencaoDoRegime(regime: RegimeTributarioFornecedor | null): RetencaoDoRegime {
+  if (regime === "mei") return "nenhuma";
+  if (regime === "simples") return "so_iss";
+  return "todas";
+}
+
+/** Por que o imposto não pode ser retido deste regime; null quando pode. */
+export function travaDoRegime(
+  regime: RegimeTributarioFornecedor | null,
+  imposto: ImpostoRetido,
+): string | null {
+  const r = retencaoDoRegime(regime);
+  if (r === "nenhuma") return "MEI: sem retenção na fonte.";
+  if (r === "so_iss" && imposto !== "ISS") {
+    return "Optante do Simples: só o ISS pode ser retido (LC 123, art. 21, § 4º). PIS, COFINS, CSLL e IRRF não (IN 459).";
+  }
+  return null;
+}
+
+/** A primeira trava que a lista de retenções esbarra; null quando cabe toda. */
+export function retencaoForaDoRegime(
+  regime: RegimeTributarioFornecedor | null,
+  impostos: readonly ImpostoRetido[],
+): string | null {
+  for (const imposto of impostos) {
+    const trava = travaDoRegime(regime, imposto);
+    if (trava) return trava;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // A NF em conferência: a tela guarda, a coluna "Dados da PP" edita e o
 // pop-up de aprovação usa (base das retenções e mês do crédito).

@@ -25,6 +25,9 @@ import {
   somaDasPartes,
   retencoesParaRegistrar,
   rotuloCurtoDoRegime,
+  retencaoDoRegime,
+  retencaoForaDoRegime,
+  travaDoRegime,
   textoDoMotivo,
   textoDoRegime,
   tomadoresPadrao,
@@ -283,6 +286,26 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
   assert.equal(rotuloCurtoDoRegime("simples"), "optante do Simples");
   assert.equal(rotuloCurtoDoRegime("mei"), "MEI");
   assert.equal(rotuloCurtoDoRegime(null), "regime não informado");
+});
+
+test("decisão 180: o Simples só retém o ISS, o MEI nada, e o resto segue o Lucro Presumido ou Real", () => {
+  assert.equal(retencaoDoRegime("simples"), "so_iss");
+  assert.equal(retencaoDoRegime("mei"), "nenhuma");
+  assert.equal(retencaoDoRegime("normal"), "todas");
+  assert.equal(retencaoDoRegime(null), "todas");
+  assert.equal(travaDoRegime("simples", "ISS"), null);
+  for (const imposto of ["PIS", "COFINS", "CSLL", "IRRF"] as const) {
+    assert.match(travaDoRegime("simples", imposto) ?? "", /só o ISS/);
+    assert.equal(travaDoRegime("normal", imposto), null);
+    assert.equal(travaDoRegime(null, imposto), null);
+  }
+  assert.equal(travaDoRegime("mei", "ISS"), "MEI: sem retenção na fonte.");
+  // A lista inteira: o servidor recusa o que a tela não deixaria mandar.
+  assert.equal(retencaoForaDoRegime("simples", ["ISS"]), null);
+  assert.match(retencaoForaDoRegime("simples", ["ISS", "IRRF"]) ?? "", /Optante do Simples/);
+  assert.equal(retencaoForaDoRegime("mei", []), null);
+  assert.equal(retencaoForaDoRegime("mei", ["ISS"]), "MEI: sem retenção na fonte.");
+  assert.equal(retencaoForaDoRegime("normal", ["PIS", "COFINS", "CSLL", "IRRF", "ISS"]), null);
 });
 
 test("decisão 179: Real e Presumido separados não são mais regime do fornecedor", () => {
