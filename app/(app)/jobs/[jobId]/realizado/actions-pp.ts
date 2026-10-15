@@ -26,6 +26,7 @@ import { formatCurrency } from "@/lib/utils";
 import { enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
 import {
   DOCUMENTO_TIPOS,
+  DOCUMENTO_TIPOS_FISCAIS,
   PP_URGENTE_JUSTIFICATIVA_MIN,
   verbaDeResponsavel,
   type TipoVerba,
@@ -1087,6 +1088,8 @@ async function renderizarDocumentoDaPP(args: {
   /** Decisão 161: a PP paga por boleto — o PDF troca a linha do PIX por
    *  "Pagamento: Boleto". */
   pagamentoPorBoleto?: boolean;
+  /** Decisão 178: a prévia da conferência — marca d'água e sem gravar. */
+  previa?: boolean;
 }): Promise<{ path: string; buffer: Buffer }> {
   // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
   // seus side-effects de inicialização do resto do módulo.
@@ -1107,6 +1110,7 @@ async function renderizarDocumentoDaPP(args: {
       verba_titular_tipo: args.pp.verba_titular_tipo,
     },
     pagamentoPorBoleto: args.pagamentoPorBoleto === true,
+    previa: args.previa === true,
     empresa: args.empresa as never,
     fornecedor: (args.fornecedor ?? null) as never,
     responsavelVerbaNome: args.responsavelVerbaNome,
@@ -2128,6 +2132,113 @@ export async function signedUrlAnexoAEmitir(
 }
 
 /**
+ * A prévia do PDF da PP na conferência lado a lado do formulário (decisão
+ * 178, 15/10/2026). É o documento que a geração vai imprimir, montado com
+ * os dados do formulário como estão agora — fornecedor, valor, parcelas,
+ * CNPJ da PP —, para conferir com o documento anexado antes de gerar.
+ *
+ * Sai SEM código ("PRÉVIA" no lugar dele) e com a marca d'água "PRÉVIA" em
+ * toda página. Não grava nada, nem no banco nem no Storage: volta em base64
+ * e a tela o abre num `blob:`, sem os botões de baixar e de abrir em outra
+ * aba. A verba não passa por aqui: o formulário dela não tem a conferência.
+ */
+export async function previaDoPdfDaPP(
+  itemRealizadoId: string,
+  dados: z.input<typeof dadosSchema>,
+): Promise<Result<{ pdf: string }>> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  const gate = await checarGatesRealizado(itemRealizadoId);
+  if (!gate.ok) return gate;
+  const { job, supabase } = gate;
+  const tenantId = session.activeTenant.id;
+
+  const parsed = dadosSchema.safeParse(dados);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: `A prévia aparece com o formulário preenchido: ${parsed.error.issues[0]?.message ?? "confira os campos"}.`,
+    };
+  }
+  const d = parsed.data;
+  const valor = valorDaPPPorUnidade(d.valor_unitario, d.quantidade, d.dias_meses);
+  if (valor <= 0) {
+    return { ok: false, message: "A prévia aparece quando R$ Unit., QT e D/M estiverem preenchidos." };
+  }
+  if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
+    return {
+      ok: false,
+      message: `A prévia aparece quando a soma das parcelas fechar com o valor da PP (${brl(valor)}).`,
+    };
+  }
+
+  const tipoVerba = tipoDaVerbaDosDados(d);
+  const pagaFornecedor = usaFornecedor(d);
+  const fornRes = pagaFornecedor
+    ? await supabase
+        .from("fornecedores")
+        .select("*")
+        .eq("id", d.fornecedor_id as string)
+        .eq("tenant_id", tenantId)
+        .eq("status", "ativo")
+        .maybeSingle()
+    : { data: null };
+  if (pagaFornecedor && !fornRes.data) {
+    return { ok: false, message: "A prévia aparece quando o fornecedor estiver escolhido." };
+  }
+  const titular = await nomeDoTitularDaVerba(
+    supabase,
+    tenantId,
+    d,
+    fornRes.data as { nome?: string | null; razao_social?: string | null } | null,
+  );
+  if (!titular.ok) return titular;
+
+  const [cnpjDaPP, contexto] = await Promise.all([
+    cnpjDaPPNaGeracao(
+      supabase,
+      tenantId,
+      { regional_id: job.regional_id, empresa_id: job.empresa_id },
+      d.estabelecimento_id ?? null,
+    ),
+    carregarContextoPdf(supabase, tenantId, job),
+  ]);
+  if (!cnpjDaPP.ok) return cnpjDaPP;
+
+  try {
+    const { buffer } = await renderizarDocumentoDaPP({
+      tenantId,
+      jobId: job.id,
+      ppId: "previa",
+      codigo: "PRÉVIA",
+      pp: {
+        servico: d.servico,
+        quantidade: d.quantidade,
+        especificacoes: d.especificacoes ?? null,
+        valor,
+        verba_producao: d.verba_producao,
+        tipo_verba: tipoVerba,
+        verba_titular_tipo: d.verba_producao ? (d.verba_titular_tipo ?? null) : null,
+      },
+      empresa: cnpjDaPP.empresa,
+      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
+      pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+      responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
+      pagamentoDoTitular: null,
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas: d.parcelas.map((p, i) => ({ numero: i + 1, data_vencimento: p.data_vencimento, valor: p.valor })),
+      previa: true,
+    });
+    return { ok: true, pdf: buffer.toString("base64") };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Não foi possível montar a prévia: ${msg}` };
+  }
+}
+
+/**
  * O que falta nos anexos para enviar (decisão 152): pelo menos um arquivo;
  * o tipo de cada um; o número dos documentos; e, em cada NF, número,
  * emissão, valor, CNPJ tomador e a parte desta PP. A soma das partes vai
@@ -2135,7 +2246,7 @@ export async function signedUrlAnexoAEmitir(
  * `_conferir_partes_da_nota`). Null = nada.
  *
  * Decisão 161: a PP paga por boleto exige também o boleto (tipo Boleto) e a
- * nota (NF ou recibo) — o boleto não substitui a nota.
+ * nota (NF, recibo ou fatura — 178) — o boleto não substitui a nota.
  */
 function faltaNosAnexosDoEnvio(
   anexos: AnexoUploaded[],
@@ -2146,7 +2257,7 @@ function faltaNosAnexosDoEnvio(
     return "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.";
   }
   if (exigeBoleto) {
-    if (!anexos.some((a) => a.documento_tipo === "nota_fiscal" || a.documento_tipo === "recibo")) {
+    if (!anexos.some((a) => !!a.documento_tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.documento_tipo))) {
       return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
     }
     if (!anexos.some((a) => a.documento_tipo === "boleto")) {

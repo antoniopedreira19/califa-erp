@@ -42,8 +42,10 @@ ficavam em abas. O banco confirmou: dos 49 fornecedores ativos em
    Boleto", com ✓ em cada um que já tem arquivo do tipo. O envio ao
    financeiro (e o "Deixar pronta para envio", decisão 160) recusa sem o
    anexo do tipo Boleto e sem a nota — NF, ou recibo, que é o documento
-   fiscal da pessoa física. As demais regras do envio (decisão 152) seguem
-   como eram.
+   fiscal da pessoa física, ou fatura (desde a
+   [178](178-fatura-revisao-sem-nf-e-previa-da-pp.md), 15/10/2026: a
+   locação de bens móveis não tem NF). As demais regras do envio (decisão
+   152) seguem como eram.
 6. **O PDF da PP não muda de desenho** (regra da 127): na chave aleatória,
    a linha do PIX traz a chave escolhida; no boleto, a linha do PIX vira
    **"Pagamento: Boleto"**. O resto da faixa de dados bancários continua o

@@ -197,7 +197,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 175 | [A errata volta a abrir o planejado, a linha cancelada zera os dois lados e o job mostra só o valor de hoje (revê a 151)](175-errata-volta-a-abrir-o-planejado-e-valor-unico.md) | 2026-10-15 |
 | 176 | [Trocar o GP e o Produtor Responsáveis do job aberto pela Equipe, e o GP de fora do projeto entrando sozinho nos GPs do projeto](176-trocar-gp-e-produtor-do-job-aberto.md) | 2026-10-15 |
 | 177 | [A produção (GP, produtor e freela) edita o cadastro do fornecedor pelo lápis, e não só o pendente](177-producao-edita-cadastro-de-fornecedor.md) | 2026-10-15 |
-| 178 | *Reservada* — fatura de locação (em implementação em outra sessão; o código dela já cita a 178) | 2026-10-15 |
+| 178 | ["Fatura" no tipo do anexo, a revisão da PP sem a linha "Nota fiscal" quando não há NF, e a prévia da PP na conferência lado a lado (revê a 153 e a 161)](178-fatura-revisao-sem-nf-e-previa-da-pp.md) | 2026-10-15 |
 | 179 | [Regime "Lucro Presumido ou Real" numa opção só no fornecedor, preenchido pela consulta do CNPJ (revê a 166)](179-regime-presumido-ou-real.md) | 2026-10-15 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em

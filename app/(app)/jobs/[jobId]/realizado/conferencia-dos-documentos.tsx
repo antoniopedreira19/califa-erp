@@ -5,8 +5,9 @@
  * o desenho aprovado no protótipo "Etapa antes da PP" (11ª rodada), igual à
  * tela da PP no Contas a Pagar (`pp-tela.tsx`):
  *
- *  • à esquerda, o PDF do Pedido de Produção — só no envio: a PP a emitir
- *    ainda não tem PDF, e no formulário a coluna não aparece;
+ *  • à esquerda, o PDF do Pedido de Produção. No envio, o da PP gerada; no
+ *    formulário, a PRÉVIA montada com os dados dele (decisão 178), com a
+ *    marca d'água e sem os botões de baixar e de abrir em outra aba;
  *  • no meio, o documento à vista, com os números 1, 2, 3… para trocar;
  *  • à direita, "Documentos e dados": anexar, a lista (o mais novo em cima,
  *    com a situação de cada um) e os campos SÓ do documento à vista — o tipo
@@ -44,6 +45,13 @@ import {
 } from "./anexos-da-pp";
 
 type ResultadoDaUrl = { ok: true; url: string } | { ok: false; message: string };
+type ResultadoDaPrevia = { ok: true; pdf: string } | { ok: false; message: string };
+
+/** O PDF da prévia, que chega em base64, num `blob:` local. */
+function urlDaPrevia(base64: string): string {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+}
 
 export function ConferenciaDosDocumentos({
   open,
@@ -52,6 +60,7 @@ export function ConferenciaDosDocumentos({
   selo,
   descricao,
   ppIdDoPdf,
+  previaDoPdf,
   anexos,
   focar,
   urlDoGravado,
@@ -77,8 +86,11 @@ export function ConferenciaDosDocumentos({
   codigo: string;
   selo: string;
   descricao: string;
-  /** A PP cujo PDF vai à esquerda (null = PP a emitir: sem a coluna). */
+  /** A PP cujo PDF vai à esquerda (null = ainda sem PDF gravado). */
   ppIdDoPdf: string | null;
+  /** Decisão 178: sem PDF gravado, a prévia do formulário vai à esquerda.
+   *  Montada ao abrir a tela, com os dados daquele momento. */
+  previaDoPdf?: () => Promise<ResultadoDaPrevia>;
   /** Os anexos de quem abriu, no estado em que estão. */
   anexos: AnexoEmEdicao[];
   /** O documento que abre à vista (o olho de um cartão). */
@@ -147,6 +159,36 @@ export function ConferenciaDosDocumentos({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens]);
 
+  // A prévia (decisão 178): montada a cada vez que a tela abre, porque o
+  // formulário pode ter mudado; o `blob:` sai da memória ao fechar.
+  const [urlPrevia, setUrlPrevia] = React.useState<string | null>(null);
+  const [motivoSemPrevia, setMotivoSemPrevia] = React.useState<string | null>(null);
+  const comPrevia = !ppIdDoPdf && !!previaDoPdf;
+  React.useEffect(() => {
+    if (!open || !comPrevia || !previaDoPdf) return;
+    let cancelado = false;
+    let criada: string | null = null;
+    setCarregandoPdf(true);
+    setMotivoSemPrevia(null);
+    previaDoPdf().then((res) => {
+      if (cancelado) return;
+      if (res.ok) {
+        criada = urlDaPrevia(res.pdf);
+        setUrlPrevia(criada);
+      } else {
+        setMotivoSemPrevia(res.message);
+      }
+      setCarregandoPdf(false);
+    });
+    return () => {
+      cancelado = true;
+      if (criada) URL.revokeObjectURL(criada);
+      setUrlPrevia(null);
+    };
+    // Só quando a tela abre: `previaDoPdf` é de quem abre e lê o formulário.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, comPrevia]);
+
   // O PDF da PP é o lado fixo: depende só da PP.
   React.useEffect(() => {
     if (!open || !ppIdDoPdf) return;
@@ -210,7 +252,7 @@ export function ConferenciaDosDocumentos({
   }, []);
 
   const urlDoAtivo = ativo ? (urlDoLocal(ativo) ?? assinadas[ativo.id] ?? null) : null;
-  const temPP = ppIdDoPdf !== null;
+  const temPP = ppIdDoPdf !== null || comPrevia;
   const nfsNaLista = visiveis.filter((a) => a.status === "ok" && a.tipo === "nota_fiscal");
 
   const situacao = (a: AnexoEmEdicao): { texto: string; ok: boolean } => {
@@ -284,7 +326,7 @@ export function ConferenciaDosDocumentos({
                   : "grid-cols-1 lg:grid-cols-[1fr_350px]",
             )}
           >
-            {temPP && (
+            {temPP && !comPrevia && (
               <PainelDocumento
                 icone={<FileText className="h-4 w-4 text-california-red" />}
                 titulo="Pedido de Produção"
@@ -300,6 +342,33 @@ export function ConferenciaDosDocumentos({
                   <VisualizadorDeArquivo url={urlPdf} nome={`PDF da ${codigo}`} imagem={false} />
                 ) : (
                   <VazioDoPainel texto={carregandoPdf ? "Carregando o PDF..." : "PDF indisponível."} />
+                )}
+              </PainelDocumento>
+            )}
+            {comPrevia && (
+              <PainelDocumento
+                icone={<FileText className="h-4 w-4 text-california-red" />}
+                titulo="Pedido de Produção"
+                extra={
+                  <Badge className="border-california-red/30 bg-california-red/10 text-[10px] text-california-red">
+                    Prévia
+                  </Badge>
+                }
+                legenda="Com os dados do formulário · não vale como PP"
+                oculto={expandido === "doc"}
+                url={urlPrevia}
+                nomeArquivo=""
+                expandido={expandido === "pp"}
+                onExpandir={() => setExpandido((e) => (e === "pp" ? null : "pp"))}
+                onErro={setErroLocal}
+                semBaixar
+              >
+                {urlPrevia ? (
+                  <VisualizadorDeArquivo url={urlPrevia} nome="Prévia do Pedido de Produção" imagem={false} semBarra />
+                ) : (
+                  <VazioDoPainel
+                    texto={carregandoPdf ? "Montando a prévia da PP..." : (motivoSemPrevia ?? "Prévia indisponível.")}
+                  />
                 )}
               </PainelDocumento>
             )}
