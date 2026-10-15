@@ -1,7 +1,7 @@
 # 156 — O CNPJ da PP é separado da empresa gerencial
 
 **Data:** 2026-10-07
-**Status:** aceita e implementada (07/10/2026).
+**Status:** aceita e implementada (07/10/2026). ⚠️ **Revisão de 15/10/2026 decidida e ainda não implementada** — "A tomadora é a emissora", no fim deste documento. O Tiago confirma a troca nas PPs antes de qualquer mudança no banco ou no código.
 **Quem decidiu:** Tiago, em 07/10/2026, a partir de um caso reportado pela produção (NF 102, regional SS, com tomador GoCrazy) e da lista de "Empresa emissora" do formulário da PP, que mostrava as empresas gerenciais.
 **Revê:** a [152](152-nf-do-fornecedor-com-cadastro-proprio.md) no CNPJ tomador sugerido e na conferência da nota (antes, pela empresa gerencial).
 **Migration:** `20261007300009_cnpj_da_pp_separado_da_gerencial.sql`.
@@ -52,7 +52,7 @@ As duas dimensões são independentes (palavras do Tiago): o CNPJ da California 
 3. **O que a aprovação faz com a nota em outro CNPJ**: hoje o financeiro só vê o aviso; a decisão (corrigir o tomador, rejeitar, aprovar assim) é dele, sem regra no sistema.
 4. **O logo do PDF** continua o da California para todo CNPJ.
 5. **A PP-00144** (ANI-1004/26, job da CCH) foi gerada com "CCH LTDA · CNPJ 00.000.000/0000-00" no PDF. Com a regra nova, cancelar e gerar de novo.
-6. **Casos antigos fora da relação, para o Tiago verificar o ocorrido** (levantados em 08/10/2026, com os documentos abertos um a um). Por decisão dele, **nada foi alterado**: a empresa emissora gravada fica como está.
+6. **Casos antigos fora da relação, para o Tiago verificar o ocorrido** (levantados em 08/10/2026, com os documentos abertos um a um). Por decisão dele, **nada foi alterado**: a empresa emissora gravada fica como está. ⚠️ Em 15/10/2026 ele decidiu passar essas PPs para a tomadora da nota; aguarda a confirmação dele (ver "Revisão de 15/10/2026", no fim).
    - **Empresa emissora gravada diferente da relação:** PP-00141 (AMB-1022/26) e PP-00145 (AMB-1019/26), da regional SS, gravadas como California no preenchimento de 07/10 (não tinham NF). Os documentos (fatura 1907 e duplicata 42029) vieram contra a GoCrazy.
    - **Jobs da Hitlab com o documento contra outro CNPJ:** PP-00043 (AMB-1002/26, NF 90 contra a California), PP-00049 (AMB-1002/26, NF 87 contra a GoCrazy), PP-00090 (UER-1002/26, NF 7408 contra a California, com ISS retido em Salvador) e PP-00045 (AMB-1002/26, relatório de passagens com cliente California; não é documento fiscal). A PP-00043 e a PP-00049 têm o mesmo fornecedor, valor e serviço com NFs diferentes: confirmar que não é o mesmo serviço pago duas vezes.
    - **Notas contra o cliente:** PP-00069 a PP-00077 (AMB-1001/26, Hitlab, cachês, aprovadas) têm NF com tomador AMBEV S.A., que cita a California "aos cuidados", pelo CNPJ 19.437.976/0003-16 (estabelecimento que não está no cadastro de impostos). Aguarda o Tiago dizer como esses cachês são pagos.
@@ -66,3 +66,42 @@ As duas dimensões são independentes (palavras do Tiago): o CNPJ da California 
 - TES-1014/26 (regional NE): abre com California. A PP-00146 foi gerada trocando para GoCrazy: PDF com "GO CRAZY CONSULTORIA E MARKETING LTDA · 29.943.648/0001-83", gerencial Agência California.
 - Envio da PP-00146 com a NF 9156 no CNPJ da California: aviso vermelho, pop-up (Voltar e Sim, enviar), confirmação de acima do planejado em seguida, auditoria com a confirmação. No financeiro, "CNPJ da PP", a frase vermelha e a faixa na aprovação (fechada sem aprovar).
 - Cadastro de impostos: o quadro por regional grava e volta ao padrão (regional Teste); o diálogo do CNPJ salva os campos novos.
+
+## Revisão de 15/10/2026 — a tomadora é a emissora (decidida, NÃO implementada)
+
+**Situação:** decidida pelo Tiago em 14 e 15/10/2026. **Nada foi aplicado.** Ele confirma a troca nas PPs antigas (lista abaixo) antes; só então entram a migration e o código.
+
+**Por quê.** A nota é o documento fiscal: o CNPJ que está nela lança a despesa, retém imposto (o ISS retido da PP-00090 é da California) e deve pagar. A relação por regional (item 3 da regra) continua só como **pré-seleção** na geração.
+
+### A regra revista
+
+1. **A empresa emissora da PP é a tomadora da nota.** Revê o item 4 da regra ("nota em outro CNPJ não barra").
+2. **Antes do envio, a nota em outro CNPJ barra.** Respostas do Tiago:
+   - no formulário de gerar e de editar a PP, o aviso vermelho vira trava. O campo "Empresa emissora" está na mesma tela;
+   - no envio, sai o "Sim, enviar" (pop-up "Enviar com a nota em outro CNPJ?") e entra o botão **"Editar a PP"**, que abre a edição da PP gerada ([173](173-pp-gerada-volta-a-se-editar.md)). Ali a empresa emissora é trocada, o PDF é refeito e a linha do tempo registra "Editada". O sistema não troca sozinho;
+   - o servidor barra também, sem a confirmação `confirmarTomadorDiferente`.
+3. **Depois do envio, "Corrigir a NF" leva a emissora junto.** Trocar o tomador troca a empresa emissora da PP e das outras PPs que usam a mesma nota, com registro. Ponto a resolver na implementação: PP com notas em CNPJs diferentes (barrar, porque a emissora ficaria ambígua).
+4. **A faixa vermelha na aprovação do financeiro fica** para o que já existia.
+
+### Troca nas PPs antigas (aprovada pelo Tiago em 15/10, aguardando a confirmação dele)
+
+Muda só `pedidos_compra.estabelecimento_id`, com auditoria. Os PDFs já gerados **não** são refeitos: são o que o fornecedor recebeu. Situação em 14/10/2026: nenhuma delas paga.
+
+| PP | Job | Valor | Status em 14/10 | Hoje | Passa a ser | Documento |
+|---|---|---|---|---|---|---|
+| PP-00141 | AMB-1022/26 (SS) | R$ 1.500,00 | em avaliação | California | GoCrazy | fatura 1907 contra a GoCrazy |
+| PP-00145 | AMB-1019/26 (SS) | R$ 3.694,09 | em avaliação | California | GoCrazy | duplicata 42029 contra a GoCrazy |
+| PP-00043 | AMB-1002/26 (Hitlab) | R$ 3.500,00 | em avaliação | Hitlab | California | NF 90 contra a California |
+| PP-00049 | AMB-1002/26 (Hitlab) | R$ 3.500,00 | em avaliação | Hitlab | GoCrazy | NF 87 contra a GoCrazy |
+| PP-00090 | UER-1002/26 (Hitlab) | R$ 6.000,00 | em avaliação | Hitlab | California | NF 7408 contra a California, ISS retido em Salvador |
+| PP-00045 | AMB-1002/26 (Hitlab) | R$ 5.737,03 | em avaliação | Hitlab | California | relatório de passagens com cliente California (sem nota fiscal) |
+| PP-00069 a 00077 | AMB-1001/26 (Hitlab) | R$ 350.000,00 | aprovadas | Hitlab | California | NFs com tomador AMBEV S.A., "aos cuidados" da filial California 19.437.976/0003-16 |
+
+Total que muda de CNPJ: R$ 373.931,12. A PP-00146 (teste) fica como está, a pedido do Tiago.
+
+### Cuidados registrados
+
+- **Os 9 cachês:** o tomador da nota é a AMBEV S.A. A /0003-16 é **filial** da California (mesma raiz 19.437.976), não outra empresa. Entram como California (/0001-54, a do cadastro) por decisão do Tiago. Falta perguntar ao contador como a California registra uma despesa com nota em nome da AMBEV.
+- **Conta que paga:** os cachês passam de Hitlab para California. O sistema ainda não confere a conta do pagamento (pendência 2). O financeiro precisa saber, para pagar pela conta certa e registrar o encontro de contas.
+- **Para o Tiago verificar:** PP-00043 × PP-00049 (mesmo fornecedor, valor e serviço com NFs diferentes); PP-00045 sem nota fiscal.
+- **PPs ainda não enviadas com NF sem tomador** (PP-00105, 00106, 00107 e 00123, todas com a California como emissora): passam pela trava nova no envio. A PP-00126 e a PP-00133 foram enviadas entre 08 e 14/10 com a nota contra a California, igual à empresa emissora; até 14/10, nenhuma PP real chegou ao financeiro com a nota em outro CNPJ.
