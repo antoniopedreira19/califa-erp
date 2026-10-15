@@ -14,8 +14,8 @@
  * novo em cima, tipo obrigatório que nasce vazio e, na NF, os dados dela
  * logo abaixo do arquivo. Aqui são opcionais; o envio cobra todos.
  *
- * Decisão 166 (09/10/2026): fornecedor PJ sem regime tributário (ou com o
- * legado "Lucro Real ou Presumido") ou sem CNAE não gera PP. O aviso
+ * Decisão 166 (09/10/2026): fornecedor PJ sem regime tributário ou sem
+ * CNAE não gera PP. O aviso
  * vermelho embaixo do campo diz o que falta e aponta o lápis; "Gerar PP"
  * trava, e "Salvar" continua — a PP a emitir espera o cadastro. Quem não
  * edita fornecedor (GP, produtor, freelancer) ganha o lápis só nesse caso, e

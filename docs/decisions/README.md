@@ -198,7 +198,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 176 | [Trocar o GP e o Produtor Responsáveis do job aberto pela Equipe, e o GP de fora do projeto entrando sozinho nos GPs do projeto](176-trocar-gp-e-produtor-do-job-aberto.md) | 2026-10-15 |
 | 177 | [A produção (GP, produtor e freela) edita o cadastro do fornecedor pelo lápis, e não só o pendente](177-producao-edita-cadastro-de-fornecedor.md) | 2026-10-15 |
 | 178 | *Reservada* — fatura de locação (em implementação em outra sessão; o código dela já cita a 178) | 2026-10-15 |
-| 179 | *Reservada* — regime "Lucro Presumido ou Real" numa opção só no fornecedor, preenchido pela consulta do CNPJ (revê a 166; em implementação) | 2026-10-15 |
+| 179 | [Regime "Lucro Presumido ou Real" numa opção só no fornecedor, preenchido pela consulta do CNPJ (revê a 166)](179-regime-presumido-ou-real.md) | 2026-10-15 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a

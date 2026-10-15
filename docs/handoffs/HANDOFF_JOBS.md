@@ -5180,7 +5180,9 @@ código publicado logo depois (`3305751`).
   comum e verba de um terceiro, decisão 164) pergunta ao servidor o que
   falta no cadastro do fornecedor escolhido
   (`pendenciasDoCadastroDoFornecedor`): na pessoa jurídica, o regime (o
-  legado "Lucro Real ou Presumido" conta como falta) e o CNAE. Faltando, um
+  legado "Lucro Real ou Presumido" conta como falta — até 15/10/2026: pela
+  decisão 179 ele volta a ser regime completo, "Lucro Presumido ou Real") e
+  o CNAE. Faltando, um
   aviso **vermelho** embaixo do campo diz o quê e aponta o lápis; o lápis
   ganha contorno vermelho e o **"Gerar PP" trava**. O **"Salvar" continua**:
   a PP a emitir espera o cadastro. Relido depois de cada edição do cadastro.

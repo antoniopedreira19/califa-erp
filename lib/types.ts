@@ -251,9 +251,9 @@ export interface Fornecedor {
   // Módulo fiscal (02/10/2026): regime tributário, da consulta do CNPJ.
   regime_tributario: RegimeTributarioFornecedor | null;
   /** O regime que a consulta do CNPJ indicou (decisão 142): Simples, MEI
-   *  ou `normal` (nenhum dos dois — a Receita não diz se é Real ou
-   *  Presumido). Diferente de `regime_tributario` = alterado manualmente. */
-  regime_consulta: "normal" | "simples" | "mei" | null;
+   *  ou `normal` (nenhum dos dois: "Lucro Presumido ou Real", decisão 179).
+   *  Diferente de `regime_tributario` = alterado manualmente. */
+  regime_consulta: RegimeTributarioFornecedor | null;
   /** A data de opção pelo Simples ou pelo MEI que a consulta trouxe
    *  ("AAAA-MM-DD"); nula no regime normal ou sem a data (decisão 142). */
   regime_desde: string | null;
@@ -4566,10 +4566,11 @@ export interface ColaboradorFeriasLancamento {
 // aprovação da PP e o fornecedor passam a registrar. Migration
 // 20261002100001_fiscal_cadastro_e_dados_da_nf.sql.
 
-/** Decisão 166 (09/10/2026): Lucro Real e Lucro Presumido separados.
- *  `normal` é o legado "Lucro Real ou Presumido" — não se escolhe mais, e é
- *  o que a consulta do CNPJ indica quando não é Simples nem MEI. */
-export type RegimeTributarioFornecedor = "lucro_real" | "lucro_presumido" | "simples" | "mei" | "normal";
+/** Decisão 179 (15/10/2026): `normal` é "Lucro Presumido ou Real", numa
+ *  opção só — o que a consulta do CNPJ indica quando não é Simples nem MEI.
+ *  Real e Presumido separados (decisão 166) saíram: a Receita não diz qual
+ *  dos dois, e a retenção da PP é a mesma. */
+export type RegimeTributarioFornecedor = "normal" | "simples" | "mei";
 
 export type RegimeTributarioPJ = "lucro_real" | "lucro_presumido";
 
