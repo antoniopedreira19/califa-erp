@@ -92,6 +92,32 @@ acrescentou:
   o orçamento (`[projetoId]/actions.ts`) e depois do envio e do reenvio
   para abertura (`abertura-actions.ts`).
 
+## Conferido no navegador (15/10/2026)
+
+No projeto de teste TES-P001/26:
+
+- **Como produtor** ("Produtor Teste Claude"): o pop-up "Equipe" do
+  TES-1013/26 e da visão agregada sem nenhum "Trocar", só os cadeados. No
+  orçamento TES-P001/26-03, a lista de GP com "GPs do projeto" e "Outros
+  GPs"; escolhido "GP Teste Claude" (de fora), o aviso "passa a ser GP
+  Responsável do projeto ao salvar" e, salvo, ele nos GPs do projeto
+  (`projeto.gp_incluido`, origem `orcamento_editado`). Reaberto, ele já
+  aparece entre os GPs do projeto, sem aviso. O GP do orçamento voltou ao
+  original.
+- **Como administrador**, no TES-1013/26: GP trocado para "GP Teste" (de
+  fora) e produtor para "Produtor Teste", com a chave ligada para o produtor
+  novo no mesmo "Salvar" — gravou as duas trocas, a chave ligada e o "GP
+  Teste" nos GPs do projeto; os dois cards apareceram na Comunicação. Pela
+  visão agregada, o GP voltou ao original e a chave foi desligada; os jobs
+  finalizados (TES-1009 e TES-1027) e o aguardando abertura (TES-1029) sem
+  "Trocar". O "Cancelar" com a troca no rascunho não grava nada.
+- Os dois GPs de teste saíram dos GPs do TES-P001/26 pelo "Editar projeto".
+  O produtor do TES-1013/26 ficou "Produtor Teste": o anterior era um
+  administrador, que a lista de produtor não oferece (decisão 168).
+- No caminho: o botão "Equipe" repetia o rosto quando o GP é também o
+  produtor (aviso de chave duplicada do React), e a linha "No lugar de…"
+  cortava nomes longos — os dois corrigidos.
+
 ## Números de 15/10/2026
 
 59 jobs abertos ou em produção, todos com o GP entre os GPs do projeto; 16

@@ -323,18 +323,19 @@ function Responsavel({
             {pessoa?.nome ?? "—"}
           </p>
           <p className="text-xs text-muted-foreground">{rotulo}</p>
+          {/* Quebra em vez de cortar: o nome de quem sai é o que importa
+              conferir antes de salvar. */}
           {antes && (
-            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="truncate">
-                No lugar de{" "}
-                <span className="font-medium text-foreground">{antes.nome}</span>
-              </span>
+            <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+              No lugar de{" "}
+              <span className="font-medium text-foreground">{antes.nome}</span>
+              {" · "}
               <button
                 type="button"
                 onClick={onDesfazer}
-                className="inline-flex shrink-0 items-center gap-1 font-medium text-california-red hover:underline"
+                className="inline-flex items-center gap-1 whitespace-nowrap align-baseline font-medium text-california-red hover:underline"
               >
-                <Undo2 className="h-3 w-3" />
+                <Undo2 className="h-3 w-3 self-center" />
                 Desfazer
               </button>
             </p>
