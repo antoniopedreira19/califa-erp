@@ -633,8 +633,8 @@ async function atualizarComSchema(
 // ---------------------------------------------------------------------------
 
 /**
- * O que falta no cadastro do fornecedor para gerar PP: o regime (o legado
- * "Lucro Real ou Presumido" conta como falta) e o CNAE, na pessoa jurídica.
+ * O que falta no cadastro do fornecedor para gerar PP: o regime e o CNAE,
+ * na pessoa jurídica.
  * O formulário da PP pergunta ao escolher o fornecedor e de novo depois de
  * cada edição do cadastro; `gerarPPDaPPAEmitir` confere no servidor.
  */

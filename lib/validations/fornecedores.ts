@@ -40,10 +40,12 @@ import { cnaeExiste } from "@/lib/fiscal/cnaes";
  * regime não tira o arquivo do cadastro; só o ✕ do formulário tira.
  *
  * Decisão 166 (09/10/2026): na pessoa jurídica, o **regime** e o **CNAE**
- * passam a ser obrigatórios. Lucro Real e Lucro Presumido se escolhem em
- * separado; o legado "Lucro Real ou Presumido" (`normal`) não se grava
- * mais — só a consulta do CNPJ o indica. O CNAE é uma subclasse do CNAE 2.3
+ * passam a ser obrigatórios. O CNAE é uma subclasse do CNAE 2.3
  * (`lib/fiscal/cnaes.ts`), em 7 dígitos.
+ *
+ * Decisão 179 (15/10/2026): Lucro Real e Lucro Presumido voltam a ser uma
+ * opção só, "Lucro Presumido ou Real" (`normal`) — a Receita não diz qual
+ * dos dois, e a consulta do CNPJ passa a preencher o regime nos três casos.
  */
 
 const UFS_BRASIL = [
@@ -153,12 +155,12 @@ function montarFornecedorSchema(exigirPagamento: boolean) {
     ),
 
     // === módulo fiscal (02/10/2026): regime tributário da pessoa jurídica ===
-    // Decisão 166: Real e Presumido separados; o legado `normal` não se
-    // grava mais. Obrigatório na pessoa jurídica (superRefine).
+    // Decisão 179: "Lucro Presumido ou Real" (`normal`), Simples ou MEI.
+    // Obrigatório na pessoa jurídica (superRefine, decisão 166).
     regime_tributario: z.preprocess(
       nullIfEmpty,
-      z.enum(["lucro_real", "lucro_presumido", "simples", "mei"], {
-        errorMap: () => ({ message: "Escolha Lucro Real, Lucro Presumido, Simples Nacional ou MEI." }),
+      z.enum(["normal", "simples", "mei"], {
+        errorMap: () => ({ message: "Escolha Lucro Presumido ou Real, Simples Nacional ou MEI." }),
       })
         .nullable()
         .optional(),

@@ -7007,7 +7007,8 @@ financeiro". Regra completa na §9 da decisão 115.
 - O cadastro de fornecedor e de veículo exige, na pessoa jurídica, o
   **regime tributário** — Lucro Real e Lucro Presumido agora são opções
   separadas; o legado "Lucro Real ou Presumido" (`normal`) não se escolhe
-  mais — e o **CNAE** (`fornecedores.cnae`, a lista inteira do IBGE em
+  mais (revisto em 15/10/2026 pela decisão 179: de novo uma opção só,
+  "Lucro Presumido ou Real") — e o **CNAE** (`fornecedores.cnae`, a lista inteira do IBGE em
   `lib/fiscal/cnaes.ts`, com busca). A consulta do CNPJ preenche o CNAE
   principal e, no Simples e no MEI, o regime.
 - O cadastro antigo (sem CNAE) abre com o regime vazio na tela, "Antes: …"
@@ -7015,7 +7016,8 @@ financeiro". Regra completa na §9 da decisão 115.
   até alguém salvar.
 - **Aprovação da PP**: o regime continua vindo do cadastro. Real e
   Presumido aparecem pelo nome ("Lucro Real", "Lucro Presumido") e seguem a
-  regra de retenção do regime normal (`nf-da-pp.ts`, `calculos.ts`).
+  regra de retenção do regime normal (`nf-da-pp.ts`, `calculos.ts`). Desde
+  15/10/2026 (decisão 179), "Lucro Presumido ou Real".
 - Em 09/10/2026, os 31 fornecedores sem regime que tinham PP lançada
   receberam o regime pela consulta do CNPJ (15 Simples, 9 MEI, 7 "Lucro Real
   ou Presumido"); os 9 que já tinham bateram com a consulta. Migration
@@ -7286,3 +7288,20 @@ os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
 - A lista do "Não gera crédito" ganhou "Fornecedor pessoa física", antes de
   "Outro". O servidor aceita o motivo novo (`MOTIVOS_SEM_CREDITO`, conferido
   em `lib/validations/nf-da-pp.ts`); o banco só exige motivo preenchido.
+
+## ⚠️ Nota de 2026-10-15 (4) — "Lucro Presumido ou Real" numa opção só no regime do fornecedor (decisão 179, revê a 166)
+
+- O regime tributário do fornecedor e do veículo volta a ter três opções:
+  **Lucro Presumido ou Real** (`normal`), Simples Nacional e MEI. A Receita
+  não diz se é Real ou Presumido, e a retenção da PP é a mesma.
+- A consulta do CNPJ passa a preencher o regime nos três casos ("nenhum
+  dos dois" é Lucro Presumido ou Real). Só falha de consulta deixa o campo
+  para escolher à mão.
+- "Lucro Presumido ou Real" é regime completo: não trava mais a PP. Os 6
+  cadastros antigos com esse regime continuam pendentes só pelo CNAE.
+- Migration `20261015900001`: os 4 cadastros com Lucro Real ou Lucro
+  Presumido (BOA MUSICA BRASIL, Mercado Livre, JK INGRESSOS e Fornecedor
+  Teste) passaram a `normal`, e a CHECK `chk_fornecedor_regime` aceita só
+  `normal`, `simples` e `mei`.
+- Na aprovação da PP (Contas a Pagar), o regime aparece como "Lucro
+  Presumido ou Real" (`textoDoRegime`, `rotuloCurtoDoRegime`).

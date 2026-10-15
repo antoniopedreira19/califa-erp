@@ -1,7 +1,7 @@
 # 166 — Regime tributário (Real e Presumido separados) e CNAE obrigatórios no fornecedor, e a PP travada para cadastro incompleto
 
 **Data:** 2026-10-09
-**Status:** aceita e implementada (09/10/2026); revista em 10/10/2026 (§6: o GP edita o cadastro pendente inteiro).
+**Status:** aceita e implementada (09/10/2026); revista em 10/10/2026 (§6: o GP edita o cadastro pendente inteiro) e em 15/10/2026 pela [179](179-regime-presumido-ou-real.md) (§1 e §3: Real e Presumido de novo numa opção só, "Lucro Presumido ou Real", preenchida pela consulta).
 **Quem decidiu:** Tiago, em 09/10/2026, sobre o protótipo "Regime e CNAE" (3 versões, com dois ajustes pedidos nos comentários).
 **Revê:** a regra do regime do módulo fiscal (entrega 1, 02/10/2026) e a [142](142-modulo-fiscal-pontos-remanescentes.md) §5 ("Lucro Real ou Presumido" numa opção só).
 **Completa:** a [150](150-cadastro-de-veiculos.md) (o veículo usa o mesmo formulário do fornecedor) e a [153](153-pp-a-emitir.md) (a PP a emitir e o "Gerar PP").
@@ -23,7 +23,9 @@ e a PP travada enquanto o cadastro antigo não for regularizado.
    opções: Lucro Real, Lucro Presumido, Simples Nacional e MEI. O legado
    "Lucro Real ou Presumido" (`normal`) não se escolhe mais. Para as
    retenções da aprovação da PP, Real, Presumido e o legado seguem a mesma
-   regra (só Simples e MEI não sofrem retenção).
+   regra (só Simples e MEI não sofrem retenção). **Revisto pela 179
+   (15/10/2026): três opções, "Lucro Presumido ou Real" (`normal`), Simples
+   Nacional e MEI.**
 2. **CNAE obrigatório na pessoa jurídica**, um por fornecedor: a lista
    inteira do IBGE (CNAE 2.3, 1.332 subclasses), num campo com busca pelo
    código (com ou sem pontuação) ou pela atividade. Pessoa física não tem
@@ -31,7 +33,9 @@ e a PP travada enquanto o cadastro antigo não for regularizado.
 3. **A consulta do CNPJ sugere.** A mesma consulta que o cadastro já fazia
    preenche o CNAE principal e põe o principal e os secundários no topo da
    lista. O regime ela só preenche no Simples e no MEI: a Receita não diz se
-   é Real ou Presumido, e aí o campo pede a escolha.
+   é Real ou Presumido, e aí o campo pede a escolha. **Revisto pela 179
+   (15/10/2026): a consulta preenche o regime nos três casos; "nenhum dos
+   dois" é "Lucro Presumido ou Real".**
 4. **Todo cadastro antigo passa por revisão.** O cadastro sem CNAE (todo
    cadastro anterior a 09/10/2026) abre com o regime **vazio na tela** e
    "Antes: …" embaixo, os dois campos marcados em vermelho com "pendente", e

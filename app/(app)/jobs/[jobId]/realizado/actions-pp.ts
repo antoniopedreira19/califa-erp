@@ -3098,8 +3098,7 @@ export async function listarPessoasParaVerba(): Promise<Result<{ pessoas: Pessoa
  * job aguardando abertura ou devolvido pelo financeiro não gera.
  *
  * Decisão 166: nem a PP de fornecedor pessoa jurídica sem regime
- * tributário (ou com o legado "Lucro Real ou Presumido") ou sem CNAE. A PP
- * a emitir fica salva, esperando o cadastro.
+ * tributário ou sem CNAE. A PP a emitir fica salva, esperando o cadastro.
  */
 export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: string }>> {
   const session = await requireSession();

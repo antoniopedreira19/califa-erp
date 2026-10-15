@@ -1,21 +1,20 @@
 /**
  * O regime tributário e o CNAE do fornecedor pessoa jurídica, no cadastro
  * (módulo fiscal, entrega 1 — 02/10/2026; consulta guardada e arquivo da
- * declaração na decisão 142; Real e Presumido separados e CNAE na decisão
- * 165, 09/10/2026).
+ * declaração na decisão 142; CNAE na decisão 166, 09/10/2026; Real e
+ * Presumido numa opção só de novo na decisão 179, 15/10/2026).
  *
- * Lucro Real, Lucro Presumido, Simples Nacional ou MEI — obrigatório na
- * pessoa jurídica desde a decisão 166. `normal` é o legado "Lucro Real ou
- * Presumido", gravado até 09/10/2026: não se escolhe mais, e o cadastro que
- * o tem precisa escolher um dos dois. Para as retenções da aprovação da PP,
- * Real, Presumido e o legado são a mesma coisa (`ehRegimeNormal`).
+ * "Lucro Presumido ou Real" (`normal`), Simples Nacional ou MEI —
+ * obrigatório na pessoa jurídica desde a decisão 166. A 166 separou Real e
+ * Presumido; a 179 os juntou de novo: a Receita não diz qual dos dois, e
+ * para as retenções da aprovação da PP é a mesma regra.
  *
  * A consulta do CNPJ que o cadastro já faz na BrasilAPI (o CNPJ.ws é a
  * reserva desde 09/10/2026, convertido para os mesmos campos em
- * `lib/consulta-cnpj.ts`) diz se é Simples, MEI ou nenhum dos dois — a
- * Receita não diz se é Real ou Presumido —, e traz o CNAE principal e os
- * secundários. Ela preenche o CNAE e, no Simples e no MEI, o regime; o
- * resto quem escolhe é quem cadastra.
+ * `lib/consulta-cnpj.ts`) diz se é Simples, MEI ou nenhum dos dois, e traz
+ * o CNAE principal e os secundários. Ela preenche o regime nos três casos
+ * ("nenhum dos dois" é "Lucro Presumido ou Real") e o CNAE; quem cadastra
+ * confere e pode trocar.
  *
  * A consulta fica guardada inteira, valha ou não o regime gravado:
  * `regime_consulta` (o que ela indicou: `normal`, `simples` ou `mei`),
@@ -27,8 +26,8 @@
  * banco: só valem na tela em que ela foi feita. A consulta só vale para o
  * CNPJ consultado: trocado o CNPJ, ela não vai ao banco.
  *
- * Decisão 166: sem o regime (ou com o legado) ou sem o CNAE, a PP desse
- * fornecedor não é gerada (`pendenciasDoCadastroFiscal`). E o cadastro que
+ * Decisão 166: sem o regime ou sem o CNAE, a PP desse fornecedor não é
+ * gerada (`pendenciasDoCadastroFiscal`). E o cadastro que
  * ainda não tem CNAE — todo cadastro anterior a 09/10/2026 — abre com o
  * regime vazio na tela, para alguém revisar: o banco guarda o regime antigo
  * até a revisão, porque a aprovação das PPs já enviadas o lê.
@@ -46,41 +45,34 @@ import { onlyDigits } from "@/lib/utils";
 import { dataBr } from "./datas";
 
 /** O que a consulta do CNPJ sabe dizer: Simples, MEI ou nenhum dos dois
- *  (`normal` — a Receita não diz se é Real ou Presumido). */
-export type RegimeDaConsulta = "normal" | "simples" | "mei";
+ *  (`normal`, "Lucro Presumido ou Real"). Desde a decisão 179 são os
+ *  mesmos valores do cadastro. */
+export type RegimeDaConsulta = RegimeTributarioFornecedor;
 
-/** Os que se escolhem, na ordem da lista do cadastro. O legado `normal`
- *  fica de fora (decisão 166). */
+/** Os que se escolhem, na ordem da lista do cadastro (decisão 179). */
 export const REGIMES_DO_FORNECEDOR: readonly RegimeTributarioFornecedor[] = [
-  "lucro_real",
-  "lucro_presumido",
+  "normal",
   "simples",
   "mei",
 ];
 
 /** Sem "Normal" na frente desde 07/10/2026 (Tiago): "regime normal" é
- *  jargão contábil e não diz nada a quem cadastra. */
+ *  jargão contábil e não diz nada a quem cadastra. "Presumido" vem antes
+ *  desde a decisão 179 (15/10/2026). */
 export const ROTULO_DO_REGIME: Record<RegimeTributarioFornecedor, string> = {
-  lucro_real: "Lucro Real",
-  lucro_presumido: "Lucro Presumido",
+  normal: "Lucro Presumido ou Real",
   simples: "Simples Nacional",
   mei: "MEI",
-  normal: "Lucro Real ou Presumido",
 };
 
 /** O que cada regime faz com as retenções e o crédito, na aprovação da PP.
- *  Lucro Real ou Presumido não tem nota desde 07/10/2026 (Tiago): "as
+ *  Lucro Presumido ou Real não tem nota desde 07/10/2026 (Tiago): "as
  *  retenções dependem do serviço" não ajudava quem cadastra. */
 export const NOTA_DO_REGIME: Partial<Record<RegimeTributarioFornecedor, string>> = {
   simples:
     "Sem retenção de PIS/COFINS/CSLL e IRRF, com a declaração. O ISS pode ser retido com a alíquota informada na nota. A compra dá crédito de PIS/COFINS normalmente.",
   mei: "Sem retenção nenhuma. A compra dá crédito de PIS/COFINS normalmente.",
 };
-
-/** Lucro Real, Lucro Presumido e o legado: as mesmas regras de retenção. */
-export function ehRegimeNormal(r: RegimeTributarioFornecedor | null | undefined): boolean {
-  return r === "lucro_real" || r === "lucro_presumido" || r === "normal";
-}
 
 // ---------------------------------------------------------------------------
 // CNAE: o formato (a lista inteira está em ./cnaes)
@@ -110,14 +102,14 @@ function codigoDoCnae(v: unknown): string | null {
 // ---------------------------------------------------------------------------
 
 /** O que falta no cadastro da pessoa jurídica para gerar PP ([] = nada).
- *  Pessoa física não tem regime nem CNAE. O legado "Lucro Real ou
- *  Presumido" conta como regime faltando: precisa escolher um dos dois. */
+ *  Pessoa física não tem regime nem CNAE. Desde a decisão 179, "Lucro
+ *  Presumido ou Real" (`normal`) é regime completo. */
 export function pendenciasDoCadastroFiscal(
   f: { tipo_pessoa: string; regime_tributario: string | null; cnae: string | null } | null | undefined,
 ): string[] {
   if (!f || f.tipo_pessoa !== "juridica") return [];
   const falta: string[] = [];
-  if (!f.regime_tributario || f.regime_tributario === "normal") falta.push("o regime tributário");
+  if (!f.regime_tributario) falta.push("o regime tributário");
   if (!f.cnae || !CNAE_RE.test(f.cnae)) falta.push("o CNAE");
   return falta;
 }
@@ -211,27 +203,20 @@ export function consultaDaRespostaDoCnpj(
   };
 }
 
-/** O regime que a consulta preenche: Simples e MEI ela sabe; "nenhum dos
- *  dois" deixa o campo para quem cadastra escolher Real ou Presumido. */
-export function regimeQueAConsultaPreenche(
-  c: RegimeDaConsulta,
-): RegimeTributarioFornecedor | null {
-  return c === "normal" ? null : c;
-}
-
 /**
  * O regime depois de uma consulta nova: entra no campo vazio e no lugar do
  * que veio de uma consulta anterior (o CNPJ foi corrigido); o que alguém
  * escolheu à mão fica — e o aviso âmbar diz o que a consulta indicou.
+ * Desde a decisão 179 a consulta preenche nos três casos: "nenhum dos dois"
+ * é "Lucro Presumido ou Real".
  */
 export function regimeDepoisDaConsulta(
   atual: RegimeTributarioFornecedor | null,
   consultaAnterior: ConsultaDoRegime | null,
   daConsulta: RegimeDaConsulta,
-): RegimeTributarioFornecedor | null {
-  const preenche = regimeQueAConsultaPreenche(daConsulta);
-  if (atual === null) return preenche;
-  if (consultaAnterior && atual === regimeQueAConsultaPreenche(consultaAnterior.regime)) return preenche;
+): RegimeTributarioFornecedor {
+  if (atual === null) return daConsulta;
+  if (consultaAnterior && atual === consultaAnterior.regime) return daConsulta;
   return atual;
 }
 
@@ -273,13 +258,11 @@ export interface TextoDeOrigem {
  *
  * - "Preenchido pela consulta do CNPJ em 02/10/2026 · optante do Simples
  *   desde 01/2019" (no MEI, "· MEI desde 03/2021"; sem a data, nada depois
- *   do dia); em Real ou Presumido com a consulta dizendo "nenhum dos dois",
- *   "Conferido com a consulta do CNPJ em … · não optante do Simples";
+ *   do dia; em Lucro Presumido ou Real, "· não optante do Simples");
  * - "Alterado manualmente — a consulta do CNPJ em … indicou Simples
  *   Nacional." (âmbar) quando o regime à vista não é o indicado;
  * - vazio (vermelho): "Antes: Simples Nacional. Confira e escolha." no
- *   cadastro em revisão, e "Consulta do CNPJ em …: não é Simples nem MEI.
- *   Escolha Real ou Presumido." quando a consulta não decide.
+ *   cadastro em revisão.
  */
 export function origemDoRegime(
   regime: RegimeTributarioFornecedor | null,
@@ -290,19 +273,9 @@ export function origemDoRegime(
 ): TextoDeOrigem | null {
   const c = consultaDoCnpj(consulta, cnpj);
   if (!regime) {
-    if (c?.regime === "normal") {
-      return {
-        texto: `Consulta do CNPJ em ${dataBr(c.em)}: não é Simples nem MEI. Escolha Real ou Presumido.`,
-        alterado: true,
-        pendente: true,
-      };
-    }
     if (antes) {
       return {
-        texto:
-          antes === "normal"
-            ? "Estava “Lucro Real ou Presumido”: escolha um dos dois."
-            : `Antes: ${ROTULO_DO_REGIME[antes]}. Confira e escolha.`,
+        texto: `Antes: ${ROTULO_DO_REGIME[antes]}. Confira e escolha.`,
         alterado: true,
         pendente: true,
       };
@@ -310,11 +283,9 @@ export function origemDoRegime(
     return null;
   }
   if (!c) return null;
-  const bate = c.regime === "normal" ? ehRegimeNormal(regime) : regime === c.regime;
-  if (!bate) {
-    const indicou = c.regime === "normal" ? "não optante do Simples" : ROTULO_DO_REGIME[c.regime];
+  if (regime !== c.regime) {
     return {
-      texto: `Alterado manualmente — a consulta do CNPJ em ${dataBr(c.em)} indicou ${indicou}.`,
+      texto: `Alterado manualmente — a consulta do CNPJ em ${dataBr(c.em)} indicou ${ROTULO_DO_REGIME[c.regime]}.`,
       alterado: true,
     };
   }
@@ -329,7 +300,7 @@ export function origemDoRegime(
           : ""
         : " · não optante do Simples";
   return {
-    texto: `${c.regime === "normal" ? "Conferido com a" : "Preenchido pela"} consulta do CNPJ em ${dataBr(c.em)}${detalhe}`,
+    texto: `Preenchido pela consulta do CNPJ em ${dataBr(c.em)}${detalhe}`,
     alterado: false,
   };
 }
@@ -396,9 +367,8 @@ export function consultaDoCadastro(
     | undefined,
 ): ConsultaDoRegime | null {
   if (!f?.cpf_cnpj || !f.regime_consultado_em) return null;
-  const gravado = f.regime_consulta ?? f.regime_tributario;
-  if (!gravado) return null;
-  const regime: RegimeDaConsulta = ehRegimeNormal(gravado) ? "normal" : (gravado as RegimeDaConsulta);
+  const regime = f.regime_consulta ?? f.regime_tributario;
+  if (!regime) return null;
   return {
     cnpj: onlyDigits(f.cpf_cnpj),
     em: f.regime_consultado_em.slice(0, 10),

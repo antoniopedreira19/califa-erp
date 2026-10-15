@@ -269,7 +269,7 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
     declaracao_simples_recebida: null,
   });
   assert.ok(normal);
-  assert.equal(textoDoRegime(normal), "Lucro Real ou Presumido · consulta do CNPJ em 01/10/2026");
+  assert.equal(textoDoRegime(normal), "Lucro Presumido ou Real · consulta do CNPJ em 01/10/2026");
   assert.equal(
     textoDoRegime({ regime: "simples", consultado_em: null, declaracao_simples_recebida: true }),
     "Optante do Simples Nacional · declaração recebida",
@@ -279,26 +279,25 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
     "Optante do Simples Nacional · consulta do CNPJ em 21/09/2026",
   );
   assert.equal(textoDoRegime({ regime: "mei", consultado_em: null, declaracao_simples_recebida: false }), "MEI");
-  assert.equal(rotuloCurtoDoRegime("normal"), "Lucro Real ou Presumido");
+  assert.equal(rotuloCurtoDoRegime("normal"), "Lucro Presumido ou Real");
   assert.equal(rotuloCurtoDoRegime("simples"), "optante do Simples");
   assert.equal(rotuloCurtoDoRegime("mei"), "MEI");
   assert.equal(rotuloCurtoDoRegime(null), "regime não informado");
 });
 
-test("decisão 166: Lucro Real e Lucro Presumido aparecem pelo nome, conferidos pela consulta", () => {
-  const presumido = regimeDoFornecedorDaPP(false, {
+test("decisão 179: Real e Presumido separados não são mais regime do fornecedor", () => {
+  // A migration 20261015900001 trocou os quatro cadastros que os tinham; um
+  // valor fora da lista é tratado como regime não informado.
+  const antigo = regimeDoFornecedorDaPP(false, {
     regime_tributario: "lucro_presumido",
     regime_consulta: "normal",
     regime_consultado_em: "2026-10-09",
     declaracao_simples_recebida: null,
   });
-  assert.ok(presumido);
-  assert.equal(textoDoRegime(presumido), "Lucro Presumido · consulta do CNPJ em 09/10/2026");
-  assert.equal(rotuloCurtoDoRegime("lucro_real"), "Lucro Real");
-  assert.equal(rotuloCurtoDoRegime("lucro_presumido"), "Lucro Presumido");
-  // A consulta disse Simples e o cadastro diz Lucro Real: sem a data.
+  assert.equal(antigo, null);
+  // A consulta disse Simples e o cadastro diz Lucro Presumido ou Real: sem a data.
   const trocado = regimeDoFornecedorDaPP(false, {
-    regime_tributario: "lucro_real",
+    regime_tributario: "normal",
     regime_consulta: "simples",
     regime_consultado_em: "2026-10-09",
     declaracao_simples_recebida: null,
