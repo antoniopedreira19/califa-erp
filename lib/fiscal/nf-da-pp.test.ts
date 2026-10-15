@@ -512,6 +512,7 @@ test("crédito: o financeiro tira com motivo; sem motivo, a tela pede", () => {
   const com = creditoDaNf({ nf: NF, cadastro: CADASTRO, semCredito: true, motivoSemCredito: "Reembolso de despesa do cliente", hoje: HOJE });
   assert.equal(com.final.motivo, "Marcado pelo financeiro como sem crédito: reembolso de despesa do cliente.");
   assert.equal(textoDoMotivo("Outro"), "outro motivo");
+  assert.equal(textoDoMotivo("Fornecedor pessoa física"), "fornecedor pessoa física");
 });
 
 test("crédito: as alíquotas vêm do parâmetro vigente na emissão", () => {
