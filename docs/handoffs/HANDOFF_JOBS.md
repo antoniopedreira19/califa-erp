@@ -5508,3 +5508,27 @@ PP-00107, não via botão ao lado do fornecedor. Regra completa na decisão 177.
   auditoria com o nome e o papel de cada um. O telefone usado no teste
   voltou ao original; o freela entrou e saiu da Equipe do TES-P001/26;
   nenhuma PP foi criada.
+
+## ⚠️ Nota de 2026-10-15 — "Fatura" no anexo, a revisão sem a linha "Nota fiscal" e a prévia da PP (decisão 178)
+
+Pedido do Tiago em 15/10/2026, a partir do retorno de uma produtora que
+anexou a fatura de locação de banheiros às PP-00197 e PP-00198 como
+"Recibo" e leu na revisão que os dados da nota seriam pedidos no envio.
+Regra completa na decisão 178.
+
+- **Tipo "Fatura"** entre Recibo e Boleto (enum `documento_tipo`, migration
+  `20261015950001`). Pede só o número, vale como comprovante
+  (`DOCUMENTO_TIPOS_FISCAIS`) e como "a nota" da PP paga por boleto. Não é
+  NF. A prestação de verba segue só NF ou recibo.
+- **Revisão "Gerar o Pedido de Produção?"**: a linha "Nota fiscal" só com
+  arquivo marcado NF; "Anexos" mostra o número ("Fatura 0129-2026 ·
+  arquivo.pdf").
+- **Prévia da PP na tela lado a lado do formulário**: `previaDoPdfDaPP`
+  monta o PDF com o gerador de sempre (`previa: true` → "PRÉVIA" no lugar do
+  código, "Não vale como PP" e marca d'água), não grava nada e abre num
+  `blob:` sem baixar, sem abrir em aba e sem a barra do visualizador.
+- **Conferido** em `localhost:3178`, como administrador, no TES-1014/26
+  (item Passagem, Fornecedor Teste, R$ 100): lista do tipo, prévia montada
+  pelo servidor, revisão sem a linha "Nota fiscal", `fatura` gravado na PP a
+  emitir e na PP-00199 gerada; pop-up de envio com a fatura e o número. A
+  PP-00199 foi fechada sem enviar e cancelada pela tela.

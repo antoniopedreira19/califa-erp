@@ -108,6 +108,11 @@ const fator = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 
  * Decisão 173 (13/10/2026): a mesma revisão antes de salvar a edição de uma
  * PP gerada (`edicao`). Muda o título, o botão ("Salvar alterações") e a
  * linha "Esta PP", que mostra o valor de antes quando ele muda.
+ *
+ * Decisão 178 (15/10/2026): a linha "Nota fiscal" só aparece com arquivo
+ * marcado NF. Antes ela aparecia em toda PP fora da verba e, com recibo ou
+ * fatura, dizia que os dados da nota seriam pedidos no envio —
+ * o que o envio não pede. "Anexos" mostra o número de cada documento.
  */
 export function RevisaoDialog({
   open,
@@ -197,10 +202,14 @@ export function RevisaoDialog({
       aEmitir.anexos.length === 0
         ? "Nenhum"
         : aEmitir.anexos
-            .map((a) => `${a.documento_tipo ? documentoTipoLabel(a.documento_tipo) : "sem tipo"} · ${a.arquivo_nome_original}`)
+            .map((a) => {
+              const numero = (a.documento_numero ?? "").trim();
+              const tipo = a.documento_tipo ? documentoTipoLabel(a.documento_tipo) : "sem tipo";
+              return `${tipo}${numero ? ` ${numero}` : ""} · ${a.arquivo_nome_original}`;
+            })
             .join("; "),
     ],
-    ...(d.verba_producao
+    ...(d.verba_producao || nfs.length === 0
       ? []
       : ([
           [

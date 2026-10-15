@@ -170,6 +170,10 @@ interface Dados {
   /** Decisão 161: a PP paga por boleto. O documento continua o de sempre;
    *  só a linha do PIX vira "Pagamento: Boleto". */
   pagamentoPorBoleto?: boolean;
+  /** Decisão 178: a prévia da conferência lado a lado, montada com os dados
+   *  do formulário antes de gerar. Sai com a marca d'água "PRÉVIA" em toda
+   *  página e o aviso no cabeçalho; não é gravada em lugar nenhum. */
+  previa?: boolean;
   empresa: Empresa;
   /** Null quando `pp.verba_producao === true` — não há fornecedor. */
   fornecedor: Fornecedor | null;
@@ -234,6 +238,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     responsavelNome,
     parcelas,
     pagamentoPorBoleto,
+    previa,
   } = dados;
 
   const parcelada = parcelas.length > 1;
@@ -342,8 +347,20 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 alignment: "center",
                 bold: true,
                 fontSize: 18,
-                margin: [0, 0, 0, 6],
+                margin: [0, 0, 0, previa ? 2 : 6],
               },
+              ...(previa
+                ? [
+                    {
+                      text: "Não vale como PP",
+                      alignment: "center" as const,
+                      bold: true,
+                      fontSize: 7,
+                      color: "#E74B56",
+                      margin: [0, 0, 0, 6] as [number, number, number, number],
+                    },
+                  ]
+                : []),
             ],
           },
         ],
@@ -867,6 +884,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     pageMargins: [25, 25, 25, 35],
     content,
     defaultStyle: { font: "Helvetica", fontSize: 8 },
+    ...(previa
+      ? { watermark: { text: "PRÉVIA", color: "#E74B56", opacity: 0.1, bold: true, angle: -40 } }
+      : {}),
     footer: (currentPage, pageCount) => ({
       columns: [
         {

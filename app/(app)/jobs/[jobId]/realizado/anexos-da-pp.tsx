@@ -48,6 +48,7 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   DOCUMENTO_TIPOS,
+  DOCUMENTO_TIPOS_FISCAIS,
   PP_ANEXO_MIMETYPES_ACEITOS,
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
@@ -990,14 +991,14 @@ function ListaDePPs({ pps }: { pps: NotaExistente["pps"] }) {
  *  soma. */
 /**
  * O que o envio vai exigir quando a PP é paga por boleto (decisão 161): a
- * nota (NF ou recibo) e o boleto, cada um com ✓ quando já tem arquivo do
+ * nota (NF, recibo ou fatura — 178) e o boleto, cada um com ✓ quando já tem arquivo do
  * tipo. Fica no formulário da PP e no pop-up de envio, acima da área de
  * anexos. Sem boleto, não aparece — a regra de sempre não muda.
  */
 export function ExigidosNoEnvio({ anexos }: { anexos: AnexoEmEdicao[] }) {
   const ok = anexos.filter((a) => a.status === "ok");
   const itens: Array<[string, boolean]> = [
-    ["NF", ok.some((a) => a.tipo === "nota_fiscal" || a.tipo === "recibo")],
+    ["NF", ok.some((a) => !!a.tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.tipo))],
     ["Boleto", ok.some((a) => a.tipo === "boleto")],
   ];
   return (
@@ -1179,7 +1180,7 @@ export function faltaNosAnexosParaEnviar(
   if (semTipo) return `Escolha o tipo de “${semTipo.nome}”.`;
   const semNumero = ok.find((a) => a.tipo !== "nota_fiscal" && !(a.numero ?? "").trim());
   if (semNumero) return `Preencha o número do documento de “${semNumero.nome}”.`;
-  if (exigeBoleto && !ok.some((a) => a.tipo === "nota_fiscal" || a.tipo === "recibo")) {
+  if (exigeBoleto && !ok.some((a) => !!a.tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.tipo))) {
     return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
   }
   if (exigeBoleto && !ok.some((a) => a.tipo === "boleto")) {

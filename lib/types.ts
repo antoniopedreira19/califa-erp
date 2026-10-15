@@ -3157,11 +3157,14 @@ export type PPAnexoMimetype = (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number];
  * coluna Documento da Conciliação.
  *
  * Acrescentar valor aqui é aditivo — o enum começou no conjunto mínimo
- * que o time nomeou.
+ * que o time nomeou. A fatura entrou na decisão 178 (15/10/2026): na
+ * locação de bens móveis o fornecedor emite fatura, não NF, e a produção
+ * marcava o arquivo como Recibo. O contrato de locação é o "Contrato".
  */
 export const DOCUMENTO_TIPOS = [
   "nota_fiscal",
   "recibo",
+  "fatura",
   "boleto",
   "contrato",
   "outro",
@@ -3176,6 +3179,8 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
       return "NF";
     case "recibo":
       return "Recibo";
+    case "fatura":
+      return "Fatura";
     case "boleto":
       return "Boleto";
     case "contrato":
@@ -3189,11 +3194,13 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
  * Os tipos que valem como comprovante FISCAL da despesa. A coluna
  * Documento mostra o primeiro anexo que cai aqui — contrato e boleto
  * acompanham a compra, mas não são o documento que a contabilidade
- * procura.
+ * procura. A fatura faz o papel da nota onde não há NF, como na locação
+ * (decisão 178): conta aqui e vale como "a nota" da PP paga por boleto (161).
  */
 export const DOCUMENTO_TIPOS_FISCAIS: readonly DocumentoTipo[] = [
   "nota_fiscal",
   "recibo",
+  "fatura",
 ];
 
 /** O documento de um anexo, como as telas o consomem. */

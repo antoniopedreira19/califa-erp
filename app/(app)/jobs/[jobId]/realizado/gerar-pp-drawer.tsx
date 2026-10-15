@@ -93,6 +93,7 @@ import {
   editarPPGerada,
   listarPessoasParaVerba,
   prefixoAnexosPedidoCompra,
+  previaDoPdfDaPP,
   reservarPedidoCompra,
   salvarPPAEmitir,
   prefixoAnexosPPAEmitir,
@@ -2065,10 +2066,16 @@ export function GerarPPDrawer({
             selo={editando || editandoGerada ? "Em edição" : "Nova"}
             descricao={
               ppGeradaEditando
-                ? "Documentos e dados — lado a lado. O PDF da PP é refeito ao salvar."
-                : "Documentos e dados — lado a lado. O PDF da PP aparece aqui depois de gerar."
+                ? "Prévia da PP e documentos lado a lado. O PDF da PP é refeito ao salvar."
+                : "Prévia da PP e documentos lado a lado. O PDF da PP sai ao gerar."
             }
             ppIdDoPdf={null}
+            // Decisão 178: a prévia com os dados do formulário de agora.
+            previaDoPdf={() =>
+              itemRealizadoId
+                ? previaDoPdfDaPP(itemRealizadoId, montarDados())
+                : Promise.resolve({ ok: false as const, message: "Prévia indisponível." })
+            }
             anexos={anexos}
             focar={ladoALado?.foco ?? null}
             // Os anexos da PP gerada moram nela; os da PP a emitir, na tabela dela.
