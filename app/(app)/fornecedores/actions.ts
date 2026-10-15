@@ -24,7 +24,6 @@ import type { PixTipoChave } from "@/lib/types";
 import {
   BUCKET_DO_FORNECEDOR,
   caminhoDaDeclaracao,
-  cadastroSemRevisao,
   declaracaoDoTenant,
   pendenciasDoCadastroFiscal,
   recusaDoArquivoDaDeclaracao,
@@ -197,55 +196,26 @@ function mapDbError(msg: string): string {
  * selecionar). O que muda entre eles é só o schema e o que fazer depois.
  */
 /**
- * Quem cria fornecedor: a tela (`cadastros.fornecedores.editar`, admin e
- * financeiro desde 07/10/2026) ou o cadastro rápido de dentro da PP
- * (`.inline`, admin, GP, produtor e freelancer). Vale também para subir o
- * arquivo da declaração e para marcar um fornecedor como veículo.
+ * Quem cria e quem edita fornecedor: a tela (`cadastros.fornecedores.editar`,
+ * admin e financeiro desde 07/10/2026) ou o cadastro rápido de dentro do
+ * fluxo (`.inline`, admin, GP, produtor e freelancer) — o "+" e o lápis do
+ * campo Fornecedor da PP e do BV. Vale também para subir o arquivo da
+ * declaração e para marcar um fornecedor como veículo.
+ *
+ * Decisão 177 (Tiago, 15/10/2026): a produção também EDITA qualquer
+ * cadastro, e não só o pendente da decisão 166 — "isso deve ser possível
+ * tanto para o produtor quanto freela". Quem cadastra pelo fluxo corrige
+ * pelo fluxo. Inativar e reativar continuam só na tela, com `.editar`.
+ *
+ * O que protege o pagamento já combinado é o da decisão 067: a PP que foi
+ * para o financeiro paga pela foto que tirou, e trocar conta ou PIX de quem
+ * tem PP lá pede confirmação (`avisarSePagamentoMudouComPPsNoFinanceiro`).
  */
-async function checarCriarFornecedor(
+async function checarCadastroDeFornecedor(
   session: Awaited<ReturnType<typeof requireSession>>,
 ): ReturnType<typeof checarPermissao> {
   if (pode(session.activeRole, "cadastros.fornecedores.editar")) return { ok: true };
   return checarPermissao(session, "cadastros.fornecedores.inline");
-}
-
-/**
- * Quem edita um fornecedor: quem tem `cadastros.fornecedores.editar`
- * (administrador e financeiro), sempre; e quem tem o cadastro rápido da PP
- * (`.inline`: GP, produtor e freelancer) enquanto o cadastro estiver
- * pendente para gerar PP — sem regime, com o legado "Lucro Real ou
- * Presumido" ou sem CNAE (decisão 166). É o lápis do campo Fornecedor da
- * PP, e com ele o cadastro inteiro se edita (Tiago, 10/10/2026: "se ele
- * verificar algum erro em outro item, poderá modificá-lo também").
- */
-async function checarEditarFornecedor(
-  session: Awaited<ReturnType<typeof requireSession>>,
-  id: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (pode(session.activeRole, "cadastros.fornecedores.editar")) return { ok: true };
-  if (!pode(session.activeRole, "cadastros.fornecedores.inline")) {
-    return checarPermissao(session, "cadastros.fornecedores.editar");
-  }
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("fornecedores")
-    .select("tipo_pessoa, regime_tributario, cnae")
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
-  if (data && (cadastroSemRevisao(data) || pendenciasDoCadastroFiscal(data).length > 0)) {
-    return { ok: true };
-  }
-  const negado = await checarPermissao(session, "cadastros.fornecedores.editar", {
-    motivo: "cadastro_completo",
-    fornecedor_id: id,
-  });
-  return negado.ok
-    ? negado
-    : {
-        ok: false,
-        message: "O cadastro deste fornecedor já está completo. Para alterá-lo, fale com o financeiro.",
-      };
 }
 
 async function inserirFornecedor(
@@ -261,7 +231,7 @@ async function inserirFornecedor(
   // e o cadastro rapido dentro do PP (criarFornecedorRapido, decisao 048).
   // Libera quem tem a tela (admin e financeiro) ou o inline (admin, GP,
   // produtor e freelancer).
-  const gate = await checarCriarFornecedor(session);
+  const gate = await checarCadastroDeFornecedor(session);
   if (!gate.ok) return gate;
   const parsed = schema.safeParse(extractInput(formData));
 
@@ -542,8 +512,8 @@ async function atualizarComSchema(
   schema: typeof fornecedorSchema | typeof fornecedorVeiculoSchema,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  // Decisão 166: o GP, o produtor e o freelancer editam o cadastro pendente.
-  const gate = await checarEditarFornecedor(session, id);
+  // Decisão 177: o GP, o produtor e o freelancer editam pelo lápis da PP.
+  const gate = await checarCadastroDeFornecedor(session);
   if (!gate.ok) return gate;
   const parsed = schema.safeParse(extractInput(formData));
 
@@ -791,7 +761,7 @@ export async function atualizarVeiculoFornecedor(
  *  só o marca, sem mexer no cadastro. */
 export async function marcarFornecedorComoVeiculo(fornecedorId: string): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarCriarFornecedor(session);
+  const gate = await checarCadastroDeFornecedor(session);
   if (!gate.ok) return gate;
 
   const supabase = createClient();
@@ -930,7 +900,7 @@ export async function reservarArquivoDaDeclaracao(input: {
   tipo: string;
 }): Promise<{ ok: true; path: string } | { ok: false; message: string }> {
   const session = await requireSession();
-  const gate = await checarCriarFornecedor(session);
+  const gate = await checarCadastroDeFornecedor(session);
   if (!gate.ok) return gate;
   const nome = String(input?.nome ?? "");
   const recusa = recusaDoArquivoDaDeclaracao(

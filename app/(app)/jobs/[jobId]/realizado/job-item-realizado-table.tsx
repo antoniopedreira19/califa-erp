@@ -178,7 +178,7 @@ interface Props {
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152): o botão no painel do item. */
   papelCorrigeNf: boolean;
-  /** `cadastros.fornecedores.editar` — o "+" do campo Fornecedor. */
+  /** O "+" e o lápis do campo Fornecedor da PP (decisão 177). */
   podeCadastrarFornecedor?: boolean;
   podeEditarFornecedor?: boolean;
   /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão

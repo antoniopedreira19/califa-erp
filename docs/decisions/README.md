@@ -196,6 +196,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 174 | [O job não se edita depois da abertura, o botão "Equipe" e o Produtor Responsável que envia PP com a chave do GP](174-equipe-do-job-e-envio-de-pp-pelo-produtor.md) | 2026-10-14 |
 | 175 | [A errata volta a abrir o planejado, a linha cancelada zera os dois lados e o job mostra só o valor de hoje (revê a 151)](175-errata-volta-a-abrir-o-planejado-e-valor-unico.md) | 2026-10-15 |
 | 176 | [Trocar o GP e o Produtor Responsáveis do job aberto pela Equipe, e o GP de fora do projeto entrando sozinho nos GPs do projeto](176-trocar-gp-e-produtor-do-job-aberto.md) | 2026-10-15 |
+| 177 | [A produção (GP, produtor e freela) edita o cadastro do fornecedor pelo lápis, e não só o pendente](177-producao-edita-cadastro-de-fornecedor.md) | 2026-10-15 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -208,4 +209,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 177**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 178**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
