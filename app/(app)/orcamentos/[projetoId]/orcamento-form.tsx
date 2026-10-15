@@ -94,7 +94,7 @@ interface Props {
    *  Sem ela o combobox abriria sem rótulo em edição. */
   cidadeAtual?: CidadeOption | null;
   /** Quem pode ser GP: os GPs do projeto primeiro, e os outros GPs — quem
-   *  vem de fora entra no projeto ao salvar (decisão 175). */
+   *  vem de fora entra no projeto ao salvar (decisão 176). */
   gps: GpParaEscolha[];
   /** Só quem tem o papel Produtor (`listarProdutoresAtivos`, 13/10/2026).
    *  Na edição, quem chama acrescenta o produtor já gravado, se ele não

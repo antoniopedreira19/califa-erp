@@ -318,7 +318,7 @@ interface Props {
   regionaisDoProjeto: { id: string; nome: string }[];
   /** Mesmas listas do formulário do orçamento (decisão 135): o GP sai de
    *  quem pode ser GP — os do projeto primeiro, e quem vem de fora entra no
-   *  projeto ao enviar (decisão 175) —, o produtor de quem tem o papel
+   *  projeto ao enviar (decisão 176) —, o produtor de quem tem o papel
    *  Produtor. Cada uma já traz a pessoa gravada no orçamento, mesmo que
    *  ela tenha saído da lista — ver `comQuemEstaNoOrcamento` na página. */
   gps: GpParaEscolha[];

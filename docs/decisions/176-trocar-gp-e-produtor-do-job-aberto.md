@@ -1,4 +1,4 @@
-# 175 — Trocar o GP e o Produtor Responsáveis do job aberto pela Equipe, e o GP de fora do projeto entrando sozinho nos GPs do projeto
+# 176 — Trocar o GP e o Produtor Responsáveis do job aberto pela Equipe, e o GP de fora do projeto entrando sozinho nos GPs do projeto
 
 **Data:** 2026-10-15
 **Status:** aceita e implementada (15/10/2026).
@@ -9,8 +9,10 @@ job não se edita depois da abertura, mas os responsáveis se trocam pela
 Equipe.
 **Revisa:** a regra 3 da [170](170-gp-so-quem-pode-ser-gp.md) — o GP do
 orçamento não precisa mais ser GP Responsável do projeto.
-**Migration:** `20261015300001_trocar_responsaveis_do_job.sql` — uma
-tabela, três funções e um gatilho, aditiva.
+**Migrations:** `20261015300001_trocar_responsaveis_do_job.sql` — uma
+tabela, três funções e um gatilho, aditiva; e `20261015300002_decisao_176_renumerada.sql`
+— nasceu como 175, e outra sessão já tinha a 175 (a errata que volta a abrir
+o planejado); só o comentário da tabela muda.
 
 ## O pedido
 

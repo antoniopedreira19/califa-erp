@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Trocar o GP e o Produtor Responsáveis de um job aberto, e o GP de fora
--- do projeto entrando sozinho nos GPs do projeto — decisão 175 (15/10/2026)
+-- do projeto entrando sozinho nos GPs do projeto — decisão 176 (15/10/2026)
 --
 -- Pedido do Tiago (14/10/2026), com o protótipo "Trocar os responsáveis"
 -- aprovado em 15/10/2026 (opções 1A e 2A):
@@ -46,7 +46,7 @@ create table if not exists public.jobs_trocas_de_responsavel (
 );
 
 comment on table public.jobs_trocas_de_responsavel is
-  'Decisão 175: cada troca do GP ou do Produtor Responsável de job aberto. Grava só trocar_responsavel_do_job; a Comunicação do job mostra um card por linha.';
+  'Decisão 176: cada troca do GP ou do Produtor Responsável de job aberto. Grava só trocar_responsavel_do_job; a Comunicação do job mostra um card por linha.';
 
 create index if not exists idx_jobs_trocas_de_responsavel_job
   on public.jobs_trocas_de_responsavel (job_id, em);

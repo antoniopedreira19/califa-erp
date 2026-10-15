@@ -2668,7 +2668,7 @@ export type ItemChat =
         | "check-circle"
         | "x-circle"
         | "ban"
-        // A troca do GP ou do Produtor Responsável (decisão 175).
+        // A troca do GP ou do Produtor Responsável (decisão 176).
         | "users";
       cor: "azul" | "verde" | "bege" | "vermelho";
       titulo: string;

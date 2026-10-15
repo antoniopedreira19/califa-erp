@@ -61,7 +61,7 @@ export default async function NovoOrcamentoPage({
         .eq("tenant_id", session.activeTenant.id),
       // Quem pode ser GP: os GPs Responsáveis do projeto primeiro, e os
       // outros GPs depois — quem vem de fora entra no projeto ao salvar
-      // (decisão 175, que revisa a 170).
+      // (decisão 176, que revisa a 170).
       listarGpsParaOrcamento(params.projetoId, session.activeTenant.id),
       // Só as primeiras cidades: o combobox busca o resto no servidor a
       // cada digitação. O cadastro comporta o Brasil inteiro.

@@ -14,7 +14,7 @@ import { jobEstaCongelado, type JobStatus } from "@/lib/types";
  * Grava três coisas, cada uma com o seu papel:
  *  - quem está na Equipe do projeto (os acréscimos manuais, papel
  *    `equipe`): GPs e produtores (`projetos.editar_equipe`);
- *  - a troca do GP e do Produtor Responsáveis de job aberto (decisão 175):
+ *  - a troca do GP e do Produtor Responsáveis de job aberto (decisão 176):
  *    só GP e administrador (`jobs.trocar_responsaveis`), e o banco confere
  *    de novo (`trocar_responsavel_do_job`) — o GP de fora entra nos GPs do
  *    projeto, e a troca do produtor desliga a chave;
@@ -120,7 +120,7 @@ export async function salvarEquipeDoProjeto(
   }>;
   const jobPorId = new Map(jobs.map((j) => [j.id, j]));
 
-  // As trocas que mudam alguém (decisão 175). Só job aberto ou em produção:
+  // As trocas que mudam alguém (decisão 176). Só job aberto ou em produção:
   // antes da abertura, o GP e o produtor mudam no envio para abertura.
   const trocas = parsed.data.trocas.filter((t) => {
     const j = jobPorId.get(t.jobId);
@@ -288,7 +288,7 @@ export async function salvarEquipeDoProjeto(
       entidadeTipo: "job",
       entidadeId: t.jobId,
       metadata: {
-        decisao: "175",
+        decisao: "176",
         job_codigo: job.codigo,
         papel: t.papel,
         de_id: de,
@@ -306,7 +306,7 @@ export async function salvarEquipeDoProjeto(
         entidadeTipo: "projeto",
         entidadeId: projetoId,
         metadata: {
-          decisao: "175",
+          decisao: "176",
           projeto_codigo: projeto.codigo,
           gp_id: t.para,
           gp_nome: nomes.get(t.para) ?? null,

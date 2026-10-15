@@ -157,7 +157,7 @@ function comQuemEstaNoOrcamento(
   );
 }
 
-/** O mesmo, na lista de GP (decisão 175). Quem está gravado e não pode
+/** O mesmo, na lista de GP (decisão 176). Quem está gravado e não pode
  *  mais ser GP vem marcado como do projeto: o campo mostra o nome sem o
  *  aviso de que ele entra, e o servidor explica a recusa. */
 function gpsComQuemEstaNoOrcamento(
@@ -361,7 +361,7 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id),
     // Quem pode ser GP: os GPs Responsáveis do projeto primeiro, e os
     // outros GPs depois — quem vem de fora entra no projeto ao salvar
-    // (decisão 175, que revisa a 170).
+    // (decisão 176, que revisa a 170).
     listarGpsParaOrcamento(params.projetoId, session.activeTenant.id),
     // Só as primeiras cidades, e as mesmas para os dois consumidores desta
     // tela: o editor do orçamento e o combobox do modal de abertura. O

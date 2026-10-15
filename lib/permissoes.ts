@@ -165,7 +165,7 @@ export const permissoes = {
    *  confere de novo (`definir_envio_de_pp_do_produtor`). */
   "jobs.liberar_envio_pp_produtor": ["administrador", "gerente_producao"],
   /** Trocar, na Equipe do job, o GP e o Produtor Responsáveis de job aberto
-   *  (decisão 175): qualquer GP e o administrador, sem errata e sem o
+   *  (decisão 176): qualquer GP e o administrador, sem errata e sem o
    *  financeiro. O banco confere de novo (`trocar_responsavel_do_job`). */
   "jobs.trocar_responsaveis":     ["administrador", "gerente_producao"],
   /** Pôr e tirar gente da Equipe do projeto pelo botão "Equipe" do job e
