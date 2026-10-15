@@ -144,7 +144,6 @@ export default async function JobDetailPage({
     abertoPorNome,
     competencias,
     totaisJob,
-    aberturaDoJob,
     custoPlanejadoJob,
     custoRealizadoJob,
     bvPlanejadoJob,
@@ -269,9 +268,10 @@ export default async function JobDetailPage({
               <ResumoResultado
                 valorJob={totaisJob.valorJob}
                 deducoes={totaisJob.deducoesDoResultado}
-                // O job como foi aberto (decisão 151): divide o valor quando
-                // uma errata o mudou.
-                abertura={aberturaDoJob}
+                // Só o valor do job de hoje (volta atrás da decisão 151, em
+                // 15/10/2026): o da abertura fica no card de Erratas e no
+                // histórico da planilha.
+                abertura={null}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
                 bvRealizado={bvRealizadoJob}
@@ -445,8 +445,8 @@ export default async function JobDetailPage({
             // O "Editar orçado" é do financeiro (decisão 115); aqui a
             // produção corrige pela errata.
             edicaoDoFinanceiro={null}
-            // O job como foi aberto (decisão 151): o Totais do job inteiro.
-            aberturaDoJob={aberturaDoJob}
+            // O Totais fecha sobre o job de hoje (15/10/2026).
+            aberturaDoJob={null}
             // Decisão 159: o GP registra a errata; o produtor a deixa
             // pronta para envio.
             papelNaErrata={comPedido ? null : papelNaErrata}

@@ -78,14 +78,7 @@ import type { EtapasDaFicha } from "./ficha-job";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
 import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
-import type { AnexoDaPPNaLista, PPAEmitir, PlanejadoAntesDoSave } from "@/lib/types";
-import {
-  fechamentoDaAbertura,
-  itensDaVersaoComAsEdicoesDaFila,
-  orcadoDaLinhaNaAbertura,
-  type EdicaoDaFila,
-  type ItemDaVersaoNaAbertura,
-} from "@/lib/calculos/abertura-do-job";
+import type { AnexoDaPPNaLista, PPAEmitir } from "@/lib/types";
 import {
   comAContaDaMidia,
   fechamentoDosItens,
@@ -198,7 +191,6 @@ export async function carregarDetalheDoJob(
     alteracoesFinanceiroRes,
     aEmitirRes,
     tomadoresRes,
-    itensDaVersaoRes,
     cnpjDaRegionalRes,
     errataProntaRes,
     meiosDaVersaoRes,
@@ -447,14 +439,6 @@ export async function carregarDetalheDoJob(
       .eq("ativo", true)
       .order("ordem")
       .order("nome"),
-    // A versão aprovada é a foto da abertura (decisão 151, entrega 2): o
-    // orçado de cada linha na abertura e os números do lado planejado do
-    // resultado. Só as colunas da conta — a versão não muda com a errata.
-    supabase
-      .from("versoes_orcamento_itens")
-      .select("id, tipo_custo, total_orcado, em_save, save_consumido")
-      .eq("versao_orcamento_id", versaoAprovadaId)
-      .eq("tenant_id", session.activeTenant.id),
     // O CNPJ que a PP já traz escolhido para a regional do job (decisão 156).
     raw.regional_id
       ? supabase
@@ -575,82 +559,10 @@ export async function carregarDetalheDoJob(
       valor: Number(bv.valor ?? 0),
     });
   }
-  // A foto da abertura (decisão 151): os itens da versão aprovada. Sem eles
-  // a tela fica como era — orçado de hoje na rentabilidade, valor único.
-  if (itensDaVersaoRes.error) {
-    console.error("[job.itens_da_versao]", itensDaVersaoRes.error.message);
-  }
-  // As edições do orçado que o financeiro fez com o job na fila: entram na
-  // foto, porque o job abriu com elas (revisão da decisão 115, 13/10/2026).
-  // Sem o histórico lido, a foto não reproduz o `valor_job_abertura` e a
-  // tela fica com o valor único.
-  const itemVersaoDaLinha = new Map<string, string>(
-    ((itensRes.data ?? []) as any[])
-      .filter((it) => it.item_versao_id)
-      .map((it) => [it.id as string, it.item_versao_id as string]),
-  );
-  const aberturaEm = raw.data_abertura_financeiro
-    ? Date.parse(raw.data_abertura_financeiro)
-    : null;
-  const edicoesDaFila: EdicaoDaFila[] =
-    aberturaEm === null
-      ? []
-      : ((alteracoesFinanceiroRes.data ?? []) as any[])
-          .filter((a) => Date.parse(a.created_at) < aberturaEm)
-          .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
-          .flatMap((a) => (a.itens ?? []) as any[])
-          .flatMap((i) => {
-            const itemVersaoId = itemVersaoDaLinha.get(i.job_item_orcado_id);
-            if (!itemVersaoId) return [];
-            return [
-              {
-                itemVersaoId,
-                tipoCusto: i.tipo_custo_para ?? i.tipo_custo,
-                // A conta da coluna gerada `total_orcado` da cópia, sem
-                // arredondar: o `total_para` do histórico vem em centavos.
-                totalOrcado:
-                  Number(i.valor_unitario_para ?? 0) *
-                  Number(i.quantidade_para ?? 1) *
-                  Number(i.dias_meses_para ?? 1),
-              },
-            ];
-          });
-  const itensDaVersao: ItemDaVersaoNaAbertura[] = itensDaVersaoRes.error
-    ? []
-    : itensDaVersaoComAsEdicoesDaFila(
-        ((itensDaVersaoRes.data ?? []) as any[]).map((i) => ({
-          id: i.id,
-          tipo_custo: i.tipo_custo,
-          total_orcado: Number(i.total_orcado ?? 0),
-          em_save: i.em_save === true,
-          save_consumido: Number(i.save_consumido ?? 0),
-        })),
-        edicoesDaFila,
-      );
-  const versaoLida = itensDeVersaoLidos(itensDaVersaoRes);
-  // O orçado de cada linha na abertura: 0 na que já era save na versão,
-  // porque save não entra na rentabilidade (decisão 028 §9).
-  const orcadoNaVersao = new Map(
-    itensDaVersao.map((i) => [i.id, i.em_save ? 0 : Number(i.total_orcado ?? 0)]),
-  );
-  const eraSaveNaVersao = new Map(itensDaVersao.map((i) => [i.id, i.em_save === true]));
-
-  // Linha que virou save DEPOIS da abertura (decisão 151): o trigger zerou
-  // o planejado dela, mas ele continua contando no lado planejado. Volta o
-  // de antes do save — o mesmo número que a abertura conheceu.
-  const planejadoDaAbertura = (it: any): PlanejadoAntesDoSave | null => {
-    if (!versaoLida || it.em_save !== true || !it.item_versao_id) return null;
-    if (!eraSaveNaVersao.has(it.item_versao_id)) return null;
-    if (eraSaveNaVersao.get(it.item_versao_id) === true) return null;
-    const antes = it.planejado_antes_save as PlanejadoAntesDoSave | null;
-    return antes ?? null;
-  };
-
   // `id` é o id da CÓPIA do job — a chave que o realizado, o BV, a PP e o
   // save usam. `orcado_id` carrega o mesmo valor e fica por compatibilidade;
   // `item_versao_id` é `null` na linha que nasceu de uma errata.
   const itens: ItemPlanilhaJob[] = (itensRes.data ?? []).map((it: any) => {
-    const antesDoSave = planejadoDaAbertura(it);
     return {
     id: it.id,
     orcado_id: it.id,
@@ -667,36 +579,23 @@ export async function carregarDetalheDoJob(
     quantidade_orcada: Number(it.quantidade_orcada ?? 1),
     dias_meses_orcado: Number(it.dias_meses_orcado ?? 1),
     total_orcado: Number(it.total_orcado ?? 0),
-    ...(antesDoSave
-      ? {
-          valor_unitario_planejado: Number(antesDoSave.valor_unitario ?? 0),
-          quantidade_planejada: Number(antesDoSave.quantidade ?? 0),
-          dias_meses_planejado: Number(antesDoSave.dias_meses ?? 0),
-          total_planejado:
-            Number(antesDoSave.valor_unitario ?? 0) *
-            Number(antesDoSave.quantidade ?? 0) *
-            Number(antesDoSave.dias_meses ?? 0),
-        }
-      : {
-          valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
-          quantidade_planejada: Number(it.quantidade_planejada ?? 0),
-          dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
-          total_planejado: Number(it.total_planejado ?? 0),
-        }),
-    save_depois_da_abertura: antesDoSave !== null,
+    valor_unitario_planejado: Number(it.valor_unitario_planejado ?? 0),
+    quantidade_planejada: Number(it.quantidade_planejada ?? 0),
+    dias_meses_planejado: Number(it.dias_meses_planejado ?? 0),
+    total_planejado: Number(it.total_planejado ?? 0),
+    // Desde 15/10/2026 (volta atrás da decisão 151) o resultado planejado é
+    // o de hoje: a linha que vira save sai do planejado como sai do orçado.
+    save_depois_da_abertura: false,
     // `null` preservado de propósito: significa "ainda não congelado", e
     // é o que manda a conta calcular a dedução a partir do BV vigente.
     em_save: it.em_save === true,
     save_consumido: Number(it.save_consumido ?? 0),
     // Linha cancelada por errata (decisão 151): fica na planilha com o
-    // orçado zerado e o planejado da abertura.
+    // orçado e, desde 15/10/2026, o planejado zerados.
     cancelada_em: it.cancelada_em ?? null,
-    // O orçado da linha na abertura — a base da rentabilidade planejada
-    // (decisão 151, entrega 2). 0 na linha criada por errata. Sem a versão
-    // lida, `null`: vale o orçado de hoje.
-    orcado_abertura: versaoLida
-      ? orcadoDaLinhaNaAbertura(it.item_versao_id ?? null, orcadoNaVersao)
-      : null,
+    // `null`: a rentabilidade planejada usa o orçado de hoje (volta atrás
+    // da decisão 151, entrega 2, em 15/10/2026).
+    orcado_abertura: null,
     bv_liquido_planejado:
       it.bv_liquido_planejado === null || it.bv_liquido_planejado === undefined
         ? null
@@ -1187,23 +1086,6 @@ export async function carregarDetalheDoJob(
   const totaisJob = fechamentoMidiaJob
     ? comAContaDaMidia(totaisNacionais, fechamentoMidiaJob)
     : totaisNacionais;
-  // O job como foi aberto (decisão 151, entrega 2): o lado PLANEJADO do
-  // resultado. Só depois da abertura do financeiro — antes dela não há
-  // "inicial" e "atual". `null` quando a versão não reproduz o
-  // `valor_job_abertura` gravado (ver `fechamentoDaAbertura`).
-  // A Mídia Off ainda não tem errata (entrega 5): o valor não se divide.
-  const aberturaDoJob =
-    !paramsMidia && raw.data_abertura_financeiro && itensDeVersaoLidos(itensDaVersaoRes)
-      ? fechamentoDaAbertura(
-          itensDaVersao,
-          Number(versaoAprovada.percentual_honorarios),
-          Number(versaoAprovada.percentual_imposto),
-          planilha.internacional,
-          raw.valor_job_abertura === null || raw.valor_job_abertura === undefined
-            ? null
-            : Number(raw.valor_job_abertura),
-        )
-      : null;
   // Passa pelos blocos com BV, e não pela soma crua das colunas: em `A` e
   // `D` o realizado é o ORÇADO (eles não geram PP e ficam em zero na
   // tabela), e o resumo do cabeçalho precisa bater com o card de Totais
@@ -1819,7 +1701,6 @@ export async function carregarDetalheDoJob(
     envios,
     faturamentoMensal,
     totaisJob,
-    aberturaDoJob,
     custoPlanejadoJob,
     custoRealizadoJob,
     bvPlanejadoJob,
@@ -1865,10 +1746,4 @@ export async function carregarDetalheDoJob(
         : null,
     errataPronta,
   };
-}
-
-/** A leitura da versão deu certo e trouxe linhas? Sem ela não há foto da
- *  abertura, e a tela fica como era. */
-function itensDeVersaoLidos(res: { error: unknown; data: unknown[] | null }): boolean {
-  return !res.error && (res.data ?? []).length > 0;
 }

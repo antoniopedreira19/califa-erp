@@ -539,10 +539,16 @@ antes.
 
 1. **Na fila da abertura** (`aguardando_abertura`), o "Editar orçado" abre
    também R$ Unit., QT e D/M do **planejado**.
-2. **Depois da abertura**, o planejado continua travado — ele é o da
-   abertura (decisão 151). A célula diz "O planejado é o da abertura do
-   job: o financeiro só o edita com o job na fila da abertura.", a action
-   e a função do banco recusam.
+2. **Depois da abertura**, o planejado continua travado para o
+   financeiro — ele é o da abertura (decisão 151). A célula diz "O
+   planejado é o da abertura do job: o financeiro só o edita com o job na
+   fila da abertura.", a action e a função do banco recusam.
+
+   > ⚠️ **15/10/2026 (decisão 175):** o planejado deixou de ser "o da
+   > abertura" — depois dela ele muda pela errata da produção. O
+   > financeiro segue editando-o só na fila; a célula agora diz "O
+   > financeiro só edita o planejado com o job na fila da abertura. Depois
+   > dela, o planejado muda pela errata."
 3. **As exceções do orçado valem:** Interno (o planejado espelha o orçado,
    decisão 105), linha com save, linha vermelha e linha cancelada ficam
    fechados.
