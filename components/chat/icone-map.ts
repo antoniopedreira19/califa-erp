@@ -5,6 +5,7 @@ import {
   FileText,
   FolderOpen,
   Tags,
+  Users,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export const ICONE_COMPONENTE: Record<string, LucideIcon> = {
   "check-circle": CheckCircle2,
   "x-circle": XCircle,
   ban: Ban,
+  users: Users,
 };
 
 export const ICONE_CORES = {

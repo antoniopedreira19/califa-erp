@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { saveDaVersao, saldosDeSaveDoCliente } from "@/lib/data/saves";
 import type { SaldoDeSave } from "@/lib/data/saves";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
-import { listarGpsDoProjeto, listarProdutoresAtivos } from "@/lib/data/members";
+import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
@@ -165,9 +165,10 @@ export default async function OrcamentosAgregadoPage({
       .select("profile_id, profile:profiles(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId),
-    // A lista do orçamento novo: só os GPs Responsáveis que podem ser GP
-    // (decisão 170). A de cima continua dando o nome no card.
-    listarGpsDoProjeto(params.projetoId),
+    // A lista do orçamento novo: quem pode ser GP, os do projeto primeiro —
+    // quem vem de fora entra no projeto ao criar (decisão 175, que revisa
+    // a 170). A de cima continua dando o nome no card.
+    listarGpsParaOrcamento(params.projetoId, tenantId),
     // Os orçamentos que só dependem de não ter item para sair pela lixeira
     // do card (decisão 148, entrega 2) — a mesma regra da exclusão.
     supabase.rpc("orcamentos_excluiveis_do_projeto", { p_projeto_id: params.projetoId }),

@@ -5438,3 +5438,20 @@ código publicado logo depois (`3305751`).
   a PP daquele job — `papelEnviaPP`, `podeEnviarPP` e `papelCorrigeNf` no
   carregador, e os portões de `actions-pp.ts` e `actions-notas-da-pp.ts`.
   Trocar o produtor desliga a chave (gatilho no banco).
+
+## ⚠️ Nota de 2026-10-15 — Trocar o GP e o Produtor Responsáveis pela Equipe (decisão 175)
+
+- **"Trocar"** nos cards do GP e do Produtor Responsável do pop-up "Equipe"
+  do job, e um ícone por célula na tabela da visão agregada. Só GP e
+  administrador (`jobs.trocar_responsaveis`), só job aberto ou em produção
+  (`JobNaEquipe.aceitaTroca`). Grava no mesmo "Salvar"
+  (`salvarEquipeDoProjeto` recebe `trocas`), pela função
+  `trocar_responsavel_do_job`.
+- O novo GP pode ser qualquer GP ou administrador; quem não é GP do projeto
+  passa a ser (`incluir_gp_no_projeto`). O novo produtor tem o papel
+  Produtor. A troca do produtor desliga a chave da 174.
+- A escrita direta de `responsavel_id` e `produtor_id` em job já aberto é
+  barrada pelo gatilho `jobs_guarda_troca_de_responsavel`.
+- Cada troca é uma linha em `jobs_trocas_de_responsavel` e um card na
+  Comunicação (`lerTrocasDeResponsavelDoJob` no `carregarDetalheDoJob`),
+  que conta como não lido para quem não trocou.

@@ -37,6 +37,7 @@ import {
   type PessoaOpcao,
 } from "./enviar-job-modal";
 import type { MesDoEnvio } from "@/lib/calculos/recebimento-por-mes";
+import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
 import { PPsQueTravam, type PPQueTravaOEnvio } from "./pps-que-travam";
 
@@ -153,7 +154,7 @@ interface Props {
   /** Opções de cidade, regional, GP e produtor do modal — ver
    *  <EnviarJobModal>. */
   regionaisDoProjeto: { id: string; nome: string }[];
-  gpsDoProjeto: PessoaOpcao[];
+  gps: GpParaEscolha[];
   produtores: PessoaOpcao[];
   cidadesIniciais: { id: string; nome: string; uf: string | null }[];
 
@@ -215,7 +216,7 @@ export function FluxoAbertura({
   projetoNome,
   herdados,
   regionaisDoProjeto,
-  gpsDoProjeto,
+  gps,
   produtores,
   cidadesIniciais,
   inicial,
@@ -468,7 +469,7 @@ export function FluxoAbertura({
       valor:
         (etapa === "enviada"
           ? herdados.gpNome
-          : gpsDoProjeto.find((p) => p.id === dados.gpId)?.nome) ??
+          : gps.find((p) => p.id === dados.gpId)?.nome) ??
         "— não informado",
     },
     {
@@ -750,7 +751,7 @@ export function FluxoAbertura({
         moeda={moeda}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
-        gpsDoProjeto={gpsDoProjeto}
+        gps={gps}
         produtores={produtores}
         cidadesIniciais={cidadesIniciais}
         periodoTravado={periodoTravado}

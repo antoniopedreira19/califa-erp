@@ -106,6 +106,7 @@ import {
   salvarConsumoDeSave,
 } from "../[orcId]/versoes/[versaoId]/save-actions";
 import { esquecerPagina, useProtegerSaida } from "@/components/voltar/estado";
+import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 
 interface Props {
   projeto: {
@@ -167,8 +168,9 @@ interface Props {
   /** Todos os vinculados ao projeto: dá o nome do GP no card dos
    *  orçamentos que já existem. */
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
-  /** Só os que podem ser GP (decisão 170): a lista do orçamento novo. */
-  gpsPossiveis: Pick<Profile, "id" | "nome">[];
+  /** Quem pode ser GP, os do projeto primeiro (decisões 170 e 175): a
+   *  lista do orçamento novo. */
+  gpsPossiveis: GpParaEscolha[];
   produtores: Pick<Profile, "id" | "nome">[];
   categoriasItem: Categoria[];
   fornecedores: FornecedorOpcao[];
@@ -432,9 +434,13 @@ export function EditorAgregado({
     () => ({
       categoria: new Map(nomesDeCategoria.map((c) => [c.id, c.nome])),
       regional: new Map(regionaisDoProjeto.map((r) => [r.id, r.nome])),
-      gp: new Map(gpsDoProjeto.map((g) => [g.id, g.nome])),
+      // Com a lista inteira: o GP de fora escolhido num orçamento novo só
+      // entra nos vinculados do projeto no próximo carregamento (175).
+      gp: new Map(
+        [...gpsPossiveis, ...gpsDoProjeto].map((g) => [g.id, g.nome]),
+      ),
     }),
-    [nomesDeCategoria, regionaisDoProjeto, gpsDoProjeto],
+    [nomesDeCategoria, regionaisDoProjeto, gpsDoProjeto, gpsPossiveis],
   );
 
   function descricao(orc: OrcamentoRascunho): string {
@@ -1319,7 +1325,7 @@ export function EditorAgregado({
             servicos={servicos}
             regionaisDoProjeto={regionaisDoProjeto}
             cidadesIniciais={cidadesIniciais}
-            gpsDoProjeto={gpsPossiveis}
+            gps={gpsPossiveis}
             produtores={produtores}
             onRascunho={criarOrcamento}
             onCancel={() => setModal(null)}

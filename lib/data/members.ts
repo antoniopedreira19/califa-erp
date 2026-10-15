@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
+import { montarGpsParaEscolha, type GpParaEscolha } from "@/lib/gps-para-escolha";
 
 /**
  * Lista os membros ativos do tenant (com profile também ativo), ordenados
@@ -77,24 +78,29 @@ export async function listarGpsAtivos(
 }
 
 /**
- * Os GPs Responsáveis do projeto que podem ser GP (decisão 170) — a lista
- * do campo "GP Responsável" do orçamento. Ler `projeto_responsaveis` direto
- * trazia também os acréscimos à Equipe (`papel = 'equipe'`), e quem foi
- * cadastrado como GP do projeto sem ter o papel.
+ * A lista do campo "GP Responsável" do orçamento (decisão 175, que revisa a
+ * 170): os GPs Responsáveis do projeto que podem ser GP primeiro, e depois
+ * todo membro ativo com o papel GP ou Administrador. Quem vem de fora entra
+ * nos GPs do projeto quando o orçamento é salvo. Ler `projeto_responsaveis`
+ * direto trazia os acréscimos à Equipe (`papel = 'equipe'`) — por isso as
+ * duas funções do banco.
  */
-export async function listarGpsDoProjeto(
+export async function listarGpsParaOrcamento(
   projetoId: string,
-): Promise<Pick<Profile, "id" | "nome">[]> {
+  tenantId: string,
+): Promise<GpParaEscolha[]> {
   const supabase = createClient();
 
-  const { data, error } = await supabase.rpc("gps_do_projeto", {
-    p_projeto_id: projetoId,
-  });
+  const [doProjetoRes, ativosRes] = await Promise.all([
+    supabase.rpc("gps_do_projeto", { p_projeto_id: projetoId }),
+    supabase.rpc("gps_ativos_do_tenant", { p_tenant_id: tenantId }),
+  ]);
+  if (doProjetoRes.error)
+    console.error("[members.gps_do_projeto]", doProjetoRes.error.message);
+  if (ativosRes.error) console.error("[members.gps]", ativosRes.error.message);
 
-  if (error) {
-    console.error("[members.gps_do_projeto]", error.message);
-    return [];
-  }
-
-  return (data ?? []) as Pick<Profile, "id" | "nome">[];
+  return montarGpsParaEscolha(
+    (doProjetoRes.data ?? []) as Array<{ id: string; nome: string }>,
+    (ativosRes.data ?? []) as Array<{ id: string; nome: string }>,
+  );
 }
