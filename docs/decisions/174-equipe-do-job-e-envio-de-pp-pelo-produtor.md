@@ -114,3 +114,12 @@ era.
   PP.
 - O filtro "Meus" da home (`lib/home/escopo-meus.ts`) continua olhando
   orçamentos, Equipe e criador — não os responsáveis dos jobs.
+
+## ⚠️ Nota de 2026-10-15 — os responsáveis se trocam pela Equipe (decisão 175)
+
+- O job continua sem "Editar", mas o GP e o Produtor Responsáveis de job
+  aberto agora se trocam no próprio pop-up "Equipe" ("Trocar"), pelo GP ou
+  pelo administrador, sem errata e sem o financeiro — ver a
+  [175](175-trocar-gp-e-produtor-do-job-aberto.md). A troca do produtor
+  desliga a chave pelo mesmo gatilho desta decisão, e o "Salvar" compara a
+  chave pedida com o estado depois da troca.

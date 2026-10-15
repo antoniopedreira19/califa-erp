@@ -246,6 +246,7 @@ export default async function JobDetailPage({
                   jobId={job.id}
                   podeMudarMembros={pode(session.activeRole, "projetos.editar_equipe")}
                   podeMudarChave={pode(session.activeRole, "jobs.liberar_envio_pp_produtor")}
+                  podeTrocarResponsaveis={pode(session.activeRole, "jobs.trocar_responsaveis")}
                 />
               )}
               {mostraMenuDoJob && (

@@ -10,11 +10,24 @@
  * resto da equipe do projeto agrupado por papel. Na visão agregada: os
  * responsáveis de cada job, com a chave de cada um, e a equipe inteira.
  * GPs e produtores põem e tiram gente; quem entrou sozinho tem cadeado.
+ *
+ * O GP ou o administrador troca o GP e o Produtor Responsáveis de job
+ * aberto ("Trocar", decisão 175), sem errata e sem o financeiro. Grava no
+ * mesmo "Salvar"; a troca do produtor desliga a chave; quem sai continua
+ * na equipe pelo que já o punha nela (o orçamento, o projeto).
  */
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Lock, Send, UserPlus, Users, X } from "lucide-react";
+import {
+  AlertCircle,
+  Lock,
+  Send,
+  Undo2,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +35,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
+import {
+  Combobox,
+  COMBOBOX_COMO_SELECT,
+  type ComboboxItem,
+} from "@/components/ui/combobox";
 import {
   Tooltip,
   TooltipContent,
@@ -32,6 +49,7 @@ import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/types";
 import type {
   EquipeDoProjeto,
+  JobNaEquipe,
   MembroDaEquipe,
   MotivoNaEquipe,
   PessoaDaEquipe,
@@ -273,14 +291,27 @@ function EquipePorPapel({
 function Responsavel({
   pessoa,
   rotulo,
+  antes,
+  onDesfazer,
+  trocar,
   children,
 }: {
   pessoa: PessoaDaEquipe | null;
   rotulo: string;
+  /** Quem estava antes da troca ainda não salva. */
+  antes: PessoaDaEquipe | null;
+  onDesfazer: () => void;
+  /** O "Trocar" (GP ou administrador, job aberto); sem ele, o cadeado. */
+  trocar: React.ReactNode | null;
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-white p-4">
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-xl border bg-white p-4 transition-colors",
+        antes ? "border-california-red/40" : "border-border",
+      )}
+    >
       <div className="flex items-center gap-3">
         {pessoa ? (
           <Avatar pessoa={pessoa} tamanho="lg" />
@@ -292,8 +323,24 @@ function Responsavel({
             {pessoa?.nome ?? "—"}
           </p>
           <p className="text-xs text-muted-foreground">{rotulo}</p>
+          {antes && (
+            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="truncate">
+                No lugar de{" "}
+                <span className="font-medium text-foreground">{antes.nome}</span>
+              </span>
+              <button
+                type="button"
+                onClick={onDesfazer}
+                className="inline-flex shrink-0 items-center gap-1 font-medium text-california-red hover:underline"
+              >
+                <Undo2 className="h-3 w-3" />
+                Desfazer
+              </button>
+            </p>
+          )}
         </div>
-        {pessoa && <Cadeado />}
+        {trocar ?? (pessoa && <Cadeado />)}
       </div>
       {children && (
         <div className="border-t border-border pt-3">{children}</div>
@@ -311,6 +358,48 @@ interface PropsDoPopup {
   jobId: string | null;
   podeMudarMembros: boolean;
   podeMudarChave: boolean;
+  /** GP ou administrador: troca o GP e o Produtor Responsáveis de job
+   *  aberto (decisão 175). */
+  podeTrocarResponsaveis: boolean;
+}
+
+type Papel = "gp" | "produtor";
+type TrocasDoRascunho = Record<string, Partial<Record<Papel, string>>>;
+
+/** O gatilho "Trocar": a lista abre no primeiro clique. */
+function Trocar({
+  rotulo,
+  itens,
+  cabecalho,
+  onEscolher,
+  compacto = false,
+}: {
+  rotulo: string;
+  itens: ComboboxItem[];
+  cabecalho: React.ReactNode;
+  onEscolher: (id: string) => void;
+  compacto?: boolean;
+}) {
+  return (
+    <div className="shrink-0">
+      <Combobox
+        ariaLabel={rotulo}
+        items={itens}
+        value={null}
+        onChange={(v) => v && onEscolher(v)}
+        placeholder={compacto ? "" : "Trocar"}
+        buscaPlaceholder="Escreva o nome"
+        larguraLista="w-[320px]"
+        alinharLista="end"
+        cabecalhoLista={cabecalho}
+        className={
+          compacto
+            ? "h-7 w-7 justify-center border-transparent px-0 text-muted-foreground hover:border-border hover:bg-accent [&>span:first-child]:hidden"
+            : "h-8 w-auto gap-2 px-2.5 text-xs font-semibold [&>span:first-child]:text-foreground"
+        }
+      />
+    </div>
+  );
 }
 
 function ConteudoDaEquipe({
@@ -318,6 +407,7 @@ function ConteudoDaEquipe({
   jobId,
   podeMudarMembros,
   podeMudarChave,
+  podeTrocarResponsaveis,
   onFechar,
 }: PropsDoPopup & { onFechar: () => void }) {
   const router = useRouter();
@@ -329,6 +419,7 @@ function ConteudoDaEquipe({
   const [envia, setEnvia] = React.useState<Record<string, boolean>>(() =>
     Object.fromEntries(equipe.jobs.map((j) => [j.id, j.produtorEnviaPP])),
   );
+  const [trocas, setTrocas] = React.useState<TrocasDoRascunho>({});
 
   const pessoaPorId = React.useMemo(() => {
     const m = new Map<string, PessoaDaEquipe>();
@@ -364,14 +455,97 @@ function ConteudoDaEquipe({
     .filter((p) => !naEquipe.has(p.id) && p.papel !== null)
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   const job = jobId ? (equipe.jobs.find((j) => j.id === jobId) ?? null) : null;
-  const naGrade = job
-    ? membros.filter(
-        (m) => m.pessoa.id !== job.gpId && m.pessoa.id !== job.produtorId,
-      )
-    : membros;
-  const podeSalvar = podeMudarMembros || podeMudarChave;
   const pessoa = (id: string | null) =>
     id ? (pessoaPorId.get(id) ?? null) : null;
+
+  // ---- A troca dos responsáveis -------------------------------------------
+  const gpDe = (j: JobNaEquipe) => trocas[j.id]?.gp ?? j.gpId;
+  const produtorDe = (j: JobNaEquipe) => trocas[j.id]?.produtor ?? j.produtorId;
+  const gpsDoProjeto = new Set(
+    equipe.membros
+      .filter((m) => m.motivos.some((x) => x.tipo === "gp_projeto"))
+      .map((m) => m.pessoa.id),
+  );
+  const ordenar = (a: PessoaDaEquipe, b: PessoaDaEquipe) =>
+    a.nome.localeCompare(b.nome, "pt-BR");
+
+  function itensDeGp(atual: string | null): ComboboxItem[] {
+    const podem = [...pessoaPorId.values()]
+      .filter(
+        (p) =>
+          p.id !== atual &&
+          (p.papel === "gerente_producao" || p.papel === "administrador"),
+      )
+      .sort(ordenar);
+    // Qualquer GP ou administrador (decisão 175): quem não é GP do projeto
+    // passa a ser ao salvar.
+    const doProjeto = podem.filter((p) => gpsDoProjeto.has(p.id));
+    const outros = podem.filter((p) => !gpsDoProjeto.has(p.id));
+    return [
+      ...doProjeto.map((p) => ({ value: p.id, label: p.nome, grupo: "GPs do projeto" })),
+      ...outros.map((p) => ({
+        value: p.id,
+        label: p.papel === "administrador" ? `${p.nome} · Administrador` : p.nome,
+        grupo: "Outros GPs",
+      })),
+    ];
+  }
+
+  function itensDeProdutor(atual: string | null): ComboboxItem[] {
+    const podem = [...pessoaPorId.values()]
+      .filter((p) => p.id !== atual && p.papel === "produtor")
+      .sort(ordenar);
+    return [
+      ...podem
+        .filter((p) => naEquipe.has(p.id))
+        .map((p) => ({ value: p.id, label: p.nome, grupo: "Na equipe do projeto" })),
+      ...podem
+        .filter((p) => !naEquipe.has(p.id))
+        .map((p) => ({ value: p.id, label: p.nome, grupo: "Outros produtores" })),
+    ];
+  }
+
+  function trocar(j: JobNaEquipe, papel: Papel, para: string) {
+    const original = papel === "gp" ? j.gpId : j.produtorId;
+    setTrocas((t) => {
+      const doJob = { ...(t[j.id] ?? {}) };
+      if (para === original) delete doJob[papel];
+      else doJob[papel] = para;
+      return { ...t, [j.id]: doJob };
+    });
+    // A chave é da pessoa: o produtor novo começa sem enviar (174).
+    if (papel === "produtor")
+      setEnvia((e) => ({ ...e, [j.id]: para === original ? j.produtorEnviaPP : false }));
+  }
+  function desfazer(j: JobNaEquipe, papel: Papel) {
+    trocar(j, papel, (papel === "gp" ? j.gpId : j.produtorId) ?? "");
+  }
+
+  const podeTrocarNo = (j: JobNaEquipe) => podeTrocarResponsaveis && j.aceitaTroca;
+
+  const cabecalhoGp = (j: JobNaEquipe) => (
+    <>Novo GP do {j.codigo}. Quem não é GP do projeto passa a ser.</>
+  );
+  const cabecalhoProdutor = (j: JobNaEquipe) => <>Novo Produtor Responsável do {j.codigo}.</>;
+
+  /** As trocas que o "Salvar" vai gravar, com os nomes. */
+  const trocasPedidas = equipe.jobs.flatMap((j) =>
+    (["gp", "produtor"] as Papel[])
+      .filter((p) => trocas[j.id]?.[p])
+      .map((p) => ({
+        job: j,
+        papel: p,
+        de: pessoa(p === "gp" ? j.gpId : j.produtorId),
+        para: pessoa(trocas[j.id]![p]!),
+      })),
+  );
+
+  const naGrade = job
+    ? membros.filter(
+        (m) => m.pessoa.id !== gpDe(job) && m.pessoa.id !== produtorDe(job),
+      )
+    : membros;
+  const podeSalvar = podeMudarMembros || podeMudarChave || podeTrocarResponsaveis;
 
   function salvar() {
     setErro(null);
@@ -382,6 +556,11 @@ function ConteudoDaEquipe({
         chaves: Object.entries(envia).map(([id, liga]) => ({
           jobId: id,
           liga,
+        })),
+        trocas: trocasPedidas.map((t) => ({
+          jobId: t.job.id,
+          papel: t.papel,
+          para: t.para!.id,
         })),
       });
       if (!res.ok) {
@@ -423,7 +602,22 @@ function ConteudoDaEquipe({
               Responsáveis pelo job
             </p>
             <div className="grid gap-4 md:grid-cols-2">
-              <Responsavel pessoa={pessoa(job.gpId)} rotulo="GP Responsável">
+              <Responsavel
+                pessoa={pessoa(gpDe(job))}
+                rotulo="GP Responsável"
+                antes={trocas[job.id]?.gp ? pessoa(job.gpId) : null}
+                onDesfazer={() => desfazer(job, "gp")}
+                trocar={
+                  podeTrocarNo(job) ? (
+                    <Trocar
+                      rotulo="Trocar o GP Responsável"
+                      itens={itensDeGp(gpDe(job))}
+                      cabecalho={cabecalhoGp(job)}
+                      onEscolher={(id) => trocar(job, "gp", id)}
+                    />
+                  ) : null
+                }
+              >
                 <div className="flex items-center justify-between gap-2.5">
                   <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                     <Send className="h-3.5 w-3.5 text-muted-foreground" />
@@ -433,21 +627,40 @@ function ConteudoDaEquipe({
                 </div>
               </Responsavel>
               <Responsavel
-                pessoa={pessoa(job.produtorId)}
+                pessoa={pessoa(produtorDe(job))}
                 rotulo="Produtor Responsável"
-              >
-                {job.produtorId ? (
-                  <div className="flex items-center justify-between gap-2.5">
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                      <Send className="h-3.5 w-3.5 text-muted-foreground" />
-                      Envia PPs ao financeiro
-                    </span>
-                    <Chave
-                      ligada={envia[job.id] ?? false}
-                      onChange={(v) => setEnvia((e) => ({ ...e, [job.id]: v }))}
-                      pode={podeMudarChave && !job.congelado}
-                      rotulo="Envia PPs ao financeiro"
+                antes={trocas[job.id]?.produtor ? pessoa(job.produtorId) : null}
+                onDesfazer={() => desfazer(job, "produtor")}
+                trocar={
+                  podeTrocarNo(job) ? (
+                    <Trocar
+                      rotulo="Trocar o Produtor Responsável"
+                      itens={itensDeProdutor(produtorDe(job))}
+                      cabecalho={cabecalhoProdutor(job)}
+                      onEscolher={(id) => trocar(job, "produtor", id)}
                     />
+                  ) : null
+                }
+              >
+                {produtorDe(job) ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2.5">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                        <Send className="h-3.5 w-3.5 text-muted-foreground" />
+                        Envia PPs ao financeiro
+                      </span>
+                      <Chave
+                        ligada={envia[job.id] ?? false}
+                        onChange={(v) => setEnvia((e) => ({ ...e, [job.id]: v }))}
+                        pode={podeMudarChave && !job.congelado}
+                        rotulo="Envia PPs ao financeiro"
+                      />
+                    </div>
+                    {trocas[job.id]?.produtor && job.produtorEnviaPP && !envia[job.id] && (
+                      <p className="text-[11.5px] text-muted-foreground">
+                        Volta desligada para o novo produtor.
+                      </p>
+                    )}
                   </div>
                 ) : null}
               </Responsavel>
@@ -475,14 +688,13 @@ function ConteudoDaEquipe({
                   </span>
                 </div>
                 {equipe.jobs.map((j) => {
-                  const gp = pessoa(j.gpId);
-                  const prod = pessoa(j.produtorId);
+                  const pode = podeTrocarNo(j);
                   return (
                     <div
                       key={j.id}
                       className={cn(
                         GRADE_JOBS,
-                        "border-b border-border/70 py-2.5 last:border-0",
+                        "group border-b border-border/70 py-2.5 last:border-0",
                       )}
                     >
                       <span className="min-w-0 truncate text-sm">
@@ -493,20 +705,40 @@ function ConteudoDaEquipe({
                           {j.nome}
                         </span>
                       </span>
-                      <span className="flex min-w-0 items-center gap-2">
-                        {gp && <Avatar pessoa={gp} />}
-                        <span className="truncate text-[13px] text-foreground">
-                          {gp?.nome ?? "—"}
-                        </span>
-                      </span>
-                      <span className="flex min-w-0 items-center gap-2">
-                        {prod && <Avatar pessoa={prod} />}
-                        <span className="truncate text-[13px] text-foreground">
-                          {prod?.nome ?? "—"}
-                        </span>
-                      </span>
+                      <CelulaDoResponsavel
+                        pessoa={pessoa(gpDe(j))}
+                        antes={trocas[j.id]?.gp ? pessoa(j.gpId) : null}
+                        onDesfazer={() => desfazer(j, "gp")}
+                        trocar={
+                          pode ? (
+                            <Trocar
+                              compacto
+                              rotulo={`Trocar o GP do ${j.codigo}`}
+                              itens={itensDeGp(gpDe(j))}
+                              cabecalho={cabecalhoGp(j)}
+                              onEscolher={(id) => trocar(j, "gp", id)}
+                            />
+                          ) : null
+                        }
+                      />
+                      <CelulaDoResponsavel
+                        pessoa={pessoa(produtorDe(j))}
+                        antes={trocas[j.id]?.produtor ? pessoa(j.produtorId) : null}
+                        onDesfazer={() => desfazer(j, "produtor")}
+                        trocar={
+                          pode ? (
+                            <Trocar
+                              compacto
+                              rotulo={`Trocar o Produtor Responsável do ${j.codigo}`}
+                              itens={itensDeProdutor(produtorDe(j))}
+                              cabecalho={cabecalhoProdutor(j)}
+                              onEscolher={(id) => trocar(j, "produtor", id)}
+                            />
+                          ) : null
+                        }
+                      />
                       <span>
-                        {j.produtorId ? (
+                        {produtorDe(j) ? (
                           <Chave
                             ligada={envia[j.id] ?? false}
                             onChange={(v) =>
@@ -600,7 +832,55 @@ function ConteudoDaEquipe({
           )}
         </div>
       </div>
+
     </DialogContent>
+  );
+}
+
+/** Uma célula de responsável na tabela da visão agregada. */
+function CelulaDoResponsavel({
+  pessoa,
+  antes,
+  onDesfazer,
+  trocar,
+}: {
+  pessoa: PessoaDaEquipe | null;
+  antes: PessoaDaEquipe | null;
+  onDesfazer: () => void;
+  trocar: React.ReactNode | null;
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {pessoa && <Avatar pessoa={pessoa} />}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] text-foreground">
+          {pessoa?.nome ?? "—"}
+        </span>
+        {antes && (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="truncate">era {antes.nome}</span>
+            <button
+              type="button"
+              onClick={onDesfazer}
+              aria-label={`Desfazer: voltar para ${antes.nome}`}
+              className="inline-flex shrink-0 items-center text-california-red hover:underline"
+            >
+              <Undo2 className="h-3 w-3" />
+            </button>
+          </span>
+        )}
+      </span>
+      {trocar && (
+        <span
+          className={cn(
+            "transition-opacity",
+            antes ? "opacity-100" : "opacity-0 focus-within:opacity-100 group-hover:opacity-100",
+          )}
+        >
+          {trocar}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -641,9 +921,12 @@ export function BotaoEquipe(props: PropsDoPopup) {
   const primeiro = new Set(
     [job?.gpId, job?.produtorId].filter(Boolean) as string[],
   );
+  // O GP e o produtor podem ser a mesma pessoa: um rosto só.
   const pessoas = [
     ...equipe.membros.filter((m) => m.pessoa.id === job?.gpId),
-    ...equipe.membros.filter((m) => m.pessoa.id === job?.produtorId),
+    ...equipe.membros.filter(
+      (m) => m.pessoa.id === job?.produtorId && m.pessoa.id !== job?.gpId,
+    ),
     ...equipe.membros.filter((m) => !primeiro.has(m.pessoa.id)),
   ].map((m) => m.pessoa);
 

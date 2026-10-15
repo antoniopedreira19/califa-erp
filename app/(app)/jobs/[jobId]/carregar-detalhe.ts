@@ -5,8 +5,10 @@ import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import {
   lerRecusasDeSaveDoJob,
+  lerTrocasDeResponsavelDoJob,
   montarThreadChat,
   recusasDeSaveNaoLidas,
+  trocasDeResponsavelNaoLidas,
 } from "@/lib/data/job-chat";
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
 import { SELECT_EVENTOS_DA_PP, eventosDaPP } from "@/lib/data/eventos-da-pp";
@@ -191,6 +193,7 @@ export async function carregarDetalheDoJob(
     competenciasRes,
     mesesRes,
     recusasDeSave,
+    trocasDeResponsavel,
     consumosComPedidoRes,
     alteracoesFinanceiroRes,
     aEmitirRes,
@@ -395,6 +398,8 @@ export async function carregarDetalheDoJob(
     mesesDaVersaoQuery(supabase, session.activeTenant.id, versaoAprovadaId),
     // As recusas de save viram card na Comunicação (decisão 099).
     lerRecusasDeSaveDoJob(supabase, session.activeTenant.id, raw.id),
+    // As trocas do GP e do produtor viram card na Comunicação (decisão 175).
+    lerTrocasDeResponsavelDoJob(supabase, session.activeTenant.id, raw.id),
     // Situação dos pedidos de CONSUMO das linhas do job: "pago só por save"
     // só vale com o consumo aprovado (decisão 099).
     supabase
@@ -1265,6 +1270,7 @@ export async function carregarDetalheDoJob(
     versaoAprovada.moeda,
     recusasDeSave,
     alteracoesFinanceiro,
+    trocasDeResponsavel,
   );
 
   // Não lidas = o que chegou de outra pessoa depois da última leitura.
@@ -1284,7 +1290,9 @@ export async function carregarDetalheDoJob(
     alteracoesFinanceiro.filter(
       (a) => a.created_by !== session.profile.id && (!lidaAte || a.created_at > lidaAte),
     ).length +
-    recusasDeSaveNaoLidas(recusasDeSave, session.profile.id, lidaAte);
+    recusasDeSaveNaoLidas(recusasDeSave, session.profile.id, lidaAte) +
+    // A troca do GP ou do produtor também: quem entra precisa ver (175).
+    trocasDeResponsavelNaoLidas(trocasDeResponsavel, session.profile.id, lidaAte);
 
   // ---- Chat de PPs: thread e contador de não lidas ----
   if (mensagensPPsRes.error)

@@ -5617,3 +5617,13 @@ aplicada na hora combinada com a frente do Antonio, junto da
   Produtor Responsáveis de cada job vivo, como já travava o criador, os GPs
   e os produtores dos orçamentos. É a mesma Equipe que o botão "Equipe" do
   job e da visão agregada mostra.
+
+## ⚠️ Nota de 2026-10-15 — O GP do orçamento pode vir de fora do projeto (decisão 175)
+
+- O campo "GP Responsável" do Novo orçamento, do editor, do orçamento novo
+  da agregada e do envio para abertura lista todo membro que pode ser GP,
+  os GPs do projeto primeiro (`listarGpsParaOrcamento`,
+  `lib/gps-para-escolha.ts`). Escolhido alguém de fora, o campo avisa, e ele
+  entra nos GPs Responsáveis do projeto depois de gravar o orçamento ou de
+  enviar o job (`incluirGpNoProjeto`, auditoria `projeto.gp_incluido`).
+- Revisa a regra 3 da 170; a trava do envio para GP sem o papel continua.

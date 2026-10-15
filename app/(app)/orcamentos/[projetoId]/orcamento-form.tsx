@@ -38,6 +38,7 @@ import {
   erroDoPeriodoMensal,
 } from "@/lib/calculos/meses-trimestre";
 import { CidadeCombobox, type CidadeOption } from "../cidade-combobox";
+import { gpDeFora, itensDeGp, type GpParaEscolha } from "@/lib/gps-para-escolha";
 import {
   atualizarOrcamento,
   criarOrcamento,
@@ -92,8 +93,9 @@ interface Props {
   /** Cidade já gravada no orçamento, com o nome resolvido no servidor.
    *  Sem ela o combobox abriria sem rótulo em edição. */
   cidadeAtual?: CidadeOption | null;
-  /** GP responsável sai dos responsáveis do projeto. */
-  gpsDoProjeto: Pick<Profile, "id" | "nome">[];
+  /** Quem pode ser GP: os GPs do projeto primeiro, e os outros GPs — quem
+   *  vem de fora entra no projeto ao salvar (decisão 175). */
+  gps: GpParaEscolha[];
   /** Só quem tem o papel Produtor (`listarProdutoresAtivos`, 13/10/2026).
    *  Na edição, quem chama acrescenta o produtor já gravado, se ele não
    *  tiver o papel — senão o campo abriria vazio. */
@@ -141,7 +143,7 @@ export function OrcamentoForm({
   regionaisDoProjeto,
   cidadesIniciais,
   cidadeAtual,
-  gpsDoProjeto,
+  gps,
   produtores,
   onSuccess,
   onCancel,
@@ -564,22 +566,18 @@ export function OrcamentoForm({
               cliente do projeto (13/10/2026). */}
           <Combobox
             id="gp_responsavel_id"
-            items={gpsDoProjeto.map((r) => ({ value: r.id, label: r.nome }))}
+            items={itensDeGp(gps)}
             value={gpId || null}
             onChange={(v) => setGpId(v ?? "")}
-            disabled={gpsDoProjeto.length === 0}
-            placeholder={
-              gpsDoProjeto.length === 0
-                ? "Projeto sem responsável cadastrado"
-                : "Selecione o GP responsável"
-            }
+            placeholder="Selecione o GP responsável"
             buscaPlaceholder="Escreva o nome"
             larguraLista={LARGURA_LISTA_DE_PESSOAS}
             className={`${COMBOBOX_COMO_SELECT} ${erroClasses("gp_responsavel_id")}`}
           />
-          {gpsDoProjeto.length === 0 && (
+          {gpDeFora(gps, gpId) && (
             <p className="text-xs text-muted-foreground">
-              As opções vêm dos responsáveis do projeto.
+              {gpDeFora(gps, gpId)!.nome} passa a ser GP Responsável do
+              projeto ao salvar.
             </p>
           )}
         </Field>

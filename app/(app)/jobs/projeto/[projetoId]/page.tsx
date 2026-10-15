@@ -180,6 +180,10 @@ export default async function ProjetoAgregadoPage({
                       session.activeRole,
                       "jobs.liberar_envio_pp_produtor",
                     )}
+                    podeTrocarResponsaveis={pode(
+                      session.activeRole,
+                      "jobs.trocar_responsaveis",
+                    )}
                   />
                 )}
               </div>

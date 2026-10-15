@@ -23,6 +23,7 @@ import { esquecerPagina } from "@/components/voltar/estado";
 import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import type { CidadeOption } from "../cidade-combobox";
 import { OrcamentoForm } from "./orcamento-form";
+import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 
 interface Props {
   projetoId: string;
@@ -38,7 +39,8 @@ interface Props {
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   cidadesIniciais: CidadeOption[];
   cidadeAtual: CidadeOption | null;
-  gpsDoProjeto: Pick<Profile, "id" | "nome">[];
+  /** Quem pode ser GP: os do projeto e os outros (decisão 175). */
+  gps: GpParaEscolha[];
   produtores: Pick<Profile, "id" | "nome">[];
   /** O projeto, travado no formulário como na criação. */
   projetoNome: string;
@@ -63,7 +65,7 @@ export function OrcamentoEditorDrawer({
   regionaisDoProjeto,
   cidadesIniciais,
   cidadeAtual,
-  gpsDoProjeto,
+  gps,
   produtores,
   projetoNome,
   projetoCodigo,
@@ -152,7 +154,7 @@ export function OrcamentoEditorDrawer({
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}
               cidadeAtual={cidadeAtual}
-              gpsDoProjeto={gpsDoProjeto}
+              gps={gps}
               produtores={produtores}
               projetoNome={projetoNome}
               projetoCodigo={projetoCodigo}

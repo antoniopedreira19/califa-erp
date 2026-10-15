@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { listarGpsDoProjeto, listarProdutoresAtivos } from "@/lib/data/members";
+import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
 import type { CategoriaDominio, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
@@ -23,7 +23,7 @@ export default async function NovoOrcamentoPage({
     categoriasRes,
     servicosRes,
     regionaisRes,
-    gpsDoProjeto,
+    gps,
     cidadesIniciais,
     produtores,
   ] = await Promise.all([
@@ -59,9 +59,10 @@ export default async function NovoOrcamentoPage({
         .select("regional:regionais(id, nome)")
         .eq("projeto_id", params.projetoId)
         .eq("tenant_id", session.activeTenant.id),
-      // Só os GPs Responsáveis que podem ser GP — sem a Equipe e sem quem
-      // não tem o papel (decisão 170).
-      listarGpsDoProjeto(params.projetoId),
+      // Quem pode ser GP: os GPs Responsáveis do projeto primeiro, e os
+      // outros GPs depois — quem vem de fora entra no projeto ao salvar
+      // (decisão 175, que revisa a 170).
+      listarGpsParaOrcamento(params.projetoId, session.activeTenant.id),
       // Só as primeiras cidades: o combobox busca o resto no servidor a
       // cada digitação. O cadastro comporta o Brasil inteiro.
       listarCidadesIniciais(session.activeTenant.id),
@@ -103,7 +104,7 @@ export default async function NovoOrcamentoPage({
           projetoCodigo={projeto.codigo}
           regionaisDoProjeto={regionaisDoProjeto}
           cidadesIniciais={cidadesIniciais}
-          gpsDoProjeto={gpsDoProjeto}
+          gps={gps}
           produtores={produtores}
         />
       </div>

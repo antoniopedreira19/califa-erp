@@ -189,6 +189,8 @@ export type AuditAction =
   | "projeto.equipe_alterada"
   | "job.envio_de_pp_do_produtor_ligado"
   | "job.envio_de_pp_do_produtor_desligado"
+  | "job.responsavel_trocado"
+  | "projeto.gp_incluido"
   // Decisão 128: o envio depois do "Cancelar aprovação" da devolução volta
   // com o código do job cancelado; e o planejado da versão aprovada se
   // corrige com o job devolvido, na versão e na cópia do job.
