@@ -7277,3 +7277,12 @@ os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
     nada;
   - os 19 casos do protótipo com este componente, incluindo uma aprovação
     completa com retenção e a NF contra a Hitlab.
+
+## ⚠️ Nota de 2026-10-15 (3) — "Fornecedor pessoa física" entre os motivos de não gerar crédito (decisão 139)
+
+- O crédito de PIS/COFINS da aprovação não confere se o fornecedor é pessoa
+  física. O Tiago decidiu não travar: pessoa física pode chegar a emitir
+  nota de pessoa jurídica.
+- A lista do "Não gera crédito" ganhou "Fornecedor pessoa física", antes de
+  "Outro". O servidor aceita o motivo novo (`MOTIVOS_SEM_CREDITO`, conferido
+  em `lib/validations/nf-da-pp.ts`); o banco só exige motivo preenchido.
