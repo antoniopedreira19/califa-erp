@@ -7240,3 +7240,40 @@ Regra completa na nota de 14/10/2026 da decisão 036.
   pelo financeiro. A troca aparece como card automático na Comunicação do
   job, também no lado do financeiro ("Produtor Responsável trocado · Fulano
   → Ciclano · por Beltrano").
+
+## ⚠️ Nota de 2026-10-15 (2) — O pop-up de aprovar PP em seções, com rodapé fixo (desenho; decisões 139, 142 §5 e 152 sem mudança de regra)
+
+Escolhido pelo Tiago no protótipo "Retenções no Contas a Pagar" (opção B,
+revisada em 14/10). O pop-up tinha texto demais e, com a retenção ligada,
+passava da altura da tela: 1.249 px de conteúdo. **Nenhuma regra mudou**:
+os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
+
+- **Três blocos numa caixa.**
+  - O pagamento vem sem título; os rótulos dos campos já dizem.
+  - "Retenções na fonte" tem a chave à direita. O título é o rótulo dela, e
+    a chave não repete "Reter na fonte".
+  - "Crédito de PIS/COFINS" vem sempre aberto.
+- **Ligar a chave abre a grade de alíquotas direto**, com o retido e o
+  líquido embaixo; desligar recolhe. Saíram o "Ajustar alíquotas" e a frase
+  de resumo. O "Repetir as da PP-…" fica acima da grade.
+- **As guias viraram uma tabela:** guia, valor, apuração e vencimento.
+- **Os textos de explicação viraram dica (ícone ⓘ):**
+  - viraram dica: o da data, o do centro de custo, o do cartão, o da
+    regra do crédito e o das guias;
+  - o aviso de mercadoria virou o selo "Só para serviço";
+  - a trava do Simples/MEI e a do cartão viraram o selo "Retenção travada"
+    / "Cartão: sem retenção", com a regra na dica.
+- **O crédito que a regra não dá fica explicado à vista.** É o caso do CNPJ
+  tomador no lucro presumido (Hitlab): a linha diz o porquê, e não há
+  caixa para marcar.
+- **Rodapé fixo:** Cancelar e Aprovar sempre à vista; só o meio rola. Com a
+  retenção aberta e as guias, o meio passa a rolar (cerca de 1.030 px de
+  conteúdo para ~900 px de tela).
+- **O foco ao abrir vai para o primeiro campo, não para uma dica.** Focada,
+  a dica abria o tooltip sozinha, e o Esc fechava só ele.
+- **Conferido:**
+  - logado como administrador nas PP-00148 e PP-00132 (TES-1014/26):
+    retenção, grade, guias, cartão, Cancelar, Esc e Fechar, sem aprovar
+    nada;
+  - os 19 casos do protótipo com este componente, incluindo uma aprovação
+    completa com retenção e a NF contra a Hitlab.
