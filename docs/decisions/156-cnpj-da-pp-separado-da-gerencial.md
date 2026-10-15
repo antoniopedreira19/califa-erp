@@ -69,19 +69,19 @@ As duas dimensões são independentes (palavras do Tiago): o CNPJ da California 
 
 ## Revisão de 15/10/2026 — a tomadora é a emissora (decidida, NÃO implementada)
 
-**Situação:** decidida pelo Tiago em 14 e 15/10/2026. **Nada foi aplicado.** Ele confirma a troca nas PPs antigas (lista abaixo) antes; só então entram a migration e o código.
+**Situação:** decidida pelo Tiago em 14, 15 e 16/10/2026. **Nada foi aplicado.** Ele confirma a troca nas PPs antigas (lista abaixo) antes; só então entram a migration e o código.
 
 **Por quê.** A nota é o documento fiscal: o CNPJ que está nela lança a despesa, retém imposto (o ISS retido da PP-00090 é da California) e deve pagar. A relação por regional (item 3 da regra) continua só como **pré-seleção** na geração.
 
 ### A regra revista
 
 1. **A empresa emissora da PP é a tomadora da nota.** Revê o item 4 da regra ("nota em outro CNPJ não barra").
-2. **Antes do envio, a nota em outro CNPJ barra.** Respostas do Tiago:
-   - no formulário de gerar e de editar a PP, o aviso vermelho vira trava. O campo "Empresa emissora" está na mesma tela;
-   - no envio, sai o "Sim, enviar" (pop-up "Enviar com a nota em outro CNPJ?") e entra o botão **"Editar a PP"**, que abre a edição da PP gerada ([173](173-pp-gerada-volta-a-se-editar.md)). Ali a empresa emissora é trocada, o PDF é refeito e a linha do tempo registra "Editada". O sistema não troca sozinho;
-   - o servidor barra também, sem a confirmação `confirmarTomadorDiferente`.
+2. **A empresa emissora segue o documento sozinha** (Tiago, 16/10/2026, revendo a resposta de 15/10). Ao anexar a nota com outro CNPJ tomador, a PP passa para a empresa do documento, o PDF é refeito e aparece um aviso informativo — sem trava e sem "tem certeza?". Sem documento ainda, vale a pré-seleção pela regional. O servidor faz a mesma conta (não confia só na tela) e registra a troca. *Substitui* o que estava decidido em 15/10: barrar o envio e abrir a edição da PP pelo botão "Editar a PP" ([173](173-pp-gerada-volta-a-se-editar.md)). Motivo: com a regra "a tomadora é a emissora", a correção era sempre a mesma; o financeiro continua podendo rejeitar documento errado.
+   - **Em aberto:** a fatura (decisão 178) e o recibo só pedem o número, sem o CNPJ tomador. Proposta (aguarda o Tiago): pedir só o campo "Contra qual CNPJ" neles também, já preenchido com o CNPJ da PP, para que sigam a mesma regra.
 3. **Depois do envio, "Corrigir a NF" leva a emissora junto.** Trocar o tomador troca a empresa emissora da PP e das outras PPs que usam a mesma nota, com registro. Ponto a resolver na implementação: PP com notas em CNPJs diferentes (barrar, porque a emissora ficaria ambígua).
 4. **A faixa vermelha na aprovação do financeiro fica** para o que já existia.
+5. **A PP é documento interno, por enquanto** (Tiago, 16/10/2026): não vai a terceiros. O cabeçalho com a empresa emissora fica (sem ele o documento perde a cara profissional) e mostra a empresa do documento anexado, que é quem paga.
+6. **O PDF ganha "Empresa gerencial" e "Regional" embaixo de "Job:"**, sempre as do job (Tiago, 16/10/2026). Assim, a quem o job pertence fica no documento, e o cabeçalho diz quem paga. Desenho aprovado com dados fictícios: job da Hitlab, regional Hitlab, cabeçalho California (nota contra a California). Os trechos escritos para o fornecedor ("Solicitamos por ordem do sacado", "Dados para faturamento da cobrança", "Assinatura do Fornecedor") ficam como estão até o Tiago decidir.
 
 ### Troca nas PPs antigas (aprovada pelo Tiago em 15/10, aguardando a confirmação dele)
 
