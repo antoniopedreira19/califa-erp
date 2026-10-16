@@ -417,6 +417,11 @@ export type AuditAction =
   // chamada, hit ou miss do cache. Metadata guarda modelo, tokens,
   // custo estimado em USD e flag de confiança baixa.
   | "pp.anexo.nf_lida_por_ia"
+  // Módulo Freelancers — catálogo de cargos (Task 013).
+  | "freelancer_cargo.criado"
+  | "freelancer_cargo.renomeado"
+  | "freelancer_cargo.inativado"
+  | "freelancer_cargo.reativado"
   | "acao_negada";
 
 export interface AuditPayload {
