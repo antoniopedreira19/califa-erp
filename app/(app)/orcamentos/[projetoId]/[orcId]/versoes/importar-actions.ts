@@ -33,6 +33,7 @@ import { montarPreviewDaAba } from "@/lib/importacao/preview-da-aba";
 import {
   abaSugerida,
   lerTodasAsAbas,
+  mensagemSemAbaLegivel,
   ordenarAbas,
   totaisDaAba,
   type AbaLida,
@@ -388,13 +389,7 @@ export async function previewImportacao(
 
   const sugerida = abaSugerida(abas);
   if (!sugerida) {
-    return {
-      ok: false,
-      message:
-        abas.length === 1
-          ? (abas[0].motivo ?? "Nenhum item encontrado na planilha.")
-          : `Nenhuma das ${abas.length} abas do arquivo está no formato do orçamento. Confira o modelo e envie de novo.`,
-    };
+    return { ok: false, message: mensagemSemAbaLegivel(abas) };
   }
 
   return {

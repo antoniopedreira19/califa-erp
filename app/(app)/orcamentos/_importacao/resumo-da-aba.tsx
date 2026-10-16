@@ -200,7 +200,9 @@ export function ResumoDaAba({
               p.planilha_tem_planejado
                 ? mensal
                   ? "Os valores do bloco PLANEJADO da planilha — na planilha interna, pelas colunas do cabeçalho."
-                  : "Os valores das colunas H · R$, I · QT e J · D/M."
+                  : // No internacional as colunas saem do cabeçalho (16/10/2026):
+                    // a interna da agência traz o USD na H, e o R$ na I.
+                    "Os valores de R$, QT e D/M do bloco PLANEJADO da planilha."
                 : "A planilha só tem o orçado: o planejado de todas as linhas fica zerado."
             }
           />
