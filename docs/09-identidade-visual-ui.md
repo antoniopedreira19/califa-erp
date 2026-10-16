@@ -246,6 +246,8 @@ A tabela fecha com o **total da planilha** no `<tfoot>` (`LINHA_TOTAL_ROTULO` + 
 
 **Ações do grupo:** lápis de renomear **na linha**, ao lado do nome; lixeira **na calha**, na altura da linha do grupo, com uma vaga vazia da largura do BV antes dela para cair no mesmo eixo das lixeiras de item.
 
+**Fora das planilhas, a mesma linha (16/10/2026, revisão da decisão 091).** Lista agrupada que não é planilha — a primeira foi a página inicial da Conciliação, agrupada por empresa — usa a faixa do grupo em `FAIXA_GRUPO_LISTA` (o grafite claro do `grupoValor` da RENTABILIDADE) sobre linhas brancas, com o **subtotal na própria faixa** (sem linha "Subtotal" separada), e fecha com `TOTAL_LISTA`. Antes, a faixa da empresa era um cinza quase igual ao das linhas e não se destacava.
+
 ## Navegação por teclado nas planilhas
 
 A grade editável do orçamento se comporta como planilha: **Tab anda na horizontal, Enter desce, as setas andam nas duas direções, Esc desfaz.** Tab na última coluna editável desce para a **primeira coluna da linha seguinte**, e cai na linha "Novo item" quando ela existe — dá para preencher um grupo inteiro sem tocar no mouse.

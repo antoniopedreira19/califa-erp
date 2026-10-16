@@ -5,9 +5,15 @@
  * conta, agrupada por empresa contábil.
  *
  * Um só `thead` no topo (os títulos das colunas não se repetem por grupo);
- * cada empresa é um `tbody` com faixa de abertura e linha de subtotal; o
- * `tfoot` fecha o total geral. Client por causa da busca — recebe dados
- * prontos do server component.
+ * cada empresa é um `tbody` aberto pela faixa da empresa, que carrega o
+ * subtotal do grupo; o `tfoot` fecha o total geral. Client por causa da
+ * busca — recebe dados prontos do server component.
+ *
+ * A faixa da empresa é a linha do agrupamento das planilhas, em grafite
+ * claro sobre linhas brancas (revisão de 16/10/2026): antes ela era um
+ * cinza quase igual ao das linhas, e uma linha "Subtotal" repetia o saldo
+ * que a faixa já mostrava. As colunas têm largura fixa (`table-fixed` +
+ * `colgroup`), como as planilhas.
  *
  * A coluna Situação é a razão de a lista trazer conta inativa: sem ela a
  * tela seria de contas ativas e a coluna diria sempre a mesma coisa.
@@ -17,6 +23,7 @@ import Link from "next/link";
 import { ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
+import { FAIXA_GRUPO_LISTA, TOTAL_LISTA, TOTAL_LISTA_FUNDO } from "@/app/(app)/_planilha/blocos";
 import { dataCurta, hrefExtrato, TIPO_CONTA_LABEL, type ContaResumo } from "./hub-periodo";
 import {
   BarraDosFiltrosDeColuna,
@@ -94,6 +101,28 @@ const COLUNAS: ColunaFiltravel<ContaResumo>[] = [
  *  o botão do filtro segue o desenho dela. */
 const TITULO = "normal-case tracking-normal";
 
+/** Larguras fixas: Conta fica com a sobra. */
+function Colunas() {
+  return (
+    <colgroup>
+      <col />
+      <col className="w-[180px]" />
+      <col className="w-[120px]" />
+      <col className="w-[120px]" />
+      <col className="w-[84px]" />
+      <col className="w-[160px]" />
+      <col className="w-[160px]" />
+      <col className="w-[180px]" />
+      <col className="w-[44px]" />
+    </colgroup>
+  );
+}
+
+/** Célula sem valor: o traço fica claro para não pesar na leitura. */
+function Traco() {
+  return <span className="text-muted-foreground/40">—</span>;
+}
+
 export function HubTabela({
   contas,
   de,
@@ -155,10 +184,11 @@ export function HubTabela({
       })
       // Com ordem pelo título, as contas vêm naquela ordem dentro da
       // empresa, e a empresa entra na posição da sua primeira conta (o
-      // `Map` guarda a ordem de chegada). Sem ordem, a de sempre: a empresa
-      // de maior saldo primeiro.
+      // `Map` guarda a ordem de chegada). Sem ordem, as empresas em ordem
+      // alfabética — California, GoCrazy, Hitlab (pedido do Tiago em
+      // 16/10/2026; antes era a de maior saldo primeiro).
       .sort((a, b) =>
-        colunas.ordenacao ? 0 : b.saldo - a.saldo || a.empresa.localeCompare(b.empresa),
+        colunas.ordenacao ? 0 : a.empresa.localeCompare(b.empresa, "pt-BR"),
       );
   }, [colunas.visiveis, colunas.ordenacao]);
 
@@ -168,10 +198,7 @@ export function HubTabela({
     (a, g) => a + g.contas.filter((c) => c.ativa).length,
     0,
   );
-  const inativasVistas = grupos.reduce(
-    (a, g) => a + g.contas.filter((c) => !c.ativa).length,
-    0,
-  );
+  const inativasVistas = grupos.reduce((a, g) => a + g.inativas, 0);
   const saldoInativasVistas = grupos.reduce(
     (a, g) =>
       a + g.contas.filter((c) => !c.ativa).reduce((s, c) => s + c.saldoAtual, 0),
@@ -216,35 +243,36 @@ export function HubTabela({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full min-w-[1000px] text-sm">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="w-full min-w-[1000px] table-fixed text-sm">
+            <Colunas />
             <thead className="border-b border-border bg-muted/40">
               <tr>
-                <th className="min-w-[220px] px-4 py-3 text-left font-medium text-muted-foreground">
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                   {colunas.titulo("conta", TITULO)}
                 </th>
-                <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">
+                <th className="px-3 py-3 text-left font-medium text-muted-foreground">
                   {colunas.titulo("banco", TITULO)}
                 </th>
-                <th className="w-28 whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">
+                <th className="px-3 py-3 text-left font-medium text-muted-foreground">
                   {colunas.titulo("situacao", TITULO)}
                 </th>
-                <th className="w-24 whitespace-nowrap px-3 py-3 text-right font-medium text-muted-foreground">
+                <th className="px-3 py-3 text-right font-medium text-muted-foreground">
                   {colunas.titulo("ultimo", TITULO)}
                 </th>
-                <th className="w-16 px-3 py-3 text-right font-medium text-muted-foreground">
+                <th className="px-3 py-3 text-right font-medium text-muted-foreground">
                   {colunas.titulo("lancamentos", TITULO)}
                 </th>
-                <th className="w-36 whitespace-nowrap px-3 py-3 text-right font-medium text-muted-foreground">
+                <th className="px-3 py-3 text-right font-medium text-muted-foreground">
                   {colunas.titulo("entradas", TITULO)}
                 </th>
-                <th className="w-36 whitespace-nowrap px-3 py-3 text-right font-medium text-muted-foreground">
+                <th className="px-3 py-3 text-right font-medium text-muted-foreground">
                   {colunas.titulo("saidas", TITULO)}
                 </th>
-                <th className="w-40 whitespace-nowrap px-4 py-3 text-right font-medium text-muted-foreground">
+                <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                   {colunas.titulo("saldo", TITULO)}
                 </th>
-                <th className="w-10 px-2 py-3" />
+                <th className="px-2 py-3" />
               </tr>
             </thead>
 
@@ -259,9 +287,11 @@ export function HubTabela({
             )}
             {grupos.map((g) => (
               <tbody key={g.empresa}>
-                <tr className="border-y border-border bg-muted/20">
-                  <td colSpan={7} className="px-4 py-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em]">
+                {/* A faixa da empresa, com o subtotal do grupo nas colunas
+                    de valor. */}
+                <tr className="h-11">
+                  <td colSpan={4} className={`${FAIXA_GRUPO_LISTA} px-4`}>
+                    <span className="text-sm font-semibold text-foreground">
                       {g.empresa}
                     </span>
                     <span className="ml-2 text-xs text-muted-foreground">
@@ -271,79 +301,95 @@ export function HubTabela({
                         ` · ${g.inativas} ${g.inativas === 1 ? "inativa" : "inativas"}`}
                     </span>
                   </td>
+                  <td className={`${FAIXA_GRUPO_LISTA} px-3 text-right text-xs text-muted-foreground tabular-nums`}>
+                    {g.lancamentos || "—"}
+                  </td>
+                  <td className={`${FAIXA_GRUPO_LISTA} whitespace-nowrap px-3 text-right font-mono text-xs tabular-nums`}>
+                    {g.creditos > 0 ? (
+                      <span className="text-emerald-700">{formatCurrency(g.creditos)}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className={`${FAIXA_GRUPO_LISTA} whitespace-nowrap px-3 text-right font-mono text-xs tabular-nums`}>
+                    {g.debitos > 0 ? (
+                      <span className="text-california-red">{formatCurrency(g.debitos)}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td
-                    className={`whitespace-nowrap px-4 py-2 text-right font-mono text-sm font-semibold ${
+                    className={`${FAIXA_GRUPO_LISTA} whitespace-nowrap px-4 text-right font-mono text-sm font-semibold tabular-nums ${
                       g.saldo < 0 ? "text-california-red" : "text-foreground"
                     }`}
                   >
                     {formatCurrency(g.saldo)}
                   </td>
-                  <td />
+                  <td className={FAIXA_GRUPO_LISTA} />
                 </tr>
 
                 {g.contas.map((c) => (
                   <tr
                     key={c.id}
-                    className="group relative border-b border-border transition-colors hover:bg-muted/50"
+                    className="group relative border-b border-border transition-colors last:border-b-0 hover:bg-muted/50"
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2.5">
                       <Link
                         href={hrefExtrato(c.id, de, ate)}
                         prefetch={false}
-                        className="block whitespace-nowrap font-medium text-foreground after:absolute after:inset-0 group-hover:text-california-red"
+                        className="block truncate font-medium text-foreground after:absolute after:inset-0 group-hover:text-california-red"
                       >
                         {c.nome}
                       </Link>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="block truncate text-xs text-muted-foreground">
                         {TIPO_CONTA_LABEL[c.tipo] ?? c.tipo}
                         {c.agenciaConta ? ` · ${c.agenciaConta}` : ""}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
+                    <td className="truncate px-3 py-2.5 text-muted-foreground">
                       {c.banco}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-                          c.ativa
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            c.ativa ? "bg-emerald-500" : "bg-muted-foreground"
-                          }`}
-                        />
-                        {c.ativa ? "Ativa" : "Inativa"}
-                      </span>
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      {/* "Ativa" é quase todas as linhas: ponto e texto, sem
+                          pílula. A inativa, que é a exceção, mantém o selo. */}
+                      {c.ativa ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Ativa
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                          Inativa
+                        </span>
+                      )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right text-muted-foreground tabular-nums">
-                      {dataCurta(c.ultimoMovimento)}
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right text-muted-foreground tabular-nums">
+                      {c.ultimoMovimento ? dataCurta(c.ultimoMovimento) : <Traco />}
                     </td>
-                    <td className="px-3 py-3 text-right text-muted-foreground tabular-nums">
-                      {c.lancamentosPeriodo || "—"}
+                    <td className="px-3 py-2.5 text-right text-muted-foreground tabular-nums">
+                      {c.lancamentosPeriodo || <Traco />}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono tabular-nums">
                       {c.creditosPeriodo > 0 ? (
                         <span className="text-emerald-700">
                           {formatCurrency(c.creditosPeriodo)}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <Traco />
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono tabular-nums">
                       {c.debitosPeriodo > 0 ? (
                         <span className="text-california-red">
                           {formatCurrency(c.debitosPeriodo)}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <Traco />
                       )}
                     </td>
                     <td
-                      className={`whitespace-nowrap px-4 py-3 text-right font-mono font-semibold tabular-nums ${
+                      className={`whitespace-nowrap px-4 py-2.5 text-right font-mono font-semibold tabular-nums ${
                         !c.ativa
                           ? "text-muted-foreground"
                           : c.saldoAtual < 0
@@ -358,56 +404,41 @@ export function HubTabela({
                     >
                       {formatCurrency(c.saldoAtual)}
                     </td>
-                    <td className="px-2 py-3 text-right">
-                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-california-red" />
+                    <td className="px-2 py-2.5 text-right">
+                      <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-california-red" />
                     </td>
                   </tr>
                 ))}
-
-                <tr className="border-b border-border bg-muted/10 text-xs">
-                  <td className="px-4 py-2 font-medium" colSpan={4}>
-                    Subtotal · {g.empresa}
-                  </td>
-                  <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">
-                    {g.lancamentos || "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-emerald-700 tabular-nums">
-                    {g.creditos > 0 ? formatCurrency(g.creditos) : "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-california-red tabular-nums">
-                    {g.debitos > 0 ? formatCurrency(g.debitos) : "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2 text-right font-mono text-sm font-semibold tabular-nums">
-                    {formatCurrency(g.saldo)}
-                  </td>
-                  <td />
-                </tr>
               </tbody>
             ))}
 
-            <tfoot className="border-t-2 border-border bg-muted/30">
+            <tfoot>
               <tr>
-                <td className="px-4 py-3 font-semibold" colSpan={4}>
+                <td className={`${TOTAL_LISTA} px-4 py-3 font-semibold`} colSpan={4}>
                   {filtrando
                     ? `Total do filtro · ${vistas} ${vistas === 1 ? "conta ativa" : "contas ativas"}`
                     : `Total geral · ${totais.contas} contas ativas`}
                 </td>
-                <td className="px-3 py-3 text-right font-medium tabular-nums">
+                <td className={`${TOTAL_LISTA} px-3 py-3 text-right font-medium tabular-nums`}>
                   {rodape.lancamentos || "—"}
                 </td>
-                <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-emerald-700 tabular-nums">
+                <td className={`${TOTAL_LISTA} whitespace-nowrap px-3 py-3 text-right font-mono font-medium text-emerald-700 tabular-nums`}>
                   {formatCurrency(rodape.creditos)}
                 </td>
-                <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-california-red tabular-nums">
+                <td className={`${TOTAL_LISTA} whitespace-nowrap px-3 py-3 text-right font-mono font-medium text-california-red tabular-nums`}>
                   {formatCurrency(rodape.debitos)}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-mono font-bold tabular-nums">
+                <td
+                  className={`${TOTAL_LISTA} whitespace-nowrap px-4 py-3 text-right font-mono font-bold tabular-nums ${
+                    rodape.saldo < 0 ? "text-california-red" : "text-foreground"
+                  }`}
+                >
                   {formatCurrency(rodape.saldo)}
                 </td>
-                <td />
+                <td className={TOTAL_LISTA} />
               </tr>
               {inativasVistas > 0 && (
-                <tr className="text-[11px] text-muted-foreground">
+                <tr className={`${TOTAL_LISTA_FUNDO} text-[11px] text-muted-foreground`}>
                   <td className="px-4 pb-3" colSpan={7}>
                     Fora do total: {inativasVistas}{" "}
                     {inativasVistas === 1 ? "conta inativa" : "contas inativas"}
