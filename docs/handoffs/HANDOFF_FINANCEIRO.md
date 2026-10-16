@@ -7471,3 +7471,21 @@ Regra completa na seção 9 da decisão 091.
 - **Testado** no TES-P001/26 (TESTE-184A/B/C emitidas e canceladas pela
   action). Pendências na 184 §5: imposto da exportação, avulsa na
   rentabilidade do job, conta da receita.
+
+## ⚠️ Nota de 2026-10-16 (8) — O nome do financeiro no título e no registro da abertura (revisão da decisão 021)
+
+- **Defeito:** desde 20/08 a página do job no financeiro mostrava o nome
+  da PRODUÇÃO no título, no campo "Nome do job" da aba Abertura, na ficha
+  de Informações, na planilha e no fluxo. `carregarJobParaAbertura`
+  (`abertura-de-job/dados.ts`) não lia `jobs.nome_financeiro`.
+- **Dano:** "Editar registro" e a revisão de errata abriam com o nome da
+  produção, e salvar sem retocar o campo sobrescrevia o nome do
+  financeiro. Aconteceu em AMB-1019/26 e ANI-1002/26, ambos em 07/10.
+- **Conserto:** `JobNaFila.nome_financeiro` (obrigatório); título, ficha,
+  planilha, fluxo e o estado do formulário usam
+  `nomeDoJobNoFinanceiro()`. "Dados da produção" segue com `nome`. O campo
+  Projeto já estava certo.
+- **Dado:** AMB-1019/26 restaurado pelo "Editar registro" com o nome da
+  foto da abertura, idêntico byte a byte (foto 3, 16/10, só o nome mudou
+  na auditoria). ANI-1002/26 aguarda decisão: o nome da abertura
+  ("… Unisociesc …") ou o da correção da Priscila ("… Unicuritiba …").

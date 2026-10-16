@@ -267,6 +267,10 @@ export default async function JobNoFinanceiroPage({
         faturamento_previsto: aprovacaoSave.depois.faturamento_previsto,
       }
     : carregadoParaAbertura.job;
+  // O nome que o financeiro gravou na abertura — o do título, da ficha, da
+  // planilha e do fluxo. O da produção (`jobNaFila.nome`) fica só no
+  // painel "Dados da produção" do formulário.
+  const nomeNoFinanceiro = nomeDoJobNoFinanceiro(jobNaFila);
 
   const [projetos, irmaosRes] = await Promise.all([
     listarProjetosFinanceiro(tenantId, jobNaFila.cliente_id),
@@ -471,7 +475,7 @@ export default async function JobNoFinanceiroPage({
               {/* O nome do FINANCEIRO — é a tela dele. A produção continua
                   vendo o nome que cadastrou (`nome_financeiro` vs `nome`). */}
               <h1 className="text-2xl font-bold tracking-tight">
-                {jobNaFila.nome}
+                {nomeNoFinanceiro}
               </h1>
               <Badge className={cn("border", jobStatusBadgeClasses(statusExibido))}>
                 {jobStatusLabel(statusExibido)}
@@ -647,7 +651,7 @@ export default async function JobNoFinanceiroPage({
               etapas={detalhe.etapasDoJob}
               job={{
                 codigo: job.codigo,
-                nome: jobNaFila.nome,
+                nome: nomeNoFinanceiro,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —
                 // `dados.ts` da abertura já resolve (decisão 055).
@@ -827,7 +831,7 @@ export default async function JobNoFinanceiroPage({
                 empresa_id: job.empresa_id,
                 responsavel_id: job.responsavel_id,
               }}
-              nomeJob={jobNaFila.nome}
+              nomeJob={nomeNoFinanceiro}
               versao={{
                 id: versaoAprovada.id,
                 numero_versao: versaoAprovada.numero_versao,
@@ -883,7 +887,7 @@ export default async function JobNoFinanceiroPage({
           <FluxoCaixaJobs
             linhas={linhasDeFluxo}
             jobs={[
-              { id: job.id, codigo: job.codigo, nome: jobNaFila.nome },
+              { id: job.id, codigo: job.codigo, nome: nomeNoFinanceiro },
             ]}
             contas={contas.map((c) => ({ id: c.id, rotulo: c.rotulo }))}
             prazos={prazosDoJob}

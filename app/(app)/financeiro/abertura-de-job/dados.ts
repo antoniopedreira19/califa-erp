@@ -27,7 +27,17 @@ import { grupoDoPedido } from "@/lib/data/saves";
 export interface JobNaFila {
   id: string;
   codigo: string;
+  /** O nome da PRODUÇÃO — o do painel "Dados da produção". */
   nome: string;
+  /**
+   * O nome gravado pelo financeiro na abertura (`jobs.nome_financeiro`).
+   * Nulo até o job abrir. Quem mostra o nome do financeiro usa
+   * `nomeDoJobNoFinanceiro(job)`. Até 16/10/2026 este campo não era lido:
+   * a página do job mostrava o nome da produção no título e no formulário,
+   * e salvar uma edição ou revisão gravava o nome da produção por cima do
+   * do financeiro.
+   */
+  nome_financeiro: string | null;
   valor_total: number | null;
   /** O que a California emite nota — difere do valor total pelos custos
    *  que o cliente paga direto ao fornecedor (A, D, F). */
@@ -307,7 +317,7 @@ export interface TotaisPlanilhaJob {
 }
 
 const SELECT_JOB_FILA =
-  "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
+  "id, codigo, nome, nome_financeiro, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, created_at, produto, cidade, projeto_id, " +
   // Quem enviou (decisão 136). `created_by` aponta para `auth.users`, e o
   // nome dele sai em query própria; `enviado_abertura_por` aponta para
@@ -407,6 +417,7 @@ function montarJobNaFila(
     id: j.id,
     codigo: j.codigo,
     nome: j.nome,
+    nome_financeiro: j.nome_financeiro ?? null,
     valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
     faturamento_previsto:
       j.faturamento_previsto !== null && j.faturamento_previsto !== undefined

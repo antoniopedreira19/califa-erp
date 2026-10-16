@@ -268,3 +268,27 @@ impostos com imposto previsto. Continua valendo o motivo original para o
 job sem faturamento: ele não precisa de conta de recebimento. Quem confere
 é a Server Action, na abertura e na edição do registro. Ver a
 [100](100-previsao-de-impostos-na-abertura.md) §3.
+
+## ⚠️ Nota de 2026-10-16 — a página do job mostrava o nome da produção
+
+A seção 1 diz que o financeiro vê `jobs.nome_financeiro`, mas a página do
+job no financeiro (`/financeiro/jobs/[jobId]`) lia o job por
+`carregarJobParaAbertura`, que nunca selecionou essa coluna. Desde 20/08 o
+título, o campo "Nome do job" da aba Abertura do Job, a ficha de
+Informações, o nome da planilha e o do fluxo mostravam o nome da
+produção. O campo Projeto não tinha o defeito: ele sempre leu
+`projeto_financeiro_id`.
+
+O efeito mais grave estava no formulário: "Editar registro" e a revisão de
+errata abriam com o nome da produção, e salvar sem retocar o campo gravava
+esse nome por cima do do financeiro. Aconteceu duas vezes, as duas em
+07/10/2026: AMB-1019/26 (revisão de errata) e ANI-1002/26 (edição).
+
+Agora `JobNaFila` traz `nome_financeiro` (obrigatório, nulo até a
+abertura), e a página e o formulário usam `nomeDoJobNoFinanceiro()`. O
+painel "Dados da produção" continua com o nome da produção.
+
+O AMB-1019/26 voltou ao nome da abertura ("Corona - WSL Challenger
+Logística 3T 2026") pelo próprio "Editar registro", em 16/10/2026. O
+ANI-1002/26 aguarda o Tiago: a abertura gravou "… Unisociesc 3T 2026", e
+a Priscila corrigiu para "… Unicuritiba 3T 2026" antes da sobrescrita.
