@@ -5617,3 +5617,33 @@ aplicada na hora combinada com a frente do Antonio, junto da
   Produtor Responsáveis de cada job vivo, como já travava o criador, os GPs
   e os produtores dos orçamentos. É a mesma Equipe que o botão "Equipe" do
   job e da visão agregada mostra.
+
+## ⚠️ Nota de 2026-10-15 — O GP do orçamento pode vir de fora do projeto (decisão 176)
+
+- O campo "GP Responsável" do Novo orçamento, do editor, do orçamento novo
+  da agregada e do envio para abertura lista todo membro que pode ser GP,
+  os GPs do projeto primeiro (`listarGpsParaOrcamento`,
+  `lib/gps-para-escolha.ts`). Escolhido alguém de fora, o campo avisa, e ele
+  entra nos GPs Responsáveis do projeto depois de gravar o orçamento ou de
+  enviar o job (`incluirGpNoProjeto`, auditoria `projeto.gp_incluido`).
+- Revisa a regra 3 da 170; a trava do envio para GP sem o papel continua.
+
+## ⚠️ Nota de 2026-10-16 — importação da interna internacional da agência (revisão das decisões 072 e 110)
+
+- Quando todas as abas do arquivo caem pelo mesmo motivo, a mensagem diz
+  qual (antes, com 2+ abas, só "Confira o modelo"). Caso: a planilha
+  internacional "Gen AI México" num orçamento de Evento, GOO-P003/26-01.
+- Planilha internacional: as colunas do planejado saem do cabeçalho — a
+  interna da agência traz H · USD antes do R$, e o planejado entrava
+  deslocado (R$ 40,9 milhões na V4).
+- Planilha internacional: o % do FEE é lido do fechamento (inclusive de
+  dentro da fórmula, `=G26*13%`), e a prévia mostra o mesmo aviso de
+  honorários diferentes do nacional. A importação não muda os honorários
+  da versão.
+- O texto da opção "Usar o planejado da planilha" deixou de citar as colunas
+  H/I/J: "Os valores de R$, QT e D/M do bloco PLANEJADO da planilha."
+- Conferido no navegador (16/10): a mensagem nas portas da versão
+  (TES-P001/26-25) e da visão agregada ("Teste Mídia On 131"); a prévia das
+  4 abas e a V4 importada como v2 do TES-P001/26-03 (dado de teste deixado:
+  orçado R$ 42.549,10, planejado R$ 41.323,90, aviso de 13% × 12% e a
+  auditoria com `honorarios_planilha_ignorado: 13`).

@@ -19,6 +19,7 @@ import {
   janelasComEnvioAberto,
   parcelaForaDaRegra,
   primeiraDataDaProximaParcela,
+  ppAceitaQuarta,
   primeiraDataPossivelDoPrazo,
   tipoDoPrazo,
   ppSegueOPrazoDeEnvio,
@@ -124,6 +125,16 @@ test("a quarta da semana seguinte fica aberta até sexta, e só com urgência", 
   assert.equal(tipoDoPrazo("2026-11-09", "2026-10-13", FERIADOS, true), "janela");
   assert.equal(tipoDoPrazo("2026-10-20", "2026-10-13", FERIADOS, true), null);
   assert.equal(tipoDoPrazo("2026-10-12", "2026-10-13", FERIADOS, true), null); // passado
+});
+
+test("a quarta vale na PP urgente e na verba, urgente ou não (revisão da 172)", () => {
+  assert.equal(ppAceitaQuarta({ urgente: true, verba: false }), true);
+  assert.equal(ppAceitaQuarta({ urgente: false, verba: true }), true);
+  assert.equal(ppAceitaQuarta({ urgente: true, verba: true }), true);
+  assert.equal(ppAceitaQuarta({ urgente: false, verba: false }), false);
+  const verba = ppAceitaQuarta({ urgente: false, verba: true });
+  assert.equal(tipoDoPrazo("2026-10-21", "2026-10-16", FERIADOS, verba), "quarta");
+  assert.equal(primeiraDataPossivelDoPrazo("2026-10-16", FERIADOS, verba), "2026-10-21");
 });
 
 test("a primeira data possível do prazo, com e sem urgência", () => {

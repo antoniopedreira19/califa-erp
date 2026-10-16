@@ -83,7 +83,7 @@ Legenda: **V** = ver · **E** = editar/criar · **A** = aprovar ou ação críti
 | **Cliente via "cadastro inline"** (dentro do formulário de projeto) | E | E | — | — | — |
 | **Marca via "cadastro inline"** (o "+" do campo Marca do projeto) | E | E | — | — | — |
 | Fornecedores (via tela `/fornecedores`) | E | — | — | — | — |
-| **Fornecedor via "cadastro inline"** (dentro de PP) | E | E | E | E | — |
+| **Fornecedor via "cadastro inline"** (criar e editar dentro da PP, decisão 177) | E | E | E | E | — |
 | Empresas do tenant | E | — | — | — | — |
 | Contas bancárias | E | — | — | — | E |
 | Plano de contas, cartões de crédito | E | — | — | — | E |
@@ -106,6 +106,13 @@ precisa do fornecedor. **Abrir o cadastro de quem já existe continua em
 também é `inline` porque abre um dialog de uma linha que só insere, e não
 a ficha do cliente — renomear e inativar marca seguem com o
 administrador, em `/clientes/<id>`. Ver decisão 089 §6 e §6b.
+
+⚠️ **O fornecedor saiu dessa regra (15/10/2026, decisão 177).**
+`cadastros.fornecedores.inline` cria **e edita**: o administrador, o GP, o
+produtor e o freelancer abrem qualquer cadastro de fornecedor pelo lápis do
+campo (PP, BV e veículo da Mídia Off), pendente ou não. A tela de
+Fornecedores, inativar e reativar seguem em `.editar` (administrador e
+financeiro). O cliente continua como acima: o inline só cria.
 
 ### Orçamento
 

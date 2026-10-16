@@ -19,6 +19,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { pode, produtorComAChave } from "@/lib/permissoes";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { seguirDocumentosDaNotaCorrigida, type TrocaDeEmissora } from "./actions-pp";
 
 /** A nota do cadastro com aquele número, e as PPs que ela já cobre. */
 export interface NotaExistente {
@@ -252,7 +253,16 @@ const correcaoSchema = z.object({
 
 export async function corrigirNfsDaPP(
   input: unknown,
-): Promise<{ ok: true; codigo: string } | { ok: false; message: string }> {
+): Promise<
+  | {
+      ok: true;
+      codigo: string;
+      /** Revisão da 156: a empresa emissora que seguiu a nota corrigida. */
+      emissora: TrocaDeEmissora | null;
+      aviso: string | null;
+    }
+  | { ok: false; message: string }
+> {
   const parsed = correcaoSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: "Preencha cada NF: número, data de emissão, valor, CNPJ tomador e valor nesta PP." };
@@ -325,8 +335,17 @@ export async function corrigirNfsDaPP(
     },
   });
 
+  // Revisão da 156 (16/10/2026): a empresa emissora segue a nota corrigida,
+  // nesta PP e nas outras com a mesma nota.
+  const seguiu = await seguirDocumentosDaNotaCorrigida(ppId);
+
   revalidatePath(`/jobs/${antes.job_id}`);
   revalidatePath(`/financeiro/jobs/${antes.job_id}`);
   revalidatePath("/financeiro/contas-a-pagar");
-  return { ok: true, codigo: antes.codigo };
+  return {
+    ok: true,
+    codigo: antes.codigo,
+    emissora: seguiu.ok ? seguiu.troca : null,
+    aviso: seguiu.ok ? seguiu.aviso : `A NF foi corrigida, mas a empresa emissora não mudou: ${seguiu.message}`,
+  };
 }

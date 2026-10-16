@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { incluirGpNoProjeto } from "@/lib/data/incluir-gp-no-projeto";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { aberturaJobSchema } from "@/lib/validations/abertura-job";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
@@ -394,12 +395,12 @@ export async function enviarJobParaAbertura(
   // quem manda o payload não é obrigado a respeitá-la.
   //
   // GP e produtor (decisão 135) seguem as listas do formulário do
-  // orçamento: o GP sai dos GPs Responsáveis do projeto que podem ser GP
-  // (decisão 170), o produtor de quem tem o papel Produtor (decisão 168).
-  // O que já está no orçamento passa sem a conferência da lista — um GP
-  // que saiu da equipe do projeto depois não pode travar um envio que
-  // ninguém mexeu. O PAPEL do GP, não: o GP que não pode ser GP (nem GP
-  // nem Administrador) trava o envio, mexido ou não (decisão 170).
+  // orçamento: o GP sai de quem pode ser GP — os do projeto e os outros,
+  // que entram no projeto ao enviar (decisão 176, que revisa a 170) —, o
+  // produtor de quem tem o papel Produtor (decisão 168). O que já está no
+  // orçamento passa sem a conferência da lista de produtor. O PAPEL do GP,
+  // não: o GP que não pode ser GP (nem GP nem Administrador) trava o envio,
+  // mexido ou não (decisão 170).
   const gpMudou = parsed.data.gp_responsavel_id !== orc.gp_responsavel_id;
   const produtorMudou = parsed.data.produtor_id !== orc.produtor_id;
   const [produtoRes, cidadeRes, regionalDoProjetoRes, gpDoProjetoRes, membrosRes] = await Promise.all([
@@ -423,9 +424,7 @@ export async function enviarJobParaAbertura(
       .eq("regional_id", parsed.data.regional_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{ regional_id: string }>(),
-    gpMudou
-      ? supabase.rpc("gps_do_projeto", { p_projeto_id: orc.projeto_id })
-      : supabase.rpc("gps_ativos_do_tenant", { p_tenant_id: session.activeTenant.id }),
+    supabase.rpc("gps_ativos_do_tenant", { p_tenant_id: session.activeTenant.id }),
     // A mesma fonte da lista do modal (`listarProdutoresAtivos`, só o
     // papel Produtor desde 13/10/2026): ler `tenant_members` direto
     // mostraria só a própria linha para quem não é administrador.
@@ -467,8 +466,8 @@ export async function enviarJobParaAbertura(
       return {
         ok: false,
         message:
-          "O GP escolhido não é um GP Responsável do projeto com o papel GP. Selecione outro.",
-        fieldErrors: { gp_responsavel_id: ["Escolha um dos GPs Responsáveis do projeto."] },
+          "O GP escolhido não pode ser GP: no cadastro de usuários, não está ativo com o papel GP. Selecione outro.",
+        fieldErrors: { gp_responsavel_id: ["Escolha um GP da lista."] },
       };
     }
     // O GP que veio gravado no orçamento não pode ser GP: a trava que
@@ -481,7 +480,7 @@ export async function enviarJobParaAbertura(
     const quem = gp?.nome ?? "O GP deste orçamento";
     return {
       ok: false,
-      message: `${quem} não pode ser o GP do job: no cadastro de usuários, não está ativo com o papel GP. Escolha outro GP Responsável do projeto para enviar.`,
+      message: `${quem} não pode ser o GP do job: no cadastro de usuários, não está ativo com o papel GP. Escolha outro GP para enviar.`,
       fieldErrors: {
         gp_responsavel_id: [`${quem} não está ativo com o papel GP. Escolha outro.`],
       },
@@ -838,6 +837,16 @@ export async function enviarJobParaAbertura(
         faturamento_previsto: espelhosDoReenvio.faturamento_previsto,
         faturamento_save_previsto: espelhosDoReenvio.faturamento_save_previsto,
       },
+    });
+
+    // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176). O
+    // job já foi reenviado: uma falha aqui fica no log.
+    await incluirGpNoProjeto(supabase, {
+      tenantId: session.activeTenant.id,
+      projetoId: orc.projeto_id,
+      gpId: parsed.data.gp_responsavel_id,
+      origem: "envio_para_abertura",
+      orcamentoId: orc.id,
     });
 
     revalidatePath(`/orcamentos/${orc.projeto_id}/${orc.id}/versoes/${versaoId}`);
@@ -1269,6 +1278,16 @@ export async function enviarJobParaAbertura(
       // cliente não precisa ser duplicado no log.
       qtd_contatos_cobranca: parsed.data.contatos_cobranca.length,
     },
+  });
+
+  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176). O
+  // job já foi criado: uma falha aqui fica no log.
+  await incluirGpNoProjeto(supabase, {
+    tenantId: session.activeTenant.id,
+    projetoId: orc.projeto_id,
+    gpId: parsed.data.gp_responsavel_id,
+    origem: "envio_para_abertura",
+    orcamentoId: orc.id,
   });
 
   revalidatePath(`/orcamentos/${orc.projeto_id}/${orc.id}/versoes/${versaoId}`);

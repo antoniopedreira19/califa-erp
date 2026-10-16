@@ -259,10 +259,9 @@ function barrarLinhaComSave(
   return null;
 }
 
-/** O PLANEJADO da linha, opcional nos dois schemas. Desde a decisão 151
- *  (07/10/2026) o servidor IGNORA o que vier aqui: a errata não muda o
- *  planejado (`planejadoDaErrata`). Fica no schema para o payload de uma
- *  aba aberta antes da mudança continuar válido. */
+/** O PLANEJADO da linha, opcional nos dois schemas. Desde 15/10/2026 (volta
+ *  atrás da decisão 151) a errata volta a mudá-lo, na linha nova e na
+ *  existente; ausente = o que a linha já tinha (`planejadoDaErrata`). */
 const planejadoSchema = {
   valor_unitario_planejado: z.number().nonnegative().optional(),
   quantidade_planejada: z.number().nonnegative().optional(),
@@ -426,27 +425,46 @@ interface Trio {
 }
 
 /**
- * O planejado que a linha tem depois da errata (decisão 151, 07/10/2026):
- * a errata NÃO muda o planejado, que é o da abertura do job. O servidor
- * decide sozinho, sem ler o que veio no payload, para uma chamada montada
- * à mão não gravar o que a tela não deixa:
+ * O planejado que a linha tem depois da errata. Desde 15/10/2026 (volta
+ * atrás da decisão 151) vale o que a errata informou, na linha nova e na
+ * existente — com as mesmas exceções da tela, para uma chamada montada à
+ * mão não gravar o que a tela não deixa:
  *
  * - linha vermelha ou em save: zero (o banco cobra os dois);
  * - serviço Interno: igual ao orçado novo (decisão 105 — o trigger
  *   `planejado_espelha_orcado` grava isso de todo jeito; aqui é para o
  *   histórico da errata contar o mesmo);
- * - linha nova: zero, com QT e D/M em 1, como ela nasce na tela;
- * - linha que já existia: o planejado que ela já tinha.
+ * - planejado informado: ele;
+ * - sem planejado no payload (aba aberta antes de 15/10/2026): a linha
+ *   nova zera com QT e D/M em 1, a existente fica com o que tinha.
  */
 function planejadoDaErrata(
   linha: { vermelha: boolean; emSave: boolean; interno: boolean; nova: boolean },
   orcadoPara: Trio,
+  informado: Trio | null,
   planejadoAtual: Trio,
 ): Trio {
   if (linha.vermelha || linha.emSave) return { unit: 0, qtd: 0, dm: 0 };
   if (linha.interno) return orcadoPara;
+  if (informado) return informado;
   if (linha.nova) return { unit: 0, qtd: 1, dm: 1 };
   return planejadoAtual;
+}
+
+/** O planejado que veio no payload, quando veio inteiro. */
+function planejadoInformado(l: {
+  valor_unitario_planejado?: number;
+  quantidade_planejada?: number;
+  dias_meses_planejado?: number;
+}): Trio | null {
+  if (
+    l.valor_unitario_planejado === undefined ||
+    l.quantidade_planejada === undefined ||
+    l.dias_meses_planejado === undefined
+  ) {
+    return null;
+  }
+  return { unit: l.valor_unitario_planejado, qtd: l.quantidade_planejada, dm: l.dias_meses_planejado };
 }
 
 /**
@@ -456,15 +474,15 @@ function planejadoDaErrata(
  *
  * - **corrige** uma linha: R$ unitário, QT, D/M e tipo de custo. QT e D/M
  *   entraram junto com o modo errata na própria planilha — antes eles
- *   ficavam congelados como aprovados. O PLANEJADO não muda desde a
- *   decisão 151 (07/10/2026): ele é o da abertura (`planejadoDaErrata`).
+ *   ficavam congelados como aprovados. O PLANEJADO muda junto desde
+ *   15/10/2026, volta atrás da decisão 151 (`planejadoDaErrata`).
  * - **cria** linha, normal ou VERMELHA. A normal entra com o planejado
- *   zerado; a vermelha nasce zerada no orçado e no planejado e serve só
+ *   que a errata informou; a vermelha nasce zerada no orçado e no planejado e serve só
  *   para receber PP: é o custo que o orçamento não previu e que alguém
  *   precisa pedir mesmo assim.
  * - **cancela** linha (decisão 151; até ali, removia), desde que ela ainda
  *   não tenha documento nem save. A cancelada fica na planilha com o orçado
- *   zerado e o planejado da abertura.
+ *   e, desde 15/10/2026, o planejado zerados.
  *
  * Desde 22/09/2026 (decisão 099) linha com save — gerado, consumido, com
  * pedido aguardando ou recusado ainda não retirado — não entra em errata
@@ -1125,18 +1143,6 @@ async function montarErrata(
       alt.valor_unitario !== unitarioDe ||
       alt.quantidade !== qtdDe ||
       alt.dias_meses !== dmDe;
-    const mudou = orcadoMudou || alt.tipo_custo !== tipoDe;
-    // Planejado não é errata (decisão 151): sem mudança no orçado ou no
-    // tipo, a linha não entra.
-    if (!mudou) continue;
-
-    const totalAntes = Number(atual.total_orcado ?? 0);
-    const totalDepois = totalDe(
-      alt.valor_unitario,
-      alt.quantidade,
-      alt.dias_meses,
-    );
-
     const planAtual: Trio = {
       unit: Number(atual.valor_unitario_planejado ?? 0),
       qtd: Number(atual.quantidade_planejada ?? 0),
@@ -1150,7 +1156,20 @@ async function montarErrata(
         nova: false,
       },
       { unit: alt.valor_unitario, qtd: alt.quantidade, dm: alt.dias_meses },
+      planejadoInformado(alt),
       planAtual,
+    );
+    // O planejado também é errata desde 15/10/2026.
+    const planejadoMudou =
+      planPara.unit !== planAtual.unit || planPara.qtd !== planAtual.qtd || planPara.dm !== planAtual.dm;
+    const mudou = orcadoMudou || planejadoMudou || alt.tipo_custo !== tipoDe;
+    if (!mudou) continue;
+
+    const totalAntes = Number(atual.total_orcado ?? 0);
+    const totalDepois = totalDe(
+      alt.valor_unitario,
+      alt.quantidade,
+      alt.dias_meses,
     );
 
     mudancas.push({
@@ -1189,7 +1208,8 @@ async function montarErrata(
   }
 
   // ---- 2. Cancelamentos (decisão 151) ----
-  // A linha fica na planilha com o orçado zerado e o planejado da abertura.
+  // A linha fica na planilha com o orçado e, desde 15/10/2026, o planejado
+  // zerados.
   // As travas são as que a remoção tinha — PP no histórico, BV lançado e
   // save —, com nome de gente na mensagem.
   if (cancelamentos.length > 0) {
@@ -1244,16 +1264,16 @@ async function montarErrata(
         dmPara: dm,
         totalDe: totalAntes,
         totalPara: 0,
-        // O planejado fica: é o da abertura (no Interno, o trigger o leva
-        // a zero junto com o orçado).
+        // O planejado vai a zero junto (15/10/2026): o R$ Unit.; QT e D/M
+        // ficam, como no orçado.
         planUnitDe: planUnit,
-        planUnitPara: interno ? 0 : planUnit,
+        planUnitPara: 0,
         planQtdDe: planQtd,
         planQtdPara: planQtd,
         planDmDe: planDm,
         planDmPara: planDm,
         planTotalDe: planTotal,
-        planTotalPara: interno ? 0 : planTotal,
+        planTotalPara: 0,
         efeito: efeitoDe(
           { total: totalAntes, tipoCusto: tipo },
           { total: 0, tipoCusto: tipo },
@@ -1282,10 +1302,11 @@ async function montarErrata(
     const qtd = nova.linha_vermelha ? 1 : nova.quantidade;
     const dm = nova.linha_vermelha ? 1 : nova.dias_meses;
     const total = totalDe(unit, qtd, dm);
-    // A linha nova entra com o planejado zerado (decisão 151).
+    // O planejado que a errata informou (15/10/2026).
     const plan = planejadoDaErrata(
       { vermelha: nova.linha_vermelha, emSave: false, interno, nova: true },
       { unit, qtd, dm },
+      planejadoInformado(nova),
       { unit: 0, qtd: 0, dm: 0 },
     );
 
@@ -1483,9 +1504,9 @@ async function montarErrata(
         valor_unitario_orcado: m.unitarioPara,
         quantidade_orcada: m.qtdPara,
         dias_meses_orcado: m.dmPara,
-        // Zerado (decisão 151): o planejado do job é o da abertura. Na
-        // vermelha o banco cobra o zero em `chk_jio_linha_vermelha_zerada`;
-        // no Interno o trigger o iguala ao orçado.
+        // O informado (15/10/2026). Na vermelha o banco cobra o zero em
+        // `chk_jio_linha_vermelha_zerada`; no Interno o trigger o iguala ao
+        // orçado.
         valor_unitario_planejado: m.planUnitPara,
         quantidade_planejada: m.planQtdPara,
         dias_meses_planejado: m.planDmPara,
@@ -1566,16 +1587,16 @@ async function montarErrata(
           valor_unitario_orcado: m.unitarioPara,
           quantidade_orcada: m.qtdPara,
           dias_meses_orcado: m.dmPara,
-          // O planejado que já estava lá (decisão 151): gravar o mesmo
-          // número é inócuo, e o trigger tem a última palavra em save e
-          // no Interno.
+          // O planejado como a errata o deixa (15/10/2026); o trigger tem a
+          // última palavra em save e no Interno.
           valor_unitario_planejado: m.planUnitPara,
           quantidade_planejada: m.planQtdPara,
           dias_meses_planejado: m.planDmPara,
         })),
-      // Decisão 151: a linha não sai mais — a função zera o unitário,
-      // grava a marca de cancelada e dá as PPs dela por concluídas. As
-      // situações travadas (PP, BV, save) foram barradas lá em cima.
+      // Decisão 151: a linha não sai mais — a função zera o unitário do
+      // orçado e, desde 15/10/2026, o do planejado, grava a marca de
+      // cancelada e dá as PPs dela por concluídas. As situações travadas
+      // (PP, BV, save) foram barradas lá em cima.
       canceladas: mudancas
         .filter((m) => m.acao === "cancelada")
         .map((m) => m.copiaId),

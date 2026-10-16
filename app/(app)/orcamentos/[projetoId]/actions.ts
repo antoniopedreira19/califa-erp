@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { incluirGpNoProjeto } from "@/lib/data/incluir-gp-no-projeto";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
@@ -287,9 +288,14 @@ const ORCAMENTO_ARQUIVADO =
   "Orçamento arquivado é só leitura. Reative o orçamento para editar.";
 
 /**
- * Regional e GP do orçamento têm que sair do projeto — o formulário já
- * mostra só essas opções, mas quem posta o form pode mandar outra coisa.
- * A FK não cobre isso: ela só garante que a regional existe no cadastro.
+ * A regional do orçamento tem que sair do projeto, e o GP tem que poder ser
+ * GP — o formulário já mostra só essas opções, mas quem posta o form pode
+ * mandar outra coisa. A FK não cobre isso: ela só garante que a regional
+ * existe no cadastro.
+ *
+ * O GP não precisa mais ser do projeto (decisão 176, que revisa a 170): o
+ * de fora entra nos GPs Responsáveis do projeto depois que o orçamento é
+ * gravado (`incluirGpNoProjeto`).
  */
 async function assertRegionalEGpDoProjeto(
   supabase: ReturnType<typeof createClient>,
@@ -306,10 +312,8 @@ async function assertRegionalEGpDoProjeto(
       .eq("regional_id", regionalId)
       .eq("tenant_id", tenantId)
       .maybeSingle(),
-    // Os GPs Responsáveis que podem ser GP (decisão 170). Ler
-    // `projeto_responsaveis` direto aceitava quem está só na Equipe e quem
-    // foi cadastrado como GP do projeto sem ter o papel.
-    supabase.rpc("gps_do_projeto", { p_projeto_id: projetoId }),
+    // Quem pode ser GP: papel GP ou Administrador, ativo (decisão 170).
+    supabase.rpc("gps_ativos_do_tenant", { p_tenant_id: tenantId }),
   ]);
 
   if (!regRes.data) {
@@ -327,9 +331,9 @@ async function assertRegionalEGpDoProjeto(
     return {
       ok: false,
       message:
-        "O GP escolhido não é um GP Responsável do projeto com o papel GP. Selecione outro.",
+        "O GP escolhido não pode ser GP: no cadastro de usuários, não está ativo com o papel GP. Selecione outro.",
       fieldErrors: {
-        gp_responsavel_id: ["Escolha um dos GPs Responsáveis do projeto."],
+        gp_responsavel_id: ["Escolha um GP da lista."],
       },
     };
   }
@@ -546,6 +550,17 @@ async function criarOrcamentoComV1(
     entidadeTipo: "orcamento",
     entidadeId: data.id,
     metadata: { codigo, nome: parsed.data.nome, projeto_id: projetoId },
+  });
+
+  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176). O
+  // orçamento já está gravado: uma falha aqui fica no log, e o próximo
+  // "Salvar" ou o envio para abertura incluem de novo.
+  await incluirGpNoProjeto(supabase, {
+    tenantId: session.activeTenant.id,
+    projetoId,
+    gpId: parsed.data.gp_responsavel_id,
+    origem: "orcamento_criado",
+    orcamentoId: data.id,
   });
 
   revalidatePath(`/orcamentos/${projetoId}`);
@@ -1023,6 +1038,15 @@ export async function atualizarOrcamento(
             ...(devolvido ? { com_job_devolvido: true } : {}),
           }
         : undefined,
+  });
+
+  // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176).
+  await incluirGpNoProjeto(supabase, {
+    tenantId: session.activeTenant.id,
+    projetoId,
+    gpId: parsed.data.gp_responsavel_id,
+    origem: "orcamento_editado",
+    orcamentoId: orcId,
   });
 
   revalidatePath(`/orcamentos/${projetoId}`);

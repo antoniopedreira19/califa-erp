@@ -160,6 +160,10 @@ async function main() {
         fornecedor: fornecedor as never,
         responsavelVerbaNome: pp.verba_producao ? (verbaRes.data?.nome ?? "") : null,
         job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+        // Script já rodado (decisão 126): o documento como era, sem as
+        // linhas da revisão da 156.
+        empresaGerencial: null,
+        regional: null,
         projeto: { campanha: projeto.campanha ?? null },
         cliente: { nome_fantasia: (projeto.cliente as unknown as { nome_fantasia: string } | null)?.nome_fantasia ?? "" },
         responsavelNome: (projeto.responsavel as unknown as { nome: string } | null)?.nome ?? "",

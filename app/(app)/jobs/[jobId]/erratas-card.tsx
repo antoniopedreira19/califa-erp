@@ -95,7 +95,7 @@ export function ErratasCard({
           Erratas
         </h2>
         <span className="text-[11.5px] text-muted-foreground">
-          Alterações de itens orçados e tipos de custo após a abertura do job
+          Alterações de itens orçados, planejados e tipos de custo após a abertura do job
         </span>
 
         {/* Sem errata não há "antes x depois" que faça sentido: mostra só o

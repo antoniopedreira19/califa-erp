@@ -84,9 +84,23 @@ export interface NotaSaidaFiscal {
 export interface RecebimentoFiscal {
   id: string;
   nota_id: string;
+  /**
+   * O dia em que o recebimento conta. Decisão 182: o adiantamento (dinheiro
+   * antes da nota) conta na emissão da nota, não no dia do dinheiro (IN RFB
+   * 1.700/2017, art. 223, §2º; IN RFB 2.121/2022, art. 54, §2º).
+   */
   data: string;
+  /** Só no adiantamento: o dia em que o dinheiro entrou, antes da nota. */
+  adiantado_em?: string;
   bruto: number;
   retido: Partial<Record<ImpostoRetido, number>>;
+}
+
+/** "recebida em 05/10/2026", ou o adiantamento com o dia em que conta. */
+export function quandoRecebida(r: Pick<RecebimentoFiscal, "data" | "adiantado_em">, genero: "a" | "o" = "a") {
+  return r.adiantado_em
+    ? `recebid${genero} em ${dataBr(r.adiantado_em)}, antes da nota · conta na emissão, ${dataBr(r.data)}`
+    : `recebid${genero} em ${dataBr(r.data)}`;
 }
 
 /** Baixa de uma PP: o bruto (base das retenções) e o que a agência de fato reteve. */
@@ -765,7 +779,7 @@ function guiaIss(
       memoria.push({
         grupo: "retido",
         rotulo: `ISS retido pelo cliente · NF ${n.numero}`,
-        detalhe: `recebida em ${dataBr(r.data)} · quem recolhe é o cliente`,
+        detalhe: `${quandoRecebida(r)} · quem recolhe é o cliente`,
         valor: -iss,
         nota_id: n.id,
       });
@@ -952,7 +966,7 @@ function guiaPisCofins(
       memoria.push({
         grupo: "debito",
         rotulo: comJobs(`Recebimento da NF ${n.numero}`, n),
-        detalhe: `recebido em ${dataBr(r.data)} · regime de caixa`,
+        detalhe: `${quandoRecebida(r, "o")} · regime de caixa`,
         base: r.bruto,
         aliquota: aliquotaDaNota(c),
         valor: debitoNoCaixa(c, tributo, r.bruto),
@@ -974,7 +988,7 @@ function guiaPisCofins(
     memoria.push({
       grupo: "retido",
       rotulo: `${tributo} ${tributo === "PIS" ? "retido" : "retida"} pelo cliente · NF ${n.numero}`,
-      detalhe: `recebida em ${dataBr(r.data)} · antecipação do imposto`,
+      detalhe: `${quandoRecebida(r)} · antecipação do imposto`,
       valor: -v,
       nota_id: n.id,
     });
@@ -1243,11 +1257,11 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
     if (!n || ctx.pjDoEstab(n.estabelecimento_id) !== pj) continue;
     if (r.retido.IRRF) {
       irrf += r.retido.IRRF;
-      memIr.push({ grupo: "retido", rotulo: `IRRF retido pelo cliente · NF ${n.numero}`, detalhe: `recebida em ${dataBr(r.data)}`, valor: -r.retido.IRRF, nota_id: n.id });
+      memIr.push({ grupo: "retido", rotulo: `IRRF retido pelo cliente · NF ${n.numero}`, detalhe: quandoRecebida(r), valor: -r.retido.IRRF, nota_id: n.id });
     }
     if (r.retido.CSLL) {
       csllRetida += r.retido.CSLL;
-      memCs.push({ grupo: "retido", rotulo: `CSLL retida pelo cliente · NF ${n.numero}`, detalhe: `recebida em ${dataBr(r.data)}`, valor: -r.retido.CSLL, nota_id: n.id });
+      memCs.push({ grupo: "retido", rotulo: `CSLL retida pelo cliente · NF ${n.numero}`, detalhe: quandoRecebida(r), valor: -r.retido.CSLL, nota_id: n.id });
     }
   }
   let irDevido = r2(Math.max(0, ir15 - irrf) + adicional);

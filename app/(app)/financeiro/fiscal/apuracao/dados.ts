@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { BlocoAApurar } from "@/lib/fiscal/a-apurar";
+import { irpjCsllAApurar, type BlocoAApurar, type IrpjCsllAApurar } from "@/lib/fiscal/a-apurar";
 import { carregarBlocosAApurar } from "@/lib/fiscal/a-apurar-dados";
 import { carregarFatosFiscais } from "@/lib/fiscal/apuracao-fatos";
 import {
@@ -64,6 +64,8 @@ export interface PJDaTela {
   /** Como as guias da PJ se juntam (o texto ao lado do nome no agrupamento). */
   como_apura: string | null;
   matriz_id: string | null;
+  /** PJ de teste (decisão 181): a guia em curso se aprova, com confirmação. */
+  de_teste: boolean;
 }
 
 export interface ARecuperarDaTela extends ARecuperar {
@@ -82,6 +84,11 @@ export interface DadosDaApuracao {
    * com título a receber em aberto (sem nenhum, o bloco não aparece).
    */
   aApurar: BlocoAApurar[];
+  /**
+   * O IRPJ e a CSLL que as parcelas em aberto acrescentam a cada trimestre
+   * (o mesmo do fluxo de caixa): as linhas "A apurar" da lista (decisão 183).
+   */
+  aApurarIrpjCsll: IrpjCsllAApurar[];
   /** Falha ao ler os títulos em aberto: o bloco não aparece e a aba diz por quê. */
   aApurarErro: string | null;
   /** As PJs na ordem do cadastro de impostos. */
@@ -111,7 +118,7 @@ const juntar = (itens: string[]) =>
 /** O nome do arquivo no fim do caminho ("<tenant>/guias/<uuid>/darf.pdf" → "darf.pdf"). */
 const nomeDoArquivo = (path: string | null) => (path ? path.split("/").pop() || path : null);
 
-function pjsDaTela(cad: CadastroFiscal, nomes: Map<string, string>, hoje: string): PJDaTela[] {
+function pjsDaTela(cad: CadastroFiscal, nomes: Map<string, string>, deTeste: Set<string>, hoje: string): PJDaTela[] {
   const estabs = [...cad.estabelecimentos].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
   const ids = [...new Set(estabs.map((e) => e.empresa_contabil_id))];
   return ids.map((id) => {
@@ -139,6 +146,7 @@ function pjsDaTela(cad: CadastroFiscal, nomes: Map<string, string>, hoje: string
       rotulo_regime: rotulo,
       como_apura: como,
       matriz_id: matriz?.id ?? null,
+      de_teste: deTeste.has(id),
     };
   });
 }
@@ -150,6 +158,7 @@ function vazio(tenantId: string, hoje: string, erro: string | null): DadosDaApur
     guias: [],
     aRecuperar: [],
     aApurar: [],
+    aApurarIrpjCsll: [],
     aApurarErro: null,
     pjs: [],
     estabelecimentos: [],
@@ -179,7 +188,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
   try {
     const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes] = await Promise.all([
       carregarFatosFiscais(supabase, tenantId),
-      supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia").eq("tenant_id", tenantId),
+      supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia, de_teste").eq("tenant_id", tenantId),
       supabase
         .from("fiscal_aprovacoes")
         .select("id, chave, data, valor_calculado, valor_guia, justificativa, diferenca, guia_path, aprovada_por")
@@ -235,12 +244,14 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       };
     });
 
-    const nomesDasPJs = new Map(
-      ((empresasRes.data ?? []) as Array<{ id: string; razao_social: string; nome_fantasia: string | null }>).map((e) => [
-        e.id,
-        e.nome_fantasia?.trim() || e.razao_social,
-      ]),
-    );
+    const empresas = (empresasRes.data ?? []) as Array<{
+      id: string;
+      razao_social: string;
+      nome_fantasia: string | null;
+      de_teste: boolean;
+    }>;
+    const nomesDasPJs = new Map(empresas.map((e) => [e.id, e.nome_fantasia?.trim() || e.razao_social]));
+    const pjsDeTeste = new Set(empresas.filter((e) => e.de_teste).map((e) => e.id));
 
     // Depende dos fatos (quais notas da PJ do caixa ainda têm o que receber);
     // sem nenhuma, não consulta nada.
@@ -252,8 +263,9 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       guias,
       aRecuperar,
       aApurar: aApurar.blocos,
+      aApurarIrpjCsll: irpjCsllAApurar(cadastro, fatos, aApurar.blocos, hoje),
       aApurarErro: aApurar.erro,
-      pjs: pjsDaTela(cadastro, nomesDasPJs, hoje),
+      pjs: pjsDaTela(cadastro, nomesDasPJs, pjsDeTeste, hoje),
       estabelecimentos: [...cadastro.estabelecimentos]
         .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome))
         .map((e) => ({

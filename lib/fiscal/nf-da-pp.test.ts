@@ -25,6 +25,9 @@ import {
   somaDasPartes,
   retencoesParaRegistrar,
   rotuloCurtoDoRegime,
+  retencaoDoRegime,
+  retencaoForaDoRegime,
+  travaDoRegime,
   textoDoMotivo,
   textoDoRegime,
   tomadoresPadrao,
@@ -269,7 +272,7 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
     declaracao_simples_recebida: null,
   });
   assert.ok(normal);
-  assert.equal(textoDoRegime(normal), "Lucro Real ou Presumido · consulta do CNPJ em 01/10/2026");
+  assert.equal(textoDoRegime(normal), "Lucro Presumido ou Real · consulta do CNPJ em 01/10/2026");
   assert.equal(
     textoDoRegime({ regime: "simples", consultado_em: null, declaracao_simples_recebida: true }),
     "Optante do Simples Nacional · declaração recebida",
@@ -279,26 +282,45 @@ test("regime do fornecedor: texto da coluna e rótulo do pop-up", () => {
     "Optante do Simples Nacional · consulta do CNPJ em 21/09/2026",
   );
   assert.equal(textoDoRegime({ regime: "mei", consultado_em: null, declaracao_simples_recebida: false }), "MEI");
-  assert.equal(rotuloCurtoDoRegime("normal"), "Lucro Real ou Presumido");
+  assert.equal(rotuloCurtoDoRegime("normal"), "Lucro Presumido ou Real");
   assert.equal(rotuloCurtoDoRegime("simples"), "optante do Simples");
   assert.equal(rotuloCurtoDoRegime("mei"), "MEI");
   assert.equal(rotuloCurtoDoRegime(null), "regime não informado");
 });
 
-test("decisão 166: Lucro Real e Lucro Presumido aparecem pelo nome, conferidos pela consulta", () => {
-  const presumido = regimeDoFornecedorDaPP(false, {
+test("decisão 180: o Simples só retém o ISS, o MEI nada, e o resto segue o Lucro Presumido ou Real", () => {
+  assert.equal(retencaoDoRegime("simples"), "so_iss");
+  assert.equal(retencaoDoRegime("mei"), "nenhuma");
+  assert.equal(retencaoDoRegime("normal"), "todas");
+  assert.equal(retencaoDoRegime(null), "todas");
+  assert.equal(travaDoRegime("simples", "ISS"), null);
+  for (const imposto of ["PIS", "COFINS", "CSLL", "IRRF"] as const) {
+    assert.match(travaDoRegime("simples", imposto) ?? "", /só o ISS/);
+    assert.equal(travaDoRegime("normal", imposto), null);
+    assert.equal(travaDoRegime(null, imposto), null);
+  }
+  assert.equal(travaDoRegime("mei", "ISS"), "MEI: sem retenção na fonte.");
+  // A lista inteira: o servidor recusa o que a tela não deixaria mandar.
+  assert.equal(retencaoForaDoRegime("simples", ["ISS"]), null);
+  assert.match(retencaoForaDoRegime("simples", ["ISS", "IRRF"]) ?? "", /Optante do Simples/);
+  assert.equal(retencaoForaDoRegime("mei", []), null);
+  assert.equal(retencaoForaDoRegime("mei", ["ISS"]), "MEI: sem retenção na fonte.");
+  assert.equal(retencaoForaDoRegime("normal", ["PIS", "COFINS", "CSLL", "IRRF", "ISS"]), null);
+});
+
+test("decisão 179: Real e Presumido separados não são mais regime do fornecedor", () => {
+  // A migration 20261015900001 trocou os quatro cadastros que os tinham; um
+  // valor fora da lista é tratado como regime não informado.
+  const antigo = regimeDoFornecedorDaPP(false, {
     regime_tributario: "lucro_presumido",
     regime_consulta: "normal",
     regime_consultado_em: "2026-10-09",
     declaracao_simples_recebida: null,
   });
-  assert.ok(presumido);
-  assert.equal(textoDoRegime(presumido), "Lucro Presumido · consulta do CNPJ em 09/10/2026");
-  assert.equal(rotuloCurtoDoRegime("lucro_real"), "Lucro Real");
-  assert.equal(rotuloCurtoDoRegime("lucro_presumido"), "Lucro Presumido");
-  // A consulta disse Simples e o cadastro diz Lucro Real: sem a data.
+  assert.equal(antigo, null);
+  // A consulta disse Simples e o cadastro diz Lucro Presumido ou Real: sem a data.
   const trocado = regimeDoFornecedorDaPP(false, {
-    regime_tributario: "lucro_real",
+    regime_tributario: "normal",
     regime_consulta: "simples",
     regime_consultado_em: "2026-10-09",
     declaracao_simples_recebida: null,
@@ -512,6 +534,7 @@ test("crédito: o financeiro tira com motivo; sem motivo, a tela pede", () => {
   const com = creditoDaNf({ nf: NF, cadastro: CADASTRO, semCredito: true, motivoSemCredito: "Reembolso de despesa do cliente", hoje: HOJE });
   assert.equal(com.final.motivo, "Marcado pelo financeiro como sem crédito: reembolso de despesa do cliente.");
   assert.equal(textoDoMotivo("Outro"), "outro motivo");
+  assert.equal(textoDoMotivo("Fornecedor pessoa física"), "fornecedor pessoa física");
 });
 
 test("crédito: as alíquotas vêm do parâmetro vigente na emissão", () => {

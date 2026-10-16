@@ -251,9 +251,9 @@ export interface Fornecedor {
   // Módulo fiscal (02/10/2026): regime tributário, da consulta do CNPJ.
   regime_tributario: RegimeTributarioFornecedor | null;
   /** O regime que a consulta do CNPJ indicou (decisão 142): Simples, MEI
-   *  ou `normal` (nenhum dos dois — a Receita não diz se é Real ou
-   *  Presumido). Diferente de `regime_tributario` = alterado manualmente. */
-  regime_consulta: "normal" | "simples" | "mei" | null;
+   *  ou `normal` (nenhum dos dois: "Lucro Presumido ou Real", decisão 179).
+   *  Diferente de `regime_tributario` = alterado manualmente. */
+  regime_consulta: RegimeTributarioFornecedor | null;
   /** A data de opção pelo Simples ou pelo MEI que a consulta trouxe
    *  ("AAAA-MM-DD"); nula no regime normal ou sem a data (decisão 142). */
   regime_desde: string | null;
@@ -2095,7 +2095,10 @@ export type PPEventoTipo =
   // avaliação, sem aprovar. O `motivo` diz o que mudou.
   | "nf_corrigida"
   // Decisão 173 (13/10/2026): a PP gerada, ainda no job, foi editada.
-  | "editada";
+  | "editada"
+  // Revisão da decisão 156 (16/10/2026): a empresa emissora mudou — pelo
+  // documento ou na edição. O `motivo` diz de qual para qual.
+  | "emissora_trocada";
 
 /**
  * Um evento do histórico da PP (decisão 136): quem fez o quê e quando.
@@ -2667,7 +2670,9 @@ export type ItemChat =
         | "file-text"
         | "check-circle"
         | "x-circle"
-        | "ban";
+        | "ban"
+        // A troca do GP ou do Produtor Responsável (decisão 176).
+        | "users";
       cor: "azul" | "verde" | "bege" | "vermelho";
       titulo: string;
       quando: string;
@@ -3155,11 +3160,14 @@ export type PPAnexoMimetype = (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number];
  * coluna Documento da Conciliação.
  *
  * Acrescentar valor aqui é aditivo — o enum começou no conjunto mínimo
- * que o time nomeou.
+ * que o time nomeou. A fatura entrou na decisão 178 (15/10/2026): na
+ * locação de bens móveis o fornecedor emite fatura, não NF, e a produção
+ * marcava o arquivo como Recibo. O contrato de locação é o "Contrato".
  */
 export const DOCUMENTO_TIPOS = [
   "nota_fiscal",
   "recibo",
+  "fatura",
   "boleto",
   "contrato",
   "outro",
@@ -3174,6 +3182,8 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
       return "NF";
     case "recibo":
       return "Recibo";
+    case "fatura":
+      return "Fatura";
     case "boleto":
       return "Boleto";
     case "contrato":
@@ -3187,11 +3197,13 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
  * Os tipos que valem como comprovante FISCAL da despesa. A coluna
  * Documento mostra o primeiro anexo que cai aqui — contrato e boleto
  * acompanham a compra, mas não são o documento que a contabilidade
- * procura.
+ * procura. A fatura faz o papel da nota onde não há NF, como na locação
+ * (decisão 178): conta aqui e vale como "a nota" da PP paga por boleto (161).
  */
 export const DOCUMENTO_TIPOS_FISCAIS: readonly DocumentoTipo[] = [
   "nota_fiscal",
   "recibo",
+  "fatura",
 ];
 
 /** O documento de um anexo, como as telas o consomem. */
@@ -3231,6 +3243,10 @@ export interface EmpresaContabil {
   endereco_cidade: string | null;
   endereco_cep: string | null;
   endereco_uf: string | null;
+  /** PJ de teste (decisão 181): CNPJ fictício para os testes; a guia em
+   *  curso dela se aprova antes do fechamento e ela fica fora dos
+   *  demonstrativos consolidados. */
+  de_teste: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -4564,10 +4580,11 @@ export interface ColaboradorFeriasLancamento {
 // aprovação da PP e o fornecedor passam a registrar. Migration
 // 20261002100001_fiscal_cadastro_e_dados_da_nf.sql.
 
-/** Decisão 166 (09/10/2026): Lucro Real e Lucro Presumido separados.
- *  `normal` é o legado "Lucro Real ou Presumido" — não se escolhe mais, e é
- *  o que a consulta do CNPJ indica quando não é Simples nem MEI. */
-export type RegimeTributarioFornecedor = "lucro_real" | "lucro_presumido" | "simples" | "mei" | "normal";
+/** Decisão 179 (15/10/2026): `normal` é "Lucro Presumido ou Real", numa
+ *  opção só — o que a consulta do CNPJ indica quando não é Simples nem MEI.
+ *  Real e Presumido separados (decisão 166) saíram: a Receita não diz qual
+ *  dos dois, e a retenção da PP é a mesma. */
+export type RegimeTributarioFornecedor = "normal" | "simples" | "mei";
 
 export type RegimeTributarioPJ = "lucro_real" | "lucro_presumido";
 

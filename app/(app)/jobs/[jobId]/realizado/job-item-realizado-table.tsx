@@ -178,7 +178,7 @@ interface Props {
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152): o botão no painel do item. */
   papelCorrigeNf: boolean;
-  /** `cadastros.fornecedores.editar` — o "+" do campo Fornecedor. */
+  /** O "+" e o lápis do campo Fornecedor da PP (decisão 177). */
   podeCadastrarFornecedor?: boolean;
   podeEditarFornecedor?: boolean;
   /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
@@ -297,10 +297,10 @@ const MOTIVO_TRAVA_PP =
   "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
 
 /** Linha cancelada por errata (decisão 151): fica na planilha com o
- *  orçado zerado e o planejado da abertura, e não entra mais em errata. É
- *  o `title` do cadeado, do selo e da calha. */
+ *  orçado e, desde 15/10/2026, o planejado zerados, e não entra mais em
+ *  errata. É o `title` do cadeado, do selo e da calha. */
 const MOTIVO_CANCELADA =
-  "Linha cancelada por errata: o orçado fica zerado e o planejado da abertura continua contando. Não recebe PP nem BV.";
+  "Linha cancelada por errata: o orçado e o planejado ficam zerados. Não recebe PP nem BV.";
 
 /** Por que a linha com save não entra na errata (decisão 099 §15): save
  *  gerado, consumo, pedido aguardando ou recusa ainda não retirada. O mesmo
@@ -543,9 +543,10 @@ function CampoDaErrata({
  * uma vez só, em `useRascunhoErrata`, e é de lá que sai o total da linha.
  *
  * No Planejado a célula só abre quando `errata.planejadoLiberado` diz que
- * sim — e desde a decisão 151 (07/10/2026) ele nunca diz: o planejado do
- * job é o da abertura. Travada, a célula mostra o motivo no `title` e
- * continua de leitura, com a forma de sempre (zero vira travessão, como em
+ * sim: na errata, desde 15/10/2026 (volta atrás da decisão 151), na linha
+ * nova e na existente; no "Editar orçado" do financeiro, só na fila da
+ * abertura. Travada, a célula mostra o motivo no `title` e continua de
+ * leitura, com a forma de sempre (zero vira travessão, como em
  * `CelulaLeitura`).
  */
 function CelulaOrcadoErrata({
@@ -1901,9 +1902,9 @@ export function JobItemRealizadoTable({
                   })}
 
                   {/* Os dois jeitos de criar linha, no pé do grupo.
-                      "Novo item" é a linha de sempre: tem orçado e entra na
-                      conta, com o planejado zerado — o planejado do job é o
-                      da abertura (decisão 151). "Linha vermelha" é a
+                      "Novo item" é a linha de sempre: tem orçado e
+                      planejado e entra na conta (o planejado abre desde
+                      15/10/2026, volta atrás da decisão 151). "Linha vermelha" é a
                       outra coisa — ela nasce sem orçado e sem planejado e
                       só recebe realizado, por PP. É o custo que o
                       orçamento não previu e que alguém precisa pedir
@@ -1937,9 +1938,8 @@ export function JobItemRealizadoTable({
                             Linha vermelha
                           </button>
                           <span className="text-[11px] text-muted-foreground">
-                            novo item entra com o planejado zerado · linha
-                            vermelha: orçado e planejado zerados, só recebe
-                            realizado por PP
+                            linha vermelha: orçado e planejado zerados, só
+                            recebe realizado por PP
                           </span>
                         </div>
                       </td>

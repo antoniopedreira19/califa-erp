@@ -14,8 +14,8 @@
  * novo em cima, tipo obrigatório que nasce vazio e, na NF, os dados dela
  * logo abaixo do arquivo. Aqui são opcionais; o envio cobra todos.
  *
- * Decisão 166 (09/10/2026): fornecedor PJ sem regime tributário (ou com o
- * legado "Lucro Real ou Presumido") ou sem CNAE não gera PP. O aviso
+ * Decisão 166 (09/10/2026): fornecedor PJ sem regime tributário ou sem
+ * CNAE não gera PP. O aviso
  * vermelho embaixo do campo diz o que falta e aponta o lápis; "Gerar PP"
  * trava, e "Salvar" continua — a PP a emitir espera o cadastro. Quem não
  * edita fornecedor (GP, produtor, freelancer) ganha o lápis só nesse caso, e
@@ -33,6 +33,7 @@ import {
   X,
   AlertTriangle,
   Columns2,
+  Lock,
   Pencil,
   Plus,
 } from "lucide-react";
@@ -53,6 +54,7 @@ import {
   PP_URGENTE_JUSTIFICATIVA_MIN,
   rotuloDaVerbaMinusculo,
   type DadosDaPPAEmitir,
+  type DocumentoTipo,
   type Fornecedor,
   type PedidoCompraNaLista,
   type PPAEmitir,
@@ -79,6 +81,7 @@ import {
   ehQuarta,
   hojeEmSaoPauloIso,
   isoParaBr,
+  ppAceitaQuarta,
   primeiraDataPossivelDoPrazo,
   primeiraJanelaComEnvioAberto,
   vencimentoAceitaEnvio,
@@ -93,6 +96,7 @@ import {
   editarPPGerada,
   listarPessoasParaVerba,
   prefixoAnexosPedidoCompra,
+  previaDoPdfDaPP,
   reservarPedidoCompra,
   salvarPPAEmitir,
   prefixoAnexosPPAEmitir,
@@ -108,6 +112,12 @@ import {
 } from "./titular-da-verba-field";
 import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
+  DOCUMENTOS_EM_CNPJS_DIFERENTES,
+  documentoTemCnpj,
+  emissoraDosDocumentos,
+} from "@/lib/fiscal/cnpj-da-pp";
+import {
+  CnpjDoDocumento,
   ExigidosNoEnvio,
   ListaDeAnexos,
   NfDoAnexo,
@@ -120,6 +130,7 @@ import {
   parteDaNf,
   useAnexosEmEdicao,
   useNotasExistentes,
+  type AnexoEmEdicao,
   type TomadorDaNf,
 } from "./anexos-da-pp";
 import { RevisaoDialog, textoAguardaAbertura } from "./pp-a-emitir-ui";
@@ -158,9 +169,10 @@ interface Props {
   }>;
   /** As empresas gerenciais: só o nome da do job aparece (decisão 156). */
   empresas: Array<{ id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }>;
-  /** `cadastros.fornecedores.editar`. Sem ela, o "+" e o lápis somem: a
-   *  action já barrava, mas o GP preenchia o cadastro inteiro para só
-   *  então ler "Você não tem permissão para essa ação" (18/09/2026). */
+  /** O "+" (`cadastros.fornecedores.inline`) e o lápis (`.inline` ou
+   *  `.editar`, decisão 177). Sem eles, os botões somem: a action já
+   *  barrava, mas o GP preenchia o cadastro inteiro para só então ler
+   *  "Você não tem permissão para essa ação" (18/09/2026). */
   podeCadastrarFornecedor?: boolean;
   podeEditarFornecedor?: boolean;
   defaultEmpresaId: string;
@@ -280,6 +292,14 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
   };
 }
 
+/** "NF 123", "fatura 1907", "recibo 42": o documento que definiu a empresa
+ *  emissora (revisão da 156). */
+function rotuloDoDocumento(a: AnexoEmEdicao): string {
+  const numero = (a.tipo === "nota_fiscal" ? a.nf.numero : (a.numero ?? "")).trim();
+  const tipo = a.tipo === "nota_fiscal" ? "NF" : a.tipo === "fatura" ? "fatura" : "recibo";
+  return numero ? `${tipo} ${numero}` : `${tipo} “${a.nome}”`;
+}
+
 function dateToIso(date: Date | null): string {
   return date ? format(date, "yyyy-MM-dd") : "";
 }
@@ -387,13 +407,10 @@ export function GerarPPDrawer({
     };
   }, [fornecedorId, usaFornecedor, versaoDoCadastro]);
   const cadastroIncompleto = usaFornecedor && Boolean(fornecedorId) && faltaNoCadastro.length > 0;
-  /** Quem não edita fornecedor ganha o lápis com o cadastro pendente: ele
-   *  abre o cadastro inteiro, todo editável, e o servidor aceita enquanto o
-   *  cadastro estiver pendente. */
-  const completaPeloLapis = !podeEditarFornecedor && podeCadastrarFornecedor && cadastroIncompleto;
-  const temLapis = podeEditarFornecedor || completaPeloLapis;
+  // O lápis abre o cadastro inteiro, todo editável. Desde a decisão 177 a
+  // produção o tem sempre, e não só com o cadastro pendente (166).
   const travaDoCadastro = cadastroIncompleto
-    ? temLapis
+    ? podeEditarFornecedor
       ? "Complete o cadastro do fornecedor para gerar a PP."
       : "O financeiro precisa completar o cadastro do fornecedor para a PP ser gerada."
     : null;
@@ -525,12 +542,14 @@ export function GerarPPDrawer({
   const [prazoOriginal, setPrazoOriginal] = React.useState<string | null>(null);
   // Pagamento urgente (decisão 077).
   const [urgente, setUrgente] = React.useState(false);
+  /** A PP pode cair numa quarta de exceções: a urgente (decisão 172) e,
+   *  desde 16/10/2026, a verba, urgente ou não. */
+  const quartaLiberada = ppAceitaQuarta({ urgente, verba: verbaProducao });
   const [justificativa, setJustificativa] = React.useState("");
   const [faltaJustificativa, setFaltaJustificativa] = React.useState(false);
   // Decisão 152: os anexos com tipo, número e, na NF, os dados dela. O
   // CNPJ tomador sugerido é o CNPJ da PP (decisão 156).
   const tomadorPadrao = cnpjId || null;
-  const nomeDoCnpj = tomadores.find((t) => t.id === cnpjId)?.nome ?? "o CNPJ da PP";
   const {
     anexos,
     setAnexos,
@@ -541,6 +560,19 @@ export function GerarPPDrawer({
     aviso: avisoDosAnexos,
     setAviso: setAvisoDosAnexos,
   } = useAnexosEmEdicao(uploadPrefix, tomadorPadrao);
+  // Revisão da 156 (16/10/2026): com nota, fatura ou recibo que diga o CNPJ,
+  // a empresa emissora é a do documento — o seletor trava e diz qual
+  // documento a definiu. Sem documento, vale o seletor (pré-seleção pela
+  // regional ou a escolha de quem preenche).
+  const pelosDocumentos = emissoraDosDocumentos(
+    verbaProducao ? [] : anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+  );
+  const emissoraEfetiva = pelosDocumentos.tipo === "documento" ? pelosDocumentos.estabelecimentoId : cnpjId;
+  const documentoDaEmissora =
+    pelosDocumentos.tipo === "documento"
+      ? anexos.find((a) => a.status === "ok" && documentoTemCnpj(a.tipo) && a.nf.tomador === emissoraEfetiva)
+      : undefined;
+  const nomeDoCnpj = tomadores.find((t) => t.id === emissoraEfetiva)?.nome ?? "o CNPJ da PP";
   const existentes = useNotasExistentes(
     verbaProducao ? null : fornecedorId || null,
     anexos.filter((a) => a.tipo === "nota_fiscal").map((a) => a.nf.numero),
@@ -803,11 +835,15 @@ export function GerarPPDrawer({
    * primeira janela aberta, com o aviso — a quarta só vale com urgência.
    * Desligado com o prazo vazio, volta para a primeira janela, como numa PP
    * nova.
+   *
+   * Na verba as quartas já estão liberadas (revisão da 172, 16/10/2026): a
+   * urgência só avisa o financeiro, e o prazo escolhido fica como está.
    */
   function mudarUrgencia(ligado: boolean) {
     setUrgente(ligado);
     if (!ligado) setFaltaJustificativa(false);
     if (ligado) {
+      if (verbaProducao) return;
       setAvisoQuarta(null);
       mudarPrazo("");
       setPrazoVez((v) => v + 1);
@@ -818,6 +854,12 @@ export function GerarPPDrawer({
       setPrazoVez((v) => v + 1);
       return;
     }
+    if (!verbaProducao) tirarAQuartaDoPrazo();
+  }
+
+  /** O prazo numa quarta de exceções que deixou de valer (a urgência ou a
+   *  verba saiu) volta para a primeira janela aberta, com o aviso. */
+  function tirarAQuartaDoPrazo() {
     if (ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento)) {
       const de = prazoPagamento;
       const para = primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados);
@@ -933,7 +975,11 @@ export function GerarPPDrawer({
         return false;
       }
     }
-    if (!cnpjId) {
+    if (pelosDocumentos.tipo === "divergente") {
+      setErro(DOCUMENTOS_EM_CNPJS_DIFERENTES);
+      return false;
+    }
+    if (!emissoraEfetiva) {
       setErro("Escolha a empresa emissora (o CNPJ da PP).");
       return false;
     }
@@ -993,23 +1039,23 @@ export function GerarPPDrawer({
       );
       return false;
     }
-    // O calendário já só acende janelas (e, com urgência, as quartas de
-    // exceções); isto cobre a data digitada por outro caminho. O servidor
-    // checa de novo.
-    const quartaSemUrgencia = !urgente && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento);
-    if (quartaSemUrgencia) {
+    // O calendário já só acende janelas (e, na urgência e na verba, as
+    // quartas de exceções); isto cobre a data digitada por outro caminho. O
+    // servidor checa de novo.
+    const quartaFora = !quartaLiberada && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento);
+    if (quartaFora) {
       setErro(
-        `A quarta de exceções só vale para pagamento urgente. Ligue "Pagamento urgente" ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
+        `A quarta de exceções só vale para verba ou pagamento urgente. Ligue "Pagamento urgente" ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
       );
       return false;
     }
     if (
       prazoPagamento !== prazoOriginal &&
       (prazoPagamento < hoje ||
-        (!ehJanelaDePagamento(prazoPagamento) && !(urgente && ehQuarta(prazoPagamento))))
+        (!ehJanelaDePagamento(prazoPagamento) && !(quartaLiberada && ehQuarta(prazoPagamento))))
     ) {
       setErro(
-        urgente
+        quartaLiberada
           ? "O prazo de pagamento precisa ser, a partir de hoje, uma janela (dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte) ou uma quarta de exceções."
           : "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
       );
@@ -1018,8 +1064,8 @@ export function GerarPPDrawer({
     if (prazoPagamento !== prazoOriginal && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
       setErro(
         ehJanelaDePagamento(prazoPagamento)
-          ? `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`
-          : `A quarta ${isoParaBr(prazoPagamento)} só podia ser escolhida até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`,
+          ? `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada))}.`
+          : `A quarta ${isoParaBr(prazoPagamento)} só podia ser escolhida até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada))}.`,
       );
       return false;
     }
@@ -1032,7 +1078,7 @@ export function GerarPPDrawer({
     const parcelasEnvio = parcelasParaEnvio();
         const dadosBase = {
           empresa_id: empresaId,
-          estabelecimento_id: cnpjId || null,
+          estabelecimento_id: emissoraEfetiva || null,
           prazo_pagamento: prazoPagamento,
           servico: servico.trim(),
           valor_unitario: unitNum,
@@ -1207,6 +1253,32 @@ export function GerarPPDrawer({
 
   /** Os campos da NF de um arquivo — na lista e, `compacta`, na coluna da
    *  tela lado a lado. */
+  /** O tipo do documento. O arquivo que passa a dizer o CNPJ (NF, fatura ou
+   *  recibo) nasce com a empresa emissora de agora — a que outro documento
+   *  já definiu, ou a do seletor (revisão da 156). */
+  function mudarTipo(id: string, t: DocumentoTipo) {
+    const a = anexos.find((x) => x.id === id);
+    const passaADizer = !!a && documentoTemCnpj(t) && !documentoTemCnpj(a.tipo);
+    mudar(id, passaADizer && a ? { tipo: t, nf: { ...a.nf, tomador: emissoraEfetiva || a.nf.tomador } } : { tipo: t });
+  }
+
+  /** "Contra qual CNPJ" da fatura e do recibo (revisão da 156). */
+  function cnpjDoDocumento(id: string) {
+    const a = anexos.find((x) => x.id === id);
+    if (!a) return null;
+    return (
+      <CnpjDoDocumento
+        valor={a.nf.tomador}
+        onChange={(v) => mudarNf(id, { tomador: v })}
+        tomadores={tomadores}
+        tomadorEsperado={emissoraEfetiva || null}
+        empresaNome={nomeDoCnpj}
+        idBase={`pp-doc-${id}`}
+        disabled={pending}
+      />
+    );
+  }
+
   function camposDaNf(id: string, compacta: boolean) {
     const a = anexos.find((x) => x.id === id);
     if (!a) return null;
@@ -1217,7 +1289,7 @@ export function GerarPPDrawer({
         faltas={[]}
         idBase={`${compacta ? "conferencia" : "pp-nf"}-${id}`}
         tomadores={tomadores}
-        tomadorEsperado={cnpjId || null}
+        tomadorEsperado={emissoraEfetiva || null}
         empresaNome={nomeDoCnpj}
         existente={notaExistenteDe(existentes, a.nf.numero)}
         valorPP={valorPP}
@@ -1280,13 +1352,12 @@ export function GerarPPDrawer({
                         revisão. O ✕ de dentro do campo é o caminho de
                         volta para o "+".
 
-                        São duas permissões diferentes (18/09/2026): criar
-                        aqui é `cadastros.fornecedores.inline`, que o GP e
-                        o produtor têm porque a PP é o fluxo deles; abrir
-                        para editar é `cadastros.fornecedores.editar`, do
-                        administrador e do financeiro. Por isso o gate segue o
-                        papel do botão, e não o botão. */}
-                    {(fornecedorId ? temLapis : podeCadastrarFornecedor) && (
+                        Criar aqui é `cadastros.fornecedores.inline`, que o
+                        GP, o produtor e o freela têm porque a PP é o fluxo
+                        deles; editar é o mesmo `.inline` desde a decisão
+                        177, ou `.editar` (administrador e financeiro). O
+                        gate segue o papel do botão, e não o botão. */}
+                    {(fornecedorId ? podeEditarFornecedor : podeCadastrarFornecedor) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1329,7 +1400,7 @@ export function GerarPPDrawer({
                       <span>
                         <b className="font-semibold">Cadastro incompleto:</b> falta{" "}
                         {listarPendencias(faltaNoCadastro)}.{" "}
-                        {temLapis ? (
+                        {podeEditarFornecedor ? (
                           <>
                             Clique no lápis <Pencil className="mb-0.5 inline h-3 w-3" aria-label="lápis" /> ao
                             lado para completar e gerar a PP.
@@ -1344,10 +1415,10 @@ export function GerarPPDrawer({
                     {fornecedorId
                       ? podeEditarFornecedor
                         ? "O lápis abre o cadastro deste fornecedor. O ✕ limpa o campo e traz o + de volta."
-                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o administrador."
+                        : "O ✕ limpa o campo. Revisar o cadastro de um fornecedor é com o financeiro."
                       : podeCadastrarFornecedor
                       ? "Escreva para buscar na lista. O + cadastra um fornecedor novo sem sair da PP."
-                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o administrador."}
+                      : "Escreva para buscar na lista. Cadastro de fornecedor é com o financeiro."}
                   </p>
                   )}
                   {fornecedorId && (
@@ -1466,6 +1537,8 @@ export function GerarPPDrawer({
                   setPagamento(PAGAMENTO_PELO_CADASTRO);
                   setFaltaPagamento(false);
                   setTipoVerba(t);
+                  // Fora da verba, a quarta só vale com urgência (172).
+                  if (t === null && !urgente) tirarAQuartaDoPrazo();
                 }}
                 disabled={pending}
               />
@@ -1552,8 +1625,15 @@ export function GerarPPDrawer({
                   primeiro quem contrata, depois quem recebe. */}
               <div>
                 <label className="text-xs font-medium">Empresa emissora *</label>
-                <Select value={cnpjId || undefined} onValueChange={setCnpjId}>
-                  <SelectTrigger>
+                {/* Revisão da 156 (16/10/2026): o documento com CNPJ define
+                    a empresa emissora e o seletor trava; sem documento, vale
+                    a escolha daqui. */}
+                <Select
+                  value={emissoraEfetiva || undefined}
+                  onValueChange={setCnpjId}
+                  disabled={pelosDocumentos.tipo === "documento"}
+                >
+                  <SelectTrigger aria-label="Empresa emissora">
                     <SelectValue placeholder="Escolha o CNPJ" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1564,14 +1644,27 @@ export function GerarPPDrawer({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  A nota do fornecedor vem neste CNPJ. Empresa gerencial do job:{" "}
-                  {(() => {
-                    const g = empresas.find((e) => e.id === empresaId);
-                    return g ? (g.nome_fantasia ?? g.razao_social) : "—";
-                  })()}
-                  .
-                </p>
+                {pelosDocumentos.tipo === "divergente" ? (
+                  <p className="mt-1 text-[11px] font-semibold text-california-red">{DOCUMENTOS_EM_CNPJS_DIFERENTES}</p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {documentoDaEmissora ? (
+                      <>
+                        <Lock className="mr-1 inline h-3 w-3 align-[-1px]" />
+                        Definida pelo documento: {rotuloDoDocumento(documentoDaEmissora)}. Para mudar, corrija o CNPJ no
+                        documento.{" "}
+                      </>
+                    ) : (
+                      "Quem paga a PP. Com nota, fatura ou recibo anexado, vale o CNPJ do documento. "
+                    )}
+                    Empresa gerencial do job:{" "}
+                    {(() => {
+                      const g = empresas.find((e) => e.id === empresaId);
+                      return g ? (g.nome_fantasia ?? g.razao_social) : "—";
+                    })()}
+                    .
+                  </p>
+                )}
               </div>
 
               {/* Fornecedor (modo normal) ou Titular da verba (modo verba,
@@ -1625,9 +1718,9 @@ export function GerarPPDrawer({
                     name="prazo_pagamento"
                     defaultValue={prazoPagamento}
                     onDateChange={(date) => mudarPrazo(dateToIso(date))}
-                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados, urgente)}
-                    diasMarcados={quartaMarcada(hoje, feriados, urgente)}
-                    legenda={urgente ? <LegendaDaQuarta /> : undefined}
+                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados, quartaLiberada)}
+                    diasMarcados={quartaMarcada(hoje, feriados, quartaLiberada)}
+                    legenda={quartaLiberada ? <LegendaDaQuarta /> : undefined}
                   />
                   <EnvioAte vencimento={prazoPagamento} feriados={feriados} />
                   {urgente && !prazoPagamento && (
@@ -1720,12 +1813,16 @@ export function GerarPPDrawer({
                   )}
                 </div>
               </div>
-              <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} urgente={urgente} />
+              <AvisoPrazoForaDaJanela
+                prazo={prazoPagamento}
+                original={prazoOriginal}
+                quartaLiberada={quartaLiberada}
+              />
               <AvisoPrazoDeEnvioPerdido
                 prazo={prazoPagamento}
                 hojeIso={hoje}
                 feriados={feriados}
-                urgente={urgente}
+                quartaLiberada={quartaLiberada}
               />
               {avisoQuarta && <AvisoQuartaSemUrgencia de={avisoQuarta.de} para={avisoQuarta.para} />}
 
@@ -1740,6 +1837,7 @@ export function GerarPPDrawer({
               )}
 
               <UrgenciaPPField
+                liberaQuartas={!verbaProducao}
                 urgente={urgente}
                 justificativa={justificativa}
                 onUrgenteChange={mudarUrgencia}
@@ -1817,13 +1915,14 @@ export function GerarPPDrawer({
                   )}
                   <ListaDeAnexos
                     itens={itensDaLista(anexos)}
-                    onTipo={(id, t) => mudar(id, { tipo: t })}
+                    onTipo={mudarTipo}
                     onNumero={(id, numero) => mudar(id, { numero })}
                     onRemover={remover}
                     tipoInvalido={() => false}
                     disabled={pending}
                     onVer={(id) => setLadoALado({ foco: id })}
                     renderNf={(id) => camposDaNf(id, false)}
+                    renderCnpj={cnpjDoDocumento}
                   />
                   <ResumoDasNfs
                     valores={anexos
@@ -2068,20 +2167,27 @@ export function GerarPPDrawer({
             selo={editando || editandoGerada ? "Em edição" : "Nova"}
             descricao={
               ppGeradaEditando
-                ? "Documentos e dados — lado a lado. O PDF da PP é refeito ao salvar."
-                : "Documentos e dados — lado a lado. O PDF da PP aparece aqui depois de gerar."
+                ? "Prévia da PP e documentos lado a lado. O PDF da PP é refeito ao salvar."
+                : "Prévia da PP e documentos lado a lado. O PDF da PP sai ao gerar."
             }
             ppIdDoPdf={null}
+            // Decisão 178: a prévia com os dados do formulário de agora.
+            previaDoPdf={() =>
+              itemRealizadoId
+                ? previaDoPdfDaPP(itemRealizadoId, montarDados())
+                : Promise.resolve({ ok: false as const, message: "Prévia indisponível." })
+            }
             anexos={anexos}
             focar={ladoALado?.foco ?? null}
             // Os anexos da PP gerada moram nela; os da PP a emitir, na tabela dela.
             urlDoGravado={ppGeradaEditando ? signedUrlAnexo : signedUrlAnexoAEmitir}
             prontoParaAnexar={!!uploadPrefix}
             onArquivos={subir}
-            onTipo={(id, t) => mudar(id, { tipo: t })}
+            onTipo={mudarTipo}
             onNumero={(id, numero) => mudar(id, { numero })}
             onRemover={remover}
             renderNf={(id) => camposDaNf(id, true)}
+            renderCnpj={cnpjDoDocumento}
             mostrarFaltas={false}
             obrigatorio={false}
             valorPP={valorPP}
@@ -2114,7 +2220,7 @@ export function GerarPPDrawer({
             }}
             aEmitir={revisaoDaEdicao}
             nomeDoFornecedor={nomeDeQuemRecebe}
-            nomeDaEmpresa={tomadores.find((t) => t.id === cnpjId)?.nome ?? "—"}
+            nomeDaEmpresa={tomadores.find((t) => t.id === emissoraEfetiva)?.nome ?? "—"}
             tomadores={tomadores}
             planejado={valorPlanejado}
             emitidasAntes={Math.round((emPPsEmitidas - valorAntesDaEdicao) * 100) / 100}

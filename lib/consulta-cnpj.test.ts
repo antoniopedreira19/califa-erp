@@ -64,7 +64,7 @@ test("optante do Simples sem MEI vira Simples", () => {
   assert.equal(consultaDaRespostaDoCnpj(dados, CNPJ, HOJE)?.desde, "2019-01-01");
 });
 
-test("excluída do Simples e empresa que nunca optou (simples nulo) viram Lucro Real ou Presumido", () => {
+test("excluída do Simples e empresa que nunca optou (simples nulo) viram Lucro Presumido ou Real", () => {
   const excluida = respostaDoCnpjWs(
     respostaWs({ simples: "Não", mei: "Não", data_opcao_simples: "2010-01-01", data_exclusao_simples: "2015-12-31" }),
   );

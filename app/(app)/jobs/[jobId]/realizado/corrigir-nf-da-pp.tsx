@@ -27,7 +27,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
-import { signedUrlAnexo } from "./actions-pp";
+import { signedUrlAnexo, type TrocaDeEmissora } from "./actions-pp";
+import { DOCUMENTOS_EM_CNPJS_DIFERENTES, emissoraDosDocumentos } from "@/lib/fiscal/cnpj-da-pp";
 import {
   carregarNfsDaPPParaCorrigir,
   corrigirNfsDaPP,
@@ -67,7 +68,9 @@ export function CorrigirNfDialog({
   nomeDaEmpresa: (empresaId: string) => string;
   tomadores: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
-  onCorrigida: (codigo: string) => void;
+  /** Revisão da 156: `emissora` diz se a PP passou para o CNPJ da nota;
+   *  `aviso`, se a correção passou mas a empresa emissora não pôde seguir. */
+  onCorrigida: (codigo: string, emissora: TrocaDeEmissora | null, aviso: string | null) => void;
 }) {
   const [pp, setPp] = React.useState<PPParaCorrigirNf | null>(null);
   const [nfs, setNfs] = React.useState<NfEmCorrecao[]>([]);
@@ -150,6 +153,15 @@ export function CorrigirNfDialog({
       setErro(falta);
       return;
     }
+    // Revisão da 156: a empresa emissora segue a nota — notas em CNPJs
+    // diferentes não dizem qual ela é.
+    const pelasNotas = emissoraDosDocumentos(
+      nfs.map((n) => ({ documento_tipo: "nota_fiscal" as const, nf_tomador_estabelecimento_id: n.nf.tomador || null })),
+    );
+    if (pelasNotas.tipo === "divergente") {
+      setErro(DOCUMENTOS_EM_CNPJS_DIFERENTES);
+      return;
+    }
     setErro(null);
     const alvoPP = pp;
     startTransition(async () => {
@@ -168,11 +180,12 @@ export function CorrigirNfDialog({
         setErro(res.message);
         return;
       }
-      onCorrigida(res.codigo);
+      onCorrigida(res.codigo, res.emissora, res.aviso);
     });
   }
 
-  // Decisão 156: a nota é conferida com o CNPJ da PP, não com a gerencial.
+  // Decisão 156: o CNPJ da PP. Revisão de 16/10/2026: se a nota está em
+  // outro, a PP passa para ele ao salvar (o aviso informa).
   const tomadorEsperado = pp ? (pp.estabelecimento_id ?? tomadorPorEmpresa[pp.empresa_id] ?? null) : null;
   const empresaNome = tomadores.find((t) => t.id === tomadorEsperado)?.nome ?? (pp ? nomeDaEmpresa(pp.empresa_id) : "");
 

@@ -5180,7 +5180,9 @@ código publicado logo depois (`3305751`).
   comum e verba de um terceiro, decisão 164) pergunta ao servidor o que
   falta no cadastro do fornecedor escolhido
   (`pendenciasDoCadastroDoFornecedor`): na pessoa jurídica, o regime (o
-  legado "Lucro Real ou Presumido" conta como falta) e o CNAE. Faltando, um
+  legado "Lucro Real ou Presumido" conta como falta — até 15/10/2026: pela
+  decisão 179 ele volta a ser regime completo, "Lucro Presumido ou Real") e
+  o CNAE. Faltando, um
   aviso **vermelho** embaixo do campo diz o quê e aponta o lápis; o lápis
   ganha contorno vermelho e o **"Gerar PP" trava**. O **"Salvar" continua**:
   a PP a emitir espera o cadastro. Relido depois de cada edição do cadastro.
@@ -5224,7 +5226,8 @@ código publicado logo depois (`3305751`).
   no cadastro, corrigem também.
 - O lápis do campo Fornecedor da PP continua aparecendo para eles só com o
   cadastro pendente (sem regime, com o legado ou sem CNAE), e agora abre o
-  mesmo formulário do administrador. O modo `somentePendentes` e a action
+  mesmo formulário do administrador. *(Até 15/10/2026: desde a decisão 177
+  o lápis aparece com qualquer cadastro — ver a nota daquele dia.)* O modo `somentePendentes` e a action
   `completarCadastroFiscalDoFornecedor` saíram.
 - No servidor, `atualizarComSchema` usa `checarEditarFornecedor`: quem tem
   `cadastros.fornecedores.editar` edita sempre; quem tem só o cadastro rápido
@@ -5438,3 +5441,151 @@ código publicado logo depois (`3305751`).
   a PP daquele job — `papelEnviaPP`, `podeEnviarPP` e `papelCorrigeNf` no
   carregador, e os portões de `actions-pp.ts` e `actions-notas-da-pp.ts`.
   Trocar o produtor desliga a chave (gatilho no banco).
+
+## ⚠️ Nota de 2026-10-15 — Trocar o GP e o Produtor Responsáveis pela Equipe (decisão 176)
+
+- **"Trocar"** nos cards do GP e do Produtor Responsável do pop-up "Equipe"
+  do job, e um ícone por célula na tabela da visão agregada. Só GP e
+  administrador (`jobs.trocar_responsaveis`), só job aberto ou em produção
+  (`JobNaEquipe.aceitaTroca`). Grava no mesmo "Salvar"
+  (`salvarEquipeDoProjeto` recebe `trocas`), pela função
+  `trocar_responsavel_do_job`.
+- O novo GP pode ser qualquer GP ou administrador; quem não é GP do projeto
+  passa a ser (`incluir_gp_no_projeto`). O novo produtor tem o papel
+  Produtor. A troca do produtor desliga a chave da 174.
+- A escrita direta de `responsavel_id` e `produtor_id` em job já aberto é
+  barrada pelo gatilho `jobs_guarda_troca_de_responsavel`.
+- Cada troca é uma linha em `jobs_trocas_de_responsavel` e um card na
+  Comunicação (`lerTrocasDeResponsavelDoJob` no `carregarDetalheDoJob`),
+  que conta como não lido para quem não trocou.
+
+## ⚠️ Nota de 2026-10-15 — A errata volta a abrir o planejado, e o job mostra só o valor de hoje (decisão 175, revê a 151)
+
+Pedido do Tiago em 14/10/2026. Regra completa na decisão 175.
+
+- **Planejado na errata:** abre na linha nova e na existente (R$ Unit., QT
+  e D/M). Fechado na vermelha, em save, na cancelada, na linha com PP no
+  financeiro e no Interno. Mudar só o planejado já conta como "alterada".
+- **Linha cancelada:** fica, com orçado e planejado zerados (função
+  `registrar_errata_do_job`, migration `20261015100001`). O "Exibir" tem
+  "Linhas canceladas" para escondê-las da tabela; na errata elas aparecem.
+- **Cabeçalho, Totais e RENTAB. planejada:** só o valor de hoje — o
+  carregador não lê mais a versão aprovada nem monta a foto da abertura. O
+  valor da abertura segue no card de Erratas e vai para o histórico de
+  versões. A linha que vira save sai do planejado.
+- **Textos:** card de Erratas "orçados, planejados e tipos de custo"; o
+  aviso do "+ Novo item" perdeu "entra com o planejado zerado"; o pop-up
+  diz "O que muda na planilha" quando o planejado muda.
+- **Conferido:** TES-1008/26 com valor único no cabeçalho; errata no
+  rascunho do TES-1025/26 (planejado de linha existente e de linha nova,
+  cancelada zerada, pop-up com o de → para), descartada; depois a mesma
+  errata registrada no TES-1025/26 — banco com planejado de/para nas três
+  linhas, Item 6 zerado nos dois lados, valor do job R$ 163.734,93 único
+  na produção e no financeiro, "Linhas canceladas" esconde e mostra.
+
+## ⚠️ Nota de 2026-10-15 — A produção edita o cadastro do fornecedor pelo lápis (decisão 177)
+
+Pedido do Tiago em 15/10/2026, a partir do print de uma produtora que, na
+PP-00107, não via botão ao lado do fornecedor. Regra completa na decisão 177.
+
+- **Lápis:** o administrador, o GP, o produtor e o freelancer veem o lápis
+  do campo Fornecedor da PP com qualquer fornecedor escolhido, pendente ou
+  não, e salvam o cadastro inteiro. A permissão é a mesma do "+"
+  (`cadastros.fornecedores.inline`).
+- **Servidor:** `checarCadastroDeFornecedor` (era `checarCriarFornecedor` +
+  `checarEditarFornecedor`) aceita `.editar` ou `.inline`. Vale também para
+  o lápis do BV e o do veículo da Mídia Off, que já apareciam e eram
+  recusados no cadastro completo.
+- **Fica com o financeiro e o administrador:** a tela de Fornecedores,
+  inativar e reativar.
+- **Sem migration:** a policy de UPDATE de `fornecedores` já aceitava
+  qualquer membro do tenant.
+- **Conferido** em `127.0.0.1:3177`, no TES-1014/26 (Nova PP do item
+  Produtor, fechada sem salvar), com o "Fornecedor Teste" (cadastro
+  completo): como **Produtor Teste Claude** e como **Freelancer Teste
+  Claude**, o lápis aparece com "O lápis abre o cadastro deste
+  fornecedor…", o cadastro abre editável e salva — `fornecedor.editado` na
+  auditoria com o nome e o papel de cada um. O telefone usado no teste
+  voltou ao original; o freela entrou e saiu da Equipe do TES-P001/26;
+  nenhuma PP foi criada.
+
+## ⚠️ Nota de 2026-10-15 — "Fatura" no anexo, a revisão sem a linha "Nota fiscal" e a prévia da PP (decisão 178)
+
+Pedido do Tiago em 15/10/2026, a partir do retorno de uma produtora que
+anexou a fatura de locação de banheiros às PP-00197 e PP-00198 como
+"Recibo" e leu na revisão que os dados da nota seriam pedidos no envio.
+Regra completa na decisão 178.
+
+- **Tipo "Fatura"** entre Recibo e Boleto (enum `documento_tipo`, migration
+  `20261015950001`). Pede só o número, vale como comprovante
+  (`DOCUMENTO_TIPOS_FISCAIS`) e como "a nota" da PP paga por boleto. Não é
+  NF. A prestação de verba segue só NF ou recibo.
+- **Revisão "Gerar o Pedido de Produção?"**: a linha "Nota fiscal" só com
+  arquivo marcado NF; "Anexos" mostra o número ("Fatura 0129-2026 ·
+  arquivo.pdf").
+- **Prévia da PP na tela lado a lado do formulário**: `previaDoPdfDaPP`
+  monta o PDF com o gerador de sempre (`previa: true` → "PRÉVIA" no lugar do
+  código, "Não vale como PP" e marca d'água), não grava nada e abre num
+  `blob:` sem baixar, sem abrir em aba e sem a barra do visualizador.
+- **Conferido** em `localhost:3178`, como administrador, no TES-1014/26
+  (item Passagem, Fornecedor Teste, R$ 100): lista do tipo, prévia montada
+  pelo servidor, revisão sem a linha "Nota fiscal", `fatura` gravado na PP a
+  emitir e na PP-00199 gerada; pop-up de envio com a fatura e o número. A
+  PP-00199 foi fechada sem enviar e cancelada pela tela.
+
+## ⚠️ Nota de 2026-10-16 — a empresa emissora segue o documento (revisão da decisão 156)
+
+Decidido pelo Tiago em 14 a 16/10/2026; regra completa no fim da decisão 156.
+
+- **A empresa emissora da PP é a do documento** (NF, fatura ou recibo).
+  Sem documento, vale o seletor (pré-seleção pela regional). Regra em
+  `emissoraDosDocumentos` (`lib/fiscal/cnpj-da-pp.ts`, com teste);
+  documentos em CNPJs diferentes barram.
+- **Fatura e recibo ganham "Contra qual CNPJ"** (`CnpjDoDocumento`, em
+  `anexos-da-pp.tsx`; prop `renderCnpj` na `ListaDeAnexos` e na
+  `ConferenciaDosDocumentos`), no mesmo campo da NF
+  (`nf_tomador_estabelecimento_id`). Obrigatório no envio.
+- **Formulário:** com documento, o seletor trava e diz "Definida pelo
+  documento: …"; o servidor repete a conta (`emissoraPelosAnexos`) na
+  geração, na edição e na PP a emitir.
+- **Envio e Pronta para envio:** saiu o "Enviar com a nota em outro
+  CNPJ?" (e o 4º parâmetro `confirmarTomadorDiferente`). O aviso azul
+  informa a troca; `seguirDocumentoNaPP` troca a empresa e refaz o PDF
+  depois de gravar os anexos. `ResultadoEnvio` ok traz `emissora`
+  (`TrocaDeEmissora | null`) e o `onEnviada` do `EnvioDialog` a recebe.
+- **Corrigir a NF:** `seguirDocumentosDaNotaCorrigida` aplica a regra na PP
+  e nas outras com a mesma nota; `onCorrigida(codigo, emissora, aviso)`.
+- **Linha do tempo:** evento `emissora_trocada` (gatilho
+  `trg_pp_registra_troca_de_emissora`), rótulo "Empresa emissora trocada" na
+  ficha (`ver-pp-drawer.tsx`) e no dossiê.
+- **PDF:** "Empresa gerencial" e "Regional" embaixo de "Job:"
+  (`ContextoPdf.empresaGerencial/regional`, obrigatórios no gerador).
+- Migration `20261015970001`: o evento novo, o gatilho e a troca nas 15 PPs
+  antigas confirmadas pelo Tiago. Testado como GP Teste Claude no
+  TES-1014/26 (PP-00206, deixada em avaliação).
+
+## ⚠️ Nota de 2026-10-16 — a verba cai na quarta de exceções sem urgência (revisão da decisão 172)
+
+Pedido do Tiago em 16/10/2026 (opção A); regra completa no fim da decisão 172.
+
+- **Regra:** `ppAceitaQuarta({ urgente, verba })` em
+  `lib/calculos/janelas-pagamento.ts` — a quarta vale na PP urgente e em
+  toda verba. `tipoDoPrazo` e `primeiraDataPossivelDoPrazo` recebem
+  `quartaLiberada` no lugar de `urgente`.
+- **Formulário** (`gerar-pp-drawer.tsx`): `quartaLiberada` alimenta o
+  calendário, a legenda, os avisos e as checagens do envio. Na verba, ligar a
+  urgência não zera o prazo; desligar a verba com uma quarta e sem urgência
+  chama `tirarAQuartaDoPrazo` (o mesmo aviso de desligar a urgência).
+  `UrgenciaPPField` ganhou `liberaQuartas` (falso na verba: a frase fica só
+  "Avisa o financeiro…"); os avisos de `prazo-e-urgencia-pp.tsx` trocaram a
+  prop `urgente` por `quartaLiberada`.
+- **Servidor** (`actions-pp.ts`): `validarVencimentosNasJanelas` recebe
+  `quartaLiberada` em gerar, PP a emitir, edição da PP gerada e "Atualizar
+  vencimento"; o envio ao financeiro só barra a quarta fora da urgência e
+  da verba.
+- **Painel:** `AtualizarVencimento` recebe `quartaLiberada` (era `urgente`).
+- **Financeiro:** selo "✓ quarta de exceções" no dossiê também na verba
+  (`pp-dossie.tsx`).
+- **Testado** no TES-1008/26 (formulário) e no TES-1001/26 (PP a emitir de
+  verba salva em 04/11 sem urgência e excluída). Sem migration.
+

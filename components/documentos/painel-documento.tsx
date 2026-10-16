@@ -21,8 +21,11 @@ import { cn } from "@/lib/utils";
  * não reabre o visualizador. Para conferir, recarregue a página — testar
  * mudando o `src` de um PDF aberto faz o parâmetro parecer ignorado.
  */
-export function enderecoParaVisualizar(url: string): string {
-  return url.includes("#") ? url : `${url}#navpanes=0&pagemode=none`;
+export function enderecoParaVisualizar(url: string, semBarra = false): string {
+  if (url.includes("#")) return url;
+  // A prévia da PP (decisão 178) abre também sem a barra do visualizador,
+  // que traz o baixar e o imprimir.
+  return `${url}#${semBarra ? "toolbar=0&" : ""}navpanes=0&pagemode=none`;
 }
 
 /**
@@ -54,6 +57,7 @@ export function PainelDocumento({
   expandido,
   onExpandir,
   onErro,
+  semBaixar = false,
   children,
 }: {
   icone: React.ReactNode;
@@ -66,6 +70,9 @@ export function PainelDocumento({
   expandido: boolean;
   onExpandir: () => void;
   onErro: (mensagem: string) => void;
+  /** Decisão 178: a prévia da PP não se baixa nem abre em outra aba — só
+   *  se confere aqui. */
+  semBaixar?: boolean;
   children: React.ReactNode;
 }) {
   const [baixando, setBaixando] = React.useState(false);
@@ -103,7 +110,7 @@ export function PainelDocumento({
               <Maximize2 className="h-3.5 w-3.5" />
             )}
           </button>
-          {url && (
+          {url && !semBaixar && (
             <>
               <button
                 type="button"
@@ -148,10 +155,13 @@ export function VisualizadorDeArquivo({
   url,
   nome,
   imagem,
+  semBarra = false,
 }: {
   url: string;
   nome: string;
   imagem: boolean;
+  /** Sem a barra do visualizador de PDF (a prévia da PP, decisão 178). */
+  semBarra?: boolean;
 }) {
   if (imagem) {
     return (
@@ -164,7 +174,7 @@ export function VisualizadorDeArquivo({
     );
   }
   return (
-    <iframe src={enderecoParaVisualizar(url)} title={nome} className="h-full w-full border-0" />
+    <iframe src={enderecoParaVisualizar(url, semBarra)} title={nome} className="h-full w-full border-0" />
   );
 }
 

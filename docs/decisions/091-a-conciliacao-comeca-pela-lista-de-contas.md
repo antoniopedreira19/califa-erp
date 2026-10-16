@@ -125,3 +125,70 @@ lançamento com data futura não infla o saldo de hoje.
 
 O breadcrumb do extrato passou a voltar para a **lista de contas**, não
 mais direto para a central financeira.
+
+## 8. Revisão de 16/10/2026 — a empresa em destaque
+
+O Tiago apontou que a divisão das contas por empresa não se destacava:
+sem contraste, a tela dava a sensação de informação demais. A tela no ar
+era a V6 aprovada em 18/09, com um desvio — no desenho as linhas das contas
+eram brancas, dentro de um card; no código a tabela ficou sem fundo, e
+linha, faixa da empresa e página saíam no mesmo cinza. Mas o próprio V6 já
+tinha a faixa quase branca e uma linha "Subtotal" repetindo o saldo da
+faixa. Entre quatro formas comparadas num protótipo com a tela real (como
+está, o desenho de 18/09, A · faixa forte e B · um bloco por empresa), ele
+escolheu a **A**:
+
+- **Tabela única, linhas brancas** (`bg-card`), colunas de largura fixa
+  (`table-fixed` + `colgroup`), como nas planilhas.
+- **A faixa da empresa é a linha do agrupamento das planilhas**: o grafite
+  claro de `RENTABILIDADE.grupoValor`, guardado em `_planilha/blocos.ts`
+  como `FAIXA_GRUPO_LISTA`. O nome da empresa sai em 14 px, sem caixa alta.
+- **O subtotal mora na faixa**, nas colunas Lanç., Entradas, Saídas e Saldo
+  atual. A linha "Subtotal · <empresa>" saiu — os números são os mesmos,
+  só não aparecem duas vezes.
+- **O total geral fecha com o fio grosso** do total da planilha
+  (`TOTAL_LISTA`).
+- **Menos peso nas linhas:** "Ativa" virou ponto e texto, sem a pílula
+  verde (a inativa, que é a exceção, mantém o selo); os traços das células
+  vazias ficaram mais claros; Entradas e Saídas em fonte mono, como o
+  saldo.
+- **Empresas em ordem alfabética** quando nenhum título de coluna está
+  ordenando (California, Empresa Teste, GoCrazy, Hitlab) — pedido do Tiago
+  no mesmo dia. Antes era a de maior saldo primeiro. Com ordem pelo título,
+  segue valendo a regra da decisão 165: a empresa entra na posição da sua
+  primeira conta.
+
+Nada mudou no que a tela informa: mesmas colunas, mesmos números, mesma
+busca e mesmo filtro pelo título.
+
+O quadro **"Saldo por empresa"**, acima da tabela, passou também para a
+ordem alfabética, a pedido do Tiago no mesmo dia — as duas listas de
+empresas da tela andam na mesma ordem. O "Saldo por tipo de conta" segue
+na ordem de saldo.
+
+## 9. Revisão de 16/10/2026 (2) — Ecossistema California × Teste
+
+Com as empresas de teste da decisão 181 (`empresas_contabeis.de_teste`), a
+Conta Teste passou a aparecer como uma quarta empresa ("Empresa Teste"),
+somando R$ 84.390,00 no consolidado da agência. A pedido do Tiago, a
+página ganhou um **seletor de visão** ao lado do período, no mesmo desenho
+das pílulas:
+
+- **Ecossistema California** (o padrão): só as contas das empresas reais.
+- **Teste**: só as contas das empresas de teste.
+
+Uma visão não aparece na outra, e **tudo segue a visão**: consolidado,
+quebras por tipo e por empresa, tabela e "Fora do total". A visão vai na
+URL (`?visao=teste`; o padrão não aparece), como o período, e os dois
+links levam um ao outro junto. Ao abrir o extrato e voltar, a visão é a
+mesma. A separação é pela **empresa** da conta, não pelo nome. Por isso a conta
+"Teste" (0001 / 12345-6), que estava na California mas só tinha movimento
+de documentos da Empresa Teste, foi passada para a Empresa Teste no mesmo
+dia, pelo cadastro de contas bancárias, a pedido do Tiago.
+
+Junto, o rodapé passou a dizer "1 conta ativa" no singular — a visão Teste,
+com uma conta só, mostrava "1 contas ativas".
+
+Arquivos: `hub-periodo.ts` (`Visao`, `VISOES`, `lerVisao`, `hrefLista`),
+`hub-dados.ts` (lê `de_teste` e filtra as contas), `hub.tsx` (o seletor),
+`page.tsx` (lê `?visao=`).

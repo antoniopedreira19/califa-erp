@@ -127,9 +127,9 @@ export function impostosDaNota(
 // Retenções na fonte da PP (decididas na aprovação; a baixa chega com elas)
 // ---------------------------------------------------------------------------
 
-/** Decisão 166: Lucro Real, Lucro Presumido e o legado `normal` têm a mesma
- *  regra de retenção; só Simples e MEI não sofrem. */
-export type RegimeDoFornecedor = "lucro_real" | "lucro_presumido" | "normal" | "simples" | "mei";
+/** "Lucro Presumido ou Real" (`normal`, decisão 179), Simples ou MEI. Só
+ *  Simples e MEI não sofrem retenção. */
+export type RegimeDoFornecedor = "normal" | "simples" | "mei";
 
 export interface ParametrosDeRetencao {
   csrf_pis: number;
@@ -260,10 +260,18 @@ export function situacaoDoCredito(e: EntradaDoCredito): SituacaoDoCredito {
   };
 }
 
-/** Os motivos da caixa "Não gera crédito" (a lista do protótipo aprovado). */
+/**
+ * Os motivos da caixa "Não gera crédito" (a lista do protótipo aprovado).
+ *
+ * "Fornecedor pessoa física" entrou em 15/10/2026: a regra do crédito não
+ * olha o tipo de pessoa do fornecedor, e o Tiago preferiu não travar —
+ * pessoa física pode chegar a emitir nota de pessoa jurídica. Quem confere
+ * a nota marca, com este motivo.
+ */
 export const MOTIVOS_SEM_CREDITO = [
   "Serviço não é insumo do job",
   "Reembolso de despesa do cliente",
   "Nota de outro tipo de serviço",
+  "Fornecedor pessoa física",
   "Outro",
 ] as const;

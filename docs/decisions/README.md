@@ -175,7 +175,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 153 | [PP a emitir: a PP é revisada antes de gerar e não se edita depois](153-pp-a-emitir.md) | 2026-10-07 |
 | 154 | [O save do orçamento inteiro: gerar em todas as linhas ou consumir o saldo de um job](154-save-do-orcamento-inteiro.md) | 2026-10-07 |
 | 155 | [O save que vem com o job é aprovado na abertura](155-save-aprovado-na-abertura.md) | 2026-10-07 |
-| 156 | [O CNPJ da PP é separado da empresa gerencial](156-cnpj-da-pp-separado-da-gerencial.md) | 2026-10-07 |
+| 156 | [O CNPJ da PP é separado da empresa gerencial (revista em 16/10: a empresa emissora segue o documento — nota, fatura ou recibo —, e o PDF ganha a empresa gerencial e a regional)](156-cnpj-da-pp-separado-da-gerencial.md) | 2026-10-07 |
 | 157 | [A PP chega ao financeiro até 15 dias antes da janela de pagamento](157-prazo-de-envio-da-pp.md) | 2026-10-07 |
 | 158 | [Planilha de um mês só no Fee e no Always On](158-planilha-de-um-mes-no-fee-e-always-on.md) | 2026-10-08 |
 | 159 | [O produtor deixa a errata pronta para envio, e o GP a envia ao financeiro](159-errata-pronta-para-envio.md) | 2026-10-08 |
@@ -194,6 +194,15 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 172 | [Quarta de exceções na PP urgente, e as datas das parcelas que se adiam (revê a 077 e a 157)](172-quarta-de-excecoes-na-pp-urgente.md) | 2026-10-14 |
 | 173 | [A PP gerada volta a se editar, no lugar (revê a 153)](173-pp-gerada-volta-a-se-editar.md) | 2026-10-13 |
 | 174 | [O job não se edita depois da abertura, o botão "Equipe" e o Produtor Responsável que envia PP com a chave do GP](174-equipe-do-job-e-envio-de-pp-pelo-produtor.md) | 2026-10-14 |
+| 175 | [A errata volta a abrir o planejado, a linha cancelada zera os dois lados e o job mostra só o valor de hoje (revê a 151)](175-errata-volta-a-abrir-o-planejado-e-valor-unico.md) | 2026-10-15 |
+| 176 | [Trocar o GP e o Produtor Responsáveis do job aberto pela Equipe, e o GP de fora do projeto entrando sozinho nos GPs do projeto](176-trocar-gp-e-produtor-do-job-aberto.md) | 2026-10-15 |
+| 177 | [A produção (GP, produtor e freela) edita o cadastro do fornecedor pelo lápis, e não só o pendente](177-producao-edita-cadastro-de-fornecedor.md) | 2026-10-15 |
+| 178 | ["Fatura" no tipo do anexo, a revisão da PP sem a linha "Nota fiscal" quando não há NF, e a prévia da PP na conferência lado a lado (revê a 153 e a 161)](178-fatura-revisao-sem-nf-e-previa-da-pp.md) | 2026-10-15 |
+| 179 | [Regime "Lucro Presumido ou Real" numa opção só no fornecedor, preenchido pela consulta do CNPJ (revê a 166)](179-regime-presumido-ou-real.md) | 2026-10-15 |
+| 180 | [O optante do Simples pode ter o ISS retido na aprovação da PP; o MEI continua travado (revê a 139)](180-iss-retido-do-simples-na-aprovacao.md) | 2026-10-15 |
+| 181 | [Empresas de teste no fiscal e a Apuração na ordem de vencimento (revê a 141)](181-empresas-de-teste-e-apuracao-por-vencimento.md) | 2026-10-16 |
+| 182 | [O adiantamento conta na emissão da nota; ajustes da lista da Apuração (revê a 141, a 142 e a 181)](182-adiantamento-na-emissao-e-ajustes-da-apuracao.md) | 2026-10-16 |
+| 183 | [O "a apurar no recebimento" vira linhas da lista da Apuração; a conta da Empresa Teste Presumido (revê a 181)](183-a-apurar-na-lista-e-conta-da-empresa-teste-presumido.md) | 2026-10-16 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -206,4 +215,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 175**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 184**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

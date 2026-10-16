@@ -110,7 +110,7 @@ O desenho da 11ª rodada do protótipo, igual à tela da PP no Contas a Pagar
 | Onde | Como abre | O que mostra | Rodapé |
 |---|---|---|---|
 | Envio ao financeiro | "Ver PP e documentos lado a lado", ao lado de "Anexos", ou o olho de um cartão (abre já nele) | O PDF da PP, o documento à vista (1, 2, 3… no cabeçalho) e a coluna "Documentos e dados" | "Voltar ao resumo" e "Enviar ao financeiro" — o mesmo envio; o "acima do planejado" aparece no aviso da tela |
-| Formulário da PP a emitir | "Ver documentos lado a lado", acima da área de anexar, ou o olho de um cartão | O documento à vista e a coluna; sem o PDF da PP, que ainda não existe | "Voltar ao formulário" |
+| Formulário da PP a emitir | "Ver documentos lado a lado", acima da área de anexar, ou o olho de um cartão | A prévia da PP (desde a [178](178-fatura-revisao-sem-nf-e-previa-da-pp.md); até ali, sem o PDF da PP, que ainda não existe), o documento à vista e a coluna | "Voltar ao formulário" |
 
 - A coluna "Documentos e dados": a área de anexar, a lista numerada com a
   situação de cada documento ("Escolha o tipo", "NF · falta preencher",
@@ -135,6 +135,13 @@ O desenho da 11ª rodada do protótipo, igual à tela da PP no Contas a Pagar
   imagem de recibo, tipos e dados preenchidos pela tela, gerada e enviada
   pelo rodapé da tela (com o "acima do planejado"); anexo já salvo de uma PP
   a emitir aberto pela URL assinada; o Contas a Pagar segue igual.
+
+⚠️ **Revista pela [178](178-fatura-revisao-sem-nf-e-previa-da-pp.md)
+(15/10/2026).** No formulário, a tela lado a lado ganhou a prévia da PP à
+esquerda: o PDF que a geração vai imprimir, com os dados do formulário,
+marcado "PRÉVIA" e sem baixar. E a revisão "Gerar o Pedido de Produção?" só
+mostra a linha "Nota fiscal" com arquivo marcado NF; "Anexos" mostra o
+número de cada documento.
 
 ## Respostas do Tiago (07/10/2026, depois da entrega)
 

@@ -85,6 +85,7 @@ import { passaDoPlanejado } from "@/lib/calculos/pps-item";
 import {
   hojeEmSaoPauloIso,
   isoParaBr,
+  ppAceitaQuarta,
   vencimentoAceitaEnvio,
 } from "@/lib/calculos/janelas-pagamento";
 import {
@@ -143,7 +144,8 @@ export interface PPDoItem {
   prazoPagamento: string;
   geradaEm: string;
   /** Pagamento urgente: o "Atualizar vencimento" oferece também as quartas
-   *  de exceções (decisão 172). Obrigatório pelo mesmo motivo do trio. */
+   *  de exceções (decisão 172), como na verba. Obrigatório pelo mesmo
+   *  motivo do trio. */
   urgente: boolean;
   servico: string;
   /** Os anexos gravados: o envio abre com eles. */
@@ -790,7 +792,10 @@ export function PainelPPsItem({
                           )}
                           {prazoPerdido && (
                             <AtualizarVencimento
-                              urgente={pp.urgente}
+                              quartaLiberada={ppAceitaQuarta({
+                                urgente: pp.urgente,
+                                verba: pp.verbaProducao,
+                              })}
                               ppId={pp.id}
                               codigo={pp.codigo}
                               vencimento={pp.prazoPagamento}
@@ -1072,12 +1077,14 @@ export function PainelPPsItem({
             tomadorPorEmpresa={tomadorPorEmpresa}
             nomeDaEmpresaDe={nomeDaEmpresa}
             moeda={moeda}
-            onEnviada={(codigo) => {
+            onEnviada={(codigo, emissora) => {
               setEnviando(null);
               onMensagem?.(
-                modoDoEnvio === "preparar"
+                (modoDoEnvio === "preparar"
                   ? `${codigo} pronta para envio. O GP envia pela aba Pedidos de Produção.`
-                  : `${codigo} enviada ao financeiro.`,
+                  : `${codigo} enviada ao financeiro.`) +
+                  // Revisão da 156: a PP passou para o CNPJ do documento.
+                  (emissora ? ` A empresa emissora passou para ${emissora.para}, o CNPJ do documento.` : ""),
               );
               router.refresh();
             }}
@@ -1090,9 +1097,15 @@ export function PainelPPsItem({
           nomeDaEmpresa={nomeDaEmpresa}
           tomadores={tomadores}
           tomadorPorEmpresa={tomadorPorEmpresa}
-          onCorrigida={(codigo) => {
+          onCorrigida={(codigo, emissora, aviso) => {
             setCorrigindoNf(null);
-            onMensagem?.(`NF da ${codigo} corrigida.`);
+            onMensagem?.(
+              aviso ??
+                `NF da ${codigo} corrigida.${
+                  // Revisão da 156: a PP passou para o CNPJ da nota corrigida.
+                  emissora ? ` A empresa emissora passou para ${emissora.para}, o CNPJ da nota.` : ""
+                }`,
+            );
             router.refresh();
           }}
         />
