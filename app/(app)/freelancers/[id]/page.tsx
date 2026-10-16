@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import {
   Mail,
-  Phone,
   MapPin,
   CreditCard,
   Building2,
@@ -9,11 +8,12 @@ import {
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Freelancer } from "@/lib/types";
+import type { Freelancer, FreelancerContrato } from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { HeroFreelancer } from "../_components/hero-freelancer";
 import { AbasPerfil } from "../_components/abas-perfil";
 import { BlocoInfo, Linha } from "../_components/bloco-info";
+import { ContratosDoFreelancer } from "../contratos/_components/contratos-do-freelancer";
 import { formatCnpj, formatCep, formatTelefone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -28,20 +28,36 @@ export default async function FreelancerPerfilPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const { data, error } = await supabase
-    .from("freelancers")
-    .select("*")
-    .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-  const freelancer = data as Freelancer | null;
+  const [freelancerRes, contratosRes] = await Promise.all([
+    supabase
+      .from("freelancers")
+      .select("*")
+      .eq("id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("freelancer_contratos")
+      .select("*, job:jobs(codigo, nome)")
+      .eq("freelancer_id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("data_inicio", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+  ]);
 
-  if (error) {
-    console.error("[freelancer.perfil]", error.message);
+  const freelancer = freelancerRes.data as Freelancer | null;
+
+  if (freelancerRes.error) {
+    console.error("[freelancer.perfil]", freelancerRes.error.message);
   }
   if (!freelancer) {
     notFound();
   }
+
+  const contratos = ((contratosRes.data ?? []) as any[]).map((c) => ({
+    ...(c as FreelancerContrato),
+    job_codigo: c.job?.codigo ?? null,
+    job_nome: c.job?.nome ?? null,
+  }));
 
   const podeEditar = PODE_EDITAR.has(session.activeRole);
   const temContato = !!(freelancer.email || freelancer.celular);
@@ -170,7 +186,16 @@ export default async function FreelancerPerfilPage({
     <div className="space-y-6">
       <BotaoVoltar reserva="/freelancers/lista" />
       <HeroFreelancer freelancer={freelancer} podeEditar={podeEditar} />
-      <AbasPerfil dados={dadosPessoais} />
+      <AbasPerfil
+        dados={dadosPessoais}
+        contratos={
+          <ContratosDoFreelancer
+            freelancerId={freelancer.id}
+            contratos={contratos}
+            podeCriar={podeEditar}
+          />
+        }
+      />
     </div>
   );
 }
