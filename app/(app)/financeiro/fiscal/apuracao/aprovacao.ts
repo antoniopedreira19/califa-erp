@@ -142,9 +142,15 @@ export function montarPedidoDeAprovacao(e: {
   hoje: string;
   /** O município da matriz da PJ: o vencimento das cotas. */
   cidadeDaMatriz: string;
+  /**
+   * A PJ é de teste (`empresas_contabeis.de_teste`, decisão 181): a guia em
+   * curso se aprova antes do fechamento (a tela pede confirmação). Nas PJs
+   * reais, só depois do fechamento.
+   */
+  pjDeTeste: boolean;
 }): ResultadoDaMontagem {
   const { guia: g, estado, entrada } = e;
-  if (estado === "em_curso") {
+  if (estado === "em_curso" && !e.pjDeTeste) {
     return { ok: false, message: "A competência ainda está em curso: a guia só se aprova depois do fechamento." };
   }
   if (estado === "aprovada") return { ok: false, message: "Esta guia já foi aprovada." };

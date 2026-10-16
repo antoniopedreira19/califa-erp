@@ -200,6 +200,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 178 | ["Fatura" no tipo do anexo, a revisão da PP sem a linha "Nota fiscal" quando não há NF, e a prévia da PP na conferência lado a lado (revê a 153 e a 161)](178-fatura-revisao-sem-nf-e-previa-da-pp.md) | 2026-10-15 |
 | 179 | [Regime "Lucro Presumido ou Real" numa opção só no fornecedor, preenchido pela consulta do CNPJ (revê a 166)](179-regime-presumido-ou-real.md) | 2026-10-15 |
 | 180 | [O optante do Simples pode ter o ISS retido na aprovação da PP; o MEI continua travado (revê a 139)](180-iss-retido-do-simples-na-aprovacao.md) | 2026-10-15 |
+| 181 | [Empresas de teste no fiscal e a Apuração na ordem de vencimento (revê a 141)](181-empresas-de-teste-e-apuracao-por-vencimento.md) | 2026-10-16 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -212,4 +213,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 181**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 182**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

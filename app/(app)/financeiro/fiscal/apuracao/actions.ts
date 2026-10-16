@@ -56,12 +56,23 @@ interface Recalculo {
   fatos: FatosDoBanco;
   hoje: string;
   guias: Guia[];
+  /** As PJs de teste (decisão 181): a guia em curso delas se aprova. */
+  pjsDeTeste: Set<string>;
 }
 
 async function recalcular(supabase: ReturnType<typeof createClient>, tenantId: string): Promise<Recalculo> {
   const hoje = hojeEmSaoPaulo();
-  const fatos = await carregarFatosFiscais(supabase, tenantId);
-  return { fatos, hoje, guias: calcularApuracao(fatos.cadastro, fatos.fatos, hoje, fatos.aprovacoes) };
+  const [fatos, testeRes] = await Promise.all([
+    carregarFatosFiscais(supabase, tenantId),
+    supabase.from("empresas_contabeis").select("id").eq("tenant_id", tenantId).eq("de_teste", true),
+  ]);
+  if (testeRes.error) throw new Error(`[fiscal.apuracao.pjs_de_teste] ${testeRes.error.message}`);
+  return {
+    fatos,
+    hoje,
+    guias: calcularApuracao(fatos.cadastro, fatos.fatos, hoje, fatos.aprovacoes),
+    pjsDeTeste: new Set(((testeRes.data ?? []) as Array<{ id: string }>).map((p) => p.id)),
+  };
 }
 
 /** Monta o pedido de uma guia já recalculada (a cidade da matriz dá o vencimento das cotas). */
@@ -79,6 +90,7 @@ function pedidoDa(r: Recalculo, g: Guia, entrada: EntradaDaAprovacao) {
     cadastro: r.fatos.cadastro,
     hoje: r.hoje,
     cidadeDaMatriz: matriz?.municipio ?? "",
+    pjDeTeste: r.pjsDeTeste.has(g.empresa_contabil_id),
   });
 }
 
