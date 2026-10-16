@@ -131,6 +131,7 @@ function montar(g: Guia, e: Partial<EntradaDaAprovacao>, estado: "a_aprovar" | "
     cadastro: CAD,
     hoje: "2027-01-05",
     cidadeDaMatriz: "Salvador",
+    pjDeTeste: false,
   });
   if (!r.ok) throw new Error(r.message);
   return r.pedido;
@@ -206,6 +207,7 @@ describe("IRPJ/CSLL: cotas sobre o valor da guia", () => {
       cadastro: CAD,
       hoje: "2027-01-05",
       cidadeDaMatriz: "Salvador",
+      pjDeTeste: false,
     });
     assert.equal(r.ok, false);
   });
@@ -228,9 +230,26 @@ describe("Rateio e justificativa", () => {
         cadastro: CAD,
         hoje: "2027-01-05",
         cidadeDaMatriz: "Salvador",
+        pjDeTeste: false,
       });
       assert.equal(r.ok, false);
     }
+  });
+
+  test("em curso se aprova só na PJ de teste (decisão 181)", () => {
+    const base = {
+      guia: guiaIrpj(9000),
+      estado: "em_curso" as const,
+      delta: 0,
+      entrada: entrada({ valor_guia: 9000 }),
+      cadastro: CAD,
+      hoje: "2027-01-05",
+      cidadeDaMatriz: "Salvador",
+    };
+    assert.equal(montarPedidoDeAprovacao({ ...base, pjDeTeste: false }).ok, false);
+    const r = montarPedidoDeAprovacao({ ...base, pjDeTeste: true });
+    assert.equal(r.ok, true);
+    if (r.ok) conferirTravas(r.pedido);
   });
 
   test("em curso e aprovada não se aprovam", () => {
@@ -243,6 +262,7 @@ describe("Rateio e justificativa", () => {
         cadastro: CAD,
         hoje: "2027-01-05",
         cidadeDaMatriz: "Salvador",
+        pjDeTeste: false,
       });
       assert.equal(r.ok, false);
     }
@@ -309,6 +329,7 @@ describe("Diferença: o complementar", () => {
       cadastro: CAD,
       hoje: "2027-01-05",
       cidadeDaMatriz: "Salvador",
+      pjDeTeste: false,
     });
     assert.equal(r.ok, false);
   });

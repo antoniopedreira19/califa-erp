@@ -7338,3 +7338,28 @@ os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
 - **Ainda sem regra:** se, na aprovação, o financeiro registrar um tomador
   diferente do da produção, a empresa emissora não segue sozinha; a frase
   vermelha "A nota está no CNPJ…" continua no dossiê e na aprovação.
+
+## ⚠️ Nota de 2026-10-16 (2) — Empresas de teste no fiscal e a Apuração na ordem de vencimento (decisão 181)
+
+- **Duas PJs de teste** no cadastro de impostos, com CNPJ fictício e a marca
+  nova `empresas_contabeis.de_teste`: Empresa Teste (88.888.888/0001-91,
+  lucro real, CNAEs da California) e Empresa Teste Presumido
+  (77.777.777/0001-91, presumido pelo caixa, CNAEs da Hitlab). A Empresa
+  Teste gerencial ganhou as regionais Teste 2 e Teste 3; as três regionais
+  de teste têm a Empresa Teste como CNPJ padrão da PP.
+- **Os projetos TES foram para a Empresa Teste/Teste** com orçamentos,
+  jobs, PPs, notas, títulos e lançamentos, e o CNPJ de tudo isso para a PJ
+  de teste (migration `20261016600002`, com o OK do Tiago). As NFs 602, 603
+  e 9001 saíram da Apuração da California. A NF 34 (AMB-1016/26) é real e
+  ficou na GoCrazy.
+- **Apuração em lista, na ordem de vencimento**, com Competência e
+  Trimestre em colunas; competência e situação viraram filtros rápidos
+  (padrão "Em aberto") e o CNPJ ganhou atalho igual ao de regional da aba
+  PPs. O prazo ("em 16 dias", "venceu há 1 dia") aparece nas guias a
+  aprovar.
+- **Na PJ de teste, a guia em curso se aprova**, com o pop-up "Aprovar antes
+  do fim da competência?". Nas PJs reais, só depois do fechamento — a regra
+  está também no servidor.
+- **Conferido em 16/10/2026** no Chrome, com os dados reais: o PIS de
+  outubro/2026 da Empresa Teste foi confirmado em curso (R$ 0,00, sem
+  título).

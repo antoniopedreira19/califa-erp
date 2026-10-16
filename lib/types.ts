@@ -3243,6 +3243,10 @@ export interface EmpresaContabil {
   endereco_cidade: string | null;
   endereco_cep: string | null;
   endereco_uf: string | null;
+  /** PJ de teste (decisão 181): CNPJ fictício para os testes; a guia em
+   *  curso dela se aprova antes do fechamento e ela fica fora dos
+   *  demonstrativos consolidados. */
+  de_teste: boolean;
   created_at: string;
   updated_at: string;
 }

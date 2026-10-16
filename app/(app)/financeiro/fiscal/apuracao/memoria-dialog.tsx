@@ -65,7 +65,13 @@ export function MemoriaDialog({
   hoje,
   onClose,
   onAprovada,
+  aprovarEmCurso,
 }: {
+  /**
+   * A guia em curso desta PJ se aprova antes do fechamento, com confirmação:
+   * só nas PJs de teste (decisão 181). O servidor confere de novo.
+   */
+  aprovarEmCurso: boolean;
   g: GuiaDaTela;
   tenantId: string;
   pj: PJDaTela | undefined;
@@ -79,7 +85,9 @@ export function MemoriaDialog({
   onClose: () => void;
   onAprovada: (mensagem: string) => void;
 }) {
-  const podeAprovar = g.estado === "a_aprovar" || g.estado === "diferenca";
+  const emCursoAprovavel = g.estado === "em_curso" && aprovarEmCurso;
+  const podeAprovar = g.estado === "a_aprovar" || g.estado === "diferenca" || emCursoAprovavel;
+  const [perguntarAntecipada, setPerguntarAntecipada] = React.useState(false);
   const diferenca = g.estado === "diferenca";
   const aprovacao = g.aprovacoes.find((a) => !a.diferenca) ?? null;
   const temComp = !diferenca && (g.compensacoes ?? []).length > 0;
@@ -129,8 +137,14 @@ export function MemoriaDialog({
     setArquivo(f);
   }
 
-  async function confirmar() {
+  async function confirmar(antecipadaConfirmada = false) {
     if (enviando) return;
+    // Decisão 181: a aprovação antes do fim da competência pede confirmação.
+    if (emCursoAprovavel && !antecipadaConfirmada) {
+      setErro(null);
+      setPerguntarAntecipada(true);
+      return;
+    }
     if (Math.abs(dif) >= 0.01 && justificativa.trim().length < JUSTIFICATIVA_MINIMA) {
       setErro(
         `Explique a diferença entre a guia da contabilidade e o valor calculado (mínimo ${JUSTIFICATIVA_MINIMA} caracteres).`,
@@ -343,9 +357,11 @@ export function MemoriaDialog({
                   Competência em curso
                 </p>
                 <p className="text-[12.5px] text-muted-foreground">
-                  O valor muda a cada nota, custo ou recebimento até {dataBr(fim)}. A aprovação abre depois do fechamento; enquanto isso, a estimativa entra no fluxo de caixa no vencimento.
+                  {emCursoAprovavel
+                    ? `O valor muda a cada nota, custo ou recebimento até ${dataBr(fim)}. Nesta PJ de teste dá para aprovar antes do fechamento: o que entrar depois volta como Diferença a aprovar.`
+                    : `O valor muda a cada nota, custo ou recebimento até ${dataBr(fim)}. A aprovação abre depois do fechamento; enquanto isso, a estimativa entra no fluxo de caixa no vencimento.`}
                 </p>
-                {g.cotas && g.cotas.length > 0 && <CotasTabela cotas={g.cotas} />}
+                {!emCursoAprovavel && g.cotas && g.cotas.length > 0 && <CotasTabela cotas={g.cotas} />}
               </>
             )}
 
@@ -607,6 +623,42 @@ export function MemoriaDialog({
             )}
           </div>
         </div>
+
+        {/* Decisão 181: a confirmação da aprovação antes do fim da competência. */}
+        <Dialog open={perguntarAntecipada} onOpenChange={(o) => !enviando && setPerguntarAntecipada(o)}>
+          <DialogContent className="sm:max-w-[460px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Hourglass className="h-5 w-5 text-amber-600" />
+                Aprovar antes do fim da competência?
+              </DialogTitle>
+              <DialogDescription>
+                {g.rotulo_competencia} vai até {dataBr(fim)}. Se entrar nota, custo ou recebimento até lá, a guia volta como Diferença a
+                aprovar.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => setPerguntarAntecipada(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPerguntarAntecipada(false);
+                  void confirmar(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-sm font-semibold text-white hover:bg-california-red-hover"
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Aprovar mesmo assim
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

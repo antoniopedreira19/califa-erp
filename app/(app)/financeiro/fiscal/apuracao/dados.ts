@@ -64,6 +64,8 @@ export interface PJDaTela {
   /** Como as guias da PJ se juntam (o texto ao lado do nome no agrupamento). */
   como_apura: string | null;
   matriz_id: string | null;
+  /** PJ de teste (decisão 181): a guia em curso se aprova, com confirmação. */
+  de_teste: boolean;
 }
 
 export interface ARecuperarDaTela extends ARecuperar {
@@ -111,7 +113,7 @@ const juntar = (itens: string[]) =>
 /** O nome do arquivo no fim do caminho ("<tenant>/guias/<uuid>/darf.pdf" → "darf.pdf"). */
 const nomeDoArquivo = (path: string | null) => (path ? path.split("/").pop() || path : null);
 
-function pjsDaTela(cad: CadastroFiscal, nomes: Map<string, string>, hoje: string): PJDaTela[] {
+function pjsDaTela(cad: CadastroFiscal, nomes: Map<string, string>, deTeste: Set<string>, hoje: string): PJDaTela[] {
   const estabs = [...cad.estabelecimentos].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
   const ids = [...new Set(estabs.map((e) => e.empresa_contabil_id))];
   return ids.map((id) => {
@@ -139,6 +141,7 @@ function pjsDaTela(cad: CadastroFiscal, nomes: Map<string, string>, hoje: string
       rotulo_regime: rotulo,
       como_apura: como,
       matriz_id: matriz?.id ?? null,
+      de_teste: deTeste.has(id),
     };
   });
 }
@@ -179,7 +182,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
   try {
     const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes] = await Promise.all([
       carregarFatosFiscais(supabase, tenantId),
-      supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia").eq("tenant_id", tenantId),
+      supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia, de_teste").eq("tenant_id", tenantId),
       supabase
         .from("fiscal_aprovacoes")
         .select("id, chave, data, valor_calculado, valor_guia, justificativa, diferenca, guia_path, aprovada_por")
@@ -235,12 +238,14 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       };
     });
 
-    const nomesDasPJs = new Map(
-      ((empresasRes.data ?? []) as Array<{ id: string; razao_social: string; nome_fantasia: string | null }>).map((e) => [
-        e.id,
-        e.nome_fantasia?.trim() || e.razao_social,
-      ]),
-    );
+    const empresas = (empresasRes.data ?? []) as Array<{
+      id: string;
+      razao_social: string;
+      nome_fantasia: string | null;
+      de_teste: boolean;
+    }>;
+    const nomesDasPJs = new Map(empresas.map((e) => [e.id, e.nome_fantasia?.trim() || e.razao_social]));
+    const pjsDeTeste = new Set(empresas.filter((e) => e.de_teste).map((e) => e.id));
 
     // Depende dos fatos (quais notas da PJ do caixa ainda têm o que receber);
     // sem nenhuma, não consulta nada.
@@ -253,7 +258,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       aRecuperar,
       aApurar: aApurar.blocos,
       aApurarErro: aApurar.erro,
-      pjs: pjsDaTela(cadastro, nomesDasPJs, hoje),
+      pjs: pjsDaTela(cadastro, nomesDasPJs, pjsDeTeste, hoje),
       estabelecimentos: [...cadastro.estabelecimentos]
         .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome))
         .map((e) => ({
