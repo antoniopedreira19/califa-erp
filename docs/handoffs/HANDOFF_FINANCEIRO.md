@@ -7406,3 +7406,18 @@ Regra completa na seção 9 da decisão 091.
   para "Mês anterior" mantendo Teste; extrato e Voltar de volta à visão
   Teste.
 
+## ⚠️ Nota de 2026-10-16 (5) — O adiantamento conta na emissão da nota; ajustes da lista da Apuração (decisão 182)
+
+- **Recebimento antes da nota:** a Apuração passa a contá-lo na data de
+  emissão da nota (IN RFB 1.700, art. 223, §2º), com a retenção do cliente
+  junto. Na Hitlab, PIS, COFINS, IRPJ e CSLL do adiantamento vão para o mês
+  (e o trimestre) da nota. A memória de cálculo mostra os dois dias. A
+  leitura traz as baixas de todas as notas com CNPJ emissor, de qualquer
+  data.
+- **Lista:** o olho sai quando há botão de ação; a diferença mostra só
+  "+R$ X" ou "−R$ X" (o sentido na dica); "saldo credor" e "calculado"
+  quebram linha dentro da coluna.
+- **Pendências registradas na 182 §3:** receita jan–set/2026 da Hitlab
+  (LC 224), rendimento de aplicação no presumido, a Hitlab reter como
+  tomadora e a forma do "a apurar no recebimento" (protótipo A/B).
+

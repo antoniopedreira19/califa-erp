@@ -35,7 +35,6 @@ import type {
   NotaSaidaFiscal,
   RecebimentoFiscal,
 } from "./apuracao";
-import { PRIMEIRA_COMPETENCIA } from "./apuracao";
 
 export interface FatosDoBanco {
   cadastro: CadastroFiscal;
@@ -46,7 +45,6 @@ export interface FatosDoBanco {
 const IMPOSTOS: readonly ImpostoRetido[] = ["ISS", "PIS", "COFINS", "CSLL", "IRRF"];
 /** As PPs cujas notas entram na Apuração. */
 const PP_QUE_CONTA = new Set(["aprovada", "pago"]);
-const INICIO = `${PRIMEIRA_COMPETENCIA}-01`;
 
 type Nome = { nome_fantasia: string | null; razao_social: string | null } | null;
 const nomeDa = (e: Nome) => e?.nome_fantasia?.trim() || e?.razao_social?.trim() || "—";
@@ -178,16 +176,19 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
       .not("estabelecimento_id", "is", null)
       .not("fiscal_cnae_id", "is", null),
     // Dois vínculos entre lançamento e título (cada um aponta o outro): o
-    // embed precisa do nome da chave.
+    // embed precisa do nome da chave. Só as baixas das notas com CNPJ
+    // emissor (as da Apuração), de qualquer data: o adiantamento recebido
+    // antes de outubro/2026 conta na emissão da nota (decisão 182).
     supabase
       .from("lancamentos_financeiros")
       .select(
-        "id, valor, data_movimento, titulo:titulos_receber!lancamentos_financeiros_titulo_receber_id_fkey(faturamento_id), " +
+        "id, valor, data_movimento, " +
+          "titulo:titulos_receber!lancamentos_financeiros_titulo_receber_id_fkey!inner(faturamento_id, nota:faturamentos!inner(estabelecimento_id)), " +
           "retencoes:baixas_retencoes(imposto, valor)",
       )
       .eq("tenant_id", tenantId)
       .eq("origem", "titulo_baixa")
-      .gte("data_movimento", INICIO),
+      .not("titulo.nota.estabelecimento_id", "is", null),
     supabase
       .from("notas_fiscais_fornecedor")
       .select(
@@ -319,15 +320,21 @@ export function montarFatos(e: {
     };
   });
 
-  const idsDeNota = new Set(notas.map((n) => n.id));
+  const emissaoDaNota = new Map(notas.map((n) => [n.id, n.emissao]));
   const recebimentos: RecebimentoFiscal[] = e.recebimentos
-    .filter((r) => r.titulo && idsDeNota.has(r.titulo.faturamento_id))
+    .filter((r) => r.titulo && emissaoDaNota.has(r.titulo.faturamento_id))
     .map((r) => {
       const retido = retidoDe(r.retencoes);
+      const emissao = emissaoDaNota.get(r.titulo!.faturamento_id)!;
+      // Decisão 182: o adiantamento conta na emissão da nota (IN RFB
+      // 1.700/2017, art. 223, §2º): o imposto vai para o mês (ou o
+      // trimestre) da nota, e a retenção junto.
+      const adiantado = r.data_movimento < emissao;
       return {
         id: r.id,
         nota_id: r.titulo!.faturamento_id,
-        data: r.data_movimento,
+        data: adiantado ? emissao : r.data_movimento,
+        ...(adiantado ? { adiantado_em: r.data_movimento } : {}),
         bruto: Math.round((Number(r.valor) + somaRetida(retido)) * 100) / 100,
         retido,
       };
