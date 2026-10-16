@@ -7397,8 +7397,13 @@ Regra completa na seção 9 da decisão 091.
   agência.
 - A visão vai na URL (`?visao=teste`) e sobrevive à troca de período e à
   ida e volta do extrato.
-- A conta "Teste" da California continua no Ecossistema: a separação é pela
-  empresa, não pelo nome da conta.
+- A separação é pela empresa da conta, não pelo nome. **A conta "Teste"**
+  (0001 / 12345-6, criada em 24/09), que estava na California, **foi para a
+  Empresa Teste** no mesmo dia, a pedido do Tiago, pelo cadastro de contas
+  bancárias (auditoria `conta_bancaria.atualizada`): os 4 lançamentos dela
+  eram todos de documentos da Empresa Teste. `empresa_id` seguiu vazio, e
+  saldo inicial e data não mudaram. Depois disso: Ecossistema com
+  −R$ 473.835,01 em outubro; Teste com 2 contas e R$ 125.421,77.
 - "Total geral · 1 conta ativa" no singular.
 - **Conferido em 16/10/2026** logado, com os dados reais: Ecossistema com
   −R$ 432.803,24 e 17 lançamentos em outubro (as 3 empresas numa linha no

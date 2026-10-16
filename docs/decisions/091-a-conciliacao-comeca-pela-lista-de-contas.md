@@ -181,8 +181,10 @@ Uma visão não aparece na outra, e **tudo segue a visão**: consolidado,
 quebras por tipo e por empresa, tabela e "Fora do total". A visão vai na
 URL (`?visao=teste`; o padrão não aparece), como o período, e os dois
 links levam um ao outro junto. Ao abrir o extrato e voltar, a visão é a
-mesma. A separação é pela **empresa** da conta, não pelo nome: a conta
-"Teste" da California continua no Ecossistema California.
+mesma. A separação é pela **empresa** da conta, não pelo nome. Por isso a conta
+"Teste" (0001 / 12345-6), que estava na California mas só tinha movimento
+de documentos da Empresa Teste, foi passada para a Empresa Teste no mesmo
+dia, pelo cadastro de contas bancárias, a pedido do Tiago.
 
 Junto, o rodapé passou a dizer "1 conta ativa" no singular — a visão Teste,
 com uma conta só, mostrava "1 contas ativas".
