@@ -65,6 +65,30 @@ export function lerPeriodo(valor: string | undefined): PeriodoChave {
     : "mes";
 }
 
+/**
+ * De quais empresas a página mostra as contas (revisão da decisão 091,
+ * 16/10/2026): as do Ecossistema California ou só as de teste
+ * (`empresas_contabeis.de_teste`, decisão 181). Uma não aparece na outra:
+ * a conta de teste não soma no consolidado da agência.
+ */
+export type Visao = "ecossistema" | "teste";
+
+export const VISOES: Array<{ chave: Visao; label: string }> = [
+  { chave: "ecossistema", label: "Ecossistema California" },
+  { chave: "teste", label: "Teste" },
+];
+
+export function lerVisao(valor: string | undefined): Visao {
+  return valor === "teste" ? "teste" : "ecossistema";
+}
+
+/** A lista com período e visão. A visão padrão não vai para a URL. */
+export function hrefLista(periodo: PeriodoChave, visao: Visao): string {
+  const q = new URLSearchParams({ periodo });
+  if (visao === "teste") q.set("visao", "teste");
+  return `/financeiro/conciliacao?${q.toString()}`;
+}
+
 /** "17/09/26" — a data como o extrato já mostra. */
 export function dataCurta(iso: string | null): string {
   if (!iso) return "—";

@@ -165,3 +165,28 @@ O quadro **"Saldo por empresa"**, acima da tabela, passou também para a
 ordem alfabética, a pedido do Tiago no mesmo dia — as duas listas de
 empresas da tela andam na mesma ordem. O "Saldo por tipo de conta" segue
 na ordem de saldo.
+
+## 9. Revisão de 16/10/2026 (2) — Ecossistema California × Teste
+
+Com as empresas de teste da decisão 181 (`empresas_contabeis.de_teste`), a
+Conta Teste passou a aparecer como uma quarta empresa ("Empresa Teste"),
+somando R$ 84.390,00 no consolidado da agência. A pedido do Tiago, a
+página ganhou um **seletor de visão** ao lado do período, no mesmo desenho
+das pílulas:
+
+- **Ecossistema California** (o padrão): só as contas das empresas reais.
+- **Teste**: só as contas das empresas de teste.
+
+Uma visão não aparece na outra, e **tudo segue a visão**: consolidado,
+quebras por tipo e por empresa, tabela e "Fora do total". A visão vai na
+URL (`?visao=teste`; o padrão não aparece), como o período, e os dois
+links levam um ao outro junto. Ao abrir o extrato e voltar, a visão é a
+mesma. A separação é pela **empresa** da conta, não pelo nome: a conta
+"Teste" da California continua no Ecossistema California.
+
+Junto, o rodapé passou a dizer "1 conta ativa" no singular — a visão Teste,
+com uma conta só, mostrava "1 contas ativas".
+
+Arquivos: `hub-periodo.ts` (`Visao`, `VISOES`, `lerVisao`, `hrefLista`),
+`hub-dados.ts` (lê `de_teste` e filtra as contas), `hub.tsx` (o seletor),
+`page.tsx` (lê `?visao=`).
