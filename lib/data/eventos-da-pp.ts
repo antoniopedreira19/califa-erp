@@ -65,6 +65,8 @@ const ROTULO: Record<PPEventoTipo, string> = {
   nf_corrigida: "NF corrigida",
   // Decisão 173: a PP gerada editada no job, antes do envio.
   editada: "Editada",
+  // Revisão da 156: a empresa emissora seguiu o documento (ou foi trocada).
+  emissora_trocada: "Empresa emissora trocada",
 };
 
 export function rotuloDoEventoPP(t: PPEventoTipo): string {
@@ -82,7 +84,9 @@ export function eventoPPMostraMotivo(t: PPEventoTipo): boolean {
     t === "cancelada" ||
     t === "prestacao_reprovada" ||
     // O que mudou na nota (revisão da decisão 152).
-    t === "nf_corrigida"
+    t === "nf_corrigida" ||
+    // De qual empresa emissora para qual (revisão da decisão 156).
+    t === "emissora_trocada"
   );
 }
 

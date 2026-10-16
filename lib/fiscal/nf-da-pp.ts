@@ -55,8 +55,8 @@ export interface RegimeDoFornecedorDaPP {
   declaracao_simples_recebida: boolean;
 }
 
-/** Decisão 166: Real e Presumido separados; `normal` é o legado. */
-const REGIMES: readonly RegimeTributarioFornecedor[] = ["lucro_real", "lucro_presumido", "normal", "simples", "mei"];
+/** Decisão 179: "Lucro Presumido ou Real" (`normal`), Simples ou MEI. */
+const REGIMES: readonly RegimeTributarioFornecedor[] = ["normal", "simples", "mei"];
 
 /** Null na verba de produção (não há fornecedor) e quando o cadastro não informou. */
 export function regimeDoFornecedorDaPP(
@@ -77,10 +77,7 @@ export function regimeDoFornecedorDaPP(
   // ela indicou. Sem `regime_consulta` (gravado antes da 142), a data só
   // existia com o regime indicado.
   const indicou = fornecedor.regime_consulta ?? fornecedor.regime_tributario;
-  // Decisão 166: a consulta diz "nenhum dos dois" (`normal`); ela confere
-  // Real e Presumido.
-  const normal = (r: string | null) => r === "normal" || r === "lucro_real" || r === "lucro_presumido";
-  const confere = indicou === regime || (normal(indicou) && normal(regime));
+  const confere = indicou === regime;
   return {
     regime,
     consultado_em: confere ? fornecedor.regime_consultado_em ?? null : null,
@@ -263,22 +260,56 @@ export function textoDoRegime(r: RegimeDoFornecedorDaPP): string {
         ? r.declaracao_simples_recebida
           ? "Optante do Simples Nacional · declaração recebida"
           : "Optante do Simples Nacional"
-        : r.regime === "lucro_real"
-          ? "Lucro Real"
-          : r.regime === "lucro_presumido"
-            ? "Lucro Presumido"
-            : "Lucro Real ou Presumido";
+        : "Lucro Presumido ou Real";
   return r.consultado_em ? `${texto} · consulta do CNPJ em ${dataBr(r.consultado_em)}` : texto;
 }
 
 /** Ao lado do nome do fornecedor, na linha das retenções do pop-up. */
 export function rotuloCurtoDoRegime(regime: RegimeTributarioFornecedor | null): string {
-  if (regime === "lucro_real") return "Lucro Real";
-  if (regime === "lucro_presumido") return "Lucro Presumido";
-  if (regime === "normal") return "Lucro Real ou Presumido";
+  if (regime === "normal") return "Lucro Presumido ou Real";
   if (regime === "simples") return "optante do Simples";
   if (regime === "mei") return "MEI";
   return "regime não informado";
+}
+
+/**
+ * Decisão 180 (revê a 139): o que o regime do fornecedor deixa reter na
+ * aprovação. O optante do Simples não sofre retenção de PIS/COFINS/CSLL e
+ * IRRF (IN SRF 459), mas o ISS pode ser retido quando o município exige
+ * (LC 123/2006, art. 21, § 4º), na alíquota da nota. O MEI não sofre
+ * retenção. Sem regime informado, segue o Lucro Presumido ou Real.
+ */
+export type RetencaoDoRegime = "todas" | "so_iss" | "nenhuma";
+
+export function retencaoDoRegime(regime: RegimeTributarioFornecedor | null): RetencaoDoRegime {
+  if (regime === "mei") return "nenhuma";
+  if (regime === "simples") return "so_iss";
+  return "todas";
+}
+
+/** Por que o imposto não pode ser retido deste regime; null quando pode. */
+export function travaDoRegime(
+  regime: RegimeTributarioFornecedor | null,
+  imposto: ImpostoRetido,
+): string | null {
+  const r = retencaoDoRegime(regime);
+  if (r === "nenhuma") return "MEI: sem retenção na fonte.";
+  if (r === "so_iss" && imposto !== "ISS") {
+    return "Optante do Simples: só o ISS pode ser retido (LC 123, art. 21, § 4º). PIS, COFINS, CSLL e IRRF não (IN 459).";
+  }
+  return null;
+}
+
+/** A primeira trava que a lista de retenções esbarra; null quando cabe toda. */
+export function retencaoForaDoRegime(
+  regime: RegimeTributarioFornecedor | null,
+  impostos: readonly ImpostoRetido[],
+): string | null {
+  for (const imposto of impostos) {
+    const trava = travaDoRegime(regime, imposto);
+    if (trava) return trava;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

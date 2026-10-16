@@ -9,7 +9,8 @@
  *
  * Decisão 172 (14/10/2026): a quarta de exceções da PP urgente tem a sua
  * data-limite (a sexta anterior), e o "Atualizar vencimento" da PP urgente
- * escolhe a data num calendário com as janelas e as quartas.
+ * escolhe a data num calendário com as janelas e as quartas. Desde
+ * 16/10/2026, a PP de verba também.
  */
 
 import * as React from "react";
@@ -111,11 +112,12 @@ export function AtualizarVencimento({
   feriados,
   podeAtualizar,
   onAtualizada,
-  urgente,
+  quartaLiberada,
 }: {
-  /** A PP é urgente: a data nova se escolhe num calendário com as janelas e
-   *  as quartas de exceções (decisão 172). Sem urgência, a lista de janelas. */
-  urgente: boolean;
+  /** A PP aceita a quarta (urgente ou de verba, `ppAceitaQuarta`): a data
+   *  nova se escolhe num calendário com as janelas e as quartas de exceções
+   *  (decisão 172). Nas outras, a lista de janelas. */
+  quartaLiberada: boolean;
   ppId: string;
   codigo: string;
   vencimento: string;
@@ -134,15 +136,15 @@ export function AtualizarVencimento({
     [hojeIso, feriados],
   );
   const [escolhida, setEscolhida] = React.useState<string>(
-    urgente ? primeiraDataPossivelDoPrazo(hojeIso, feriados, true) : (janelas[0] ?? ""),
+    quartaLiberada ? primeiraDataPossivelDoPrazo(hojeIso, feriados, true) : (janelas[0] ?? ""),
   );
   // Os feriados chegam depois do primeiro render: a escolha que saiu da
-  // lista volta para a primeira janela aberta. No calendário da PP urgente,
-  // a data fica (o servidor confere de novo).
+  // lista volta para a primeira janela aberta. No calendário da PP que
+  // aceita a quarta, a data fica (o servidor confere de novo).
   React.useEffect(() => {
-    if (urgente) return;
+    if (quartaLiberada) return;
     if (!janelas.includes(escolhida)) setEscolhida(janelas[0] ?? "");
-  }, [janelas, escolhida, urgente]);
+  }, [janelas, escolhida, quartaLiberada]);
 
   function atualizar() {
     if (!escolhida) return;
@@ -168,7 +170,7 @@ export function AtualizarVencimento({
           {podeAtualizar ? " Escolha a nova data:" : ""}
         </span>
       </p>
-      {podeAtualizar && urgente && (
+      {podeAtualizar && quartaLiberada && (
         <div className="flex flex-wrap items-start gap-2">
           <div className="w-[190px]">
             <DatePicker
@@ -186,7 +188,7 @@ export function AtualizarVencimento({
           <BotaoAtualizar pending={pending} pronto={!!escolhida} onClick={atualizar} />
         </div>
       )}
-      {podeAtualizar && !urgente && (
+      {podeAtualizar && !quartaLiberada && (
         <div className="flex flex-wrap items-center gap-2">
           <Select value={escolhida} onValueChange={setEscolhida} disabled={pending}>
             <SelectTrigger

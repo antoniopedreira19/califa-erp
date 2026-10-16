@@ -69,7 +69,7 @@ function sim(v: unknown): boolean {
 /**
  * A resposta do CNPJ.ws (`publica.cnpj.ws/cnpj/{cnpj}`) nos campos da
  * BrasilAPI. `simples` nulo é a empresa que nunca optou: Simples e MEI vão
- * como `false`, e a consulta deduz Lucro Real ou Presumido — o mesmo que a
+ * como `false`, e a consulta deduz Lucro Presumido ou Real — o mesmo que a
  * BrasilAPI dá para ela. `null` quando a resposta não tem o estabelecimento.
  */
 export function respostaDoCnpjWs(resposta: unknown): RespostaDoCnpj | null {

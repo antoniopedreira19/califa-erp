@@ -3,6 +3,7 @@
 **Data:** 2026-09-27
 **Decidido por:** Tiago
 **Migration:** nenhuma.
+**Revisões:** 29/09/2026 (§5, decisão 129); 16/10/2026 (§6, o motivo quando todas as abas caem).
 **Protótipo aprovado:** https://claude.ai/artifact/8VCtqYBcZcHEchfV4PMzMW (versão 4)
 
 ---
@@ -117,3 +118,22 @@ histórico fica sem caminho. A limpeza de envios esquecidos, que o §3
 deixou de fora, entrou com a mesma decisão: o editor do projeto descarta
 o que for trocado, removido ou abandonado, e cada envio novo apaga os
 envios do tenant com mais de um dia. Ver a decisão 129.
+
+## 6. Revisão de 16/10/2026: nenhuma aba entra pelo mesmo motivo
+
+Quando nenhuma aba é legível, o modal não chega à tabela de abas e mostra
+uma mensagem. Com uma aba só, a mensagem era o motivo dela; com mais de
+uma, era sempre "Nenhuma das N abas do arquivo está no formato do
+orçamento. Confira o modelo e envie de novo." — e o motivo sumia.
+
+Caso real: a produtora criou um orçamento de **Evento** (modelo nacional) e
+importou a interna internacional "Gen AI México", de 4 abas. As 4 caíram
+por modelo, e a tela não dizia que o problema era a categoria do
+orçamento.
+
+Agora, quando todas as abas caem pelo **mesmo** motivo, ele vai na
+mensagem: "Nenhuma das 4 abas do arquivo entra. Esta é uma planilha
+internacional (…), e o orçamento é nacional. Nada foi importado." Com
+motivos diferentes, a mensagem genérica continua. Vale nas duas portas, a
+da versão e a do editor do orçamento (`mensagemSemAbaLegivel`, em
+`lib/importacao/abas-do-arquivo.ts`).

@@ -3,6 +3,10 @@
 **Data:** 2026-10-07
 **Status:** entregas 1 e 2 aceitas e no ar (07/10/2026), com a linha que
 vira save depois da abertura contando no planejado (fim do arquivo).
+**Revista pela [175](175-errata-volta-a-abrir-o-planejado-e-valor-unico.md)
+em 15/10/2026:** a errata volta a abrir o planejado (na linha nova e na
+existente), a linha cancelada zera também o planejado e o job mostra só o
+valor de hoje. Fica desta decisão a linha **cancelada** em vez de apagada.
 **Quem decidiu:** Tiago, em 06 e 07/10/2026, a partir do protótipo
 interativo (https://claude.ai/artifact/UvUXt8rKSNsXTEofUxtt7p, v3). Todas as
 respostas seguiram a recomendação que acompanhava a pergunta.
@@ -12,6 +16,11 @@ dela, criado antes. Regra de colisão do Tiago: a mais nova move.
 **Revê:** [054](054-errata-abre-o-planejado-junto-com-o-orcado.md) (a errata
 abria o planejado junto com o orçado) e a remoção de linha da
 [030](030-errata-na-planilha-e-a-linha-vermelha.md).
+
+> ⚠️ **Revista em 15/10/2026 (decisão 175).** O planejado do job deixou de
+> ser "o da abertura": a errata o corrige, a cancelada o zera, e o
+> cabeçalho, o Totais e a RENTAB. planejada fecham sobre a planilha de
+> hoje. O resto deste arquivo descreve a regra de 07/10/2026.
 
 ## A ideia em uma frase
 

@@ -100,6 +100,88 @@ export async function lerRecusasDeSaveDoJob(
 }
 
 /**
+ * Uma troca do GP ou do Produtor Responsável do job (decisão 176), para o
+ * card da Comunicação. Vem de `jobs_trocas_de_responsavel`, que tem três
+ * FKs para `profiles`: os nomes saem numa consulta própria, nunca por embed.
+ */
+export interface TrocaDeResponsavelNoChat {
+  id: string;
+  papel: "gp" | "produtor";
+  deNome: string | null;
+  paraNome: string | null;
+  /** `profiles.id` de quem trocou — para a conta de não lidas. */
+  porId: string;
+  porNome: string | null;
+  em: string;
+  /** A chave do envio de PP estava ligada e voltou desligada (174). */
+  chaveDesligou: boolean;
+  /** O novo GP não era GP Responsável do projeto e passou a ser. */
+  entrouNosGpsDoProjeto: boolean;
+}
+
+/** As trocas de responsável de um job, da mais antiga à mais recente. */
+export async function lerTrocasDeResponsavelDoJob(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<TrocaDeResponsavelNoChat[]> {
+  const { data, error } = await supabase
+    .from("jobs_trocas_de_responsavel")
+    .select(
+      "id, papel, de_id, para_id, por_id, em, chave_desligou, entrou_nos_gps_do_projeto",
+    )
+    .eq("tenant_id", tenantId)
+    .eq("job_id", jobId)
+    .order("em", { ascending: true });
+  if (error) {
+    console.error("[job-chat.trocas]", error.message);
+    return [];
+  }
+  const linhas = (data ?? []) as Array<{
+    id: string;
+    papel: "gp" | "produtor";
+    de_id: string | null;
+    para_id: string;
+    por_id: string;
+    em: string;
+    chave_desligou: boolean;
+    entrou_nos_gps_do_projeto: boolean;
+  }>;
+  if (linhas.length === 0) return [];
+  const ids = [
+    ...new Set(linhas.flatMap((l) => [l.de_id, l.para_id, l.por_id]).filter(Boolean)),
+  ] as string[];
+  const { data: pessoas, error: pessoasErr } = await supabase
+    .from("profiles")
+    .select("id, nome")
+    .in("id", ids);
+  if (pessoasErr) console.error("[job-chat.trocas.nomes]", pessoasErr.message);
+  const nomes = new Map(
+    ((pessoas ?? []) as Array<{ id: string; nome: string | null }>).map((p) => [p.id, p.nome]),
+  );
+  return linhas.map((l) => ({
+    id: l.id,
+    papel: l.papel,
+    deNome: l.de_id ? (nomes.get(l.de_id) ?? null) : null,
+    paraNome: nomes.get(l.para_id) ?? null,
+    porId: l.por_id,
+    porNome: nomes.get(l.por_id) ?? null,
+    em: l.em,
+    chaveDesligou: l.chave_desligou,
+    entrouNosGpsDoProjeto: l.entrou_nos_gps_do_projeto,
+  }));
+}
+
+/** As trocas de outra pessoa depois da última leitura — como a errata. */
+export function trocasDeResponsavelNaoLidas(
+  trocas: TrocaDeResponsavelNoChat[],
+  profileId: string,
+  lidaAte: string | null,
+): number {
+  return trocas.filter((t) => t.porId !== profileId && (!lidaAte || t.em > lidaAte)).length;
+}
+
+/**
  * Quantas recusas de save contam como não lidas para quem está logado: as
  * de outra pessoa depois da última leitura — a mesma regra da errata, que
  * é o evento que o outro time mais precisa ver.
@@ -232,6 +314,11 @@ export function montarThreadChat(
    * silêncio. A produção vê a alteração aqui (P5 do Tiago, 28/09/2026).
    */
   alteracoesFinanceiro: JobAlteracaoFinanceiroComItens[],
+  /**
+   * As trocas do GP e do Produtor Responsável (decisão 176). Obrigatório
+   * pelo mesmo motivo das recusas.
+   */
+  trocasDeResponsavel: TrocaDeResponsavelNoChat[],
 ): ItemChat[] {
   const itens: ItemChat[] = [];
 
@@ -521,6 +608,31 @@ export function montarThreadChat(
           ? "A linha voltou ao consumo aprovado anterior."
           : "A linha voltou ao faturamento e a reserva foi liberada.",
       em: r.decididoEm,
+    });
+  }
+
+  // ---- Um card por troca de responsável (decisão 176) ----
+  // Sem errata e sem o financeiro: o card é o registro de quem trocou.
+  for (const t of trocasDeResponsavel) {
+    const notas = [
+      t.chaveDesligou ? "A chave do envio de PP voltou desligada." : null,
+      t.entrouNosGpsDoProjeto && t.paraNome
+        ? `${t.paraNome} passou a ser GP Responsável do projeto.`
+        : null,
+    ].filter(Boolean);
+    itens.push({
+      tipo: "sistema",
+      id: `troca-${t.id}`,
+      icone: "users",
+      cor: "bege",
+      titulo: t.papel === "gp" ? "GP Responsável trocado" : "Produtor Responsável trocado",
+      quando: dataHora(t.em),
+      resumo: `${t.deNome ?? "—"} → ${t.paraNome ?? "—"} · por ${t.porNome ?? "—"}.`,
+      valor: null,
+      valorTom: "neutro",
+      linhas: [],
+      nota: notas.length > 0 ? notas.join(" ") : null,
+      em: t.em,
     });
   }
 

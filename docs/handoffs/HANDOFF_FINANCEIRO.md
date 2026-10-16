@@ -7007,7 +7007,8 @@ financeiro". Regra completa na §9 da decisão 115.
 - O cadastro de fornecedor e de veículo exige, na pessoa jurídica, o
   **regime tributário** — Lucro Real e Lucro Presumido agora são opções
   separadas; o legado "Lucro Real ou Presumido" (`normal`) não se escolhe
-  mais — e o **CNAE** (`fornecedores.cnae`, a lista inteira do IBGE em
+  mais (revisto em 15/10/2026 pela decisão 179: de novo uma opção só,
+  "Lucro Presumido ou Real") — e o **CNAE** (`fornecedores.cnae`, a lista inteira do IBGE em
   `lib/fiscal/cnaes.ts`, com busca). A consulta do CNPJ preenche o CNAE
   principal e, no Simples e no MEI, o regime.
 - O cadastro antigo (sem CNAE) abre com o regime vazio na tela, "Antes: …"
@@ -7015,7 +7016,8 @@ financeiro". Regra completa na §9 da decisão 115.
   até alguém salvar.
 - **Aprovação da PP**: o regime continua vindo do cadastro. Real e
   Presumido aparecem pelo nome ("Lucro Real", "Lucro Presumido") e seguem a
-  regra de retenção do regime normal (`nf-da-pp.ts`, `calculos.ts`).
+  regra de retenção do regime normal (`nf-da-pp.ts`, `calculos.ts`). Desde
+  15/10/2026 (decisão 179), "Lucro Presumido ou Real".
 - Em 09/10/2026, os 31 fornecedores sem regime que tinham PP lançada
   receberam o regime pela consulta do CNPJ (15 Simples, 9 MEI, 7 "Lucro Real
   ou Presumido"); os 9 que já tinham bateram com a consulta. Migration
@@ -7233,3 +7235,210 @@ Regra completa na nota de 14/10/2026 da decisão 036.
   "Nenhum valor alterado"), com a frase inteira na dica.
 - Código em `fila-celulas.tsx` (novo), `fila-list.tsx` e
   `cancelamento-na-fila.tsx`. Os pop-ups não mudaram.
+
+## ⚠️ Nota de 2026-10-15 — Troca do GP ou do produtor aparece na Comunicação (decisão 176)
+
+- A produção troca o GP e o Produtor Responsáveis de job aberto sem passar
+  pelo financeiro. A troca aparece como card automático na Comunicação do
+  job, também no lado do financeiro ("Produtor Responsável trocado · Fulano
+  → Ciclano · por Beltrano").
+
+## ⚠️ Nota de 2026-10-15 (2) — O pop-up de aprovar PP em seções, com rodapé fixo (desenho; decisões 139, 142 §5 e 152 sem mudança de regra)
+
+Escolhido pelo Tiago no protótipo "Retenções no Contas a Pagar" (opção B,
+revisada em 14/10). O pop-up tinha texto demais e, com a retenção ligada,
+passava da altura da tela: 1.249 px de conteúdo. **Nenhuma regra mudou**:
+os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
+
+- **Três blocos numa caixa.**
+  - O pagamento vem sem título; os rótulos dos campos já dizem.
+  - "Retenções na fonte" tem a chave à direita. O título é o rótulo dela, e
+    a chave não repete "Reter na fonte".
+  - "Crédito de PIS/COFINS" vem sempre aberto.
+- **Ligar a chave abre a grade de alíquotas direto**, com o retido e o
+  líquido embaixo; desligar recolhe. Saíram o "Ajustar alíquotas" e a frase
+  de resumo. O "Repetir as da PP-…" fica acima da grade.
+- **As guias viraram uma tabela:** guia, valor, apuração e vencimento.
+- **Os textos de explicação viraram dica (ícone ⓘ):**
+  - viraram dica: o da data, o do centro de custo, o do cartão, o da
+    regra do crédito e o das guias;
+  - o aviso de mercadoria virou o selo "Só para serviço";
+  - a trava do Simples/MEI e a do cartão viraram o selo "Retenção travada"
+    / "Cartão: sem retenção", com a regra na dica.
+- **O crédito que a regra não dá fica explicado à vista.** É o caso do CNPJ
+  tomador no lucro presumido (Hitlab): a linha diz o porquê, e não há
+  caixa para marcar.
+- **Rodapé fixo:** Cancelar e Aprovar sempre à vista; só o meio rola. Com a
+  retenção aberta e as guias, o meio passa a rolar (cerca de 1.030 px de
+  conteúdo para ~900 px de tela).
+- **O foco ao abrir vai para o primeiro campo, não para uma dica.** Focada,
+  a dica abria o tooltip sozinha, e o Esc fechava só ele.
+- **Conferido:**
+  - logado como administrador nas PP-00148 e PP-00132 (TES-1014/26):
+    retenção, grade, guias, cartão, Cancelar, Esc e Fechar, sem aprovar
+    nada;
+  - os 19 casos do protótipo com este componente, incluindo uma aprovação
+    completa com retenção e a NF contra a Hitlab.
+
+## ⚠️ Nota de 2026-10-15 (3) — "Fornecedor pessoa física" entre os motivos de não gerar crédito (decisão 139)
+
+- O crédito de PIS/COFINS da aprovação não confere se o fornecedor é pessoa
+  física. O Tiago decidiu não travar: pessoa física pode chegar a emitir
+  nota de pessoa jurídica.
+- A lista do "Não gera crédito" ganhou "Fornecedor pessoa física", antes de
+  "Outro". O servidor aceita o motivo novo (`MOTIVOS_SEM_CREDITO`, conferido
+  em `lib/validations/nf-da-pp.ts`); o banco só exige motivo preenchido.
+
+## ⚠️ Nota de 2026-10-15 (4) — "Lucro Presumido ou Real" numa opção só no regime do fornecedor (decisão 179, revê a 166)
+
+- O regime tributário do fornecedor e do veículo volta a ter três opções:
+  **Lucro Presumido ou Real** (`normal`), Simples Nacional e MEI. A Receita
+  não diz se é Real ou Presumido, e a retenção da PP é a mesma.
+- A consulta do CNPJ passa a preencher o regime nos três casos ("nenhum
+  dos dois" é Lucro Presumido ou Real). Só falha de consulta deixa o campo
+  para escolher à mão.
+- "Lucro Presumido ou Real" é regime completo: não trava mais a PP. Os 6
+  cadastros antigos com esse regime continuam pendentes só pelo CNAE.
+- Migration `20261015900001`: os 4 cadastros com Lucro Real ou Lucro
+  Presumido (BOA MUSICA BRASIL, Mercado Livre, JK INGRESSOS e Fornecedor
+  Teste) passaram a `normal`, e a CHECK `chk_fornecedor_regime` aceita só
+  `normal`, `simples` e `mei`.
+- Na aprovação da PP (Contas a Pagar), o regime aparece como "Lucro
+  Presumido ou Real" (`textoDoRegime`, `rotuloCurtoDoRegime`).
+
+## ⚠️ Nota de 2026-10-15 (5) — O optante do Simples pode ter o ISS retido na aprovação da PP (decisão 180, revê a 139)
+
+- No pop-up "Aprovar PP", a chave "Reter na fonte" do fornecedor do
+  Simples deixou de ficar travada. Ligada, só o ISS se preenche, na alíquota
+  da nota; PIS, COFINS, CSLL e IRRF ficam com cadeado (IN 459). O selo "Só
+  ISS" explica a regra na dica.
+- O MEI continua travado ("MEI: sem retenção na fonte.").
+- `aprovarPPComNotaFiscal` passou a conferir o regime do fornecedor e
+  recusa federal de Simples e qualquer retenção de MEI
+  (`retencaoForaDoRegime`, em `lib/fiscal/nf-da-pp.ts`).
+- A baixa não mudou: ela repete a retenção da aprovação e segue editável à
+  mão, sem conferir regime.
+
+## ⚠️ Nota de 2026-10-16 — a empresa emissora da PP segue o documento (revisão da decisão 156)
+
+- **A empresa emissora (o CNPJ da PP, quem paga) é a do documento do
+  fornecedor** — NF, fatura ou recibo. A produção não precisa mais
+  confirmar "nota em outro CNPJ": a PP passa para o CNPJ do documento, com
+  o PDF refeito e o passo "Empresa emissora trocada" na linha do tempo do
+  dossiê. Fatura e recibo agora dizem "Contra qual CNPJ".
+- **15 PPs antigas trocadas em 16/10/2026** (migration `20261015970001`,
+  confirmada pelo Tiago): PP-00141 e PP-00145 → GoCrazy; PP-00043, PP-00090
+  e PP-00045 → California; PP-00049 → GoCrazy; os cachês PP-00069 a
+  PP-00077 (AMB-1001/26) → California, que já os tinha pago em 08/10 pela
+  conta California Santander. Os PDFs antigos ficaram.
+- **Para o financeiro conferir:** a PP-00090 foi aprovada em 15/10 sem a
+  retenção do ISS de R$ 300 que a NF 7408 traz (tomadora California,
+  Salvador). As PPs ainda não pagas desta lista devem sair da conta do CNPJ
+  novo — o sistema ainda não confere a conta (pendência 2 da decisão 156).
+- **Ainda sem regra:** se, na aprovação, o financeiro registrar um tomador
+  diferente do da produção, a empresa emissora não segue sozinha; a frase
+  vermelha "A nota está no CNPJ…" continua no dossiê e na aprovação.
+
+## ⚠️ Nota de 2026-10-16 (2) — Empresas de teste no fiscal e a Apuração na ordem de vencimento (decisão 181)
+
+- **Duas PJs de teste** no cadastro de impostos, com CNPJ fictício e a marca
+  nova `empresas_contabeis.de_teste`: Empresa Teste (88.888.888/0001-91,
+  lucro real, CNAEs da California) e Empresa Teste Presumido
+  (77.777.777/0001-91, presumido pelo caixa, CNAEs da Hitlab). A Empresa
+  Teste gerencial ganhou as regionais Teste 2 e Teste 3; as três regionais
+  de teste têm a Empresa Teste como CNPJ padrão da PP.
+- **Os projetos TES foram para a Empresa Teste/Teste** com orçamentos,
+  jobs, PPs, notas, títulos e lançamentos, e o CNPJ de tudo isso para a PJ
+  de teste (migration `20261016600002`, com o OK do Tiago). As NFs 602, 603
+  e 9001 saíram da Apuração da California. A NF 34 (AMB-1016/26) é real e
+  ficou na GoCrazy.
+- **Apuração em lista, na ordem de vencimento**, com Competência e
+  Trimestre em colunas; competência e situação viraram filtros rápidos
+  (padrão "Em aberto") e o CNPJ ganhou atalho igual ao de regional da aba
+  PPs. O prazo ("em 16 dias", "venceu há 1 dia") aparece nas guias a
+  aprovar.
+- **Na PJ de teste, a guia em curso se aprova**, com o pop-up "Aprovar antes
+  do fim da competência?". Nas PJs reais, só depois do fechamento — a regra
+  está também no servidor.
+- **Conferido em 16/10/2026** no Chrome, com os dados reais: o PIS de
+  outubro/2026 da Empresa Teste foi confirmado em curso (R$ 0,00, sem
+  título).
+
+## ⚠️ Nota de 2026-10-16 (3) — A empresa em destaque na lista da Conciliação (revisão da decisão 091)
+
+Regra completa na seção 8 da decisão 091.
+
+- **Faixa da empresa em grafite claro** (`FAIXA_GRUPO_LISTA`, o mesmo tom da
+  linha do agrupamento das planilhas) sobre **linhas brancas** — antes a
+  tabela não tinha fundo e faixa e linha saíam no mesmo cinza.
+- **O subtotal foi para a faixa**; a linha "Subtotal · <empresa>" saiu. O
+  total geral fecha com o fio grosso (`TOTAL_LISTA`).
+- **Empresas em ordem alfabética** por padrão, na tabela e no quadro
+  "Saldo por empresa"; na tabela, a ordem pelo título da coluna continua
+  mandando quando escolhida. O "Saldo por tipo de conta" segue por saldo.
+- "Ativa" sem pílula, traços mais claros, colunas de largura fixa.
+- Código em `hub-tabela.tsx` e duas constantes novas em
+  `_planilha/blocos.ts`. O resto da página (faixa do consolidado e as
+  quebras do saldo) não mudou.
+- **Conferido em 16/10/2026** no navegador, logado como administrador, em
+  1960 px, com os dados reais: ordem alfabética, busca ("santander" → 3
+  contas, subtotal do filtro batendo), ordem pelo título "Saldo atual",
+  limpar filtro e o clique na linha abrindo o extrato com o período. A
+  conta inativa foi vista só no protótipo (não há conta inativa no banco).
+
+## ⚠️ Nota de 2026-10-16 (4) — Ecossistema California × Teste na lista da Conciliação (revisão da decisão 091)
+
+Regra completa na seção 9 da decisão 091.
+
+- **Seletor de visão** ao lado do período: "Ecossistema California" (padrão)
+  mostra só as empresas reais; "Teste" só as de teste
+  (`empresas_contabeis.de_teste`, decisão 181). Consolidado, quebras e
+  tabela seguem a visão; a conta de teste não soma mais no saldo da
+  agência.
+- A visão vai na URL (`?visao=teste`) e sobrevive à troca de período e à
+  ida e volta do extrato.
+- A separação é pela empresa da conta, não pelo nome. **A conta "Teste"**
+  (0001 / 12345-6, criada em 24/09), que estava na California, **foi para a
+  Empresa Teste** no mesmo dia, a pedido do Tiago, pelo cadastro de contas
+  bancárias (auditoria `conta_bancaria.atualizada`): os 4 lançamentos dela
+  eram todos de documentos da Empresa Teste. `empresa_id` seguiu vazio, e
+  saldo inicial e data não mudaram. Depois disso: Ecossistema com
+  −R$ 473.835,01 em outubro; Teste com 2 contas e R$ 125.421,77.
+- "Total geral · 1 conta ativa" no singular.
+- **Conferido em 16/10/2026** logado, com os dados reais: Ecossistema com
+  −R$ 432.803,24 e 17 lançamentos em outubro (as 3 empresas numa linha no
+  quadro "Saldo por empresa"); Teste com a Conta Teste, R$ 84.390,00; troca
+  para "Mês anterior" mantendo Teste; extrato e Voltar de volta à visão
+  Teste.
+
+## ⚠️ Nota de 2026-10-16 (5) — O adiantamento conta na emissão da nota; ajustes da lista da Apuração (decisão 182)
+
+- **Recebimento antes da nota:** a Apuração passa a contá-lo na data de
+  emissão da nota (IN RFB 1.700, art. 223, §2º), com a retenção do cliente
+  junto. Na Hitlab, PIS, COFINS, IRPJ e CSLL do adiantamento vão para o mês
+  (e o trimestre) da nota. A memória de cálculo mostra os dois dias. A
+  leitura traz as baixas de todas as notas com CNPJ emissor, de qualquer
+  data.
+- **Lista:** o olho sai quando há botão de ação; a diferença mostra só
+  "+R$ X" ou "−R$ X" (o sentido na dica); "saldo credor" e "calculado"
+  quebram linha dentro da coluna.
+- **Pendências registradas na 182 §3:** receita jan–set/2026 da Hitlab
+  (LC 224), rendimento de aplicação no presumido, a Hitlab reter como
+  tomadora e a forma do "a apurar no recebimento" (protótipo A/B).
+
+## ⚠️ Nota de 2026-10-16 (6) — "A apurar no recebimento" como linhas da lista; conta da Empresa Teste Presumido (decisão 183)
+
+- **Apuração:** no presumido pelo caixa, cada PIS/COFINS (por mês do
+  recebimento previsto) e IRPJ/CSLL (por trimestre) que ainda vai nascer é
+  uma linha "A apurar" na data de vencimento (`a-apurar.tsx`:
+  `projecoesDe`, `LinhaProjecao`, `DialogoAApurar`). Chip "A apurar"; entra
+  em "Em aberto" e "Todas"; segue CNPJ e competência; sai com filtro de
+  coluna. O resumo ganha o total a apurar; o cartão do fim da página saiu.
+- **Hoje no banco não há linha "A apurar":** a Hitlab não tem nota com CNPJ
+  emissor e as 3 da Empresa Teste Presumido estão canceladas.
+- **Migration 20261016600003:** "Conta Teste Presumido" (Banco Teste,
+  corrente, R$ 100.000,00 em 01/09/2026) — aparece na Conciliação, visão
+  Teste.
+- **Pendências (183 §4):** receita jan–set/2026 e guias de IRPJ/CSLL do 1º
+  ao 3º trimestre da Hitlab (LC 224), rendimento de aplicação no presumido,
+  a Hitlab reter como tomadora.

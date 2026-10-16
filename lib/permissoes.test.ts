@@ -482,3 +482,9 @@ test("Equipe e a chave do envio de PP pelo Produtor Responsável (decisão 174)"
   assert.equal(corrigeNfNoJob("produtor", produtor, semChave), false);
   assert.equal(corrigeNfNoJob("produtor", produtor, comChave), true);
 });
+
+test("Trocar o GP e o Produtor Responsáveis do job aberto (decisão 176)", () => {
+  // Qualquer GP e o administrador — não o produtor, nem com a chave da 174.
+  const trocam = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.trocar_responsaveis")));
+  assert.deepEqual(trocam, new Set<AppRole>(["administrador", "gerente_producao"]));
+});

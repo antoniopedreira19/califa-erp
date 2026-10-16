@@ -1,7 +1,7 @@
 # 054 — "Realizar errata": a errata abre o planejado junto com o orçado
 
 **Data:** 2026-09-07
-**Status:** aceita — **revista pela [150](151-errata-nao-mexe-no-planejado-e-cancela-linha.md) em 2026-10-07**: a errata não abre mais o planejado (nem na linha nova, que entra zerada, nem na existente), e a linha deixou de ser removida — é cancelada, com o planejado mantido.
+**Status:** aceita — **revista pela [150](151-errata-nao-mexe-no-planejado-e-cancela-linha.md) em 2026-10-07**: a errata não abre mais o planejado (nem na linha nova, que entra zerada, nem na existente), e a linha deixou de ser removida — é cancelada, com o planejado mantido. **Em vigor de novo no planejado desde 2026-10-15 ([175](175-errata-volta-a-abrir-o-planejado-e-valor-unico.md))**: a errata volta a abrir o planejado na linha nova e na existente; a linha continua cancelada (não removida), agora com o planejado zerado.
 **Contexto:** modo errata da Planilha Interna do job (`/jobs/[jobId]`,
 aba "Planilha Interna", e a mesma seção em `/financeiro/jobs/[jobId]`).
 Pedido do Tiago em 07/09/2026. Completa a 030 (errata na planilha) e a

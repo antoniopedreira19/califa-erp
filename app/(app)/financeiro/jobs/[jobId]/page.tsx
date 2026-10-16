@@ -222,7 +222,6 @@ export default async function JobNoFinanceiroPage({
     job,
     versaoAprovada,
     totaisJob,
-    aberturaDoJob,
     custoPlanejadoJob,
     custoRealizadoJob,
     bvPlanejadoJob,
@@ -525,9 +524,9 @@ export default async function JobNoFinanceiroPage({
                   resumoFinanceiro?.deducoesDoResultado ??
                   totaisJob.deducoesDoResultado
                 }
-                // O job como foi aberto (decisão 151): o mesmo da página de
-                // Jobs.
-                abertura={aberturaDoJob}
+                // Só o valor do job de hoje, como na página de Jobs (volta
+                // atrás da decisão 151, em 15/10/2026).
+                abertura={null}
                 custoPlanejado={
                   custoPlanejadoJob + (resumoFinanceiro?.planejadoDosPedidos ?? 0)
                 }
@@ -806,8 +805,8 @@ export default async function JobNoFinanceiroPage({
               papelCorrigeNf={pode(session.activeRole, "jobs.corrigir_nf_pp")}
               confirmarSaidaParaOrcamento
               edicaoDoFinanceiro={edicaoDoFinanceiro}
-              // O job como foi aberto (decisão 151): o mesmo da página de Jobs.
-              aberturaDoJob={aberturaDoJob}
+              // O Totais fecha sobre o job de hoje (15/10/2026).
+              aberturaDoJob={null}
               // O financeiro não faz errata nem vê a pronta (decisão 159).
               papelNaErrata={null}
               errataPronta={null}

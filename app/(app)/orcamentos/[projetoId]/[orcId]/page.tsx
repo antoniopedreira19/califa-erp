@@ -8,7 +8,8 @@ import { FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
-import { listarGpsDoProjeto, listarProdutoresAtivos } from "@/lib/data/members";
+import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
+import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
 import {
   orcamentoStatusLabel,
@@ -156,6 +157,18 @@ function comQuemEstaNoOrcamento(
   );
 }
 
+/** O mesmo, na lista de GP (decisão 176). Quem está gravado e não pode
+ *  mais ser GP vem marcado como do projeto: o campo mostra o nome sem o
+ *  aviso de que ele entra, e o servidor explica a recusa. */
+function gpsComQuemEstaNoOrcamento(
+  lista: GpParaEscolha[],
+  id: string | null | undefined,
+  nome: string | null | undefined,
+): GpParaEscolha[] {
+  if (!id || lista.some((g) => g.id === id)) return lista;
+  return [...lista, { id, nome: nome ?? "—", doProjeto: true }];
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -235,7 +248,7 @@ export default async function OrcamentoDetailPage({
     reservadoRes,
     canceladoAposAberturaRes,
     regionaisProjRes,
-    gpsDoProjeto,
+    gpsParaOrcamento,
     cidadesIniciais,
     produtores,
     categoriasRes,
@@ -346,9 +359,10 @@ export default async function OrcamentoDetailPage({
       .select("regional:regionais(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
-    // Só os GPs Responsáveis que podem ser GP — sem a Equipe e sem quem
-    // não tem o papel (decisão 170).
-    listarGpsDoProjeto(params.projetoId),
+    // Quem pode ser GP: os GPs Responsáveis do projeto primeiro, e os
+    // outros GPs depois — quem vem de fora entra no projeto ao salvar
+    // (decisão 176, que revisa a 170).
+    listarGpsParaOrcamento(params.projetoId, session.activeTenant.id),
     // Só as primeiras cidades, e as mesmas para os dois consumidores desta
     // tela: o editor do orçamento e o combobox do modal de abertura. O
     // cadastro comporta o Brasil inteiro — o resto vem do servidor a cada
@@ -503,8 +517,8 @@ export default async function OrcamentoDetailPage({
   // (decisões 168 e 170), e o orçamento gravado com alguém fora dele
   // abriria o campo vazio. Assim o nome aparece, e o servidor explica a
   // recusa.
-  const gpsDoEnvio = comQuemEstaNoOrcamento(
-    gpsDoProjeto,
+  const gpsDoEnvio = gpsComQuemEstaNoOrcamento(
+    gpsParaOrcamento,
     orcamentoRaw?.gp_responsavel_id,
     orcamentoRaw?.gp?.nome,
   );
@@ -860,7 +874,7 @@ export default async function OrcamentoDetailPage({
               regionaisDoProjeto={regionaisDoProjeto}
               cidadesIniciais={cidadesIniciais}
               cidadeAtual={cidadeAtual}
-              gpsDoProjeto={gpsDoEnvio}
+              gps={gpsDoEnvio}
               produtores={produtoresDoEnvio}
               projetoNome={projetoRaw.nome}
               projetoCodigo={projetoRaw.codigo}
@@ -1148,7 +1162,7 @@ function VersaoSelecionada({
   regionais: { id: string; nome: string }[];
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
   /** Listas do envio para abertura (decisão 135). */
-  gpsDoEnvio: Pick<Profile, "id" | "nome">[];
+  gpsDoEnvio: GpParaEscolha[];
   produtoresDoEnvio: Pick<Profile, "id" | "nome">[];
   cidadesIniciais: CidadeOpcao[];
   clienteNome: string;
@@ -1717,7 +1731,7 @@ function VersaoSelecionada({
         projetoNome={projetoRaw?.nome ?? "—"}
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
-        gpsDoProjeto={gpsDoEnvio}
+        gps={gpsDoEnvio}
         produtores={produtoresDoEnvio}
         // Já vêm limitadas de `listarCidadesIniciais`; o resto do Brasil
         // vem do servidor a cada digitação.

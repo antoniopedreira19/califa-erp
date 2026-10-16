@@ -69,7 +69,7 @@ import {
 } from "@/lib/fiscal/nf-da-pp";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
-import { ehQuarta, qualJanela } from "@/lib/calculos/janelas-pagamento";
+import { ehQuarta, ppAceitaQuarta, qualJanela } from "@/lib/calculos/janelas-pagamento";
 import type { PPRow } from "./pedidos-compra-list";
 import { useChatPPsOpcional } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
@@ -171,10 +171,14 @@ export function PPDossie({
   /** O selo do vencimento: janela do 08, do 20, ou nenhuma — a PP gerada
    *  antes da regra de 14/09/2026 (decisão 077). */
   const janelaDoVencimento = vencimentoOriginal ? qualJanela(vencimentoOriginal) : null;
-  /** A quarta de exceções da PP urgente (decisão 172): selo vermelho, da
-   *  cor do "Urgente". Sem ele, a quarta cairia em "fora das janelas". */
+  /** A quarta de exceções da PP urgente ou de verba (decisão 172): selo
+   *  vermelho, da cor do "Urgente". Sem ele, a quarta cairia em "fora das
+   *  janelas". */
   const quartaDeExcecoes =
-    !janelaDoVencimento && pp.urgente && vencimentoOriginal !== "" && ehQuarta(vencimentoOriginal);
+    !janelaDoVencimento &&
+    ppAceitaQuarta({ urgente: pp.urgente, verba: pp.verba_producao }) &&
+    vencimentoOriginal !== "" &&
+    ehQuarta(vencimentoOriginal);
 
   return (
     // `flex-1` e não altura automática: sem ele a coluna encolhia até o
@@ -462,9 +466,9 @@ function Historico({ pp }: { pp: PPRow }) {
               {e.por_nome ? <span className="text-muted-foreground"> · {e.por_nome}</span> : null}
               {e.motivo && eventoPPMostraMotivo(e.evento) ? (
                 <span className="mt-0.5 block break-words text-muted-foreground">
-                  {/* Na NF corrigida, o motivo é o que mudou, escrito pelo
-                      banco: sem aspas. */}
-                  {e.evento === "nf_corrigida" ? e.motivo : <>“{e.motivo}”</>}
+                  {/* Na NF corrigida e na troca da empresa emissora, o motivo é
+                      o que mudou, escrito pelo banco: sem aspas. */}
+                  {e.evento === "nf_corrigida" || e.evento === "emissora_trocada" ? e.motivo : <>“{e.motivo}”</>}
                 </span>
               ) : null}
             </span>

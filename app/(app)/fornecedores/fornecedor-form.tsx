@@ -23,7 +23,7 @@
  * dizer o que falta antes do clique; quem recusa de verdade é a action.
  *
  * Módulo fiscal (02/10/2026): a pessoa jurídica ganha o **regime
- * tributário** — Lucro Real ou Presumido, Simples Nacional ou MEI —, ao
+ * tributário** — Lucro Presumido ou Real, Simples Nacional ou MEI —, ao
  * lado da razão social. A consulta do CNPJ que o cadastro novo já faz
  * (BrasilAPI) preenche o regime pelos campos de opção pelo Simples e pelo
  * MEI, e a origem fica embaixo do campo; trocado à mão para outro, o texto
@@ -41,9 +41,9 @@
  * rápido (o "+" da PP, do BV e o pop-up do veículo) e ficam só na página
  * do cadastro. A produção anexava a NF e o print da consulta do CNPJ no
  * lugar da declaração. O que o cadastro já tem continua indo no envio, pelo
- * estado, então editar pelo pop-up não apaga nada. E Lucro Real ou
- * Presumido perdeu a nota azul; a do Simples, que fala da declaração, sai
- * do cadastro rápido.
+ * estado, então editar pelo pop-up não apaga nada. E Lucro Presumido ou
+ * Real perdeu a nota azul; a do Simples, que fala da declaração, sai do
+ * cadastro rápido.
  *
  * Decisão 161 (09/10/2026): conta e PIX em dois blocos sempre à vista, e a
  * marcação "Sem conta nem PIX no cadastro" para o fornecedor que manda boleto
@@ -51,15 +51,16 @@
  * rodapé deixa de cobrar conta ou PIX e o salvar grava os dois vazios (o
  * servidor e a CHECK do banco repetem a regra).
  *
- * Decisão 166 (09/10/2026): na pessoa jurídica o **regime** (Lucro Real e
- * Lucro Presumido agora separados) e o **CNAE** (a lista do IBGE inteira,
- * com busca) são obrigatórios. A consulta do CNPJ preenche o CNAE principal
- * e, no Simples e no MEI, o regime. O cadastro antigo, que ainda não tem
+ * Decisão 166 (09/10/2026): na pessoa jurídica o **regime** e o **CNAE**
+ * (a lista do IBGE inteira, com busca) são obrigatórios. A consulta do CNPJ
+ * preenche o CNAE principal e o regime — nos três casos desde a decisão
+ * 179 (15/10/2026), que juntou Real e Presumido de novo numa opção só,
+ * "Lucro Presumido ou Real". O cadastro antigo, que ainda não tem
  * CNAE, abre com o regime vazio na tela ("Antes: …") e os dois campos
  * marcados em vermelho, e consulta o CNPJ sozinho para sugerir. Aberto
- * pelo lápis da PP por quem não edita fornecedor (GP, produtor, freelancer),
- * o cadastro pendente se edita inteiro — o servidor aceita enquanto ele
- * estiver pendente (`checarEditarFornecedor`).
+ * pelo lápis da PP pela produção (GP, produtor, freelancer), o cadastro se
+ * edita inteiro — pendente ou não desde a decisão 177
+ * (`checarCadastroDeFornecedor`).
  */
 
 import * as React from "react";
@@ -452,19 +453,19 @@ export function FornecedorForm({
   //
   // Decisão 166: o cadastro antigo (sem CNAE) abre com o regime vazio na
   // tela — o banco guarda o antigo até a revisão, porque a aprovação das PPs
-  // já enviadas o lê —, e o legado "Lucro Real ou Presumido" também abre
-  // vazio, para escolher um dos dois. O texto embaixo diz o que havia.
+  // já enviadas o lê. O texto embaixo diz o que havia, e a consulta do CNPJ
+  // da abertura sugere de novo.
   const emRevisao = cadastroSemRevisao(fornecedor);
   const regimeGravado = fornecedor?.regime_tributario ?? null;
-  const regimeAntes = emRevisao || regimeGravado === "normal" ? regimeGravado : null;
+  const regimeAntes = emRevisao ? regimeGravado : null;
   const [regime, setRegime] = React.useState<RegimeTributarioFornecedor | null>(
     regimeAntes ? null : regimeGravado,
   );
   /** Decisão 166: o CNAE da pessoa jurídica (7 dígitos). Controlado, como o
    *  regime. */
   const [cnae, setCnae] = React.useState<string | null>(fornecedor?.cnae ?? null);
-  /** O cadastro abriu sem regime, com o legado ou sem CNAE: o que falta fica
-   *  em vermelho até ser preenchido. */
+  /** O cadastro abriu sem regime ou sem CNAE: o que falta fica em vermelho
+   *  até ser preenchido. */
   const abriuIncompleto = pendenciasDoCadastroFiscal(fornecedor).length > 0;
   /** O que a consulta do CNPJ disse do regime, e de qual CNPJ. Muda só com
    *  uma consulta nova; na edição, abre com a que o cadastro gravou. */
@@ -761,8 +762,8 @@ export function FornecedorForm({
   }
 
   // Decisão 166: o cadastro que abriu incompleto consulta o CNPJ sozinho, e
-  // a consulta sugere o que sabe (o CNAE e, no Simples ou no MEI, o regime)
-  // nos campos vazios — quem revisa confere e salva.
+  // a consulta sugere o que sabe (o CNAE e o regime) nos campos vazios —
+  // quem revisa confere e salva.
   React.useEffect(() => {
     const doc = onlyDigits(fornecedor?.cpf_cnpj ?? "");
     if (abriuIncompleto && fornecedor?.tipo_pessoa === "juridica" && doc.length === 14) {
@@ -1330,8 +1331,8 @@ export function FornecedorForm({
 
               {/* Módulo fiscal: o que o regime faz com as retenções e o
                   crédito, na aprovação da PP. Fora do pop-up rápido do
-                  veículo (Tiago, 07/10/2026, decisão 150). Lucro Real ou
-                  Presumido não tem nota, e a do Simples, que fala da
+                  veículo (Tiago, 07/10/2026, decisão 150). Lucro Presumido
+                  ou Real não tem nota, e a do Simples, que fala da
                   declaração, sai do cadastro rápido junto com ela (Tiago,
                   07/10/2026). */}
               {ehPj &&

@@ -26,6 +26,7 @@ import { formatCurrency } from "@/lib/utils";
 import { enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
 import {
   DOCUMENTO_TIPOS,
+  DOCUMENTO_TIPOS_FISCAIS,
   PP_URGENTE_JUSTIFICATIVA_MIN,
   verbaDeResponsavel,
   type TipoVerba,
@@ -42,7 +43,14 @@ import {
   parcelasFecham,
 } from "@/lib/calculos/pps-item";
 import { aplicarConclusaoDoItem } from "./conclusao-item";
-import { cnpjPadraoDaPP, empresaDoDocumento, type CnpjDoDocumento } from "@/lib/fiscal/cnpj-da-pp";
+import {
+  DOCUMENTOS_EM_CNPJS_DIFERENTES,
+  cnpjPadraoDaPP,
+  documentoTemCnpj,
+  emissoraDosDocumentos,
+  empresaDoDocumento,
+  type CnpjDoDocumento,
+} from "@/lib/fiscal/cnpj-da-pp";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
 import { listarPendencias, pendenciasDoCadastroFiscal } from "@/lib/fiscal/regime-do-fornecedor";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
@@ -70,6 +78,7 @@ import {
   isoParaBr,
   ppSegueOPrazoDeEnvio,
   primeiraDataDaProximaParcela,
+  ppAceitaQuarta,
   primeiraDataPossivelDoPrazo,
   primeiraJanelaComEnvioAberto,
   vencimentoAceitaEnvio,
@@ -414,22 +423,25 @@ function camposDeUrgencia(
  * PP gerada antes de 14/09/2026, que só precisa obedecer quando alguém
  * trocar a data (pergunta 6a). Sem esta checagem aqui, a regra dependeria
  * só do calendário da tela.
+ *
+ * `quartaLiberada` vem de `ppAceitaQuarta`: a PP urgente (decisão 172) e,
+ * desde 16/10/2026, a verba, urgente ou não.
  */
 function validarVencimentosNasJanelas(
   datas: string[],
   gravadas: string[],
   feriados: string[],
-  urgente: boolean,
+  quartaLiberada: boolean,
 ): string | null {
   const hoje = hojeEmSaoPauloIso();
   for (let i = 0; i < datas.length; i++) {
     const data = datas[i].slice(0, 10);
     const br = data.split("-").reverse().join("/");
-    // A quarta de exceções só vale com urgência (decisão 172) — mesmo a
-    // gravada, quando a urgência sai. As PPs de antes da 077 com o prazo
-    // numa quarta são de setembro e já estão no financeiro.
-    if (i === 0 && !urgente && ehQuarta(data) && !ehJanelaDePagamento(data) && data >= INICIO_DA_QUARTA) {
-      return `A quarta de exceções (${br}) só vale para pagamento urgente. Marque a urgência ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`;
+    // A quarta de exceções só vale na PP urgente e na verba (decisão 172) —
+    // mesmo a gravada, quando a urgência ou a verba sai. As PPs de antes da
+    // 077 com o prazo numa quarta são de setembro e já estão no financeiro.
+    if (i === 0 && !quartaLiberada && ehQuarta(data) && !ehJanelaDePagamento(data) && data >= INICIO_DA_QUARTA) {
+      return `A quarta de exceções (${br}) só vale para verba ou pagamento urgente. Marque a urgência ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`;
     }
     // A data gravada que não mudou passa (pergunta 6a da 077). Da 2ª parcela
     // em diante, só se a anterior também não mudou: com ela andando, a
@@ -441,15 +453,15 @@ function validarVencimentosNasJanelas(
       return `O vencimento ${br} já passou. Escolha uma janela de pagamento a partir de hoje.`;
     }
     if (i === 0) {
-      const quarta = urgente && ehQuarta(data) && !ehJanelaDePagamento(data);
+      const quarta = quartaLiberada && ehQuarta(data) && !ehJanelaDePagamento(data);
       if (!quarta && !ehJanelaDePagamento(data)) {
-        return urgente
-          ? `${br} não é uma janela de pagamento nem uma quarta de exceções. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte — e, no pagamento urgente, nas quartas.`
+        return quartaLiberada
+          ? `${br} não é uma janela de pagamento nem uma quarta de exceções. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte — e, na verba e no pagamento urgente, nas quartas.`
           : `${br} não é uma janela de pagamento. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte.`;
       }
       // O prazo de envio (decisão 157; na quarta, a sexta anterior) só pesa
       // no 1º vencimento: as parcelas seguintes vêm depois dele.
-      const erroPrazo = erroDoPrazoDeEnvio(data, hoje, feriados, urgente);
+      const erroPrazo = erroDoPrazoDeEnvio(data, hoje, feriados, quartaLiberada);
       if (erroPrazo) return erroPrazo;
       continue;
     }
@@ -479,11 +491,11 @@ function erroDoPrazoDeEnvio(
   vencimento: string,
   hoje: string,
   feriados: string[],
-  urgente: boolean,
+  quartaLiberada: boolean,
 ): string | null {
   if (vencimentoAceitaEnvio(vencimento, hoje, feriados)) return null;
   const limite = dataLimiteDeEnvio(vencimento, feriados);
-  const primeira = primeiraDataPossivelDoPrazo(hoje, feriados, urgente);
+  const primeira = primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada);
   if (limite && !ehJanelaDePagamento(vencimento)) {
     return `A quarta de exceções ${isoParaBr(vencimento)} fechou em ${isoParaBr(limite)}: ela só pode ser escolhida, e a PP enviada, até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeira)}.`;
   }
@@ -521,18 +533,33 @@ function horariosEmOrdem(quantos: number): string[] {
   return Array.from({ length: quantos }, (_, i) => new Date(agora + i).toISOString());
 }
 
-/** Os dados da NF do anexo, só quando ele é do tipo NF. */
+/** Os dados da NF do anexo, só quando ele é do tipo NF. O CNPJ vale também
+ *  para a fatura e o recibo (revisão da 156, 16/10/2026). */
 function nfDoAnexo(a: AnexoUploaded) {
   const nf = a.documento_tipo === "nota_fiscal";
   return {
     nf_data_emissao: nf ? a.nf_data_emissao : null,
     nf_valor: nf ? a.nf_valor : null,
-    nf_tomador_estabelecimento_id: nf ? a.nf_tomador_estabelecimento_id : null,
+    nf_tomador_estabelecimento_id: documentoTemCnpj(a.documento_tipo) ? a.nf_tomador_estabelecimento_id : null,
     nf_valor_na_pp: nf ? a.nf_valor_na_pp : null,
   };
 }
 
 type AnexoUploaded = z.infer<typeof anexoUploadedSchema>;
+
+/**
+ * A empresa emissora da PP com estes anexos (revisão da 156, 16/10/2026): o
+ * CNPJ do documento (nota, fatura ou recibo), quando ele diz; sem documento,
+ * o escolhido no formulário. Documentos em CNPJs diferentes barram.
+ */
+function emissoraPelosAnexos(
+  anexos: AnexoUploaded[],
+  escolhido: string | null,
+): { ok: true; id: string | null } | { ok: false; message: string } {
+  const pelosDocumentos = emissoraDosDocumentos(anexos);
+  if (pelosDocumentos.tipo === "divergente") return { ok: false, message: DOCUMENTOS_EM_CNPJS_DIFERENTES };
+  return { ok: true, id: pelosDocumentos.tipo === "documento" ? pelosDocumentos.estabelecimentoId : escolhido };
+}
 
 /**
  * Enviar (e reenviar) PP ao financeiro é do GP e do administrador (decisão
@@ -915,17 +942,16 @@ export interface AcimaDoPlanejado {
   excedente: number;
 }
 
-/** As NFs cujo CNPJ tomador não é o CNPJ da PP (decisão 156): o envio
- *  pede "tem certeza?" e o financeiro decide na aprovação. */
-export interface TomadorDiferente {
-  /** O CNPJ da PP (`fiscal_estabelecimentos.id`). */
-  cnpjDaPP: string | null;
-  notas: Array<{ numero: string; tomador: string }>;
+/** A empresa emissora que mudou porque o documento estava em outro CNPJ
+ *  (revisão da 156, 16/10/2026), com os nomes curtos para o aviso. */
+export interface TrocaDeEmissora {
+  de: string | null;
+  para: string;
 }
 
 export type ResultadoEnvio =
-  | { ok: true; codigo: string }
-  | { ok: false; message: string; acimaDoPlanejado?: AcimaDoPlanejado; tomadorDiferente?: TomadorDiferente };
+  | { ok: true; codigo: string; emissora: TrocaDeEmissora | null }
+  | { ok: false; message: string; acimaDoPlanejado?: AcimaDoPlanejado };
 
 /**
  * O CNPJ da PP na geração (decisão 156): o escolhido no formulário ou, sem
@@ -994,14 +1020,18 @@ interface ContextoPdf {
   projeto: { campanha: string | null };
   cliente: { nome_fantasia: string };
   responsavelNome: string;
+  /** Revisão da 156 (16/10/2026): a empresa gerencial e a regional do job,
+   *  embaixo do "Job:". Sempre as do job. */
+  empresaGerencial: string | null;
+  regional: string | null;
 }
 
 async function carregarContextoPdf(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
-  job: { projeto_id: string | null },
+  job: { projeto_id: string | null; empresa_id: string | null; regional_id: string | null },
 ): Promise<ContextoPdf> {
-  const [projetoRes] = await Promise.all([
+  const [projetoRes, empresaRes, regionalRes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
@@ -1010,7 +1040,25 @@ async function carregarContextoPdf(
       .eq("id", job.projeto_id ?? "")
       .eq("tenant_id", tenantId)
       .maybeSingle(),
+    job.empresa_id
+      ? supabase
+          .from("empresas")
+          .select("nome_fantasia, razao_social")
+          .eq("id", job.empresa_id)
+          .eq("tenant_id", tenantId)
+          .maybeSingle<{ nome_fantasia: string | null; razao_social: string }>()
+      : Promise.resolve({ data: null }),
+    job.regional_id
+      ? supabase
+          .from("regionais")
+          .select("nome")
+          .eq("id", job.regional_id)
+          .eq("tenant_id", tenantId)
+          .maybeSingle<{ nome: string }>()
+      : Promise.resolve({ data: null }),
   ]);
+  const empresa = empresaRes.data as { nome_fantasia: string | null; razao_social: string } | null;
+  const regional = regionalRes.data as { nome: string } | null;
 
   const projeto = projetoRes.data as {
     campanha: string | null;
@@ -1022,6 +1070,8 @@ async function carregarContextoPdf(
     projeto: { campanha: projeto?.campanha ?? null },
     cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
     responsavelNome: projeto?.responsavel?.nome ?? "",
+    empresaGerencial: empresa ? (empresa.nome_fantasia ?? empresa.razao_social) : null,
+    regional: regional?.nome ?? null,
   };
 }
 
@@ -1087,6 +1137,8 @@ async function renderizarDocumentoDaPP(args: {
   /** Decisão 161: a PP paga por boleto — o PDF troca a linha do PIX por
    *  "Pagamento: Boleto". */
   pagamentoPorBoleto?: boolean;
+  /** Decisão 178: a prévia da conferência — marca d'água e sem gravar. */
+  previa?: boolean;
 }): Promise<{ path: string; buffer: Buffer }> {
   // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
   // seus side-effects de inicialização do resto do módulo.
@@ -1107,11 +1159,14 @@ async function renderizarDocumentoDaPP(args: {
       verba_titular_tipo: args.pp.verba_titular_tipo,
     },
     pagamentoPorBoleto: args.pagamentoPorBoleto === true,
+    previa: args.previa === true,
     empresa: args.empresa as never,
     fornecedor: (args.fornecedor ?? null) as never,
     responsavelVerbaNome: args.responsavelVerbaNome,
     pagamentoDoTitular: args.pagamentoDoTitular,
     job: args.job,
+    empresaGerencial: args.contexto.empresaGerencial,
+    regional: args.contexto.regional,
     projeto: args.contexto.projeto,
     cliente: args.contexto.cliente,
     responsavelNome: args.contexto.responsavelNome,
@@ -1335,7 +1390,7 @@ async function finalizarPedidoCompraImpl(
     d.parcelas.map((p) => p.data_vencimento),
     [],
     await carregarFeriadosNacionais(supabase, session.activeTenant.id),
-    d.urgente === true,
+    ppAceitaQuarta({ urgente: d.urgente === true, verba: d.verba_producao }),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(d, null, session.profile.id);
@@ -1470,12 +1525,15 @@ async function finalizarPedidoCompraImpl(
   if (!empRes.data)
     return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
 
-  // Decisão 156: o CNPJ da PP (o do PDF, o tomador esperado da NF).
+  // Decisão 156: o CNPJ da PP (o do PDF). Revisão de 16/10/2026: com
+  // documento que diga o CNPJ, a empresa emissora é a dele.
+  const emissora = emissoraPelosAnexos(anexosParsed.data, d.estabelecimento_id ?? null);
+  if (!emissora.ok) return emissora;
   const cnpjDaPP = await cnpjDaPPNaGeracao(
     supabase,
     session.activeTenant.id,
     { regional_id: job.regional_id, empresa_id: job.empresa_id },
-    d.estabelecimento_id ?? null,
+    emissora.id,
   );
   if (!cnpjDaPP.ok) return cnpjDaPP;
 
@@ -2128,6 +2186,113 @@ export async function signedUrlAnexoAEmitir(
 }
 
 /**
+ * A prévia do PDF da PP na conferência lado a lado do formulário (decisão
+ * 178, 15/10/2026). É o documento que a geração vai imprimir, montado com
+ * os dados do formulário como estão agora — fornecedor, valor, parcelas,
+ * CNPJ da PP —, para conferir com o documento anexado antes de gerar.
+ *
+ * Sai SEM código ("PRÉVIA" no lugar dele) e com a marca d'água "PRÉVIA" em
+ * toda página. Não grava nada, nem no banco nem no Storage: volta em base64
+ * e a tela o abre num `blob:`, sem os botões de baixar e de abrir em outra
+ * aba. A verba não passa por aqui: o formulário dela não tem a conferência.
+ */
+export async function previaDoPdfDaPP(
+  itemRealizadoId: string,
+  dados: z.input<typeof dadosSchema>,
+): Promise<Result<{ pdf: string }>> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  const gate = await checarGatesRealizado(itemRealizadoId);
+  if (!gate.ok) return gate;
+  const { job, supabase } = gate;
+  const tenantId = session.activeTenant.id;
+
+  const parsed = dadosSchema.safeParse(dados);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: `A prévia aparece com o formulário preenchido: ${parsed.error.issues[0]?.message ?? "confira os campos"}.`,
+    };
+  }
+  const d = parsed.data;
+  const valor = valorDaPPPorUnidade(d.valor_unitario, d.quantidade, d.dias_meses);
+  if (valor <= 0) {
+    return { ok: false, message: "A prévia aparece quando R$ Unit., QT e D/M estiverem preenchidos." };
+  }
+  if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
+    return {
+      ok: false,
+      message: `A prévia aparece quando a soma das parcelas fechar com o valor da PP (${brl(valor)}).`,
+    };
+  }
+
+  const tipoVerba = tipoDaVerbaDosDados(d);
+  const pagaFornecedor = usaFornecedor(d);
+  const fornRes = pagaFornecedor
+    ? await supabase
+        .from("fornecedores")
+        .select("*")
+        .eq("id", d.fornecedor_id as string)
+        .eq("tenant_id", tenantId)
+        .eq("status", "ativo")
+        .maybeSingle()
+    : { data: null };
+  if (pagaFornecedor && !fornRes.data) {
+    return { ok: false, message: "A prévia aparece quando o fornecedor estiver escolhido." };
+  }
+  const titular = await nomeDoTitularDaVerba(
+    supabase,
+    tenantId,
+    d,
+    fornRes.data as { nome?: string | null; razao_social?: string | null } | null,
+  );
+  if (!titular.ok) return titular;
+
+  const [cnpjDaPP, contexto] = await Promise.all([
+    cnpjDaPPNaGeracao(
+      supabase,
+      tenantId,
+      { regional_id: job.regional_id, empresa_id: job.empresa_id },
+      d.estabelecimento_id ?? null,
+    ),
+    carregarContextoPdf(supabase, tenantId, job),
+  ]);
+  if (!cnpjDaPP.ok) return cnpjDaPP;
+
+  try {
+    const { buffer } = await renderizarDocumentoDaPP({
+      tenantId,
+      jobId: job.id,
+      ppId: "previa",
+      codigo: "PRÉVIA",
+      pp: {
+        servico: d.servico,
+        quantidade: d.quantidade,
+        especificacoes: d.especificacoes ?? null,
+        valor,
+        verba_producao: d.verba_producao,
+        tipo_verba: tipoVerba,
+        verba_titular_tipo: d.verba_producao ? (d.verba_titular_tipo ?? null) : null,
+      },
+      empresa: cnpjDaPP.empresa,
+      fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
+      pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+      responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
+      pagamentoDoTitular: null,
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas: d.parcelas.map((p, i) => ({ numero: i + 1, data_vencimento: p.data_vencimento, valor: p.valor })),
+      previa: true,
+    });
+    return { ok: true, pdf: buffer.toString("base64") };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Não foi possível montar a prévia: ${msg}` };
+  }
+}
+
+/**
  * O que falta nos anexos para enviar (decisão 152): pelo menos um arquivo;
  * o tipo de cada um; o número dos documentos; e, em cada NF, número,
  * emissão, valor, CNPJ tomador e a parte desta PP. A soma das partes vai
@@ -2135,7 +2300,7 @@ export async function signedUrlAnexoAEmitir(
  * `_conferir_partes_da_nota`). Null = nada.
  *
  * Decisão 161: a PP paga por boleto exige também o boleto (tipo Boleto) e a
- * nota (NF ou recibo) — o boleto não substitui a nota.
+ * nota (NF, recibo ou fatura — 178) — o boleto não substitui a nota.
  */
 function faltaNosAnexosDoEnvio(
   anexos: AnexoUploaded[],
@@ -2146,7 +2311,7 @@ function faltaNosAnexosDoEnvio(
     return "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.";
   }
   if (exigeBoleto) {
-    if (!anexos.some((a) => a.documento_tipo === "nota_fiscal" || a.documento_tipo === "recibo")) {
+    if (!anexos.some((a) => !!a.documento_tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.documento_tipo))) {
       return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
     }
     if (!anexos.some((a) => a.documento_tipo === "boleto")) {
@@ -2158,6 +2323,10 @@ function faltaNosAnexosDoEnvio(
     const numero = (a.documento_numero ?? "").trim();
     if (a.documento_tipo !== "nota_fiscal") {
       if (!numero) return `Preencha o número do documento de “${a.nome_original}”.`;
+      // Revisão da 156: fatura e recibo dizem contra qual CNPJ.
+      if (documentoTemCnpj(a.documento_tipo) && !a.nf_tomador_estabelecimento_id) {
+        return `Escolha contra qual CNPJ foi emitido “${a.nome_original}”.`;
+      }
       continue;
     }
     if (!numero || !a.nf_data_emissao || !(a.nf_valor && a.nf_valor > 0) || !a.nf_tomador_estabelecimento_id) {
@@ -2186,6 +2355,7 @@ function faltaNosAnexosDoEnvio(
   if (soma > valorPP + 0.004) {
     return `As NFs nesta PP somam ${formatCurrency(soma, "BRL")}, mais que o valor da PP (${formatCurrency(valorPP, "BRL")}). Em “Valor nesta PP”, informe só a parte desta PP.`;
   }
+  if (emissoraDosDocumentos(anexos).tipo === "divergente") return DOCUMENTOS_EM_CNPJS_DIFERENTES;
   return null;
 }
 
@@ -2308,6 +2478,281 @@ async function gravarAnexosDoEnvio(
 }
 
 /**
+ * Refaz o PDF da PP a partir do que está gravado (revisão da 156,
+ * 16/10/2026): a empresa emissora mudou porque o documento estava em outro
+ * CNPJ. É o mesmo documento de antes — a data de emissão, as parcelas e o
+ * pagamento da foto da PP (decisões 067 e 127) —, com o cabeçalho novo.
+ * Null = deu certo.
+ */
+async function refazerPdfDaPP(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  ppId: string,
+): Promise<string | null> {
+  const { data: ppBruta } = await supabase
+    .from("pedidos_compra")
+    .select("*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor)")
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!ppBruta) return "PP não encontrada.";
+  const pp = ppBruta as unknown as FotoDePagamentoDaPP & {
+    id: string;
+    codigo: string;
+    job_id: string;
+    estabelecimento_id: string | null;
+    verba_producao: boolean;
+    fornecedor_id: string | null;
+    responsavel_verba_id: string | null;
+    tipo_verba: TipoVerba | null;
+    verba_titular_nome: string | null;
+    servico: string;
+    especificacoes: string | null;
+    quantidade: number | string;
+    valor: number | string;
+    pdf_path: string | null;
+    created_at: string;
+    dados_pagamento_congelados_em: string | null;
+    verba_titular_tipo: TitularDaVerbaTipo | null;
+    verba_titular_cpf: string | null;
+    pagamento_fora_do_cadastro_meio: string | null;
+    parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
+  };
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, codigo, nome, produto, projeto_id, empresa_id, regional_id")
+    .eq("id", pp.job_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      codigo: string;
+      nome: string;
+      produto: string | null;
+      projeto_id: string | null;
+      empresa_id: string | null;
+      regional_id: string | null;
+    }>();
+  if (!job) return "Job não encontrado.";
+  const parcelas = (pp.parcelas ?? [])
+    .slice()
+    .sort((a, b) => a.numero - b.numero)
+    .map((p) => ({ numero: p.numero, data_vencimento: p.data_vencimento.slice(0, 10), valor: Number(p.valor) }));
+  if (parcelas.length === 0) return "Esta PP não tem parcelas gravadas.";
+
+  const [fornRes, cnpjDaPP, responsavelRes, contexto] = await Promise.all([
+    !pp.fornecedor_id
+      ? Promise.resolve({ data: null })
+      : supabase.from("fornecedores").select("*").eq("id", pp.fornecedor_id).eq("tenant_id", tenantId).maybeSingle(),
+    cnpjDaPPNaGeracao(supabase, tenantId, job, pp.estabelecimento_id),
+    verbaDeResponsavel(pp) && pp.responsavel_verba_id
+      ? supabase.from("profiles").select("nome").eq("id", pp.responsavel_verba_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    carregarContextoPdf(supabase, tenantId, job),
+  ]);
+  if (!cnpjDaPP.ok) return cnpjDaPP.message;
+  const cadastro = (fornRes.data ?? null) as Record<string, unknown> | null;
+  const fornecedorDoPdf =
+    cadastro && pp.dados_pagamento_congelados_em
+      ? { ...cadastro, ...lerFoto(pp) }
+      : fornecedorDoDocumento(
+          cadastro,
+          lerPagamentoForaDoCadastro(ppBruta as Parameters<typeof lerPagamentoForaDoCadastro>[0]),
+        );
+
+  let documento: { path: string; buffer: Buffer };
+  try {
+    documento = await renderizarDocumentoDaPP({
+      tenantId,
+      jobId: job.id,
+      ppId: pp.id,
+      codigo: pp.codigo,
+      pp: {
+        servico: pp.servico,
+        quantidade: Number(pp.quantidade),
+        especificacoes: pp.especificacoes ?? null,
+        valor: Number(pp.valor),
+        verba_producao: pp.verba_producao,
+        tipo_verba: pp.tipo_verba,
+        verba_titular_tipo: pp.verba_titular_tipo ?? null,
+      },
+      empresa: cnpjDaPP.empresa,
+      fornecedor: fornecedorDoPdf,
+      pagamentoDoTitular: pagamentoDoTitularDaPP(pp),
+      pagamentoPorBoleto: pp.pagamento_fora_do_cadastro_meio === "boleto",
+      responsavelVerbaNome: !pp.verba_producao
+        ? null
+        : verbaDeResponsavel(pp)
+          ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
+          : (pp.verba_titular_nome ?? ""),
+      job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      contexto,
+      parcelas,
+      emitidaEm: pp.created_at,
+    });
+  } catch (err: unknown) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const { error: uploadErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(pp.pdf_path || documento.path, documento.buffer, { contentType: "application/pdf", upsert: true });
+  return uploadErr ? uploadErr.message : null;
+}
+
+/**
+ * A empresa emissora segue o documento (revisão da 156, 16/10/2026). Lê os
+ * anexos gravados da PP e, se a nota, a fatura ou o recibo estão em outro
+ * CNPJ, passa a PP para ele e refaz o PDF — na PP ainda no job ou em
+ * avaliação; a aprovada e a paga guardam o documento como estava. O gatilho
+ * `trg_pp_registra_troca_de_emissora` põe a troca na linha do tempo.
+ * Documentos em CNPJs diferentes barram: uma PP é paga por um CNPJ só.
+ */
+async function seguirDocumentoNaPP(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  ppId: string,
+  origem: "envio" | "pronta_para_envio" | "correcao_da_nf",
+): Promise<{ ok: true; troca: TrocaDeEmissora | null } | { ok: false; message: string }> {
+  const [ppRes, anexosRes] = await Promise.all([
+    supabase
+      .from("pedidos_compra")
+      .select("id, codigo, status, estabelecimento_id, job_id")
+      .eq("id", ppId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ id: string; codigo: string; status: PPStatus; estabelecimento_id: string | null; job_id: string }>(),
+    supabase
+      .from("pedidos_compra_anexos")
+      .select("documento_tipo, nf_tomador_estabelecimento_id")
+      .eq("pedido_compra_id", ppId)
+      .eq("tenant_id", tenantId),
+  ]);
+  const pp = ppRes.data;
+  if (!pp || anexosRes.error) return { ok: false, message: "Não foi possível ler os documentos da PP." };
+  const pelosDocumentos = emissoraDosDocumentos(
+    (anexosRes.data ?? []) as Array<{
+      documento_tipo: (typeof DOCUMENTO_TIPOS)[number] | null;
+      nf_tomador_estabelecimento_id: string | null;
+    }>,
+  );
+  if (pelosDocumentos.tipo === "divergente") return { ok: false, message: DOCUMENTOS_EM_CNPJS_DIFERENTES };
+  if (pelosDocumentos.tipo === "nenhum" || pelosDocumentos.estabelecimentoId === pp.estabelecimento_id) {
+    return { ok: true, troca: null };
+  }
+  const para = pelosDocumentos.estabelecimentoId;
+
+  const { data: estabs } = await supabase
+    .from("fiscal_estabelecimentos")
+    .select("id, nome, cnpj, ativo")
+    .eq("tenant_id", tenantId)
+    .in("id", [para, ...(pp.estabelecimento_id ? [pp.estabelecimento_id] : [])]);
+  const lista = (estabs ?? []) as Array<{ id: string; nome: string; cnpj: string | null; ativo: boolean }>;
+  const novo = lista.find((e) => e.id === para);
+  if (!novo || !novo.ativo || (novo.cnpj ?? "").replace(/\D/g, "").length !== 14) {
+    return {
+      ok: false,
+      message: "O CNPJ do documento não está ativo no cadastro de impostos. Peça ao financeiro para ativá-lo.",
+    };
+  }
+  const nomeCurto = (nome: string) => nome.split(" · ")[0];
+  const antigo = lista.find((e) => e.id === pp.estabelecimento_id) ?? null;
+
+  const { error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({ estabelecimento_id: para })
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId);
+  if (updErr) return { ok: false, message: `Não foi possível trocar a empresa emissora: ${updErr.message}` };
+
+  if (pp.status === "gerada" || pp.status === "em_avaliacao") {
+    const erroPdf = await refazerPdfDaPP(supabase, tenantId, ppId);
+    if (erroPdf) {
+      // Sem o PDF novo, a troca volta: PP e documento não podem divergir.
+      await supabase
+        .from("pedidos_compra")
+        .update({ estabelecimento_id: pp.estabelecimento_id })
+        .eq("id", ppId)
+        .eq("tenant_id", tenantId);
+      return { ok: false, message: `Não foi possível refazer o PDF com o CNPJ do documento: ${erroPdf}` };
+    }
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.emissora_trocada",
+    tenantId,
+    entidadeTipo: "pedido_compra",
+    entidadeId: ppId,
+    metadata: {
+      pp_codigo: pp.codigo,
+      job_id: pp.job_id,
+      de: pp.estabelecimento_id,
+      para,
+      origem,
+      decisao: 156,
+    },
+  });
+  return { ok: true, troca: { de: antigo ? nomeCurto(antigo.nome) : null, para: nomeCurto(novo.nome) } };
+}
+
+/**
+ * Depois de "Corrigir a NF" (revisão da 156, 16/10/2026): a empresa emissora
+ * segue o documento na PP corrigida e nas outras PPs com as mesmas notas — a
+ * correção dos dados da nota vale para todas elas. A NF já está corrigida
+ * quando isto roda: se a emissora não puder seguir, volta um aviso, sem
+ * desfazer a correção.
+ */
+export async function seguirDocumentosDaNotaCorrigida(
+  ppId: string,
+): Promise<{ ok: true; troca: TrocaDeEmissora | null; aviso: string | null } | { ok: false; message: string }> {
+  if (!z.string().uuid().safeParse(ppId).success) return { ok: false, message: "PP inválida." };
+  const session = await requireSession();
+  if (!pode(session.activeRole, "jobs.corrigir_nf_pp") && !pode(session.activeRole, "jobs.emitir_pp")) {
+    return { ok: false, message: "Você não tem permissão para corrigir a NF da PP." };
+  }
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: daPP } = await supabase
+    .from("pedidos_compra_anexos")
+    .select("nota_fiscal_id")
+    .eq("pedido_compra_id", ppId)
+    .eq("tenant_id", tenantId)
+    .not("nota_fiscal_id", "is", null);
+  const notas = [...new Set((daPP ?? []).map((a) => a.nota_fiscal_id as string))];
+  let outras: string[] = [];
+  if (notas.length > 0) {
+    const { data: comAsNotas } = await supabase
+      .from("pedidos_compra_anexos")
+      .select("pedido_compra_id")
+      .eq("tenant_id", tenantId)
+      .in("nota_fiscal_id", notas);
+    const ids = [...new Set((comAsNotas ?? []).map((a) => a.pedido_compra_id as string))].filter((id) => id !== ppId);
+    if (ids.length > 0) {
+      const { data: vivas } = await supabase
+        .from("pedidos_compra")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .in("id", ids)
+        .neq("status", "cancelada");
+      outras = (vivas ?? []).map((p) => p.id as string);
+    }
+  }
+
+  const principal = await seguirDocumentoNaPP(supabase, tenantId, ppId, "correcao_da_nf");
+  const falhas: string[] = [];
+  for (const id of outras) {
+    const r = await seguirDocumentoNaPP(supabase, tenantId, id, "correcao_da_nf");
+    if (!r.ok) falhas.push(r.message);
+  }
+  if (!principal.ok) {
+    return { ok: true, troca: null, aviso: `A NF foi corrigida, mas a empresa emissora não mudou: ${principal.message}` };
+  }
+  return {
+    ok: true,
+    troca: principal.troca,
+    aviso: falhas.length > 0 ? `A NF foi corrigida, mas outra PP com ela não mudou de empresa emissora: ${falhas[0]}` : null,
+  };
+}
+
+/**
  * Envia ao financeiro uma PP que está GERADA (02/09/2026, decisão 039).
  *
  * É a metade que "Gerar PP" perdeu: até aqui gerar e enviar eram o mesmo
@@ -2339,8 +2784,6 @@ export async function enviarPedidoCompraAoFinanceiro(
   pp_id: string,
   confirmarAcimaDoPlanejado = false,
   anexosDoEnvio?: z.input<typeof anexoUploadedSchema>[],
-  /** Decisão 156: o "tem certeza?" da nota em outro CNPJ já foi respondido. */
-  confirmarTomadorDiferente = false,
 ): Promise<ResultadoEnvio> {
   const session = await requireSession();
   const supabase = createClient();
@@ -2402,12 +2845,14 @@ export async function enviarPedidoCompraAoFinanceiro(
     const hoje = hojeEmSaoPauloIso();
     const feriados = await carregarFeriadosNacionais(supabase, session.activeTenant.id);
     const prazo = ppRow.prazo_pagamento.slice(0, 10);
-    // A quarta de exceções só sai com a PP urgente (decisão 172); a quarta
-    // tem a sua data-limite, a sexta anterior, na conta de baixo.
-    if (!ppRow.urgente && ehQuarta(prazo) && !ehJanelaDePagamento(prazo)) {
+    // A quarta de exceções só sai com a PP urgente ou de verba (decisão
+    // 172); a quarta tem a sua data-limite, a sexta anterior, na conta de
+    // baixo.
+    const quartaLiberada = ppAceitaQuarta({ urgente: ppRow.urgente, verba: ppRow.verba_producao });
+    if (!quartaLiberada && ehQuarta(prazo) && !ehJanelaDePagamento(prazo)) {
       return {
         ok: false,
-        message: `O vencimento ${isoParaBr(prazo)} é uma quarta de exceções, que só vale para pagamento urgente. Edite a ${ppRow.codigo} e escolha uma janela.`,
+        message: `O vencimento ${isoParaBr(prazo)} é uma quarta de exceções, que só vale para verba ou pagamento urgente. Edite a ${ppRow.codigo} e escolha uma janela.`,
       };
     }
     if (!vencimentoAceitaEnvio(prazo, hoje, feriados)) {
@@ -2427,7 +2872,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       });
       return {
         ok: false,
-        message: `O prazo de envio para o vencimento ${isoParaBr(prazo)} terminou${limite ? ` em ${isoParaBr(limite)}` : ""}. Atualize o vencimento da ${ppRow.codigo} — a primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, ppRow.urgente))}.`,
+        message: `O prazo de envio para o vencimento ${isoParaBr(prazo)} terminou${limite ? ` em ${isoParaBr(limite)}` : ""}. Atualize o vencimento da ${ppRow.codigo} — a primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada))}.`,
       };
     }
   }
@@ -2449,29 +2894,10 @@ export async function enviarPedidoCompraAoFinanceiro(
     if (falta) return { ok: false, message: falta };
   }
 
-  // Decisão 156: a nota em outro CNPJ que não o da PP não barra o envio —
-  // pede o "tem certeza?" e o financeiro decide na aprovação.
-  const notasEmOutroCnpj = ppRow.estabelecimento_id
-    ? anexosDoPedido.filter(
-        (a) =>
-          a.documento_tipo === "nota_fiscal" &&
-          a.nf_tomador_estabelecimento_id &&
-          a.nf_tomador_estabelecimento_id !== ppRow.estabelecimento_id,
-      )
-    : [];
-  if (notasEmOutroCnpj.length > 0 && !confirmarTomadorDiferente) {
-    return {
-      ok: false,
-      message: "A nota está em outro CNPJ que não o da PP. Confirme o envio.",
-      tomadorDiferente: {
-        cnpjDaPP: ppRow.estabelecimento_id,
-        notas: notasEmOutroCnpj.map((a) => ({
-          numero: (a.documento_numero ?? "").trim(),
-          tomador: a.nf_tomador_estabelecimento_id as string,
-        })),
-      },
-    };
-  }
+  // Revisão da 156 (16/10/2026): nota em outro CNPJ não pede mais "tem
+  // certeza?" — a empresa emissora segue o documento, depois de gravar os
+  // anexos (`seguirDocumentoNaPP`). Documentos em CNPJs diferentes já
+  // barraram em `faltaNosAnexosDoEnvio`.
 
   // A trava do AR vem ANTES da conta do planejado: ela barra de vez, e
   // deixar o "tem certeza?" aparecer primeiro faria o usuário confirmar
@@ -2538,6 +2964,10 @@ export async function enviarPedidoCompraAoFinanceiro(
     }
   }
 
+  // Revisão da 156: a empresa emissora segue o documento, com o PDF refeito.
+  const seguiu = await seguirDocumentoNaPP(supabase, session.activeTenant.id, pp_id, "envio");
+  if (!seguiu.ok) return seguiu;
+
   // `.eq("status", "gerada")` é a trava de corrida: dois envios ao mesmo
   // tempo, só um passa. O `select` diz se ESTE passou.
   const agora = new Date().toISOString();
@@ -2577,9 +3007,9 @@ export async function enviarPedidoCompraAoFinanceiro(
       verba_producao: ppRow.verba_producao,
       anexos: anexosDoPedido.length,
       notas_fiscais: anexosDoPedido.filter((a) => a.documento_tipo === "nota_fiscal").length,
-      // Decisão 156: enviada com nota em outro CNPJ, depois do "tem certeza?".
-      nota_em_outro_cnpj_confirmada: notasEmOutroCnpj.length > 0,
-      cnpj_da_pp: ppRow.estabelecimento_id,
+      // Revisão da 156: a empresa emissora que o documento definiu no envio.
+      emissora_seguiu_documento: seguiu.troca !== null,
+      cnpj_da_pp_antes: ppRow.estabelecimento_id,
     },
   });
 
@@ -2587,7 +3017,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   revalidatePath(`/financeiro/jobs/${job.id}`);
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro");
-  return { ok: true, codigo: ppRow.codigo };
+  return { ok: true, codigo: ppRow.codigo, emissora: seguiu.troca };
 }
 
 /**
@@ -2603,9 +3033,10 @@ export async function enviarPedidoCompraAoFinanceiro(
  *
  * A PP continua "gerada", e quem preparou pode reabrir e gravar de novo até
  * o GP enviar. Ficam para o envio, que é quando o GP decide: o "tem
- * certeza?" acima do planejado, o da nota em outro CNPJ (decisão 156), o
- * prazo de envio (decisão 157), a abertura em revisão (decisão 040) e a
- * ligação das NFs ao cadastro de notas (`ligar_notas_fiscais_da_pp`).
+ * certeza?" acima do planejado, o prazo de envio (decisão 157), a abertura
+ * em revisão (decisão 040) e a ligação das NFs ao cadastro de notas
+ * (`ligar_notas_fiscais_da_pp`). A empresa emissora já segue o documento
+ * aqui (revisão da 156, 16/10/2026).
  *
  * Quem e quando são gravados pelo gatilho `trg_pp_carimba_pronta_para_envio`
  * com o usuário da sessão; o gatilho também recusa a marca fora da PP gerada.
@@ -2672,6 +3103,9 @@ export async function deixarPPProntaParaEnvio(
       anexosDoPedido,
     );
     if (erroAnexos) return { ok: false, message: erroAnexos };
+    // Revisão da 156: a empresa emissora segue o documento, com o PDF refeito.
+    const seguiu = await seguirDocumentoNaPP(supabase, session.activeTenant.id, pp_id, "pronta_para_envio");
+    if (!seguiu.ok) return seguiu;
   }
 
   // `.eq("status", "gerada")`: se o GP enviou no meio, nada muda aqui.
@@ -2888,7 +3322,7 @@ export async function salvarPPAEmitir(
     d.parcelas.map((p) => p.data_vencimento),
     gravadas,
     await carregarFeriadosNacionais(supabase, tenantId),
-    d.urgente === true,
+    ppAceitaQuarta({ urgente: d.urgente === true, verba: d.verba_producao }),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(d, null, session.profile.id);
@@ -2938,6 +3372,11 @@ export async function salvarPPAEmitir(
   const titular = await nomeDoTitularDaVerba(supabase, tenantId, d);
   if (!titular.ok) return titular;
 
+  // Revisão da 156: com documento que diga o CNPJ, a empresa emissora é a
+  // dele — a PP a emitir guarda já a que a geração vai usar.
+  const emissora = emissoraPelosAnexos(anexosParsed.data, d.estabelecimento_id ?? null);
+  if (!emissora.ok) return emissora;
+
   const linha = {
     empresa_id: d.empresa_id,
     ...colunasDaVerba(d, titular.nome),
@@ -2945,7 +3384,7 @@ export async function salvarPPAEmitir(
     valor,
     // O formulário como veio (já validado): a geração o valida de novo, e
     // o valor normalizado pelo schema não precisa passar duas vezes por ele.
-    dados,
+    dados: emissora.id && emissora.id !== (d.estabelecimento_id ?? null) ? { ...dados, estabelecimento_id: emissora.id } : dados,
     ultima_pp_do_item: ultimaPPDoItem,
     atualizada_por: session.profile.id,
   };
@@ -3098,8 +3537,7 @@ export async function listarPessoasParaVerba(): Promise<Result<{ pessoas: Pessoa
  * job aguardando abertura ou devolvido pelo financeiro não gera.
  *
  * Decisão 166: nem a PP de fornecedor pessoa jurídica sem regime
- * tributário (ou com o legado "Lucro Real ou Presumido") ou sem CNAE. A PP
- * a emitir fica salva, esperando o cadastro.
+ * tributário ou sem CNAE. A PP a emitir fica salva, esperando o cadastro.
  */
 export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: string }>> {
   const session = await requireSession();
@@ -3416,7 +3854,12 @@ export async function cancelarERefazerPP(
       documento_numero: a.nota?.numero ?? a.documento_numero,
       nf_data_emissao: nf ? (a.nota?.data_emissao ?? a.nf_data_emissao) : null,
       nf_valor: nf ? (a.nota?.valor ?? a.nf_valor) : null,
-      nf_tomador_estabelecimento_id: nf ? (a.nota?.tomador_estabelecimento_id ?? a.nf_tomador_estabelecimento_id) : null,
+      // A fatura e o recibo levam o CNPJ também (revisão da 156).
+      nf_tomador_estabelecimento_id: nf
+        ? (a.nota?.tomador_estabelecimento_id ?? a.nf_tomador_estabelecimento_id)
+        : documentoTemCnpj(a.documento_tipo)
+          ? a.nf_tomador_estabelecimento_id
+          : null,
       nf_valor_na_pp: nf ? a.nf_valor_na_pp : null,
       criado_por: session.profile.id,
       created_at: horariosDosAnexos[anexosNovos.length],
@@ -3522,7 +3965,7 @@ export async function feriadosNacionaisParaPP(): Promise<string[]> {
  * Mudam o 1º vencimento, as parcelas seguintes (onde estavam, se ainda
  * couberem; senão, a primeira data possível — decisão 172 —, com os mesmos
  * valores) e o PDF, refeito com as datas novas e a data de emissão de antes.
- * Na PP urgente, a data nova pode ser uma quarta de exceções.
+ * Na PP urgente e na de verba, a data nova pode ser uma quarta de exceções.
  *
  * Só vale para a PP ainda no job (`gerada`) e só quando o vencimento atual
  * já não aceita envio. Desde a decisão 173 a PP gerada também se edita
@@ -3596,8 +4039,14 @@ export async function atualizarVencimentoDaPP(
     };
   }
   const novo = novoVencimento.slice(0, 10);
-  // Na PP urgente, a data nova pode ser uma quarta de exceções (decisão 172).
-  const erroJanela = validarVencimentosNasJanelas([novo], [], feriados, pp.urgente === true);
+  // Na PP urgente e na de verba, a data nova pode ser uma quarta de
+  // exceções (decisão 172).
+  const erroJanela = validarVencimentosNasJanelas(
+    [novo],
+    [],
+    feriados,
+    ppAceitaQuarta({ urgente: pp.urgente === true, verba: pp.verba_producao === true }),
+  );
   if (erroJanela) return { ok: false, message: erroJanela };
 
   // As parcelas na ordem; a PP sem linha de parcela (anterior a 17/08) vira
@@ -3879,7 +4328,7 @@ async function editarPPGeradaImpl(
     d.parcelas.map((p) => p.data_vencimento),
     parcelasAntes.map((p) => p.data_vencimento),
     feriados,
-    d.urgente === true,
+    ppAceitaQuarta({ urgente: d.urgente === true, verba: d.verba_producao }),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(
@@ -3962,11 +4411,14 @@ async function editarPPGeradaImpl(
   );
   if (!titular.ok) return titular;
   if (!empRes.data) return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
+  // Revisão da 156: com documento que diga o CNPJ, a empresa emissora é a dele.
+  const emissora = emissoraPelosAnexos(anexosParsed.data, d.estabelecimento_id ?? null);
+  if (!emissora.ok) return emissora;
   const cnpjDaPP = await cnpjDaPPNaGeracao(
     supabase,
     tenantId,
     { regional_id: job.regional_id, empresa_id: job.empresa_id },
-    d.estabelecimento_id ?? null,
+    emissora.id,
   );
   if (!cnpjDaPP.ok) return cnpjDaPP;
 

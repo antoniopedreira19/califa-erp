@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
+import { gpDeFora, itensDeGp, type GpParaEscolha } from "@/lib/gps-para-escolha";
 import {
   Select,
   SelectContent,
@@ -315,11 +316,12 @@ interface Props {
 
   /** Mesma regra do formulário do orçamento: só as regionais do projeto. */
   regionaisDoProjeto: { id: string; nome: string }[];
-  /** Mesmas listas do formulário do orçamento (decisão 135): o GP sai dos
-   *  responsáveis do projeto, o produtor dos membros ativos. Cada uma já
-   *  traz a pessoa gravada no orçamento, mesmo que ela tenha saído da
-   *  lista — ver `comQuemEstaNoOrcamento` na página. */
-  gpsDoProjeto: PessoaOpcao[];
+  /** Mesmas listas do formulário do orçamento (decisão 135): o GP sai de
+   *  quem pode ser GP — os do projeto primeiro, e quem vem de fora entra no
+   *  projeto ao enviar (decisão 176) —, o produtor de quem tem o papel
+   *  Produtor. Cada uma já traz a pessoa gravada no orçamento, mesmo que
+   *  ela tenha saído da lista — ver `comQuemEstaNoOrcamento` na página. */
+  gps: GpParaEscolha[];
   produtores: PessoaOpcao[];
   /** Primeiras cidades do cadastro — o combobox busca o resto no servidor. */
   cidadesIniciais: CidadeOption[];
@@ -360,7 +362,7 @@ export function EnviarJobModal({
   moeda,
   herdados,
   regionaisDoProjeto,
-  gpsDoProjeto,
+  gps,
   produtores,
   cidadesIniciais,
   periodoTravado = false,
@@ -526,24 +528,19 @@ export function EnviarJobModal({
             obrigatorio
             erro={erroDe("gp_responsavel_id")}
             apoio={
-              gpsDoProjeto.length === 0
-                ? "O projeto não tem responsável cadastrado. Edite o projeto."
-                : "Opções vindas dos responsáveis do projeto."
+              gpDeFora(gps, dados.gpId)
+                ? `${gpDeFora(gps, dados.gpId)!.nome} passa a ser GP Responsável do projeto ao enviar.`
+                : "Os GPs do projeto primeiro; os outros entram no projeto ao enviar."
             }
           >
             {/* Combobox, não Select: digitar acha o nome, como no
                 formulário do orçamento (13/10/2026). */}
             <Combobox
               ariaLabel="GP Responsável"
-              items={gpsDoProjeto.map((p) => ({ value: p.id, label: p.nome }))}
+              items={itensDeGp(gps)}
               value={dados.gpId || null}
               onChange={(v) => onChange({ gpId: v ?? "" })}
-              disabled={gpsDoProjeto.length === 0}
-              placeholder={
-                gpsDoProjeto.length === 0
-                  ? "Projeto sem responsável cadastrado"
-                  : "Selecione o GP responsável"
-              }
+              placeholder="Selecione o GP responsável"
               buscaPlaceholder="Escreva o nome"
               className={cn(
                 COMBOBOX_COMO_SELECT,

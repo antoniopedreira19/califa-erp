@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-02
 **Decidido por:** Tiago
-**Status:** aceita — entregue em 02/10/2026 (a Apuração e os Impostos a Pagar vêm nas próximas entregas); revisada em 07/10/2026 (a retenção na aprovação da PP começa desligada, decisão 142 §5)
+**Status:** aceita — entregue em 02/10/2026 (a Apuração e os Impostos a Pagar vêm nas próximas entregas); revisada em 07/10/2026 (a retenção na aprovação da PP começa desligada, decisão 142 §5); revisada em 15/10/2026 (motivo "Fornecedor pessoa física" no "Não gera crédito"); revisada em 15/10/2026 (o Simples pode ter o ISS retido, decisão 180)
 **Migrations:** `20261002100001_fiscal_cadastro_e_dados_da_nf.sql` e
 `20261002100300_fiscal_parametros_selic_e_darf_minimo.sql` (as duas aditivas)
 
@@ -47,6 +47,11 @@ de hoje, cada nota e cada PP já entrem com o dado que a Apuração vai usar.
   ⚠️ **04/10/2026 — substituída pela decisão 146:** o job saiu da regra; o
   crédito é cheio no mês da emissão e a guia tira a parte da receita do mês
   no 12.08 (rateio proporcional). Não há mais "a confirmar" nem estorno.
+  ⚠️ **15/10/2026 — fornecedor pessoa física:** a regra não confere o tipo
+  de pessoa do fornecedor, e o Tiago decidiu **não travar** — pessoa física
+  pode chegar a emitir nota de pessoa jurídica. A lista de motivos do "Não
+  gera crédito" ganhou "Fornecedor pessoa física" (`MOTIVOS_SEM_CREDITO`),
+  para quem confere a nota marcar.
 - **Retenções:** regime normal (ou não informado) → PIS 0,65%, COFINS 3%,
   CSLL 1% (DARF 5952) e IRRF 1,5% (DARF 1708), no mês do pagamento, com
   vencimento no dia 20 do mês seguinte (antecipa); Simples/MEI → sem
@@ -58,6 +63,11 @@ de hoje, cada nota e cada PP já entrem com o dado que a Apuração vai usar.
   aplicadas sozinhas. Simples/MEI e cartão seguem travados sem retenção. A
   NF que outra PP já registrou com ISS retido nasce com a chave ligada só
   com aquele ISS (decisão 152).
+  ⚠️ **15/10/2026 — o Simples pode ter o ISS retido (decisão
+  [180](180-iss-retido-do-simples-na-aprovacao.md)):** a IN 459 só trata dos
+  federais, e o município pode exigir o ISS do optante (LC 123, art. 21,
+  § 4º). No Simples a chave liga e só o ISS se preenche; o MEI continua
+  travado. O servidor confere o regime.
 - **Vencimentos:** ISS no dia do município do CNPJ (prorroga); PIS/COFINS
   dia 25 (antecipa); retenções federais dia 20 (antecipa).
 - **Filiais de São Paulo e Fortaleza** entram inativas e sem CNPJ: o número

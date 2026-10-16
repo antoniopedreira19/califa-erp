@@ -175,6 +175,19 @@ export const LINHA_GRUPO_NOME =
 export const LINHA_TOTAL_ROTULO =
   "text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-foreground bg-[#f3f2ee] border-t-2 border-t-foreground";
 
+/** Faixa do grupo numa LISTA agrupada, fora das planilhas — a empresa na
+ *  página inicial da Conciliação (revisão da decisão 091, 16/10/2026). O
+ *  mesmo grafite da linha do agrupamento (`RENTABILIDADE.grupoValor`): o
+ *  grupo se lê igual em todo o ERP, e com contraste contra as linhas
+ *  brancas. A faixa carrega o subtotal do grupo, como na planilha. */
+export const FAIXA_GRUPO_LISTA = "bg-[#eceae5] border-y border-y-[#dcd9d2]";
+
+/** A linha que fecha essa lista: o fundo e o fio grosso do
+ *  `LINHA_TOTAL_ROTULO` da planilha. O fundo sozinho serve à nota que vem
+ *  embaixo do total ("Fora do total"). */
+export const TOTAL_LISTA_FUNDO = "bg-[#f3f2ee]";
+export const TOTAL_LISTA = "bg-[#f3f2ee] border-t-2 border-t-foreground";
+
 /** Linha tracejada do "Novo grupo", no pé do corpo da tabela — depois do
  *  último grupo e antes do total. Ela mostra ONDE o grupo vai nascer, e
  *  fecha a simetria com o "＋ Novo item" que encerra cada agrupamento. */

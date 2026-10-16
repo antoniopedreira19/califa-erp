@@ -82,6 +82,21 @@ export function motivoDaAbaSemItens(parsed: ParseResultado): string {
   return primeiro || "Nenhum item no formato do orçamento.";
 }
 
+/**
+ * A mensagem quando nenhuma aba entra. Com uma aba, ou com todas caindo
+ * pelo mesmo motivo, o motivo vai junto (16/10/2026): a planilha
+ * internacional num orçamento de Evento recusava as 4 abas por modelo, e
+ * a tela só dizia "Confira o modelo" — a produtora não tinha como saber
+ * que o problema era a categoria do orçamento.
+ */
+export function mensagemSemAbaLegivel(abas: { motivo: string | null }[]): string {
+  const motivos = new Set(abas.map((a) => a.motivo ?? ""));
+  const unico = motivos.size === 1 ? abas[0]?.motivo : null;
+  if (abas.length === 1) return unico ?? "Nenhum item encontrado na planilha.";
+  if (unico) return `Nenhuma das ${abas.length} abas do arquivo entra. ${unico}`;
+  return `Nenhuma das ${abas.length} abas do arquivo está no formato do orçamento. Confira o modelo e envie de novo.`;
+}
+
 /** Ordem da tabela: visíveis legíveis, ocultas legíveis, as que não
  *  entram — cada grupo na ordem do arquivo. */
 export function ordenarAbas<T extends { visivel: boolean; legivel: boolean }>(abas: T[]): T[] {

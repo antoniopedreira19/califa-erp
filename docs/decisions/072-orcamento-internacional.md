@@ -1,7 +1,7 @@
 # 072 — O orçamento internacional tem planilha própria, e quem a escolhe é a categoria
 
 **Data:** 2026-09-11
-**Status:** aceita
+**Status:** aceita (revista em 16/10/2026: a importação lê o planejado pelo cabeçalho e o % do FEE)
 **Contexto:** `versoes_orcamento`, `categorias_dominio`, a tela da versão
 do orçamento e `lib/calculos/versao-totais.ts`. Pedido do Tiago em
 10/09/2026, com a planilha `Modelo de planilha interna - Internacional
@@ -337,8 +337,12 @@ As regras, decididas pelo Tiago:
 Colunas lidas: D · BRL (unitário), E · QT, F · D/M. TT USD e TT BRL são
 calculados e ficam de fora. O PLANEJADO (H · R$, I · QT, J · D/M) entra
 como no nacional, **menos** quando a H traz o id oculto da exportação — ali
-a H é id e a I, crédito consumido. A leitura para no primeiro rótulo do
-fechamento (TOTAL, FEE…): embaixo só há fechamento, legenda e câmbio.
+a H é id e a I, crédito consumido. Desde 16/10/2026 as colunas do
+planejado saem do cabeçalho (o primeiro R$ depois do TT BRL), porque a
+interna da agência traz H · USD antes do R$ — ver a seção de 16/10. A
+leitura dos itens para no primeiro rótulo do fechamento (TOTAL, FEE…):
+embaixo só há fechamento, legenda e câmbio, e dali só se lê o % do FEE
+(16/10/2026).
 Linha com valor e sem nome na B é descartada com aviso, e um aviso único
 diz quantas linhas entraram como B.
 
@@ -490,6 +494,46 @@ A cadeia é compartilhada com a planilha interna do job
 (`job-totais-card.tsx`), que recebe o mesmo desenho, a mesma nota e o
 mesmo tópico de save. As cores da caixa moram em `CADEIA_INTERNACIONAL`,
 em `_planilha/blocos.ts`, feitas do azul do ORÇADO.
+
+## ⚠️ A importação lê a interna da agência: planejado pelo cabeçalho e o % do FEE (16/10/2026)
+
+Caso que motivou: `_INTERNA - YOUTUBE - Gen AI - MEXICO.xlsx` (4 abas,
+V1 a V4), a interna internacional que a produção monta. Importada na v1 de
+um orçamento Internacional, a V4 entrou com o orçado por item certo
+(R$ 42.549,10), mas:
+
+- **o planejado saiu com R$ 40,9 milhões.** A interna da agência põe o
+  planejado em USD na H, antes do R$: H · USD, I · R$, J · QT, K · D/M. Com
+  as colunas fixas H/I/J, o USD entrava como R$, o R$ como QT e a QT como
+  D/M. A interna do ERP e a planilha modelo têm o R$ na H, e as duas formas
+  existem;
+- **o valor do job ficou R$ 644,98 abaixo do INVOICING.** O FEE da planilha
+  é `=G26*13%`, e a versão nasceu com os 12% do cadastro do Google. A
+  leitura parava no TOTAL, não via o FEE, e o aviso de honorários
+  diferentes, que o nacional mostra, nunca aparecia.
+
+O que mudou em `parser-oficial.ts`:
+
+| Ponto | Como ficou |
+|---|---|
+| Colunas do planejado | Saem do cabeçalho: o primeiro R$ depois do TT BRL, e QT e D/M depois dele (`planejadoInternacionalDoCabecalho`). Sem R$ depois do TT BRL — a planilha do cliente, em que a H é a coluna das marcas — valem H/I/J, e a marca de id continua desligando o planejado. |
+| % do FEE | Depois do TOTAL a leitura segue só para achar a linha FEE (ou HONORÁRIOS) com A e B vazias (`percentualDoFee`): o % sozinho na E, como a interna do ERP escreve; o % no rótulo; ou o % dentro da fórmula do valor, como a agência escreve. Arredondado em 4 casas (0,14 × 100 dá 14,000000000000002 no JavaScript). |
+| Aviso | O mesmo do nacional: "A planilha traz 13% de honorários, mas a versão continua com 12%…". A importação **não muda** os honorários da versão; quem decide é o GP, pelo "Editar" ao lado de Honorários. |
+
+Com a correção, as quatro abas fecham com a planilha: planejado igual ao
+SUB-TOTAL (V4: R$ 41.323,81) e, com 13%, o valor do job igual ao INVOICING
+(V4: R$ 72.883,11). A planilha do cliente do ERP escreve o FEE como
+`G…*12/100`, sem "%": ali o percentual continua não lido, como antes.
+
+Fica uma diferença de centavos que a correção não resolve: a agência
+converte o unitário de USD para BRL na planilha (`=C4*5,17` dá R$ 11,891),
+e o banco grava o unitário com 2 casas. Na V3 o orçado sai R$ 0,53 acima.
+
+O texto da opção "Usar o planejado da planilha" no modal deixou de citar
+"H · R$, I · QT e J · D/M" e diz "Os valores de R$, QT e D/M do bloco
+PLANEJADO da planilha".
+
+Testes: `lib/importacao/internacional-da-agencia.test.ts`.
 
 ## O que NÃO entrou
 

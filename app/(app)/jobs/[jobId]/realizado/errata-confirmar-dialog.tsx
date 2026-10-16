@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ERRATA } from "@/app/(app)/_planilha/blocos";
+import { ERRATA, PLANEJADO } from "@/app/(app)/_planilha/blocos";
 import type { MudancaDeEstrutura, MudancaErrata } from "./errata-rascunho";
 
 interface ParDeValores {
@@ -267,14 +267,16 @@ export function ErrataConfirmarDialog({
           {mudancas.length > 0 && (
           <section className="rounded-xl border border-border">
             <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              O que muda no orçado
+              {mudancas.some((m) => m.planejadoDe !== m.planejadoPara)
+                ? "O que muda na planilha"
+                : "O que muda no orçado"}
             </h3>
             <ul className="divide-y divide-border">
               {mudancas.map((m) => {
                 const tag = tagDaMudanca(m);
-                // A errata não muda o planejado desde a decisão 151; a
-                // sublinha só aparece no Interno, onde ele acompanha o
-                // orçado (decisão 105).
+                // A sublinha do planejado aparece quando ele muda: na errata
+                // desde 15/10/2026 (volta atrás da decisão 151) e no
+                // Interno, onde ele acompanha o orçado (decisão 105).
                 const planejadoMudou = m.planejadoDe !== m.planejadoPara;
                 return (
                   <li
@@ -303,12 +305,12 @@ export function ErrataConfirmarDialog({
                     </div>
                     {planejadoMudou && (
                       <div className="flex items-baseline justify-end gap-2 whitespace-nowrap font-mono text-[10.5px]">
-                        <span className="text-[#3f8a70]">planejado</span>
+                        <span className={PLANEJADO.textoSuave}>planejado</span>
                         <span className="text-muted-foreground">
                           {m.acao === "nova" ? "—" : formatCurrency(m.planejadoDe, moeda)}
                         </span>
                         <span className="text-muted-foreground">→</span>
-                        <span className="text-[#047857]">
+                        <span className={PLANEJADO.texto}>
                           {formatCurrency(m.planejadoPara, moeda)}
                         </span>
                       </div>

@@ -49,6 +49,9 @@ export interface JobNaEquipe {
   produtorEnviaPP: boolean;
   /** Encerrado ou finalizado: não sai mais PP, e a chave fica parada. */
   congelado: boolean;
+  /** Aberto ou em produção: o GP e o produtor se trocam pela Equipe
+   *  (decisão 176). Antes da abertura, eles mudam no envio para abertura. */
+  aceitaTroca: boolean;
 }
 
 export interface EquipeDoProjeto {
@@ -225,6 +228,7 @@ export async function carregarEquipeDoProjeto(
       produtorId: j.produtor_id,
       produtorEnviaPP: j.produtor_envia_pp === true,
       congelado: jobEstaCongelado(j.status),
+      aceitaTroca: j.status === "aberto" || j.status === "em_producao",
     })),
     acrescimos,
     candidatos: ativos.filter((p) => !motivos.has(p.id)),

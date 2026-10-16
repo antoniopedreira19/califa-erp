@@ -1,7 +1,7 @@
 /**
  * O regime tributário do fornecedor no cadastro (módulo fiscal, entrega 1;
- * consulta guardada e arquivo da declaração na decisão 142; Real e
- * Presumido separados e CNAE na decisão 166).
+ * consulta guardada e arquivo da declaração na decisão 142; CNAE na decisão
+ * 166; Real e Presumido numa opção só, preenchida pela consulta, na 179).
  * Rodar: node --import tsx --test lib/fiscal/regime-do-fornecedor.test.ts
  */
 import { test } from "node:test";
@@ -97,15 +97,15 @@ test("a consulta guarda desde quando: a opção pelo Simples, ou pelo MEI no MEI
 
 test("a consulta entra no campo vazio e no lugar de outra consulta; o escolhido à mão fica", () => {
   assert.equal(regimeDepoisDaConsulta(null, null, "simples"), "simples");
-  // Decisão 166: "nenhum dos dois" não preenche — Real ou Presumido é escolha.
-  assert.equal(regimeDepoisDaConsulta(null, null, "normal"), null);
-  // O CNPJ foi corrigido: o Simples da consulta anterior sai, e o campo
-  // espera a escolha entre Real e Presumido.
-  assert.equal(regimeDepoisDaConsulta("simples", SIMPLES, "normal"), null);
+  // Decisão 179: "nenhum dos dois" preenche "Lucro Presumido ou Real".
+  assert.equal(regimeDepoisDaConsulta(null, null, "normal"), "normal");
+  // O CNPJ foi corrigido: o Simples da consulta anterior dá lugar ao novo.
+  assert.equal(regimeDepoisDaConsulta("simples", SIMPLES, "normal"), "normal");
   assert.equal(regimeDepoisDaConsulta("simples", SIMPLES, "mei"), "mei");
+  assert.equal(regimeDepoisDaConsulta("normal", NORMAL, "simples"), "simples");
   // Escolhido à mão (diferente da consulta anterior, ou sem consulta): fica.
   assert.equal(regimeDepoisDaConsulta("mei", SIMPLES, "normal"), "mei");
-  assert.equal(regimeDepoisDaConsulta("lucro_real", null, "simples"), "lucro_real");
+  assert.equal(regimeDepoisDaConsulta("normal", null, "simples"), "normal");
 });
 
 test("decisão 166: o CNAE da consulta entra no vazio e no lugar do que veio da consulta anterior", () => {
@@ -131,12 +131,11 @@ test("embaixo do campo: preenchido pela consulta, com desde quando", () => {
     texto: "Preenchido pela consulta do CNPJ em 02/10/2026 · MEI desde 03/2021",
     alterado: false,
   });
-  // Real ou Presumido: a consulta não preenche, só confere.
-  assert.deepEqual(origemDoRegime("lucro_presumido", NORMAL, CNPJ), {
-    texto: "Conferido com a consulta do CNPJ em 02/10/2026 · não optante do Simples",
+  // Decisão 179: Lucro Presumido ou Real também vem da consulta.
+  assert.deepEqual(origemDoRegime("normal", NORMAL, CNPJ), {
+    texto: "Preenchido pela consulta do CNPJ em 02/10/2026 · não optante do Simples",
     alterado: false,
   });
-  assert.deepEqual(origemDoRegime("lucro_real", NORMAL, CNPJ)?.alterado, false);
   // Sem a data de opção: só o dia da consulta.
   assert.deepEqual(origemDoRegime("simples", { ...SIMPLES, desde: null }, CNPJ), {
     texto: "Preenchido pela consulta do CNPJ em 02/10/2026",
@@ -149,36 +148,33 @@ test("embaixo do campo: preenchido pela consulta, com desde quando", () => {
 });
 
 test("embaixo do campo: âmbar quando trocado à mão, dizendo o que a consulta indicou", () => {
-  assert.deepEqual(origemDoRegime("lucro_real", SIMPLES, CNPJ), {
+  assert.deepEqual(origemDoRegime("normal", SIMPLES, CNPJ), {
     texto: "Alterado manualmente — a consulta do CNPJ em 02/10/2026 indicou Simples Nacional.",
     alterado: true,
   });
   assert.deepEqual(origemDoRegime("simples", NORMAL, CNPJ), {
-    texto: "Alterado manualmente — a consulta do CNPJ em 02/10/2026 indicou não optante do Simples.",
+    texto: "Alterado manualmente — a consulta do CNPJ em 02/10/2026 indicou Lucro Presumido ou Real.",
     alterado: true,
   });
-  assert.deepEqual(origemDoRegime("lucro_presumido", MEI, "64.582.932/0001-72"), {
+  assert.deepEqual(origemDoRegime("normal", MEI, "64.582.932/0001-72"), {
     texto: "Alterado manualmente — a consulta do CNPJ em 02/10/2026 indicou MEI.",
     alterado: true,
   });
 });
 
-test("decisão 166: regime vazio em vermelho — a consulta não decide, ou o cadastro está em revisão", () => {
-  assert.deepEqual(origemDoRegime(null, NORMAL, CNPJ), {
-    texto: "Consulta do CNPJ em 02/10/2026: não é Simples nem MEI. Escolha Real ou Presumido.",
-    alterado: true,
-    pendente: true,
-  });
+test("decisão 166: regime vazio em vermelho no cadastro em revisão", () => {
   assert.deepEqual(origemDoRegime(null, null, CNPJ, "mei"), {
     texto: "Antes: MEI. Confira e escolha.",
     alterado: true,
     pendente: true,
   });
-  assert.deepEqual(origemDoRegime(null, null, CNPJ, "normal"), {
-    texto: "Estava “Lucro Real ou Presumido”: escolha um dos dois.",
+  assert.deepEqual(origemDoRegime(null, NORMAL, CNPJ, "normal"), {
+    texto: "Antes: Lucro Presumido ou Real. Confira e escolha.",
     alterado: true,
     pendente: true,
   });
+  // Decisão 179: a consulta sempre decide; sem o "antes", nada a dizer.
+  assert.equal(origemDoRegime(null, NORMAL, CNPJ), null);
   // Escolhido: o "antes" some.
   assert.equal(origemDoRegime("mei", null, CNPJ, "mei"), null);
 });
@@ -199,14 +195,15 @@ test("decisão 166: o texto embaixo do CNAE diz se ele veio da consulta", () => 
   assert.equal(formatarCnae("0111301"), "0111-3/01");
 });
 
-test("decisão 166: o que falta para gerar PP — regime (o legado conta como falta) e CNAE, só na PJ", () => {
+test("decisão 166: o que falta para gerar PP — regime e CNAE, só na PJ", () => {
   const pj = { tipo_pessoa: "juridica", regime_tributario: "simples", cnae: "5911102" };
   assert.deepEqual(pendenciasDoCadastroFiscal(pj), []);
   assert.deepEqual(pendenciasDoCadastroFiscal({ ...pj, regime_tributario: null, cnae: null }), [
     "o regime tributário",
     "o CNAE",
   ]);
-  assert.deepEqual(pendenciasDoCadastroFiscal({ ...pj, regime_tributario: "normal" }), ["o regime tributário"]);
+  // Decisão 179: "Lucro Presumido ou Real" é regime completo.
+  assert.deepEqual(pendenciasDoCadastroFiscal({ ...pj, regime_tributario: "normal" }), []);
   assert.deepEqual(pendenciasDoCadastroFiscal({ ...pj, cnae: "59111" }), ["o CNAE"]);
   assert.deepEqual(pendenciasDoCadastroFiscal({ tipo_pessoa: "fisica", regime_tributario: null, cnae: null }), []);
   assert.equal(listarPendencias(["o regime tributário", "o CNAE"]), "o regime tributário e o CNAE");
@@ -263,12 +260,6 @@ test("a edição abre com a consulta gravada", () => {
   assert.equal(
     consultaDoCadastro({ ...CADASTRO, regime_consulta: "normal", regime_desde: "2019-01-01" })?.desde,
     null,
-  );
-  // Decisão 166: gravado como Real ou Presumido sem `regime_consulta` (antes
-  // da 142), a consulta indicou "nenhum dos dois".
-  assert.equal(
-    consultaDoCadastro({ ...CADASTRO, regime_tributario: "lucro_real", regime_consulta: null })?.regime,
-    "normal",
   );
   assert.equal(consultaDoCadastro({ ...CADASTRO, regime_consultado_em: null }), null);
   assert.equal(consultaDoCadastro({ ...CADASTRO, cpf_cnpj: null }), null);
@@ -333,17 +324,17 @@ test("o regime vai ao banco com a consulta inteira e a declaração do Simples",
 
 test("trocado à mão, a consulta vai junto — o aviso âmbar continua ao reabrir", () => {
   // O que a tela manda quando a consulta disse Simples e o usuário escolheu
-  // Lucro Presumido.
+  // Lucro Presumido ou Real.
   const consulta = consultaParaGravar(SIMPLES, CNPJ);
   const r = fornecedorSchema.safeParse({
     ...BASE,
-    regime_tributario: "lucro_presumido",
+    regime_tributario: "normal",
     regime_consulta: consulta.regime_consulta,
     regime_desde: consulta.regime_desde,
     regime_consultado_em: consulta.regime_consultado_em,
   });
   assert.ok(r.success);
-  assert.equal(r.data.regime_tributario, "lucro_presumido");
+  assert.equal(r.data.regime_tributario, "normal");
   assert.equal(r.data.regime_consulta, "simples");
   assert.equal(r.data.regime_desde, "2019-01-01");
   assert.equal(r.data.regime_consultado_em, HOJE);
@@ -376,7 +367,7 @@ test("a consulta vai inteira ou não vai: sem o dia, sem regime ou sem o indicad
 
   const semIndicado = fornecedorSchema.safeParse({
     ...BASE,
-    regime_tributario: "lucro_real",
+    regime_tributario: "normal",
     regime_consulta: "",
     regime_consultado_em: HOJE,
   });
@@ -400,12 +391,12 @@ test("o desde só acompanha a consulta que indicou Simples ou MEI", () => {
 test("a declaração de optante só fica no Simples", () => {
   const r = fornecedorSchema.safeParse({
     ...BASE,
-    regime_tributario: "lucro_real",
+    regime_tributario: "normal",
     regime_consultado_em: "",
     declaracao_simples_recebida: "true",
   });
   assert.ok(r.success);
-  assert.equal(r.data.regime_tributario, "lucro_real");
+  assert.equal(r.data.regime_tributario, "normal");
   assert.equal(r.data.regime_consultado_em, null);
   assert.equal(r.data.declaracao_simples_recebida, false);
 });
@@ -434,22 +425,22 @@ test("pessoa física não tem regime nem consulta", () => {
 });
 
 test("regime fora da lista e data malformada são recusados", () => {
-  // Decisão 166: o legado "Lucro Real ou Presumido" não se grava mais.
-  for (const fora of ["normal", "presumido"]) {
+  // Decisão 179: Real e Presumido separados não se gravam mais.
+  for (const fora of ["lucro_real", "lucro_presumido", "presumido"]) {
     const regime = fornecedorSchema.safeParse({ ...BASE, regime_tributario: fora });
     assert.ok(!regime.success);
     assert.ok(regime.error.issues.some((i) => i.path.includes("regime_tributario")));
   }
   const data = fornecedorSchema.safeParse({
     ...BASE,
-    regime_tributario: "lucro_real",
+    regime_tributario: "normal",
     regime_consultado_em: "02/10/2026",
   });
   assert.ok(!data.success);
   assert.ok(data.error.issues.some((i) => i.path.includes("regime_consultado_em")));
   const indicado = fornecedorSchema.safeParse({
     ...BASE,
-    regime_tributario: "lucro_real",
+    regime_tributario: "normal",
     regime_consulta: "presumido",
     regime_consultado_em: HOJE,
   });
@@ -530,7 +521,7 @@ test("o arquivo vai ao banco; vazio tira; trocar o regime não apaga", () => {
   // Deixou de ser Simples: a caixa cai, o arquivo fica com o cadastro.
   const normal = fornecedorSchema.safeParse({
     ...BASE,
-    regime_tributario: "lucro_presumido",
+    regime_tributario: "normal",
     declaracao_simples_recebida: "true",
     declaracao_simples_path: ARQUIVO,
   });

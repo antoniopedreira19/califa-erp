@@ -189,6 +189,8 @@ export type AuditAction =
   | "projeto.equipe_alterada"
   | "job.envio_de_pp_do_produtor_ligado"
   | "job.envio_de_pp_do_produtor_desligado"
+  | "job.responsavel_trocado"
+  | "projeto.gp_incluido"
   // Decisão 128: o envio depois do "Cancelar aprovação" da devolução volta
   // com o código do job cancelado; e o planejado da versão aprovada se
   // corrige com o job devolvido, na versão e na cópia do job.
@@ -248,6 +250,10 @@ export type AuditAction =
   // Decisão 157 (07/10/2026): a PP gerada que perdeu o prazo de envio ganha
   // vencimento novo, sem cancelar e refazer.
   | "pedido_compra.vencimento_atualizado"
+  // Revisão da decisão 156 (16/10/2026): a empresa emissora seguiu o CNPJ do
+  // documento (nota, fatura ou recibo) — no envio, na pronta para envio, na
+  // correção da NF ou na correção dos casos antigos.
+  | "pedido_compra.emissora_trocada"
   // Tela 3.2 — a baixa passou a ser da PARCELA, e a data de pagamento do
   // título virou repactuável.
   | "pedido_compra.parcela_paga"

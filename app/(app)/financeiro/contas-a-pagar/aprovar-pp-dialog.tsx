@@ -28,9 +28,11 @@
  *   (Tiago, 07/10/2026; até então vinham ligadas no regime normal com PIS
  *   0,65%, COFINS 3%, CSLL 1% e IRRF 1,5%). A exceção é a NF que outra PP
  *   já registrou com ISS retido (decisão 152): a chave nasce ligada só com
- *   aquele ISS. Travadas desligadas no Simples e no MEI (IN 459); sem
- *   retenção no cartão, como na baixa. Ligadas, vêm com o aviso âmbar de
- *   que só valem para serviço: nota de mercadoria não tem retenção.
+ *   aquele ISS. No Simples, só o ISS (decisão 180: a IN 459 é federal, e
+ *   o município pode exigir o ISS do optante); no MEI, travadas
+ *   desligadas; sem retenção no cartão, como na baixa. Ligadas, vêm com o
+ *   aviso âmbar de que só valem para serviço: nota de mercadoria não tem
+ *   retenção.
  * - **Crédito de PIS/COFINS** — automático pela regra, no mês da emissão
  *   da NF. Só o financeiro tira, e com motivo.
  *
@@ -44,10 +46,29 @@
  * retido e o crédito de cada nota aparecem por nota, e a que outra PP já
  * registrou só é lembrada. Aprovar grava as notas
  * (`registrar_notas_fiscais_da_pp`).
+ *
+ * ⚠️ Desenho em seções (15/10/2026, opção B do protótipo "Retenções no
+ * Contas a Pagar", escolhida pelo Tiago): o pop-up tinha texto demais e,
+ * com a retenção ligada, passava da altura da tela (1.249 px de conteúdo).
+ * Nenhuma regra mudou — os mesmos estados, contas, travas e mensagens.
+ * Mudou o arranjo:
+ * - Três blocos numa caixa: o pagamento (sem título — os rótulos dos campos
+ *   já dizem), "Retenções na fonte" e "Crédito de PIS/COFINS". O título das
+ *   retenções é o rótulo da chave; a chave não repete "Reter na fonte".
+ * - Ligar a chave abre a grade de alíquotas direto, com o retido e o
+ *   líquido embaixo (saíram o "Ajustar alíquotas" e a frase de resumo).
+ *   Desligar recolhe.
+ * - O parágrafo das guias virou uma tabela (guia, valor, apuração, vence).
+ * - Os textos de explicação viraram dica (ícone ⓘ): o que ficou à vista é
+ *   o que pede ação. O aviso de mercadoria virou o selo "Só para serviço",
+ *   e a trava do Simples, do MEI e do cartão, um selo com a regra na dica.
+ * - O crédito que não sai pela regra (CNPJ tomador no lucro presumido)
+ *   mostra o motivo à vista, em uma linha.
+ * - Rodapé fixo: Cancelar e Aprovar ficam sempre à vista, e só o meio rola.
  */
 
 import * as React from "react";
-import { AlertCircle, CheckCircle2, FilePenLine, Lock } from "lucide-react";
+import { AlertCircle, CheckCircle2, FilePenLine, Info, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -65,6 +86,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MoneyInput } from "@/components/ui/money-input";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
@@ -90,7 +112,6 @@ import {
 } from "@/lib/fiscal/calculos";
 import { dataBr, mesDe, nomeDoMes } from "@/lib/fiscal/datas";
 import {
-  aliquotaEfetiva,
   creditoDaNf,
   faltaNasNotasParaAprovar,
   guiaDoIssRetido,
@@ -98,8 +119,10 @@ import {
   parteDaNota,
   percentual,
   retencoesParaRegistrar,
+  retencaoDoRegime,
   rotuloCurtoDoRegime,
   somaDasPartes,
+  travaDoRegime,
   vencimentoDasGuiasFederais,
   type CreditoDaNf,
   type NfEmConferencia,
@@ -155,15 +178,15 @@ function formatDate(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
-/** Módulo fiscal: o que as seções novas dizem enquanto a NF não tem data e valor. */
-const TEXTO_SEM_NF =
-  "Preencha a data de emissão e o valor das notas em “Dados da PP”, olhando a nota ao lado: o valor é a base das retenções e a data, o mês do crédito.";
+/** Módulo fiscal: o que as seções novas dizem enquanto a NF não tem data e
+ *  valor — a frase curta à vista, o porquê na dica. */
+const TEXTO_SEM_NF = "Preencha a emissão e o valor das notas em “Dados da PP”, olhando a nota ao lado.";
+const DICA_SEM_NF = "O valor é a base das retenções e a data, o mês do crédito.";
 
 /**
- * Com "Reter na fonte" ligado — o que só acontece no Lucro Real ou
- * Presumido e no fornecedor sem regime informado, porque no Simples e no
- * MEI a chave fica travada desligada. O sistema não sabe se a nota é de
- * serviço ou de mercadoria; quem olha a nota decide (Tiago, 07/10/2026).
+ * Com "Reter na fonte" ligado — o que não acontece no MEI, onde a chave
+ * fica travada desligada. O sistema não sabe se a nota é de serviço ou de
+ * mercadoria; quem olha a nota decide (Tiago, 07/10/2026).
  */
 const AVISO_RETENCAO_SO_EM_SERVICO =
   "A retenção na fonte só vale para serviço. Se a nota for de mercadoria (DANFE, NF-e), desligue: compra de mercadoria não tem retenção de PIS/COFINS/CSLL, IR nem ISS.";
@@ -240,14 +263,13 @@ export function AprovarPPDialog({
   const issTravado: number | null | undefined = registroComIss
     ? (registroComIss.iss_aliquota ?? null)
     : undefined;
-  const [ajustando, setAjustando] = React.useState(false);
   // Módulo fiscal: a troca manual do crédito, sempre com motivo.
   const [semCredito, setSemCredito] = React.useState(false);
   const [motivoSemCredito, setMotivoSemCredito] = React.useState("");
   const regime = pp?.regimeDoFornecedor ?? null;
-  // Simples e MEI não sofrem retenção de PIS/COFINS/CSLL e IRRF (IN 459).
-  // Sem regime informado, segue o normal.
-  const optanteDoSimples = regime === "simples" || regime === "mei";
+  // Decisão 180: o Simples só retém o ISS; o MEI não retém nada. Sem regime
+  // informado, segue o Lucro Presumido ou Real.
+  const doRegime = retencaoDoRegime(regime);
 
   /** Cada aprovação começa SEM retenção: o financeiro liga e preenche caso
    *  a caso, olhando a nota (Tiago, 07/10/2026). A exceção é a NF que outra
@@ -255,8 +277,7 @@ export function AprovarPPDialog({
    *  com aquele ISS, que não se edita nem desliga. */
   function iniciarRetencao() {
     v.setRetem(false);
-    setAjustando(false);
-    if (!nfs || optanteDoSimples || !issTravado) return;
+    if (!nfs || doRegime === "nenhuma" || !issTravado) return;
     v.setRetem(true);
     travarIss();
   }
@@ -264,6 +285,14 @@ export function AprovarPPDialog({
   /** O ISS da nota já registrada por outra PP volta ao valor dela. */
   function travarIss() {
     if (issTravado !== undefined) v.porAliquota("ISS", issTravado);
+  }
+
+  /** Decisão 180: o imposto que o regime não deixa reter volta ao branco
+   *  (o "Repetir" de uma retenção antiga do mesmo fornecedor). */
+  function limparTravadosPeloRegime() {
+    for (const { imposto } of IMPOSTOS_RETIDOS) {
+      if (travaDoRegime(regime, imposto)) v.porAliquota(imposto, null);
+    }
   }
 
   // Cada abertura começa limpa: o diálogo é a decisão de UMA aprovação, e
@@ -296,7 +325,6 @@ export function AprovarPPDialog({
     estavaNoCartao.current = noCartao;
     if (noCartao) {
       v.setRetem(false);
-      setAjustando(false);
     } else {
       iniciarRetencao();
     }
@@ -310,18 +338,12 @@ export function AprovarPPDialog({
   // ---------------------------------------------------------------------
   const incompleta = nfs ? nfs.some(nfIncompleta) : false;
   const registroDeOutra = (nf: NfEmConferencia) => pp.registroDeOutraPP[nf.anexo_id] ?? null;
-  const retencaoTravada = optanteDoSimples || noCartao;
+  const retencaoTravada = doRegime === "nenhuma" || noCartao;
   const motivoSemRetencao = noCartao
     ? "No cartão de crédito não há retenção: o item entra inteiro na fatura, como na baixa."
-    : optanteDoSimples
-      ? "Optante do Simples: sem retenção de PIS/COFINS/CSLL e IRRF (IN 459)."
-      : null;
-  const resumo = IMPOSTOS_RETIDOS.filter(({ imposto }) => v.valores[imposto] > 0)
-    .map(
-      ({ imposto }) =>
-        `${imposto} ${percentual(aliquotaEfetiva(imposto, v.aliquotas, v.valores, base))}`,
-    )
-    .join(" · ");
+    : travaDoRegime(regime, "ISS");
+  // Decisão 180: no Simples a chave liga, mas só o ISS se preenche.
+  const soIss = doRegime === "so_iss" && !noCartao;
   // As guias que as retenções geram: CSRF (PIS + COFINS + CSLL) na DARF
   // 5952, IRRF na 1708, e o ISS retido na guia do município. As alíquotas
   // saem dos valores da tela, para a guia bater centavo a centavo com eles.
@@ -489,70 +511,80 @@ export function AprovarPPDialog({
     });
   }
 
+  const outroCnpj =
+    pp.cnpjDaPP && nfs ? nfs.filter((nf) => nf.tomador && nf.tomador !== pp.cnpjDaPP?.id) : [];
+  const issDeOutra = guias.iss > 0 && notasJaRegistradas.length > 0;
+  const comGuias = darfs.length > 0 || guiasIss.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* `z-[60]` porque este diálogo é aberto TAMBÉM de dentro da
           conferência em tela cheia — ver a escala de camadas no
           `FullscreenContent`. Sem isso ele monta atrás do `<iframe>` do
-          documento: visível, e sem receber clique. */}
-      <DialogContent className="z-[60] max-w-md" overlayClassName="z-[60]">
-        <DialogHeader>
-          {/* `pr-8`: o "X" de fechar é absoluto no canto (16px da borda,
-              24px de largura) e cobria o valor empurrado para a direita
-              (16/09/2026). O recuo tira o valor de baixo dele. */}
-          <DialogTitle className="flex flex-wrap items-baseline gap-2 pr-8">
-            <span>Aprovar</span>
-            <span className="font-mono text-california-red">{pp.codigo}</span>
-            <span className="ml-auto font-mono text-sm font-semibold text-muted-foreground">
-              {formatCurrency(pp.valor, "BRL")}
-            </span>
-          </DialogTitle>
-          {pp.envio && (
-            <FaixaQuemEnviou
-              rotulo={pp.envio.reenviada ? "Reenviada por" : "Enviada por"}
-              nome={pp.envio.por_nome}
-              em={pp.envio.em}
-              referencia={`Emitida por ${pp.emitidaPorNome ?? "—"} · GP responsável do job: ${pp.gpResponsavelNome ?? "—"}`}
-            />
-          )}
-          {pp.cnpjDaPP && nfs && nfs.some((nf) => nf.tomador && nf.tomador !== pp.cnpjDaPP?.id) && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-california-red/30 bg-california-red/5 px-3.5 py-2.5 text-left text-[12.5px] leading-relaxed text-california-red">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <div>
-                <strong className="font-semibold">A nota está em outro CNPJ que não o da PP.</strong>{" "}
-                {nfs
-                  .filter((nf) => nf.tomador && nf.tomador !== pp.cnpjDaPP?.id)
-                  .map((nf) => `NF ${nf.numero.trim()}: ${cadastro.estabelecimentos.find((e) => e.id === nf.tomador)?.nome ?? "—"}`)
-                  .join(" · ")}
-                . A PP é do CNPJ {pp.cnpjDaPP.nome}. Confira antes de aprovar.
-              </div>
-            </div>
-          )}
-          {pp.correcaoDaNf && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-left text-[12.5px] leading-relaxed">
-              <FilePenLine className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-              <div>
+          documento: visível, e sem receber clique.
+          Rodapé fixo (15/10/2026): o cartão vira coluna e só o meio rola —
+          com a retenção aberta, o Aprovar não sai de vista. */}
+      <DialogContent
+        className="z-[60] flex max-w-lg flex-col gap-0 overflow-hidden p-0"
+        overlayClassName="z-[60]"
+        onOpenAutoFocus={focarPrimeiroCampo}
+      >
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-5 pt-6">
+          <DialogHeader>
+            {/* `pr-8`: o "X" de fechar é absoluto no canto (16px da borda,
+                24px de largura) e cobria o valor empurrado para a direita
+                (16/09/2026). O recuo tira o valor de baixo dele. */}
+            <DialogTitle className="flex flex-wrap items-baseline gap-2 pr-8">
+              <span>Aprovar</span>
+              <span className="font-mono text-california-red">{pp.codigo}</span>
+              <span className="ml-auto font-mono text-sm font-semibold text-muted-foreground">
+                {formatCurrency(pp.valor, "BRL")}
+              </span>
+            </DialogTitle>
+            {pp.envio && (
+              <FaixaQuemEnviou
+                rotulo={pp.envio.reenviada ? "Reenviada por" : "Enviada por"}
+                nome={pp.envio.por_nome}
+                em={pp.envio.em}
+                referencia={`Emitida por ${pp.emitidaPorNome ?? "—"} · GP responsável do job: ${pp.gpResponsavelNome ?? "—"}`}
+              />
+            )}
+            {outroCnpj.length > 0 && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-california-red/30 bg-california-red/5 px-3.5 py-2.5 text-left text-[12.5px] leading-relaxed text-california-red">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
-                  <span className="text-amber-800">NF corrigida por</span>{" "}
-                  <strong className="font-semibold text-foreground">{pp.correcaoDaNf.por_nome ?? "—"}</strong>
-                  <span className="text-amber-800"> em {formatDataAsHoraBr(pp.correcaoDaNf.em)}</span>
+                  <strong className="font-semibold">A nota está em outro CNPJ que não o da PP.</strong>{" "}
+                  {outroCnpj
+                    .map(
+                      (nf) =>
+                        `NF ${nf.numero.trim()}: ${cadastro.estabelecimentos.find((e) => e.id === nf.tomador)?.nome ?? "—"}`,
+                    )
+                    .join(" · ")}
+                  . A PP é do CNPJ {pp.cnpjDaPP?.nome}. Confira antes de aprovar.
                 </div>
-                {pp.correcaoDaNf.motivo && (
-                  <div className="text-[11.5px] text-amber-800">{pp.correcaoDaNf.motivo}</div>
-                )}
               </div>
-            </div>
-          )}
-          <DialogDescription>
-            Vencimento negociado pela produção:{" "}
-            <strong className="font-semibold text-foreground">
-              {formatDate(pp.vencimentoOriginal)}
-            </strong>
-            .
-          </DialogDescription>
-        </DialogHeader>
+            )}
+            {pp.correcaoDaNf && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-left text-[12.5px] leading-relaxed">
+                <FilePenLine className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <div>
+                  <div>
+                    <span className="text-amber-800">NF corrigida por</span>{" "}
+                    <strong className="font-semibold text-foreground">{pp.correcaoDaNf.por_nome ?? "—"}</strong>
+                    <span className="text-amber-800"> em {formatDataAsHoraBr(pp.correcaoDaNf.em)}</span>
+                  </div>
+                  {pp.correcaoDaNf.motivo && (
+                    <div className="text-[11.5px] text-amber-800">{pp.correcaoDaNf.motivo}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            <DialogDescription>
+              Vencimento negociado pela produção:{" "}
+              <strong className="font-semibold text-foreground">{formatDate(pp.vencimentoOriginal)}</strong>.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4">
           {erro && (
             <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -566,8 +598,8 @@ export function AprovarPPDialog({
             <AprovarForaDoCadastro
               pagamento={pp.pagamentoForaDoCadastro}
               marcado={foraAprovado}
-              onChange={(v) => {
-                setForaAprovado(v);
+              onChange={(x) => {
+                setForaAprovado(x);
                 setFaltaForaAprovado(false);
                 setErro(null);
               }}
@@ -576,166 +608,185 @@ export function AprovarPPDialog({
             />
           )}
 
-          <div className="space-y-2">
-            <p className="text-sm font-bold">
-              Data de pagamento <span className="text-california-red">*</span>
-            </p>
-            <DatePicker
-              id="aprovar-pp-data-pagamento"
-              name="aprovar_pp_data_pagamento"
-              onDateChange={(d) => {
-                setDataPagamento(
-                  d
-                    ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-                    : "",
-                );
-                setErro(null);
-              }}
-            />
-            <p className="text-[11px] text-muted-foreground text-pretty">
-              Vira o vencimento do título em Títulos a Pagar; o original fica
-              registrado. Hoje é{" "}
-              <strong className="font-semibold text-california-red">{hoje}</strong>.
-              {pp.parcelas > 1 && (
-                <>
-                  {" "}
-                  Como esta PP tem {pp.parcelas} parcelas, as demais são deslocadas
-                  pelo mesmo número de dias.
-                </>
-              )}
-            </p>
-          </div>
+          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+            {/* ---- O pagamento: sem título, os rótulos dos campos já dizem. ---- */}
+            <div className="space-y-4 px-4 py-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-bold">
+                    Data de pagamento <span className="text-california-red">*</span>
+                  </p>
+                  <Dica
+                    texto={`Vira o vencimento do título em Títulos a Pagar; o original fica registrado.${
+                      pp.parcelas > 1
+                        ? ` Como esta PP tem ${pp.parcelas} parcelas, as demais são deslocadas pelo mesmo número de dias.`
+                        : ""
+                    }`}
+                  />
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    Hoje é <strong className="font-semibold text-california-red">{hoje}</strong>
+                  </span>
+                </div>
+                <DatePicker
+                  id="aprovar-pp-data-pagamento"
+                  name="aprovar_pp_data_pagamento"
+                  onDateChange={(d) => {
+                    setDataPagamento(
+                      d
+                        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+                        : "",
+                    );
+                    setErro(null);
+                  }}
+                />
+                {pp.parcelas > 1 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {pp.parcelas} parcelas: as demais andam o mesmo número de dias.
+                  </p>
+                )}
+              </div>
 
-          <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-sm font-bold">Como vai ser pago</p>
-            {/* Seletor do sistema, e não o nativo do sistema operacional
-                (16/09/2026). "Decidir na baixa" é a ausência de escolha, e o
-                Radix não aceita item de valor vazio — daí o rótulo DECIDIR. */}
-            <Select
-              value={formaPagamento === "" ? DECIDIR : formaPagamento}
-              disabled={pending}
-              onValueChange={(v) => {
-                const nova = v === DECIDIR ? "" : v;
-                setFormaPagamento(nova);
-                setCartaoId("");
-                // No cartão o tipo já entra em Custo Operacional; o subtipo
-                // continua em branco, que é a escolha real.
-                setTipoId(nova === "cartao_credito" ? custoOperacionalId : "");
-                setSubtipoId("");
-                setErro(null);
-              }}
-            >
-              <SelectTrigger aria-label="Como vai ser pago" className="h-10 w-full text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DECIDIR}>Decidir na baixa, parcela a parcela</SelectItem>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="transferencia">Transferência</SelectItem>
-                <SelectItem value="boleto">Boleto</SelectItem>
-                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {noCartao && (
-              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p className="text-[11.5px] leading-relaxed text-amber-900">
-                  O cartão aqui é a intenção: a parcela entra na fatura quando o
-                  pagamento for confirmado em Títulos a Pagar, pela{" "}
-                  <strong>data informada na baixa</strong>, e o dinheiro sai uma
-                  vez só, na baixa da fatura inteira. O centro de custo é
-                  escolhido agora para o item já chegar classificado à fatura.
-                </p>
-
+              <div className="space-y-1.5">
+                <p className="text-sm font-bold">Como vai ser pago</p>
+                {/* Seletor do sistema, e não o nativo do sistema operacional
+                    (16/09/2026). "Decidir na baixa" é a ausência de escolha, e o
+                    Radix não aceita item de valor vazio — daí o rótulo DECIDIR. */}
                 <Select
-                  value={cartaoId === "" ? undefined : cartaoId}
+                  value={formaPagamento === "" ? DECIDIR : formaPagamento}
                   disabled={pending}
-                  onValueChange={setCartaoId}
+                  onValueChange={(x) => {
+                    const nova = x === DECIDIR ? "" : x;
+                    setFormaPagamento(nova);
+                    setCartaoId("");
+                    // No cartão o tipo já entra em Custo Operacional; o subtipo
+                    // continua em branco, que é a escolha real.
+                    setTipoId(nova === "cartao_credito" ? custoOperacionalId : "");
+                    setSubtipoId("");
+                    setErro(null);
+                  }}
                 >
-                  <SelectTrigger aria-label="Cartão" className="h-9 w-full text-xs">
-                    <SelectValue placeholder="Escolha o cartão…" />
+                  <SelectTrigger aria-label="Como vai ser pago" className="h-10 w-full text-sm">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {cartoes.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-xs">
-                        {c.nome} · {c.bandeira.toUpperCase()} · ••••{c.ultimos_4_digitos}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value={DECIDIR}>Decidir na baixa, parcela a parcela</SelectItem>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="transferencia">Transferência</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                    <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
                   </SelectContent>
                 </Select>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Combobox
-                    ariaLabel="Tipo do plano de contas"
-                    items={tipos.map((t) => ({
-                      value: t.id,
-                      label: `${t.codigo} · ${t.nome}`,
-                    }))}
-                    value={tipoId || null}
-                    onChange={(v) => {
-                      setTipoId(v ?? "");
-                      setSubtipoId("");
-                    }}
-                    disabled={pending}
-                    placeholder="Tipo…"
-                    buscaPlaceholder="Escreva o código ou o nome"
-                    className="h-9 w-full border-border px-3.5 text-xs"
-                  />
-                  <Combobox
-                    ariaLabel="Subtipo do plano de contas"
-                    items={subtipos
-                      .filter((sub) => sub.tipo_id === tipoId)
-                      .map((sub) => ({
-                        value: sub.id,
-                        label: `${sub.codigo} · ${sub.nome}`,
-                      }))}
-                    value={subtipoId || null}
-                    onChange={(v) => setSubtipoId(v ?? "")}
-                    disabled={pending || tipoId === ""}
-                    placeholder="Subtipo…"
-                    buscaPlaceholder="Escreva o código ou o nome"
-                    className="h-9 w-full border-border px-3.5 text-xs"
-                  />
-                </div>
-              </div>
-            )}
-
-            {!noCartao && (
-              <div className="rounded-lg border border-border bg-muted/30 p-3">
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="text-muted-foreground">Centro de custo</span>
-                  <span className="font-semibold">Custo Operacional</span>
-                </div>
-                <p className="mt-1.5 text-[11px] text-muted-foreground text-pretty">
-                  Padrão de todo custo de job (decisão 068). O subtipo você escolhe na
-                  baixa, em Títulos a Pagar.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Módulo fiscal: as retenções na fonte, decididas na aprovação
-              sobre a soma das partes das notas nesta PP. */}
-          {nfs && (
-            <div className="space-y-2 border-t border-border pt-3">
-              <p className="text-sm font-bold">Retenções na fonte</p>
-              {incompleta ? (
-                <p className="flex items-start gap-1.5 text-[12px] leading-snug text-amber-800">
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none" />
-                  <span>{TEXTO_SEM_NF}</span>
-                </p>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="min-w-0 text-xs leading-snug text-muted-foreground">
-                      {pp.fornecedorNome} · {rotuloCurtoDoRegime(regime)}
-                    </span>
-                    <div
-                      className={cn(
-                        "flex flex-none items-center gap-2",
-                        retencaoTravada && "opacity-60",
-                      )}
+                {noCartao ? (
+                  <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-amber-900">
+                      Cartão e centro de custo
+                      <Dica
+                        className="text-amber-700/70"
+                        texto="O cartão aqui é a intenção: a parcela entra na fatura quando o pagamento for confirmado em Títulos a Pagar, pela data informada na baixa, e o dinheiro sai uma vez só, na baixa da fatura inteira. O centro de custo é escolhido agora para o item já chegar classificado à fatura."
+                      />
+                    </div>
+                    <Select
+                      value={cartaoId === "" ? undefined : cartaoId}
+                      disabled={pending}
+                      onValueChange={setCartaoId}
                     >
+                      <SelectTrigger aria-label="Cartão" className="h-9 w-full text-xs">
+                        <SelectValue placeholder="Escolha o cartão…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cartoes.map((c) => (
+                          <SelectItem key={c.id} value={c.id} className="text-xs">
+                            {c.nome} · {c.bandeira.toUpperCase()} · ••••{c.ultimos_4_digitos}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Combobox
+                        ariaLabel="Tipo do plano de contas"
+                        items={tipos.map((t) => ({ value: t.id, label: `${t.codigo} · ${t.nome}` }))}
+                        value={tipoId || null}
+                        onChange={(x) => {
+                          setTipoId(x ?? "");
+                          setSubtipoId("");
+                        }}
+                        disabled={pending}
+                        placeholder="Tipo…"
+                        buscaPlaceholder="Escreva o código ou o nome"
+                        className="h-9 w-full border-border px-3.5 text-xs"
+                      />
+                      <Combobox
+                        ariaLabel="Subtipo do plano de contas"
+                        items={subtipos
+                          .filter((sub) => sub.tipo_id === tipoId)
+                          .map((sub) => ({ value: sub.id, label: `${sub.codigo} · ${sub.nome}` }))}
+                        value={subtipoId || null}
+                        onChange={(x) => setSubtipoId(x ?? "")}
+                        disabled={pending || tipoId === ""}
+                        placeholder="Subtipo…"
+                        buscaPlaceholder="Escreva o código ou o nome"
+                        className="h-9 w-full border-border px-3.5 text-xs"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 pt-0.5 text-xs">
+                    <span className="text-muted-foreground">Centro de custo</span>
+                    <span className="font-semibold">Custo Operacional</span>
+                    <Dica texto="Padrão de todo custo de job (decisão 068). O subtipo você escolhe na baixa, em Títulos a Pagar." />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ---- Módulo fiscal: as retenções na fonte, decididas na aprovação
+                 sobre a soma das partes das notas nesta PP. O título é o
+                 rótulo da chave; ligada, a grade abre. ---- */}
+            {nfs && (
+              <div className="space-y-3 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    {incompleta || retencaoTravada ? (
+                      <p className="text-sm font-bold">Retenções na fonte</p>
+                    ) : (
+                      <label htmlFor="aprovar-pp-reter" className="block w-fit cursor-pointer text-sm font-bold">
+                        Retenções na fonte
+                      </label>
+                    )}
+                    {!incompleta && (
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+                        <span className="min-w-0">
+                          {pp.fornecedorNome} · {rotuloCurtoDoRegime(regime)}
+                        </span>
+                        {v.retem && (
+                          <span className="inline-flex flex-none items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800">
+                            Só para serviço
+                            <Dica className="h-3.5 w-3.5 text-amber-700/70" texto={AVISO_RETENCAO_SO_EM_SERVICO} />
+                          </span>
+                        )}
+                        {motivoSemRetencao && (
+                          <span className="inline-flex flex-none items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+                            <Lock className="h-2.5 w-2.5" />
+                            {noCartao ? "Cartão: sem retenção" : "Retenção travada"}
+                            <Dica className="h-3.5 w-3.5" texto={motivoSemRetencao} />
+                          </span>
+                        )}
+                        {soIss && (
+                          <span className="inline-flex flex-none items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+                            <Lock className="h-2.5 w-2.5" />
+                            Só ISS
+                            <Dica
+                              className="h-3.5 w-3.5"
+                              texto={`${travaDoRegime(regime, "PIS")} O ISS só se o município exigir, na alíquota da nota.`}
+                            />
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {!incompleta && (
+                    <div className={cn("flex-none pt-0.5", retencaoTravada && "opacity-60")}>
                       <Chave
                         id="aprovar-pp-reter"
                         ligada={v.retem}
@@ -744,236 +795,221 @@ export function AprovarPPDialog({
                           // Ligar abre as alíquotas em branco para o
                           // financeiro preencher (Tiago, 07/10/2026).
                           v.setRetem(x);
-                          setAjustando(x);
                           if (x) travarIss();
                           setErro(null);
                         }}
                         rotulo="Reter na fonte"
                       />
-                      <label
-                        htmlFor="aprovar-pp-reter"
-                        className={cn(
-                          "text-[13px] font-semibold",
-                          retencaoTravada ? "cursor-not-allowed" : "cursor-pointer",
-                        )}
-                      >
-                        Reter na fonte
-                      </label>
                     </div>
-                  </div>
-
-                  {motivoSemRetencao && (
-                    <p className="text-[11.5px] leading-snug text-muted-foreground text-pretty">
-                      {motivoSemRetencao}
-                    </p>
                   )}
+                </div>
 
-                  {v.retem && (
-                    <>
-                      <p className="flex items-start gap-1.5 text-[12px] leading-snug text-amber-800 text-pretty">
-                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none" />
-                        <span>{AVISO_RETENCAO_SO_EM_SERVICO}</span>
-                      </p>
-                      {v.retido > 0 ? (
-                        <p className="text-[12px] leading-relaxed tabular-nums">
-                          <span>
-                            {resumo} ={" "}
-                            <b className="font-mono font-semibold">
-                              {formatCurrency(v.retido, "BRL")}
-                            </b>{" "}
-                            ·
-                          </span>{" "}
-                          <span className="whitespace-nowrap">
-                            líquido{" "}
-                            <b className="font-mono font-semibold">
-                              {formatCurrency(v.liquido, "BRL")}
-                            </b>
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="text-[12px] text-muted-foreground">
-                          Nenhum imposto informado: ajuste as alíquotas ou desligue a retenção.
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] font-semibold">
+                {incompleta && (
+                  <p className="flex items-start gap-1.5 text-[12px] leading-snug text-amber-800">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none" />
+                    <span>{TEXTO_SEM_NF}</span>
+                    <Dica className="mt-px" texto={DICA_SEM_NF} />
+                  </p>
+                )}
+
+                {!incompleta && v.retem && (
+                  <div className="space-y-2">
+                    {pp.ultimaRetencao && (
+                      <div className="flex justify-end">
                         <button
                           type="button"
-                          onClick={() => setAjustando((a) => !a)}
-                          aria-expanded={ajustando}
-                          disabled={pending}
-                          className="text-california-red underline-offset-2 hover:underline disabled:opacity-50"
-                        >
-                          {ajustando ? "Ocultar alíquotas" : "Ajustar alíquotas"}
-                        </button>
-                        {pp.ultimaRetencao && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              v.repetir();
-                              travarIss();
-                              setErro(null);
-                            }}
-                            disabled={pending}
-                            className="text-california-red underline-offset-2 hover:underline disabled:opacity-50"
-                          >
-                            Repetir as da {pp.ultimaRetencao.referencia} (mesmo fornecedor)
-                          </button>
-                        )}
-                      </div>
-                      {ajustando && (
-                        <GradeDeAliquotas
-                          v={v}
-                          issTravadoPor={
-                            issTravado !== undefined
-                              ? `ISS da NF já registrado com a ${registroComIss?.na_pp ?? "outra PP"}`
-                              : null
-                          }
-                        />
-                      )}
-                      {issTravado !== undefined && (
-                        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground text-pretty">
-                          <Lock className="mt-0.5 h-3 w-3 flex-none" />
-                          <span>
-                            {issTravado
-                              ? `ISS retido de ${percentual(issTravado)}, o mesmo registrado na aprovação da ${registroComIss?.na_pp ?? "outra PP"}: a NF é a mesma.`
-                              : `Sem ISS retido, como na aprovação da ${registroComIss?.na_pp ?? "outra PP"}: a NF é a mesma.`}
-                          </span>
-                        </p>
-                      )}
-                      {(darfs.length > 0 || guiasIss.length > 0 || (guias.iss > 0 && notasJaRegistradas.length > 0)) && (
-                        <p className="text-[11px] leading-snug text-muted-foreground text-pretty">
-                          {darfs.length > 0 && (
-                            <>
-                              Geram{" "}
-                              {darfs.map((d, i) => (
-                                <React.Fragment key={d.codigo}>
-                                  {i > 0 && " e "}
-                                  DARF {d.codigo}{" "}
-                                  <b className="font-mono font-semibold">
-                                    {formatCurrency(d.valor, "BRL")}
-                                  </b>
-                                </React.Fragment>
-                              ))}
-                              , na apuração do mês do pagamento
-                              {mesDoPagamento ? ` (${nomeDoMes(mesDoPagamento)})` : ""}
-                              {vencFederal && (
-                                <>
-                                  , com vencimento em{" "}
-                                  <b className="font-semibold">{dataBr(vencFederal.data)}</b>
-                                </>
-                              )}
-                              .
-                            </>
-                          )}
-                          {guiasIss.map((g, i) => (
-                            <React.Fragment key={g.chave}>
-                              {darfs.length > 0 || i > 0 ? " E a" : "Gera a"} guia municipal do
-                              ISS retido,{" "}
-                              <b className="font-mono font-semibold">
-                                {formatCurrency(g.valor, "BRL")}
-                              </b>
-                              , de {g.municipio}-{g.uf}, na apuração do mês da emissão da NF (
-                              {nomeDoMes(g.mes)}), com vencimento em{" "}
-                              <b className="font-semibold">{dataBr(g.vencimento)}</b>.
-                            </React.Fragment>
-                          ))}
-                          {guias.iss > 0 && notasJaRegistradas.length > 0 && (
-                            <>
-                              {" "}
-                              O ISS retido da NF{" "}
-                              {notasJaRegistradas.map((nf) => nf.numero.trim()).join(", ")} já
-                              entrou na apuração com a{" "}
-                              {registroDeOutra(notasJaRegistradas[0])?.na_pp ?? "outra PP"}.
-                            </>
-                          )}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Módulo fiscal: o crédito de PIS/COFINS de cada NF. Automático
-              pela regra (fornecedor PJ com NF), no mês da emissão, pelo
-              valor cheio da nota; a parte do 12.08 sai na Apuração, pelo
-              rateio proporcional do mês (decisão 146). O financeiro só tira
-              o crédito, e com motivo. A nota que outra PP registrou só é
-              lembrada: o crédito dela já está na apuração (decisão 152). */}
-          {nfs && (
-            <div className="space-y-2 border-t border-border pt-3">
-              <p className="text-sm font-bold">Crédito de PIS/COFINS</p>
-              {!creditos ? (
-                <p className="text-[12px] leading-snug text-muted-foreground">
-                  Aparece quando a data de emissão e o valor das notas estiverem preenchidos.
-                </p>
-              ) : (
-                <>
-                  {creditos.map(({ nf, registro, credito }) => (
-                    <p key={nf.anexo_id} className="text-[12.5px] leading-relaxed">
-                      <span
-                        className={cn(
-                          "mr-2 inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 align-[1px] text-[10px] font-bold uppercase tracking-wide",
-                          PILULA_DO_CREDITO[credito.final.estado].tom,
-                        )}
-                      >
-                        {PILULA_DO_CREDITO[credito.final.estado].texto}
-                      </span>
-                      {/* Sem crédito, o valor continua à vista, riscado: quem
-                          tira o crédito vê quanto está deixando de tomar. */}
-                      <b
-                        title={`PIS ${percentual(credito.aliquotaPis)} ${formatCurrency(credito.final.pis, "BRL")} + COFINS ${percentual(credito.aliquotaCofins)} ${formatCurrency(credito.final.cofins, "BRL")}`}
-                        className={cn(
-                          "font-mono font-semibold",
-                          !credito.final.gera &&
-                            "text-muted-foreground line-through decoration-muted-foreground/60",
-                        )}
-                      >
-                        {formatCurrency(credito.final.total, "BRL")}
-                      </b>{" "}
-                      <span className={cn(!credito.final.gera && "text-muted-foreground")}>
-                        {nfs.length > 1 && `NF ${nf.numero.trim()} · `}
-                        {registro
-                          ? `já na apuração, registrada com a ${registro.na_pp ?? "outra PP"}`
-                          : credito.final.mes
-                            ? `na apuração de ${credito.final.mes} (mês da emissão da NF)`
-                            : "na apuração do mês da emissão da NF"}
-                      </span>
-                    </p>
-                  ))}
-                  {creditosNovos[0] && (
-                    <p className="text-[11.5px] leading-snug text-muted-foreground text-pretty">
-                      {creditosNovos[0].credito.final.motivo}
-                    </p>
-                  )}
-                  {podeTirarCredito && (
-                    <>
-                      <label className="flex w-fit cursor-pointer items-center gap-2 text-[13px] font-semibold">
-                        <Checkbox
-                          checked={semCredito}
-                          disabled={pending}
-                          onCheckedChange={(c) => {
-                            setSemCredito(c === true);
-                            if (c !== true) setMotivoSemCredito("");
+                          onClick={() => {
+                            v.repetir();
+                            limparTravadosPeloRegime();
+                            travarIss();
                             setErro(null);
                           }}
-                          aria-label="Não gera crédito"
-                          className="rounded-[4px]"
-                        />
-                        Não gera crédito
-                        <span className="text-[11px] font-normal text-muted-foreground">
-                          só o financeiro altera
+                          disabled={pending}
+                          className="text-[11.5px] font-semibold text-california-red underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          Repetir as da {pp.ultimaRetencao.referencia} (mesmo fornecedor)
+                        </button>
+                      </div>
+                    )}
+                    <GradeDeAliquotas
+                      v={v}
+                      base={base}
+                      regime={regime}
+                      issTravadoPor={
+                        issTravado !== undefined
+                          ? `ISS da NF já registrado com a ${registroComIss?.na_pp ?? "outra PP"}`
+                          : null
+                      }
+                    />
+                    {issTravado !== undefined && (
+                      <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+                        <Lock className="mt-0.5 h-3 w-3 flex-none" />
+                        <span>
+                          {issTravado
+                            ? `ISS de ${percentual(issTravado)} travado: a NF já foi registrada com a ${registroComIss?.na_pp ?? "outra PP"}.`
+                            : `Sem ISS retido, como na ${registroComIss?.na_pp ?? "outra PP"}: a NF é a mesma.`}
                         </span>
-                      </label>
-                      {semCredito && (
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="aprovar-pp-motivo-credito"
-                            className="text-xs font-semibold"
+                      </p>
+                    )}
+                    {comGuias ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[11px] font-semibold text-muted-foreground">Guias que geram</p>
+                          <Dica texto="As DARF entram na apuração do mês do pagamento, pelo CNPJ tomador da nota; a guia do ISS retido, no mês da emissão da NF, no município do tomador." />
+                        </div>
+                        <table className="w-full table-fixed text-[11.5px] tabular-nums">
+                          <colgroup>
+                            <col />
+                            <col className="w-[92px]" />
+                            <col className="w-[72px]" />
+                            <col className="w-[78px]" />
+                          </colgroup>
+                          <thead>
+                            <tr className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                              <th className="pb-1 text-left font-semibold">Guia</th>
+                              <th className="pb-1 text-right font-semibold">Valor</th>
+                              <th className="pb-1 text-right font-semibold">Apuração</th>
+                              <th className="pb-1 text-right font-semibold">Vence</th>
+                            </tr>
+                          </thead>
+                          <tbody className="[&_td]:border-t [&_td]:border-border [&_td]:py-1">
+                            {darfs.map((d) => (
+                              <tr key={d.codigo}>
+                                <td className="truncate pr-2">
+                                  DARF {d.codigo}{" "}
+                                  <span className="text-muted-foreground">
+                                    · {d.codigo === "5952" ? "PIS/COFINS/CSLL" : "IRRF"}
+                                  </span>
+                                </td>
+                                <td className="text-right font-mono font-semibold">{formatCurrency(d.valor, "BRL")}</td>
+                                <td className="text-right text-muted-foreground">
+                                  {mesDoPagamento ? mesCurto(nomeDoMes(mesDoPagamento)) : "do pgto."}
+                                </td>
+                                <td className="text-right">{vencFederal ? dataBr(vencFederal.data) : "—"}</td>
+                              </tr>
+                            ))}
+                            {guiasIss.map((g) => (
+                              <tr key={g.chave}>
+                                <td className="truncate pr-2">
+                                  ISS retido{" "}
+                                  <span className="text-muted-foreground">
+                                    · {g.municipio}-{g.uf}
+                                  </span>
+                                </td>
+                                <td className="text-right font-mono font-semibold">{formatCurrency(g.valor, "BRL")}</td>
+                                <td className="text-right text-muted-foreground">{mesCurto(nomeDoMes(g.mes))}</td>
+                                <td className="text-right">{dataBr(g.vencimento)}</td>
+                              </tr>
+                            ))}
+                            {issDeOutra && (
+                              <tr>
+                                <td colSpan={4} className="text-muted-foreground">
+                                  ISS da NF {notasJaRegistradas.map((nf) => nf.numero.trim()).join(", ")}: já entrou
+                                  com a {registroDeOutra(notasJaRegistradas[0])?.na_pp ?? "outra PP"}.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      issDeOutra && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Sem guia nova: o ISS da NF {notasJaRegistradas.map((nf) => nf.numero.trim()).join(", ")} já
+                          entrou com a {registroDeOutra(notasJaRegistradas[0])?.na_pp ?? "outra PP"}.
+                        </p>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ---- Módulo fiscal: o crédito de PIS/COFINS de cada NF.
+                 Automático pela regra (fornecedor PJ com NF), no mês da
+                 emissão, pelo valor cheio da nota; a parte do 12.08 sai na
+                 Apuração, pelo rateio proporcional do mês (decisão 146). O
+                 financeiro só tira o crédito, e com motivo. A nota que outra
+                 PP registrou só é lembrada: o crédito dela já está na
+                 apuração (decisão 152). ---- */}
+            {nfs && (
+              <div className="space-y-2 px-4 py-3">
+                <p className="text-sm font-bold">Crédito de PIS/COFINS</p>
+                {!creditos ? (
+                  <p className="text-[12px] leading-snug text-muted-foreground">
+                    Aparece quando a data de emissão e o valor das notas estiverem preenchidos.
+                  </p>
+                ) : (
+                  <>
+                    {creditos.map(({ nf, registro, credito }) => (
+                      <div key={nf.anexo_id} className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px]">
+                          <span
+                            className={cn(
+                              "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                              PILULA_DO_CREDITO[credito.final.estado].tom,
+                            )}
                           >
-                            Motivo <span className="text-california-red">*</span>
-                          </label>
+                            {PILULA_DO_CREDITO[credito.final.estado].texto}
+                          </span>
+                          {/* Sem crédito, o valor continua à vista, riscado: quem
+                              tira o crédito vê quanto está deixando de tomar. */}
+                          <b
+                            title={`PIS ${percentual(credito.aliquotaPis)} ${formatCurrency(credito.final.pis, "BRL")} + COFINS ${percentual(credito.aliquotaCofins)} ${formatCurrency(credito.final.cofins, "BRL")}`}
+                            className={cn(
+                              "font-mono font-semibold",
+                              !credito.final.gera &&
+                                "text-muted-foreground line-through decoration-muted-foreground/60",
+                            )}
+                          >
+                            {formatCurrency(credito.final.total, "BRL")}
+                          </b>
+                          <span className={cn("text-muted-foreground", !credito.final.gera && "line-through")}>
+                            {nfs.length > 1 && `NF ${nf.numero.trim()} · `}
+                            {registro
+                              ? `já na apuração (${registro.na_pp ?? "outra PP"})`
+                              : credito.final.mes
+                                ? mesCurto(credito.final.mes)
+                                : "mês da emissão"}
+                          </span>
+                          {!registro && credito.automatico.gera && (
+                            <Dica
+                              texto={`${
+                                credito.final.mes
+                                  ? `Entra na apuração de ${credito.final.mes}, o mês da emissão da NF. `
+                                  : "Entra na apuração do mês da emissão da NF. "
+                              }${credito.final.motivo}`}
+                            />
+                          )}
+                        </div>
+                        {/* O crédito que a REGRA não dá (CNPJ tomador no lucro
+                            presumido) mostra o porquê à vista: não há o que
+                            marcar, e ninguém procura a explicação na dica. */}
+                        {!registro && !credito.automatico.gera && (
+                          <p className="text-[11.5px] leading-snug text-muted-foreground">
+                            {credito.automatico.motivo}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    {podeTirarCredito && (
+                      <>
+                        <label className="flex w-fit cursor-pointer items-center gap-2 text-[13px] font-semibold">
+                          <Checkbox
+                            checked={semCredito}
+                            disabled={pending}
+                            onCheckedChange={(c) => {
+                              setSemCredito(c === true);
+                              if (c !== true) setMotivoSemCredito("");
+                              setErro(null);
+                            }}
+                            aria-label="Não gera crédito"
+                            className="rounded-[4px]"
+                          />
+                          Não gera crédito
+                          <Dica texto="Só o financeiro altera, e com motivo." />
+                        </label>
+                        {semCredito && (
                           <Select
                             value={motivoSemCredito === "" ? undefined : motivoSemCredito}
                             disabled={pending}
@@ -987,7 +1023,7 @@ export function AprovarPPDialog({
                               aria-label="Motivo"
                               className="h-9 w-full text-xs"
                             >
-                              <SelectValue placeholder="Escolha o motivo…" />
+                              <SelectValue placeholder="Motivo de não gerar crédito *" />
                             </SelectTrigger>
                             <SelectContent>
                               {MOTIVOS_SEM_CREDITO.map((m) => (
@@ -997,21 +1033,25 @@ export function AprovarPPDialog({
                               ))}
                             </SelectContent>
                           </Select>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 border-t border-border pt-4">
+        {/* Rodapé fixo, fora da rolagem. */}
+        <div className="flex flex-none items-center gap-2.5 border-t border-border bg-card px-6 py-4">
           <span className="text-[11px] text-muted-foreground">
-            {pp.parcelas > 1
-              ? `Cria ${pp.parcelas} títulos a pagar`
-              : "Cria 1 título a pagar"}
+            {pp.parcelas > 1 ? `Cria ${pp.parcelas} títulos a pagar` : "Cria 1 título a pagar"}
+            {v.retem && v.retido > 0 && !noCartao && (
+              <span className="ml-1.5 text-foreground">
+                · líquido <b className="font-mono font-semibold">{formatCurrency(v.liquido, "BRL")}</b>
+              </span>
+            )}
           </span>
           <button
             type="button"
@@ -1033,6 +1073,50 @@ export function AprovarPPDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** "outubro/2026" → "out/2026": a coluna da apuração e o mês do crédito. */
+function mesCurto(mes: string): string {
+  const [nome, ano] = mes.split("/");
+  return ano ? `${nome.slice(0, 3)}/${ano}` : mes;
+}
+
+/**
+ * O foco de abertura vai ao primeiro controle que não é uma dica: focada, a
+ * dica abriria o tooltip sozinha, e o Esc fecharia só ele, não o pop-up.
+ */
+function focarPrimeiroCampo(e: Event) {
+  e.preventDefault();
+  const raiz = e.currentTarget as HTMLElement;
+  const alvo = raiz.querySelector<HTMLElement>(
+    'button:not([data-dica]):not([disabled]), input:not([type="hidden"]):not([disabled]), [role="combobox"]',
+  );
+  (alvo ?? raiz).focus();
+}
+
+/** O texto que era parágrafo, atrás de um ícone ⓘ com tooltip. */
+function Dica({ texto, className }: { texto: string; className?: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-dica=""
+          aria-label={texto}
+          className={cn(
+            "inline-flex h-4 w-4 flex-none items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/30",
+            className,
+          )}
+        >
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      {/* `z-[70]`: acima do pop-up, que está em `z-[60]`. */}
+      <TooltipContent side="top" className="z-[70] max-w-[300px] text-[11.5px] leading-relaxed">
+        {texto}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1058,6 +1142,7 @@ function Chave({
       role="switch"
       aria-checked={ligada}
       aria-label={rotulo}
+      title={rotulo}
       disabled={desligada}
       onClick={() => onChange(!ligada)}
       className={cn(
@@ -1077,49 +1162,75 @@ function Chave({
 }
 
 /**
- * Módulo fiscal: a grade compacta do "Ajustar alíquotas" — imposto,
- * alíquota e valor, um calcula o outro (como na baixa, decisão 125), sobre
- * o valor da NF.
+ * Módulo fiscal: a grade das alíquotas — imposto, alíquota e valor, um
+ * calcula o outro (como na baixa, decisão 125), sobre o valor da NF. Aberta
+ * sempre que a chave está ligada, com o retido e o líquido embaixo.
  */
 function GradeDeAliquotas({
   v,
+  base,
+  regime,
   issTravadoPor,
 }: {
   v: EstadoDoValorDaBaixa;
+  base: number;
+  /** Decisão 180: no Simples, só o ISS se edita. */
+  regime: RegimeTributarioFornecedor | null;
   /** Decisão 152: a NF já registrada por outra PP trava o ISS (o motivo). */
   issTravadoPor: string | null;
 }) {
   return (
-    <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-2.5">
-      <div className="grid grid-cols-[minmax(0,1fr)_88px_128px] gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+    <div className="overflow-hidden rounded-lg border border-border">
+      <div className="grid grid-cols-[minmax(0,1fr)_88px_128px] gap-2 border-b border-border bg-muted/40 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
         <span>Imposto</span>
         <span className="text-right">Alíquota</span>
         <span className="text-right">Valor</span>
       </div>
-      {IMPOSTOS_RETIDOS.map(({ imposto, dica }) => (
-        <div
-          key={imposto}
-          className="grid grid-cols-[minmax(0,1fr)_88px_128px] items-center gap-2"
-        >
-          <span className="text-[12.5px] font-semibold" title={dica}>
-            {imposto}
+      <div className="space-y-1 px-2.5 py-2">
+        {IMPOSTOS_RETIDOS.map(({ imposto, dica }) => {
+          const travadoPor = (imposto === "ISS" ? issTravadoPor : null) ?? travaDoRegime(regime, imposto);
+          return (
+            <div key={imposto} className="grid grid-cols-[minmax(0,1fr)_88px_128px] items-center gap-2">
+              <span
+                className={cn(
+                  "flex items-center gap-1 text-[12.5px] font-semibold",
+                  travadoPor && imposto !== "ISS" && "text-muted-foreground",
+                )}
+                title={dica}
+              >
+                {imposto}
+                {travadoPor && <Lock className="h-3 w-3 text-muted-foreground" aria-label={travadoPor} />}
+              </span>
+              <PercentualCompacto
+                valor={v.aliquotas[imposto]}
+                onChange={(x) => v.porAliquota(imposto, x)}
+                rotulo={`Alíquota de ${imposto}`}
+                travadoPor={travadoPor}
+              />
+              <MoneyInput
+                value={v.valores[imposto]}
+                onValueChange={(x) => v.porValor(imposto, arredondar(x))}
+                aria-label={`Valor retido de ${imposto}`}
+                disabled={travadoPor !== null}
+                title={travadoPor ?? undefined}
+                className="h-8 px-2 text-right text-xs"
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="space-y-0.5 border-t border-border bg-muted/30 px-2.5 py-2 text-[12px] tabular-nums">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">
+            Retido{v.retido > 0 && base > 0 ? ` (${percentual((v.retido / base) * 100)})` : ""}
           </span>
-          <PercentualCompacto
-            valor={v.aliquotas[imposto]}
-            onChange={(x) => v.porAliquota(imposto, x)}
-            rotulo={`Alíquota de ${imposto}`}
-            travadoPor={imposto === "ISS" ? issTravadoPor : null}
-          />
-          <MoneyInput
-            value={v.valores[imposto]}
-            onValueChange={(x) => v.porValor(imposto, arredondar(x))}
-            aria-label={`Valor retido de ${imposto}`}
-            disabled={imposto === "ISS" && issTravadoPor !== null}
-            title={imposto === "ISS" ? (issTravadoPor ?? undefined) : undefined}
-            className="h-8 px-2 text-right text-xs"
-          />
+          <span className="font-mono font-semibold text-california-red">− {formatCurrency(v.retido, "BRL")}</span>
         </div>
-      ))}
+        <div className="flex justify-between">
+          <span className="font-semibold">Líquido ao fornecedor</span>
+          <span className="font-mono font-bold">{formatCurrency(v.liquido, "BRL")}</span>
+        </div>
+      </div>
     </div>
   );
 }
