@@ -65,7 +65,7 @@ export default async function SolicitacoesPage({
   }
 
   // Pre-load jobs e cargos pra Nova solicitação (reutilizável)
-  const [solicitacoesRes, jobsRes, cargosRes] = await Promise.all([
+  const [solicitacoesRes, jobsRes, cargosRes, naoLidasRes] = await Promise.all([
     query,
     supabase
       .from("jobs")
@@ -81,6 +81,7 @@ export default async function SolicitacoesPage({
       .eq("ativo", true)
       .order("nome", { ascending: true })
       .returns<FreelancerCargo[]>(),
+    supabase.rpc("get_freelancer_solicitacao_mensagens_nao_lidas"),
   ]);
 
   const solicitacoes = ((solicitacoesRes.data ?? []) as any[]).map((s) => ({
@@ -98,6 +99,15 @@ export default async function SolicitacoesPage({
   }));
 
   const cargos = cargosRes.data ?? [];
+
+  // Mapa de não lidas por solicitação (badge na tabela)
+  const naoLidasMap: Record<string, number> = {};
+  for (const linha of (naoLidasRes.data ?? []) as Array<{
+    solicitacao_id: string;
+    nao_lidas: number;
+  }>) {
+    naoLidasMap[linha.solicitacao_id] = Number(linha.nao_lidas);
+  }
 
   // Resolver origin pro link público (fallback env)
   const h = headers();
@@ -120,6 +130,7 @@ export default async function SolicitacoesPage({
         activeRole={session.activeRole}
         userId={session.profile.id}
         publicOrigin={publicOrigin}
+        naoLidasPorSolicitacao={naoLidasMap}
       />
     </div>
   );

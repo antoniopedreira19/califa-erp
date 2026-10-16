@@ -34,6 +34,7 @@ import type {
   FreelancerSolicitacaoStatus,
 } from "@/lib/types";
 import { ChipStatusSolicitacao } from "./chip-status-solicitacao";
+import { ChatSolicitacao } from "./chat-solicitacao";
 import {
   aprovarSolicitacao,
   rejeitarSolicitacao,
@@ -304,6 +305,8 @@ export function PopoverSolicitacao({
               )}
             </BlocoInfo>
           )}
+
+          <ChatSolicitacao solicitacaoId={s.id} userId={userId} />
         </div>
 
         {/* Modo rejeição inline */}
