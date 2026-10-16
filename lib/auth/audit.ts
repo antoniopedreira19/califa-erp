@@ -442,6 +442,8 @@ export type AuditAction =
   | "freelancer_solicitacao.aprovada"
   | "freelancer_solicitacao.rejeitada"
   | "freelancer_solicitacao.cancelada"
+  // Módulo Freelancers — cadastramento via link público (Task 022).
+  | "freelancer.cadastrado_via_solicitacao"
   | "acao_negada";
 
 export interface AuditPayload {

@@ -17,7 +17,11 @@ export async function updateSession(request: NextRequest) {
     path === "/definir-senha" ||
     path.startsWith("/api/auth/") ||
     path.startsWith("/_next") ||
-    path.startsWith("/favicon");
+    path.startsWith("/favicon") ||
+    // Fluxo público de solicitação de contratação (Task 022):
+    // freelancer preenche dados pessoais via link enviado pelo GP.
+    path.startsWith("/form/freelancer-solicitacao/") ||
+    path.startsWith("/api/public/freelancer-solicitacao/");
 
   let supabaseResponse = NextResponse.next({ request });
 
