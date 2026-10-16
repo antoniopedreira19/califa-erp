@@ -38,6 +38,7 @@ import type { DadosDaApuracao, EstabelecimentoDaTela, GuiaDaTela, PJDaTela } fro
 import { MemoriaDialog } from "./memoria-dialog";
 import { MultiSelectCnpjs } from "./multi-select-cnpjs";
 import { Nota, ResumoItem, moeda, nomeGuia, situacaoDa, somaGrupo } from "./ui";
+import { DialogoAApurar, ItemDoResumo, LinhaProjecao, projecoesDe, type Projecao } from "./a-apurar";
 import {
   BarraDosFiltrosDeColuna,
   FILTRO_VAZIO,
@@ -60,11 +61,13 @@ const trimestreDaGuia = (g: GuiaDaTela) => (g.periodo === "trimestral" ? g.compe
 const diasEntre = (de: string, ate: string) => Math.round((Date.parse(`${ate}T12:00:00Z`) - Date.parse(`${de}T12:00:00Z`)) / 86400000);
 
 /** Os filtros rápidos da situação. "Em aberto" é tudo que não foi aprovado. */
-type Mostrar = "aberto" | "a_aprovar" | "em_curso" | "aprovadas" | "todas";
+type Mostrar = "aberto" | "a_aprovar" | "em_curso" | "a_apurar" | "aprovadas" | "todas";
 const MOSTRAR: Array<[Mostrar, string, (g: GuiaDaTela) => boolean]> = [
   ["aberto", "Em aberto", (g) => g.estado !== "aprovada"],
   ["a_aprovar", "A aprovar", (g) => g.estado === "a_aprovar" || g.estado === "diferenca"],
   ["em_curso", "Em curso", (g) => g.estado === "em_curso"],
+  // Decisão 183: o que ainda vai nascer no recebimento (linhas "A apurar").
+  ["a_apurar", "A apurar", () => false],
   ["aprovadas", "Aprovadas", (g) => g.estado === "aprovada"],
   ["todas", "Todas", () => true],
 ];
@@ -273,6 +276,8 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
   const listaDoTopo = React.useMemo(() => porCnpj.filter(filtroDoMostrar), [porCnpj, filtroDoMostrar]);
   const colunasDaTabela = React.useMemo(() => colunasDaApuracao(pjPorId, estabPorId, ordemPj), [pjPorId, estabPorId, ordemPj]);
   const colunas = useFiltrosDeColuna(listaDoTopo, colunasDaTabela, { guardarEm: "fiscal-apuracao-vencimento" });
+  const [aApurarAberto, setAApurarAberto] = React.useState<Projecao | null>(null);
+  const todasProjecoes = React.useMemo(() => projecoesDe(dados, pjPorId), [dados, pjPorId]);
 
   // Os chips de competência: os meses e os trimestres que têm guia.
   const meses = React.useMemo(() => [...new Set(guias.filter((g) => g.periodo === "mensal").map((g) => g.competencia))].sort(), [guias]);
@@ -310,6 +315,21 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
   // guias pelo valor calculado" seguem esta lista: o lote nunca aprova uma
   // guia que o filtro escondeu.
   const lista = colunas.visiveis;
+  // Decisão 183: as linhas "A apurar" seguem o CNPJ e a competência de cima
+  // e entram em "Em aberto", "A apurar" e "Todas". Os filtros dos títulos
+  // são das guias: com um deles ligado (fora o da competência), elas saem.
+  const projecoesDoCnpj = todasProjecoes.filter((p) => cnpjs.length === 0 || cnpjs.includes(p.pj));
+  const projecoes =
+    !["aberto", "a_apurar", "todas"].includes(mostrar) || (colunas.filtrando && !periodo)
+      ? []
+      : projecoesDoCnpj.filter((p) => !periodo || (periodo.includes("-T") ? p.trimestre === periodo : p.competencia === periodo));
+  type LinhaDaTabela = { tipo: "guia"; g: GuiaDaTela; v: string } | { tipo: "a_apurar"; p: Projecao; v: string };
+  const linhasDaTabela: LinhaDaTabela[] = [
+    ...lista.map((g) => ({ tipo: "guia" as const, g, v: g.vencimento })),
+    ...projecoes.map((p) => ({ tipo: "a_apurar" as const, p, v: p.vencimento })),
+  ];
+  // Com ordem pelo título, as linhas "A apurar" ficam no fim; sem ela, entram pela data.
+  if (!colunas.ordenacao) linhasDaTabela.sort((a, b) => a.v.localeCompare(b.v));
   const aAprovar = lista.filter((g) => g.estado === "a_aprovar");
   const pendentes = lista.filter((g) => g.estado === "a_aprovar" || g.estado === "diferenca");
   const totalAAprovar = r2(pendentes.reduce((s, g) => s + aAprovarDa(g), 0));
@@ -364,7 +384,18 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Mostrar</span>
             {MOSTRAR.map(([k, rotulo, f]) => (
-              <Chip key={k} ativo={mostrar === k} onClick={() => setMostrar(k)} n={k === "todas" ? undefined : contagem(f)}>
+              <Chip
+                key={k}
+                ativo={mostrar === k}
+                onClick={() => setMostrar(k)}
+                n={
+                  k === "todas"
+                    ? undefined
+                    : k === "a_apurar"
+                      ? projecoesDoCnpj.length
+                      : contagem(f) + (k === "aberto" ? projecoesDoCnpj.length : 0)
+                }
+              >
                 {rotulo}
               </Chip>
             ))}
@@ -399,6 +430,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
         />
         <div className="h-5 w-px bg-border" />
         <ResumoItem icone={<Hourglass className="h-3.5 w-3.5 text-muted-foreground" />} label="Em curso (estimativa)" valor={moeda(totalEmCurso)} />
+        <ItemDoResumo projecoes={projecoes} />
         {proxima && (
           <>
             <div className="h-5 w-px bg-border" />
@@ -471,24 +503,28 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
             </tr>
           </thead>
           <tbody>
-            {lista.length === 0 && (
+            {linhasDaTabela.length === 0 && (
               <tr>
                 <td colSpan={LARGURAS.length} className="px-4 py-10 text-center text-sm text-muted-foreground">
                   {colunas.ativo || mostrar !== "todas" || cnpjs.length ? "Nenhuma guia com esse filtro." : "Nenhuma guia até agora."}
                 </td>
               </tr>
             )}
-            {lista.map((g) => (
-              <LinhaGuia
-                key={g.chave}
-                g={g}
-                hoje={dados.hoje}
-                pj={pjPorId.get(g.empresa_contabil_id)}
-                estab={g.estabelecimento_id ? estabPorId.get(g.estabelecimento_id) : undefined}
-                aprovarEmCurso={aprovaEmCurso(g)}
-                onAbrir={() => setAberta(g.chave)}
-              />
-            ))}
+            {linhasDaTabela.map((l) =>
+              l.tipo === "a_apurar" ? (
+                <LinhaProjecao key={l.p.chave} p={l.p} pj={pjPorId.get(l.p.pj)} onAbrir={() => setAApurarAberto(l.p)} />
+              ) : (
+                <LinhaGuia
+                  key={l.g.chave}
+                  g={l.g}
+                  hoje={dados.hoje}
+                  pj={pjPorId.get(l.g.empresa_contabil_id)}
+                  estab={l.g.estabelecimento_id ? estabPorId.get(l.g.estabelecimento_id) : undefined}
+                  aprovarEmCurso={aprovaEmCurso(l.g)}
+                  onAbrir={() => setAberta(l.g.chave)}
+                />
+              ),
+            )}
           </tbody>
         </table>
       </div>
@@ -524,7 +560,14 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
         </div>
       )}
 
-      <BlocosAApurar dados={dados} pjPorId={pjPorId} />
+      {dados.aApurarErro && (
+        <Nota tom="ambar" icone={<AlertTriangle className="h-3.5 w-3.5" />}>
+          Não foi possível projetar o que falta apurar no recebimento: {dados.aApurarErro}
+        </Nota>
+      )}
+      {aApurarAberto && (
+        <DialogoAApurar dados={dados} pjPorId={pjPorId} p={aApurarAberto} onClose={() => setAApurarAberto(null)} />
+      )}
 
       <p className="flex items-start gap-2 text-xs text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -642,70 +685,6 @@ function Prazo({ g, hoje }: { g: GuiaDaTela; hoje: string }) {
     <span className={cn("block text-[10.5px] font-semibold", d < 0 ? "text-rose-700" : d <= 5 ? "text-amber-700" : "text-muted-foreground")}>
       {texto}
     </span>
-  );
-}
-
-/**
- * "<PJ> · a apurar no recebimento" (protótipo `telas/apuracao.tsx`): no lucro
- * presumido pelo caixa, PIS, COFINS, IRPJ e CSLL só nascem no recebimento.
- * Até lá, os títulos em aberto das notas da PJ são projetados pela previsão
- * de recebimento (`lib/fiscal/a-apurar.ts`), e a projeção entra no fluxo de
- * caixa como estimativa. Vale para todas as competências; sem título em
- * aberto, o bloco não aparece.
- */
-function BlocosAApurar({ dados, pjPorId }: { dados: DadosDaApuracao; pjPorId: Map<string, PJDaTela> }) {
-  return (
-    <>
-      {dados.aApurarErro && (
-        <Nota tom="ambar" icone={<AlertTriangle className="h-3.5 w-3.5" />}>
-          Não foi possível projetar o que falta apurar no recebimento: {dados.aApurarErro}
-        </Nota>
-      )}
-      {dados.aApurar.map((b) => (
-        <div key={b.pj} className="rounded-2xl border border-border bg-card px-5 py-4 shadow-soft">
-          <p className="flex items-center gap-2 text-sm font-semibold">
-            <Hourglass className="h-4 w-4 text-muted-foreground" />
-            {pjPorId.get(b.pj)?.nome ?? b.pj_nome} · a apurar no recebimento
-          </p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            No regime de caixa, PIS, COFINS, IRPJ e CSLL só nascem quando o cliente paga. Enquanto isso, o sistema projeta pela previsão de
-            recebimento dos títulos em aberto, e a projeção entra no fluxo de caixa como estimativa.
-          </p>
-          <table className="mt-3 w-full text-[12.5px]">
-            <thead>
-              <tr className="text-left text-[10.5px] uppercase tracking-wider text-muted-foreground">
-                <th className="py-1 font-semibold">Nota</th>
-                <th className="py-1 font-semibold">Recebimento previsto</th>
-                <th className="py-1 text-right font-semibold">A receber</th>
-                <th className="py-1 text-right font-semibold">PIS + COFINS</th>
-                <th className="py-1 text-right font-semibold">Vencem em</th>
-                <th className="py-1 pl-4 font-semibold">IRPJ e CSLL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {b.linhas.map((l) => (
-                <tr key={l.titulo_id} className="border-t border-border">
-                  <td className="py-1.5">{l.rotulo}</td>
-                  <td className="py-1.5 font-mono">
-                    {dataBr(l.previsao)}
-                    {/* Previsão que já passou: a projeção conta o recebimento a partir de amanhã. */}
-                    {l.recebimento !== l.previsao && (
-                      <span className="block font-sans text-[10.5px] text-muted-foreground">
-                        vencida · projetada para {dataBr(l.recebimento)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-1.5 text-right font-mono">{moeda(l.a_receber)}</td>
-                  <td className="py-1.5 text-right font-mono">{moeda(l.pis_cofins)}</td>
-                  <td className="py-1.5 text-right font-mono">{dataBr(l.vencimento)}</td>
-                  <td className="py-1.5 pl-4 text-muted-foreground">entra na base do {l.rotulo_trimestre}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
-    </>
   );
 }
 

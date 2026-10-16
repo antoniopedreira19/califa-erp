@@ -7426,3 +7426,19 @@ Regra completa na seção 9 da decisão 091.
   (LC 224), rendimento de aplicação no presumido, a Hitlab reter como
   tomadora e a forma do "a apurar no recebimento" (protótipo A/B).
 
+## ⚠️ Nota de 2026-10-16 (6) — "A apurar no recebimento" como linhas da lista; conta da Empresa Teste Presumido (decisão 183)
+
+- **Apuração:** no presumido pelo caixa, cada PIS/COFINS (por mês do
+  recebimento previsto) e IRPJ/CSLL (por trimestre) que ainda vai nascer é
+  uma linha "A apurar" na data de vencimento (`a-apurar.tsx`:
+  `projecoesDe`, `LinhaProjecao`, `DialogoAApurar`). Chip "A apurar"; entra
+  em "Em aberto" e "Todas"; segue CNPJ e competência; sai com filtro de
+  coluna. O resumo ganha o total a apurar; o cartão do fim da página saiu.
+- **Hoje no banco não há linha "A apurar":** a Hitlab não tem nota com CNPJ
+  emissor e as 3 da Empresa Teste Presumido estão canceladas.
+- **Migration 20261016600003:** "Conta Teste Presumido" (Banco Teste,
+  corrente, R$ 100.000,00 em 01/09/2026) — aparece na Conciliação, visão
+  Teste.
+- **Pendências (183 §4):** receita jan–set/2026 e guias de IRPJ/CSLL do 1º
+  ao 3º trimestre da Hitlab (LC 224), rendimento de aplicação no presumido,
+  a Hitlab reter como tomadora.
