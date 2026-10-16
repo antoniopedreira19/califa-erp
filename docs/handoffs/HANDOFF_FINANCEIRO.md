@@ -7363,3 +7363,24 @@ os mesmos estados, contas, travas e mensagens de `aprovar-pp-dialog.tsx`.
 - **Conferido em 16/10/2026** no Chrome, com os dados reais: o PIS de
   outubro/2026 da Empresa Teste foi confirmado em curso (R$ 0,00, sem
   título).
+
+## ⚠️ Nota de 2026-10-16 (3) — A empresa em destaque na lista da Conciliação (revisão da decisão 091)
+
+Regra completa na seção 8 da decisão 091.
+
+- **Faixa da empresa em grafite claro** (`FAIXA_GRUPO_LISTA`, o mesmo tom da
+  linha do agrupamento das planilhas) sobre **linhas brancas** — antes a
+  tabela não tinha fundo e faixa e linha saíam no mesmo cinza.
+- **O subtotal foi para a faixa**; a linha "Subtotal · <empresa>" saiu. O
+  total geral fecha com o fio grosso (`TOTAL_LISTA`).
+- **Empresas em ordem alfabética** por padrão; a ordem pelo título da
+  coluna continua mandando quando escolhida.
+- "Ativa" sem pílula, traços mais claros, colunas de largura fixa.
+- Código em `hub-tabela.tsx` e duas constantes novas em
+  `_planilha/blocos.ts`. O resto da página (faixa do consolidado e as
+  quebras do saldo) não mudou.
+- **Conferido em 16/10/2026** no navegador, logado como administrador, em
+  1960 px, com os dados reais: ordem alfabética, busca ("santander" → 3
+  contas, subtotal do filtro batendo), ordem pelo título "Saldo atual",
+  limpar filtro e o clique na linha abrindo o extrato com o período. A
+  conta inativa foi vista só no protótipo (não há conta inativa no banco).
