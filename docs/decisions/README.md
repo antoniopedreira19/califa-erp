@@ -204,7 +204,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 182 | [O adiantamento conta na emissão da nota; ajustes da lista da Apuração (revê a 141, a 142 e a 181)](182-adiantamento-na-emissao-e-ajustes-da-apuracao.md) | 2026-10-16 |
 | 183 | [O "a apurar no recebimento" vira linhas da lista da Apuração; a conta da Empresa Teste Presumido (revê a 181)](183-a-apurar-na-lista-e-conta-da-empresa-teste-presumido.md) | 2026-10-16 |
 | 184 | [O Faturar redesenhado: drawer que abre a nota, "Faturar", job de referência na avulsa e CNPJ do tomador com "exterior" (revê a 086 e a 123)](184-faturar-drawer-que-abre-a-nota-e-cnpj-do-tomador.md) | 2026-10-16 |
-| 185 | *Reservada* — errata em revisão trava o envio de PP só na linha alterada (revê a 040) | 2026-10-16 |
+| 185 | [A errata em revisão trava o envio de PP só na linha que ela alterou (revê a 040)](185-errata-trava-o-envio-de-pp-so-na-linha-alterada.md) | 2026-10-16 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a

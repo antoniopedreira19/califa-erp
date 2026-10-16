@@ -18,7 +18,7 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
-import { textoAguardaAbertura } from "./pp-a-emitir-ui";
+import { TEXTO_LINHA_ALTERADA_EM_REVISAO, textoAguardaAbertura } from "./pp-a-emitir-ui";
 import { nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import {
@@ -188,9 +188,10 @@ interface Props {
    *  `rejeitado_financeiro`). Distingue-se do job ENCERRADO, que também
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
   preAbertura: boolean;
-  /** Errata devolveu o job ao mural: o envio de PP ao financeiro fica
-   *  fechado até a revisão da abertura ser salva (decisão 040). */
-  aberturaEmRevisao?: boolean;
+  /** As linhas (`jobs_itens_orcado.id`) que uma errata ainda não revisada
+   *  mudou: o envio das PPs delas fica fechado até a revisão da abertura
+   *  ser salva (decisões 040 e 185). As outras enviam normalmente. */
+  linhasComEnvioTravado?: string[];
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -701,7 +702,7 @@ export function JobItemRealizadoTable({
   podeEditarFornecedor = false,
   podeConfirmarBv,
   preAbertura,
-  aberturaEmRevisao = false,
+  linhasComEnvioTravado = [],
   ppsPorItemId,
   aEmitirPorItemId,
   statusDoJob,
@@ -2393,8 +2394,8 @@ export function JobItemRealizadoTable({
         const envioBloqueadoPor = preAbertura
           ? textoAguardaAbertura(statusDoJob) ??
             "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir."
-          : aberturaEmRevisao
-            ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
+          : itemAtual && linhasComEnvioTravado.includes(itemAtual.id)
+            ? TEXTO_LINHA_ALTERADA_EM_REVISAO
             : !papelEnviaPP
               ? "Só o GP envia PP ao financeiro. Confira os documentos e deixe a PP pronta para envio: o GP a envia pela aba Pedidos de Produção."
               : null;
