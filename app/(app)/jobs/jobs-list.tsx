@@ -53,8 +53,11 @@ export interface JobRow {
   regional_id: string | null;
   regional_nome: string | null;
   responsavel_id: string | null;
-  /** Produtor do job — conta como "meu" junto com o GP responsável. */
   produtor_id: string | null;
+  /** Entra no recorte "Meus": sou o GP ou o Produtor Responsável do job,
+   *  ou estou na Equipe do projeto dele (16/10/2026). Vem do servidor —
+   *  `projetosNaEquipeDe`. */
+  meu: boolean;
   /** Descritivo do job (coluna `jobs.observacoes`) — obrigatório no envio
    *  para abertura desde a decisão 043. Nulo nos 27 jobs anteriores à
    *  regra, e nesses o ícone da linha fica apagado. */
@@ -184,20 +187,16 @@ interface GrupoProjeto {
 export function JobsList({
   rows,
   empresas,
-  usuarioId,
   podeAlternarMeusTodos = true,
   meusInicial,
 }: {
   rows: JobRow[];
   empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
-  /** Quem está logado — define o recorte "Meus". */
-  usuarioId: string;
   /**
    * Se `false`, a chave "Meus/Todos" nao aparece e o filtro `meus`
    * comeca em `false` (mostra todos os jobs que o RLS deixou passar).
    * Usado pro Freelancer, que so ve jobs onde participa da equipe do
-   * projeto — RLS ja fez esse recorte (`is_freelancer_do_projeto`), entao
-   * filtrar por GP/produtor na tela esconderia jobs da equipe dele. O
+   * projeto — RLS ja fez esse recorte (`is_freelancer_do_projeto`). O
    * "Meus" do freelancer E a equipe (03/10/2026). Fonte-verdade da regra:
    * `lib/permissoes.ts`, recurso `listas.chave_meus_todos`.
    */
@@ -253,11 +252,11 @@ export function JobsList({
   const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rows.filter((r) => {
-      // "Meu" é o job em que sou o GP responsável OU o produtor. Só com o
-      // GP, o produtor abria a lista em "Meus" e não via nenhum job seu
-      // (corrigido em 03/10/2026).
-      if (meus && r.responsavel_id !== usuarioId && r.produtor_id !== usuarioId)
-        return false;
+      // "Meu" é o job do projeto em cuja Equipe estou — não só o job em que
+      // sou o GP ou o Produtor Responsável (16/10/2026). A GP que criou o
+      // projeto e deixou outra GP responsável abria a lista em "Meus" e não
+      // via o job.
+      if (meus && !r.meu) return false;
       if (statusFiltro !== "todos" && r.status !== statusFiltro) return false;
       if (produtoFiltro !== "todos" && (r.produto?.trim() ?? "") !== produtoFiltro)
         return false;
@@ -271,7 +270,7 @@ export function JobsList({
         r.nome.toLowerCase().includes(q)
       );
     });
-  }, [rows, meus, usuarioId, statusFiltro, produtoFiltro, regionalFiltro, empresaFiltro, busca]);
+  }, [rows, meus, statusFiltro, produtoFiltro, regionalFiltro, empresaFiltro, busca]);
 
   const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "jobs" });
 
@@ -733,7 +732,7 @@ export function JobsList({
             <p className="text-sm font-semibold">Nenhum job com esse recorte</p>
             <p className="text-xs text-muted-foreground">
               {meus
-                ? "Você não é GP nem produtor de nenhum job que combine com os filtros."
+                ? "Você não está na equipe de nenhum job que combine com os filtros."
                 : "Nenhum job combina com os filtros escolhidos."}
             </p>
             <button

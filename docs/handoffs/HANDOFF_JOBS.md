@@ -5629,3 +5629,21 @@ Pedido do Tiago em 16/10/2026. Regra completa na decisão 185.
   painel e na aba); TES-1025/26 com PP-00243 no Item 1 enviada em revisão
   e PP-00244 no Item 3 recusada na tela e na action
   (`linha_alterada_em_revisao`). As duas canceladas no fim.
+
+## ⚠️ Nota de 2026-10-16 (4) — o "Meus" da lista de Jobs é a Equipe do projeto (revisão da decisão 036)
+
+Pedido do Tiago em 16/10/2026, depois do caso do COL-1001/26 (a GP que
+criou o projeto não via o job em "Meus" porque deixou outra GP como
+responsável). Regra completa na nota de 16/10 da decisão 036.
+
+- **Antes:** "meu" era o job em que sou o GP ou o Produtor Responsável.
+  **Agora:** todo job do projeto em cuja Equipe estou (criador do
+  projeto, GPs e acréscimos do projeto, responsáveis de qualquer job dele,
+  produtores dos orçamentos).
+- **Código:** `projetosNaEquipeDe` em `lib/data/equipe-do-projeto.ts`; a
+  página calcula `JobRow.meu`; a lista filtra por ele. Sem migration.
+- **Em aberto:** os cards de ação da home do GP seguem contando só o GP
+  Responsável e podem mostrar menos que a lista em "Meus" que abrem.
+- **Conferido:** logado como administrador (18 jobs em "Meus", com o
+  AMB-0156/26); a Isabella simulada com a RLS dela vê o COL-1001/26.
+

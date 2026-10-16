@@ -235,6 +235,59 @@ export async function carregarEquipeDoProjeto(
   };
 }
 
+/**
+ * Os projetos em cuja Equipe a pessoa está — a mesma régua de
+ * `carregarEquipeDoProjeto`, lida pelo outro lado (de uma pessoa para os
+ * projetos, e não de um projeto para as pessoas). É o recorte "Meus" da
+ * lista de Jobs (16/10/2026): todo job do projeto é "meu" para quem está
+ * na Equipe dele, e não só para o GP e o Produtor Responsáveis do job.
+ *
+ * Quatro leituras já filtradas por ela, em paralelo: voltam poucas linhas.
+ * Mudou quem entra sozinho na Equipe? Mude aqui também.
+ */
+export async function projetosNaEquipeDe(
+  supabase: Supabase,
+  tenantId: string,
+  profileId: string,
+): Promise<Set<string>> {
+  const [criouRes, vinculosRes, orcsRes, jobsRes] = await Promise.all([
+    supabase
+      .from("projetos")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("created_by", profileId),
+    // GP do projeto e acréscimo manual: qualquer papel vale.
+    supabase
+      .from("projeto_responsaveis")
+      .select("projeto_id")
+      .eq("tenant_id", tenantId)
+      .eq("profile_id", profileId),
+    supabase
+      .from("orcamentos")
+      .select("projeto_id")
+      .eq("tenant_id", tenantId)
+      .eq("produtor_id", profileId),
+    supabase
+      .from("jobs")
+      .select("projeto_id")
+      .eq("tenant_id", tenantId)
+      .or(`responsavel_id.eq.${profileId},produtor_id.eq.${profileId}`)
+      .neq("status", "cancelado"),
+  ]);
+  for (const r of [criouRes, vinculosRes, orcsRes, jobsRes]) {
+    if (r.error) console.error("[equipe.projetosDe]", r.error.message);
+  }
+
+  const ids = new Set<string>();
+  for (const p of (criouRes.data ?? []) as Array<{ id: string }>) ids.add(p.id);
+  for (const r of [vinculosRes, orcsRes, jobsRes]) {
+    for (const l of (r.data ?? []) as Array<{ projeto_id: string | null }>) {
+      if (l.projeto_id) ids.add(l.projeto_id);
+    }
+  }
+  return ids;
+}
+
 /** A Equipe a partir do job — a página do job a lê junto do detalhe, sem
  *  esperar o projeto chegar por ele. */
 export async function carregarEquipeDoJob(
