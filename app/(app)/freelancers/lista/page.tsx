@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Users, Plus } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
@@ -115,15 +116,14 @@ export default async function FreelancersListaPage({
           <div className="flex items-center gap-2">
             {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
             {podeCriarFreelancer && (
-              <button
-                type="button"
-                disabled
-                title="Chega na Task 014"
-                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white opacity-50 cursor-not-allowed shadow-sm"
+              <Link
+                href="/freelancers/novo"
+                prefetch={false}
+                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 Novo freelancer
-              </button>
+              </Link>
             )}
           </div>
         }
