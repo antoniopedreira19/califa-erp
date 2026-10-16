@@ -126,3 +126,51 @@ test("os pagamentos de cada PP vão na primeira nota dela, com o código e o job
   assert.deepEqual(n1.pagamentos.map((p) => [p.id, p.pp, p.job?.job_id, p.bruto]), [["pg-a", "PP-00139", "j1", 9150]]);
   assert.deepEqual(n2.pagamentos.map((p) => [p.id, p.pp, p.job?.job_id, p.bruto]), [["pg-b", "PP-00140", "j2", 3926]]);
 });
+
+// ---------------------------------------------------------------------------
+// Decisão 182: o adiantamento conta na emissão da nota
+// ---------------------------------------------------------------------------
+
+const notaDeSaida = (id: string, emissao: string) => ({
+  id,
+  numero_nf: id.toUpperCase(),
+  data_emissao: emissao,
+  valor_total: "10000.00",
+  estabelecimento_id: "ssa",
+  fiscal_cnae_id: "cnae",
+  emitido_em: `${emissao}T12:00:00-03:00`,
+  empresa_id: "emp",
+  descricao: null,
+  empresa: { nome_fantasia: "Hitlab", razao_social: null },
+  itens: [],
+});
+
+const recebimento = (id: string, nota: string, data: string, retido: Array<{ imposto: string; valor: string }> = []) => ({
+  id,
+  valor: "10000.00",
+  data_movimento: data,
+  titulo: { faturamento_id: nota },
+  retencoes: retido,
+});
+
+test("o adiantamento conta na emissão da nota, com a retenção junto; o recebimento depois da nota fica no dia dele", () => {
+  const { fatos } = montarFatos({
+    cadastro: CADASTRO,
+    notas: [notaDeSaida("nf1", "2026-10-05")],
+    jobs: [],
+    recebimentos: [
+      recebimento("adiantado", "nf1", "2026-09-20", [{ imposto: "IRRF", valor: "150.00" }]),
+      recebimento("depois", "nf1", "2026-11-03"),
+    ],
+    notasFornecedor: [],
+    pagamentos: [],
+    aprovacoes: [],
+  });
+  const porId = new Map(fatos.recebimentos.map((r) => [r.id, r]));
+  assert.equal(porId.get("adiantado")?.data, "2026-10-05");
+  assert.equal(porId.get("adiantado")?.adiantado_em, "2026-09-20");
+  assert.equal(porId.get("adiantado")?.bruto, 10150);
+  assert.equal(porId.get("adiantado")?.retido.IRRF, 150);
+  assert.equal(porId.get("depois")?.data, "2026-11-03");
+  assert.equal(porId.get("depois")?.adiantado_em, undefined);
+});

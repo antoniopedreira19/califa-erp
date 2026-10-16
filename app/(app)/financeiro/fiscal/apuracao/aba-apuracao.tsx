@@ -772,6 +772,8 @@ function LinhaGuia({
   const aprovado = r2(g.aprovacoes.reduce((s, a) => s + a.valor_guia, 0));
   const original = g.aprovacoes.find((a) => !a.diferenca);
   const motivoCurto = g.vencimento_motivo?.split("·")[1]?.trim();
+  // O botão de ação abre a mesma memória de cálculo: com ele, o olho sai.
+  const temAcao = aprovarEmCurso || g.estado === "a_aprovar" || g.estado === "diferenca";
   return (
     <tr onClick={onAbrir} className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40">
       <td className="px-3 py-3">
@@ -821,19 +823,28 @@ function LinhaGuia({
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums">
         {moeda(g.apurado)}
         {g.saldo_credor_gerado > 0 && (
-          <span className="block font-sans text-[10px] font-semibold text-sky-700">saldo credor {moeda(g.saldo_credor_gerado)}</span>
+          <span className="block whitespace-normal font-sans text-[10px] font-semibold leading-tight text-sky-700">
+            saldo credor {moeda(g.saldo_credor_gerado)}
+          </span>
         )}
+        {/* Só o valor a mais (ou a menos) desde a aprovação: a frase inteira
+            passava da coluna. O sentido fica na dica. */}
         {g.estado === "diferenca" && (
-          <span className="block font-sans text-[10.5px] font-semibold text-rose-700">
+          <span
+            className={cn("block whitespace-nowrap font-sans text-[10.5px] font-semibold", g.delta > 0 ? "text-rose-700" : "text-emerald-700")}
+            title={`${g.delta > 0 ? "A mais" : "A menos"} desde a aprovação`}
+          >
             {g.delta > 0 ? "+" : "−"}
-            {moeda(Math.abs(g.delta))} desde a aprovação
+            {moeda(Math.abs(g.delta))}
           </span>
         )}
       </td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs">
         {g.aprovacoes.length ? moeda(aprovado) : <span className="text-muted-foreground">—</span>}
         {original && Math.abs(original.valor_guia - original.valor_calculado) >= 0.01 && (
-          <span className="block font-sans text-[10px] text-amber-700">calculado {moeda(original.valor_calculado)}</span>
+          <span className="block whitespace-normal font-sans text-[10px] leading-tight text-amber-700">
+            calculado {moeda(original.valor_calculado)}
+          </span>
         )}
       </td>
       <td className="px-2 py-3 text-center">{situacaoDa(g)}</td>
@@ -866,18 +877,20 @@ function LinhaGuia({
               {g.estado === "diferenca" ? "Diferença" : g.apurado > 0 ? "Aprovar" : "Confirmar"}
             </button>
           )}
-          <button
-            type="button"
-            title="Ver a memória de cálculo"
-            aria-label="Ver a memória de cálculo"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAbrir();
-            }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
+          {!temAcao && (
+            <button
+              type="button"
+              title="Ver a memória de cálculo"
+              aria-label="Ver a memória de cálculo"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAbrir();
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </td>
     </tr>
