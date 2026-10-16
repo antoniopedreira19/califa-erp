@@ -81,6 +81,7 @@ import {
   ehQuarta,
   hojeEmSaoPauloIso,
   isoParaBr,
+  ppAceitaQuarta,
   primeiraDataPossivelDoPrazo,
   primeiraJanelaComEnvioAberto,
   vencimentoAceitaEnvio,
@@ -541,6 +542,9 @@ export function GerarPPDrawer({
   const [prazoOriginal, setPrazoOriginal] = React.useState<string | null>(null);
   // Pagamento urgente (decisão 077).
   const [urgente, setUrgente] = React.useState(false);
+  /** A PP pode cair numa quarta de exceções: a urgente (decisão 172) e,
+   *  desde 16/10/2026, a verba, urgente ou não. */
+  const quartaLiberada = ppAceitaQuarta({ urgente, verba: verbaProducao });
   const [justificativa, setJustificativa] = React.useState("");
   const [faltaJustificativa, setFaltaJustificativa] = React.useState(false);
   // Decisão 152: os anexos com tipo, número e, na NF, os dados dela. O
@@ -831,11 +835,15 @@ export function GerarPPDrawer({
    * primeira janela aberta, com o aviso — a quarta só vale com urgência.
    * Desligado com o prazo vazio, volta para a primeira janela, como numa PP
    * nova.
+   *
+   * Na verba as quartas já estão liberadas (revisão da 172, 16/10/2026): a
+   * urgência só avisa o financeiro, e o prazo escolhido fica como está.
    */
   function mudarUrgencia(ligado: boolean) {
     setUrgente(ligado);
     if (!ligado) setFaltaJustificativa(false);
     if (ligado) {
+      if (verbaProducao) return;
       setAvisoQuarta(null);
       mudarPrazo("");
       setPrazoVez((v) => v + 1);
@@ -846,6 +854,12 @@ export function GerarPPDrawer({
       setPrazoVez((v) => v + 1);
       return;
     }
+    if (!verbaProducao) tirarAQuartaDoPrazo();
+  }
+
+  /** O prazo numa quarta de exceções que deixou de valer (a urgência ou a
+   *  verba saiu) volta para a primeira janela aberta, com o aviso. */
+  function tirarAQuartaDoPrazo() {
     if (ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento)) {
       const de = prazoPagamento;
       const para = primeiraJanelaComEnvioAberto(hojeEmSaoPauloIso(), feriados);
@@ -1025,23 +1039,23 @@ export function GerarPPDrawer({
       );
       return false;
     }
-    // O calendário já só acende janelas (e, com urgência, as quartas de
-    // exceções); isto cobre a data digitada por outro caminho. O servidor
-    // checa de novo.
-    const quartaSemUrgencia = !urgente && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento);
-    if (quartaSemUrgencia) {
+    // O calendário já só acende janelas (e, na urgência e na verba, as
+    // quartas de exceções); isto cobre a data digitada por outro caminho. O
+    // servidor checa de novo.
+    const quartaFora = !quartaLiberada && ehQuarta(prazoPagamento) && !ehJanelaDePagamento(prazoPagamento);
+    if (quartaFora) {
       setErro(
-        `A quarta de exceções só vale para pagamento urgente. Ligue "Pagamento urgente" ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
+        `A quarta de exceções só vale para verba ou pagamento urgente. Ligue "Pagamento urgente" ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`,
       );
       return false;
     }
     if (
       prazoPagamento !== prazoOriginal &&
       (prazoPagamento < hoje ||
-        (!ehJanelaDePagamento(prazoPagamento) && !(urgente && ehQuarta(prazoPagamento))))
+        (!ehJanelaDePagamento(prazoPagamento) && !(quartaLiberada && ehQuarta(prazoPagamento))))
     ) {
       setErro(
-        urgente
+        quartaLiberada
           ? "O prazo de pagamento precisa ser, a partir de hoje, uma janela (dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte) ou uma quarta de exceções."
           : "O prazo de pagamento precisa ser uma janela a partir de hoje: dia 08 ou 20 — caindo em fim de semana, na segunda-feira seguinte.",
       );
@@ -1050,8 +1064,8 @@ export function GerarPPDrawer({
     if (prazoPagamento !== prazoOriginal && !vencimentoAceitaEnvio(prazoPagamento, hoje, feriados)) {
       setErro(
         ehJanelaDePagamento(prazoPagamento)
-          ? `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`
-          : `A quarta ${isoParaBr(prazoPagamento)} só podia ser escolhida até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, urgente))}.`,
+          ? `O prazo de envio do vencimento ${isoParaBr(prazoPagamento)} já passou: o financeiro recebe a PP até 15 dias antes da janela. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada))}.`
+          : `A quarta ${isoParaBr(prazoPagamento)} só podia ser escolhida até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada))}.`,
       );
       return false;
     }
@@ -1523,6 +1537,8 @@ export function GerarPPDrawer({
                   setPagamento(PAGAMENTO_PELO_CADASTRO);
                   setFaltaPagamento(false);
                   setTipoVerba(t);
+                  // Fora da verba, a quarta só vale com urgência (172).
+                  if (t === null && !urgente) tirarAQuartaDoPrazo();
                 }}
                 disabled={pending}
               />
@@ -1702,9 +1718,9 @@ export function GerarPPDrawer({
                     name="prazo_pagamento"
                     defaultValue={prazoPagamento}
                     onDateChange={(date) => mudarPrazo(dateToIso(date))}
-                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados, urgente)}
-                    diasMarcados={quartaMarcada(hoje, feriados, urgente)}
-                    legenda={urgente ? <LegendaDaQuarta /> : undefined}
+                    dateDisabled={diaForaDaJanela(hoje, prazoOriginal, feriados, quartaLiberada)}
+                    diasMarcados={quartaMarcada(hoje, feriados, quartaLiberada)}
+                    legenda={quartaLiberada ? <LegendaDaQuarta /> : undefined}
                   />
                   <EnvioAte vencimento={prazoPagamento} feriados={feriados} />
                   {urgente && !prazoPagamento && (
@@ -1797,12 +1813,16 @@ export function GerarPPDrawer({
                   )}
                 </div>
               </div>
-              <AvisoPrazoForaDaJanela prazo={prazoPagamento} original={prazoOriginal} urgente={urgente} />
+              <AvisoPrazoForaDaJanela
+                prazo={prazoPagamento}
+                original={prazoOriginal}
+                quartaLiberada={quartaLiberada}
+              />
               <AvisoPrazoDeEnvioPerdido
                 prazo={prazoPagamento}
                 hojeIso={hoje}
                 feriados={feriados}
-                urgente={urgente}
+                quartaLiberada={quartaLiberada}
               />
               {avisoQuarta && <AvisoQuartaSemUrgencia de={avisoQuarta.de} para={avisoQuarta.para} />}
 
@@ -1817,6 +1837,7 @@ export function GerarPPDrawer({
               )}
 
               <UrgenciaPPField
+                liberaQuartas={!verbaProducao}
                 urgente={urgente}
                 justificativa={justificativa}
                 onUrgenteChange={mudarUrgencia}

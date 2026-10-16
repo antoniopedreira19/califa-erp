@@ -85,6 +85,7 @@ import { passaDoPlanejado } from "@/lib/calculos/pps-item";
 import {
   hojeEmSaoPauloIso,
   isoParaBr,
+  ppAceitaQuarta,
   vencimentoAceitaEnvio,
 } from "@/lib/calculos/janelas-pagamento";
 import {
@@ -143,7 +144,8 @@ export interface PPDoItem {
   prazoPagamento: string;
   geradaEm: string;
   /** Pagamento urgente: o "Atualizar vencimento" oferece também as quartas
-   *  de exceções (decisão 172). Obrigatório pelo mesmo motivo do trio. */
+   *  de exceções (decisão 172), como na verba. Obrigatório pelo mesmo
+   *  motivo do trio. */
   urgente: boolean;
   servico: string;
   /** Os anexos gravados: o envio abre com eles. */
@@ -790,7 +792,10 @@ export function PainelPPsItem({
                           )}
                           {prazoPerdido && (
                             <AtualizarVencimento
-                              urgente={pp.urgente}
+                              quartaLiberada={ppAceitaQuarta({
+                                urgente: pp.urgente,
+                                verba: pp.verbaProducao,
+                              })}
                               ppId={pp.id}
                               codigo={pp.codigo}
                               vencimento={pp.prazoPagamento}

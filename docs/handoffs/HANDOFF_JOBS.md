@@ -5563,3 +5563,29 @@ Decidido pelo Tiago em 14 a 16/10/2026; regra completa no fim da decisão 156.
 - Migration `20261015970001`: o evento novo, o gatilho e a troca nas 15 PPs
   antigas confirmadas pelo Tiago. Testado como GP Teste Claude no
   TES-1014/26 (PP-00206, deixada em avaliação).
+
+## ⚠️ Nota de 2026-10-16 — a verba cai na quarta de exceções sem urgência (revisão da decisão 172)
+
+Pedido do Tiago em 16/10/2026 (opção A); regra completa no fim da decisão 172.
+
+- **Regra:** `ppAceitaQuarta({ urgente, verba })` em
+  `lib/calculos/janelas-pagamento.ts` — a quarta vale na PP urgente e em
+  toda verba. `tipoDoPrazo` e `primeiraDataPossivelDoPrazo` recebem
+  `quartaLiberada` no lugar de `urgente`.
+- **Formulário** (`gerar-pp-drawer.tsx`): `quartaLiberada` alimenta o
+  calendário, a legenda, os avisos e as checagens do envio. Na verba, ligar a
+  urgência não zera o prazo; desligar a verba com uma quarta e sem urgência
+  chama `tirarAQuartaDoPrazo` (o mesmo aviso de desligar a urgência).
+  `UrgenciaPPField` ganhou `liberaQuartas` (falso na verba: a frase fica só
+  "Avisa o financeiro…"); os avisos de `prazo-e-urgencia-pp.tsx` trocaram a
+  prop `urgente` por `quartaLiberada`.
+- **Servidor** (`actions-pp.ts`): `validarVencimentosNasJanelas` recebe
+  `quartaLiberada` em gerar, PP a emitir, edição da PP gerada e "Atualizar
+  vencimento"; o envio ao financeiro só barra a quarta fora da urgência e
+  da verba.
+- **Painel:** `AtualizarVencimento` recebe `quartaLiberada` (era `urgente`).
+- **Financeiro:** selo "✓ quarta de exceções" no dossiê também na verba
+  (`pp-dossie.tsx`).
+- **Testado** no TES-1008/26 (formulário) e no TES-1001/26 (PP a emitir de
+  verba salva em 04/11 sem urgência e excluída). Sem migration.
+
