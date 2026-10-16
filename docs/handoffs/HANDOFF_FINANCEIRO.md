@@ -7373,8 +7373,9 @@ Regra completa na seção 8 da decisão 091.
   tabela não tinha fundo e faixa e linha saíam no mesmo cinza.
 - **O subtotal foi para a faixa**; a linha "Subtotal · <empresa>" saiu. O
   total geral fecha com o fio grosso (`TOTAL_LISTA`).
-- **Empresas em ordem alfabética** por padrão; a ordem pelo título da
-  coluna continua mandando quando escolhida.
+- **Empresas em ordem alfabética** por padrão, na tabela e no quadro
+  "Saldo por empresa"; na tabela, a ordem pelo título da coluna continua
+  mandando quando escolhida. O "Saldo por tipo de conta" segue por saldo.
 - "Ativa" sem pílula, traços mais claros, colunas de largura fixa.
 - Código em `hub-tabela.tsx` e duas constantes novas em
   `_planilha/blocos.ts`. O resto da página (faixa do consolidado e as

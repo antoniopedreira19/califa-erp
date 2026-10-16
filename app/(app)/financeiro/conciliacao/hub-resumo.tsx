@@ -12,8 +12,12 @@ export function fatiarPorTipo(contas: ContaResumo[]): Fatia[] {
   return fatiar(contas, (c) => TIPO_CONTA_LABEL[c.tipo] ?? c.tipo);
 }
 
+/** Empresas em ordem alfabética, a mesma da tabela logo abaixo (revisão
+ *  da decisão 091, 16/10/2026). O tipo de conta segue na ordem de saldo. */
 export function fatiarPorEmpresa(contas: ContaResumo[]): Fatia[] {
-  return fatiar(contas, (c) => c.empresaContabil);
+  return fatiar(contas, (c) => c.empresaContabil).sort((a, b) =>
+    a.chave.localeCompare(b.chave, "pt-BR"),
+  );
 }
 
 function fatiar(contas: ContaResumo[], chaveDe: (c: ContaResumo) => string): Fatia[] {

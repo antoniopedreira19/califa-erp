@@ -159,5 +159,9 @@ escolheu a **A**:
   primeira conta.
 
 Nada mudou no que a tela informa: mesmas colunas, mesmos números, mesma
-busca e mesmo filtro pelo título. O quadro "Saldo por empresa" acima da
-tabela continua na ordem de saldo.
+busca e mesmo filtro pelo título.
+
+O quadro **"Saldo por empresa"**, acima da tabela, passou também para a
+ordem alfabética, a pedido do Tiago no mesmo dia — as duas listas de
+empresas da tela andam na mesma ordem. O "Saldo por tipo de conta" segue
+na ordem de saldo.
