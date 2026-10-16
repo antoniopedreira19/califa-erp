@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 import { ContratoForm } from "../_components/contrato-form";
 import { BlocoArquivos } from "../_components/bloco-arquivos";
+import { BlocoDistrato } from "../_components/bloco-distrato";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,19 @@ export default async function EditarContratoPage({
         podeGerenciar={PODE_EDITAR.has(session.activeRole)}
         podeGerarMinuta={podeGerarMinuta}
         motivoBloqueioMinuta={motivoBloqueioMinuta}
+      />
+
+      <BlocoDistrato
+        contratoId={contrato.id}
+        dataTerminoAtual={contrato.data_termino}
+        distrato={{
+          data_proposta: contrato.distrato_data_proposta,
+          motivo: contrato.distrato_motivo,
+          minuta_url: contrato.distrato_minuta_url,
+          arquivo_url: contrato.distrato_arquivo_url,
+          solicitado_em: contrato.distrato_solicitado_em,
+        }}
+        podeGerenciar={PODE_EDITAR.has(session.activeRole)}
       />
 
       <ContratoForm

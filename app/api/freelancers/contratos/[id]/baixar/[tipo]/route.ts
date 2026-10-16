@@ -4,7 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const TIPOS_VALIDOS = new Set(["minuta", "assinado"]);
+const TIPOS_VALIDOS = new Set([
+  "minuta",
+  "assinado",
+  "distrato-minuta",
+  "distrato-assinado",
+]);
 const EXPIRA_EM_SEG = 60 * 60; // 1 hora
 
 /**
@@ -31,7 +36,9 @@ export async function GET(
   const supabase = createClient();
   const { data: contrato, error } = await supabase
     .from("freelancer_contratos")
-    .select("minuta_url, arquivo_url")
+    .select(
+      "minuta_url, arquivo_url, distrato_minuta_url, distrato_arquivo_url",
+    )
     .eq("id", params.id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -43,10 +50,13 @@ export async function GET(
     );
   }
 
-  const path =
-    params.tipo === "minuta"
-      ? (contrato as any).minuta_url
-      : (contrato as any).arquivo_url;
+  const colunaPorTipo: Record<string, string> = {
+    minuta: "minuta_url",
+    assinado: "arquivo_url",
+    "distrato-minuta": "distrato_minuta_url",
+    "distrato-assinado": "distrato_arquivo_url",
+  };
+  const path = (contrato as any)[colunaPorTipo[params.tipo]];
 
   if (!path) {
     return NextResponse.json(

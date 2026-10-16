@@ -444,6 +444,11 @@ export type AuditAction =
   | "freelancer_solicitacao.cancelada"
   // Módulo Freelancers — cadastramento via link público (Task 022).
   | "freelancer.cadastrado_via_solicitacao"
+  // Módulo Freelancers — distrato (Task 025).
+  | "freelancer_contrato.distrato_solicitado"
+  | "freelancer_contrato.distrato_minuta_gerada"
+  | "freelancer_contrato.distrato_aplicado"
+  | "freelancer_contrato.distrato_cancelado"
   | "acao_negada";
 
 export interface AuditPayload {
