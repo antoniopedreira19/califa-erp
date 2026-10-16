@@ -5089,3 +5089,82 @@ export interface DadosExtraidosNF {
   };
   confianca_baixa: boolean;
 }
+
+// ============================================================================
+// MÓDULO FREELANCERS (Task 011 em diante)
+// ============================================================================
+// Cadastro mestre de freelancer + catálogo de cargos do módulo. Contratos,
+// solicitações, histórico e view de status vêm nas tasks das próximas fases.
+
+export type TipoPagamentoFreelancer = "conta_bancaria" | "pix";
+
+export type AcaoPrevistaFreelancer =
+  | "contratar"
+  | "renovar"
+  | "manter"
+  | "substituir"
+  | "encerrar";
+
+export type OrigemFreelancer = "manual" | "form_publico" | "migracao";
+
+export interface Freelancer {
+  id: string;
+  tenant_id: string;
+
+  // Identificação
+  nome_social: string;
+  nome_completo: string | null;
+  cpf: string | null;
+  rg: string | null;
+  data_nascimento: string | null; // ISO YYYY-MM-DD
+
+  // Contato
+  email: string | null;
+  celular: string | null;
+
+  // Endereço estruturado
+  cep: string | null;
+  rua: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+
+  // Pessoa jurídica (par obrigatório: ou os dois null, ou os dois preenchidos)
+  cnpj: string | null;
+  razao_social: string | null;
+  cartao_cnpj_url: string | null;
+
+  // Pagamento
+  tipo_pagamento: TipoPagamentoFreelancer | null;
+  banco: string | null;
+  agencia: string | null;
+  conta: string | null;
+  pix_chave: string | null;
+
+  // Diversidade / saúde (opcional)
+  cor_raca: string | null;
+  identidade_genero: string | null;
+  deficiencia: string | null;
+  saude_obs: string | null;
+  contato_emergencia: string | null;
+
+  // Workflow
+  acao_prevista: AcaoPrevistaFreelancer | null;
+  origem: OrigemFreelancer;
+
+  // Auditoria
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface FreelancerCargo {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  ativo: boolean;
+  created_at: string;
+  created_by: string | null;
+}
