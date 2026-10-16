@@ -5219,3 +5219,62 @@ export interface FreelancerContrato {
   created_by: string | null;
   updated_by: string | null;
 }
+
+// ----------------------------------------------------------------------------
+// View freelancers_com_status (Task 016)
+// ----------------------------------------------------------------------------
+
+/** Status derivado só do contrato (arquivos + datas). */
+export type StatusContrato =
+  | "sem_contrato"
+  | "sem_minuta"
+  | "sem_assinado"
+  | "agendado"
+  | "vigente"
+  | "vencendo"
+  | "vencido";
+
+/** Status cruzado com `status_real` do contrato. */
+export type StatusCalculado =
+  | "regular"
+  | "vencendo"
+  | "irregular"
+  | "sem_minuta"
+  | "sem_assinado"
+  | "pendente"
+  | "limbo"
+  | "agendado"
+  | "encerrado";
+
+/**
+ * Linha da view `freelancers_com_status`: freelancer + contrato ativo +
+ * status derivados. Todos os campos de contrato são nullable porque o
+ * freelancer pode não ter contrato.
+ */
+export interface FreelancerComStatus extends Freelancer {
+  contrato_id: string | null;
+  contrato_origem_sistema: OrigemFreelancerContratoSistema | null;
+  nome_job: string | null;
+  cargo_contrato: string | null;
+  valor: number | null;
+  tipo: TipoFreelancerContrato | null;
+  data_inicio: string | null;
+  data_termino: string | null;
+  cidade_contrato: string | null;
+  status_real: boolean | null;
+  arquivo_url: string | null;
+  minuta_url: string | null;
+
+  // Responsável do contrato (join com profiles)
+  responsavel_id: string | null;
+  responsavel_nome: string | null;
+  responsavel_email: string | null;
+
+  // Job real do califa-erp (join com jobs)
+  job_codigo: string | null;
+  job_nome: string | null;
+
+  // Derivados
+  status_contrato: StatusContrato;
+  status_calculado: StatusCalculado;
+}
