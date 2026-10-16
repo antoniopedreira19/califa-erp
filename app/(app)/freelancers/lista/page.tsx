@@ -45,7 +45,14 @@ const CARDS_VALIDOS = new Set<CategoriaCard>([
 export default async function FreelancersListaPage({
   searchParams,
 }: {
-  searchParams: { q?: string; acao?: string; status?: string; card?: string };
+  searchParams: {
+    q?: string;
+    acao?: string;
+    status?: string;
+    card?: string;
+    inicio_apos?: string;
+    responsavel?: string;
+  };
 }) {
   const session = await requireSession();
   if (!pode(session.activeRole, "sidebar.freelancers")) {
@@ -102,6 +109,18 @@ export default async function FreelancersListaPage({
     .filter((s) => STATUS_VALIDOS.has(s));
   if (statusFiltro.length > 0) {
     query = query.in("status_calculado", statusFiltro);
+  }
+
+  // Filtro por data de início do contrato (>= inicio_apos)
+  const inicioApos = searchParams.inicio_apos?.trim();
+  if (inicioApos && /^\d{4}-\d{2}-\d{2}$/.test(inicioApos)) {
+    query = query.gte("data_inicio", inicioApos);
+  }
+
+  // Filtro por responsável do contrato
+  const responsavelId = searchParams.responsavel?.trim();
+  if (responsavelId && /^[0-9a-f-]{36}$/i.test(responsavelId)) {
+    query = query.eq("responsavel_id", responsavelId);
   }
 
   // Filtro por card de análise (combina com os outros via AND)
