@@ -5168,3 +5168,54 @@ export interface FreelancerCargo {
   created_at: string;
   created_by: string | null;
 }
+
+// ----------------------------------------------------------------------------
+// Contratos de freelancer (Task 015)
+// ----------------------------------------------------------------------------
+
+export type TipoFreelancerContrato = "mensal" | "periodo" | "diarias";
+export type OrigemFreelancerContratoSistema = "califa_erp" | "ag_california_rh";
+
+export interface FreelancerContrato {
+  id: string;
+  tenant_id: string;
+
+  // Vínculos
+  freelancer_id: string;
+  /** Null em contratos legados migrados; obrigatório em contratos novos. */
+  job_id: string | null;
+  responsavel_id: string | null;
+
+  // Dados do contrato (snapshot)
+  nome_job: string;
+  cargo: string | null;
+  tipo: TipoFreelancerContrato;
+  valor: number;
+  data_inicio: string | null;
+  data_termino: string | null;
+  cidade: string | null;
+  observacoes: string | null;
+
+  // Operacional
+  status_real: boolean;
+  arquivo_url: string | null;
+  minuta_url: string | null;
+
+  // Distrato (antecipação de término)
+  data_termino_original: string | null;
+  distrato_minuta_url: string | null;
+  distrato_arquivo_url: string | null;
+  distrato_data_proposta: string | null;
+  distrato_motivo: string | null;
+  distrato_solicitado_em: string | null;
+  distrato_solicitado_por: string | null;
+
+  // Origem
+  origem_sistema: OrigemFreelancerContratoSistema;
+
+  // Auditoria
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
