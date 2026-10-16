@@ -5263,6 +5263,76 @@ export type StatusCalculado =
   | "agendado"
   | "encerrado";
 
+// ----------------------------------------------------------------------------
+// Solicitações de contratação (Task 020)
+// ----------------------------------------------------------------------------
+
+export type FreelancerSolicitacaoStatus =
+  | "pendente"
+  | "aprovada"
+  | "rejeitada"
+  | "cadastrada"
+  | "cancelada";
+
+export interface FreelancerSolicitacao {
+  id: string;
+  tenant_id: string;
+  token: string;
+  solicitante_id: string;
+
+  // Dados do freela proposto
+  nome_freela: string;
+  cpf_freela: string | null;
+
+  // Dados do contrato pré-aprovado
+  job_id: string;
+  cargo: string | null;
+  valor: number;
+  tipo: TipoFreelancerContrato;
+  data_inicio: string | null;
+  data_termino: string | null;
+  cidade: string | null;
+  observacoes: string | null;
+
+  // Status + metadados
+  status: FreelancerSolicitacaoStatus;
+  aprovado_por: string | null;
+  aprovado_em: string | null;
+  expira_em: string | null;
+  rejeitado_por: string | null;
+  rejeitado_em: string | null;
+  rejeicao_motivo: string | null;
+  cancelado_por: string | null;
+  cancelado_em: string | null;
+
+  // Resultado do cadastro (preenchido quando status=cadastrada)
+  freelancer_id: string | null;
+  contrato_id: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FreelancerSolicitacaoMensagem {
+  id: string;
+  solicitacao_id: string;
+  autor_id: string | null;
+  texto: string;
+  created_at: string;
+}
+
+export interface FreelancerSolicitacaoMensagemLeitura {
+  solicitacao_id: string;
+  user_id: string;
+  last_read_at: string;
+}
+
+/** Resultado da RPC `get_freelancer_solicitacao_mensagens_nao_lidas()`. */
+export interface FreelancerSolicitacaoNaoLidas {
+  solicitacao_id: string;
+  nao_lidas: number;
+}
+
 /**
  * Linha da view `freelancers_com_status`: freelancer + contrato ativo +
  * status derivados. Todos os campos de contrato são nullable porque o
