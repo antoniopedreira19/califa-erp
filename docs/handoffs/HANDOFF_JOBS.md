@@ -5589,3 +5589,18 @@ Pedido do Tiago em 16/10/2026 (opção A); regra completa no fim da decisão 172
 - **Testado** no TES-1008/26 (formulário) e no TES-1001/26 (PP a emitir de
   verba salva em 04/11 sem urgência e excluída). Sem migration.
 
+
+## ⚠️ Nota de 2026-10-16 (2) — "Tomador no exterior, sem CNPJ" no envio para faturamento (decisão 184)
+
+- **Envio do GP** (`enviar-faturamento-dialog.tsx`): cada nota tem a caixa
+  "Tomador no exterior, sem CNPJ" debaixo do CNPJ do cliente; marcada, o
+  campo vira "Sem CNPJ", a pendência do CNPJ sai e a nota vai com
+  `tomador_exterior` (resumo e confirmação dizem "Tomador no exterior").
+- **Validação** (`notaFaturamentoSchema`): sem a marca, CNPJ de 14 números
+  válido; com ela, o CNPJ vai nulo.
+- **Banco:** `jobs_envio_faturamento_notas.tomador_exterior`; o `cnpj` só
+  pode ser nulo com a marca (migrations 20261016700001 e 700003);
+  `enviar_job_para_faturamento` grava a marca.
+- **"Ver envio"** da página do job mostra "Tomador no exterior, sem CNPJ".
+- **Testado** no TES-1007/26 (envio feito e mantido na fila como dado de
+  teste; a nota TESTE-184C dele foi emitida e cancelada).

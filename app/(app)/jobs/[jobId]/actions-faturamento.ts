@@ -749,6 +749,7 @@ export async function enviarJobParaFaturamento(
         valor_save: valorSave,
         notas: parsed.data.notas.map((n) => ({
           cnpj: n.cnpj,
+          tomador_exterior: n.tomador_exterior,
           cnae_sugerido: n.cnae_sugerido,
           descritivo: n.descritivo,
           parcelas: n.parcelas.map((p) => ({

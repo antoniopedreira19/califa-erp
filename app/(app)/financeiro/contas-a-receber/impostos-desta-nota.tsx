@@ -163,7 +163,6 @@ export function ImpostosDestaNota({
         {imp.pelaCaixa && (
           <p>PIS, COFINS, IRPJ e CSLL nascem quando o cliente pagar (regime de caixa).</p>
         )}
-        <p>Retenções do cliente continuam na baixa do título, como hoje.</p>
       </div>
     </div>
   );

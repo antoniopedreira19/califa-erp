@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -181,6 +182,8 @@ interface ParcelaForm {
 interface NotaForm {
   id: string;
   cnpj: string;
+  /** Decisão 184: "Tomador no exterior, sem CNPJ". */
+  exterior: boolean;
   valor: number;
   venc: string;
   parcelas: ParcelaForm[] | null;
@@ -334,6 +337,7 @@ export function EnviarFaturamentoDialog({
     {
       id: novoId(),
       cnpj: cnpjDoCadastro,
+      exterior: false,
       valor: valorFaturado,
       venc: vencInicial,
       parcelas: null,
@@ -485,6 +489,7 @@ export function EnviarFaturamentoDialog({
         {
           id: novoId(),
           cnpj: cnpjDoCadastro,
+          exterior: false,
           valor: 0,
           venc: primeiraVenc,
           parcelas: null,
@@ -630,7 +635,7 @@ export function EnviarFaturamentoDialog({
     const p: string[] = [];
     notas.forEach((n, i) => {
       const r = multi ? `nota ${i + 1}` : "nota";
-      if (!isValidCnpj(n.cnpj)) p.push(`CNPJ da ${r}`);
+      if (!n.exterior && !isValidCnpj(n.cnpj)) p.push(`CNPJ da ${r}`);
       if (centavos(n.valor) <= 0) p.push(`valor da ${r}`);
       if (n.parcelas) {
         if (n.parcelas.some((x) => x.data_vencimento.length !== 10)) {
@@ -663,7 +668,8 @@ export function EnviarFaturamentoDialog({
         portal_id: portalId === SEM_PORTAL ? null : portalId,
         mes: mes?.iso ?? null,
         notas: notas.map((n) => ({
-          cnpj: n.cnpj,
+          cnpj: n.exterior ? null : n.cnpj,
+          tomador_exterior: n.exterior,
           cnae_sugerido: n.cnae.trim() || null,
           descritivo: n.descritivo.trim() || null,
           parcelas: n.parcelas
@@ -831,7 +837,7 @@ export function EnviarFaturamentoDialog({
                           <span className="min-w-0 truncate">
                             <span className="font-semibold">NF {i + 1}</span>
                             <span className="ml-2 font-mono text-[11px] text-muted-foreground">
-                              {formatCnpj(n.cnpj)}
+                              {n.exterior ? "Tomador no exterior" : formatCnpj(n.cnpj)}
                             </span>
                           </span>
                           <span className="flex-none font-mono font-semibold">
@@ -1294,7 +1300,9 @@ export function EnviarFaturamentoDialog({
                 >
                   <span className="pt-px text-xs font-semibold text-muted-foreground">NF {i + 1}</span>
                   <span className="min-w-0 text-[13px]">
-                    <span className="block font-mono">{formatCnpj(n.cnpj)}</span>
+                    <span className="block font-mono">
+                      {n.exterior ? "Tomador no exterior, sem CNPJ" : formatCnpj(n.cnpj)}
+                    </span>
                     <span className="block text-xs text-muted-foreground">
                       {n.parcelas
                         ? `${n.parcelas.length} parcelas, de ${dataBr(n.parcelas[0].data_vencimento)} a ${dataBr(n.parcelas[n.parcelas.length - 1].data_vencimento)}`
@@ -1395,7 +1403,7 @@ function CartaoNota({
 }) {
   const [cnpjTocado, setCnpjTocado] = React.useState(false);
   const qtdParcelas = nota.parcelas ? nota.parcelas.length : 1;
-  const cnpjErrado = cnpjTocado && nota.cnpj.length > 0 && !isValidCnpj(nota.cnpj);
+  const cnpjErrado = !nota.exterior && cnpjTocado && nota.cnpj.length > 0 && !isValidCnpj(nota.cnpj);
   const somaParcelas = (nota.parcelas ?? []).reduce((s, p) => s + p.valor, 0);
   const parcelasFecham = centavos(somaParcelas) === centavos(nota.valor);
   // Valor que não está na lista (texto livre de antes dela) aparece como
@@ -1456,22 +1464,38 @@ function CartaoNota({
             <Label>
               CNPJ do cliente <span className="text-california-red">*</span>
             </Label>
-            <MaskedInput
-              mask="cnpj"
-              defaultValue={nota.cnpj}
-              onDigitsChange={(d) => onMexer((n) => ({ ...n, cnpj: d }))}
-              onBlur={() => setCnpjTocado(true)}
-              aria-label={`CNPJ do cliente da nota ${indice + 1}`}
-              className={cn(
-                "font-mono",
-                cnpjErrado && "border-california-red ring-2 ring-california-red/15",
-              )}
-            />
+            {nota.exterior ? (
+              <div className="flex h-11 items-center rounded-lg border border-dashed border-border bg-muted/50 px-3 text-[13px] text-muted-foreground">
+                Sem CNPJ
+              </div>
+            ) : (
+              <MaskedInput
+                mask="cnpj"
+                defaultValue={nota.cnpj}
+                onDigitsChange={(d) => onMexer((n) => ({ ...n, cnpj: d }))}
+                onBlur={() => setCnpjTocado(true)}
+                aria-label={`CNPJ do cliente da nota ${indice + 1}`}
+                className={cn(
+                  "font-mono",
+                  cnpjErrado && "border-california-red ring-2 ring-california-red/15",
+                )}
+              />
+            )}
             {cnpjErrado && (
               <p className="text-[11px] text-california-red">
                 {nota.cnpj.length < 14 ? "Faltam números no CNPJ." : "CNPJ inválido."}
               </p>
             )}
+            {/* Decisão 184: cliente no exterior — a nota sai para a
+                subsidiária brasileira (outro CNPJ) ou sem CNPJ. */}
+            <label className="flex cursor-pointer items-center gap-2 text-[11.5px] text-muted-foreground">
+              <Checkbox
+                checked={nota.exterior}
+                onCheckedChange={(v) => onMexer((n) => ({ ...n, exterior: v === true }))}
+                aria-label={`Tomador no exterior, sem CNPJ, na nota ${indice + 1}`}
+              />
+              Tomador no exterior, sem CNPJ
+            </label>
           </div>
 
           <div className="space-y-1.5">
