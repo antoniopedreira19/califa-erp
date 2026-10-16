@@ -9,6 +9,7 @@ import {
   podeEncerrar,
 } from "@/lib/data/impedimentos-encerramento";
 import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
+import { projetosNaEquipeDe } from "@/lib/data/equipe-do-projeto";
 import { JobsList, type JobRow } from "./jobs-list";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -74,7 +75,9 @@ export default async function JobsPage({
         // "Ativação de marca" num projeto "Pevetech".
         "produto, regional_id, responsavel_id, " +
         // O produtor também é dono do job no recorte "Meus" (03/10/2026):
-        // quem entra como produtor quase nunca é o GP do job.
+        // quem entra como produtor quase nunca é o GP do job. Desde
+        // 16/10/2026 o recorte é a Equipe do projeto inteira — ver
+        // `projetosNaEquipeDe`, lido junto desta query.
         "produtor_id, " +
         // Os dois descritivos que a lista mostra em cartão (handoff
         // "Descritivos nas Listas", 04/09/2026): o do job na linha e o
@@ -129,13 +132,21 @@ export default async function JobsPage({
   // TODO: filtro=pps_rejeitadas — join com pedidos_compra; deixar sem filtro por ora
   // TODO: filtro=minhas_pps — join com pedidos_compra; deixar sem filtro por ora
 
+  const podeAlternarMeusTodos = pode(session.activeRole, "listas.chave_meus_todos");
+
   // Os jobs com pedido de cancelamento no financeiro levam o selo
   // "Cancelamento solicitado" (decisão 169). Leitura do índice parcial.
-  const [jobsRes, empresas, comPedidoDeCancelamento] = await Promise.all([
-    jobsQuery,
-    listEmpresasAtivas(session.activeTenant.id),
-    jobsComCancelamentoPendente(supabase, session.activeTenant.id),
-  ]);
+  // O recorte "Meus" é a Equipe do projeto (16/10/2026); sem a chave
+  // "Meus/Todos" (o freelancer), a RLS já fez esse recorte.
+  const [jobsRes, empresas, comPedidoDeCancelamento, projetosDaMinhaEquipe] =
+    await Promise.all([
+      jobsQuery,
+      listEmpresasAtivas(session.activeTenant.id),
+      jobsComCancelamentoPendente(supabase, session.activeTenant.id),
+      podeAlternarMeusTodos
+        ? projetosNaEquipeDe(supabase, session.activeTenant.id, session.profile.id)
+        : Promise.resolve(new Set<string>()),
+    ]);
 
   if (jobsRes.error) console.error("[jobs.list]", jobsRes.error.message);
 
@@ -154,8 +165,6 @@ export default async function JobsPage({
       return imp ? podeEncerrar(imp) : false;
     });
   }
-
-  const podeAlternarMeusTodos = pode(session.activeRole, "listas.chave_meus_todos");
 
   const rows: JobRow[] = linhas.map((r: any) => ({
     id: r.id,
@@ -177,6 +186,10 @@ export default async function JobsPage({
     regional_nome: r.regional?.nome ?? null,
     responsavel_id: r.responsavel_id ?? null,
     produtor_id: r.produtor_id ?? null,
+    meu:
+      r.responsavel_id === session.profile.id ||
+      r.produtor_id === session.profile.id ||
+      projetosDaMinhaEquipe.has(r.projeto_id),
     observacoes: r.observacoes ?? null,
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,
@@ -244,7 +257,6 @@ export default async function JobsPage({
         <JobsList
           rows={rows}
           empresas={empresas}
-          usuarioId={session.profile.id}
           podeAlternarMeusTodos={podeAlternarMeusTodos}
           // O link diz de quem é a lista: `meus=1` abre no Meus; um filtro de
           // aterrissagem sem ele (o card do administrador, que conta a

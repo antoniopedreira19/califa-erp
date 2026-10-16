@@ -21,7 +21,7 @@ primeiro item da barra — em `/orcamentos` e `/jobs`.
 
 | Tela | Regra | Hoje |
 |---|---|---|
-| Jobs | o usuário é o GP (`jobs.responsavel_id`) **ou o produtor** (`jobs.produtor_id`) do job — ver nota de 03/10/2026 | 12 de 29 |
+| Jobs | o usuário está na **Equipe do projeto** do job — ver notas de 03/10/2026 e de 16/10/2026 (até 16/10: GP ou produtor do job) | 12 de 29 |
 | Projetos | o usuário está **associado ao projeto ou a um orçamento dentro dele** | 12 de 18 ativos |
 
 ### A regra dos projetos
@@ -103,7 +103,8 @@ colunas adicionais; desconsidere o resto".
 - O recorte "Meus" de **Jobs** não mudou na ampliação de 02/09: continuou
   sendo `jobs.responsavel_id`. A ampliação foi pedida para a lista de
   projetos, onde a associação tem mais de uma porta de entrada. O produtor
-  entrou depois, em 03/10/2026 (nota abaixo).
+  entrou depois, em 03/10/2026, e a Equipe do projeto inteira em
+  16/10/2026 (notas abaixo).
 - Nenhuma mudança de layout, cor ou tipografia das duas tabelas.
 
 ## ⚠️ O produtor também é dono do job no "Meus" de Jobs (2026-10-03)
@@ -340,3 +341,52 @@ reenvio, marca de save): as sete linhas com 64 px.
 Código: `app/(app)/financeiro/abertura-de-job/fila-celulas.tsx` (grade,
 células, botão e selo, comuns às três faixas), `fila-list.tsx` e a linha
 de `cancelamento-na-fila.tsx`. Os pop-ups não mudaram.
+
+## ⚠️ O "Meus" de Jobs é a Equipe do projeto (2026-10-16)
+
+Caso real: a Isabella Gandra (GP) criou o projeto COL-P001/26, o
+orçamento e o job COL-1001/26, mas pôs a Gabriela Singh como GP
+Responsável. Na lista de Jobs, em "Meus", não via job nenhum ("Você não é
+GP nem produtor…"), embora o pop-up "Equipe" do job a mostre na equipe
+("Criou o projeto").
+
+**Regra do Tiago:** quem está na Equipe do projeto vê **todos os jobs do
+projeto** no "Meus" — GPs, produtores e freelancers, mesmo sem ser o GP
+nem o Produtor Responsável do job. Quem criou o projeto está na Equipe
+sozinho.
+
+- **A Equipe é a do pop-up** (decisões 037 e 174, montada em
+  `carregarEquipeDoProjeto`): quem criou o projeto, os GPs do projeto e os
+  acréscimos manuais (`projeto_responsaveis`, qualquer papel), o GP e o
+  Produtor Responsáveis de qualquer job não cancelado do projeto, e os
+  produtores dos orçamentos. A leitura ao contrário (de uma pessoa para os
+  projetos) é `projetosNaEquipeDe`, no mesmo arquivo: quatro consultas já
+  filtradas pela pessoa, em paralelo com a query da lista. Mudou quem
+  entra sozinho na Equipe, mude as duas.
+- **Freelancer:** nada muda. Ele não tem a chave "Meus/Todos", e a RLS já
+  entrega só os jobs dos projetos em que está na Equipe (nota de
+  03/10/2026).
+- **"Todos"** não mudou.
+- **O que fica de fora:** quem só criou o job ou o orçamento, ou só
+  aprovou a versão, sem estar na Equipe. Na lista de Projetos & Orçamentos
+  isso conta (§2); na de Jobs, não — o Tiago pediu a régua da Equipe.
+- **Medido em 16/10/2026:** a Isabella vai de 0 para 1 job (COL-1001/26,
+  conferido com a RLS dela); o Tiago, de 17 para 18 (AMB-0156/26, do
+  projeto AMB-P015/26, que ele criou); o Produtor Teste, de 8 para 17.
+- **Os cards de ação da home continuam no GP Responsável** ("Jobs
+  pendentes de envio para faturamento", "Jobs prontos pra encerrar").
+  Com a lista mais larga, o número do card pode ficar menor que o da
+  lista em "Meus" que ele abre — em 16/10, um GP tinha 6 no card e 12 na
+  lista. **Ponto em aberto com o Tiago.** O KPI "Meus jobs em andamento"
+  já contava os projetos do usuário (`lib/home/escopo-meus.ts`) e agora
+  fica perto da lista.
+
+**Conferido logado em 16/10/2026** (como administrador): em "Meus", 18
+jobs, com o AMB-0156/26 entre eles (GP e produtor são outras pessoas);
+"Todos" com 93; o estado vazio diz "Você não está na equipe de nenhum job
+que combine com os filtros."; console sem erro.
+
+Código: `lib/data/equipe-do-projeto.ts` (`projetosNaEquipeDe`),
+`app/(app)/jobs/page.tsx` (calcula `JobRow.meu` no servidor) e
+`app/(app)/jobs/jobs-list.tsx` (filtro por `meu`, sem a prop `usuarioId`,
+e o texto do estado vazio). Sem migration.
