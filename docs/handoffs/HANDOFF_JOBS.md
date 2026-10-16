@@ -5651,3 +5651,38 @@ responsável). Regra completa na nota de 16/10 da decisão 036.
   do GP numa rota temporária: 10 pendentes de envio e 2 prontos pra
   encerrar, iguais às listas.
 
+## ⚠️ Nota de 2026-10-16 (5) — o selo de status da aba PPs não fica mais embaixo do olho
+
+Visto ao montar o guia da prestação de contas da verba com telas reais
+(16/10/2026): a 1440×900, no TES-1003/26, "AGUARDANDO PRESTAÇÃO" aparecia
+como "AGUARDANDC ◉ STA" — o olho do "Ver PP" por cima do fim do selo.
+Correção só visual: sem regra nova, sem migration, nenhum texto mudou.
+
+- **Causa:** o `colgroup` em % da tabela (`table-fixed` desde 09/09/2026)
+  não previa a calha da prestação. Com "Prestar contas" na tela a calha
+  alarga 99px e a tabela cai de 1219 para 1120px a 1440. O Status ficava
+  com 73 a 82px úteis para selos de até 170px; o olho (28px) tinha 11 a
+  15px e transbordava para a esquerda; e um valor de seis dígitos
+  (R$ 250.000,00) transbordava para a direita, sobre o começo do selo.
+- **Correção** (`job-pps-section.tsx`): Status 9 → 12%, Valor 8,5 →
+  10,5%, olho 3,5 → 4% e sem recuo à esquerda; Origem e Serviço 20 → 18%,
+  Fornecedor 15 → 13,5%. O selo e o "Pronta para envio" quebram linha
+  dentro da coluna: numa linha seguem a pílula de sempre; em duas, um
+  retângulo de canto 11px. Só nesta tabela — `PPStatusChip` e
+  `SituacaoVerbaChip` não mudaram, e a aprovação e Títulos a Pagar seguem
+  iguais.
+- **Conferido** a 1440×900 e a 1838×1040 (Produtor Teste no WebKit,
+  administrador no Chrome do app): no TES-1014/26 com as PPs postas em
+  memória em cada situação da verba, "Pronta para envio" e R$ 250.000,00
+  (nada gravado), e nas páginas reais do TES-1001/26, TES-1003/26 e
+  TES-1014/26. Todos os selos inteiros dentro da coluna, o olho dentro da
+  sua, o valor sem encostar no selo, sem rolagem lateral, e "Prestar
+  contas"/"Corrigir prestação" dentro da tela (terminam em 1412 de 1440 e
+  em 1769 de 1838). Antes, a 1440, o olho saía da própria coluna nas 16
+  linhas e cobria todos os selos longos.
+- **Em aberto:** (1) na PP rejeitada, quem envia PP (GP e administrador)
+  vê o "Cancelar e refazer" (136px) na coluna do olho, e ele cobre o selo
+  "REJEITADO". Já era assim; levar o botão para a trilha, como o "Prestar
+  contas", pede decisão. (2) Com a calha da prestação, a 1440, o código
+  quebra em "PP-/00206" — também já era assim.
+
