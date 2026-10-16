@@ -425,6 +425,9 @@ export type AuditAction =
   // Módulo Freelancers — cadastro mestre (Task 014).
   | "freelancer.criado"
   | "freelancer.editado"
+  // Módulo Freelancers — contratos (Task 017).
+  | "freelancer_contrato.criado"
+  | "freelancer_contrato.editado"
   | "acao_negada";
 
 export interface AuditPayload {

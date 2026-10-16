@@ -47,15 +47,14 @@ export function HeroFreelancer({ freelancer: f, podeEditar }: Props) {
             {/* Ações */}
             {podeEditar && (
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  disabled
-                  title="Novo contrato chega na Fase 2"
-                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white opacity-50 cursor-not-allowed shadow-sm"
+                <Link
+                  href={`/freelancers/contratos/novo?freelancer=${f.id}`}
+                  prefetch={false}
+                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
                 >
                   <Plus className="h-4 w-4" />
                   Novo contrato
-                </button>
+                </Link>
                 <Link
                   href={`/freelancers/${f.id}/editar`}
                   prefetch={false}
