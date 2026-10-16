@@ -12,7 +12,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { PageHeader } from "@/components/ui/page-header";
 import { formatCurrency } from "@/lib/utils";
 import { carregarHub } from "./hub-dados";
-import { dataCurta, PERIODOS, type PeriodoChave } from "./hub-periodo";
+import {
+  dataCurta,
+  hrefLista,
+  PERIODOS,
+  VISOES,
+  type PeriodoChave,
+  type Visao,
+} from "./hub-periodo";
 import { HubTabela } from "./hub-tabela";
 import {
   BlocoQuebra,
@@ -25,15 +32,18 @@ export async function HubConciliacao({
   supabase,
   tenantId,
   periodo,
+  visao,
 }: {
   supabase: SupabaseClient;
   tenantId: string;
   periodo: PeriodoChave;
+  visao: Visao;
 }) {
   const { contas, totais, inativas, periodo: faixa } = await carregarHub(
     supabase,
     tenantId,
     periodo,
+    visao,
   );
 
   return (
@@ -82,10 +92,19 @@ export async function HubConciliacao({
             />
           )}
         </div>
-        <SeletorPeriodo atual={periodo} />
+        <div className="flex flex-wrap items-center gap-3">
+          <SeletorVisao atual={visao} periodo={periodo} />
+          <SeletorPeriodo atual={periodo} visao={visao} />
+        </div>
       </div>
 
-      {contas.length === 0 ? (
+      {contas.length === 0 && visao === "teste" ? (
+        <div className="rounded-xl border border-dashed border-border py-16 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nenhuma conta bancária nas empresas de teste.
+          </p>
+        </div>
+      ) : contas.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border py-16 text-center">
           <p className="text-sm text-muted-foreground">
             Nenhuma conta bancária cadastrada. Vá em{" "}
@@ -128,14 +147,38 @@ export async function HubConciliacao({
   );
 }
 
+/** Ecossistema California × Teste (revisão da decisão 091, 16/10/2026).
+ *  Mesmo desenho das pílulas de período; também é uma navegação, e leva
+ *  o período junto. */
+function SeletorVisao({ atual, periodo }: { atual: Visao; periodo: PeriodoChave }) {
+  return (
+    <div className="inline-flex items-center rounded-lg border border-border bg-card p-0.5">
+      {VISOES.map((v) => (
+        <Link
+          key={v.chave}
+          href={hrefLista(periodo, v.chave)}
+          prefetch={false}
+          className={
+            v.chave === atual
+              ? "rounded-md bg-california-red px-3 py-1.5 text-xs font-semibold text-white"
+              : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          }
+        >
+          {v.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 /** Pílulas de período. Links puros: trocar o período é uma navegação. */
-function SeletorPeriodo({ atual }: { atual: PeriodoChave }) {
+function SeletorPeriodo({ atual, visao }: { atual: PeriodoChave; visao: Visao }) {
   return (
     <div className="inline-flex items-center rounded-lg border border-border bg-card p-0.5">
       {PERIODOS.map((p) => (
         <Link
           key={p.chave}
-          href={`/financeiro/conciliacao?periodo=${p.chave}`}
+          href={hrefLista(p.chave, visao)}
           prefetch={false}
           className={
             p.chave === atual

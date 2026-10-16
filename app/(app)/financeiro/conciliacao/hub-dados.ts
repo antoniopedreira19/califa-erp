@@ -17,6 +17,7 @@ import {
   type ContaResumo,
   type PeriodoChave,
   type TotaisConciliacao,
+  type Visao,
 } from "./hub-periodo";
 
 export type DadosDoHub = {
@@ -34,6 +35,7 @@ export async function carregarHub(
   supabase: SupabaseClient,
   tenantId: string,
   chave: PeriodoChave,
+  visao: Visao,
 ): Promise<DadosDoHub> {
   const periodo = { chave, ...faixaDoPeriodo(chave) };
 
@@ -54,9 +56,9 @@ export async function carregarHub(
     }),
     supabase
       .from("empresas_contabeis")
-      .select("id, razao_social, nome_fantasia")
+      .select("id, razao_social, nome_fantasia, de_teste")
       .eq("tenant_id", tenantId)
-      .returns<Pick<EmpresaContabil, "id" | "razao_social" | "nome_fantasia">[]>(),
+      .returns<Pick<EmpresaContabil, "id" | "razao_social" | "nome_fantasia" | "de_teste">[]>(),
   ]);
 
   // O erro é LIDO: sem isto, um engano na consulta vira "nenhuma conta
@@ -84,7 +86,17 @@ export async function carregarHub(
     ]),
   );
 
-  const contas: ContaResumo[] = (contasRes.data ?? []).map((c) => {
+  // A visão separa as empresas de teste (decisão 181) do Ecossistema
+  // California: cada uma mostra só as suas contas, e o consolidado soma só
+  // o que está na tela. Conta sem empresa conhecida fica no ecossistema.
+  const deTeste = new Set(
+    (contabeisRes.data ?? []).filter((e) => e.de_teste).map((e) => e.id),
+  );
+  const daVisao = (contasRes.data ?? []).filter(
+    (c) => deTeste.has(c.empresa_contabil_id) === (visao === "teste"),
+  );
+
+  const contas: ContaResumo[] = daVisao.map((c) => {
     const r = resumoPorConta.get(c.id);
     const agencia = c.agencia?.trim() || null;
     const numero = c.numero_conta?.trim() || null;

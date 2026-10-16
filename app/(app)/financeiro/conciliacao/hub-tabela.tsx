@@ -417,7 +417,7 @@ export function HubTabela({
                 <td className={`${TOTAL_LISTA} px-4 py-3 font-semibold`} colSpan={4}>
                   {filtrando
                     ? `Total do filtro · ${vistas} ${vistas === 1 ? "conta ativa" : "contas ativas"}`
-                    : `Total geral · ${totais.contas} contas ativas`}
+                    : `Total geral · ${totais.contas} ${totais.contas === 1 ? "conta ativa" : "contas ativas"}`}
                 </td>
                 <td className={`${TOTAL_LISTA} px-3 py-3 text-right font-medium tabular-nums`}>
                   {rodape.lancamentos || "—"}

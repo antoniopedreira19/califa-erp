@@ -7385,3 +7385,24 @@ Regra completa na seção 8 da decisão 091.
   contas, subtotal do filtro batendo), ordem pelo título "Saldo atual",
   limpar filtro e o clique na linha abrindo o extrato com o período. A
   conta inativa foi vista só no protótipo (não há conta inativa no banco).
+
+## ⚠️ Nota de 2026-10-16 (4) — Ecossistema California × Teste na lista da Conciliação (revisão da decisão 091)
+
+Regra completa na seção 9 da decisão 091.
+
+- **Seletor de visão** ao lado do período: "Ecossistema California" (padrão)
+  mostra só as empresas reais; "Teste" só as de teste
+  (`empresas_contabeis.de_teste`, decisão 181). Consolidado, quebras e
+  tabela seguem a visão; a conta de teste não soma mais no saldo da
+  agência.
+- A visão vai na URL (`?visao=teste`) e sobrevive à troca de período e à
+  ida e volta do extrato.
+- A conta "Teste" da California continua no Ecossistema: a separação é pela
+  empresa, não pelo nome da conta.
+- "Total geral · 1 conta ativa" no singular.
+- **Conferido em 16/10/2026** logado, com os dados reais: Ecossistema com
+  −R$ 432.803,24 e 17 lançamentos em outubro (as 3 empresas numa linha no
+  quadro "Saldo por empresa"); Teste com a Conta Teste, R$ 84.390,00; troca
+  para "Mês anterior" mantendo Teste; extrato e Voltar de volta à visão
+  Teste.
+
