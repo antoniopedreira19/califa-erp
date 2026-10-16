@@ -10,7 +10,7 @@ import {
   type FaturadoRow,
 } from "./faturamento-list";
 import { TitulosList } from "./titulos-list";
-import type { InfoJob } from "./faturar-drawer";
+import type { CnpjsDoCliente, InfoJob, JobDoFaturar } from "./faturar-drawer";
 import {
   contatosDeCobrancaPorJob,
   type ContatoCobranca,
@@ -80,6 +80,7 @@ export default async function ContasReceberPage({
     recebidosAntesRes,
     cadastroFiscal,
     pjsRes,
+    jobsDoFaturarRes,
   ] = await Promise.all([
     supabase
       .from("vw_faturamento_pendente")
@@ -186,7 +187,7 @@ export default async function ContasReceberPage({
       .order("razao_social"),
     supabase
       .from("clientes")
-      .select("id, nome_fantasia, razao_social")
+      .select("id, nome_fantasia, razao_social, cnpj")
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
       .order("nome_fantasia"),
@@ -250,6 +251,15 @@ export default async function ContasReceberPage({
       .from("empresas_contabeis")
       .select("id, nome_fantasia, razao_social")
       .eq("tenant_id", tenantId),
+    // Decisão 184: de onde o Faturar tira empresa (gerencial), regional e
+    // cliente — da nota de job e da avulsa referente a um job, que é
+    // escolhido nesta mesma lista.
+    supabase
+      .from("jobs")
+      .select("id, codigo, nome, status, empresa_id, regional_id, projeto:projetos!jobs_projeto_id_fkey(cliente_id)")
+      .eq("tenant_id", tenantId)
+      .in("status", ["aberto", "em_producao", "encerrado", "finalizado"])
+      .order("codigo", { ascending: false }),
   ]);
 
   for (const [nome, res] of [
@@ -266,6 +276,7 @@ export default async function ContasReceberPage({
     ["ultimas_retencoes", ultimasRetencoesRes],
     ["recebidos_antes", recebidosAntesRes],
     ["pjs", pjsRes],
+    ["jobs_do_faturar", jobsDoFaturarRes],
   ] as const) {
     if (res.error) console.error(`[cr.${nome}]`, res.error.message);
   }
@@ -402,6 +413,8 @@ export default async function ContasReceberPage({
       nota_ordem: r.nota_ordem == null ? null : Number(r.nota_ordem),
       nota_total: r.nota_total == null ? null : Number(r.nota_total),
       cnpj_tomador: (r.cnpj_tomador as string | null) ?? null,
+      // Decisão 184: o GP marcou o tomador no exterior, sem CNPJ.
+      tomador_exterior: r.tomador_exterior === true,
       cnae_sugerido: (r.cnae_sugerido as string | null) ?? null,
       descritivo_nota: (r.descritivo_nota as string | null) ?? null,
       autor_nome: (r.autor_nome as string | null) ?? null,
@@ -662,6 +675,48 @@ export default async function ContasReceberPage({
     notas: faturadosBrutos,
   });
 
+  // Decisão 184: empresa (gerencial), regional e cliente de cada job — a
+  // nota de job sai neles, e a avulsa referente a um job também.
+  const jobsDoFaturar: JobDoFaturar[] = (
+    (jobsDoFaturarRes.data ?? []) as unknown as Array<{
+      id: string;
+      codigo: string | null;
+      nome: string;
+      status: string;
+      empresa_id: string | null;
+      regional_id: string | null;
+      projeto: { cliente_id: string | null } | null;
+    }>
+  ).map((j) => ({
+    id: j.id,
+    codigo: j.codigo ?? "",
+    nome: j.nome,
+    encerrado: j.status === "encerrado" || j.status === "finalizado",
+    empresa_id: j.empresa_id,
+    regional_id: j.regional_id,
+    cliente_id: j.projeto?.cliente_id ?? null,
+  }));
+
+  // O CNPJ do tomador da avulsa nasce com o do cadastro do cliente; os já
+  // usados em nota ou no envio viram atalhos debaixo do campo.
+  const cnpjsPorCliente: Record<string, CnpjsDoCliente> = {};
+  const soDigitos14 = (v: string | null | undefined) => {
+    const d = (v ?? "").replace(/\D/g, "");
+    return d.length === 14 ? d : null;
+  };
+  for (const c of (clientesRes.data ?? []) as Array<{ id: string; cnpj: string | null }>) {
+    const cadastro = soDigitos14(c.cnpj);
+    cnpjsPorCliente[c.id] = { cadastro, usados: cadastro ? [cadastro] : [] };
+  }
+  for (const u of [
+    ...faturadosBrutos.map((f) => ({ cliente: f.cliente_id, cnpj: f.cnpj_tomador })),
+    ...pendentes.map((p) => ({ cliente: p.cliente_id, cnpj: p.cnpj_tomador })),
+  ]) {
+    const cnpj = soDigitos14(u.cnpj);
+    const doCliente = u.cliente ? cnpjsPorCliente[u.cliente] : undefined;
+    if (cnpj && doCliente && !doCliente.usados.includes(cnpj)) doCliente.usados.push(cnpj);
+  }
+
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   // A tabela de Titulos a Receber pede 1426px e a de Faturamento 1371px:
   // as duas cabem inteiras a partir de ~1570px de viewport. Abaixo disso
@@ -695,6 +750,8 @@ export default async function ContasReceberPage({
             contas={contasRes.data ?? []}
             recebidosAntes={recebidosAntes}
             fiscal={fiscal}
+            jobs={jobsDoFaturar}
+            cnpjsPorCliente={cnpjsPorCliente}
           />
         }
         faturamentoCount={pendentes.length}

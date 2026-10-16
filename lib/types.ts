@@ -1307,8 +1307,10 @@ export interface JobEnvioFaturamentoNota {
   envio_id: string;
   job_id: string;
   ordem: number;
-  /** Só dígitos, 14. */
-  cnpj: string;
+  /** Só dígitos, 14. Nulo quando o GP marca o tomador no exterior (184). */
+  cnpj: string | null;
+  /** Decisão 184: "Tomador no exterior, sem CNPJ" — a nota vai sem CNPJ. */
+  tomador_exterior: boolean;
   cnae_sugerido: string | null;
   descritivo: string | null;
   created_at: string;
@@ -3484,12 +3486,18 @@ export interface Faturamento {
    */
   cnae: string;
   /**
-   * CNPJ para o qual a nota saiu, só dígitos (decisão 123). Preenchido por
-   * `emitir_faturamento`: o das notas do envio cobertas, ou o do cadastro
-   * do cliente na avulsa. Nulo nas notas anteriores a 29/09/2026 — que
-   * saíram para o CNPJ do cadastro — e nas de BV.
+   * CNPJ para o qual a nota saiu, só dígitos (decisão 123). Desde a 184 é
+   * o do campo "CNPJ do tomador" do Faturar (nasce com o do envio, ou com
+   * o do cadastro do cliente na avulsa). Nulo nas notas anteriores a
+   * 29/09/2026 — que saíram para o CNPJ do cadastro —, nas de BV e nas de
+   * tomador no exterior.
    */
   cnpj_tomador: string | null;
+  /** Decisão 184: tomador no exterior, nota sem CNPJ do tomador. */
+  tomador_exterior: boolean;
+  /** Decisão 184: o job a que a nota AVULSA se refere (empresa, regional e
+   *  cliente são os dele). Não consome saldo de faturamento do job. */
+  job_referencia_id: string | null;
   /** Módulo fiscal (02/10/2026): o CNPJ emissor e o CNAE escolhidos na
    *  lista do cadastro de impostos. Nulos nas notas anteriores. */
   estabelecimento_id: string | null;

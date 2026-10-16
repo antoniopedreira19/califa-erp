@@ -25,13 +25,18 @@ export type ParcelaFaturamentoInput = z.infer<typeof parcelaFaturamentoSchema>;
  * O CNPJ é do cliente tomador e é campo livre: nasce com o do cadastro e
  * pode ser outro (o Tiago preferiu não cadastrar vários CNPJs por cliente,
  * 29/09/2026). CNAE sugerido e descritivo são opcionais (D2).
+ *
+ * Decisão 184: "Tomador no exterior, sem CNPJ" — a nota vai sem CNPJ (ou
+ * para a subsidiária brasileira, que é só outro CNPJ).
  */
-export const notaFaturamentoSchema = z.object({
+export const notaFaturamentoSchema = z
+  .object({
   cnpj: z
     .string()
-    .transform((v) => onlyDigits(v))
-    .refine((v) => v.length === 14, "O CNPJ tem 14 números.")
-    .refine(isValidCnpj, "CNPJ inválido."),
+    .nullable()
+    .default(null)
+    .transform((v) => (v === null ? null : onlyDigits(v))),
+  tomador_exterior: z.boolean().default(false),
   cnae_sugerido: z
     .string()
     .trim()
@@ -49,7 +54,16 @@ export const notaFaturamentoSchema = z.object({
   parcelas: z
     .array(parcelaFaturamentoSchema)
     .min(1, "Cada nota fiscal precisa de ao menos um vencimento."),
-});
+  })
+  .superRefine((n, ctx) => {
+    if (n.tomador_exterior) return;
+    if (!n.cnpj || n.cnpj.length !== 14) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cnpj"], message: "O CNPJ tem 14 números." });
+    } else if (!isValidCnpj(n.cnpj)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cnpj"], message: "CNPJ inválido." });
+    }
+  })
+  .transform((n) => (n.tomador_exterior ? { ...n, cnpj: null } : n));
 
 export type NotaFaturamentoInput = z.infer<typeof notaFaturamentoSchema>;
 
