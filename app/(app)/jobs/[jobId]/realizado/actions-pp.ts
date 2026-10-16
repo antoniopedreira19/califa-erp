@@ -78,6 +78,7 @@ import {
   isoParaBr,
   ppSegueOPrazoDeEnvio,
   primeiraDataDaProximaParcela,
+  ppAceitaQuarta,
   primeiraDataPossivelDoPrazo,
   primeiraJanelaComEnvioAberto,
   vencimentoAceitaEnvio,
@@ -422,22 +423,25 @@ function camposDeUrgencia(
  * PP gerada antes de 14/09/2026, que só precisa obedecer quando alguém
  * trocar a data (pergunta 6a). Sem esta checagem aqui, a regra dependeria
  * só do calendário da tela.
+ *
+ * `quartaLiberada` vem de `ppAceitaQuarta`: a PP urgente (decisão 172) e,
+ * desde 16/10/2026, a verba, urgente ou não.
  */
 function validarVencimentosNasJanelas(
   datas: string[],
   gravadas: string[],
   feriados: string[],
-  urgente: boolean,
+  quartaLiberada: boolean,
 ): string | null {
   const hoje = hojeEmSaoPauloIso();
   for (let i = 0; i < datas.length; i++) {
     const data = datas[i].slice(0, 10);
     const br = data.split("-").reverse().join("/");
-    // A quarta de exceções só vale com urgência (decisão 172) — mesmo a
-    // gravada, quando a urgência sai. As PPs de antes da 077 com o prazo
-    // numa quarta são de setembro e já estão no financeiro.
-    if (i === 0 && !urgente && ehQuarta(data) && !ehJanelaDePagamento(data) && data >= INICIO_DA_QUARTA) {
-      return `A quarta de exceções (${br}) só vale para pagamento urgente. Marque a urgência ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`;
+    // A quarta de exceções só vale na PP urgente e na verba (decisão 172) —
+    // mesmo a gravada, quando a urgência ou a verba sai. As PPs de antes da
+    // 077 com o prazo numa quarta são de setembro e já estão no financeiro.
+    if (i === 0 && !quartaLiberada && ehQuarta(data) && !ehJanelaDePagamento(data) && data >= INICIO_DA_QUARTA) {
+      return `A quarta de exceções (${br}) só vale para verba ou pagamento urgente. Marque a urgência ou escolha uma janela: a primeira possível hoje é ${isoParaBr(primeiraJanelaComEnvioAberto(hoje, feriados))}.`;
     }
     // A data gravada que não mudou passa (pergunta 6a da 077). Da 2ª parcela
     // em diante, só se a anterior também não mudou: com ela andando, a
@@ -449,15 +453,15 @@ function validarVencimentosNasJanelas(
       return `O vencimento ${br} já passou. Escolha uma janela de pagamento a partir de hoje.`;
     }
     if (i === 0) {
-      const quarta = urgente && ehQuarta(data) && !ehJanelaDePagamento(data);
+      const quarta = quartaLiberada && ehQuarta(data) && !ehJanelaDePagamento(data);
       if (!quarta && !ehJanelaDePagamento(data)) {
-        return urgente
-          ? `${br} não é uma janela de pagamento nem uma quarta de exceções. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte — e, no pagamento urgente, nas quartas.`
+        return quartaLiberada
+          ? `${br} não é uma janela de pagamento nem uma quarta de exceções. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte — e, na verba e no pagamento urgente, nas quartas.`
           : `${br} não é uma janela de pagamento. A California paga nos dias 08 e 20 — caindo em fim de semana, na segunda-feira seguinte.`;
       }
       // O prazo de envio (decisão 157; na quarta, a sexta anterior) só pesa
       // no 1º vencimento: as parcelas seguintes vêm depois dele.
-      const erroPrazo = erroDoPrazoDeEnvio(data, hoje, feriados, urgente);
+      const erroPrazo = erroDoPrazoDeEnvio(data, hoje, feriados, quartaLiberada);
       if (erroPrazo) return erroPrazo;
       continue;
     }
@@ -487,11 +491,11 @@ function erroDoPrazoDeEnvio(
   vencimento: string,
   hoje: string,
   feriados: string[],
-  urgente: boolean,
+  quartaLiberada: boolean,
 ): string | null {
   if (vencimentoAceitaEnvio(vencimento, hoje, feriados)) return null;
   const limite = dataLimiteDeEnvio(vencimento, feriados);
-  const primeira = primeiraDataPossivelDoPrazo(hoje, feriados, urgente);
+  const primeira = primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada);
   if (limite && !ehJanelaDePagamento(vencimento)) {
     return `A quarta de exceções ${isoParaBr(vencimento)} fechou em ${isoParaBr(limite)}: ela só pode ser escolhida, e a PP enviada, até a sexta anterior. A primeira data possível hoje é ${isoParaBr(primeira)}.`;
   }
@@ -1386,7 +1390,7 @@ async function finalizarPedidoCompraImpl(
     d.parcelas.map((p) => p.data_vencimento),
     [],
     await carregarFeriadosNacionais(supabase, session.activeTenant.id),
-    d.urgente === true,
+    ppAceitaQuarta({ urgente: d.urgente === true, verba: d.verba_producao }),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(d, null, session.profile.id);
@@ -2841,12 +2845,14 @@ export async function enviarPedidoCompraAoFinanceiro(
     const hoje = hojeEmSaoPauloIso();
     const feriados = await carregarFeriadosNacionais(supabase, session.activeTenant.id);
     const prazo = ppRow.prazo_pagamento.slice(0, 10);
-    // A quarta de exceções só sai com a PP urgente (decisão 172); a quarta
-    // tem a sua data-limite, a sexta anterior, na conta de baixo.
-    if (!ppRow.urgente && ehQuarta(prazo) && !ehJanelaDePagamento(prazo)) {
+    // A quarta de exceções só sai com a PP urgente ou de verba (decisão
+    // 172); a quarta tem a sua data-limite, a sexta anterior, na conta de
+    // baixo.
+    const quartaLiberada = ppAceitaQuarta({ urgente: ppRow.urgente, verba: ppRow.verba_producao });
+    if (!quartaLiberada && ehQuarta(prazo) && !ehJanelaDePagamento(prazo)) {
       return {
         ok: false,
-        message: `O vencimento ${isoParaBr(prazo)} é uma quarta de exceções, que só vale para pagamento urgente. Edite a ${ppRow.codigo} e escolha uma janela.`,
+        message: `O vencimento ${isoParaBr(prazo)} é uma quarta de exceções, que só vale para verba ou pagamento urgente. Edite a ${ppRow.codigo} e escolha uma janela.`,
       };
     }
     if (!vencimentoAceitaEnvio(prazo, hoje, feriados)) {
@@ -2866,7 +2872,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       });
       return {
         ok: false,
-        message: `O prazo de envio para o vencimento ${isoParaBr(prazo)} terminou${limite ? ` em ${isoParaBr(limite)}` : ""}. Atualize o vencimento da ${ppRow.codigo} — a primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, ppRow.urgente))}.`,
+        message: `O prazo de envio para o vencimento ${isoParaBr(prazo)} terminou${limite ? ` em ${isoParaBr(limite)}` : ""}. Atualize o vencimento da ${ppRow.codigo} — a primeira data possível hoje é ${isoParaBr(primeiraDataPossivelDoPrazo(hoje, feriados, quartaLiberada))}.`,
       };
     }
   }
@@ -3316,7 +3322,7 @@ export async function salvarPPAEmitir(
     d.parcelas.map((p) => p.data_vencimento),
     gravadas,
     await carregarFeriadosNacionais(supabase, tenantId),
-    d.urgente === true,
+    ppAceitaQuarta({ urgente: d.urgente === true, verba: d.verba_producao }),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(d, null, session.profile.id);
@@ -3959,7 +3965,7 @@ export async function feriadosNacionaisParaPP(): Promise<string[]> {
  * Mudam o 1º vencimento, as parcelas seguintes (onde estavam, se ainda
  * couberem; senão, a primeira data possível — decisão 172 —, com os mesmos
  * valores) e o PDF, refeito com as datas novas e a data de emissão de antes.
- * Na PP urgente, a data nova pode ser uma quarta de exceções.
+ * Na PP urgente e na de verba, a data nova pode ser uma quarta de exceções.
  *
  * Só vale para a PP ainda no job (`gerada`) e só quando o vencimento atual
  * já não aceita envio. Desde a decisão 173 a PP gerada também se edita
@@ -4033,8 +4039,14 @@ export async function atualizarVencimentoDaPP(
     };
   }
   const novo = novoVencimento.slice(0, 10);
-  // Na PP urgente, a data nova pode ser uma quarta de exceções (decisão 172).
-  const erroJanela = validarVencimentosNasJanelas([novo], [], feriados, pp.urgente === true);
+  // Na PP urgente e na de verba, a data nova pode ser uma quarta de
+  // exceções (decisão 172).
+  const erroJanela = validarVencimentosNasJanelas(
+    [novo],
+    [],
+    feriados,
+    ppAceitaQuarta({ urgente: pp.urgente === true, verba: pp.verba_producao === true }),
+  );
   if (erroJanela) return { ok: false, message: erroJanela };
 
   // As parcelas na ordem; a PP sem linha de parcela (anterior a 17/08) vira
@@ -4316,7 +4328,7 @@ async function editarPPGeradaImpl(
     d.parcelas.map((p) => p.data_vencimento),
     parcelasAntes.map((p) => p.data_vencimento),
     feriados,
-    d.urgente === true,
+    ppAceitaQuarta({ urgente: d.urgente === true, verba: d.verba_producao }),
   );
   if (erroJanela) return { ok: false, message: erroJanela };
   const urgencia = camposDeUrgencia(

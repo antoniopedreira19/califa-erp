@@ -3,7 +3,8 @@
 **Data:** 2026-10-14
 **Status:** aceita e implementada (14/10/2026), por cima da
 [173](173-pp-gerada-volta-a-se-editar.md) — a edição da PP gerada segue as
-mesmas regras.
+mesmas regras. ⚠️ **Revista em 16/10/2026:** a verba também cai na quarta,
+sem urgência — "Revisão de 16/10/2026", no fim deste documento.
 **Quem decidiu:** Tiago, em 13/10/2026 (pedido e respostas) e 14/10/2026
 (aprovação do protótipo: selo vermelho e calendário no "Atualizar
 vencimento").
@@ -188,3 +189,63 @@ urgência, que não mudou (a lista de 6 janelas).
 https://claude.ai/artifact/Te6aeYHavb9UrSqTzFQ16S — as três telas reais
 (formulário da PP, tela da PP no financeiro e o painel do item com o
 "Atualizar vencimento"), aprovado em 14/10/2026.
+
+## Revisão de 16/10/2026 — a verba cai na quarta sem urgência
+
+**Pedido do Tiago (16/10/2026):** "Quero que seja possível selecionar o
+Prazo de Pagamento para as quartas de exceção nas PPs de Verba."
+
+**O que os números mostraram:** entre 14 e 16/10, 11 das 14 PPs de verba
+foram marcadas como urgentes, e as justificativas diziam o motivo — "Pagamentos
+do Flash são semanais, às quartas-feiras". A urgência virou o caminho para
+chegar à quarta, não um aviso de adiantamento.
+
+**Opções levadas a ele:** (A) a verba acende as quartas sempre, sem
+urgência, e o "Pagamento urgente" continua para o caso urgente de fato;
+(B) igual, mas sem o switch de urgência na verba; (C) só a verba de
+alimentação e a de transporte (as do Flash). **Escolhida a A.**
+
+**A regra agora:**
+
+- A PP aceita a quarta de exceções quando é **urgente ou de verba** — de
+  produção, alimentação ou transporte, com ou sem titular
+  (`ppAceitaQuarta` em `lib/calculos/janelas-pagamento.ts`). O resto da
+  regra não muda: a quarta fecha na sexta anterior, só o 1º vencimento cai
+  nela, e as parcelas seguintes pulam a janela logo depois.
+- **Formulário:** com a verba ligada, o calendário acende as quartas e mostra
+  a legenda, sem ligar a urgência. Ligar a urgência na verba não zera mais o
+  prazo (as quartas já estavam liberadas), e a frase do bloco fica só
+  "Avisa o financeiro que o pagamento precisa ser adiantado."
+- **Desligar a verba** com o prazo numa quarta e sem urgência devolve o
+  prazo à primeira janela, com o aviso "A quarta dd/mm/aaaa só vale para
+  verba ou pagamento urgente: o prazo voltou para dd/mm/aaaa." (o mesmo
+  aviso de desligar a urgência).
+- **Servidor:** gerar, salvar a PP a emitir, editar a PP gerada e
+  "Atualizar vencimento" passam `ppAceitaQuarta` para
+  `validarVencimentosNasJanelas`; o envio ao financeiro só recusa a quarta
+  na PP que não é urgente nem de verba. As mensagens dizem "só vale para
+  verba ou pagamento urgente".
+- **Painel do item:** o "Atualizar vencimento" da verba é o calendário com
+  as quartas, como o da PP urgente.
+- **Financeiro:** o selo "✓ quarta de exceções" do dossiê vale também para
+  a verba sem urgência (antes ela cairia em "fora das janelas").
+
+**Migration:** nenhuma.
+
+**Conferido em 16/10/2026 (servidor local):**
+
+- Formulário de verba no TES-1008/26 · Item 6, sem urgência: o calendário
+  abriu com as quartas 21/10, 28/10, 04/11, 11/11, 18/11 e 25/11 e a
+  legenda; com 21/10, "Quarta de exceções · envio até 16/10/2026". Ligar a
+  urgência manteve 21/10; desligar a verba (sem urgência) levou o prazo
+  para 09/11 com o aviso, e a frase da urgência voltou ao texto completo.
+- O servidor aceitou: PP a emitir de verba de produção salva no TES-1001/26
+  · Agrupamento 3 · Item 3 com o prazo em 04/11 e `urgente = false`;
+  reaberta pelo lápis com 04/11 e "envio até 30/10/2026", sem aviso.
+  Excluída pela tela no fim.
+- `node --test lib/calculos/janelas-pagamento.test.ts`: 18 testes (1 novo).
+  `tsc` e `eslint` dos arquivos alterados limpos.
+
+**Não exercitado no navegador:** o "Atualizar vencimento" de uma verba
+gerada com o prazo perdido e o selo do dossiê numa verba sem urgência — não
+há PP nesse estado hoje; os dois usam a mesma `ppAceitaQuarta`.

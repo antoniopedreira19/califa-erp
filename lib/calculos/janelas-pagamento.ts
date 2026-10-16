@@ -21,7 +21,8 @@
  * Desde a decisão 172 (14/10/2026) a PP urgente também pode cair numa
  * QUARTA DE EXCEÇÕES, escolhida até a sexta anterior; e a parcela seguinte
  * pula a janela que vem logo depois da anterior, podendo ser adiada à mão.
- * As regras estão no fim deste arquivo.
+ * Desde 16/10/2026 (revisão da 172) a verba também cai na quarta, urgente
+ * ou não. As regras estão no fim deste arquivo.
  *
  * Datas são ISO `YYYY-MM-DD` tratadas em UTC: é dia de calendário, não
  * instante, e fuso nenhum pode empurrar um 08 para 07.
@@ -177,8 +178,8 @@ export function dataLimiteDeEnvio(
 ): string | null {
   const janela = qualJanela(vencimentoIso);
   // Decisão 172: a quarta de exceções tem a sua data-limite, a sexta
-  // anterior. A quarta só chega gravada numa PP urgente — as portas de
-  // gravação recusam a quarta sem urgência —, então aqui basta a data.
+  // anterior. A quarta só chega gravada numa PP urgente ou de verba — as
+  // portas de gravação recusam a quarta nas outras —, então aqui basta a data.
   if (janela === null) return dataLimiteDaQuarta(vencimentoIso, feriados);
   const ms = isoParaUtc(vencimentoIso);
   if (ms === null) return null;
@@ -284,7 +285,17 @@ export function dataLimiteDaQuarta(
   return utcParaIso(limite);
 }
 
-/** Hoje a quarta ainda aceita PP urgente? */
+/**
+ * A PP pode cair numa quarta de exceções? A urgente (decisão 172) e, desde
+ * 16/10/2026, toda verba, urgente ou não: o cartão Flash da produção é pago
+ * às quartas, e as verbas vinham marcadas urgentes só para chegar à data
+ * (11 das 14 verbas entre 14 e 16/10).
+ */
+export function ppAceitaQuarta(pp: { urgente: boolean; verba: boolean }): boolean {
+  return pp.urgente || pp.verba;
+}
+
+/** Hoje a quarta ainda aceita PP (urgente ou de verba)? */
 export function quartaDeExcecoesAberta(
   iso: string,
   hojeIso: string,
@@ -296,35 +307,37 @@ export function quartaDeExcecoesAberta(
 
 /**
  * O que a data pode ser como prazo (1º vencimento) da PP hoje: janela com
- * envio aberto, quarta de exceções (só com urgência) ou nada. A quarta que
- * também é janela (o 08 ou o 20 numa quarta) segue só a regra da janela —
- * senão a data teria duas datas-limite de envio.
+ * envio aberto, quarta de exceções (só na PP que aceita a quarta — a
+ * urgente e a verba, ver `ppAceitaQuarta`) ou nada. A quarta que também é
+ * janela (o 08 ou o 20 numa quarta) segue só a regra da janela — senão a
+ * data teria duas datas-limite de envio.
  */
 export function tipoDoPrazo(
   iso: string,
   hojeIso: string,
   feriados: Iterable<string>,
-  urgente: boolean,
+  quartaLiberada: boolean,
 ): "janela" | "quarta" | null {
   if (!iso || iso.slice(0, 10) < hojeIso.slice(0, 10)) return null;
   const uteis = conjuntoDeFeriados(feriados);
   if (ehJanelaDePagamento(iso) && vencimentoAceitaEnvio(iso, hojeIso, uteis)) return "janela";
-  if (urgente && !ehJanelaDePagamento(iso) && quartaDeExcecoesAberta(iso, hojeIso, uteis)) return "quarta";
+  if (quartaLiberada && !ehJanelaDePagamento(iso) && quartaDeExcecoesAberta(iso, hojeIso, uteis)) return "quarta";
   return null;
 }
 
 /**
  * A primeira data que o prazo da PP pode ter hoje: a primeira janela com
- * envio aberto ou, na PP urgente, a quarta de exceções, se vier antes.
+ * envio aberto ou, na PP que aceita a quarta, a quarta de exceções, se
+ * vier antes.
  */
 export function primeiraDataPossivelDoPrazo(
   hojeIso: string,
   feriados: Iterable<string>,
-  urgente: boolean,
+  quartaLiberada: boolean,
 ): string {
   const uteis = conjuntoDeFeriados(feriados);
   const janela = primeiraJanelaComEnvioAberto(hojeIso, uteis);
-  if (!urgente) return janela;
+  if (!quartaLiberada) return janela;
   let ms = isoParaUtc(hojeIso)!;
   const ate = isoParaUtc(janela)!;
   for (; ms < ate; ms += DIA_MS) {
