@@ -5642,8 +5642,12 @@ responsável). Regra completa na nota de 16/10 da decisão 036.
   produtores dos orçamentos).
 - **Código:** `projetosNaEquipeDe` em `lib/data/equipe-do-projeto.ts`; a
   página calcula `JobRow.meu`; a lista filtra por ele. Sem migration.
-- **Em aberto:** os cards de ação da home do GP seguem contando só o GP
-  Responsável e podem mostrar menos que a lista em "Meus" que abrem.
+- **Home do GP:** os cards "Jobs pendentes de envio para faturamento" e
+  "Jobs prontos pra encerrar" também contam a Equipe (decidido pelo Tiago
+  no mesmo dia), para o número bater com a lista que abrem
+  (`lib/home/carregar.ts`).
 - **Conferido:** logado como administrador (18 jobs em "Meus", com o
-  AMB-0156/26); a Isabella simulada com a RLS dela vê o COL-1001/26.
+  AMB-0156/26); a Isabella simulada com a RLS dela vê o COL-1001/26; home
+  do GP numa rota temporária: 10 pendentes de envio e 2 prontos pra
+  encerrar, iguais às listas.
 
