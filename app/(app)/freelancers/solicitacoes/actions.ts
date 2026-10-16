@@ -163,6 +163,62 @@ export async function rejeitarSolicitacao(
   return { ok: true };
 }
 
+export async function enviarMensagem(
+  solicitacaoId: string,
+  texto: string,
+): Promise<ActionResult<{ id: string }>> {
+  const session = await requireSession();
+  const sanitizado = texto.trim();
+  if (sanitizado.length === 0 || sanitizado.length > 2000) {
+    return { ok: false, message: "Mensagem precisa ter entre 1 e 2000 caracteres" };
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("freelancer_solicitacao_mensagens")
+    .insert({
+      solicitacao_id: solicitacaoId,
+      autor_id: session.profile.id,
+      texto: sanitizado,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[solicitacao.mensagem.enviar]", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  // Não revalida — Realtime cuida de notificar os outros clientes
+  return { ok: true, data: { id: data.id } };
+}
+
+export async function marcarMensagensComoLidas(
+  solicitacaoId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("freelancer_solicitacao_mensagens_leituras")
+    .upsert(
+      {
+        solicitacao_id: solicitacaoId,
+        user_id: session.profile.id,
+        last_read_at: new Date().toISOString(),
+      },
+      { onConflict: "solicitacao_id,user_id" },
+    );
+
+  if (error) {
+    console.error("[solicitacao.mensagem.marcar_lida]", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath("/freelancers/solicitacoes");
+  return { ok: true };
+}
+
 export async function cancelarSolicitacao(
   id: string,
 ): Promise<ActionResult> {

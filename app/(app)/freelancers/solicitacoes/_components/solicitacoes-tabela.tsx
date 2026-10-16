@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, Search, X, ArrowRight } from "lucide-react";
+import {
+  ClipboardList,
+  Search,
+  X,
+  ArrowRight,
+  MessageCircle,
+} from "lucide-react";
 import { cn, formatCurrency, formatCpf } from "@/lib/utils";
 import type {
   FreelancerSolicitacao,
@@ -26,6 +32,7 @@ interface Props {
   activeRole: string;
   userId: string;
   publicOrigin: string;
+  naoLidasPorSolicitacao: Record<string, number>;
 }
 
 export function SolicitacoesTabela({
@@ -33,6 +40,7 @@ export function SolicitacoesTabela({
   activeRole,
   userId,
   publicOrigin,
+  naoLidasPorSolicitacao,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -172,6 +180,7 @@ export function SolicitacoesTabela({
                 <SolicitacaoRow
                   key={s.id}
                   s={s}
+                  naoLidas={naoLidasPorSolicitacao[s.id] ?? 0}
                   onAbrir={() => abrir(s)}
                 />
               ))}
@@ -213,9 +222,11 @@ function Th({
 
 function SolicitacaoRow({
   s,
+  naoLidas,
   onAbrir,
 }: {
   s: SolicitacaoLinha;
+  naoLidas: number;
   onAbrir: () => void;
 }) {
   return (
@@ -224,9 +235,20 @@ function SolicitacaoRow({
       className="border-b border-border last:border-0 hover:bg-california-red/[0.02] transition-colors group cursor-pointer"
     >
       <td className="px-3 py-2.5">
-        <p className="font-semibold text-foreground uppercase tracking-wide">
-          {s.nome_freela}
-        </p>
+        <div className="flex items-center gap-2">
+          {naoLidas > 0 && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-california-red px-1.5 py-0.5 text-[9px] font-bold text-white"
+              title={`${naoLidas} mensagem(ns) não lida(s)`}
+            >
+              <MessageCircle className="h-2.5 w-2.5" />
+              {naoLidas}
+            </span>
+          )}
+          <p className="font-semibold text-foreground uppercase tracking-wide">
+            {s.nome_freela}
+          </p>
+        </div>
         {s.cpf_freela && (
           <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
             {formatCpf(s.cpf_freela)}
