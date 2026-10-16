@@ -7489,3 +7489,26 @@ Regra completa na seção 9 da decisão 091.
   foto da abertura, idêntico byte a byte (foto 3, 16/10, só o nome mudou
   na auditoria). ANI-1002/26 aguarda decisão: o nome da abertura
   ("… Unisociesc …") ou o da correção da Priscila ("… Unicuritiba …").
+
+## ⚠️ Nota de 2026-10-16 (9) — "Exportar Excel" na aba Visualizar Jobs da Abertura de Job
+
+- **O quê:** botão **Exportar Excel** no canto superior direito da aba
+  Visualizar Jobs (linha dos chips). Baixa um `.xlsx` com um job por linha
+  e cada informação numa coluna (22): código, job, nome na produção,
+  status, código e nome do projeto do financeiro, cliente, GP, regional,
+  marca, abertura, valor total, faturamento, situação do faturamento, NF,
+  vencimento em aberto, recebimentos, recebido, situação dos recebimentos,
+  custos, custos realizados e situação dos custos. Valores em R$ e datas
+  como número/data do Excel; cabeçalho congelado, filtro do Excel ligado
+  e linha de total com `SUBTOTAL(109)`, que acompanha o filtro.
+- **O que sai é o que a tela mostra:** chips, filtros de cima e filtros
+  dos títulos aplicados, na ordem da arrumação escolhida (por projeto ou
+  por job). Grupo recolhido não esconde job do arquivo. Com filtro, o
+  arquivo se chama "Jobs no financeiro (filtrado) - DD-MM-AAAA.xlsx".
+- **Como:** gerado no navegador, das linhas que a página já tem — nenhuma
+  leitura nova do banco. `exportar-lista.ts` e o ExcelJS só descem no
+  clique (import dinâmico), para não pesar no carregamento da tela. As
+  notas "62% recebido" / "previsto na abertura" saíram para
+  `notas-de-caixa.ts`, usado pela lista e pela exportação.
+- **Sem regra nova:** nenhum número é calculado de outro jeito; é a mesma
+  linha da tela, desmontada em colunas. Por isso não tem decisão numerada.
