@@ -67,9 +67,12 @@ import { acharColunaDeMarcas, RECUSA_INTERNA_DO_JOB } from "./coluna-marcas";
  *   - não há coluna de tipo: toda linha entra como **B · Bi-trib.** (a
  *     conta do modelo), e o tipo se ajusta na tela;
  *   - o PLANEJADO da planilha interna (H · R$, I · QT, J · D/M) entra como
- *     no nacional — menos quando a H traz o id oculto da exportação;
- *   - a leitura para no primeiro rótulo do fechamento (TOTAL, FEE…): o que
- *     vem embaixo é fechamento, legenda e câmbio.
+ *     no nacional — menos quando a H traz o id oculto da exportação. Desde
+ *     16/10/2026 as colunas saem do cabeçalho: a interna da agência traz
+ *     H · USD antes do R$ (`planejadoInternacionalDoCabecalho`);
+ *   - a leitura dos itens para no primeiro rótulo do fechamento (TOTAL,
+ *     FEE…): o que vem embaixo é fechamento, legenda e câmbio. Do
+ *     fechamento só se lê o % do FEE (`percentualDoFee`, 16/10/2026).
  *
  * Grupo vazio (nome que aparece numa linha de grupo mas em nenhum item) é
  * descartado no fim. É o que resolve o "CONTEUDO" sem acento da linha de
@@ -397,6 +400,41 @@ function percentualDaFormula(row: ExcelJS.Row, ateColuna: number): number | null
   return null;
 }
 
+/**
+ * % do FEE numa linha do fechamento internacional — ou `null` (16/10/2026).
+ *
+ * Até aqui a leitura internacional parava no TOTAL e não via o FEE, e o
+ * aviso de honorários diferentes do cadastro, que o nacional mostra, nunca
+ * aparecia: a "Gen AI México" calcula o FEE a 13% e a versão nasceu com os
+ * 12% do cadastro do Google, R$ 644,98 abaixo do INVOICING da planilha.
+ *
+ * A interna do ERP põe o % sozinho na E, como o HONORÁRIOS do nacional; na
+ * planilha da agência a E é parte da mescla do rótulo, e o % mora dentro da
+ * fórmula do valor ("=G26*13%"). O rótulo vale com A e B vazias, como em
+ * todo fechamento.
+ */
+function percentualDoFee(row: ExcelJS.Row): number | null {
+  if (normalizar(row.getCell(1).value) !== "" || normalizar(row.getCell(2).value) !== "") {
+    return null;
+  }
+  const rotulo = [3, 4, 5].map((c) => normalizar(row.getCell(c).value).toLowerCase()).join(" ");
+  if (!/\bfee\b|honor/.test(rotulo)) return null;
+  // 0,14 × 100 dá 14,000000000000002 — e o aviso compara com o cadastro.
+  const arredondar = (n: number) => Math.round(n * 10000) / 10000;
+
+  // Acima de 100 não é percentual: é valor digitado na E.
+  const daColunaE = toNumber(row.getCell(5).value);
+  if (daColunaE.ok && daColunaE.n > 0 && daColunaE.n <= 100) {
+    return arredondar(daColunaE.n <= 1 ? daColunaE.n * 100 : daColunaE.n);
+  }
+  const m = rotulo.match(/([0-9]+(?:[.,][0-9]+)?)\s*%/);
+  if (m) {
+    const n = Number(m[1].replace(",", "."));
+    if (Number.isFinite(n) && n > 0) return arredondar(n);
+  }
+  return percentualDaFormula(row, 12);
+}
+
 /** Colunas do orçado e do planejado (1 = A). */
 interface Colunas {
   rs: number;
@@ -447,6 +485,40 @@ function colunasDoCabecalho(cells: string[]): Colunas {
   const pdm = prs ? (achar(["d/m", "dias"], pqt) ?? pqt + 1) : COLUNAS_PADRAO.pdm;
   const ptt = prs ? (achar(["tt"], pdm) ?? pdm + 1) : COLUNAS_PADRAO.ptt;
   return { rs, qt, dm, tt, tipo: tt + 1, prs: prs ?? COLUNAS_PADRAO.prs, pqt, pdm, ptt };
+}
+
+/** R$, QT e D/M do planejado internacional (1 = A). */
+interface ColunasDoPlanejado {
+  rs: number;
+  qt: number;
+  dm: number;
+}
+
+/** H · R$, I · QT, J · D/M — a interna do ERP e a planilha modelo. */
+const PLANEJADO_INTERNACIONAL_PADRAO: ColunasDoPlanejado = { rs: 8, qt: 9, dm: 10 };
+
+/**
+ * Onde está o planejado da planilha internacional, pelo cabeçalho
+ * (16/10/2026): o primeiro R$ depois do TT BRL, e QT e D/M depois dele.
+ *
+ * A interna da agência põe o planejado em USD na H antes do R$ (H · USD,
+ * I · R$, J · QT, K · D/M); com as colunas fixas o USD entrava como R$, o
+ * R$ como QT e a QT como D/M — o planejado da "Gen AI México" saiu com
+ * R$ 40,9 milhões. Sem R$ depois do TT BRL (a planilha do cliente, em que a
+ * H é a coluna das marcas) valem as colunas fixas.
+ */
+function planejadoInternacionalDoCabecalho(cells: string[]): ColunasDoPlanejado {
+  const baixo = cells.map((c) => c.toLowerCase().trim());
+  const achar = (nomes: string[], depoisDe: number): number | null => {
+    const i = baixo.findIndex((c, idx) => idx > depoisDe && nomes.includes(c));
+    return i >= 0 ? i : null;
+  };
+  const ttBrl = baixo.indexOf("tt brl");
+  const rs = ttBrl >= 0 ? achar(["r$"], ttBrl) : null;
+  if (rs === null) return PLANEJADO_INTERNACIONAL_PADRAO;
+  const qt = achar(["qt"], rs) ?? rs + 1;
+  const dm = achar(["d/m", "dias"], qt) ?? qt + 1;
+  return { rs: rs + 1, qt: qt + 1, dm: dm + 1 };
 }
 
 /** A aba tem cabeçalho e ao menos um título de mês (ou a marca `mes:`). */
@@ -606,6 +678,8 @@ export async function parseOficial(
   let viuMarcaDeMes = false;
   let fimDoMensal = false;
   let col: Colunas = COLUNAS_PADRAO;
+  /** Planejado internacional: as colunas saem do cabeçalho. */
+  let planejadoInternacional = PLANEJADO_INTERNACIONAL_PADRAO;
 
   /** Acha o grupo pelo nome ou cria um novo, preservando a ordem de entrada. */
   function grupoPorNome(nome: string, grupoId: string | null = null): ParseGrupo {
@@ -730,6 +804,7 @@ export async function parseOficial(
     // Nas linhas de item a C é o TT USD, que é número.
     if (colA === "" && colB === "" && colC !== "" && !toNumber(row.getCell(3).value).ok) {
       fimDaInternacional = true;
+      percentualHonorarios ??= percentualDoFee(row);
       linhasIgnoradas++;
       return;
     }
@@ -778,8 +853,10 @@ export async function parseOficial(
 
     // Planejado só nas planilhas que o trazem: na exportação para o
     // cliente a H é o id oculto e a I, o crédito consumido — nada disso é
-    // planejado. Na interna a H é mesmo o R$ planejado.
-    const temPlanejado = !ehMarcaDeId(cells[7]);
+    // planejado. Na interna a H é mesmo o R$ planejado, e na da agência o
+    // R$ vem na I, depois do USD (as colunas saem do cabeçalho).
+    const pl = planejadoInternacional;
+    const temPlanejado = !ehMarcaDeId(cells[pl.rs - 1] ?? "");
     const planejado = (col: number) => {
       const v = toNumber(row.getCell(col).value);
       return temPlanejado && v.ok && v.n > 0 ? v.n : 0;
@@ -795,9 +872,9 @@ export async function parseOficial(
       valor_unitario_orcado: numeroDaLinha(row.getCell(4).value, colD, 4, rowNumber, "unitario"),
       quantidade_orcada: numeroDaLinha(row.getCell(5).value, colE, 5, rowNumber, "quantidade"),
       dias_meses_orcado: numeroDaLinha(row.getCell(6).value, colF, 6, rowNumber, "dias"),
-      valor_unitario_planejado: planejado(8),
-      quantidade_planejada: planejado(9),
-      dias_meses_planejado: planejado(10),
+      valor_unitario_planejado: planejado(pl.rs),
+      quantidade_planejada: planejado(pl.qt),
+      dias_meses_planejado: planejado(pl.dm),
       planilha_origem: null,
       linha_xlsx: rowNumber,
     };
@@ -888,7 +965,12 @@ export async function parseOficial(
   }
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (fimDaInternacional || fimDoMensal) return;
+    if (fimDoMensal) return;
+    // Depois dos itens, do fechamento internacional só sai o % do FEE.
+    if (fimDaInternacional) {
+      percentualHonorarios ??= percentualDoFee(row);
+      return;
+    }
     // Lê colunas A–L (12 colunas): até J basta para orçado + planejado, e as
     // duas a mais mantêm a checagem de "linha vazia" honesta.
     // No mensal, A–P: a planilha interna leva o planejado até a M.
@@ -916,6 +998,7 @@ export async function parseOficial(
         headerEncontrado = true;
         layoutInternacional = ehLayoutInternacional(cells);
         if (mensal && !layoutInternacional) col = colunasDoCabecalho(cells);
+        if (layoutInternacional) planejadoInternacional = planejadoInternacionalDoCabecalho(cells);
       }
       return;
     }
