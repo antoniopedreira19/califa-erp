@@ -5604,3 +5604,28 @@ Pedido do Tiago em 16/10/2026 (opção A); regra completa no fim da decisão 172
 - **"Ver envio"** da página do job mostra "Tomador no exterior, sem CNPJ".
 - **Testado** no TES-1007/26 (envio feito e mantido na fila como dado de
   teste; a nota TESTE-184C dele foi emitida e cancelada).
+
+## ⚠️ Nota de 2026-10-16 (3) — a errata em revisão trava o envio de PP só na linha alterada (decisão 185, revê a 040)
+
+Pedido do Tiago em 16/10/2026. Regra completa na decisão 185.
+
+- **Antes:** com o job em revisão da abertura, nenhuma PP do job ia ao
+  financeiro (040 §2). **Agora:** só a PP da linha que uma errata ainda não
+  revisada mudou (orçado, planejado, tipo, linha nova, cancelada). As
+  outras linhas enviam normalmente.
+- **Janela:** a mesma do mural — errata depois do último registro de
+  abertura ou revisão (`jobs_aberturas`), ou da data de abertura.
+- **Reorganizar a planilha (162) não trava.** O faturamento continua
+  travado pelo job inteiro.
+- **Código:** `lib/data/linhas-da-revisao.ts` (regra + 4 testes);
+  `barrarEnvioDePP` recebe a linha (`linha_alterada_em_revisao` na
+  auditoria); o carregador devolve `linhasComEnvioTravado` e
+  `podeEnviarPP` não olha mais a revisão; painel do item e aba PPs travam
+  por linha com `TEXTO_LINHA_ALTERADA_EM_REVISAO`. Sem migration.
+- **Caso real que motivou:** ANI-1001/26 — as PP-00240 e PP-00241, de
+  linhas que a errata não tocou, passam a poder ser enviadas; as 3 PPs
+  da linha nova "UNA: Viagem Itabira" seguem esperando a revisão.
+- **Conferido:** ANI-1001/26 só olhando (2 liberadas, 3 travadas, no
+  painel e na aba); TES-1025/26 com PP-00243 no Item 1 enviada em revisão
+  e PP-00244 no Item 3 recusada na tela e na action
+  (`linha_alterada_em_revisao`). As duas canceladas no fim.

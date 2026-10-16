@@ -34,6 +34,7 @@ import {
 } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { carregarPessoasParaVerba, type PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
+import { linhasAlteradasNaRevisao } from "@/lib/data/linhas-da-revisao";
 import {
   valorDaPPPorUnidade,
   somaDasPPsNaoCanceladas,
@@ -635,9 +636,13 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         nome: string;
         projeto_id: string | null;
         orcamento_id: string | null;
-        /** Errata devolveu o job ao mural: nenhuma PP sai para o
-         *  financeiro até a revisão da abertura ser salva (decisão 040). */
+        /** Errata devolveu o job ao mural: a PP da linha que a errata
+         *  mudou não sai para o financeiro até a revisão da abertura ser
+         *  salva (decisões 040 e 185). */
         abertura_em_revisao: boolean;
+        /** O início da janela da revisão, junto do último registro da
+         *  abertura (decisão 185). */
+        data_abertura_financeiro: string | null;
         /** A regional do job: decide o CNPJ padrão da PP (decisão 156). */
         regional_id: string | null;
         /** Quem envia PP do job além do GP (decisão 174). */
@@ -714,7 +719,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const { data: jobRow, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, regional_id, produtor_id, produtor_envia_pp",
+      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, data_abertura_financeiro, regional_id, produtor_id, produtor_envia_pp",
     )
     .eq("id", item.job_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1191,18 +1196,29 @@ async function renderizarDocumentoDaPP(args: {
  *    passou a valer na pré-abertura, então a trava que era do gate de
  *    gerar precisou nascer aqui — senão soltar a geração soltaria junto
  *    o envio, que é o que compromete dinheiro.
- * 2. **A errata devolveu o job ao mural** (`abertura_em_revisao`) e a
- *    revisão ainda não foi salva (decisão 040, 02/09/2026).
+ * 2. **A errata mudou a linha da PP** e a revisão da abertura ainda não
+ *    foi salva (decisão 040, 02/09/2026, revista pela 185 em 16/10/2026).
+ *    Até a 185 a revisão fechava o envio de TODAS as PPs do job; agora
+ *    fecha só o da linha que uma errata ainda não revisada mudou
+ *    (`linhasAlteradasNaRevisao`). As outras linhas enviam normalmente.
  *
  * Nos dois casos gerar, editar e cancelar continuam liberados — é o
- * ENVIO que fecha, junto com o faturamento, que já fechava desde a 030.
+ * ENVIO que fecha. O faturamento segue fechado pelo job inteiro em
+ * revisão: a errata muda o valor do job.
  *
  * ⚠️ Era `barrarEnvioEmRevisao`, com só a segunda trava (decisão 040 §4).
  */
 async function barrarEnvioDePP(
+  supabase: ReturnType<typeof createClient>,
   tenantId: string,
   ppId: string,
-  job: { id: string; status: string; abertura_em_revisao: boolean },
+  job: {
+    id: string;
+    status: string;
+    abertura_em_revisao: boolean;
+    data_abertura_financeiro: string | null;
+  },
+  item: { job_item_orcado_id: string; item_nome: string },
 ): Promise<Err | null> {
   const negar = async (motivo: string, message: string): Promise<Err> => {
     await logAuditEvent({
@@ -1230,10 +1246,21 @@ async function barrarEnvioDePP(
   }
 
   if (job.abertura_em_revisao) {
-    return negar(
-      "abertura_em_revisao",
-      "A abertura deste job está em revisão no financeiro desde a última errata. Nenhuma PP pode ser enviada até a revisão ser salva — a PP fica gerada, no job.",
-    );
+    const linhas = await linhasAlteradasNaRevisao(supabase, tenantId, job);
+    // Sem conseguir ler as erratas, trava como antes da 185: o envio é o
+    // passo que compromete dinheiro.
+    if (linhas === null) {
+      return negar(
+        "abertura_em_revisao",
+        "A abertura deste job está em revisão no financeiro e não foi possível conferir as linhas da errata. Tente de novo em instantes — a PP fica gerada, no job.",
+      );
+    }
+    if (linhas.has(item.job_item_orcado_id)) {
+      return negar(
+        "linha_alterada_em_revisao",
+        `A errata alterou "${item.item_nome}" e a abertura está em revisão no financeiro. O envio das PPs desta linha volta quando a revisão for salva — a PP fica gerada, no job.`,
+      );
+    }
   }
 
   return null;
@@ -2761,7 +2788,8 @@ export async function seguirDocumentosDaNotaCorrigida(
  *
  *   1. O job aceita ação de planilha e quem envia é o responsável do job
  *      ou administrador (mesmo gate de gerar).
- *   2. A abertura NÃO está em revisão por errata (decisão 040).
+ *   2. A linha da PP não foi alterada por uma errata que a revisão da
+ *      abertura ainda não conferiu (decisão 040, revista pela 185).
  *   3. PP que não é verba de produção tem pelo menos um anexo — o anexo
  *      deixou de travar a geração e passou a travar o envio.
  *   4. Se, com esta PP, o item passa do PLANEJADO, o envio exige
@@ -2831,9 +2859,11 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { item, job } = gate;
 
   const bloqueioEnvio = await barrarEnvioDePP(
+    supabase,
     session.activeTenant.id,
     pp_id,
     job,
+    item,
   );
   if (bloqueioEnvio) return bloqueioEnvio;
 

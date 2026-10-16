@@ -1,7 +1,7 @@
 # 040 — A errata não toca linha com PP no financeiro, e trava o envio de PP até a revisão da abertura
 
 **Data:** 2026-09-02
-**Status:** aceita
+**Status:** aceita; a §2 (envio de PP) foi revista pela [185](185-errata-trava-o-envio-de-pp-so-na-linha-alterada.md) em 2026-10-16.
 **Contexto:** modo errata da Planilha Interna do job (`/jobs/[jobId]`) e
 o mural de abertura do financeiro. Decisões do Tiago em 02/09/2026.
 Completa a 030 e depende da 039 (PP gerada).
@@ -92,3 +92,12 @@ visível no topo, com a foto inteira a um clique. Quem encerra a revisão
 continua sendo `editarRegistroDaAbertura`, que agora audita como
 `job.abertura_revisada` e grava a foto. Ver
 [059](059-revisao-da-abertura-editavel-e-o-historico-das-fotos.md).
+
+## ⚠️ Nota de 2026-10-16 — o envio trava só na linha que a errata mudou (decisão 185)
+
+A frase 2 do topo ("nenhuma PP sai para o financeiro") deixou de valer.
+Com o job em revisão, só a PP da linha que uma errata ainda não revisada
+mudou espera; as outras linhas enviam normalmente. A errata que só
+reorganiza a planilha (162) não trava nada, e o faturamento continua
+travado pelo job inteiro. Regra completa na
+[185](185-errata-trava-o-envio-de-pp-so-na-linha-alterada.md).

@@ -54,8 +54,9 @@ interface Props {
   /**
    * Uma errata mexeu no orçado depois da abertura e o financeiro ainda não
    * reconferiu. O job segue aberto e a produção segue trabalhando — o que
-   * fecha é o envio para faturamento (27/08/2026) e, desde 02/09/2026, o
-   * envio de PPs ao financeiro (decisão 040).
+   * fecha é o envio para faturamento (27/08/2026) e o envio das PPs das
+   * linhas que a errata mudou (decisão 040; só dessas linhas desde a 185,
+   * 16/10/2026 — fora desta barra, no painel do item e na aba PPs).
    */
   aberturaEmRevisao?: boolean;
   /** O job tem uma errata pronta para envio (decisão 159): o envio para

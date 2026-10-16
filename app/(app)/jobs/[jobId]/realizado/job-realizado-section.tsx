@@ -267,10 +267,11 @@ interface Props {
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
    *  isto a tela deixava montar a errata inteira antes de reprovar. */
   jaEnviadoParaFaturamento?: boolean;
-  /** Errata devolveu o job ao mural do financeiro: nenhuma PP sai para o
-   *  financeiro até a revisão da abertura ser salva (decisão 040). Gerar,
-   *  editar e cancelar seguem liberados. */
-  aberturaEmRevisao?: boolean;
+  /** As linhas que uma errata ainda não revisada mudou (decisão 185): a PP
+   *  delas não sai para o financeiro até a revisão da abertura ser salva.
+   *  As outras enviam normalmente; gerar, editar e cancelar seguem
+   *  liberados em todas. */
+  linhasComEnvioTravado?: string[];
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -353,7 +354,7 @@ export function JobRealizadoSection({
   podeEditarFornecedor = false,
   podeConfirmarBv,
   jaEnviadoParaFaturamento = false,
-  aberturaEmRevisao = false,
+  linhasComEnvioTravado = [],
   ppsPorItemId,
   aEmitirPorItemId,
   tomadoresDaNf,
@@ -1107,7 +1108,7 @@ export function JobRealizadoSection({
           podeEditarFornecedor={podeEditarFornecedor}
           podeConfirmarBv={podeConfirmarBv}
           preAbertura={preAbertura}
-          aberturaEmRevisao={aberturaEmRevisao}
+          linhasComEnvioTravado={linhasComEnvioTravado}
           ppsPorItemId={ppsPorItemId}
           aEmitirPorItemId={aEmitirPorItemId}
           statusDoJob={job.status}

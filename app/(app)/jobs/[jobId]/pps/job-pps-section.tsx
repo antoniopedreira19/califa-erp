@@ -43,7 +43,12 @@ import {
   cancelarERefazerPP,
   cancelarPedidoCompra,
 } from "../realizado/actions-pp";
-import { EnvioDialog, textoAguardaAbertura, type PPParaEnviar } from "../realizado/pp-a-emitir-ui";
+import {
+  EnvioDialog,
+  TEXTO_LINHA_ALTERADA_EM_REVISAO,
+  textoAguardaAbertura,
+  type PPParaEnviar,
+} from "../realizado/pp-a-emitir-ui";
 import { GerarPPDrawer } from "../realizado/gerar-pp-drawer";
 import type { TomadorDaNf } from "../realizado/anexos-da-pp";
 import { prazoDeEnvioPerdido, useFeriadosNacionais } from "../realizado/prazo-de-envio-pp";
@@ -90,11 +95,13 @@ interface Props {
    *  164 e 171): administrador, GP, produtor ou freela do job, e o
    *  responsável da verba de produção anterior à 171. */
   podePrestarContas: string[];
-  /** O status do job e a marca de revisão da abertura (decisão 040): as
-   *  portas do envio que não são do papel, nas mesmas frases do painel do
-   *  item. O PAPEL vem de `papelEnviaPP`. */
+  /** O status do job e as linhas travadas pela revisão da abertura
+   *  (decisões 040 e 185): as portas do envio que não são do papel, nas
+   *  mesmas frases do painel do item. O PAPEL vem de `papelEnviaPP`.
+   *  `realizadosComEnvioTravado` são os `item_realizado_id` das linhas que
+   *  uma errata ainda não revisada mudou; as outras enviam normalmente. */
   statusDoJob: JobStatus;
-  aberturaEmRevisao: boolean;
+  realizadosComEnvioTravado: string[];
   /** O que o pop-up de envio precisa — o mesmo que o painel do item recebe
    *  (decisões 152 e 156). */
   tomadoresDaNf: TomadorDaNf[];
@@ -249,7 +256,7 @@ export function JobPPsSection({
   papelEnviaPP,
   podePrestarContas,
   statusDoJob,
-  aberturaEmRevisao,
+  realizadosComEnvioTravado,
   tomadoresDaNf,
   tomadorPorEmpresa,
   empresas,
@@ -288,12 +295,9 @@ export function JobPPsSection({
   const feriados = useFeriadosNacionais();
   const hoje = hojeEmSaoPauloIso();
   // As portas do envio que não são do papel, nas mesmas frases do painel do
-  // item (`envioBloqueadoPor` de job-item-realizado-table.tsx).
-  const envioBloqueadoPor =
-    textoAguardaAbertura(statusDoJob) ??
-    (aberturaEmRevisao
-      ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
-      : null);
+  // item (`envioBloqueadoPor` de job-item-realizado-table.tsx). A revisão
+  // da abertura é por linha (decisão 185), em `travaDoEnvio`.
+  const envioBloqueadoPor = textoAguardaAbertura(statusDoJob);
   const nomeDaEmpresa = (id: string) => {
     const e = empresas.find((x) => x.id === id);
     return e ? (e.nome_fantasia ?? e.razao_social) : "—";
@@ -543,12 +547,15 @@ export function JobPPsSection({
 
   /**
    * Por que ESTA PP não pode ser enviada agora, na ordem do painel do item:
-   * o job (pré-abertura, abertura em revisão) e o prazo de envio do
-   * vencimento (decisão 157). O papel nem chega aqui: o botão só existe
-   * para quem envia. Nulo: o botão vale.
+   * o job (pré-abertura), a linha alterada por errata em revisão (decisão
+   * 185) e o prazo de envio do vencimento (decisão 157). O papel nem chega
+   * aqui: o botão só existe para quem envia. Nulo: o botão vale.
    */
   function travaDoEnvio(pp: PedidoCompraNaLista): string | null {
     if (envioBloqueadoPor) return envioBloqueadoPor;
+    if (realizadosComEnvioTravado.includes(pp.item_realizado_id)) {
+      return TEXTO_LINHA_ALTERADA_EM_REVISAO;
+    }
     const perdido = prazoDeEnvioPerdido(
       { prazoPagamento: pp.prazo_pagamento, geradaEm: pp.created_at },
       hoje,
