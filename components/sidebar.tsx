@@ -20,6 +20,7 @@ import {
   BarChart3,
   Settings,
   Users,
+  UserCheck,
 } from "lucide-react";
 
 type NavLink = {
@@ -76,6 +77,12 @@ const links: NavLink[] = [
     label: "RH",
     icon: Users,
     permissao: "sidebar.rh",
+  },
+  {
+    href: "/freelancers",
+    label: "Freelancers",
+    icon: UserCheck,
+    permissao: "sidebar.freelancers",
   },
 ];
 

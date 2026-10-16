@@ -40,6 +40,13 @@ export const permissoes = {
   "sidebar.administracao":       ["administrador"],
   /** Modulo RH: cadastro de colaboradores, alocacao, salario, niveis. */
   "sidebar.rh":                  ["administrador", "rh"],
+  /**
+   * Modulo Freelancers: cadastro mestre, contratos, solicitacoes de
+   * contratacao. Isolado do RH no inicio (Fases 1-4); integracao com
+   * folha/colaboradores vem depois. Freelancer (role) nao ve o modulo:
+   * ele acessa via link publico quando for a vez dele.
+   */
+  "sidebar.freelancers":         ["administrador", "rh", "financeiro", "gerente_producao", "produtor"],
 
   // ==================================================================
   // Chave "Meus/Todos" nas listas (Projetos, Orcamentos, Jobs)
