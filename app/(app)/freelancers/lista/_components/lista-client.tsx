@@ -5,11 +5,16 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Users } from "lucide-react";
 import { cn, formatCpf } from "@/lib/utils";
-import type { Freelancer, AcaoPrevistaFreelancer } from "@/lib/types";
+import type {
+  AcaoPrevistaFreelancer,
+  FreelancerComStatus,
+  StatusCalculado,
+} from "@/lib/types";
 import { AcaoPrevistaBadge, ACOES_PREVISTAS } from "./acao-prevista-badge";
+import { StatusBadge } from "../../_components/status-badge";
 
 interface Props {
-  freelancers: Freelancer[];
+  freelancers: FreelancerComStatus[];
 }
 
 export function ListaClient({ freelancers }: Props) {
@@ -89,13 +94,13 @@ export function ListaClient({ freelancers }: Props) {
                   CPF
                 </th>
                 <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
+                  Cargo
+                </th>
+                <th className="px-3 py-2.5 text-center font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
+                  Status
+                </th>
+                <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
                   Cidade
-                </th>
-                <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Email
-                </th>
-                <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Celular
                 </th>
                 <th className="px-3 py-2.5 text-center font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
                   Ação prevista
@@ -118,7 +123,7 @@ export function ListaClient({ freelancers }: Props) {
   );
 }
 
-function FreelancerRow({ f }: { f: Freelancer }) {
+function FreelancerRow({ f }: { f: FreelancerComStatus }) {
   const href = `/freelancers/${f.id}`;
   const dataFormatada = new Date(f.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -146,13 +151,17 @@ function FreelancerRow({ f }: { f: Freelancer }) {
         {f.cpf ? formatCpf(f.cpf) : <span className="text-muted-foreground">—</span>}
       </td>
       <td className="px-3 py-2.5 text-foreground">
+        {f.cargo_contrato ? (
+          f.cargo_contrato
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-center">
+        <StatusBadge status={f.status_calculado as StatusCalculado} />
+      </td>
+      <td className="px-3 py-2.5 text-foreground">
         {f.cidade ?? <span className="text-muted-foreground">—</span>}
-      </td>
-      <td className="px-3 py-2.5 text-foreground truncate max-w-[200px]">
-        {f.email ?? <span className="text-muted-foreground">—</span>}
-      </td>
-      <td className="px-3 py-2.5 tabular-nums text-foreground">
-        {f.celular ?? <span className="text-muted-foreground">—</span>}
       </td>
       <td className="px-3 py-2.5 text-center">
         <AcaoPrevistaBadge acao={f.acao_prevista as AcaoPrevistaFreelancer | null} />

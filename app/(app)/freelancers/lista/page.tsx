@@ -5,10 +5,12 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import { PageHeader } from "@/components/ui/page-header";
-import type { Freelancer, FreelancerCargo } from "@/lib/types";
+import type { FreelancerComStatus, FreelancerCargo } from "@/lib/types";
 import { ListaClient } from "./_components/lista-client";
 import { BuscaInput } from "./_components/busca-input";
 import { GerenciarCargosDialog } from "./_components/gerenciar-cargos-dialog";
+import { CardsAnalise, type CategoriaCard } from "./_components/cards-analise";
+import { ChipsStatus } from "./_components/chips-status";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +23,29 @@ const ACOES_VALIDAS = new Set([
   "sem_decisao",
 ]);
 
+const STATUS_VALIDOS = new Set([
+  "regular",
+  "vencendo",
+  "irregular",
+  "sem_minuta",
+  "sem_assinado",
+  "agendado",
+  "pendente",
+  "encerrado",
+  "limbo",
+]);
+
+const CARDS_VALIDOS = new Set<CategoriaCard>([
+  "na-ativa",
+  "em-dia",
+  "irregular",
+  "encerrados",
+]);
+
 export default async function FreelancersListaPage({
   searchParams,
 }: {
-  searchParams: { q?: string; acao?: string };
+  searchParams: { q?: string; acao?: string; status?: string; card?: string };
 }) {
   const session = await requireSession();
   if (!pode(session.activeRole, "sidebar.freelancers")) {
@@ -33,18 +54,16 @@ export default async function FreelancersListaPage({
 
   const supabase = createClient();
 
-  // Query de freelancers com filtros server-side
+  // Query principal consome a view `freelancers_com_status` — ela traz
+  // cargo e status derivado do contrato ativo.
   let query = supabase
-    .from("freelancers")
+    .from("freelancers_com_status")
     .select("*")
     .eq("tenant_id", session.activeTenant.id)
     .order("nome_social", { ascending: true });
 
   const termo = searchParams.q?.trim();
   if (termo) {
-    // CPF puro no banco é só dígitos — se o usuário digitou 123.456.789-01
-    // o ilike não vai casar. Fazemos busca em nome_social, nome_completo
-    // e cpf (comparando com e sem máscara).
     const soDigitos = termo.replace(/\D+/g, "");
     const likeNome = `%${termo}%`;
     const condicoes = [
@@ -57,7 +76,7 @@ export default async function FreelancersListaPage({
     query = query.or(condicoes.join(","));
   }
 
-  // Filtro por ação prevista — múltiplos separados por vírgula na URL
+  // Filtro por ação prevista
   const acoesFiltro = (searchParams.acao ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -66,9 +85,7 @@ export default async function FreelancersListaPage({
   if (acoesFiltro.length > 0) {
     const temSemDecisao = acoesFiltro.includes("sem_decisao");
     const acoesConcretas = acoesFiltro.filter((a) => a !== "sem_decisao");
-
     if (temSemDecisao && acoesConcretas.length > 0) {
-      // Combina: ação IS NULL OR ação IN (...)
       const inList = acoesConcretas.join(",");
       query = query.or(`acao_prevista.is.null,acao_prevista.in.(${inList})`);
     } else if (temSemDecisao) {
@@ -78,14 +95,53 @@ export default async function FreelancersListaPage({
     }
   }
 
-  const [freelancersRes, cargosRes] = await Promise.all([
-    query.returns<Freelancer[]>(),
+  // Filtro por status_calculado via chips
+  const statusFiltro = (searchParams.status ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => STATUS_VALIDOS.has(s));
+  if (statusFiltro.length > 0) {
+    query = query.in("status_calculado", statusFiltro);
+  }
+
+  // Filtro por card de análise (combina com os outros via AND)
+  const cardFiltro = searchParams.card;
+  if (cardFiltro && CARDS_VALIDOS.has(cardFiltro as CategoriaCard)) {
+    if (cardFiltro === "na-ativa") {
+      query = query.eq("status_real", true);
+    } else if (cardFiltro === "em-dia") {
+      query = query
+        .eq("status_real", true)
+        .in("status_calculado", ["regular", "vencendo"]);
+    } else if (cardFiltro === "irregular") {
+      query = query
+        .eq("status_real", true)
+        .in("status_calculado", [
+          "irregular",
+          "sem_minuta",
+          "sem_assinado",
+          "pendente",
+        ]);
+    } else if (cardFiltro === "encerrados") {
+      // Qualquer um que não esteja trabalhando
+      query = query.or("status_real.eq.false,status_calculado.eq.encerrado");
+    }
+  }
+
+  // Totais dos 4 cards (independentes dos filtros atuais pra o usuário
+  // ter sempre o retrato geral do tenant).
+  const [freelancersRes, cargosRes, totaisRes] = await Promise.all([
+    query.returns<FreelancerComStatus[]>(),
     supabase
       .from("freelancer_cargos")
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true })
       .returns<FreelancerCargo[]>(),
+    supabase
+      .from("freelancers_com_status")
+      .select("status_real, status_calculado")
+      .eq("tenant_id", session.activeTenant.id),
   ]);
 
   if (freelancersRes.error) {
@@ -97,6 +153,40 @@ export default async function FreelancersListaPage({
 
   const freelancers = freelancersRes.data ?? [];
   const cargos = cargosRes.data ?? [];
+
+  // Cálculo dos 4 cards de análise
+  const totaisRaw =
+    (totaisRes.data as Array<{
+      status_real: boolean | null;
+      status_calculado: string;
+    }>) ?? [];
+  const totais: Record<CategoriaCard, number> = {
+    "na-ativa": 0,
+    "em-dia": 0,
+    irregular: 0,
+    encerrados: 0,
+  };
+  for (const t of totaisRaw) {
+    if (t.status_real === false || t.status_calculado === "encerrado") {
+      totais.encerrados += 1;
+      continue;
+    }
+    if (t.status_real === true) {
+      totais["na-ativa"] += 1;
+      if (
+        t.status_calculado === "regular" ||
+        t.status_calculado === "vencendo"
+      ) {
+        totais["em-dia"] += 1;
+      } else if (
+        ["irregular", "sem_minuta", "sem_assinado", "pendente"].includes(
+          t.status_calculado,
+        )
+      ) {
+        totais.irregular += 1;
+      }
+    }
+  }
 
   const podeGerenciarCargos =
     session.activeRole === "administrador" || session.activeRole === "rh";
@@ -129,7 +219,15 @@ export default async function FreelancersListaPage({
         }
       />
 
-      <BuscaInput />
+      <CardsAnalise totais={totais} />
+
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <BuscaInput />
+      </div>
+
+      <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+        <ChipsStatus />
+      </div>
 
       <ListaClient freelancers={freelancers} />
     </div>
