@@ -57,6 +57,7 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import {
   formatPercentualRateio,
+  nomeDoJobNoFinanceiro,
   ordenarCompetencias,
   rateioLabel,
   type JobCompetencia,
@@ -510,9 +511,11 @@ export function AberturaForm({
       : "Aprovar consumo e registrar revisão"
     : "Registrar revisão de abertura";
 
-  // Na abertura o nome vem do job da produção; num job já aberto vem do
-  // nome que o financeiro gravou (`dados-abertos` já resolve o fallback).
-  const [nome, setNome] = React.useState(job.nome);
+  // Na abertura o nome vem do job da produção; num job já aberto, do nome
+  // que o financeiro gravou. Até 16/10/2026 nascia sempre do da produção, e
+  // salvar uma edição ou revisão sem retocar o campo apagava o nome do
+  // financeiro (AMB-1019/26 e ANI-1002/26 em 07/10/2026).
+  const [nome, setNome] = React.useState(() => nomeDoJobNoFinanceiro(job));
   // Chega com a categoria que a produção deu ao job no orçamento — o
   // financeiro confere e pode trocar. Só pré-seleciona o que está na
   // lista: categoria inativada desde o envio deixa o campo vazio, e aí o
@@ -1472,7 +1475,7 @@ export function AberturaForm({
   /** Desfaz a edição voltando tudo ao que veio do servidor. */
   function cancelarEdicao() {
     setErro(null);
-    setNome(job.nome);
+    setNome(nomeDoJobNoFinanceiro(job));
     setProjetoId(job.projeto_financeiro_id ?? "");
     setNomeProjetoNovo(null);
     setContaRecebId(job.conta_recebimento_id);
