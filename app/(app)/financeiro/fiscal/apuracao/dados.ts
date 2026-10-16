@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { BlocoAApurar } from "@/lib/fiscal/a-apurar";
+import { irpjCsllAApurar, type BlocoAApurar, type IrpjCsllAApurar } from "@/lib/fiscal/a-apurar";
 import { carregarBlocosAApurar } from "@/lib/fiscal/a-apurar-dados";
 import { carregarFatosFiscais } from "@/lib/fiscal/apuracao-fatos";
 import {
@@ -84,6 +84,11 @@ export interface DadosDaApuracao {
    * com título a receber em aberto (sem nenhum, o bloco não aparece).
    */
   aApurar: BlocoAApurar[];
+  /**
+   * O IRPJ e a CSLL que as parcelas em aberto acrescentam a cada trimestre
+   * (o mesmo do fluxo de caixa): as linhas "A apurar" da lista (decisão 183).
+   */
+  aApurarIrpjCsll: IrpjCsllAApurar[];
   /** Falha ao ler os títulos em aberto: o bloco não aparece e a aba diz por quê. */
   aApurarErro: string | null;
   /** As PJs na ordem do cadastro de impostos. */
@@ -153,6 +158,7 @@ function vazio(tenantId: string, hoje: string, erro: string | null): DadosDaApur
     guias: [],
     aRecuperar: [],
     aApurar: [],
+    aApurarIrpjCsll: [],
     aApurarErro: null,
     pjs: [],
     estabelecimentos: [],
@@ -257,6 +263,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       guias,
       aRecuperar,
       aApurar: aApurar.blocos,
+      aApurarIrpjCsll: irpjCsllAApurar(cadastro, fatos, aApurar.blocos, hoje),
       aApurarErro: aApurar.erro,
       pjs: pjsDaTela(cadastro, nomesDasPJs, pjsDeTeste, hoje),
       estabelecimentos: [...cadastro.estabelecimentos]
