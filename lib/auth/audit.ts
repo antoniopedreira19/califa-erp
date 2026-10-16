@@ -437,6 +437,11 @@ export type AuditAction =
   // Módulo Freelancers — arquivos (Task 018).
   | "freelancer_contrato.minuta_gerada"
   | "freelancer_contrato.assinado_enviado"
+  // Módulo Freelancers — solicitações (Task 021).
+  | "freelancer_solicitacao.criada"
+  | "freelancer_solicitacao.aprovada"
+  | "freelancer_solicitacao.rejeitada"
+  | "freelancer_solicitacao.cancelada"
   | "acao_negada";
 
 export interface AuditPayload {
