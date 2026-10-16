@@ -16,7 +16,7 @@ const nextConfig = {
     // serverComponentsExternalPackages tambem cobre server actions via
     // next-flight-action-entry-loader — evita webpack tentar bundlar
     // deps nativas e reduz cold start.
-    serverComponentsExternalPackages: ["pdfmake", "pdfkit"],
+    serverComponentsExternalPackages: ["pdfmake", "pdfkit", "docx"],
     // pdfkit carrega Helvetica.cjs/afm/etc por require dinamico; o
     // tracer da Vercel nao segue esses requires e o deploy sobe sem
     // as fontes -> "Cannot find module .../standard-fonts/Helvetica.cjs"

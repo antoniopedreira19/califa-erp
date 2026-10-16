@@ -10,6 +10,7 @@ import type {
   FreelancerContrato,
 } from "@/lib/types";
 import { ContratoForm } from "../_components/contrato-form";
+import { BlocoArquivos } from "../_components/bloco-arquivos";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export default async function EditarContratoPage({
 
   const { data: contratoRaw, error: contratoErr } = await supabase
     .from("freelancer_contratos")
-    .select("*, freelancer:freelancers(id, nome_social)")
+    .select("*, freelancer:freelancers(id, nome_social, cpf)")
     .eq("id", params.id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -48,6 +49,7 @@ export default async function EditarContratoPage({
   const freelancer = (contratoRaw as any).freelancer as {
     id: string;
     nome_social: string;
+    cpf: string | null;
   } | null;
   if (!freelancer) notFound();
 
@@ -115,6 +117,11 @@ export default async function EditarContratoPage({
 
   const cargos = cargosRes.data ?? [];
 
+  const podeGerarMinuta = !!freelancer.nome_social && !!freelancer.cpf;
+  const motivoBloqueioMinuta = podeGerarMinuta
+    ? undefined
+    : "Preencha pelo menos nome social e CPF do freelancer antes de gerar a minuta";
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
@@ -129,6 +136,15 @@ export default async function EditarContratoPage({
           icon={FileText}
         />
       </div>
+
+      <BlocoArquivos
+        contratoId={contrato.id}
+        temMinuta={!!contrato.minuta_url}
+        temAssinado={!!contrato.arquivo_url}
+        podeGerenciar={PODE_EDITAR.has(session.activeRole)}
+        podeGerarMinuta={podeGerarMinuta}
+        motivoBloqueioMinuta={motivoBloqueioMinuta}
+      />
 
       <ContratoForm
         modo="editar"
