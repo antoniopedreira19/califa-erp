@@ -151,6 +151,12 @@ const emitirSchema = z.object({
   rateio: z
     .array(z.object({ regional_id: z.string(), percentual: z.number() }))
     .default([]),
+  // Decisão 184: o CNPJ do tomador é campo do Faturar (nasce com o do envio
+  // ou com o do cadastro do cliente); "Tomador no exterior" sai sem CNPJ. A
+  // nota avulsa pode se referir a um job, que dá empresa, regional e cliente.
+  cnpj_tomador: z.string().nullable().default(null),
+  tomador_exterior: z.boolean().default(false),
+  job_referencia_id: z.string().uuid().nullable().default(null),
 });
 
 /** Hoje no fuso da casa (o servidor roda em UTC): o mesmo dia da aba Apuração. */
@@ -197,6 +203,15 @@ export async function emitirFaturamento(
   }
   if (d.origem_tipo === "avulso" && (!d.plano_conta_tipo_id || !d.plano_conta_subtipo_id)) {
     return { ok: false, message: "No faturamento avulso, informe o centro de custo." };
+  }
+  // Decisão 184: fora do BV, a nota sai para um CNPJ de 14 números ou para
+  // um tomador no exterior, sem CNPJ. A RPC confere de novo.
+  const cnpjTomador = (d.cnpj_tomador ?? "").replace(/\D/g, "");
+  if (d.origem_tipo !== "bv" && !d.tomador_exterior && !/^\d{14}$/.test(cnpjTomador)) {
+    return { ok: false, message: "Informe o CNPJ do tomador, ou marque “Tomador no exterior, sem CNPJ”." };
+  }
+  if (d.job_referencia_id && d.origem_tipo !== "avulso") {
+    return { ok: false, message: "Só a nota avulsa leva job de referência." };
   }
   // A nota sem job não tem de onde tirar regional: o rateio vem com ela,
   // como na despesa sem job (082). A RPC confere de novo, com a empresa.
@@ -312,6 +327,9 @@ export async function emitirFaturamento(
       itens: d.itens,
       parcelas: d.parcelas,
       rateio: d.origem_tipo === "avulso" ? d.rateio : [],
+      cnpj_tomador: d.origem_tipo === "bv" || d.tomador_exterior ? null : cnpjTomador,
+      tomador_exterior: d.origem_tipo !== "bv" && d.tomador_exterior,
+      job_referencia_id: d.origem_tipo === "avulso" ? d.job_referencia_id : null,
     },
   });
 
@@ -368,6 +386,8 @@ export async function emitirFaturamento(
         qtd_parcelas: d.parcelas.length,
         agrupada: d.itens.length > 1,
         regionais_no_rateio: d.rateio.length,
+        tomador_exterior: d.tomador_exterior,
+        job_referencia_id: d.job_referencia_id,
         estabelecimento_id: d.estabelecimento_id,
         fiscal_cnae_id: d.fiscal_cnae_id,
         cnae: cnaeTexto,

@@ -95,7 +95,9 @@ test("situação de cada mês: a enviar, na fila, parcial, faturado e sem fatura
       { id: `${id}-p1`, ordem: 1, valor: valor / 2, data_vencimento: mes, nota_id: `${id}-n1` },
       { id: `${id}-p2`, ordem: 2, valor: valor / 2, data_vencimento: mes, nota_id: `${id}-n1` },
     ],
-    notas: [{ id: `${id}-n1`, ordem: 1, cnpj: "25313018000174", cnae_sugerido: null, descritivo: null }],
+    notas: [
+      { id: `${id}-n1`, ordem: 1, cnpj: "25313018000174", tomador_exterior: false, cnae_sugerido: null, descritivo: null },
+    ],
     anexos: [],
   });
   const nota = (parcela: string, valor: number) => ({

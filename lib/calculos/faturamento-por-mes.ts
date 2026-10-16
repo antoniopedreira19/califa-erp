@@ -145,7 +145,9 @@ export interface ParcelaDoEnvio {
 export interface NotaDoEnvio {
   id: string;
   ordem: number;
-  cnpj: string;
+  /** Nulo quando o GP marcou o tomador no exterior (decisão 184). */
+  cnpj: string | null;
+  tomador_exterior: boolean;
   cnae_sugerido: string | null;
   descritivo: string | null;
 }

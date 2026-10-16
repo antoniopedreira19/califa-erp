@@ -50,8 +50,10 @@ import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/typ
 import type { FiscalDoFaturar } from "@/lib/fiscal/faturar";
 import {
   FaturarDrawer,
+  type CnpjsDoCliente,
   type DrawerState,
   type InfoJob,
+  type JobDoFaturar,
 } from "./faturar-drawer";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import {
@@ -125,8 +127,11 @@ export interface FaturamentoPendenteRow {
   /** Posição da nota no envio, e quantas notas o envio tem. Nulos em BV. */
   nota_ordem: number | null;
   nota_total: number | null;
-  /** CNPJ do cliente para o qual a nota sai (só dígitos). Nulo em BV. */
+  /** CNPJ do cliente para o qual a nota sai (só dígitos). Nulo em BV e
+   *  quando o GP marcou o tomador no exterior. */
   cnpj_tomador: string | null;
+  /** Decisão 184: o GP marcou "Tomador no exterior, sem CNPJ". */
+  tomador_exterior: boolean;
   /** CNAE que o GP sugeriu — texto de fundo no Faturar (D3). */
   cnae_sugerido: string | null;
   /** O descritivo que o GP escreveu para esta nota. */
@@ -429,6 +434,10 @@ interface Props {
   /** Módulo fiscal (02/10/2026): o que o Faturar usa do cadastro de
    *  impostos — CNPJ emissor, CNAEs e as sugestões. */
   fiscal: FiscalDoFaturar;
+  /** Decisão 184: empresa, regional e cliente de cada job, e os CNPJs de
+   *  cada cliente — o Faturar tira deles o que não se escolhe mais. */
+  jobs: JobDoFaturar[];
+  cnpjsPorCliente: Record<string, CnpjsDoCliente>;
 }
 
 /** A chave do recebimento antes da NF desta parcela: a nota ou o BV. */
@@ -450,6 +459,8 @@ export function FaturamentoList({
   contas,
   recebidosAntes,
   fiscal,
+  jobs,
+  cnpjsPorCliente,
 }: Props) {
   const router = useRouter();
   const [drawer, setDrawer] = React.useState<DrawerState | null>(null);
@@ -1503,6 +1514,8 @@ export function FaturamentoList({
           proximoNf={proximoNf}
           recebidosAntes={recebidosAntes}
           fiscal={fiscal}
+          jobs={jobs}
+          cnpjsPorCliente={cnpjsPorCliente}
         />
       )}
 

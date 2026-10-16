@@ -7442,3 +7442,32 @@ Regra completa na seção 9 da decisão 091.
 - **Pendências (183 §4):** receita jan–set/2026 e guias de IRPJ/CSLL do 1º
   ao 3º trimestre da Hitlab (LC 224), rendimento de aplicação no presumido,
   a Hitlab reter como tomadora.
+
+## ⚠️ Nota de 2026-10-16 (7) — O Faturar redesenhado: drawer que abre a nota, "Faturar", job de referência e CNPJ do tomador (decisão 184)
+
+- **`faturar-drawer.tsx` reescrito** pelo protótipo aprovado (modelo C,
+  versão 5): drawer de 700 px com seções numeradas (Cliente e job / Jobs
+  nesta NF · Valor e classificação · Nota fiscal · Parcelas); a área de
+  arrastar o PDF no fim da seção Nota fiscal; anexado, o mesmo
+  `DialogPrimitive.Content` vai a `w-full` e a nota abre à esquerda
+  (`PainelDocumento` com o `blob:` do arquivo, `semBaixar`). Botão
+  "Faturar"; toast "NF X faturada · <CNPJ emissor> · …".
+- **Empresa (gerencial), regional e cliente** vêm do job, numa faixa
+  travada (`FaixaDoJob`); BV mostra "Fornecedor" e a empresa do job do BV.
+- **Avulsa:** "Referente a um job" (empresa, regional e cliente do job;
+  rateio 100% na regional dele) ou "Sem job" (como antes).
+- **CNPJ do tomador** nas duas notas (fora o BV) com "Tomador no exterior,
+  sem CNPJ"; na de job nasce com o do envio e avisa quando diverge.
+- **Competência não é campo;** sai a frase das retenções do quadro de
+  impostos.
+- **Leitura** ("NF X emitida") inalterada, em `nota-emitida-drawer.tsx`.
+- **Página:** consulta nova dos jobs (`jobsDoFaturar`, aberto a
+  finalizado, com empresa, regional e cliente) e `cnpjsPorCliente`
+  (cadastro + já usados); `clientes` passa a ler o `cnpj`.
+- **Banco** (migrations 20261016700001–700003): `faturamentos.tomador_exterior`
+  e `job_referencia_id`; `emitir_faturamento` grava o CNPJ do formulário e
+  recusa nota de job/BV fora da empresa do job e avulsa referente a job fora
+  da empresa, do cliente ou da regional dele.
+- **Testado** no TES-P001/26 (TESTE-184A/B/C emitidas e canceladas pela
+  action). Pendências na 184 §5: imposto da exportação, avulsa na
+  rentabilidade do job, conta da receita.

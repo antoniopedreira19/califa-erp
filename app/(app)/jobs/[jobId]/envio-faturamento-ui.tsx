@@ -186,7 +186,9 @@ export function VerEnvioFaturamentoDialog({
                           <span className="text-xs font-semibold">
                             NF {nota.ordem}
                             <span className="ml-2 font-mono font-normal text-muted-foreground">
-                              {formatCnpj(nota.cnpj)}
+                              {nota.tomador_exterior || !nota.cnpj
+                                ? "Tomador no exterior, sem CNPJ"
+                                : formatCnpj(nota.cnpj)}
                             </span>
                           </span>
                           <span className="font-mono text-sm font-semibold">

@@ -341,7 +341,7 @@ export async function carregarDetalheDoJob(
         // Notas e anexos pela FK do envio (decisão 123): a parcela é uma
         // tabela de junção entre envio e nota, e sem o hint o PostgREST
         // acharia dois caminhos e recusaria a consulta.
-        "id, mes, valor_faturado, valor_save, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em, enviado_por, parcelas:jobs_envio_faturamento_parcelas(id, ordem, valor, data_vencimento, nota_id), notas:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_envio_id_fkey(id, ordem, cnpj, cnae_sugerido, descritivo), anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
+        "id, mes, valor_faturado, valor_save, data_faturamento, numero_po, descricao_nf, portal_url, enviado_em, enviado_por, parcelas:jobs_envio_faturamento_parcelas(id, ordem, valor, data_vencimento, nota_id), notas:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_envio_id_fkey(id, ordem, cnpj, tomador_exterior, cnae_sugerido, descritivo), anexos:jobs_envio_faturamento_anexos!jobs_envio_faturamento_anexos_envio_id_fkey(id, nome_arquivo, path, mime_type, tamanho_bytes)",
       )
       .eq("job_id", jobId)
       .eq("tenant_id", session.activeTenant.id)
