@@ -373,20 +373,29 @@ sozinho.
 - **Medido em 16/10/2026:** a Isabella vai de 0 para 1 job (COL-1001/26,
   conferido com a RLS dela); o Tiago, de 17 para 18 (AMB-0156/26, do
   projeto AMB-P015/26, que ele criou); o Produtor Teste, de 8 para 17.
-- **Os cards de ação da home continuam no GP Responsável** ("Jobs
-  pendentes de envio para faturamento", "Jobs prontos pra encerrar").
-  Com a lista mais larga, o número do card pode ficar menor que o da
-  lista em "Meus" que ele abre — em 16/10, um GP tinha 6 no card e 12 na
-  lista. **Ponto em aberto com o Tiago.** O KPI "Meus jobs em andamento"
-  já contava os projetos do usuário (`lib/home/escopo-meus.ts`) e agora
-  fica perto da lista.
+- **Os cards de ação da home do GP também contam a Equipe** ("Jobs
+  pendentes de envio para faturamento" e "Jobs prontos pra encerrar").
+  Contavam só o GP Responsável, e o número do card ficava menor que o da
+  lista em "Meus" que ele abre (em 16/10, um GP tinha 6 no card e 12 na
+  lista). Decidido pelo Tiago no mesmo dia: o card conta os jobs dos
+  projetos em cuja Equipe o GP está, pela mesma `projetosNaEquipeDe`.
+  O card "Versões aguardando sua aprovação" continua no GP do orçamento.
+  O KPI "Meus jobs em andamento" já contava os projetos do usuário
+  (`lib/home/escopo-meus.ts`) e não mudou.
 
 **Conferido logado em 16/10/2026** (como administrador): em "Meus", 18
 jobs, com o AMB-0156/26 entre eles (GP e produtor são outras pessoas);
 "Todos" com 93; o estado vazio diz "Você não está na equipe de nenhum job
 que combine com os filtros."; console sem erro.
 
+**Cards conferidos em 16/10/2026** (a home do GP montada com o usuário do
+Tiago numa rota temporária, já apagada): "pendentes de envio" foi de 9
+para 10 e abre a lista com os mesmos 10 jobs (o AMB-0156/26 entrou);
+"prontos pra encerrar" mostra 2 e a lista também.
+
 Código: `lib/data/equipe-do-projeto.ts` (`projetosNaEquipeDe`),
-`app/(app)/jobs/page.tsx` (calcula `JobRow.meu` no servidor) e
+`app/(app)/jobs/page.tsx` (calcula `JobRow.meu` no servidor),
 `app/(app)/jobs/jobs-list.tsx` (filtro por `meu`, sem a prop `usuarioId`,
-e o texto do estado vazio). Sem migration.
+e o texto do estado vazio) e `lib/home/carregar.ts` (os dois cards de job
+da home do GP; `pendentesDeEnvioQuery` recebe os projetos em vez do
+responsável). Sem migration.
