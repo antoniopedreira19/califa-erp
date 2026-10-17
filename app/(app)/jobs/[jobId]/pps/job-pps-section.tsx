@@ -69,6 +69,7 @@ import {
 } from "@/components/ui/filtro-de-coluna";
 import { PrestarContasDrawer } from "./prestar-contas-drawer";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 /** A tela lado a lado do Contas a Pagar, em leitura — a mesma do
  *  "Visualizar" do "Ver PP". Só carrega quando alguém clica no olho. */
@@ -785,7 +786,7 @@ export function JobPPsSection({
                         empurrava a coluna e comia o espaço da origem. */}
                     <td
                       className="px-3.5 py-2.5 align-middle font-mono text-[11.5px] leading-tight"
-                      title={`Emitida em ${formatarData(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
+                      title={`Emitida em ${formatDiaBr(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
                     >
                       {pp.codigo}
                       {total > 1 && (
@@ -857,7 +858,7 @@ export function JobPPsSection({
                               <DescritivoRodapeNota
                                 icone={<Clock className="h-3 w-3 flex-none" />}
                               >
-                                Emitida em {formatarData(pp.created_at)}
+                                Emitida em {formatDiaBr(pp.created_at)}
                                 {pp.emitida_por_nome
                                   ? ` por ${pp.emitida_por_nome}`
                                   : ""}

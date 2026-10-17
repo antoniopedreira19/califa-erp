@@ -56,3 +56,23 @@ export function formatDataEHoraBr(iso: string | Date | null | undefined): string
   if (!p) return "—";
   return `${p.dia}/${p.mes}/${p.ano} ${p.hora}:${p.minuto}`;
 }
+
+/** "2026-10-08": o dia de um `timestamptz` no horário de Brasília, no
+ *  formato de uma coluna `date` — para ordenar, agrupar por mês ou exportar.
+ *  Cortar o ISO (`iso.slice(0, 10)`) dá o dia em UTC: o que foi registrado
+ *  depois das 21h caía no dia seguinte. Uma coluna `date` ("2026-10-08") não
+ *  tem fuso e volta como está — passá-la ao `Date` a leria como meia-noite
+ *  UTC, que em Brasília ainda é o dia anterior. */
+export function diaIsoBr(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const p = partes(iso);
+  return p ? `${p.ano}-${p.mes}-${p.dia}` : iso.slice(0, 10);
+}
+
+/** "08/10/2026": o dia de um `timestamptz` no horário de Brasília (ver
+ *  `diaIsoBr`). Coluna `date` também serve, e sai como está. */
+export function formatDiaBr(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const [y, m, d] = diaIsoBr(iso).split("-");
+  return d && m && y ? `${d}/${m}/${y}` : "—";
+}

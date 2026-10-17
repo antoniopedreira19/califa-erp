@@ -81,6 +81,7 @@ import {
   rotuloDoEventoPP,
 } from "@/lib/data/eventos-da-pp";
 import { formatDiaHoraCurtoBr } from "@/lib/formatar-data-hora";
+import { formatDataEHoraBr } from "@/lib/formatar-data-hora";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -88,11 +89,9 @@ function formatDate(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return `${formatDate(iso)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+/** O dia saía do ISO cortado (UTC) e a hora do relógio local: às 23:54
+ *  de Brasília, "09/10/2026 23:54". Os dois agora vêm de Brasília. */
+const formatDateTime = formatDataEHoraBr;
 
 function iconePorMime(nome: string) {
   return /\.(png|jpe?g|webp|gif)$/i.test(nome) ? ImageIcon : FileText;

@@ -54,6 +54,7 @@ import type {
   DadosDosImpostos,
   ImpostoDaLista,
 } from "./dados";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 // ---------------------------------------------------------------------------
 // Peças comuns
@@ -493,7 +494,7 @@ export function BaixaRegistradaDialog({
             <div className="min-w-0">
               Valor corrigido:{" "}
               {t.correcoes
-                .map((c) => `${moeda(c.de)} → ${moeda(c.para)} em ${br(c.criado_em)} (${c.justificativa})`)
+                .map((c) => `${moeda(c.de)} → ${moeda(c.para)} em ${formatDiaBr(c.criado_em)} (${c.justificativa})`)
                 .join("; ")}
             </div>
           </div>
@@ -666,7 +667,7 @@ export function CorrigirDialog({
             <p className="mb-1 font-semibold">Correções anteriores</p>
             {t.correcoes.map((c) => (
               <p key={c.id} className="text-muted-foreground">
-                {br(c.criado_em)} · {moeda(c.de)} → {moeda(c.para)} · {c.justificativa} · {c.autor}
+                {formatDiaBr(c.criado_em)} · {moeda(c.de)} → {moeda(c.para)} · {c.justificativa} · {c.autor}
               </p>
             ))}
           </div>

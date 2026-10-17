@@ -27,6 +27,7 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 const TODOS = "Todos";
 
@@ -907,7 +908,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                           {j.responsavel_nome ?? "—"}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                          {formatDataBr(j.data_abertura_financeiro)}
+                          {formatDiaBr(j.data_abertura_financeiro)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                           {formatCurrency(j.valor_total)}
@@ -1009,7 +1010,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                     {j.responsavel_nome ?? "—"}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {formatDataBr(j.data_abertura_financeiro)}
+                    {formatDiaBr(j.data_abertura_financeiro)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                     {formatCurrency(j.valor_total)}

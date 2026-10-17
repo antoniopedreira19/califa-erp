@@ -5,6 +5,7 @@ import type {
   PrestacaoDaVerba,
 } from "@/lib/types";
 import { nomeContraparteBRPP, roleLabel } from "@/lib/types";
+import { diaIsoBr, formatDataEHoraBr, formatDiaHoraCurtoBr } from "@/lib/formatar-data-hora";
 
 /**
  * O recorte da PP que a thread realmente lê.
@@ -51,30 +52,19 @@ export type PPParaThreadChat = Pick<
  * timestamp `updated_at`. No MVP essas transições não voltam atrás.
  */
 
-function dataHora(iso: string): string {
-  const d = new Date(iso);
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const hora = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes}/${d.getFullYear()} ${hora}:${min}`;
-}
-
-function dataHoraCurta(iso: string): string {
-  const d = new Date(iso);
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const hora = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes} ${hora}:${min}`;
-}
+// A thread é montada no servidor, que na Vercel roda em UTC: `getHours()`
+// e `getDate()` davam a hora de Greenwich (3h adiantada) e, depois das 21h,
+// o dia seguinte. As duas saem no horário de Brasília.
+const dataHora = formatDataEHoraBr;
+const dataHoraCurta = (iso: string) => formatDiaHoraCurtoBr(iso);
 
 function moeda(v: number, moedaCode: string): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: moedaCode });
 }
 
 function prazoEmDias(createdAt: string, prazoPagamento: string): string {
-  const emissao = new Date(createdAt.slice(0, 10));
+  // `createdAt` é um instante: o dia dele é o de Brasília, não o do ISO.
+  const emissao = new Date(diaIsoBr(createdAt));
   const vencimento = new Date(prazoPagamento.slice(0, 10));
   const dias = Math.round(
     (vencimento.getTime() - emissao.getTime()) / 86_400_000,

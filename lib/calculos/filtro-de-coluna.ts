@@ -7,6 +7,8 @@
  * Testes: node --import tsx --test lib/calculos/filtro-de-coluna.test.ts
  */
 
+import { diaIsoBr } from "@/lib/formatar-data-hora";
+
 /** O filtro de uma coluna. Vazio = a coluna não filtra. */
 export interface FiltroDaColuna {
   /** O texto buscado dentro da coluna. */
@@ -150,10 +152,11 @@ export function celulaTexto(texto: string | null | undefined, ordem?: string | n
     : { valor: "", rotulo: "(vazio)", ordem: ordem ?? "￿" };
 }
 
-/** Célula de data (ISO): o dia na lista, dentro do mês, como no Excel. */
+/** Célula de data (ISO): o dia na lista, dentro do mês, como no Excel.
+ *  Coluna `date` entra como está; `timestamptz` entra pelo dia de Brasília. */
 export function celulaData(iso: string | null | undefined, sufixo = ""): CelulaDaColuna {
   if (!iso) return { valor: "", rotulo: "(sem data)", ordem: "9999-99-99", grupo: "" };
-  const d = iso.slice(0, 10);
+  const d = diaIsoBr(iso);
   const [a, m, dia] = d.split("-");
   return {
     valor: sufixo ? `${sufixo}:${d}` : d,

@@ -3,6 +3,7 @@ import { jobStatusExibido, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
 import { notaCusto, notaRecebimento } from "./notas-de-caixa";
+import { diaIsoBr } from "@/lib/formatar-data-hora";
 
 /**
  * "Exportar" da aba Visualizar Jobs (pedido do Tiago, 16/10/2026): a
@@ -57,7 +58,13 @@ const COLUNAS: Coluna[] = [
   // Regional e Marca são filtros da tela que não viram coluna nela.
   { cabecalho: "Regional", largura: 16, tipo: "texto", valor: (j) => j.regional_nome },
   { cabecalho: "Marca", largura: 30, tipo: "texto", valor: (j) => j.produto },
-  { cabecalho: "Abertura", largura: 12, tipo: "data", valor: (j) => j.data_abertura_financeiro },
+  // `timestamptz`: o dia de Brasília, não o do ISO cortado.
+  {
+    cabecalho: "Abertura",
+    largura: 12,
+    tipo: "data",
+    valor: (j) => (j.data_abertura_financeiro ? diaIsoBr(j.data_abertura_financeiro) : null),
+  },
   { cabecalho: "Valor total", largura: 17, tipo: "moeda", valor: (j) => j.valor_total },
   { cabecalho: "Faturamento", largura: 17, tipo: "moeda", valor: (j) => j.valor_faturamento },
   {

@@ -5715,3 +5715,51 @@ permissão (`podeEnviar`) e o mesmo pop-up de confirmação.
   lateral; o ícone abre "Cancelar a PP-00147 e refazer?" (fechado em
   "Voltar"). Comparação com fotos da tela real:
   https://claude.ai/artifact/RtJYas1UfQqLnpGY56MFhy
+
+## ⚠️ Nota de 2026-10-17 (2) — data de errata, PP e prestação no dia de Brasília
+
+Visto em 08/10/2026 no TES-1014/26: a errata registrada às 23:54 de 08/10
+aparecia no card de Erratas como **09/10/2026**, enquanto a linha da errata
+pronta, logo acima, mostrava 08/10. Correção só de exibição: sem regra
+nova, sem migration, nenhum dado mudou.
+
+- **Causa:** as telas formatavam `timestamptz` cortando o ISO
+  (`iso.slice(0, 10)`), que é o dia em **UTC**. Tudo que é registrado
+  depois das 21h de Brasília caía no dia seguinte. Coluna `date` (sem hora)
+  não tem esse problema e ficou como estava. No banco, em 17/10: 7 de 35
+  erratas, 6 de 203 PPs e 13 de 84 aberturas de job tinham o dia trocado.
+- **Funções novas** em `lib/formatar-data-hora.ts`: `diaIsoBr` (o dia de
+  Brasília como `aaaa-mm-dd`) e `formatDiaBr` (`dd/mm/aaaa`). As duas
+  devolvem coluna `date` como está: passá-la ao `Date` a leria como
+  meia-noite UTC, que em Brasília ainda é o dia anterior.
+- **Corrigido nas telas do job:** card de Erratas (data da errata, e a da
+  pronta pela mesma função); aba PPs ("Emitida em", na dica do código e no
+  rodapé do descritivo); Prestar contas ("Reprovada pelo financeiro ·
+  data").
+- **Chat de PPs do job** (`lib/data/job-chat-pps.ts`): a thread é montada no
+  servidor, que na Vercel roda em UTC, e usava `getHours()`/`getDate()`.
+  Em produção, toda hora saía **3h adiantada** e, depois das 21h, com o dia
+  seguinte (no dev local, que roda em Brasília, isso não aparecia). Passou a
+  usar `formatDataEHoraBr` e `formatDiaHoraCurtoBr`, no mesmo formato. O
+  "Prazo de pagamento" em dias conta a partir do dia de Brasília do envio.
+- **Filtro por coluna** (`celulaData`, decisão 165): entra pelo dia de
+  Brasília. Mudou o rótulo, a busca e o agrupamento por mês, inclusive na
+  virada do mês (23:30 de 30/09 não cai mais em outubro). Teste novo em
+  `lib/calculos/filtro-de-coluna.test.ts`.
+- **Financeiro:** as telas de lá estão na nota de 2026-10-17 (2) do
+  `HANDOFF_FINANCEIRO.md`.
+- **Sem bug, ficaram como estão:** os eventos "só data" do Ver PP (vêm de
+  coluna `date`; nenhum no banco hoje), a ficha do job (já tratava o fuso)
+  e os `pago_em`, que apesar do nome são `date`.
+- **Conferido** no dev do worktree, como administrador: TES-1014/26 (errata
+  das 23:54 de 08/10 em 08/10/2026) e BOC-1003/26, só leitura (PP-00211 a
+  PP-00216, emitidas entre 21:52 e 22:50 de 15/10, em 15/10/2026). O chat e
+  as funções foram rodados com `TZ=UTC`, como na Vercel: a errata sai
+  "08/10/2026 23:54", e antes saía "09/10/2026 02:54".
+- **Em aberto:** (1) a coluna "Criação" da aba Desembolsos do Contas a
+  Pagar corta o `created_at` em UTC, mas é da frente do Antonio e não foi
+  mexida. O filtro dessa coluna já usa o dia de Brasília, então numa
+  criação feita à noite o filtro e a célula divergem (hoje, 0 de 1
+  desembolso). (2) Vários `new Date().toISOString().slice(0, 10)` calculam
+  o "hoje" em UTC: depois das 21h, "hoje" já é amanhã. Não é exibição de
+  `timestamptz` e ficou fora desta correção.
