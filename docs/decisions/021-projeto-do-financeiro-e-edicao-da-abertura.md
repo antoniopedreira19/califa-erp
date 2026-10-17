@@ -288,7 +288,19 @@ Agora `JobNaFila` traz `nome_financeiro` (obrigatório, nulo até a
 abertura), e a página e o formulário usam `nomeDoJobNoFinanceiro()`. O
 painel "Dados da produção" continua com o nome da produção.
 
-O AMB-1019/26 voltou ao nome da abertura ("Corona - WSL Challenger
-Logística 3T 2026") pelo próprio "Editar registro", em 16/10/2026. O
-ANI-1002/26 aguarda o Tiago: a abertura gravou "… Unisociesc 3T 2026", e
-a Priscila corrigiu para "… Unicuritiba 3T 2026" antes da sobrescrita.
+Os dois voltaram pelo próprio "Editar registro", com o último nome que o
+financeiro gravou antes da sobrescrita, conferido byte a byte contra a
+foto em `jobs_aberturas`, e só o nome mudou na auditoria:
+
+| Job | Nome restaurado | Origem | Quando |
+|---|---|---|---|
+| AMB-1019/26 | "Corona - WSL Challenger Logística 3T 2026" | foto 1, abertura (Priscila) | 16/10/2026 |
+| ANI-1002/26 | "Ânima - Vídeo Institucional Unicuritiba 3T 2026" | foto 2, edição de 07/10 15:41 (Priscila) | 17/10/2026 |
+
+No ANI-1002/26 a abertura tinha gravado "… Unisociesc 3T 2026", que a
+própria Priscila corrigiu 44 minutos depois. O Tiago aprovou restaurar
+esse último registro (17/10/2026).
+
+Os outros cinco jobs com nome trocado depois da abertura (AMB-1002/26,
+AMB-1003/26, AMB-1014/26, DEE-1001/26 e DEE-1002/26) foram renomeados por
+alguém, e o nome de hoje é o da última foto: ficaram como estão.
