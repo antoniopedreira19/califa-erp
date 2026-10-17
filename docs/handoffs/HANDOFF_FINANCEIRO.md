@@ -7487,8 +7487,15 @@ Regra completa na seção 9 da decisão 091.
   Projeto já estava certo.
 - **Dado:** AMB-1019/26 restaurado pelo "Editar registro" com o nome da
   foto da abertura, idêntico byte a byte (foto 3, 16/10, só o nome mudou
-  na auditoria). ANI-1002/26 aguarda decisão: o nome da abertura
-  ("… Unisociesc …") ou o da correção da Priscila ("… Unicuritiba …").
+  na auditoria). ANI-1002/26 restaurado em 17/10, também pelo "Editar
+  registro", com "Ânima - Vídeo Institucional Unicuritiba 3T 2026": a
+  correção que a Priscila gravou às 15:41 de 07/10 (foto 2), aprovada pelo
+  Tiago. A abertura tinha gravado "… Unisociesc …", nome do ANI-1003/26.
+- **Conferido em 17/10:** os 9 "de → para" de nome na auditoria batem byte
+  a byte com as fotos. AMB-1002/26, AMB-1003/26, AMB-1014/26, DEE-1001/26
+  e DEE-1002/26 foram renomeados por alguém e já estão com o nome da
+  última foto. Nenhum job ficou com o nome da produção por cima de um nome
+  do financeiro.
 
 ## ⚠️ Nota de 2026-10-16 (9) — "Exportar Excel" na aba Visualizar Jobs da Abertura de Job
 
