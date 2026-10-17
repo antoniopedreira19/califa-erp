@@ -51,6 +51,7 @@ import {
   totalBaixado,
 } from "@/lib/data/baixas-do-documento";
 import type { PPRow } from "./pedidos-compra-list";
+import type { DeslocamentosDoReembolso, ReembolsoTipo } from "@/lib/calculos/reembolso";
 import type { TituloRow } from "./titulos-pagar-list";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         tipo_verba, verba_titular_tipo, verba_titular_nome,
+        reembolso_tipo, reembolso_deslocamentos,
         enviada_financeiro_em, aprovada_em, anexos_na_aprovacao,
         urgente, urgente_justificativa, urgente_em,
         forma_pagamento, cartao_credito_id,
@@ -240,6 +242,8 @@ export function mapearPPsDoFinanceiro(
     tipo_verba: TipoVerba | null;
     verba_titular_tipo: TitularDaVerbaTipo | null;
     verba_titular_nome: string | null;
+    reembolso_tipo: ReembolsoTipo | null;
+    reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     dados_pagamento_congelados_em: string | null;
     pagamento_fora_do_cadastro_meio: string | null;
     pagamento_fora_do_cadastro_motivo: string | null;
@@ -382,6 +386,8 @@ export function mapearPPsDoFinanceiro(
     // produção, o titular guardado na PP na alimentação e no transporte.
     tipo_verba: tipoDaVerba(r),
     verba_titular_tipo: r.verba_titular_tipo ?? null,
+    reembolso_tipo: r.tipo_verba === "reembolso" ? (r.reembolso_tipo ?? "despesas") : null,
+    reembolso_deslocamentos: r.reembolso_deslocamentos ?? null,
     responsavel_nome: nomeDeQuemRecebeAVerba(r),
     // Prestação da verba e estorno do saldo, no formato único (decisão 081).
     prestacao: prestacaoDaVerba(r.prestacao),
@@ -401,6 +407,10 @@ export function mapearPPsDoFinanceiro(
         id: a.id,
         arquivo_nome_original: a.arquivo_nome_original,
         arquivo_tamanho_bytes: a.arquivo_tamanho_bytes,
+        documento_tipo: a.documento_tipo ?? null,
+        documento_numero: a.documento_numero ?? null,
+        nf_data_emissao: a.nf_data_emissao ?? null,
+        nf_valor: a.nf_valor === null || a.nf_valor === undefined ? null : Number(a.nf_valor),
       })),
     // Ordenadas aqui: o embed do PostgREST não garante ordem, e a lista
     // e o drawer mostram "1/3, 2/3, 3/3" na sequência.
@@ -575,7 +585,10 @@ export function montarTitulosAPagar(e: {
         // A verba paga a uma pessoa não tem fornecedor: o título diz para
         // quem é, como o estorno da verba (decisão 164).
         fornecedor_nome:
-          pp.fornecedor_nome || (pp.verba_producao && pp.responsavel_nome ? `Verba — ${pp.responsavel_nome}` : "—"),
+          pp.fornecedor_nome ||
+          (pp.verba_producao && pp.responsavel_nome
+            ? `${pp.tipo_verba === "reembolso" ? "Reembolso" : "Verba"} — ${pp.responsavel_nome}`
+            : "—"),
         cadastro_do_fornecedor_mudou: pp.cadastro_do_fornecedor_mudou,
         job_codigo: pp.job_codigo || "—",
         job_nome: pp.job_nome,

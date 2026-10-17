@@ -422,7 +422,7 @@ export function JobPPsSection({
           const tipo = tipoDaVerba(pp);
           const quem = nomeDeQuemRecebeAVerba(pp);
           const nome = tipo
-            ? `${rotuloDaVerbaMinusculo(tipo).replace(/^v/, "V")}${quem ? ` · ${quem}` : ""}`
+            ? `${rotuloDaVerbaMinusculo(tipo).replace(/^./, (c) => c.toUpperCase())}${quem ? ` · ${quem}` : ""}`
             : ((pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—");
           return { valor: nome, rotulo: nome, ordem: nome };
         }
@@ -883,7 +883,7 @@ export function JobPPsSection({
                       {pp.verba_producao ? (
                         <span className="line-clamp-2 leading-snug">
                           <span className="italic">
-                            {rotuloDaVerbaMinusculo(tipoDaVerba(pp) ?? "producao").replace(/^v/, "V")}
+                            {rotuloDaVerbaMinusculo(tipoDaVerba(pp) ?? "producao").replace(/^./, (c) => c.toUpperCase())}
                           </span>
                           {nomeDeQuemRecebeAVerba(pp) ? ` · ${nomeDeQuemRecebeAVerba(pp)}` : ""}
                         </span>
@@ -1180,6 +1180,8 @@ export function JobPPsSection({
               servico: ppEnviando.servico,
               fornecedorId: ppEnviando.fornecedor_id ?? null,
               verbaProducao: ppEnviando.verba_producao === true,
+              reembolsoTipo:
+                ppEnviando.tipo_verba === "reembolso" ? (ppEnviando.reembolso_tipo ?? "despesas") : null,
               anexos: ppEnviando.anexos ?? [],
               pagaPorBoleto: ppEnviando.pagamento_fora_do_cadastro?.meio === "boleto",
             } satisfies PPParaEnviar

@@ -2442,6 +2442,7 @@ export function JobItemRealizadoTable({
                 diasMeses: Number(pp.dias_meses ?? 0),
                 valor: Number(pp.valor ?? 0),
                 verbaProducao: pp.verba_producao === true,
+                reembolsoTipo: pp.tipo_verba === "reembolso" ? (pp.reembolso_tipo ?? "despesas") : null,
                 temAnexo: (pp.anexos ?? []).length > 0,
                 situacaoVerba: situacaoDaVerba(pp),
                 fornecedorId: pp.fornecedor_id ?? null,

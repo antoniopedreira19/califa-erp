@@ -10,6 +10,7 @@ import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import type { Job, JobStatus, Regional } from "@/lib/types";
+import { rotuloDaVerba, tipoDaVerba } from "@/lib/types";
 import {
   jobStatusLabel,
   jobStatusExibido,
@@ -195,7 +196,7 @@ export default async function JobDetailPage({
       id: pp.id,
       codigo: pp.codigo,
       quem: pp.verba_producao
-        ? "Verba de produção"
+        ? rotuloDaVerba(tipoDaVerba(pp) ?? "producao")
         : (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—",
       valor: Number(pp.valor ?? 0),
       status: pp.status as PPDoPedido["status"],

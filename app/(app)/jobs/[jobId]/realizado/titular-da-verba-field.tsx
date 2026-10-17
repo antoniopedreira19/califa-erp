@@ -6,6 +6,10 @@
  *
  * - O switch de sempre passa a se chamar "Verba"; ligado, ao lado, escolhe
  *   Produção, Alimentação ou Transporte (ligar cai em Produção, como antes).
+ *   Desde a decisão 187 (17/10/2026) o tipo da PP é marcado numa lista
+ *   empilhada — Normal, Verba e Reembolso, com a bolinha do "Esta é a
+ *   última PP deste item?" —, e ao lado da Verba ou do Reembolso aparecem
+ *   as opções dele (o "Marcar · empilhado" que o Tiago escolheu).
  * - O "Titular da verba" sai de uma lista só: colaboradores do RH e freelas
  *   trabalhando, com a busca pelo nome, a função e o nome social. A caixa
  *   "Terceiro (fornecedor)", desmarcada por padrão, troca para o campo
@@ -19,6 +23,7 @@ import * as React from "react";
 import { Combobox, COMBOBOX_COMO_SELECT, type ComboboxItem } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import type { TipoVerba } from "@/lib/types";
+import { REEMBOLSO_TIPOS, type ReembolsoTipo } from "@/lib/calculos/reembolso";
 import type { PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
 
 const SEGMENTO = "flex rounded-lg border border-border bg-white p-0.5";
@@ -31,60 +36,135 @@ const TIPOS: Array<[TipoVerba, string]> = [
   ["transporte", "Transporte"],
 ];
 
-/** O switch "Verba" e, ligado, qual verba. `null` = PP de fornecedor. */
-export function TipoDaVerbaField({
+/** Uma opção com a bolinha do "Esta é a última PP deste item?". */
+function Bolinha({
+  rotulo,
+  marcada,
+  onClick,
+  disabled,
+}: {
+  rotulo: string;
+  marcada: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={marcada}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex items-center gap-2.5 whitespace-nowrap text-sm font-medium disabled:opacity-50"
+    >
+      <span
+        className={cn(
+          "inline-flex h-[15px] w-[15px] flex-none items-center justify-center rounded-full border-[1.5px]",
+          marcada ? "border-foreground" : "border-[#C9C4B8]",
+        )}
+      >
+        <span className={cn("h-[7px] w-[7px] rounded-full", marcada ? "bg-foreground" : "bg-transparent")} />
+      </span>
+      {rotulo}
+    </button>
+  );
+}
+
+function Segmento<T extends string>({
+  rotulo,
+  opcoes,
+  valor,
+  onChange,
+  disabled,
+}: {
+  rotulo: string;
+  opcoes: ReadonlyArray<readonly [T, string]>;
+  valor: T | null;
+  onChange: (v: T) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div role="radiogroup" aria-label={rotulo} className={cn(SEGMENTO, "ml-auto w-[330px]")}>
+      {opcoes.map(([v, nome]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={v === valor}
+          disabled={disabled}
+          onClick={() => onChange(v)}
+          className={cn(
+            BOTAO_SEG,
+            v === valor ? "bg-[#282828] text-white" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {nome}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * O tipo da PP (decisão 187): Normal, Verba (Produção · Alimentação ·
+ * Transporte) ou Reembolso (Despesas · Veículo próprio). Marcar Verba cai em
+ * Produção e marcar Reembolso cai em Despesas, como o switch de antes.
+ * `tipo` null = PP normal (de fornecedor).
+ */
+export function TipoDaPPField({
   tipo,
+  reembolsoTipo,
   onChange,
   disabled,
 }: {
   tipo: TipoVerba | null;
-  onChange: (t: TipoVerba | null) => void;
+  reembolsoTipo: ReembolsoTipo | null;
+  onChange: (tipo: TipoVerba | null, reembolsoTipo: ReembolsoTipo | null) => void;
   disabled?: boolean;
 }) {
-  const ligado = tipo !== null;
+  const reembolso = tipo === "reembolso";
+  const verba = tipo !== null && !reembolso;
+  const atual = reembolso ? "reembolso" : verba ? "verba" : "normal";
+  const opcoes: Array<["normal" | "verba" | "reembolso", string]> = [
+    ["normal", "Normal"],
+    ["verba", "Verba"],
+    ["reembolso", "Reembolso"],
+  ];
   return (
-    <div className="flex min-h-9 items-center gap-2.5">
-      <label className="flex cursor-pointer items-center gap-2.5">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={ligado}
-          disabled={disabled}
-          onClick={() => onChange(ligado ? null : "producao")}
-          className={cn(
-            "relative inline-flex h-5 w-9 flex-none items-center rounded-full border-2 border-transparent transition-colors",
-            ligado ? "bg-california-red" : "bg-muted-foreground/30",
-          )}
-        >
-          <span
-            className={cn(
-              "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
-              ligado ? "translate-x-4" : "translate-x-0",
-            )}
+    <div role="radiogroup" aria-label="Tipo da PP" className="flex flex-col gap-1">
+      {opcoes.map(([v, rotulo]) => (
+        <div key={v} className="flex min-h-9 items-center gap-2.5">
+          <Bolinha
+            rotulo={rotulo}
+            marcada={v === atual}
+            disabled={disabled}
+            onClick={() => {
+              if (v === atual) return;
+              if (v === "normal") onChange(null, null);
+              else if (v === "verba") onChange("producao", null);
+              else onChange("reembolso", "despesas");
+            }}
           />
-        </button>
-        <span className="text-sm font-medium">Verba</span>
-      </label>
-      {ligado && (
-        <div role="radiogroup" aria-label="Qual verba" className={cn(SEGMENTO, "ml-auto w-[330px]")}>
-          {TIPOS.map(([v, rotulo]) => (
-            <button
-              key={v}
-              type="button"
-              role="radio"
-              aria-checked={v === tipo}
+          {v === "verba" && verba && (
+            <Segmento
+              rotulo="Qual verba"
+              opcoes={TIPOS}
+              valor={tipo}
+              onChange={(t) => onChange(t, null)}
               disabled={disabled}
-              onClick={() => onChange(v)}
-              className={cn(
-                BOTAO_SEG,
-                v === tipo ? "bg-[#282828] text-white" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {rotulo}
-            </button>
-          ))}
+            />
+          )}
+          {v === "reembolso" && reembolso && (
+            <Segmento
+              rotulo="Qual reembolso"
+              opcoes={REEMBOLSO_TIPOS}
+              valor={reembolsoTipo ?? "despesas"}
+              onChange={(r) => onChange("reembolso", r)}
+              disabled={disabled}
+            />
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -138,8 +218,11 @@ export function itensDasPessoas(
   return itens;
 }
 
-/** "Titular da verba *", a caixa do terceiro e a lista de pessoas. */
+/** "Titular da verba *", a caixa do terceiro e a lista de pessoas. No
+ *  reembolso (decisão 187), "Titular do reembolso *", sem terceiro. */
 export function TitularDaVerbaField({
+  rotulo = "Titular da verba *",
+  semTerceiro = false,
   itens,
   carregando,
   titularId,
@@ -148,6 +231,9 @@ export function TitularDaVerbaField({
   onTerceiro,
   disabled,
 }: {
+  rotulo?: string;
+  /** Decisão 187: o reembolso vai só para colaborador ou freela. */
+  semTerceiro?: boolean;
   itens: ComboboxItem[];
   carregando: boolean;
   titularId: string;
@@ -158,8 +244,8 @@ export function TitularDaVerbaField({
 }) {
   return (
     <div className="relative">
-      <label className="text-xs font-medium">Titular da verba *</label>
-      <CaixaTerceiro marcado={terceiro} onChange={onTerceiro} disabled={disabled} />
+      <label className="text-xs font-medium">{rotulo}</label>
+      {!semTerceiro && <CaixaTerceiro marcado={terceiro} onChange={onTerceiro} disabled={disabled} />}
       <Combobox
         items={itens}
         value={titularId || null}
