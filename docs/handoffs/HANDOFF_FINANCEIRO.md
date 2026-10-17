@@ -7532,3 +7532,26 @@ Regra completa na seção 9 da decisão 091.
   R$ 10.000,00), TES-1023/26 (só consome, R$ 5.000,00) e TES-1006/26 (sem
   save, sem as linhas) — os mesmos valores da soma no banco.
 
+
+## ⚠️ Nota de 2026-10-17 (2) — datas de registro no dia de Brasília
+
+Mesma causa da nota de 2026-10-17 (2) do `HANDOFF_JOBS.md`: `timestamptz`
+formatado com `iso.slice(0, 10)` mostra o dia em UTC, e o que é registrado
+depois das 21h de Brasília aparecia com o dia seguinte. Correção só de
+exibição, pelas funções `formatDiaBr`, `diaIsoBr` e `formatDataEHoraBr`
+de `lib/formatar-data-hora.ts`. Sem migration, nenhum dado mudou.
+
+- **Abertura de Job → Visualizar Jobs:** coluna "Abertura" nas duas
+  organizações, o filtro dela e a coluna "Abertura" do **Exportar Excel**.
+  13 de 84 jobs mudam de dia. Ex.: AMB-1023/26 a AMB-1027/26, abertos entre
+  23:07 e 23:25 de 06/10, saíam em 07/10.
+- **Contas a Pagar → PPs:** "Emissão" e, no filtro Prestações, "Enviada em"
+  (célula e filtro).
+- **Dossiê da PP** (`pp-dossie.tsx`): "Marcado por … ·" da urgência,
+  cancelada, rejeitada e as datas da prestação (enviada, aprovada,
+  reprovada). Ali o dia vinha de UTC e a hora do relógio local, e a
+  urgência da PP-00215 (22:43 de 15/10) saía "16/10/2026 22:43".
+- **Fiscal → Impostos:** "cancelado" na lista e a data das correções de
+  valor (baixa registrada e "Correções anteriores").
+- **Fora:** a coluna "Criação" da aba Desembolsos é da frente do Antonio e
+  segue cortando em UTC (ver "Em aberto" na nota do Jobs).

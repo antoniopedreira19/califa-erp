@@ -126,3 +126,13 @@ test("data vira dia dentro do mês, e o mês desmarcado inteiro vale para o dia 
   assert.equal(passaNaColuna([outroDia], semOutubro, false), false);
   assert.equal(passaNaColuna([celulaData("2026-11-02")], semOutubro, false), true);
 });
+
+test("timestamptz entra pelo dia de Brasília: 23:30 do dia 30 não vira dia 1º do mês seguinte", () => {
+  // 2026-10-01 02:30 UTC = 30/09/2026 23:30 em Brasília.
+  const d = celulaData("2026-10-01T02:30:00+00:00");
+  assert.equal(d.rotulo, "30/09/2026");
+  assert.equal(d.grupo, "setembro de 2026");
+  assert.equal(d.ordem, "2026-09-30");
+  // Coluna `date` não tem fuso: segue como está.
+  assert.equal(celulaData("2026-10-01").rotulo, "01/10/2026");
+});

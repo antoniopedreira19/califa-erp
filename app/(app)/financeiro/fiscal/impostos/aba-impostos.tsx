@@ -59,6 +59,7 @@ import {
   somaDias,
 } from "./dialogos";
 import { paraOLoteImposto } from "./lote";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 type Filtro = "a_pagar" | "vencidos" | "pagos" | "todos";
 
@@ -452,7 +453,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
                       <span className="block whitespace-nowrap text-[10.5px] text-emerald-700">pago {br(t.pago_em)}</span>
                     )}
                     {cancelado && (
-                      <span className="block whitespace-nowrap text-[10.5px]">cancelado {br(t.cancelado_em)}</span>
+                      <span className="block whitespace-nowrap text-[10.5px]">cancelado {formatDiaBr(t.cancelado_em)}</span>
                     )}
                   </td>
                   <td className="px-3 py-3">

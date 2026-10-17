@@ -48,6 +48,7 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 export interface PPRow {
   id: string;
@@ -708,7 +709,7 @@ export function PedidosCompraList({
                   <span>{r.job_nome}</span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {formatDate(filtro === "prestacoes" ? (r.prestacao?.enviada_em ?? null) : r.created_at)}
+                  {formatDiaBr(filtro === "prestacoes" ? (r.prestacao?.enviada_em ?? null) : r.created_at)}
                 </td>
                 <td className="px-4 py-3">
                   <QuemEnviou
