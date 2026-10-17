@@ -138,6 +138,14 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PlanilhaMidiaDoJob } from "./planilha-midia-do-job";
 import type { MidiaDoDetalhe } from "../carregar-detalhe";
 import { useProtegerSaida } from "@/components/voltar/estado";
+import {
+  montarHistorico,
+  type DadosDoHistorico,
+  type MudancaNaLinha as MudancaDoHistorico,
+  type VersaoDaPlanilha,
+} from "@/lib/calculos/historico-da-planilha";
+import { carregarHistoricoDaPlanilha } from "./actions-historico";
+import { BotaoHistorico, FaixaDaVersao, SeloDaLinha } from "./historico-da-planilha";
 
 const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
 
@@ -334,9 +342,194 @@ interface Props {
    *  `null` nos outros modelos. Obrigatória pelo mesmo motivo de
    *  `interno`. */
   midia: MidiaDoDetalhe | null;
+  /** O "Histórico" da barra (decisão 186): as versões da planilha, de cada
+   *  momento do job, em leitura. Nas duas telas do job e na Abertura de Job
+   *  do financeiro; fora da planilha da origem do save, que é só consulta.
+   *  A Mídia Off não tem. Obrigatória pelo mesmo motivo de `interno`. */
+  comHistorico: boolean;
 }
 
-export function JobRealizadoSection({
+/** O histórico na planilha (decisão 186): o botão da barra e, na versão
+ *  antiga, a faixa de cima e o selo de cada linha que o momento mudou. */
+interface HistoricoNaPlanilha {
+  botao: React.ReactNode;
+  antiga: {
+    faixa: React.ReactNode;
+    /** Ausente com o "Destacar o que mudou" desligado. */
+    selo: ((itemId: string) => React.ReactNode) | undefined;
+  } | null;
+}
+
+type PropsDaPlanilha = Omit<Props, "comHistorico"> & {
+  historico: HistoricoNaPlanilha | null;
+};
+
+// A versão antiga não traz o realizado, as PPs, o BV nem o save: eles andam
+// com a planilha atual. Referências estáveis, como `SEM_MESES`.
+const SEM_REALIZADOS = new Map<string, JobItemRealizado>();
+const SEM_PPS = new Map<string, PedidoCompraNaLista[]>();
+const SEM_A_EMITIR = new Map<string, PPAEmitir[]>();
+const SEM_BVS: Record<string, ItemBv[]> = {};
+const SEM_SAVES: Record<string, EstadoSaveDaLinha> = {};
+const SEM_LINHAS: string[] = [];
+
+const ERRO_DO_HISTORICO = "Não foi possível carregar o histórico da planilha. Tente de novo.";
+
+/**
+ * A planilha do job com o histórico de versões (decisão 186, 17/10/2026).
+ * Guarda a versão escolhida e, quando ela não é a atual, entrega à mesma
+ * planilha as linhas e os agrupamentos daquele momento, em leitura: sem
+ * realizado, PP, BV, save, errata ou edição. O histórico só é lido quando
+ * alguém abre o "Histórico" (a página não paga por ele) e a conta das
+ * versões roda aqui (`montarHistorico`).
+ */
+export function JobRealizadoSection({ comHistorico, ...props }: Props) {
+  const { job, versao, modeloPlanilha, itens, midia } = props;
+  const [dados, setDados] = React.useState<DadosDoHistorico | null>(null);
+  const [carregando, setCarregando] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+  const [chave, setChave] = React.useState("atual");
+  const [destacar, setDestacar] = React.useState(true);
+  const pedido = React.useRef(0);
+
+  // A página recarregou (errata, alteração, save): o histórico lido ficou
+  // velho, e a tela volta para a planilha atual.
+  React.useEffect(() => {
+    pedido.current += 1;
+    setDados(null);
+    setErro(null);
+    setCarregando(false);
+    setChave("atual");
+  }, [itens]);
+
+  const versoes = React.useMemo(() => (dados ? montarHistorico(dados) : null), [dados]);
+  const internacional = React.useMemo(
+    () => configDaPlanilha(modeloPlanilha, versao).internacional,
+    [modeloPlanilha, versao],
+  );
+  // O valor do job de cada versão, pela mesma conta do cabeçalho e da barra
+  // da errata.
+  const valores = React.useMemo(
+    () =>
+      new Map(
+        (versoes ?? []).map((v) => [
+          v.chave,
+          calcularTotaisVersao(
+            v.itens.map((i) => ({
+              tipo_custo: i.tipo_custo,
+              total_orcado: Number(i.total_orcado ?? 0),
+              em_save: i.em_save,
+              save_consumido: Number(i.save_consumido ?? 0),
+            })),
+            versao.percentual_honorarios,
+            versao.percentual_imposto,
+            internacional,
+          ).valorJob,
+        ]),
+      ),
+    [versoes, versao.percentual_honorarios, versao.percentual_imposto, internacional],
+  );
+  const valorDe = React.useCallback((v: VersaoDaPlanilha) => valores.get(v.chave) ?? 0, [valores]);
+
+  const carregar = React.useCallback(() => {
+    if (dados || carregando) return;
+    const este = ++pedido.current;
+    setCarregando(true);
+    setErro(null);
+    carregarHistoricoDaPlanilha(job.id)
+      .then((r) => {
+        if (este !== pedido.current) return;
+        if (r.ok) setDados(r.dados);
+        else setErro(r.message);
+      })
+      .catch(() => {
+        if (este === pedido.current) setErro(ERRO_DO_HISTORICO);
+      })
+      .finally(() => {
+        if (este === pedido.current) setCarregando(false);
+      });
+  }, [dados, carregando, job.id]);
+
+  if (!comHistorico || midia) return <PlanilhaDoJob {...props} historico={null} />;
+
+  const indice = versoes ? versoes.findIndex((v) => v.chave === chave) : -1;
+  const antiga = versoes && indice > 0 ? versoes[indice] : null;
+  const botao = (
+    <BotaoHistorico
+      versoes={versoes}
+      carregando={carregando}
+      erro={erro}
+      selecionada={antiga ? antiga.chave : "atual"}
+      valorDe={valorDe}
+      moeda={versao.moeda}
+      onAbrir={carregar}
+      onEscolher={setChave}
+    />
+  );
+  if (!versoes || !antiga) return <PlanilhaDoJob {...props} historico={{ botao, antiga: null }} />;
+
+  const mudancaPorLinha = new Map<string, MudancaDoHistorico>();
+  for (const m of antiga.mudancas) if (m.itemId) mudancaPorLinha.set(m.itemId, m);
+  const anterior = versoes[indice + 1] ?? null;
+  const faixa = (
+    <FaixaDaVersao
+      versao={antiga}
+      valorJob={{ antes: anterior ? valorDe(anterior) : null, depois: valorDe(antiga) }}
+      moeda={versao.moeda}
+      temAnterior={anterior !== null}
+      temProxima
+      onAnterior={() => anterior && setChave(anterior.chave)}
+      onProxima={() => setChave(versoes[indice - 1].chave)}
+      onAtual={() => setChave("atual")}
+      destacar={destacar}
+      onDestacar={setDestacar}
+    />
+  );
+  return (
+    <PlanilhaDoJob
+      // Outra versão é outra planilha: o rascunho e os recolhidos começam de
+      // novo, e "Voltar para a atual" remonta a de hoje.
+      key={antiga.chave}
+      {...props}
+      itens={antiga.itens}
+      grupos={antiga.grupos}
+      realizadosMap={SEM_REALIZADOS}
+      ppsPorItemId={SEM_PPS}
+      aEmitirPorItemId={SEM_A_EMITIR}
+      bvsPorItem={SEM_BVS}
+      savePorItem={SEM_SAVES}
+      linhasComEnvioTravado={SEM_LINHAS}
+      destacarItens={destacar ? [...mudancaPorLinha.keys()] : SEM_LINHAS}
+      podeAcoes={false}
+      podeMexerNoSave={false}
+      podeGerarPP={false}
+      papelEnviaPP={false}
+      papelCorrigeNf={false}
+      podeCadastrarFornecedor={false}
+      podeEditarFornecedor={false}
+      podeConfirmarBv={false}
+      podeExportarInterna={false}
+      edicaoDoFinanceiro={null}
+      aberturaDoJob={null}
+      papelNaErrata={null}
+      errataPronta={null}
+      historico={{
+        botao,
+        antiga: {
+          faixa,
+          selo: destacar
+            ? (id) => {
+                const m = mudancaPorLinha.get(id);
+                return m ? <SeloDaLinha mudanca={m} moeda={versao.moeda} /> : null;
+              }
+            : undefined,
+        },
+      }}
+    />
+  );
+}
+
+function PlanilhaDoJob({
   job,
   versao,
   nomeJob,
@@ -380,7 +573,8 @@ export function JobRealizadoSection({
   papelNaErrata,
   errataPronta,
   midia,
-}: Props) {
+  historico,
+}: PropsDaPlanilha) {
   const router = useRouter();
 
   // Um só lugar decide como este job fecha — o mesmo objeto vai para a
@@ -887,7 +1081,12 @@ export function JobRealizadoSection({
   // Antes da abertura a planilha aparece inteira — o que fica de fora são
   // as ações que geram documento. O aviso substitui o antigo bloco
   // "Realizado indisponível", que escondia a planilha toda.
+  // A versão antiga do histórico (decisão 186) fica em leitura, sem o
+  // realizado: a mesma chave que zera o realizado antes da abertura, sem a
+  // faixa de "aguardando abertura".
+  const vendoAntiga = historico?.antiga != null;
   const preAbertura =
+    vendoAntiga ||
     job.status === "aguardando_abertura" ||
     job.status === "rejeitado_financeiro";
 
@@ -1128,9 +1327,11 @@ export function JobRealizadoSection({
           // O pop-up de save abre em toda tela do job — em leitura onde não
           // se edita (decisão 099 §18). A errata ligada fecha a coluna: as
           // duas mexem na mesma linha.
-          onAbrirSave={!errata.ativo && !interno ? setLinhaSave : undefined}
+          onAbrirSave={!errata.ativo && !interno && !vendoAntiga ? setLinhaSave : undefined}
           abrirSaveSoComSave={modoDoSave === null}
           destacarItens={destacarItens}
+          destaque={vendoAntiga ? "historico" : "save"}
+          seloDaLinha={historico?.antiga?.selo}
           errata={
             (modoFinanceiro ? podeEditarOrcado : podeErrata) && !mesFechado
               ? errata
@@ -1170,6 +1371,8 @@ export function JobRealizadoSection({
         titulo={titulo}
         subtitulo={subtitulo}
         abertura={jobInteiro ? aberturaDoJob : null}
+        // A versão antiga fecha só no planejado: o realizado é da atual.
+        somentePlanejada={vendoAntiga}
       />
     );
   }
@@ -1242,7 +1445,9 @@ export function JobRealizadoSection({
     // Os 12px a mais que a calha antiga foram devolvidos à página (o
     // max-w de JobDetalhe cresceu junto): a planilha não encolheu.
     <div className={cn("space-y-4", temCalha && "pr-[116px]")}>
-      {preAbertura && (
+      {historico?.antiga?.faixa}
+
+      {preAbertura && !vendoAntiga && (
         <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
           <Clock className="mt-0.5 h-3.5 w-3.5 flex-none" />
           <span>
@@ -1271,13 +1476,18 @@ export function JobRealizadoSection({
         />
       )}
 
-      <div className="flex items-center justify-between">
+      {/* A barra em duas linhas (decisão 186, pedido do Tiago no protótipo
+          de 14/10/2026): o rótulo em cima; embaixo, o "Recolher todos" no
+          canto esquerdo e o "Histórico" ao lado do Bruto/Líquido. Some na
+          errata e na edição do financeiro: quem edita está na atual. */}
+      <div className="space-y-2.5">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ClipboardList className="h-4 w-4 text-california-red" />
           <span>
             Planilha do job · {nomeVersao(nomeJob, versao.numero_versao)}
           </span>
         </div>
+        <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {grupos.length > 0 && (
             <BotaoRecolherTodos
@@ -1285,6 +1495,9 @@ export function JobRealizadoSection({
               onAlternarTodos={recolher.alternarTodos}
             />
           )}
+        </div>
+        <div className="flex items-center gap-3">
+          {historico && !errata.ativo && historico.botao}
           <ChaveBrutoLiquido visao={visao} onChange={setVisao} />
           <MenuExibirColunas
             titulo="Colunas"
@@ -1452,6 +1665,7 @@ export function JobRealizadoSection({
               Ver versão aprovada →
             </Link>
           )}
+        </div>
         </div>
       </div>
 

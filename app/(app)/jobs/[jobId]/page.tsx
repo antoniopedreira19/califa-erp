@@ -453,6 +453,8 @@ export default async function JobDetailPage({
             papelNaErrata={comPedido ? null : papelNaErrata}
             errataPronta={errataPronta}
             midia={detalhe.midia}
+            // O histórico de versões da planilha (decisão 186).
+            comHistorico
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}

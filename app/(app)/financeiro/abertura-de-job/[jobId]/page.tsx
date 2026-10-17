@@ -469,6 +469,9 @@ export default async function AbrirJobNoFinanceiroPage({
             papelNaErrata={null}
             errataPronta={null}
             midia={detalhe.midia}
+            // O histórico de versões (decisão 186): na fila, o envio e as
+            // edições do financeiro; na revisão, a errata que a trouxe.
+            comHistorico
             edicaoDoFinanceiro={
               pode(session.activeRole, "jobs.editar_orcado_financeiro")
                 ? { travadoPor: null, mesesComNota: [], recebimento: [], envios: [] }

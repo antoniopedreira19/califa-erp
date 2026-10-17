@@ -62,6 +62,9 @@ interface Props {
   /** Fechamento do job (decisão 087): o Resultado fica travado no
    *  realizado, sem o seletor Planejada/Realizada. */
   somenteRealizada?: boolean;
+  /** Versão antiga do histórico (decisão 186): o realizado não entra, e o
+   *  Resultado fica travado no planejado. */
+  somentePlanejada?: boolean;
   /** Abre as colunas de save já expandidas. No fechamento elas aparecem
    *  por padrão (Tiago, 16/09/2026); o botão continua lá para recolher. */
   colunasSaveAbertas?: boolean;
@@ -123,6 +126,7 @@ export function JobTotaisCard({
   titulo = "Totais",
   subtitulo = "Orçado × Planejado × Realizado · valores calculados a partir dos itens.",
   somenteRealizada = false,
+  somentePlanejada = false,
   colunasSaveAbertas = false,
   abertura,
 }: Props) {
@@ -334,6 +338,7 @@ export function JobTotaisCard({
           honorarios={honorarios}
           taxaHonorarios={formatarTaxa(percentualHonorarios)}
           somenteRealizada={somenteRealizada}
+          somentePlanejada={somentePlanejada}
           abertura={abertura}
           moeda={moeda}
         />

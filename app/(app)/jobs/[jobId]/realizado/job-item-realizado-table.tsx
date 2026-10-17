@@ -48,7 +48,7 @@ import {
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
-import { ERRATA, LINHA_NOVO_GRUPO, SAVE } from "@/app/(app)/_planilha/blocos";
+import { ERRATA, HISTORICO, LINHA_NOVO_GRUPO, SAVE } from "@/app/(app)/_planilha/blocos";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
   parseNumero,
@@ -236,6 +236,13 @@ interface Props {
    *  job no financeiro abre a partir da aprovação (decisão 099,
    *  22/09/2026). Obrigatória de propósito: quem não destaca manda `[]`. */
   destacarItens: string[];
+  /** A cor do destaque das `destacarItens`: o âmbar da aprovação de save
+   *  ou, na versão antiga do histórico (decisão 186), o vermelho da errata.
+   *  Default: o do save. */
+  destaque?: "save" | "historico";
+  /** Histórico (decisão 186): o selo da linha que mudou na versão antiga,
+   *  ao lado do nome do item. Ausente fora do histórico. */
+  seloDaLinha?: (itemId: string) => React.ReactNode;
   /** O rascunho do modo errata. Ausente = planilha só de leitura, que é
    *  como as outras telas que reusam esta tabela a consomem. */
   errata?: RascunhoErrata;
@@ -723,6 +730,8 @@ export function JobItemRealizadoTable({
   onAbrirSave,
   abrirSaveSoComSave,
   destacarItens,
+  destaque = "save",
+  seloDaLinha,
   errata,
   podeEditarLinhas = true,
   modoDaEdicao = "errata",
@@ -1596,7 +1605,9 @@ export function JobItemRealizadoTable({
                               savePorItem?.[item.id] ?? SAVE_VAZIO,
                             ),
                           destacarItens.includes(item.id) &&
-                            SAVE.linhaEmAprovacao,
+                            (destaque === "historico"
+                              ? HISTORICO.linhaQueMudou
+                              : SAVE.linhaEmAprovacao),
                         )}
                       >
                         {saveVisivel && (
@@ -1683,6 +1694,7 @@ export function JobItemRealizadoTable({
                                   cancelada
                                 </span>
                               )}
+                              {seloDaLinha?.(item.id)}
                             </div>
                           </CelulaJob>
                         )}
