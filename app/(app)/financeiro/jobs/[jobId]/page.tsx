@@ -817,6 +817,9 @@ export default async function JobNoFinanceiroPage({
               papelNaErrata={null}
               errataPronta={null}
               midia={detalhe.midia}
+              // O histórico de versões da planilha (decisão 186), também
+              // na visão do financeiro.
+              comHistorico
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}

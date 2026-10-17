@@ -13,6 +13,7 @@
     "test:cnab-fora": "node --import tsx --test lib/cnab/fora-do-cadastro.test.ts",
     "test:foto-pp": "node --import tsx --test lib/data/foto-pagamento-da-pp.test.ts",
     "test:linhas-da-revisao": "node --import tsx --test lib/data/linhas-da-revisao.test.ts",
+    "test:historico-da-planilha": "node --import tsx --test lib/calculos/historico-da-planilha.test.ts",
     "test:folha": "node --import tsx --test lib/validations/rh-folhas.test.ts",
     "test:folha-parser": "node --import tsx --test lib/pdf/parse-folha-contabilidade.test.ts",
     "test:nf-janela": "node --import tsx --test lib/folha/janela-pagamento.test.ts",

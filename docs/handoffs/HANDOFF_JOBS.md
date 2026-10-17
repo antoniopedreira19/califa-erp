@@ -5763,3 +5763,28 @@ nova, sem migration, nenhum dado mudou.
   desembolso). (2) Vários `new Date().toISOString().slice(0, 10)` calculam
   o "hoje" em UTC: depois das 21h, "hoje" já é amanhã. Não é exibição de
   `timestamptz` e ficou fora desta correção.
+
+## ⚠️ Nota de 2026-10-17 — Histórico de versões da Planilha Interna (decisão 186)
+
+Pedido do Tiago em 14/10/2026, protótipo aprovado em 15/10/2026. Regra
+completa na decisão 186.
+
+- **Botão "Histórico"** na barra da planilha, ao lado do Bruto/Líquido; a
+  barra ficou em duas linhas (rótulo em cima; "Recolher todos" à esquerda).
+  Na página do job, na do job no financeiro e na Abertura de Job
+  (`comHistorico` no `JobRealizadoSection`, obrigatória). Fora da planilha
+  da origem do save e da Mídia Off. Some na errata e no "Editar orçado".
+- **Versão antiga só leitura:** `JobRealizadoSection` virou um invólucro que
+  guarda a versão escolhida e entrega à planilha (`PlanilhaDoJob`) as linhas
+  e os agrupamentos daquele momento, sem realizado, PP, BV, save, errata ou
+  edição; faixa em cima (`FaixaDaVersao`), selo e fundo vermelho na linha que
+  mudou (`seloDaLinha` e `destaque` na tabela, `HISTORICO` em `blocos.ts`),
+  Totais só no planejado (`somentePlanejada`).
+- **Reconstrução** de trás para a frente a partir da planilha de hoje,
+  função pura `montarHistorico` (`lib/calculos/historico-da-planilha.ts`,
+  `npm run test:historico-da-planilha`). Sem tabela nova. A leitura
+  (`carregarHistoricoDaPlanilha`) só roda ao abrir o "Histórico".
+- **Conferido:** os 26 jobs com histórico (15 reais) batem ao centavo em
+  todas as 155 versões contra o valor gravado de cada momento, a abertura e a
+  versão aprovada; na tela, TES-1025/26, TES-1002/26 (mensal) e TES-1029/26
+  (fila), na produção e no financeiro.

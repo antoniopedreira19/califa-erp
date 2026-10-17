@@ -71,6 +71,8 @@ async function PlanilhaDaOrigemCarregada({
       papelNaErrata={null}
       errataPronta={null}
       midia={detalhe.midia}
+      // Só consulta da origem do saldo: sem o histórico (decisão 186).
+      comHistorico={false}
       interno={detalhe.interno}
       savePorItem={detalhe.savePorItem}
       saldosDeSave={[]}
