@@ -55,6 +55,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatCurrency, cn } from "@/lib/utils";
+import { SAVE } from "@/app/(app)/_planilha/blocos";
 import {
   formatPercentualRateio,
   nomeDoJobNoFinanceiro,
@@ -285,6 +286,12 @@ interface Props {
    *  a página do job aberto montar o formulário sem ela, e o job pago por
    *  save dizia "pago diretamente pelo cliente ao fornecedor". */
   saveConsumido: number;
+  /** O crédito que as linhas deste job em save geram (`totalGeradoEmSave`,
+   *  em `dados.ts`) — o "Total gerado em save" do envio da produção. O
+   *  cartão "Dados da produção" o mostra abaixo do valor total, junto do
+   *  consumo (Tiago, 17/10/2026). Obrigatória, pelo mesmo motivo de
+   *  `saveConsumido`. */
+  saveGerado: number;
   /** As linhas do job em save e fora dele (`linhasDoSave`, em `dados.ts`).
    *  Só serve para EXPLICAR um custo previsto zero: a linha em save não tem
    *  custo neste job, e a de fora é paga pelo cliente direto ao fornecedor
@@ -464,6 +471,7 @@ export function AberturaForm({
   aliquotaIntTaxes,
   rentabilidade,
   saveConsumido,
+  saveGerado,
   linhasDoSave,
   enviadoPorNome,
   curvaInicial,
@@ -3273,6 +3281,45 @@ export function AberturaForm({
                 {formatCurrency(job.valor_total)}
               </span>
             </div>
+            {/* O save do job, abaixo do valor total, como no envio da
+                produção: o crédito que ele gera e o que ele consome do
+                saldo de outro job. Zero não vira linha. Grafite do SAVE,
+                de `blocos.ts` — a mesma cor do envio e do card de Totais
+                (Tiago, 17/10/2026). */}
+            {(saveGerado > 0.004 || saveConsumido > 0.004) && (
+              <div className="flex flex-col gap-2.5 border-t border-border pt-2.5">
+                {saveGerado > 0.004 && (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[12.5px] font-semibold">
+                      Total gerado em save
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-[13px] font-bold",
+                        SAVE.textoApagado,
+                      )}
+                    >
+                      {formatCurrency(saveGerado)}
+                    </span>
+                  </div>
+                )}
+                {saveConsumido > 0.004 && (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[12.5px] font-semibold">
+                      Consumo de save
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-[13px] font-bold",
+                        SAVE.textoApagado,
+                      )}
+                    >
+                      {formatCurrency(saveConsumido)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             {/* Item 03 do protótipo: a planilha interna do job em leitura,
                 dentro do próprio fluxo de abertura. No job já aberto a
                 planilha é a aba da página do job no financeiro: o link ia

@@ -44,6 +44,7 @@ import {
   carregarJobParaAbertura,
   linhasDoSave,
   revisaoPendenteDoJob,
+  totalGeradoEmSave,
 } from "../../abertura-de-job/dados";
 import { carregarSavesDaAbertura } from "../../abertura-de-job/saves-da-abertura";
 import { PlanilhaDaOrigem } from "../../abertura-de-job/[jobId]/planilha-da-origem";
@@ -609,6 +610,7 @@ export default async function JobNoFinanceiroPage({
                 custoPlanejadoJob + (resumoFinanceiro?.planejadoDosPedidos ?? 0),
             }}
             saveConsumido={saveConsumido}
+            saveGerado={totalGeradoEmSave(detalhe.itens)}
             linhasDoSave={linhasDoSave(detalhe.itens)}
             saves={saves}
             // A planilha de cada job de origem do consumo (decisão 155),
