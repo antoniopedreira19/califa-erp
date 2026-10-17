@@ -1,7 +1,7 @@
 # 155 — O save que vem com o job é aprovado na abertura
 
 **Data:** 2026-10-07
-**Status:** aceita e implementada (07/10/2026).
+**Status:** aceita e implementada (07/10/2026). Revista em 17/10/2026: o save no cartão "Dados da produção".
 **Quem decidiu:** Tiago, em 07/10/2026, a partir de dois protótipos interativos.
 - **Como era:** https://claude.ai/artifact/WQ24E5vp7Vemqmw9GzNi6J.
 - **A proposta:** https://claude.ai/artifact/THxGXFBhLM1w8UyAFdmk9Y, versão 3, com o atalho da origem abrindo em pop-up.
@@ -42,6 +42,8 @@ O financeiro conferia os números na abertura, abria o job e depois fazia mais u
 - **Conferência da fila:** "São aprovados junto com a abertura do job, no formulário de abertura. Se algum não deveria ser save, use Reprovar." Antes dizia "Não são aprovados aqui…".
 - **Linha da fila:** marca "Orçamento inteiro em save", "Orçamento inteiro pago pelo saldo do {código}" ou "N linhas com save".
 - **Pop-up de save da linha, no job ainda não aberto:** "O financeiro aprova junto com a abertura do job."
+
+⚠️ **O save no cartão "Dados da produção" (2026-10-17).** O cartão da coluna da direita da abertura (e do job aberto) mostrava o faturamento previsto e o valor total, mas não o save — que o envio da produção mostra logo abaixo do valor total. Agora, separadas por um traço, entram as mesmas duas linhas do envio, cada uma só quando passa de zero: **"Total gerado em save"** (o orçado das linhas vivas em save, `totalGeradoEmSave` em `dados.ts` — o mesmo `totais.save.totalSaveGerado` do envio, sobre a cópia do job) e **"Consumo de save"** (a soma de `save_consumido`, o `saveConsumido` que o formulário já recebia). Grafite do SAVE (`blocos.ts`), a cor do envio. Pedido do Tiago, 17/10/2026.
 
 ## Onde mora
 

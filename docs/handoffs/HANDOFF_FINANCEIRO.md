@@ -7512,3 +7512,23 @@ Regra completa na seção 9 da decisão 091.
   `notas-de-caixa.ts`, usado pela lista e pela exportação.
 - **Sem regra nova:** nenhum número é calculado de outro jeito; é a mesma
   linha da tela, desmontada em colunas. Por isso não tem decisão numerada.
+
+## ⚠️ Nota de 2026-10-17 (1) — o save no cartão "Dados da produção" da abertura (revisão da decisão 155)
+
+- **O quê:** o cartão "Dados da produção", na coluna da direita do
+  formulário da abertura e do job aberto, ganhou o save abaixo do valor
+  total, como o envio da produção já mostrava: "Total gerado em save" e
+  "Consumo de save", separados do valor total por um traço, em grafite
+  (`SAVE.textoApagado`). Cada linha só aparece quando passa de zero; job
+  sem save fica como era.
+- **Os números:** "Total gerado em save" = orçado das linhas vivas em save
+  da cópia do job (`totalGeradoEmSave`, em `abertura-de-job/dados.ts`, a
+  mesma soma de `totais.save.totalSaveGerado` do envio). "Consumo de save"
+  = o `saveConsumido` que o formulário já recebia. As duas páginas
+  (`abertura-de-job/[jobId]` e `financeiro/jobs/[jobId]`) passam a prop
+  nova `saveGerado`, obrigatória como a `saveConsumido`.
+- **Conferido no dev do worktree, como administrador:** TES-1002/26
+  (R$ 10.000,00 gerado e R$ 1.000,00 consumido), TES-1024/26 (só gera,
+  R$ 10.000,00), TES-1023/26 (só consome, R$ 5.000,00) e TES-1006/26 (sem
+  save, sem as linhas) — os mesmos valores da soma no banco.
+

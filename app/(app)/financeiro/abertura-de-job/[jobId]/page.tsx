@@ -11,7 +11,7 @@ import { FichaJob } from "@/app/(app)/jobs/[jobId]/ficha-job";
 import { AlteracoesFinanceiroCard } from "@/app/(app)/jobs/[jobId]/alteracoes-financeiro-card";
 import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
-import { carregarJobParaAbertura, linhasDoSave } from "../dados";
+import { carregarJobParaAbertura, linhasDoSave, totalGeradoEmSave } from "../dados";
 import { carregarSavesDaAbertura } from "../saves-da-abertura";
 import { PlanilhaDaOrigem } from "./planilha-da-origem";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
@@ -338,6 +338,7 @@ export default async function AbrirJobNoFinanceiroPage({
             aliquotaIntTaxes={imposto?.aliquotaIntTaxes ?? null}
             rentabilidade={rentabilidade}
             saveConsumido={saveConsumido}
+            saveGerado={totalGeradoEmSave(detalhe.itens)}
             linhasDoSave={linhasDoSave(detalhe.itens)}
             saves={saves}
             // A planilha de cada job de origem do consumo, para o pop-up do

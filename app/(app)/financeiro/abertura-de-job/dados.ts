@@ -1191,3 +1191,20 @@ export function linhasDoSave(
   const emSave = vivas.filter((i) => i.em_save).length;
   return { emSave, foraDoSave: vivas.length - emSave };
 }
+
+/**
+ * O crédito que as linhas do job em save geram para o cliente: o orçado
+ * das linhas vivas em save. É o "Total gerado em save" que a produção vê no
+ * envio para abertura (`totais.save.totalSaveGerado`), sobre a cópia do
+ * job — e o cartão "Dados da produção" da abertura mostra o mesmo número
+ * abaixo do valor total (Tiago, 17/10/2026). Mesma coluna e mesma regra de
+ * linha cancelada de `linhasDoSave`.
+ */
+export function totalGeradoEmSave(
+  itens: { em_save: boolean; cancelada_em: string | null; total_orcado: number | string | null }[],
+): number {
+  const total = itens
+    .filter((i) => !i.cancelada_em && i.em_save)
+    .reduce((s, i) => s + Number(i.total_orcado ?? 0), 0);
+  return Math.round(total * 100) / 100;
+}
