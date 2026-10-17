@@ -5686,3 +5686,32 @@ Correção só visual: sem regra nova, sem migration, nenhum texto mudou.
   contas", pede decisão. (2) Com a calha da prestação, a 1440, o código
   quebra em "PP-/00206" — também já era assim.
 
+## ⚠️ Nota de 2026-10-17 — o "Cancelar e refazer" da PP rejeitada foi para a trilha
+
+Resolve o item (1) em aberto da nota de 16/10/2026 (5). Opção C, escolhida
+pelo Tiago em 17/10/2026 entre três (A: o botão com texto na trilha,
+alargando-a de 99 para 208px; B: ícone ao lado do olho; C: ícone na
+trilha). Correção só visual: sem regra nova, sem migration, mesma
+permissão (`podeEnviar`) e o mesmo pop-up de confirmação.
+
+- **Causa:** o botão (138px) morava na coluna do olho, que tem 4% da
+  tabela (49px a 1440, 45px com a calha da prestação, 61px a 1838), e
+  transbordava para a esquerda. A 1440 cobria o selo "REJEITADO" (82px)
+  inteiro; a 1838, 36 a 51px dele.
+- **Correção** (`job-pps-section.tsx`): o botão virou ícone de 29px, lápis
+  vermelho com borda clara (as cores do botão de antes) e a dica "Cancelar
+  e refazer", na trilha entre o "Ver formulário" e o cancelar. A
+  rejeitada não envia nem edita, então os três ícones cabem nos 99px de
+  sempre: a trilha não alarga e a tabela não muda de largura. A coluna do
+  olho ficou só com o olho.
+- **Uma diferença de lugar:** como todo botão da trilha, ele aparece na primeira
+  linha da PP que está na tela (com filtro ou ordem pelo título, a parcela
+  1 pode ter saído). Antes ficava só na linha da parcela 1.
+- **Conferido** a 1440×900 e 1838×1040, com e sem a calha da prestação:
+  no TES-1014/26 com a PP-00132 e a PP-00147 rejeitadas em memória (nada
+  gravado) e na PP-00087 (TES-1008/26), rejeitada de verdade. Selo inteiro
+  nos três pontos medidos, ícone a 130 a 196px do fim do selo, trilha
+  dentro da tela (termina em 1438 de 1440 e 1795 de 1838), sem rolagem
+  lateral; o ícone abre "Cancelar a PP-00147 e refazer?" (fechado em
+  "Voltar"). Comparação com fotos da tela real:
+  https://claude.ai/artifact/RtJYas1UfQqLnpGY56MFhy

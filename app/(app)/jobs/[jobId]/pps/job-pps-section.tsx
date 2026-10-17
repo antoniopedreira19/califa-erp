@@ -176,6 +176,9 @@ const CHIPS: Array<{ key: Filtro; label: string }> = [
  * valem na linha, um colado no outro (sem lugar vazio, pedido do Tiago).
  * "Prestar contas" segue com texto, no lugar do cancelar (verba paga nunca
  * é cancelável), e a trilha só se alarga quando há verba esperando prestação.
+ * O "Cancelar e refazer" da rejeitada (decisão 153) também é ícone, entre o
+ * formulário e o cancelar: a rejeitada não envia nem edita, então os três
+ * cabem na largura de sempre (17/10/2026).
  */
 const ICONE = 29;
 const VAO = 6;
@@ -954,20 +957,10 @@ export function JobPPsSection({
                         tabela. */}
                     <td className="py-2.5 pl-0 pr-3.5 align-middle">
                       {/* Ver PDF é de CADA parcela (Tela 2.3): cada uma
-                          tem seu documento. Editar é da PP inteira, então
-                          só a primeira linha o mostra. */}
+                          tem seu documento. O "Cancelar e refazer" morava
+                          aqui e, com 138 px numa coluna de 45 a 61, cobria
+                          o selo "Rejeitado"; foi para a trilha (17/10/2026). */}
                       <div className="flex items-center justify-end gap-1.5">
-                        {podeEnviar && pp.status === "rejeitada" && indice === 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setPpRefazendo(pp)}
-                            disabled={pending}
-                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red/25 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-california-red hover:bg-california-red/[0.06] disabled:opacity-50"
-                          >
-                            <Pencil className="h-3 w-3" />
-                            Cancelar e refazer
-                          </button>
-                        )}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
@@ -998,7 +991,8 @@ export function JobPPsSection({
             Planilha Interna. Desde 08/10/2026 são três colunas de ícones —
             enviar (só o GP, PP gerada com arquivo anexado), ver o
             formulário (toda PP) e cancelar (a PP que ainda dá para
-            cancelar) —; "Prestar contas" fica na coluna do cancelar. */}
+            cancelar) —; "Prestar contas" fica na coluna do cancelar, e o
+            "Cancelar e refazer" da rejeitada entre o formulário e ele. */}
         <div
           className="absolute left-full ml-2.5"
           style={{ width: larguraTrilha, top: offsetThead }}
@@ -1112,6 +1106,25 @@ export function JobPPsSection({
                 {situacaoDaLinha === "prestacao_reprovada" ? "Corrigir prestação" : "Prestar contas"}
               </button>
             );
+            // A rejeitada volta como PP a emitir (decisão 153): é envio ao
+            // financeiro, então segue `podeEnviar`, como o reenvio.
+            const refazerEl = podeEnviar && pp.status === "rejeitada" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setPpRefazendo(pp)}
+                    disabled={pending}
+                    aria-label={`Cancelar e refazer ${pp.codigo}`}
+                    className="inline-flex flex-none items-center justify-center rounded-[9px] border border-california-red/25 bg-white text-california-red transition-colors hover:bg-california-red/[0.06] disabled:opacity-50"
+                    style={{ width: ICONE, height: ICONE }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Cancelar e refazer</TooltipContent>
+              </Tooltip>
+            );
             const cancelarEl = cancelar && !prestar && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1144,6 +1157,7 @@ export function JobPPsSection({
                 {editarEl}
                 {formularioEl}
                 {prestarEl}
+                {refazerEl}
                 {cancelarEl}
               </div>
             );
