@@ -91,3 +91,15 @@ test("PP que não é verba não entra na conta da verba", () => {
   });
   assert.equal(verbaPendenteNoEncerramento(situacao), false);
 });
+
+test("reembolso pago não presta contas e não trava o encerramento (decisão 187)", () => {
+  const situacao = situacaoDaVerba({
+    verba_producao: true,
+    tipo_verba: "reembolso",
+    status: "pago",
+    prestacao: null,
+    devolucao: null,
+  });
+  assert.equal(situacao, null);
+  assert.equal(verbaPendenteNoEncerramento(situacao), false);
+});

@@ -86,6 +86,14 @@ import {
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFeriadosNacionais } from "@/lib/data/feriados-nacionais";
 import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
+import {
+  DESGASTE_POR_KM_PADRAO,
+  contaDosDeslocamentos,
+  faltaNosComprovantesDoReembolso,
+  faltaNosDeslocamentos,
+  type DeslocamentosDoReembolso,
+  type ReembolsoTipo,
+} from "@/lib/calculos/reembolso";
 
 const BUCKET = "pedidos-compra";
 const PDF_TTL_SEGUNDOS = 3600;
@@ -286,6 +294,25 @@ const dataSchema = z
  *  14/09/2026 tinha 12. Vale também contra payload sem fim. */
 const MAX_PARCELAS = 24;
 
+/** Decisão 187: os deslocamentos do reembolso de veículo próprio. O
+ *  servidor refaz a conta (`conferirReembolso`). */
+const deslocamentosSchema = z.object({
+  consumo_km_l: z.number().positive().max(100),
+  preco_litro: z.number().positive().max(100),
+  desgaste_por_km: z.number().min(0).max(100),
+  linhas: z
+    .array(
+      z.object({
+        data: dataSchema,
+        trajeto: z.string().trim().min(1).max(500),
+        km_ida_volta: z.number().positive().max(10000),
+        vezes: z.number().int().min(1).max(99),
+      }),
+    )
+    .min(1, "Inclua pelo menos um deslocamento.")
+    .max(200),
+});
+
 const dadosBaseSchema = z.object({
   // A empresa GERENCIAL. A geração grava a do job (decisão 156): o que vem
   // daqui só vale se o job não tiver empresa.
@@ -332,7 +359,11 @@ const dadosBaseSchema = z.object({
       verba_producao: z.literal(true),
       // Decisão 164: produção, alimentação ou transporte. Ausente = produção
       // (a PP a emitir salva antes). As combinações estão no superRefine.
-      tipo_verba: z.enum(["producao", "alimentacao", "transporte"]).nullable().optional(),
+      tipo_verba: z.enum(["producao", "alimentacao", "transporte", "reembolso"]).nullable().optional(),
+      // Decisão 187: o reembolso mora no campo da verba — despesas ou
+      // veículo próprio, com os deslocamentos.
+      reembolso_tipo: z.enum(["despesas", "veiculo_proprio"]).nullable().optional(),
+      deslocamentos: deslocamentosSchema.nullable().optional(),
       // O titular (decisão 164; nas três verbas desde a 171) — colaborador
       // ou freela em verba_titular_id, ou o terceiro em fornecedor_id, com o
       // pagamento do fornecedor. `responsavel_verba_id` só chega da PP a
@@ -351,6 +382,26 @@ const dadosBaseSchema = z.object({
 const dadosSchema = dadosBaseSchema.superRefine((d, ctx) => {
   if (!d.verba_producao) return;
   const falha = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+  // Decisão 187: o reembolso vai para um colaborador ou freela — sem
+  // terceiro — e diz se é de despesas ou de veículo próprio.
+  if (d.tipo_verba === "reembolso") {
+    if (!d.reembolso_tipo) {
+      falha("Escolha o tipo do reembolso: despesas ou veículo próprio");
+      return;
+    }
+    if (d.verba_titular_tipo === "fornecedor" || d.fornecedor_id || d.pagamento_fora_do_cadastro) {
+      falha("O reembolso vai para um colaborador ou freela. Escolha o titular do reembolso");
+      return;
+    }
+    if (!d.verba_titular_tipo || !d.verba_titular_id) {
+      falha("Escolha o titular do reembolso");
+      return;
+    }
+    if (d.reembolso_tipo === "veiculo_proprio" && !d.deslocamentos) {
+      falha("Preencha os deslocamentos do veículo próprio");
+    }
+    return;
+  }
   if (d.responsavel_verba_id) {
     falha("A verba de produção agora tem titular, como as outras. Escolha o titular da verba");
     return;
@@ -505,11 +556,117 @@ function erroDoPrazoDeEnvio(
     : `${isoParaBr(vencimento)} não é uma janela de pagamento. A primeira data possível hoje é ${isoParaBr(primeira)}.`;
 }
 
+// ---------------------------------------------------------------------------
+// Reembolso (decisão 187)
+// ---------------------------------------------------------------------------
+
+/** O desgaste por km do reembolso de veículo próprio: o valor da casa que
+ *  só o financeiro altera (`financeiro_parametros`). Sem a linha, o da
+ *  planilha (R$ 0,40). */
+async function desgastePorKmVigente(supabase: ReturnType<typeof createClient>, tenantId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("financeiro_parametros")
+    .select("valor")
+    .eq("tenant_id", tenantId)
+    .eq("chave", "reembolso_desgaste_por_km")
+    .maybeSingle<{ valor: number | string }>();
+  if (error) console.error("[reembolso.desgaste]", error.message);
+  return data ? Number(data.valor) : DESGASTE_POR_KM_PADRAO;
+}
+
+/** O formulário pede o desgaste quando a pessoa escolhe "Veículo próprio". */
+export async function desgastePorKmDoReembolso(): Promise<number> {
+  const session = await requireSession();
+  return desgastePorKmVigente(createClient(), session.activeTenant.id);
+}
+
+/**
+ * O reembolso que a PP grava (decisão 187). Fora dele, as colunas nulas.
+ * No veículo próprio, o servidor refaz a conta dos deslocamentos — ela é o
+ * valor da PP — e o desgaste por km aceito é o vigente ou o que a PP (ou a
+ * PP a emitir) já guardava: a PP fica com o desgaste da data em que nasceu.
+ */
+async function conferirReembolso(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  d: {
+    verba_producao: boolean;
+    tipo_verba?: TipoVerba | null;
+    reembolso_tipo?: ReembolsoTipo | null;
+    deslocamentos?: DeslocamentosDoReembolso | null;
+    valor_unitario: number;
+    quantidade: number;
+    dias_meses: number;
+  },
+  desgasteJaGuardado: number | null,
+): Promise<
+  Result<{
+    colunas: { reembolso_tipo: ReembolsoTipo | null; reembolso_deslocamentos: DeslocamentosDoReembolso | null };
+  }>
+> {
+  if (tipoDaVerbaDosDados(d) !== "reembolso") {
+    return { ok: true, colunas: { reembolso_tipo: null, reembolso_deslocamentos: null } };
+  }
+  if (!d.reembolso_tipo) return { ok: false, message: "Escolha o tipo do reembolso: despesas ou veículo próprio." };
+  if (d.reembolso_tipo === "despesas") {
+    return { ok: true, colunas: { reembolso_tipo: "despesas", reembolso_deslocamentos: null } };
+  }
+  const desl = d.deslocamentos;
+  if (!desl) return { ok: false, message: "Preencha os deslocamentos do veículo próprio." };
+  const falta = faltaNosDeslocamentos(desl);
+  if (falta) return { ok: false, message: falta };
+  const vigente = await desgastePorKmVigente(supabase, tenantId);
+  const aceitos = [vigente, desgasteJaGuardado].filter((x): x is number => x !== null && Number.isFinite(x));
+  if (!aceitos.some((a) => Math.abs(a - desl.desgaste_por_km) < 0.00005)) {
+    return {
+      ok: false,
+      message: `O desgaste por km mudou para ${brl(vigente)}. Feche e abra o formulário de novo para refazer a conta.`,
+    };
+  }
+  const conta = contaDosDeslocamentos(desl);
+  const valor = valorDaPPPorUnidade(d.valor_unitario, d.quantidade, d.dias_meses);
+  if (Math.abs(conta.total - valor) > 0.004) {
+    return { ok: false, message: `O valor do reembolso é o da conta dos deslocamentos: ${brl(conta.total)}.` };
+  }
+  return {
+    ok: true,
+    colunas: {
+      reembolso_tipo: "veiculo_proprio",
+      reembolso_deslocamentos: {
+        consumo_km_l: desl.consumo_km_l,
+        preco_litro: desl.preco_litro,
+        desgaste_por_km: desl.desgaste_por_km,
+        linhas: desl.linhas.map((l) => ({
+          data: l.data,
+          trajeto: l.trajeto.trim(),
+          km_ida_volta: l.km_ida_volta,
+          vezes: l.vezes,
+        })),
+      },
+    },
+  };
+}
+
+/** Os anexos do envio de um reembolso, na regra dos comprovantes. */
+function faltaNosAnexosDoReembolso(anexos: AnexoUploaded[], valor: number, tipo: ReembolsoTipo): string | null {
+  return faltaNosComprovantesDoReembolso(
+    anexos.map((a) => ({
+      tipo: a.documento_tipo,
+      numero: a.documento_numero,
+      data: a.nf_data_emissao,
+      valor: a.nf_valor,
+    })),
+    valor,
+    tipo,
+  );
+}
+
 const anexoUploadedSchema = z.object({
   anexo_id: z.string().uuid(),
   /** Que documento este arquivo é, e com que número (28/08/2026). O par
    *  anda junto: número sem tipo não identifica nada. */
-  documento_tipo: z.enum(DOCUMENTO_TIPOS).nullable().default(null),
+  // O cupom fiscal (decisão 187) só aparece nos comprovantes do reembolso.
+  documento_tipo: z.enum([...DOCUMENTO_TIPOS, "cupom_fiscal"]).nullable().default(null),
   documento_numero: z.string().trim().max(60).nullable().default(null),
   path: z.string().min(1),
   nome_original: z.string().min(1),
@@ -538,9 +695,13 @@ function horariosEmOrdem(quantos: number): string[] {
  *  para a fatura e o recibo (revisão da 156, 16/10/2026). */
 function nfDoAnexo(a: AnexoUploaded) {
   const nf = a.documento_tipo === "nota_fiscal";
+  // Decisão 187: o comprovante do reembolso guarda a data e o valor em
+  // qualquer tipo (cupom, recibo…). Fora do reembolso a tela só os manda
+  // na NF.
+  const comValor = nf || a.nf_valor !== null;
   return {
-    nf_data_emissao: nf ? a.nf_data_emissao : null,
-    nf_valor: nf ? a.nf_valor : null,
+    nf_data_emissao: comValor ? a.nf_data_emissao : null,
+    nf_valor: comValor ? a.nf_valor : null,
     nf_tomador_estabelecimento_id: documentoTemCnpj(a.documento_tipo) ? a.nf_tomador_estabelecimento_id : null,
     nf_valor_na_pp: nf ? a.nf_valor_na_pp : null,
   };
@@ -1127,6 +1288,11 @@ async function renderizarDocumentoDaPP(args: {
     tipo_verba?: TipoVerba | null;
     /** Decisão 171: nulo na verba = verba de produção anterior (responsável). */
     verba_titular_tipo: TitularDaVerbaTipo | null;
+    /** Decisão 187: o tipo do reembolso e, no veículo próprio, a conta que
+     *  sai em tabela. Obrigatórios: um chamador que os esquecesse refaria o
+     *  PDF do reembolso sem os deslocamentos. */
+    reembolso_tipo: ReembolsoTipo | null;
+    reembolso_deslocamentos: DeslocamentosDoReembolso | null;
   };
   empresa: unknown;
   fornecedor: unknown | null;
@@ -1162,6 +1328,8 @@ async function renderizarDocumentoDaPP(args: {
       verba_producao: args.pp.verba_producao,
       tipo_verba: args.pp.tipo_verba ?? null,
       verba_titular_tipo: args.pp.verba_titular_tipo,
+      reembolso_tipo: args.pp.reembolso_tipo,
+      reembolso_deslocamentos: args.pp.reembolso_deslocamentos,
     },
     pagamentoPorBoleto: args.pagamentoPorBoleto === true,
     previa: args.previa === true,
@@ -1551,6 +1719,15 @@ async function finalizarPedidoCompraImpl(
   if (!titular.ok) return titular;
   if (!empRes.data)
     return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
+  // Decisão 187: os dados vêm da PP a emitir, já conferidos ao salvar — o
+  // desgaste guardado nela vale. A conta é refeita aqui de novo.
+  const reembolso = await conferirReembolso(
+    supabase,
+    session.activeTenant.id,
+    d,
+    d.verba_producao ? (d.deslocamentos?.desgaste_por_km ?? null) : null,
+  );
+  if (!reembolso.ok) return reembolso;
 
   // Decisão 156: o CNPJ da PP (o do PDF). Revisão de 16/10/2026: com
   // documento que diga o CNPJ, a empresa emissora é a dele.
@@ -1584,8 +1761,10 @@ async function finalizarPedidoCompraImpl(
     item_realizado_id: itemRealizadoId,
     job_id: job.id,
     // PP normal: o fornecedor. Verba: o titular (decisões 164 e 171) — o
-    // terceiro também em fornecedor_id.
+    // terceiro também em fornecedor_id. Reembolso: o titular, o tipo e os
+    // deslocamentos (decisão 187).
     ...colunasDaVerba(d, titular.nome),
+    ...reembolso.colunas,
     empresa_id: job.empresa_id ?? d.empresa_id,
     estabelecimento_id: cnpjDaPP.id,
     servico: d.servico,
@@ -1744,6 +1923,7 @@ async function finalizarPedidoCompraImpl(
         verba_producao: d.verba_producao,
         tipo_verba: tipoVerba,
         verba_titular_tipo: d.verba_producao ? (d.verba_titular_tipo ?? null) : null,
+        ...reembolso.colunas,
       },
       // O cabeçalho é o do CNPJ da PP, não o da gerencial (decisão 156).
       empresa: cnpjDaPP.empresa,
@@ -1877,6 +2057,7 @@ async function finalizarPedidoCompraImpl(
       acima_do_planejado: passaDoPlanejado(emPPsAntes + valor, item.total_planejado),
       anexos: anexosParsed.data.length,
       ...colunasDaVerba(d, titular.nome),
+      reembolso_tipo: reembolso.colunas.reembolso_tipo,
       pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
@@ -2301,6 +2482,11 @@ export async function previaDoPdfDaPP(
         verba_producao: d.verba_producao,
         tipo_verba: tipoVerba,
         verba_titular_tipo: d.verba_producao ? (d.verba_titular_tipo ?? null) : null,
+        reembolso_tipo: d.verba_producao && tipoVerba === "reembolso" ? (d.reembolso_tipo ?? null) : null,
+        reembolso_deslocamentos:
+          d.verba_producao && tipoVerba === "reembolso" && d.reembolso_tipo === "veiculo_proprio"
+            ? (d.deslocamentos ?? null)
+            : null,
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
@@ -2542,6 +2728,9 @@ async function refazerPdfDaPP(
     dados_pagamento_congelados_em: string | null;
     verba_titular_tipo: TitularDaVerbaTipo | null;
     verba_titular_cpf: string | null;
+    /** Decisão 187. */
+    reembolso_tipo: ReembolsoTipo | null;
+    reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     pagamento_fora_do_cadastro_meio: string | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
   };
@@ -2601,6 +2790,8 @@ async function refazerPdfDaPP(
         verba_producao: pp.verba_producao,
         tipo_verba: pp.tipo_verba,
         verba_titular_tipo: pp.verba_titular_tipo ?? null,
+        reembolso_tipo: pp.reembolso_tipo ?? null,
+        reembolso_deslocamentos: pp.reembolso_deslocamentos ?? null,
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoPdf,
@@ -2819,7 +3010,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, fornecedor_id, estabelecimento_id, prazo_pagamento, urgente, created_at, pagamento_fora_do_cadastro_meio, anexos:pedidos_compra_anexos(id)",
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, fornecedor_id, estabelecimento_id, prazo_pagamento, urgente, created_at, pagamento_fora_do_cadastro_meio, anexos:pedidos_compra_anexos(id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -2831,6 +3022,8 @@ export async function enviarPedidoCompraAoFinanceiro(
       status: PPStatus;
       valor: number | string;
       verba_producao: boolean;
+      tipo_verba: TipoVerba | null;
+      reembolso_tipo: ReembolsoTipo | null;
       fornecedor_id: string | null;
       estabelecimento_id: string | null;
       prazo_pagamento: string;
@@ -2911,16 +3104,21 @@ export async function enviarPedidoCompraAoFinanceiro(
   // notas entram na prestação de contas. Nas demais, a nota do fornecedor
   // é o que justifica o pedido — e é ela que o financeiro vai conferir.
   // Decisão 152: todo campo de todo anexo é obrigatório no envio.
+  // Decisão 187: o reembolso é "não fornecedor" como a verba, mas leva os
+  // comprovantes — obrigatórios aqui, no envio, e não na geração.
+  const reembolsoNoEnvio = ppRow.tipo_verba === "reembolso" ? (ppRow.reembolso_tipo ?? "despesas") : null;
   let anexosDoPedido: AnexoUploaded[] = [];
-  if (!ppRow.verba_producao) {
+  if (!ppRow.verba_producao || reembolsoNoEnvio) {
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
     anexosDoPedido = parsed.data;
-    const falta = faltaNosAnexosDoEnvio(
-      anexosDoPedido,
-      Number(ppRow.valor ?? 0),
-      ppRow.pagamento_fora_do_cadastro_meio === "boleto",
-    );
+    const falta = reembolsoNoEnvio
+      ? faltaNosAnexosDoReembolso(anexosDoPedido, Number(ppRow.valor ?? 0), reembolsoNoEnvio)
+      : faltaNosAnexosDoEnvio(
+          anexosDoPedido,
+          Number(ppRow.valor ?? 0),
+          ppRow.pagamento_fora_do_cadastro_meio === "boleto",
+        );
     if (falta) return { ok: false, message: falta };
   }
 
@@ -2959,7 +3157,19 @@ export async function enviarPedidoCompraAoFinanceiro(
 
   // Decisões 152 e 153: os anexos como o pop-up mandou, e cada NF ligada à
   // sua nota do cadastro. Depois das travas, para o "tem certeza?" acima do
-  // planejado não deixar meio envio gravado.
+  // planejado não deixar meio envio gravado. O reembolso grava os
+  // comprovantes, mas não liga nota de fornecedor (decisão 187).
+  if (reembolsoNoEnvio) {
+    const erroAnexos = await gravarAnexosDoEnvio(
+      supabase,
+      session.activeTenant.id,
+      session.profile.id,
+      job.id,
+      pp_id,
+      anexosDoPedido,
+    );
+    if (erroAnexos) return { ok: false, message: erroAnexos };
+  }
   if (!ppRow.verba_producao) {
     const erroAnexos = await gravarAnexosDoEnvio(
       supabase,
@@ -3080,7 +3290,7 @@ export async function deixarPPProntaParaEnvio(
 
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
-    .select("id, codigo, job_id, item_realizado_id, status, valor, verba_producao, pagamento_fora_do_cadastro_meio")
+    .select("id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, pagamento_fora_do_cadastro_meio")
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -3091,6 +3301,8 @@ export async function deixarPPProntaParaEnvio(
       status: PPStatus;
       valor: number | string;
       verba_producao: boolean;
+      tipo_verba: TipoVerba | null;
+      reembolso_tipo: ReembolsoTipo | null;
       pagamento_fora_do_cadastro_meio: string | null;
     }>();
 
@@ -3112,17 +3324,21 @@ export async function deixarPPProntaParaEnvio(
   const { job } = gate;
 
   // Os documentos, com as regras do envio (decisão 152). A verba de
-  // produção sai sem nota: só a marca.
+  // produção sai sem nota: só a marca. O reembolso leva os comprovantes,
+  // com as regras dele (decisão 187).
+  const reembolsoNoEnvio = ppRow.tipo_verba === "reembolso" ? (ppRow.reembolso_tipo ?? "despesas") : null;
   let anexosDoPedido: AnexoUploaded[] = [];
-  if (!ppRow.verba_producao) {
+  if (!ppRow.verba_producao || reembolsoNoEnvio) {
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
     anexosDoPedido = parsed.data;
-    const falta = faltaNosAnexosDoEnvio(
-      anexosDoPedido,
-      Number(ppRow.valor ?? 0),
-      ppRow.pagamento_fora_do_cadastro_meio === "boleto",
-    );
+    const falta = reembolsoNoEnvio
+      ? faltaNosAnexosDoReembolso(anexosDoPedido, Number(ppRow.valor ?? 0), reembolsoNoEnvio)
+      : faltaNosAnexosDoEnvio(
+          anexosDoPedido,
+          Number(ppRow.valor ?? 0),
+          ppRow.pagamento_fora_do_cadastro_meio === "boleto",
+        );
     if (falta) return { ok: false, message: falta };
     const erroAnexos = await gravarAnexosDoEnvio(
       supabase,
@@ -3401,6 +3617,16 @@ export async function salvarPPAEmitir(
   // mostra), conferido contra a mesma lista do formulário.
   const titular = await nomeDoTitularDaVerba(supabase, tenantId, d);
   if (!titular.ok) return titular;
+  // Decisão 187: no veículo próprio, a conta dos deslocamentos fecha o
+  // valor. O desgaste aceito é o vigente ou o que esta PP a emitir já
+  // guardava (salva antes de o financeiro mudar o valor).
+  const reembolso = await conferirReembolso(
+    supabase,
+    tenantId,
+    d,
+    (existente?.dados as { deslocamentos?: { desgaste_por_km?: number } } | null)?.deslocamentos?.desgaste_por_km ?? null,
+  );
+  if (!reembolso.ok) return reembolso;
 
   // Revisão da 156: com documento que diga o CNPJ, a empresa emissora é a
   // dele — a PP a emitir guarda já a que a geração vai usar.
@@ -3763,6 +3989,8 @@ export async function cancelarERefazerPP(
     verba_colaborador_id: string | null;
     verba_freela_id: string | null;
     verba_titular_nome: string | null;
+    reembolso_tipo: ReembolsoTipo | null;
+    reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     servico: string;
     especificacoes: string | null;
     valor_unitario: number | string;
@@ -3828,8 +4056,11 @@ export async function cancelarERefazerPP(
       ? parcelas
       : [{ data_vencimento: linhaPP.prazo_pagamento.slice(0, 10), valor: Number(linhaPP.valor) }],
     verba_producao: linhaPP.verba_producao,
-    // Decisão 164: o tipo e o titular voltam como estavam.
+    // Decisão 164: o tipo e o titular voltam como estavam. Decisão 187: o
+    // reembolso, com o tipo e os deslocamentos.
     tipo_verba: linhaPP.verba_producao ? (linhaPP.tipo_verba ?? "producao") : null,
+    reembolso_tipo: linhaPP.reembolso_tipo ?? null,
+    deslocamentos: linhaPP.reembolso_deslocamentos ?? null,
     fornecedor_id:
       !linhaPP.verba_producao || linhaPP.verba_titular_tipo === "fornecedor" ? linhaPP.fornecedor_id : null,
     // A verba de produção anterior à 171 volta com o responsável que tinha;
@@ -3882,8 +4113,10 @@ export async function cancelarERefazerPP(
       arquivo_mimetype: a.arquivo_mimetype,
       documento_tipo: a.documento_tipo,
       documento_numero: a.nota?.numero ?? a.documento_numero,
-      nf_data_emissao: nf ? (a.nota?.data_emissao ?? a.nf_data_emissao) : null,
-      nf_valor: nf ? (a.nota?.valor ?? a.nf_valor) : null,
+      // Decisão 187: o comprovante do reembolso leva a data e o valor em
+      // qualquer tipo.
+      nf_data_emissao: nf ? (a.nota?.data_emissao ?? a.nf_data_emissao) : a.nf_valor !== null ? a.nf_data_emissao : null,
+      nf_valor: nf ? (a.nota?.valor ?? a.nf_valor) : a.nf_valor,
       // A fatura e o recibo levam o CNPJ também (revisão da 156).
       nf_tomador_estabelecimento_id: nf
         ? (a.nota?.tomador_estabelecimento_id ?? a.nf_tomador_estabelecimento_id)
@@ -4046,6 +4279,9 @@ export async function atualizarVencimentoDaPP(
     /** Decisão 171: a origem do titular e o CPF do colaborador (da foto). */
     verba_titular_tipo: TitularDaVerbaTipo | null;
     verba_titular_cpf: string | null;
+    /** Decisão 187. */
+    reembolso_tipo: ReembolsoTipo | null;
+    reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
   };
   if (pp.status !== "gerada") {
@@ -4137,6 +4373,8 @@ export async function atualizarVencimentoDaPP(
         verba_producao: pp.verba_producao,
         tipo_verba: pp.tipo_verba,
         verba_titular_tipo: pp.verba_titular_tipo ?? null,
+        reembolso_tipo: pp.reembolso_tipo ?? null,
+        reembolso_deslocamentos: pp.reembolso_deslocamentos ?? null,
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoPdf,
@@ -4289,7 +4527,7 @@ async function editarPPGeradaImpl(
     .from("pedidos_compra")
     .select(
       "id, codigo, job_id, item_realizado_id, status, pdf_path, created_at, valor, fornecedor_id, " +
-        "urgente, urgente_por, urgente_em, pronta_para_envio_em, " +
+        "urgente, urgente_por, urgente_em, pronta_para_envio_em, reembolso_deslocamentos, " +
         "parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor, pdf_path)",
     )
     .eq("id", ppId)
@@ -4308,6 +4546,7 @@ async function editarPPGeradaImpl(
       urgente_por: string | null;
       urgente_em: string | null;
       pronta_para_envio_em: string | null;
+      reembolso_deslocamentos: DeslocamentosDoReembolso | null;
       parcelas: Array<{
         id: string;
         numero: number;
@@ -4441,6 +4680,10 @@ async function editarPPGeradaImpl(
   );
   if (!titular.ok) return titular;
   if (!empRes.data) return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
+  // Decisão 187: a PP editada mantém o desgaste com que foi feita (ou usa o
+  // vigente, se ainda não era de veículo próprio).
+  const reembolso = await conferirReembolso(supabase, tenantId, d, ppRow.reembolso_deslocamentos?.desgaste_por_km ?? null);
+  if (!reembolso.ok) return reembolso;
   // Revisão da 156: com documento que diga o CNPJ, a empresa emissora é a dele.
   const emissora = emissoraPelosAnexos(anexosParsed.data, d.estabelecimento_id ?? null);
   if (!emissora.ok) return emissora;
@@ -4472,6 +4715,7 @@ async function editarPPGeradaImpl(
       verba_producao: d.verba_producao,
       tipo_verba: tipoVerba,
       verba_titular_tipo: d.verba_producao ? (d.verba_titular_tipo ?? null) : null,
+      ...reembolso.colunas,
     },
     empresa: cnpjDaPP.empresa,
     fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
@@ -4504,6 +4748,7 @@ async function editarPPGeradaImpl(
     .from("pedidos_compra")
     .update({
       ...colunasDaVerba(d, titular.nome),
+      ...reembolso.colunas,
       empresa_id: job.empresa_id ?? d.empresa_id,
       estabelecimento_id: cnpjDaPP.id,
       servico: d.servico,

@@ -21,6 +21,13 @@ import type {
   TitularDaVerbaTipo,
 } from "@/lib/types";
 import { rotuloDaVerba } from "@/lib/types";
+import {
+  contaDosDeslocamentos,
+  contaPorExtenso,
+  rotuloDoReembolso,
+  type DeslocamentosDoReembolso,
+  type ReembolsoTipo,
+} from "@/lib/calculos/reembolso";
 // Logo embed como base64: em serverless Vercel, `public/` não é copiado
 // pro filesystem da função runtime (ENOENT). Base64 no bundle resolve.
 import { LOGO_ICON_BASE64 } from "./logo-base64";
@@ -166,6 +173,11 @@ interface Dados {
      *  "Responsável" e o texto de então. Opcional, um chamador que o
      *  esquecesse imprimiria toda verba nova no desenho antigo. */
     verba_titular_tipo: TitularDaVerbaTipo | null;
+    /** Decisão 187: na PP de reembolso (`tipo_verba = "reembolso"`), o
+     *  tipo e, no veículo próprio, os deslocamentos — que saem numa tabela
+     *  com a conta. Ausentes nos scripts antigos (sem reembolso). */
+    reembolso_tipo?: ReembolsoTipo | null;
+    reembolso_deslocamentos?: DeslocamentosDoReembolso | null;
   };
   /** Decisão 161: a PP paga por boleto. O documento continua o de sempre;
    *  só a linha do PIX vira "Pagamento: Boleto". */
@@ -258,8 +270,15 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   // Decisão 171: as três verbas têm titular. Sem titular, é a verba de
   // produção de antes — e o documento refeito sai como foi gerado.
   const verbaAntiga = tipoVerba !== null && !pp.verba_titular_tipo;
-  const rotuloQuemRecebe = verbaAntiga ? "Responsável" : "Titular da verba";
-  const naturezaDaVerba = tipoVerba
+  // Decisão 187: o reembolso mora no campo da verba, mas não é adiantamento.
+  const reembolso = tipoVerba === "reembolso";
+  const deslocamentos = reembolso && pp.reembolso_tipo === "veiculo_proprio" ? (pp.reembolso_deslocamentos ?? null) : null;
+  const rotuloQuemRecebe = reembolso ? "Titular do reembolso" : verbaAntiga ? "Responsável" : "Titular da verba";
+  const naturezaDaVerba = reembolso
+    ? pp.reembolso_tipo === "veiculo_proprio"
+      ? `${rotuloDoReembolso("veiculo_proprio")} — combustível e desgaste do veículo de quem está nomeado acima, conforme os deslocamentos desta PP.`
+      : `${rotuloDoReembolso("despesas")} — devolve a quem está nomeado acima o que foi pago do próprio bolso, conforme os comprovantes enviados ao financeiro.`
+    : tipoVerba
     ? verbaAntiga
       ? "Verba de Produção — o dinheiro fica sob responsabilidade do funcionário nomeado acima e será prestado contas ao final."
       : `${rotuloDaVerba(tipoVerba)} — adiantamento sob responsabilidade de quem está nomeado acima, com prestação de contas ao final.`
@@ -464,6 +483,80 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
         ]
       : [];
 
+  // ===== 4b. Deslocamentos do reembolso de veículo próprio (decisão 187) =====
+  // A conta da planilha "Reembolso de Gasolina", com uma lista só: cada
+  // deslocamento entra no combustível e no desgaste.
+  const deslocamentosBloco: Content[] = deslocamentos
+    ? (() => {
+        const conta = contaDosDeslocamentos(deslocamentos);
+        const km = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+        return [
+          secaoHeader("DESLOCAMENTOS COM VEÍCULO PRÓPRIO"),
+          {
+            table: {
+              widths: ["13%", "*", "13%", "8%", "10%", "14%"],
+              body: [
+                [
+                  { text: "Data", bold: true, fontSize: 8 },
+                  { text: "Trajeto", bold: true, fontSize: 8 },
+                  { text: "Km ida e volta", bold: true, fontSize: 8, alignment: "right" as const },
+                  { text: "Vezes", bold: true, fontSize: 8, alignment: "right" as const },
+                  { text: "Km", bold: true, fontSize: 8, alignment: "right" as const },
+                  { text: "Valor", bold: true, fontSize: 8, alignment: "right" as const },
+                ],
+                ...deslocamentos.linhas.map((l, i) => [
+                  { text: fmtDate(l.data), fontSize: 8 },
+                  // A Helvetica do PDF é WinAnsi: a seta "→" que a tela sugere
+                  // sairia "!". Vira ">".
+                  { text: l.trajeto.replace(/\s*[→⇒➔➜➝➞]\s*/g, " > "), fontSize: 8 },
+                  { text: km(l.km_ida_volta), fontSize: 8, alignment: "right" as const },
+                  { text: String(l.vezes), fontSize: 8, alignment: "right" as const },
+                  { text: km(l.km_ida_volta * l.vezes), fontSize: 8, alignment: "right" as const },
+                  { text: fmtBRL(conta.porLinha[i] ?? 0), fontSize: 8, alignment: "right" as const },
+                ]),
+                [
+                  {
+                    text: [
+                      { text: "Consumo: ", bold: true },
+                      `${deslocamentos.consumo_km_l.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km/l   `,
+                      { text: "Preço do litro: ", bold: true },
+                      `${fmtBRL(deslocamentos.preco_litro)}   `,
+                      { text: "Desgaste por km: ", bold: true },
+                      fmtBRL(deslocamentos.desgaste_por_km),
+                    ],
+                    colSpan: 6,
+                    fontSize: 8,
+                  },
+                  {},
+                  {},
+                  {},
+                  {},
+                  {},
+                ],
+                [
+                  {
+                    text: [
+                      { text: `${km(conta.km)} km · combustível ${fmtBRL(conta.combustivel)} + desgaste ${fmtBRL(conta.desgaste)}`, bold: true },
+                      `   (${contaPorExtenso(deslocamentos)})`,
+                    ],
+                    colSpan: 6,
+                    fontSize: 8,
+                  },
+                  {},
+                  {},
+                  {},
+                  {},
+                  {},
+                ],
+              ],
+            },
+            layout: BORDA,
+            margin: [0, 0, 0, 0],
+          } as Content,
+        ];
+      })()
+    : [];
+
   // ===== 5. DADOS PARA FATURAMENTO DA COBRANÇA =====
   const faturamentoTable: Content = {
     table: {
@@ -542,7 +635,11 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   const bancariosBloco: Content[] = isVerba
     ? titularTemPagamento && pagamentoDoTitular
       ? [
-          secaoHeader("DADOS BANCÁRIOS DO TITULAR DA VERBA PARA PAGAMENTO"),
+          secaoHeader(
+            reembolso
+              ? "DADOS BANCÁRIOS DO TITULAR DO REEMBOLSO PARA PAGAMENTO"
+              : "DADOS BANCÁRIOS DO TITULAR DA VERBA PARA PAGAMENTO",
+          ),
           {
             table: {
               widths: ["18%", "32%", "18%", "32%"],
@@ -814,7 +911,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 text: isVerba
                   ? verbaAntiga
                     ? "Assinatura do Responsável"
-                    : "Assinatura do Titular da Verba"
+                    : reembolso
+                      ? "Assinatura do Titular do Reembolso"
+                      : "Assinatura do Titular da Verba"
                   : "Assinatura do Fornecedor",
                 alignment: "center",
                 fontSize: 8,
@@ -871,6 +970,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     secaoHeader("SOLICITAMOS POR ORDEM DO SACADO, O SEGUINTE SERVIÇO"),
     servicoTable,
     ...especificacoesBloco,
+    ...deslocamentosBloco,
     secaoHeader("DADOS PARA FATURAMENTO DA COBRANÇA"),
     faturamentoTable,
     ...bancariosBloco,
@@ -878,7 +978,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     valorBlock,
     secaoHeader(
       isVerba
-        ? verbaAntiga
+        ? reembolso
+          ? "DADOS DO TITULAR DO REEMBOLSO"
+          : verbaAntiga
           ? "DADOS DO RESPONSÁVEL"
           : "DADOS DO TITULAR DA VERBA"
         : "DADOS DO FORNECEDOR",

@@ -5788,3 +5788,35 @@ completa na decisão 186.
   todas as 155 versões contra o valor gravado de cada momento, a abertura e a
   versão aprovada; na tela, TES-1025/26, TES-1002/26 (mensal) e TES-1029/26
   (fila), na produção e no financeiro.
+
+## ⚠️ Nota de 2026-10-17 (4) — PP de reembolso (decisão 187)
+
+Pedido do Tiago em 16/10/2026, protótipo aprovado em 17/10/2026 ("Marcar
+empilhado"). Regra completa na decisão 187.
+
+- **Seletor do tipo** (`TipoDaPPField`, em `titular-da-verba-field.tsx`):
+  Normal · Verba · Reembolso empilhados; à direita, as verbas ou
+  Despesas · Veículo próprio. O reembolso é `verba_producao = true` +
+  `tipo_verba = 'reembolso'` + `reembolso_tipo`.
+- **Titular do reembolso:** a lista da verba, sem "Terceiro"
+  (`semTerceiro`).
+- **Veículo próprio** (`deslocamentos-do-reembolso.tsx`): o valor é a conta
+  dos deslocamentos (`lib/calculos/reembolso.ts`, a mesma do servidor); o
+  trio vira total × 1 × 1; o desgaste por km vem do financeiro e a PP
+  guarda o da data em que nasceu.
+- **Comprovantes** (`comprovantes-do-reembolso.tsx`): opcionais para
+  salvar e gerar, obrigatórios no envio. Despesas: tipo (com "Cupom
+  fiscal"), número, data e valor, soma = valor da PP. Veículo: ≥ 1 arquivo
+  sem tipo. `comprovanteDoReembolsoParaEnvio` manda data e valor de
+  qualquer tipo (o `anexoParaEnvio` da PP normal ficou como estava).
+- **Tipo obrigatório nas linhas:** `PPParaEnviar.reembolsoTipo`,
+  `PPDoItem.reembolsoTipo`, `PPRow.reembolso_tipo/_deslocamentos` e os
+  campos do comprovante no anexo do `PPRow` — opcionais, o `.map` os
+  descartaria (ver o `CLAUDE.md`).
+- **Sem prestação de contas:** `situacaoDaVerba` devolve nulo para o
+  reembolso; `impedimentos-encerramento.ts` passou a ler o `tipo_verba`
+  (sem isso, o reembolso pago travaria o encerramento do job).
+- **PDF:** tabela dos deslocamentos; a seta "→" do trajeto vira ">" (a
+  Helvetica do pdfmake é WinAnsi e a imprimia como "!").
+- **Conferido** no TES-1001/26 com a PP-00250 (veículo, R$ 166,46) e a
+  PP-00253 (despesas, R$ 150,00), as duas canceladas no fim.

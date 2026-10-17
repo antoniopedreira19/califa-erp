@@ -7562,3 +7562,19 @@ de `lib/formatar-data-hora.ts`. Sem migration, nenhum dado mudou.
   valor (baixa registrada e "Correções anteriores").
 - **Fora:** a coluna "Criação" da aba Desembolsos é da frente do Antonio e
   segue cortando em UTC (ver "Em aberto" na nota do Jobs).
+
+## ⚠️ Nota de 2026-10-17 (3) — PP de reembolso e o desgaste por km (decisão 187)
+
+- **Cadastros → "Reembolso de veículo próprio"**
+  (`/financeiro/cadastros/reembolso`): o desgaste do veículo por km
+  (R$ 0,40), tabela `financeiro_parametros`. Só administrador e financeiro
+  gravam (tela, action e RLS); auditoria `financeiro_parametro.atualizado`
+  com o valor anterior e o novo. Vale para as PPs novas — cada PP guarda o
+  desgaste com que nasceu.
+- **Contas a Pagar:** selo "Reembolso" na lista de PPs (e na busca),
+  "Reembolso — Nome" nos títulos; no dossiê, o bloco "Reembolso" (tipo e
+  resumo dos deslocamentos) e os comprovantes com tipo, número, data e
+  valor. O reembolso não tem prestação de contas: o bloco não aparece e a
+  aprovação sem documento não o trata como verba.
+- Os comprovantes **não viram nota fiscal** do módulo fiscal; o reembolso
+  fica fora da retenção e da remessa, como a verba.

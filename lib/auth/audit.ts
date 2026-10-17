@@ -317,6 +317,8 @@ export type AuditAction =
   | "fatura_cartao.reaberta"
   | "fatura_cartao.baixa_estornada"
   | "cartao_credito.criado"
+  // Decisão 187: o desgaste por km do reembolso de veículo próprio.
+  | "financeiro_parametro.atualizado"
   | "cartao_credito.atualizado"
   | "cartao_credito.inativado"
   | "cartao_credito.reativado"

@@ -299,12 +299,16 @@ export interface ItemDeAnexo {
 
 /** O tipo obrigatório, sem opção em branco: nasce em "Escolha o tipo". */
 export function TipoObrigatorio({
+  tipos = DOCUMENTO_TIPOS,
   valor,
   onChange,
   descricaoArquivo,
   invalido,
   disabled,
 }: {
+  /** Os tipos oferecidos. O reembolso oferece os comprovantes, com o cupom
+   *  fiscal (decisão 187). */
+  tipos?: readonly DocumentoTipo[];
   valor: DocumentoTipo | null;
   onChange: (t: DocumentoTipo) => void;
   descricaoArquivo: string;
@@ -320,7 +324,7 @@ export function TipoObrigatorio({
         <SelectValue placeholder="Escolha o tipo" />
       </SelectTrigger>
       <SelectContent>
-        {DOCUMENTO_TIPOS.map((t) => (
+        {tipos.map((t) => (
           <SelectItem key={t} value={t}>
             {documentoTipoLabel(t)}
           </SelectItem>
@@ -331,6 +335,9 @@ export function TipoObrigatorio({
 }
 
 export function ListaDeAnexos({
+  tipos,
+  semTipo = false,
+  renderComprovante,
   itens,
   onTipo,
   onNumero,
@@ -343,6 +350,14 @@ export function ListaDeAnexos({
   onVer,
   disabled,
 }: {
+  /** Os tipos oferecidos (decisão 187: os comprovantes do reembolso). */
+  tipos?: readonly DocumentoTipo[];
+  /** Decisão 187: o anexo do reembolso de veículo próprio (foto da
+   *  quilometragem, print do mapa) não leva tipo. */
+  semTipo?: boolean;
+  /** Decisão 187: no reembolso de despesas, número, data e valor de cada
+   *  comprovante — no lugar dos campos da NF e do número. */
+  renderComprovante?: (id: string) => React.ReactNode;
   /** Na ordem de exibição: o mais novo em cima. */
   itens: ItemDeAnexo[];
   onTipo: (id: string, t: DocumentoTipo) => void;
@@ -396,8 +411,9 @@ export function ListaDeAnexos({
                   {(a.tamanhoBytes / 1024).toFixed(0)} KB · {situacao}
                 </p>
               </div>
-              {a.status === "ok" && (
+              {a.status === "ok" && !semTipo && (
                 <TipoObrigatorio
+                  tipos={tipos}
                   valor={a.tipo}
                   descricaoArquivo={a.nome}
                   invalido={tipoInvalido(a.id)}
@@ -427,10 +443,13 @@ export function ListaDeAnexos({
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
-            {a.status === "ok" && a.tipo === "nota_fiscal" && (
+            {a.status === "ok" && a.tipo !== null && renderComprovante && (
+              <div className="border-t border-border px-3 pb-3 pt-2.5">{renderComprovante(a.id)}</div>
+            )}
+            {a.status === "ok" && a.tipo === "nota_fiscal" && !renderComprovante && (
               <div className="border-t border-border px-3 pb-3 pt-2.5">{renderNf(a.id)}</div>
             )}
-            {a.status === "ok" && a.tipo !== null && a.tipo !== "nota_fiscal" && (
+            {a.status === "ok" && a.tipo !== null && a.tipo !== "nota_fiscal" && !renderComprovante && (
               <div className="space-y-2 border-t border-border px-3 py-2">
                 <div className="flex items-center gap-2">
                   <label htmlFor={`num-${a.id}`} className="text-[11px] font-medium text-muted-foreground">
@@ -1211,6 +1230,10 @@ export function anexoEmEdicao(a: AnexoGravado, tomadorPadrao: string | null): An
         }
       : {
           ...NF_VAZIA,
+          // Decisão 187: o comprovante do reembolso guarda a data e o valor
+          // em qualquer tipo; nos outros anexos eles vêm nulos.
+          emissao: a.nf_data_emissao ?? "",
+          valor: a.nf_valor ?? 0,
           // Fatura e recibo guardam o CNPJ no mesmo campo (revisão da 156).
           tomador: (documentoTemCnpj(a.documento_tipo) ? a.nf_tomador_estabelecimento_id : null) ?? tomadorPadrao ?? "",
         },
@@ -1235,6 +1258,21 @@ export function anexoParaEnvio(a: AnexoEmEdicao) {
     // NF, fatura e recibo: contra qual CNPJ (revisão da 156).
     nf_tomador_estabelecimento_id: documentoTemCnpj(a.tipo) ? a.nf.tomador || null : null,
     nf_valor_na_pp: ehNf && a.nf.cobreOutra && a.nf.valorNaPP > 0 ? a.nf.valorNaPP : null,
+  };
+}
+
+/** Decisão 187: o comprovante do reembolso, no formato das Server Actions
+ *  — a data e o valor em qualquer tipo (cupom, recibo…), sem CNPJ. O anexo
+ *  do veículo próprio vai sem tipo e sem campo. */
+export function comprovanteDoReembolsoParaEnvio(a: AnexoEmEdicao) {
+  const base = anexoParaEnvio(a);
+  return {
+    ...base,
+    documento_numero: a.tipo ? ((a.tipo === "nota_fiscal" ? a.nf.numero : (a.numero ?? "")).trim() || null) : null,
+    nf_data_emissao: a.tipo && a.nf.emissao ? a.nf.emissao : null,
+    nf_valor: a.tipo && a.nf.valor > 0 ? a.nf.valor : null,
+    nf_tomador_estabelecimento_id: null,
+    nf_valor_na_pp: null,
   };
 }
 
