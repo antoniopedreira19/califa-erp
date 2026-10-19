@@ -5999,4 +5999,28 @@ ao de uma PP válida. O PDF agora diz quando não vale.
 - **Risco que fica:** as policies dos outros buckets (avulsas, faturamentos,
   NF, fornecedores, freelancers etc.) têm o mesmo cast. Hoje esses buckets
   só têm pasta de tenant na raiz (conferido em 19/10); uma pasta fora disso
-  quebra a listagem do bucket inteiro do mesmo jeito.
+  quebra a listagem do bucket inteiro do mesmo jeito. Seis deles foram
+  blindados no mesmo dia: ver a nota (8).
+
+## ⚠️ Nota de 2026-10-19 (8) — Mais seis buckets toleram pasta fora do tenant
+
+- **Por quê:** prevenção. A mesma pasta fora do padrão que travou o "Gerar
+  PP" derrubaria a listagem de qualquer bucket com o cast cru. Nenhum dos
+  seis tinha pasta assim; nada estava quebrado.
+- **O que mudou:** migration `20261019900002_storage_policies_toleram_pasta_fora_do_tenant.sql`.
+  As 18 policies de `impostos`, `fornecedores`, `envios-faturamento`,
+  `orcamento-importacoes`, `faturamentos-nf` e `contas-avulsas` trocam o
+  `::uuid` por `tenant_do_caminho_no_storage` (`alter policy`: nome, comando,
+  papel e tipo ficam). A regra de acesso é a mesma; uma pasta estranha na
+  raiz fica invisível em vez de dar erro. Escolha do Tiago: os três buckets
+  da outra frente (`colaboradores-nf`, `contratacoes-anexos`,
+  `freelancer-arquivos`) ficaram de fora.
+- **Conferência:** antes de aplicar, as expressões antiga e nova deram o
+  mesmo resultado nos 486 caminhos com pasta de tenant, como administrador,
+  financeiro, produtor dono de importação e freelancer. Como `authenticated`
+  (`begin read only` + `set local role`), administrador, financeiro, RH,
+  GP, produtor, freelancer e o produtor dono de uma importação veem a mesma
+  quantidade de arquivos antes e depois nos nove buckets. Com uma pasta
+  `_teste-blindagem/` inserida e desfeita na mesma transação, o `impostos`
+  dava "invalid input syntax for type uuid" antes; depois, os seis buckets
+  listam normalmente (inclusive `storage.search`) e a pasta não aparece.
