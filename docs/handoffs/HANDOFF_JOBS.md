@@ -5756,11 +5756,10 @@ nova, sem migration, nenhum dado mudou.
   PP-00216, emitidas entre 21:52 e 22:50 de 15/10, em 15/10/2026). O chat e
   as funções foram rodados com `TZ=UTC`, como na Vercel: a errata sai
   "08/10/2026 23:54", e antes saía "09/10/2026 02:54".
-- **Em aberto:** (1) a coluna "Criação" da aba Desembolsos do Contas a
-  Pagar corta o `created_at` em UTC, mas é da frente do Antonio e não foi
-  mexida. O filtro dessa coluna já usa o dia de Brasília, então numa
-  criação feita à noite o filtro e a célula divergem (hoje, 0 de 1
-  desembolso). (2) Vários `new Date().toISOString().slice(0, 10)` calculam
+- **Em aberto:** (1) ~~a coluna "Criação" da aba Desembolsos do Contas a
+  Pagar corta o `created_at` em UTC~~. ⚠️ **Resolvido em 2026-10-19**, a
+  pedido do Tiago, apesar de a tela ser da frente do Antonio: ver a nota
+  de 2026-10-19 (3) do `HANDOFF_FINANCEIRO.md`. (2) Vários `new Date().toISOString().slice(0, 10)` calculam
   o "hoje" em UTC: depois das 21h, "hoje" já é amanhã. Não é exibição de
   `timestamptz` e ficou fora desta correção.
 

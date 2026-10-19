@@ -7561,7 +7561,8 @@ de `lib/formatar-data-hora.ts`. Sem migration, nenhum dado mudou.
 - **Fiscal → Impostos:** "cancelado" na lista e a data das correções de
   valor (baixa registrada e "Correções anteriores").
 - **Fora:** a coluna "Criação" da aba Desembolsos é da frente do Antonio e
-  segue cortando em UTC (ver "Em aberto" na nota do Jobs).
+  segue cortando em UTC (ver "Em aberto" na nota do Jobs). ⚠️ **Resolvido
+  em 2026-10-19:** ver a nota de 2026-10-19 (3).
 
 ## ⚠️ Nota de 2026-10-17 (3) — PP de reembolso e o desgaste por km (decisão 187)
 
@@ -7613,7 +7614,23 @@ ser dividido entre notas). Regra completa na decisão 188.
 - **Entrega 2 (a fazer):** a fila e o Faturar mostram a nota do lote de uma vez,
   com as partes dos jobs já juntas e a observação.
 
-## ⚠️ Nota de 2026-10-19 (3) — "Saves deste job" no idioma das Previsões, quem consome o crédito e as planilhas em pop-up (revisão da decisão 155)
+## ⚠️ Nota de 2026-10-19 (3) — a coluna "Criação" dos Desembolsos no dia de Brasília
+
+Fecha a pendência da nota de 2026-10-17 (2). Pedido do Tiago em
+19/10/2026. A tela é da frente do Antonio (`desembolsos-list.tsx`, commit
+`bbd8a29`), e só a coluna "Criação" mudou.
+
+- **Antes:** a célula cortava o `created_at` (`timestamptz`) com
+  `iso.slice(0, 10)`, que é o dia em UTC. Um desembolso criado depois das
+  21h de Brasília aparecia com o dia seguinte. O filtro da mesma coluna já
+  usava o dia de Brasília desde 17/10, e os dois divergiam.
+- **Agora:** a célula usa `formatDiaBr` (`lib/formatar-data-hora.ts`), como
+  o filtro. O `formatDate` local, que só servia a essa coluna, saiu.
+- **Conferido** no dev do worktree, como administrador: o único desembolso
+  (14:11 de 22/09) sai 22/09/2026. Não há desembolso criado à noite no
+  banco. O caso noturno foi conferido pela função, com o servidor em UTC.
+
+## ⚠️ Nota de 2026-10-19 (4) — "Saves deste job" no idioma das Previsões, quem consome o crédito e as planilhas em pop-up (revisão da decisão 155)
 
 - **O desenho:** opção B do protótipo "Save na Abertura"
   (https://claude.ai/artifact/AtKiRyEVgWMfAz7vAyorkG), aprovada pelo

@@ -17,6 +17,7 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 // ---------- Tipo da row (vindo do SELECT com joins) ----------
 
@@ -43,12 +44,6 @@ export interface DesembolsoRow {
 
 function formatMoney(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  return `${d}/${m}/${y}`;
 }
 
 function statusBadgeClasses(status: DesembolsoStatus): string {
@@ -279,7 +274,7 @@ export function DesembolsosContasPagarList({ rows,
 
                 <td className="px-4 py-3 text-muted-foreground">{r.criador_nome || "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                  {formatDate(r.created_at)}
+                  {formatDiaBr(r.created_at)}
                 </td>
 
                 <td className="px-4 py-3">
