@@ -307,7 +307,7 @@ export function SolicitarCancelamentoDialog({
                   const l = listaDeCodigos(aCancelar.map((pp) => pp.codigo));
                   return `${l.charAt(0).toUpperCase()}${l.slice(1)} serão canceladas.`;
                 })()}{" "}
-            O PDF e os anexos ficam guardados no histórico.
+            O PDF ganha o selo de cancelada e fica no histórico, com os anexos.
             <span className="mt-3 block">Depois você volta ao pop-up anterior para enviar o pedido.</span>
             {erroPPs && <span className="mt-3 block text-xs text-california-red">{erroPPs}</span>}
           </>

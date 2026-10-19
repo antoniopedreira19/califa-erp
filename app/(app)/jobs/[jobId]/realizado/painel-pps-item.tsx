@@ -1166,7 +1166,7 @@ export function PainelPPsItem({
           description={
             <>
               <strong className="text-foreground">{cancelando?.codigo}</strong>{" "}
-              será cancelada. O PDF e os anexos ficam guardados no histórico.
+              será cancelada. O PDF ganha o selo de cancelada e fica no histórico, com os anexos.
               {cancelando && cancelando.status !== "gerada" && (
                 <>
                   {" "}

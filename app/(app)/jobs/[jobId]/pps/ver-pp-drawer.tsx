@@ -245,7 +245,7 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
         return {
           ...base,
           titulo: "Cancelada",
-          detalhe: [e.por_nome, "o PDF e os anexos ficam guardados no histórico"]
+          detalhe: [e.por_nome, "o PDF fica no histórico com o selo de cancelada"]
             .filter(Boolean)
             .join(" · "),
           estado: "feito",
@@ -481,7 +481,7 @@ function passosDasColunas(pp: PedidoCompraNaLista): Passo[] {
     passos.push({
       chave: "cancelada",
       titulo: "Cancelada",
-      detalhe: "o PDF e os anexos ficam guardados no histórico",
+      detalhe: "o PDF fica no histórico com o selo de cancelada",
       quando: formatDataHora(pp.cancelada_em),
       estado: "agora",
     });
@@ -1066,7 +1066,7 @@ export function VerPPDrawer({
           description={
             <>
               <strong className="text-foreground">{pp.codigo}</strong> será
-              cancelada. O PDF e os anexos ficam guardados no histórico.
+              cancelada. O PDF ganha o selo de cancelada e fica no histórico, com os anexos.
               {/* Desde a decisão 160 a ficha abre também da PP gerada, que
                   ainda não está no financeiro — como no painel do item. */}
               {pp.status !== "gerada" && (

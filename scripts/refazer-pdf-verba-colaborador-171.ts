@@ -84,6 +84,8 @@ async function main() {
       .slice()
       .sort((a, b) => a.numero - b.numero);
     const novo = await renderPedidoCompraPDF({
+      // Anterior à decisão 190: o documento saía sem selo.
+      selo: null,
       pp: {
         codigo: pp.codigo,
         servico: pp.servico,

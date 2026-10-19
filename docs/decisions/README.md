@@ -208,6 +208,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 186 | [O histórico de versões da Planilha Interna do job, na produção e no financeiro](186-historico-de-versoes-da-planilha-do-job.md) | 2026-10-17 |
 | 187 | [PP de reembolso: despesas com comprovantes e deslocamento com veículo próprio](187-pp-de-reembolso.md) | 2026-10-17 |
 | 188 | [Envio em lote para faturamento: vários jobs de um cliente, com as notas que o cliente pediu e o rateio entre notas e jobs](188-envio-em-lote-para-faturamento.md) | 2026-10-19 |
+| 189 | *Reservada* — em uso por outra sessão (prestação de contas da verba), ainda sem arquivo em 19/10/2026 | 2026-10-19 |
+| 190 | [O PDF da PP que não vale para pagamento sai com selo: a gerada, ainda não enviada pelo sistema, e a cancelada](190-selo-no-pdf-da-pp-nao-enviada-e-cancelada.md) | 2026-10-19 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -220,4 +222,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 189**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 191**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

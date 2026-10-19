@@ -142,6 +142,8 @@ async function main() {
 
       // ---- o documento novo ----
       const novo = await renderPedidoCompraPDF({
+        // Anterior à decisão 190: o documento saía sem selo.
+        selo: null,
         pp: {
           codigo: pp.codigo,
           servico: pp.servico,

@@ -5898,3 +5898,30 @@ texto começava por "é cancelada" e a aba de PPs não abria nada.
   "Não, ainda faltam PPs" já marcado; a PP-00258 voltou ao financeiro, como
   estava a PP-00206. Protótipo:
   https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r
+
+## ⚠️ Nota de 2026-10-19 (4) — Selo no PDF da PP não enviada e da cancelada (decisão 190)
+
+A PP corre por dois caminhos enquanto o financeiro migra (envio pelo ERP e
+PDF por e-mail), e a PP-00100 e a PP-00101 foram geradas, mandadas por
+e-mail e canceladas sem chegar ao financeiro pelo sistema, com um PDF igual
+ao de uma PP válida. O PDF agora diz quando não vale.
+
+- **Gerada** → faixa vermelha em toda página "NÃO ENVIADA AO FINANCEIRO
+  PELO SISTEMA · NÃO PAGUE", marca d'água e aviso embaixo do número.
+  **Cancelada** → "CANCELADA EM dd/mm/aaaa · NÃO PAGUE". Em avaliação,
+  aprovada, paga e rejeitada saem limpas; a prévia (178) não muda.
+- O selo segue o status gravado: `refazerPdfDaPP` lê `status` e
+  `cancelada_em`; o envio e os dois cancelamentos (`cancelarPedidoCompra`,
+  `cancelarERefazerPP`) chamam `trocarSeloDaPP` depois de gravar. Geração,
+  edição (173), "Atualizar vencimento" (157) e troca de emissora (156) já
+  passam pela `renderizarDocumentoDaPP`, onde o `selo` é obrigatório.
+- Falha no PDF depois do status: o status fica e o erro vai ao log
+  `[pp.selo]`.
+- Textos dos pop-ups de cancelamento e da linha do tempo: "O PDF ganha o
+  selo de cancelada e fica no histórico, com os anexos."
+- **Sem migration.** Conferido no TES-1001/26 com o GP Teste Claude: a
+  PP-00263 (verba de R$ 100,00, Fornecedor Teste) gerada com o selo,
+  enviada limpa e cancelada com "CANCELADA EM 19/10/2026".
+- **Retroativo**: depois do deploy, o PDF de toda PP gerada ou cancelada é
+  refeito pela mesma função, com cópia do original em
+  `pedidos-compra/_antes-da-decisao-190/<caminho>`.

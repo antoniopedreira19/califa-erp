@@ -1306,7 +1306,7 @@ export function JobPPsSection({
           <>
             <strong className="text-foreground">{ppCancelando?.codigo}</strong>{" "}
             será cancelada e o item volta a permitir a geração de uma nova PP. O
-            PDF e os anexos ficam guardados no histórico.
+            PDF ganha o selo de cancelada e fica no histórico, com os anexos.
           </>
         }
         confirmLabel="Cancelar PP"

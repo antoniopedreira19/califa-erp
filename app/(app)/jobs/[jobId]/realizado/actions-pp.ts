@@ -19,7 +19,7 @@ import {
   type FotoDePagamentoDaPP,
   type PagamentoForaDoCadastro,
 } from "@/lib/data/foto-pagamento-da-pp";
-import type { PagamentoDoTitularNoPdf } from "@/lib/pdf/pedido-compra";
+import type { PagamentoDoTitularNoPdf, SeloDaPP } from "@/lib/pdf/pedido-compra";
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { formatCurrency } from "@/lib/utils";
@@ -1274,6 +1274,18 @@ async function fotoDoTitularDaPP(
  * Quem chama decide o que fazer com o buffer: a geração desfaz a PP se o
  * upload falhar; a edição e o reenvio sobrescrevem o documento anterior.
  */
+/** Decisão 190: o selo da PP gerada, ainda fora do financeiro. */
+const SELO_NAO_ENVIADA: SeloDaPP = { tipo: "nao_enviada" };
+
+/** Decisão 190: o selo que o status gravado pede. A PP gerada e a cancelada
+ *  não valem para pagamento; as demais (em avaliação, aprovada, paga e a
+ *  rejeitada, que já passou pelo financeiro) saem limpas. */
+function seloPeloStatus(status: PPStatus, canceladaEm: string | null): SeloDaPP | null {
+  if (status === "gerada") return SELO_NAO_ENVIADA;
+  if (status === "cancelada") return { tipo: "cancelada", em: canceladaEm ?? new Date().toISOString() };
+  return null;
+}
+
 async function renderizarDocumentoDaPP(args: {
   tenantId: string;
   jobId: string;
@@ -1310,6 +1322,9 @@ async function renderizarDocumentoDaPP(args: {
   pagamentoPorBoleto?: boolean;
   /** Decisão 178: a prévia da conferência — marca d'água e sem gravar. */
   previa?: boolean;
+  /** Decisão 190: o selo "não pague" da PP gerada e da cancelada; null na
+   *  enviada. Obrigatório pelo mesmo motivo do `selo` do gerador. */
+  selo: SeloDaPP | null;
 }): Promise<{ path: string; buffer: Buffer }> {
   // Import dinâmico: só carrega pdfmake QUANDO vai gerar PDF, isolando
   // seus side-effects de inicialização do resto do módulo.
@@ -1333,6 +1348,7 @@ async function renderizarDocumentoDaPP(args: {
     },
     pagamentoPorBoleto: args.pagamentoPorBoleto === true,
     previa: args.previa === true,
+    selo: args.selo,
     empresa: args.empresa as never,
     fornecedor: (args.fornecedor ?? null) as never,
     responsavelVerbaNome: args.responsavelVerbaNome,
@@ -1938,6 +1954,8 @@ async function finalizarPedidoCompraImpl(
         data_vencimento: p.data_vencimento,
         valor: Number(p.valor),
       })),
+      // Decisão 190: nasce gerada, ainda fora do financeiro.
+      selo: SELO_NAO_ENVIADA,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -2190,7 +2208,8 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
     };
   }
 
-  // Soft delete: marca como cancelada. PDF e anexos ficam no bucket.
+  // Soft delete: marca como cancelada. PDF e anexos ficam no bucket — o PDF
+  // refeito com o selo "cancelada em …" (decisão 190).
   const agora = new Date().toISOString();
   const { error: updErr } = await supabase
     .from("pedidos_compra")
@@ -2226,6 +2245,9 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
       origem: "gp",
     },
   });
+
+  // Decisão 190: a cópia baixada daqui em diante diz "cancelada · não pague".
+  await trocarSeloDaPP(supabase, session.activeTenant.id, pp_id, pp.codigo);
 
   revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true };
@@ -2497,6 +2519,8 @@ export async function previaDoPdfDaPP(
       contexto,
       parcelas: d.parcelas.map((p, i) => ({ numero: i + 1, data_vencimento: p.data_vencimento, valor: p.valor })),
       previa: true,
+      // A prévia tem a marca dela ("PRÉVIA · Não vale como PP").
+      selo: null,
     });
     return { ok: true, pdf: buffer.toString("base64") };
   } catch (err: unknown) {
@@ -2696,6 +2720,11 @@ async function gravarAnexosDoEnvio(
  * CNPJ. É o mesmo documento de antes — a data de emissão, as parcelas e o
  * pagamento da foto da PP (decisões 067 e 127) —, com o cabeçalho novo.
  * Null = deu certo.
+ *
+ * Decisão 190: é também quem troca o selo, porque lê o status gravado — a
+ * PP gerada sai com "não enviada ao financeiro pelo sistema", a cancelada
+ * com "cancelada em …", e as demais limpas. O envio ao financeiro e o
+ * cancelamento a chamam depois de gravar o status novo.
  */
 async function refazerPdfDaPP(
   supabase: ReturnType<typeof createClient>,
@@ -2733,6 +2762,9 @@ async function refazerPdfDaPP(
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     pagamento_fora_do_cadastro_meio: string | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
+    /** Decisão 190: o selo sai do status gravado. */
+    status: PPStatus;
+    cancelada_em: string | null;
   };
   const { data: job } = await supabase
     .from("jobs")
@@ -2806,6 +2838,7 @@ async function refazerPdfDaPP(
       contexto,
       parcelas,
       emitidaEm: pp.created_at,
+      selo: seloPeloStatus(pp.status, pp.cancelada_em),
     });
   } catch (err: unknown) {
     return err instanceof Error ? err.message : String(err);
@@ -2814,6 +2847,22 @@ async function refazerPdfDaPP(
     .from(BUCKET)
     .upload(pp.pdf_path || documento.path, documento.buffer, { contentType: "application/pdf", upsert: true });
   return uploadErr ? uploadErr.message : null;
+}
+
+/**
+ * Decisão 190: depois de o status mudar (envio ao financeiro, cancelamento),
+ * refaz o PDF com o selo do status novo. O status já está gravado e não
+ * volta atrás se o PDF falhar — a falha fica no log, e o PDF velho continua
+ * dizendo "não pague", que é o lado seguro do erro.
+ */
+async function trocarSeloDaPP(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  ppId: string,
+  codigo: string,
+): Promise<void> {
+  const erro = await refazerPdfDaPP(supabase, tenantId, ppId);
+  if (erro) console.error("[pp.selo]", codigo, erro);
 }
 
 /**
@@ -3252,6 +3301,9 @@ export async function enviarPedidoCompraAoFinanceiro(
       cnpj_da_pp_antes: ppRow.estabelecimento_id,
     },
   });
+
+  // Decisão 190: chegou ao financeiro pelo sistema — o PDF perde o selo.
+  await trocarSeloDaPP(supabase, session.activeTenant.id, pp_id, ppRow.codigo);
 
   revalidatePath(`/jobs/${job.id}`);
   revalidatePath(`/financeiro/jobs/${job.id}`);
@@ -4228,6 +4280,9 @@ export async function cancelarERefazerPP(
     },
   });
 
+  // Decisão 190: a PP rejeitada que sai também ganha o selo de cancelada.
+  await trocarSeloDaPP(supabase, tenantId, ppId, linhaPP.codigo);
+
   revalidatePath(`/jobs/${linhaPP.job_id}`);
   return { ok: true, aEmitirId: novoId, codigo: linhaPP.codigo };
 }
@@ -4419,6 +4474,8 @@ export async function atualizarVencimentoDaPP(
       contexto,
       parcelas: parcelasNovas,
       emitidaEm: pp.created_at,
+      // Só a PP gerada atualiza o vencimento (decisão 157): segue com o selo.
+      selo: SELO_NAO_ENVIADA,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -4754,6 +4811,8 @@ async function editarPPGeradaImpl(
     parcelas: parcelasNovas,
     // A PP é a mesma: a emissão continua a da geração.
     emitidaEm: ppRow.created_at,
+    // Só a PP gerada se edita (decisão 173): segue com o selo (decisão 190).
+    selo: SELO_NAO_ENVIADA,
   };
   // Decisão 171: na verba do colaborador, a conta e o PIX são a foto que o
   // banco tira da ficha do RH AO GRAVAR (mantida se o titular é o mesmo,

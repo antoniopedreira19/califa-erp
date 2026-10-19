@@ -30,6 +30,7 @@ import {
 } from "@/lib/calculos/reembolso";
 // Logo embed como base64: em serverless Vercel, `public/` não é copiado
 // pro filesystem da função runtime (ENOENT). Base64 no bundle resolve.
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 import { LOGO_ICON_BASE64 } from "./logo-base64";
 
 // Lazy init do PdfPrinter — evita executar top-level side-effect ao
@@ -186,6 +187,13 @@ interface Dados {
    *  do formulário antes de gerar. Sai com a marca d'água "PRÉVIA" em toda
    *  página e o aviso no cabeçalho; não é gravada em lugar nenhum. */
   previa?: boolean;
+  /** Decisão 190: o selo da PP que não vale para pagamento — a que ainda
+   *  não foi enviada ao financeiro pelo sistema e a cancelada. Faixa
+   *  vermelha no alto de toda página, marca d'água e aviso embaixo do
+   *  número. Null = a PP enviada, que sai limpa. Obrigatório: quem gera o
+   *  PDF decide pelo status, e um chamador que o esquecesse soltaria a PP
+   *  não enviada sem o selo. */
+  selo: SeloDaPP | null;
   empresa: Empresa;
   /** Null quando `pp.verba_producao === true` — não há fornecedor. */
   fornecedor: Fornecedor | null;
@@ -228,6 +236,29 @@ interface Dados {
   }>;
 }
 
+/** Decisão 190: por que a PP não vale para pagamento. `em` é o instante do
+ *  cancelamento (`pedidos_compra.cancelada_em`), impresso no dia de Brasília. */
+export type SeloDaPP = { tipo: "nao_enviada" } | { tipo: "cancelada"; em: string };
+
+/** Os três textos do selo: a faixa do alto, a marca d'água e o aviso
+ *  embaixo do número. "Pelo sistema" porque a PP mandada por e-mail também
+ *  chegou ao financeiro — o que falta é o envio pelo ERP (Tiago, 19/10). */
+export function textosDoSelo(selo: SeloDaPP): { faixa: string; marca: string; aviso: string } {
+  if (selo.tipo === "cancelada") {
+    const dia = formatDiaBr(selo.em);
+    return {
+      faixa: `CANCELADA EM ${dia}  ·  NÃO PAGUE`,
+      marca: "CANCELADA",
+      aviso: `Cancelada em ${dia} · não pague`,
+    };
+  }
+  return {
+    faixa: "NÃO ENVIADA AO FINANCEIRO PELO SISTEMA  ·  NÃO PAGUE",
+    marca: "NÃO ENVIADA AO FINANCEIRO PELO SISTEMA",
+    aviso: "Não pague: ainda não foi enviada pelo sistema",
+  };
+}
+
 /** A conta e o PIX do colaborador titular da verba, como o PDF os imprime
  *  (decisão 171). */
 export interface PagamentoDoTitularNoPdf {
@@ -256,7 +287,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     parcelas,
     pagamentoPorBoleto,
     previa,
+    selo,
   } = dados;
+  // A prévia já tem a marca dela; o selo vale para a PP gravada.
+  const textosSelo = selo && !previa ? textosDoSelo(selo) : null;
 
   const parcelada = parcelas.length > 1;
   const primeira = parcelas[0];
@@ -371,12 +405,12 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 alignment: "center",
                 bold: true,
                 fontSize: 18,
-                margin: [0, 0, 0, previa ? 2 : 6],
+                margin: [0, 0, 0, previa || textosSelo ? 2 : 6],
               },
-              ...(previa
+              ...(previa || textosSelo
                 ? [
                     {
-                      text: "Não vale como PP",
+                      text: textosSelo ? textosSelo.aviso : "Não vale como PP",
                       alignment: "center" as const,
                       bold: true,
                       fontSize: 7,
@@ -992,11 +1026,39 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
 
   const docDefinition: TDocumentDefinitions = {
     pageSize: "A4",
-    pageMargins: [25, 25, 25, 35],
+    // Com o selo, a margem de cima abre espaço para a faixa, que vem no
+    // cabeçalho de TODA página: a PP de várias páginas não perde o aviso.
+    pageMargins: [25, textosSelo ? 52 : 25, 25, 35],
     content,
     defaultStyle: { font: "Helvetica", fontSize: 8 },
     ...(previa
       ? { watermark: { text: "PRÉVIA", color: "#E74B56", opacity: 0.1, bold: true, angle: -40 } }
+      : textosSelo
+        ? { watermark: { text: textosSelo.marca, color: "#E74B56", opacity: 0.32, bold: true, angle: -40 } }
+        : {}),
+    ...(textosSelo
+      ? {
+          header: () => ({
+            table: {
+              widths: ["*"],
+              body: [
+                [
+                  {
+                    text: textosSelo.faixa,
+                    bold: true,
+                    fontSize: 13,
+                    color: "#FFFFFF",
+                    fillColor: "#D92D3A",
+                    alignment: "center" as const,
+                    margin: [0, 6, 0, 6] as [number, number, number, number],
+                  },
+                ],
+              ],
+            },
+            layout: "noBorders",
+            margin: [25, 14, 25, 0] as [number, number, number, number],
+          }),
+        }
       : {}),
     footer: (currentPage, pageCount) => ({
       columns: [

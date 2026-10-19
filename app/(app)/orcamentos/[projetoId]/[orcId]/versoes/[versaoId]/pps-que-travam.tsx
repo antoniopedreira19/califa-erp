@@ -127,7 +127,7 @@ export function PPsQueTravam({
             {uma
               ? `A ${codigos[0]} será cancelada, e o item volta a permitir uma nova PP.`
               : `${lista.charAt(0).toUpperCase()}${lista.slice(1)} serão canceladas, e os itens voltam a permitir uma nova PP.`}{" "}
-            O PDF e os anexos ficam guardados no histórico.
+            O PDF ganha o selo de cancelada e fica no histórico, com os anexos.
             <span className="mt-3 block">
               Depois você volta ao pop-up anterior para {depois}.
             </span>
