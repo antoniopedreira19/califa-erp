@@ -6024,3 +6024,35 @@ ao de uma PP válida. O PDF agora diz quando não vale.
   `_teste-blindagem/` inserida e desfeita na mesma transação, o `impostos`
   dava "invalid input syntax for type uuid" antes; depois, os seis buckets
   listam normalmente (inclusive `storage.search`) e a pasta não aparece.
+
+## ⚠️ Nota de 2026-10-19 (9) — Titular freela da verba: a FK passa para `freelancers` (decisão 171)
+
+- **Sintoma (relatado pela produção):** "insert or update on table
+  "pedidos_compra_a_emitir" violates foreign key constraint
+  "pedidos_compra_a_emitir_verba_freela_id_fkey"" ao salvar ou gerar a
+  reemissão da PP-00127 (verba de produção). Valia para qualquer verba com
+  titular freela, em qualquer job, desde as 16h24; colaborador e terceiro
+  seguiam normais.
+- **Causa:** às 16h24 a migration `pessoas_para_verba_le_freelancers` trocou
+  a origem da lista "Titular da verba" da tabela provisória `freelas` (70) para
+  `freelancers` (221, migradas do RH). As FKs `verba_freela_id` de
+  `pedidos_compra` e `pedidos_compra_a_emitir` seguiam em `freelas`, e as duas
+  tabelas não têm id em comum. O titular da PP-00127 é um GP que só existe em
+  `freelancers`.
+- **Correção:** migration `20261019900003_titular_freela_da_verba_vem_de_freelancers.sql`
+  (destrutiva, autorizada pelo Tiago). As duas FKs apontam para `freelancers`
+  (`on delete restrict`, `not valid`). As referências antigas trocaram pelo
+  CPF: 13 de 14 PPs e 14 de 15 PPs a emitir, com os gatilhos de usuário
+  desligados no UPDATE (o `updated_at` das 29 linhas e os 739 eventos ficaram
+  iguais). As 2 que sobram apontam para o "ZZ Freela Teste 164", sem CPF: a
+  PP-00158 (cancelada) e uma PP a emitir de teste, ambas no TES-1025/26.
+  `freelas` continua no banco.
+- **Conferência:** no TES-1025/26, pelo servidor da 3000, "Salvar" de uma
+  verba de produção com o titular freela que só existe em `freelancers`
+  gravou a PP a emitir; "Gerar PP" gerou a PP-00274 com PDF. A PP-00274 foi
+  cancelada depois.
+- **O que falta (não resolvido aqui):** a PP com titular freela sai **sem
+  conta**. O gatilho `pp_foto_do_colaborador` só copia a conta do colaborador
+  do RH; `freelancers` tem conta em 208 dos 221, mas em texto livre (199
+  bancos só pelo nome, 43 contas sem dígito). A PP-00127 foi recusada pelo
+  financeiro justamente por estar sem os dados bancários.

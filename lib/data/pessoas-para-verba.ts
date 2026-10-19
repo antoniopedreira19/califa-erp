@@ -1,9 +1,10 @@
 /**
  * Quem pode ser titular da verba — de produção, alimentação ou transporte
- * (decisões 164 e 171): os colaboradores ativos do RH e os freelas ativos da lista
- * provisória, sem repetir quem está nos dois.
+ * (decisões 164 e 171): os colaboradores ativos do RH e os freelas do cadastro
+ * do RH (`freelancers`, desde 19/10/2026; antes a lista provisória `freelas`),
+ * sem repetir quem está nos dois.
  *
- * A ficha do RH só abre para administrador e RH, e a tabela de freelas
+ * A ficha do RH só abre para administrador e RH, e o cadastro de freelas
  * guarda o CPF; por isso a lista vem da função `pessoas_para_verba`, que
  * devolve só nome, função e o segundo dado da linha (contratação ou
  * cidade), e só para quem gera PP. O formulário carrega a lista quando a
