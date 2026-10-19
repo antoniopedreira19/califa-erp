@@ -8,7 +8,7 @@ cancelar e refazer. ⚠️ **Revista pela [173](173-pp-gerada-volta-a-se-editar.
 (13/10/2026): a PP gerada voltou a se editar, no lugar** — mesmo código, PDF
 refeito, revisão antes de gravar, e a marca "Pronta para envio" cai. O resto
 desta decisão segue valendo. ⚠️ **Revisão de 19/10/2026: "Cancelar e
-refazer" virou "Reemitir PP"** (no mesmo dia, "Reemitir e editar PP"), e a
+refazer" virou "Reemitir PP"** (no mesmo dia, "Editar e Reemitir PP"), e a
 aba de PPs abre o formulário e a revisão ali mesmo (ver o fim).
 **Quem decidiu:** Tiago, de 06 a 07/10/2026, a partir do protótipo
 interativo "Etapa antes da PP" (https://claude.ai/artifact/BkLusveQDiropTy9UBccYe,
@@ -46,7 +46,7 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
 | PP gerada | **Não tem mais "Editar".** Ver PDF e Cancelar continuam. |
 | Envio | No painel do item, em pop-up. **Todo campo é obrigatório**: o tipo de cada anexo, os quatro dados de cada NF e o número dos outros documentos. A PP acima do planejado pede a confirmação ali mesmo. |
 | Pré-abertura (`aguardando_abertura` e `rejeitado_financeiro`) | **Só PP a emitir.** "Gerar PP" fica apagado com o motivo: "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir. Gerar e enviar a PP voltam com a abertura." |
-| PP rejeitada | Mostra o motivo e **"Reemitir e editar PP"** (até 19/10/2026, "Cancelar e refazer"; no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Reemite a PP-…", e o formulário abre com o motivo no topo (desde 19/10, também na aba de PPs). A pergunta "Esta é a última PP deste item?" volta respondida como da primeira vez (até 19/10/2026 voltava em branco). A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
+| PP rejeitada | Mostra o motivo e **"Editar e Reemitir PP"** (até 19/10/2026, "Cancelar e refazer"; no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Reemite a PP-…", e o formulário abre com o motivo no topo (desde 19/10, também na aba de PPs). A pergunta "Esta é a última PP deste item?" volta respondida como da primeira vez (até 19/10/2026 voltava em branco). A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
 
 ## O painel do item ("Destrinchar realizado")
 
@@ -210,10 +210,12 @@ versão" e "Reabrir". "Editar" ficou de fora porque já é o lápis da PP gerada
   mudado; a produção continua podendo trocar. A resposta é a da PP a emitir
   que gerou a rejeitada; na PP gerada antes desta decisão, que não tem PP a
   emitir, vale o item marcado como concluído ("Sim") ou não ("Não").
-- **"Reemitir e editar PP"** (pedido do Tiago, no mesmo dia, depois de a
-  produção continuar achando que perdia o formulário): botão, dica,
-  confirmação, título do pop-up ("Reemitir e editar a PP-…?") e do formulário
-  e o motivo de cancelamento gravado. O texto do pop-up, o selo ("Reemite a
+- **"Editar e Reemitir PP"** (pedidos do Tiago, no mesmo dia, depois de a
+  produção continuar achando que perdia o formulário; passou por "Reemitir e
+  editar PP"): botão, dica, confirmação, título do pop-up ("Editar e reemitir
+  a PP-…?") e do formulário e o motivo de cancelamento gravado. O botão de
+  confirmar é vermelho, sem o ícone de alerta (variante `primary` do
+  `ConfirmDialog`). O texto do pop-up, o selo ("Reemite a
   PP-…") e o aviso ficam como estavam.
 - **A verba de produção anterior à decisão 171 não reemitia.** A PP-00127
   (verba com "responsável" e sem titular) dava "Falha ao refazer: … violates
@@ -225,6 +227,8 @@ versão" e "Reabrir". "Editar" ficou de fora porque já é o lápis da PP gerada
   aos valores da PP-00127: os de antes recusam, os de agora passam.
 - **Sem migration.** O motivo de cancelamento das PPs já reemitidas continua
   com o texto antigo.
+- **A PP-00127 reemitiu** em 19/10/2026 às 15h21, depois da correção: a PP a
+  emitir guardou o responsável e espera o titular.
 - **Conferido** no TES-1014/26: PP-00206 rejeitada e reemitida pela aba de PPs
   (PP-00255), e a PP-00255 rejeitada e reemitida pelo painel do item
   (PP-00257), e a PP-00257 reemitida com a resposta "Não, ainda faltam PPs"

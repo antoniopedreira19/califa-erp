@@ -12,7 +12,10 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-type Variant = "default" | "destructive";
+/** "default": botão escuro. "destructive": vermelho, com o ícone de alerta.
+ *  "primary": vermelho sem o alerta — a ação principal que não destrói nada
+ *  (o "Editar e Reemitir PP", 19/10/2026). */
+type Variant = "default" | "destructive" | "primary";
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -128,7 +131,7 @@ export function ConfirmDialog({
             disabled={pending || confirmDisabled}
             className={cn(
               "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed",
-              variant === "destructive"
+              variant === "destructive" || variant === "primary"
                 ? "bg-california-red hover:bg-california-red-hover"
                 : "bg-california-dark hover:bg-california-dark-soft",
             )}

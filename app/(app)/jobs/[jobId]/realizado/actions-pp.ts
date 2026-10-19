@@ -3998,7 +3998,7 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
 }
 
 /**
- * "Reemitir e editar PP" (até 19/10/2026, "Cancelar e refazer") da PP rejeitada
+ * "Editar e Reemitir PP" (até 19/10/2026, "Cancelar e refazer") da PP rejeitada
  * pelo financeiro (decisão 153). A PP não se edita: ela é cancelada (fica
  * no histórico) e volta como PP a
  * emitir, com os mesmos dados e os mesmos documentos — os arquivos são
@@ -4251,7 +4251,7 @@ export async function cancelarERefazerPP(
       status: "cancelada",
       cancelada_por: session.profile.id,
       cancelada_em: new Date().toISOString(),
-      motivo_cancelamento: "Rejeitada pelo financeiro e reemitida (Reemitir e editar PP).",
+      motivo_cancelamento: "Rejeitada pelo financeiro e reemitida (Editar e Reemitir PP).",
     })
     .eq("id", ppId)
     .eq("tenant_id", tenantId)

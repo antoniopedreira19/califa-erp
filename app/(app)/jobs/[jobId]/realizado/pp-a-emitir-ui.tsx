@@ -109,7 +109,7 @@ export function SeloPPAEmitir({ refaz }: { refaz: string | null }) {
 }
 
 /**
- * O pop-up do "Reemitir e editar PP" da rejeitada — no painel do item e na aba de
+ * O pop-up do "Editar e Reemitir PP" da rejeitada — no painel do item e na aba de
  * PPs. Revisão da 153 (19/10/2026): antes "Cancelar e refazer", que
  * começava por "é cancelada" e fez um produtor achar que perderia o
  * formulário. Agora começa pelo que fica.

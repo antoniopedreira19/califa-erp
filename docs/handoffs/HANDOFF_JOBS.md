@@ -5952,3 +5952,17 @@ ao de uma PP válida. O PDF agora diz quando não vale.
   subir um servidor do worktree (limite de 5 servidores por pasta, todos de
   outras conversas), e não há verba antiga rejeitável no TES-P001/26: o
   primeiro uso real será a própria PP-00127.
+
+## ⚠️ Nota de 2026-10-19 (6) — "Editar e Reemitir PP" com o botão vermelho (revisão da decisão 153)
+
+- **Texto:** "Reemitir e editar PP" virou **"Editar e Reemitir PP"** (botão do
+  painel, dica da aba de PPs, confirmação); os títulos dizem "Editar e
+  reemitir a PP-…". Motivo de cancelamento gravado: "(Editar e Reemitir PP)".
+- **Botão vermelho:** o confirmar do pop-up era escuro (variante padrão do
+  `ConfirmDialog`). Entrou a variante **`primary`**: vermelho como o
+  `destructive`, sem o ícone de alerta. Os outros usos do componente não
+  mudam.
+- **A PP-00127 reemitiu** às 15h21 com a correção da nota (5): PP a emitir
+  com o responsável, esperando a produção escolher o titular e gerar.
+- Conferido no protótipo com o código deste commit
+  (https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r, versão 4).
