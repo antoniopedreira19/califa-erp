@@ -328,6 +328,10 @@ interface Props {
    *  mudou. `null` antes da abertura. Obrigatória pelo mesmo motivo de
    *  `interno`. */
   aberturaDoJob: FechamentoDaAbertura | null;
+  /** A ótica com que o Resultado dos Totais abre. As planilhas em pop-up
+   *  da abertura do job abrem em "Planejada" (Tiago, 08/10/2026); sem ela,
+   *  "Realizada", como sempre. */
+  resultadoInicial?: "planejada" | "realizada";
   /** Quem faz o quê na errata (decisão 159): o GP e o administrador
    *  REGISTRAM — a errata vai ao financeiro na hora; o produtor PREPARA —
    *  deixa a errata pronta para um GP enviar. `null` = não faz errata
@@ -570,6 +574,7 @@ function PlanilhaDoJob({
   confirmarSaidaParaOrcamento,
   edicaoDoFinanceiro,
   aberturaDoJob,
+  resultadoInicial,
   papelNaErrata,
   errataPronta,
   midia,
@@ -1373,6 +1378,7 @@ function PlanilhaDoJob({
         abertura={jobInteiro ? aberturaDoJob : null}
         // A versão antiga fecha só no planejado: o realizado é da atual.
         somentePlanejada={vendoAntiga}
+        resultadoInicial={resultadoInicial}
       />
     );
   }

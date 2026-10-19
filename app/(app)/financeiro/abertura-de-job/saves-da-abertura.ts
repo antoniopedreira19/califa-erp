@@ -31,6 +31,18 @@ export interface LinhaDeSaveDaAbertura {
   situacao: SaveAprovacaoSituacao | null;
 }
 
+/** Um job que consumiu o crédito deste — consumo aprovado (revisão da
+ *  decisão 155, 19/10/2026). */
+export interface ConsumidorDoSave {
+  jobId: string;
+  codigo: string;
+  nome: string;
+  /** O que ele usa do crédito deste job (a soma das linhas dele). */
+  valor: number;
+  /** Quando o financeiro o abriu — é na abertura que o consumo se aprova. */
+  abertoEm: string | null;
+}
+
 export interface SavesDaAbertura {
   linhas: LinhaDeSaveDaAbertura[];
   clienteNome: string;
@@ -46,6 +58,17 @@ export interface SavesDaAbertura {
   /** Job aberto com todos os pedidos da abertura aprovados: quando e por
    *  quem. Nulo antes de abrir, ou se algum pedido não está aprovado. */
   aprovados: { em: string; porNome: string | null } | null;
+  /**
+   * O crédito deste job, como a `vw_saves_por_job` o conta: o consumido
+   * (consumo aprovado), o reservado (consumo de job enviado que ainda não
+   * foi aprovado) e o livre (`disponivel`, o gerado menos os dois). Nulo
+   * quando o job não tem crédito aprovado — antes de abrir, ou sem linha
+   * que gera.
+   */
+  credito: { consumido: number; reservado: number; livre: number } | null;
+  /** Os jobs que consumiram o crédito deste, na ordem em que abriram. Só
+   *  os de consumo aprovado; o reservado entra só no número de cima. */
+  consumidores: ConsumidorDoSave[];
 }
 
 const MOMENTOS_DA_ABERTURA = ["abertura", "reenvio"];
@@ -132,21 +155,24 @@ export async function carregarSavesDaAbertura(
     ...new Set(pedidos.map((p) => p.decidido_por as string | null).filter(Boolean)),
   ] as string[];
 
-  const [saldosRes, origensRes, pessoasRes] = await Promise.all([
-    clienteId || idsOrigem.length > 0
-      ? supabase
-          .from("vw_saves_por_job")
-          .select("job_id, cliente_id, disponivel")
-          .eq("tenant_id", tenantId)
-          .or(
-            [
-              clienteId ? `cliente_id.eq.${clienteId}` : null,
-              idsOrigem.length > 0 ? `job_id.in.(${idsOrigem.join(",")})` : null,
-            ]
-              .filter(Boolean)
-              .join(","),
-          )
-      : Promise.resolve({ data: [], error: null }),
+  const temGera = linhasDoJob.some((l) => l.tipo === "gera");
+
+  const [saldosRes, origensRes, pessoasRes, consumosRes] = await Promise.all([
+    // O próprio job entra sempre: é a linha dele que traz o consumido, o
+    // reservado e o livre do crédito (a view só tem linha para job com
+    // crédito aprovado).
+    supabase
+      .from("vw_saves_por_job")
+      .select("job_id, cliente_id, disponivel, consumido, reservado_aprovacao")
+      .eq("tenant_id", tenantId)
+      .or(
+        [
+          clienteId ? `cliente_id.eq.${clienteId}` : null,
+          `job_id.in.(${[...idsOrigem, jobId].join(",")})`,
+        ]
+          .filter(Boolean)
+          .join(","),
+      ),
     idsOrigem.length > 0 || consumoJobId
       ? supabase
           .from("jobs")
@@ -156,18 +182,45 @@ export async function carregarSavesDaAbertura(
     aprovadores.length > 0
       ? supabase.from("profiles").select("id, nome").in("id", aprovadores)
       : Promise.resolve({ data: [], error: null }),
+    // Quem consumiu o crédito deste job: os pedidos de consumo APROVADOS
+    // que têm este job entre as origens — a mesma fonte do "consumido" da
+    // view (`save_uso_linhas`). Dica de FK: `saves_aprovacoes` aponta para
+    // `jobs` por `job_id` e, pela errata, para outra tabela.
+    temGera
+      ? supabase
+          .from("saves_aprovacoes")
+          .select(
+            "job_id, origens, job:jobs!saves_aprovacoes_job_id_fkey(codigo, nome, status, data_abertura_financeiro)",
+          )
+          .eq("tenant_id", tenantId)
+          .eq("tipo", "consome")
+          .eq("situacao", "aprovado")
+          // `origens` é jsonb: o filtro vai como TEXTO JSON. Com array, o
+          // supabase-js monta um literal de array do Postgres e a consulta
+          // falha ("invalid input syntax for type json").
+          .contains("origens", JSON.stringify([{ job_origem_id: jobId }]))
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (saldosRes.error) console.error("[abertura-job.saves.saldos]", saldosRes.error.message);
   if (origensRes.error) console.error("[abertura-job.saves.origens]", origensRes.error.message);
+  if (consumosRes.error) console.error("[abertura-job.saves.consumidores]", consumosRes.error.message);
 
   const nomes = new Map<string, { codigo: string; nome: string }>(
     ((origensRes.data ?? []) as any[]).map((j) => [j.id, { codigo: j.codigo, nome: j.nome }]),
   );
   let saldoDoClienteAntes = 0;
+  let credito: SavesDaAbertura["credito"] = null;
   const disponivelPorJob = new Map<string, number>();
   for (const s of (saldosRes.data ?? []) as any[]) {
     const v = Number(s.disponivel ?? 0);
     disponivelPorJob.set(s.job_id, v);
+    if (s.job_id === jobId && temGera) {
+      credito = {
+        consumido: Number(s.consumido ?? 0),
+        reservado: Number(s.reservado_aprovacao ?? 0),
+        livre: v,
+      };
+    }
     // O próprio job fica de fora: depois de aberto, o crédito que ele gerou
     // já está na view, e o "antes → depois" o contaria duas vezes.
     if (clienteId && s.cliente_id === clienteId && s.job_id !== jobId) {
@@ -231,6 +284,30 @@ export async function carregarSavesDaAbertura(
     }
   }
 
+  // Um consumidor por job, com a soma do que ele usa deste crédito. O job
+  // cancelado sai, como sai da conta da view.
+  const porConsumidor = new Map<string, ConsumidorDoSave>();
+  for (const p of (consumosRes.data ?? []) as any[]) {
+    if (!p.job || p.job.status === "cancelado") continue;
+    const valor = ((p.origens ?? []) as any[])
+      .filter((o) => o?.job_origem_id === jobId)
+      .reduce((t, o) => t + Number(o.valor ?? 0), 0);
+    if (valor <= 0) continue;
+    const atual = porConsumidor.get(p.job_id);
+    if (atual) atual.valor = Math.round((atual.valor + valor) * 100) / 100;
+    else
+      porConsumidor.set(p.job_id, {
+        jobId: p.job_id,
+        codigo: p.job.codigo,
+        nome: p.job.nome,
+        valor: Math.round(valor * 100) / 100,
+        abertoEm: p.job.data_abertura_financeiro ?? null,
+      });
+  }
+  const consumidores = [...porConsumidor.values()].sort((a, b) =>
+    String(a.abertoEm ?? "").localeCompare(String(b.abertoEm ?? "")),
+  );
+
   return {
     linhas,
     clienteNome,
@@ -238,6 +315,8 @@ export async function carregarSavesDaAbertura(
     saldoDasOrigens,
     modoInteiro,
     aprovados,
+    credito,
+    consumidores,
   };
 }
 

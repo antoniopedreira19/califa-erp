@@ -1,10 +1,11 @@
 # 155 — O save que vem com o job é aprovado na abertura
 
 **Data:** 2026-10-07
-**Status:** aceita e implementada (07/10/2026). Revista em 17/10/2026: o save no cartão "Dados da produção".
+**Status:** aceita e implementada (07/10/2026). Revista em 17/10/2026 (o save no cartão "Dados da produção") e em 19/10/2026 (o bloco no idioma das Previsões, quem consome o crédito e as planilhas em pop-up — ver a nota no fim de "O que mais mudou junto").
 **Quem decidiu:** Tiago, em 07/10/2026, a partir de dois protótipos interativos.
 - **Como era:** https://claude.ai/artifact/WQ24E5vp7Vemqmw9GzNi6J.
 - **A proposta:** https://claude.ai/artifact/THxGXFBhLM1w8UyAFdmk9Y, versão 3, com o atalho da origem abrindo em pop-up.
+- **Revisão de 19/10/2026:** "Planilhas do save" (https://claude.ai/artifact/Cn4T8TLKD3Vz9FQLVUfs6L) e "Save na Abertura" (https://claude.ai/artifact/AtKiRyEVgWMfAz7vAyorkG, opção B, aprovada).
 
 **Revê:** a [099 §2](099-aprovacao-de-save.md), itens 2 e 6, para os saves que vêm com o envio do job.
 **Migration:** `20261007950001_save_aprovado_na_abertura.sql`.
@@ -17,11 +18,11 @@ O financeiro conferia os números na abertura, abria o job e depois fazia mais u
 
 ## A regra
 
-1. **A aprovação mora no formulário da abertura.** O bloco "Saves deste job · N" fica logo depois das Previsões e traz:
-   - o resumo por tipo;
+1. **A aprovação mora no formulário da abertura.** O bloco "Saves deste job" fica logo depois das Previsões e, desde 19/10/2026, fala o idioma delas:
+   - blocos de resumo no topo: o save gerado, o consumo e o saldo do cliente antes → depois;
    - o selo do modo inteiro, quando há;
-   - as linhas, recolhidas em 3 quando passam de 5;
-   - uma caixa por tipo presente: **"Aprovar save gerado"** e **"Aprovar consumo de save"**.
+   - uma tabela só, com uma faixa por tipo e as linhas dele embaixo, recolhidas em 3 quando passam de 5, e a linha de Soma;
+   - uma caixa por tipo presente, **na faixa do tipo**: **"Aprovar save gerado"** e **"Aprovar consumo de save"**.
 2. **Sem as caixas presentes marcadas, "Abrir job no financeiro" não libera.** O rodapé diz o que falta: "Marque “Aprovar save gerado” para abrir o job.", "Marque “Aprovar consumo de save”…" ou "Marque a aprovação dos saves…". A Server Action confere o mesmo, antes de qualquer escrita, e recusa com a mesma mensagem.
 3. **Abrir o job aprova os pedidos.** A confirmação diz "Os N saves deste job ficam aprovados.", mostra a linha "Saves aprovados com a abertura" e o botão "Sim, abrir job e aprovar os saves" (no singular com um save). Os pedidos nascem e são aprovados numa transação só:
    - situação `aprovado`;
@@ -29,11 +30,11 @@ O financeiro conferia os números na abertura, abria o job e depois fazia mais u
    - decididos por quem abriu.
    Nada vai para a faixa Saves, e não há revisão por save.
 4. **Recusar um save antes de abrir é o "Reprovar job" de hoje.** O job volta para a produção, que corrige o save no job devolvido e reenvia (decisões 057 e 128). Não existe recusa de linha dentro da abertura.
-5. **Saldo do cliente no bloco:** "antes" é o disponível do cliente somando os OUTROS jobs dele, já com o consumo deste job reservado; "depois" = antes + crédito. No exemplo do protótipo: R$ 8.000,00 → R$ 22.800,00 (escolha do Tiago). Para cada job de origem: "usa X · saldo Y · sobram Z", com o saldo de antes deste consumo.
-6. **A planilha do job de origem abre em pop-up.** Um atalho "Visualizar planilha do {código}", no mesmo visual do "Visualizar planilha interna", fica logo abaixo dele na coluna da direita. Ele abre a Planilha Interna do outro job em leitura. Ela chega por streaming (`Suspense`) e não atrasa o formulário. Só existe quando o job consome save.
-7. **No job aberto, o bloco aparece em leitura:**
-   - as caixas marcadas e travadas, com "Aprovado por {nome} em {data}";
-   - a coluna "Situação" com o chip de cada pedido.
+5. **Saldo do cliente no bloco:** "antes" é o disponível do cliente somando os OUTROS jobs dele, já com o consumo deste job reservado; "depois" = antes + crédito. No exemplo do protótipo: R$ 8.000,00 → R$ 22.800,00 (escolha do Tiago). Para cada job de origem, na Soma do consumo: "Saldo do {código}: Y → sobram Z", com o saldo de antes deste consumo. No job aberto, só "Pago com o saldo do {código}" (19/10/2026): o saldo de antes não se reconstrói depois que outros jobs consomem da mesma origem.
+6. **A planilha do job de origem abre em pop-up.** Um atalho "Visualizar planilha de origem do save ({código})", no mesmo visual do "Visualizar planilha interna", fica logo abaixo dele na coluna da direita. Ele abre a Planilha Interna do outro job em leitura. Desde 19/10/2026 ela só é lida quando o pop-up abre (`lerPlanilhaEmLeitura`), em vez de por streaming a cada visita. Só existe quando o job consome save.
+7. **No job aberto, o bloco aparece em leitura** (desde 19/10/2026):
+   - "Aprovados com a abertura · {data} · {nome}" no cabeçalho e, na faixa de cada tipo, o selo da situação dos pedidos ("Aprovado com a abertura", "Aguardando aprovação" ou "Recusado");
+   - no job que gerou save, o bloco "Livre do crédito" (o `disponivel` da `vw_saves_por_job`, com o consumido e o reservado embaixo) e a faixa "Consumido por" com os jobs de consumo aprovado.
 8. **A errata de save do job já aberto (`job_aberto`) não muda.** Ela segue para a faixa Saves e para a revisão da abertura.
 
 ## O que mais mudou junto
@@ -45,6 +46,13 @@ O financeiro conferia os números na abertura, abria o job e depois fazia mais u
 
 ⚠️ **O save no cartão "Dados da produção" (2026-10-17).** O cartão da coluna da direita da abertura (e do job aberto) mostrava o faturamento previsto e o valor total, mas não o save — que o envio da produção mostra logo abaixo do valor total. Agora, separadas por um traço, entram as mesmas duas linhas do envio, cada uma só quando passa de zero: **"Total gerado em save"** (o orçado das linhas vivas em save, `totalGeradoEmSave` em `dados.ts` — o mesmo `totais.save.totalSaveGerado` do envio, sobre a cópia do job) e **"Consumo de save"** (a soma de `save_consumido`, o `saveConsumido` que o formulário já recebia). Grafite do SAVE (`blocos.ts`), a cor do envio. Pedido do Tiago, 17/10/2026.
 
+⚠️ **Conferir e aprovar o save no idioma das Previsões (2026-10-19).** O Tiago não gostou da tabela do bloco e aprovou a opção B do protótipo "Save na Abertura", com as escolhas que ele tinha feito no "Planilhas do save":
+- **O bloco:** blocos de resumo no topo, como os quatro das Previsões; uma tabela só, com uma faixa por tipo, onde fica a caixa de aprovação (o lugar de "Parcelas fecham com o faturamento"), e a linha de Soma de cada tipo. Saíram as colunas Tipo, Save, Faturamento da linha e Situação: a linha que gera mostra "na nota R$ X" ao lado, a que consome mostra de onde vem o saldo. As linhas têm a textura do save da planilha (`SAVE.hachura` e `SAVE.linhaConsome`).
+- **Quem consome o crédito:** no job aberto que gerou save, a faixa "Consumido por" lista os jobs que já consumiram — consumo aprovado (`saves_aprovacoes`, tipo `consome`, situação `aprovado`, com este job nas origens), com a data de abertura e o valor. Só os consumidos; o reservado entra no número do bloco "Livre do crédito", que é o `disponivel` da view.
+- **As planilhas em pop-up:** o ícone na ponta de cada linha abre a planilha do outro job — a de origem, ou a de quem consome. O "Visualizar planilha interna" também abre num pop-up, em vez de trocar de aba (decisão 111) ou navegar até ela; na aprovação de um save, a linha do pedido vem em destaque. Os pop-ups abrem com o Resultado dos Totais em "Planejada" (`resultadoInicial`, até o `PainelResultado`) e, no job mensal, mostram a planilha inteira, sem a régua de meses que navegaria para fora da abertura.
+- **Atalhos só com o título:** "Visualizar planilha interna" perdeu o resumo embaixo, e o da origem passou a "Visualizar planilha de origem do save ({código})".
+- **Leitura sob demanda:** a planilha de cada pop-up só é lida quando ele abre (`lerPlanilhaEmLeitura`, mesma trava da página: administrador ou financeiro). Com a lista de quem consome, carregar as planilhas junto com a página seria uma planilha inteira por consumidor a cada visita.
+
 ## Onde mora
 
 - **Banco:** `save_aprovar_na_abertura(job, momento, números)`, com SECURITY DEFINER e execução só para `authenticated`. Ela chama `save_enviar_pendentes` (papel, status e uma linha por pedido) e depois `decidir_pedido_save(…, 'aprovar', null, null, 'manter', null)` para cada pedido. Com totais nulos e revisão `manter`, os números do job e a revisão da abertura não mudam: o financeiro já os contava desde o envio.
@@ -52,7 +60,7 @@ O financeiro conferia os números na abertura, abria o job e depois fazia mais u
 - **Server Action:** `abrirJobNoFinanceiro(jobId, payload, { gera, consumo })`. A auditoria `save.pedido.aprovado` leva `{ na: "abertura", momento, quantidade }`.
 - **Telas:**
   - os dados do bloco vêm de `abertura-de-job/saves-da-abertura.ts`;
-  - o pop-up da origem é `abertura-de-job/[jobId]/planilha-da-origem.tsx`;
+  - os pop-ups de planilha (a do próprio job, a de origem e a de quem consome) são `abertura-de-job/[jobId]/planilha-em-leitura.tsx`, com a leitura em `abertura-de-job/planilha-em-leitura-actions.ts` (até 19/10/2026, `planilha-da-origem.tsx`, removido);
   - o formulário é `abertura-form.tsx`.
 
 ## Testado (07/10/2026, dev do worktree, administrador)

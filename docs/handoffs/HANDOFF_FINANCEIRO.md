@@ -7612,3 +7612,42 @@ ser dividido entre notas). Regra completa na decisão 188.
   valor, rateio), e o lote guarda a observação da produção para o financeiro.
 - **Entrega 2 (a fazer):** a fila e o Faturar mostram a nota do lote de uma vez,
   com as partes dos jobs já juntas e a observação.
+
+## ⚠️ Nota de 2026-10-19 (3) — "Saves deste job" no idioma das Previsões, quem consome o crédito e as planilhas em pop-up (revisão da decisão 155)
+
+- **O desenho:** opção B do protótipo "Save na Abertura"
+  (https://claude.ai/artifact/AtKiRyEVgWMfAz7vAyorkG), aprovada pelo
+  Tiago, com as escolhas do "Planilhas do save". Detalhes na decisão 155,
+  nota de 2026-10-19.
+- **Bloco:** blocos de resumo (save gerado, consumo, saldo do cliente
+  antes → depois na abertura; "Livre do crédito" no job aberto) e uma tabela
+  só, com uma faixa por tipo. A caixa "Aprovar…" fica na faixa; no job
+  aberto, o selo da situação. A trava de abrir o job não mudou.
+- **Quem consome:** a faixa "Consumido por", no job aberto que gerou save,
+  lê os pedidos de consumo aprovados que têm o job nas origens
+  (`saves_aprovacoes.origens`, filtro jsonb como texto). O livre vem da
+  `vw_saves_por_job` (`disponivel`, com `consumido` e `reservado_aprovacao`).
+- **Planilhas em pop-up, lidas sob demanda:** `planilha-em-leitura.tsx` +
+  `planilha-em-leitura-actions.ts` (administrador ou financeiro) servem o
+  "Visualizar planilha interna", o atalho da origem e o ícone de cada linha.
+  `planilha-da-origem.tsx` saiu, e as páginas não montam mais a planilha da
+  origem a cada visita. Os pop-ups abrem o Resultado em "Planejada"
+  (`resultadoInicial` em `JobRealizadoSection` → `JobTotaisCard` →
+  `PainelResultado.visaoInicial`) e, no mensal, sem a régua de meses.
+- **Tabela em layout automático:** o bloco não é planilha; com colunas
+  fixas, numa tela de 1024 px o item sumia.
+- **Conferido no dev do worktree, como administrador:**
+  - TES-1001/26 (gerou R$ 10.000,00): "Livre do crédito R$ 8.000,00 ·
+    R$ 2.000,00 consumidos por 2 jobs" e a faixa "Consumido por" com
+    TES-1002/26 e TES-1004/26 (R$ 1.000,00 cada, abertos em 21/09 e 22/09).
+    O pop-up do TES-1002/26 (mensal) abriu em "Planejada", sem a régua.
+  - TES-1002/26 (gera e consome do TES-1001/26): as duas faixas, o atalho
+    "Visualizar planilha de origem do save (TES-1001/26)" e a planilha
+    interna em pop-up, sem trocar de aba.
+  - TES-1023/26 (só consome) e TES-1024/26 (inteiro em save): selo
+    "Aprovado com a abertura" na faixa.
+  - O modo de abertura (caixas na faixa) foi visto no TES-1002/26 por uma
+    rota de preview temporária, que não foi para o commit: não havia job
+    com save na fila. As caixas marcam e o rodapé segue a trava de antes.
+  - tsc, lint e build limpos.
+

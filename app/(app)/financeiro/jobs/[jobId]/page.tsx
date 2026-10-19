@@ -47,7 +47,6 @@ import {
   totalGeradoEmSave,
 } from "../../abertura-de-job/dados";
 import { carregarSavesDaAbertura } from "../../abertura-de-job/saves-da-abertura";
-import { PlanilhaDaOrigem } from "../../abertura-de-job/[jobId]/planilha-da-origem";
 import { fotosDaAbertura } from "../../abertura-de-job/fotos";
 import {
   carregarAprovacaoDeSave,
@@ -613,20 +612,6 @@ export default async function JobNoFinanceiroPage({
             saveGerado={totalGeradoEmSave(detalhe.itens)}
             linhasDoSave={linhasDoSave(detalhe.itens)}
             saves={saves}
-            // A planilha de cada job de origem do consumo (decisão 155),
-            // por streaming, como na abertura.
-            planilhasDasOrigens={Object.fromEntries(
-              [
-                ...new Map(
-                  (saves?.linhas ?? [])
-                    .flatMap((l) => l.origens)
-                    .map((o) => [o.jobId, o.codigo] as const),
-                ),
-              ].map(([id, codigo]) => [
-                id,
-                <PlanilhaDaOrigem key={id} session={session} jobId={id} codigo={codigo} />,
-              ]),
-            )}
             enviadoPorNome={carregadoParaAbertura.enviadoPorNome}
             curvaInicial={previsoes.curva}
             recebimentoInicial={previsoes.recebimento}

@@ -72,6 +72,8 @@ interface Props {
    *  Resultado fecha sobre ele quando o valor do job mudou. Obrigatória:
    *  quem não tem a foto (conferência, fechamento) manda `null`. */
   abertura: FechamentoDaAbertura | null;
+  /** A ótica com que o Resultado abre (`PainelResultado.visaoInicial`). */
+  resultadoInicial?: "planejada" | "realizada";
 }
 
 /** Taxa configurada na versão: 12 -> "12%", 19.53 -> "19,53%". */
@@ -129,6 +131,7 @@ export function JobTotaisCard({
   somentePlanejada = false,
   colunasSaveAbertas = false,
   abertura,
+  resultadoInicial,
 }: Props) {
   const {
     subtotaisPorTipo,
@@ -340,6 +343,7 @@ export function JobTotaisCard({
           somenteRealizada={somenteRealizada}
           somentePlanejada={somentePlanejada}
           abertura={abertura}
+          visaoInicial={resultadoInicial}
           moeda={moeda}
         />
       </div>

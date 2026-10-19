@@ -13,7 +13,6 @@ import { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job-real
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
 import { carregarJobParaAbertura, linhasDoSave, totalGeradoEmSave } from "../dados";
 import { carregarSavesDaAbertura } from "../saves-da-abertura";
-import { PlanilhaDaOrigem } from "./planilha-da-origem";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
@@ -341,21 +340,6 @@ export default async function AbrirJobNoFinanceiroPage({
             saveGerado={totalGeradoEmSave(detalhe.itens)}
             linhasDoSave={linhasDoSave(detalhe.itens)}
             saves={saves}
-            // A planilha de cada job de origem do consumo, para o pop-up do
-            // atalho ao lado da planilha interna (decisão 155). Chega por
-            // streaming: o formulário não espera por ela.
-            planilhasDasOrigens={Object.fromEntries(
-              [
-                ...new Map(
-                  (saves?.linhas ?? [])
-                    .flatMap((l) => l.origens)
-                    .map((o) => [o.jobId, o.codigo] as const),
-                ),
-              ].map(([id, codigo]) => [
-                id,
-                <PlanilhaDaOrigem key={id} session={session} jobId={id} codigo={codigo} />,
-              ]),
-            )}
             enviadoPorNome={enviadoPorNome}
             curvaInicial={sugerirCurva(
               custoPrevisto,

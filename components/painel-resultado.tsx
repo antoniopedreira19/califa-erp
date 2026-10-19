@@ -89,6 +89,13 @@ interface Props {
    */
   somenteRealizada?: boolean;
   /**
+   * A ótica com que o seletor ABRE, quando há seletor. Sem ela, "Realizada"
+   * (o padrão do design). As planilhas abertas em pop-up na abertura do job
+   * abrem em "Planejada" (Tiago, 08/10/2026): ali se confere o que foi
+   * planejado, e o realizado do job ainda nem existe.
+   */
+  visaoInicial?: Visao;
+  /**
    * O job como foi aberto (decisão 151, entrega 2). Quando o valor do job
    * mudou depois da abertura, a ótica PLANEJADA usa os números da abertura
    * — valor, impostos, honorários e orçado — e o rótulo vira "Valor do Job
@@ -146,10 +153,11 @@ export function PainelResultado({
   somentePlanejada,
   somenteRealizada,
   abertura = null,
+  visaoInicial,
   moeda,
 }: Props) {
   const [visao, setVisao] = React.useState<Visao>(
-    somentePlanejada ? "planejada" : "realizada",
+    somentePlanejada ? "planejada" : (visaoInicial ?? "realizada"),
   );
   const planejada =
     !somenteRealizada && (somentePlanejada || visao === "planejada");
