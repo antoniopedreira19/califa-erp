@@ -7668,3 +7668,28 @@ Fecha a pendência da nota de 2026-10-17 (2). Pedido do Tiago em
     com save na fila. As caixas marcam e o rodapé segue a trava de antes.
   - tsc, lint e build limpos.
 
+
+## ⚠️ Nota de 2026-10-19 (5) — pop-up do job mensal no Trimestre e o teste de ponta a ponta da decisão 155
+
+- **Corrige a nota (4):** no job mensal, o pop-up de planilha não mostra
+  mais a planilha corrida, sem régua. Abre no Trimestre (meses empilhados,
+  "Totais do trimestre"), e na Mídia Off na Campanha. A régua e o
+  "Abrir {mês}" trocam de mês dentro do pop-up, sem navegar.
+- **Como:** `JobRealizadoSection` ganhou `mesNoLugar` (o mês fica num
+  estado local em vez da URL); `ReguaMeses` ganhou `onSelecionar` (o bloco
+  vira botão) e `TrimestreEmpilhado` ganhou `onAbrir`. Na Mídia Off, o
+  mesmo pelo `doJob.noLugar` de `PlanilhaMidia`. Sem essas props, tudo
+  segue com links, como antes: a aba Planilha Interna não mudou.
+- **Teste de ponta a ponta**, pelas telas, no TES-P001/26 (orçamento "ZZ
+  Teste 155 save na abertura", job **TES-1030/26**): Brindes gera
+  R$ 5.000,00 e Transporte consome R$ 2.000,00 do TES-1001/26.
+  - Enquanto o job aguardava, o TES-1001/26 mostrou os R$ 2.000,00
+    "reservados".
+  - Na abertura, a trava andou caixa por caixa, e "Sim, abrir job e
+    aprovar os saves" deixou os dois pedidos `aprovado` (momento
+    `abertura`), com a auditoria `save.pedido.aprovado`.
+  - Depois, o TES-1001/26 passou a listar o TES-1030/26 em "Consumido
+    por", e o reservado sumiu. Detalhes na decisão 155.
+- **Desempenho no dev:** cada pop-up levou de 3 a 10 s para carregar a
+  planilha (Server Action + `carregarDetalheDoJob` completo). Não foi
+  medido no build de produção.

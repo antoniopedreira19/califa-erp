@@ -49,7 +49,7 @@ O financeiro conferia os números na abertura, abria o job e depois fazia mais u
 ⚠️ **Conferir e aprovar o save no idioma das Previsões (2026-10-19).** O Tiago não gostou da tabela do bloco e aprovou a opção B do protótipo "Save na Abertura", com as escolhas que ele tinha feito no "Planilhas do save":
 - **O bloco:** blocos de resumo no topo, como os quatro das Previsões; uma tabela só, com uma faixa por tipo, onde fica a caixa de aprovação (o lugar de "Parcelas fecham com o faturamento"), e a linha de Soma de cada tipo. Saíram as colunas Tipo, Save, Faturamento da linha e Situação: a linha que gera mostra "na nota R$ X" ao lado, a que consome mostra de onde vem o saldo. As linhas têm a textura do save da planilha (`SAVE.hachura` e `SAVE.linhaConsome`).
 - **Quem consome o crédito:** no job aberto que gerou save, a faixa "Consumido por" lista os jobs que já consumiram — consumo aprovado (`saves_aprovacoes`, tipo `consome`, situação `aprovado`, com este job nas origens), com a data de abertura e o valor. Só os consumidos; o reservado entra no número do bloco "Livre do crédito", que é o `disponivel` da view.
-- **As planilhas em pop-up:** o ícone na ponta de cada linha abre a planilha do outro job — a de origem, ou a de quem consome. O "Visualizar planilha interna" também abre num pop-up, em vez de trocar de aba (decisão 111) ou navegar até ela; na aprovação de um save, a linha do pedido vem em destaque. Os pop-ups abrem com o Resultado dos Totais em "Planejada" (`resultadoInicial`, até o `PainelResultado`) e, no job mensal, mostram a planilha inteira, sem a régua de meses que navegaria para fora da abertura.
+- **As planilhas em pop-up:** o ícone na ponta de cada linha abre a planilha do outro job — a de origem, ou a de quem consome. O "Visualizar planilha interna" também abre num pop-up, em vez de trocar de aba (decisão 111) ou navegar até ela; na aprovação de um save, a linha do pedido vem em destaque. Os pop-ups abrem com o Resultado dos Totais em "Planejada" (`resultadoInicial`, até o `PainelResultado`). No job mensal, abrem no **Trimestre**, com os meses empilhados e os "Totais do trimestre"; na Mídia Off, na **Campanha**. A régua e o "Abrir {mês}" trocam o mês dentro do próprio pop-up (`mesNoLugar`), sem navegar: um link de mês sairia da abertura e levaria o que já foi preenchido. A primeira versão (0dc567ab) mostrava a planilha corrida, sem régua; o Tiago perguntou se era a visão do trimestre e não era — corrigido no mesmo dia.
 - **Atalhos só com o título:** "Visualizar planilha interna" perdeu o resumo embaixo, e o da origem passou a "Visualizar planilha de origem do save ({código})".
 - **Leitura sob demanda:** a planilha de cada pop-up só é lida quando ele abre (`lerPlanilhaEmLeitura`, mesma trava da página: administrador ou financeiro). Com a lista de quem consome, carregar as planilhas junto com a página seria uma planilha inteira por consumidor a cada visita.
 
@@ -73,3 +73,20 @@ O financeiro conferia os números na abertura, abria o job e depois fazia mais u
   - aberto, o pedido nasceu `aprovado` e o saldo do TES-1007/26 foi a R$ 0,00;
   - o job aberto mostrou o aviso "pago com saldo em save".
 - **TES-1024/26** (TES-P002/26-06, orçamento inteiro gerando R$ 10.000,00): dois pedidos `aprovado` no "Sim, abrir job", o crédito de R$ 10.000,00 no saldo do cliente e nenhuma faixa Saves.
+
+## Testado de ponta a ponta (19/10/2026, dev do worktree, administrador)
+
+Pelo fluxo real da tela, no TES-P001/26, orçamento "ZZ Teste 155 save na abertura":
+
+- **Orçamento:** Brindes (R$ 5.000,00) marcada para gerar save; Transporte (R$ 3.000,00) consumindo R$ 2.000,00 do TES-1001/26. A versão foi aprovada e o envio criou o **TES-1030/26**, com "Empresa: Empresa Teste" abaixo do Projeto e "Total gerado em save" e "Consumo de save" no resumo.
+- **Reservado:** com o TES-1030/26 aguardando abertura, o TES-1001/26 mostrou "Livre do crédito R$ 6.000,00 · R$ 2.000,00 consumidos por 2 jobs · R$ 2.000,00 reservados".
+- **Abertura:**
+  - o bloco mostrou save gerado R$ 5.000,00, consumo R$ 2.000,00 e saldo do cliente R$ 58.500,00 → R$ 63.500,00;
+  - os dois pop-ups (planilha interna e TES-1001/26) abriram em leitura, com "Planejada" nos Totais; o BV do TES-1001/26 abriu só em consulta;
+  - a trava andou caixa por caixa: "Marque a aprovação dos saves…", depois "Marque “Aprovar consumo de save”…", e liberou com as duas;
+  - a confirmação listou "2 · crédito R$ 5.000,00 · consumo R$ 2.000,00 do TES-1001/26".
+- **Banco:** TES-1030/26 `aberto`; dois pedidos `aprovado` com momento `abertura` (o de consumo com o TES-1001/26 nas origens); auditoria `save.pedido.aprovado` com `{ na: "abertura", quantidade: 2 }`, antes de `job.aberto_no_financeiro`.
+- **Depois:**
+  - o TES-1030/26 mostrou "Aprovado com a abertura" nas duas faixas e "Livre do crédito R$ 5.000,00";
+  - o TES-1001/26 passou a "R$ 4.000,00 consumidos por 3 jobs", sem reservado, com o TES-1030/26 em "Consumido por" (aberto em 19/10/2026), e o pop-up dele abriu daquela linha.
+- **Mensal e Mídia Off:** no TES-1002/26 (Always On), o pop-up abriu no Trimestre, com os três meses e os "Totais do trimestre", e trocou de mês dentro dele; no TES-1026/26 (Mídia Off), abriu na Campanha.

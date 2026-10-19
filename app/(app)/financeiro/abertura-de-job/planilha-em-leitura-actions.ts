@@ -51,9 +51,9 @@ export async function lerPlanilhaEmLeitura(jobId: string): Promise<ResultadoDaPl
 
   // As mesmas props da aba Planilha Interna da página do job no financeiro,
   // em leitura: sem "Editar orçado", errata, PP, BV ou histórico — o pop-up
-  // é para conferir. Sem `hrefPlanilha`, o job mensal aparece na planilha
-  // inteira: a régua de meses navegaria para fora da abertura e levaria o
-  // que já foi preenchido.
+  // é para conferir. No job mensal (e na Mídia Off) a régua troca de mês no
+  // próprio pop-up (`mesNoLugar`), a partir do Trimestre (ou da Campanha):
+  // navegar sairia da abertura e levaria o que já foi preenchido.
   return {
     ok: true,
     props: {
@@ -101,6 +101,7 @@ export async function lerPlanilhaEmLeitura(jobId: string): Promise<ResultadoDaPl
       faturamentoMensal: detalhe.faturamentoMensal,
       mesPedido: undefined,
       hrefPlanilha: undefined,
+      mesNoLugar: true,
       grupos: detalhe.grupos,
       itens: detalhe.itens,
       realizadosMap: detalhe.realizadosMap,

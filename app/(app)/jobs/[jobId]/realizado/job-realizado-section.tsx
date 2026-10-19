@@ -332,6 +332,11 @@ interface Props {
    *  da abertura do job abrem em "Planejada" (Tiago, 08/10/2026); sem ela,
    *  "Realizada", como sempre. */
   resultadoInicial?: "planejada" | "realizada";
+  /** A planilha em pop-up da abertura do job (19/10/2026): no modelo
+   *  mensal (e na Mídia Off) a régua troca de mês aqui mesmo, sem navegar —
+   *  navegar sairia da abertura e perderia o que foi preenchido. Abre na
+   *  visão do Trimestre (na mídia, da Campanha), com todos os meses. */
+  mesNoLugar?: boolean;
   /** Quem faz o quê na errata (decisão 159): o GP e o administrador
    *  REGISTRAM — a errata vai ao financeiro na hora; o produtor PREPARA —
    *  deixa a errata pronta para um GP enviar. `null` = não faz errata
@@ -575,6 +580,7 @@ function PlanilhaDoJob({
   edicaoDoFinanceiro,
   aberturaDoJob,
   resultadoInicial,
+  mesNoLugar = false,
   papelNaErrata,
   errataPronta,
   midia,
@@ -1121,7 +1127,12 @@ function PlanilhaDoJob({
   // rascunho da errata, como o resto da tela, para a régua acompanhar o que
   // se digita.
   const mensal =
-    modeloPlanilha === "mensal" && meses.length > 0 && hrefPlanilha !== undefined;
+    modeloPlanilha === "mensal" &&
+    meses.length > 0 &&
+    (hrefPlanilha !== undefined || mesNoLugar);
+  // No pop-up (`mesNoLugar`) o mês mora aqui, não na URL: abre no Trimestre.
+  const [mesNoPopUp, setMesNoPopUp] = React.useState("trimestre");
+  const mesDaTela = mesNoLugar ? mesNoPopUp : mesPedido;
   const dadosDosMeses = React.useMemo(() => {
     if (!mensal) return [];
     const mesDoGrupo = new Map(errata.grupos.map((g) => [g.id, g.mes_id]));
@@ -1154,9 +1165,9 @@ function PlanilhaDoJob({
   }, [mensal, meses, errata.grupos, gruposDaPlanilha, paraTotais]);
   // Sem `?mes=`, abre no primeiro mês — como a planilha do orçamento.
   const mesSelecionado =
-    !mensal || mesPedido === "trimestre"
+    !mensal || mesDaTela === "trimestre"
       ? null
-      : (dadosDosMeses.find((d) => d.chave === mesPedido) ??
+      : (dadosDosMeses.find((d) => d.chave === mesDaTela) ??
         dadosDosMeses[0] ??
         null);
   // O que acompanha a alteração do financeiro (decisão 115): o pop-up mostra
@@ -1399,6 +1410,7 @@ function PlanilhaDoJob({
         midia={midia}
         mesPedido={mesPedido}
         hrefPlanilha={hrefPlanilha ?? `/jobs/${job.id}?aba=planilha`}
+        noLugar={mesNoLugar}
         linkDaVersao={
           confirmarSaidaParaOrcamento ? (
             <LinkSaidaDeModulo
@@ -1713,6 +1725,14 @@ function PlanilhaDoJob({
             }))}
             selecionado={mesSelecionado?.mes.id ?? "trimestre"}
             editar={null}
+            onSelecionar={
+              mesNoLugar
+                ? (chave) =>
+                    setMesNoPopUp(
+                      dadosDosMeses.find((d) => d.mes.id === chave)?.chave ?? "trimestre",
+                    )
+                : undefined
+            }
           />
           {avisoDosMesesEnviados && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
@@ -1740,6 +1760,14 @@ function PlanilhaDoJob({
             <>
               <TrimestreEmpilhado
                 moeda={versao.moeda}
+                onAbrir={
+                  mesNoLugar
+                    ? (id) =>
+                        setMesNoPopUp(
+                          dadosDosMeses.find((d) => d.mes.id === id)?.chave ?? "trimestre",
+                        )
+                    : undefined
+                }
                 meses={dadosDosMeses.map((d) => ({
                   id: d.mes.id,
                   titulo: rotuloMes(d.mes.mes),

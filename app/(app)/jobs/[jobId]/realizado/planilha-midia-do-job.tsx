@@ -33,6 +33,7 @@ export function PlanilhaMidiaDoJob({
   linkDaVersao,
   detalheDoMes,
   detalheCampanha,
+  noLugar = false,
 }: {
   job: { id: string; projeto_id: string; orcamento_id: string };
   nomeJob: string;
@@ -49,6 +50,9 @@ export function PlanilhaMidiaDoJob({
   /** A situação do faturamento de cada mês (`YYYY-MM`), para a régua. */
   detalheDoMes: Record<string, string>;
   detalheCampanha: string;
+  /** A planilha em pop-up da abertura do job (19/10/2026): a régua troca de
+   *  mês aqui mesmo, sem navegar. */
+  noLugar?: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -72,7 +76,7 @@ export function PlanilhaMidiaDoJob({
         params={midia.params}
         mesPedido={mesPedido}
         readOnly
-        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha }}
+        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha, noLugar }}
       />
     </div>
   );

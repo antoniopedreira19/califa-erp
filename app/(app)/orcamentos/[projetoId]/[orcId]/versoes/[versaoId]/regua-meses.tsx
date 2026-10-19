@@ -66,6 +66,11 @@ interface Props {
   /** "linhas": as palavras da Mídia Off (decisão 147) no "Editar meses".
    *  Padrão: "itens". */
   vocabulario?: "itens" | "linhas";
+  /** Troca de mês no lugar, sem navegar: cada bloco vira botão e chama
+   *  isto com a `chave` dele. É a planilha em pop-up da abertura do job
+   *  (19/10/2026), onde navegar perderia o que foi preenchido. Sem ele, os
+   *  blocos são links, como sempre. */
+  onSelecionar?: (chave: string) => void;
 }
 
 function formatarPct(n: number): string {
@@ -82,6 +87,7 @@ export function ReguaMeses({
   editar,
   acao,
   vocabulario = "itens",
+  onSelecionar,
 }: Props) {
   return (
     <div className="space-y-2.5">
@@ -97,6 +103,7 @@ export function ReguaMeses({
           moeda={moeda}
           ativo={selecionado === trimestre.chave}
           trimestre
+          onSelecionar={onSelecionar}
         />
         {meses.map((m) => (
           <Bloco
@@ -104,6 +111,7 @@ export function ReguaMeses({
             bloco={m}
             moeda={moeda}
             ativo={selecionado === m.chave}
+            onSelecionar={onSelecionar}
           />
         ))}
         {(editar || acao) && (
@@ -122,27 +130,16 @@ function Bloco({
   moeda,
   ativo,
   trimestre = false,
+  onSelecionar,
 }: {
   bloco: BlocoDaRegua;
   moeda: string;
   ativo: boolean;
   trimestre?: boolean;
+  onSelecionar?: (chave: string) => void;
 }) {
-  return (
-    <Link
-      href={bloco.href}
-      prefetch={false}
-      scroll={false}
-      aria-current={ativo ? "page" : undefined}
-      className={cn(
-        "flex w-[190px] min-w-0 flex-col gap-[3px] rounded-xl border px-3 py-2.5 transition-colors",
-        ativo
-          ? "border-california-red bg-white shadow-[0_0_0_3px_rgba(231,75,86,0.18)]"
-          : trimestre
-            ? "border-border bg-muted/60 hover:border-california-red/40"
-            : "border-border bg-white hover:border-california-red/40",
-      )}
-    >
+  const conteudo = (
+    <>
       <span
         className={cn(
           "text-[10px] font-bold uppercase leading-3 tracking-[0.08em]",
@@ -164,6 +161,37 @@ function Bloco({
             ? "Sem planejado"
             : `Resultado geral ${formatarPct(bloco.resultadoGeral)}`)}
       </span>
+    </>
+  );
+  const classe = cn(
+    "flex w-[190px] min-w-0 flex-col gap-[3px] rounded-xl border px-3 py-2.5 text-left transition-colors",
+    ativo
+      ? "border-california-red bg-white shadow-[0_0_0_3px_rgba(231,75,86,0.18)]"
+      : trimestre
+        ? "border-border bg-muted/60 hover:border-california-red/40"
+        : "border-border bg-white hover:border-california-red/40",
+  );
+  if (onSelecionar) {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelecionar(bloco.chave)}
+        aria-pressed={ativo}
+        className={classe}
+      >
+        {conteudo}
+      </button>
+    );
+  }
+  return (
+    <Link
+      href={bloco.href}
+      prefetch={false}
+      scroll={false}
+      aria-current={ativo ? "page" : undefined}
+      className={classe}
+    >
+      {conteudo}
     </Link>
   );
 }
