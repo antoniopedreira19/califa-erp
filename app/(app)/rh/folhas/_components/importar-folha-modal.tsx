@@ -283,7 +283,7 @@ function PreviewTabela(props: { preview: ResumoImportacao }) {
 }
 
 function formatarCpf(cpf: string): string {
-  // "00000000000" → "200.000.001-00"
+  // "00000000000" → "000.000.000-00"
   const d = cpf.replace(/\D/g, "");
   if (d.length !== 11) return cpf;
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;

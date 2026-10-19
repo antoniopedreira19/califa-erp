@@ -6,10 +6,10 @@
  * Formato real do texto extraído por pdf-parse v1 (observado em produção):
  *
  *   Empregados                                       ← header da seção
- *   110.000.018-0001 COLABORADOR EXEMPLO 01       ← CPF + código(colados) + nome
+ *   110.000.018-0001 COLABORADOR EXEMPLO 01          ← CPF + código(colados) + nome
  *   05/10/2026                                       ← data
  *   1.988,40                                         ← valor
- *   100.000.002-0002 CRISTIANA DANTAS...              ← próxima linha
+ *   100.000.002-0002 COLABORADOR EXEMPLO 02          ← próxima linha
  *   ...
  *   Estagiários                                      ← header próxima seção
  *   200.000.001-0001 ESTAGIARIO EXEMPLO 01

@@ -34,36 +34,36 @@ test("extrai todas as 33 linhas (30+2+1)", () => {
 
 test("normaliza CPF (remove pontos e traços)", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
-  const caroline = r.linhas.find((l) => l.nome.startsWith("CAROLINE"));
-  assert.ok(caroline, "CAROLINE deve ser encontrada");
-  assert.equal(caroline!.cpf, "11000001800");
-  assert.equal(caroline!.cpf.length, 11);
-  assert.match(caroline!.cpf, /^\d+$/);
+  const primeiro = r.linhas.find((l) => l.nome === "COLABORADOR EXEMPLO 01");
+  assert.ok(primeiro, "COLABORADOR EXEMPLO 01 deve ser encontrado");
+  assert.equal(primeiro!.cpf, "11000001800");
+  assert.equal(primeiro!.cpf.length, 11);
+  assert.match(primeiro!.cpf, /^\d+$/);
 });
 
 test("converte valor para centavos (inteiro)", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
-  const caroline = r.linhas.find((l) => l.nome.startsWith("CAROLINE"));
-  assert.equal(caroline?.valor, 198840); // R$ 1.988,40
+  const primeiro = r.linhas.find((l) => l.nome === "COLABORADOR EXEMPLO 01");
+  assert.equal(primeiro?.valor, 198840); // R$ 1.988,40
 });
 
 test("converte valor com milhares (ponto como separador)", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
-  const mariana = r.linhas.find((l) => l.nome.startsWith("MARIANA"));
-  assert.equal(mariana?.valor, 842173); // R$ 8.421,73
+  const decimoQuinto = r.linhas.find((l) => l.nome === "COLABORADOR EXEMPLO 15");
+  assert.equal(decimoQuinto?.valor, 842173); // R$ 8.421,73
 });
 
 test("converte data_pagamento para ISO yyyy-mm-dd", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
-  const caroline = r.linhas.find((l) => l.nome.startsWith("CAROLINE"));
-  assert.equal(caroline?.data_pagamento, "2026-10-05");
+  const primeiro = r.linhas.find((l) => l.nome === "COLABORADOR EXEMPLO 01");
+  assert.equal(primeiro?.data_pagamento, "2026-10-05");
 });
 
 test("categoriza linha pela seção correta", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
-  const estagiario = r.linhas.find((l) => l.nome.startsWith("EDUARDO"));
+  const estagiario = r.linhas.find((l) => l.nome === "ESTAGIARIO EXEMPLO 01");
   assert.equal(estagiario?.secao, "estagiarios");
-  const contribuinte = r.linhas.find((l) => l.nome.startsWith("BRUNO"));
+  const contribuinte = r.linhas.find((l) => l.nome === "CONTRIBUINTE EXEMPLO 01");
   assert.equal(contribuinte?.secao, "contribuintes");
 });
 
