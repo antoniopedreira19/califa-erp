@@ -137,3 +137,122 @@ export function parcelasDaParte(
     data_vencimento: i === 0 ? primeiraData : somaDiasIso(primeiraData, 30 * i),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Copiar as notas de um envio anterior (decisão 188, entrega 3)
+// ---------------------------------------------------------------------------
+
+/** Uma nota como o pop-up a monta, e como ela vem de um envio anterior. */
+export interface NotaParaCopiar {
+  tomador: string;
+  /** Só dígitos; nulo no tomador no exterior. */
+  cnpj: string | null;
+  exterior: boolean;
+  valor: number;
+  descritivo: string;
+  modo: ModoDoRateio;
+}
+
+/** Cada valor mantém a sua parte do total; o último fecha os centavos. */
+export function escalarCentavos(cents: number[], alvo: number): number[] {
+  const soma = cents.reduce((a, b) => a + b, 0);
+  if (soma <= 0 || cents.length === 0) return [...cents];
+  const novos = cents.map((v) => Math.round((v * alvo) / soma));
+  novos[novos.length - 1] += alvo - novos.reduce((a, b) => a + b, 0);
+  return novos;
+}
+
+const MESES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+/** Na caixa do texto que estava lá: "OUTUBRO", "Outubro" ou "outubro". */
+function naMesmaCaixa(original: string, novo: string): string {
+  if (original === original.toUpperCase() && original !== original.toLowerCase()) return novo.toUpperCase();
+  if (original.charAt(0) === original.charAt(0).toUpperCase()) return novo.charAt(0).toUpperCase() + novo.slice(1);
+  return novo;
+}
+
+/**
+ * Troca o mês de um envio pelo do outro no descritivo: "outubro" vira
+ * "novembro", na caixa em que estava. Quando o ano vem junto ("dezembro de
+ * 2026", "dezembro/2026"), ele muda também — de dezembro para janeiro, o ano
+ * vira. Mês com OUTRO ano no texto ("outubro/2025") fica como está: não é o
+ * mês do envio.
+ */
+export function trocarMesNoTexto(texto: string, deIso: string, paraIso: string): string {
+  const [deAno, deMes] = deIso.split("-").map(Number);
+  const [paraAno, paraMes] = paraIso.split("-").map(Number);
+  if (deAno === paraAno && deMes === paraMes) return texto;
+  const de = MESES[deMes - 1];
+  const para = MESES[paraMes - 1];
+  const re = new RegExp(`(?<!\\p{L})(${de})(?!\\p{L})(\\s*(?:de|\\/|-)\\s*)?(\\d{4})?`, "giu");
+  return texto.replace(re, (todo: string, mes: string, ligacao: string | undefined, ano: string | undefined) => {
+    if (ano && Number(ano) !== deAno) return todo;
+    const nome = naMesmaCaixa(mes, para);
+    if (ano) return `${nome}${ligacao ?? ""}${paraAno}`;
+    return `${nome}${ligacao ?? ""}`;
+  });
+}
+
+export interface CopiaDasNotas {
+  notas: NotaParaCopiar[];
+  /** Os valores foram levados ao total deste envio, na mesma proporção. */
+  ajustou: boolean;
+  /** Algum descritivo teve o mês trocado. */
+  trocouMes: boolean;
+  /** Notas "Só o job" de um job que não é deste envio: voltaram para Proporcional. */
+  voltaramDeJob: number;
+  /** Notas divididas à mão: voltaram para Proporcional (os valores dos jobs mudam). */
+  voltaramDeManual: number;
+}
+
+/**
+ * As notas de um envio anterior no envio de agora: tomador, CNPJ (ou
+ * exterior), descritivo com o mês trocado e o valor — igual, ou na mesma
+ * proporção do total de agora (`ajustar`). A nota "Só o job" continua assim
+ * se o job é deste envio; a de outro job e a dividida à mão voltam para
+ * Proporcional.
+ */
+export function copiarNotas(
+  notas: NotaParaCopiar[],
+  o: { jobs: string[]; totalCentavos: number; ajustar: boolean; mesDe: string | null; mesPara: string | null },
+): CopiaDasNotas {
+  const cents = notas.map((n) => centavos(n.valor));
+  const soma = cents.reduce((a, b) => a + b, 0);
+  const ajustou = o.ajustar && soma !== o.totalCentavos && soma > 0;
+  const valores = ajustou ? escalarCentavos(cents, o.totalCentavos) : cents;
+  const ids = new Set(o.jobs);
+  let trocouMes = false;
+  let voltaramDeJob = 0;
+  let voltaramDeManual = 0;
+  const copiadas = notas.map((n, i) => {
+    let descritivo = n.descritivo;
+    if (o.mesDe && o.mesPara) {
+      const novo = trocarMesNoTexto(descritivo, o.mesDe, o.mesPara);
+      if (novo !== descritivo) trocouMes = true;
+      descritivo = novo;
+    }
+    let modo = n.modo;
+    if (modo === MANUAL) {
+      voltaramDeManual += 1;
+      modo = PROPORCIONAL;
+    } else if (modo !== PROPORCIONAL && !ids.has(modo)) {
+      voltaramDeJob += 1;
+      modo = PROPORCIONAL;
+    }
+    return { ...n, valor: valores[i] / 100, descritivo, modo };
+  });
+  return { notas: copiadas, ajustou, trocouMes, voltaramDeJob, voltaramDeManual };
+}

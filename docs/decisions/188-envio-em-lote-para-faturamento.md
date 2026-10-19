@@ -1,9 +1,9 @@
 # 188 — Envio em lote para faturamento: vários jobs de um cliente, com as notas que o cliente pediu e o rateio entre notas e jobs
 
 **Data:** 2026-10-19
-**Status:** aceita. **Entregas 1 e 2 implementadas em 19/10/2026** (o envio
-pela lista de Jobs; a nota do lote na fila do financeiro e no Faturar).
-Entrega 3 a fazer (ver §6).
+**Status:** aceita. **Entregas 1, 2 e 3 implementadas em 19/10/2026** (o
+envio pela lista de Jobs; a nota do lote na fila do financeiro e no Faturar;
+"Repetir" e "Copiar de um envio anterior", §6a).
 **Quem decidiu:** Tiago, de 16 a 19/10/2026, sobre o protótipo interativo
 ("Envio em Lote", quatro versões comentadas no próprio protótipo) e o e-mail
 real do faturamento do Fee Ânima.
@@ -176,11 +176,40 @@ quando a lista de contatos do job mudou.
 
 - **Entrega 2 — financeiro (feita em 19/10/2026, §4a):** a fila de
   faturamento e o Faturar lendo a nota do lote de uma vez.
-- **Entrega 3 — "Copiar de um envio anterior":** as notas de qualquer envio do
-  cliente (outros jobs, outro mês — ex.: o 1º TRI copiando o 4º TRI), com o
-  mês trocado nos descritivos e os valores iguais ou na mesma proporção do
-  total; e "Repetir as notas de {mês anterior}" quando o mês anterior destes
-  jobs já foi enviado.
+- **Entrega 3 — "Copiar de um envio anterior" (feita em 19/10/2026, §6a).**
+
+## 6a. Repetir e copiar as notas de um envio anterior (entrega 3)
+
+- **De onde vêm:** os envios já feitos para o cliente, do mais recente ao mais
+  antigo (até 12): os lotes, com as notas e o rateio de cada uma, e os envios
+  de um job só que têm notas (decisão 123) — nesses, a nota é toda do job e o
+  tomador é o cliente. `carregarEnvioEmLote` lê os dois junto da conferência.
+- **"Repetir as notas de {mês}":** aparece quando o envio mais recente com
+  **estes mesmos jobs** existe (no mensal, o mês anterior deles). Repete as
+  notas com os valores iguais.
+- **"Copiar de um envio anterior"** (ou "de outro envio", quando há o
+  Repetir): a lista dos envios à esquerda; à direita, as notas do escolhido e
+  os **Valores** — "Na mesma proporção, ajustados a R$ X" (padrão quando o
+  total mudou; cada nota mantém a sua parte, e a última fecha os centavos) ou
+  "Iguais aos de {mês}".
+- **Ao copiar:** vêm tomador, CNPJ (ou exterior), valor e descritivo. O mês do
+  envio vira o do lote nos descritivos, na caixa em que estava, e o ano vira
+  junto quando vem colado ("dezembro/2026" → "janeiro/2027"); mês com outro
+  ano no texto fica. A nota "Só o job X" continua assim se o job é deste
+  lote; a de outro job e a dividida à mão voltam para Proporcional.
+- **O aviso** acima das notas diz o que foi feito (repetiu ou copiou, trocou
+  o mês, ajustou os valores, quantas voltaram para Proporcional) e pede para
+  conferir. Nada é enviado sem passar pelas pendências e pela confirmação de
+  sempre.
+- As contas são funções puras com testes (`copiarNotas`, `escalarCentavos`,
+  `trocarMesNoTexto`, em `lib/calculos/envio-em-lote.ts`).
+- **Testado:** no TES-P001/26 (TES-1002 + TES-1003, novembro), a lista trouxe
+  os 6 envios do cliente Teste; copiar o lote de outubro ajustou as 2 notas a
+  R$ 167.018,77, manteve a nota 2 "Só o TES-1002/26" e "exterior", e o envio
+  ficou pronto (fechado sem enviar). O "Repetir" e a troca do mês nos 18
+  descritivos foram conferidos no pop-up real com o Fee Ômega fictício
+  (protótipo https://claude.ai/artifact/KYSb95HrtonmB4TvpPw54J): nenhum envio
+  real tem hoje os mesmos jobs de um lote livre.
 
 ## 7. Pendente fora do sistema
 

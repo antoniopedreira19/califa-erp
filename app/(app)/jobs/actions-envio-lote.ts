@@ -33,6 +33,7 @@ import {
   centavos,
   parcelasDaParte,
   ratearNotas,
+  type NotaParaCopiar,
 } from "@/lib/calculos/envio-em-lote";
 import { conferirEnvioDoJob } from "@/lib/faturamento/conferir-envio-do-job";
 import { envioEmLoteSchema, type EnvioEmLoteInput } from "@/lib/validations/envio-faturamento-lote";
@@ -59,6 +60,157 @@ export interface DadosDoLote {
   vencimentoSugerido: string;
   contatos: Array<{ nome: string; numero: string; email: string; deJobs: string[] }>;
   portais: Array<{ id: string; nome: string; url: string }>;
+  /** Os envios já feitos para o cliente, do mais recente ao mais antigo:
+   *  a origem do "Copiar de um envio anterior" e do "Repetir" (entrega 3). */
+  anteriores: EnvioAnterior[];
+}
+
+/**
+ * Um envio já feito para o cliente: um lote, ou o envio de um job só que
+ * tem notas (decisão 123). O pop-up copia as notas dele.
+ */
+export interface EnvioAnterior {
+  /** "lote:<id>" ou "envio:<id>". */
+  id: string;
+  /** O mês do envio no mensal (Fee e Always On); nulo nos outros. */
+  mes: string | null;
+  enviadoEm: string;
+  por: string | null;
+  jobs: Array<{ id: string; codigo: string; nome: string }>;
+  notas: NotaParaCopiar[];
+}
+
+/** Quantos envios anteriores o pop-up oferece. */
+const LIMITE_DE_ANTERIORES = 12;
+
+/**
+ * Os envios já feitos para o cliente: os lotes, com as notas e o rateio de
+ * cada uma, e os envios de um job só que têm notas (a nota é toda do job).
+ * Do mais recente ao mais antigo. Só lê.
+ */
+async function lerEnviosAnteriores(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  cliente: { id: string; nome: string },
+): Promise<EnvioAnterior[]> {
+  const [lotesRes, enviosRes] = await Promise.all([
+    supabase
+      .from("envios_faturamento_lote")
+      .select(
+        "id, mes, enviado_em, autor:profiles!envios_faturamento_lote_enviado_por_fkey(nome), " +
+          "envios:jobs_envio_faturamento!jobs_envio_faturamento_lote_id_fkey(job:jobs!jobs_envio_faturamento_job_id_fkey(id, codigo, nome)), " +
+          "notas:envios_faturamento_lote_notas!envios_faturamento_lote_notas_lote_id_fkey(ordem, tomador_nome, cnpj, tomador_exterior, valor, descritivo, rateio, " +
+          "partes:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_lote_nota_id_fkey(job_id))",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("cliente_id", cliente.id)
+      .order("enviado_em", { ascending: false })
+      .limit(LIMITE_DE_ANTERIORES)
+      .returns<
+        Array<{
+          id: string;
+          mes: string | null;
+          enviado_em: string;
+          autor: { nome: string | null } | null;
+          envios: Array<{ job: { id: string; codigo: string; nome: string } | null }>;
+          notas: Array<{
+            ordem: number;
+            tomador_nome: string;
+            cnpj: string | null;
+            tomador_exterior: boolean;
+            valor: number | string;
+            descritivo: string | null;
+            rateio: string;
+            partes: Array<{ job_id: string }>;
+          }>;
+        }>
+      >(),
+    supabase
+      .from("jobs_envio_faturamento")
+      .select(
+        "id, mes, enviado_em, enviado_por, " +
+          "job:jobs!jobs_envio_faturamento_job_id_fkey!inner(id, codigo, nome, projeto:projetos!jobs_projeto_id_fkey!inner(cliente_id)), " +
+          "notas:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_envio_id_fkey(id, ordem, cnpj, tomador_exterior, descritivo), " +
+          "parcelas:jobs_envio_faturamento_parcelas!jobs_envio_faturamento_parcelas_envio_id_fkey(nota_id, valor)",
+      )
+      .eq("tenant_id", tenantId)
+      .is("lote_id", null)
+      .eq("job.projeto.cliente_id", cliente.id)
+      .not("enviado_em", "is", null)
+      .order("enviado_em", { ascending: false })
+      .limit(LIMITE_DE_ANTERIORES)
+      .returns<
+        Array<{
+          id: string;
+          mes: string | null;
+          enviado_em: string;
+          enviado_por: string | null;
+          job: { id: string; codigo: string; nome: string };
+          notas: Array<{ id: string; ordem: number; cnpj: string | null; tomador_exterior: boolean; descritivo: string | null }>;
+          parcelas: Array<{ nota_id: string | null; valor: number | string }>;
+        }>
+      >(),
+  ]);
+  if (lotesRes.error) console.error("[jobs.lote.anteriores.lotes]", lotesRes.error.message);
+  if (enviosRes.error) console.error("[jobs.lote.anteriores.envios]", enviosRes.error.message);
+
+  const lotes: EnvioAnterior[] = (lotesRes.data ?? []).map((l) => ({
+    id: `lote:${l.id}`,
+    mes: l.mes,
+    enviadoEm: l.enviado_em,
+    por: l.autor?.nome ?? null,
+    jobs: l.envios.flatMap((e) => (e.job ? [e.job] : [])).sort((a, b) => a.codigo.localeCompare(b.codigo)),
+    notas: [...l.notas]
+      .sort((a, b) => a.ordem - b.ordem)
+      .map((n) => ({
+        tomador: n.tomador_nome,
+        cnpj: n.cnpj,
+        exterior: n.tomador_exterior,
+        valor: Number(n.valor),
+        descritivo: n.descritivo ?? "",
+        // "Só o job" é a nota de uma parte só; a dividida à mão volta como
+        // "manual" e o pop-up a passa para Proporcional.
+        modo:
+          n.rateio === "job" && n.partes.length === 1
+            ? n.partes[0].job_id
+            : n.rateio === "manual"
+              ? MANUAL
+              : PROPORCIONAL,
+      })),
+  }));
+
+  // O envio de um job só: o autor vem de `auth.users`, sem embed; o nome
+  // sai de `profiles` numa leitura à parte.
+  const envios = (enviosRes.data ?? []).filter((e) => e.notas.length > 0);
+  const idsAutores = [...new Set(envios.map((e) => e.enviado_por).filter((x): x is string => Boolean(x)))];
+  const nomes = new Map<string, string>();
+  if (idsAutores.length > 0) {
+    const { data } = await supabase.from("profiles").select("id, nome").in("id", idsAutores).returns<{ id: string; nome: string | null }[]>();
+    for (const p of data ?? []) if (p.nome) nomes.set(p.id, p.nome);
+  }
+  const deUmJob: EnvioAnterior[] = envios.map((e) => ({
+    id: `envio:${e.id}`,
+    mes: e.mes,
+    enviadoEm: e.enviado_em,
+    por: e.enviado_por ? (nomes.get(e.enviado_por) ?? null) : null,
+    jobs: [{ id: e.job.id, codigo: e.job.codigo, nome: e.job.nome }],
+    notas: [...e.notas]
+      .sort((a, b) => a.ordem - b.ordem)
+      .map((n) => ({
+        tomador: cliente.nome,
+        cnpj: n.cnpj,
+        exterior: n.tomador_exterior,
+        valor: e.parcelas.filter((p) => p.nota_id === n.id).reduce((s, p) => s + Number(p.valor), 0),
+        descritivo: n.descritivo ?? "",
+        modo: e.job.id,
+      }))
+      .filter((n) => n.valor > 0),
+  }));
+
+  return [...lotes, ...deUmJob]
+    .filter((e) => e.notas.length > 0)
+    .sort((a, b) => b.enviadoEm.localeCompare(a.enviadoEm))
+    .slice(0, LIMITE_DE_ANTERIORES);
 }
 
 export type CarregarLoteResult = { ok: true; dados: DadosDoLote } | { ok: false; message: string };
@@ -206,8 +358,16 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
     return true;
   });
 
-  // A conferência de cada job, a mesma do envio pela página do job.
-  const [conferencias, contatosPorJob, portaisRes] = await Promise.all([
+  const cli = jobs[0].projeto!.cliente;
+  const cliente = {
+    id: jobs[0].projeto!.cliente_id,
+    nome: cli?.nome_fantasia ?? cli?.razao_social ?? "Cliente",
+    cnpj: cli?.cnpj ? cli.cnpj.replace(/\D/g, "") : null,
+  };
+
+  // A conferência de cada job, a mesma do envio pela página do job; e os
+  // envios anteriores do cliente, para copiar as notas (entrega 3).
+  const [conferencias, contatosPorJob, portaisRes, anteriores] = await Promise.all([
     Promise.all(
       aConferir.map((j) =>
         conferirEnvioDoJob(supabase, {
@@ -229,6 +389,7 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
       .eq("ativo", true)
       .order("nome")
       .returns<{ id: string; nome: string; url: string }[]>(),
+    lerEnviosAnteriores(supabase, tenantId, cliente),
   ]);
 
   const doLote: JobDoLote[] = [];
@@ -269,16 +430,11 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
       .filter((d) => d >= hoje)
       .sort()[0] ?? "";
 
-  const cli = jobs[0].projeto!.cliente;
   const emp = jobs[0].empresa;
   return {
     ok: true,
     dados: {
-      cliente: {
-        id: jobs[0].projeto!.cliente_id,
-        nome: cli?.nome_fantasia ?? cli?.razao_social ?? "Cliente",
-        cnpj: cli?.cnpj ? cli.cnpj.replace(/\D/g, "") : null,
-      },
+      cliente,
       empresa: { id: jobs[0].empresa_id!, nome: emp?.nome_fantasia ?? emp?.razao_social ?? "Empresa" },
       mes: doLote.some((j) => j.mes) ? mesDoLote : null,
       jobs: doLote,
@@ -286,6 +442,7 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
       vencimentoSugerido,
       contatos: [...porEmail.values()],
       portais: portaisRes.data ?? [],
+      anteriores,
     },
   };
 }
