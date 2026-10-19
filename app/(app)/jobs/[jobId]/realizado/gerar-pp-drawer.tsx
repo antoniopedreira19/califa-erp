@@ -1539,7 +1539,7 @@ export function GerarPPDrawer({
               ? `Editar ${ppGeradaEditando.codigo}`
               : editando
                 ? refaz
-                  ? `Reemitir a ${refaz.codigo}`
+                  ? `Reemitir e editar a ${refaz.codigo}`
                   : "Editar PP a emitir"
                 : "Novo Pedido de Produção"}
           </DialogTitle>
@@ -1548,7 +1548,7 @@ export function GerarPPDrawer({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
             {/* Reemitindo uma PP rejeitada: o motivo no topo (decisão 153;
-                "Reemitir PP" desde 19/10/2026). */}
+                "Reemitir e editar PP" desde 19/10/2026). */}
             {refaz && (
               <div className="rounded-xl border border-california-red/30 bg-california-red/5 px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-california-red">

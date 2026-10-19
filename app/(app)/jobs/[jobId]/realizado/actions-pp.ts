@@ -3998,7 +3998,7 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
 }
 
 /**
- * "Reemitir PP" (até 19/10/2026, "Cancelar e refazer") da PP rejeitada
+ * "Reemitir e editar PP" (até 19/10/2026, "Cancelar e refazer") da PP rejeitada
  * pelo financeiro (decisão 153). A PP não se edita: ela é cancelada (fica
  * no histórico) e volta como PP a
  * emitir, com os mesmos dados e os mesmos documentos — os arquivos são
@@ -4214,6 +4214,13 @@ export async function cancelarERefazerPP(
     item_realizado_id: linhaPP.item_realizado_id,
     empresa_id: dados.empresa_id,
     ...colunasDaVerba(dados, linhaPP.verba_titular_nome ?? null),
+    // A verba de produção anterior à 171 não tem titular: a PP a emitir
+    // guarda o responsável que ela tinha, a única forma que a `chk_ppae_verba`
+    // aceita sem titular, e o formulário pede o titular antes de gerar. Sem
+    // isso a reemissão falhava na checagem (PP-00127, 19/10/2026).
+    ...(verbaDeResponsavel(linhaPP) && linhaPP.responsavel_verba_id
+      ? { responsavel_verba_id: linhaPP.responsavel_verba_id, verba_titular_nome: null }
+      : {}),
     servico: dados.servico,
     valor: Number(linhaPP.valor),
     dados,
@@ -4244,7 +4251,7 @@ export async function cancelarERefazerPP(
       status: "cancelada",
       cancelada_por: session.profile.id,
       cancelada_em: new Date().toISOString(),
-      motivo_cancelamento: "Rejeitada pelo financeiro e reemitida (Reemitir PP).",
+      motivo_cancelamento: "Rejeitada pelo financeiro e reemitida (Reemitir e editar PP).",
     })
     .eq("id", ppId)
     .eq("tenant_id", tenantId)

@@ -49,6 +49,7 @@
  *  - 19/10/2026 (revisão da 153): "Cancelar e refazer" virou "Reemitir
  *    PP". Um produtor achou que perderia o formulário e teria de refazer a
  *    PP do zero; o pop-up agora começa pelo que fica (dados e anexos).
+ *    No mesmo dia virou "Reemitir e editar PP" (pedido do Tiago).
  */
 
 import * as React from "react";
@@ -942,7 +943,7 @@ export function PainelPPsItem({
                                   className="inline-flex w-fit items-center gap-1.5 rounded-[9px] border border-california-red bg-california-red px-2.5 py-1 text-[11px] font-bold text-white hover:bg-california-red-hover disabled:opacity-50"
                                 >
                                   <Pencil className="h-3 w-3" />
-                                  Reemitir PP
+                                  Reemitir e editar PP
                                 </button>
                               )}
                             </span>
@@ -1151,9 +1152,9 @@ export function PainelPPsItem({
         <ConfirmDialog
           open={refazendo !== null}
           onOpenChange={(o) => !o && setRefazendo(null)}
-          title={`Reemitir a ${refazendo?.codigo ?? "PP"}?`}
+          title={`Reemitir e editar a ${refazendo?.codigo ?? "PP"}?`}
           description={<TextoDoReemitir codigo={refazendo?.codigo ?? "PP"} />}
-          confirmLabel="Reemitir PP"
+          confirmLabel="Reemitir e editar PP"
           cancelLabel="Voltar"
           pending={pending}
           onConfirm={refazer}

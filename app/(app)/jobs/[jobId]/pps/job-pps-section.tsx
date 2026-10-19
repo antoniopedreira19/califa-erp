@@ -1159,14 +1159,14 @@ export function JobPPsSection({
                     type="button"
                     onClick={() => setPpRefazendo(pp)}
                     disabled={pending}
-                    aria-label={`Reemitir ${pp.codigo}`}
+                    aria-label={`Reemitir e editar ${pp.codigo}`}
                     className="inline-flex flex-none items-center justify-center rounded-[9px] border border-california-red/25 bg-white text-california-red transition-colors hover:bg-california-red/[0.06] disabled:opacity-50"
                     style={{ width: ICONE, height: ICONE }}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Reemitir PP</TooltipContent>
+                <TooltipContent>Reemitir e editar PP</TooltipContent>
               </Tooltip>
             );
             const cancelarEl = cancelar && !prestar && (
@@ -1446,9 +1446,9 @@ export function JobPPsSection({
       <ConfirmDialog
         open={ppRefazendo !== null}
         onOpenChange={(o) => !o && setPpRefazendo(null)}
-        title={`Reemitir a ${ppRefazendo?.codigo ?? "PP"}?`}
+        title={`Reemitir e editar a ${ppRefazendo?.codigo ?? "PP"}?`}
         description={<TextoDoReemitir codigo={ppRefazendo?.codigo ?? "PP"} />}
-        confirmLabel="Reemitir PP"
+        confirmLabel="Reemitir e editar PP"
         cancelLabel="Voltar"
         pending={pending}
         onConfirm={() => {

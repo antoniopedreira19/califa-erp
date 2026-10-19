@@ -5930,3 +5930,25 @@ ao de uma PP válida. O PDF agora diz quando não vale.
   sanitização de PII (`a89a2ba6`, `23d7f83b`) a partir de uma cópia sem os
   dois commits do "Reemitir PP" (`2c90f46c` e `777dc9a5`). Eles foram
   reaplicados, sem conflito, como `7b25c96f` e `b62a4084`, antes da 190.
+
+## ⚠️ Nota de 2026-10-19 (5) — "Reemitir e editar PP" e a verba anterior à 171 (revisão da decisão 153)
+
+- **Texto:** o "Reemitir PP" virou **"Reemitir e editar PP"** (botão do
+  painel, ícone e dica da aba de PPs, confirmação, título do pop-up e do
+  formulário, motivo de cancelamento gravado). Pedido do Tiago: a produção
+  continuava achando que perdia o formulário.
+- **Erro corrigido:** a PP-00127 (QPC-1001/26), verba de produção de antes da
+  decisão 171 (com "responsável", sem titular), dava "Falha ao refazer: new
+  row for relation pedidos_compra_a_emitir violates check constraint
+  chk_ppae_verba". `cancelarERefazerPP` montava a PP a emitir com
+  `colunasDaVerba`, que zera o responsável; sem titular, nenhuma forma da
+  checagem fecha. Agora, quando `verbaDeResponsavel(pp)`, a PP a emitir
+  guarda o `responsavel_verba_id` da PP (a forma "verba de responsável" da
+  checagem), e o formulário pede o titular antes de gerar.
+- **Conferência:** a expressão da `chk_ppae_verba` aplicada aos valores da
+  PP-00127 (só leitura): antes recusa, agora passa. Os textos novos foram
+  conferidos no protótipo montado com o código deste commit
+  (https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r, versão 3). Não deu para
+  subir um servidor do worktree (limite de 5 servidores por pasta, todos de
+  outras conversas), e não há verba antiga rejeitável no TES-P001/26: o
+  primeiro uso real será a própria PP-00127.
