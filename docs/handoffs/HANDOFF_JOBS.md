@@ -5761,7 +5761,9 @@ nova, sem migration, nenhum dado mudou.
   pedido do Tiago, apesar de a tela ser da frente do Antonio: ver a nota
   de 2026-10-19 (3) do `HANDOFF_FINANCEIRO.md`. (2) Vários `new Date().toISOString().slice(0, 10)` calculam
   o "hoje" em UTC: depois das 21h, "hoje" já é amanhã. Não é exibição de
-  `timestamptz` e ficou fora desta correção.
+  `timestamptz` e ficou fora desta correção. ⚠️ **Auditado e em parte
+  corrigido em 2026-10-19:** ver a nota de 2026-10-19 (6) do
+  `HANDOFF_FINANCEIRO.md`.
 
 ## ⚠️ Nota de 2026-10-17 — Histórico de versões da Planilha Interna (decisão 186)
 
@@ -5847,3 +5849,20 @@ protótipo. Regra completa na decisão 188.
   revisão da abertura.
 - **Fica para as entregas 2 e 3:** a fila do financeiro e o Faturar lendo a nota
   do lote de uma vez; "Copiar de um envio anterior".
+
+## ⚠️ Nota de 2026-10-19 (2) — Repetir e copiar as notas de um envio anterior no envio em lote (decisão 188, entrega 3)
+
+- **Onde:** no pop-up "Enviar para faturamento" da lista de Jobs, no começo das
+  notas: **"Repetir as notas de {mês}"** (quando o envio mais recente com estes
+  mesmos jobs existe) e **"Copiar de um envio anterior"** (os lotes e os envios
+  de um job só do cliente, até 12, do mais recente ao mais antigo).
+- **Ao copiar:** tomador, CNPJ ou exterior, valor (igual, ou na mesma proporção
+  do total de agora) e descritivo com o mês trocado ("dezembro/2026" vira
+  "janeiro/2027"). "Só o job X" continua se o job está no lote; de outro job e
+  dividida à mão voltam para Proporcional. Um aviso diz o que foi feito.
+- **Dado:** `carregarEnvioEmLote` devolve `anteriores` (`EnvioAnterior`),
+  lidos junto da conferência; sem migration. Contas puras e testadas em
+  `lib/calculos/envio-em-lote.ts` (`npm run test:envio-em-lote`, 8 testes).
+- **Testado:** cópia no TES-P001/26 (TES-1002 + TES-1003, sem enviar); Repetir
+  e troca do mês no protótipo com o pop-up real e dados fictícios
+  (https://claude.ai/artifact/KYSb95HrtonmB4TvpPw54J).

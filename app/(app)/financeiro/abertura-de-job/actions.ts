@@ -43,6 +43,7 @@ import {
 } from "./aprovacao-save";
 import type { SaveAprovacaoMomento, SaveAprovacaoTipo } from "@/lib/types";
 import type { EspelhosDoJob } from "@/lib/data/espelhos-do-job";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export type ActionResult =
   | {
@@ -1165,7 +1166,9 @@ async function criarProjetoDoJob(
     nome: string;
   },
 ): Promise<{ ok: true; id: string; codigo: string } | { ok: false; message: string }> {
-  const dataBase = args.dataInicio ?? new Date().toISOString().slice(0, 10);
+  // Hoje em Brasília: em UTC, um projeto criado em 31/12 depois das 21h
+  // sairia com o ano seguinte no código.
+  const dataBase = args.dataInicio ?? hojeEmSaoPauloIso();
 
   let codigo: string;
   try {

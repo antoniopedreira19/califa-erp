@@ -28,3 +28,21 @@ export function chaveDoRecebidoAntes(
   if (bvId) return `bv:${bvId}`;
   return null;
 }
+
+/**
+ * A chave da linha da fila de faturamento: a nota do envio junta os
+ * vencimentos dela, e a nota do envio em lote junta as partes dos jobs
+ * (decisão 188). A página conta as linhas por ela — o número da aba é o de
+ * linhas da fila, não o de parcelas.
+ */
+export function chaveDaLinhaDaFila(r: {
+  lote: { lote_nota_id: string } | null;
+  envio_nota_id: string | null;
+  envio_parcela_id: string | null;
+  origem_tipo: string;
+  origem_id: string;
+}): string {
+  if (r.lote) return `lote:${r.lote.lote_nota_id}`;
+  if (r.envio_nota_id) return `nota:${r.envio_nota_id}`;
+  return r.envio_parcela_id ?? `${r.origem_tipo}:${r.origem_id}`;
+}

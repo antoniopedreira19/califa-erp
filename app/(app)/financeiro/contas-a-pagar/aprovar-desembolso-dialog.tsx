@@ -33,6 +33,7 @@ import { aprovarDesembolsoComData } from "@/app/(app)/financeiro/desembolsos/act
 import type { DesembolsoStatus } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { proximaFatura } from "@/lib/cartoes/proxima-fatura";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export interface DesembolsoParaAprovar {
   id: string;
@@ -62,8 +63,10 @@ function formatDate(d: Date): string {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
+/** Hoje em Brasília. `toISOString()` é UTC: depois das 21h, a data de
+ *  pagamento já vinha preenchida com amanhã. */
 function hoje(): string {
-  return new Date().toISOString().slice(0, 10);
+  return hojeEmSaoPauloIso();
 }
 
 export function AprovarDesembolsoDialog({

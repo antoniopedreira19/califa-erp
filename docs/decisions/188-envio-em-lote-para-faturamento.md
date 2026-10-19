@@ -1,8 +1,9 @@
 # 188 — Envio em lote para faturamento: vários jobs de um cliente, com as notas que o cliente pediu e o rateio entre notas e jobs
 
 **Data:** 2026-10-19
-**Status:** aceita. **Entrega 1 implementada em 19/10/2026** (o envio pela
-lista de Jobs). Entregas 2 e 3 a fazer (ver §6).
+**Status:** aceita. **Entregas 1, 2 e 3 implementadas em 19/10/2026** (o
+envio pela lista de Jobs; a nota do lote na fila do financeiro e no Faturar;
+"Repetir" e "Copiar de um envio anterior", §6a).
 **Quem decidiu:** Tiago, de 16 a 19/10/2026, sobre o protótipo interativo
 ("Envio em Lote", quatro versões comentadas no próprio protótipo) e o e-mail
 real do faturamento do Fee Ânima.
@@ -139,6 +140,31 @@ refaz a mesma conta com os valores relidos.
 - O envio pela página do job, depois da troca para a conferência comum,
   recusou a revisão pendente (TES-1025) e o "já enviado" (TES-1004), com a
   auditoria `acao_negada`.
+- **Entrega 2:** na fila do TES-P001/26, as 6 parcelas da nota 1 do lote
+  (3 jobs × 2 vencimentos) viraram uma linha "Lote · 1/2", e a nota 2 outra.
+  O Faturar abriu a nota 1 com R$ 123.866,54 em 2 × R$ 61.933,27. A emissão
+  pelo `emitir_faturamento`, como administrador e em transação desfeita,
+  gravou 7 itens (o save do TES-1004 em item próprio) e 2 títulos, tirou as
+  partes da nota 1 da fila e deixou a nota 2.
+
+## 4a. A nota do lote no financeiro (entrega 2)
+
+- **Fila:** as partes dos jobs de uma nota do lote são uma linha só (selo
+  "Lote"): os jobs com "+", os códigos, o tomador quando não é o cliente, o
+  CNPJ, a posição no lote ("1/18") e os vencimentos pelas datas. O Fee de 18
+  notas e 4 jobs fica com 18 linhas, e não 72.
+- **Faturar:** "Faturar a nota 1 de 18 do lote", com os jobs, o tomador, o
+  descritivo da nota já na Descrição da NF, a observação do envio no quadro
+  de quem enviou e uma parcela por vencimento (a soma das partes do dia).
+  Faturamento parcial e remover um job seguem como no agrupado.
+- **Botão `i`:** a PO de cada job, os contatos de todos e a observação.
+- **O número da aba Faturamento** conta as linhas da fila, não as parcelas.
+- Sem migration: a página lê a nota do lote das notas pendentes, numa
+  segunda onda paralela à dos contatos.
+- **Pendente:** a linha do lote não oferece o recebimento antes da NF (130),
+  que se prende a uma nota de job; o que já estiver numa parte entra na
+  parcela 1 do Faturar. Como receber antes pela nota do lote fica para
+  decidir.
 
 ## 5. Auditoria
 
@@ -148,15 +174,42 @@ quando a lista de contatos do job mudou.
 
 ## 6. Próximas entregas
 
-- **Entrega 2 — financeiro:** a fila de faturamento e o Faturar lendo a nota
-  do lote de uma vez (as partes dos jobs juntas, com tomador, CNPJ, descritivo
-  e a observação). Até lá, o financeiro vê as partes de cada job na fila, com o
-  CNPJ, e as junta pelo Faturamento Agrupado.
-- **Entrega 3 — "Copiar de um envio anterior":** as notas de qualquer envio do
-  cliente (outros jobs, outro mês — ex.: o 1º TRI copiando o 4º TRI), com o
-  mês trocado nos descritivos e os valores iguais ou na mesma proporção do
-  total; e "Repetir as notas de {mês anterior}" quando o mês anterior destes
-  jobs já foi enviado.
+- **Entrega 2 — financeiro (feita em 19/10/2026, §4a):** a fila de
+  faturamento e o Faturar lendo a nota do lote de uma vez.
+- **Entrega 3 — "Copiar de um envio anterior" (feita em 19/10/2026, §6a).**
+
+## 6a. Repetir e copiar as notas de um envio anterior (entrega 3)
+
+- **De onde vêm:** os envios já feitos para o cliente, do mais recente ao mais
+  antigo (até 12): os lotes, com as notas e o rateio de cada uma, e os envios
+  de um job só que têm notas (decisão 123) — nesses, a nota é toda do job e o
+  tomador é o cliente. `carregarEnvioEmLote` lê os dois junto da conferência.
+- **"Repetir as notas de {mês}":** aparece quando o envio mais recente com
+  **estes mesmos jobs** existe (no mensal, o mês anterior deles). Repete as
+  notas com os valores iguais.
+- **"Copiar de um envio anterior"** (ou "de outro envio", quando há o
+  Repetir): a lista dos envios à esquerda; à direita, as notas do escolhido e
+  os **Valores** — "Na mesma proporção, ajustados a R$ X" (padrão quando o
+  total mudou; cada nota mantém a sua parte, e a última fecha os centavos) ou
+  "Iguais aos de {mês}".
+- **Ao copiar:** vêm tomador, CNPJ (ou exterior), valor e descritivo. O mês do
+  envio vira o do lote nos descritivos, na caixa em que estava, e o ano vira
+  junto quando vem colado ("dezembro/2026" → "janeiro/2027"); mês com outro
+  ano no texto fica. A nota "Só o job X" continua assim se o job é deste
+  lote; a de outro job e a dividida à mão voltam para Proporcional.
+- **O aviso** acima das notas diz o que foi feito (repetiu ou copiou, trocou
+  o mês, ajustou os valores, quantas voltaram para Proporcional) e pede para
+  conferir. Nada é enviado sem passar pelas pendências e pela confirmação de
+  sempre.
+- As contas são funções puras com testes (`copiarNotas`, `escalarCentavos`,
+  `trocarMesNoTexto`, em `lib/calculos/envio-em-lote.ts`).
+- **Testado:** no TES-P001/26 (TES-1002 + TES-1003, novembro), a lista trouxe
+  os 6 envios do cliente Teste; copiar o lote de outubro ajustou as 2 notas a
+  R$ 167.018,77, manteve a nota 2 "Só o TES-1002/26" e "exterior", e o envio
+  ficou pronto (fechado sem enviar). O "Repetir" e a troca do mês nos 18
+  descritivos foram conferidos no pop-up real com o Fee Ômega fictício
+  (protótipo https://claude.ai/artifact/KYSb95HrtonmB4TvpPw54J): nenhum envio
+  real tem hoje os mesmos jobs de um lote livre.
 
 ## 7. Pendente fora do sistema
 

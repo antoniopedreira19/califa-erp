@@ -66,6 +66,7 @@ import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { JobFinanceiroTabs } from "./job-financeiro-tabs";
 import { abaDaUrl } from "./abas";
 import { impostoDoJob } from "../../abertura-de-job/imposto-previsto";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export const dynamic = "force-dynamic";
 
@@ -146,7 +147,9 @@ export default async function JobNoFinanceiroPage({
     carregarPrazosDosJobs(tenantId, [params.jobId]),
     previsoesGravadas(supabase, tenantId, params.jobId),
     // O selo de faturamento: a esteira de "Visualizar Jobs", só deste job.
-    faturamentoPorJob(tenantId, hoje, [params.jobId]),
+    // A inadimplência usa o hoje de Brasília; o `hoje` desta página segue o
+    // de UTC porque alimenta o fluxo, que acompanha a `vw_fluxo_caixa`.
+    faturamentoPorJob(tenantId, hojeEmSaoPauloIso(), [params.jobId]),
     // Vocabulário do combo de categoria do formulário de abertura: o
     // mesmo escopo 'orcamento' que a fila usa. Não existe lista de
     // categoria só do financeiro.

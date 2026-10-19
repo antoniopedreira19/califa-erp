@@ -70,6 +70,9 @@ export interface InfoFaturamento {
   contatos: ContatoCobranca[];
   /** Só quando há saldo em save nesta linha. */
   quebra?: QuebraSave | null;
+  /** A observação que a produção escreveu para o financeiro no envio em
+   *  lote (decisão 188). Não sai na nota. */
+  observacao?: string | null;
   /**
    * Linha de BV: os três blocos são do JOB, e o BV é cobrado do fornecedor.
    * Nenhum deles se aplica, então cada vazio explica o porquê em vez de
@@ -208,6 +211,14 @@ export function InfoFaturamentoModal({
               </Vazio>
             )}
           </div>
+
+          {info?.observacao?.trim() && (
+            <div className="flex flex-col gap-1.5">
+              <Rotulo>Observação do envio</Rotulo>
+              <p className="whitespace-pre-line text-[13px] text-pretty">{info.observacao}</p>
+              <p className="text-[11.5px] text-muted-foreground">Para o financeiro; não sai na nota.</p>
+            </div>
+          )}
 
           {info?.quebra && (
             <div className="flex flex-col gap-1.5">

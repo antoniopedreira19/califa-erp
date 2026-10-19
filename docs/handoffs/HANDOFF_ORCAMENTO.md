@@ -5665,3 +5665,19 @@ aplicada na hora combinada com a frente do Antonio, junto da
   TES-P001/26-12 (aberto e fechado sem enviar) e "Ver dados do job" do
   TES-P001/26-07 (TES-1029/26) mostraram "Empresa Teste".
 
+## ⚠️ Nota de 2026-10-19 (2) — a recusa do "Aprovar versão" diz que quem aprova é o GP
+
+- **Por quê:** o produtor vê o "Aprovar versão" na barra do rodapé, mas
+  `orcamentos.aprovar` é só de administrador e GP. Depois do "Sim, aprovar
+  versão" ele recebia o genérico "Você não tem permissão para essa ação."
+  (caso real: um produtor no AMB-1017/26, em 16/10, e outro orçamento em
+  06/10). O Tiago viu as formas no protótipo (esconder, apagar ou trocar o
+  botão por "Próximo passo") e escolheu manter o botão como está.
+- **O quê:** a recusa de `aprovarVersao` passa a dizer "Só o GP pode aprovar
+  a versão. Peça a aprovação ao GP responsável pelo orçamento." Só essa
+  action mudou: as outras recusas por papel continuam com o texto genérico
+  de `respostaPermissaoNegada`, e o `acao_negada` segue na auditoria.
+- **Conferido no navegador (19/10), como Produtor Teste Claude:** no
+  TES-P001/26-19 (v1 em rascunho), "Aprovar versão" → "Sim, aprovar versão"
+  mostrou a mensagem nova no pop-up; a versão continuou em rascunho e a
+  auditoria registrou o `acao_negada` de `orcamentos.aprovar`.

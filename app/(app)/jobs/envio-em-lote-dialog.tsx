@@ -21,7 +21,7 @@
  */
 
 import * as React from "react";
-import { AlertCircle, Check, Layers, Loader2, Lock, Plus, Rows3, Send, Trash2, X } from "lucide-react";
+import { AlertCircle, Check, Copy, Info, Layers, Loader2, Lock, Plus, Repeat, Rows3, Send, Trash2, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
@@ -40,13 +40,17 @@ import {
   PROPORCIONAL,
   centavos,
   centavosDoJobNasNotas,
+  copiarNotas,
+  escalarCentavos,
   ratearNotas,
   somaDiasIso,
 } from "@/lib/calculos/envio-em-lote";
+import { nomeDoMes, rotuloMes } from "@/lib/calculos/meses-trimestre";
 import {
   carregarEnvioEmLote,
   enviarLoteParaFaturamento,
   type DadosDoLote,
+  type EnvioAnterior,
   type JobDoLote,
 } from "./actions-envio-lote";
 import { cadastrarPortalDoClienteDoJob } from "./[jobId]/actions-faturamento";
@@ -68,6 +72,15 @@ const isoLocal = (d: Date) =>
 
 let sequencia = 0;
 const novoId = () => `l${++sequencia}`;
+
+/** O dia do envio, no horário de Brasília. */
+const diaDoEnvio = (ev: EnvioAnterior) =>
+  new Date(ev.enviadoEm).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+/** "Outubro de 2026" (mensal) ou "Envio de 16/10/2026". */
+const tituloDoEnvio = (ev: EnvioAnterior) => (ev.mes ? rotuloMes(ev.mes) : `Envio de ${diaDoEnvio(ev)}`);
+/** No meio da frase: "de outubro de 2026" ou "do envio de 16/10/2026". */
+const deDoEnvio = (ev: EnvioAnterior) =>
+  ev.mes ? `de ${nomeDoMes(ev.mes)} de ${ev.mes.slice(0, 4)}` : `do envio de ${diaDoEnvio(ev)}`;
 
 interface Nota {
   id: string;
@@ -270,6 +283,57 @@ function Formulario({
   });
   const mexer = (id: string, patch: Partial<Nota>) =>
     setNotas((ns) => ns.map((n) => (n.id === id ? { ...n, ...patch } : n)));
+
+  // ---- Copiar de um envio anterior (entrega 3)
+  // "Repetir" é o envio mais recente com estes mesmos jobs — o mês anterior
+  // deles, no mensal.
+  const [copiar, setCopiar] = React.useState(false);
+  const [aviso, setAviso] = React.useState<string | null>(null);
+  const idsDoLote = React.useMemo(() => jobs.map((j) => j.id), [jobs]);
+  const mesmosJobs = (ev: EnvioAnterior) =>
+    ev.jobs.length === jobs.length && ev.jobs.every((j) => idsDoLote.includes(j.id));
+  const anterior = dados.anteriores.find(mesmosJobs) ?? null;
+  function copiarDe(ev: EnvioAnterior, ajustar: boolean) {
+    const r = copiarNotas(ev.notas, {
+      jobs: idsDoLote,
+      totalCentavos: total,
+      ajustar,
+      mesDe: ev.mes,
+      mesPara: dados.mes,
+    });
+    setNotas(
+      r.notas.map((n) =>
+        linha({
+          tomador: n.tomador,
+          cnpj: n.exterior ? "" : (n.cnpj ?? ""),
+          exterior: n.exterior,
+          valor: n.valor,
+          descritivo: n.descritivo,
+          modo: n.modo,
+        }),
+      ),
+    );
+    const partesDoAviso = [
+      `${mesmosJobs(ev) ? "Repeti" : "Copiei"} ${ev.notas.length === 1 ? "a nota" : `as ${ev.notas.length} notas`} ${deDoEnvio(ev)}`,
+    ];
+    if (r.trocouMes && ev.mes && dados.mes)
+      partesDoAviso.push(`troquei “${nomeDoMes(ev.mes)}” por “${nomeDoMes(dados.mes)}” nos descritivos`);
+    if (r.ajustou) partesDoAviso.push(`ajustei os valores na mesma proporção ao total de ${brlc(total)}`);
+    if (r.voltaramDeJob > 0)
+      partesDoAviso.push(
+        r.voltaramDeJob === 1
+          ? "1 nota que era de um job de lá voltou para Proporcional"
+          : `${r.voltaramDeJob} notas que eram de um job de lá voltaram para Proporcional`,
+      );
+    if (r.voltaramDeManual > 0)
+      partesDoAviso.push(
+        r.voltaramDeManual === 1
+          ? "1 nota dividida à mão voltou para Proporcional"
+          : `${r.voltaramDeManual} notas divididas à mão voltaram para Proporcional`,
+      );
+    setAviso(`${partesDoAviso.join("; ")}. Confira antes de enviar.`);
+  }
+
   const acoes: Acoes = {
     umaParaTodos: () => setNotas([linha({ tomador: dados.cliente.nome, valor: total / 100 })]),
     umaPorJob: () => setNotas(jobs.map((j) => linha({ tomador: dados.cliente.nome, valor: j.valor, modo: j.id }))),
@@ -279,7 +343,10 @@ function Formulario({
       setNotas((ns) => [...ns, nova]);
     },
     remover: (id) => setNotas((ns) => ns.filter((n) => n.id !== id)),
-    limpar: () => setNotas([]),
+    limpar: () => {
+      setNotas([]);
+      setAviso(null);
+    },
     mexer,
     mudarModo: (n, modo) => {
       if (modo === MANUAL) {
@@ -371,6 +438,12 @@ function Formulario({
             acoes={acoes}
             somaNotas={somaNotas}
             total={total}
+            anterior={anterior}
+            temAnteriores={dados.anteriores.length > 0}
+            onRepetir={() => anterior && copiarDe(anterior, false)}
+            onCopiar={() => setCopiar(true)}
+            aviso={aviso}
+            onFecharAviso={() => setAviso(null)}
           />
         </div>
         <Resumo
@@ -508,6 +581,21 @@ function Formulario({
         pending={enviando}
         onConfirm={enviar}
       />
+      {copiar && (
+        <CopiarDeEnvio
+          anteriores={dados.anteriores}
+          cliente={dados.cliente.nome}
+          total={total}
+          mes={dados.mes}
+          mesmosJobs={mesmosJobs}
+          idsDoLote={idsDoLote}
+          onCopiar={(ev, ajustar) => {
+            copiarDe(ev, ajustar);
+            setCopiar(false);
+          }}
+          onClose={() => setCopiar(false)}
+        />
+      )}
     </>
   );
 }
@@ -620,6 +708,12 @@ function Notas({
   acoes,
   somaNotas,
   total,
+  anterior,
+  temAnteriores,
+  onRepetir,
+  onCopiar,
+  aviso,
+  onFecharAviso,
 }: {
   notas: Nota[];
   jobs: JobDoLote[];
@@ -629,6 +723,14 @@ function Notas({
   acoes: Acoes;
   somaNotas: number;
   total: number;
+  /** O envio mais recente com estes mesmos jobs: o "Repetir". */
+  anterior: EnvioAnterior | null;
+  temAnteriores: boolean;
+  onRepetir: () => void;
+  onCopiar: () => void;
+  /** O que a cópia fez, para conferir. */
+  aviso: string | null;
+  onFecharAviso: () => void;
 }) {
   if (notas.length === 0) {
     return (
@@ -637,10 +739,26 @@ function Notas({
         <div className="rounded-xl border-2 border-dashed border-border bg-white px-6 py-9 text-center">
           <p className="text-sm font-semibold">Quais notas o cliente pediu?</p>
           <p className="mx-auto mt-1 max-w-[560px] text-xs text-muted-foreground">
-            Uma linha por nota, como o cliente pediu: tomador, CNPJ, valor e descritivo. Depois, cada nota diz de que
-            jobs ela é.
+            {anterior
+              ? `Repita as notas ${deDoEnvio(anterior)} destes jobs, copie de outro envio do cliente, ou monte do zero. `
+              : temAnteriores
+                ? "Copie as notas de um envio anterior do cliente — de outros jobs ou de outro mês — ou monte do zero. "
+                : "Uma linha por nota, como o cliente pediu: tomador, CNPJ, valor e descritivo. "}
+            Depois, cada nota diz de que jobs ela é.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {anterior && (
+              <button type="button" onClick={onRepetir} className={BOTAO_PRIMARIO}>
+                <Repeat className="h-3.5 w-3.5" />
+                {anterior.mes ? `Repetir as notas de ${nomeDoMes(anterior.mes)}` : "Repetir as notas do envio anterior"}
+              </button>
+            )}
+            {temAnteriores && (
+              <button type="button" onClick={onCopiar} className={anterior ? BOTAO : BOTAO_PRIMARIO}>
+                <Copy className="h-3.5 w-3.5" />
+                {anterior ? "Copiar de outro envio" : "Copiar de um envio anterior"}
+              </button>
+            )}
             <button type="button" onClick={acoes.umaParaTodos} className={BOTAO}>
               <Layers className="h-3.5 w-3.5" />
               Uma nota para todos os jobs
@@ -651,7 +769,7 @@ function Notas({
                 Uma nota por job
               </button>
             )}
-            <button type="button" onClick={acoes.adicionar} className={BOTAO_PRIMARIO}>
+            <button type="button" onClick={acoes.adicionar} className={temAnteriores ? BOTAO : BOTAO_PRIMARIO}>
               <Plus className="h-3.5 w-3.5" />
               Adicionar nota
             </button>
@@ -677,6 +795,20 @@ function Notas({
         Uma linha por nota, como o cliente pediu. Em “Rateio”, o padrão é dividir a nota na proporção do valor dos jobs;
         escolha “Só o” job quando a nota for de um job só, ou “Dividir à mão” para escrever quanto vai para cada job.
       </p>
+      {aviso && (
+        <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+          <Info className="mt-px h-3.5 w-3.5 flex-none" />
+          <span className="min-w-0 flex-1">{aviso}</span>
+          <button
+            type="button"
+            onClick={onFecharAviso}
+            aria-label="Fechar o aviso"
+            className="flex-none rounded p-0.5 text-sky-700 transition-colors hover:bg-sky-100"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       <div className="overflow-hidden rounded-xl border border-border bg-white">
         <table className="w-full table-fixed text-[13px]">
           <colgroup>
@@ -891,6 +1023,255 @@ function LinhaDaNota({
         </button>
       </td>
     </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Copiar as notas de um envio anterior (entrega 3, desenho de 19/10/2026)
+// ---------------------------------------------------------------------------
+
+/**
+ * Os envios do cliente à esquerda, do mais recente ao mais antigo; à
+ * direita, as notas do escolhido e como os valores entram: na mesma
+ * proporção do total de agora (padrão quando o total mudou) ou iguais.
+ */
+function CopiarDeEnvio({
+  anteriores,
+  cliente,
+  total,
+  mes,
+  mesmosJobs,
+  idsDoLote,
+  onCopiar,
+  onClose,
+}: {
+  anteriores: EnvioAnterior[];
+  cliente: string;
+  total: number;
+  mes: string | null;
+  mesmosJobs: (ev: EnvioAnterior) => boolean;
+  idsDoLote: string[];
+  onCopiar: (ev: EnvioAnterior, ajustar: boolean) => void;
+  onClose: () => void;
+}) {
+  const [selId, setSelId] = React.useState(anteriores[0]?.id ?? "");
+  const [ajustar, setAjustar] = React.useState(true);
+  const ev = anteriores.find((x) => x.id === selId) ?? anteriores[0];
+  if (!ev) return null;
+  const cents = ev.notas.map((n) => centavos(n.valor));
+  const totalEv = cents.reduce((a, b) => a + b, 0);
+  const difere = totalEv !== total;
+  const novos = difere && ajustar ? escalarCentavos(cents, total) : cents;
+  const outros = !mesmosJobs(ev);
+  const voltam = ev.notas.filter((n) => n.modo === MANUAL || (n.modo !== PROPORCIONAL && !idsDoLote.includes(n.modo))).length;
+  const pct = (v: number) => (totalEv > 0 ? ((v / totalEv) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) : "0");
+  const deLa = ev.mes ? nomeDoMes(ev.mes) : "lá";
+  const opcao = (ativo: boolean) =>
+    cn(
+      "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+      ativo ? "border-california-red/50 bg-california-red/[0.04]" : "border-border bg-white hover:border-california-red/30",
+    );
+  const bolinha = (ativo: boolean) => (
+    <span
+      className={cn(
+        "mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full border",
+        ativo ? "border-california-red" : "border-border",
+      )}
+    >
+      {ativo && <span className="h-2 w-2 rounded-full bg-california-red" />}
+    </span>
+  );
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1180px]"
+        onOpenAutoFocus={(x) => x.preventDefault()}
+      >
+        <DialogHeader className="border-b border-border p-6 pr-12">
+          <DialogTitle>Copiar as notas de um envio anterior</DialogTitle>
+          <DialogDescription>
+            Os envios do cliente {cliente}, do mais recente para o mais antigo — de quaisquer jobs. Vêm o tomador, o CNPJ,
+            o descritivo e o valor de cada nota; depois você confere e ajusta o que mudou.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)]">
+          <div
+            className="min-h-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4"
+            role="radiogroup"
+            aria-label="Envios anteriores"
+          >
+            {anteriores.map((x) => {
+              const ativo = x.id === ev.id;
+              const soma = x.notas.reduce((s, n) => s + centavos(n.valor), 0);
+              return (
+                <button
+                  key={x.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={ativo}
+                  onClick={() => setSelId(x.id)}
+                  className={opcao(ativo)}
+                >
+                  {bolinha(ativo)}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">{tituloDoEnvio(x)}</span>
+                      {mesmosJobs(x) && (
+                        <span className="whitespace-nowrap rounded-full border border-emerald-600/30 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                          Estes mesmos jobs
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {qtdNotas(x.notas.length)} · <span className="font-mono">{brlc(soma)}</span>
+                    </span>
+                    <span className="mt-1.5 flex flex-wrap gap-1">
+                      {x.jobs.map((j) => (
+                        <span
+                          key={j.id}
+                          title={j.nome}
+                          className="rounded-full border border-border bg-white px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-california-red"
+                        >
+                          {j.codigo}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="mt-1.5 block text-[11px] text-muted-foreground">
+                      Enviado em {diaDoEnvio(x)}
+                      {x.por ? ` por ${x.por}` : ""}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="min-h-0 space-y-4 overflow-y-auto p-5">
+            <div className="space-y-2">
+              <Label>Valores</Label>
+              {difere ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={ajustar}
+                    onClick={() => setAjustar(true)}
+                    className={opcao(ajustar)}
+                  >
+                    {bolinha(ajustar)}
+                    <span>
+                      <span className="block text-[13px] font-semibold">Na mesma proporção, ajustados a {brlc(total)}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Cada nota mantém a sua parte do total: a {ev.notas[0].tomador || "nota 1"} era {pct(cents[0])}% em{" "}
+                        {deLa} e continua {pct(cents[0])}%.
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={!ajustar}
+                    onClick={() => setAjustar(false)}
+                    className={opcao(!ajustar)}
+                  >
+                    {bolinha(!ajustar)}
+                    <span>
+                      <span className="block text-[13px] font-semibold">
+                        Iguais aos {ev.mes ? `de ${deLa}` : "do envio"} ({brlc(totalEv)})
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        A soma fica {totalEv < total ? "abaixo" : "acima"} dos {brlc(total)} deste envio; você ajusta nota
+                        a nota.
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-emerald-600/25 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-800">
+                  ✓ {tituloDoEnvio(ev)} soma {brlc(totalEv)}, o mesmo valor deste envio: os valores vêm iguais.
+                </p>
+              )}
+            </div>
+            {mes && ev.mes && ev.mes.slice(0, 7) !== mes.slice(0, 7) && (
+              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Nos descritivos, “{nomeDoMes(ev.mes)}” vira “{nomeDoMes(mes)}”.
+              </p>
+            )}
+            {(outros || voltam > 0) && (
+              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                {outros
+                  ? `Os jobs ${deDoEnvio(ev)} não são os mesmos deste envio (${ev.jobs.map((j) => j.codigo).join(", ")}). `
+                  : ""}
+                {voltam > 0
+                  ? voltam === 1
+                    ? "1 nota que era de um job de lá, ou dividida à mão, entra em “Proporcional” entre os jobs deste envio."
+                    : `${voltam} notas que eram de um job de lá, ou divididas à mão, entram em “Proporcional” entre os jobs deste envio.`
+                  : "As notas proporcionais se dividem entre os jobs deste envio."}
+              </p>
+            )}
+            <div className="overflow-hidden rounded-xl border border-border bg-white">
+              <table className="w-full table-fixed text-[12.5px]">
+                <colgroup>
+                  <col className="w-[34px]" />
+                  <col />
+                  <col className="w-[160px]" />
+                  <col className="w-[130px]" />
+                  {difere && ajustar && <col className="w-[130px]" />}
+                </colgroup>
+                <thead className="bg-muted/50">
+                  <tr className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <th className="px-2 py-2">#</th>
+                    <th className="px-2 py-2 text-left">Tomador</th>
+                    <th className="px-2 py-2 text-left">CNPJ</th>
+                    <th className="px-2 py-2 text-right">{ev.mes ? `Em ${nomeDoMes(ev.mes)}` : "No envio"}</th>
+                    {difere && ajustar && (
+                      <th className="px-2 py-2 text-right">{mes ? `Em ${nomeDoMes(mes)}` : "Agora"}</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ev.notas.map((n, i) => (
+                    <tr key={i} className="border-t border-border">
+                      <td className="px-2 py-1.5 text-center font-mono text-[11px] text-muted-foreground">{i + 1}</td>
+                      <td className="truncate px-2 py-1.5" title={n.descritivo || undefined}>
+                        {n.tomador || "Sem nome"}
+                      </td>
+                      <td className="px-2 py-1.5 font-mono text-[11.5px]">
+                        {n.exterior ? "exterior" : n.cnpj ? formatCnpj(n.cnpj) : "—"}
+                      </td>
+                      <td
+                        className={cn("px-2 py-1.5 text-right font-mono", difere && ajustar && "text-muted-foreground")}
+                      >
+                        {brl(n.valor)}
+                      </td>
+                      {difere && ajustar && (
+                        <td className="px-2 py-1.5 text-right font-mono font-semibold">{brlc(novos[i])}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 border-t border-border p-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => onCopiar(ev, ajustar)}
+            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-california-red-hover"
+          >
+            <Copy className="h-4 w-4" />
+            {ev.notas.length === 1 ? "Copiar a nota" : `Copiar as ${ev.notas.length} notas`}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
