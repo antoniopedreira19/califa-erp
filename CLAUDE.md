@@ -54,6 +54,25 @@ No MVP, o gerente de projetos conversa com o cliente fora do sistema. O sistema 
 
 **O TypeScript não lê o banco.** Não há tipos gerados: `lib/types.ts` é escrito à mão. Migration que mexe em coluna usada pelo frontend termina atualizando o tipo correspondente, no mesmo commit — senão o campo fica invisível para o verificador e para o autocompletar.
 
+## Dados pessoais nunca entram no repo (regra transversal)
+
+**Nenhum arquivo versionado pode conter CPF, nome, email, telefone, CNPJ, data de nascimento ou outro dado identificável de pessoa real.** Vale para código, teste, fixture, migration SQL, ADR, spec, plan, doc, comentário ou mensagem de commit. Sem exceção, mesmo em arquivo "só meu, só pra reproduzir rapidinho".
+
+**O que usar no lugar:**
+- CPF: `190.000.NNN-00` (fixture da folha), `110.000.NNN-00` (migration), `111.444.777-35` (teste que valida DV), `000.000.000-00` (vazio)
+- CNPJ: `00.000.000/0001-00`, `11.222.333/0001-81` (teste que valida DV)
+- Email: `colaborador_NNN@exemplo.com`, `pessoal_NNN@exemplo.com`
+- Telefone: `00000000000`
+- Nome: `COLABORADOR NNN EXEMPLO`, `FORNECEDOR NNN EXEMPLO`
+
+**Barreiras automáticas:**
+1. **Pre-commit hook** em `.githooks/pre-commit` roda `scripts/check-pii.sh` e bloqueia commit com dado real. Setup único por clone: `git config core.hooksPath .githooks`.
+2. **GitHub Action** em `.github/workflows/pii-check.yml` roda o mesmo check em cada push/PR. Falha o CI se escapar do hook local.
+
+**Se o hook falsar positivamente** (CNPJ institucional, email público, placeholder novo), edite a whitelist em `scripts/check-pii.sh` e justifique no commit — não force o commit com `--no-verify`.
+
+O repositório é público. Em outubro de 2026 vazamos 196 colaboradores com CPF+nome+email+telefone+data de nascimento numa migration SQL + fixture de folha com salário líquido de 33 pessoas. Toda a limpeza (sanitização dos arquivos + reescrita do histórico com `git filter-repo` + force-push + delete das 7 branches remotas antigas) custou uma tarde inteira e deixou dívidas (quem clonou nesse período ainda tem o dado). Essa regra existe pra nunca mais acontecer.
+
 ## Performance é feature (regra transversal)
 
 **Toda mudança de UI ou backend deve ser avaliada contra o guia de performance ANTES de codar.** Leia `docs/PERFORMANCE.md` — é a fonte-verdade sobre o que degrada o sistema, como detectar e como corrigir. Use o checklist do documento como filtro final antes de qualquer commit que toca em `app/(app)/**` ou `lib/supabase/**`.

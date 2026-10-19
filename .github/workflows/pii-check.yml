@@ -1,0 +1,38 @@
+name: PII check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check-pii:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan changed files for PII
+        shell: bash
+        run: |
+          # Em PR, compara contra a base. Em push, compara contra o pai.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          fi
+
+          # Primeiro push de uma branch nao tem BASE util
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            # Scaneia os ultimos 20 commits como fallback
+            FILES=$(git diff --name-only HEAD~20..HEAD --diff-filter=ACM 2>/dev/null || git ls-files)
+          else
+            FILES=$(git diff --name-only "$BASE..$HEAD" --diff-filter=ACM)
+          fi
+
+          export PRE_COMMIT_FILES="$FILES"
+          chmod +x scripts/check-pii.sh
+          scripts/check-pii.sh

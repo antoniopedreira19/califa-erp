@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Pre-commit hook: bloqueia commit com dados pessoais reais.
+# Setup (uma vez por clone): git config core.hooksPath .githooks
+
+exec scripts/check-pii.sh
