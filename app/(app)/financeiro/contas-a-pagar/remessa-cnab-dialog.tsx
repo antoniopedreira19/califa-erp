@@ -56,6 +56,7 @@ import type {
   PixTipoChave,
   TipoContaBancariaFornecedor,
 } from "@/lib/types";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 // ---------------------------------------------------------------------
 // Tipos (dados vindos do server component)
@@ -188,8 +189,10 @@ function formatBRL(v: number): string {
   });
 }
 
+/** Hoje em Brasília. `toISOString()` é UTC: depois das 21h, a data de
+ *  pagamento já vinha preenchida com amanhã. */
 function hoje(): string {
-  return new Date().toISOString().slice(0, 10);
+  return hojeEmSaoPauloIso();
 }
 
 function baixarBase64ComoArquivo(base64: string, nome: string) {

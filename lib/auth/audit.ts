@@ -207,6 +207,8 @@ export type AuditAction =
   | "job.enviado_para_faturamento"
   // Decisão 123: a lista de contatos de cobrança trocada no envio.
   | "job.contatos_cobranca_alterados"
+  // Decisão 188: vários jobs de um cliente enviados para faturamento de uma vez.
+  | "jobs.enviados_em_lote"
   | "job.encerrado"
   | "job.finalizado"
   | "cliente_portal.criado"
@@ -317,6 +319,8 @@ export type AuditAction =
   | "fatura_cartao.reaberta"
   | "fatura_cartao.baixa_estornada"
   | "cartao_credito.criado"
+  // Decisão 187: o desgaste por km do reembolso de veículo próprio.
+  | "financeiro_parametro.atualizado"
   | "cartao_credito.atualizado"
   | "cartao_credito.inativado"
   | "cartao_credito.reativado"

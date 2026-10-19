@@ -62,6 +62,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import {
   documentoTipoLabel,
+  ehReembolso,
   podeCancelarPP,
   rotuloDaVerba,
   rotuloDaVerbaMinusculo,
@@ -75,6 +76,7 @@ import {
   situacaoVerbaLabel,
 } from "@/lib/types";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
+import { contaDosDeslocamentos, contaPorExtenso, rotuloDoReembolso } from "@/lib/calculos/reembolso";
 import {
   nfInicial,
   notasFiscaisDaLinhaPP,
@@ -718,11 +720,16 @@ export function VerPPDrawer({
               </span>
               {/* Decisão 164: o switch passou a se chamar "Verba", com o tipo
                   ao lado. */}
+              {/* Decisão 187: o reembolso mora no campo da verba. */}
               <span className="text-sm font-medium text-muted-foreground">
-                Verba
+                {ehReembolso(pp) ? "Reembolso" : "Verba"}
               </span>
               <span className="ml-auto text-[11px] text-muted-foreground">
-                {tipoDaVerba(pp) ? rotuloDaVerba(tipoDaVerba(pp)!) : "Não"}
+                {ehReembolso(pp)
+                  ? rotuloDoReembolso(pp.reembolso_tipo ?? "despesas")
+                  : tipoDaVerba(pp)
+                    ? rotuloDaVerba(tipoDaVerba(pp)!)
+                    : "Não"}
               </span>
             </div>
 
@@ -762,6 +769,9 @@ export function VerPPDrawer({
                   {formatCurrency(Number(pp.valor ?? 0), "BRL")}
                 </span>
               </div>
+              {pp.reembolso_tipo === "veiculo_proprio" && pp.reembolso_deslocamentos && (
+                <DeslocamentosLidos deslocamentos={pp.reembolso_deslocamentos} />
+              )}
             </div>
 
             <div>
@@ -895,11 +905,13 @@ export function VerPPDrawer({
           {/* Anexos */}
           <div className="space-y-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Anexos {anexos.length > 0 ? `· ${anexos.length}` : ""}
+              {ehReembolso(pp) ? "Comprovantes" : "Anexos"} {anexos.length > 0 ? `· ${anexos.length}` : ""}
             </h3>
             {anexos.length === 0 ? (
               <p className="rounded border border-dashed border-border p-3 text-[12.5px] text-muted-foreground">
-                {tipoDaVerba(pp)
+                {ehReembolso(pp)
+                  ? "Nenhum comprovante ainda — são obrigatórios no envio ao financeiro."
+                  : tipoDaVerba(pp)
                   ? `${rotuloDaVerbaMinusculo(tipoDaVerba(pp)!).replace(/^v/, "V")} sai sem anexo — as notas entram na prestação de contas.`
                   : "Sem anexos nesta PP."}
               </p>
@@ -1120,6 +1132,8 @@ function AnexoLido({
     !!nota?.tomador && !!pp.estabelecimento_id && nota.tomador !== pp.estabelecimento_id;
   const registradaNaOutra =
     nota?.registrada?.na_pp && nota.registrada.na_pp !== pp.codigo ? nota.registrada.na_pp : null;
+  // Decisão 187: o comprovante da despesa traz número, data e valor.
+  const comprovante = pp.reembolso_tipo === "despesas" && anexo.nf_valor !== null;
 
   return (
     <li className="overflow-hidden rounded-xl border border-border bg-white">
@@ -1157,6 +1171,19 @@ function AnexoLido({
           <Eye className="h-3 w-3" />
         </button>
       </div>
+
+      {/* Decisão 187: o comprovante da despesa, com o que a produção informou. */}
+      {comprovante && (
+        <div className="grid grid-cols-[148px_148px_132px] gap-x-2 border-t border-border px-3 pb-3 pt-2.5">
+          <DadoDaNf rotulo="Número" mono>
+            {anexo.documento_numero || "—"}
+          </DadoDaNf>
+          <DadoDaNf rotulo="Data da despesa">{formatData(anexo.nf_data_emissao)}</DadoDaNf>
+          <DadoDaNf rotulo="Valor pago" mono>
+            {formatCurrency(anexo.nf_valor, "BRL")}
+          </DadoDaNf>
+        </div>
+      )}
 
       {anexo.documento_tipo === "nota_fiscal" && nota && nf && (
         <div className="space-y-1.5 border-t border-border px-3 pb-3 pt-2.5">
@@ -1236,7 +1263,8 @@ function AnexoLido({
         </div>
       )}
 
-      {anexo.documento_tipo && anexo.documento_tipo !== "nota_fiscal" && (
+      {/* No comprovante do reembolso o número já está no bloco acima. */}
+      {anexo.documento_tipo && anexo.documento_tipo !== "nota_fiscal" && !comprovante && (
         <div className="flex items-center gap-2 border-t border-border px-3 py-2">
           <span className={rotulo}>Número do documento</span>
           <span className="flex h-8 w-44 items-center rounded-lg border border-border bg-muted/40 px-2 font-mono text-xs">
@@ -1249,6 +1277,38 @@ function AnexoLido({
 }
 
 /** Um dado da NF, na caixa travada do tamanho do campo do envio. */
+/** Os deslocamentos do reembolso de veículo próprio, como a PP guardou
+ *  (decisão 187). */
+function DeslocamentosLidos({ deslocamentos }: { deslocamentos: NonNullable<PedidoCompraNaLista["reembolso_deslocamentos"]> }) {
+  const conta = contaDosDeslocamentos(deslocamentos);
+  const rotulo = "text-[11px] font-medium text-muted-foreground";
+  return (
+    <div className="space-y-1.5 border-t border-border pt-3">
+      <div className="grid grid-cols-[84px_minmax(0,1fr)_64px_40px_80px] gap-x-2">
+        <span className={rotulo}>Data</span>
+        <span className={rotulo}>Trajeto</span>
+        <span className={cn(rotulo, "text-right")}>Km</span>
+        <span className={cn(rotulo, "text-right")}>Vezes</span>
+        <span className={cn(rotulo, "text-right")}>Valor</span>
+      </div>
+      {deslocamentos.linhas.map((l, i) => (
+        <div key={i} className="grid grid-cols-[84px_minmax(0,1fr)_64px_40px_80px] gap-x-2 text-xs">
+          <span className="font-mono">{formatData(l.data)}</span>
+          <span className="truncate" title={l.trajeto}>
+            {l.trajeto}
+          </span>
+          <span className="text-right font-mono">
+            {l.km_ida_volta.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+          </span>
+          <span className="text-right font-mono">{l.vezes}</span>
+          <span className="text-right font-mono font-semibold">{formatCurrency(conta.porLinha[i] ?? 0, "BRL")}</span>
+        </div>
+      ))}
+      <p className="font-mono text-[11px] text-muted-foreground">{contaPorExtenso(deslocamentos)}</p>
+    </div>
+  );
+}
+
 function DadoDaNf({
   rotulo,
   children,

@@ -29,7 +29,8 @@ import type {
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba, situacaoVerbaLabel } from "@/lib/types";
-import type { TipoVerba, TitularDaVerbaTipo } from "@/lib/types";
+import type { DocumentoTipo, TipoVerba, TitularDaVerbaTipo } from "@/lib/types";
+import type { DeslocamentosDoReembolso, ReembolsoTipo } from "@/lib/calculos/reembolso";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
 import type { NotasFiscaisDaLinhaPP, RegimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
@@ -48,6 +49,7 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 export interface PPRow {
   id: string;
@@ -154,6 +156,11 @@ export interface PPRow {
   tipo_verba: TipoVerba | null;
   /** De onde vem o titular (alimentação e transporte). */
   verba_titular_tipo: TitularDaVerbaTipo | null;
+  /** Decisão 187: na PP de reembolso, despesas ou veículo próprio; null
+   *  fora dela. Obrigatório pelo mesmo motivo do `tipo_verba`. */
+  reembolso_tipo: ReembolsoTipo | null;
+  /** Decisão 187: a conta do veículo próprio, como a PP guardou. */
+  reembolso_deslocamentos: DeslocamentosDoReembolso | null;
   /** Quem recebe a verba: o responsável (produção) ou o titular
    *  (alimentação e transporte). Null fora da verba. */
   responsavel_nome: string | null;
@@ -175,6 +182,12 @@ export interface PPRow {
     id: string;
     arquivo_nome_original: string;
     arquivo_tamanho_bytes: number;
+    /** O tipo, o número, a data e o valor que a produção informou — o
+     *  dossiê do reembolso mostra o comprovante assim (decisão 187). */
+    documento_tipo: DocumentoTipo | null;
+    documento_numero: string | null;
+    nf_data_emissao: string | null;
+    nf_valor: number | null;
   }>;
   /**
    * Parcelas da PP, sempre ao menos uma (1/1). Aqui são leitura — o
@@ -325,7 +338,7 @@ function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
         busca: [
           r.codigo,
           r.urgente && (r.status === "em_avaliacao" || r.status === "aprovada") ? "Urgente" : "",
-          r.verba_producao ? "Verba" : "",
+          r.verba_producao ? (r.tipo_verba === "reembolso" ? "Reembolso" : "Verba") : "",
         ].join(" "),
       }),
     },
@@ -673,7 +686,8 @@ export function PedidosCompraList({
                   )}
                   {r.verba_producao && (
                     <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                      Verba
+                      {/* Decisão 187: o reembolso mora no campo da verba. */}
+                      {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
                     </span>
                   )}
                 </td>
@@ -708,7 +722,7 @@ export function PedidosCompraList({
                   <span>{r.job_nome}</span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {formatDate(filtro === "prestacoes" ? (r.prestacao?.enviada_em ?? null) : r.created_at)}
+                  {formatDiaBr(filtro === "prestacoes" ? (r.prestacao?.enviada_em ?? null) : r.created_at)}
                 </td>
                 <td className="px-4 py-3">
                   <QuemEnviou

@@ -42,6 +42,7 @@ import {
   ExigidosNoEnvio,
   anexoEmEdicao,
   anexoParaEnvio,
+  comprovanteDoReembolsoParaEnvio,
   faltaNosAnexosParaEnviar,
   faltasDaNf,
   itensDaLista,
@@ -52,6 +53,15 @@ import {
   type TomadorDaNf,
 } from "./anexos-da-pp";
 import { CorrigirNfDialog } from "./corrigir-nf-da-pp";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { CamposDoComprovante, ResumoDosComprovantes, comprovantesDosAnexos } from "./comprovantes-do-reembolso";
+import {
+  TIPOS_DE_COMPROVANTE,
+  faltaNosComprovantesDoReembolso,
+  resumoDosDeslocamentos,
+  rotuloDoReembolso,
+  type ReembolsoTipo,
+} from "@/lib/calculos/reembolso";
 
 // ---------------------------------------------------------------------------
 // A pré-abertura: só PP a emitir
@@ -67,6 +77,11 @@ export function textoAguardaAbertura(status: string): string | null {
   }
   return null;
 }
+
+/** A errata mudou a linha e a revisão da abertura ainda não foi salva
+ *  (decisão 185): só as PPs desta linha esperam. */
+export const TEXTO_LINHA_ALTERADA_EM_REVISAO =
+  "A errata alterou esta linha e a abertura está em revisão no financeiro: o envio das PPs dela volta quando a revisão for salva.";
 
 export function FaixaAguardaAbertura({ texto }: { texto: string }) {
   return (
@@ -167,6 +182,9 @@ export function RevisaoDialog({
   // antes dela não tem o tipo: é produção. Desde a 171 as três verbas têm
   // titular; só a de produção salva antes dela tem responsável.
   const tipoVerba = d.verba_producao ? (d.tipo_verba ?? aEmitir.tipo_verba ?? "producao") : null;
+  // Decisão 187: o reembolso mora no campo da verba.
+  const reembolso = tipoVerba === "reembolso";
+  const reembolsoTipo: ReembolsoTipo = d.reembolso_tipo ?? "despesas";
   const rotuloDeQuemRecebe = !tipoVerba
     ? "Fornecedor"
     : aEmitir.verba_titular_tipo === "fornecedor"
@@ -183,7 +201,11 @@ export function RevisaoDialog({
           ],
         ] as Array<[string, React.ReactNode]>)
       : []),
-    ...(tipoVerba ? ([["Verba", rotuloDaVerba(tipoVerba)]] as Array<[string, React.ReactNode]>) : []),
+    ...(tipoVerba
+      ? ((reembolso
+          ? [["Tipo", rotuloDoReembolso(reembolsoTipo)]]
+          : [["Verba", rotuloDaVerba(tipoVerba)]]) as Array<[string, React.ReactNode]>)
+      : []),
     [rotuloDeQuemRecebe, nomeDoFornecedor],
     ["Serviço", d.servico],
     [
@@ -193,19 +215,29 @@ export function RevisaoDialog({
         <b>{formatCurrency(aEmitir.valor, moeda)}</b>
       </span>,
     ],
+    ...(reembolso && reembolsoTipo === "veiculo_proprio"
+      ? ([["Deslocamentos", resumoDosDeslocamentos(d.deslocamentos)]] as Array<[string, React.ReactNode]>)
+      : []),
     ["Empresa emissora", nomeDaEmpresa],
     [
       "Pagamento",
       `${parcelas > 1 ? `${parcelas} parcelas, a 1ª em` : "Parcela única em"} ${dataBr(d.parcelas[0]?.data_vencimento ?? d.prazo_pagamento)}`,
     ],
     [
-      "Anexos",
+      reembolso ? "Comprovantes" : "Anexos",
       aEmitir.anexos.length === 0
-        ? "Nenhum"
+        ? reembolso
+          ? "Nenhum ainda — são obrigatórios no envio ao financeiro"
+          : "Nenhum"
         : aEmitir.anexos
             .map((a) => {
               const numero = (a.documento_numero ?? "").trim();
               const tipo = a.documento_tipo ? documentoTipoLabel(a.documento_tipo) : "sem tipo";
+              // Decisão 187: o comprovante de despesa mostra a data e o valor.
+              if (reembolso && a.documento_tipo && a.nf_valor) {
+                return `${tipo}${numero ? ` ${numero}` : ""} · ${dataBr(a.nf_data_emissao ?? "")} · ${formatCurrency(a.nf_valor, moeda)}`;
+              }
+              if (reembolso && !a.documento_tipo) return a.arquivo_nome_original;
               return `${tipo}${numero ? ` ${numero}` : ""} · ${a.arquivo_nome_original}`;
             })
             .join("; "),
@@ -362,6 +394,11 @@ export interface PPParaEnviar {
   servico: string;
   fornecedorId: string | null;
   verbaProducao: boolean;
+  /** Decisão 187: na PP de reembolso, o tipo — o envio cobra os
+   *  comprovantes (despesas) ou o anexo do deslocamento (veículo próprio).
+   *  Null fora do reembolso. Obrigatório: um chamador que o esquecesse
+   *  mandaria o reembolso sem comprovante, como a verba. */
+  reembolsoTipo: ReembolsoTipo | null;
   anexos: AnexoDaPPNaLista[];
   /** Decisão 161: paga por boleto — o envio exige o boleto e a nota. */
   pagaPorBoleto: boolean;
@@ -458,12 +495,37 @@ export function EnvioDialog({
   const existentes = useNotasExistentes(pp?.fornecedorId ?? null, numerosDasNfs, pp?.id ?? null, versaoDasNotas);
 
   if (!pp) return null;
+  // Decisão 187: o reembolso leva os comprovantes, com a regra dele.
+  const reembolsoTipo = pp.reembolsoTipo;
+  const veiculo = reembolsoTipo === "veiculo_proprio";
+  const comAnexos = !pp.verbaProducao || reembolsoTipo !== null;
+  function camposDoComprovanteEnvio(id: string) {
+    const a = anexos.find((x) => x.id === id);
+    if (!a) return null;
+    return (
+      <CamposDoComprovante
+        anexo={a}
+        onNumero={(n) => (a.tipo === "nota_fiscal" ? mudarNf(id, { numero: n }) : mudar(id, { numero: n }))}
+        onData={(iso) => mudarNf(id, { emissao: iso })}
+        onValor={(v) => mudarNf(id, { valor: v })}
+        hoje={hojeEmSaoPauloIso()}
+        destacarFaltas={tentou}
+        disabled={pending}
+      />
+    );
+  }
+  const paraEnvio = reembolsoTipo ? comprovanteDoReembolsoParaEnvio : anexoParaEnvio;
 
   function enviar(confirmado: boolean) {
     if (!pp) return;
     setTentou(true);
-    const falta = faltaNosAnexosParaEnviar(anexos, pp.valor, existentes, pp.pagaPorBoleto);
-    if (falta && !pp.verbaProducao) {
+    const subindo = anexos.some((a) => a.status === "uploading" || a.status === "selecionado");
+    const falta = reembolsoTipo
+      ? subindo
+        ? "Aguarde os arquivos terminarem de subir."
+        : faltaNosComprovantesDoReembolso(comprovantesDosAnexos(anexos), pp.valor, reembolsoTipo)
+      : faltaNosAnexosParaEnviar(anexos, pp.valor, existentes, pp.pagaPorBoleto);
+    if (falta && comAnexos) {
       setErro(falta);
       return;
     }
@@ -473,7 +535,7 @@ export function EnvioDialog({
       startTransition(async () => {
         const res = await deixarPPProntaParaEnvio(
           alvo.id,
-          anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+          anexos.filter((a) => a.status === "ok").map(paraEnvio),
         );
         if (!res.ok) {
           setErro(res.message);
@@ -489,7 +551,7 @@ export function EnvioDialog({
       const res = await enviarPedidoCompraAoFinanceiro(
         alvo.id,
         confirmado,
-        anexos.filter((a) => a.status === "ok").map(anexoParaEnvio),
+        anexos.filter((a) => a.status === "ok").map(paraEnvio),
       );
       if (!res.ok) {
         if (res.acimaDoPlanejado) {
@@ -558,7 +620,7 @@ export function EnvioDialog({
     <button
       type="button"
       onClick={() => enviar(confirmando !== null)}
-      disabled={pending || (!pp.verbaProducao && prefixo === null)}
+      disabled={pending || (comAnexos && prefixo === null)}
       className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
     >
       {preparar ? <ClipboardCheck className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
@@ -591,9 +653,10 @@ export function EnvioDialog({
                 Deixar <span className="font-mono">{pp.codigo}</span> pronta para envio
               </DialogTitle>
               <DialogDescription className="text-[12.5px] leading-relaxed">
-                {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.
-                Confira os documentos do fornecedor: o GP envia a PP ao financeiro pela aba Pedidos de Produção. Todos os
-                campos são obrigatórios.
+                {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.{" "}
+                {reembolsoTipo
+                  ? "Confira os comprovantes do reembolso: o GP envia a PP ao financeiro pela aba Pedidos de Produção. Todos os campos são obrigatórios."
+                  : "Confira os documentos do fornecedor: o GP envia a PP ao financeiro pela aba Pedidos de Produção. Todos os campos são obrigatórios."}
               </DialogDescription>
             </>
           ) : (
@@ -602,8 +665,10 @@ export function EnvioDialog({
                 Enviar <span className="font-mono">{pp.codigo}</span> ao financeiro
               </DialogTitle>
               <DialogDescription className="text-[12.5px] leading-relaxed">
-                {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.
-                A PP não muda mais; aqui entram os documentos do fornecedor. Todos os campos são obrigatórios para enviar.
+                {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.{" "}
+                {reembolsoTipo
+                  ? "A PP não muda mais; aqui entram os comprovantes do reembolso. Todos os campos são obrigatórios para enviar."
+                  : "A PP não muda mais; aqui entram os documentos do fornecedor. Todos os campos são obrigatórios para enviar."}
               </DialogDescription>
             </>
           )}
@@ -624,11 +689,17 @@ export function EnvioDialog({
               </button>
             </div>
           )}
-          {!pp.verbaProducao && (
+          {comAnexos && (
             <>
               {/* O "Ver PP e documentos lado a lado" virou o "Verificar" do
                   rodapé (pedido do Tiago, 08/10/2026). */}
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Anexos</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {reembolsoTipo
+                  ? veiculo
+                    ? "Comprovantes do deslocamento"
+                    : "Comprovantes da despesa"
+                  : "Anexos"}
+              </p>
               {pp.pagaPorBoleto && <ExigidosNoEnvio anexos={anexos} />}
               <ZonaDeAnexos id={`envio-arquivos-${pp.id}`} pronto={prefixo !== null} onArquivos={subir} />
               <ListaDeAnexos
@@ -643,11 +714,18 @@ export function EnvioDialog({
                   return tentou && !!a && a.tipo !== "nota_fiscal" && !(a.numero ?? "").trim();
                 }}
                 disabled={pending}
-                onVer={(id) => setLadoALado({ foco: id })}
+                onVer={reembolsoTipo ? undefined : (id) => setLadoALado({ foco: id })}
+                tipos={reembolsoTipo ? TIPOS_DE_COMPROVANTE : undefined}
+                semTipo={veiculo}
+                renderComprovante={reembolsoTipo && !veiculo ? camposDoComprovanteEnvio : undefined}
                 renderNf={(id) => camposDaNf(id, false)}
                 renderCnpj={cnpjDoDocumento}
               />
-              <ResumoDasNfs valores={nfsDaLista.map((a) => parteDaNf(a.nf))} valorPP={pp.valor} />
+              {reembolsoTipo ? (
+                !veiculo && <ResumoDosComprovantes anexos={anexos} valorPP={pp.valor} />
+              ) : (
+                <ResumoDasNfs valores={nfsDaLista.map((a) => parteDaNf(a.nf))} valorPP={pp.valor} />
+              )}
             </>
           )}
 

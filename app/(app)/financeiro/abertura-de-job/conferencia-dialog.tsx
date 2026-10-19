@@ -51,6 +51,9 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
     { rotulo: "Código", valor: job.codigo, mono: true },
     // Só o nome: o único código da conferência é o do job (30/09/2026).
     { rotulo: "Projeto", valor: job.projeto_nome ?? "—" },
+    // A empresa do job, que vem do projeto — a mesma linha do painel
+    // "Dados da produção" da abertura (Tiago, 19/10/2026).
+    { rotulo: "Empresa", valor: job.empresa_nome ?? "—" },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
     { rotulo: "Marca", valor: job.produto ?? "—" },
     // Vem do orçamento: é a categoria que a produção deu ao job e a que a

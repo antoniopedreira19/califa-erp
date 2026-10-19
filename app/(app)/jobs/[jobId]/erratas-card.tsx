@@ -9,7 +9,7 @@ import {
   type JobErrataComItens,
   type JobErrataItem,
 } from "@/lib/types";
-import { quandoDaPronta } from "./realizado/errata-pronta-faixa";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 import { LinhaDeEstrutura } from "./realizado/errata-confirmar-dialog";
 
 interface Props {
@@ -27,11 +27,6 @@ interface Props {
   valorJobAtual: number;
   faturamentoPrevistoAtual: number;
   moeda: string;
-}
-
-function formatarData(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  return `${d}/${m}/${y}`;
 }
 
 function comSinal(v: number, moeda: string): string {
@@ -161,7 +156,7 @@ export function ErratasCard({
       {pronta && (
         <div className="grid w-full grid-cols-[96px_1fr_auto_auto_20px] items-center gap-4 border-b border-border/60 px-6 py-3.5">
           <span className="font-mono text-[11.5px] text-muted-foreground">
-            {quandoDaPronta(pronta.preparadaEm).slice(0, 10)}
+            {formatDiaBr(pronta.preparadaEm)}
           </span>
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-[13.5px] font-semibold leading-tight">
@@ -211,7 +206,9 @@ export function ErratasCard({
               className="grid w-full grid-cols-[96px_1fr_auto_auto_20px] items-center gap-4 px-6 py-3.5 text-left transition-colors hover:bg-california-red/[0.025]"
             >
               <span className="font-mono text-[11.5px] text-muted-foreground">
-                {formatarData(e.created_at)}
+                {/* `created_at` é timestamptz: o dia sai no horário de
+                    Brasília, como na linha da errata pronta acima. */}
+                {formatDiaBr(e.created_at)}
               </span>
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-[13.5px] font-semibold leading-tight">

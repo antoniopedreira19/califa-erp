@@ -56,6 +56,7 @@ import {
   linkDocumentoPrestacao,
   prefixoUploadPrestacao,
 } from "./actions-prestacao";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 const BUCKET = "pedidos-compra";
 
@@ -389,7 +390,7 @@ export function PrestarContasDrawer({
                 <p className="font-semibold text-california-red">
                   Reprovada pelo financeiro
                   {ppAtual.prestacao.reprovada_em
-                    ? ` · ${formatarData(ppAtual.prestacao.reprovada_em)}`
+                    ? ` · ${formatDiaBr(ppAtual.prestacao.reprovada_em)}`
                     : ""}
                   {ppAtual.prestacao.reprovada_por_nome
                     ? `, ${ppAtual.prestacao.reprovada_por_nome}`

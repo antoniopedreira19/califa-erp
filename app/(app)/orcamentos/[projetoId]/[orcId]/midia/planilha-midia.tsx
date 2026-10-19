@@ -101,6 +101,10 @@ interface Props {
     /** Pelo mês, `YYYY-MM`. */
     detalheDoMes: Record<string, string>;
     detalheCampanha: string;
+    /** A planilha em pop-up da abertura do job (19/10/2026): a régua e o
+     *  "Abrir mês" trocam de mês aqui mesmo, sem navegar, a partir da
+     *  Campanha. */
+    noLugar?: boolean;
   } | null;
 }
 
@@ -127,6 +131,10 @@ export function PlanilhaMidiaOff({
 }: Props) {
   const router = useRouter();
   const base = doJob ? doJob.hrefBase : `/orcamentos/${projetoId}/${orcamentoId}?v=${versaoId}`;
+  // No pop-up da abertura o mês mora aqui, não na URL.
+  const noLugar = doJob?.noLugar === true;
+  const [mesNoPopUp, setMesNoPopUp] = React.useState<string | undefined>(undefined);
+  const mesDaTela = noLugar ? mesNoPopUp : mesPedido;
 
   // ---- O que veio do servidor, no formato da planilha ----------------------
   const mesDoId = React.useMemo(() => new Map(meses.map((m) => [m.id, chaveDoMes(m.mes)])), [meses]);
@@ -211,10 +219,10 @@ export function PlanilhaMidiaOff({
   // A Campanha abre por padrão; campanha de um mês só abre direto no mês.
   const chaves = dados.map((d) => d.mes);
   const selecionado =
-    mesPedido === "campanha"
+    mesDaTela === "campanha"
       ? "campanha"
-      : mesPedido && chaves.includes(mesPedido)
-        ? mesPedido
+      : mesDaTela && chaves.includes(mesDaTela)
+        ? mesDaTela
         : chaves.length === 1
           ? chaves[0]
           : "campanha";
@@ -654,6 +662,7 @@ export function PlanilhaMidiaOff({
               href: `${base}&mes=${d.mes}`,
             }))}
             selecionado={selecionado}
+            onSelecionar={noLugar ? (chave) => setMesNoPopUp(chave) : undefined}
             editar={
               readOnly
                 ? null
@@ -751,6 +760,11 @@ export function PlanilhaMidiaOff({
                   <TrimestreEmpilhado
                     moeda="BRL"
                     acoes={temGrade(gruposDeMidia) ? <ControleDaGrade /> : null}
+                    onAbrir={
+                      noLugar
+                        ? (id) => setMesNoPopUp(dados.find((d) => d.mesId === id)?.mes)
+                        : undefined
+                    }
                     meses={dados.map((d) => ({
                       id: d.mesId,
                       titulo: rotuloMes(d.iso),

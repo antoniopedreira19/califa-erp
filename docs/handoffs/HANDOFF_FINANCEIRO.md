@@ -7471,3 +7471,313 @@ Regra completa na seção 9 da decisão 091.
 - **Testado** no TES-P001/26 (TESTE-184A/B/C emitidas e canceladas pela
   action). Pendências na 184 §5: imposto da exportação, avulsa na
   rentabilidade do job, conta da receita.
+
+## ⚠️ Nota de 2026-10-16 (8) — O nome do financeiro no título e no registro da abertura (revisão da decisão 021)
+
+- **Defeito:** desde 20/08 a página do job no financeiro mostrava o nome
+  da PRODUÇÃO no título, no campo "Nome do job" da aba Abertura, na ficha
+  de Informações, na planilha e no fluxo. `carregarJobParaAbertura`
+  (`abertura-de-job/dados.ts`) não lia `jobs.nome_financeiro`.
+- **Dano:** "Editar registro" e a revisão de errata abriam com o nome da
+  produção, e salvar sem retocar o campo sobrescrevia o nome do
+  financeiro. Aconteceu em AMB-1019/26 e ANI-1002/26, ambos em 07/10.
+- **Conserto:** `JobNaFila.nome_financeiro` (obrigatório); título, ficha,
+  planilha, fluxo e o estado do formulário usam
+  `nomeDoJobNoFinanceiro()`. "Dados da produção" segue com `nome`. O campo
+  Projeto já estava certo.
+- **Dado:** AMB-1019/26 restaurado pelo "Editar registro" com o nome da
+  foto da abertura, idêntico byte a byte (foto 3, 16/10, só o nome mudou
+  na auditoria). ANI-1002/26 restaurado em 17/10, também pelo "Editar
+  registro", com "Ânima - Vídeo Institucional Unicuritiba 3T 2026": a
+  correção que a Priscila gravou às 15:41 de 07/10 (foto 2), aprovada pelo
+  Tiago. A abertura tinha gravado "… Unisociesc …", nome do ANI-1003/26.
+- **Conferido em 17/10:** os 9 "de → para" de nome na auditoria batem byte
+  a byte com as fotos. AMB-1002/26, AMB-1003/26, AMB-1014/26, DEE-1001/26
+  e DEE-1002/26 foram renomeados por alguém e já estão com o nome da
+  última foto. Nenhum job ficou com o nome da produção por cima de um nome
+  do financeiro.
+
+## ⚠️ Nota de 2026-10-16 (9) — "Exportar Excel" na aba Visualizar Jobs da Abertura de Job
+
+- **O quê:** botão **Exportar Excel** no canto superior direito da aba
+  Visualizar Jobs (linha dos chips). Baixa um `.xlsx` com um job por linha
+  e cada informação numa coluna (22): código, job, nome na produção,
+  status, código e nome do projeto do financeiro, cliente, GP, regional,
+  marca, abertura, valor total, faturamento, situação do faturamento, NF,
+  vencimento em aberto, recebimentos, recebido, situação dos recebimentos,
+  custos, custos realizados e situação dos custos. Valores em R$ e datas
+  como número/data do Excel; cabeçalho congelado, filtro do Excel ligado
+  e linha de total com `SUBTOTAL(109)`, que acompanha o filtro.
+- **O que sai é o que a tela mostra:** chips, filtros de cima e filtros
+  dos títulos aplicados, na ordem da arrumação escolhida (por projeto ou
+  por job). Grupo recolhido não esconde job do arquivo. Com filtro, o
+  arquivo se chama "Jobs no financeiro (filtrado) - DD-MM-AAAA.xlsx".
+- **Como:** gerado no navegador, das linhas que a página já tem — nenhuma
+  leitura nova do banco. `exportar-lista.ts` e o ExcelJS só descem no
+  clique (import dinâmico), para não pesar no carregamento da tela. As
+  notas "62% recebido" / "previsto na abertura" saíram para
+  `notas-de-caixa.ts`, usado pela lista e pela exportação.
+- **Sem regra nova:** nenhum número é calculado de outro jeito; é a mesma
+  linha da tela, desmontada em colunas. Por isso não tem decisão numerada.
+
+## ⚠️ Nota de 2026-10-17 (1) — o save no cartão "Dados da produção" da abertura (revisão da decisão 155)
+
+- **O quê:** o cartão "Dados da produção", na coluna da direita do
+  formulário da abertura e do job aberto, ganhou o save abaixo do valor
+  total, como o envio da produção já mostrava: "Total gerado em save" e
+  "Consumo de save", separados do valor total por um traço, em grafite
+  (`SAVE.textoApagado`). Cada linha só aparece quando passa de zero; job
+  sem save fica como era.
+- **Os números:** "Total gerado em save" = orçado das linhas vivas em save
+  da cópia do job (`totalGeradoEmSave`, em `abertura-de-job/dados.ts`, a
+  mesma soma de `totais.save.totalSaveGerado` do envio). "Consumo de save"
+  = o `saveConsumido` que o formulário já recebia. As duas páginas
+  (`abertura-de-job/[jobId]` e `financeiro/jobs/[jobId]`) passam a prop
+  nova `saveGerado`, obrigatória como a `saveConsumido`.
+- **Conferido no dev do worktree, como administrador:** TES-1002/26
+  (R$ 10.000,00 gerado e R$ 1.000,00 consumido), TES-1024/26 (só gera,
+  R$ 10.000,00), TES-1023/26 (só consome, R$ 5.000,00) e TES-1006/26 (sem
+  save, sem as linhas) — os mesmos valores da soma no banco.
+
+
+## ⚠️ Nota de 2026-10-17 (2) — datas de registro no dia de Brasília
+
+Mesma causa da nota de 2026-10-17 (2) do `HANDOFF_JOBS.md`: `timestamptz`
+formatado com `iso.slice(0, 10)` mostra o dia em UTC, e o que é registrado
+depois das 21h de Brasília aparecia com o dia seguinte. Correção só de
+exibição, pelas funções `formatDiaBr`, `diaIsoBr` e `formatDataEHoraBr`
+de `lib/formatar-data-hora.ts`. Sem migration, nenhum dado mudou.
+
+- **Abertura de Job → Visualizar Jobs:** coluna "Abertura" nas duas
+  organizações, o filtro dela e a coluna "Abertura" do **Exportar Excel**.
+  13 de 84 jobs mudam de dia. Ex.: AMB-1023/26 a AMB-1027/26, abertos entre
+  23:07 e 23:25 de 06/10, saíam em 07/10.
+- **Contas a Pagar → PPs:** "Emissão" e, no filtro Prestações, "Enviada em"
+  (célula e filtro).
+- **Dossiê da PP** (`pp-dossie.tsx`): "Marcado por … ·" da urgência,
+  cancelada, rejeitada e as datas da prestação (enviada, aprovada,
+  reprovada). Ali o dia vinha de UTC e a hora do relógio local, e a
+  urgência da PP-00215 (22:43 de 15/10) saía "16/10/2026 22:43".
+- **Fiscal → Impostos:** "cancelado" na lista e a data das correções de
+  valor (baixa registrada e "Correções anteriores").
+- **Fora:** a coluna "Criação" da aba Desembolsos é da frente do Antonio e
+  segue cortando em UTC (ver "Em aberto" na nota do Jobs). ⚠️ **Resolvido
+  em 2026-10-19:** ver a nota de 2026-10-19 (3).
+
+## ⚠️ Nota de 2026-10-17 (3) — PP de reembolso e o desgaste por km (decisão 187)
+
+- **Cadastros → "Reembolso de veículo próprio"**
+  (`/financeiro/cadastros/reembolso`): o desgaste do veículo por km
+  (R$ 0,40), tabela `financeiro_parametros`. Só administrador e financeiro
+  gravam (tela, action e RLS); auditoria `financeiro_parametro.atualizado`
+  com o valor anterior e o novo. Vale para as PPs novas — cada PP guarda o
+  desgaste com que nasceu.
+- **Contas a Pagar:** selo "Reembolso" na lista de PPs (e na busca),
+  "Reembolso — Nome" nos títulos; no dossiê, o bloco "Reembolso" (tipo e
+  resumo dos deslocamentos) e os comprovantes com tipo, número, data e
+  valor. O reembolso não tem prestação de contas: o bloco não aparece e a
+  aprovação sem documento não o trata como verba.
+- Os comprovantes **não viram nota fiscal** do módulo fiscal; o reembolso
+  fica fora da retenção e da remessa, como a verba.
+
+## ⚠️ Nota de 2026-10-19 (1) — a empresa do job em "Dados da produção" e na conferência da fila
+
+- **O quê:** a linha **Empresa**, logo abaixo de Projeto, no painel "Dados
+  da produção" do formulário da abertura (fila, revisão, job aberto) e no
+  pop-up "Conferir o job antes de abrir" da fila. Pedido do Tiago num
+  comentário do protótipo "Save na Abertura" (19/10/2026).
+- **O dado:** `jobs.empresa_id`, que o gatilho `enforce_empresa_from_projeto`
+  copia do projeto — nome fantasia, ou a razão social. `JobNaFila` ganhou
+  `empresa_nome` (obrigatório), lido no mesmo select da fila com o embed
+  `empresa:empresas!jobs_empresa_id_fkey(...)`; nenhuma consulta nova.
+- **Sem regra nova:** só exibição, por isso sem decisão numerada. A mesma
+  linha entrou no envio da produção (ver `HANDOFF_ORCAMENTO.md`, nota de
+  2026-10-19).
+- **Conferido no dev do worktree, como administrador:** TES-1029/26
+  (aguardando abertura) mostrou "Empresa · Empresa Teste" no painel e na
+  conferência da fila.
+
+## ⚠️ Nota de 2026-10-19 (2) — O que chega do envio em lote (decisão 188, entrega 1)
+
+A produção passou a enviar vários jobs de um cliente e de uma empresa de uma
+vez, com as notas que o cliente pediu (uma nota pode juntar jobs; um job pode
+ser dividido entre notas). Regra completa na decisão 188.
+
+- **Na fila de faturamento, por enquanto nada muda de forma:** cada job do lote
+  chega com o seu envio, e cada parte dele numa nota do lote é uma nota do envio
+  do job (com o CNPJ ou "exterior", o descritivo e os vencimentos). As partes de
+  uma mesma nota do cliente têm o mesmo CNPJ e se juntam pelo Faturamento
+  Agrupado, como hoje.
+- **O rastro já está gravado:** `jobs_envio_faturamento_notas.lote_nota_id`
+  aponta para a nota do lote (`envios_faturamento_lote_notas`: tomador, CNPJ,
+  valor, rateio), e o lote guarda a observação da produção para o financeiro.
+- **Entrega 2 (a fazer):** a fila e o Faturar mostram a nota do lote de uma vez,
+  com as partes dos jobs já juntas e a observação.
+
+## ⚠️ Nota de 2026-10-19 (3) — a coluna "Criação" dos Desembolsos no dia de Brasília
+
+Fecha a pendência da nota de 2026-10-17 (2). Pedido do Tiago em
+19/10/2026. A tela é da frente do Antonio (`desembolsos-list.tsx`, commit
+`bbd8a29`), e só a coluna "Criação" mudou.
+
+- **Antes:** a célula cortava o `created_at` (`timestamptz`) com
+  `iso.slice(0, 10)`, que é o dia em UTC. Um desembolso criado depois das
+  21h de Brasília aparecia com o dia seguinte. O filtro da mesma coluna já
+  usava o dia de Brasília desde 17/10, e os dois divergiam.
+- **Agora:** a célula usa `formatDiaBr` (`lib/formatar-data-hora.ts`), como
+  o filtro. O `formatDate` local, que só servia a essa coluna, saiu.
+- **Conferido** no dev do worktree, como administrador: o único desembolso
+  (14:11 de 22/09) sai 22/09/2026. Não há desembolso criado à noite no
+  banco. O caso noturno foi conferido pela função, com o servidor em UTC.
+
+## ⚠️ Nota de 2026-10-19 (4) — "Saves deste job" no idioma das Previsões, quem consome o crédito e as planilhas em pop-up (revisão da decisão 155)
+
+- **O desenho:** opção B do protótipo "Save na Abertura"
+  (https://claude.ai/artifact/AtKiRyEVgWMfAz7vAyorkG), aprovada pelo
+  Tiago, com as escolhas do "Planilhas do save". Detalhes na decisão 155,
+  nota de 2026-10-19.
+- **Bloco:** blocos de resumo (save gerado, consumo, saldo do cliente
+  antes → depois na abertura; "Livre do crédito" no job aberto) e uma tabela
+  só, com uma faixa por tipo. A caixa "Aprovar…" fica na faixa; no job
+  aberto, o selo da situação. A trava de abrir o job não mudou.
+- **Quem consome:** a faixa "Consumido por", no job aberto que gerou save,
+  lê os pedidos de consumo aprovados que têm o job nas origens
+  (`saves_aprovacoes.origens`, filtro jsonb como texto). O livre vem da
+  `vw_saves_por_job` (`disponivel`, com `consumido` e `reservado_aprovacao`).
+- **Planilhas em pop-up, lidas sob demanda:** `planilha-em-leitura.tsx` +
+  `planilha-em-leitura-actions.ts` (administrador ou financeiro) servem o
+  "Visualizar planilha interna", o atalho da origem e o ícone de cada linha.
+  `planilha-da-origem.tsx` saiu, e as páginas não montam mais a planilha da
+  origem a cada visita. Os pop-ups abrem o Resultado em "Planejada"
+  (`resultadoInicial` em `JobRealizadoSection` → `JobTotaisCard` →
+  `PainelResultado.visaoInicial`) e, no mensal, sem a régua de meses.
+- **Tabela em layout automático:** o bloco não é planilha; com colunas
+  fixas, numa tela de 1024 px o item sumia.
+- **Conferido no dev do worktree, como administrador:**
+  - TES-1001/26 (gerou R$ 10.000,00): "Livre do crédito R$ 8.000,00 ·
+    R$ 2.000,00 consumidos por 2 jobs" e a faixa "Consumido por" com
+    TES-1002/26 e TES-1004/26 (R$ 1.000,00 cada, abertos em 21/09 e 22/09).
+    O pop-up do TES-1002/26 (mensal) abriu em "Planejada", sem a régua.
+  - TES-1002/26 (gera e consome do TES-1001/26): as duas faixas, o atalho
+    "Visualizar planilha de origem do save (TES-1001/26)" e a planilha
+    interna em pop-up, sem trocar de aba.
+  - TES-1023/26 (só consome) e TES-1024/26 (inteiro em save): selo
+    "Aprovado com a abertura" na faixa.
+  - O modo de abertura (caixas na faixa) foi visto no TES-1002/26 por uma
+    rota de preview temporária, que não foi para o commit: não havia job
+    com save na fila. As caixas marcam e o rodapé segue a trava de antes.
+  - tsc, lint e build limpos.
+
+
+## ⚠️ Nota de 2026-10-19 (5) — A nota do envio em lote na fila e no Faturar (decisão 188, entrega 2)
+
+- **Na fila (aba Faturamento):** as partes dos jobs de uma mesma nota do lote
+  viram **uma linha só**, com o selo "Lote": os nomes dos jobs com "+" (em
+  até duas linhas), os códigos, o mês, "Enviado em lote por", o tomador
+  (quando não é o próprio cliente) e o CNPJ da nota. A coluna Nota mostra a
+  posição no lote ("1/18") e os vencimentos contam as datas, não as parcelas.
+  O Fee de 18 notas e 4 jobs deixa de ser 72 linhas e vira 18.
+- **No Faturar:** "Faturar a nota 1 de 18 do lote", com os jobs da nota, o
+  tomador debaixo do CNPJ, o descritivo da nota já na Descrição da NF, a
+  observação do envio no quadro de quem enviou e uma parcela por vencimento
+  (a soma das partes que vencem no dia). Faturamento parcial e remover um job
+  seguem como no agrupado; o que sobra volta como linha do lote.
+- **No botão `i`:** a PO de cada job, os contatos de todos e a **Observação do
+  envio** (bloco novo, só quando existe).
+- **O número da aba** passa a contar as linhas da fila (`chaveDaLinhaDaFila`,
+  em `chave-info.ts`), não as parcelas. Vale também para a nota de um job com
+  vários vencimentos, que contava cada vencimento.
+- **Dado:** `page.tsx` lê, numa segunda onda junto dos contatos, a nota do lote
+  das notas pendentes (`jobs_envio_faturamento_notas.lote_nota_id` →
+  `envios_faturamento_lote_notas` → `envios_faturamento_lote`). A view
+  `vw_faturamento_pendente` não mudou; nenhuma migration.
+- **Pendente:** a linha do lote não tem o botão de **recebimento antes da NF**.
+  O recebido se prende a uma nota de job (`recebimentos_antes_nf.envio_nota_id`)
+  e a nota do lote é de vários; o que já estiver registrado numa parte entra
+  na parcela 1 do Faturar, como antes. Como receber antes pela nota do lote é
+  decisão a tomar.
+- **Testado:** no TES-P001/26, a nota 1 do lote (TES-1002, TES-1004 com save e
+  TES-1014, 2 vencimentos) abriu com R$ 123.866,54 em 2 × R$ 61.933,27; a
+  emissão pelo banco, em transação desfeita, gravou 7 itens (o save do TES-1004
+  em item próprio) e 2 títulos, tirou as partes da nota 1 da fila e deixou a
+  nota 2. tsc, lint e build limpos. Protótipo com as telas reais e dados
+  fictícios: https://claude.ai/artifact/7iJvNnkZgsSEX9uCC6ATY5
+
+## ⚠️ Nota de 2026-10-19 (6) — o "hoje" de Brasília nas datas que gravam ou marcam situação
+
+O "hoje" do sistema era o de UTC em dois lugares: no código
+(`new Date().toISOString().slice(0, 10)`, no servidor e no navegador) e no
+banco (`current_date`, com o banco em `TimeZone = UTC`). Das 21h à
+meia-noite de Brasília, os dois já são o dia seguinte. A auditoria de
+19/10/2026 achou 32 ocorrências no código (Jobs e Financeiro) e 16 funções
+e 2 views no banco. O Tiago escolheu a recomendação: no código, o que grava
+dado ou marca situação; no banco, só os estornos.
+
+- **Código** (`hojeEmSaoPauloIso()`, de `lib/calculos/janelas-pagamento.ts`):
+  - **Remessa CNAB** e **Aprovar desembolso:** a "Data de pagamento" vinha
+    preenchida com amanhã.
+  - **Código do projeto do financeiro** sem data de início: em 31/12 depois
+    das 21h, o código sairia com o ano seguinte (`/27` em vez de `/26`).
+  - **Reativar recorrência:** a que vence amanhã contava como vencida e
+    tinha a próxima data recalculada.
+  - **"Inadimplente"** (`faturamentoPorJob`, a lista Visualizar Jobs e a
+    página do job no financeiro): a nota que vence hoje já marcava o job.
+    Na página do job, só a inadimplência mudou. O `hoje` da página segue o
+    de UTC porque alimenta o fluxo, que acompanha a `vw_fluxo_caixa`.
+- **Banco** (migration `20261019700001`): função nova
+  `public.hoje_em_sao_paulo()`, par do `hojeEmSaoPauloIso()`. As 7 funções
+  que lançam estorno (`estornar_baixa_avulsa`, `_desembolso_parcela`,
+  `_devolucao_verba`, `_fatura_cartao`, `_pp_parcela`, `_titulo` e o gatilho
+  `avulsa_estorno_lanca_no_cartao`) trocaram o seu único `current_date` por
+  ela. Antes, o estorno feito à noite caía no extrato do dia seguinte e não
+  batia com o do banco na conciliação. A troca foi feita sobre a definição
+  no ar: o md5 de cada função depois da migration é igual ao da definição
+  anterior com só essa troca. Dono (`postgres`), `security definer` e
+  GRANTs ficaram como estavam. Algumas funções são da frente do Antonio
+  (o estorno do cartão); a mudança foi autorizada pelo Tiago.
+- **Conferido:** com o relógio parado às 23:30 de 31/12 e o processo em UTC,
+  o código antigo dava `2027-01-01` e o novo dá `2026-12-31`. No banco, o
+  instante da errata do TES-1014/26 (23:54 de 08/10) dá 08/10 em Brasília e
+  09/10 em UTC. No dev do worktree, como administrador e sem gravar nada:
+  Aprovar desembolso e Exportar remessa Santander abrem com 19/10/2026;
+  Visualizar Jobs e a página do job no financeiro carregam sem erro.
+- **Ficaram em UTC, de propósito ou para depois:**
+  - **Fluxo de caixa e "Saldo hoje":** o código acompanha a `vw_fluxo_caixa`,
+    que usa `current_date`. Mudar um lado sem o outro faz os dois
+    discordarem à noite.
+  - **Filtros "vencidas" do Contas a Pagar e do Contas a Receber, contagem
+    de vencidos na entrada do Financeiro, home:** só contagem e filtro, sem
+    gravar nada. Os arquivos são da frente do Antonio.
+  - **No banco:** a data da compra padrão da fatura do cartão
+    (`avulsa_entra_na_fatura`), o resumo da conciliação, o cálculo da
+    próxima data da recorrência e a `vw_fluxo_caixa`. As duas rotinas
+    agendadas (recorrentes e rolagem da previsão) rodam às 06:00 UTC, 03:00
+    em Brasília, e não são afetadas.
+  - **Certos como estão:** 7 lugares fazem conta de data em UTC de propósito
+    (`Date.UTC`, `T12:00:00Z`), e o calendário (`DatePicker`) devolve a
+    meia-noite local.
+
+## ⚠️ Nota de 2026-10-19 (7) — pop-up do job mensal no Trimestre e o teste de ponta a ponta da decisão 155
+
+- **Corrige a nota (4):** no job mensal, o pop-up de planilha não mostra
+  mais a planilha corrida, sem régua. Abre no Trimestre (meses empilhados,
+  "Totais do trimestre"), e na Mídia Off na Campanha. A régua e o
+  "Abrir {mês}" trocam de mês dentro do pop-up, sem navegar.
+- **Como:** `JobRealizadoSection` ganhou `mesNoLugar` (o mês fica num
+  estado local em vez da URL); `ReguaMeses` ganhou `onSelecionar` (o bloco
+  vira botão) e `TrimestreEmpilhado` ganhou `onAbrir`. Na Mídia Off, o
+  mesmo pelo `doJob.noLugar` de `PlanilhaMidia`. Sem essas props, tudo
+  segue com links, como antes: a aba Planilha Interna não mudou.
+- **Teste de ponta a ponta**, pelas telas, no TES-P001/26 (orçamento "ZZ
+  Teste 155 save na abertura", job **TES-1030/26**): Brindes gera
+  R$ 5.000,00 e Transporte consome R$ 2.000,00 do TES-1001/26.
+  - Enquanto o job aguardava, o TES-1001/26 mostrou os R$ 2.000,00
+    "reservados".
+  - Na abertura, a trava andou caixa por caixa, e "Sim, abrir job e
+    aprovar os saves" deixou os dois pedidos `aprovado` (momento
+    `abertura`), com a auditoria `save.pedido.aprovado`.
+  - Depois, o TES-1001/26 passou a listar o TES-1030/26 em "Consumido
+    por", e o reservado sumiu. Detalhes na decisão 155.
+- **Desempenho no dev:** cada pop-up levou de 3 a 10 s para carregar a
+  planilha (Server Action + `carregarDetalheDoJob` completo). Não foi
+  medido no build de produção.

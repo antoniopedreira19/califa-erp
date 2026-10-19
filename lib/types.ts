@@ -3,6 +3,8 @@
  * Espelham os enums e tabelas criados pela migration da Task 001.
  */
 
+import type { DeslocamentosDoReembolso, ReembolsoTipo } from "@/lib/calculos/reembolso";
+
 export type AppRole =
   | "administrador"
   | "gerente_producao"
@@ -1264,8 +1266,55 @@ export interface JobEnvioFaturamento {
   /** Parte do `valor_faturado` que é receita de save do mês. Só nos
    *  envios com mês; nos outros vale `jobs.faturamento_save_previsto`. */
   valor_save: number | null;
+  /** Decisão 188: o envio em lote de que este envio faz parte. Nulo no
+   *  envio pela página do job. */
+  lote_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Envio em lote para faturamento (decisão 188): vários jobs de um mesmo
+ * cliente e de uma mesma empresa, enviados de uma vez pela lista de Jobs.
+ * Cada job continua com o seu `JobEnvioFaturamento` (com `lote_id`).
+ */
+export interface EnvioFaturamentoLote {
+  id: string;
+  tenant_id: string;
+  cliente_id: string;
+  empresa_id: string;
+  /** O mês dos jobs mensais do lote; nulo sem mensal. */
+  mes: string | null;
+  /** Recado da produção para o financeiro; não sai na nota. */
+  observacao: string | null;
+  portal_id: string | null;
+  portal_url: string | null;
+  enviado_por: string | null;
+  enviado_em: string;
+  created_at: string;
+}
+
+/** Como a nota do lote se divide entre os jobs. */
+export type RateioDaNotaDoLote = "proporcional" | "job" | "manual";
+
+/**
+ * Uma nota que o cliente pediu num envio em lote (decisão 188). A parte de
+ * cada job nela é uma `JobEnvioFaturamentoNota` com `lote_nota_id`.
+ */
+export interface EnvioFaturamentoLoteNota {
+  id: string;
+  tenant_id: string;
+  lote_id: string;
+  ordem: number;
+  tomador_nome: string | null;
+  /** Só dígitos, 14. Nulo no tomador no exterior (184). */
+  cnpj: string | null;
+  tomador_exterior: boolean;
+  valor: number;
+  cnae_sugerido: string | null;
+  descritivo: string | null;
+  rateio: RateioDaNotaDoLote;
+  created_at: string;
 }
 
 /**
@@ -1313,6 +1362,8 @@ export interface JobEnvioFaturamentoNota {
   tomador_exterior: boolean;
   cnae_sugerido: string | null;
   descritivo: string | null;
+  /** Decisão 188: a nota do lote de que esta é a parte do job. */
+  lote_nota_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1835,8 +1886,16 @@ export interface JobItemRealizado {
 // Tabela e colunas seguem `pedidos_compra` por compatibilidade; o nome
 // visível ao usuário é "Pedido de Produção", igual ao PDF emitido.
 
-/** Os tipos de verba (decisão 164). */
-export type TipoVerba = "producao" | "alimentacao" | "transporte";
+/** Os tipos de verba (decisão 164) — e o reembolso (decisão 187), que mora
+ *  no mesmo campo: é "não fornecedor" como a verba (titular, baixa inteira,
+ *  sem NF de fornecedor, fora da remessa), mas não é adiantamento — não
+ *  presta contas nem devolve saldo. `ehReembolso` separa os dois. */
+export type TipoVerba = "producao" | "alimentacao" | "transporte" | "reembolso";
+
+/** A PP de reembolso (decisão 187): despesas ou veículo próprio. */
+export function ehReembolso(pp: { tipo_verba?: TipoVerba | string | null } | null | undefined): boolean {
+  return pp?.tipo_verba === "reembolso";
+}
 
 /** De onde vem o titular da verba: um colaborador do RH, um freela (lista
  *  provisória) ou um terceiro com cadastro de fornecedor. Desde a decisão
@@ -1855,6 +1914,7 @@ export function tipoDaVerba(pp: {
 
 /** "Verba de Produção", "Verba de Alimentação", "Verba de Transporte". */
 export function rotuloDaVerba(tipo: TipoVerba): string {
+  if (tipo === "reembolso") return "Reembolso";
   return tipo === "alimentacao"
     ? "Verba de Alimentação"
     : tipo === "transporte"
@@ -1884,9 +1944,11 @@ export function verbaDeResponsavel(pp: {
  *  "Responsável" na verba de produção anterior à decisão 171. */
 export function rotuloDeQuemRecebeAVerba(pp: {
   verba_producao?: boolean | null;
+  tipo_verba?: TipoVerba | null;
   verba_titular_tipo?: TitularDaVerbaTipo | null;
   verba_titular_nome?: string | null;
 }): string {
+  if (ehReembolso(pp)) return "Titular do reembolso";
   return verbaDeResponsavel(pp) ? "Responsável" : "Titular da verba";
 }
 
@@ -1985,6 +2047,12 @@ export interface PedidoCompra {
    *  banco junto com a conta e o PIX (nas colunas `fornecedor_*` da foto).
    *  Nulo para freela, terceiro e fora da verba. */
   verba_titular_cpf: string | null;
+  /** Decisão 187: na PP de reembolso (`tipo_verba = "reembolso"`), despesas
+   *  ou veículo próprio. Null fora do reembolso. */
+  reembolso_tipo: ReembolsoTipo | null;
+  /** Decisão 187: no reembolso de veículo próprio, a conta (consumo, preço
+   *  do litro, desgaste por km da data da PP e os deslocamentos). */
+  reembolso_deslocamentos: DeslocamentosDoReembolso | null;
   // Fase 2
   status: PPStatus;
   prazo_pagamento_financeiro: string | null;
@@ -2818,6 +2886,9 @@ export interface DadosDaPPAEmitir {
   verba_titular_tipo?: TitularDaVerbaTipo | null;
   /** O colaborador ou o freela escolhido (o terceiro vai em fornecedor_id). */
   verba_titular_id?: string | null;
+  /** Decisão 187: o tipo do reembolso e, no veículo próprio, a conta. */
+  reembolso_tipo?: ReembolsoTipo | null;
+  deslocamentos?: DeslocamentosDoReembolso | null;
   /** Decisão 127, no formato do envio (`pagamentoParaEnvio`). */
   pagamento_fora_do_cadastro: {
     meio: MeioForaDoCadastro;
@@ -2976,11 +3047,13 @@ export type SituacaoVerba =
 
 export function situacaoDaVerba(pp: {
   verba_producao: boolean;
+  /** O reembolso (decisão 187) não presta contas: sem situação de verba. */
+  tipo_verba?: TipoVerba | null;
   status: PPStatus;
   prestacao: Pick<PrestacaoDaVerba, "status" | "valor_devolvido"> | null;
   devolucao: Pick<DevolucaoDaVerba, "pago_em"> | null;
 }): SituacaoVerba | null {
-  if (!pp.verba_producao || pp.status !== "pago") return null;
+  if (!pp.verba_producao || ehReembolso(pp) || pp.status !== "pago") return null;
   if (!pp.prestacao) return "aguardando_prestacao";
   if (pp.prestacao.status === "em_avaliacao") return "prestacao_em_avaliacao";
   if (pp.prestacao.status === "reprovada") return "prestacao_reprovada";
@@ -3175,7 +3248,10 @@ export const DOCUMENTO_TIPOS = [
   "outro",
 ] as const;
 
-export type DocumentoTipo = (typeof DOCUMENTO_TIPOS)[number];
+/** Os tipos das listas de anexo. O cupom fiscal (decisão 187) é tipo
+ *  válido, mas por enquanto só os comprovantes do reembolso o oferecem
+ *  (`TIPOS_DE_COMPROVANTE`, em `lib/calculos/reembolso.ts`). */
+export type DocumentoTipo = (typeof DOCUMENTO_TIPOS)[number] | "cupom_fiscal";
 
 /** Rótulo curto, como aparece na coluna e no chip. */
 export function documentoTipoLabel(t: DocumentoTipo): string {
@@ -3190,6 +3266,8 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
       return "Boleto";
     case "contrato":
       return "Contrato";
+    case "cupom_fiscal":
+      return "Cupom fiscal";
     default:
       return "Outro";
   }

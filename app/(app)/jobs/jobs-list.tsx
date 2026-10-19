@@ -2,15 +2,21 @@
 
 import * as React from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  Building2,
   CheckCircle2,
   ChevronRight,
   CornerUpLeft,
   Pencil,
   Search,
+  Send,
+  X,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import {
   DescritivoPopover,
@@ -35,6 +41,14 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
+import type { EnvioEmLoteResultado } from "./envio-em-lote-dialog";
+
+// O pop-up do envio em lote só carrega quando a pessoa clica em "Enviar"
+// (`docs/PERFORMANCE.md`: componente pesado entra por `dynamic`).
+const EnvioEmLoteDialog = dynamic(
+  () => import("./envio-em-lote-dialog").then((m) => m.EnvioEmLoteDialog),
+  { ssr: false },
+);
 
 export interface JobRow {
   id: string;
@@ -53,8 +67,11 @@ export interface JobRow {
   regional_id: string | null;
   regional_nome: string | null;
   responsavel_id: string | null;
-  /** Produtor do job — conta como "meu" junto com o GP responsável. */
   produtor_id: string | null;
+  /** Entra no recorte "Meus": sou o GP ou o Produtor Responsável do job,
+   *  ou estou na Equipe do projeto dele (16/10/2026). Vem do servidor —
+   *  `projetosNaEquipeDe`. */
+  meu: boolean;
   /** Descritivo do job (coluna `jobs.observacoes`) — obrigatório no envio
    *  para abertura desde a decisão 043. Nulo nos 27 jobs anteriores à
    *  regra, e nesses o ícone da linha fica apagado. */
@@ -68,6 +85,13 @@ export interface JobRow {
   responsavel_nome: string | null;
   empresa_id: string | null;
   empresa_nome: string | null;
+  /** Envio em lote (decisão 188): o lote é de um cliente e de uma empresa. */
+  cliente_id: string | null;
+  /** Por que o job não entra num envio para faturamento agora — a régua
+   *  barata da lista (status, previsto, envio completo). As travas finas
+   *  (save, errata, mês) são conferidas quando o pop-up abre. `null` =
+   *  pode ir. */
+  motivo_fora_do_lote: string | null;
 }
 
 const STATUS_FILTROS: JobStatusExibido[] = [
@@ -184,20 +208,17 @@ interface GrupoProjeto {
 export function JobsList({
   rows,
   empresas,
-  usuarioId,
   podeAlternarMeusTodos = true,
   meusInicial,
+  podeEnviarFaturamento = false,
 }: {
   rows: JobRow[];
   empresas: { id: string; razao_social: string; nome_fantasia: string | null }[];
-  /** Quem está logado — define o recorte "Meus". */
-  usuarioId: string;
   /**
    * Se `false`, a chave "Meus/Todos" nao aparece e o filtro `meus`
    * comeca em `false` (mostra todos os jobs que o RLS deixou passar).
    * Usado pro Freelancer, que so ve jobs onde participa da equipe do
-   * projeto — RLS ja fez esse recorte (`is_freelancer_do_projeto`), entao
-   * filtrar por GP/produtor na tela esconderia jobs da equipe dele. O
+   * projeto — RLS ja fez esse recorte (`is_freelancer_do_projeto`). O
    * "Meus" do freelancer E a equipe (03/10/2026). Fonte-verdade da regra:
    * `lib/permissoes.ts`, recurso `listas.chave_meus_todos`.
    */
@@ -205,8 +226,53 @@ export function JobsList({
   /** Com o que a chave "Meus/Todos" abre. A página decide pelo link — ver
    *  `app/(app)/jobs/page.tsx`. Ausente, vale `podeAlternarMeusTodos`. */
   meusInicial?: boolean;
+  /** Mostra o "Enviar para faturamento" em lote (decisão 188): o mesmo
+   *  gate do envio pela página do job, `jobs.enviar_faturamento`. */
+  podeEnviarFaturamento?: boolean;
 }) {
   const router = useRouter();
+
+  // ---- Envio em lote para faturamento (decisão 188) -------------------
+  // "Enviar para faturamento" liga o modo de seleção: a calha de cada job
+  // vira uma caixa, o primeiro job marcado prende o lote ao cliente e à
+  // empresa dele, e uma barra no rodapé leva ao pop-up.
+  const [modoEnvio, setModoEnvio] = React.useState(false);
+  const [selecionados, setSelecionados] = React.useState<string[]>([]);
+  const [loteAberto, setLoteAberto] = React.useState(false);
+  const [aviso, setAviso] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 6000);
+    return () => clearTimeout(t);
+  }, [aviso]);
+  const linhasDoLote = rows.filter((r) => selecionados.includes(r.id));
+  const primeiraDoLote = linhasDoLote[0] ?? null;
+  /** Por que o job não entra no lote: a régua da página, e depois o
+   *  cliente e a empresa do primeiro job marcado. */
+  function motivoForaDoLote(r: JobRow): string | null {
+    if (r.motivo_fora_do_lote) return r.motivo_fora_do_lote;
+    if (!primeiraDoLote || primeiraDoLote.id === r.id) return null;
+    if (r.cliente_id !== primeiraDoLote.cliente_id) {
+      return `É de outro cliente: o lote é só do cliente ${primeiraDoLote.cliente_nome ?? "do primeiro job"}.`;
+    }
+    if (r.empresa_id !== primeiraDoLote.empresa_id) {
+      return `É da ${r.empresa_nome ?? "outra empresa"}: o lote é só de jobs da ${primeiraDoLote.empresa_nome ?? "mesma empresa"}.`;
+    }
+    return null;
+  }
+  function alternarSelecao(r: JobRow) {
+    if (selecionados.includes(r.id)) {
+      setSelecionados((s) => s.filter((x) => x !== r.id));
+      return;
+    }
+    if (motivoForaDoLote(r)) return;
+    setSelecionados((s) => [...s, r.id]);
+  }
+  function sairDoEnvio() {
+    setModoEnvio(false);
+    setSelecionados([]);
+  }
+  const totalDoLote = linhasDoLote.reduce((s, r) => s + (r.valor_total ?? 0), 0);
   // Meus é o padrão pra quem pode alternar — quem abre a lista quer o
   // próprio trabalho. Freelancer nao pode alternar; comeca em "todos" e
   // conta com o filtro do RLS.
@@ -253,11 +319,11 @@ export function JobsList({
   const doTopo = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return rows.filter((r) => {
-      // "Meu" é o job em que sou o GP responsável OU o produtor. Só com o
-      // GP, o produtor abria a lista em "Meus" e não via nenhum job seu
-      // (corrigido em 03/10/2026).
-      if (meus && r.responsavel_id !== usuarioId && r.produtor_id !== usuarioId)
-        return false;
+      // "Meu" é o job do projeto em cuja Equipe estou — não só o job em que
+      // sou o GP ou o Produtor Responsável (16/10/2026). A GP que criou o
+      // projeto e deixou outra GP responsável abria a lista em "Meus" e não
+      // via o job.
+      if (meus && !r.meu) return false;
       if (statusFiltro !== "todos" && r.status !== statusFiltro) return false;
       if (produtoFiltro !== "todos" && (r.produto?.trim() ?? "") !== produtoFiltro)
         return false;
@@ -271,7 +337,7 @@ export function JobsList({
         r.nome.toLowerCase().includes(q)
       );
     });
-  }, [rows, meus, usuarioId, statusFiltro, produtoFiltro, regionalFiltro, empresaFiltro, busca]);
+  }, [rows, meus, statusFiltro, produtoFiltro, regionalFiltro, empresaFiltro, busca]);
 
   const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "jobs" });
 
@@ -428,6 +494,21 @@ export function JobsList({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {podeEnviarFaturamento && (
+            <button
+              type="button"
+              onClick={() => (modoEnvio ? sairDoEnvio() : setModoEnvio(true))}
+              className={cn(
+                "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border px-3 text-xs font-semibold transition-colors",
+                modoEnvio
+                  ? "border-california-red bg-california-red/10 text-california-red"
+                  : "border-border bg-white text-foreground hover:border-california-red/40 hover:text-california-red",
+              )}
+            >
+              {modoEnvio ? <X className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+              {modoEnvio ? "Sair do envio em lote" : "Enviar para faturamento"}
+            </button>
+          )}
           {empresas.length > 0 && (
             <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
               <SelectTrigger className="h-9 w-[180px] px-2.5 text-[13px]">
@@ -586,29 +667,69 @@ export function JobsList({
                       key={j.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => router.push(`/jobs/${j.id}?from=jobs`)}
+                      onClick={() =>
+                        modoEnvio ? alternarSelecao(j) : router.push(`/jobs/${j.id}?from=jobs`)
+                      }
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          router.push(`/jobs/${j.id}?from=jobs`);
+                          if (modoEnvio) alternarSelecao(j);
+                          else router.push(`/jobs/${j.id}?from=jobs`);
                         }
                       }}
-                      className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:bg-muted/70"
+                      className={cn(
+                        "cursor-pointer border-b border-b-[#f4f2f2] transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:bg-muted/70",
+                        modoEnvio &&
+                          !selecionados.includes(j.id) &&
+                          motivoForaDoLote(j) &&
+                          "cursor-not-allowed opacity-50 hover:bg-transparent",
+                        modoEnvio &&
+                          selecionados.includes(j.id) &&
+                          "bg-california-red/[0.05] hover:bg-california-red/[0.08]",
+                      )}
                     >
                       {/* Calha da árvore: vertical desce até o meio da última
                           linha, e o traço horizontal encosta no código. */}
                       <td className="relative w-8 px-2 py-3">
-                        <span
-                          aria-hidden="true"
-                          className="absolute left-[23px] top-0 w-px bg-[#dad7d7]"
-                          style={{
-                            height: i === g.jobs.length - 1 ? "50%" : "100%",
-                          }}
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="absolute left-6 top-1/2 h-px w-[9px] bg-[#dad7d7]"
-                        />
+                        {modoEnvio ? (
+                          // No envio em lote a calha vira a caixa de seleção;
+                          // o job que não pode ir mostra o motivo.
+                          !selecionados.includes(j.id) && motivoForaDoLote(j) ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  className="mx-auto flex h-4 w-4 items-center justify-center rounded border border-dashed border-border"
+                                  aria-label={`${j.codigo} não entra no envio: ${motivoForaDoLote(j)}`}
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[320px]">
+                                {motivoForaDoLote(j)}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={selecionados.includes(j.id)}
+                                onCheckedChange={() => alternarSelecao(j)}
+                                aria-label={`Selecionar ${j.codigo}`}
+                              />
+                            </span>
+                          )
+                        ) : (
+                          <>
+                            <span
+                              aria-hidden="true"
+                              className="absolute left-[23px] top-0 w-px bg-[#dad7d7]"
+                              style={{
+                                height: i === g.jobs.length - 1 ? "50%" : "100%",
+                              }}
+                            />
+                            <span
+                              aria-hidden="true"
+                              className="absolute left-6 top-1/2 h-px w-[9px] bg-[#dad7d7]"
+                            />
+                          </>
+                        )}
                       </td>
                       {/* Sem quebra: o código partia no hífen ("AMB-" em
                           cima, "1001/26" embaixo). */}
@@ -733,7 +854,7 @@ export function JobsList({
             <p className="text-sm font-semibold">Nenhum job com esse recorte</p>
             <p className="text-xs text-muted-foreground">
               {meus
-                ? "Você não é GP nem produtor de nenhum job que combine com os filtros."
+                ? "Você não está na equipe de nenhum job que combine com os filtros."
                 : "Nenhum job combina com os filtros escolhidos."}
             </p>
             <button
@@ -754,6 +875,83 @@ export function JobsList({
           </div>
         )}
       </div>
+
+      {/* Barra do envio em lote — o mesmo padrão da barra do Faturamento
+          Agrupado do Contas a Receber: fixa no rodapé, com o total. */}
+      {modoEnvio && (
+        <div className="sticky bottom-0 z-20 -mx-1 overflow-hidden rounded-t-2xl border border-b-0 border-california-red/35 bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+          <div className="flex flex-wrap items-center gap-3.5 bg-california-red/[0.04] px-5 py-2.5">
+            <span className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold">
+              <Send className="h-3.5 w-3.5 text-california-red" />
+              Envio para faturamento
+            </span>
+            <div className="h-4 w-px bg-california-red/25" />
+            <span className="whitespace-nowrap text-xs text-muted-foreground">
+              {selecionados.length === 0
+                ? "Marque os jobs de um mesmo cliente e de uma mesma empresa"
+                : `${selecionados.length} selecionado(s)`}
+            </span>
+            {selecionados.length > 0 && (
+              <span className="whitespace-nowrap font-mono text-sm font-bold tabular-nums" title="Valor total dos jobs; o valor a faturar é conferido no envio">
+                {formatMoney(totalDoLote)}
+              </span>
+            )}
+            {primeiraDoLote && (
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                <Building2 className="h-3 w-3" />
+                {primeiraDoLote.cliente_nome ?? "Cliente"} · {primeiraDoLote.empresa_nome ?? "Empresa"}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={sairDoEnvio}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={selecionados.length === 0}
+                onClick={() => setLoteAberto(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Send className="h-3.5 w-3.5" />
+                {selecionados.length > 1 ? `Enviar ${selecionados.length} jobs` : "Enviar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loteAberto && selecionados.length > 0 && (
+        <EnvioEmLoteDialog
+          jobIds={selecionados}
+          onClose={() => setLoteAberto(false)}
+          onEnviado={(r: EnvioEmLoteResultado) => {
+            setLoteAberto(false);
+            sairDoEnvio();
+            setAviso(
+              r.qtdJobs === 1
+                ? `Job enviado para faturamento em ${r.qtdNotas === 1 ? "1 nota" : `${r.qtdNotas} notas`}.`
+                : `${r.qtdJobs} jobs do cliente ${r.cliente} enviados para faturamento em ${r.qtdNotas === 1 ? "1 nota" : `${r.qtdNotas} notas`}. O financeiro recebe as notas já com os seus jobs.`,
+            );
+            router.refresh();
+          }}
+        />
+      )}
+
+      {aviso && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated animate-in fade-in slide-in-from-bottom-2"
+        >
+          <span className="text-sm font-medium text-emerald-800">{aviso}</span>
+          <button type="button" onClick={() => setAviso(null)} className="text-emerald-700 hover:text-emerald-900" aria-label="Fechar aviso">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

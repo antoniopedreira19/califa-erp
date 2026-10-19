@@ -5,6 +5,7 @@ import {
   type SituacaoFaturamento,
   type TituloDaNota,
 } from "@/lib/calculos/esteira-faturamento";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 /**
  * Onde cada job está na esteira do faturamento, para um lote de jobs.
@@ -168,7 +169,9 @@ export async function notasEmitidasDosJobs(
 
 export async function faturamentoPorJob(
   tenantId: string,
-  hoje: string = new Date().toISOString().slice(0, 10),
+  // Hoje em Brasília: em UTC, depois das 21h a nota que vence hoje já
+  // marcava o job como inadimplente.
+  hoje: string = hojeEmSaoPauloIso(),
   /** Só estes jobs — a página de um job. Sem ele, o tenant inteiro. */
   jobIds?: string[],
 ): Promise<Map<string, FaturamentoDoJob>> {

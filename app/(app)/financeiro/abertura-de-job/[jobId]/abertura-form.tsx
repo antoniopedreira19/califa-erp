@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowDownLeft,
   ArrowLeftRight,
   ArrowRight,
+  ArrowUpRight,
   CalendarCheck,
   CalendarDays,
   Check,
@@ -55,13 +57,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatCurrency, cn } from "@/lib/utils";
+import { SAVE } from "@/app/(app)/_planilha/blocos";
 import {
   formatPercentualRateio,
+  nomeDoJobNoFinanceiro,
   ordenarCompetencias,
   rateioLabel,
   type JobCompetencia,
   type FotoDaAbertura,
-  type SaveAprovacaoSituacao,
 } from "@/lib/types";
 import type { ServicoOption } from "@/lib/data/servicos";
 import type { JobNaFila, RevisaoDeErrata } from "../dados";
@@ -110,12 +113,13 @@ import type {
   SavesDaAbertura,
 } from "../saves-da-abertura";
 import { IconeSave } from "../icone-save";
+import { BotaoDaPlanilha, PopUpDaPlanilha } from "./planilha-em-leitura";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
 import { useVoltar } from "@/components/voltar/botao-voltar";
 import { useProtegerSaida } from "@/components/voltar/estado";
 import { nomeDaPagina } from "@/lib/voltar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useIrParaAbaDoJob } from "../../jobs/[jobId]/job-financeiro-tabs";
 
 interface CategoriaOption {
   id: string;
@@ -284,6 +288,12 @@ interface Props {
    *  a página do job aberto montar o formulário sem ela, e o job pago por
    *  save dizia "pago diretamente pelo cliente ao fornecedor". */
   saveConsumido: number;
+  /** O crédito que as linhas deste job em save geram (`totalGeradoEmSave`,
+   *  em `dados.ts`) — o "Total gerado em save" do envio da produção. O
+   *  cartão "Dados da produção" o mostra abaixo do valor total, junto do
+   *  consumo (Tiago, 17/10/2026). Obrigatória, pelo mesmo motivo de
+   *  `saveConsumido`. */
+  saveGerado: number;
   /** As linhas do job em save e fora dele (`linhasDoSave`, em `dados.ts`).
    *  Só serve para EXPLICAR um custo previsto zero: a linha em save não tem
    *  custo neste job, e a de fora é paga pelo cliente direto ao fornecedor
@@ -346,13 +356,6 @@ interface Props {
    * prop opcional esconde a fronteira em que o dado some (CLAUDE.md).
    */
   saves: SavesDaAbertura | null;
-  /**
-   * A planilha interna, em leitura, de cada job de origem do consumo, por
-   * id do job — o conteúdo do pop-up do atalho "Visualizar planilha do …"
-   * (decisão 155). A página monta no servidor, já com `Suspense`; aqui ela
-   * só entra no Dialog. `{}` quando o job não consome saldo.
-   */
-  planilhasDasOrigens: Record<string, React.ReactNode>;
 }
 
 /** O atalho "Visualizar planilha interna" — link ou botão de aba, mesma cara. */
@@ -463,6 +466,7 @@ export function AberturaForm({
   aliquotaIntTaxes,
   rentabilidade,
   saveConsumido,
+  saveGerado,
   linhasDoSave,
   enviadoPorNome,
   curvaInicial,
@@ -482,15 +486,11 @@ export function AberturaForm({
   revisao = null,
   aprovacaoSave,
   saves,
-  planilhasDasOrigens,
 }: Props) {
   const router = useRouter();
   // Revisão aberta pela fila volta à fila; pela Visualizar Jobs, volta lá
   // (decisão 108). A reserva é a fila, o destino fixo de antes.
   const voltar = useVoltar("/financeiro/abertura-de-job?aba=aguardando");
-  // A abertura mora na primeira das abas do job (decisão 111): o atalho da
-  // planilha troca de aba em vez de sair da página. Nulo fora das abas.
-  const irParaAba = useIrParaAbaDoJob();
 
   // Modo leitura só destrava quando alguém clica em "Editar registro".
   // A revisão já nasce destravada: reconferir a abertura depois de uma
@@ -510,9 +510,11 @@ export function AberturaForm({
       : "Aprovar consumo e registrar revisão"
     : "Registrar revisão de abertura";
 
-  // Na abertura o nome vem do job da produção; num job já aberto vem do
-  // nome que o financeiro gravou (`dados-abertos` já resolve o fallback).
-  const [nome, setNome] = React.useState(job.nome);
+  // Na abertura o nome vem do job da produção; num job já aberto, do nome
+  // que o financeiro gravou. Até 16/10/2026 nascia sempre do da produção, e
+  // salvar uma edição ou revisão sem retocar o campo apagava o nome do
+  // financeiro (AMB-1019/26 e ANI-1002/26 em 07/10/2026).
+  const [nome, setNome] = React.useState(() => nomeDoJobNoFinanceiro(job));
   // Chega com a categoria que a produção deu ao job no orçamento — o
   // financeiro confere e pode trocar. Só pré-seleciona o que está na
   // lista: categoria inativada desde o envio deixa o campo vazio, e aí o
@@ -1472,7 +1474,7 @@ export function AberturaForm({
   /** Desfaz a edição voltando tudo ao que veio do servidor. */
   function cancelarEdicao() {
     setErro(null);
-    setNome(job.nome);
+    setNome(nomeDoJobNoFinanceiro(job));
     setProjetoId(job.projeto_financeiro_id ?? "");
     setNomeProjetoNovo(null);
     setContaRecebId(job.conta_recebimento_id);
@@ -1507,6 +1509,8 @@ export function AberturaForm({
     { rotulo: "Código", valor: job.codigo, mono: true },
     // Só o nome: o único código do painel é o do job (decisão 135).
     { rotulo: "Projeto", valor: job.projeto_nome ?? "—" },
+    // A empresa do job, que vem do projeto (Tiago, 19/10/2026).
+    { rotulo: "Empresa", valor: job.empresa_nome ?? "—" },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
     { rotulo: "Marca", valor: job.produto ?? "—" },
     // A que veio do orçamento — fixa. O que o financeiro escolher no
@@ -1537,24 +1541,6 @@ export function AberturaForm({
       semRecebimento,
     ),
   ];
-
-  const resumoPlanilha =
-    job.planilha_itens > 0
-      ? `${job.planilha_grupos} ${job.planilha_grupos === 1 ? "agrupamento" : "agrupamentos"} · ${job.planilha_itens} ${job.planilha_itens === 1 ? "item" : "itens"} · orçado ${formatCurrency(job.planilha_orcado)}`
-      : "Planilha interna sem itens.";
-
-  const conteudoDoAtalhoDaPlanilha = (
-    <>
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
-        <Table2 className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[12.5px] font-semibold">Visualizar planilha interna</p>
-        <p className="text-[11px] text-muted-foreground">{resumoPlanilha}</p>
-      </div>
-      <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-    </>
-  );
 
   return (
     <div className="flex flex-col gap-5 pb-6">
@@ -3270,54 +3256,57 @@ export function AberturaForm({
                 {formatCurrency(job.valor_total)}
               </span>
             </div>
-            {/* Item 03 do protótipo: a planilha interna do job em leitura,
-                dentro do próprio fluxo de abertura. No job já aberto a
-                planilha é a aba da página do job no financeiro: o link ia
-                para a rota da conferência e dependia do redirect dela para
-                `/jobs`, que tirava o financeiro do módulo (decisão 099,
-                item 20).
-
-                Na aprovação de save o link leva o `aprovarSave` junto: a
-                planilha abre com a linha do pedido em destaque, e voltar
-                para a aba da abertura continua na aprovação. Sem ele, a
-                revisão registrada na volta não aprovaria nada (achado da
-                revisão de 22/09/2026). */}
-            {/* Na abertura (decisão 111) a planilha é a aba ao lado, e o
-                atalho só troca de aba: sair para a rota da conferência
-                descartaria o que já foi preenchido. */}
-            {modo === "abertura" && irParaAba ? (
-              <button
-                type="button"
-                onClick={() => irParaAba("planilha")}
-                className={CLASSE_ATALHO_PLANILHA}
-              >
-                {conteudoDoAtalhoDaPlanilha}
-              </button>
-            ) : (
-              <Link
-                href={
-                  modo === "abertura"
-                    ? `/financeiro/abertura-de-job/${job.id}/planilha`
-                    : aprovacaoSave
-                      ? `/financeiro/jobs/${job.id}?aba=planilha&aprovarSave=${aprovacaoSave.pedidoId}`
-                      : `/financeiro/jobs/${job.id}?aba=planilha`
-                }
-                prefetch={false}
-                className={CLASSE_ATALHO_PLANILHA}
-              >
-                {conteudoDoAtalhoDaPlanilha}
-              </Link>
+            {/* O save do job, abaixo do valor total, como no envio da
+                produção: o crédito que ele gera e o que ele consome do
+                saldo de outro job. Zero não vira linha. Grafite do SAVE,
+                de `blocos.ts` — a mesma cor do envio e do card de Totais
+                (Tiago, 17/10/2026). */}
+            {(saveGerado > 0.004 || saveConsumido > 0.004) && (
+              <div className="flex flex-col gap-2.5 border-t border-border pt-2.5">
+                {saveGerado > 0.004 && (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[12.5px] font-semibold">
+                      Total gerado em save
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-[13px] font-bold",
+                        SAVE.textoApagado,
+                      )}
+                    >
+                      {formatCurrency(saveGerado)}
+                    </span>
+                  </div>
+                )}
+                {saveConsumido > 0.004 && (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[12.5px] font-semibold">
+                      Consumo de save
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-[13px] font-bold",
+                        SAVE.textoApagado,
+                      )}
+                    >
+                      {formatCurrency(saveConsumido)}
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
+            {/* A planilha interna do job em leitura, num pop-up (revisão da
+                decisão 155, 19/10/2026): a mesma forma dos atalhos do save, e
+                nada do que foi preenchido se perde. Até ali o atalho trocava
+                de aba (decisão 111) ou navegava até ela no job aberto. Na
+                aprovação de um save a linha do pedido vem em destaque. */}
+            <AtalhoDaPlanilhaInterna
+              job={job}
+              destacarItens={aprovacaoSave?.linhaId ? [aprovacaoSave.linhaId] : []}
+            />
             {/* A planilha do job de origem do consumo, logo abaixo da
-                planilha interna e no mesmo tipo de botão (decisão 155): quem
-                aprova o consumo confere de onde o saldo vem sem sair da
-                abertura. */}
-            {saves && (
-              <AtalhosDasOrigens
-                saves={saves}
-                planilhasDasOrigens={planilhasDasOrigens}
-              />
-            )}
+                planilha interna e no mesmo tipo de botão (decisão 155). */}
+            {saves && <AtalhosDasOrigens saves={saves} />}
           </div>
 
           {/* O que a produção escreveu ao enviar o job. Mesmo dado e mesmo
@@ -3978,83 +3967,264 @@ const linhasTexto = (n: number) => (n === 1 ? "1 linha" : `${n} linhas`);
 const LIMITE_TABELA_ABERTA = 5;
 const LINHAS_TABELA_RECOLHIDA = 3;
 
-/** A situação do pedido de cada linha: o mesmo chip, com as mesmas classes,
- *  do pop-up de save da planilha (`_planilha/save-dialog.tsx`). Sem pedido
- *  ainda (antes de abrir), "Ainda não enviado". */
-const CHIP_DA_SITUACAO: Partial<Record<SaveAprovacaoSituacao, [string, string]>> = {
-  aguardando: ["border-amber-200 bg-amber-50 text-amber-700", "Aguardando aprovação"],
-  aprovado: ["border-emerald-200 bg-emerald-50 text-emerald-700", "Aprovado"],
-  recusado: [
-    "border-california-red/25 bg-california-red/5 text-california-red",
-    "Recusado",
-  ],
-};
-const CHIP_SEM_PEDIDO: [string, string] = [
-  "border-border bg-muted text-muted-foreground",
-  "Ainda não enviado",
-];
-
-function ChipDaSituacao({ situacao }: { situacao: SaveAprovacaoSituacao | null }) {
-  const [classes, rotulo] =
-    (situacao ? CHIP_DA_SITUACAO[situacao] : null) ?? CHIP_SEM_PEDIDO;
+/**
+ * O selo da faixa de cada tipo: aprovado, ou ainda por decidir. Na abertura
+ * a faixa leva a caixa; no job aberto, o selo da situação dos pedidos.
+ */
+function SeloDaFaixa({
+  tom,
+  children,
+}: {
+  tom: "ok" | "pendente" | "recusado";
+  children: React.ReactNode;
+}) {
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold",
-        classes,
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] font-semibold",
+        tom === "ok" && "border-emerald-200 bg-white text-emerald-700",
+        tom === "pendente" && "border-amber-200 bg-amber-50 text-amber-700",
+        tom === "recusado" &&
+          "border-california-red/25 bg-california-red/5 text-california-red",
       )}
     >
-      {rotulo}
+      {tom === "ok" ? <Check className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+      {children}
     </span>
   );
 }
 
-/** A caixa de aprovação de um tipo de save: o `Checkbox` do sistema. Na
- *  abertura, marcável. Nos outros modos, travada: marcada quando todas as
- *  linhas do tipo têm o pedido aprovado, com quem aprovou e quando. */
-function CaixaDeAprovacao({
+/** O selo do tipo no job aberto, pela situação dos pedidos das linhas. */
+function seloDaLeitura(linhas: LinhaDeSaveDaAbertura[]): React.ReactNode {
+  if (linhas.length === 0) return null;
+  if (linhas.every((l) => l.situacao === "aprovado")) {
+    return <SeloDaFaixa tom="ok">Aprovado com a abertura</SeloDaFaixa>;
+  }
+  if (linhas.some((l) => l.situacao === "recusado")) {
+    return <SeloDaFaixa tom="recusado">Recusado</SeloDaFaixa>;
+  }
+  if (linhas.some((l) => l.situacao === "aguardando")) {
+    return <SeloDaFaixa tom="pendente">Aguardando aprovação</SeloDaFaixa>;
+  }
+  return null;
+}
+
+/** A caixa de aprovação de um tipo, compacta, na faixa do tipo — onde as
+ *  Previsões põem "Parcelas fecham com o faturamento". */
+function CaixaNaFaixa({
   rotulo,
   marcada,
-  travada,
   onMarcar,
-  aprovado,
 }: {
   rotulo: string;
   marcada: boolean;
-  travada: boolean;
   onMarcar: (v: boolean) => void;
-  aprovado: SavesDaAbertura["aprovados"];
 }) {
   const id = React.useId();
   return (
     <label
       htmlFor={id}
       className={cn(
-        "inline-flex shrink-0 items-start gap-2 rounded-lg border px-3 py-2",
-        marcada ? "border-emerald-200 bg-emerald-50" : "border-border bg-white",
-        !travada && "cursor-pointer",
+        "inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors",
+        marcada
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-amber-300 bg-white text-foreground hover:border-amber-400",
       )}
     >
       <Checkbox
         id={id}
         checked={marcada}
-        disabled={travada}
         onCheckedChange={(v) => onMarcar(v === true)}
-        className="mt-px"
+        className="h-3.5 w-3.5"
       />
-      <span className="flex flex-col leading-tight">
-        <span className="text-[12.5px] font-semibold">{rotulo}</span>
-        {aprovado && (
-          <span className="mt-0.5 text-[11px] text-emerald-700">
-            Aprovado por {aprovado.porNome ?? "—"} em{" "}
-            {formatDataAsHoraBr(aprovado.em)}
-          </span>
-        )}
-      </span>
+      {rotulo}
     </label>
   );
 }
 
+/** Um bloco de resumo, como os quatro do topo das Previsões. */
+function BlocoDeResumo({
+  titulo,
+  valor,
+  apoio,
+}: {
+  titulo: string;
+  valor: React.ReactNode;
+  apoio: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border px-4 py-3">
+      <p
+        className={cn(
+          "text-[10px] font-bold uppercase tracking-[0.09em]",
+          SAVE.textoApagado,
+        )}
+      >
+        {titulo}
+      </p>
+      <p className="mt-1.5 whitespace-nowrap font-mono text-base font-bold">{valor}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{apoio}</p>
+    </div>
+  );
+}
+
+/** O ícone da faixa: a direção do save, na cor do SAVE. */
+function IconeDaFaixa({ tipo }: { tipo: "gera" | "consome" }) {
+  const Icone = tipo === "gera" ? ArrowUpRight : ArrowDownLeft;
+  return (
+    <span
+      className={cn(
+        "inline-flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border border-current",
+        SAVE.icone,
+      )}
+    >
+      <Icone className="h-3 w-3" />
+    </span>
+  );
+}
+
+/** A faixa de cada tipo dentro da tabela, como "Parcelas de recebimento". */
+function FaixaDoTipo({
+  tipo,
+  titulo,
+  detalhe,
+  direita,
+}: {
+  tipo: "gera" | "consome";
+  titulo: string;
+  detalhe: React.ReactNode;
+  direita: React.ReactNode;
+}) {
+  return (
+    <tr>
+      <td colSpan={5} className="p-0">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2.5 border-y border-border px-4 py-2.5",
+            SAVE.linhaConsome,
+          )}
+        >
+          <IconeDaFaixa tipo={tipo} />
+          <p
+            className={cn(
+              "text-[11px] font-bold uppercase tracking-[0.07em]",
+              SAVE.textoApagado,
+            )}
+          >
+            {titulo}
+          </p>
+          <span className="text-[11.5px] text-muted-foreground">{detalhe}</span>
+          {direita && <span className="ml-auto inline-flex items-center gap-2">{direita}</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/** Recolhe em 3 a partir de 6, como as tabelas do bloco sempre fizeram. */
+function useRecolher<T>(itens: T[]) {
+  const recolhivel = itens.length > LIMITE_TABELA_ABERTA;
+  const [aberta, setAberta] = React.useState(!recolhivel);
+  return {
+    visiveis: aberta ? itens : itens.slice(0, LINHAS_TABELA_RECOLHIDA),
+    recolhivel,
+    aberta,
+    alternar: () => setAberta((a) => !a),
+  };
+}
+
+function LinhaDeRecolher({
+  aberta,
+  rotulo,
+  onClick,
+}: {
+  aberta: boolean;
+  rotulo: string;
+  onClick: () => void;
+}) {
+  return (
+    <tr>
+      <td colSpan={5} className="p-0">
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex w-full items-center justify-center gap-1.5 border-b border-border bg-muted/40 px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {aberta ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {aberta ? "Recolher" : rotulo}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function LinhaDeSoma({ esquerda, valor }: { esquerda: React.ReactNode; valor: number }) {
+  return (
+    <tr className="border-b border-border">
+      <td colSpan={3} className="px-4 py-2.5 text-[12px] text-muted-foreground">
+        {esquerda}
+      </td>
+      <td className="whitespace-nowrap px-4 py-2.5 text-right text-[12px] text-muted-foreground">
+        Soma{" "}
+        <span className="font-mono text-[13.5px] font-bold text-foreground">
+          {formatCurrency(valor)}
+        </span>
+      </td>
+      <td />
+    </tr>
+  );
+}
+
+const valorMono = (v: number) => (
+  <span className="font-mono font-semibold text-foreground">{formatCurrency(v)}</span>
+);
+
+const umOuVarios = (n: number, um: string, varios: string) =>
+  n === 1 ? `1 ${um}` : `${n} ${varios}`;
+
+/** "do saldo do TES-1009/26", ou "do saldo de 2 jobs". */
+const doSaldo = (porOrigem: { codigo: string }[]) =>
+  porOrigem.length === 1
+    ? `do saldo do ${porOrigem[0].codigo}`
+    : `do saldo de ${porOrigem.length} jobs`;
+
+/** As origens de uma linha que consome: "do TES-1009/26"; de mais de um
+ *  job, uma por linha, com quanto vem de cada uma. */
+function origensDaLinha(l: LinhaDeSaveDaAbertura): React.ReactNode {
+  const os = [...l.origens].sort((a, b) => b.valor - a.valor);
+  if (os.length === 1) return `do ${os[0].codigo}`;
+  return (
+    <span className="flex flex-col gap-0.5">
+      {os.map((o) => (
+        <span key={o.jobId} className="whitespace-nowrap">
+          {o.codigo} · {formatCurrency(o.valor)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+const DESCRICAO_DA_ORIGEM =
+  "em leitura — a linha que gerou o saldo usado aqui aparece com o ícone de save.";
+const DESCRICAO_DO_CONSUMIDOR =
+  "em leitura — a linha que consome o saldo deste job aparece com o ícone de save.";
+
+/**
+ * "Saves deste job" (decisão 155, revista em 19/10/2026 a partir do
+ * protótipo "Save na Abertura", opção B). No idioma das Previsões: blocos de
+ * resumo no topo e uma tabela só, com uma faixa por tipo. Na abertura, a
+ * caixa de aprovação mora na faixa do tipo; no job aberto, o selo da
+ * situação dos pedidos. Cada tipo fecha com a linha de Soma. As linhas que
+ * geram save têm a hachura da coluna Save da planilha e as que consomem, o
+ * fundo grafite claro (`SAVE`, em `blocos.ts`). O ícone na ponta da linha
+ * abre a planilha do outro job — a de origem, ou a de quem consome.
+ *
+ * No job aberto que gerou save, a faixa "Consumido por" lista os jobs que já
+ * consumiram o crédito (consumo aprovado), e o resumo traz o livre da
+ * `vw_saves_por_job`. A linha do consumo diz só "Pago com o saldo do …": o
+ * saldo e as sobras de antes não se reconstroem depois que outros jobs
+ * consomem da mesma origem.
+ */
 function SavesDesteJob({
   saves,
   aAprovar,
@@ -4073,298 +4243,370 @@ function SavesDesteJob({
 }) {
   const { linhas, clienteNome } = saves;
   const r = resumirSaves(linhas);
-  const recolhivel = linhas.length > LIMITE_TABELA_ABERTA;
-  const [aberta, setAberta] = React.useState(!recolhivel);
-  const visiveis = aberta ? linhas : linhas.slice(0, LINHAS_TABELA_RECOLHIDA);
-  const temGera = r.gera.linhas > 0;
-  // O saldo vem pronto da página, já descontado o consumo deste job; o
-  // crédito é o que a abertura soma a ele.
+  const gera = linhas.filter((l) => l.tipo === "gera");
+  const consome = linhas.filter((l) => l.tipo === "consome");
+  const consumidores = aAprovar ? [] : saves.consumidores;
   const saldoDepois = emCentavos(saves.saldoDoClienteAntes + r.gera.credito);
-  const modoInteiro = saves.modoInteiro;
+  const somaDosConsumidores = emCentavos(consumidores.reduce((t, c) => t + c.valor, 0));
+  const consumido = saves.credito?.consumido ?? somaDosConsumidores;
+  const reservado = saves.credito?.reservado ?? 0;
+  const livre = saves.credito?.livre ?? emCentavos(r.gera.credito - consumido - reservado);
+  const rg = useRecolher(gera);
+  const rc = useRecolher(consome);
+  const rj = useRecolher(consumidores);
 
-  // Em leitura, a caixa de cada tipo reflete os pedidos: marcada só com
-  // TODAS as linhas daquele tipo aprovadas.
-  const todasAprovadas = (tipo: "gera" | "consome") => {
-    const doTipo = linhas.filter((l) => l.tipo === tipo);
-    return doTipo.length > 0 && doTipo.every((l) => l.situacao === "aprovado");
-  };
-  const geraAprovado = !aAprovar && todasAprovadas("gera");
-  const consumoAprovado = !aAprovar && todasAprovadas("consome");
-
-  // A regra, no pé do cartão (só na abertura).
-  const oQueAcontece: string[] = [];
-  if (temGera) oQueAcontece.push(`o crédito entra no saldo de ${clienteNome}`);
-  if (r.consome.linhas > 0) {
-    oQueAcontece.push(
-      `o consumo usa o saldo ${r.consome.porOrigem.map((o) => `do ${o.codigo}`).join(" e ")}`,
+  const caixaOuSelo = (tipo: "gera" | "consome") =>
+    aAprovar ? (
+      <CaixaNaFaixa
+        rotulo={tipo === "gera" ? "Aprovar save gerado" : "Aprovar consumo de save"}
+        marcada={tipo === "gera" ? aprovaGera : aprovaConsumo}
+        onMarcar={tipo === "gera" ? onAprovaGera : onAprovaConsumo}
+      />
+    ) : (
+      seloDaLeitura(tipo === "gera" ? gera : consome)
     );
-  }
-  const um = linhas.length === 1;
+
+  const apoioDoLivre = [
+    consumido > 0.004
+      ? consumidores.length > 0
+        ? `${formatCurrency(consumido)} consumidos por ${umOuVarios(consumidores.length, "job", "jobs")}`
+        : `${formatCurrency(consumido)} consumidos`
+      : "Nenhum job consumiu ainda",
+    reservado > 0.004 ? `${formatCurrency(reservado)} reservados` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <section className="rounded-2xl border border-border bg-card shadow-soft">
       <header className="flex flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border bg-muted/50 px-5 py-3.5">
         <ArrowLeftRight className="h-4 w-4 text-california-red" />
-        <h2 className="text-[15px] font-semibold">
-          Saves deste job · {linhas.length}
-        </h2>
-        {saves.aprovados && (
-          <span className="text-xs text-muted-foreground">
-            Aprovados com a abertura · {formatDataAsHoraBr(saves.aprovados.em)}
-            {saves.aprovados.porNome ? ` · ${saves.aprovados.porNome}` : ""}
-          </span>
-        )}
-        {modoInteiro && (
+        <h2 className="text-[15px] font-semibold">Saves deste job</h2>
+        <span className="text-xs text-muted-foreground">
+          {aAprovar
+            ? "Confira as linhas e aprove cada tipo para abrir o job."
+            : saves.aprovados
+              ? `Aprovados com a abertura · ${formatDataAsHoraBr(saves.aprovados.em)}${
+                  saves.aprovados.porNome ? ` · ${saves.aprovados.porNome}` : ""
+                }`
+              : null}
+        </span>
+        {saves.modoInteiro && (
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-foreground">
-            {modoInteiro.tipo === "gera" && <IconeSave tipo="gera" origens={[]} />}
-            {modoInteiro.tipo === "gera"
+            {saves.modoInteiro.tipo === "gera" && <IconeSave tipo="gera" origens={[]} />}
+            {saves.modoInteiro.tipo === "gera"
               ? "Orçamento inteiro em save"
-              : `Orçamento inteiro pago pelo saldo do ${modoInteiro.codigo}`}
+              : `Orçamento inteiro pago pelo saldo do ${saves.modoInteiro.codigo}`}
           </span>
         )}
       </header>
 
       <div className="flex flex-col gap-[18px] p-5">
-        {/* Resumo: uma linha para o que gera, uma por job de origem. A
-            caixa de cada tipo fica ao lado da linha dele. */}
-        <div className="divide-y divide-border rounded-xl border border-border">
-          {temGera && (
-            <div className="flex items-center gap-4 px-4 py-3">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5">
-                <IconeSave tipo="gera" origens={[]} />
-                <span className="text-[13px] font-semibold">
-                  Gera save · {linhasTexto(r.gera.linhas)}
-                </span>
-                <span className="text-[12.5px] text-muted-foreground">
-                  crédito para {clienteNome}{" "}
-                  <span className="font-mono font-semibold text-foreground">
-                    {formatCurrency(r.gera.credito)}
-                  </span>
-                </span>
-                <span className="ml-auto inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                  saldo de save de {clienteNome}
-                  <span className="font-mono line-through">
+        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          {gera.length > 0 && (
+            <BlocoDeResumo
+              titulo="Save gerado"
+              valor={formatCurrency(r.gera.credito)}
+              apoio={
+                aAprovar
+                  ? `${linhasTexto(gera.length)} · crédito para ${clienteNome} quando o job abrir`
+                  : `${linhasTexto(gera.length)} · crédito de ${clienteNome}`
+              }
+            />
+          )}
+          {consome.length > 0 && (
+            <BlocoDeResumo
+              titulo="Consumo de save"
+              valor={formatCurrency(r.consome.valor)}
+              apoio={`${linhasTexto(consome.length)} · ${doSaldo(r.consome.porOrigem)}`}
+            />
+          )}
+          {gera.length > 0 && aAprovar && (
+            <BlocoDeResumo
+              titulo={`Saldo de save de ${clienteNome}`}
+              valor={
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-muted-foreground line-through">
                     {formatCurrency(saves.saldoDoClienteAntes)}
                   </span>
-                  <ArrowRight className="h-3 w-3" />
-                  <span className="font-mono font-semibold text-foreground">
-                    {formatCurrency(saldoDepois)}
-                  </span>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  {formatCurrency(saldoDepois)}
                 </span>
-              </div>
-              <CaixaDeAprovacao
-                rotulo="Aprovar save gerado"
-                marcada={aAprovar ? aprovaGera : geraAprovado}
-                travada={!aAprovar}
-                onMarcar={onAprovaGera}
-                aprovado={geraAprovado ? saves.aprovados : null}
-              />
-            </div>
+              }
+              apoio="Hoje → depois de abrir este job"
+            />
           )}
-          {r.consome.porOrigem.map((o, i) => {
-            const saldo = saves.saldoDasOrigens[o.jobId] ?? 0;
-            return (
-              <div key={o.jobId} className="flex items-center gap-4 px-4 py-3">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5">
-                  <IconeSave tipo="consome" origens={[o.codigo]} />
-                  <span className="text-[13px] font-semibold">
-                    Consome save · {linhasTexto(o.linhas)} · do{" "}
-                    <span className="font-mono">{o.codigo}</span> {o.nome}
-                  </span>
-                  <span className="text-[12.5px] text-muted-foreground">
-                    usa{" "}
-                    <span className="font-mono font-semibold text-foreground">
-                      {formatCurrency(o.valor)}
-                    </span>
-                  </span>
-                  <span className="ml-auto text-[12.5px] text-muted-foreground">
-                    saldo{" "}
-                    <span className="font-mono text-foreground">
-                      {formatCurrency(saldo)}
-                    </span>{" "}
-                    · sobram{" "}
-                    <span className="font-mono font-semibold text-foreground">
-                      {formatCurrency(emCentavos(saldo - o.valor))}
-                    </span>
-                  </span>
-                </div>
-                {/* Uma caixa só para todo o consumo, na primeira origem. */}
-                {i === 0 && (
-                  <CaixaDeAprovacao
-                    rotulo="Aprovar consumo de save"
-                    marcada={aAprovar ? aprovaConsumo : consumoAprovado}
-                    travada={!aAprovar}
-                    onMarcar={onAprovaConsumo}
-                    aprovado={consumoAprovado ? saves.aprovados : null}
-                  />
-                )}
-              </div>
-            );
-          })}
+          {gera.length > 0 && !aAprovar && (
+            <BlocoDeResumo titulo="Livre do crédito" valor={formatCurrency(livre)} apoio={apoioDoLivre} />
+          )}
         </div>
 
-        {/* As linhas. */}
         <div className="overflow-hidden rounded-xl border border-border">
-          <table className="w-full border-collapse text-[13px]">
+          {/* Layout automático: o bloco não é planilha (a regra do
+              `table-fixed` é da planilha e dos Totais). Com colunas fixas,
+              numa tela estreita o item sumia; aqui ele e o detalhe quebram
+              linha, e o valor nunca quebra. */}
+          <table className="w-full border-collapse text-[13.5px]">
             <thead>
               <tr className="border-b border-border text-left text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                <th className="px-4 py-2.5 font-semibold">Grupo · Item</th>
-                <th className="w-16 px-2 py-2.5 text-center font-semibold">Tipo</th>
-                <th className="w-32 px-2 py-2.5 font-semibold">Save</th>
-                <th className="w-40 px-4 py-2.5 text-right font-semibold">Valor</th>
-                {temGera && (
-                  <th className="w-48 px-4 py-2.5 text-right font-semibold">
-                    Faturamento da linha
-                  </th>
-                )}
-                {!aAprovar && (
-                  <th className="w-44 px-4 py-2.5 font-semibold">Situação</th>
-                )}
+                <th className="w-14 px-4 py-2.5 font-semibold">#</th>
+                <th className="px-4 py-2.5 font-semibold">Grupo · item</th>
+                <th className="px-4 py-2.5 font-semibold" />
+                <th className="whitespace-nowrap px-4 py-2.5 text-right font-semibold">Valor</th>
+                <th className="w-14 px-4 py-2.5" aria-label="Planilha" />
               </tr>
             </thead>
             <tbody>
-              {visiveis.map((l) => (
-                <tr key={l.id} className="border-b border-border last:border-b-0">
-                  <td className="px-4 py-2.5">
-                    {l.grupo && (
-                      <span className="text-muted-foreground">{l.grupo} · </span>
-                    )}
-                    <span className="font-medium">{l.item}</span>
-                  </td>
-                  <td className="px-2 py-2.5 text-center">
-                    <Badge variant="outline">{l.tipoCusto ?? "—"}</Badge>
-                  </td>
-                  <td className="px-2 py-2.5">
-                    <IconeSave
-                      tipo={l.tipo}
-                      origens={[...l.origens]
-                        .sort((a, b) => b.valor - a.valor)
-                        .map((o) => o.codigo)}
+              {gera.length > 0 && (
+                <>
+                  <FaixaDoTipo
+                    tipo="gera"
+                    titulo="Save gerado"
+                    detalhe={aAprovar ? `crédito para ${clienteNome}` : `crédito de ${clienteNome}`}
+                    direita={caixaOuSelo("gera")}
+                  />
+                  {rg.visiveis.map((l, i) => (
+                    <tr key={l.id} className={cn("border-b border-border", SAVE.hachura)}>
+                      <td className="px-4 py-2.5 font-mono text-[12px] text-muted-foreground">
+                        S{String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {l.grupo && <span className="text-muted-foreground">{l.grupo} · </span>}
+                        <span className="font-medium">{l.item}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-[12px] text-muted-foreground">
+                        {l.faturamentoDaLinha !== null && (
+                          <>na nota {formatCurrency(l.faturamentoDaLinha)}</>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono font-semibold">
+                        {formatCurrency(l.valor)}
+                      </td>
+                      <td />
+                    </tr>
+                  ))}
+                  {rg.recolhivel && (
+                    <LinhaDeRecolher
+                      aberta={rg.aberta}
+                      rotulo={`Mostrar as ${gera.length} linhas`}
+                      onClick={rg.alternar}
                     />
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono font-semibold">
-                    {formatCurrency(l.valor)}
-                  </td>
-                  {temGera && (
-                    <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
-                      {l.faturamentoDaLinha === null
-                        ? "—"
-                        : formatCurrency(l.faturamentoDaLinha)}
-                    </td>
                   )}
-                  {!aAprovar && (
-                    <td className="px-4 py-2.5">
-                      <ChipDaSituacao situacao={l.situacao} />
-                    </td>
+                  {/* O saldo do cliente (ou o livre do crédito) já está no
+                      bloco de cima: a Soma fica só com o total. */}
+                  <LinhaDeSoma valor={r.gera.credito} esquerda={null} />
+                </>
+              )}
+
+              {consome.length > 0 && (
+                <>
+                  <FaixaDoTipo
+                    tipo="consome"
+                    titulo="Consumo de save"
+                    detalhe={r.consome.porOrigem
+                      .map((o) => `do ${o.codigo}${o.nome ? ` · ${o.nome}` : ""}`)
+                      .join(" e ")}
+                    direita={caixaOuSelo("consome")}
+                  />
+                  {rc.visiveis.map((l, i) => (
+                    <tr key={l.id} className={cn("border-b border-border", SAVE.linhaConsome)}>
+                      <td className="px-4 py-2.5 font-mono text-[12px] text-muted-foreground">
+                        C{String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {l.grupo && <span className="text-muted-foreground">{l.grupo} · </span>}
+                        <span className="font-medium">{l.item}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-[12px] text-muted-foreground">
+                        {origensDaLinha(l)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono font-semibold">
+                        {formatCurrency(l.valor)}
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <span className="flex flex-col items-center gap-1">
+                          {[...l.origens]
+                            .sort((a, b) => b.valor - a.valor)
+                            .map((o) => (
+                              <BotaoDaPlanilha
+                                key={o.jobId}
+                                jobId={o.jobId}
+                                codigo={o.codigo}
+                                descricao={`${o.nome ? `${o.nome} · ` : ""}${DESCRICAO_DA_ORIGEM}`}
+                              />
+                            ))}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {rc.recolhivel && (
+                    <LinhaDeRecolher
+                      aberta={rc.aberta}
+                      rotulo={`Mostrar as ${consome.length} linhas`}
+                      onClick={rc.alternar}
+                    />
                   )}
-                </tr>
-              ))}
+                  <LinhaDeSoma
+                    valor={r.consome.valor}
+                    esquerda={
+                      aAprovar
+                        ? r.consome.porOrigem.map((o, i) => {
+                            const saldo = saves.saldoDasOrigens[o.jobId] ?? 0;
+                            return (
+                              <span key={o.jobId}>
+                                {i > 0 && " · "}
+                                Saldo do {o.codigo}:{" "}
+                                <span className="font-mono">{formatCurrency(saldo)}</span> → sobram{" "}
+                                {valorMono(emCentavos(saldo - o.valor))}
+                              </span>
+                            );
+                          })
+                        : `Pago com o saldo ${r.consome.porOrigem
+                            .map((o) => `do ${o.codigo}`)
+                            .join(" e ")}`
+                    }
+                  />
+                </>
+              )}
+
+              {consumidores.length > 0 && (
+                <>
+                  <FaixaDoTipo
+                    tipo="gera"
+                    titulo="Consumido por"
+                    detalhe={`${umOuVarios(consumidores.length, "job", "jobs")} · ${
+                      consumidores.length === 1 ? "usa" : "usam"
+                    } ${formatCurrency(somaDosConsumidores)} do crédito de ${formatCurrency(r.gera.credito)}`}
+                    direita={null}
+                  />
+                  {rj.visiveis.map((c, i) => (
+                    <tr key={c.jobId} className="border-b border-border">
+                      <td className="px-4 py-2.5 font-mono text-[12px] text-muted-foreground">
+                        J{String(i + 1).padStart(2, "0")}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="font-mono font-semibold">{c.codigo}</span>{" "}
+                        <span className="text-muted-foreground">· {c.nome}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-[12px] text-muted-foreground">
+                        {c.abertoEm ? `aberto em ${formatDiaBr(c.abertoEm)}` : null}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono font-semibold">
+                        {formatCurrency(c.valor)}
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <BotaoDaPlanilha
+                          jobId={c.jobId}
+                          codigo={c.codigo}
+                          descricao={`${c.nome} · ${DESCRICAO_DO_CONSUMIDOR}`}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {rj.recolhivel && (
+                    <LinhaDeRecolher
+                      aberta={rj.aberta}
+                      rotulo={`Mostrar os ${consumidores.length} jobs`}
+                      onClick={rj.alternar}
+                    />
+                  )}
+                  <LinhaDeSoma valor={somaDosConsumidores} esquerda={null} />
+                </>
+              )}
             </tbody>
           </table>
-          {recolhivel && (
-            <button
-              type="button"
-              onClick={() => setAberta((a) => !a)}
-              className="flex w-full items-center justify-center gap-1.5 border-t border-border bg-muted/40 px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {aberta ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
-              {aberta ? "Recolher" : `Mostrar as ${linhas.length} linhas`}
-            </button>
-          )}
         </div>
 
         {aAprovar && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3.5 py-3">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Marque a aprovação para abrir o job: {oQueAcontece.join(" e ")}.
-              Se {um ? "ele" : "algum"} não deveria ser save, não abra o job:
-              use “Reprovar job” — ele volta para a produção corrigir e
-              reenviar.
-            </p>
-          </div>
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            Se alguma linha não deveria ser save, não abra o job: use “Reprovar job”.
+          </p>
         )}
       </div>
     </section>
   );
 }
 
-/**
- * Um atalho por job de origem do consumo, no MESMO visual do "Visualizar
- * planilha interna" (`CLASSE_ATALHO_PLANILHA` e o mesmo miolo), logo abaixo
- * dele (decisão 155). Abre a planilha interna do outro job num pop-up, em
- * leitura, sem sair da abertura — o que foi preenchido continua aqui. A
- * planilha chega pronta da página (`planilhasDasOrigens`).
- */
-function AtalhosDasOrigens({
-  saves,
-  planilhasDasOrigens,
+/** O atalho "Visualizar planilha interna": abre a planilha deste job num
+ *  pop-up, em leitura, como os da origem (Tiago, 07/10/2026). Na aprovação
+ *  de um save (decisão 099), a linha do pedido vem em destaque. A aba
+ *  Planilha Interna continua no topo, e é nela que se edita. */
+function AtalhoDaPlanilhaInterna({
+  job,
+  destacarItens,
 }: {
-  saves: SavesDaAbertura;
-  planilhasDasOrigens: Record<string, React.ReactNode>;
+  job: { id: string; codigo: string; nome: string };
+  destacarItens: string[];
 }) {
-  const [origemAberta, setOrigemAberta] = React.useState<{
+  const [aberto, setAberto] = React.useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setAberto(true)} className={CLASSE_ATALHO_PLANILHA}>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
+          <Table2 className="h-4 w-4" />
+        </div>
+        <p className="min-w-0 text-[12.5px] font-semibold">Visualizar planilha interna</p>
+        <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      </button>
+      <PopUpDaPlanilha
+        aberto={aberto}
+        onOpenChange={setAberto}
+        jobId={job.id}
+        codigo={job.codigo}
+        descricao={`${job.nome} · em leitura — as linhas com save aparecem com o ícone de save. Para editar, use a aba Planilha Interna.`}
+        destacarItens={destacarItens}
+      />
+    </>
+  );
+}
+
+/**
+ * Um atalho por job de origem do consumo, no mesmo visual do "Visualizar
+ * planilha interna", logo abaixo dele (decisão 155). "Visualizar planilha
+ * de origem do save (código)", só o título (Tiago, 08/10/2026). Abre a
+ * planilha do outro job num pop-up, em leitura, sem sair da abertura.
+ */
+function AtalhosDasOrigens({ saves }: { saves: SavesDaAbertura }) {
+  const [escolhida, setEscolhida] = React.useState<{
     jobId: string;
     codigo: string;
     nome: string;
   } | null>(null);
+  const [aberto, setAberto] = React.useState(false);
   const origens = resumirSaves(saves.linhas).consome.porOrigem;
   if (origens.length === 0) return null;
   return (
     <>
-      {origens.map((o) => {
-        const saldo = saves.saldoDasOrigens[o.jobId] ?? 0;
-        return (
-          <button
-            key={o.jobId}
-            type="button"
-            onClick={() =>
-              setOrigemAberta({ jobId: o.jobId, codigo: o.codigo, nome: o.nome })
-            }
-            className={CLASSE_ATALHO_PLANILHA}
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
-              <Table2 className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[12.5px] font-semibold">
-                Visualizar planilha do{" "}
-                <span className="whitespace-nowrap">{o.codigo}</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {o.nome} · usa {formatCurrency(o.valor)} de{" "}
-                {formatCurrency(saldo)}
-              </p>
-            </div>
-            <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          </button>
-        );
-      })}
-      <Dialog
-        open={origemAberta !== null}
-        onOpenChange={(aberto) => !aberto && setOrigemAberta(null)}
-      >
-        <DialogContent className="max-h-[88vh] w-[calc(100%-48px)] max-w-[1660px] overflow-y-auto">
-          {origemAberta && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-[19px]">
-                  Planilha interna do {origemAberta.codigo}
-                </DialogTitle>
-                <DialogDescription className="text-[13px]">
-                  {origemAberta.nome} · em leitura — a linha que gerou o saldo
-                  usado aqui aparece com o ícone de save.
-                </DialogDescription>
-              </DialogHeader>
-              {planilhasDasOrigens[origemAberta.jobId] ?? null}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {origens.map((o) => (
+        <button
+          key={o.jobId}
+          type="button"
+          onClick={() => {
+            setEscolhida({ jobId: o.jobId, codigo: o.codigo, nome: o.nome });
+            setAberto(true);
+          }}
+          className={CLASSE_ATALHO_PLANILHA}
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-california-red">
+            <Table2 className="h-4 w-4" />
+          </div>
+          <p className="min-w-0 text-[12.5px] font-semibold">
+            Visualizar planilha de origem do save{" "}
+            <span className="whitespace-nowrap">({o.codigo})</span>
+          </p>
+          <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      ))}
+      {escolhida && (
+        <PopUpDaPlanilha
+          aberto={aberto}
+          onOpenChange={setAberto}
+          jobId={escolhida.jobId}
+          codigo={escolhida.codigo}
+          descricao={`${escolhida.nome ? `${escolhida.nome} · ` : ""}${DESCRICAO_DA_ORIGEM}`}
+        />
+      )}
     </>
   );
 }

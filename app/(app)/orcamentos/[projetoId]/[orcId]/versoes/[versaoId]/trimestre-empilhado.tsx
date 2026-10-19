@@ -35,12 +35,17 @@ export function TrimestreEmpilhado({
   meses,
   moeda,
   acoes,
+  onAbrir,
 }: {
   meses: MesDoTrimestre[];
   moeda: string;
   /** Botões ao lado do "Recolher todos" — na Mídia Off, o "Caber na tela ⇄
    *  Alargar colunas" da grade (decisão 147). */
   acoes?: React.ReactNode;
+  /** "Abrir {mês}" no lugar, sem navegar: vira botão e chama isto com o id
+   *  do mês. É a planilha em pop-up da abertura do job (19/10/2026). Sem
+   *  ele, é o link de sempre. */
+  onAbrir?: (id: string) => void;
 }) {
   // Nasce com o primeiro mês aberto: com os três abertos a página enterra
   // o Totais do trimestre, e com todos fechados ela não mostra planilha.
@@ -111,13 +116,23 @@ export function TrimestreEmpilhado({
                     : `${m.resultadoGeral.toFixed(1).replace(".", ",")}%`}
                 </Metrica>
               </div>
-              <Link
-                href={m.href}
-                prefetch={false}
-                className="flex-none whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
-              >
-                Abrir {m.nome}
-              </Link>
+              {onAbrir ? (
+                <button
+                  type="button"
+                  onClick={() => onAbrir(m.id)}
+                  className="flex-none whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+                >
+                  Abrir {m.nome}
+                </button>
+              ) : (
+                <Link
+                  href={m.href}
+                  prefetch={false}
+                  className="flex-none whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+                >
+                  Abrir {m.nome}
+                </Link>
+              )}
             </div>
             {aberto && m.conteudo}
           </div>

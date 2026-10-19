@@ -22,6 +22,7 @@ import {
 } from "@/lib/data/impedimentos-encerramento";
 import type { CardKpi, CardPendencia, DadosHome } from "./tipos";
 import { projetoIdsDoUsuario } from "./escopo-meus";
+import { projetosNaEquipeDe } from "@/lib/data/equipe-do-projeto";
 
 const formatarBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -572,7 +573,11 @@ export async function carregarHomeFreelancer(
  *
  * Cards de ACAO usam filtro estrito (a acao so pode ser executada por
  * quem e responsavel direto): versoes onde `orcamento.gp_responsavel_id`
- * bate, jobs onde `responsavel_id` bate.
+ * bate. Os dois cards de JOB ("pendentes de envio para faturamento" e
+ * "prontos pra encerrar") contam os jobs dos projetos em cuja Equipe
+ * estou — o mesmo "Meus" da lista de Jobs que eles abrem (decisão 036,
+ * nota de 16/10/2026). Antes contavam só `responsavel_id`, e o número do
+ * card ficava menor que a lista.
  *
  * Cards de CONTEXTO usam o escopo expandido via `projetoIdsDoUsuario`.
  *
@@ -589,9 +594,14 @@ export async function carregarHomeGerenteProducao(
   const tenantId = session.activeTenant.id;
   const userId = session.profile.id;
 
-  // Escopo expandido: rodado uma vez, reusado nos cards de contexto.
-  const projetoIds = await projetoIdsDoUsuario(session, supabase);
+  // Escopo expandido: rodado uma vez, reusado nos cards de contexto. A
+  // Equipe (o "Meus" da lista de Jobs) vai junto, para os cards de job.
+  const [projetoIds, equipe] = await Promise.all([
+    projetoIdsDoUsuario(session, supabase),
+    projetosNaEquipeDe(supabase, tenantId, userId),
+  ]);
   const semProjetos = projetoIds.length === 0;
+  const projetosDaEquipe = Array.from(equipe);
 
   const [
     versoesAguardandoMim,
@@ -616,19 +626,24 @@ export async function carregarHomeGerenteProducao(
       .eq("tenant_id", tenantId)
       .in("status", ["em_revisao", "enviada_cliente"])
       .eq("orcamento.gp_responsavel_id", userId),
-    // ESTRITO: meus jobs abertos — base do "prontos pra encerrar", que
+    // EQUIPE: meus jobs abertos — base do "prontos pra encerrar", que
     // confere as pendências numa segunda onda (`contarProntosPraEncerrar`).
-    supabase
-      .from("jobs")
-      .select("id, status")
-      .eq("tenant_id", tenantId)
-      .eq("responsavel_id", userId)
-      .in("status", ["aberto", "em_producao"]),
-    // ESTRITO: meus jobs pendentes de envio para faturamento (decisão 105).
+    // "Meus" é o da lista de Jobs: os projetos da minha Equipe (036).
+    projetosDaEquipe.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : supabase
+          .from("jobs")
+          .select("id, status")
+          .eq("tenant_id", tenantId)
+          .in("projeto_id", projetosDaEquipe)
+          .in("status", ["aberto", "em_producao"]),
+    // EQUIPE: meus jobs pendentes de envio para faturamento (decisão 105).
     // Um card só no lugar de "prontos pra enviar pra faturamento" e de
     // "faturamento próximo" (pedido do Tiago, 25/09/2026). "Meus" é o da
-    // lista de jobs: sou o GP responsável (decisão 036).
-    pendentesDeEnvioQuery(supabase, tenantId, userId),
+    // lista de Jobs: os projetos da minha Equipe (036, nota de 16/10/2026).
+    projetosDaEquipe.length === 0
+      ? Promise.resolve({ count: 0 })
+      : pendentesDeEnvioQuery(supabase, tenantId, projetosDaEquipe),
     // CONTEXTO: mensagens no chat dos jobs onde participo
     // TODO: migrar pra join com jobs_chat_leituras pra contar so "nao lidas" de verdade
     semProjetos
@@ -874,7 +889,8 @@ export async function carregarHomeProdutor(
 function pendentesDeEnvioQuery(
   supabase: Awaited<ReturnType<typeof createClient>>,
   tenantId: string,
-  responsavelId?: string,
+  /** Os projetos da Equipe de quem olha; ausente, a empresa inteira. */
+  projetoIds?: string[],
 ) {
   let q = supabase
     .from("jobs")
@@ -883,7 +899,7 @@ function pendentesDeEnvioQuery(
     .in("status", ["aberto", "em_producao", "encerrado"])
     .gt("faturamento_previsto", 0.004)
     .is("faturamento_enviado_em", null);
-  if (responsavelId) q = q.eq("responsavel_id", responsavelId);
+  if (projetoIds) q = q.in("projeto_id", projetoIds);
   return q;
 }
 

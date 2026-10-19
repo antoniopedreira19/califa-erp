@@ -43,7 +43,12 @@ import {
   cancelarERefazerPP,
   cancelarPedidoCompra,
 } from "../realizado/actions-pp";
-import { EnvioDialog, textoAguardaAbertura, type PPParaEnviar } from "../realizado/pp-a-emitir-ui";
+import {
+  EnvioDialog,
+  TEXTO_LINHA_ALTERADA_EM_REVISAO,
+  textoAguardaAbertura,
+  type PPParaEnviar,
+} from "../realizado/pp-a-emitir-ui";
 import { GerarPPDrawer } from "../realizado/gerar-pp-drawer";
 import type { TomadorDaNf } from "../realizado/anexos-da-pp";
 import { prazoDeEnvioPerdido, useFeriadosNacionais } from "../realizado/prazo-de-envio-pp";
@@ -64,6 +69,7 @@ import {
 } from "@/components/ui/filtro-de-coluna";
 import { PrestarContasDrawer } from "./prestar-contas-drawer";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 /** A tela lado a lado do Contas a Pagar, em leitura — a mesma do
  *  "Visualizar" do "Ver PP". Só carrega quando alguém clica no olho. */
@@ -90,11 +96,13 @@ interface Props {
    *  164 e 171): administrador, GP, produtor ou freela do job, e o
    *  responsável da verba de produção anterior à 171. */
   podePrestarContas: string[];
-  /** O status do job e a marca de revisão da abertura (decisão 040): as
-   *  portas do envio que não são do papel, nas mesmas frases do painel do
-   *  item. O PAPEL vem de `papelEnviaPP`. */
+  /** O status do job e as linhas travadas pela revisão da abertura
+   *  (decisões 040 e 185): as portas do envio que não são do papel, nas
+   *  mesmas frases do painel do item. O PAPEL vem de `papelEnviaPP`.
+   *  `realizadosComEnvioTravado` são os `item_realizado_id` das linhas que
+   *  uma errata ainda não revisada mudou; as outras enviam normalmente. */
   statusDoJob: JobStatus;
-  aberturaEmRevisao: boolean;
+  realizadosComEnvioTravado: string[];
   /** O que o pop-up de envio precisa — o mesmo que o painel do item recebe
    *  (decisões 152 e 156). */
   tomadoresDaNf: TomadorDaNf[];
@@ -169,6 +177,9 @@ const CHIPS: Array<{ key: Filtro; label: string }> = [
  * valem na linha, um colado no outro (sem lugar vazio, pedido do Tiago).
  * "Prestar contas" segue com texto, no lugar do cancelar (verba paga nunca
  * é cancelável), e a trilha só se alarga quando há verba esperando prestação.
+ * O "Cancelar e refazer" da rejeitada (decisão 153) também é ícone, entre o
+ * formulário e o cancelar: a rejeitada não envia nem edita, então os três
+ * cabem na largura de sempre (17/10/2026).
  */
 const ICONE = 29;
 const VAO = 6;
@@ -177,6 +188,11 @@ const LARGURA_TRILHA_ICONES = ICONE * 3 + VAO * 2;
 const LARGURA_TRILHA_PRESTACAO = ICONE * 2 + VAO * 2 + 128;
 /** O quanto a trilha pode avançar sobre o respiro lateral da página. */
 const AVANCO_NA_MARGEM = 30;
+
+/** O selo da coluna Status pode ir a duas linhas (16/10/2026). O canto de
+ *  11 px é a pílula de sempre numa linha (21 px de altura) e um retângulo
+ *  arredondado em duas — `rounded-full` viraria uma cápsula. */
+const SELO_QUE_QUEBRA = "whitespace-normal rounded-[11px] text-center";
 
 /** "Pronta para envio" (08/10/2026): o produtor conferiu os documentos no
  *  painel do item e deixou a PP para o GP enviar. */
@@ -249,7 +265,7 @@ export function JobPPsSection({
   papelEnviaPP,
   podePrestarContas,
   statusDoJob,
-  aberturaEmRevisao,
+  realizadosComEnvioTravado,
   tomadoresDaNf,
   tomadorPorEmpresa,
   empresas,
@@ -288,12 +304,9 @@ export function JobPPsSection({
   const feriados = useFeriadosNacionais();
   const hoje = hojeEmSaoPauloIso();
   // As portas do envio que não são do papel, nas mesmas frases do painel do
-  // item (`envioBloqueadoPor` de job-item-realizado-table.tsx).
-  const envioBloqueadoPor =
-    textoAguardaAbertura(statusDoJob) ??
-    (aberturaEmRevisao
-      ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
-      : null);
+  // item (`envioBloqueadoPor` de job-item-realizado-table.tsx). A revisão
+  // da abertura é por linha (decisão 185), em `travaDoEnvio`.
+  const envioBloqueadoPor = textoAguardaAbertura(statusDoJob);
   const nomeDaEmpresa = (id: string) => {
     const e = empresas.find((x) => x.id === id);
     return e ? (e.nome_fantasia ?? e.razao_social) : "—";
@@ -409,7 +422,7 @@ export function JobPPsSection({
           const tipo = tipoDaVerba(pp);
           const quem = nomeDeQuemRecebeAVerba(pp);
           const nome = tipo
-            ? `${rotuloDaVerbaMinusculo(tipo).replace(/^v/, "V")}${quem ? ` · ${quem}` : ""}`
+            ? `${rotuloDaVerbaMinusculo(tipo).replace(/^./, (c) => c.toUpperCase())}${quem ? ` · ${quem}` : ""}`
             : ((pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—");
           return { valor: nome, rotulo: nome, ordem: nome };
         }
@@ -543,12 +556,15 @@ export function JobPPsSection({
 
   /**
    * Por que ESTA PP não pode ser enviada agora, na ordem do painel do item:
-   * o job (pré-abertura, abertura em revisão) e o prazo de envio do
-   * vencimento (decisão 157). O papel nem chega aqui: o botão só existe
-   * para quem envia. Nulo: o botão vale.
+   * o job (pré-abertura), a linha alterada por errata em revisão (decisão
+   * 185) e o prazo de envio do vencimento (decisão 157). O papel nem chega
+   * aqui: o botão só existe para quem envia. Nulo: o botão vale.
    */
   function travaDoEnvio(pp: PedidoCompraNaLista): string | null {
     if (envioBloqueadoPor) return envioBloqueadoPor;
+    if (realizadosComEnvioTravado.includes(pp.item_realizado_id)) {
+      return TEXTO_LINHA_ALTERADA_EM_REVISAO;
+    }
     const perdido = prazoDeEnvioPerdido(
       { prazoPagamento: pp.prazo_pagamento, geradaEm: pp.created_at },
       hoje,
@@ -707,18 +723,25 @@ export function JobPPsSection({
                 descrição longa esticava a tabela para fora da página e
                 obrigava a rolar para o lado até o Status. Agora as
                 larguras mandam e o texto é que se acomoda — a mesma regra
-                das planilhas (docs/09-identidade-visual-ui.md). */}
+                das planilhas (docs/09-identidade-visual-ui.md).
+
+                Status, Valor e o olho cresceram em 16/10/2026: a 1440 px,
+                com a calha alargada pelo "Prestar contas", a tabela fica
+                em ~1120 px, e o olho (28 px numa coluna de 11 úteis)
+                cobria o fim do selo, enquanto um valor de seis dígitos
+                transbordava por cima do começo dele. As larguras saíram
+                das três colunas de texto, que quebram em duas linhas. */}
             <table className="w-full min-w-[980px] table-fixed border-collapse text-[13px]">
               <colgroup>
                 <col className="w-[7%]" />
-                <col className="w-[20%]" />
-                <col className="w-[20%]" />
-                <col className="w-[15%]" />
+                <col className="w-[18%]" />
+                <col className="w-[18%]" />
+                <col className="w-[13.5%]" />
                 <col className="w-[8.5%]" />
                 <col className="w-[8.5%]" />
-                <col className="w-[8.5%]" />
-                <col className="w-[9%]" />
-                <col className="w-[3.5%]" />
+                <col className="w-[10.5%]" />
+                <col className="w-[12%]" />
+                <col className="w-[4%]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -763,7 +786,7 @@ export function JobPPsSection({
                         empurrava a coluna e comia o espaço da origem. */}
                     <td
                       className="px-3.5 py-2.5 align-middle font-mono text-[11.5px] leading-tight"
-                      title={`Emitida em ${formatarData(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
+                      title={`Emitida em ${formatDiaBr(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
                     >
                       {pp.codigo}
                       {total > 1 && (
@@ -835,7 +858,7 @@ export function JobPPsSection({
                               <DescritivoRodapeNota
                                 icone={<Clock className="h-3 w-3 flex-none" />}
                               >
-                                Emitida em {formatarData(pp.created_at)}
+                                Emitida em {formatDiaBr(pp.created_at)}
                                 {pp.emitida_por_nome
                                   ? ` por ${pp.emitida_por_nome}`
                                   : ""}
@@ -860,7 +883,7 @@ export function JobPPsSection({
                       {pp.verba_producao ? (
                         <span className="line-clamp-2 leading-snug">
                           <span className="italic">
-                            {rotuloDaVerbaMinusculo(tipoDaVerba(pp) ?? "producao").replace(/^v/, "V")}
+                            {rotuloDaVerbaMinusculo(tipoDaVerba(pp) ?? "producao").replace(/^./, (c) => c.toUpperCase())}
                           </span>
                           {nomeDeQuemRecebeAVerba(pp) ? ` · ${nomeDeQuemRecebeAVerba(pp)}` : ""}
                         </span>
@@ -906,42 +929,39 @@ export function JobPPsSection({
                       {formatCurrency(valorLinha, "BRL")}
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
-                      {/* Verba paga: o chip diz onde a prestação está (081). */}
+                      {/* Verba paga: o chip diz onde a prestação está (081).
+                          O selo quebra linha dentro da coluna em vez de
+                          passar por baixo do olho (16/10/2026): os da verba
+                          medem até 170 px, e a coluna tem de 106 a 118 úteis a
+                          1440 px. Numa linha só ele segue igual à pílula. */}
                       {situacao ? (
-                        <SituacaoVerbaChip situacao={situacao} />
+                        <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} />
                       ) : (
                         <div className="flex flex-col items-start gap-1">
-                          <PPStatusChip status={pp.status} />
+                          <PPStatusChip status={pp.status} className={SELO_QUE_QUEBRA} />
                           {/* O gatilho do GP (08/10/2026): o produtor
                               conferiu os documentos e deixou a PP pronta. */}
                           {prontaParaEnvio(pp) && (
                             <span
                                         title={`Pronta para envio${pp.pronta_para_envio_por_nome ? ` · ${pp.pronta_para_envio_por_nome}` : ""}`}
-                              className="inline-flex items-center gap-1 whitespace-nowrap text-[10.5px] font-semibold text-amber-800"
+                              className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-amber-800"
                             >
-                              <ClipboardCheck className="h-3 w-3" />
+                              <ClipboardCheck className="h-3 w-3 flex-none" />
                               Pronta para envio
                             </span>
                           )}
                         </div>
                       )}
                     </td>
-                    <td className="px-3.5 py-2.5 align-middle">
+                    {/* Sem recuo à esquerda: o do Status já separa, e o
+                        olho cabe inteiro na coluna a partir de ~1050 px de
+                        tabela. */}
+                    <td className="py-2.5 pl-0 pr-3.5 align-middle">
                       {/* Ver PDF é de CADA parcela (Tela 2.3): cada uma
-                          tem seu documento. Editar é da PP inteira, então
-                          só a primeira linha o mostra. */}
+                          tem seu documento. O "Cancelar e refazer" morava
+                          aqui e, com 138 px numa coluna de 45 a 61, cobria
+                          o selo "Rejeitado"; foi para a trilha (17/10/2026). */}
                       <div className="flex items-center justify-end gap-1.5">
-                        {podeEnviar && pp.status === "rejeitada" && indice === 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setPpRefazendo(pp)}
-                            disabled={pending}
-                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red/25 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-california-red hover:bg-california-red/[0.06] disabled:opacity-50"
-                          >
-                            <Pencil className="h-3 w-3" />
-                            Cancelar e refazer
-                          </button>
-                        )}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
@@ -972,7 +992,8 @@ export function JobPPsSection({
             Planilha Interna. Desde 08/10/2026 são três colunas de ícones —
             enviar (só o GP, PP gerada com arquivo anexado), ver o
             formulário (toda PP) e cancelar (a PP que ainda dá para
-            cancelar) —; "Prestar contas" fica na coluna do cancelar. */}
+            cancelar) —; "Prestar contas" fica na coluna do cancelar, e o
+            "Cancelar e refazer" da rejeitada entre o formulário e ele. */}
         <div
           className="absolute left-full ml-2.5"
           style={{ width: larguraTrilha, top: offsetThead }}
@@ -1086,6 +1107,25 @@ export function JobPPsSection({
                 {situacaoDaLinha === "prestacao_reprovada" ? "Corrigir prestação" : "Prestar contas"}
               </button>
             );
+            // A rejeitada volta como PP a emitir (decisão 153): é envio ao
+            // financeiro, então segue `podeEnviar`, como o reenvio.
+            const refazerEl = podeEnviar && pp.status === "rejeitada" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setPpRefazendo(pp)}
+                    disabled={pending}
+                    aria-label={`Cancelar e refazer ${pp.codigo}`}
+                    className="inline-flex flex-none items-center justify-center rounded-[9px] border border-california-red/25 bg-white text-california-red transition-colors hover:bg-california-red/[0.06] disabled:opacity-50"
+                    style={{ width: ICONE, height: ICONE }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Cancelar e refazer</TooltipContent>
+              </Tooltip>
+            );
             const cancelarEl = cancelar && !prestar && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1118,6 +1158,7 @@ export function JobPPsSection({
                 {editarEl}
                 {formularioEl}
                 {prestarEl}
+                {refazerEl}
                 {cancelarEl}
               </div>
             );
@@ -1139,6 +1180,8 @@ export function JobPPsSection({
               servico: ppEnviando.servico,
               fornecedorId: ppEnviando.fornecedor_id ?? null,
               verbaProducao: ppEnviando.verba_producao === true,
+              reembolsoTipo:
+                ppEnviando.tipo_verba === "reembolso" ? (ppEnviando.reembolso_tipo ?? "despesas") : null,
               anexos: ppEnviando.anexos ?? [],
               pagaPorBoleto: ppEnviando.pagamento_fora_do_cadastro?.meio === "boleto",
             } satisfies PPParaEnviar

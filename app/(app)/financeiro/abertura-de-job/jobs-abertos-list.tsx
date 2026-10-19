@@ -3,11 +3,21 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronRight, FolderTree, List, Search } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronRight,
+  Download,
+  FolderTree,
+  List,
+  Loader2,
+  Search,
+} from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { jobStatusBadgeClasses, jobStatusExibido, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
+import { notaCusto, notaRecebimento } from "./notas-de-caixa";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { compararCodigosDeJob } from "@/lib/codigos/jobs";
 import {
   BarraDosFiltrosDeColuna,
@@ -17,6 +27,7 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 const TODOS = "Todos";
 
@@ -199,52 +210,6 @@ function opcoesDe(linhas: JobAberto[], campo: (j: JobAberto) => string | null) {
   }
   return [TODOS, ...vistos.sort((a, b) => a.localeCompare(b, "pt-BR"))];
 }
-
-/**
- * A segunda linha das células de Recebimentos e Custos: o que o número de
- * cima ainda não conta sozinho.
- *
- * A ordem importa. Havendo realizado, é ele que qualifica o total —
- * "62% recebido" diz mais do que qualquer rótulo. Sem realizado, o que
- * interessa é a procedência: número vindo do fluxo de caixa (previsão ou
- * documento) contra número que caiu no previsto da abertura, porque o
- * job ainda não tem NADA lançado daquele lado.
- */
-function notaDeCaixa(
-  total: number,
-  realizado: number,
-  doPrevisto: boolean,
-  rotuloRealizado: string,
-  rotuloZerado: string,
-): string {
-  if (total <= 0) return "sem previsão";
-  if (realizado > 0) {
-    const pct = ((realizado / total) * 100).toLocaleString("pt-BR", {
-      maximumFractionDigits: 0,
-    });
-    return `${pct}% ${rotuloRealizado}`;
-  }
-  if (doPrevisto) return "previsto na abertura";
-  return rotuloZerado;
-}
-
-const notaRecebimento = (j: JobAberto) =>
-  notaDeCaixa(
-    j.recebimentos,
-    j.recebimentos_realizado,
-    j.recebimentos_do_previsto,
-    "recebido",
-    "nada recebido",
-  );
-
-const notaCusto = (j: JobAberto) =>
-  notaDeCaixa(
-    j.custos,
-    j.custos_realizado,
-    j.custos_do_previsto,
-    "realizado",
-    "sem realizado",
-  );
 
 /** Célula de dinheiro com a nota embaixo — a mesma nas duas visões. */
 function CelulaCaixa({
@@ -521,6 +486,31 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     router.push(`/financeiro/jobs/${id}?aba=info`);
   }
 
+  const [exportando, setExportando] = React.useState(false);
+  const [erroExportar, setErroExportar] = React.useState(false);
+
+  /**
+   * Baixa em Excel o que está na tela, na ordem da arrumação escolhida
+   * (pedido do Tiago, 16/10/2026). Grupo recolhido não esconde job do
+   * arquivo: recolher é só visual. O gerador vem por import dinâmico — o
+   * ExcelJS só desce para quem clica.
+   */
+  async function exportar() {
+    if (exportando || visiveis.length === 0) return;
+    setExportando(true);
+    setErroExportar(false);
+    try {
+      const { baixarJobsEmExcel } = await import("./exportar-lista");
+      const ordem = modo === "projeto" ? grupos.flatMap((g) => g.jobs) : linhasPorJob;
+      await baixarJobsEmExcel(ordem, filtroAtivo);
+    } catch (e) {
+      console.error("[abertura.exportar-lista]", e);
+      setErroExportar(true);
+    } finally {
+      setExportando(false);
+    }
+  }
+
   const vazio = (
     <p className="px-4 py-12 text-center text-sm text-muted-foreground">
       {linhas.length === 0
@@ -550,6 +540,37 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
             {c.rotulo}
           </button>
         ))}
+
+        <div className="ml-auto flex items-center gap-2.5">
+          {erroExportar && (
+            <span className="text-[12px] text-california-red">
+              Não foi possível gerar a planilha. Tente de novo.
+            </span>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={exportar}
+                disabled={exportando || visiveis.length === 0}
+                className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border bg-white px-3.5 text-[12.5px] font-semibold text-foreground transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {exportando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-california-red" />
+                ) : (
+                  <Download className="h-3.5 w-3.5 text-california-red" />
+                )}
+                {exportando ? "Exportando…" : "Exportar Excel"}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end">
+              {visiveis.length === 1
+                ? "O job da lista"
+                : `Os ${visiveis.length} jobs da lista`}
+              {filtroAtivo ? ", com os filtros aplicados" : ""}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Filtros + busca */}
@@ -887,7 +908,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                           {j.responsavel_nome ?? "—"}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                          {formatDataBr(j.data_abertura_financeiro)}
+                          {formatDiaBr(j.data_abertura_financeiro)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                           {formatCurrency(j.valor_total)}
@@ -989,7 +1010,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                     {j.responsavel_nome ?? "—"}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {formatDataBr(j.data_abertura_financeiro)}
+                    {formatDiaBr(j.data_abertura_financeiro)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
                     {formatCurrency(j.valor_total)}

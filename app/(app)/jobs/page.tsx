@@ -9,6 +9,7 @@ import {
   podeEncerrar,
 } from "@/lib/data/impedimentos-encerramento";
 import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
+import { projetosNaEquipeDe } from "@/lib/data/equipe-do-projeto";
 import { JobsList, type JobRow } from "./jobs-list";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -17,6 +18,22 @@ export const dynamic = "force-dynamic";
 // TODO: filtro=chat_pendente — precisa join com jobs_chat_leituras; implementar em fase 2
 // TODO: filtro=pps_rejeitadas — precisa join com pedidos_compra; implementar em fase 2
 // TODO: filtro=minhas_pps — precisa join com pedidos_compra; implementar em fase 2
+
+/**
+ * A régua barata do envio em lote (decisão 188), com o que a lista já lê:
+ * status, faturamento previsto e envio completo. As travas finas (save,
+ * errata, mês, Mídia Off) são conferidas quando o pop-up abre
+ * (`carregarEnvioEmLote`). `null` = o job pode ser marcado.
+ */
+function motivoForaDoLote(r: any, cancelamentoPedido: boolean): string | null {
+  if (!["aberto", "em_producao", "encerrado"].includes(r.status)) {
+    return "Só job aberto ou encerrado vai para faturamento.";
+  }
+  if (cancelamentoPedido) return "Tem pedido de cancelamento no financeiro.";
+  if (r.faturamento_enviado_em) return "Todo o faturamento dele já foi enviado.";
+  if (!(Number(r.faturamento_previsto ?? 0) > 0.004)) return "Sem faturamento previsto.";
+  return null;
+}
 
 export default async function JobsPage({
   searchParams,
@@ -68,13 +85,15 @@ export default async function JobsPage({
   let jobsQuery = supabase
     .from("jobs")
     .select(
-      "id, codigo, created_at, nome, status, faturamento_enviado_em, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
+      "id, codigo, created_at, nome, status, faturamento_enviado_em, faturamento_previsto, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
         // Produto e Regional saem do PRÓPRIO job, não do projeto (decisão
         // do Tiago, 01/09/2026): os dois divergem na base — o JOB-0003 é
         // "Ativação de marca" num projeto "Pevetech".
         "produto, regional_id, responsavel_id, " +
         // O produtor também é dono do job no recorte "Meus" (03/10/2026):
-        // quem entra como produtor quase nunca é o GP do job.
+        // quem entra como produtor quase nunca é o GP do job. Desde
+        // 16/10/2026 o recorte é a Equipe do projeto inteira — ver
+        // `projetosNaEquipeDe`, lido junto desta query.
         "produtor_id, " +
         // Os dois descritivos que a lista mostra em cartão (handoff
         // "Descritivos nas Listas", 04/09/2026): o do job na linha e o
@@ -83,7 +102,7 @@ export default async function JobsPage({
         // jeito, sem query nova.
         "observacoes, " +
         "regional:regionais(nome), " +
-        "projeto:projetos(codigo, nome, descricao, cliente:clientes(nome_fantasia)), " +
+        "projeto:projetos(codigo, nome, descricao, cliente_id, cliente:clientes(nome_fantasia)), " +
         "responsavel:profiles!responsavel_id(nome), " +
         "empresa:empresas(id, razao_social, nome_fantasia)",
     )
@@ -129,13 +148,24 @@ export default async function JobsPage({
   // TODO: filtro=pps_rejeitadas — join com pedidos_compra; deixar sem filtro por ora
   // TODO: filtro=minhas_pps — join com pedidos_compra; deixar sem filtro por ora
 
+  const podeAlternarMeusTodos = pode(session.activeRole, "listas.chave_meus_todos");
+  // O envio em lote para faturamento (decisão 188) tem o gate do envio pela
+  // página do job.
+  const podeEnviarFaturamento = pode(session.activeRole, "jobs.enviar_faturamento");
+
   // Os jobs com pedido de cancelamento no financeiro levam o selo
   // "Cancelamento solicitado" (decisão 169). Leitura do índice parcial.
-  const [jobsRes, empresas, comPedidoDeCancelamento] = await Promise.all([
-    jobsQuery,
-    listEmpresasAtivas(session.activeTenant.id),
-    jobsComCancelamentoPendente(supabase, session.activeTenant.id),
-  ]);
+  // O recorte "Meus" é a Equipe do projeto (16/10/2026); sem a chave
+  // "Meus/Todos" (o freelancer), a RLS já fez esse recorte.
+  const [jobsRes, empresas, comPedidoDeCancelamento, projetosDaMinhaEquipe] =
+    await Promise.all([
+      jobsQuery,
+      listEmpresasAtivas(session.activeTenant.id),
+      jobsComCancelamentoPendente(supabase, session.activeTenant.id),
+      podeAlternarMeusTodos
+        ? projetosNaEquipeDe(supabase, session.activeTenant.id, session.profile.id)
+        : Promise.resolve(new Set<string>()),
+    ]);
 
   if (jobsRes.error) console.error("[jobs.list]", jobsRes.error.message);
 
@@ -154,8 +184,6 @@ export default async function JobsPage({
       return imp ? podeEncerrar(imp) : false;
     });
   }
-
-  const podeAlternarMeusTodos = pode(session.activeRole, "listas.chave_meus_todos");
 
   const rows: JobRow[] = linhas.map((r: any) => ({
     id: r.id,
@@ -177,6 +205,10 @@ export default async function JobsPage({
     regional_nome: r.regional?.nome ?? null,
     responsavel_id: r.responsavel_id ?? null,
     produtor_id: r.produtor_id ?? null,
+    meu:
+      r.responsavel_id === session.profile.id ||
+      r.produtor_id === session.profile.id ||
+      projetosDaMinhaEquipe.has(r.projeto_id),
     observacoes: r.observacoes ?? null,
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,
@@ -185,6 +217,8 @@ export default async function JobsPage({
     responsavel_nome: r.responsavel?.nome ?? null,
     empresa_id: r.empresa_id ?? null,
     empresa_nome: r.empresa?.nome_fantasia ?? r.empresa?.razao_social ?? null,
+    cliente_id: r.projeto?.cliente_id ?? null,
+    motivo_fora_do_lote: motivoForaDoLote(r, comPedidoDeCancelamento.has(r.id)),
   }));
 
   return (
@@ -244,7 +278,6 @@ export default async function JobsPage({
         <JobsList
           rows={rows}
           empresas={empresas}
-          usuarioId={session.profile.id}
           podeAlternarMeusTodos={podeAlternarMeusTodos}
           // O link diz de quem é a lista: `meus=1` abre no Meus; um filtro de
           // aterrissagem sem ele (o card do administrador, que conta a
@@ -253,6 +286,7 @@ export default async function JobsPage({
           meusInicial={
             podeAlternarMeusTodos && (searchParams?.meus === "1" || !filtro)
           }
+          podeEnviarFaturamento={podeEnviarFaturamento}
         />
       )}
     </div>

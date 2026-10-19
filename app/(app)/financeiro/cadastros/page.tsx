@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, Scale, type LucideIcon } from "lucide-react";
+import { ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, Scale, Car, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { formatCurrency } from "@/lib/utils";
+import { DESGASTE_POR_KM_PADRAO } from "@/lib/calculos/reembolso";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +13,7 @@ export default async function CadastrosFinanceiroPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [contasBancariasRes, tiposPlanoRes, cartoesCreditoRes, cnpjsEmissoresRes] = await Promise.all([
+  const [contasBancariasRes, tiposPlanoRes, cartoesCreditoRes, cnpjsEmissoresRes, desgasteRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*", { count: "exact", head: true })
@@ -34,12 +36,21 @@ export default async function CadastrosFinanceiroPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true),
+    // O desgaste por km do reembolso de veículo próprio (decisão 187).
+    supabase
+      .from("financeiro_parametros")
+      .select("valor")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("chave", "reembolso_desgaste_por_km")
+      .maybeSingle<{ valor: number | string }>(),
   ]);
 
   if (contasBancariasRes.error) console.error("[fin-cadastros.contas_bancarias]", contasBancariasRes.error.message);
   if (tiposPlanoRes.error) console.error("[fin-cadastros.plano_contas_tipos]", tiposPlanoRes.error.message);
   if (cartoesCreditoRes.error) console.error("[fin-cadastros.cartoes_credito]", cartoesCreditoRes.error.message);
   if (cnpjsEmissoresRes.error) console.error("[fin-cadastros.fiscal_estabelecimentos]", cnpjsEmissoresRes.error.message);
+  if (desgasteRes.error) console.error("[fin-cadastros.financeiro_parametros]", desgasteRes.error.message);
+  const desgastePorKm = desgasteRes.data ? Number(desgasteRes.data.valor) : DESGASTE_POR_KM_PADRAO;
 
   return (
     <div className="space-y-6">
@@ -82,6 +93,13 @@ export default async function CadastrosFinanceiroPage() {
           description="Os CNPJs que emitem nota, os CNAEs e as alíquotas de cada um, os vencimentos e os feriados. O Faturar e a Apuração leem daqui."
           count={cnpjsEmissoresRes.count ?? 0}
         />
+        <CadastroCard
+          href="/financeiro/cadastros/reembolso"
+          icon={Car}
+          title="Reembolso de veículo próprio"
+          description="O desgaste do veículo por km que a PP de reembolso de veículo próprio soma ao combustível."
+          resumo={`${formatCurrency(desgastePorKm, "BRL")} por km`}
+        />
       </div>
     </div>
   );
@@ -93,12 +111,15 @@ function CadastroCard({
   title,
   description,
   count,
+  resumo,
 }: {
   href: string;
   icon: LucideIcon;
   title: string;
   description: string;
-  count: number;
+  count?: number;
+  /** No lugar da contagem, quando o cadastro é um valor só. */
+  resumo?: string;
 }) {
   return (
     <Link
@@ -115,10 +136,14 @@ function CadastroCard({
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
 
       <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
-        <p className="text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">{count}</span>{" "}
-          {count === 1 ? "ativo" : "ativos"}
-        </p>
+        {resumo !== undefined ? (
+          <p className="text-xs font-semibold text-foreground">{resumo}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">{count ?? 0}</span>{" "}
+            {count === 1 ? "ativo" : "ativos"}
+          </p>
+        )}
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-california-red">
           Abrir
           <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />

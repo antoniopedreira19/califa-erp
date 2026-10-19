@@ -8,6 +8,7 @@ import {
   FaturamentoList,
   type FaturamentoPendenteRow,
   type FaturadoRow,
+  type NotaDoLote,
 } from "./faturamento-list";
 import { TitulosList } from "./titulos-list";
 import type { CnpjsDoCliente, InfoJob, JobDoFaturar } from "./faturar-drawer";
@@ -20,7 +21,7 @@ import type {
   PlanoContaTipo,
   PlanoContaSubtipo,
 } from "@/lib/types";
-import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
 import type { RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { SELECT_ESTORNO_DE_BAIXA } from "@/lib/data/estornos-de-baixa";
@@ -305,13 +306,64 @@ export default async function ContasReceberPage({
     empresa_id: string;
   }>;
 
-  // Quem cobrar, por job (docs/decisions/012). Uma query só para a tela
-  // inteira — depende de `jobsList`, por isso não cabe na onda paralela
-  // de cima. Job anterior a 17/08/2026 não aparece no mapa.
-  const contatosPorJob = await contatosDeCobrancaPorJob(
-    jobsList.map((j) => j.id),
-    session.activeTenant.id,
-  );
+  // A segunda onda, em paralelo: o que depende da primeira.
+  // - Quem cobrar, por job (docs/decisions/012). Uma query só para a tela
+  //   inteira — depende de `jobsList`. Job anterior a 17/08/2026 não
+  //   aparece no mapa.
+  // - A nota do envio em lote (decisão 188, entrega 2) de cada nota de job
+  //   que espera faturamento: a fila junta as partes dos jobs numa linha só.
+  //   Depende das notas pendentes, para não ler o histórico inteiro.
+  const idsNotasPendentes = [
+    ...new Set(
+      (pendentesRes.data ?? [])
+        .map((r) => r.envio_nota_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const [contatosPorJob, notasDoLoteRes] = await Promise.all([
+    contatosDeCobrancaPorJob(
+      jobsList.map((j) => j.id),
+      session.activeTenant.id,
+    ),
+    idsNotasPendentes.length
+      ? supabase
+          .from("jobs_envio_faturamento_notas")
+          .select(
+            "id, lote_nota:envios_faturamento_lote_notas!jobs_envio_faturamento_notas_lote_nota_id_fkey(id, ordem, tomador_nome, valor, lote:envios_faturamento_lote!envios_faturamento_lote_notas_lote_id_fkey(id, observacao, enviado_em, notas:envios_faturamento_lote_notas!envios_faturamento_lote_notas_lote_id_fkey(id)))",
+          )
+          .eq("tenant_id", tenantId)
+          .in("id", idsNotasPendentes)
+          .not("lote_nota_id", "is", null)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (notasDoLoteRes.error) console.error("[cr.notas_do_lote]", notasDoLoteRes.error.message);
+  const notaDoLotePorEnvioNota = new Map<string, NotaDoLote>();
+  for (const n of (notasDoLoteRes.data ?? []) as unknown as Array<{
+    id: string;
+    lote_nota: {
+      id: string;
+      ordem: number;
+      tomador_nome: string;
+      valor: string | number;
+      lote: {
+        id: string;
+        observacao: string | null;
+        enviado_em: string | null;
+        notas: Array<{ id: string }> | null;
+      } | null;
+    } | null;
+  }>) {
+    if (!n.lote_nota?.lote) continue;
+    notaDoLotePorEnvioNota.set(n.id, {
+      lote_nota_id: n.lote_nota.id,
+      lote_id: n.lote_nota.lote.id,
+      ordem: Number(n.lote_nota.ordem),
+      total: n.lote_nota.lote.notas?.length ?? 1,
+      tomador_nome: n.lote_nota.tomador_nome,
+      valor: Number(n.lote_nota.valor),
+      observacao: n.lote_nota.lote.observacao?.trim() || null,
+    });
+  }
 
   /**
    * O que o botão `i` mostra de cada job: PO, a instrução do GP sobre a
@@ -419,6 +471,9 @@ export default async function ContasReceberPage({
       descritivo_nota: (r.descritivo_nota as string | null) ?? null,
       autor_nome: (r.autor_nome as string | null) ?? null,
       autor_em: (r.autor_em as string | null) ?? null,
+      // Decisão 188: a nota do envio em lote de que esta parte é. Nula no
+      // envio de um job só e no BV.
+      lote: r.envio_nota_id ? (notaDoLotePorEnvioNota.get(r.envio_nota_id as string) ?? null) : null,
     };
   });
 
@@ -754,7 +809,8 @@ export default async function ContasReceberPage({
             cnpjsPorCliente={cnpjsPorCliente}
           />
         }
-        faturamentoCount={pendentes.length}
+        // As linhas da fila, não as parcelas: a nota do lote é uma linha só.
+        faturamentoCount={new Set(pendentes.map(chaveDaLinhaDaFila)).size}
         titulos={
           <TitulosList
             rows={linhasTitulos}

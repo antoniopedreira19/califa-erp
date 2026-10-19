@@ -328,6 +328,13 @@ function FormularioDeFaturar({
   const avulso = state.modo === "avulso";
   const linhas = state.modo === "origem" ? state.linhas : [];
   const primeira = linhas[0] ?? null;
+  // Decisão 188: a nota do envio em lote, quando todas as linhas são dela. É
+  // UMA nota pedida pelo cliente, com a parte de cada job: tomador, CNPJ,
+  // descritivo e vencimentos vêm dela.
+  const loteDaNota =
+    primeira?.lote && linhas.every((l) => l.lote?.lote_nota_id === primeira.lote?.lote_nota_id)
+      ? primeira.lote
+      : null;
   const origemTipo: "job" | "bv" | "avulso" = primeira?.origem_tipo ?? "avulso";
   const ehBv = origemTipo === "bv";
 
@@ -415,13 +422,14 @@ function FormularioDeFaturar({
   );
   const notasAtivas = new Set(itensAtivos.map(chaveNota)).size;
   const jobsAtivos = new Set(itensAtivos.map((l) => l.origem_id)).size;
-  // Quem mandou cada job ou BV desta nota (decisão 136).
+  // Quem mandou cada job ou BV desta nota (decisão 136). Na nota do lote
+  // os jobs foram juntos: uma linha só, sem o código.
   const autores = [
     ...new Map(
       linhas
         .filter((l) => l.autor_nome)
         .map((l) => [
-          `${l.origem_tipo}:${l.codigo ?? l.origem_id}`,
+          loteDaNota ? `lote:${l.autor_nome}:${l.autor_em}` : `${l.origem_tipo}:${l.codigo ?? l.origem_id}`,
           { codigo: l.codigo, nome: l.autor_nome as string, em: l.autor_em, bv: l.origem_tipo === "bv" },
         ]),
     ).values(),
@@ -535,6 +543,8 @@ function FormularioDeFaturar({
   }
 
   const [descricao, setDescricao] = React.useState(() => {
+    // A nota do lote vem com o descritivo que a produção escreveu nela.
+    if (loteDaNota) return primeira?.descritivo_nota?.trim() ?? "";
     // NF agrupada e avulsa nascem em BRANCO (decisão do Tiago, 31/08/2026).
     if (avulso || !umaNotaSo) return "";
     if (primeira?.descritivo_nota?.trim()) return primeira.descritivo_nota.trim();
@@ -610,6 +620,25 @@ function FormularioDeFaturar({
   // não está aqui: ela é o recebido, travada, e entra na frente.
   const [parcelas, setParcelas] = React.useState<Parcela[]>(() => {
     const antesInicial = somaDosRecebidos(recebidosDasLinhas(linhas, recebidosAntes));
+    // A nota do lote (decisão 188): as partes dos jobs vencem juntas — cada
+    // data vira uma parcela, com a soma das partes, e o recebido antes
+    // abatido em ordem.
+    if (loteDaNota) {
+      const porData = new Map<string, number>();
+      for (const l of linhas) {
+        const data = l.data_prevista ?? format(addDays(new Date(), 30), "yyyy-MM-dd");
+        porData.set(data, centavos((porData.get(data) ?? 0) + l.saldo));
+      }
+      let resta = antesInicial;
+      return [...porData.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([data, valor]) => {
+          const usa = Math.min(valor, resta);
+          resta = centavos(resta - usa);
+          return { valor: centavos(valor - usa), data_vencimento: data };
+        })
+        .filter((p) => p.valor > 0.004);
+    }
     // Uma nota do envio com vários vencimentos (decisão 123): cada
     // vencimento vira uma parcela, com o recebido antes abatido em ordem.
     if (umaNotaSo && linhas.length > 1) {
@@ -816,12 +845,18 @@ function FormularioDeFaturar({
   // ---- Textos -----------------------------------------------------------------
   const titulo = avulso
     ? "Faturamento avulso"
-    : notasAtivas > 1
-      ? "Faturamento agrupado"
-      : `Faturar ${primeira?.codigo ?? primeira?.descricao ?? ""}`;
+    : loteDaNota
+      ? loteDaNota.total > 1
+        ? `Faturar a nota ${loteDaNota.ordem} de ${loteDaNota.total} do lote`
+        : "Faturar a nota do lote"
+      : notasAtivas > 1
+        ? "Faturamento agrupado"
+        : `Faturar ${primeira?.codigo ?? primeira?.descricao ?? ""}`;
   const subtitulo = avulso
     ? "Nota fiscal que não consome saldo de faturamento de job."
-    : "Uma única nota fiscal; o valor por job pode ser total ou parcial.";
+    : loteDaNota
+      ? "A nota que a produção montou no envio em lote, com a parte de cada job; o valor por job pode ser total ou parcial."
+      : "Uma única nota fiscal; o valor por job pode ser total ou parcial.";
   const rodape = avulso
     ? `Ao faturar, as parcelas desta NF entram em Títulos a Receber como faturamento avulso${
         jobRef ? `, sem consumir o saldo do ${jobRef.codigo}` : ", sem consumir saldo de nenhum job"
@@ -904,6 +939,11 @@ function FormularioDeFaturar({
                 Voltar ao do envio
               </button>
             </span>
+          ) : loteDaNota ? (
+            <>
+              Tomador: <strong className="font-semibold text-foreground">{loteDaNota.tomador_nome}</strong> · veio do envio
+              em lote{autorDoDescritivo ? ` de ${autorDoDescritivo}` : ""}.
+            </>
           ) : (
             `Veio do envio${autorDoDescritivo ? ` de ${autorDoDescritivo}` : ""}. Troque se a nota sai para outra empresa do cliente.`
           )}
@@ -1069,7 +1109,9 @@ function FormularioDeFaturar({
                 )}
                 <span className="font-mono text-[11px] text-muted-foreground">
                   {l.codigo}
-                  {l.nota_ordem && l.nota_total ? ` · NF ${l.nota_ordem}/${l.nota_total}` : ""}
+                  {/* Na nota do lote a numeração da nota do job confunde: a
+                      nota é a do lote, que está no título. */}
+                  {!loteDaNota && l.nota_ordem && l.nota_total ? ` · NF ${l.nota_ordem}/${l.nota_total}` : ""}
                   {l.data_prevista ? ` · vence ${formatarData(l.data_prevista)}` : ""} · valor {formatMoney(l.saldo)}
                 </span>
                 {parcial && (
@@ -1288,9 +1330,13 @@ function FormularioDeFaturar({
         ajuda={
           avulso
             ? null
-            : !umaNotaSo
-              ? "Cada job traz a instrução do seu gerente de projetos — leia uma a uma no botão de informações da linha."
-              : `Vem do descritivo que ${autorDoDescritivo ?? "o gerente de projetos"} mandou no envio.`
+            : loteDaNota
+              ? primeira?.descritivo_nota?.trim()
+                ? `Vem do descritivo que ${autorDoDescritivo ?? "o gerente de projetos"} escreveu nesta nota do lote.`
+                : "O envio em lote não trouxe descritivo para esta nota."
+              : !umaNotaSo
+                ? "Cada job traz a instrução do seu gerente de projetos — leia uma a uma no botão de informações da linha."
+                : `Vem do descritivo que ${autorDoDescritivo ?? "o gerente de projetos"} mandou no envio.`
         }
       >
         <textarea
@@ -1577,12 +1623,23 @@ function FormularioDeFaturar({
                             <span className="font-mono text-[11.5px] text-muted-foreground">{a.codigo} · </span>
                           )}
                           <span className="text-muted-foreground">
-                            {a.bv ? "BV confirmado por" : "Enviado para faturamento por"}
+                            {a.bv
+                              ? "BV confirmado por"
+                              : loteDaNota
+                                ? "Enviado em lote para faturamento por"
+                                : "Enviado para faturamento por"}
                           </span>{" "}
                           <strong className="font-semibold text-foreground">{a.nome}</strong>
                           {a.em && <span className="text-muted-foreground"> em {formatDataAsHoraBr(a.em)}</span>}
                         </div>
                       ))}
+                      {/* A observação do envio em lote (decisão 188): para o
+                          financeiro, não sai na nota. */}
+                      {loteDaNota?.observacao && (
+                        <p className="mt-1 whitespace-pre-line text-foreground text-pretty">
+                          <span className="font-semibold">Observação:</span> {loteDaNota.observacao}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}

@@ -268,3 +268,39 @@ impostos com imposto previsto. Continua valendo o motivo original para o
 job sem faturamento: ele não precisa de conta de recebimento. Quem confere
 é a Server Action, na abertura e na edição do registro. Ver a
 [100](100-previsao-de-impostos-na-abertura.md) §3.
+
+## ⚠️ Nota de 2026-10-16 — a página do job mostrava o nome da produção
+
+A seção 1 diz que o financeiro vê `jobs.nome_financeiro`, mas a página do
+job no financeiro (`/financeiro/jobs/[jobId]`) lia o job por
+`carregarJobParaAbertura`, que nunca selecionou essa coluna. Desde 20/08 o
+título, o campo "Nome do job" da aba Abertura do Job, a ficha de
+Informações, o nome da planilha e o do fluxo mostravam o nome da
+produção. O campo Projeto não tinha o defeito: ele sempre leu
+`projeto_financeiro_id`.
+
+O efeito mais grave estava no formulário: "Editar registro" e a revisão de
+errata abriam com o nome da produção, e salvar sem retocar o campo gravava
+esse nome por cima do do financeiro. Aconteceu duas vezes, as duas em
+07/10/2026: AMB-1019/26 (revisão de errata) e ANI-1002/26 (edição).
+
+Agora `JobNaFila` traz `nome_financeiro` (obrigatório, nulo até a
+abertura), e a página e o formulário usam `nomeDoJobNoFinanceiro()`. O
+painel "Dados da produção" continua com o nome da produção.
+
+Os dois voltaram pelo próprio "Editar registro", com o último nome que o
+financeiro gravou antes da sobrescrita, conferido byte a byte contra a
+foto em `jobs_aberturas`, e só o nome mudou na auditoria:
+
+| Job | Nome restaurado | Origem | Quando |
+|---|---|---|---|
+| AMB-1019/26 | "Corona - WSL Challenger Logística 3T 2026" | foto 1, abertura (Priscila) | 16/10/2026 |
+| ANI-1002/26 | "Ânima - Vídeo Institucional Unicuritiba 3T 2026" | foto 2, edição de 07/10 15:41 (Priscila) | 17/10/2026 |
+
+No ANI-1002/26 a abertura tinha gravado "… Unisociesc 3T 2026", que a
+própria Priscila corrigiu 44 minutos depois. O Tiago aprovou restaurar
+esse último registro (17/10/2026).
+
+Os outros cinco jobs com nome trocado depois da abertura (AMB-1002/26,
+AMB-1003/26, AMB-1014/26, DEE-1001/26 e DEE-1002/26) foram renomeados por
+alguém, e o nome de hoje é o da última foto: ficaram como estão.

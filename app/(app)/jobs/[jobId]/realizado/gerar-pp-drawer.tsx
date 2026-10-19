@@ -93,6 +93,7 @@ import {
 } from "@/app/(app)/fornecedores/actions";
 import { listarPendencias } from "@/lib/fiscal/regime-do-fornecedor";
 import {
+  desgastePorKmDoReembolso,
   editarPPGerada,
   listarPessoasParaVerba,
   prefixoAnexosPedidoCompra,
@@ -106,10 +107,24 @@ import {
 import type { PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
 import {
   CaixaTerceiro,
-  TipoDaVerbaField,
+  TipoDaPPField,
   TitularDaVerbaField,
   itensDasPessoas,
 } from "./titular-da-verba-field";
+import { CamposDoComprovante, ResumoDosComprovantes } from "./comprovantes-do-reembolso";
+import {
+  DeslocamentosDoReembolsoField,
+  deslocamentosEmEdicao,
+  deslocamentosParaGravar,
+  deslocamentosVazios,
+  type DeslocamentosEmEdicao,
+} from "./deslocamentos-do-reembolso";
+import {
+  DESGASTE_POR_KM_PADRAO,
+  TIPOS_DE_COMPROVANTE,
+  faltaNosDeslocamentos,
+  type ReembolsoTipo,
+} from "@/lib/calculos/reembolso";
 import { ConferenciaDosDocumentos } from "./conferencia-dos-documentos";
 import {
   DOCUMENTOS_EM_CNPJS_DIFERENTES,
@@ -125,6 +140,7 @@ import {
   ZonaDeAnexos,
   anexoEmEdicao,
   anexoParaEnvio,
+  comprovanteDoReembolsoParaEnvio,
   itensDaLista,
   notaExistenteDe,
   parteDaNf,
@@ -268,6 +284,8 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
       tipo_verba: pp.tipo_verba,
       verba_titular_tipo: pp.verba_titular_tipo,
       verba_titular_id: pp.verba_colaborador_id ?? pp.verba_freela_id ?? null,
+      reembolso_tipo: pp.reembolso_tipo,
+      deslocamentos: pp.reembolso_deslocamentos,
       pagamento_fora_do_cadastro: fora
         ? {
             meio: fora.meio,
@@ -371,6 +389,27 @@ export function GerarPPDrawer({
   // "é verba", de qualquer tipo, como no resto do formulário e no banco.
   const [tipoVerba, setTipoVerba] = React.useState<TipoVerba | null>(null);
   const verbaProducao = tipoVerba !== null;
+  /** Decisão 187: o reembolso mora no campo da verba — despesas (com os
+   *  comprovantes, obrigatórios no envio) ou veículo próprio (com a conta
+   *  dos deslocamentos). */
+  const [reembolsoTipo, setReembolsoTipo] = React.useState<ReembolsoTipo | null>(null);
+  const reembolso = tipoVerba === "reembolso";
+  const veiculo = reembolso && reembolsoTipo === "veiculo_proprio";
+  const [deslocamentos, setDeslocamentos] = React.useState<DeslocamentosEmEdicao>(deslocamentosVazios);
+  const [faltaDeslocamento, setFaltaDeslocamento] = React.useState(false);
+  /** O desgaste por km: o que a PP já guardava, ou o do financeiro, pedido
+   *  quando a pessoa escolhe "Veículo próprio". */
+  const [desgastePorKm, setDesgastePorKm] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!veiculo || desgastePorKm !== null) return;
+    let vivo = true;
+    desgastePorKmDoReembolso()
+      .then((v) => vivo && setDesgastePorKm(v))
+      .catch(() => vivo && setDesgastePorKm(DESGASTE_POR_KM_PADRAO));
+    return () => {
+      vivo = false;
+    };
+  }, [veiculo, desgastePorKm]);
   /** O colaborador ou o freela escolhido, e de onde ele veio. */
   const [titularId, setTitularId] = React.useState("");
   const [titularOrigem, setTitularOrigem] = React.useState<TitularDaVerbaTipo | null>(null);
@@ -642,6 +681,13 @@ export function GerarPPDrawer({
       const d = fonte.dados;
       // A PP a emitir de antes da decisão 164 não tem o tipo: é produção.
       setTipoVerba(d.verba_producao ? (d.tipo_verba ?? fonte.tipo_verba ?? "producao") : null);
+      // Decisão 187: o tipo do reembolso e os deslocamentos, com o desgaste
+      // que a PP guardou.
+      const tipoAberto = d.verba_producao ? (d.tipo_verba ?? fonte.tipo_verba ?? null) : null;
+      setReembolsoTipo(tipoAberto === "reembolso" ? (d.reembolso_tipo ?? "despesas") : null);
+      setDeslocamentos(d.deslocamentos ? deslocamentosEmEdicao(d.deslocamentos) : deslocamentosVazios());
+      setDesgastePorKm(d.deslocamentos ? d.deslocamentos.desgaste_por_km : null);
+      setFaltaDeslocamento(false);
       setTitularTerceiro(d.verba_titular_tipo === "fornecedor");
       setTitularOrigem(
         d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela" ? d.verba_titular_tipo : null,
@@ -699,6 +745,10 @@ export function GerarPPDrawer({
     }
 
     setTipoVerba(null);
+    setReembolsoTipo(null);
+    setDeslocamentos(deslocamentosVazios());
+    setDesgastePorKm(null);
+    setFaltaDeslocamento(false);
     setTitularId("");
     setTitularOrigem(null);
     setTitularTerceiro(false);
@@ -942,6 +992,20 @@ export function GerarPPDrawer({
       );
       return;
     }
+    // Decisão 187: no veículo próprio, os deslocamentos se conferem antes
+    // do trio (que sai da conta deles).
+    if (veiculo) {
+      const falta = faltaNosDeslocamentos(deslocamentosParaGravar(deslocamentos, desgastePorKm ?? 0));
+      if (falta) {
+        setFaltaDeslocamento(true);
+        setErro(falta);
+        return;
+      }
+      if (desgastePorKm === null) {
+        setErro("Aguarde o desgaste por km carregar e tente de novo.");
+        return;
+      }
+    }
     if (!validar()) return;
     salvar(gerar);
   }
@@ -951,7 +1015,7 @@ export function GerarPPDrawer({
     setErro(null);
     if (!ppId || !itemRealizadoId) return false;
     if (verbaProducao && !titularTerceiro && !titularId) {
-      setErro("Escolha o titular da verba.");
+      setErro(reembolso ? "Escolha o titular do reembolso." : "Escolha o titular da verba.");
       return false;
     }
     if (ultimaPP === null) {
@@ -1117,6 +1181,15 @@ export function GerarPPDrawer({
                 verba_titular_id: titularId,
                 fornecedor_id: null,
                 responsavel_verba_id: null,
+                // Decisão 187: o tipo do reembolso e, no veículo próprio, a conta.
+                ...(reembolso
+                  ? {
+                      reembolso_tipo: reembolsoTipo ?? ("despesas" as const),
+                      deslocamentos: veiculo
+                        ? deslocamentosParaGravar(deslocamentos, desgastePorKm ?? DESGASTE_POR_KM_PADRAO)
+                        : null,
+                    }
+                  : {}),
               };
     return dados;
   }
@@ -1124,6 +1197,8 @@ export function GerarPPDrawer({
   /** Os anexos que vão para as actions: só os que já subiram. Verba não
    *  leva anexo — as notas vão na prestação de contas. */
   function anexosParaAction() {
+    // Decisão 187: o reembolso leva os comprovantes, com a data e o valor.
+    if (reembolso) return anexos.filter((a) => a.status === "ok").map(comprovanteDoReembolsoParaEnvio);
     return verbaProducao ? [] : anexos.filter((a) => a.status === "ok").map(anexoParaEnvio);
   }
 
@@ -1274,6 +1349,24 @@ export function GerarPPDrawer({
         tomadorEsperado={emissoraEfetiva || null}
         empresaNome={nomeDoCnpj}
         idBase={`pp-doc-${id}`}
+        disabled={pending}
+      />
+    );
+  }
+
+  /** Decisão 187: número, data e valor do comprovante de despesa — opcionais
+   *  aqui, cobrados no envio ao financeiro. */
+  function camposDoComprovante(id: string) {
+    const a = anexos.find((x) => x.id === id);
+    if (!a) return null;
+    return (
+      <CamposDoComprovante
+        anexo={a}
+        onNumero={(n) => (a.tipo === "nota_fiscal" ? mudarNf(id, { numero: n }) : mudar(id, { numero: n }))}
+        onData={(iso) => mudarNf(id, { emissao: iso })}
+        onValor={(v) => mudarNf(id, { valor: v })}
+        hoje={hoje}
+        destacarFaltas={false}
         disabled={pending}
       />
     );
@@ -1526,19 +1619,27 @@ export function GerarPPDrawer({
 
               {/* O switch "Verba" e qual verba (decisão 164). Trocar de tipo
                   limpa quem recebe, como o switch fazia. */}
-              <TipoDaVerbaField
+              <TipoDaPPField
                 tipo={tipoVerba}
-                onChange={(t) => {
-                  if (t === tipoVerba) return;
-                  setFornecedorId("");
-                  setTitularId("");
-                  setTitularOrigem(null);
-                  setTitularTerceiro(false);
-                  setPagamento(PAGAMENTO_PELO_CADASTRO);
-                  setFaltaPagamento(false);
-                  setTipoVerba(t);
-                  // Fora da verba, a quarta só vale com urgência (172).
-                  if (t === null && !urgente) tirarAQuartaDoPrazo();
+                reembolsoTipo={reembolsoTipo}
+                onChange={(t, r) => {
+                  if (t === tipoVerba && r === reembolsoTipo) return;
+                  if (t !== tipoVerba) {
+                    setFornecedorId("");
+                    setTitularId("");
+                    setTitularOrigem(null);
+                    setTitularTerceiro(false);
+                    setPagamento(PAGAMENTO_PELO_CADASTRO);
+                    setFaltaPagamento(false);
+                    setTipoVerba(t);
+                    // Fora da verba (e do reembolso), a quarta só vale com
+                    // urgência (172).
+                    if (t === null && !urgente) tirarAQuartaDoPrazo();
+                  }
+                  // Decisão 187: despesas ou veículo próprio. Trocar entre
+                  // os dois mantém o titular.
+                  setReembolsoTipo(r);
+                  setFaltaDeslocamento(false);
                 }}
                 disabled={pending}
               />
@@ -1546,8 +1647,29 @@ export function GerarPPDrawer({
               {/* Valor desta PP — as mesmas colunas do item na planilha.
                   Fica logo abaixo do switch porque primeiro se decide se é
                   verba de produção, depois quanto vale a PP: quando o prazo
-                  de pagamento é escolhido, o dinheiro já está definido. */}
-              <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                  de pagamento é escolhido, o dinheiro já está definido.
+                  No reembolso de veículo próprio (decisão 187), o valor é a
+                  conta dos deslocamentos, e o trio fica total × 1 × 1. */}
+              {veiculo && (
+                <DeslocamentosDoReembolsoField
+                  valor={deslocamentos}
+                  onChange={setDeslocamentos}
+                  onTotal={(total) => {
+                    const texto = total > 0 ? total.toFixed(2).replace(".", ",") : "";
+                    setUnitario(texto);
+                    setQuantidade(texto ? "1" : "");
+                    setDm(texto ? "1" : "");
+                    setParcelas((prev) => redividirParcelas(prev, valorPP, total));
+                  }}
+                  desgastePorKm={desgastePorKm}
+                  destacarFaltas={faltaDeslocamento}
+                  hoje={hoje}
+                  disabled={pending}
+                />
+              )}
+              <div
+                className={cn("space-y-3 rounded-lg border border-border bg-muted/20 p-3", veiculo && "hidden")}
+              >
                 <div className="flex items-baseline justify-between gap-3">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Valor desta PP
@@ -1655,7 +1777,9 @@ export function GerarPPDrawer({
                         documento.{" "}
                       </>
                     ) : (
-                      "Quem paga a PP. Com nota, fatura ou recibo anexado, vale o CNPJ do documento. "
+                      reembolso
+                        ? "Quem paga o reembolso. "
+                        : "Quem paga a PP. Com nota, fatura ou recibo anexado, vale o CNPJ do documento. "
                     )}
                     Empresa gerencial do job:{" "}
                     {(() => {
@@ -1671,6 +1795,8 @@ export function GerarPPDrawer({
                   as três desde a decisão 171) */}
               {verbaProducao && !titularTerceiro ? (
                 <TitularDaVerbaField
+                  rotulo={reembolso ? "Titular do reembolso *" : undefined}
+                  semTerceiro={reembolso}
                   itens={itensDoTitular}
                   carregando={pessoas === null}
                   titularId={titularId}
@@ -1882,11 +2008,15 @@ export function GerarPPDrawer({
                 sem anexo: as notas entram na prestação de contas. */}
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {tipoVerba
+                {reembolso
+                  ? veiculo
+                    ? "Comprovantes do deslocamento (obrigatórios para o envio ao financeiro)"
+                    : "Comprovantes da despesa (obrigatórios para o envio ao financeiro)"
+                  : tipoVerba
                   ? `Anexos (não exigidos na ${rotuloDaVerbaMinusculo(tipoVerba)})`
                   : "Anexos (obrigatórios para o envio ao financeiro)"}
               </h3>
-              {tipoVerba ? (
+              {tipoVerba && !reembolso ? (
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                   {rotuloDaVerbaMinusculo(tipoVerba).replace(/^v/, "V")} é adiantamento: a PP sai antes de existir nota
                   e as notas entram na prestação de contas.
@@ -1895,7 +2025,14 @@ export function GerarPPDrawer({
                 <>
                   {/* Decisão 153, entrega 3: os documentos lado a lado, como
                       no Contas a Pagar. */}
-                  {anexos.length > 0 && (
+                  {reembolso && (
+                    <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                      {veiculo
+                        ? "A foto da quilometragem, o print do mapa ou o que comprovar o deslocamento — agora ou no envio."
+                        : "O cupom, a nota ou o recibo de cada gasto, com número, data e valor — agora ou no envio."}
+                    </p>
+                  )}
+                  {anexos.length > 0 && !reembolso && (
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -1920,16 +2057,23 @@ export function GerarPPDrawer({
                     onRemover={remover}
                     tipoInvalido={() => false}
                     disabled={pending}
-                    onVer={(id) => setLadoALado({ foco: id })}
+                    onVer={reembolso ? undefined : (id) => setLadoALado({ foco: id })}
+                    tipos={reembolso ? TIPOS_DE_COMPROVANTE : undefined}
+                    semTipo={veiculo}
+                    renderComprovante={reembolso && !veiculo ? camposDoComprovante : undefined}
                     renderNf={(id) => camposDaNf(id, false)}
                     renderCnpj={cnpjDoDocumento}
                   />
-                  <ResumoDasNfs
-                    valores={anexos
-                      .filter((a) => a.status === "ok" && a.tipo === "nota_fiscal")
-                      .map((a) => parteDaNf(a.nf))}
-                    valorPP={valorPP}
-                  />
+                  {reembolso ? (
+                    !veiculo && <ResumoDosComprovantes anexos={anexos} valorPP={valorPP} />
+                  ) : (
+                    <ResumoDasNfs
+                      valores={anexos
+                        .filter((a) => a.status === "ok" && a.tipo === "nota_fiscal")
+                        .map((a) => parteDaNf(a.nf))}
+                      valorPP={valorPP}
+                    />
+                  )}
                 </>
               )}
             </div>

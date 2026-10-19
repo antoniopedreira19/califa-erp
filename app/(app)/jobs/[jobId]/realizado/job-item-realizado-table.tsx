@@ -18,7 +18,7 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
-import { textoAguardaAbertura } from "./pp-a-emitir-ui";
+import { TEXTO_LINHA_ALTERADA_EM_REVISAO, textoAguardaAbertura } from "./pp-a-emitir-ui";
 import { nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import {
@@ -48,7 +48,7 @@ import {
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
-import { ERRATA, LINHA_NOVO_GRUPO, SAVE } from "@/app/(app)/_planilha/blocos";
+import { ERRATA, HISTORICO, LINHA_NOVO_GRUPO, SAVE } from "@/app/(app)/_planilha/blocos";
 import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
   parseNumero,
@@ -188,9 +188,10 @@ interface Props {
    *  `rejeitado_financeiro`). Distingue-se do job ENCERRADO, que também
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
   preAbertura: boolean;
-  /** Errata devolveu o job ao mural: o envio de PP ao financeiro fica
-   *  fechado até a revisão da abertura ser salva (decisão 040). */
-  aberturaEmRevisao?: boolean;
+  /** As linhas (`jobs_itens_orcado.id`) que uma errata ainda não revisada
+   *  mudou: o envio das PPs delas fica fechado até a revisão da abertura
+   *  ser salva (decisões 040 e 185). As outras enviam normalmente. */
+  linhasComEnvioTravado?: string[];
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -235,6 +236,13 @@ interface Props {
    *  job no financeiro abre a partir da aprovação (decisão 099,
    *  22/09/2026). Obrigatória de propósito: quem não destaca manda `[]`. */
   destacarItens: string[];
+  /** A cor do destaque das `destacarItens`: o âmbar da aprovação de save
+   *  ou, na versão antiga do histórico (decisão 186), o vermelho da errata.
+   *  Default: o do save. */
+  destaque?: "save" | "historico";
+  /** Histórico (decisão 186): o selo da linha que mudou na versão antiga,
+   *  ao lado do nome do item. Ausente fora do histórico. */
+  seloDaLinha?: (itemId: string) => React.ReactNode;
   /** O rascunho do modo errata. Ausente = planilha só de leitura, que é
    *  como as outras telas que reusam esta tabela a consomem. */
   errata?: RascunhoErrata;
@@ -701,7 +709,7 @@ export function JobItemRealizadoTable({
   podeEditarFornecedor = false,
   podeConfirmarBv,
   preAbertura,
-  aberturaEmRevisao = false,
+  linhasComEnvioTravado = [],
   ppsPorItemId,
   aEmitirPorItemId,
   statusDoJob,
@@ -722,6 +730,8 @@ export function JobItemRealizadoTable({
   onAbrirSave,
   abrirSaveSoComSave,
   destacarItens,
+  destaque = "save",
+  seloDaLinha,
   errata,
   podeEditarLinhas = true,
   modoDaEdicao = "errata",
@@ -1595,7 +1605,9 @@ export function JobItemRealizadoTable({
                               savePorItem?.[item.id] ?? SAVE_VAZIO,
                             ),
                           destacarItens.includes(item.id) &&
-                            SAVE.linhaEmAprovacao,
+                            (destaque === "historico"
+                              ? HISTORICO.linhaQueMudou
+                              : SAVE.linhaEmAprovacao),
                         )}
                       >
                         {saveVisivel && (
@@ -1682,6 +1694,7 @@ export function JobItemRealizadoTable({
                                   cancelada
                                 </span>
                               )}
+                              {seloDaLinha?.(item.id)}
                             </div>
                           </CelulaJob>
                         )}
@@ -2393,8 +2406,8 @@ export function JobItemRealizadoTable({
         const envioBloqueadoPor = preAbertura
           ? textoAguardaAbertura(statusDoJob) ??
             "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir."
-          : aberturaEmRevisao
-            ? "A abertura deste job está em revisão no financeiro desde a última errata. O envio de PPs volta quando a revisão for salva — gerar, editar e cancelar continuam liberados."
+          : itemAtual && linhasComEnvioTravado.includes(itemAtual.id)
+            ? TEXTO_LINHA_ALTERADA_EM_REVISAO
             : !papelEnviaPP
               ? "Só o GP envia PP ao financeiro. Confira os documentos e deixe a PP pronta para envio: o GP a envia pela aba Pedidos de Produção."
               : null;
@@ -2429,6 +2442,7 @@ export function JobItemRealizadoTable({
                 diasMeses: Number(pp.dias_meses ?? 0),
                 valor: Number(pp.valor ?? 0),
                 verbaProducao: pp.verba_producao === true,
+                reembolsoTipo: pp.tipo_verba === "reembolso" ? (pp.reembolso_tipo ?? "despesas") : null,
                 temAnexo: (pp.anexos ?? []).length > 0,
                 situacaoVerba: situacaoDaVerba(pp),
                 fornecedorId: pp.fornecedor_id ?? null,

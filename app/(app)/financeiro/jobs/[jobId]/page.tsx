@@ -44,9 +44,9 @@ import {
   carregarJobParaAbertura,
   linhasDoSave,
   revisaoPendenteDoJob,
+  totalGeradoEmSave,
 } from "../../abertura-de-job/dados";
 import { carregarSavesDaAbertura } from "../../abertura-de-job/saves-da-abertura";
-import { PlanilhaDaOrigem } from "../../abertura-de-job/[jobId]/planilha-da-origem";
 import { fotosDaAbertura } from "../../abertura-de-job/fotos";
 import {
   carregarAprovacaoDeSave,
@@ -66,6 +66,7 @@ import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { JobFinanceiroTabs } from "./job-financeiro-tabs";
 import { abaDaUrl } from "./abas";
 import { impostoDoJob } from "../../abertura-de-job/imposto-previsto";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export const dynamic = "force-dynamic";
 
@@ -146,7 +147,9 @@ export default async function JobNoFinanceiroPage({
     carregarPrazosDosJobs(tenantId, [params.jobId]),
     previsoesGravadas(supabase, tenantId, params.jobId),
     // O selo de faturamento: a esteira de "Visualizar Jobs", só deste job.
-    faturamentoPorJob(tenantId, hoje, [params.jobId]),
+    // A inadimplência usa o hoje de Brasília; o `hoje` desta página segue o
+    // de UTC porque alimenta o fluxo, que acompanha a `vw_fluxo_caixa`.
+    faturamentoPorJob(tenantId, hojeEmSaoPauloIso(), [params.jobId]),
     // Vocabulário do combo de categoria do formulário de abertura: o
     // mesmo escopo 'orcamento' que a fila usa. Não existe lista de
     // categoria só do financeiro.
@@ -267,6 +270,10 @@ export default async function JobNoFinanceiroPage({
         faturamento_previsto: aprovacaoSave.depois.faturamento_previsto,
       }
     : carregadoParaAbertura.job;
+  // O nome que o financeiro gravou na abertura — o do título, da ficha, da
+  // planilha e do fluxo. O da produção (`jobNaFila.nome`) fica só no
+  // painel "Dados da produção" do formulário.
+  const nomeNoFinanceiro = nomeDoJobNoFinanceiro(jobNaFila);
 
   const [projetos, irmaosRes] = await Promise.all([
     listarProjetosFinanceiro(tenantId, jobNaFila.cliente_id),
@@ -471,7 +478,7 @@ export default async function JobNoFinanceiroPage({
               {/* O nome do FINANCEIRO — é a tela dele. A produção continua
                   vendo o nome que cadastrou (`nome_financeiro` vs `nome`). */}
               <h1 className="text-2xl font-bold tracking-tight">
-                {jobNaFila.nome}
+                {nomeNoFinanceiro}
               </h1>
               <Badge className={cn("border", jobStatusBadgeClasses(statusExibido))}>
                 {jobStatusLabel(statusExibido)}
@@ -605,22 +612,9 @@ export default async function JobNoFinanceiroPage({
                 custoPlanejadoJob + (resumoFinanceiro?.planejadoDosPedidos ?? 0),
             }}
             saveConsumido={saveConsumido}
+            saveGerado={totalGeradoEmSave(detalhe.itens)}
             linhasDoSave={linhasDoSave(detalhe.itens)}
             saves={saves}
-            // A planilha de cada job de origem do consumo (decisão 155),
-            // por streaming, como na abertura.
-            planilhasDasOrigens={Object.fromEntries(
-              [
-                ...new Map(
-                  (saves?.linhas ?? [])
-                    .flatMap((l) => l.origens)
-                    .map((o) => [o.jobId, o.codigo] as const),
-                ),
-              ].map(([id, codigo]) => [
-                id,
-                <PlanilhaDaOrigem key={id} session={session} jobId={id} codigo={codigo} />,
-              ]),
-            )}
             enviadoPorNome={carregadoParaAbertura.enviadoPorNome}
             curvaInicial={previsoes.curva}
             recebimentoInicial={previsoes.recebimento}
@@ -647,7 +641,7 @@ export default async function JobNoFinanceiroPage({
               etapas={detalhe.etapasDoJob}
               job={{
                 codigo: job.codigo,
-                nome: jobNaFila.nome,
+                nome: nomeNoFinanceiro,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —
                 // `dados.ts` da abertura já resolve (decisão 055).
@@ -811,6 +805,9 @@ export default async function JobNoFinanceiroPage({
               papelNaErrata={null}
               errataPronta={null}
               midia={detalhe.midia}
+              // O histórico de versões da planilha (decisão 186), também
+              // na visão do financeiro.
+              comHistorico
               interno={detalhe.interno}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}
@@ -827,7 +824,7 @@ export default async function JobNoFinanceiroPage({
                 empresa_id: job.empresa_id,
                 responsavel_id: job.responsavel_id,
               }}
-              nomeJob={jobNaFila.nome}
+              nomeJob={nomeNoFinanceiro}
               versao={{
                 id: versaoAprovada.id,
                 numero_versao: versaoAprovada.numero_versao,
@@ -883,7 +880,7 @@ export default async function JobNoFinanceiroPage({
           <FluxoCaixaJobs
             linhas={linhasDeFluxo}
             jobs={[
-              { id: job.id, codigo: job.codigo, nome: jobNaFila.nome },
+              { id: job.id, codigo: job.codigo, nome: nomeNoFinanceiro },
             ]}
             contas={contas.map((c) => ({ id: c.id, rotulo: c.rotulo }))}
             prazos={prazosDoJob}

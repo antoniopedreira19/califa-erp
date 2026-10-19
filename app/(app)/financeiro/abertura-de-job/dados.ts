@@ -27,7 +27,17 @@ import { grupoDoPedido } from "@/lib/data/saves";
 export interface JobNaFila {
   id: string;
   codigo: string;
+  /** O nome da PRODUÇÃO — o do painel "Dados da produção". */
   nome: string;
+  /**
+   * O nome gravado pelo financeiro na abertura (`jobs.nome_financeiro`).
+   * Nulo até o job abrir. Quem mostra o nome do financeiro usa
+   * `nomeDoJobNoFinanceiro(job)`. Até 16/10/2026 este campo não era lido:
+   * a página do job mostrava o nome da produção no título e no formulário,
+   * e salvar uma edição ou revisão gravava o nome da produção por cima do
+   * do financeiro.
+   */
+  nome_financeiro: string | null;
   valor_total: number | null;
   /** O que a California emite nota — difere do valor total pelos custos
    *  que o cliente paga direto ao fornecedor (A, D, F). */
@@ -46,6 +56,11 @@ export interface JobNaFila {
   projeto_id: string;
   projeto_codigo: string | null;
   projeto_nome: string | null;
+  /** A empresa do job (`jobs.empresa_id`, que o gatilho
+   *  `enforce_empresa_from_projeto` copia do projeto): nome fantasia, ou a
+   *  razão social. O painel "Dados da produção" e a conferência a mostram
+   *  logo abaixo do Projeto (Tiago, 19/10/2026). */
+  empresa_nome: string | null;
   /** Cliente do projeto de produção. Filtra o combo de projeto do
    *  financeiro e vira o `cliente_id` do projeto criado ali. */
   cliente_id: string | null;
@@ -307,7 +322,7 @@ export interface TotaisPlanilhaJob {
 }
 
 const SELECT_JOB_FILA =
-  "id, codigo, nome, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
+  "id, codigo, nome, nome_financeiro, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, created_at, produto, cidade, projeto_id, " +
   // Quem enviou (decisão 136). `created_by` aponta para `auth.users`, e o
   // nome dele sai em query própria; `enviado_abertura_por` aponta para
@@ -319,6 +334,9 @@ const SELECT_JOB_FILA =
   // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
   "servico_id, servico:categorias_dominio!servico_id(nome), " +
   "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+  // A empresa do job. Dica de FK por segurança: `jobs` tem uma FK só para
+  // `empresas` hoje, mas uma segunda deixaria o embed ambíguo (HTTP 300).
+  "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
   "projeto_financeiro:projetos_financeiro(codigo, nome), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
@@ -407,6 +425,7 @@ function montarJobNaFila(
     id: j.id,
     codigo: j.codigo,
     nome: j.nome,
+    nome_financeiro: j.nome_financeiro ?? null,
     valor_total: j.valor_total !== null ? Number(j.valor_total) : null,
     faturamento_previsto:
       j.faturamento_previsto !== null && j.faturamento_previsto !== undefined
@@ -423,6 +442,7 @@ function montarJobNaFila(
     projeto_id: j.projeto_id,
     projeto_codigo: j.projeto?.codigo ?? null,
     projeto_nome: j.projeto?.nome ?? null,
+    empresa_nome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
     cliente_id: j.projeto?.cliente_id ?? null,
     cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
     projeto_financeiro_id: j.projeto_financeiro_id ?? null,
@@ -1179,4 +1199,21 @@ export function linhasDoSave(
   const vivas = itens.filter((i) => !i.cancelada_em);
   const emSave = vivas.filter((i) => i.em_save).length;
   return { emSave, foraDoSave: vivas.length - emSave };
+}
+
+/**
+ * O crédito que as linhas do job em save geram para o cliente: o orçado
+ * das linhas vivas em save. É o "Total gerado em save" que a produção vê no
+ * envio para abertura (`totais.save.totalSaveGerado`), sobre a cópia do
+ * job — e o cartão "Dados da produção" da abertura mostra o mesmo número
+ * abaixo do valor total (Tiago, 17/10/2026). Mesma coluna e mesma regra de
+ * linha cancelada de `linhasDoSave`.
+ */
+export function totalGeradoEmSave(
+  itens: { em_save: boolean; cancelada_em: string | null; total_orcado: number | string | null }[],
+): number {
+  const total = itens
+    .filter((i) => !i.cancelada_em && i.em_save)
+    .reduce((s, i) => s + Number(i.total_orcado ?? 0), 0);
+  return Math.round(total * 100) / 100;
 }

@@ -10,6 +10,7 @@ import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import type { Job, JobStatus, Regional } from "@/lib/types";
+import { rotuloDaVerba, tipoDaVerba } from "@/lib/types";
 import {
   jobStatusLabel,
   jobStatusExibido,
@@ -156,6 +157,7 @@ export default async function JobDetailPage({
     podeCadastrarFornecedor,
     podeEditarFornecedor,
     podeEnviarPP,
+    linhasComEnvioTravado,
     papelEnviaPP,
     papelCorrigeNf,
     etapasDoJob,
@@ -194,7 +196,7 @@ export default async function JobDetailPage({
       id: pp.id,
       codigo: pp.codigo,
       quem: pp.verba_producao
-        ? "Verba de produção"
+        ? rotuloDaVerba(tipoDaVerba(pp) ?? "producao")
         : (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—",
       valor: Number(pp.valor ?? 0),
       status: pp.status as PPDoPedido["status"],
@@ -452,6 +454,8 @@ export default async function JobDetailPage({
             papelNaErrata={comPedido ? null : papelNaErrata}
             errataPronta={errataPronta}
             midia={detalhe.midia}
+            // O histórico de versões da planilha (decisão 186).
+            comHistorico
             interno={detalhe.interno}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
@@ -513,7 +517,7 @@ export default async function JobDetailPage({
             papelCorrigeNf={papelCorrigeNf}
             podeConfirmarBv={podeConfirmarBv && !comPedido}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
-            aberturaEmRevisao={job.abertura_em_revisao}
+            linhasComEnvioTravado={linhasComEnvioTravado}
             ppsPorItemId={ppsPorItemId}
             aEmitirPorItemId={aEmitirPorItemId}
             tomadoresDaNf={tomadoresDaNf}
@@ -537,7 +541,12 @@ export default async function JobDetailPage({
             // Decisão 160: o envio, o formulário e a PP ao lado dos
             // documentos também pela aba — com o que o painel do item usa.
             statusDoJob={job.status}
-            aberturaEmRevisao={job.abertura_em_revisao}
+            // Decisão 185: a revisão da abertura trava só as linhas que a
+            // errata mudou — aqui pelo realizado, que é a chave da PP.
+            realizadosComEnvioTravado={linhasComEnvioTravado.flatMap((id) => {
+              const realizado = realizadosMap.get(id);
+              return realizado ? [realizado.id] : [];
+            })}
             tomadoresDaNf={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             empresas={empresas}

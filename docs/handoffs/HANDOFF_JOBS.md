@@ -5604,3 +5604,265 @@ Pedido do Tiago em 16/10/2026 (opção A); regra completa no fim da decisão 172
 - **"Ver envio"** da página do job mostra "Tomador no exterior, sem CNPJ".
 - **Testado** no TES-1007/26 (envio feito e mantido na fila como dado de
   teste; a nota TESTE-184C dele foi emitida e cancelada).
+
+## ⚠️ Nota de 2026-10-16 (3) — a errata em revisão trava o envio de PP só na linha alterada (decisão 185, revê a 040)
+
+Pedido do Tiago em 16/10/2026. Regra completa na decisão 185.
+
+- **Antes:** com o job em revisão da abertura, nenhuma PP do job ia ao
+  financeiro (040 §2). **Agora:** só a PP da linha que uma errata ainda não
+  revisada mudou (orçado, planejado, tipo, linha nova, cancelada). As
+  outras linhas enviam normalmente.
+- **Janela:** a mesma do mural — errata depois do último registro de
+  abertura ou revisão (`jobs_aberturas`), ou da data de abertura.
+- **Reorganizar a planilha (162) não trava.** O faturamento continua
+  travado pelo job inteiro.
+- **Código:** `lib/data/linhas-da-revisao.ts` (regra + 4 testes);
+  `barrarEnvioDePP` recebe a linha (`linha_alterada_em_revisao` na
+  auditoria); o carregador devolve `linhasComEnvioTravado` e
+  `podeEnviarPP` não olha mais a revisão; painel do item e aba PPs travam
+  por linha com `TEXTO_LINHA_ALTERADA_EM_REVISAO`. Sem migration.
+- **Caso real que motivou:** ANI-1001/26 — as PP-00240 e PP-00241, de
+  linhas que a errata não tocou, passam a poder ser enviadas; as 3 PPs
+  da linha nova "UNA: Viagem Itabira" seguem esperando a revisão.
+- **Conferido:** ANI-1001/26 só olhando (2 liberadas, 3 travadas, no
+  painel e na aba); TES-1025/26 com PP-00243 no Item 1 enviada em revisão
+  e PP-00244 no Item 3 recusada na tela e na action
+  (`linha_alterada_em_revisao`). As duas canceladas no fim.
+
+## ⚠️ Nota de 2026-10-16 (4) — o "Meus" da lista de Jobs é a Equipe do projeto (revisão da decisão 036)
+
+Pedido do Tiago em 16/10/2026, depois do caso do COL-1001/26 (a GP que
+criou o projeto não via o job em "Meus" porque deixou outra GP como
+responsável). Regra completa na nota de 16/10 da decisão 036.
+
+- **Antes:** "meu" era o job em que sou o GP ou o Produtor Responsável.
+  **Agora:** todo job do projeto em cuja Equipe estou (criador do
+  projeto, GPs e acréscimos do projeto, responsáveis de qualquer job dele,
+  produtores dos orçamentos).
+- **Código:** `projetosNaEquipeDe` em `lib/data/equipe-do-projeto.ts`; a
+  página calcula `JobRow.meu`; a lista filtra por ele. Sem migration.
+- **Home do GP:** os cards "Jobs pendentes de envio para faturamento" e
+  "Jobs prontos pra encerrar" também contam a Equipe (decidido pelo Tiago
+  no mesmo dia), para o número bater com a lista que abrem
+  (`lib/home/carregar.ts`).
+- **Conferido:** logado como administrador (18 jobs em "Meus", com o
+  AMB-0156/26); a Isabella simulada com a RLS dela vê o COL-1001/26; home
+  do GP numa rota temporária: 10 pendentes de envio e 2 prontos pra
+  encerrar, iguais às listas.
+
+## ⚠️ Nota de 2026-10-16 (5) — o selo de status da aba PPs não fica mais embaixo do olho
+
+Visto ao montar o guia da prestação de contas da verba com telas reais
+(16/10/2026): a 1440×900, no TES-1003/26, "AGUARDANDO PRESTAÇÃO" aparecia
+como "AGUARDANDC ◉ STA" — o olho do "Ver PP" por cima do fim do selo.
+Correção só visual: sem regra nova, sem migration, nenhum texto mudou.
+
+- **Causa:** o `colgroup` em % da tabela (`table-fixed` desde 09/09/2026)
+  não previa a calha da prestação. Com "Prestar contas" na tela a calha
+  alarga 99px e a tabela cai de 1219 para 1120px a 1440. O Status ficava
+  com 73 a 82px úteis para selos de até 170px; o olho (28px) tinha 11 a
+  15px e transbordava para a esquerda; e um valor de seis dígitos
+  (R$ 250.000,00) transbordava para a direita, sobre o começo do selo.
+- **Correção** (`job-pps-section.tsx`): Status 9 → 12%, Valor 8,5 →
+  10,5%, olho 3,5 → 4% e sem recuo à esquerda; Origem e Serviço 20 → 18%,
+  Fornecedor 15 → 13,5%. O selo e o "Pronta para envio" quebram linha
+  dentro da coluna: numa linha seguem a pílula de sempre; em duas, um
+  retângulo de canto 11px. Só nesta tabela — `PPStatusChip` e
+  `SituacaoVerbaChip` não mudaram, e a aprovação e Títulos a Pagar seguem
+  iguais.
+- **Conferido** a 1440×900 e a 1838×1040 (Produtor Teste no WebKit,
+  administrador no Chrome do app): no TES-1014/26 com as PPs postas em
+  memória em cada situação da verba, "Pronta para envio" e R$ 250.000,00
+  (nada gravado), e nas páginas reais do TES-1001/26, TES-1003/26 e
+  TES-1014/26. Todos os selos inteiros dentro da coluna, o olho dentro da
+  sua, o valor sem encostar no selo, sem rolagem lateral, e "Prestar
+  contas"/"Corrigir prestação" dentro da tela (terminam em 1412 de 1440 e
+  em 1769 de 1838). Antes, a 1440, o olho saía da própria coluna nas 16
+  linhas e cobria todos os selos longos.
+- **Em aberto:** (1) na PP rejeitada, quem envia PP (GP e administrador)
+  vê o "Cancelar e refazer" (136px) na coluna do olho, e ele cobre o selo
+  "REJEITADO". Já era assim; levar o botão para a trilha, como o "Prestar
+  contas", pede decisão. (2) Com a calha da prestação, a 1440, o código
+  quebra em "PP-/00206" — também já era assim.
+
+## ⚠️ Nota de 2026-10-17 — o "Cancelar e refazer" da PP rejeitada foi para a trilha
+
+Resolve o item (1) em aberto da nota de 16/10/2026 (5). Opção C, escolhida
+pelo Tiago em 17/10/2026 entre três (A: o botão com texto na trilha,
+alargando-a de 99 para 208px; B: ícone ao lado do olho; C: ícone na
+trilha). Correção só visual: sem regra nova, sem migration, mesma
+permissão (`podeEnviar`) e o mesmo pop-up de confirmação.
+
+- **Causa:** o botão (138px) morava na coluna do olho, que tem 4% da
+  tabela (49px a 1440, 45px com a calha da prestação, 61px a 1838), e
+  transbordava para a esquerda. A 1440 cobria o selo "REJEITADO" (82px)
+  inteiro; a 1838, 36 a 51px dele.
+- **Correção** (`job-pps-section.tsx`): o botão virou ícone de 29px, lápis
+  vermelho com borda clara (as cores do botão de antes) e a dica "Cancelar
+  e refazer", na trilha entre o "Ver formulário" e o cancelar. A
+  rejeitada não envia nem edita, então os três ícones cabem nos 99px de
+  sempre: a trilha não alarga e a tabela não muda de largura. A coluna do
+  olho ficou só com o olho.
+- **Uma diferença de lugar:** como todo botão da trilha, ele aparece na primeira
+  linha da PP que está na tela (com filtro ou ordem pelo título, a parcela
+  1 pode ter saído). Antes ficava só na linha da parcela 1.
+- **Conferido** a 1440×900 e 1838×1040, com e sem a calha da prestação:
+  no TES-1014/26 com a PP-00132 e a PP-00147 rejeitadas em memória (nada
+  gravado) e na PP-00087 (TES-1008/26), rejeitada de verdade. Selo inteiro
+  nos três pontos medidos, ícone a 130 a 196px do fim do selo, trilha
+  dentro da tela (termina em 1438 de 1440 e 1795 de 1838), sem rolagem
+  lateral; o ícone abre "Cancelar a PP-00147 e refazer?" (fechado em
+  "Voltar"). Comparação com fotos da tela real:
+  https://claude.ai/artifact/RtJYas1UfQqLnpGY56MFhy
+
+## ⚠️ Nota de 2026-10-17 (2) — data de errata, PP e prestação no dia de Brasília
+
+Visto em 08/10/2026 no TES-1014/26: a errata registrada às 23:54 de 08/10
+aparecia no card de Erratas como **09/10/2026**, enquanto a linha da errata
+pronta, logo acima, mostrava 08/10. Correção só de exibição: sem regra
+nova, sem migration, nenhum dado mudou.
+
+- **Causa:** as telas formatavam `timestamptz` cortando o ISO
+  (`iso.slice(0, 10)`), que é o dia em **UTC**. Tudo que é registrado
+  depois das 21h de Brasília caía no dia seguinte. Coluna `date` (sem hora)
+  não tem esse problema e ficou como estava. No banco, em 17/10: 7 de 35
+  erratas, 6 de 203 PPs e 13 de 84 aberturas de job tinham o dia trocado.
+- **Funções novas** em `lib/formatar-data-hora.ts`: `diaIsoBr` (o dia de
+  Brasília como `aaaa-mm-dd`) e `formatDiaBr` (`dd/mm/aaaa`). As duas
+  devolvem coluna `date` como está: passá-la ao `Date` a leria como
+  meia-noite UTC, que em Brasília ainda é o dia anterior.
+- **Corrigido nas telas do job:** card de Erratas (data da errata, e a da
+  pronta pela mesma função); aba PPs ("Emitida em", na dica do código e no
+  rodapé do descritivo); Prestar contas ("Reprovada pelo financeiro ·
+  data").
+- **Chat de PPs do job** (`lib/data/job-chat-pps.ts`): a thread é montada no
+  servidor, que na Vercel roda em UTC, e usava `getHours()`/`getDate()`.
+  Em produção, toda hora saía **3h adiantada** e, depois das 21h, com o dia
+  seguinte (no dev local, que roda em Brasília, isso não aparecia). Passou a
+  usar `formatDataEHoraBr` e `formatDiaHoraCurtoBr`, no mesmo formato. O
+  "Prazo de pagamento" em dias conta a partir do dia de Brasília do envio.
+- **Filtro por coluna** (`celulaData`, decisão 165): entra pelo dia de
+  Brasília. Mudou o rótulo, a busca e o agrupamento por mês, inclusive na
+  virada do mês (23:30 de 30/09 não cai mais em outubro). Teste novo em
+  `lib/calculos/filtro-de-coluna.test.ts`.
+- **Financeiro:** as telas de lá estão na nota de 2026-10-17 (2) do
+  `HANDOFF_FINANCEIRO.md`.
+- **Sem bug, ficaram como estão:** os eventos "só data" do Ver PP (vêm de
+  coluna `date`; nenhum no banco hoje), a ficha do job (já tratava o fuso)
+  e os `pago_em`, que apesar do nome são `date`.
+- **Conferido** no dev do worktree, como administrador: TES-1014/26 (errata
+  das 23:54 de 08/10 em 08/10/2026) e BOC-1003/26, só leitura (PP-00211 a
+  PP-00216, emitidas entre 21:52 e 22:50 de 15/10, em 15/10/2026). O chat e
+  as funções foram rodados com `TZ=UTC`, como na Vercel: a errata sai
+  "08/10/2026 23:54", e antes saía "09/10/2026 02:54".
+- **Em aberto:** (1) ~~a coluna "Criação" da aba Desembolsos do Contas a
+  Pagar corta o `created_at` em UTC~~. ⚠️ **Resolvido em 2026-10-19**, a
+  pedido do Tiago, apesar de a tela ser da frente do Antonio: ver a nota
+  de 2026-10-19 (3) do `HANDOFF_FINANCEIRO.md`. (2) Vários `new Date().toISOString().slice(0, 10)` calculam
+  o "hoje" em UTC: depois das 21h, "hoje" já é amanhã. Não é exibição de
+  `timestamptz` e ficou fora desta correção. ⚠️ **Auditado e em parte
+  corrigido em 2026-10-19:** ver a nota de 2026-10-19 (6) do
+  `HANDOFF_FINANCEIRO.md`.
+
+## ⚠️ Nota de 2026-10-17 — Histórico de versões da Planilha Interna (decisão 186)
+
+Pedido do Tiago em 14/10/2026, protótipo aprovado em 15/10/2026. Regra
+completa na decisão 186.
+
+- **Botão "Histórico"** na barra da planilha, ao lado do Bruto/Líquido; a
+  barra ficou em duas linhas (rótulo em cima; "Recolher todos" à esquerda).
+  Na página do job, na do job no financeiro e na Abertura de Job
+  (`comHistorico` no `JobRealizadoSection`, obrigatória). Fora da planilha
+  da origem do save e da Mídia Off. Some na errata e no "Editar orçado".
+- **Versão antiga só leitura:** `JobRealizadoSection` virou um invólucro que
+  guarda a versão escolhida e entrega à planilha (`PlanilhaDoJob`) as linhas
+  e os agrupamentos daquele momento, sem realizado, PP, BV, save, errata ou
+  edição; faixa em cima (`FaixaDaVersao`), selo e fundo vermelho na linha que
+  mudou (`seloDaLinha` e `destaque` na tabela, `HISTORICO` em `blocos.ts`),
+  Totais só no planejado (`somentePlanejada`).
+- **Reconstrução** de trás para a frente a partir da planilha de hoje,
+  função pura `montarHistorico` (`lib/calculos/historico-da-planilha.ts`,
+  `npm run test:historico-da-planilha`). Sem tabela nova. A leitura
+  (`carregarHistoricoDaPlanilha`) só roda ao abrir o "Histórico".
+- **Conferido:** os 26 jobs com histórico (15 reais) batem ao centavo em
+  todas as 155 versões contra o valor gravado de cada momento, a abertura e a
+  versão aprovada; na tela, TES-1025/26, TES-1002/26 (mensal) e TES-1029/26
+  (fila), na produção e no financeiro.
+
+## ⚠️ Nota de 2026-10-17 (4) — PP de reembolso (decisão 187)
+
+Pedido do Tiago em 16/10/2026, protótipo aprovado em 17/10/2026 ("Marcar
+empilhado"). Regra completa na decisão 187.
+
+- **Seletor do tipo** (`TipoDaPPField`, em `titular-da-verba-field.tsx`):
+  Normal · Verba · Reembolso empilhados; à direita, as verbas ou
+  Despesas · Veículo próprio. O reembolso é `verba_producao = true` +
+  `tipo_verba = 'reembolso'` + `reembolso_tipo`.
+- **Titular do reembolso:** a lista da verba, sem "Terceiro"
+  (`semTerceiro`).
+- **Veículo próprio** (`deslocamentos-do-reembolso.tsx`): o valor é a conta
+  dos deslocamentos (`lib/calculos/reembolso.ts`, a mesma do servidor); o
+  trio vira total × 1 × 1; o desgaste por km vem do financeiro e a PP
+  guarda o da data em que nasceu.
+- **Comprovantes** (`comprovantes-do-reembolso.tsx`): opcionais para
+  salvar e gerar, obrigatórios no envio. Despesas: tipo (com "Cupom
+  fiscal"), número, data e valor, soma = valor da PP. Veículo: ≥ 1 arquivo
+  sem tipo. `comprovanteDoReembolsoParaEnvio` manda data e valor de
+  qualquer tipo (o `anexoParaEnvio` da PP normal ficou como estava).
+- **Tipo obrigatório nas linhas:** `PPParaEnviar.reembolsoTipo`,
+  `PPDoItem.reembolsoTipo`, `PPRow.reembolso_tipo/_deslocamentos` e os
+  campos do comprovante no anexo do `PPRow` — opcionais, o `.map` os
+  descartaria (ver o `CLAUDE.md`).
+- **Sem prestação de contas:** `situacaoDaVerba` devolve nulo para o
+  reembolso; `impedimentos-encerramento.ts` passou a ler o `tipo_verba`
+  (sem isso, o reembolso pago travaria o encerramento do job).
+- **PDF:** tabela dos deslocamentos; a seta "→" do trajeto vira ">" (a
+  Helvetica do pdfmake é WinAnsi e a imprimia como "!").
+- **Conferido** no TES-1001/26 com a PP-00250 (veículo, R$ 166,46) e a
+  PP-00253 (despesas, R$ 150,00), as duas canceladas no fim.
+
+## ⚠️ Nota de 2026-10-19 — Envio em lote para faturamento pela lista de Jobs (decisão 188, entrega 1)
+
+Pedido do Tiago em 16/10/2026; design aprovado em 19/10/2026 sobre o
+protótipo. Regra completa na decisão 188.
+
+- **Lista de Jobs** (`jobs-list.tsx`): botão "Enviar para faturamento" (gate
+  `jobs.enviar_faturamento`) liga o modo de seleção; a calha vira caixa; o job
+  que não pode ir fica apagado com o motivo no tooltip (`motivo_fora_do_lote`,
+  calculado em `page.tsx`: status, cancelamento pedido, envio completo, sem
+  previsto) e, depois do primeiro marcado, outro cliente ou outra empresa. Barra
+  no rodapé com quantos, total e cliente · empresa.
+- **Pop-up** (`envio-em-lote-dialog.tsx`, por `dynamic`): abre relendo os jobs
+  (`carregarEnvioEmLote`): valor relido, mês do mensal, contatos, portais e
+  quem ficou fora com o motivo. Cartões dos jobs com a barra do que já está
+  nas notas; tabela das notas com o "Rateio" (Proporcional · Só o job · Dividir
+  à mão); vencimento, parcelas, CNAE e portal comuns; observação; contatos.
+- **Envio** (`actions-envio-lote.ts` → `enviar_lote_para_faturamento`): confere
+  cada job de novo com a mesma régua da página do job
+  (`lib/faturamento/conferir-envio-do-job.ts`), refaz o rateio com os valores
+  relidos (`lib/calculos/envio-em-lote.ts`, com testes) e grava numa transação.
+- **A action da página do job** passou a usar a mesma conferência (só a Mídia
+  Off segue com as travas próprias lá dentro).
+- **Testado** no TES-P001/26: TES-1002/26 (outubro), TES-1004/26 e TES-1014/26
+  enviados em 2 notas (ficaram como dado de teste); TES-1025/26 ficou fora pela
+  revisão da abertura.
+- **Fica para as entregas 2 e 3:** a fila do financeiro e o Faturar lendo a nota
+  do lote de uma vez; "Copiar de um envio anterior".
+
+## ⚠️ Nota de 2026-10-19 (2) — Repetir e copiar as notas de um envio anterior no envio em lote (decisão 188, entrega 3)
+
+- **Onde:** no pop-up "Enviar para faturamento" da lista de Jobs, no começo das
+  notas: **"Repetir as notas de {mês}"** (quando o envio mais recente com estes
+  mesmos jobs existe) e **"Copiar de um envio anterior"** (os lotes e os envios
+  de um job só do cliente, até 12, do mais recente ao mais antigo).
+- **Ao copiar:** tomador, CNPJ ou exterior, valor (igual, ou na mesma proporção
+  do total de agora) e descritivo com o mês trocado ("dezembro/2026" vira
+  "janeiro/2027"). "Só o job X" continua se o job está no lote; de outro job e
+  dividida à mão voltam para Proporcional. Um aviso diz o que foi feito.
+- **Dado:** `carregarEnvioEmLote` devolve `anteriores` (`EnvioAnterior`),
+  lidos junto da conferência; sem migration. Contas puras e testadas em
+  `lib/calculos/envio-em-lote.ts` (`npm run test:envio-em-lote`, 8 testes).
+- **Testado:** cópia no TES-P001/26 (TES-1002 + TES-1003, sem enviar); Repetir
+  e troca do mês no protótipo com o pop-up real e dados fictícios
+  (https://claude.ai/artifact/KYSb95HrtonmB4TvpPw54J).

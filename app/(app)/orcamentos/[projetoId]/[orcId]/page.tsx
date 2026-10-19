@@ -1729,6 +1729,10 @@ function VersaoSelecionada({
         proximoCodigoJob={proximoCodigoJob}
         codigoReservado={reservado?.codigo ?? null}
         projetoNome={projetoRaw?.nome ?? "—"}
+        // A empresa do projeto, que vira a do job (19/10/2026).
+        empresaNome={
+          projetoRaw?.empresa?.nome_fantasia ?? projetoRaw?.empresa?.razao_social ?? "—"
+        }
         herdados={herdados}
         regionaisDoProjeto={regionaisDoProjeto}
         gps={gpsDoEnvio}

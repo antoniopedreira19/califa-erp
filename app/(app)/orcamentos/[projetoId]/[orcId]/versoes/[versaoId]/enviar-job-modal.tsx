@@ -286,6 +286,8 @@ interface Props {
 
   orcamentoNome: string;
   projetoNome: string;
+  /** A empresa do projeto, que vira a do job (19/10/2026). */
+  empresaNome: string;
   clienteNome: string;
   codigoJob: string;
   /** O código é o do job cancelado pelo "Cancelar aprovação" da devolução,
@@ -349,6 +351,7 @@ export function EnviarJobModal({
   onChange,
   orcamentoNome,
   projetoNome,
+  empresaNome,
   clienteNome,
   codigoJob,
   codigoReaproveitado,
@@ -465,7 +468,9 @@ export function EnviarJobModal({
           {/* Linha 1 — identificação, tudo travado. O código do projeto
               saiu em 30/09/2026 (decisão 135): o único código do
               formulário é o do job. */}
-          <Campo rotulo="Projeto">
+          {/* A empresa do job, logo abaixo do Projeto (Tiago, 19/10/2026):
+              como apoio do campo, para a linha seguir com três campos. */}
+          <Campo rotulo="Projeto" apoio={`Empresa: ${empresaNome}`}>
             <Travado valor={projetoNome} />
           </Campo>
           <Campo

@@ -82,6 +82,7 @@ import {
   type SituacaoVerba,
 } from "@/lib/types";
 import { passaDoPlanejado } from "@/lib/calculos/pps-item";
+import type { ReembolsoTipo } from "@/lib/calculos/reembolso";
 import {
   hojeEmSaoPauloIso,
   isoParaBr,
@@ -128,6 +129,10 @@ export interface PPDoItem {
   diasMeses: number;
   valor: number;
   verbaProducao: boolean;
+  /** Decisão 187: na PP de reembolso, despesas ou veículo próprio — o envio
+   *  cobra os comprovantes. Null fora do reembolso. Obrigatório pelo mesmo
+   *  motivo do trio. */
+  reembolsoTipo: ReembolsoTipo | null;
   /** Tem pelo menos um anexo. Fora da verba, é o que libera o envio. */
   temAnexo: boolean;
   /** Onde a verba está depois de paga (decisão 081). Só leitura aqui: a
@@ -348,7 +353,11 @@ export function PainelPPsItem({
         return;
       }
       setRevisando(null);
-      onMensagem?.(`Pedido de Produção ${res.codigo} gerado. Envie ao financeiro quando a nota chegar.`);
+      onMensagem?.(
+        alvo.tipo_verba === "reembolso"
+          ? `Pedido de Produção ${res.codigo} gerado. Envie ao financeiro com os comprovantes.`
+          : `Pedido de Produção ${res.codigo} gerado. Envie ao financeiro quando a nota chegar.`,
+      );
       router.refresh();
     });
   }
@@ -578,12 +587,17 @@ export function PainelPPsItem({
                     id: a.id,
                     codigo: "",
                     status: "gerada",
-                    fornecedorNome: contraparte(a),
+                    // Decisão 187: o cartão do reembolso a emitir diz que é
+                    // reembolso; a revisão mostra só o titular.
+                    fornecedorNome:
+                      a.tipo_verba === "reembolso" ? `Reembolso — ${contraparte(a)}` : contraparte(a),
                     valorUnitario: a.dados.valor_unitario,
                     quantidade: a.dados.quantidade,
                     diasMeses: a.dados.dias_meses,
                     valor: a.valor,
                     verbaProducao: a.verba_producao,
+                    reembolsoTipo:
+                      a.tipo_verba === "reembolso" ? (a.dados.reembolso_tipo ?? "despesas") : null,
                     temAnexo: a.anexos.length > 0,
                     situacaoVerba: null,
                     fornecedorId: a.fornecedor_id,
@@ -1065,6 +1079,7 @@ export function PainelPPsItem({
                 servico: enviando.servico,
                 fornecedorId: enviando.fornecedorId,
                 verbaProducao: enviando.verbaProducao,
+                reembolsoTipo: enviando.reembolsoTipo,
                 anexos: enviando.anexos,
                 pagaPorBoleto: enviando.pagaPorBoleto,
               } satisfies PPParaEnviar

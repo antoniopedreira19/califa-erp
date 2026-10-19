@@ -131,7 +131,8 @@ export async function impedimentosDosJobs(
     supabase
       .from("pedidos_compra")
       .select(
-        "job_id, codigo, status, verba_producao, " +
+        // O `tipo_verba` separa o reembolso (decisão 187), que não presta contas.
+        "job_id, codigo, status, verba_producao, tipo_verba, " +
           "prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(status, valor_devolvido), " +
           "devolucao:pp_verba_devolucoes!pp_verba_devolucoes_pedido_compra_id_fkey(pago_em)",
       )
@@ -228,6 +229,7 @@ export async function impedimentosDosJobs(
     for (const pp of (verbasRes.data ?? []) as any[]) {
       const situacao = situacaoDaVerba({
         verba_producao: pp.verba_producao === true,
+        tipo_verba: pp.tipo_verba ?? null,
         status: pp.status,
         prestacao: prestacaoDaVerba(pp.prestacao),
         devolucao: devolucaoDaVerba(pp.devolucao),

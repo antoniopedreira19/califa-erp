@@ -70,6 +70,7 @@ import {
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { ehQuarta, ppAceitaQuarta, qualJanela } from "@/lib/calculos/janelas-pagamento";
+import { resumoDosDeslocamentos, rotuloDoReembolso } from "@/lib/calculos/reembolso";
 import type { PPRow } from "./pedidos-compra-list";
 import { useChatPPsOpcional } from "./chat/chat-pps-provider";
 import { ChatPPsConversa } from "./chat/chat-pps-conversa";
@@ -81,6 +82,7 @@ import {
   rotuloDoEventoPP,
 } from "@/lib/data/eventos-da-pp";
 import { formatDiaHoraCurtoBr } from "@/lib/formatar-data-hora";
+import { formatDataEHoraBr } from "@/lib/formatar-data-hora";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -88,11 +90,9 @@ function formatDate(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return `${formatDate(iso)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+/** O dia saía do ISO cortado (UTC) e a hora do relógio local: às 23:54
+ *  de Brasília, "09/10/2026 23:54". Os dois agora vêm de Brasília. */
+const formatDateTime = formatDataEHoraBr;
 
 function iconePorMime(nome: string) {
   return /\.(png|jpe?g|webp|gif)$/i.test(nome) ? ImageIcon : FileText;
@@ -290,6 +290,19 @@ export function PPDossie({
             )}
           </Grupo>
 
+          {/* Decisão 187: o reembolso diz de quê, e o de veículo próprio
+              mostra a conta — o PDF ao lado tem a tabela dos deslocamentos. */}
+          {pp.reembolso_tipo && (
+            <Grupo rotulo="Reembolso">
+              <p className="text-[12.5px] font-semibold leading-snug">{rotuloDoReembolso(pp.reembolso_tipo)}</p>
+              {pp.reembolso_tipo === "veiculo_proprio" && pp.reembolso_deslocamentos && (
+                <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground">
+                  {resumoDosDeslocamentos(pp.reembolso_deslocamentos)}
+                </p>
+              )}
+            </Grupo>
+          )}
+
           <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
             <Grupo rotulo="Valor">
               <p className="font-mono text-base font-bold">
@@ -356,10 +369,12 @@ export function PPDossie({
           {/* Verba não tem anexo próprio: os documentos dela são os da
               prestação, no bloco abaixo (decisão 081). */}
           {(!pp.verba_producao || pp.anexos.length > 0) && (
-          <Grupo rotulo={`Anexos (${pp.anexos.length})`}>
+          <Grupo rotulo={`${pp.reembolso_tipo ? "Comprovantes" : "Anexos"} (${pp.anexos.length})`}>
             {pp.anexos.length === 0 ? (
               <p className="text-[11.5px] text-muted-foreground">
-                A produção não enviou documento nesta PP.
+                {pp.reembolso_tipo
+                  ? "A produção não enviou comprovante nesta PP."
+                  : "A produção não enviou documento nesta PP."}
               </p>
             ) : (
               <ul className="space-y-1">
@@ -383,6 +398,18 @@ export function PPDossie({
                         <span className="min-w-0 flex-1 truncate">
                           <span className="font-semibold">{i + 1}</span> ·{" "}
                           {a.arquivo_nome_original}
+                          {/* Decisão 187: o comprovante da despesa com o que a
+                              produção informou — a soma fecha o valor da PP. */}
+                          {pp.reembolso_tipo === "despesas" && a.documento_tipo && (
+                            <span className="block truncate text-muted-foreground">
+                              {documentoTipoLabel(a.documento_tipo)}
+                              {a.documento_numero ? ` ${a.documento_numero}` : ""} ·{" "}
+                              {formatDate(a.nf_data_emissao)} ·{" "}
+                              <span className="font-mono font-semibold text-foreground">
+                                {formatCurrency(a.nf_valor ?? 0, "BRL")}
+                              </span>
+                            </span>
+                          )}
                         </span>
                         <span className="flex-none text-muted-foreground">
                           {(a.arquivo_tamanho_bytes / 1024).toFixed(0)} KB
@@ -412,7 +439,8 @@ export function PPDossie({
 
           <Historico pp={pp} />
 
-          {pp.verba_producao && (
+          {/* O reembolso não presta contas (decisão 187). */}
+          {pp.verba_producao && !pp.reembolso_tipo && (
             <Prestacao pp={pp} anexoAtivo={anexoAtivo} onDocumento={onAnexo} />
           )}
         </div>
@@ -490,7 +518,7 @@ function Historico({ pp }: { pp: PPRow }) {
             // Verba de produção sai sem nota — as notas vêm na prestação de
             // contas —, então nela "sem documento" é o normal e não leva o
             // vermelho de alerta (Tiago, 14/09/2026).
-            pp.verba_producao ? (
+            pp.verba_producao && !pp.reembolso_tipo ? (
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Aprovada sem documento — PP de {rotuloDaVerbaMinusculo(pp.tipo_verba ?? "producao")}.
               </p>

@@ -358,6 +358,18 @@ export const ERRATA = {
     "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",
 } as const;
 
+/** HISTÓRICO — a versão antiga da Planilha Interna (decisão 186,
+ *  17/10/2026). No vermelho da errata, que é quem muda a planilha depois da
+ *  abertura: o botão quando a versão na tela não é a atual e o fundo da
+ *  linha que o momento mudou (com o fio à esquerda, como a linha recém-
+ *  movida da errata). */
+export const HISTORICO = {
+  linhaQueMudou:
+    "[&>td]:shadow-[inset_0_0_0_9999px_rgba(231,75,86,0.07)] [&>td:first-child]:shadow-[inset_3px_0_0_#e74b56,inset_0_0_0_9999px_rgba(231,75,86,0.07)]",
+  botaoAtivo:
+    "border-california-red bg-california-red/[0.07] text-[#b83b45]",
+} as const;
+
 /** SELEÇÃO — a célula selecionada da planilha e a linha de dicas.
  *
  *  A célula selecionada ganha a MESMA moldura arredondada do campo em

@@ -1726,7 +1726,15 @@ async function barrarConsumoSemSaldoAprovado(
 export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.aprovar");
-  if (!gate.ok) return gate;
+  // O produtor vê o "Aprovar versão" na barra do rodapé (Tiago, 19/10/2026:
+  // o botão fica). A recusa diz quem aprova, no lugar do "Você não tem
+  // permissão para essa ação." genérico.
+  if (!gate.ok) {
+    return {
+      ...gate,
+      message: "Só o GP pode aprovar a versão. Peça a aprovação ao GP responsável pelo orçamento.",
+    };
+  }
   const supabase = createClient();
 
   // 1. Fetch versão + orçamento (com projeto_id pra revalidatePath)
