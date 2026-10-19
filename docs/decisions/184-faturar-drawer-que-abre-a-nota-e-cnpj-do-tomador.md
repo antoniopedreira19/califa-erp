@@ -116,9 +116,14 @@ leitura da nota emitida, ampliar a nota e as saídas.
 
 ## 5. Fica para depois
 
-- **Imposto da nota sem CNPJ (exportação de serviço):** o cálculo continua
-  o de hoje (ISS, PIS e COFINS) até a contabilidade dizer quando a
-  exportação os afasta.
+- **Imposto da nota sem CNPJ (exportação de serviço) — decidido em
+  19/10/2026: fica como está.** O Faturar calcula ISS, PIS e COFINS na nota
+  com tomador no exterior como em qualquer nota, e eles entram na apuração.
+  Tiago: "Ao realizar o recebimento nós emitimos a NF normalmente para
+  justificar o recebimento, e nesses casos registramos o ISS que colocamos
+  na NF ao emiti-la, geralmente no nosso município. É o que acontece hoje."
+  A caixa "Exportação de serviço" (sem ISS, PIS e COFINS) foi descartada:
+  os impostos são pagos.
 - **Receita avulsa com job na rentabilidade do job:** a nota guarda o job,
   mas a rentabilidade (`vw_job_rentabilidade`, da frente do Antonio) não a
   lê. Decidir antes de ligar.
