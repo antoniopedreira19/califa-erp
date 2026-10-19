@@ -1,7 +1,5 @@
-import { LayoutDashboard } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { PageHeader } from "@/components/ui/page-header";
 import { HeroDashboard } from "./_components/hero-dashboard";
 import { CardsAnalise, type CategoriaCard } from "./lista/_components/cards-analise";
 import { CardsAcoesPrevistas } from "./_components/cards-acoes-previstas";
@@ -184,13 +182,6 @@ export default async function FreelancersDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Freelancers"
-        title="Dashboard"
-        description="Visão geral do módulo: alertas, solicitações pendentes, performance por responsável e novos contratos."
-        icon={LayoutDashboard}
-      />
-
       <HeroDashboard
         nomeUsuario={session.profile.nome}
         totalFreelancers={rows.length}

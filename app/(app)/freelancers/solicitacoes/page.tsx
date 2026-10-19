@@ -1,10 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { ClipboardList } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
-import { PageHeader } from "@/components/ui/page-header";
 import type {
   FreelancerCargo,
   FreelancerSolicitacao,
@@ -117,20 +115,13 @@ export default async function SolicitacoesPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Freelancers"
-        title="Solicitações"
-        description="Pedidos de contratação feitos pelos gerentes, aguardando aprovação do RH ou Financeiro."
-        icon={ClipboardList}
-        actions={<NovaSolicitacaoDialog jobs={jobs} cargos={cargos} />}
-      />
-
       <SolicitacoesTabela
         solicitacoes={solicitacoes}
         activeRole={session.activeRole}
         userId={session.profile.id}
         publicOrigin={publicOrigin}
         naoLidasPorSolicitacao={naoLidasMap}
+        actions={<NovaSolicitacaoDialog jobs={jobs} cargos={cargos} />}
       />
     </div>
   );

@@ -33,6 +33,7 @@ interface Props {
   userId: string;
   publicOrigin: string;
   naoLidasPorSolicitacao: Record<string, number>;
+  actions?: React.ReactNode;
 }
 
 export function SolicitacoesTabela({
@@ -41,6 +42,7 @@ export function SolicitacoesTabela({
   userId,
   publicOrigin,
   naoLidasPorSolicitacao,
+  actions,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -97,8 +99,8 @@ export function SolicitacoesTabela({
 
   return (
     <div className="space-y-4">
-      {/* Busca + chips */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+      {/* Busca + ações */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <form onSubmit={submitBusca} className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
@@ -119,6 +121,9 @@ export function SolicitacoesTabela({
             </button>
           )}
         </form>
+        {actions && (
+          <div className="flex items-center gap-2 md:shrink-0">{actions}</div>
+        )}
       </div>
 
       <div className="rounded-xl border border-border bg-muted/30 p-4">

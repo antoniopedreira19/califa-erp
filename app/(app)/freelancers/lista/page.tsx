@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { Users, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
-import { PageHeader } from "@/components/ui/page-header";
 import type { FreelancerComStatus, FreelancerCargo } from "@/lib/types";
 import { ListaClient } from "./_components/lista-client";
 import { BuscaInput } from "./_components/busca-input";
@@ -217,33 +216,24 @@ export default async function FreelancersListaPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Freelancers"
-        title="Freelancers"
-        description="Cadastro de pessoas e seus contratos. Busca por nome ou CPF, filtros por status e cargo, exportação."
-        icon={Users}
-        actions={
-          <div className="flex items-center gap-2">
-            <ExportarButton />
-            {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
-            {podeCriarFreelancer && (
-              <Link
-                href="/freelancers/novo"
-                prefetch={false}
-                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Novo freelancer
-              </Link>
-            )}
-          </div>
-        }
-      />
-
       <CardsAnalise totais={totais} />
 
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <BuscaInput />
+        <div className="flex items-center gap-2 md:shrink-0">
+          <ExportarButton />
+          {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
+          {podeCriarFreelancer && (
+            <Link
+              href="/freelancers/novo"
+              prefetch={false}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Novo freelancer
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
