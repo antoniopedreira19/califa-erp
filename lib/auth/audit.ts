@@ -449,6 +449,8 @@ export type AuditAction =
   | "freelancer_contrato.distrato_minuta_gerada"
   | "freelancer_contrato.distrato_aplicado"
   | "freelancer_contrato.distrato_cancelado"
+  // Módulo Freelancers — ação prevista inline (Task 027).
+  | "freelancer.acao_prevista_alterada"
   | "acao_negada";
 
 export interface AuditPayload {

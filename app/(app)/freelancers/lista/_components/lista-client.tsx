@@ -12,12 +12,14 @@ import type {
 } from "@/lib/types";
 import { AcaoPrevistaBadge, ACOES_PREVISTAS } from "./acao-prevista-badge";
 import { StatusBadge } from "../../_components/status-badge";
+import { ToggleAcaoPrevista } from "./toggle-acao-prevista";
 
 interface Props {
   freelancers: FreelancerComStatus[];
+  podeEditar: boolean;
 }
 
-export function ListaClient({ freelancers }: Props) {
+export function ListaClient({ freelancers, podeEditar }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -113,7 +115,7 @@ export function ListaClient({ freelancers }: Props) {
             </thead>
             <tbody>
               {freelancers.map((f) => (
-                <FreelancerRow key={f.id} f={f} />
+                <FreelancerRow key={f.id} f={f} podeEditar={podeEditar} />
               ))}
             </tbody>
           </table>
@@ -123,7 +125,13 @@ export function ListaClient({ freelancers }: Props) {
   );
 }
 
-function FreelancerRow({ f }: { f: FreelancerComStatus }) {
+function FreelancerRow({
+  f,
+  podeEditar,
+}: {
+  f: FreelancerComStatus;
+  podeEditar: boolean;
+}) {
   const href = `/freelancers/${f.id}`;
   const dataFormatada = new Date(f.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -163,8 +171,20 @@ function FreelancerRow({ f }: { f: FreelancerComStatus }) {
       <td className="px-3 py-2.5 text-foreground">
         {f.cidade ?? <span className="text-muted-foreground">—</span>}
       </td>
-      <td className="px-3 py-2.5 text-center">
-        <AcaoPrevistaBadge acao={f.acao_prevista as AcaoPrevistaFreelancer | null} />
+      <td
+        className="px-3 py-2.5 text-center"
+        onClick={(e) => podeEditar && e.stopPropagation()}
+      >
+        {podeEditar ? (
+          <ToggleAcaoPrevista
+            freelancerId={f.id}
+            valorAtual={f.acao_prevista as AcaoPrevistaFreelancer | null}
+          />
+        ) : (
+          <AcaoPrevistaBadge
+            acao={f.acao_prevista as AcaoPrevistaFreelancer | null}
+          />
+        )}
       </td>
       <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">
         {dataFormatada}

@@ -121,6 +121,56 @@ export async function criarFreelancer(formData: FormData): Promise<ActionResult<
   redirect(`/freelancers/${data.id}`);
 }
 
+const ACOES_VALIDAS = new Set([
+  "contratar",
+  "renovar",
+  "manter",
+  "substituir",
+  "encerrar",
+]);
+
+/** Toggle inline de ação prevista — admin/rh/financeiro apenas. */
+export async function atualizarAcaoPrevista(
+  id: string,
+  acao: string | null,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!podeEscrever(session.activeRole)) {
+    return { ok: false, message: "Sem permissão" };
+  }
+
+  if (acao !== null && !ACOES_VALIDAS.has(acao)) {
+    return { ok: false, message: "Ação inválida" };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("freelancers")
+    .update({
+      acao_prevista: acao,
+      updated_by: session.profile.id,
+    })
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    console.error("[freelancer.acao_prevista]", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  await logAuditEvent({
+    acao: "freelancer.acao_prevista_alterada",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "freelancer",
+    entidadeId: id,
+    metadata: { acao_prevista: acao },
+  });
+
+  revalidatePath("/freelancers/lista");
+  revalidatePath(`/freelancers/${id}`);
+  return { ok: true };
+}
+
 export async function atualizarFreelancer(
   id: string,
   formData: FormData,

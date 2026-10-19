@@ -11,6 +11,7 @@ import { BuscaInput } from "./_components/busca-input";
 import { GerenciarCargosDialog } from "./_components/gerenciar-cargos-dialog";
 import { CardsAnalise, type CategoriaCard } from "./_components/cards-analise";
 import { ChipsStatus } from "./_components/chips-status";
+import { ExportarButton } from "./_components/exportar-button";
 
 export const dynamic = "force-dynamic";
 
@@ -223,6 +224,7 @@ export default async function FreelancersListaPage({
         icon={Users}
         actions={
           <div className="flex items-center gap-2">
+            <ExportarButton />
             {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
             {podeCriarFreelancer && (
               <Link
@@ -248,7 +250,10 @@ export default async function FreelancersListaPage({
         <ChipsStatus />
       </div>
 
-      <ListaClient freelancers={freelancers} />
+      <ListaClient
+        freelancers={freelancers}
+        podeEditar={podeCriarFreelancer}
+      />
     </div>
   );
 }
