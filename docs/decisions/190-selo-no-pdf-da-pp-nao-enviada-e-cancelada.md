@@ -11,7 +11,9 @@ e enviar numa ação só", e a Recomendada ficam para depois).
 **Revê:** nenhuma regra de processo. Gerar, deixar pronta, enviar, editar
 e cancelar continuam como nas decisões 153, 157, 160, 169 e 173; muda só o
 documento.
-**Migration:** nenhuma.
+**Migration:** nenhuma para o selo. A pasta das cópias do retroativo exigiu
+a `20261019900001_pp_storage_policy_tolera_pasta_fora_do_tenant.sql` (ver
+"O retroativo").
 
 ## O problema
 
@@ -79,6 +81,20 @@ O script não ficou no repositório: ele empacota a `actions-pp.ts` real
 exportando a `refazerPdfDaPP` só para a rodada (esbuild, com stubs para
 `next/headers`, `next/cache`, `server-only` e o `cache` do React) e roda com
 a chave de serviço. Ensaio primeiro (PDFs só no disco), depois gravação.
+
+⚠️ **A pasta das cópias travou a geração de PP (19/10/2026, 12h43–15h28).**
+As policies do bucket faziam `split_part(name, '/', 1)::uuid`, e numa
+listagem o Postgres avalia a policy em todas as linhas do bucket antes do
+filtro de prefixo. O "_antes-da-decisao-190" na raiz não é uuid, então toda
+listagem do bucket por usuário logado devolvia `invalid input syntax for
+type uuid: "_antes-da-decisao-190"` — e "Gerar PP" lista a pasta da PP
+sempre (o "Salvar" e o envio, só com anexo novo). A migration
+`20261019900001` passa o primeiro segmento pela
+`tenant_do_caminho_no_storage`, que devolve NULL quando ele não é uuid: a
+pasta fora de tenant vira "sem acesso" em vez de erro. As cópias ficam onde
+estão e só a chave de serviço as lê. **Não crie pasta fora de
+`<tenant_id>/` nos outros buckets**: as policies deles têm o mesmo cast e
+quebram do mesmo jeito.
 
 ## O que o selo não cobre
 

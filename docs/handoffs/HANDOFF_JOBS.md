@@ -5966,3 +5966,37 @@ ao de uma PP válida. O PDF agora diz quando não vale.
   com o responsável, esperando a produção escolher o titular e gerar.
 - Conferido no protótipo com o código deste commit
   (https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r, versão 4).
+
+## ⚠️ Nota de 2026-10-19 (7) — A pasta das cópias da 190 travou "Gerar PP" (12h43–15h28)
+
+- **Sintoma (relatado pela produção):** "Falha ao listar anexos: invalid
+  input syntax for type uuid: "_antes-da-decisao-190"" no formulário da PP,
+  nova ou a emitir, em qualquer job. Nenhuma PP foi gerada entre a PP de
+  12h30 e a migration das 15h28.
+- **Causa:** o retroativo da 190 copiou os 112 PDFs originais para
+  `pedidos-compra/_antes-da-decisao-190/` às 12h43–12h45. As quatro
+  policies do bucket faziam `split_part(name, '/', 1)::uuid` direto, e numa
+  listagem o Postgres avalia a policy em todas as linhas do bucket antes do
+  filtro de prefixo: o cast da pasta nova estourava para qualquer usuário
+  logado. Quebrava o "Gerar PP" (lista a pasta da PP sempre), o "Salvar" da
+  PP a emitir com anexo e o envio ao financeiro com anexo novo.
+- **Correção:** migration `20261019900001_pp_storage_policy_tolera_pasta_fora_do_tenant.sql`.
+  Função `tenant_do_caminho_no_storage(name)` (uuid do primeiro segmento, ou
+  NULL quando não é uuid; `case` garante a ordem) e as policies
+  `pp_storage_*` a usam. Para os arquivos em `<tenant_id>/...` o acesso é o
+  mesmo; a pasta das cópias fica invisível para `authenticated` e segue
+  legível pela chave de serviço. Nenhum arquivo foi movido nem apagado.
+- **Conferência:** antes, a listagem como GP Teste Claude (`set local role
+  authenticated`) reproduzia o erro; depois, a pasta do job lista, o GP vê os
+  433 arquivos do tenant e nenhuma das 112 cópias, e `storage.search`
+  responde. Na tela, o GP Teste Claude gerou a PP-00266 (R$ 100,00,
+  Fornecedor Teste) no TES-1025/26 pelo servidor da 3000, cujo código é
+  anterior à 190: o PDF dela saiu sem selo. Em produção a equipe gerou a
+  PP-00265 (ANI-1012/26) às 15h31 e a PP-00267 (2GB-1002/26) às 15h33.
+- **Ficou para a produção:** PPs a emitir criadas no intervalo e ainda não
+  geradas, em BOC-1003/26, DEE-1001/26, QPC-1001/26 (3), EDU-1001/26,
+  2GB-1002/26 e AMB-1002/26. Algumas podem ser repetição da mesma tentativa.
+- **Risco que fica:** as policies dos outros buckets (avulsas, faturamentos,
+  NF, fornecedores, freelancers etc.) têm o mesmo cast. Hoje esses buckets
+  só têm pasta de tenant na raiz (conferido em 19/10); uma pasta fora disso
+  quebra a listagem do bucket inteiro do mesmo jeito.
