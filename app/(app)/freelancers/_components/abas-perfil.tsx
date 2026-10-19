@@ -22,9 +22,15 @@ interface Props {
   defaultTab?: AbaKey;
   dados: React.ReactNode;
   contratos: React.ReactNode;
+  historico: React.ReactNode;
 }
 
-export function AbasPerfil({ defaultTab = "dados", dados, contratos }: Props) {
+export function AbasPerfil({
+  defaultTab = "dados",
+  dados,
+  contratos,
+  historico,
+}: Props) {
   const [ativa, setAtiva] = React.useState<AbaKey>(defaultTab);
 
   return (
@@ -69,12 +75,7 @@ export function AbasPerfil({ defaultTab = "dados", dados, contratos }: Props) {
 
       {ativa === "dados" && <div>{dados}</div>}
       {ativa === "contratos" && <div>{contratos}</div>}
-      {ativa === "historico" && (
-        <PlaceholderAba
-          titulo="Histórico chega na Fase 4"
-          descricao="Linha do tempo com todas as alterações feitas nos dados do freelancer e nos contratos — quem mudou o quê e quando."
-        />
-      )}
+      {ativa === "historico" && <div>{historico}</div>}
     </div>
   );
 }

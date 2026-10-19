@@ -5341,6 +5341,21 @@ export interface FreelancerSolicitacaoNaoLidas {
   nao_lidas: number;
 }
 
+// ----------------------------------------------------------------------------
+// Histórico de contratos (Task 026)
+// ----------------------------------------------------------------------------
+
+export interface FreelancerContratoHistorico {
+  id: string;
+  tenant_id: string;
+  contrato_id: string;
+  campo: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  alterado_por: string | null;
+  alterado_em: string;
+}
+
 /**
  * Linha da view `freelancers_com_status`: freelancer + contrato ativo +
  * status derivados. Todos os campos de contrato são nullable porque o

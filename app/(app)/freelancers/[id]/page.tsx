@@ -14,6 +14,7 @@ import { HeroFreelancer } from "../_components/hero-freelancer";
 import { AbasPerfil } from "../_components/abas-perfil";
 import { BlocoInfo, Linha } from "../_components/bloco-info";
 import { ContratosDoFreelancer } from "../contratos/_components/contratos-do-freelancer";
+import { HistoricoContratoTimeline } from "../_components/historico-contrato-timeline";
 import { formatCnpj, formatCep, formatTelefone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export default async function FreelancerPerfilPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [freelancerRes, contratosRes] = await Promise.all([
+  const [freelancerRes, contratosRes, historicoRes] = await Promise.all([
     supabase
       .from("freelancers")
       .select("*")
@@ -42,6 +43,14 @@ export default async function FreelancerPerfilPage({
       .eq("tenant_id", session.activeTenant.id)
       .order("data_inicio", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false }),
+    supabase
+      .from("freelancer_contrato_historico")
+      .select(
+        "*, autor:profiles!alterado_por(nome), contrato:freelancer_contratos!contrato_id(nome_job, freelancer_id)",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .order("alterado_em", { ascending: false })
+      .limit(200),
   ]);
 
   const freelancer = freelancerRes.data as Freelancer | null;
@@ -58,6 +67,24 @@ export default async function FreelancerPerfilPage({
     job_codigo: c.job?.codigo ?? null,
     job_nome: c.job?.nome ?? null,
   }));
+
+  // Filtra histórico só dos contratos deste freelancer (RLS já restringiu
+  // por tenant). Nome do autor e do job vêm no join.
+  const idsDosContratos = new Set(contratos.map((c) => c.id));
+  const historico = ((historicoRes.data ?? []) as any[])
+    .filter((h) => idsDosContratos.has(h.contrato_id))
+    .map((h) => ({
+      id: h.id as string,
+      tenant_id: h.tenant_id as string,
+      contrato_id: h.contrato_id as string,
+      campo: h.campo as string,
+      valor_anterior: h.valor_anterior as string | null,
+      valor_novo: h.valor_novo as string | null,
+      alterado_por: h.alterado_por as string | null,
+      alterado_em: h.alterado_em as string,
+      alterado_por_nome: h.autor?.nome ?? null,
+      contrato_nome_job: h.contrato?.nome_job ?? null,
+    }));
 
   const podeEditar = PODE_EDITAR.has(session.activeRole);
   const temContato = !!(freelancer.email || freelancer.celular);
@@ -195,6 +222,7 @@ export default async function FreelancerPerfilPage({
             podeCriar={podeEditar}
           />
         }
+        historico={<HistoricoContratoTimeline historico={historico} />}
       />
     </div>
   );
