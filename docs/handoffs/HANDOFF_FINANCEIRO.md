@@ -7668,3 +7668,37 @@ Fecha a pendência da nota de 2026-10-17 (2). Pedido do Tiago em
     com save na fila. As caixas marcam e o rodapé segue a trava de antes.
   - tsc, lint e build limpos.
 
+
+## ⚠️ Nota de 2026-10-19 (5) — A nota do envio em lote na fila e no Faturar (decisão 188, entrega 2)
+
+- **Na fila (aba Faturamento):** as partes dos jobs de uma mesma nota do lote
+  viram **uma linha só**, com o selo "Lote": os nomes dos jobs com "+" (em
+  até duas linhas), os códigos, o mês, "Enviado em lote por", o tomador
+  (quando não é o próprio cliente) e o CNPJ da nota. A coluna Nota mostra a
+  posição no lote ("1/18") e os vencimentos contam as datas, não as parcelas.
+  O Fee de 18 notas e 4 jobs deixa de ser 72 linhas e vira 18.
+- **No Faturar:** "Faturar a nota 1 de 18 do lote", com os jobs da nota, o
+  tomador debaixo do CNPJ, o descritivo da nota já na Descrição da NF, a
+  observação do envio no quadro de quem enviou e uma parcela por vencimento
+  (a soma das partes que vencem no dia). Faturamento parcial e remover um job
+  seguem como no agrupado; o que sobra volta como linha do lote.
+- **No botão `i`:** a PO de cada job, os contatos de todos e a **Observação do
+  envio** (bloco novo, só quando existe).
+- **O número da aba** passa a contar as linhas da fila (`chaveDaLinhaDaFila`,
+  em `chave-info.ts`), não as parcelas. Vale também para a nota de um job com
+  vários vencimentos, que contava cada vencimento.
+- **Dado:** `page.tsx` lê, numa segunda onda junto dos contatos, a nota do lote
+  das notas pendentes (`jobs_envio_faturamento_notas.lote_nota_id` →
+  `envios_faturamento_lote_notas` → `envios_faturamento_lote`). A view
+  `vw_faturamento_pendente` não mudou; nenhuma migration.
+- **Pendente:** a linha do lote não tem o botão de **recebimento antes da NF**.
+  O recebido se prende a uma nota de job (`recebimentos_antes_nf.envio_nota_id`)
+  e a nota do lote é de vários; o que já estiver registrado numa parte entra
+  na parcela 1 do Faturar, como antes. Como receber antes pela nota do lote é
+  decisão a tomar.
+- **Testado:** no TES-P001/26, a nota 1 do lote (TES-1002, TES-1004 com save e
+  TES-1014, 2 vencimentos) abriu com R$ 123.866,54 em 2 × R$ 61.933,27; a
+  emissão pelo banco, em transação desfeita, gravou 7 itens (o save do TES-1004
+  em item próprio) e 2 títulos, tirou as partes da nota 1 da fila e deixou a
+  nota 2. tsc, lint e build limpos. Protótipo com as telas reais e dados
+  fictícios: https://claude.ai/artifact/7iJvNnkZgsSEX9uCC6ATY5

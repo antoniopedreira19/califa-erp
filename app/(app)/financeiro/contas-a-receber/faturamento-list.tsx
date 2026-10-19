@@ -62,7 +62,7 @@ import {
   type InfoFaturamento,
 } from "@/components/financeiro/info-faturamento-modal";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
-import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
 import {
   RecebidosAntesNfDialog,
   RecebimentoAntesNfDialog,
@@ -140,11 +140,35 @@ export interface FaturamentoPendenteRow {
    *  para faturamento; na de BV, quem confirmou o BV. */
   autor_nome: string | null;
   autor_em: string | null;
+  /** Decisão 188: a nota do envio em lote de que esta parcela é parte. Nula
+   *  no envio de um job só e no BV. */
+  lote: NotaDoLote | null;
+}
+
+/**
+ * Uma nota do envio em lote (decisão 188): a nota que o cliente pediu, com
+ * a parte de cada job. Cada parte é uma nota do envio do job; a fila junta
+ * as partes numa linha só, e o Faturar emite a nota inteira.
+ */
+export interface NotaDoLote {
+  lote_nota_id: string;
+  lote_id: string;
+  /** Posição da nota no lote, e quantas notas o lote tem. */
+  ordem: number;
+  total: number;
+  /** Para quem a nota sai, como a produção escreveu (a instituição do
+   *  e-mail do cliente). */
+  tomador_nome: string;
+  /** O valor da nota pedida, somadas as partes dos jobs. */
+  valor: number;
+  /** A observação do envio para o financeiro. Não sai na nota. */
+  observacao: string | null;
 }
 
 /**
  * Uma linha da fila: as parcelas (vencimentos) de UMA nota do envio, ou um
- * BV. Os números são a soma das parcelas.
+ * BV. Os números são a soma das parcelas. Na nota do envio em lote, as
+ * parcelas são as de todos os jobs da nota (decisão 188).
  */
 interface LinhaDaFila {
   chave: string;
@@ -156,6 +180,9 @@ interface LinhaDaFila {
   saldo: number;
   primeiroVencimento: string | null;
   ultimoVencimento: string | null;
+  /** Quantos vencimentos a nota tem. Na do lote, as partes dos jobs vencem
+   *  juntas: conta as datas, não as parcelas. */
+  vencimentos: number;
 }
 
 export interface FaturadoRow {
@@ -232,10 +259,18 @@ function dedupContatos(lista: ContatoCobranca[]): ContatoCobranca[] {
   });
 }
 
-/** A chave da linha da fila: a nota do envio junta as parcelas dela. */
-function chaveLinha(r: FaturamentoPendenteRow): string {
-  if (r.envio_nota_id) return `nota:${r.envio_nota_id}`;
-  return r.envio_parcela_id ?? `${r.origem_tipo}:${r.origem_id}`;
+/** A chave da linha da fila (`chave-info.ts`): a nota do envio junta as
+ *  parcelas dela, e a nota do envio em lote junta as partes dos jobs. */
+const chaveLinha = chaveDaLinhaDaFila;
+
+/** Os jobs distintos de uma linha, na ordem das parcelas. */
+function jobsDaLinha(l: LinhaDaFila): FaturamentoPendenteRow[] {
+  const vistos = new Set<string>();
+  return l.parcelas.filter((x) => {
+    if (vistos.has(x.origem_id)) return false;
+    vistos.add(x.origem_id);
+    return true;
+  });
 }
 
 /** Junta as parcelas de cada nota numa linha, na ordem em que aparecem. */
@@ -254,6 +289,7 @@ function agruparPorNota(rows: FaturamentoPendenteRow[]): LinhaDaFila[] {
         saldo: r.saldo,
         primeiroVencimento: r.data_prevista,
         ultimoVencimento: r.data_prevista,
+        vencimentos: 1,
       });
       continue;
     }
@@ -271,8 +307,31 @@ function agruparPorNota(rows: FaturamentoPendenteRow[]): LinhaDaFila[] {
     }
   }
   const linhas = Array.from(porChave.values());
-  for (const l of linhas) l.parcelas.sort((a, b) => a.parcela_numero - b.parcela_numero);
-  return linhas;
+  for (const l of linhas) {
+    // Na nota do lote, job a job: as parcelas de cada job ficam juntas.
+    l.parcelas.sort(
+      (a, b) =>
+        (l.p.lote ? (a.codigo ?? "").localeCompare(b.codigo ?? "") : 0) || a.parcela_numero - b.parcela_numero,
+    );
+    if (l.p.lote) l.p = l.parcelas[0];
+    l.vencimentos = l.p.lote
+      ? new Set(l.parcelas.map((x) => x.data_prevista ?? "")).size
+      : l.parcelas.length;
+  }
+  // A ordem continua a do vencimento; no empate, as notas de um mesmo lote
+  // seguem a ordem do lote (1/2 antes de 2/2).
+  return linhas
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => {
+      const va = a.l.primeiroVencimento ?? "9999-12-31";
+      const vb = b.l.primeiroVencimento ?? "9999-12-31";
+      if (va !== vb) return va.localeCompare(vb);
+      const la = a.l.p.lote;
+      const lb = b.l.p.lote;
+      if (la && lb && la.lote_id === lb.lote_id) return la.ordem - lb.ordem;
+      return a.i - b.i;
+    })
+    .map((x) => x.l);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,9 +349,10 @@ type LinhaDaTabela = { tipo: "pendente"; l: LinhaDaFila } | { tipo: "faturado"; 
 /** O selo da coluna Origem. */
 function origemDaLinha(x: LinhaDaTabela): string {
   if (x.tipo === "faturado") return "Faturado";
+  if (x.l.p.lote) return "Lote";
   return x.l.p.origem_tipo === "bv" ? "BV" : "Job";
 }
-const ORDEM_DA_ORIGEM = ["Job", "BV", "Faturado"];
+const ORDEM_DA_ORIGEM = ["Job", "Lote", "BV", "Faturado"];
 
 /** O cliente, como o filtro "Cliente" de cima chama: o BV vem com o
  *  fornecedor, rotulado — é dele que a nota cobra. */
@@ -304,7 +364,10 @@ function contraparteDaLinha(x: LinhaDaTabela): string {
 
 /** O que a coluna "Job / descrição" mostra em negrito. */
 function descricaoDaLinha(x: LinhaDaTabela): string {
-  if (x.tipo === "pendente") return x.l.p.descricao;
+  // A nota do lote junta os jobs, como a nota emitida de vários jobs.
+  if (x.tipo === "pendente") {
+    return x.l.p.lote ? jobsDaLinha(x.l).map((j) => j.descricao).join(" + ") : x.l.p.descricao;
+  }
   return [...new Set(x.f.itens.map((i) => i.descricao.split(" — ")[0]))].join(" + ");
 }
 
@@ -327,9 +390,10 @@ const COLUNAS: ColunaFiltravel<LinhaDaTabela>[] = [
       const extra =
         x.tipo === "pendente"
           ? [
-              x.l.p.codigo ?? "",
+              ...jobsDaLinha(x.l).map((j) => j.codigo ?? ""),
               x.l.p.mes_referencia ? rotuloMes(x.l.p.mes_referencia) : "",
               x.l.p.autor_nome ?? "",
+              x.l.p.lote?.tomador_nome ?? "",
             ]
           : [...x.f.itens.map((i) => i.codigo), ...x.f.autores.map((a) => a.nome)];
       return { ...celulaTexto(texto), busca: [texto, ...extra].join(" ") };
@@ -381,9 +445,10 @@ const COLUNAS: ColunaFiltravel<LinhaDaTabela>[] = [
         const t = x.f.qtd_parcelas > 1 ? `${x.f.qtd_parcelas}x` : "1/1";
         return { ...celulaTexto(t), ordem: 1000 + x.f.qtd_parcelas };
       }
-      const ordem = x.l.p.nota_ordem ?? 1;
-      const total = x.l.p.nota_total ?? 1;
-      const venc = x.l.parcelas.length > 1 ? ` ${x.l.parcelas.length} venc.` : "";
+      // Na nota do lote, a posição é a da nota no lote (decisão 188).
+      const ordem = x.l.p.lote?.ordem ?? x.l.p.nota_ordem ?? 1;
+      const total = x.l.p.lote?.total ?? x.l.p.nota_total ?? 1;
+      const venc = x.l.vencimentos > 1 ? ` ${x.l.vencimentos} venc.` : "";
       return { ...celulaTexto(`${ordem}/${total}`), ordem: total * 10 + ordem, busca: `${ordem}/${total}${venc}` };
     },
   },
@@ -567,6 +632,27 @@ export function FaturamentoList({
       (p.nota_ordem && p.nota_total ? ` · NF ${p.nota_ordem}/${p.nota_total}` : "");
     const saldoProprio = linha.parcelas.reduce((t, x) => t + x.saldo_proprio, 0);
     const saldoSave = linha.parcelas.reduce((t, x) => t + x.saldo_save, 0);
+    // A nota do envio em lote (decisão 188): a PO de cada job, os contatos
+    // de todos, e a observação do envio.
+    if (p.lote) {
+      const jobsDaNota = jobsDaLinha(linha);
+      const dadosDosJobs = jobsDaNota.map((j) =>
+        j.job_id ? (infoPorJob[chaveInfoDoEnvio(j.job_id, j.mes_referencia)] ?? infoPorJob[j.job_id]) : undefined,
+      );
+      return {
+        referencia:
+          `Nota ${p.lote.ordem}/${p.lote.total} do lote · ${p.contraparte_nome}` +
+          (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : ""),
+        pos: jobsDaNota.map((j, i) => ({ job: j.codigo ?? "", po: dadosDosJobs[i]?.po ?? null })),
+        descricaoNf: p.descritivo_nota,
+        anexosPo: dadosDosJobs.flatMap((d) => d?.anexos ?? []),
+        cnpj: p.cnpj_tomador,
+        cnaeSugerido: p.cnae_sugerido,
+        contatos: dedupContatos(dadosDosJobs.flatMap((d) => d?.contatos ?? [])),
+        quebra: saldoSave > 0.005 ? { job: saldoProprio, save: saldoSave } : null,
+        observacao: p.lote.observacao,
+      };
+    }
     if (p.origem_tipo === "bv") {
       return {
         referencia,
@@ -620,6 +706,9 @@ export function FaturamentoList({
    *  que não aceita (parcela de envio anterior às notas). */
   function alvoDoRecebido(linha: LinhaDaFila): AlvoDoRecebidoAntes | null {
     const p = linha.p;
+    // A nota do lote ainda não aceita: o recebido antes da NF se prende a
+    // UMA nota de job, e a do lote é de vários (decisão 188, pendente).
+    if (p.lote) return null;
     const chave = chaveAntes(p);
     if (!chave) return null;
     const vencimentos = linha.parcelas.length;
@@ -1149,14 +1238,25 @@ export function FaturamentoList({
                     </td>
                   )}
                   <td className="px-4 py-3">
-                    <ChipOrigem tipo={p.origem_tipo} />
+                    <ChipOrigem tipo={p.lote ? "lote" : p.origem_tipo} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-semibold">{p.descricao}</span>
+                      {/* A nota do lote junta os jobs, como a nota emitida de
+                          vários jobs: os nomes com "+", os códigos embaixo.
+                          Com largura máxima: a tabela é `w-max`, e os nomes
+                          de 4 jobs numa linha só empurravam a coluna Ação
+                          para fora da tela. */}
+                      <span className={cn("font-semibold", p.lote && "line-clamp-2 max-w-[440px]")}>
+                        {p.lote ? jobsDaLinha(linha).map((j) => j.descricao).join(" + ") : p.descricao}
+                      </span>
                       {p.codigo && (
                         <span className="font-mono text-[11px] text-muted-foreground">
-                          {p.codigo}
+                          {p.lote
+                            ? jobsDaLinha(linha)
+                                .map((j) => j.codigo)
+                                .join(", ")
+                            : p.codigo}
                         </span>
                       )}
                       {p.mes_referencia && (
@@ -1168,7 +1268,11 @@ export function FaturamentoList({
                           faturamento, ou quem confirmou o BV. */}
                       {p.autor_nome && (
                         <span className="text-[11px] text-muted-foreground">
-                          {p.origem_tipo === "bv" ? "BV confirmado por" : "Enviado por"}{" "}
+                          {p.origem_tipo === "bv"
+                            ? "BV confirmado por"
+                            : p.lote
+                              ? "Enviado em lote por"
+                              : "Enviado por"}{" "}
                           <span className="font-semibold text-foreground">{p.autor_nome}</span>
                           {p.autor_em ? ` · ${formatDataHoraCurta(p.autor_em)}` : ""}
                         </span>
@@ -1196,6 +1300,14 @@ export function FaturamentoList({
                   <td className="px-4 py-3 text-xs text-muted-foreground">
                     <div className="flex flex-col gap-0.5">
                       <span>{p.contraparte_nome}</span>
+                      {/* O tomador que a produção escreveu no lote (decisão
+                          188), quando não é o próprio cliente. */}
+                      {p.lote &&
+                        p.lote.tomador_nome.trim().toLowerCase() !== p.contraparte_nome.trim().toLowerCase() && (
+                        <span className="text-[11px] font-medium text-foreground">
+                          {p.lote.tomador_nome}
+                        </span>
+                      )}
                       {/* O CNPJ para o qual a nota sai (decisão 123): pode
                           não ser o do cadastro do cliente. */}
                       {p.cnpj_tomador && (
@@ -1220,22 +1332,24 @@ export function FaturamentoList({
                         {formatMoney(linha.saldo)}
                       </span>
                       <span className="text-[10.5px] text-muted-foreground">
-                        {(p.nota_total ?? 1) > 1
-                          ? `de ${formatMoney(p.saldo_job)} ${p.mes_referencia ? "no mês" : "no job"}`
-                          : p.mes_referencia
-                            ? "total do mês"
-                            : "total do job"}
+                        {p.lote
+                          ? `${jobsDaLinha(linha).length} ${jobsDaLinha(linha).length > 1 ? "jobs" : "job"} nesta nota`
+                          : (p.nota_total ?? 1) > 1
+                            ? `de ${formatMoney(p.saldo_job)} ${p.mes_referencia ? "no mês" : "no job"}`
+                            : p.mes_referencia
+                              ? "total do mês"
+                              : "total do job"}
                       </span>
                     </div>
                   </td>
                   <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                     <div className="flex flex-col gap-0.5">
                       <span>
-                        {p.nota_ordem ?? 1}/{p.nota_total ?? 1}
+                        {p.lote?.ordem ?? p.nota_ordem ?? 1}/{p.lote?.total ?? p.nota_total ?? 1}
                       </span>
-                      {linha.parcelas.length > 1 && (
+                      {linha.vencimentos > 1 && (
                         <span className="font-sans text-[10.5px]">
-                          {linha.parcelas.length} venc.
+                          {linha.vencimentos} venc.
                         </span>
                       )}
                     </div>
@@ -1243,7 +1357,7 @@ export function FaturamentoList({
                   <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
                     <div className="flex flex-col gap-0.5">
                       <span>{formatDate(linha.primeiroVencimento)}</span>
-                      {linha.parcelas.length > 1 && (
+                      {linha.vencimentos > 1 && (
                         <span className="font-sans text-[10.5px]">
                           até {formatDate(linha.ultimoVencimento)}
                         </span>
@@ -1627,17 +1741,20 @@ export function FaturamentoList({
 // Peças pequenas
 // ---------------------------------------------------------------------------
 
-function ChipOrigem({ tipo }: { tipo: "job" | "bv" }) {
+function ChipOrigem({ tipo }: { tipo: "job" | "bv" | "lote" }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
         tipo === "bv"
           ? "border-violet-200 bg-violet-50 text-violet-700"
-          : "border-border bg-muted text-muted-foreground",
+          : tipo === "lote"
+            ? "border-sky-200 bg-sky-50 text-sky-700"
+            : "border-border bg-muted text-muted-foreground",
       )}
     >
-      {tipo === "bv" ? "BV" : "Job"}
+      {tipo === "lote" && <Layers className="h-2.5 w-2.5" />}
+      {tipo === "bv" ? "BV" : tipo === "lote" ? "Lote" : "Job"}
     </span>
   );
 }
