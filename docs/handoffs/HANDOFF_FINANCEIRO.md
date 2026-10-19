@@ -7578,3 +7578,21 @@ de `lib/formatar-data-hora.ts`. Sem migration, nenhum dado mudou.
   aprovação sem documento não o trata como verba.
 - Os comprovantes **não viram nota fiscal** do módulo fiscal; o reembolso
   fica fora da retenção e da remessa, como a verba.
+
+## ⚠️ Nota de 2026-10-19 (1) — a empresa do job em "Dados da produção" e na conferência da fila
+
+- **O quê:** a linha **Empresa**, logo abaixo de Projeto, no painel "Dados
+  da produção" do formulário da abertura (fila, revisão, job aberto) e no
+  pop-up "Conferir o job antes de abrir" da fila. Pedido do Tiago num
+  comentário do protótipo "Save na Abertura" (19/10/2026).
+- **O dado:** `jobs.empresa_id`, que o gatilho `enforce_empresa_from_projeto`
+  copia do projeto — nome fantasia, ou a razão social. `JobNaFila` ganhou
+  `empresa_nome` (obrigatório), lido no mesmo select da fila com o embed
+  `empresa:empresas!jobs_empresa_id_fkey(...)`; nenhuma consulta nova.
+- **Sem regra nova:** só exibição, por isso sem decisão numerada. A mesma
+  linha entrou no envio da produção (ver `HANDOFF_ORCAMENTO.md`, nota de
+  2026-10-19).
+- **Conferido no dev do worktree, como administrador:** TES-1029/26
+  (aguardando abertura) mostrou "Empresa · Empresa Teste" no painel e na
+  conferência da fila.
+

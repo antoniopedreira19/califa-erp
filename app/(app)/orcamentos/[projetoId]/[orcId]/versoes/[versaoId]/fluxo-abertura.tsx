@@ -146,6 +146,10 @@ interface Props {
    *  a sigla do cliente mudou e ele não serve mais. */
   codigoReservado: string | null;
   projetoNome: string;
+  /** A empresa do projeto — que vira a do job (o gatilho
+   *  `enforce_empresa_from_projeto` a copia). O resumo do envio e o
+   *  formulário a mostram logo abaixo do Projeto (Tiago, 19/10/2026). */
+  empresaNome: string;
 
   /** Produto, categoria e serviço: só exibidos. O servidor relê o produto
    *  do projeto na hora de gravar o job. */
@@ -214,6 +218,7 @@ export function FluxoAbertura({
   proximoCodigoJob,
   codigoReservado,
   projetoNome,
+  empresaNome,
   herdados,
   regionaisDoProjeto,
   gps,
@@ -440,6 +445,8 @@ export function FluxoAbertura({
     { rotulo: "Código", valor: job?.codigo ?? proximoCodigoJob, mono: true },
     // Só o nome: o único código da conferência é o do job (30/09/2026).
     { rotulo: "Projeto", valor: projetoNome },
+    // A empresa do job, que vem do projeto (19/10/2026).
+    { rotulo: "Empresa", valor: empresaNome },
     { rotulo: "Cliente", valor: clienteNome },
     { rotulo: "Marca", valor: herdados.produtoNome ?? "— não informada" },
     {
@@ -738,6 +745,7 @@ export function FluxoAbertura({
         onChange={(patch) => setDados((d) => ({ ...d, ...patch }))}
         orcamentoNome={orcamentoNome}
         projetoNome={projetoNome}
+        empresaNome={empresaNome}
         clienteNome={clienteNome}
         codigoJob={job?.codigo ?? proximoCodigoJob}
         codigoReaproveitado={!job && codigoReservado !== null}

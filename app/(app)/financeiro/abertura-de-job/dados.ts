@@ -56,6 +56,11 @@ export interface JobNaFila {
   projeto_id: string;
   projeto_codigo: string | null;
   projeto_nome: string | null;
+  /** A empresa do job (`jobs.empresa_id`, que o gatilho
+   *  `enforce_empresa_from_projeto` copia do projeto): nome fantasia, ou a
+   *  razão social. O painel "Dados da produção" e a conferência a mostram
+   *  logo abaixo do Projeto (Tiago, 19/10/2026). */
+  empresa_nome: string | null;
   /** Cliente do projeto de produção. Filtra o combo de projeto do
    *  financeiro e vira o `cliente_id` do projeto criado ali. */
   cliente_id: string | null;
@@ -329,6 +334,9 @@ const SELECT_JOB_FILA =
   // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
   "servico_id, servico:categorias_dominio!servico_id(nome), " +
   "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+  // A empresa do job. Dica de FK por segurança: `jobs` tem uma FK só para
+  // `empresas` hoje, mas uma segunda deixaria o embed ambíguo (HTTP 300).
+  "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
   "projeto_financeiro:projetos_financeiro(codigo, nome), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
@@ -434,6 +442,7 @@ function montarJobNaFila(
     projeto_id: j.projeto_id,
     projeto_codigo: j.projeto?.codigo ?? null,
     projeto_nome: j.projeto?.nome ?? null,
+    empresa_nome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
     cliente_id: j.projeto?.cliente_id ?? null,
     cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
     projeto_financeiro_id: j.projeto_financeiro_id ?? null,

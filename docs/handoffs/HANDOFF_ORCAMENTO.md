@@ -5647,3 +5647,21 @@ aplicada na hora combinada com a frente do Antonio, junto da
   4 abas e a V4 importada como v2 do TES-P001/26-03 (dado de teste deixado:
   orçado R$ 42.549,10, planejado R$ 41.323,90, aviso de 13% × 12% e a
   auditoria com `honorarios_planilha_ignorado: 13`).
+
+## ⚠️ Nota de 2026-10-19 — a empresa do job no envio para abertura
+
+- **O quê:** a empresa do job aparece no envio para abertura, logo abaixo
+  do Projeto, como no painel "Dados da produção" do financeiro:
+  - no formulário "Enviar job para abertura", como apoio do campo
+    Projeto ("Empresa: …"), para a primeira linha seguir com três campos
+    (Projeto, Código do job, Cliente);
+  - no resumo do envio ("Dados do job" e a confirmação), como a linha
+    **Empresa** depois de Projeto.
+- **O dado:** a empresa do PROJETO — que vira a do job, pelo gatilho
+  `enforce_empresa_from_projeto`. Ela já vinha no select do projeto da
+  página do orçamento; `FluxoAbertura` e `EnviarJobModal` ganharam a prop
+  `empresaNome` (obrigatória).
+- **Conferido no dev do worktree, como administrador:** o formulário do
+  TES-P001/26-12 (aberto e fechado sem enviar) e "Ver dados do job" do
+  TES-P001/26-07 (TES-1029/26) mostraram "Empresa Teste".
+
