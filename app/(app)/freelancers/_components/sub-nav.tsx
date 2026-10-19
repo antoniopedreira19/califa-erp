@@ -51,7 +51,7 @@ export function FreelancersSubNav() {
   return (
     <div className="border-b border-border -mx-5 md:-mx-8 px-5 md:px-8 mb-6">
       <nav
-        className="flex items-center gap-1 overflow-x-auto"
+        className="flex items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="tablist"
         aria-label="Seções do módulo Freelancers"
       >
