@@ -7702,3 +7702,58 @@ Fecha a pendência da nota de 2026-10-17 (2). Pedido do Tiago em
   em item próprio) e 2 títulos, tirou as partes da nota 1 da fila e deixou a
   nota 2. tsc, lint e build limpos. Protótipo com as telas reais e dados
   fictícios: https://claude.ai/artifact/7iJvNnkZgsSEX9uCC6ATY5
+
+## ⚠️ Nota de 2026-10-19 (6) — o "hoje" de Brasília nas datas que gravam ou marcam situação
+
+O "hoje" do sistema era o de UTC em dois lugares: no código
+(`new Date().toISOString().slice(0, 10)`, no servidor e no navegador) e no
+banco (`current_date`, com o banco em `TimeZone = UTC`). Das 21h à
+meia-noite de Brasília, os dois já são o dia seguinte. A auditoria de
+19/10/2026 achou 32 ocorrências no código (Jobs e Financeiro) e 16 funções
+e 2 views no banco. O Tiago escolheu a recomendação: no código, o que grava
+dado ou marca situação; no banco, só os estornos.
+
+- **Código** (`hojeEmSaoPauloIso()`, de `lib/calculos/janelas-pagamento.ts`):
+  - **Remessa CNAB** e **Aprovar desembolso:** a "Data de pagamento" vinha
+    preenchida com amanhã.
+  - **Código do projeto do financeiro** sem data de início: em 31/12 depois
+    das 21h, o código sairia com o ano seguinte (`/27` em vez de `/26`).
+  - **Reativar recorrência:** a que vence amanhã contava como vencida e
+    tinha a próxima data recalculada.
+  - **"Inadimplente"** (`faturamentoPorJob`, a lista Visualizar Jobs e a
+    página do job no financeiro): a nota que vence hoje já marcava o job.
+    Na página do job, só a inadimplência mudou. O `hoje` da página segue o
+    de UTC porque alimenta o fluxo, que acompanha a `vw_fluxo_caixa`.
+- **Banco** (migration `20261019700001`): função nova
+  `public.hoje_em_sao_paulo()`, par do `hojeEmSaoPauloIso()`. As 7 funções
+  que lançam estorno (`estornar_baixa_avulsa`, `_desembolso_parcela`,
+  `_devolucao_verba`, `_fatura_cartao`, `_pp_parcela`, `_titulo` e o gatilho
+  `avulsa_estorno_lanca_no_cartao`) trocaram o seu único `current_date` por
+  ela. Antes, o estorno feito à noite caía no extrato do dia seguinte e não
+  batia com o do banco na conciliação. A troca foi feita sobre a definição
+  no ar: o md5 de cada função depois da migration é igual ao da definição
+  anterior com só essa troca. Dono (`postgres`), `security definer` e
+  GRANTs ficaram como estavam. Algumas funções são da frente do Antonio
+  (o estorno do cartão); a mudança foi autorizada pelo Tiago.
+- **Conferido:** com o relógio parado às 23:30 de 31/12 e o processo em UTC,
+  o código antigo dava `2027-01-01` e o novo dá `2026-12-31`. No banco, o
+  instante da errata do TES-1014/26 (23:54 de 08/10) dá 08/10 em Brasília e
+  09/10 em UTC. No dev do worktree, como administrador e sem gravar nada:
+  Aprovar desembolso e Exportar remessa Santander abrem com 19/10/2026;
+  Visualizar Jobs e a página do job no financeiro carregam sem erro.
+- **Ficaram em UTC, de propósito ou para depois:**
+  - **Fluxo de caixa e "Saldo hoje":** o código acompanha a `vw_fluxo_caixa`,
+    que usa `current_date`. Mudar um lado sem o outro faz os dois
+    discordarem à noite.
+  - **Filtros "vencidas" do Contas a Pagar e do Contas a Receber, contagem
+    de vencidos na entrada do Financeiro, home:** só contagem e filtro, sem
+    gravar nada. Os arquivos são da frente do Antonio.
+  - **No banco:** a data da compra padrão da fatura do cartão
+    (`avulsa_entra_na_fatura`), o resumo da conciliação, o cálculo da
+    próxima data da recorrência e a `vw_fluxo_caixa`. As duas rotinas
+    agendadas (recorrentes e rolagem da previsão) rodam às 06:00 UTC, 03:00
+    em Brasília, e não são afetadas.
+  - **Certos como estão:** 7 lugares fazem conta de data em UTC de propósito
+    (`Date.UTC`, `T12:00:00Z`), e o calendário (`DatePicker`) devolve a
+    meia-noite local.
+

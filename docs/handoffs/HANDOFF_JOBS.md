@@ -5761,7 +5761,9 @@ nova, sem migration, nenhum dado mudou.
   pedido do Tiago, apesar de a tela ser da frente do Antonio: ver a nota
   de 2026-10-19 (3) do `HANDOFF_FINANCEIRO.md`. (2) Vários `new Date().toISOString().slice(0, 10)` calculam
   o "hoje" em UTC: depois das 21h, "hoje" já é amanhã. Não é exibição de
-  `timestamptz` e ficou fora desta correção.
+  `timestamptz` e ficou fora desta correção. ⚠️ **Auditado e em parte
+  corrigido em 2026-10-19:** ver a nota de 2026-10-19 (6) do
+  `HANDOFF_FINANCEIRO.md`.
 
 ## ⚠️ Nota de 2026-10-17 — Histórico de versões da Planilha Interna (decisão 186)
 

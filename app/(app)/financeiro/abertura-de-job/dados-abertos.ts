@@ -9,6 +9,7 @@ import {
 import { caixaPorJob, CAIXA_VAZIO } from "@/lib/data/caixa-por-job";
 import { servicoPorOrcamento } from "@/lib/data/servicos";
 import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export type { SituacaoFaturamento };
 
@@ -192,7 +193,7 @@ export const STATUS_NA_LISTA = [
  */
 export async function listarJobsDoFinanceiro(
   tenantId: string,
-  hoje: string = new Date().toISOString().slice(0, 10),
+  hoje: string = hojeEmSaoPauloIso(),
 ): Promise<JobAberto[]> {
   const supabase = createClient();
 

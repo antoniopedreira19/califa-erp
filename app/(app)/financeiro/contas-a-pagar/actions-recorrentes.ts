@@ -8,6 +8,7 @@ import {
   criarContaRecorrenteSchema,
   editarContaRecorrenteSchema,
 } from "@/lib/validations/conta-recorrente";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 type Ok<T = { id: string }> = { ok: true } & Partial<T>;
 type Err = { ok: false; message: string; fieldErrors?: Record<string, string[]> };
@@ -384,7 +385,9 @@ export async function reativarContaRecorrente(id: string): Promise<Result> {
   if (!atual) return { ok: false, message: "Recorrência não encontrada." };
 
   // Se proxima_data já passou, recalcula.
-  const hoje = new Date().toISOString().slice(0, 10);
+  // Hoje em Brasília: em UTC, depois das 21h a recorrência que vence
+  // amanhã já contava como vencida e tinha a próxima data recalculada.
+  const hoje = hojeEmSaoPauloIso();
   let novaProxData: string | null = null;
   if (atual.proxima_data <= hoje) {
     const { data: prox } = await supabase.rpc("calcular_proxima_data_inicial", {
