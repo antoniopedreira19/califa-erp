@@ -338,20 +338,20 @@ test("B PIX, chave CPF do próprio favorecido: 14 posições com zeros e a chave
 });
 
 test("B PIX, chave CPF de outra pessoa num fornecedor CNPJ: 019-032 é a chave (G035)", () => {
-  // O caso de 10/09/2026: CNPJ 00.000.000/0001-00 com chave CPF — o banco
+  // O caso de 10/09/2026: CNPJ 11.222.333/0001-81 com chave CPF — o banco
   // recusou porque os dois campos divergiam.
-  const linha = montarSegmentoBPixChave(1, 2, pix("cpf", "11144477735", "00000000000100"));
+  const linha = montarSegmentoBPixChave(1, 2, pix("cpf", "11144477735", "11222333000181"));
   assert.equal(linha.slice(17, 18), "1", "inscrição da chave, não do cadastro");
   assert.equal(linha.slice(18, 32), "00011144477735");
   assert.equal(linha.slice(127, 226).trimEnd(), "11144477735");
 });
 
 test("B PIX, chave CNPJ: tipo 2 e o CNPJ da chave", () => {
-  const linha = montarSegmentoBPixChave(1, 2, pix("cnpj", "00000000000100", "11144477735"));
+  const linha = montarSegmentoBPixChave(1, 2, pix("cnpj", "11222333000181", "11144477735"));
   assert.equal(linha.slice(14, 16), "03");
   assert.equal(linha.slice(17, 18), "2");
-  assert.equal(linha.slice(18, 32), "00000000000100");
-  assert.equal(linha.slice(127, 226).trimEnd(), "00000000000100");
+  assert.equal(linha.slice(18, 32), "11222333000181");
+  assert.equal(linha.slice(127, 226).trimEnd(), "11222333000181");
 });
 
 test("B PIX, chaves telefone, e-mail e aleatória: 019-032 é o documento do favorecido", () => {
@@ -361,11 +361,11 @@ test("B PIX, chaves telefone, e-mail e aleatória: 019-032 é o documento do fav
     ["aleatoria", "123e4567-e89b-12d3-a456-426614174000", "04"],
   ];
   for (const [tipo, chave, forma] of casos) {
-    const linha = montarSegmentoBPixChave(1, 2, pix(tipo, chave, "00000000000100"));
+    const linha = montarSegmentoBPixChave(1, 2, pix(tipo, chave, "11222333000181"));
     assert.equal(linha.length, 240, tipo);
     assert.equal(linha.slice(14, 16), forma, `forma de iniciação ${tipo}`);
     assert.equal(linha.slice(17, 18), "2", tipo);
-    assert.equal(linha.slice(18, 32), "00000000000100", tipo);
+    assert.equal(linha.slice(18, 32), "11222333000181", tipo);
     assert.equal(linha.slice(127, 226).trimEnd(), chave, `Informação 12 ${tipo}`);
   }
 });
@@ -405,7 +405,7 @@ test("Arquivo PIX completo: estrutura do PE000014 corrigida", () => {
 
 test("problemaDaChavePix aceita as chaves no formato do banco", () => {
   assert.equal(problemaDaChavePix("cpf", "111.444.777-35"), null);
-  assert.equal(problemaDaChavePix("cnpj", "00.000.000/0001-00"), null);
+  assert.equal(problemaDaChavePix("cnpj", "11.222.333/0001-81"), null);
   assert.equal(problemaDaChavePix("telefone", "(71) 99999-8888"), null);
   assert.equal(problemaDaChavePix("telefone", "+55 71 99999-8888"), null);
   assert.equal(problemaDaChavePix("email", "Financeiro@Fornecedor.com.br"), null);
@@ -429,7 +429,7 @@ test("problemaDaChavePix recusa o que o banco não aceita", () => {
 test("normalizarChavePix + PIX_FORMATO: o canônico bate com a CHECK do banco", () => {
   const casos: Array<[PixTipo, string]> = [
     ["cpf", "111.444.777-35"],
-    ["cnpj", "00.000.000/0001-00"],
+    ["cnpj", "11.222.333/0001-81"],
     ["telefone", "71999998888"],
     ["email", " Fulano@Exemplo.COM "],
     ["aleatoria", "123E4567E89B12D3A456426614174000"],

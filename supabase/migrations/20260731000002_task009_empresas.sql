@@ -142,7 +142,7 @@ begin
       'CALIFÓRNIA FILMES E PUBLICIDADE LTDA', 'California',
       '19437976000154', 'ISENTO', '479604001-42',
       'AV. DA FRANÇA', '393', 'SETOR 2', 'Comércio', 'Salvador', 'BA', '40010000',
-      '00000000000', null,
+      '11000002400', null,
       null, null,
       true, true
     );

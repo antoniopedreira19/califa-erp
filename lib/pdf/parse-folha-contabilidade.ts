@@ -6,18 +6,18 @@
  * Formato real do texto extraído por pdf-parse v1 (observado em produção):
  *
  *   Empregados                                       ← header da seção
- *   110.000.018-0001 COLABORADOR EXEMPLO 01          ← CPF + código(colados) + nome
+ *   190.000.001-0001 COLABORADOR EXEMPLO 01          ← CPF + código(colados) + nome
  *   05/10/2026                                       ← data
  *   1.988,40                                         ← valor
- *   100.000.002-0002 COLABORADOR EXEMPLO 02          ← próxima linha
+ *   190.000.002-0002 COLABORADOR EXEMPLO 02          ← próxima linha
  *   ...
  *   Estagiários                                      ← header próxima seção
- *   200.000.001-0001 ESTAGIARIO EXEMPLO 01
+ *   290.000.001-0001 ESTAGIARIO EXEMPLO 01
  *   05/10/2026
  *   2.000,00
  *   ...
  *   Contribuintes
- *   300.000.001-0001 CONTRIBUINTE EXEMPLO 01
+ *   390.000.001-0001 CONTRIBUINTE EXEMPLO 01
  *   05/10/2026
  *   1.442,69
  *   Contribuintes: 1Empregados: 30Estagiários: 2125.281,45   ← rodapé grudado
@@ -64,7 +64,7 @@ const RE_CNPJ = /CNPJ[\s:]*([\d./-]+)/i;
 const RE_COMPETENCIA = /Compet[eê]ncia[\s:]*(\d{2})\/(\d{4})/i;
 
 // Linha de colaborador: CPF (xxx.xxx.xxx-xx) + código (dígitos sem separador)
-// + espaço + nome. Ex: "110.000.018-0001 COLABORADOR EXEMPLO 01"
+// + espaço + nome. Ex: "190.000.001-0001 COLABORADOR EXEMPLO 01"
 const RE_LINHA_CPF_CODIGO_NOME =
   /^(\d{3}\.\d{3}\.\d{3}-\d{2})(\d+)\s+(.+?)\s*$/;
 const RE_DATA = /^(\d{2}\/\d{2}\/\d{4})$/;

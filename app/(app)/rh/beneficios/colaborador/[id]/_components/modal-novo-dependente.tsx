@@ -198,7 +198,7 @@ export function ModalNovoDependente({
                 inputMode="numeric"
                 value={cpf}
                 onChange={(e) => setCpf(formatarCpf(e.target.value))}
-                placeholder="000.000.000-00"
+                placeholder="110.000.024-00"
                 className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/20"
               />
             </div>

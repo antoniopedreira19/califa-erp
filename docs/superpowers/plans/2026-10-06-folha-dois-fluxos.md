@@ -787,14 +787,14 @@ Cálculo: Folha Mensal
 Competência: 09/2026
 ...
 Empregados
-01 COLABORADOR EXEMPLO 01 110.000.018-00 1.988,40 05/10/2026
-02 COLABORADOR EXEMPLO 02 100.000.002-00 3.191,42 05/10/2026
+01 COLABORADOR EXEMPLO 01 190.000.001-00 1.988,40 05/10/2026
+02 COLABORADOR EXEMPLO 02 190.000.002-00 3.191,42 05/10/2026
 ...
 Estagiários
-01 ESTAGIARIO EXEMPLO 01 200.000.001-00 2.000,00 05/10/2026
-02 ESTAGIARIO EXEMPLO 02 200.000.002-00 2.000,00 05/10/2026
+01 ESTAGIARIO EXEMPLO 01 290.000.001-00 2.000,00 05/10/2026
+02 ESTAGIARIO EXEMPLO 02 290.000.002-00 2.000,00 05/10/2026
 Contribuintes
-01 CONTRIBUINTE EXEMPLO 01 300.000.001-00 1.442,69 05/10/2026
+01 CONTRIBUINTE EXEMPLO 01 390.000.001-00 1.442,69 05/10/2026
 Empregados: 30 Estagiários: 2 Contribuintes: 1 Total da Empresa: 125.281,45
 ```
 
@@ -843,7 +843,7 @@ test("normaliza CPF (remove pontos e traços)", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
   const caroline = r.linhas.find(l => l.nome.startsWith("CAROLINE"));
   assert.ok(caroline);
-  assert.equal(caroline.cpf, "11000001800");
+  assert.equal(caroline.cpf, "19000000100");
   assert.equal(caroline.cpf.length, 11);
   assert.match(caroline.cpf, /^\d+$/);
 });

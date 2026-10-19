@@ -199,7 +199,7 @@ function PixChaveInput({
         defaultValue={initialValue}
         onDigitsChange={onDigitsChange}
         ref={maskRef}
-        placeholder={tipo === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"}
+        placeholder={tipo === "cpf" ? "110.000.024-00" : "00.000.000/0000-00"}
       />
     );
   }

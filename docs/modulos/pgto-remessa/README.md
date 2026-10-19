@@ -74,7 +74,7 @@ Substituir o pagamento manual (um a um, dentro do internet banking) por **geraç
 
 - Config CNAB da conta `California Santander` (convênio `00334682004906997169`, ag. 4682, cc. 13005989-7, sequencial 13) preenchida com dados do `PE000013.TXT` (arquivo antigo aceito pelo Santander).
 - Endereço fiscal da California Filmes preenchido (Salvador/BA).
-- Dados bancários do colaborador de teste (`Teste`, CPF 11144477735): PIX (CPF) + banco Nubank (260) ag. 0001 / cc. 14720239-6.
+- Dados bancários do colaborador de teste (`Teste`, CPF 19000009800): PIX (CPF) + banco Nubank (260) ag. 0001 / cc. 14720239-6.
 - E2E preparado até o botão de geração: salário do "Teste" reduzido pra R$ 1, folha 09/2026 aprovada, 2 `contas_avulsas` materializadas (rateio 50/50) prontas pra virar o primeiro `.REM` real.
 
 ### O que ainda falta

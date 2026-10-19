@@ -21,7 +21,7 @@ do PIX:
 |---|---|---|
 | 07/08 | CPF do favorecido **zerado** (posições 019–032) e a chave na Informação 12 | G035 |
 | 01/09 | CPF encostado à esquerda com brancos (`11000001900   `) | G042: à direita, zeros à esquerda |
-| 10/09 | Favorecido CNPJ 00.000.000/0001-00 com chave CPF 111.444.777-35: os dois campos divergiam | G035: na chave CPF/CNPJ, 019–032 **é** a chave |
+| 10/09 | Favorecido CNPJ 00.000.000/0001-00 com chave CPF 190.000.099-00: os dois campos divergiam | G035: na chave CPF/CNPJ, 019–032 **é** a chave |
 
 Os três arquivos vinham do Publi. O arquivo do ERP (PE000014, 21/09) já
 acertava os dois primeiros, mas repetiria o terceiro: gravava o

@@ -22,7 +22,7 @@ Atualizado a cada fechamento de rodada. Prioridade decrescente dentro de cada bl
 
 - [ ] **Gerar o primeiro `.REM`** pelo botão da tela, com a folha do "Teste" (R$ 1). Terreno já está pronto no banco: 2 `contas_avulsas` aprovadas materializadas em 21/09/2026.
 - [ ] **Importar no site do Santander** e confirmar aceitação. Se rejeitar, o `.RET` traz o código de ocorrência (seção 5 do manual, pág. 61) — mapear qual campo desalinhou.
-- [ ] **Se PIX for aceito**: R$ 1,00 desce na chave PIX (CPF 11144477735) → E2E validado.
+- [ ] **Se PIX for aceito**: R$ 1,00 desce na chave PIX (CPF 19000009800) → E2E validado.
 - [ ] **Se PIX for rejeitado**: remover `pix_chave` do colaborador de teste temporariamente e regerar → o gerador cai automaticamente pra TED (banco Nubank 260, câmara CIP 018).
 
 ## 🟡 P1 — Fase 6: Persistência do arquivo

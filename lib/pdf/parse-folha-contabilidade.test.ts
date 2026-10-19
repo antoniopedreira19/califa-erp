@@ -36,7 +36,7 @@ test("normaliza CPF (remove pontos e traços)", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
   const primeiro = r.linhas.find((l) => l.nome === "COLABORADOR EXEMPLO 01");
   assert.ok(primeiro, "COLABORADOR EXEMPLO 01 deve ser encontrado");
-  assert.equal(primeiro!.cpf, "11000001800");
+  assert.equal(primeiro!.cpf, "19000000100");
   assert.equal(primeiro!.cpf.length, 11);
   assert.match(primeiro!.cpf, /^\d+$/);
 });

@@ -1064,7 +1064,7 @@ function VisaoDados({
               <MaskedInput
                 id="pix_chave"
                 mask="cpf"
-                placeholder="000.000.000-00"
+                placeholder="110.000.024-00"
                 onDigitsChange={setPixChaveDigitos}
               />
             ) : pixTipo === "cnpj" ? (

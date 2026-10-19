@@ -19,7 +19,7 @@ const config: Record<
     maxDigits: 11,
     maxLength: 14, // "XXX.XXX.XXX-XX"
     format: formatCpf,
-    placeholder: "000.000.000-00",
+    placeholder: "110.000.024-00",
   },
   cnpj: {
     maxDigits: 14,

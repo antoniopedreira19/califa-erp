@@ -34,7 +34,7 @@ update colaboradores_salarios s set valor=5500
 from colaboradores c
 where s.colaborador_id=c.id and s.data_fim is null
   and c.tenant_id='d2a02c10-9c7e-4157-8dd5-84bbf5a7044c'
-  and regexp_replace(coalesce(c.cpf,''),'[^0-9]','','g')='11144477735'
+  and regexp_replace(coalesce(c.cpf,''),'[^0-9]','','g')='19000009900'
   and s.valor<>5500;
 
 -- 3a e 3b (níveis e líderes) foram aplicados via CTE VALUES no MCP.

@@ -75,3 +75,8 @@ CLAUDE.local.md
 # Planos de alteração montados fora do fluxo de tasks (uso local, enviados ao Claude Code sob demanda)
 planos-locais/
 tmp/
+
+# Arquivos de sanitizacao de PII com CPFs reais (uso unico, apagar apos limpeza)
+.git-filter-replacements.txt
+scripts/sanitize-pii-mapping.json
+scripts/sanitize-pii.py

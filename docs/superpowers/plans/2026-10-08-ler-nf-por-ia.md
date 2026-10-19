@@ -292,7 +292,7 @@ test("validarCnpj — null para número de dígitos errado", () => {
 });
 
 test("validarCnpj — null para dígitos repetidos", () => {
-  assert.equal(validarCnpj("00000000000000"), null);
+  assert.equal(validarCnpj("11000002400000"), null);
   assert.equal(validarCnpj("99999999999999"), null);
   assert.equal(validarCnpj("11111111111111"), null);
 });
@@ -378,7 +378,7 @@ export function validarCnpj(bruto: string | null): string | null {
   if (!bruto) return null;
   const digitos = bruto.replace(/\D/g, "");
   if (digitos.length !== 14) return null;
-  // 00000000000000, 11111111111111, etc.
+  // 11000002400000, 11111111111111, etc.
   if (/^(\d)\1{13}$/.test(digitos)) return null;
 
   const calcularDV = (base: string, pesos: number[]): number => {
