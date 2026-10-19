@@ -455,6 +455,8 @@ export type AuditAction =
   | "freelancer_contrato.distrato_cancelado"
   // Módulo Freelancers — ação prevista inline (Task 027).
   | "freelancer.acao_prevista_alterada"
+  // Módulo Freelancers — migração dos legados do AgCaliforniaRH (Task 028).
+  | "freelancers.migracao_executada"
   | "acao_negada";
 
 export interface AuditPayload {
