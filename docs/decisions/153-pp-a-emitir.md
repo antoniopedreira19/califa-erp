@@ -7,7 +7,9 @@ PP gerada que perdeu o prazo de envio tem o vencimento atualizado, sem
 cancelar e refazer. ⚠️ **Revista pela [173](173-pp-gerada-volta-a-se-editar.md)
 (13/10/2026): a PP gerada voltou a se editar, no lugar** — mesmo código, PDF
 refeito, revisão antes de gravar, e a marca "Pronta para envio" cai. O resto
-desta decisão segue valendo.
+desta decisão segue valendo. ⚠️ **Revisão de 19/10/2026: "Cancelar e
+refazer" virou "Reemitir PP"**, e a aba de PPs abre o formulário e a
+revisão ali mesmo (ver o fim).
 **Quem decidiu:** Tiago, de 06 a 07/10/2026, a partir do protótipo
 interativo "Etapa antes da PP" (https://claude.ai/artifact/BkLusveQDiropTy9UBccYe,
 v1 a v17, rodadas nos comentários do artifact). "Pronto o protótipo /
@@ -44,7 +46,7 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
 | PP gerada | **Não tem mais "Editar".** Ver PDF e Cancelar continuam. |
 | Envio | No painel do item, em pop-up. **Todo campo é obrigatório**: o tipo de cada anexo, os quatro dados de cada NF e o número dos outros documentos. A PP acima do planejado pede a confirmação ali mesmo. |
 | Pré-abertura (`aguardando_abertura` e `rejeitado_financeiro`) | **Só PP a emitir.** "Gerar PP" fica apagado com o motivo: "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir. Gerar e enviar a PP voltam com a abertura." |
-| PP rejeitada | Mostra o motivo e **"Cancelar e refazer"** (no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Refaz a PP-…", e o formulário abre com o motivo no topo. A pergunta "Esta é a última PP deste item?" volta a ser feita. A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
+| PP rejeitada | Mostra o motivo e **"Reemitir PP"** (até 19/10/2026, "Cancelar e refazer"; no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Reemite a PP-…", e o formulário abre com o motivo no topo (desde 19/10, também na aba de PPs). A pergunta "Esta é a última PP deste item?" volta a ser feita. A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
 
 ## O painel do item ("Destrinchar realizado")
 
@@ -170,3 +172,41 @@ número de cada documento.
    mesma nota. Os dados da nota seguem travados para a produção (resposta 6
    da 152); quem corrige é o financeiro, na aprovação. Confirmado em 08/10
    ("Faça ao recomendado").
+
+## ⚠️ Revisão de 19/10/2026 — "Reemitir PP"
+
+Um produtor procurou o Tiago achando que o "Cancelar e refazer" apagava o
+formulário e obrigava a refazer a PP do zero. Não apaga: o servidor
+(`cancelarERefazerPP`) copia todos os campos e todos os anexos para a PP a
+emitir antes de cancelar a rejeitada (conferido no código e no banco, nas
+PP-00130 e PP-00131). O que assustava era o texto, que começava por "é
+cancelada", e a aba de PPs, que só avisava que a PP tinha voltado no painel do
+item, sem abrir nada.
+
+O Tiago escolheu **"Reemitir PP"** (sugestão dele), depois de ver também
+"Editar", "Corrigir", "Corrigir e substituir", "Ajustar", "Revisar", "Nova
+versão" e "Reabrir". "Editar" ficou de fora porque já é o lápis da PP gerada
+(decisão 173), que mantém o código; aqui o código muda.
+
+- **Os textos:** botão, dica e confirmação "Reemitir PP"; título "Reemitir a
+  PP-…?"; o pop-up começa pelo que fica: "O formulário volta preenchido, com
+  os mesmos dados e anexos, para você ajustar o que o financeiro apontou. Ao
+  gerar, sai uma PP nova, com outro código, no lugar da PP-…, que fica no
+  histórico com o motivo da rejeição." O formulário diz "Reemitir a PP-…" e
+  "Reemitindo a PP-…, rejeitada pelo financeiro"; o selo da PP a emitir,
+  "Reemite a PP-…"; o motivo de cancelamento gravado, "Rejeitada pelo
+  financeiro e reemitida (Reemitir PP)." As frases do financeiro que
+  descrevem o caminho da produção dizem "reemite".
+- **A aba de PPs abre o formulário** na PP a emitir que voltou, como o painel
+  do item já fazia, e o "Gerar PP" mostra a revisão ali mesmo. Quem não edita
+  PP pela aba recebe o aviso de onde ela está.
+- **Defeito corrigido junto:** depois do "Gerar PP" de uma PP a emitir que já
+  existia, a revisão abria com a versão de antes de salvar (no painel e na
+  aba), e o "Editar" da revisão voltava sem a resposta da "última PP". A
+  revisão agora espera a versão salva (`updated_at` novo).
+- **Sem regra nova e sem migration.** O motivo de cancelamento das PPs já
+  reemitidas continua com o texto antigo.
+- **Conferido** no TES-1014/26: PP-00206 rejeitada e reemitida pela aba de PPs
+  (PP-00255), e a PP-00255 rejeitada e reemitida pelo painel do item
+  (PP-00257, enviada de volta ao financeiro). Protótipo com a tela real:
+  https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r

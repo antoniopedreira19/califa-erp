@@ -1537,25 +1537,28 @@ export function GerarPPDrawer({
             {ppGeradaEditando
               ? `Editar ${ppGeradaEditando.codigo}`
               : editando
-                ? `Editar PP a emitir${refaz ? ` · refaz a ${refaz.codigo}` : ""}`
+                ? refaz
+                  ? `Reemitir a ${refaz.codigo}`
+                  : "Editar PP a emitir"
                 : "Novo Pedido de Produção"}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
-            {/* Refazendo uma PP rejeitada: o motivo no topo (decisão 153). */}
+            {/* Reemitindo uma PP rejeitada: o motivo no topo (decisão 153;
+                "Reemitir PP" desde 19/10/2026). */}
             {refaz && (
               <div className="rounded-xl border border-california-red/30 bg-california-red/5 px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-california-red">
-                  Refazendo a <span className="font-mono">{refaz.codigo}</span>, rejeitada pelo financeiro
+                  Reemitindo a <span className="font-mono">{refaz.codigo}</span>, rejeitada pelo financeiro
                 </p>
                 <p className="mt-1 text-[12.5px] leading-snug text-foreground">
                   {refaz.motivo_rejeicao || "— sem motivo informado"}
                 </p>
                 <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground">
-                  A <span className="font-mono">{refaz.codigo}</span> já está cancelada. Corrija o que precisar e gere a
-                  PP nova, com outro código.
+                  Os dados e os anexos da <span className="font-mono">{refaz.codigo}</span> já estão aqui. Ajuste o que
+                  o financeiro apontou e gere a PP nova, com outro código.
                 </p>
               </div>
             )}

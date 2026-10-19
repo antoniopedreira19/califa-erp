@@ -4774,8 +4774,8 @@ código publicado logo depois (`3305751`).
   `reenviarPedidoCompra` e `pps/editar-pp-drawer.tsx`. O envio ao
   financeiro virou um pop-up no painel com todos os campos obrigatórios.
 - **PP rejeitada: "Cancelar e refazer"** (painel do item e aba Pedidos de
-  Produção). Ela é cancelada e volta como PP a emitir com os mesmos dados e
-  anexos; a PP nova diz "Substitui a PP-…".
+  Produção; "Reemitir PP" desde 19/10/2026). Ela é cancelada e volta como PP
+  a emitir com os mesmos dados e anexos; a PP nova diz "Substitui a PP-…".
 - **Pré-abertura: só PP a emitir.** Isso revê a decisão 056 (gerar PP na
   pré-abertura).
 - Painel do item: "Em PPs a emitir" ao lado de "Em PPs emitidas", e a seção
@@ -5866,3 +5866,30 @@ protótipo. Regra completa na decisão 188.
 - **Testado:** cópia no TES-P001/26 (TES-1002 + TES-1003, sem enviar); Repetir
   e troca do mês no protótipo com o pop-up real e dados fictícios
   (https://claude.ai/artifact/KYSb95HrtonmB4TvpPw54J).
+
+## ⚠️ Nota de 2026-10-19 (3) — "Cancelar e refazer" virou "Reemitir PP" (revisão da decisão 153)
+
+Um produtor achou que o "Cancelar e refazer" apagava o formulário. Não apaga
+(o servidor copia campos e anexos para a PP a emitir antes de cancelar), mas o
+texto começava por "é cancelada" e a aba de PPs não abria nada.
+
+- **Textos** (`pp-a-emitir-ui.tsx`: `TextoDoReemitir` e `TOAST_DO_REEMITIR`,
+  usados no painel do item e na aba): botão, dica e confirmação "Reemitir
+  PP"; o pop-up começa por "O formulário volta preenchido, com os mesmos dados
+  e anexos…". No formulário, "Reemitir a PP-…" e "Reemitindo a PP-…"; no
+  selo, "Reemite a PP-…"; no motivo de cancelamento gravado, "Rejeitada pelo
+  financeiro e reemitida (Reemitir PP)." O pop-up de rejeitar e o de reprovar
+  do financeiro e o envio para encerramento dizem "reemite"/"reemitir".
+- **A aba de PPs abre o formulário** (`job-pps-section.tsx`) na PP a emitir
+  que voltou, e o "Gerar PP" abre a `RevisaoDialog` ali mesmo. O
+  `page.tsx` passa `aEmitirReemitidas` em `edicaoDaPP` (as PPs a emitir com
+  `refaz`). Sem `edicaoDaPP`, o aviso diz onde a PP a emitir está.
+- **Defeito corrigido:** a revisão depois do "Gerar PP" de uma PP a emitir que
+  já existia abria com a versão de antes de salvar, e o "Editar" voltava sem
+  a resposta da "última PP". O pedido de revisão leva o `updated_at` de antes
+  (`depoisDe`) e espera o novo (`job-item-realizado-table.tsx`,
+  `painel-pps-item.tsx` e a aba).
+- **Sem migration.** Conferido no TES-1014/26: PP-00206 → PP-00255 pela aba
+  de PPs e PP-00255 → PP-00257 pelo painel do item; a PP-00257 voltou ao
+  financeiro, como estava a PP-00206. Protótipo:
+  https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r

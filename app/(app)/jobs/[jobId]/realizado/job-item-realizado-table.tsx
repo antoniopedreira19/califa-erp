@@ -767,7 +767,11 @@ export function JobItemRealizadoTable({
   const [ppGeradaEditando, setPpGeradaEditando] = React.useState<PedidoCompraNaLista | null>(null);
   /** O "Gerar PP" do formulário: o painel abre a revisão desta PP a emitir
    *  assim que ela chega pelo refresh. */
-  const [pedidoDeRevisao, setPedidoDeRevisao] = React.useState<{ id: string; vez: number } | null>(null);
+  const [pedidoDeRevisao, setPedidoDeRevisao] = React.useState<{
+    id: string;
+    vez: number;
+    depoisDe: string | null;
+  } | null>(null);
   /** "Cancelar e refazer": o formulário abre na PP a emitir que voltou,
    *  assim que ela chega pelo refresh. */
   const [editarQuandoChegar, setEditarQuandoChegar] = React.useState<string | null>(null);
@@ -2575,7 +2579,13 @@ export function JobItemRealizadoTable({
                 }
                 // "Gerar PP": a PP a emitir foi salva e o painel abre a
                 // revisão dela antes de gerar (decisão 153).
-                setPedidoDeRevisao((antes) => ({ id, vez: (antes?.vez ?? 0) + 1 }));
+                // A PP a emitir que já existia está na lista com os dados de
+                // antes de salvar: `depoisDe` faz a revisão esperar a nova.
+                setPedidoDeRevisao((antes) => ({
+                  id,
+                  vez: (antes?.vez ?? 0) + 1,
+                  depoisDe: aEmitirEditando?.id === id ? aEmitirEditando.updated_at : null,
+                }));
               }}
             />
 

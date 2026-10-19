@@ -36,16 +36,21 @@ import {
   type PPStatus,
   type Empresa,
   type JobStatus,
+  type PPAEmitir,
   situacaoDaVerba,
   verbaAguardaProducao,
 } from "@/lib/types";
 import {
   cancelarERefazerPP,
   cancelarPedidoCompra,
+  gerarPPDaPPAEmitir,
 } from "../realizado/actions-pp";
 import {
   EnvioDialog,
+  RevisaoDialog,
   TEXTO_LINHA_ALTERADA_EM_REVISAO,
+  TextoDoReemitir,
+  TOAST_DO_REEMITIR,
   textoAguardaAbertura,
   type PPParaEnviar,
 } from "../realizado/pp-a-emitir-ui";
@@ -131,6 +136,11 @@ export interface EdicaoDaPPNaAba {
     string,
     { nome: string; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
   >;
+  /** As PPs a emitir que reemitem uma rejeitada (revisão da 153,
+   *  19/10/2026): o "Reemitir PP" da aba abre o formulário nelas, e a
+   *  revisão antes de gerar também é daqui — sem levar a pessoa à
+   *  Planilha Interna. */
+  aEmitirReemitidas: PPAEmitir[];
 }
 
 /** "aguardando_prestacao" junta verba sem prestação e prestação reprovada:
@@ -177,9 +187,10 @@ const CHIPS: Array<{ key: Filtro; label: string }> = [
  * valem na linha, um colado no outro (sem lugar vazio, pedido do Tiago).
  * "Prestar contas" segue com texto, no lugar do cancelar (verba paga nunca
  * é cancelável), e a trilha só se alarga quando há verba esperando prestação.
- * O "Cancelar e refazer" da rejeitada (decisão 153) também é ícone, entre o
- * formulário e o cancelar: a rejeitada não envia nem edita, então os três
- * cabem na largura de sempre (17/10/2026).
+ * O "Reemitir PP" da rejeitada (decisão 153; "Cancelar e refazer" até
+ * 19/10/2026) também é ícone, entre o formulário e o cancelar: a rejeitada
+ * não envia nem edita, então os três cabem na largura de sempre
+ * (17/10/2026).
  */
 const ICONE = 29;
 const VAO = 6;
@@ -278,11 +289,43 @@ export function JobPPsSection({
   const [busca, setBusca] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
-  /** A rejeitada que vai ser cancelada e refeita (decisão 153): ela não se
-   *  edita mais, volta como PP a emitir no painel do item. */
+  /** A rejeitada que vai ser reemitida (decisão 153): ela não se edita,
+   *  é cancelada e volta como PP a emitir, com os mesmos dados. */
   const [ppRefazendo, setPpRefazendo] = React.useState<PedidoCompraNaLista | null>(
     null,
   );
+  /** Revisão da 153 (19/10/2026): o formulário abre aqui, na PP a emitir
+   *  que o "Reemitir PP" devolveu, assim que ela chega pelo refresh — como
+   *  no painel do item. Antes a aba só avisava onde ela tinha ido parar. */
+  const [aEmitirEditando, setAEmitirEditando] = React.useState<PPAEmitir | null>(null);
+  const [abrirQuandoChegar, setAbrirQuandoChegar] = React.useState<string | null>(null);
+  /** O "Gerar PP" do formulário: a revisão abre quando a PP a emitir
+   *  salva chega pelo refresh. Ela já estava na lista antes de salvar:
+   *  `depoisDe` é o `updated_at` de antes, para a revisão não abrir com a
+   *  versão velha (que nem tinha a resposta da "última PP"). */
+  const [revisarQuandoChegar, setRevisarQuandoChegar] = React.useState<{
+    id: string;
+    depoisDe: string | null;
+  } | null>(null);
+  const [revisando, setRevisando] = React.useState<PPAEmitir | null>(null);
+  const [erroDaRevisao, setErroDaRevisao] = React.useState<string | null>(null);
+  const aEmitirReemitidas = edicaoDaPP?.aEmitirReemitidas;
+  React.useEffect(() => {
+    if (!abrirQuandoChegar || !aEmitirReemitidas) return;
+    const alvo = aEmitirReemitidas.find((a) => a.id === abrirQuandoChegar);
+    if (!alvo) return;
+    setAbrirQuandoChegar(null);
+    setPpEditando(null);
+    setAEmitirEditando(alvo);
+  }, [abrirQuandoChegar, aEmitirReemitidas]);
+  React.useEffect(() => {
+    if (!revisarQuandoChegar || !aEmitirReemitidas) return;
+    const alvo = aEmitirReemitidas.find((a) => a.id === revisarQuandoChegar.id);
+    if (!alvo || alvo.updated_at === revisarQuandoChegar.depoisDe) return;
+    setRevisarQuandoChegar(null);
+    setErroDaRevisao(null);
+    setRevisando(alvo);
+  }, [revisarQuandoChegar, aEmitirReemitidas]);
   const [ppCancelando, setPpCancelando] =
     React.useState<PedidoCompraNaLista | null>(null);
   const [ppPrestando, setPpPrestando] =
@@ -993,7 +1036,7 @@ export function JobPPsSection({
             enviar (só o GP, PP gerada com arquivo anexado), ver o
             formulário (toda PP) e cancelar (a PP que ainda dá para
             cancelar) —; "Prestar contas" fica na coluna do cancelar, e o
-            "Cancelar e refazer" da rejeitada entre o formulário e ele. */}
+            "Reemitir PP" da rejeitada entre o formulário e ele. */}
         <div
           className="absolute left-full ml-2.5"
           style={{ width: larguraTrilha, top: offsetThead }}
@@ -1116,14 +1159,14 @@ export function JobPPsSection({
                     type="button"
                     onClick={() => setPpRefazendo(pp)}
                     disabled={pending}
-                    aria-label={`Cancelar e refazer ${pp.codigo}`}
+                    aria-label={`Reemitir ${pp.codigo}`}
                     className="inline-flex flex-none items-center justify-center rounded-[9px] border border-california-red/25 bg-white text-california-red transition-colors hover:bg-california-red/[0.06] disabled:opacity-50"
                     style={{ width: ICONE, height: ICONE }}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Cancelar e refazer</TooltipContent>
+                <TooltipContent>Reemitir PP</TooltipContent>
               </Tooltip>
             );
             const cancelarEl = cancelar && !prestar && (
@@ -1274,39 +1317,124 @@ export function JobPPsSection({
       />
 
       {/* Decisão 173: o mesmo formulário do painel do item, com a PP gerada.
-          Salvar passa pela revisão; o código fica e o PDF é refeito. */}
-      {edicaoDaPP && ppEditando && (() => {
-        const item = edicaoDaPP.itens[ppEditando.item_realizado_id];
+          Salvar passa pela revisão; o código fica e o PDF é refeito. Desde
+          19/10/2026 (revisão da 153) abre também a PP a emitir que o
+          "Reemitir PP" devolveu. */}
+      {edicaoDaPP && (ppEditando || aEmitirEditando) && (() => {
+        const itemRealizadoId = (ppEditando ?? aEmitirEditando)!.item_realizado_id;
+        const item = edicaoDaPP.itens[itemRealizadoId];
         return (
           <GerarPPDrawer
             open
-            onOpenChange={(aberto) => !aberto && setPpEditando(null)}
-            itemRealizadoId={ppEditando.item_realizado_id}
+            onOpenChange={(aberto) => {
+              if (aberto) return;
+              setPpEditando(null);
+              setAEmitirEditando(null);
+            }}
+            itemRealizadoId={itemRealizadoId}
             jobId={edicaoDaPP.jobId}
             fornecedores={edicaoDaPP.fornecedores}
             empresas={edicaoDaPP.empresas}
             podeCadastrarFornecedor={edicaoDaPP.podeCadastrarFornecedor}
             podeEditarFornecedor={edicaoDaPP.podeEditarFornecedor}
             defaultEmpresaId={edicaoDaPP.jobEmpresaId}
-            itemDescricao={item?.nome ?? ppEditando.item_nome ?? ""}
-            valorPlanejado={item?.planejado ?? planejadoPorItem[ppEditando.item_realizado_id] ?? 0}
+            itemDescricao={item?.nome ?? ppEditando?.item_nome ?? ""}
+            valorPlanejado={item?.planejado ?? planejadoPorItem[itemRealizadoId] ?? 0}
             unitarioPlanejado={item?.unitario ?? 0}
             quantidadePlanejada={item?.quantidade ?? 0}
             dmPlanejado={item?.diasMeses ?? 0}
-            emPPsEmitidas={emPPsDoItem(ppEditando.item_realizado_id)}
-            aEmitirEditando={null}
+            emPPsEmitidas={emPPsDoItem(itemRealizadoId)}
+            aEmitirEditando={aEmitirEditando}
             ppGeradaEditando={ppEditando}
             itemConcluido={item?.concluido ?? false}
             statusDoJob={statusDoJob}
             tomadores={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             cnpjPadraoDaPP={edicaoDaPP.cnpjPadraoDaPP}
-            onSuccess={(modo, codigo) => {
-              if (modo === "editada") setToast(`${codigo} atualizada. O PDF foi refeito com os dados novos.`);
+            onSuccess={(modo, idOuCodigo) => {
+              if (modo === "editada") {
+                setToast(`${idOuCodigo} atualizada. O PDF foi refeito com os dados novos.`);
+                return;
+              }
+              if (modo === "salva") {
+                setToast(
+                  `PP a emitir salva. Gere a PP pelo painel do item${item?.nome ? ` “${item.nome}”` : ""}, na Planilha Interna, quando quiser.`,
+                );
+                return;
+              }
+              // "Gerar PP": salva e abre a revisão antes de gerar (decisão
+              // 153), aqui mesmo.
+              setRevisarQuandoChegar({
+                id: idOuCodigo,
+                depoisDe: aEmitirEditando?.id === idOuCodigo ? aEmitirEditando.updated_at : null,
+              });
             }}
           />
         );
       })()}
+
+      {/* Decisão 153: a revisão antes de gerar — a mesma do painel do item. */}
+      {edicaoDaPP && (
+        <RevisaoDialog
+          open={revisando !== null}
+          onOpenChange={(o) => {
+            if (!o && !pending) setRevisando(null);
+          }}
+          aEmitir={revisando}
+          nomeDoFornecedor={
+            revisando
+              ? !revisando.verba_producao
+                ? ((revisando.fornecedor_id ? fornecedoresPorId[revisando.fornecedor_id] : null) ?? "—")
+                : (revisando.verba_titular_nome ?? "—")
+              : ""
+          }
+          nomeDaEmpresa={
+            revisando
+              ? (tomadoresDaNf.find(
+                  (t) => t.id === (revisando.dados.estabelecimento_id ?? edicaoDaPP.cnpjPadraoDaPP),
+                )?.nome ?? "—")
+              : ""
+          }
+          tomadores={tomadoresDaNf}
+          planejado={
+            revisando
+              ? (edicaoDaPP.itens[revisando.item_realizado_id]?.planejado ??
+                planejadoPorItem[revisando.item_realizado_id] ??
+                0)
+              : 0
+          }
+          emitidasAntes={revisando ? emPPsDoItem(revisando.item_realizado_id) : 0}
+          moeda="BRL"
+          pending={pending}
+          erro={erroDaRevisao}
+          onFecharErro={() => setErroDaRevisao(null)}
+          onGerar={() => {
+            const alvo = revisando;
+            if (!alvo) return;
+            setErroDaRevisao(null);
+            startTransition(async () => {
+              const res = await gerarPPDaPPAEmitir(alvo.id);
+              if (!res.ok) {
+                setErroDaRevisao(res.message);
+                return;
+              }
+              setRevisando(null);
+              setToast(
+                alvo.tipo_verba === "reembolso"
+                  ? `Pedido de Produção ${res.codigo} gerado. Envie ao financeiro com os comprovantes.`
+                  : `Pedido de Produção ${res.codigo} gerado. Envie ao financeiro quando a nota chegar.`,
+              );
+              router.refresh();
+            });
+          }}
+          onEditar={() => {
+            const alvo = revisando;
+            if (!alvo) return;
+            setRevisando(null);
+            setAEmitirEditando(alvo);
+          }}
+        />
+      )}
 
       <PrestarContasDrawer
         open={ppPrestando !== null}
@@ -1318,15 +1446,9 @@ export function JobPPsSection({
       <ConfirmDialog
         open={ppRefazendo !== null}
         onOpenChange={(o) => !o && setPpRefazendo(null)}
-        title={`Cancelar a ${ppRefazendo?.codigo ?? "PP"} e refazer?`}
-        description={
-          <>
-            A <strong className="text-foreground">{ppRefazendo?.codigo}</strong> é cancelada e fica no histórico,
-            com o motivo da rejeição. Ela volta como PP a emitir no painel do item, com os mesmos dados e anexos,
-            para você corrigir e gerar uma PP nova, com outro código.
-          </>
-        }
-        confirmLabel="Cancelar e refazer"
+        title={`Reemitir a ${ppRefazendo?.codigo ?? "PP"}?`}
+        description={<TextoDoReemitir codigo={ppRefazendo?.codigo ?? "PP"} />}
+        confirmLabel="Reemitir PP"
         cancelLabel="Voltar"
         pending={pending}
         onConfirm={() => {
@@ -1339,9 +1461,16 @@ export function JobPPsSection({
               setErro(res.message);
               return;
             }
-            setToast(
-              `${res.codigo} cancelada. A PP a emitir voltou no painel do item${alvo.item_nome ? ` “${alvo.item_nome}”` : ""}, na Planilha Interna.`,
-            );
+            // Quem não edita PP (sem `edicaoDaPP`) não tem o formulário
+            // aqui: o aviso diz onde a PP a emitir está.
+            if (edicaoDaPP) {
+              setToast(TOAST_DO_REEMITIR(res.codigo));
+              setAbrirQuandoChegar(res.aEmitirId);
+            } else {
+              setToast(
+                `A ${res.codigo} voltou como PP a emitir no painel do item${alvo.item_nome ? ` “${alvo.item_nome}”` : ""}, na Planilha Interna, com os mesmos dados e anexos.`,
+              );
+            }
             router.refresh();
           });
         }}

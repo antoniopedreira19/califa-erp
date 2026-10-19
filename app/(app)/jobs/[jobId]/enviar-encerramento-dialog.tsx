@@ -270,7 +270,7 @@ export function EnviarEncerramentoDialog({
                 {(ppsEmAberto.length > 0 || bvsEmAberto.length > 0) && (
                   <p className="text-muted-foreground">
                     Resolva esses documentos — a PP rejeitada volta para a
-                    produção refazer ou cancelar, a aprovada espera a baixa, e o
+                    produção reemitir ou cancelar, a aprovada espera a baixa, e o
                     BV espera o recebimento.
                   </p>
                 )}

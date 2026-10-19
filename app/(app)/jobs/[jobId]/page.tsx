@@ -568,6 +568,11 @@ export default async function JobDetailPage({
                     podeCadastrarFornecedor,
                     podeEditarFornecedor,
                     cnpjPadraoDaPP,
+                    // Revisão da 153 (19/10/2026): o "Reemitir PP" da aba
+                    // abre o formulário na PP a emitir que voltou.
+                    aEmitirReemitidas: [...aEmitirPorItemId.values()]
+                      .flat()
+                      .filter((a) => a.refaz !== null),
                     itens: Object.fromEntries(
                       itens.flatMap((it) => {
                         const realizado = realizadosMap.get(it.id);

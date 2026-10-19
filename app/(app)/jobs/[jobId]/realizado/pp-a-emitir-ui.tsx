@@ -101,12 +101,32 @@ export function SeloPPAEmitir({ refaz }: { refaz: string | null }) {
       </span>
       {refaz && (
         <span className="inline-flex items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[10.5px] font-bold text-red-700">
-          Refaz a <span className="ml-1 font-mono">{refaz}</span>
+          Reemite a <span className="ml-1 font-mono">{refaz}</span>
         </span>
       )}
     </span>
   );
 }
+
+/**
+ * O pop-up do "Reemitir PP" da rejeitada — no painel do item e na aba de
+ * PPs. Revisão da 153 (19/10/2026): antes "Cancelar e refazer", que
+ * começava por "é cancelada" e fez um produtor achar que perderia o
+ * formulário. Agora começa pelo que fica.
+ */
+export function TextoDoReemitir({ codigo }: { codigo: string }) {
+  return (
+    <>
+      O formulário volta preenchido, com os mesmos dados e anexos, para você ajustar o que o financeiro apontou. Ao
+      gerar, sai uma PP nova, com outro código, no lugar da <strong className="text-foreground">{codigo}</strong>,
+      que fica no histórico com o motivo da rejeição.
+    </>
+  );
+}
+
+/** O aviso enquanto o formulário abre na PP a emitir que voltou. */
+export const TOAST_DO_REEMITIR = (codigo: string) =>
+  `Os dados da ${codigo} voltaram no formulário. Ajuste o que o financeiro apontou e gere a PP nova.`;
 
 const dataBr = (iso: string) => iso.slice(0, 10).split("-").reverse().join("/");
 const fator = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });

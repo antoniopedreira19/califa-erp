@@ -46,6 +46,9 @@
  *    de novo, no lugar — o lápis abre o formulário com ela, e salvar passa
  *    pela revisão. Antes do envio só o lápis; depois, só o "Ver
  *    formulário" — nunca os dois (Tiago, 14/10/2026).
+ *  - 19/10/2026 (revisão da 153): "Cancelar e refazer" virou "Reemitir
+ *    PP". Um produtor achou que perderia o formulário e teria de refazer a
+ *    PP do zero; o pop-up agora começa pelo que fica (dados e anexos).
  */
 
 import * as React from "react";
@@ -106,6 +109,8 @@ import {
   FaixaAguardaAbertura,
   RevisaoDialog,
   SeloPPAEmitir,
+  TextoDoReemitir,
+  TOAST_DO_REEMITIR,
   textoAguardaAbertura,
   type PPParaEnviar,
 } from "./pp-a-emitir-ui";
@@ -215,7 +220,7 @@ interface Props {
   /** O status do job — aguardando abertura e devolvido só aceitam PP a emitir. */
   statusDoJob: string;
   /** O formulário pediu a revisão desta PP a emitir (o "Gerar PP" dele). */
-  pedidoDeRevisao: { id: string; vez: number } | null;
+  pedidoDeRevisao: { id: string; vez: number; depoisDe: string | null } | null;
   /** Abre o formulário da PP a emitir. Null quando o usuário só lê. */
   onEditarAEmitir: ((a: PPAEmitir) => void) | null;
   /** Decisão 173: abre o formulário com a PP gerada, para editar no lugar.
@@ -336,7 +341,9 @@ export function PainelPPsItem({
   React.useEffect(() => {
     if (!pedidoDeRevisao || vezDaRevisao.current === pedidoDeRevisao.vez) return;
     const alvo = aEmitir.find((a) => a.id === pedidoDeRevisao.id);
-    if (!alvo) return;
+    // A PP a emitir editada já estava na lista: espera a versão salva
+    // (19/10/2026 — a revisão abria com os dados de antes da edição).
+    if (!alvo || alvo.updated_at === pedidoDeRevisao.depoisDe) return;
     vezDaRevisao.current = pedidoDeRevisao.vez;
     setErroDaRevisao(null);
     setRevisando(alvo);
@@ -387,7 +394,7 @@ export function PainelPPsItem({
         setErro(res.message);
         return;
       }
-      onMensagem?.(`${res.codigo} cancelada. Corrija a PP a emitir e gere a PP nova.`);
+      onMensagem?.(TOAST_DO_REEMITIR(res.codigo));
       router.refresh();
       onRefeita(res.aEmitirId);
     });
@@ -935,7 +942,7 @@ export function PainelPPsItem({
                                   className="inline-flex w-fit items-center gap-1.5 rounded-[9px] border border-california-red bg-california-red px-2.5 py-1 text-[11px] font-bold text-white hover:bg-california-red-hover disabled:opacity-50"
                                 >
                                   <Pencil className="h-3 w-3" />
-                                  Cancelar e refazer
+                                  Reemitir PP
                                 </button>
                               )}
                             </span>
@@ -1144,15 +1151,9 @@ export function PainelPPsItem({
         <ConfirmDialog
           open={refazendo !== null}
           onOpenChange={(o) => !o && setRefazendo(null)}
-          title={`Cancelar a ${refazendo?.codigo ?? "PP"} e refazer?`}
-          description={
-            <>
-              A <strong className="text-foreground">{refazendo?.codigo}</strong> é cancelada e fica no histórico, com o
-              motivo da rejeição. Ela volta como PP a emitir, com os mesmos dados e anexos, para você corrigir e gerar
-              uma PP nova, com outro código.
-            </>
-          }
-          confirmLabel="Cancelar e refazer"
+          title={`Reemitir a ${refazendo?.codigo ?? "PP"}?`}
+          description={<TextoDoReemitir codigo={refazendo?.codigo ?? "PP"} />}
+          confirmLabel="Reemitir PP"
           cancelLabel="Voltar"
           pending={pending}
           onConfirm={refazer}

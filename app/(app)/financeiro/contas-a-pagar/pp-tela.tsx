@@ -661,7 +661,7 @@ export function PPTela(
             description={
               <div className="space-y-2">
                 <p>
-                  A produção vê o motivo e refaz a PP: esta é cancelada e volta como
+                  A produção vê o motivo e reemite a PP: esta é cancelada e volta como
                   PP a emitir, para gerar uma PP nova, com outro código.
                 </p>
                 <div>
@@ -784,7 +784,7 @@ export function PPTela(
               <div className="space-y-3">
                 <p>
                   A PP sai de Títulos a Pagar e volta para a produção, que vê o
-                  motivo e refaz a PP (com outro código) ou só a cancela. As datas escolhidas na
+                  motivo e reemite a PP (com outro código) ou só a cancela. As datas escolhidas na
                   aprovação são desfeitas; o vencimento negociado com o fornecedor
                   fica.
                 </p>
