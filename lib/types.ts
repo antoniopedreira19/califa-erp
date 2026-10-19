@@ -1266,8 +1266,55 @@ export interface JobEnvioFaturamento {
   /** Parte do `valor_faturado` que é receita de save do mês. Só nos
    *  envios com mês; nos outros vale `jobs.faturamento_save_previsto`. */
   valor_save: number | null;
+  /** Decisão 188: o envio em lote de que este envio faz parte. Nulo no
+   *  envio pela página do job. */
+  lote_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Envio em lote para faturamento (decisão 188): vários jobs de um mesmo
+ * cliente e de uma mesma empresa, enviados de uma vez pela lista de Jobs.
+ * Cada job continua com o seu `JobEnvioFaturamento` (com `lote_id`).
+ */
+export interface EnvioFaturamentoLote {
+  id: string;
+  tenant_id: string;
+  cliente_id: string;
+  empresa_id: string;
+  /** O mês dos jobs mensais do lote; nulo sem mensal. */
+  mes: string | null;
+  /** Recado da produção para o financeiro; não sai na nota. */
+  observacao: string | null;
+  portal_id: string | null;
+  portal_url: string | null;
+  enviado_por: string | null;
+  enviado_em: string;
+  created_at: string;
+}
+
+/** Como a nota do lote se divide entre os jobs. */
+export type RateioDaNotaDoLote = "proporcional" | "job" | "manual";
+
+/**
+ * Uma nota que o cliente pediu num envio em lote (decisão 188). A parte de
+ * cada job nela é uma `JobEnvioFaturamentoNota` com `lote_nota_id`.
+ */
+export interface EnvioFaturamentoLoteNota {
+  id: string;
+  tenant_id: string;
+  lote_id: string;
+  ordem: number;
+  tomador_nome: string | null;
+  /** Só dígitos, 14. Nulo no tomador no exterior (184). */
+  cnpj: string | null;
+  tomador_exterior: boolean;
+  valor: number;
+  cnae_sugerido: string | null;
+  descritivo: string | null;
+  rateio: RateioDaNotaDoLote;
+  created_at: string;
 }
 
 /**
@@ -1315,6 +1362,8 @@ export interface JobEnvioFaturamentoNota {
   tomador_exterior: boolean;
   cnae_sugerido: string | null;
   descritivo: string | null;
+  /** Decisão 188: a nota do lote de que esta é a parte do job. */
+  lote_nota_id: string | null;
   created_at: string;
   updated_at: string;
 }

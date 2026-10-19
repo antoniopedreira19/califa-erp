@@ -7596,3 +7596,19 @@ de `lib/formatar-data-hora.ts`. Sem migration, nenhum dado mudou.
   (aguardando abertura) mostrou "Empresa · Empresa Teste" no painel e na
   conferência da fila.
 
+## ⚠️ Nota de 2026-10-19 (2) — O que chega do envio em lote (decisão 188, entrega 1)
+
+A produção passou a enviar vários jobs de um cliente e de uma empresa de uma
+vez, com as notas que o cliente pediu (uma nota pode juntar jobs; um job pode
+ser dividido entre notas). Regra completa na decisão 188.
+
+- **Na fila de faturamento, por enquanto nada muda de forma:** cada job do lote
+  chega com o seu envio, e cada parte dele numa nota do lote é uma nota do envio
+  do job (com o CNPJ ou "exterior", o descritivo e os vencimentos). As partes de
+  uma mesma nota do cliente têm o mesmo CNPJ e se juntam pelo Faturamento
+  Agrupado, como hoje.
+- **O rastro já está gravado:** `jobs_envio_faturamento_notas.lote_nota_id`
+  aponta para a nota do lote (`envios_faturamento_lote_notas`: tomador, CNPJ,
+  valor, rateio), e o lote guarda a observação da produção para o financeiro.
+- **Entrega 2 (a fazer):** a fila e o Faturar mostram a nota do lote de uma vez,
+  com as partes dos jobs já juntas e a observação.

@@ -5820,3 +5820,31 @@ empilhado"). Regra completa na decisão 187.
   Helvetica do pdfmake é WinAnsi e a imprimia como "!").
 - **Conferido** no TES-1001/26 com a PP-00250 (veículo, R$ 166,46) e a
   PP-00253 (despesas, R$ 150,00), as duas canceladas no fim.
+
+## ⚠️ Nota de 2026-10-19 — Envio em lote para faturamento pela lista de Jobs (decisão 188, entrega 1)
+
+Pedido do Tiago em 16/10/2026; design aprovado em 19/10/2026 sobre o
+protótipo. Regra completa na decisão 188.
+
+- **Lista de Jobs** (`jobs-list.tsx`): botão "Enviar para faturamento" (gate
+  `jobs.enviar_faturamento`) liga o modo de seleção; a calha vira caixa; o job
+  que não pode ir fica apagado com o motivo no tooltip (`motivo_fora_do_lote`,
+  calculado em `page.tsx`: status, cancelamento pedido, envio completo, sem
+  previsto) e, depois do primeiro marcado, outro cliente ou outra empresa. Barra
+  no rodapé com quantos, total e cliente · empresa.
+- **Pop-up** (`envio-em-lote-dialog.tsx`, por `dynamic`): abre relendo os jobs
+  (`carregarEnvioEmLote`): valor relido, mês do mensal, contatos, portais e
+  quem ficou fora com o motivo. Cartões dos jobs com a barra do que já está
+  nas notas; tabela das notas com o "Rateio" (Proporcional · Só o job · Dividir
+  à mão); vencimento, parcelas, CNAE e portal comuns; observação; contatos.
+- **Envio** (`actions-envio-lote.ts` → `enviar_lote_para_faturamento`): confere
+  cada job de novo com a mesma régua da página do job
+  (`lib/faturamento/conferir-envio-do-job.ts`), refaz o rateio com os valores
+  relidos (`lib/calculos/envio-em-lote.ts`, com testes) e grava numa transação.
+- **A action da página do job** passou a usar a mesma conferência (só a Mídia
+  Off segue com as travas próprias lá dentro).
+- **Testado** no TES-P001/26: TES-1002/26 (outubro), TES-1004/26 e TES-1014/26
+  enviados em 2 notas (ficaram como dado de teste); TES-1025/26 ficou fora pela
+  revisão da abertura.
+- **Fica para as entregas 2 e 3:** a fila do financeiro e o Faturar lendo a nota
+  do lote de uma vez; "Copiar de um envio anterior".
