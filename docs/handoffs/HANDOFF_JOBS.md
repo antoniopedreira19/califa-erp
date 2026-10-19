@@ -5922,6 +5922,11 @@ ao de uma PP válida. O PDF agora diz quando não vale.
 - **Sem migration.** Conferido no TES-1001/26 com o GP Teste Claude: a
   PP-00263 (verba de R$ 100,00, Fornecedor Teste) gerada com o selo,
   enviada limpa e cancelada com "CANCELADA EM 19/10/2026".
-- **Retroativo**: depois do deploy, o PDF de toda PP gerada ou cancelada é
-  refeito pela mesma função, com cópia do original em
-  `pedidos-compra/_antes-da-decisao-190/<caminho>`.
+- **Retroativo, aplicado em 19/10/2026 depois do deploy**: 112 PDFs refeitos
+  pela mesma função, sem erro — 57 geradas e 19 canceladas de jobs reais,
+  5 geradas e 31 canceladas de teste. O original de cada um ficou em
+  `pedidos-compra/_antes-da-decisao-190/<caminho>` (conferido na PP-00100).
+- **Push forçado no meio do caminho**: o `main` foi reescrito em 19/10 pela
+  sanitização de PII (`a89a2ba6`, `23d7f83b`) a partir de uma cópia sem os
+  dois commits do "Reemitir PP" (`2c90f46c` e `777dc9a5`). Eles foram
+  reaplicados, sem conflito, como `7b25c96f` e `b62a4084`, antes da 190.
