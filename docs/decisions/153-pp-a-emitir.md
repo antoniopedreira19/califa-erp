@@ -46,7 +46,7 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
 | PP gerada | **Não tem mais "Editar".** Ver PDF e Cancelar continuam. |
 | Envio | No painel do item, em pop-up. **Todo campo é obrigatório**: o tipo de cada anexo, os quatro dados de cada NF e o número dos outros documentos. A PP acima do planejado pede a confirmação ali mesmo. |
 | Pré-abertura (`aguardando_abertura` e `rejeitado_financeiro`) | **Só PP a emitir.** "Gerar PP" fica apagado com o motivo: "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir. Gerar e enviar a PP voltam com a abertura." |
-| PP rejeitada | Mostra o motivo e **"Reemitir PP"** (até 19/10/2026, "Cancelar e refazer"; no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Reemite a PP-…", e o formulário abre com o motivo no topo (desde 19/10, também na aba de PPs). A pergunta "Esta é a última PP deste item?" volta a ser feita. A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
+| PP rejeitada | Mostra o motivo e **"Reemitir PP"** (até 19/10/2026, "Cancelar e refazer"; no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Reemite a PP-…", e o formulário abre com o motivo no topo (desde 19/10, também na aba de PPs). A pergunta "Esta é a última PP deste item?" volta respondida como da primeira vez (até 19/10/2026 voltava em branco). A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
 
 ## O painel do item ("Destrinchar realizado")
 
@@ -204,9 +204,17 @@ versão" e "Reabrir". "Editar" ficou de fora porque já é o lápis da PP gerada
   existia, a revisão abria com a versão de antes de salvar (no painel e na
   aba), e o "Editar" da revisão voltava sem a resposta da "última PP". A
   revisão agora espera a versão salva (`updated_at` novo).
-- **Sem regra nova e sem migration.** O motivo de cancelamento das PPs já
-  reemitidas continua com o texto antigo.
+- **"Esta é a última PP deste item?" volta respondida** (comentário do Tiago
+  no protótipo, 19/10/2026: "esse campo já deve vir preenchido da maneira que
+  foi na primeira vez"). Antes voltava em branco, porque o item podia ter
+  mudado; a produção continua podendo trocar. A resposta é a da PP a emitir
+  que gerou a rejeitada; na PP gerada antes desta decisão, que não tem PP a
+  emitir, vale o item marcado como concluído ("Sim") ou não ("Não").
+- **Sem migration.** O motivo de cancelamento das PPs já reemitidas continua
+  com o texto antigo.
 - **Conferido** no TES-1014/26: PP-00206 rejeitada e reemitida pela aba de PPs
   (PP-00255), e a PP-00255 rejeitada e reemitida pelo painel do item
-  (PP-00257, enviada de volta ao financeiro). Protótipo com a tela real:
+  (PP-00257), e a PP-00257 reemitida com a resposta "Não, ainda faltam PPs"
+  já marcada (PP-00258, enviada de volta ao financeiro). Protótipo com a tela
+  real:
   https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r

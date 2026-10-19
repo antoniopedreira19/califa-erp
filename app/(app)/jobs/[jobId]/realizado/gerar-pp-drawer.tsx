@@ -662,9 +662,10 @@ export function GerarPPDrawer({
     setFornecedorPendenteId(null);
     setFaltaResposta(false);
     setFaltaPagamento(false);
-    // A PP a emitir volta com a resposta que foi salva; a nova pergunta do
-    // zero (a que refaz uma rejeitada também: o item pode ter mudado). A PP
-    // gerada em edição volta com o que o item diz hoje (decisão 173).
+    // A PP a emitir volta com a resposta que foi salva (a que reemite uma
+    // rejeitada, com a resposta da primeira vez, desde 19/10/2026); a nova
+    // pergunta do zero. A PP gerada em edição volta com o que o item diz
+    // hoje (decisão 173).
     setUltimaPP(aEmitirEditando?.ultima_pp_do_item ?? (ppGeradaEditando ? itemConcluido : null));
     setUploadPrefix(null);
     setAnexos([]);

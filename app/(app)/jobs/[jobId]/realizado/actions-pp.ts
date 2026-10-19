@@ -4036,6 +4036,31 @@ export async function cancelarERefazerPP(
   const barrado = await barrarEnvioPeloPapel(gate.session, ppId, gate.job);
   if (barrado) return barrado;
 
+  // "Esta é a última PP deste item?" volta respondida como da primeira vez
+  // (Tiago, 19/10/2026): a resposta da PP a emitir que gerou a rejeitada.
+  // A PP gerada antes da decisão 153 não tem PP a emitir; o rastro da
+  // resposta é o item marcado como concluído.
+  const [{ data: origem }, { data: itemDaPP }] = await Promise.all([
+    supabase
+      .from("pedidos_compra_a_emitir")
+      .select("ultima_pp_do_item")
+      .eq("pp_id", ppId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+    supabase
+      .from("jobs_itens_realizado")
+      .select("pps_concluidas_em")
+      .eq("id", linhaPP.item_realizado_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+  ]);
+  const ultimaDaPrimeiraVez =
+    typeof origem?.ultima_pp_do_item === "boolean"
+      ? origem.ultima_pp_do_item
+      : itemDaPP
+        ? itemDaPP.pps_concluidas_em != null
+        : null;
+
   // Os mesmos dados, no formato do formulário.
   const fora = lerPagamentoForaDoCadastro(linhaPP as Parameters<typeof lerPagamentoForaDoCadastro>[0]);
   const parcelas = (linhaPP.parcelas ?? [])
@@ -4140,8 +4165,9 @@ export async function cancelarERefazerPP(
     servico: dados.servico,
     valor: Number(linhaPP.valor),
     dados,
-    // A pergunta da última PP volta a ser feita: o item pode ter mudado.
-    ultima_pp_do_item: null,
+    // Até 19/10/2026 a pergunta voltava em branco; agora volta como foi
+    // respondida, e a produção troca se o item mudou.
+    ultima_pp_do_item: ultimaDaPrimeiraVez,
     refaz_pp_id: ppId,
     criada_por: session.profile.id,
     atualizada_por: session.profile.id,

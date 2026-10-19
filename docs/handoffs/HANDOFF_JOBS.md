@@ -5889,7 +5889,12 @@ texto começava por "é cancelada" e a aba de PPs não abria nada.
   a resposta da "última PP". O pedido de revisão leva o `updated_at` de antes
   (`depoisDe`) e espera o novo (`job-item-realizado-table.tsx`,
   `painel-pps-item.tsx` e a aba).
+- **"Esta é a última PP deste item?" volta respondida** como da primeira vez
+  (comentário do Tiago no protótipo): `cancelarERefazerPP` lê o
+  `ultima_pp_do_item` da PP a emitir que gerou a rejeitada e, na PP anterior à
+  153, o `pps_concluidas_em` do item. Antes voltava `null`.
 - **Sem migration.** Conferido no TES-1014/26: PP-00206 → PP-00255 pela aba
-  de PPs e PP-00255 → PP-00257 pelo painel do item; a PP-00257 voltou ao
-  financeiro, como estava a PP-00206. Protótipo:
+  de PPs, PP-00255 → PP-00257 pelo painel do item e PP-00257 → PP-00258 com
+  "Não, ainda faltam PPs" já marcado; a PP-00258 voltou ao financeiro, como
+  estava a PP-00206. Protótipo:
   https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r
