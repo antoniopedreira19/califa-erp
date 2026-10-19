@@ -515,6 +515,7 @@ export default async function JobDetailPage({
             podeGerarPP={podeGerarPP && !comPedido}
             papelEnviaPP={papelEnviaPP && !comPedido}
             papelCorrigeNf={papelCorrigeNf}
+            ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
             podeConfirmarBv={podeConfirmarBv && !comPedido}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             linhasComEnvioTravado={linhasComEnvioTravado}

@@ -1,4 +1,4 @@
-import type { DevolucaoDaVerba, PrestacaoDaVerba } from "@/lib/types";
+import type { DevolucaoDaVerba, DocumentoDaPrestacao, PrestacaoDaVerba } from "@/lib/types";
 
 /**
  * A prestação de contas da verba embutida na consulta de `pedidos_compra`
@@ -15,7 +15,8 @@ export const SELECT_PRESTACAO_DA_VERBA =
   "prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(" +
   "id, status, valor_gasto, valor_devolvido, fechada_em, motivo_reprovacao, reprovada_em, aprovada_em, " +
   "enviada_por:profiles!fechada_por(nome), reprovada_por:profiles!reprovada_por(nome), aprovada_por:profiles!aprovada_por(nome), " +
-  "documentos:pp_verba_prestacoes_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, documento_tipo, documento_numero, valor, created_at)" +
+  "documentos:pp_verba_prestacoes_anexos(id, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, documento_tipo, documento_numero, valor, created_at, " +
+  "documento_data, tomador_estabelecimento_id, emitente_documento, emitente_nome, descricao, nota_fiscal_id)" +
   "), " +
   "devolucao:pp_verba_devolucoes!pp_verba_devolucoes_pedido_compra_id_fkey(id, valor, data_pagamento, pago_em)";
 
@@ -42,17 +43,38 @@ export function prestacaoDaVerba(bruto: any): PrestacaoDaVerba | null {
     aprovada_por_nome: primeiro(p.aprovada_por)?.nome ?? null,
     documentos: ((p.documentos ?? []) as any[])
       .slice()
-      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
-      .map((d) => ({
-        id: d.id,
-        arquivo_nome_original: d.arquivo_nome_original,
-        arquivo_tamanho_bytes: Number(d.arquivo_tamanho_bytes ?? 0),
-        arquivo_mimetype: d.arquivo_mimetype,
-        documento_tipo: d.documento_tipo,
-        documento_numero: d.documento_numero ?? null,
-        valor: Number(d.valor ?? 0),
-      })),
+      .sort(
+        (a, b) =>
+          String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)),
+      )
+      .map(
+        (d): DocumentoDaPrestacao => ({
+          id: d.id,
+          arquivo_nome_original: d.arquivo_nome_original,
+          arquivo_tamanho_bytes: Number(d.arquivo_tamanho_bytes ?? 0),
+          arquivo_mimetype: d.arquivo_mimetype,
+          created_at: d.created_at,
+          documento_tipo: d.documento_tipo ?? null,
+          documento_numero: d.documento_numero ?? null,
+          documento_data: d.documento_data ?? null,
+          valor: d.valor == null ? null : Number(d.valor),
+          tomador_estabelecimento_id: d.tomador_estabelecimento_id ?? null,
+          emitente_documento: d.emitente_documento ?? null,
+          emitente_nome: d.emitente_nome ?? null,
+          descricao: d.descricao ?? null,
+          nota_fiscal_id: d.nota_fiscal_id ?? null,
+        }),
+      ),
   };
+}
+
+/**
+ * A prestação como o FINANCEIRO a vê: o rascunho (decisão 189) é a
+ * produção juntando documentos e não chega a ele — para a fila, a tela da
+ * PP e os títulos, a verba ainda não tem prestação.
+ */
+export function prestacaoEnviada(p: PrestacaoDaVerba | null): PrestacaoDaVerba | null {
+  return p && p.status !== "rascunho" ? p : null;
 }
 
 export function devolucaoDaVerba(bruto: any): DevolucaoDaVerba | null {

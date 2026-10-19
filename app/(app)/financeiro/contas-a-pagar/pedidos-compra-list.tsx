@@ -282,7 +282,9 @@ type FiltroStatus = PPStatus | "todas" | "prestacoes";
 
 const STATUS_FILTROS: Array<{ key: FiltroStatus; label: string }> = [
   { key: "em_avaliacao", label: "Em avaliação" },
-  { key: "prestacoes", label: "Prestações" },
+  // "Prestação de Contas" desde 19/10/2026 (comentário do Tiago no
+  // protótipo da decisão 189); antes, "Prestações".
+  { key: "prestacoes", label: "Prestação de Contas" },
   { key: "aprovada", label: "Aprovadas" },
   { key: "pago", label: "Pagas" },
   { key: "rejeitada", label: "Rejeitadas" },
@@ -316,12 +318,12 @@ const ORDEM_DO_STATUS = [
 ];
 
 /**
- * As colunas. No chip "Prestações" quatro títulos mudam de sentido —
+ * As colunas. No chip "Prestação de Contas" quatro títulos mudam de sentido —
  * Emissão vira "Enviada em", Prazo original vira "Gasto" e Parcela vira
  * "Saldo"; Valor só muda de nome ("Verba", o mesmo número). As três que
  * mudam de sentido têm chave própria em cada modo: o filtro feito em
  * "Emissão" não vale sobre a data de envio da prestação, e volta quando
- * o chip sai de Prestações. Código, Fornecedor, Job, Enviada por, Valor e
+ * o chip sai de Prestação de Contas. Código, Fornecedor, Job, Enviada por, Valor e
  * Status seguem filtrando nos dois modos.
  */
 function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
@@ -513,7 +515,7 @@ export function PedidosCompraList({
   const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-pps" });
   const filtrados = colunas.visiveis;
   /** A ordem guardada pode ser de uma coluna que este modo não tem
-   *  (ordenou por Emissão e foi para Prestações): aí ela não vale, e a
+   *  (ordenou por Emissão e foi para Prestação de Contas): aí ela não vale, e a
    *  barra não aparece por causa dela. */
   const ordemValendo =
     colunas.ordenacao !== null && COLUNAS.some((c) => c.chave === colunas.ordenacao!.coluna);

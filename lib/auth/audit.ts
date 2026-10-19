@@ -340,6 +340,10 @@ export type AuditAction =
   | "verba_producao.prestacao_enviada"
   | "verba_producao.prestacao_aprovada"
   | "verba_producao.prestacao_reprovada"
+  // Decisão 189: documento a documento, e a correção do financeiro.
+  | "verba_producao.prestacao_documento_anexado"
+  | "verba_producao.prestacao_documento_removido"
+  | "verba_producao.prestacao_documento_corrigido"
   | "pp_verba_devolucao.baixada"
   | "pp_verba_devolucao.baixa_estornada"
   | "empresa_contabil.criada"

@@ -208,7 +208,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 186 | [O histórico de versões da Planilha Interna do job, na produção e no financeiro](186-historico-de-versoes-da-planilha-do-job.md) | 2026-10-17 |
 | 187 | [PP de reembolso: despesas com comprovantes e deslocamento com veículo próprio](187-pp-de-reembolso.md) | 2026-10-17 |
 | 188 | [Envio em lote para faturamento: vários jobs de um cliente, com as notas que o cliente pediu e o rateio entre notas e jobs](188-envio-em-lote-para-faturamento.md) | 2026-10-19 |
-| 189 | *Reservada* — em uso por outra sessão (prestação de contas da verba), ainda sem arquivo em 19/10/2026 | 2026-10-19 |
+| 189 | [Prestação de contas da verba documento a documento, pelo "PPs" da planilha, e a NF da loja no cadastro de notas do fiscal](189-prestacao-de-contas-da-verba-documento-a-documento.md) | 2026-10-19 |
 | 190 | [O PDF da PP que não vale para pagamento sai com selo: a gerada, ainda não enviada pelo sistema, e a cancelada](190-selo-no-pdf-da-pp-nao-enviada-e-cancelada.md) | 2026-10-19 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em

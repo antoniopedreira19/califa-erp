@@ -6056,3 +6056,42 @@ ao de uma PP válida. O PDF agora diz quando não vale.
   do RH; `freelancers` tem conta em 208 dos 221, mas em texto livre (199
   bancos só pelo nome, 43 contas sem dígito). A PP-00127 foi recusada pelo
   financeiro justamente por estar sem os dados bancários.
+
+## ⚠️ Nota de 2026-10-19 (10) — Prestação de contas da verba, documento a documento (decisão 189)
+
+Redesenho aprovado pelo Tiago (versão A, "Junta e envia no fim"). Revê a 081
+no lado da produção:
+
+- **Onde:** além da trilha da aba de PPs, o **cartão da verba no "PPs" da
+  Planilha Interna** (`painel-pps-item.tsx`, `PrestacaoNoCartao`) mostra a
+  barra do comprovado, uma linha de onde a prestação está e o botão
+  "Prestar contas / Continuar prestação / Corrigir prestação" (ou "Ver
+  prestação"). O painel fecha e a gaveta abre (`job-item-realizado-table.tsx`,
+  como a ficha "Ver PP"); fechar a gaveta devolve ao painel. A permissão vem
+  de `ppsQuePossoPrestarContas` (página → `JobRealizadoSection` → tabela).
+- **A gaveta** (`pps/prestar-contas-drawer.tsx`, reescrita): cada arquivo
+  sobe e fica salvo como **rascunho** na hora; os campos se salvam a cada
+  pausa (700 ms) ou ao sair do campo, sem revalidar a página — ela se
+  atualiza quando a gaveta fecha. Vale **desde o envio da PP ao financeiro**;
+  o envio só libera com a verba paga. Os 7 tipos, com os campos de cada um
+  (`lib/calculos/prestacao-da-verba.ts`); boleto e contrato sem valor, fora
+  da soma. NF e fatura já vêm com o CNPJ da PP como tomador.
+- **Actions** (`pps/actions-prestacao.ts`): `salvarDocumentoPrestacao`,
+  `removerDocumentoPrestacao` e `enviarPrestacaoVerba` (agora sem a lista de
+  documentos: envia o que está salvo).
+- **Aba de PPs** (`job-pps-section.tsx`): o botão aparece pela regra
+  `producaoEditaPrestacao`; com o cancelar na linha (verba em avaliação), vira
+  ícone. Coluna Status com o selo à esquerda e o da verba em duas linhas
+  (`SituacaoVerbaChip duasLinhas`); `colgroup` com larguras fixas (92, 108,
+  134, 144, 136, 46).
+- **Textos:** "preste contas pelo PPs da planilha ou pela aba de PPs" na ficha
+  "Ver PP" e no envio para encerramento.
+- **Conferido em 19/10/2026 no TES-1001/26, PP-00261** (verba de produção de
+  R$ 3.000,00): gerada e enviada pela tela; com a PP em avaliação, quatro
+  documentos (NF 4521, cupom 9812, recibo 014 e boleto 4521) anexados e
+  salvos — rascunho no banco, sem evento, invisível ao financeiro, envio
+  travado. Paga na Conta Teste, o envio recusou o boleto sem data (a gaveta
+  disse qual documento e marcou o campo); completo, saiu com R$ 1.716,40 (o
+  boleto fora da soma). Reprovada pelo financeiro, a correção (CPF do recibo)
+  foi pelo cartão da Planilha Interna e reenviada. Aprovada, a linha ficou
+  "Concluída" depois da baixa do estorno.

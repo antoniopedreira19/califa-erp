@@ -15,22 +15,51 @@ const CORES: Record<SituacaoVerba, string> = {
   concluida: "border-emerald-200 bg-emerald-50 text-emerald-700",
 };
 
+/** O rótulo longo em duas linhas equilibradas (null = cabe numa só). */
+function emDuasLinhas(rotulo: string): [string, string] | null {
+  const palavras = rotulo.split(" ");
+  if (rotulo.length <= 14 || palavras.length < 2) return null;
+  let melhor: [string, string] | null = null;
+  for (let i = 1; i < palavras.length; i++) {
+    const par: [string, string] = [palavras.slice(0, i).join(" "), palavras.slice(i).join(" ")];
+    if (!melhor || Math.max(par[0].length, par[1].length) < Math.max(melhor[0].length, melhor[1].length)) {
+      melhor = par;
+    }
+  }
+  return melhor;
+}
+
 export function SituacaoVerbaChip({
   situacao,
   className,
+  duasLinhas = false,
 }: {
   situacao: SituacaoVerba;
   className?: string;
+  /** Coluna estreita (Status da aba de PPs, decisão 189): o rótulo longo
+   *  sai em duas linhas fixas e equilibradas, e a caixa abraça a linha
+   *  maior — antes ele quebrava onde a coluna mandasse, e a caixa ocupava a
+   *  célula inteira. */
+  duasLinhas?: boolean;
 }) {
+  const linhas = duasLinhas ? emDuasLinhas(situacaoVerbaLabel(situacao)) : null;
   return (
     <span
       className={cn(
         "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
         CORES[situacao],
         className,
+        linhas && "flex-col items-start gap-0 py-1 leading-[1.25]",
       )}
     >
-      {situacaoVerbaLabel(situacao)}
+      {linhas ? (
+        <>
+          <span className="whitespace-nowrap">{linhas[0]}</span>
+          <span className="whitespace-nowrap">{linhas[1]}</span>
+        </>
+      ) : (
+        situacaoVerbaLabel(situacao)
+      )}
     </span>
   );
 }

@@ -75,9 +75,18 @@ import { AprovarPPDialog } from "./aprovar-pp-dialog";
 import { AprovarPrestacaoDialog } from "./aprovar-prestacao-dialog";
 import { ultimaCorrecaoDaNf, ultimoEnvioDaPP, ultimoEnvioDaPrestacao } from "@/lib/data/eventos-da-pp";
 import {
+  corrigirDocumentoPrestacao,
   reprovarPrestacaoVerba,
   signedUrlAnexoPrestacao,
 } from "./prestacao-verba-actions";
+import {
+  aplicarCampos,
+  camposDoDocumento,
+  chaveDosCampos,
+  somaComprovadaEmCentavos,
+  soDigitos,
+  type CamposDoDocumento,
+} from "@/lib/calculos/prestacao-da-verba";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { rejeitarPedidoCompraFinanceiro, reprovarPPAprovada } from "./actions";
 import {
@@ -149,12 +158,29 @@ export function PPTela(
     ppId: string;
     porAnexo: Record<string, NfEmConferencia>;
   } | null>(null);
+  // Decisão 189: os documentos da prestação que o financeiro corrigiu na
+  // conferência. Cada correção grava na hora (ao sair do campo); o estado
+  // aqui é o que a tela, os totais e o pop-up de aprovação mostram até a
+  // lista ser relida — a linha que a lista passou não muda sozinha.
+  const [prestacaoEditada, setPrestacaoEditada] = React.useState<{
+    ppId: string;
+    porDoc: Record<string, CamposDoDocumento>;
+  } | null>(null);
+  /** O que já está gravado, por documento — sair do campo sem mudar nada
+   *  não vai ao servidor. */
+  const gravadoPorDoc = React.useRef<Record<string, string>>({});
+  const correcoesEmCurso = React.useRef(new Set<Promise<unknown>>());
+  const corrigiuRef = React.useRef(false);
 
   const ppId = pp?.id ?? null;
   // Na verba com prestação, o painel do meio mostra os documentos da
-  // prestação: a PP de verba não tem anexo próprio (decisão 081).
+  // prestação: a PP de verba não tem anexo próprio (decisão 081). Com as
+  // correções do financeiro por cima (decisão 189).
+  const correcoesDestaPP = prestacaoEditada?.ppId === pp?.id ? prestacaoEditada?.porDoc : undefined;
   const documentosDaPrestacao =
-    pp?.verba_producao && pp.prestacao ? pp.prestacao.documentos : null;
+    pp?.verba_producao && pp.prestacao
+      ? pp.prestacao.documentos.map((d) => aplicarCampos(d, correcoesDestaPP?.[d.id]))
+      : null;
   const ehPrestacao = documentosDaPrestacao != null;
   const listaDocumentos = documentosDaPrestacao ?? pp?.anexos ?? [];
   const anexo = listaDocumentos[anexoAtivo] ?? null;
@@ -174,8 +200,16 @@ export function PPTela(
   // DatePicker da emissão só lê o valor quando monta — zerado depois de
   // abrir, ele ficaria com a data da abertura anterior.
   React.useEffect(() => {
-    if (!open) setNfsEditadas(null);
-  }, [open]);
+    if (open) return;
+    setNfsEditadas(null);
+    setPrestacaoEditada(null);
+    gravadoPorDoc.current = {};
+    // A correção já está no banco; a lista relê para a próxima abertura.
+    if (corrigiuRef.current) {
+      corrigiuRef.current = false;
+      router.refresh();
+    }
+  }, [open, router]);
 
   React.useEffect(() => {
     if (!toast) return;
@@ -234,6 +268,11 @@ export function PPTela(
   const situacao = situacaoDaVerba(pp);
   const prestacaoEmAvaliacao =
     pp.verba_producao && pp.prestacao?.status === "em_avaliacao";
+  // O gasto da prestação como está na conferência (decisão 189): boleto e
+  // contrato não somam.
+  const gastoDaPrestacao = documentosDaPrestacao
+    ? somaComprovadaEmCentavos(documentosDaPrestacao) / 100
+    : 0;
   const anexoEhImagem =
     anexo != null && /\.(png|jpe?g|webp|gif)$/i.test(anexo.arquivo_nome_original);
   // Módulo fiscal: as NFs desta PP como estão na conferência (null = a PP
@@ -268,6 +307,51 @@ export function PPTela(
       ppId: id,
       porAnexo: { ...(antes?.ppId === id ? antes.porAnexo : {}), [nf.anexo_id]: nf },
     }));
+  }
+
+  /** Decisão 189: o financeiro corrige um documento da prestação. */
+  function corrigirDocumento(id: string, campos: CamposDoDocumento, salvar: boolean) {
+    if (!pp) return;
+    const ppIdAtual = pp.id;
+    setPrestacaoEditada((antes) => ({
+      ppId: ppIdAtual,
+      porDoc: { ...(antes?.ppId === ppIdAtual ? antes.porDoc : {}), [id]: campos },
+    }));
+    if (!salvar) return;
+    const original = pp.prestacao?.documentos.find((d) => d.id === id);
+    const chave = chaveDosCampos(campos);
+    const gravado = gravadoPorDoc.current[id] ?? (original ? chaveDosCampos(camposDoDocumento(original)) : "");
+    if (chave === gravado) return;
+    gravadoPorDoc.current[id] = chave;
+    const promessa = (async () => {
+      const res = await corrigirDocumentoPrestacao({
+        pp_id: ppIdAtual,
+        documento_id: id,
+        campos: {
+          documento_numero: campos.documento_numero,
+          documento_data: campos.documento_data,
+          valor: campos.valor,
+          tomador_estabelecimento_id: campos.tomador_estabelecimento_id,
+          emitente_documento: soDigitos(campos.emitente_documento),
+          emitente_nome: campos.emitente_nome,
+          descricao: campos.descricao,
+        },
+      });
+      if (!res.ok) {
+        // Não gravou: a próxima saída do campo tenta de novo.
+        delete gravadoPorDoc.current[id];
+        setErro(res.message);
+        return;
+      }
+      corrigiuRef.current = true;
+    })();
+    correcoesEmCurso.current.add(promessa);
+    void promessa.finally(() => correcoesEmCurso.current.delete(promessa));
+  }
+
+  /** A aprovação espera as correções que ainda estão indo ao servidor. */
+  async function aguardarCorrecoes() {
+    await Promise.all([...correcoesEmCurso.current]);
   }
 
   function handleAprovada(mensagem: string) {
@@ -515,6 +599,8 @@ export function PPTela(
                     nfs={nfsDaTela}
                     onNf={editarNota}
                     estabelecimentos={estabelecimentos}
+                    documentosDaPrestacao={documentosDaPrestacao}
+                    onCorrigirDocumento={financeiro && prestacaoEmAvaliacao ? corrigirDocumento : null}
                     somenteLeitura={!financeiro}
                   />
                 </div>
@@ -583,7 +669,7 @@ export function PPTela(
                 {pp.prestacao.enviada_por_nome ? ` por ${pp.prestacao.enviada_por_nome}` : ""} ·
                 gasto{" "}
                 <strong className="font-semibold text-white">
-                  {formatCurrency(pp.prestacao.valor_gasto, "BRL")}
+                  {formatCurrency(gastoDaPrestacao, "BRL")}
                 </strong>{" "}
                 de {formatCurrency(pp.valor, "BRL")}
               </span>
@@ -701,9 +787,19 @@ export function PPTela(
                     id: pp.id,
                     codigo: pp.codigo,
                     valor: pp.valor,
-                    gasto: pp.prestacao.valor_gasto,
-                    saldo: pp.prestacao.valor_devolvido,
+                    gasto: gastoDaPrestacao,
+                    saldo: Math.round((pp.valor - gastoDaPrestacao) * 100) / 100,
                     documentos: pp.prestacao.documentos.length,
+                    // Decisão 189: as NFs que vão para o cadastro de notas.
+                    nfs: (documentosDaPrestacao ?? [])
+                      .filter((d) => d.documento_tipo === "nota_fiscal")
+                      .map((d) => ({
+                        documento_id: d.id,
+                        numero: d.documento_numero ?? "",
+                        emissao: d.documento_data ?? "",
+                        valor: Number(d.valor ?? 0),
+                        tomador: d.tomador_estabelecimento_id ?? "",
+                      })),
                     centroDeCusto:
                       financeiro.tipos.find((t) => t.id === pp.plano_conta_tipo_id)?.nome ??
                       "Custo Operacional",
@@ -720,8 +816,11 @@ export function PPTela(
                   }
                 : null
             }
+            cadastro={financeiro.fiscal.cadastro}
+            aguardarCorrecoes={aguardarCorrecoes}
             onAprovada={(mensagem) => {
               setAprovarPrestacaoAberto(false);
+              corrigiuRef.current = false;
               handleAprovada(mensagem);
             }}
           />

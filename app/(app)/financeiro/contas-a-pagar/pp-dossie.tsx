@@ -32,7 +32,9 @@ import Link from "next/link";
 import {
   AlertTriangle,
   CalendarClock,
+  ChevronDown,
   ExternalLink,
+  FileCheck2,
   FileText,
   Image as ImageIcon,
   Lock,
@@ -44,9 +46,17 @@ import {
   ppStatusLabel,
   rotuloDaVerbaMinusculo,
   rotuloDeQuemRecebeAVerba,
-  situacaoDaVerba,
+  type DocumentoDaPrestacao,
   type FiscalEstabelecimento,
 } from "@/lib/types";
+import {
+  camposDoDocumento,
+  formatarCpfCnpj,
+  rotuloDoDocumento,
+  somaComprovadaEmCentavos,
+  tipoSomaNoComprovado,
+  type CamposDoDocumento,
+} from "@/lib/calculos/prestacao-da-verba";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MoneyInput } from "@/components/ui/money-input";
@@ -67,7 +77,6 @@ import {
   type NotaDaLinhaPP,
   type NotasFiscaisDaLinhaPP,
 } from "@/lib/fiscal/nf-da-pp";
-import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PagamentoForaDoCadastroCartao } from "@/components/financeiro/pagamento-fora-do-cadastro";
 import { ehQuarta, ppAceitaQuarta, qualJanela } from "@/lib/calculos/janelas-pagamento";
 import { resumoDosDeslocamentos, rotuloDoReembolso } from "@/lib/calculos/reembolso";
@@ -114,6 +123,8 @@ export function PPDossie({
   nfs,
   onNf,
   estabelecimentos,
+  documentosDaPrestacao,
+  onCorrigirDocumento,
   somenteLeitura = false,
 }: {
   pp: PPRow;
@@ -131,6 +142,14 @@ export function PPDossie({
   onNf: (nf: NfEmConferencia) => void;
   /** Os CNPJs do cadastro de impostos — o CNPJ tomador da NF. */
   estabelecimentos: EstabelecimentoDaNota[];
+  /** Decisão 189: os documentos da prestação como estão na conferência
+   *  (com as correções do financeiro por cima). Null fora da verba com
+   *  prestação. */
+  documentosDaPrestacao: DocumentoDaPrestacao[] | null;
+  /** O financeiro corrige os dados de um documento da prestação em
+   *  avaliação; `salvar` = gravar agora (saiu do campo, escolheu a data ou
+   *  o CNPJ). Null quando nada se corrige. */
+  onCorrigirDocumento: ((id: string, campos: CamposDoDocumento, salvar: boolean) => void) | null;
   /** A produção lendo a PP pelo "Visualizar" do job: nada se edita, e
    *  nada do que é instrução ao financeiro aparece. */
   somenteLeitura?: boolean;
@@ -437,11 +456,24 @@ export function PPDossie({
             }}
           />
 
-          <Historico pp={pp} />
-
-          {/* O reembolso não presta contas (decisão 187). */}
-          {pp.verba_producao && !pp.reembolso_tipo && (
-            <Prestacao pp={pp} anexoAtivo={anexoAtivo} onDocumento={onAnexo} />
+          {/* Decisão 189 (drawer "1 · Enxuto"): na verba, a prestação vem
+              antes do histórico, e o histórico perde "Documentos na
+              aprovação" — a verba é aprovada sem documento, sempre. O
+              reembolso não presta contas (decisão 187). */}
+          {ehVerbaComPrestacao(pp) ? (
+            <>
+              <Prestacao
+                pp={pp}
+                documentos={documentosDaPrestacao ?? []}
+                anexoAtivo={anexoAtivo}
+                onDocumento={onAnexo}
+                onCorrigir={onCorrigirDocumento}
+                estabelecimentos={estabelecimentos}
+              />
+              <Historico pp={pp} semDocumentosNaAprovacao />
+            </>
+          ) : (
+            <Historico pp={pp} />
           )}
         </div>
       ) : (
@@ -475,7 +507,20 @@ export function PPDossie({
  * `pedidos_compra_eventos`, com a hora e um registro por evento: antes
  * eram as colunas da PP, uma por tipo, e o reenvio apagava a rejeição.
  */
-function Historico({ pp }: { pp: PPRow }) {
+/** A verba que presta contas — o reembolso não presta (decisão 187). */
+function ehVerbaComPrestacao(pp: PPRow): boolean {
+  return pp.verba_producao && !pp.reembolso_tipo;
+}
+
+function Historico({
+  pp,
+  semDocumentosNaAprovacao = false,
+}: {
+  pp: PPRow;
+  /** Na verba (decisão 189), o bloco "Documentos na aprovação" sai: ela é
+   *  aprovada sem documento, e os documentos dela estão na prestação. */
+  semDocumentosNaAprovacao?: boolean;
+}) {
   const conferidos = pp.anexos_na_aprovacao;
 
   return (
@@ -504,7 +549,7 @@ function Historico({ pp }: { pp: PPRow }) {
         ))}
       </ul>
 
-      {pp.aprovada_em && (
+      {pp.aprovada_em && !semDocumentosNaAprovacao && (
         <div className="mt-2 rounded-lg border border-border bg-muted/30 p-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Documentos na aprovação
@@ -704,113 +749,331 @@ function Caixa({
   );
 }
 
-/** Verba de produção: o dinheiro sai antes da nota, e volta aqui. */
+/**
+ * A prestação de contas da verba na coluna Dados — o drawer "1 · Enxuto"
+ * aprovado em 19/10/2026 (decisão 189). Sem o resumo do topo (título,
+ * situação e barra: a situação já está no cabeçalho da tela): a lista dos
+ * documentos, com os dados do selecionado para conferir ao lado da imagem,
+ * e os totais no pé.
+ *
+ * Os dados abrem sozinhos no documento selecionado; a seta no fim da linha
+ * fecha e reabre, e cada documento lembra o estado. O financeiro corrige
+ * com a prestação em avaliação; os CNPJs vão em linha inteira, para caber
+ * nos 310 px da coluna sem cortar.
+ */
 function Prestacao({
   pp,
+  documentos,
   anexoAtivo,
   onDocumento,
+  onCorrigir,
+  estabelecimentos,
 }: {
   pp: PPRow;
+  documentos: DocumentoDaPrestacao[];
   /** Índice do documento aberto no painel do meio. */
   anexoAtivo: number;
   onDocumento: (i: number) => void;
+  onCorrigir: ((id: string, campos: CamposDoDocumento, salvar: boolean) => void) | null;
+  estabelecimentos: EstabelecimentoDaNota[];
 }) {
-  const situacao = situacaoDaVerba(pp);
   const pr = pp.prestacao;
   const brl = (n: number) => formatCurrency(n, "BRL");
+  const [fechados, setFechados] = React.useState<ReadonlySet<string>>(() => new Set());
+  const alternar = (id: string) =>
+    setFechados((f) => {
+      const n = new Set(f);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const gasto = somaComprovadaEmCentavos(documentos) / 100;
+  const saldo = Math.round((pp.valor - gasto) * 100) / 100;
+  const nfs = documentos.filter((d) => d.documento_tipo === "nota_fiscal");
+  const nfsNoFiscal = nfs.filter((d) => d.nota_fiscal_id);
+  const corrige = onCorrigir !== null && pr?.status === "em_avaliacao";
+
   return (
-    <section className="rounded-xl border border-border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-bold">Prestação de contas</p>
-        {situacao && <SituacaoVerbaChip situacao={situacao} />}
-      </div>
+    <section>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        Documentos da prestação ({documentos.length})
+      </p>
 
-      {pp.status !== "pago" && (
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          A prestação abre depois que a verba for paga.
+      {!pr && (
+        <p className="text-[11.5px] text-muted-foreground">
+          {pp.status === "pago"
+            ? "Verba paga. Quem presta contas é a produção, pelo PPs da planilha ou pela aba de PPs do job."
+            : "A prestação chega depois que a verba for paga."}
         </p>
       )}
 
-      {pp.status === "pago" && !pr && (
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          Verba paga. Quem presta contas é a produção, na aba de PPs do job.
+      {pr?.status === "reprovada" && pr.motivo_reprovacao && (
+        <div className="mb-2 rounded-lg border border-california-red/30 bg-california-red/5 p-2 text-[11px]">
+          <p className="font-semibold text-california-red">
+            Reprovada{pr.reprovada_por_nome ? ` por ${pr.reprovada_por_nome}` : ""} ·{" "}
+            {formatDateTime(pr.reprovada_em)}
+          </p>
+          <p className="text-foreground/80">“{pr.motivo_reprovacao}”</p>
+        </div>
+      )}
+
+      {pr && documentos.length === 0 && (
+        <p className="rounded-lg border border-dashed border-border p-2 text-[11px] text-muted-foreground">
+          Sem gasto — a produção devolve a verba inteira, sem documento.
         </p>
       )}
 
-      {pr && (
-        <div className="mt-2 space-y-2">
-          {pr.status === "reprovada" && pr.motivo_reprovacao && (
-            <div className="rounded-lg border border-california-red/30 bg-california-red/5 p-2 text-[11px]">
-              <p className="font-semibold text-california-red">
-                Reprovada{pr.reprovada_por_nome ? ` por ${pr.reprovada_por_nome}` : ""} ·{" "}
-                {formatDateTime(pr.reprovada_em)}
-              </p>
-              <p className="text-foreground/80">“{pr.motivo_reprovacao}”</p>
-            </div>
-          )}
-          {pr.documentos.length === 0 && (
-            <p className="rounded-lg border border-dashed border-border p-2 text-[11px] text-muted-foreground">
-              Sem gasto — a produção devolve a verba inteira, sem documento.
+      {documentos.length > 0 && (
+        <ul className="space-y-1">
+          {documentos.map((d, i) => {
+            const sel = i === anexoAtivo;
+            const temCampos = sel && corrige;
+            const abertos = temCampos && !fechados.has(d.id);
+            return (
+              <li
+                key={d.id}
+                className={cn(
+                  "rounded-lg border p-1.5",
+                  sel ? "border-california-red bg-california-red/5" : "border-border",
+                )}
+              >
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onDocumento(i)}
+                    aria-pressed={sel}
+                    title={`Ver ${d.arquivo_nome_original} ao lado da PP`}
+                    className="grid min-w-0 flex-1 grid-cols-[14px_minmax(0,1fr)_auto] items-baseline gap-1.5 text-left text-[11px]"
+                  >
+                    <span className="font-mono text-muted-foreground">{i + 1}</span>
+                    <span className="truncate">
+                      {rotuloDoDocumento(d)} · {d.emitente_nome || d.arquivo_nome_original}
+                    </span>
+                    <span className="font-mono font-semibold">
+                      {tipoSomaNoComprovado(d.documento_tipo) ? brl(Number(d.valor ?? 0)) : "—"}
+                    </span>
+                  </button>
+                  {temCampos && (
+                    <button
+                      type="button"
+                      onClick={() => alternar(d.id)}
+                      aria-expanded={abertos}
+                      aria-label={abertos ? "Fechar os dados do documento" : "Abrir os dados do documento"}
+                      title={abertos ? "Fechar os dados do documento" : "Abrir os dados do documento"}
+                      className="inline-flex h-5 w-5 flex-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-california-red"
+                    >
+                      <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", abertos && "rotate-180")} />
+                    </button>
+                  )}
+                </div>
+                {abertos && onCorrigir && (
+                  <ConferirDocumento d={d} estabelecimentos={estabelecimentos} onCorrigir={onCorrigir} />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* O aviso do fiscal em meia linha: a regra o financeiro aprende uma
+          vez; o que muda de PP para PP são as notas. */}
+      {pr?.status === "aprovada"
+        ? nfsNoFiscal.length > 0 && (
+            <p className="mt-2 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+              <FileCheck2 className="h-3 w-3 flex-none" />
+              <span>
+                No fiscal:{" "}
+                <span className="font-mono">{nfsNoFiscal.map((d) => `NF ${d.documento_numero ?? ""}`).join(", ")}</span>
+              </span>
+            </p>
+          )
+        : pr &&
+          nfs.length > 0 && (
+            <p className="mt-2 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+              <FileCheck2 className="h-3 w-3 flex-none" />
+              {nfs.length === 1 ? "1 NF entra" : `${nfs.length} NFs entram`} no fiscal na aprovação.
             </p>
           )}
-          <ul className="space-y-1">
-            {pr.documentos.map((d, i) => (
-              <li key={d.id}>
-                <button
-                  type="button"
-                  onClick={() => onDocumento(i)}
-                  aria-pressed={i === anexoAtivo}
-                  title={`Ver ${d.arquivo_nome_original} ao lado da PP`}
-                  className={cn(
-                    "grid w-full grid-cols-[14px_minmax(0,1fr)_auto] items-baseline gap-1.5 rounded-lg border p-1.5 text-left text-[11px] transition-colors",
-                    i === anexoAtivo
-                      ? "border-california-red bg-california-red/5"
-                      : "border-border hover:bg-muted",
-                  )}
-                >
-                  <span className="font-mono text-muted-foreground">{i + 1}</span>
-                  <span className="truncate">
-                    {documentoTipoLabel(d.documento_tipo)}
-                    {d.documento_numero ? ` ${d.documento_numero}` : ""} · {d.arquivo_nome_original}
-                  </span>
-                  <span className="font-mono font-semibold">{brl(d.valor)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="space-y-1 border-t border-border pt-2 text-[11px]">
-            <div className="flex justify-between font-semibold">
-              <span>Gasto comprovado</span>
-              <span className="font-mono">{brl(pr.valor_gasto)}</span>
-            </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Verba</span>
-              <span className="font-mono">{brl(pp.valor)}</span>
-            </div>
-            {pr.valor_devolvido > 0 && (
+
+      {pr && (
+        <div className="mt-2 space-y-1 border-t border-border pt-2 text-[11px]">
+          <div className="flex justify-between font-semibold">
+            <span>Gasto comprovado</span>
+            <span className="font-mono">{brl(gasto)}</span>
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>Verba</span>
+            <span className="font-mono">{brl(pp.valor)}</span>
+          </div>
+          {pp.devolucao ? (
+            <>
               <div className="flex justify-between rounded-md bg-teal-50 px-2 py-1 font-semibold text-teal-800">
-                <span>{pp.devolucao ? "Estorno de verba" : "Saldo → estorno"}</span>
-                <span className="font-mono">−{brl(pr.valor_devolvido)}</span>
+                <span>Estorno de verba</span>
+                <span className="font-mono">−{brl(pp.devolucao.valor)}</span>
               </div>
-            )}
-            {pp.devolucao && (
               <p className="text-muted-foreground">
                 {pp.devolucao.pago_em
                   ? `Devolvido em ${formatDate(pp.devolucao.pago_em)}.`
                   : `Devolução prevista para ${formatDate(pp.devolucao.data_pagamento)}.`}
               </p>
-            )}
-          </div>
-          <p className="text-[10.5px] text-muted-foreground">
-            Enviada{pr.enviada_por_nome ? ` por ${pr.enviada_por_nome}` : ""} ·{" "}
-            {formatDateTime(pr.enviada_em)}
-            {pr.aprovada_em
-              ? ` · aprovada${pr.aprovada_por_nome ? ` por ${pr.aprovada_por_nome}` : ""} em ${formatDateTime(pr.aprovada_em)}`
-              : ""}
-          </p>
+            </>
+          ) : (
+            pr.status !== "aprovada" && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Saldo → estorno</span>
+                <span className="font-mono">{brl(Math.max(0, saldo))}</span>
+              </div>
+            )
+          )}
         </div>
       )}
     </section>
+  );
+}
+
+const rotuloDaConferencia = "text-[10.5px] font-medium text-muted-foreground";
+const alturaDaConferencia = "h-7 px-2 text-[11px]";
+
+/**
+ * Os dados de um documento da prestação, que o financeiro confere com a
+ * imagem ao lado e corrige (decisão 189). O tipo é da produção: quem
+ * discordar reprova.
+ */
+function ConferirDocumento({
+  d,
+  estabelecimentos,
+  onCorrigir,
+}: {
+  d: DocumentoDaPrestacao;
+  estabelecimentos: EstabelecimentoDaNota[];
+  onCorrigir: (id: string, campos: CamposDoDocumento, salvar: boolean) => void;
+}) {
+  const campos: CamposDoDocumento = {
+    ...camposDoDocumento(d),
+    emitente_documento: d.emitente_documento ?? "",
+  };
+  // O CNPJ digitado fica como a pessoa escreve até sair do campo.
+  const [cnpjDigitado, setCnpjDigitado] = React.useState(() => formatarCpfCnpj(d.emitente_documento));
+  const mudar = (c: Partial<CamposDoDocumento>, salvar: boolean) => onCorrigir(d.id, { ...campos, ...c }, salvar);
+  const t = d.documento_tipo;
+  const fiscal = t === "nota_fiscal" || t === "fatura" || t === "cupom_fiscal";
+  const comTomador = t === "nota_fiscal" || t === "fatura";
+  const idBase = `conf-${d.id.slice(0, 8)}`;
+  const tomador = estabelecimentos.find((e) => e.id === d.tomador_estabelecimento_id);
+
+  const texto = (
+    campo: "documento_numero" | "emitente_nome" | "descricao",
+    titulo: string,
+    mono = false,
+  ) => (
+    <label className="block min-w-0" htmlFor={`${idBase}-${campo}`}>
+      <span className={rotuloDaConferencia}>{titulo}</span>
+      <Input
+        id={`${idBase}-${campo}`}
+        value={campos[campo]}
+        onChange={(e) => mudar({ [campo]: e.target.value }, false)}
+        onBlur={(e) => mudar({ [campo]: e.target.value }, true)}
+        maxLength={campo === "documento_numero" ? 60 : 200}
+        autoComplete="off"
+        className={cn(mono && "font-mono", alturaDaConferencia)}
+      />
+    </label>
+  );
+  const data = (
+    <label className="block min-w-0" htmlFor={`${idBase}-data`}>
+      <span className={rotuloDaConferencia}>{fiscal ? "Emissão" : "Data"}</span>
+      <DatePicker
+        key={`${idBase}-data`}
+        id={`${idBase}-data`}
+        name={`${idBase}_data`}
+        defaultValue={d.documento_data ?? undefined}
+        placeholder="Selecione"
+        onDateChange={(x) => mudar({ documento_data: x ? isoDoDia(x) : "" }, true)}
+        className={alturaDaConferencia}
+      />
+    </label>
+  );
+  const valor = (
+    <label className="block min-w-0" htmlFor={`${idBase}-valor`}>
+      <span className={rotuloDaConferencia}>Valor</span>
+      <MoneyInput
+        id={`${idBase}-valor`}
+        value={d.valor && d.valor > 0 ? d.valor : null}
+        onValueChange={(v) => mudar({ valor: v > 0 ? v : null }, false)}
+        onBlur={() => mudar({}, true)}
+        className={alturaDaConferencia}
+      />
+    </label>
+  );
+  const emitenteDocumento = (titulo: string) => (
+    <label className="block min-w-0" htmlFor={`${idBase}-emitente-doc`}>
+      <span className={rotuloDaConferencia}>{titulo}</span>
+      <Input
+        id={`${idBase}-emitente-doc`}
+        value={cnpjDigitado}
+        onChange={(e) => {
+          setCnpjDigitado(e.target.value);
+          mudar({ emitente_documento: e.target.value }, false);
+        }}
+        onBlur={(e) => {
+          setCnpjDigitado(formatarCpfCnpj(e.target.value));
+          mudar({ emitente_documento: e.target.value }, true);
+        }}
+        maxLength={18}
+        autoComplete="off"
+        className={cn("font-mono", alturaDaConferencia)}
+      />
+    </label>
+  );
+
+  return (
+    <div className="mt-2 space-y-1.5 rounded-md border border-border bg-muted/20 p-2">
+      <p className="text-[10.5px] font-semibold text-muted-foreground">
+        {t === "nota_fiscal"
+          ? "Dados da NF — confira com a nota ao lado"
+          : t === "fatura"
+            ? "Dados da fatura — confira ao lado"
+            : "Dados do documento — confira ao lado"}
+      </p>
+      {t === "outro" && texto("descricao", "Descrição")}
+      <div className="grid grid-cols-2 gap-1.5">
+        {t !== "outro" && texto("documento_numero", "Número", true)}
+        {data}
+        {tipoSomaNoComprovado(t) && valor}
+      </div>
+      {comTomador && (
+        <label className="block min-w-0" htmlFor={`${idBase}-tomador`}>
+          <span className={rotuloDaConferencia}>CNPJ tomador</span>
+          <Select
+            value={d.tomador_estabelecimento_id ?? undefined}
+            onValueChange={(v) => mudar({ tomador_estabelecimento_id: v }, true)}
+          >
+            <SelectTrigger
+              id={`${idBase}-tomador`}
+              aria-label="CNPJ tomador"
+              className={cn("font-mono", alturaDaConferencia)}
+            >
+              <SelectValue placeholder="Selecione">
+                {tomador ? formatarCnpj(tomador.cnpj ?? "") : undefined}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {estabelecimentos
+                .filter((e) => e.ativo || e.id === d.tomador_estabelecimento_id)
+                .map((e) => (
+                  <SelectItem key={e.id} value={e.id} className="text-xs">
+                    {e.nome} · <span className="font-mono">{formatarCnpj(e.cnpj ?? "")}</span>
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </label>
+      )}
+      {fiscal && emitenteDocumento("Emitente · CNPJ")}
+      {fiscal && texto("emitente_nome", "Emitente · razão social")}
+      {t === "recibo" && texto("emitente_nome", "Quem recebeu")}
+      {t === "recibo" && emitenteDocumento("CPF/CNPJ de quem recebeu")}
+    </div>
   );
 }
 

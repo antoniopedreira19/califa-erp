@@ -32,6 +32,7 @@ import {
   SELECT_PRESTACAO_DA_VERBA,
   devolucaoDaVerba,
   prestacaoDaVerba,
+  prestacaoEnviada,
 } from "@/lib/data/prestacao-da-verba";
 import {
   SELECT_EVENTOS_DA_PP,
@@ -390,7 +391,8 @@ export function mapearPPsDoFinanceiro(
     reembolso_deslocamentos: r.reembolso_deslocamentos ?? null,
     responsavel_nome: nomeDeQuemRecebeAVerba(r),
     // Prestação da verba e estorno do saldo, no formato único (decisão 081).
-    prestacao: prestacaoDaVerba(r.prestacao),
+    // O rascunho da produção (decisão 189) não chega ao financeiro.
+    prestacao: prestacaoEnviada(prestacaoDaVerba(r.prestacao)),
     devolucao: devolucaoDaVerba(r.devolucao),
     // Histórico de eventos (decisão 136): rejeições, reenvios e quem fez
     // cada um — as colunas acima guardam só o último de cada tipo.

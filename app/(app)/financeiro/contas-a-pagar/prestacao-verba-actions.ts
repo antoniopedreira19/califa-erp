@@ -19,6 +19,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { MOTIVOS_SEM_CREDITO } from "@/lib/fiscal/calculos";
 
 const BUCKET = "pedidos-compra";
 const ANEXO_TTL_SEGUNDOS = 3600;
@@ -65,6 +66,26 @@ const aprovarSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Data prevista inválida.")
     .nullable(),
+  /** Decisão 189: as NFs da prestação vão para o cadastro de notas do
+   *  fiscal; o financeiro só tira o crédito de PIS/COFINS, e com motivo —
+   *  como na aprovação da PP normal. */
+  notas: z
+    .array(
+      z
+        .object({
+          documento_id: z.string().uuid(),
+          credito_retirado: z.boolean(),
+          credito_motivo: z.string().nullable(),
+        })
+        .refine(
+          (n) =>
+            !n.credito_retirado ||
+            (MOTIVOS_SEM_CREDITO as readonly string[]).includes(n.credito_motivo ?? ""),
+          "Escolha por que a NF não gera crédito de PIS/COFINS.",
+        ),
+    )
+    .max(60)
+    .default([]),
 });
 
 export async function aprovarPrestacaoVerba(
@@ -81,15 +102,29 @@ export async function aprovarPrestacaoVerba(
   const { data: estornoId, error } = await supabase.rpc("aprovar_prestacao_verba", {
     p_pp_id: parsed.data.pp_id,
     p_data_prevista: parsed.data.data_prevista,
+    p_notas: parsed.data.notas.map((n) => ({
+      documento_id: n.documento_id,
+      credito_retirado: n.credito_retirado,
+      credito_motivo: n.credito_retirado ? n.credito_motivo : null,
+    })),
   });
   if (error) return { ok: false, message: error.message };
 
-  const { data: pp } = await supabase
-    .from("pedidos_compra")
-    .select("codigo, job_id")
-    .eq("id", parsed.data.pp_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
+  // As NFs que a aprovação registrou, e de qual emitente (o cadastro que a
+  // aprovação criou fica na auditoria).
+  const [{ data: pp }, { data: notas }] = await Promise.all([
+    supabase
+      .from("pedidos_compra")
+      .select("codigo, job_id")
+      .eq("id", parsed.data.pp_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .maybeSingle(),
+    supabase
+      .from("notas_fiscais_fornecedor")
+      .select("id, numero, fornecedor_id, credito_pis_cofins_retirado")
+      .eq("registrada_na_pp_id", parsed.data.pp_id)
+      .eq("tenant_id", session.activeTenant.id),
+  ]);
 
   await logAuditEvent({
     acao: "verba_producao.prestacao_aprovada",
@@ -100,6 +135,7 @@ export async function aprovarPrestacaoVerba(
       pp_codigo: pp?.codigo ?? null,
       estorno_id: estornoId ?? null,
       data_prevista: parsed.data.data_prevista,
+      notas_registradas: notas ?? [],
     },
   });
 
@@ -152,6 +188,69 @@ export async function reprovarPrestacaoVerba(
   revalidatePath("/financeiro/contas-a-pagar");
   if (pp?.job_id) revalidatePath(`/jobs/${pp.job_id}`);
   return { ok: true, codigo: pp?.codigo ?? "" };
+}
+
+const corrigirSchema = z.object({
+  pp_id: z.string().uuid(),
+  documento_id: z.string().uuid(),
+  campos: z.object({
+    documento_numero: z.string().max(60, "O número passa de 60 caracteres."),
+    documento_data: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, "Data inválida."),
+    valor: z.number().positive("Informe um valor maior que zero.").max(999_999_999).nullable(),
+    tomador_estabelecimento_id: z.string().uuid().nullable(),
+    emitente_documento: z.string().max(30),
+    emitente_nome: z.string().max(200, "Nome longo demais (até 200 caracteres)."),
+    descricao: z.string().max(200, "Descrição longa demais (até 200 caracteres)."),
+  }),
+});
+
+/**
+ * O financeiro corrige os dados de um documento da prestação em avaliação,
+ * conferindo com a imagem ao lado (decisão 189). O tipo não muda aqui: o
+ * financeiro que discordar reprova. A soma da prestação se refaz no banco.
+ */
+export async function corrigirDocumentoPrestacao(
+  input: z.input<typeof corrigirSchema>,
+): Promise<Result<{ valorGasto: number; saldo: number }>> {
+  const parsed = corrigirSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const gate = await gateFinanceiro(parsed.data.pp_id, "verba_producao.prestacao_documento_corrigido");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+  const c = parsed.data.campos;
+
+  const { error } = await supabase.rpc("corrigir_documento_prestacao_verba", {
+    p_documento_id: parsed.data.documento_id,
+    p_documento: {
+      ...c,
+      documento_numero: c.documento_numero.trim(),
+      valor: c.valor == null ? null : Math.round(c.valor * 100) / 100,
+    },
+  });
+  if (error) return { ok: false, message: error.message };
+
+  const { data: prest } = await supabase
+    .from("pp_verba_prestacoes")
+    .select("valor_gasto, valor_devolvido")
+    .eq("pedido_compra_id", parsed.data.pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  await logAuditEvent({
+    acao: "verba_producao.prestacao_documento_corrigido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: parsed.data.pp_id,
+    metadata: { documento_id: parsed.data.documento_id, campos: c },
+  });
+
+  return {
+    ok: true,
+    valorGasto: Number(prest?.valor_gasto ?? 0),
+    saldo: Number(prest?.valor_devolvido ?? 0),
+  };
 }
 
 /**

@@ -7781,3 +7781,40 @@ dado ou marca situação; no banco, só os estornos.
 - **Desempenho no dev:** cada pop-up levou de 3 a 10 s para carregar a
   planilha (Server Action + `carregarDetalheDoJob` completo). Não foi
   medido no build de produção.
+
+## ⚠️ Nota de 2026-10-19 (8) — A conferência da prestação da verba e a NF da loja no fiscal (decisão 189)
+
+- **Drawer "1 · Enxuto"** (`pp-dossie.tsx`, só na verba): a lista dos
+  documentos da prestação com os dados do selecionado ao lado da imagem
+  (abrem sozinhos; a seta fecha e reabre, e cada documento lembra), os totais
+  no pé e o Histórico depois — sem "Documentos na aprovação" e sem o resumo do
+  topo. Os CNPJs em linha inteira nos 310 px.
+- **Correção pelo financeiro:** `corrigirDocumentoPrestacao`
+  (`prestacao-verba-actions.ts`) grava ao sair do campo; a tela (`pp-tela.tsx`)
+  guarda as correções por cima da linha (os totais, o rodapé e o pop-up usam
+  elas) e relê a lista ao fechar. O tipo não se corrige: quem discordar
+  reprova.
+- **Aprovar** (`aprovar-prestacao-dialog.tsx`): a linha das NFs que vão para
+  o cadastro de notas e o crédito de PIS/COFINS de cada uma, com o "Não gera
+  crédito" e o motivo da PP normal. `aprovar_prestacao_verba` procura o
+  emitente pelo CNPJ (ou o cria, sem dados de pagamento) e registra a nota com
+  `registrada_na_pp_id` = a verba; sem ISS retido. Fatura e cupom não entram.
+- **Apuração** (`lib/fiscal/apuracao-fatos.ts`): a nota que não é anexo de PP
+  entra pela verba que a registrou, sem os pagamentos dela. Teste novo em
+  `apuracao-fatos.test.ts`.
+- **Fila:** o filtro "Prestações" passou a se chamar "Prestação de Contas"; o
+  rascunho da produção não aparece em lugar nenhum do financeiro
+  (`prestacaoEnviada`, em `dados-dos-titulos.ts`).
+- **Conferido em 19/10/2026 (PP-00261, TES-1001/26):** o filtro mostrou 0
+  enquanto a produção juntava documentos e 1 depois do envio; a NF corrigida
+  de R$ 1.180,00 para R$ 1.200,00 refez a soma (R$ 1.736,40, saldo
+  R$ 1.263,60) e gravou a auditoria; a reprovação com motivo voltou à
+  produção; na aprovação, "Não gera crédito" sem motivo foi recusado, e com
+  motivo aprovou: o fornecedor "ZZ FERRAGENS TESTE 189 LTDA" (CNPJ
+  fictício de teste) nasceu sem dados de pagamento, a NF 4521
+  entrou no cadastro de notas registrada pela PP-00261 (tomador Empresa
+  Teste, sem crédito, motivo gravado, sem ISS) e aparece na memória da COFINS
+  de out/2026 da Empresa Teste; o cupom não criou fornecedor. O estorno de
+  −R$ 1.263,60 (data prevista 26/10) foi baixado na Conta Teste. Pelo banco,
+  numa transação desfeita: o GP não corrige documento, o freela de fora não
+  alcança a PP e `anon` não executa as funções novas.

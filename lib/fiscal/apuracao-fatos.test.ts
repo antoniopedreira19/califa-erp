@@ -43,7 +43,9 @@ function nota(parcial: Partial<NotaDoBanco> & Pick<NotaDoBanco, "id" | "anexos">
     credito_pis_cofins_retirado: false,
     credito_pis_cofins_motivo: null,
     registrada_na_pp_id: null,
+    registrada_em: null,
     fornecedor: { nome: "Produtora Alfa", razao_social: null },
+    pp_que_registrou: null,
     ...parcial,
   };
 }
@@ -173,4 +175,34 @@ test("o adiantamento conta na emissão da nota, com a retenção junto; o recebi
   assert.equal(porId.get("adiantado")?.retido.IRRF, 150);
   assert.equal(porId.get("depois")?.data, "2026-11-03");
   assert.equal(porId.get("depois")?.adiantado_em, undefined);
+});
+
+test("a NF da prestação da verba entra pela verba que a registrou, sem os pagamentos dela (decisão 189)", () => {
+  const verba = { ...pp("v", "PP-00300", "pago"), verba_producao: true };
+  const [n] = montar(
+    [
+      nota({
+        id: "nv",
+        valor: "1180.00",
+        registrada_na_pp_id: "v",
+        registrada_em: "2026-10-19T15:00:00Z",
+        pp_que_registrou: verba,
+        anexos: [],
+      }),
+    ],
+    [{ id: "pg", valor: "3000.00", data_movimento: "2026-10-14", pedido_compra_id: "v", retencoes: [] }],
+  );
+  assert.ok(n, "a nota da verba entra na apuração");
+  assert.equal(n.valor, 1180);
+  assert.equal(n.pp, "PP-00300");
+  assert.deepEqual(n.pp_ids, ["v"]);
+  assert.equal(n.pagamentos.length, 0);
+});
+
+test("a nota registrada por PP que não é verba, sem anexo que conte, continua fora", () => {
+  const normal = { ...pp("x", "PP-00301", "pago"), verba_producao: false };
+  const notas = montar([
+    nota({ id: "nx", registrada_na_pp_id: "x", pp_que_registrou: normal, anexos: [] }),
+  ]);
+  assert.equal(notas.length, 0);
 });

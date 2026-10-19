@@ -3014,15 +3014,40 @@ export interface PrestacaoDaVerba {
   aprovada_em: string | null;
   aprovada_por_nome: string | null;
   /** Na ordem em que foram anexados. */
-  documentos: Array<{
-    id: string;
-    arquivo_nome_original: string;
-    arquivo_tamanho_bytes: number;
-    arquivo_mimetype: string;
-    documento_tipo: DocumentoTipo;
-    documento_numero: string | null;
-    valor: number;
-  }>;
+  documentos: DocumentoDaPrestacao[];
+}
+
+/**
+ * Um documento da prestação (decisão 189). Entra um a um, salvo como
+ * rascunho antes do envio — por isso quase tudo pode faltar. A regra do que
+ * cada tipo exige mora em `lib/calculos/prestacao-da-verba.ts` (e no banco,
+ * em `_faltas_do_documento_da_prestacao`). As prestações anteriores à 189
+ * têm só tipo (NF ou recibo), número e valor; os campos novos vêm nulos.
+ */
+export interface DocumentoDaPrestacao {
+  id: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string;
+  created_at: string;
+  /** Nulo no rascunho recém-anexado. */
+  documento_tipo: DocumentoTipo | null;
+  documento_numero: string | null;
+  /** Emissão (NF, fatura, cupom) ou data do gasto. "AAAA-MM-DD". */
+  documento_data: string | null;
+  /** Nulo no rascunho e em boleto e contrato (anexos de apoio, sem valor). */
+  valor: number | null;
+  /** NF e fatura: o CNPJ tomador (cadastro de impostos). */
+  tomador_estabelecimento_id: string | null;
+  /** Só dígitos: CNPJ do emitente (NF, fatura, cupom) ou CPF/CNPJ de quem
+   *  recebeu (recibo). */
+  emitente_documento: string | null;
+  /** Razão social do emitente, ou quem recebeu (recibo). */
+  emitente_nome: string | null;
+  /** Tipo "outro": o que o documento é. */
+  descricao: string | null;
+  /** A NF que a aprovação registrou no cadastro de notas do fiscal. */
+  nota_fiscal_id: string | null;
 }
 
 export interface DevolucaoDaVerba {
@@ -3054,7 +3079,9 @@ export function situacaoDaVerba(pp: {
   devolucao: Pick<DevolucaoDaVerba, "pago_em"> | null;
 }): SituacaoVerba | null {
   if (!pp.verba_producao || ehReembolso(pp) || pp.status !== "pago") return null;
-  if (!pp.prestacao) return "aguardando_prestacao";
+  // O rascunho (decisão 189) é a produção juntando documentos: para o
+  // resto do sistema, a prestação ainda não foi enviada.
+  if (!pp.prestacao || pp.prestacao.status === "rascunho") return "aguardando_prestacao";
   if (pp.prestacao.status === "em_avaliacao") return "prestacao_em_avaliacao";
   if (pp.prestacao.status === "reprovada") return "prestacao_reprovada";
   if (Number(pp.prestacao.valor_devolvido) > 0 && !pp.devolucao?.pago_em) {
@@ -3143,8 +3170,10 @@ export interface PPVerbaDevolucao {
   updated_at: string;
 }
 
-/** Estado da prestação de contas da verba (decisão 081). */
-export type PPVerbaPrestacaoStatus = "em_avaliacao" | "reprovada" | "aprovada";
+/** Estado da prestação de contas da verba (decisão 081). O "rascunho"
+ *  (decisão 189) nasce no primeiro documento salvo e só a produção o vê: o
+ *  financeiro recebe a prestação no envio. */
+export type PPVerbaPrestacaoStatus = "rascunho" | "em_avaliacao" | "reprovada" | "aprovada";
 
 export interface PPVerbaPrestacao {
   id: string;
@@ -3164,12 +3193,21 @@ export interface PPVerbaPrestacao {
   reprovada_por: string | null;
   aprovada_em: string | null;
   aprovada_por: string | null;
+  /** A foto dos documentos na aprovação. Desde a decisão 189 leva também a
+   *  data, o tomador, o emitente, a descrição e a NF registrada; boleto e
+   *  contrato vêm sem valor. */
   documentos_na_aprovacao: Array<{
     id: string;
     nome: string;
     documento_tipo: DocumentoTipo;
     documento_numero: string | null;
-    valor: number;
+    valor: number | null;
+    documento_data?: string | null;
+    tomador_estabelecimento_id?: string | null;
+    emitente_documento?: string | null;
+    emitente_nome?: string | null;
+    descricao?: string | null;
+    nota_fiscal_id?: string | null;
   }> | null;
 }
 
@@ -3183,11 +3221,20 @@ export interface PPVerbaPrestacaoAnexo {
   arquivo_mimetype: string;
   created_by: string | null;
   created_at: string;
-  /** Só NF e recibo comprovam gasto da verba (decisão 081, 3b). */
-  documento_tipo: DocumentoTipo;
+  /** Os 7 tipos do sistema desde a decisão 189 (antes, só NF e recibo).
+   *  Nulo no rascunho recém-anexado. */
+  documento_tipo: DocumentoTipo | null;
   documento_numero: string | null;
-  /** Quanto este documento comprova. */
-  valor: number;
+  /** Quanto este documento comprova. Nulo no rascunho e em boleto e
+   *  contrato, que não somam (decisão 189). */
+  valor: number | null;
+  documento_data: string | null;
+  tomador_estabelecimento_id: string | null;
+  emitente_documento: string | null;
+  emitente_nome: string | null;
+  descricao: string | null;
+  nota_fiscal_id: string | null;
+  updated_at: string;
 }
 
 /**

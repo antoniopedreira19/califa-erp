@@ -17,6 +17,11 @@
  *   alíquota guardada na nota. Os pagamentos (`pp_baixa`), com o que a
  *   agência de fato reteve, vão na primeira nota de cada PP, com o código e
  *   o job da PP que pagou.
+ * - **NF da prestação de contas da verba (decisão 189, 19/10/2026):** a
+ *   aprovação da prestação registra a NF da loja com `registrada_na_pp_id` =
+ *   a PP da verba, sem anexo de PP. Ela entra pela PP que a registrou (a
+ *   verba, paga), sem pagamento: o dinheiro da verba saiu antes da nota, e
+ *   não há retenção.
  * - **Aprovações:** `fiscal_aprovacoes`.
  *
  * Limites conhecidos (a próxima entrega trata): o estorno parcial do valor
@@ -118,7 +123,16 @@ interface NotaFornecedorDoBanco {
   credito_pis_cofins_retirado: boolean | null;
   credito_pis_cofins_motivo: string | null;
   registrada_na_pp_id: string | null;
+  registrada_em: string | null;
   fornecedor: { nome: string | null; razao_social: string | null } | null;
+  /** Decisão 189: a PP que registrou a nota — na NF da verba, a única. */
+  pp_que_registrou: {
+    id: string;
+    codigo: string;
+    status: string;
+    verba_producao: boolean;
+    job: JobDoBanco | null;
+  } | null;
   anexos: Array<{
     created_at: string;
     pp: { id: string; codigo: string; status: string; job: JobDoBanco | null } | null;
@@ -193,8 +207,9 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
       .from("notas_fiscais_fornecedor")
       .select(
         "id, numero, data_emissao, valor, tomador_estabelecimento_id, iss_retido_aliquota, " +
-          "credito_pis_cofins_retirado, credito_pis_cofins_motivo, registrada_na_pp_id, " +
+          "credito_pis_cofins_retirado, credito_pis_cofins_motivo, registrada_na_pp_id, registrada_em, " +
           "fornecedor:fornecedores(nome, razao_social), " +
+          `pp_que_registrou:pedidos_compra!registrada_na_pp_id(id, codigo, status, verba_producao, job:jobs(${SELECT_JOB})), ` +
           `anexos:pedidos_compra_anexos(created_at, pp:pedidos_compra(id, codigo, status, job:jobs(${SELECT_JOB})))`,
       )
       .eq("tenant_id", tenantId)
@@ -350,7 +365,7 @@ export function montarFatos(e: {
   // Decisão 152: cada nota entra uma vez. Só conta a nota que cobre ao
   // menos uma PP aprovada ou paga — a PP que a registrou pode ter sido
   // reprovada depois (decisão 083), e aí a nota espera a próxima.
-  type PPDaNota = { id: string; codigo: string; job: JobDoFato; anexada_em: string };
+  type PPDaNota = { id: string; codigo: string; job: JobDoFato; anexada_em: string; verba: boolean };
   const notasComPPs = e.notasFornecedor
     .map((n) => {
       const pps = new Map<string, PPDaNota>();
@@ -358,17 +373,37 @@ export function montarFatos(e: {
         if (!a.pp || !PP_QUE_CONTA.has(a.pp.status) || !a.pp.job) continue;
         const atual = pps.get(a.pp.id);
         if (!atual || a.created_at < atual.anexada_em)
-          pps.set(a.pp.id, { id: a.pp.id, codigo: a.pp.codigo, job: jobDoFato(a.pp.job), anexada_em: a.created_at });
+          pps.set(a.pp.id, {
+            id: a.pp.id,
+            codigo: a.pp.codigo,
+            job: jobDoFato(a.pp.job),
+            anexada_em: a.created_at,
+            verba: false,
+          });
+      }
+      // Decisão 189: a NF da prestação da verba não é anexo de PP — entra
+      // pela verba que a registrou.
+      const daVerba = n.pp_que_registrou;
+      if (pps.size === 0 && daVerba?.verba_producao && PP_QUE_CONTA.has(daVerba.status) && daVerba.job) {
+        pps.set(daVerba.id, {
+          id: daVerba.id,
+          codigo: daVerba.codigo,
+          job: jobDoFato(daVerba.job),
+          anexada_em: n.registrada_em ?? n.data_emissao,
+          verba: true,
+        });
       }
       return { n, pps: [...pps.values()].sort((x, y) => x.codigo.localeCompare(y.codigo)) };
     })
     .filter((x) => x.pps.length > 0);
 
   // A primeira nota de cada PP (na ordem em que foi anexada) leva os
-  // pagamentos dela: as retenções do pagamento são da PP, não da nota.
+  // pagamentos dela: as retenções do pagamento são da PP, não da nota. A
+  // verba não: o pagamento dela é o adiantamento, sem retenção (189).
   const primeiraNotaDaPP = new Map<string, { nota: string; em: string }>();
   for (const { n, pps } of notasComPPs) {
     for (const pp of pps) {
+      if (pp.verba) continue;
       const atual = primeiraNotaDaPP.get(pp.id);
       if (!atual || pp.anexada_em < atual.em || (pp.anexada_em === atual.em && n.id < atual.nota))
         primeiraNotaDaPP.set(pp.id, { nota: n.id, em: pp.anexada_em });
