@@ -131,6 +131,10 @@ qualquer freela escolhido na lista nova. As referências antigas trocaram
 pelo CPF (27 de 29); as 2 do freela de teste sem CPF ficaram com o id antigo,
 e por isso as FKs são `not valid`.
 
+Na mesma data, a lista voltou a deixar de fora quem não está trabalhando:
+entra o freela que não está "Encerrado" no módulo de Freelancers (64 de 221 em
+19/10), como era com a lista provisória (`20261019900004_titular_da_verba_sem_freela_encerrado.sql`).
+
 A conta do freela ainda não vai para a PP: a foto do pagamento continua só
-para o colaborador do RH. Detalhes na nota (9) de 19/10/2026 do
+para o colaborador do RH. Detalhes nas notas (9) e (11) de 19/10/2026 do
 `HANDOFF_JOBS.md`.

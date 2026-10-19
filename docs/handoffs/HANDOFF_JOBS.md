@@ -6095,3 +6095,20 @@ no lado da produção:
   boleto fora da soma). Reprovada pelo financeiro, a correção (CPF do recibo)
   foi pelo cartão da Planilha Interna e reenviada. Aprovada, a linha ficou
   "Concluída" depois da baixa do estorno.
+
+## ⚠️ Nota de 2026-10-19 (11) — Titular da verba: freela encerrado sai da lista (decisão 171)
+
+- **Por quê:** desde as 16h24 a lista "Titular da verba" lia os 221 freelas de
+  `freelancers` sem filtro, inclusive os 157 com o contrato encerrado. O
+  titular da PP-00127 era um deles. Resolvido o caso (a PP saiu como
+  "Terceiro (fornecedor)", PP-00276), o Tiago pediu a lista de volta ao normal.
+- **O que mudou:** migration `20261019900004_titular_da_verba_sem_freela_encerrado.sql`.
+  `pessoas_para_verba` só leva o freela que não está "Encerrado" no módulo de
+  Freelancers (`freelancers_com_status.status_calculado`, a mesma situação da
+  tela do módulo). Colaboradores não mudam: já eram só os ativos do RH.
+- **Conferência:** no TES-1025/26, pelo servidor da 3000, a lista do
+  formulário trouxe 274 pessoas (210 colaboradores ativos e 64 freelas, todos
+  "Sem minuta"), sem o titular da PP-00127. A lista provisória antiga tinha 69
+  freelas ativos; 59 deles seguem na lista, 9 estão encerrados no módulo novo.
+  A única PP a emitir com freela encerrado é um teste do TES-1025/26: ao
+  salvar, pede o titular de novo.

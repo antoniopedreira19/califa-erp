@@ -1,8 +1,9 @@
 /**
  * Quem pode ser titular da verba — de produção, alimentação ou transporte
  * (decisões 164 e 171): os colaboradores ativos do RH e os freelas do cadastro
- * do RH (`freelancers`, desde 19/10/2026; antes a lista provisória `freelas`),
- * sem repetir quem está nos dois.
+ * do RH (`freelancers`, desde 19/10/2026; antes a lista provisória `freelas`)
+ * que não estão "Encerrado" no módulo de Freelancers, sem repetir quem está
+ * nos dois.
  *
  * A ficha do RH só abre para administrador e RH, e o cadastro de freelas
  * guarda o CPF; por isso a lista vem da função `pessoas_para_verba`, que
