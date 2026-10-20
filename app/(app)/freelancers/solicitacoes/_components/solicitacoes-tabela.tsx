@@ -8,8 +8,14 @@ import {
   X,
   ArrowRight,
   MessageCircle,
+  ChevronDown,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Check,
+  Loader2,
 } from "lucide-react";
-import { cn, formatCurrency, formatCpf } from "@/lib/utils";
+import { cn, formatCurrency, formatCpf, nomeCurto } from "@/lib/utils";
 import type {
   FreelancerSolicitacao,
   FreelancerSolicitacaoStatus,
@@ -19,16 +25,25 @@ import {
   STATUS_SOLICITACAO,
 } from "./chip-status-solicitacao";
 import { PopoverSolicitacao } from "./popover-solicitacao";
+import { aprovarSolicitacoesEmLote } from "../actions";
+
+type TipoSolicitacao = "contratacao" | "renovacao";
 
 interface SolicitacaoLinha extends FreelancerSolicitacao {
   solicitante_nome: string | null;
   solicitante_email: string | null;
   job_codigo: string | null;
   job_nome: string | null;
+  tipo_solicitacao: TipoSolicitacao;
 }
 
 interface Props {
   solicitacoes: SolicitacaoLinha[];
+  contagens: Record<string, number>;
+  totalContagem: number;
+  solicitantesDisponiveis: Array<{ id: string; nome: string }>;
+  cargosDisponiveis: string[];
+  tipoFiltroAtual: string;
   activeRole: string;
   userId: string;
   publicOrigin: string;
@@ -36,8 +51,42 @@ interface Props {
   actions?: React.ReactNode;
 }
 
+const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
+
+// Prioridade dos status pra ordem padrão. Pendente primeiro — é o que exige
+// ação do aprovador. Finalizados ficam no final.
+const PRIORIDADE_STATUS: Record<FreelancerSolicitacaoStatus, number> = {
+  pendente: 0,
+  aprovada: 1,
+  cadastrada: 2,
+  rejeitada: 3,
+  cancelada: 4,
+};
+
+const TIPO_META: Record<
+  TipoSolicitacao,
+  { label: string; pill: string }
+> = {
+  contratacao: {
+    label: "Contratação",
+    pill: "bg-sky-50 text-sky-700 border-sky-500/30",
+  },
+  renovacao: {
+    label: "Renovação",
+    pill: "bg-violet-50 text-violet-700 border-violet-500/30",
+  },
+};
+
+type SortKey = "valor" | "status" | "created_at";
+type SortDir = "asc" | "desc";
+
 export function SolicitacoesTabela({
   solicitacoes,
+  contagens,
+  totalContagem,
+  solicitantesDisponiveis,
+  cargosDisponiveis,
+  tipoFiltroAtual,
   activeRole,
   userId,
   publicOrigin,
@@ -46,10 +95,21 @@ export function SolicitacoesTabela({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isAprovador = APROVADORES.has(activeRole);
   const [busca, setBusca] = React.useState(searchParams.get("q") ?? "");
   const [selecionada, setSelecionada] =
     React.useState<SolicitacaoLinha | null>(null);
   const [popoverOpen, setPopoverOpen] = React.useState(false);
+
+  // Bulk approval
+  const [selecionadas, setSelecionadas] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [aprovandoLote, setAprovandoLote] = React.useState(false);
+
+  // Sort explícito do usuário (null = ordem padrão por prioridade de status)
+  const [sortKey, setSortKey] = React.useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = React.useState<SortDir>("asc");
 
   React.useEffect(() => {
     setBusca(searchParams.get("q") ?? "");
@@ -60,6 +120,21 @@ export function SolicitacoesTabela({
     if (!raw) return new Set<string>();
     return new Set(raw.split(",").filter(Boolean));
   }, [searchParams]);
+
+  const solicitantesAtivos = React.useMemo(() => {
+    const raw = searchParams.get("solicitante");
+    if (!raw) return new Set<string>();
+    return new Set(raw.split(",").filter(Boolean));
+  }, [searchParams]);
+
+  const cargoAtual = searchParams.get("cargo") ?? "";
+  const tipoAtual = tipoFiltroAtual;
+  const temAlgumFiltro =
+    busca !== "" ||
+    statusAtivos.size > 0 ||
+    solicitantesAtivos.size > 0 ||
+    cargoAtual !== "" ||
+    tipoAtual !== "";
 
   function alterarQueryString(fn: (p: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString());
@@ -78,6 +153,30 @@ export function SolicitacoesTabela({
     });
   }
 
+  function toggleSolicitante(id: string) {
+    const nova = new Set(solicitantesAtivos);
+    if (nova.has(id)) nova.delete(id);
+    else nova.add(id);
+    alterarQueryString((p) => {
+      if (nova.size > 0) p.set("solicitante", Array.from(nova).join(","));
+      else p.delete("solicitante");
+    });
+  }
+
+  function setCargo(novo: string) {
+    alterarQueryString((p) => {
+      if (novo) p.set("cargo", novo);
+      else p.delete("cargo");
+    });
+  }
+
+  function setTipo(novo: string) {
+    alterarQueryString((p) => {
+      if (novo) p.set("tipo", novo);
+      else p.delete("tipo");
+    });
+  }
+
   function submitBusca(e: React.FormEvent) {
     e.preventDefault();
     alterarQueryString((p) => {
@@ -87,9 +186,25 @@ export function SolicitacoesTabela({
     });
   }
 
-  function limparBusca() {
+  function limparFiltros() {
     setBusca("");
-    alterarQueryString((p) => p.delete("q"));
+    alterarQueryString((p) => {
+      p.delete("q");
+      p.delete("status");
+      p.delete("solicitante");
+      p.delete("cargo");
+      p.delete("tipo");
+    });
+  }
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      if (sortDir === "asc") setSortDir("desc");
+      else setSortKey(null);
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   }
 
   function abrir(s: SolicitacaoLinha) {
@@ -97,8 +212,168 @@ export function SolicitacoesTabela({
     setPopoverOpen(true);
   }
 
+  // Busca por nome do solicitante — client-side (join não suportado por .or())
+  // e filtro de tipo — client-side (calculado após o fetch)
+  const filtradas = React.useMemo(() => {
+    let base = solicitacoes;
+    const buscaNorm = busca.trim().toLowerCase();
+    if (buscaNorm) {
+      base = base.filter((s) => {
+        if ((s.solicitante_nome ?? "").toLowerCase().includes(buscaNorm)) {
+          return true;
+        }
+        // Nome freela, cargo, cpf — já cobertos pelo server-side via `?q=`.
+        // Aqui só reforço solicitante_nome pq o server não consegue filtrar
+        // via join.
+        return (
+          (s.nome_freela ?? "").toLowerCase().includes(buscaNorm) ||
+          (s.cargo ?? "").toLowerCase().includes(buscaNorm) ||
+          (s.cpf_freela ?? "").replace(/\D+/g, "").includes(buscaNorm.replace(/\D+/g, ""))
+        );
+      });
+    }
+    if (tipoAtual) {
+      base = base.filter((s) => s.tipo_solicitacao === tipoAtual);
+    }
+    return base;
+  }, [solicitacoes, busca, tipoAtual]);
+
+  const ordenadas = React.useMemo(() => {
+    const copy = [...filtradas];
+    if (sortKey) {
+      copy.sort((a, b) => {
+        let cmp = 0;
+        if (sortKey === "valor") {
+          cmp = Number(a.valor) - Number(b.valor);
+        } else if (sortKey === "status") {
+          cmp =
+            PRIORIDADE_STATUS[a.status as FreelancerSolicitacaoStatus] -
+            PRIORIDADE_STATUS[b.status as FreelancerSolicitacaoStatus];
+        } else if (sortKey === "created_at") {
+          cmp = a.created_at.localeCompare(b.created_at);
+        }
+        if (cmp === 0) cmp = b.created_at.localeCompare(a.created_at);
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    } else {
+      copy.sort((a, b) => {
+        const pa = PRIORIDADE_STATUS[a.status as FreelancerSolicitacaoStatus];
+        const pb = PRIORIDADE_STATUS[b.status as FreelancerSolicitacaoStatus];
+        if (pa !== pb) return pa - pb;
+        return b.created_at.localeCompare(a.created_at);
+      });
+    }
+    return copy;
+  }, [filtradas, sortKey, sortDir]);
+
+  // Pendentes visíveis — único subset elegível pra bulk
+  const pendentesVisiveis = React.useMemo(
+    () => ordenadas.filter((s) => s.status === "pendente"),
+    [ordenadas],
+  );
+
+  // Mantém o Set clean quando o filtro muda
+  React.useEffect(() => {
+    const pendentesIds = new Set(pendentesVisiveis.map((s) => s.id));
+    setSelecionadas((atual) => {
+      let mudou = false;
+      const novo = new Set<string>();
+      atual.forEach((id) => {
+        if (pendentesIds.has(id)) novo.add(id);
+        else mudou = true;
+      });
+      return mudou ? novo : atual;
+    });
+  }, [pendentesVisiveis]);
+
+  const todasSelecionadas =
+    pendentesVisiveis.length > 0 &&
+    pendentesVisiveis.every((s) => selecionadas.has(s.id));
+
+  function toggleSelecionada(id: string) {
+    setSelecionadas((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  }
+
+  function toggleTodas() {
+    if (todasSelecionadas) setSelecionadas(new Set());
+    else setSelecionadas(new Set(pendentesVisiveis.map((s) => s.id)));
+  }
+
+  async function aprovarEmLote() {
+    if (selecionadas.size === 0) return;
+    const ids = Array.from(selecionadas);
+    if (
+      !confirm(
+        `Aprovar ${ids.length} ${ids.length === 1 ? "solicitação" : "solicitações"}?`,
+      )
+    ) {
+      return;
+    }
+    setAprovandoLote(true);
+    try {
+      const r = await aprovarSolicitacoesEmLote(ids);
+      if (!r.ok) {
+        alert(r.message);
+        return;
+      }
+      if (r.data && r.data.falharam > 0) {
+        alert(
+          `${r.data.aprovadas} aprovadas; ${r.data.falharam} falharam (talvez já não estivessem pendentes).`,
+        );
+      }
+      setSelecionadas(new Set());
+      router.refresh();
+    } finally {
+      setAprovandoLote(false);
+    }
+  }
+
+  // KPI cards
+  const cards: Array<{
+    key: string;
+    label: string;
+    valor: number;
+    cor: string;
+    dot: string;
+  }> = [
+    { key: "total", label: "Total", valor: totalContagem, cor: "text-foreground", dot: "bg-muted-foreground/40" },
+    { key: "pendente", label: "Pendentes", valor: contagens.pendente ?? 0, cor: "text-amber-700", dot: "bg-amber-500" },
+    { key: "aprovada", label: "Aprovadas", valor: contagens.aprovada ?? 0, cor: "text-sky-700", dot: "bg-sky-500" },
+    { key: "cadastrada", label: "Cadastradas", valor: contagens.cadastrada ?? 0, cor: "text-emerald-700", dot: "bg-emerald-500" },
+    { key: "rejeitada", label: "Rejeitadas", valor: contagens.rejeitada ?? 0, cor: "text-california-red", dot: "bg-california-red" },
+    { key: "cancelada", label: "Canceladas", valor: contagens.cancelada ?? 0, cor: "text-muted-foreground", dot: "bg-zinc-400" },
+  ];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* KPI cards */}
+      <section>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-3">
+          Análise rápida
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {cards.map((c) => (
+            <div
+              key={c.key}
+              className="rounded-2xl border border-border bg-white p-4"
+            >
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} />
+                {c.label}
+              </div>
+              <p className={cn("mt-1 text-3xl font-bold tabular-nums", c.cor)}>
+                {c.valor}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Busca + ações */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <form onSubmit={submitBusca} className="relative flex-1 min-w-[240px] max-w-md">
@@ -107,13 +382,16 @@ export function SolicitacoesTabela({
             type="search"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome ou CPF do freela..."
+            placeholder="Buscar por nome, CPF, cargo, solicitante..."
             className="w-full h-10 rounded-lg border border-border bg-white pl-10 pr-9 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15"
           />
           {busca && (
             <button
               type="button"
-              onClick={limparBusca}
+              onClick={() => {
+                setBusca("");
+                alterarQueryString((p) => p.delete("q"));
+              }}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               aria-label="Limpar busca"
             >
@@ -126,7 +404,9 @@ export function SolicitacoesTabela({
         )}
       </div>
 
-      <div className="rounded-xl border border-border bg-muted/30 p-4">
+      {/* Filtros */}
+      <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+        {/* Chips de status */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">
             Status
@@ -150,10 +430,68 @@ export function SolicitacoesTabela({
             );
           })}
         </div>
+
+        {/* Chips de tipo */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">
+            Tipo
+          </span>
+          {(["contratacao", "renovacao"] as const).map((t) => {
+            const ativo = tipoAtual === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTipo(ativo ? "" : t)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all border",
+                  ativo
+                    ? "bg-california-dark text-white border-california-dark"
+                    : "bg-white text-foreground border-border hover:border-california-red/40",
+                )}
+              >
+                {TIPO_META[t].label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Dropdowns: Solicitante (admin) + Cargo + Limpar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAprovador && solicitantesDisponiveis.length > 0 && (
+            <MultiSelect
+              label="Solicitante"
+              options={solicitantesDisponiveis.map((s) => ({
+                value: s.id,
+                label: nomeCurto(s.nome),
+              }))}
+              selected={solicitantesAtivos}
+              onToggle={toggleSolicitante}
+            />
+          )}
+          {cargosDisponiveis.length > 0 && (
+            <SingleSelect
+              label="Cargo"
+              options={cargosDisponiveis}
+              selected={cargoAtual}
+              onSelect={setCargo}
+            />
+          )}
+          {temAlgumFiltro && (
+            <button
+              type="button"
+              onClick={limparFiltros}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-california-red hover:underline"
+            >
+              <X className="h-3 w-3" />
+              Limpar filtros
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabela */}
-      {solicitacoes.length === 0 ? (
+      {ordenadas.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
             <ClipboardList className="h-5 w-5 text-muted-foreground" />
@@ -167,30 +505,73 @@ export function SolicitacoesTabela({
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-soft">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/20 border-b border-border">
-              <tr>
-                <Th>Freelancer</Th>
-                <Th>Job</Th>
-                <Th>Cargo</Th>
-                <Th className="text-right">Valor</Th>
-                <Th>Solicitante</Th>
-                <Th className="text-center">Data</Th>
-                <Th className="text-center">Status</Th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {solicitacoes.map((s) => (
-                <SolicitacaoRow
-                  key={s.id}
-                  s={s}
-                  naoLidas={naoLidasPorSolicitacao[s.id] ?? 0}
-                  onAbrir={() => abrir(s)}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/20 border-b border-border">
+                <tr>
+                  {isAprovador && (
+                    <Th className="w-8 text-center">
+                      <input
+                        type="checkbox"
+                        checked={todasSelecionadas}
+                        onChange={toggleTodas}
+                        disabled={pendentesVisiveis.length === 0}
+                        aria-label="Selecionar todas as pendentes"
+                        className="h-3.5 w-3.5 rounded border-border accent-california-red cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </Th>
+                  )}
+                  <Th>Freelancer</Th>
+                  <Th>Job</Th>
+                  <Th>Cargo</Th>
+                  <Th>Tipo</Th>
+                  <SortTh
+                    sortKey="valor"
+                    activeKey={sortKey}
+                    direction={sortDir}
+                    onToggle={toggleSort}
+                    align="right"
+                  >
+                    Valor
+                  </SortTh>
+                  <Th>Prazo</Th>
+                  <Th>Solicitante</Th>
+                  <SortTh
+                    sortKey="created_at"
+                    activeKey={sortKey}
+                    direction={sortDir}
+                    onToggle={toggleSort}
+                    align="center"
+                  >
+                    Pedido em
+                  </SortTh>
+                  <SortTh
+                    sortKey="status"
+                    activeKey={sortKey}
+                    direction={sortDir}
+                    onToggle={toggleSort}
+                    align="center"
+                  >
+                    Status
+                  </SortTh>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {ordenadas.map((s) => (
+                  <SolicitacaoRow
+                    key={s.id}
+                    s={s}
+                    naoLidas={naoLidasPorSolicitacao[s.id] ?? 0}
+                    isAprovador={isAprovador}
+                    selecionado={selecionadas.has(s.id)}
+                    onToggleSelecao={() => toggleSelecionada(s.id)}
+                    onAbrir={() => abrir(s)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -202,6 +583,38 @@ export function SolicitacoesTabela({
         userId={userId}
         publicOrigin={publicOrigin}
       />
+
+      {/* Barra flutuante de bulk approval */}
+      {isAprovador && selecionadas.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-2xl border border-border bg-white shadow-elevated px-4 py-3 animate-in slide-in-from-bottom-2 duration-200">
+          <span className="text-xs font-semibold text-foreground">
+            {selecionadas.size}{" "}
+            {selecionadas.size === 1 ? "selecionada" : "selecionadas"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelecionadas(new Set())}
+            disabled={aprovandoLote}
+            className="inline-flex items-center gap-1 rounded-lg border border-border text-foreground text-xs font-semibold px-3 py-1.5 hover:bg-muted/40 disabled:opacity-60"
+          >
+            <X className="h-3 w-3" />
+            Limpar
+          </button>
+          <button
+            type="button"
+            onClick={aprovarEmLote}
+            disabled={aprovandoLote}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 hover:bg-emerald-700 transition-colors disabled:opacity-60"
+          >
+            {aprovandoLote ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Check className="h-3.5 w-3.5" />
+            )}
+            Aprovar {selecionadas.size}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -210,7 +623,7 @@ function Th({
   children,
   className,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -225,20 +638,102 @@ function Th({
   );
 }
 
+function SortTh({
+  children,
+  sortKey,
+  activeKey,
+  direction,
+  onToggle,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  sortKey: SortKey;
+  activeKey: SortKey | null;
+  direction: SortDir;
+  onToggle: (key: SortKey) => void;
+  align?: "left" | "right" | "center";
+}) {
+  const active = activeKey === sortKey;
+  return (
+    <th
+      className={cn(
+        "px-3 py-2.5 font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]",
+        align === "right"
+          ? "text-right"
+          : align === "center"
+            ? "text-center"
+            : "text-left",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 hover:text-foreground transition-colors",
+          align === "right" && "flex-row-reverse",
+          active && "text-california-red",
+        )}
+      >
+        {children}
+        {active ? (
+          direction === "asc" ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+}
+
 function SolicitacaoRow({
   s,
   naoLidas,
+  isAprovador,
+  selecionado,
+  onToggleSelecao,
   onAbrir,
 }: {
   s: SolicitacaoLinha;
   naoLidas: number;
+  isAprovador: boolean;
+  selecionado: boolean;
+  onToggleSelecao: () => void;
   onAbrir: () => void;
 }) {
+  const prazo =
+    s.data_inicio && s.data_termino
+      ? `${formatarDataCurta(s.data_inicio)} → ${formatarDataCurta(s.data_termino)}`
+      : s.data_inicio
+        ? formatarDataCurta(s.data_inicio)
+        : "—";
+
   return (
     <tr
       onClick={onAbrir}
       className="border-b border-border last:border-0 hover:bg-california-red/[0.02] transition-colors group cursor-pointer"
     >
+      {isAprovador && (
+        <td
+          className="px-3 py-2.5 w-8 text-center"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {s.status === "pendente" ? (
+            <input
+              type="checkbox"
+              checked={selecionado}
+              onChange={onToggleSelecao}
+              aria-label={`Selecionar ${s.nome_freela}`}
+              className="h-3.5 w-3.5 rounded border-border accent-california-red cursor-pointer"
+            />
+          ) : (
+            <span className="text-muted-foreground/30">—</span>
+          )}
+        </td>
+      )}
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           {naoLidas > 0 && (
@@ -273,12 +768,25 @@ function SolicitacaoRow({
       <td className="px-3 py-2.5 text-foreground">
         {s.cargo || <span className="text-muted-foreground">—</span>}
       </td>
+      <td className="px-3 py-2.5">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap",
+            TIPO_META[s.tipo_solicitacao].pill,
+          )}
+        >
+          {TIPO_META[s.tipo_solicitacao].label}
+        </span>
+      </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">
         {formatCurrency(Number(s.valor))}
         <span className="text-[10px] text-muted-foreground"> /{s.tipo}</span>
       </td>
+      <td className="px-3 py-2.5 text-muted-foreground tabular-nums whitespace-nowrap">
+        {prazo}
+      </td>
       <td className="px-3 py-2.5 text-foreground truncate max-w-[160px]">
-        {s.solicitante_nome ?? "—"}
+        {nomeCurto(s.solicitante_nome)}
       </td>
       <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">
         {new Date(s.created_at).toLocaleDateString("pt-BR", {
@@ -296,5 +804,106 @@ function SolicitacaoRow({
         <ArrowRight className="h-3.5 w-3.5 text-muted-foreground inline-block" />
       </td>
     </tr>
+  );
+}
+
+function formatarDataCurta(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+}
+
+/** Dropdown multi-select enxuto (sem lib externa, só native details/summary). */
+function MultiSelect({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  selected: Set<string>;
+  onToggle: (v: string) => void;
+}) {
+  return (
+    <details className="group relative">
+      <summary className="list-none inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
+        <span>{label}</span>
+        {selected.size > 0 && (
+          <span className="tabular-nums rounded-full bg-california-red text-white px-1.5 py-0.5 text-[9px] leading-none">
+            {selected.size}
+          </span>
+        )}
+        <ChevronDown className="h-3 w-3 group-open:rotate-180 transition-transform" />
+      </summary>
+      <div className="absolute left-0 top-full mt-1 z-20 w-[240px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
+        {options.map((o) => {
+          const checked = selected.has(o.value);
+          return (
+            <label
+              key={o.value}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/40 cursor-pointer text-xs"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(o.value)}
+                className="h-3.5 w-3.5 rounded border-border accent-california-red"
+              />
+              <span className="truncate">{o.label}</span>
+            </label>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
+/** Dropdown single-select enxuto. "" = "Todos". */
+function SingleSelect({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  options: string[];
+  selected: string;
+  onSelect: (v: string) => void;
+}) {
+  return (
+    <details className="group relative">
+      <summary className="list-none inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
+        <span>{selected || label}</span>
+        <ChevronDown className="h-3 w-3 group-open:rotate-180 transition-transform" />
+      </summary>
+      <div className="absolute left-0 top-full mt-1 z-20 w-[240px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
+        <button
+          type="button"
+          onClick={() => onSelect("")}
+          className={cn(
+            "block w-full text-left px-2 py-1.5 rounded-md hover:bg-muted/40 text-xs",
+            !selected && "font-semibold text-california-red",
+          )}
+        >
+          Todos
+        </button>
+        {options.map((o) => (
+          <button
+            key={o}
+            type="button"
+            onClick={() => onSelect(o)}
+            className={cn(
+              "block w-full text-left px-2 py-1.5 rounded-md hover:bg-muted/40 text-xs",
+              selected === o && "font-semibold text-california-red",
+            )}
+          >
+            {o}
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }

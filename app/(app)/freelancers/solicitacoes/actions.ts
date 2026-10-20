@@ -115,6 +115,59 @@ export async function aprovarSolicitacao(
   return { ok: true };
 }
 
+/**
+ * Aprova várias solicitações pendentes em paralelo. Devolve contagem de
+ * sucessos/falhas sem interromper na primeira falha — admin consegue ver o
+ * resultado completo.
+ */
+export async function aprovarSolicitacoesEmLote(
+  ids: string[],
+): Promise<ActionResult<{ aprovadas: number; falharam: number }>> {
+  const session = await requireSession();
+  if (!APROVADORES.has(session.activeRole)) {
+    return { ok: false, message: "Sem permissão para aprovar" };
+  }
+  if (ids.length === 0) {
+    return { ok: true, data: { aprovadas: 0, falharam: 0 } };
+  }
+
+  const supabase = createClient();
+  const agora = new Date();
+  const expiraEm = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  const { data, error } = await supabase
+    .from("freelancer_solicitacoes")
+    .update({
+      status: "aprovada",
+      aprovado_por: session.profile.id,
+      aprovado_em: agora.toISOString(),
+      expira_em: expiraEm.toISOString(),
+    })
+    .in("id", ids)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "pendente")
+    .select("id");
+
+  if (error) {
+    console.error("[solicitacao.aprovar_lote]", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  const aprovadas = data?.length ?? 0;
+  const falharam = ids.length - aprovadas;
+
+  await logAuditEvent({
+    acao: "freelancer_solicitacao.aprovada_em_lote",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "freelancer_solicitacao",
+    entidadeId: null,
+    metadata: { ids_pedidos: ids, aprovadas, falharam },
+  });
+
+  revalidatePath("/freelancers/solicitacoes");
+  return { ok: true, data: { aprovadas, falharam } };
+}
+
 export async function rejeitarSolicitacao(
   id: string,
   formData: FormData,

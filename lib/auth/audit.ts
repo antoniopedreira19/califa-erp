@@ -451,6 +451,7 @@ export type AuditAction =
   // Módulo Freelancers — solicitações (Task 021).
   | "freelancer_solicitacao.criada"
   | "freelancer_solicitacao.aprovada"
+  | "freelancer_solicitacao.aprovada_em_lote"
   | "freelancer_solicitacao.rejeitada"
   | "freelancer_solicitacao.cancelada"
   // Módulo Freelancers — cadastramento via link público (Task 022).
