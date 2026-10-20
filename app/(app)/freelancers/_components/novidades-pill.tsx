@@ -218,7 +218,7 @@ export function NovidadesPill({
     distratosVisiveis.length +
     concluidasVisiveis.length;
 
-  if (total === 0) return null;
+  const semNovidades = total === 0;
 
   return (
     <>
@@ -231,9 +231,21 @@ export function NovidadesPill({
           aberto && "bg-white/15",
         )}
       >
-        <Sparkles className="h-3.5 w-3.5 text-california-red" />
+        <Sparkles
+          className={cn(
+            "h-3.5 w-3.5",
+            semNovidades ? "text-white/40" : "text-california-red",
+          )}
+        />
         <span>Novidades</span>
-        <span className="tabular-nums rounded-full bg-california-red px-1.5 py-0.5 text-[10px] leading-none text-white">
+        <span
+          className={cn(
+            "tabular-nums rounded-full px-1.5 py-0.5 text-[10px] leading-none",
+            semNovidades
+              ? "bg-white/15 text-white/60"
+              : "bg-california-red text-white",
+          )}
+        >
           {total}
         </span>
         <ChevronDown
@@ -254,6 +266,20 @@ export function NovidadesPill({
             className="fixed z-50 w-[320px] rounded-xl border border-border bg-white shadow-elevated overflow-hidden"
           >
             <div className="max-h-[420px] overflow-y-auto divide-y divide-border">
+              {semNovidades && (
+                <div className="px-4 py-8 text-center">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted/50 mb-2">
+                    <Sparkles className="h-4 w-4 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-xs font-semibold text-foreground">
+                    Nenhuma novidade
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Novos cadastros, aditivos, distratos e contratos que
+                    precisam de atenção vão aparecer aqui.
+                  </p>
+                </div>
+              )}
               {preenchimentosVisiveis.length > 0 && (
                 <Secao
                   titulo="Contratos preenchidos"
