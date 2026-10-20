@@ -29,13 +29,19 @@ export default async function FreelancersDashboardPage() {
 
   const isAprovador = APROVADORES.has(session.activeRole);
 
-  // 1. Dados da view pro cálculo de análise + ações previstas + performance
-  const viewRes = await supabase
+  // 1. Dados da view pro cálculo de análise + ações previstas + performance.
+  // GP/produtor vê só os freelas que ele é responsável (RLS do califa é frouxa
+  // porque o Buscar freelancer precisa ver todos — filtro de escopo aqui).
+  let viewQuery = supabase
     .from("freelancers_com_status")
     .select(
       "id, status_real, status_calculado, acao_prevista, data_inicio, responsavel_id, responsavel_nome",
     )
     .eq("tenant_id", session.activeTenant.id);
+  if (!isAprovador) {
+    viewQuery = viewQuery.eq("responsavel_id", session.profile.id);
+  }
+  const viewRes = await viewQuery;
 
   const rows = (viewRes.data ?? []) as Array<{
     id: string;

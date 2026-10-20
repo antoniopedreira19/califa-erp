@@ -64,14 +64,20 @@ export default async function FreelancersListaPage({
   }
 
   const supabase = createClient();
+  const APROVADORES_LISTA = new Set(["administrador", "rh", "financeiro"]);
+  const isAprovador = APROVADORES_LISTA.has(session.activeRole);
 
   // Query principal consome a view `freelancers_com_status` — ela traz
-  // cargo e status derivado do contrato ativo.
+  // cargo e status derivado do contrato ativo. GP/produtor vê só os freelas
+  // que ele é responsável (RLS é frouxa porque o Buscar precisa ver todos).
   let query = supabase
     .from("freelancers_com_status")
     .select("*")
     .eq("tenant_id", session.activeTenant.id)
     .order("nome_social", { ascending: true });
+  if (!isAprovador) {
+    query = query.eq("responsavel_id", session.profile.id);
+  }
 
   const termo = searchParams.q?.trim();
   if (termo) {
@@ -178,7 +184,16 @@ export default async function FreelancersListaPage({
   }
 
   // Totais dos 4 cards (independentes dos filtros atuais pra o usuário
-  // ter sempre o retrato geral do tenant).
+  // ter sempre o retrato geral do escopo visível — tenant pra aprovador,
+  // só os próprios pra GP/produtor).
+  let totaisQuery = supabase
+    .from("freelancers_com_status")
+    .select("status_real, status_calculado")
+    .eq("tenant_id", session.activeTenant.id);
+  if (!isAprovador) {
+    totaisQuery = totaisQuery.eq("responsavel_id", session.profile.id);
+  }
+
   const [freelancersRes, cargosRes, totaisRes] = await Promise.all([
     query.returns<FreelancerComStatus[]>(),
     supabase
@@ -187,10 +202,7 @@ export default async function FreelancersListaPage({
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true })
       .returns<FreelancerCargo[]>(),
-    supabase
-      .from("freelancers_com_status")
-      .select("status_real, status_calculado")
-      .eq("tenant_id", session.activeTenant.id),
+    totaisQuery,
   ]);
 
   if (freelancersRes.error) {
@@ -244,15 +256,19 @@ export default async function FreelancersListaPage({
     session.activeRole === "rh" ||
     session.activeRole === "financeiro";
 
-  // Listas únicas pros dropdowns de filtro. Deriva do set completo do tenant,
-  // não dos filtros aplicados — assim o picker mostra o catálogo real.
-  // Puxamos tudo que a view entrega sem recorte.
-  const { data: todosRows } = await supabase
+  // Listas únicas pros dropdowns de filtro. Também respeita o escopo visível
+  // (aprovador vê catálogo completo; GP/produtor vê só o que apareceria
+  // na própria lista — faz sentido o filtro só oferecer o que ele enxerga).
+  let dropdownsQuery = supabase
     .from("freelancers_com_status")
     .select(
       "responsavel_id, responsavel_nome, job_id, job_codigo, job_nome, cargo_contrato",
     )
     .eq("tenant_id", session.activeTenant.id);
+  if (!isAprovador) {
+    dropdownsQuery = dropdownsQuery.eq("responsavel_id", session.profile.id);
+  }
+  const { data: todosRows } = await dropdownsQuery;
 
   const responsaveisMap = new Map<string, string>();
   const jobsMap = new Map<string, string>();
