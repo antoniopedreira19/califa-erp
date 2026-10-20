@@ -308,33 +308,34 @@ export default async function FreelancersListaPage({
           jobsDisponiveis={jobsDisponiveis}
           cargosDisponiveis={cargosDisponiveis}
         />
-        <div className="ml-auto flex items-center gap-2">
-          <ExportarButton />
-          {podeGerenciarCargos && (
-            <Link
-              href="/jobs"
-              prefetch={false}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
-            >
-              <FolderKanban className="h-4 w-4" />
-              Jobs
-            </Link>
-          )}
-          {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
-          {podeCriarFreelancer && (
-            <Link
-              href="/freelancers/novo"
-              prefetch={false}
-              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Novo freelancer
-            </Link>
-          )}
-        </div>
       </div>
 
       <ChipsFiltros />
+
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        <ExportarButton />
+        {podeGerenciarCargos && (
+          <Link
+            href="/jobs"
+            prefetch={false}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
+          >
+            <FolderKanban className="h-4 w-4" />
+            Jobs
+          </Link>
+        )}
+        {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
+        {podeCriarFreelancer && (
+          <Link
+            href="/freelancers/novo"
+            prefetch={false}
+            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Novo freelancer
+          </Link>
+        )}
+      </div>
 
       <ListaClient
         freelancers={freelancers}
