@@ -1,18 +1,28 @@
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import type { FreelancerCargo } from "@/lib/types";
 import { HeroDashboard } from "./_components/hero-dashboard";
 import { CardsAnalise, type CategoriaCard } from "./lista/_components/cards-analise";
 import { CardsAcoesPrevistas } from "./_components/cards-acoes-previstas";
 import { CardSolicitacoes } from "./_components/card-solicitacoes";
 import { GridNovosContratos } from "./_components/grid-novos-contratos";
+import { BuscarFreelancerPill } from "./_components/buscar-freelancer-pill";
+import { NovidadesPill } from "./_components/novidades-pill";
+import type { FreelancerLookup } from "./_components/freelancer-picker-table";
+import type { JobItem } from "./_components/job-picker";
 import {
   TabelaPerformance,
   type PerformanceLinha,
 } from "./_components/tabela-performance";
+import {
+  carregarNovidades,
+  carregarFreelancersLookup,
+} from "./_data/novidades";
 
 export const dynamic = "force-dynamic";
 
 const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
+const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
 export default async function FreelancersDashboardPage() {
   const session = await requireSession();
@@ -169,7 +179,44 @@ export default async function FreelancersDashboardPage() {
     );
   }
 
-  const solRes = await solicitacoesQuery;
+  // Dados pros pills do hero (Buscar freelancer + Novidades)
+  const [solRes, lookupData, novidadesData, jobsPillRes, cargosPillRes] =
+    await Promise.all([
+      solicitacoesQuery,
+      carregarFreelancersLookup(supabase, session.activeTenant.id),
+      isAprovador
+        ? carregarNovidades(supabase, session.activeTenant.id)
+        : Promise.resolve(null),
+      // Jobs/cargos pro NovaSolicitacaoDialog quando GP clica no Buscar.
+      // Aprovador vai pra /contratos/novo direto, não precisa.
+      !isAprovador
+        ? supabase
+            .from("jobs")
+            .select("id, codigo, nome, status")
+            .eq("tenant_id", session.activeTenant.id)
+            .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
+            .order("codigo", { ascending: false })
+            .limit(500)
+        : Promise.resolve({ data: [] as any[] }),
+      !isAprovador
+        ? supabase
+            .from("freelancer_cargos")
+            .select("*")
+            .eq("tenant_id", session.activeTenant.id)
+            .eq("ativo", true)
+            .order("nome", { ascending: true })
+            .returns<FreelancerCargo[]>()
+        : Promise.resolve({ data: [] as FreelancerCargo[] }),
+    ]);
+
+  const freelancersLookup = lookupData as FreelancerLookup[];
+  const jobsPill: JobItem[] = (jobsPillRes.data ?? []).map((j: any) => ({
+    id: j.id,
+    codigo: j.codigo,
+    nome: j.nome,
+  }));
+  const cargosPill = (cargosPillRes.data ?? []) as FreelancerCargo[];
+
   const solicitacoes = ((solRes.data ?? []) as any[]).map((s) => ({
     id: s.id as string,
     nome_freela: s.nome_freela as string,
@@ -186,6 +233,28 @@ export default async function FreelancersDashboardPage() {
         nomeUsuario={session.profile.nome}
         totalFreelancers={rows.length}
         totalIrregular={totaisAnalise.irregular}
+        pills={
+          <>
+            <BuscarFreelancerPill
+              freelancers={freelancersLookup}
+              currentUserId={session.profile.id}
+              isAprovador={isAprovador}
+              jobs={jobsPill}
+              cargos={cargosPill}
+            />
+            {isAprovador && novidadesData && (
+              <NovidadesPill
+                tenantId={session.activeTenant.id}
+                novos={novidadesData.novos}
+                aditivos={novidadesData.aditivos}
+                preenchimentos={novidadesData.preenchimentos}
+                distratos={novidadesData.distratos}
+                concluidas={novidadesData.concluidas}
+                dismissedIds={novidadesData.dismissedIds}
+              />
+            )}
+          </>
+        }
       />
 
       <CardsAnalise totais={totaisAnalise} />

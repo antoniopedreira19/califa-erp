@@ -5,6 +5,8 @@ interface Props {
   nomeUsuario: string;
   totalFreelancers: number;
   totalIrregular: number;
+  /** Pills abaixo da saudação (Buscar freelancer, Novidades). */
+  pills?: React.ReactNode;
 }
 
 const DIAS_SEMANA = [
@@ -36,6 +38,7 @@ export function HeroDashboard({
   nomeUsuario,
   totalFreelancers,
   totalIrregular,
+  pills,
 }: Props) {
   const agora = new Date();
   const dataFormatada = `${DIAS_SEMANA[agora.getDay()]}, ${agora.getDate()} de ${MESES[agora.getMonth()]}`;
@@ -67,6 +70,11 @@ export function HeroDashboard({
               </>
             )}
           </p>
+          {pills && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              {pills}
+            </div>
+          )}
         </div>
         <Link
           href="/freelancers/solicitacoes"
