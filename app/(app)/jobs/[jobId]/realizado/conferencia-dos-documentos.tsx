@@ -37,6 +37,7 @@ import {
 import { signedUrlPdf } from "./actions-pp";
 import {
   ResumoDasNfs,
+  SeloIA,
   TipoObrigatorio,
   ZonaDeAnexos,
   faltasDaNf,
@@ -261,6 +262,7 @@ export function ConferenciaDosDocumentos({
 
   const situacao = (a: AnexoEmEdicao): { texto: string; ok: boolean } => {
     if (a.status !== "ok") return { texto: "enviando…", ok: false };
+    if (a.leitura?.estado === "lendo") return { texto: "lendo…", ok: false };
     if (!a.tipo) return { texto: "Escolha o tipo", ok: false };
     if (a.tipo === "nota_fiscal") {
       const falta = faltasDaNf(a.nf, valorPP).length > 0;
@@ -503,7 +505,10 @@ export function ConferenciaDosDocumentos({
                       {ativo.status === "ok" ? (
                         <>
                           <div>
-                            <p className="mb-1 text-xs font-medium">Tipo{obrigatorio ? " *" : ""}</p>
+                            <p className="mb-1 flex items-center gap-1.5 text-xs font-medium">
+                              Tipo{obrigatorio ? " *" : ""}
+                              {ativo.leitura?.estado === "lido" && ativo.leitura.campos.includes("tipo") && <SeloIA />}
+                            </p>
                             <TipoObrigatorio
                               valor={ativo.tipo}
                               descricaoArquivo={ativo.nome}
@@ -515,8 +520,12 @@ export function ConferenciaDosDocumentos({
                           {ativo.tipo === "nota_fiscal" && renderNf(ativo.id)}
                           {ativo.tipo && ativo.tipo !== "nota_fiscal" && (
                             <div>
-                              <label htmlFor={`conferencia-numero-${ativo.id}`} className="text-xs font-medium">
+                              <label
+                                htmlFor={`conferencia-numero-${ativo.id}`}
+                                className="flex items-center gap-1.5 text-xs font-medium"
+                              >
                                 Número do documento{obrigatorio ? " *" : ""}
+                                {ativo.leitura?.estado === "lido" && ativo.leitura.campos.includes("numero") && <SeloIA />}
                               </label>
                               <input
                                 id={`conferencia-numero-${ativo.id}`}

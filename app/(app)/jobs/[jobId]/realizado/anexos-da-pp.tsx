@@ -54,6 +54,7 @@ import {
   PP_ANEXO_TAMANHO_MAX_BYTES,
   PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES,
   documentoTipoLabel,
+  type CampoLidoPelaIA,
   type DadosExtraidosNF,
   type DocumentoTipo,
 } from "@/lib/types";
@@ -66,7 +67,10 @@ import {
   emissoraDosDocumentos,
 } from "@/lib/fiscal/cnpj-da-pp";
 import { buscarNotasDoFornecedor, type NotaExistente } from "./actions-notas-da-pp";
-import { lerDadosDaNFPorIA } from "./actions-ler-nf";
+import { lerDadosDaNFPorIA, lerDocumentoPorIA } from "./actions-ler-nf";
+import { aplicarLeitura, semSelo, type LeituraDoAnexo } from "@/lib/ia/leitura-do-anexo";
+
+export type { LeituraDoAnexo };
 
 /** Formata um CNPJ de 14 dígitos no padrão XX.XXX.XXX/XXXX-XX. */
 function formatCnpjCurto(digitos: string): string {
@@ -286,6 +290,21 @@ export function ZonaDeAnexos({
 // Os cartões dos arquivos
 // ---------------------------------------------------------------------------
 
+/** O selo amarelo "IA" ao lado de um campo que a leitura preencheu. */
+export function SeloIA({ className }: { className?: string }) {
+  return (
+    <span
+      title="Preenchido pela leitura automática. Confira."
+      className={cn(
+        "inline-block rounded bg-amber-100 px-1 text-[9.5px] font-semibold uppercase leading-[15px] text-amber-800",
+        className,
+      )}
+    >
+      IA
+    </span>
+  );
+}
+
 export interface ItemDeAnexo {
   id: string;
   nome: string;
@@ -295,6 +314,7 @@ export interface ItemDeAnexo {
   mensagem?: string;
   tipo: DocumentoTipo | null;
   numero: string | null;
+  leitura?: LeituraDoAnexo;
 }
 
 /** O tipo obrigatório, sem opção em branco: nasce em "Escolha o tipo". */
@@ -381,9 +401,19 @@ export function ListaDeAnexos({
       {itens.map((a) => {
         const Icone = a.mime.startsWith("image/") ? ImageIcon : FileText;
         const falhou = a.status === "erro" || a.status === "rejeitado";
+        const lido = (c: CampoLidoPelaIA) => a.leitura?.estado === "lido" && a.leitura.campos.includes(c);
         const situacao =
           a.status === "ok"
-            ? "enviado"
+            ? a.leitura?.estado === "lendo"
+              ? "lendo o documento…"
+              : a.leitura?.estado === "lido"
+                ? a.leitura.duvida
+                  ? "lido pela IA, com dúvida: confira"
+                  : "lido pela IA"
+                : // Escolhido o tipo à mão, a falha da leitura já não pede nada.
+                  a.leitura?.estado === "falhou" && !a.tipo
+                  ? "não deu para ler: escolha o tipo"
+                  : "enviado"
             : a.status === "uploading"
               ? "enviando…"
               : a.status === "selecionado"
@@ -407,10 +437,20 @@ export function ListaDeAnexos({
                 <p className="truncate text-[13px] font-medium text-foreground" title={a.nome}>
                   {a.nome}
                 </p>
-                <p className={cn("truncate text-[11.5px]", falhou ? "text-california-red" : "text-muted-foreground")}>
-                  {(a.tamanhoBytes / 1024).toFixed(0)} KB · {situacao}
+                <p
+                  className={cn(
+                    "flex items-center gap-1 truncate text-[11.5px]",
+                    falhou ? "text-california-red" : a.leitura?.duvida ? "text-amber-700" : "text-muted-foreground",
+                  )}
+                >
+                  {a.leitura?.estado === "lendo" && <Loader2 className="h-3 w-3 flex-none animate-spin" />}
+                  {a.leitura?.estado === "lido" && <Sparkles className="h-3 w-3 flex-none text-amber-600" />}
+                  <span className="truncate">
+                    {(a.tamanhoBytes / 1024).toFixed(0)} KB · {situacao}
+                  </span>
                 </p>
               </div>
+              {a.status === "ok" && !semTipo && lido("tipo") && <SeloIA />}
               {a.status === "ok" && !semTipo && (
                 <TipoObrigatorio
                   tipos={tipos}
@@ -455,6 +495,7 @@ export function ListaDeAnexos({
                   <label htmlFor={`num-${a.id}`} className="text-[11px] font-medium text-muted-foreground">
                     Número do documento{obrigatorio ? " *" : ""}
                   </label>
+                  {lido("numero") && <SeloIA />}
                   <input
                     id={`num-${a.id}`}
                     value={a.numero ?? ""}
@@ -514,6 +555,7 @@ export function NfDoAnexo({
   fornecedorAtualNome,
   servicoAtual,
   onUsarDescricao,
+  leitura,
 }: {
   nf: NfDigitada;
   /** Só o que mudou: quem guarda junta com o estado mais novo (o DatePicker
@@ -555,6 +597,9 @@ export function NfDoAnexo({
   servicoAtual?: string;
   /** Callback do botão "Usar como descrição do PP". Só vem se o campo é editável. */
   onUsarDescricao?: (descricao: string) => void;
+  /** A leitura ao anexar (decisão 192): os selos "IA" dos
+   *  campos que ela preencheu, e o botão manual some quando ela já leu. */
+  leitura?: LeituraDoAnexo;
 }) {
   const ast = obrigatorio ? " *" : "";
   const hoje = hojeEmSaoPauloIso();
@@ -617,12 +662,11 @@ export function NfDoAnexo({
     });
   }
 
-  const podeLerIA = !travada && !!anexoPath && anexoMimetype === "application/pdf" && !resultadoIA;
+  const jaLido = leitura?.estado === "lido" || leitura?.estado === "lendo";
+  const podeLerIA = !travada && !!anexoPath && anexoMimetype === "application/pdf" && !resultadoIA && !jaLido;
   const badgeIA = (campo: "numero" | "emissao" | "valor" | "tomador") =>
-    resultadoIA?.aplicado_em.has(campo) ? (
-      <span className="ml-1.5 inline-block rounded bg-amber-100 px-1 text-[9.5px] font-semibold uppercase text-amber-800">
-        IA
-      </span>
+    resultadoIA?.aplicado_em.has(campo) || (leitura?.estado === "lido" && leitura.campos.includes(campo)) ? (
+      <SeloIA className="ml-1.5" />
     ) : null;
   const outras = existente?.pps ?? [];
   const sobra = existente && outras.length > 0 ? sobraDaNota(existente, nf.valor > 0 ? nf.valor : existente.valor) : null;
@@ -1018,6 +1062,7 @@ export function CnpjDoDocumento({
   obrigatorio = false,
   invalido = false,
   disabled,
+  lidoPelaIA = false,
 }: {
   valor: string;
   onChange: (id: string) => void;
@@ -1029,6 +1074,8 @@ export function CnpjDoDocumento({
   obrigatorio?: boolean;
   invalido?: boolean;
   disabled?: boolean;
+  /** A leitura ao anexar achou o CNPJ no documento (selo "IA"). */
+  lidoPelaIA?: boolean;
 }) {
   const t = tomadores.find((x) => x.id === valor);
   return (
@@ -1037,6 +1084,7 @@ export function CnpjDoDocumento({
         <label htmlFor={`${idBase}-cnpj`} className="text-[11px] font-medium text-muted-foreground">
           Contra qual CNPJ{obrigatorio ? " *" : ""}
         </label>
+        {lidoPelaIA && <SeloIA />}
         <Select value={valor || undefined} onValueChange={onChange} disabled={disabled}>
           <SelectTrigger
             id={`${idBase}-cnpj`}
@@ -1187,6 +1235,8 @@ export interface AnexoEmEdicao {
   file?: File;
   /** A ordem da lista (a mais nova fica em cima). */
   criadoEm: string;
+  /** A leitura automática, nos PDFs que subiram agora. */
+  leitura?: LeituraDoAnexo;
 }
 
 /** Um anexo gravado, como a PP a emitir e a PP o guardam. */
@@ -1376,11 +1426,44 @@ export function faltaNasNfs(
  * A lista de anexos em edição e a subida dos arquivos para o bucket, no
  * lugar da PP (`prefixo`). Remover um arquivo que acabou de subir tira do
  * bucket na hora; o já gravado só sai quando a tela salva.
+ *
+ * Com `tomadoresParaLeitura`, cada PDF que sobe é lido pela IA logo em
+ * seguida (decisão 192): tipo, número e, quando
+ * o documento traz, os dados da nota e o CNPJ.
  */
-export function useAnexosEmEdicao(prefixo: string | null, tomadorPadrao: string | null) {
+export function useAnexosEmEdicao(
+  prefixo: string | null,
+  tomadorPadrao: string | null,
+  tomadoresParaLeitura?: TomadorDaNf[],
+) {
   const supabase = React.useMemo(() => createClient(), []);
   const [anexos, setAnexos] = React.useState<AnexoEmEdicao[]>([]);
   const [aviso, setAviso] = React.useState<string | null>(null);
+  // A leitura termina depois: ela usa os valores de quando volta.
+  const tomadoresRef = React.useRef(tomadoresParaLeitura);
+  tomadoresRef.current = tomadoresParaLeitura;
+  const padraoRef = React.useRef(tomadorPadrao);
+  padraoRef.current = tomadorPadrao;
+
+  async function ler(n: AnexoEmEdicao) {
+    const tomadores = tomadoresRef.current;
+    if (!tomadores || n.mime !== "application/pdf") return;
+    setAnexos((prev) => prev.map((p) => (p.id === n.id ? { ...p, leitura: { estado: "lendo", campos: [] } } : p)));
+    // Erro de rede ou do servidor vale como leitura que falhou: o anexo não
+    // pode ficar preso em "lendo".
+    const r = await lerDocumentoPorIA({
+      anexo_path: n.path,
+      mimetype: n.mime,
+      tomadores: tomadores.map((t) => ({ id: t.id, cnpj: t.cnpj })),
+    }).catch(() => ({ ok: false as const }));
+    setAnexos((prev) =>
+      prev.map((p) => {
+        if (p.id !== n.id) return p;
+        if (!r.ok) return { ...p, leitura: { estado: "falhou", campos: [] } };
+        return aplicarLeitura(p, r.dados, padraoRef.current);
+      }),
+    );
+  }
 
   async function subir(arquivos: File[]) {
     if (arquivos.length === 0) return;
@@ -1399,7 +1482,8 @@ export function useAnexosEmEdicao(prefixo: string | null, tomadorPadrao: string 
         mime: file.type,
         path: "",
         status: "selecionado",
-        // O tipo nasce vazio: quem anexa escolhe (Tiago, 06/10/2026).
+        // O tipo nasce vazio: quem anexa escolhe (Tiago, 06/10/2026). Na PP
+        // comum, a leitura da IA preenche depois o que seguir vazio (192).
         tipo: null,
         numero: null,
         nf: { ...NF_VAZIA, tomador: tomadorPadrao ?? "" },
@@ -1441,6 +1525,7 @@ export function useAnexosEmEdicao(prefixo: string | null, tomadorPadrao: string 
               p.id === n.id ? { ...p, status: error ? "erro" : "ok", mensagem: error?.message } : p,
             ),
           );
+          if (!error) await ler(n);
         }),
     );
   }
@@ -1456,9 +1541,40 @@ export function useAnexosEmEdicao(prefixo: string | null, tomadorPadrao: string 
   }
 
   const mudar = (id: string, parte: Partial<AnexoEmEdicao>) =>
-    setAnexos((prev) => prev.map((p) => (p.id === id ? { ...p, ...parte } : p)));
+    setAnexos((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const novo = { ...p, ...parte };
+        // Trocar entre NF e outro tipo leva o número junto: é o mesmo
+        // documento (na NF ele mora em `nf.numero`).
+        if (parte.tipo !== undefined && parte.tipo !== p.tipo) {
+          if (parte.tipo === "nota_fiscal" && !novo.nf.numero.trim() && (p.numero ?? "").trim()) {
+            novo.nf = { ...novo.nf, numero: (p.numero ?? "").trim() };
+          } else if (p.tipo === "nota_fiscal" && parte.tipo !== "nota_fiscal" && !(novo.numero ?? "").trim()) {
+            novo.numero = p.nf.numero.trim() || null;
+          }
+        }
+        const tirar: CampoLidoPelaIA[] = [];
+        if ("tipo" in parte) tirar.push("tipo");
+        if ("numero" in parte) tirar.push("numero");
+        return { ...novo, leitura: semSelo(p.leitura, tirar) };
+      }),
+    );
   const mudarNf = (id: string, parte: Partial<NfDigitada>) =>
-    setAnexos((prev) => prev.map((p) => (p.id === id ? { ...p, nf: { ...p.nf, ...parte } } : p)));
+    setAnexos((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              nf: { ...p.nf, ...parte },
+              leitura: semSelo(
+                p.leitura,
+                (["numero", "emissao", "valor", "tomador"] as const).filter((c) => c in parte),
+              ),
+            }
+          : p,
+      ),
+    );
 
   return { anexos, setAnexos, subir, remover, mudar, mudarNf, aviso, setAviso };
 }
@@ -1477,5 +1593,6 @@ export function itensDaLista(anexos: AnexoEmEdicao[]): ItemDeAnexo[] {
       mensagem: a.mensagem,
       tipo: a.tipo,
       numero: a.numero,
+      leitura: a.leitura,
     }));
 }

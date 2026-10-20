@@ -6112,3 +6112,29 @@ no lado da produção:
   freelas ativos; 59 deles seguem na lista, 9 estão encerrados no módulo novo.
   A única PP a emitir com freela encerrado é um teste do TES-1025/26: ao
   salvar, pede o titular de novo.
+
+## ⚠️ Nota de 2026-10-19 (12) — A IA lê o anexo da PP logo que ele sobe (decisão 192)
+
+Ideia do Tiago de 16/10/2026, depois das PP-00197 e PP-00198 (decisão 178).
+Protótipo aprovado em 17/10. Regra completa na decisão 192.
+
+- **O que mudou:** na PP comum, todo PDF anexado é lido pela IA assim que
+  sobe, no formulário (Gerar PP e PP a emitir) e no envio ao financeiro. A
+  leitura preenche **só o que está vazio**:
+  - tipo e número;
+  - na NF, também a data e o valor;
+  - o CNPJ da California do documento, quando o campo ainda está no CNPJ
+    da PP.
+
+  Cada campo preenchido leva o selo âmbar "IA" até alguém mexer nele.
+  Embaixo do arquivo aparece o estado da leitura ("lendo o documento…",
+  "lido pela IA", "lido pela IA, com dúvida: confira", "não deu para ler:
+  escolha o tipo").
+- **Fora:** imagens, verba de produção e reembolso (`useAnexosEmEdicao`
+  sem o terceiro argumento não lê). O servidor não muda: as travas da NF no
+  envio, do boleto e do CNPJ continuam as de antes.
+- **Custo e cache:** mesma chave e mesmo `gpt-4.1-mini` da leitura de NF.
+  O cache é `nf_extracao_cache` com `modelo = gpt-4.1-mini|documento-v1`.
+  A auditoria grava `pp.anexo.lido_por_ia`. O `custo_usd_estimado` das duas
+  leituras passou a usar o preço do gpt-4.1-mini (`custoEstimadoUsd`).
+- **Sem migration.**
