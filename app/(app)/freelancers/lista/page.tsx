@@ -329,19 +329,6 @@ export default async function FreelancersListaPage({
 
   return (
     <div className="space-y-6">
-      <CardsAnalise totais={totais} />
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <BuscaInput />
-        <FiltrosDropdowns
-          responsaveisDisponiveis={responsaveisDisponiveis}
-          jobsDisponiveis={jobsDisponiveis}
-          cargosDisponiveis={cargosDisponiveis}
-        />
-      </div>
-
-      <ChipsFiltros />
-
       <div className="flex items-center justify-end gap-2 flex-wrap">
         <ExportarButton />
         {podeGerenciarCargos && (
@@ -363,6 +350,19 @@ export default async function FreelancersListaPage({
           />
         )}
       </div>
+
+      <CardsAnalise totais={totais} />
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <BuscaInput />
+        <FiltrosDropdowns
+          responsaveisDisponiveis={responsaveisDisponiveis}
+          jobsDisponiveis={jobsDisponiveis}
+          cargosDisponiveis={cargosDisponiveis}
+        />
+      </div>
+
+      <ChipsFiltros />
 
       <ListaClient
         freelancers={freelancers}
