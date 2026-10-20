@@ -5552,7 +5552,8 @@ export interface FreelancerComStatus extends Freelancer {
   responsavel_nome: string | null;
   responsavel_email: string | null;
 
-  // Job real do califa-erp (join com jobs)
+  // Job real do califa-erp (id da FK + join com jobs pra código e nome)
+  job_id: string | null;
   job_codigo: string | null;
   job_nome: string | null;
 
