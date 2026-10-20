@@ -43,6 +43,7 @@ interface Props {
   totalContagem: number;
   solicitantesDisponiveis: Array<{ id: string; nome: string }>;
   cargosDisponiveis: string[];
+  jobsDisponiveis: Array<{ id: string; label: string }>;
   tipoFiltroAtual: string;
   activeRole: string;
   userId: string;
@@ -86,6 +87,7 @@ export function SolicitacoesTabela({
   totalContagem,
   solicitantesDisponiveis,
   cargosDisponiveis,
+  jobsDisponiveis,
   tipoFiltroAtual,
   activeRole,
   userId,
@@ -127,12 +129,19 @@ export function SolicitacoesTabela({
     return new Set(raw.split(",").filter(Boolean));
   }, [searchParams]);
 
+  const jobsAtivos = React.useMemo(() => {
+    const raw = searchParams.get("job");
+    if (!raw) return new Set<string>();
+    return new Set(raw.split(",").filter(Boolean));
+  }, [searchParams]);
+
   const cargoAtual = searchParams.get("cargo") ?? "";
   const tipoAtual = tipoFiltroAtual;
   const temAlgumFiltro =
     busca !== "" ||
     statusAtivos.size > 0 ||
     solicitantesAtivos.size > 0 ||
+    jobsAtivos.size > 0 ||
     cargoAtual !== "" ||
     tipoAtual !== "";
 
@@ -160,6 +169,16 @@ export function SolicitacoesTabela({
     alterarQueryString((p) => {
       if (nova.size > 0) p.set("solicitante", Array.from(nova).join(","));
       else p.delete("solicitante");
+    });
+  }
+
+  function toggleJob(id: string) {
+    const nova = new Set(jobsAtivos);
+    if (nova.has(id)) nova.delete(id);
+    else nova.add(id);
+    alterarQueryString((p) => {
+      if (nova.size > 0) p.set("job", Array.from(nova).join(","));
+      else p.delete("job");
     });
   }
 
@@ -194,6 +213,7 @@ export function SolicitacoesTabela({
       p.delete("solicitante");
       p.delete("cargo");
       p.delete("tipo");
+      p.delete("job");
     });
   }
 
@@ -374,16 +394,16 @@ export function SolicitacoesTabela({
         </div>
       </section>
 
-      {/* Busca + ações */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <form onSubmit={submitBusca} className="relative flex-1 min-w-[240px] max-w-md">
+      {/* Busca + filtros em dropdowns + ações */}
+      <div className="rounded-xl border border-border bg-white p-3 flex items-center gap-2 flex-wrap">
+        <form onSubmit={submitBusca} className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             type="search"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por nome, CPF, cargo, solicitante..."
-            className="w-full h-10 rounded-lg border border-border bg-white pl-10 pr-9 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15"
+            className="w-full h-9 rounded-lg border border-border bg-white pl-9 pr-9 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15"
           />
           {busca && (
             <button
@@ -399,95 +419,79 @@ export function SolicitacoesTabela({
             </button>
           )}
         </form>
-        {actions && (
-          <div className="flex items-center gap-2 md:shrink-0">{actions}</div>
+
+        <MultiSelectDropdown
+          label="Todos os status"
+          icon={<span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />}
+          options={STATUS_SOLICITACAO.map((s) => ({
+            value: s.value,
+            label: s.label,
+          }))}
+          selected={statusAtivos}
+          onToggle={(v) => toggleStatus(v as FreelancerSolicitacaoStatus)}
+        />
+
+        <SingleSelectDropdown
+          label="Todos os tipos"
+          icon={<span className="text-muted-foreground text-xs">⇄</span>}
+          options={(["contratacao", "renovacao"] as const).map((t) => ({
+            value: t,
+            label: TIPO_META[t].label,
+          }))}
+          selected={tipoAtual}
+          onSelect={setTipo}
+        />
+
+        {jobsDisponiveis.length > 0 && (
+          <MultiSelectDropdown
+            label="Todos os jobs"
+            icon={<span className="text-muted-foreground text-xs">▣</span>}
+            options={jobsDisponiveis.map((j) => ({
+              value: j.id,
+              label: j.label,
+            }))}
+            selected={jobsAtivos}
+            onToggle={toggleJob}
+          />
         )}
-      </div>
 
-      {/* Filtros */}
-      <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-        {/* Chips de status */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">
-            Status
-          </span>
-          {STATUS_SOLICITACAO.map((s) => {
-            const ativo = statusAtivos.has(s.value);
-            return (
-              <button
-                key={s.value}
-                type="button"
-                onClick={() => toggleStatus(s.value)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all border",
-                  ativo
-                    ? "bg-california-dark text-white border-california-dark"
-                    : "bg-white text-foreground border-border hover:border-california-red/40",
-                )}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
+        {cargosDisponiveis.length > 0 && (
+          <SingleSelectDropdown
+            label="Todos os cargos"
+            icon={<span className="text-muted-foreground text-xs">◉</span>}
+            options={cargosDisponiveis.map((c) => ({ value: c, label: c }))}
+            selected={cargoAtual}
+            onSelect={setCargo}
+          />
+        )}
 
-        {/* Chips de tipo */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">
-            Tipo
-          </span>
-          {(["contratacao", "renovacao"] as const).map((t) => {
-            const ativo = tipoAtual === t;
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTipo(ativo ? "" : t)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all border",
-                  ativo
-                    ? "bg-california-dark text-white border-california-dark"
-                    : "bg-white text-foreground border-border hover:border-california-red/40",
-                )}
-              >
-                {TIPO_META[t].label}
-              </button>
-            );
-          })}
-        </div>
+        {isAprovador && solicitantesDisponiveis.length > 0 && (
+          <MultiSelectDropdown
+            label="Solicitante"
+            icon={<span className="text-muted-foreground text-xs">◎</span>}
+            options={solicitantesDisponiveis.map((s) => ({
+              value: s.id,
+              label: nomeCurto(s.nome),
+            }))}
+            selected={solicitantesAtivos}
+            onToggle={toggleSolicitante}
+          />
+        )}
 
-        {/* Dropdowns: Solicitante (admin) + Cargo + Limpar */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {isAprovador && solicitantesDisponiveis.length > 0 && (
-            <MultiSelect
-              label="Solicitante"
-              options={solicitantesDisponiveis.map((s) => ({
-                value: s.id,
-                label: nomeCurto(s.nome),
-              }))}
-              selected={solicitantesAtivos}
-              onToggle={toggleSolicitante}
-            />
-          )}
-          {cargosDisponiveis.length > 0 && (
-            <SingleSelect
-              label="Cargo"
-              options={cargosDisponiveis}
-              selected={cargoAtual}
-              onSelect={setCargo}
-            />
-          )}
-          {temAlgumFiltro && (
-            <button
-              type="button"
-              onClick={limparFiltros}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-california-red hover:underline"
-            >
-              <X className="h-3 w-3" />
-              Limpar filtros
-            </button>
-          )}
-        </div>
+        {temAlgumFiltro && (
+          <button
+            type="button"
+            onClick={limparFiltros}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-california-red hover:underline"
+          >
+            <X className="h-3 w-3" />
+            Limpar
+          </button>
+        )}
+
+        {actions && (
+          <div className="flex items-center gap-2 ml-auto">{actions}</div>
+        )}
       </div>
 
       {/* Tabela */}
@@ -816,29 +820,32 @@ function formatarDataCurta(iso: string): string {
 }
 
 /** Dropdown multi-select enxuto (sem lib externa, só native details/summary). */
-function MultiSelect({
+function MultiSelectDropdown({
   label,
+  icon,
   options,
   selected,
   onToggle,
 }: {
   label: string;
+  icon?: React.ReactNode;
   options: Array<{ value: string; label: string }>;
   selected: Set<string>;
   onToggle: (v: string) => void;
 }) {
   return (
     <details className="group relative">
-      <summary className="list-none inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
+      <summary className="list-none h-9 inline-flex items-center gap-2 rounded-lg px-3 text-sm font-medium border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
+        {icon}
         <span>{label}</span>
         {selected.size > 0 && (
-          <span className="tabular-nums rounded-full bg-california-red text-white px-1.5 py-0.5 text-[9px] leading-none">
+          <span className="tabular-nums rounded-full bg-california-red text-white px-1.5 py-0.5 text-[10px] leading-none font-semibold">
             {selected.size}
           </span>
         )}
-        <ChevronDown className="h-3 w-3 group-open:rotate-180 transition-transform" />
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-open:rotate-180 transition-transform" />
       </summary>
-      <div className="absolute left-0 top-full mt-1 z-20 w-[240px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
+      <div className="absolute left-0 top-full mt-1 z-20 min-w-[220px] max-w-[320px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
         {options.map((o) => {
           const checked = selected.has(o.value);
           return (
@@ -861,25 +868,29 @@ function MultiSelect({
   );
 }
 
-/** Dropdown single-select enxuto. "" = "Todos". */
-function SingleSelect({
+/** Dropdown single-select enxuto. "" = "Todos" (label do botão). */
+function SingleSelectDropdown({
   label,
+  icon,
   options,
   selected,
   onSelect,
 }: {
   label: string;
-  options: string[];
+  icon?: React.ReactNode;
+  options: Array<{ value: string; label: string }>;
   selected: string;
   onSelect: (v: string) => void;
 }) {
+  const atual = options.find((o) => o.value === selected);
   return (
     <details className="group relative">
-      <summary className="list-none inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
-        <span>{selected || label}</span>
-        <ChevronDown className="h-3 w-3 group-open:rotate-180 transition-transform" />
+      <summary className="list-none h-9 inline-flex items-center gap-2 rounded-lg px-3 text-sm font-medium border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
+        {icon}
+        <span>{atual ? atual.label : label}</span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-open:rotate-180 transition-transform" />
       </summary>
-      <div className="absolute left-0 top-full mt-1 z-20 w-[240px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
+      <div className="absolute left-0 top-full mt-1 z-20 min-w-[220px] max-w-[320px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
         <button
           type="button"
           onClick={() => onSelect("")}
@@ -888,19 +899,19 @@ function SingleSelect({
             !selected && "font-semibold text-california-red",
           )}
         >
-          Todos
+          {label}
         </button>
         {options.map((o) => (
           <button
-            key={o}
+            key={o.value}
             type="button"
-            onClick={() => onSelect(o)}
+            onClick={() => onSelect(o.value)}
             className={cn(
               "block w-full text-left px-2 py-1.5 rounded-md hover:bg-muted/40 text-xs",
-              selected === o && "font-semibold text-california-red",
+              selected === o.value && "font-semibold text-california-red",
             )}
           >
-            {o}
+            {o.label}
           </button>
         ))}
       </div>

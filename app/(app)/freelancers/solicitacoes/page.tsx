@@ -21,6 +21,7 @@ const STATUS_VALIDOS = new Set([
 ]);
 
 const TIPOS_SOLICITACAO = new Set(["contratacao", "renovacao"]);
+const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
 
 const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
@@ -33,6 +34,7 @@ export default async function SolicitacoesPage({
     tipo?: string;
     solicitante?: string;
     cargo?: string;
+    job?: string;
   };
 }) {
   const session = await requireSession();
@@ -87,6 +89,14 @@ export default async function SolicitacoesPage({
   const cargoFiltro = searchParams.cargo?.trim();
   if (cargoFiltro) {
     query = query.eq("cargo", cargoFiltro);
+  }
+
+  const jobFiltro = (searchParams.job ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^[0-9a-f-]{36}$/i.test(s));
+  if (jobFiltro.length > 0) {
+    query = query.in("job_id", jobFiltro);
   }
 
   const tipoFiltro = (searchParams.tipo ?? "").trim();
@@ -221,9 +231,7 @@ export default async function SolicitacoesPage({
     .map(([id, nome]) => ({ id, nome }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  // Lista única de cargos presentes nas solicitações carregadas. Idealmente
-  // viria de uma query dedicada "distinct cargo", mas o volume é baixo e as
-  // próprias linhas da lista já cobrem o uso.
+  // Listas únicas pros filtros (derivadas das solicitações carregadas).
   const cargosDisponiveis = Array.from(
     new Set(
       solicitacoes
@@ -231,6 +239,21 @@ export default async function SolicitacoesPage({
         .filter((c): c is string => !!c && c.trim() !== ""),
     ),
   ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const jobsMap = new Map<string, string>();
+  for (const s of solicitacoes) {
+    if (s.job_id && s.job_nome) {
+      jobsMap.set(
+        s.job_id,
+        s.job_codigo ? `${s.job_codigo} · ${s.job_nome}` : s.job_nome,
+      );
+    }
+  }
+  const jobsDisponiveis = Array.from(jobsMap.entries())
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+  const isAprovador = APROVADORES.has(session.activeRole);
 
   // Resolver origin pro link público (fallback env)
   const h = headers();
@@ -246,12 +269,15 @@ export default async function SolicitacoesPage({
         totalContagem={totalContagem}
         solicitantesDisponiveis={solicitantesDisponiveis}
         cargosDisponiveis={cargosDisponiveis}
+        jobsDisponiveis={jobsDisponiveis}
         tipoFiltroAtual={tipoFiltroValido}
         activeRole={session.activeRole}
         userId={session.profile.id}
         publicOrigin={publicOrigin}
         naoLidasPorSolicitacao={naoLidasMap}
-        actions={<NovaSolicitacaoDialog jobs={jobs} cargos={cargos} />}
+        actions={
+          isAprovador ? null : <NovaSolicitacaoDialog jobs={jobs} cargos={cargos} />
+        }
       />
     </div>
   );
