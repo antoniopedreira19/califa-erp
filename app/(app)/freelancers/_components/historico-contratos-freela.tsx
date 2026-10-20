@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Loader2, ArrowLeft, UserCheck, Ban, AlertTriangle } from "lucide-react";
-import { cn, formatCpf } from "@/lib/utils";
+import { cn, formatCpf, nomeCurto } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -272,7 +272,7 @@ export function HistoricoContratosFreela({
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="text-xs text-foreground">
-                          {c.responsavel_nome ?? "—"}
+                          {nomeCurto(c.responsavel_nome)}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
