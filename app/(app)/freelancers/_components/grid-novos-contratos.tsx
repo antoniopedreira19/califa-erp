@@ -9,6 +9,8 @@ interface Props {
     "30d": number;
     "60d": number;
   };
+  /** 'horizontal' = 4 colunas (default); 'vertical' = 4 linhas empilhadas. */
+  orientacao?: "horizontal" | "vertical";
 }
 
 const JANELAS: Array<{
@@ -22,7 +24,11 @@ const JANELAS: Array<{
   { key: "60d", label: "Últimos 60 dias", dias: 60 },
 ];
 
-export function GridNovosContratos({ totais }: Props) {
+export function GridNovosContratos({
+  totais,
+  orientacao = "horizontal",
+}: Props) {
+  const vertical = orientacao === "vertical";
   return (
     <div className="rounded-2xl border border-border bg-white shadow-soft overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center gap-2">
@@ -32,11 +38,19 @@ export function GridNovosContratos({ totais }: Props) {
         <div className="min-w-0">
           <h2 className="text-sm font-bold text-foreground">Novos contratos</h2>
           <p className="text-xs text-muted-foreground">
-            Contratos iniciados em janelas recentes — clique pra filtrar a lista
+            {vertical
+              ? "Janelas recentes — clique pra filtrar"
+              : "Contratos iniciados em janelas recentes — clique pra filtrar a lista"}
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border">
+      <div
+        className={cn(
+          vertical
+            ? "flex flex-col divide-y divide-border"
+            : "grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border",
+        )}
+      >
         {JANELAS.map((j) => {
           const n = totais[j.key];
           const inicioApos = calcularInicioApos(j.dias);

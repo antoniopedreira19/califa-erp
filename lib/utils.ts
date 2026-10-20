@@ -34,6 +34,32 @@ export function initials(name: string | null | undefined): string {
     .toUpperCase();
 }
 
+/**
+ * Encurta o nome em "primeira palavra + último sobrenome real", ignorando
+ * preposições (de/da/do/dos/das/e) e sufixos (filho/filha/junior/jr/neto/
+ * neta/sobrinho/sobrinha). Mesma regra do SQL do titular de verba.
+ *
+ * Exemplos:
+ *   "Maria Clara de Oliveira Fernandes" → "Maria Fernandes"
+ *   "João da Silva Filho" → "João Silva"
+ *   "Rizia Cavalcante" → "Rizia Cavalcante"
+ *   "Maria" → "Maria"
+ */
+const NOME_IGNORAR = new Set([
+  "DE","DA","DO","DOS","DAS","E",
+  "FILHO","FILHA","JUNIOR","JR","NETO","NETA","SOBRINHO","SOBRINHA",
+]);
+
+export function nomeCurto(nome: string | null | undefined): string {
+  if (!nome) return "—";
+  const partes = nome.trim().split(/\s+/).filter((p) => p.length > 0);
+  if (partes.length === 0) return "—";
+  const relevantes = partes.filter((p) => !NOME_IGNORAR.has(p.toUpperCase()));
+  if (relevantes.length === 0) return partes[0];
+  if (relevantes.length === 1) return relevantes[0];
+  return `${relevantes[0]} ${relevantes[relevantes.length - 1]}`;
+}
+
 // ---------- Documentos ----------
 
 /** Remove todos os não-dígitos. */

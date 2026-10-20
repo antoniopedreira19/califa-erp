@@ -45,7 +45,11 @@ const items: SubNavItem[] = [
   },
 ];
 
-export function FreelancersSubNav() {
+export function FreelancersSubNav({
+  countSolicitacoes = 0,
+}: {
+  countSolicitacoes?: number;
+}) {
   const pathname = usePathname();
 
   return (
@@ -79,6 +83,14 @@ export function FreelancersSubNav() {
                 )}
               />
               <span>{item.label}</span>
+              {item.href === "/freelancers/solicitacoes" && countSolicitacoes > 0 && (
+                <span
+                  className="tabular-nums rounded-full bg-california-red px-1.5 py-0.5 text-[10px] leading-none text-white font-semibold"
+                  aria-label={`${countSolicitacoes} pendente${countSolicitacoes === 1 ? "" : "s"}`}
+                >
+                  {countSolicitacoes}
+                </span>
+              )}
               {active && (
                 <span
                   aria-hidden

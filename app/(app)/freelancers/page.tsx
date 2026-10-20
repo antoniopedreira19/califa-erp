@@ -4,7 +4,6 @@ import type { FreelancerCargo } from "@/lib/types";
 import { HeroDashboard } from "./_components/hero-dashboard";
 import { CardsAnalise, type CategoriaCard } from "./lista/_components/cards-analise";
 import { CardsAcoesPrevistas } from "./_components/cards-acoes-previstas";
-import { CardSolicitacoes } from "./_components/card-solicitacoes";
 import { GridNovosContratos } from "./_components/grid-novos-contratos";
 import { BuscarFreelancerPill } from "./_components/buscar-freelancer-pill";
 import { NovidadesPill } from "./_components/novidades-pill";
@@ -173,33 +172,15 @@ export default async function FreelancersDashboardPage() {
     performance.push(
       ...Array.from(porResp.values())
         .filter((l) => l.total > 0)
-        .sort((a, b) => b.total - a.total),
+        .sort((a, b) => b.score - a.score || b.total - a.total),
     );
   }
 
-  // Solicitações (modo pendentes p/ aprovador, minhas p/ demais)
-  let solicitacoesQuery = supabase
-    .from("freelancer_solicitacoes")
-    .select(
-      "id, nome_freela, cargo, status, created_at, solicitante_id, solicitante:profiles!solicitante_id(nome), job:jobs(nome)",
-    )
-    .eq("tenant_id", session.activeTenant.id)
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  if (isAprovador) {
-    solicitacoesQuery = solicitacoesQuery.eq("status", "pendente");
-  } else {
-    solicitacoesQuery = solicitacoesQuery.eq(
-      "solicitante_id",
-      session.profile.id,
-    );
-  }
-
-  // Dados pros pills do hero (Buscar freelancer + Novidades)
-  const [solRes, lookupData, novidadesData, jobsPillRes, cargosPillRes] =
+  // Dados pros pills do hero (Buscar freelancer + Novidades). Fila de
+  // solicitações pendentes mudou pra badge na tab de Solicitações (carregado
+  // no layout.tsx).
+  const [lookupData, novidadesData, jobsPillRes, cargosPillRes] =
     await Promise.all([
-      solicitacoesQuery,
       carregarFreelancersLookup(supabase, session.activeTenant.id),
       isAprovador
         ? carregarNovidades(supabase, session.activeTenant.id)
@@ -233,16 +214,6 @@ export default async function FreelancersDashboardPage() {
     nome: j.nome,
   }));
   const cargosPill = (cargosPillRes.data ?? []) as FreelancerCargo[];
-
-  const solicitacoes = ((solRes.data ?? []) as any[]).map((s) => ({
-    id: s.id as string,
-    nome_freela: s.nome_freela as string,
-    cargo: s.cargo as string | null,
-    status: s.status as any,
-    created_at: s.created_at as string,
-    solicitante_nome: s.solicitante?.nome ?? null,
-    job_nome: s.job?.nome ?? null,
-  }));
 
   return (
     <div className="space-y-6">
@@ -285,18 +256,18 @@ export default async function FreelancersDashboardPage() {
 
       <CardsAcoesPrevistas totais={totaisAcoes} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 space-y-5">
-          <GridNovosContratos totais={totaisNovos} />
-          {isAprovador && <TabelaPerformance linhas={performance} />}
+      {isAprovador && performance.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2">
+            <TabelaPerformance linhas={performance} />
+          </div>
+          <div>
+            <GridNovosContratos totais={totaisNovos} orientacao="vertical" />
+          </div>
         </div>
-        <div>
-          <CardSolicitacoes
-            solicitacoes={solicitacoes}
-            modo={isAprovador ? "pendentes" : "minhas"}
-          />
-        </div>
-      </div>
+      ) : (
+        <GridNovosContratos totais={totaisNovos} />
+      )}
     </div>
   );
 }

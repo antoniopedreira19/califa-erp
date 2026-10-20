@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Search, X, Lock } from "lucide-react";
-import { cn, initials } from "@/lib/utils";
+import { cn, initials, nomeCurto } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -216,7 +216,7 @@ export function FreelancerPickerTable({
                 const badge = VINCULO_BADGE[f.status_vinculo];
                 const bloqueado = isBloqueado(f);
                 const titleBloqueio = bloqueado
-                  ? `Ativo com ${f.responsavel_nome ?? "outro responsável"} — finalize o atual primeiro`
+                  ? `Ativo com ${nomeCurto(f.responsavel_nome)} — finalize o atual primeiro`
                   : undefined;
                 return (
                   <tr
@@ -253,7 +253,7 @@ export function FreelancerPickerTable({
                       {f.nome_job ?? "—"}
                     </td>
                     <td className="px-3 py-3 text-foreground/80">
-                      {f.responsavel_nome ?? "—"}
+                      {nomeCurto(f.responsavel_nome)}
                     </td>
                     <td className="px-5 py-3">
                       <span
