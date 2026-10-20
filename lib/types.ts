@@ -2889,6 +2889,14 @@ export interface DadosDaPPAEmitir {
   /** Decisão 187: o tipo do reembolso e, no veículo próprio, a conta. */
   reembolso_tipo?: ReembolsoTipo | null;
   deslocamentos?: DeslocamentosDoReembolso | null;
+  /** Decisão 193: o PIX ou a conta digitados para o titular que não paga
+   *  pelo cadastro (freela sem PIX completo, colaborador sem conta no RH).
+   *  Null quando paga pelo cadastro; ausente na PP a emitir salva antes. */
+  pagamento_do_titular?: PagamentoDoTitular | null;
+  /** Decisão 193: o servidor diz, ao salvar, se o titular paga pelo
+   *  cadastro (ficha do RH ou PIX do cadastro de freelas). A revisão lê
+   *  daqui. Ausente na PP a emitir salva antes. */
+  titular_paga_pelo_cadastro?: boolean | null;
   /** Decisão 127, no formato do envio (`pagamentoParaEnvio`). */
   pagamento_fora_do_cadastro: {
     meio: MeioForaDoCadastro;
@@ -2902,6 +2910,24 @@ export interface DadosDaPPAEmitir {
     conta_dv: string | null;
     tipo_conta: TipoContaBancariaFornecedor | null;
   } | null;
+}
+
+/**
+ * Decisão 193: o PIX ou a conta do titular da verba (ou do reembolso) que não
+ * paga pelo cadastro, digitado na PP. Já normalizado por
+ * `pagamentoDoTitularSchema`: o meio que não foi escolhido vai nulo.
+ */
+export interface PagamentoDoTitular {
+  meio: "pix" | "conta";
+  pix_tipo: PixTipoChave | null;
+  pix_chave: string | null;
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  agencia_dv: string | null;
+  conta: string | null;
+  conta_dv: string | null;
+  tipo_conta: TipoContaBancariaFornecedor | null;
 }
 
 /** Um anexo da PP a emitir: vira anexo da PP quando ela é gerada. */

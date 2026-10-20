@@ -6136,3 +6136,26 @@ no lado da produção:
   `created_at`. A PP-00286, gerada às 23h17 de 19/10 (Brasília), saiu com
   "Emissão: 20/10/2026", enquanto o selo do mesmo documento diz "Cancelada em
   19/10/2026". Acontece com toda PP gerada entre 21h e meia-noite.
+
+## ⚠️ Nota de 2026-10-19 (13) — Conta ou PIX do titular da verba (decisão 193)
+
+- **Por quê:** a PP de verba do freela (e do colaborador sem conta no RH)
+  saía sem dados bancários, e o financeiro passou a recusá-la (PP-00127).
+- **O que mudou:** migration `20261019900005_conta_do_titular_da_verba.sql`
+  e o formulário da PP. Quem paga pelo cadastro — colaborador com conta ou
+  PIX na ficha (171) e freela com PIX completo no cadastro de freelas — não
+  vê campo: o gatilho `pp_foto_do_colaborador` copia o pagamento para a PP, e
+  a linha embaixo do titular diz de onde. Quem não paga pelo cadastro digita
+  o PIX ou a conta no campo "Pagamento" (`pagamento-do-titular-field.tsx`),
+  obrigatório no Salvar e no Gerar, conferido no servidor
+  (`lib/validations/pagamento-do-titular.ts`). A revisão ganhou "Dados
+  bancários". Vale também para o reembolso.
+- **No banco:** `pix_do_cadastro_do_freelancer` (fechada para a tela),
+  `pessoas_para_verba` com `paga_pelo_cadastro`, e o gatilho preservando o
+  pagamento digitado enquanto a PP está "gerada" (enviada, não muda). Em
+  19/10: 46 dos 64 freelas ativos vão automático; 18 colaboradores sem
+  ficha digitam.
+- **Conferência no banco** (bloco desfeito no fim): freela com PIX completo
+  sai com o PIX e o CPF do cadastro e ignora o que a tela mandar; o digitado
+  fica na PP gerada, muda numa edição e não muda depois do envio;
+  colaborador com ficha continua com a ficha.

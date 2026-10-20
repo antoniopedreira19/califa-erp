@@ -24,6 +24,10 @@ export interface PessoaParaVerba {
   detalhe: string | null;
   /** O nome social do freela: entra na busca, não aparece na lista. */
   busca: string | null;
+  /** Decisão 193: paga pelo cadastro — a ficha do RH tem conta ou PIX, ou o
+   *  cadastro de freelas tem um PIX completo. Só o sim ou não, nunca o dado.
+   *  Falso = o formulário pede o PIX ou a conta. */
+  pagaPeloCadastro: boolean;
 }
 
 const CONTRATACOES: ReadonlySet<string> = new Set(["pj", "mei", "clt_recibo", "clt", "estagio", "socio"]);
@@ -44,6 +48,7 @@ export async function carregarPessoasParaVerba(
     funcao: string | null;
     detalhe: string | null;
     busca: string | null;
+    paga_pelo_cadastro: boolean | null;
   }>;
   return linhas
     .map((l) => ({
@@ -56,6 +61,7 @@ export async function carregarPessoasParaVerba(
           ? tipoContratacaoLabel(l.detalhe as TipoContratacao)
           : l.detalhe?.trim() || null,
       busca: l.busca?.trim() || null,
+      pagaPeloCadastro: l.paga_pelo_cadastro === true,
     }))
     .sort(
       (a, b) =>

@@ -17,6 +17,7 @@
 
 import type {
   MeioForaDoCadastro,
+  PagamentoDoTitular,
   PagamentoForaDoCadastroDaPP,
   PixTipoChave,
   TipoContaBancariaFornecedor,
@@ -324,14 +325,18 @@ export const COLUNAS_DA_FOTO_DO_TITULAR =
   "fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta, fornecedor_pix_tipo, fornecedor_pix_chave";
 
 /**
- * A conta e o PIX do colaborador titular da verba, como o PDF os imprime.
+ * A conta e o PIX do titular da verba (colaborador ou freela), como o PDF os
+ * imprime.
  *
- * Quem tira a foto é o banco (gatilho `trg_pp_foto_do_colaborador`): a
- * ficha do RH não abre para a produção nem para o financeiro, e uma função
- * que a tela chamasse entregaria a conta de qualquer colaborador pelo
- * console. A foto mora nas mesmas colunas da do fornecedor, com o CPF em
- * `verba_titular_cpf`. Null fora do colaborador, sem foto, ou sem conta e
- * sem PIX na ficha — e aí o PDF não traz o bloco.
+ * Quem paga pelo cadastro tem a foto tirada pelo banco (gatilho
+ * `trg_pp_foto_do_colaborador`): a ficha do RH (decisão 171) ou o PIX
+ * completo do cadastro de freelas (decisão 193). Nenhum dos dois abre para a
+ * produção, e uma função que a tela chamasse entregaria a conta de qualquer
+ * um pelo console. Quem não tem cadastro usável digita o PIX ou a conta na
+ * PP, e a ação grava nas mesmas colunas (`fotoDoPagamentoDoTitular`). A foto
+ * mora nas colunas da do fornecedor, com o CPF em `verba_titular_cpf`. Null
+ * fora do colaborador e do freela, sem foto, ou sem conta e sem PIX — e aí o
+ * PDF não traz o bloco.
  */
 export function pagamentoDoTitularDaPP(
   pp: Partial<FotoDePagamentoDaPP> & {
@@ -340,7 +345,8 @@ export function pagamentoDoTitularDaPP(
     dados_pagamento_congelados_em?: string | null;
   },
 ): PagamentoDoTitularNoPdf | null {
-  if (pp.verba_titular_tipo !== "colaborador" || !pp.dados_pagamento_congelados_em) return null;
+  if (pp.verba_titular_tipo !== "colaborador" && pp.verba_titular_tipo !== "freela") return null;
+  if (!pp.dados_pagamento_congelados_em) return null;
   if (!pp.fornecedor_conta && !pp.fornecedor_pix_chave) return null;
   return {
     banco_codigo: pp.fornecedor_banco_codigo ?? null,
@@ -353,4 +359,59 @@ export function pagamentoDoTitularDaPP(
     pix_chave: pp.fornecedor_pix_chave ?? null,
     cpf: pp.verba_titular_cpf ?? null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// O pagamento digitado do titular sem cadastro usável (decisão 193, 19/10/2026)
+// ---------------------------------------------------------------------------
+
+/** O PIX ou a conta digitados na PP → as nove colunas da foto. O meio que
+ *  não foi escolhido vai nulo. */
+export function fotoDoPagamentoDoTitular(p: PagamentoDoTitular): FotoDePagamentoDaPP {
+  return {
+    fornecedor_banco_codigo: p.banco_codigo,
+    fornecedor_banco_nome: p.banco_nome,
+    fornecedor_agencia: p.agencia,
+    fornecedor_agencia_dv: p.agencia_dv,
+    fornecedor_conta: p.conta,
+    fornecedor_conta_dv: p.conta_dv,
+    fornecedor_tipo_conta: p.tipo_conta,
+    fornecedor_pix_tipo: p.pix_tipo,
+    fornecedor_pix_chave: p.pix_chave,
+  };
+}
+
+/** O caminho de volta: a foto de uma PP com pagamento digitado → o que o
+ *  formulário reabre (editar a PP gerada, reemitir). Null sem foto. A conta
+ *  completa vence: é o meio que só se digita. */
+export function pagamentoDoTitularDaFoto(pp: Partial<FotoDePagamentoDaPP>): PagamentoDoTitular | null {
+  if (pp.fornecedor_conta && pp.fornecedor_banco_codigo) {
+    return {
+      meio: "conta",
+      pix_tipo: null,
+      pix_chave: null,
+      banco_codigo: pp.fornecedor_banco_codigo,
+      banco_nome: pp.fornecedor_banco_nome ?? null,
+      agencia: pp.fornecedor_agencia ?? null,
+      agencia_dv: pp.fornecedor_agencia_dv ?? null,
+      conta: pp.fornecedor_conta,
+      conta_dv: pp.fornecedor_conta_dv ?? null,
+      tipo_conta: pp.fornecedor_tipo_conta ?? null,
+    };
+  }
+  if (pp.fornecedor_pix_chave) {
+    return {
+      meio: "pix",
+      pix_tipo: pp.fornecedor_pix_tipo ?? null,
+      pix_chave: pp.fornecedor_pix_chave,
+      banco_codigo: null,
+      banco_nome: null,
+      agencia: null,
+      agencia_dv: null,
+      conta: null,
+      conta_dv: null,
+      tipo_conta: null,
+    };
+  }
+  return null;
 }
