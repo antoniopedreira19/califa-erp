@@ -488,6 +488,9 @@ export function EnvioDialog({
   const { anexos, setAnexos, subir, remover, mudar, mudarNf, aviso, setAviso } = useAnexosEmEdicao(
     prefixo,
     tomadorEsperado,
+    // Decisão 192: a IA lê o PDF ao anexar só na PP comum — o reembolso
+    // tem comprovantes com tipos e campos próprios.
+    pp && !pp.verbaProducao && !pp.reembolsoTipo ? tomadores : undefined,
   );
   const [tentou, setTentou] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -616,6 +619,7 @@ export function EnvioDialog({
         obrigatorio
         invalido={tentou && !a.nf.tomador}
         disabled={pending}
+        lidoPelaIA={a.leitura?.estado === "lido" && a.leitura.campos.includes("tomador")}
       />
     );
   }
@@ -646,6 +650,7 @@ export function EnvioDialog({
         anexoPath={a.path || null}
         anexoMimetype={a.mime}
         fornecedorAtualNome={nomeDoFornecedor}
+        leitura={a.leitura}
       />
     );
   }

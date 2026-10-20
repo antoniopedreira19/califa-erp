@@ -5246,6 +5246,27 @@ export interface NfExtracaoCache {
   extraido_em: string;
 }
 
+/**
+ * A leitura automática do anexo, logo que ele sobe (decisão 192, 19/10/2026):
+ * a IA diz que documento é, o número e, na NF ou no
+ * documento que diz o CNPJ, os dados dele. A tela pré-preenche só o que
+ * estiver vazio e marca cada campo com o selo "IA" até alguém mexer nele.
+ */
+export type CampoLidoPelaIA = "tipo" | "numero" | "emissao" | "valor" | "tomador";
+
+export interface DadosLidosDoDocumento {
+  tipo: DocumentoTipo | null;
+  /** O número do documento (na NF, o número da nota). */
+  numero: string | null;
+  /** Só na NF. */
+  data_emissao: string | null;
+  valor_total: number | null;
+  /** O CNPJ da California contra o qual o documento foi emitido, já
+   *  casado com o cadastro de CNPJs (null = não achou ou não diz). */
+  tomador_estabelecimento_id: string | null;
+  confianca_baixa: boolean;
+}
+
 /** O que a IA extrai da NF, já validado. Null = não identificado com
  *  segurança (nunca string vazia). */
 export interface DadosExtraidosNF {

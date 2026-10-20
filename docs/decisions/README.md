@@ -211,7 +211,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 189 | [Prestação de contas da verba documento a documento, pelo "PPs" da planilha, e a NF da loja no cadastro de notas do fiscal](189-prestacao-de-contas-da-verba-documento-a-documento.md) | 2026-10-19 |
 | 190 | [O PDF da PP que não vale para pagamento sai com selo: a gerada, ainda não enviada pelo sistema, e a cancelada](190-selo-no-pdf-da-pp-nao-enviada-e-cancelada.md) | 2026-10-19 |
 | 191 | [O PDF da PP mostra o item da planilha a que ela pertence, embaixo do Serviço](191-item-da-planilha-no-pdf-da-pp.md) | 2026-10-19 |
-| 192 | *Reservada* — a IA lê o PDF logo que ele é anexado à PP e pré-preenche tipo, número e os dados da NF (em implementação) | 2026-10-19 |
+| 192 | [A IA lê o PDF logo que ele é anexado à PP e pré-preenche tipo, número e os dados da NF, com o selo "IA" e editável](192-ia-le-o-anexo-da-pp-ao-anexar.md) | 2026-10-19 |
 | 193 | [A conta ou o PIX do titular da verba: automático pelo cadastro quando ele tem, digitado na PP quando não tem](193-conta-ou-pix-do-titular-da-verba.md) | 2026-10-19 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em

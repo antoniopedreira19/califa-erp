@@ -122,8 +122,12 @@ Todas em `app/(app)/jobs/[jobId]/realizado/`, menos as de `lib/` e
 ## Pendências
 
 - **As PP-00197 e PP-00198** seguem com o anexo como "Recibo 149-2026". O
-  nome do arquivo diz "129-2026": vale conferir o número no PDF. O GP pode
-  trocar o tipo para Fatura no próprio envio.
-- **Fiscal:** a fatura não entra na apuração. Se a locação de máquinas e
+  nome do arquivo diz "129-2026", mas o PDF diz "Fatura Nº 149-2026": **o
+  número está certo** (conferido em 16/10/2026). Só o tipo poderia ser
+  Fatura, e o GP pode trocá-lo no próprio envio.
+- **Fiscal:** a fatura não entra na apuração. ~~Se a locação de máquinas e
   equipamentos deve gerar crédito de PIS/COFINS, é conversa com a
-  contabilidade, para outra entrega.
+  contabilidade, para outra entrega.~~ **Resolvido em 17/10/2026: a fatura
+  não gera crédito de PIS/COFINS** (Tiago). Fica fora do fiscal, como está.
+- **Ler o anexo ao subir e já sugerir o tipo:** ideia do Tiago de
+  16/10/2026, virou a [192](192-ia-le-o-anexo-da-pp-ao-anexar.md).

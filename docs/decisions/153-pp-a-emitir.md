@@ -62,6 +62,11 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
   (formulário, envio e conferência).
 - O tipo do arquivo **nasce vazio** ("Escolha o tipo"); no formulário os
   anexos são opcionais, no envio são obrigatórios.
+  - **Revisto pela [192](192-ia-le-o-anexo-da-pp-ao-anexar.md)
+    (19/10/2026):** na PP comum, a IA lê o PDF logo que ele sobe e
+    pré-preenche o tipo e o número (na NF, também os dados da nota), com o
+    selo "IA" e editável. O tipo continua vazio até a leitura terminar e
+    quando ela não acha o tipo.
 - No anexo do tipo NF entram os dados da nota (decisão 152).
 
 ## Quem faz o quê

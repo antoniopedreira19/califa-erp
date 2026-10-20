@@ -6159,3 +6159,35 @@ no lado da produção:
   sai com o PIX e o CPF do cadastro e ignora o que a tela mandar; o digitado
   fica na PP gerada, muda numa edição e não muda depois do envio;
   colaborador com ficha continua com a ficha.
+
+## ⚠️ Nota de 2026-10-19 (14) — A IA lê o anexo da PP logo que ele sobe (decisão 192)
+
+Ideia do Tiago de 16/10/2026, depois das PP-00197 e PP-00198 (decisão 178).
+Protótipo aprovado em 17/10. Regra completa na decisão 192.
+
+- **O que mudou:** na PP comum, todo PDF anexado é lido pela IA assim que
+  sobe, no formulário (Gerar PP e PP a emitir) e no envio ao financeiro. A
+  leitura preenche **só o que está vazio**:
+  - tipo e número;
+  - na NF, também a data e o valor;
+  - o CNPJ da California do documento, quando o campo ainda está no CNPJ
+    da PP.
+
+  Cada campo preenchido leva o selo âmbar "IA" até alguém mexer nele.
+  Embaixo do arquivo aparece o estado da leitura ("lendo o documento…",
+  "lido pela IA", "lido pela IA, com dúvida: confira", "não deu para ler:
+  escolha o tipo").
+- **Fora:** imagens, verba de produção e reembolso (`useAnexosEmEdicao`
+  sem o terceiro argumento não lê). O servidor não muda: as travas da NF no
+  envio, do boleto e do CNPJ continuam as de antes.
+- **Custo e cache:** mesma chave e mesmo `gpt-4.1-mini` da leitura de NF.
+  O cache é `nf_extracao_cache` com `modelo = gpt-4.1-mini|documento-v1`.
+  A auditoria grava `pp.anexo.lido_por_ia`. O `custo_usd_estimado` das duas
+  leituras passou a usar o preço do gpt-4.1-mini (`custoEstimadoUsd`).
+- **Sem migration.**
+- **Pendente: a conferência com a IA de verdade.** A conta da OpenAI está
+  sem crédito desde 19/10/2026, 15h39 ("429 You have no credits
+  remaining"), o que derruba também o botão "Ler NF automaticamente". Até o
+  crédito voltar, cada PDF da PP comum termina em "não deu para ler:
+  escolha o tipo". O Tiago decidiu subir assim mesmo (20/10). Com crédito,
+  conferir pelo roteiro do fim da decisão 192.

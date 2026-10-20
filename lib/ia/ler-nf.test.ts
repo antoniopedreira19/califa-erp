@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lerDadosBrutosDaNF, SCHEMA_DADOS_NF } from "./ler-nf";
+import {
+  lerDadosBrutosDaNF,
+  lerDadosBrutosDoDocumento,
+  SCHEMA_DADOS_DOCUMENTO,
+  SCHEMA_DADOS_NF,
+  VERSAO_LEITURA_DOCUMENTO,
+} from "./ler-nf";
+import { custoEstimadoUsd, MODELO_LEITURA_NF } from "./openai-client";
 
 /** Mock mínimo do shape que lerDadosBrutosDaNF usa. */
 function fakeClient(respostaJson: string, tokensIn = 1000, tokensOut = 100) {
@@ -93,4 +100,66 @@ test("lerDadosBrutosDaNF lança erro se JSON válido mas sem os campos obrigató
     // confianca_baixa: faltando
   });
   await assert.rejects(() => lerDadosBrutosDaNF(Buffer.from("fake"), fakeClient(faltandoUm)));
+});
+
+// ---------------------------------------------------------------------------
+// Leitura do documento ao anexar (decisão 192)
+// ---------------------------------------------------------------------------
+
+test("lerDadosBrutosDoDocumento traz o tipo e o número do documento", async () => {
+  const resposta = JSON.stringify({
+    tipo_documento: "fatura",
+    numero_documento: "149-2026",
+    numero_nf: null,
+    data_emissao: "2026-10-14",
+    razao_social_emissor: "LOCADORA TESTE LTDA",
+    cnpj_emissor: "11222333000181",
+    razao_social_tomador: "CALIFORNIA",
+    cnpj_tomador: "19437976000154",
+    valor_total: 11500,
+    descricao_servico: "Locação de banheiros",
+    confianca_baixa: false,
+  });
+  const r = await lerDadosBrutosDoDocumento(Buffer.from("fake-pdf"), fakeClient(resposta, 2700, 180));
+  assert.equal(r.dados.tipo_documento, "fatura");
+  assert.equal(r.dados.numero_documento, "149-2026");
+  assert.equal(r.dados.cnpj_tomador, "19437976000154");
+  assert.equal(r.tokensIn, 2700);
+  assert.equal(r.tokensOut, 180);
+});
+
+test("lerDadosBrutosDoDocumento descarta tipo fora da lista", async () => {
+  const resposta = JSON.stringify({
+    tipo_documento: "orcamento",
+    numero_documento: null,
+    numero_nf: null,
+    data_emissao: null,
+    razao_social_emissor: null,
+    cnpj_emissor: null,
+    razao_social_tomador: null,
+    cnpj_tomador: null,
+    valor_total: null,
+    descricao_servico: null,
+    confianca_baixa: true,
+  });
+  const r = await lerDadosBrutosDoDocumento(Buffer.from("fake-pdf"), fakeClient(resposta));
+  assert.equal(r.dados.tipo_documento, null);
+  assert.equal(r.dados.confianca_baixa, true);
+});
+
+test("SCHEMA_DADOS_DOCUMENTO pede o tipo e o número além dos campos da NF", () => {
+  assert.ok(SCHEMA_DADOS_DOCUMENTO.required.includes("tipo_documento"));
+  assert.ok(SCHEMA_DADOS_DOCUMENTO.required.includes("numero_documento"));
+  for (const c of SCHEMA_DADOS_NF.required) assert.ok(SCHEMA_DADOS_DOCUMENTO.required.includes(c), c);
+});
+
+test("a versão do cache da leitura do documento não é a da NF", () => {
+  assert.notEqual(VERSAO_LEITURA_DOCUMENTO, MODELO_LEITURA_NF);
+  assert.ok(VERSAO_LEITURA_DOCUMENTO.startsWith(MODELO_LEITURA_NF));
+});
+
+test("custo estimado pelo preço do gpt-4.1-mini; leitura do cache custa zero", () => {
+  // 2.700 tokens de entrada e 180 de saída: 0,00108 + 0,000288.
+  assert.equal(custoEstimadoUsd(2700, 180), 0.001368);
+  assert.equal(custoEstimadoUsd(0, 0), 0);
 });

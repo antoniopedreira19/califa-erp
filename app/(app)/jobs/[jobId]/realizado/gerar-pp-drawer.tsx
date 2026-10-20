@@ -619,7 +619,9 @@ export function GerarPPDrawer({
     mudarNf,
     aviso: avisoDosAnexos,
     setAviso: setAvisoDosAnexos,
-  } = useAnexosEmEdicao(uploadPrefix, tomadorPadrao);
+    // Decisão 192: a IA lê o PDF ao anexar só na PP comum. A verba não tem
+    // anexo, e o reembolso tem comprovantes com tipos e campos próprios.
+  } = useAnexosEmEdicao(uploadPrefix, tomadorPadrao, tipoVerba ? undefined : tomadores);
   // Revisão da 156 (16/10/2026): com nota, fatura ou recibo que diga o CNPJ,
   // a empresa emissora é a do documento — o seletor trava e diz qual
   // documento a definiu. Sem documento, vale o seletor (pré-seleção pela
@@ -1402,6 +1404,7 @@ export function GerarPPDrawer({
         empresaNome={nomeDoCnpj}
         idBase={`pp-doc-${id}`}
         disabled={pending}
+        lidoPelaIA={a.leitura?.estado === "lido" && a.leitura.campos.includes("tomador")}
       />
     );
   }
@@ -1447,6 +1450,7 @@ export function GerarPPDrawer({
         fornecedorAtualNome={fornecedores.find((f) => f.id === fornecedorId)?.nome ?? null}
         servicoAtual={servico}
         onUsarDescricao={(d) => setServico(d)}
+        leitura={a.leitura}
       />
     );
   }
