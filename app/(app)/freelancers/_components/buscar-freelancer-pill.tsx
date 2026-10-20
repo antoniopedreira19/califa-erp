@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FreelancerPickerTable, type FreelancerLookup } from "./freelancer-picker-table";
 import { NovaSolicitacaoDialog } from "../solicitacoes/_components/nova-solicitacao-dialog";
+import { HistoricoDialogAprovador } from "./historico-dialog-aprovador";
 import type { FreelancerCargo } from "@/lib/types";
 import type { JobItem } from "./job-picker";
 
@@ -13,10 +13,13 @@ import type { JobItem } from "./job-picker";
  * Pill no hero do dashboard que abre modal grande com TODOS os freelas do
  * tenant (via view `freelancers_lookup` SECURITY DEFINER — sem PII).
  *
- * Ao selecionar uma linha:
- *   - Admin/RH/financeiro: vai direto pra criar novo contrato (`/freelancers/contratos/novo?freelancer=<id>`)
- *   - GP/produtor: abre o NovaSolicitacaoDialog com freela travado + começando
- *     direto na tela de histórico (iniciarRevisandoHistorico).
+ * Ao selecionar uma linha, todos passam pelo histórico primeiro
+ * (checkpoint de segurança — "esse freela já tem contrato ativo?").
+ *   - Admin/RH/financeiro: HistoricoDialogAprovador. Prosseguir → cria contrato
+ *     direto. Botão fica "Prosseguir mesmo assim" (amarelo) se tem ativo —
+ *     aditivos legítimos são permitidos.
+ *   - GP/produtor: NovaSolicitacaoDialog com `iniciarRevisandoHistorico`.
+ *     Prosseguir → form de solicitação. Botão bloqueado se tem ativo.
  */
 
 interface Props {
@@ -38,26 +41,20 @@ export function BuscarFreelancerPill({
   jobs = [],
   cargos = [],
 }: Props) {
-  const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  // Pra GP: freela escolhido pra abrir o dialog em cima do modal.
-  const [solicitarPara, setSolicitarPara] = React.useState<{
+  // Freela escolhido pra abrir dialog de histórico (variante por role).
+  const [selecionado, setSelecionado] = React.useState<{
     id: string;
     nome: string;
     cpf: string | null;
   } | null>(null);
 
   function handleSelect(freelancerId: string) {
-    if (isAprovador) {
-      setOpen(false);
-      router.push(`/freelancers/contratos/novo?freelancer=${freelancerId}`);
-      return;
-    }
     const freela = freelancers.find((f) => f.id === freelancerId);
     if (!freela) return;
     setOpen(false);
     // View `freelancers_lookup` não expõe CPF (LGPD). O dialog só mostra nome.
-    setSolicitarPara({
+    setSelecionado({
       id: freela.id,
       nome: freela.nome_social,
       cpf: null,
@@ -136,18 +133,28 @@ export function BuscarFreelancerPill({
         </div>
       )}
 
-      {/* Dialog de solicitação pra GP — abre em cima do picker com freela
-          travado e começando na tela de histórico. A key força remount a cada
-          seleção pra garantir estado limpo. */}
-      {solicitarPara && (
+      {/* Variante por role: admin/RH vê histórico com override; GP vê dialog
+          de solicitação já em modo histórico (bloqueio se ativo). A key força
+          remount a cada seleção pra estado limpo. */}
+      {selecionado && isAprovador && (
+        <HistoricoDialogAprovador
+          key={selecionado.id}
+          freelancer={selecionado}
+          open={true}
+          onOpenChange={(v) => {
+            if (!v) setSelecionado(null);
+          }}
+        />
+      )}
+      {selecionado && !isAprovador && (
         <NovaSolicitacaoDialog
-          key={solicitarPara.id}
+          key={selecionado.id}
           jobs={jobs}
           cargos={cargos}
-          freelancer={solicitarPara}
+          freelancer={selecionado}
           iniciarRevisandoHistorico
           defaultOpen
-          onClose={() => setSolicitarPara(null)}
+          onClose={() => setSelecionado(null)}
         />
       )}
     </>

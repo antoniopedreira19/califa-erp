@@ -78,6 +78,13 @@ interface Props {
   onVoltar: () => void;
   /** Botão "Prosseguir" ganha label diferente conforme o chamador. */
   labelProsseguir?: string;
+  /**
+   * Quando true, o botão Prosseguir fica HABILITADO mesmo com contrato
+   * ativo — vira "Prosseguir mesmo assim" com estilo warning. Útil pra
+   * admin/RH/financeiro que podem criar aditivos legítimos.
+   * Default false (comportamento conservador do GP/produtor).
+   */
+  permiteOverride?: boolean;
 }
 
 function calcularStatus(c: Contrato): StatusContrato {
@@ -121,6 +128,7 @@ export function HistoricoContratosFreela({
   onProsseguir,
   onVoltar,
   labelProsseguir = "Prosseguir pra solicitação",
+  permiteOverride = false,
 }: Props) {
   const supabase = React.useMemo(() => createClient(), []);
   const [contratos, setContratos] = React.useState<Contrato[]>([]);
@@ -298,15 +306,22 @@ export function HistoricoContratosFreela({
         <button
           type="button"
           onClick={onProsseguir}
-          disabled={carregando || temAtivo}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-california-red text-white text-xs font-semibold px-4 py-2 hover:bg-california-red-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={carregando || (temAtivo && !permiteOverride)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+            temAtivo && permiteOverride
+              ? "bg-amber-500 text-white hover:bg-amber-600"
+              : "bg-california-red text-white hover:bg-california-red-hover",
+          )}
           title={
-            temAtivo
+            temAtivo && !permiteOverride
               ? "Freela com contrato ativo — não pode entrar em nova solicitação"
-              : undefined
+              : temAtivo && permiteOverride
+                ? "Freela já tem contrato ativo. Aditivo deve ser compatível com o vigente."
+                : undefined
           }
         >
-          {labelProsseguir}
+          {temAtivo && permiteOverride ? "Prosseguir mesmo assim" : labelProsseguir}
         </button>
       </div>
     </div>
