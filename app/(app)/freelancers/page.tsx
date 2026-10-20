@@ -233,6 +233,7 @@ export default async function FreelancersDashboardPage() {
         nomeUsuario={session.profile.nome}
         totalFreelancers={rows.length}
         totalIrregular={totaisAnalise.irregular}
+        mostrarNovaSolicitacao={!isAprovador}
         pills={
           <>
             <BuscarFreelancerPill
