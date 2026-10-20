@@ -21,6 +21,8 @@ export interface CepInputProps {
     bairro: string;
     cidade: string;
   }) => void;
+  /** Reporta os dígitos do CEP pra quem precisa (ex.: form controlado). */
+  onDigitsChange?: (digits: string) => void;
 }
 
 /**
@@ -34,6 +36,7 @@ export function CepInput({
   defaultValue,
   disabled,
   onEnderecoEncontrado,
+  onDigitsChange,
 }: CepInputProps) {
   const [digits, setDigits] = React.useState("");
   const [buscando, setBuscando] = React.useState(false);
@@ -66,7 +69,10 @@ export function CepInput({
         id={id}
         defaultValue={defaultValue}
         disabled={disabled || buscando}
-        onDigitsChange={setDigits}
+        onDigitsChange={(d) => {
+          setDigits(d);
+          onDigitsChange?.(d);
+        }}
         onBlur={buscar}
       />
       {buscando && (

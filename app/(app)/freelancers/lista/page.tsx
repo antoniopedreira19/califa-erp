@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, FolderKanban } from "lucide-react";
+import { FolderKanban } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -12,6 +12,8 @@ import { ChipsFiltros } from "./_components/chips-filtros";
 import { GerenciarCargosDialog } from "./_components/gerenciar-cargos-dialog";
 import { CardsAnalise, type CategoriaCard } from "./_components/cards-analise";
 import { ExportarButton } from "./_components/exportar-button";
+import { NovoFreelancerDialog } from "../_components/novo-freelancer-dialog";
+import type { JobItem } from "../_components/job-picker";
 
 export const dynamic = "force-dynamic";
 
@@ -194,16 +196,36 @@ export default async function FreelancersListaPage({
     totaisQuery = totaisQuery.eq("responsavel_id", session.profile.id);
   }
 
-  const [freelancersRes, cargosRes, totaisRes] = await Promise.all([
-    query.returns<FreelancerComStatus[]>(),
-    supabase
-      .from("freelancer_cargos")
-      .select("*")
-      .eq("tenant_id", session.activeTenant.id)
-      .order("nome", { ascending: true })
-      .returns<FreelancerCargo[]>(),
-    totaisQuery,
-  ]);
+  // Dados pro NovoFreelancerDialog (só carrega quando user pode criar).
+  const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
+
+  const [freelancersRes, cargosRes, totaisRes, jobsNovoRes, responsaveisNovoRes] =
+    await Promise.all([
+      query.returns<FreelancerComStatus[]>(),
+      supabase
+        .from("freelancer_cargos")
+        .select("*")
+        .eq("tenant_id", session.activeTenant.id)
+        .order("nome", { ascending: true })
+        .returns<FreelancerCargo[]>(),
+      totaisQuery,
+      // Jobs ativos pro picker do Step 5 do dialog
+      supabase
+        .from("jobs")
+        .select("id, codigo, nome, status")
+        .eq("tenant_id", session.activeTenant.id)
+        .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
+        .order("codigo", { ascending: false })
+        .limit(500),
+      // Responsáveis (profiles ativos do tenant) pro combobox do Step 1
+      supabase
+        .from("profiles")
+        .select("id, nome, tenant_members!inner(status, tenant_id)")
+        .eq("ativo", true)
+        .eq("tenant_members.tenant_id", session.activeTenant.id)
+        .eq("tenant_members.status", "ativo")
+        .order("nome", { ascending: true }),
+    ]);
 
   if (freelancersRes.error) {
     console.error("[freelancers.lista]", freelancersRes.error.message);
@@ -214,6 +236,14 @@ export default async function FreelancersListaPage({
 
   const freelancers = freelancersRes.data ?? [];
   const cargos = cargosRes.data ?? [];
+  const jobsNovo: JobItem[] = (jobsNovoRes.data ?? []).map((j: any) => ({
+    id: j.id as string,
+    codigo: j.codigo as string,
+    nome: j.nome as string,
+  }));
+  const responsaveisNovo = ((responsaveisNovoRes.data ?? []) as any[]).map(
+    (r) => ({ id: r.id as string, nome: r.nome as string }),
+  );
 
   // Cálculo dos 4 cards de análise
   const totaisRaw =
@@ -326,14 +356,11 @@ export default async function FreelancersListaPage({
         )}
         {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
         {podeCriarFreelancer && (
-          <Link
-            href="/freelancers/novo"
-            prefetch={false}
-            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Novo freelancer
-          </Link>
+          <NovoFreelancerDialog
+            responsaveis={responsaveisNovo}
+            jobs={jobsNovo}
+            cargos={cargos}
+          />
         )}
       </div>
 
