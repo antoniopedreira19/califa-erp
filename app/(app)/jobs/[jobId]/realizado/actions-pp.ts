@@ -1286,6 +1286,14 @@ function seloPeloStatus(status: PPStatus, canceladaEm: string | null): SeloDaPP 
   return null;
 }
 
+/** Decisão 191: o nome do item da planilha, pela âncora do realizado, para
+ *  quem relê a PP gravada e refaz o PDF. */
+const ITEM_DA_PP = "realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item))";
+type ItemDaPPEmbutido = { copia: { item: string | null } | null } | null;
+function nomeDoItemDaPP(realizado: ItemDaPPEmbutido): string {
+  return realizado?.copia?.item ?? "Item";
+}
+
 async function renderizarDocumentoDaPP(args: {
   tenantId: string;
   jobId: string;
@@ -1312,6 +1320,8 @@ async function renderizarDocumentoDaPP(args: {
   /** Decisão 171: a conta e o PIX do colaborador titular (da foto da PP). */
   pagamentoDoTitular: PagamentoDoTitularNoPdf | null;
   job: { codigo: string; nome: string; produto: string };
+  /** Decisão 191: o nome do item da planilha, embaixo do Serviço. */
+  itemNome: string;
   contexto: ContextoPdf;
   parcelas: Array<{ numero: number; data_vencimento: string; valor: number }>;
   /** A data de emissão impressa. Ausente = agora (a geração); o
@@ -1359,6 +1369,7 @@ async function renderizarDocumentoDaPP(args: {
     projeto: args.contexto.projeto,
     cliente: args.contexto.cliente,
     responsavelNome: args.contexto.responsavelNome,
+    itemNome: args.itemNome,
     parcelas: parcelas.map((p) => ({
       numero: p.numero,
       data_vencimento: p.data_vencimento,
@@ -1948,6 +1959,7 @@ async function finalizarPedidoCompraImpl(
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular,
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: item.item_nome,
       contexto,
       parcelas: parcelas.map((p) => ({
         numero: p.numero,
@@ -2435,7 +2447,7 @@ export async function previaDoPdfDaPP(
   if (!permissao.ok) return permissao;
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
-  const { job, supabase } = gate;
+  const { item, job, supabase } = gate;
   const tenantId = session.activeTenant.id;
 
   const parsed = dadosSchema.safeParse(dados);
@@ -2516,6 +2528,7 @@ export async function previaDoPdfDaPP(
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular: null,
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: item.item_nome,
       contexto,
       parcelas: d.parcelas.map((p, i) => ({ numero: i + 1, data_vencimento: p.data_vencimento, valor: p.valor })),
       previa: true,
@@ -2733,7 +2746,7 @@ async function refazerPdfDaPP(
 ): Promise<string | null> {
   const { data: ppBruta } = await supabase
     .from("pedidos_compra")
-    .select("*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor)")
+    .select(`*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor), ${ITEM_DA_PP}`)
     .eq("id", ppId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -2762,6 +2775,8 @@ async function refazerPdfDaPP(
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     pagamento_fora_do_cadastro_meio: string | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
+    /** Decisão 191: o nome do item da planilha, para o PDF. */
+    realizado: ItemDaPPEmbutido;
     /** Decisão 190: o selo sai do status gravado. */
     status: PPStatus;
     cancelada_em: string | null;
@@ -2835,6 +2850,7 @@ async function refazerPdfDaPP(
           ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
           : (pp.verba_titular_nome ?? ""),
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: nomeDoItemDaPP(pp.realizado),
       contexto,
       parcelas,
       emitidaEm: pp.created_at,
@@ -4339,7 +4355,7 @@ export async function atualizarVencimentoDaPP(
 
   const { data: ppBruta } = await supabase
     .from("pedidos_compra")
-    .select("*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor)")
+    .select(`*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor), ${ITEM_DA_PP}`)
     .eq("id", ppId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -4372,6 +4388,8 @@ export async function atualizarVencimentoDaPP(
     reembolso_tipo: ReembolsoTipo | null;
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
+    /** Decisão 191: o nome do item da planilha, para o PDF. */
+    realizado: ItemDaPPEmbutido;
   };
   if (pp.status !== "gerada") {
     return {
@@ -4478,6 +4496,7 @@ export async function atualizarVencimentoDaPP(
           ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
           : (pp.verba_titular_nome ?? ""),
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: nomeDoItemDaPP(pp.realizado),
       contexto,
       parcelas: parcelasNovas,
       emitidaEm: pp.created_at,
@@ -4814,6 +4833,7 @@ async function editarPPGeradaImpl(
     // Decisão 171: a verba tem titular nas três; nada novo grava responsável.
     responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
     job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+    itemNome: item.item_nome,
     contexto,
     parcelas: parcelasNovas,
     // A PP é a mesma: a emissão continua a da geração.

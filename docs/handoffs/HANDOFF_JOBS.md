@@ -6112,3 +6112,27 @@ no lado da produção:
   freelas ativos; 59 deles seguem na lista, 9 estão encerrados no módulo novo.
   A única PP a emitir com freela encerrado é um teste do TES-1025/26: ao
   salvar, pede o titular de novo.
+
+## ⚠️ Nota de 2026-10-19 (12) — O item da planilha no PDF da PP (decisão 191)
+
+- **Por quê:** o PDF da PP trazia o "Serviço" digitado por quem gera, mas não
+  de qual linha da planilha a PP sai. O Tiago pediu o nome do item no
+  documento (17/10) e aprovou a versão A do protótipo
+  (https://claude.ai/artifact/6iho6wNwqbgzHrc6CaYMAn) em 19/10.
+- **O que mudou:** a linha "Item: <nome>" sai embaixo do "Serviço", na célula
+  que ficava vazia ao lado do "Prazo de Pagto" (ou das "Parcelas"). O
+  documento não cresce. Vale para todos os formatos (fornecedor, verbas,
+  reembolso, prévia e selos) e para todo PDF gerado ou refeito; os emitidos
+  antes ficam como estão. `itemNome` é obrigatório em
+  `renderPedidoCompraPDF` e em `renderizarDocumentoDaPP`; quem relê a PP
+  gravada (`refazerPdfDaPP`, `atualizarVencimentoDaPP`) traz o nome pelo
+  embed `ITEM_DA_PP`.
+- **Conferência:** no TES-1001/26, linha "Item 7": a PP-00286 gerada, editada e
+  cancelada pela tela saiu com "Item: Item 7" nos três PDFs (geração, edição
+  e o selo de cancelada, que passa pelo `refazerPdfDaPP`). Os demais formatos
+  foram conferidos pelo gerador. A prévia e o "Atualizar vencimento" não foram
+  exercitados na tela.
+- **Achado à parte (não corrigido):** a "Emissão" do PDF usa o dia UTC de
+  `created_at`. A PP-00286, gerada às 23h17 de 19/10 (Brasília), saiu com
+  "Emissão: 20/10/2026", enquanto o selo do mesmo documento diz "Cancelada em
+  19/10/2026". Acontece com toda PP gerada entre 21h e meia-noite.
