@@ -62,7 +62,6 @@ export function FreelancersSubNav() {
             <Link
               key={item.href}
               href={item.href}
-              prefetch={false}
               role="tab"
               aria-selected={active}
               aria-current={active ? "page" : undefined}
