@@ -1,0 +1,56 @@
+/* ---- Protótipo: o que o Tailwind não cobre ---- */
+.gutter { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.barra-lateral { box-sizing: content-box; padding-left: env(safe-area-inset-left, 0px); }
+.menu-movel { top: calc(16px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
+@media (min-width: 768px) {
+  .conteudo { padding-left: calc(76px + env(safe-area-inset-left, 0px)); }
+  .gutter { padding-left: 32px; padding-right: max(32px, env(safe-area-inset-right, 0px)); }
+}
+.barra-proto { left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+.toasts { right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+.cabeca-gaveta { padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.rodape-gaveta { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.modal-seguro { padding-top: max(16px, env(safe-area-inset-top, 0px)); padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+
+@keyframes p-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes p-gaveta { from { transform: translateX(28px); opacity: .5 } to { transform: none; opacity: 1 } }
+@keyframes p-sobe { from { transform: translateY(6px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes p-destaque { 0%, 100% { background-color: #fff4d6 } 50% { background-color: #ffe39a } }
+.anim-fade { animation: p-fade .18s ease-out }
+.anim-gaveta { animation: p-gaveta .26s cubic-bezier(.2,.8,.2,1) }
+.anim-sobe { animation: p-sobe .18s ease-out }
+.barra-proto.anim-sobe { animation: none }
+.linha-destaque td { background-color: #fff4d6 !important; animation: p-destaque 1.4s ease-in-out 3; }
+.linha-destaque td:first-child { box-shadow: inset 3px 0 0 #E74B56; font-weight: 600; }
+
+/* Prazo (versão B): a faixa à esquerda diz a urgência antes do texto. */
+.faixa-alta { box-shadow: inset 3px 0 0 #E74B56; }
+.faixa-media { box-shadow: inset 3px 0 0 #f59e0b; }
+
+/* Colunas novas nas telas do job. */
+th.destaque-coluna { color: #b3323c; }
+td.destaque-coluna { background-color: #fffbfb; }
+
+/* ---- O papel do contrato ---- */
+.papel { max-width: 720px; margin: 0 auto; background: #ffffff; color: #1f1f1f; font-family: var(--font-doc); font-size: 14.5px; line-height: 1.72; padding: 56px 64px 64px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 14px 34px -14px rgba(0,0,0,.22); }
+.papel-titulo { text-align: center; font-weight: 700; font-size: 15.5px; letter-spacing: .05em; margin: 0 0 24px; }
+.papel-clausula { font-weight: 700; font-size: 12.5px; letter-spacing: .05em; margin: 20px 0 6px; }
+.papel-par { text-align: justify; hyphens: auto; margin: 0 0 10px; }
+.papel-opcional { border-left: 2px solid #f6b3b9; padding-left: 10px; margin-left: -12px; }
+.papel-tag { font-family: var(--font-sans); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #b3323c; background: #fef0f1; border-radius: 4px; padding: 1px 5px; margin-left: 8px; vertical-align: 2px; }
+.papel-assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 56px; font-family: var(--font-sans); font-size: 11.5px; text-align: center; color: #3a3a3a; }
+.papel-assinaturas span { display: block; border-top: 1px solid #282828; margin-bottom: 6px; }
+.ph { border-radius: 3px; padding: 0 2px; }
+.ph-sys { background: #eef4fd; box-shadow: inset 0 -1px 0 #9dbbe9; color: #173f86; }
+.ph-ok { background: #e8f8f0; box-shadow: inset 0 -1px 0 #86d4ae; color: #065f46; }
+.ph-vazia { display: inline; background: #fdecee; color: #b3323c; font-family: var(--font-sans); font-size: .8em; font-weight: 600; line-height: 1.4; padding: 1px 6px; border: 1px dashed #f3a3aa; cursor: pointer; }
+.ph-vazia:hover { background: #fbdde0; }
+.ph-erro { background: #b42318; color: #fff; font-family: ui-monospace, monospace; font-size: .8em; }
+@media (max-width: 640px) {
+  .papel { padding: 28px 22px 36px; font-size: 13.5px; }
+  .papel-assinaturas { grid-template-columns: 1fr; gap: 28px; }
+}
+:focus-visible { outline-color: #E74B56; }
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
