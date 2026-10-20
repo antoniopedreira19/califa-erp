@@ -97,6 +97,7 @@ import {
   editarPPGerada,
   listarPessoasParaVerba,
   prefixoAnexosPedidoCompra,
+  pagamentoDigitadoDaPP,
   previaDoPdfDaPP,
   reservarPedidoCompra,
   salvarPPAEmitir,
@@ -170,6 +171,15 @@ import {
   problemaDoPagamento,
   type PagamentoDaPPEstado,
 } from "./pagamento-da-pp-field";
+import {
+  PAGAMENTO_DO_TITULAR_VAZIO,
+  PagamentoDoTitularField,
+  PagamentoPeloCadastro,
+  estadoDoPagamentoDoTitular,
+  pagamentoDoTitularParaEnvio,
+  problemaDoPagamentoDoTitular,
+  type PagamentoDoTitularEstado,
+} from "./pagamento-do-titular-field";
 
 interface Props {
   open: boolean;
@@ -427,6 +437,17 @@ export function GerarPPDrawer({
   const [pagamento, setPagamento] =
     React.useState<PagamentoDaPPEstado>(PAGAMENTO_PELO_CADASTRO);
   const [faltaPagamento, setFaltaPagamento] = React.useState(false);
+  // Decisão 193: o titular escolhido, da lista. Quem não paga pelo cadastro
+  // (freela sem PIX completo, colaborador sem conta no RH) digita o PIX ou a
+  // conta; quem paga não vê campo — a foto é do banco.
+  const pessoaDoTitular =
+    verbaProducao && !titularTerceiro && titularId ? (pessoas?.find((p) => p.id === titularId) ?? null) : null;
+  const pedePagTitular = pessoaDoTitular !== null && !pessoaDoTitular.pagaPeloCadastro;
+  const [pagTitular, setPagTitular] = React.useState<PagamentoDoTitularEstado>(PAGAMENTO_DO_TITULAR_VAZIO);
+  const [faltaPagTitular, setFaltaPagTitular] = React.useState(false);
+  /** Remonta o campo quando o pagamento chega depois (PP gerada em edição):
+   *  as caixas da chave guardam o valor de quando montaram. */
+  const [vezPagTitular, setVezPagTitular] = React.useState(0);
   // Decisão 166: o que falta no cadastro do fornecedor escolhido (regime e
   // CNAE da pessoa jurídica) — na PP comum e na verba de um terceiro, que
   // pagam um fornecedor. Relido depois de cada edição do cadastro.
@@ -598,7 +619,9 @@ export function GerarPPDrawer({
     mudarNf,
     aviso: avisoDosAnexos,
     setAviso: setAvisoDosAnexos,
-  } = useAnexosEmEdicao(uploadPrefix, tomadorPadrao);
+    // Decisão 192: a IA lê o PDF ao anexar só na PP comum. A verba não tem
+    // anexo, e o reembolso tem comprovantes com tipos e campos próprios.
+  } = useAnexosEmEdicao(uploadPrefix, tomadorPadrao, tipoVerba ? undefined : tomadores);
   // Revisão da 156 (16/10/2026): com nota, fatura ou recibo que diga o CNPJ,
   // a empresa emissora é a do documento — o seletor trava e diz qual
   // documento a definiu. Sem documento, vale o seletor (pré-seleção pela
@@ -702,6 +725,23 @@ export function GerarPPDrawer({
           d.pagamento_fora_do_cadastro ? { ...d.pagamento_fora_do_cadastro, banco_nome: null } : null,
         ),
       );
+      // Decisão 193: o pagamento digitado volta como foi salvo. Na PP gerada
+      // ele vem do servidor, e só o digitado: o do cadastro não vem à tela.
+      setPagTitular(estadoDoPagamentoDoTitular(d.pagamento_do_titular));
+      setFaltaPagTitular(false);
+      setVezPagTitular((v) => v + 1);
+      if (
+        ppGeradaEditando &&
+        d.verba_producao &&
+        (d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela")
+      ) {
+        const sessao = chaveSessao;
+        void pagamentoDigitadoDaPP(fonte.id).then((r) => {
+          if (sessaoRef.current !== sessao || !r.ok || !r.pagamento) return;
+          setPagTitular(estadoDoPagamentoDoTitular(r.pagamento));
+          setVezPagTitular((v) => v + 1);
+        });
+      }
       // A verba de produção de antes da decisão 171 (PP a emitir ou PP
       // gerada) guarda um responsável (usuário): abre sem titular, que
       // agora é obrigatório.
@@ -755,6 +795,8 @@ export function GerarPPDrawer({
     setTitularTerceiro(false);
     setFornecedorId("");
     setPagamento(PAGAMENTO_PELO_CADASTRO);
+    setPagTitular(PAGAMENTO_DO_TITULAR_VAZIO);
+    setFaltaPagTitular(false);
     setEmpresaId(defaultEmpresaId);
     setCnpjId(cnpjPadraoDaPP ?? "");
     setPrazoPagamento(defaultPrazoPagamento(feriadosRef.current));
@@ -1019,6 +1061,15 @@ export function GerarPPDrawer({
       setErro(reembolso ? "Escolha o titular do reembolso." : "Escolha o titular da verba.");
       return false;
     }
+    // Decisão 193: quem não paga pelo cadastro precisa do PIX ou da conta.
+    if (pedePagTitular) {
+      const problema = problemaDoPagamentoDoTitular(pagTitular, reembolso);
+      if (problema) {
+        setFaltaPagTitular(true);
+        setErro(problema);
+        return false;
+      }
+    }
     if (ultimaPP === null) {
       setFaltaResposta(true);
       setErro("Responda se esta é a última PP deste item.");
@@ -1182,6 +1233,8 @@ export function GerarPPDrawer({
                 verba_titular_id: titularId,
                 fornecedor_id: null,
                 responsavel_verba_id: null,
+                // Decisão 193: só de quem não paga pelo cadastro.
+                pagamento_do_titular: pedePagTitular ? pagamentoDoTitularParaEnvio(pagTitular) : null,
                 // Decisão 187: o tipo do reembolso e, no veículo próprio, a conta.
                 ...(reembolso
                   ? {
@@ -1351,6 +1404,7 @@ export function GerarPPDrawer({
         empresaNome={nomeDoCnpj}
         idBase={`pp-doc-${id}`}
         disabled={pending}
+        lidoPelaIA={a.leitura?.estado === "lido" && a.leitura.campos.includes("tomador")}
       />
     );
   }
@@ -1396,6 +1450,7 @@ export function GerarPPDrawer({
         fornecedorAtualNome={fornecedores.find((f) => f.id === fornecedorId)?.nome ?? null}
         servicoAtual={servico}
         onUsarDescricao={(d) => setServico(d)}
+        leitura={a.leitura}
       />
     );
   }
@@ -1539,7 +1594,7 @@ export function GerarPPDrawer({
               ? `Editar ${ppGeradaEditando.codigo}`
               : editando
                 ? refaz
-                  ? `Reemitir a ${refaz.codigo}`
+                  ? `Editar e reemitir a ${refaz.codigo}`
                   : "Editar PP a emitir"
                 : "Novo Pedido de Produção"}
           </DialogTitle>
@@ -1548,7 +1603,7 @@ export function GerarPPDrawer({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
             {/* Reemitindo uma PP rejeitada: o motivo no topo (decisão 153;
-                "Reemitir PP" desde 19/10/2026). */}
+                "Editar e Reemitir PP" desde 19/10/2026). */}
             {refaz && (
               <div className="rounded-xl border border-california-red/30 bg-california-red/5 px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-california-red">
@@ -1798,27 +1853,48 @@ export function GerarPPDrawer({
               {/* Fornecedor (modo normal) ou Titular da verba (modo verba,
                   as três desde a decisão 171) */}
               {verbaProducao && !titularTerceiro ? (
-                <TitularDaVerbaField
-                  rotulo={reembolso ? "Titular do reembolso *" : undefined}
-                  semTerceiro={reembolso}
-                  itens={itensDoTitular}
-                  carregando={pessoas === null}
-                  titularId={titularId}
-                  onTitular={(id) => {
-                    setTitularId(id);
-                    setTitularOrigem(pessoas?.find((p) => p.id === id)?.origem ?? null);
-                  }}
-                  terceiro={false}
-                  onTerceiro={(v) => {
-                    setTitularTerceiro(v);
-                    setTitularId("");
-                    setTitularOrigem(null);
-                    setFornecedorId("");
-                    setPagamento(PAGAMENTO_PELO_CADASTRO);
-                    setFaltaPagamento(false);
-                  }}
-                  disabled={pending}
-                />
+                <div>
+                  <TitularDaVerbaField
+                    rotulo={reembolso ? "Titular do reembolso *" : undefined}
+                    semTerceiro={reembolso}
+                    itens={itensDoTitular}
+                    carregando={pessoas === null}
+                    titularId={titularId}
+                    onTitular={(id) => {
+                      // Decisão 193: o pagamento era de outra pessoa.
+                      setPagTitular(PAGAMENTO_DO_TITULAR_VAZIO);
+                      setFaltaPagTitular(false);
+                      setTitularId(id);
+                      setTitularOrigem(pessoas?.find((p) => p.id === id)?.origem ?? null);
+                    }}
+                    terceiro={false}
+                    onTerceiro={(v) => {
+                      setTitularTerceiro(v);
+                      setTitularId("");
+                      setTitularOrigem(null);
+                      setFornecedorId("");
+                      setPagamento(PAGAMENTO_PELO_CADASTRO);
+                      setFaltaPagamento(false);
+                    }}
+                    disabled={pending}
+                  />
+                  {/* Decisão 193: de onde sai o pagamento do titular. */}
+                  {pessoaDoTitular && pessoaDoTitular.pagaPeloCadastro && (
+                    <PagamentoPeloCadastro origem={pessoaDoTitular.origem} />
+                  )}
+                  {pessoaDoTitular && !pessoaDoTitular.pagaPeloCadastro && (
+                    <div className="mt-3">
+                      <PagamentoDoTitularField
+                        key={`${drawerKey}-${titularId}-${vezPagTitular}`}
+                        origem={pessoaDoTitular.origem}
+                        valor={pagTitular}
+                        onChange={setPagTitular}
+                        destacarFalta={faltaPagTitular}
+                        disabled={pending}
+                      />
+                    </div>
+                  )}
+                </div>
               ) : verbaProducao ? (
                 campoFornecedor(
                   <CaixaTerceiro

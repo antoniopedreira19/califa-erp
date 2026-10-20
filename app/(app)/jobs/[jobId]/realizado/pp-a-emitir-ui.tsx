@@ -8,6 +8,7 @@
  */
 
 import * as React from "react";
+import { resumoDoPagamentoDoTitular, textoDoPagamentoPeloCadastro } from "./pagamento-do-titular-field";
 import { AlertTriangle, ClipboardCheck, Columns2, Lock, Pencil, Send, X } from "lucide-react";
 import {
   Dialog,
@@ -109,7 +110,7 @@ export function SeloPPAEmitir({ refaz }: { refaz: string | null }) {
 }
 
 /**
- * O pop-up do "Reemitir PP" da rejeitada — no painel do item e na aba de
+ * O pop-up do "Editar e Reemitir PP" da rejeitada — no painel do item e na aba de
  * PPs. Revisão da 153 (19/10/2026): antes "Cancelar e refazer", que
  * começava por "é cancelada" e fez um produtor achar que perderia o
  * formulário. Agora começa pelo que fica.
@@ -210,6 +211,18 @@ export function RevisaoDialog({
     : aEmitir.verba_titular_tipo === "fornecedor"
       ? "Titular da verba (terceiro)"
       : rotuloDeQuemRecebeAVerba(aEmitir);
+  // Decisão 193: de onde sai o pagamento do colaborador ou do freela — o
+  // digitado, ou o cadastro (o dado do cadastro não vem à tela). A PP a
+  // emitir salva antes da 193 não diz: a linha não aparece.
+  const titularPessoa =
+    tipoVerba !== null && (aEmitir.verba_titular_tipo === "colaborador" || aEmitir.verba_titular_tipo === "freela");
+  const dadosBancarios: React.ReactNode = !titularPessoa
+    ? null
+    : d.pagamento_do_titular
+      ? <span className="font-mono text-[12px]">{resumoDoPagamentoDoTitular(d.pagamento_do_titular)}</span>
+      : d.titular_paga_pelo_cadastro === true
+        ? textoDoPagamentoPeloCadastro(aEmitir.verba_titular_tipo)
+        : null;
   const linhas: Array<[string, React.ReactNode]> = [
     ...(aEmitir.refaz
       ? ([
@@ -227,6 +240,7 @@ export function RevisaoDialog({
           : [["Verba", rotuloDaVerba(tipoVerba)]]) as Array<[string, React.ReactNode]>)
       : []),
     [rotuloDeQuemRecebe, nomeDoFornecedor],
+    ...(dadosBancarios ? ([["Dados bancários", dadosBancarios]] as Array<[string, React.ReactNode]>) : []),
     ["Serviço", d.servico],
     [
       "Valor",
@@ -474,6 +488,9 @@ export function EnvioDialog({
   const { anexos, setAnexos, subir, remover, mudar, mudarNf, aviso, setAviso } = useAnexosEmEdicao(
     prefixo,
     tomadorEsperado,
+    // Decisão 192: a IA lê o PDF ao anexar só na PP comum — o reembolso
+    // tem comprovantes com tipos e campos próprios.
+    pp && !pp.verbaProducao && !pp.reembolsoTipo ? tomadores : undefined,
   );
   const [tentou, setTentou] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -602,6 +619,7 @@ export function EnvioDialog({
         obrigatorio
         invalido={tentou && !a.nf.tomador}
         disabled={pending}
+        lidoPelaIA={a.leitura?.estado === "lido" && a.leitura.campos.includes("tomador")}
       />
     );
   }
@@ -632,6 +650,7 @@ export function EnvioDialog({
         anexoPath={a.path || null}
         anexoMimetype={a.mime}
         fornecedorAtualNome={nomeDoFornecedor}
+        leitura={a.leitura}
       />
     );
   }

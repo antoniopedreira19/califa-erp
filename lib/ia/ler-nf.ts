@@ -130,3 +130,88 @@ function garantirShapeDadosBrutosNF(parsed: unknown): DadosBrutosNF {
   }
   return obj as unknown as DadosBrutosNF;
 }
+
+// ---------------------------------------------------------------------------
+// Leitura do documento ao anexar (decisão 192, 19/10/2026): o
+// mesmo pedido da NF, mais o tipo do documento e o número dele. Vale para
+// NF, recibo, fatura, boleto, contrato e outros.
+// ---------------------------------------------------------------------------
+
+export const TIPOS_LIDOS = ["nota_fiscal", "recibo", "fatura", "boleto", "contrato", "outro"] as const;
+
+export interface DadosBrutosDocumento extends DadosBrutosNF {
+  tipo_documento: (typeof TIPOS_LIDOS)[number] | null;
+  numero_documento: string | null;
+}
+
+/** O cache da leitura do documento não se mistura com o da NF: a mesma
+ *  coluna `modelo` leva a versão do pedido. */
+export const VERSAO_LEITURA_DOCUMENTO = `${MODELO_LEITURA_NF}|documento-v1`;
+
+export const SCHEMA_DADOS_DOCUMENTO = {
+  ...SCHEMA_DADOS_NF,
+  required: [...SCHEMA_DADOS_NF.required, "tipo_documento", "numero_documento"],
+  properties: {
+    ...SCHEMA_DADOS_NF.properties,
+    tipo_documento: {
+      type: ["string", "null"] as const,
+      enum: [...TIPOS_LIDOS, null],
+      description:
+        "nota_fiscal (DANFE, NFS-e), recibo, fatura (inclusive fatura de locação), boleto, contrato ou outro",
+    },
+    numero_documento: {
+      type: ["string", "null"] as const,
+      description: "O número que identifica o documento (Fatura nº, Recibo nº, número da NF, número do documento do boleto)",
+    },
+  },
+};
+
+const PROMPT_DOCUMENTO = `Você está lendo um documento anexado a um pedido de compra de uma agência no Brasil.
+Primeiro diga que documento é: nota_fiscal (DANFE ou NFS-e), recibo, fatura (inclusive fatura de locação), boleto, contrato ou outro.
+Depois extraia os dados nos campos do schema. numero_documento é o número que identifica o documento; numa NF, é o mesmo número da nota.
+Os campos de NF (data de emissão, valor total, CNPJs) valem para qualquer documento que os traga. CNPJ emissor é de quem emitiu; CNPJ tomador é de quem recebe ou paga (o cliente, o sacado).
+Use null quando não puder identificar com certeza — nunca invente, nunca chute.
+Marque confianca_baixa=true se o documento estiver borrado, incompleto, cortado ou se houver qualquer dúvida relevante, inclusive sobre o tipo.`;
+
+export async function lerDadosBrutosDoDocumento(
+  pdfBuffer: Buffer,
+  cliente: OpenAI = getOpenAIClient(),
+): Promise<{ dados: DadosBrutosDocumento; tokensIn: number; tokensOut: number }> {
+  const resp = await cliente.responses.create({
+    model: MODELO_LEITURA_NF,
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_file",
+            filename: "documento.pdf",
+            file_data: `data:application/pdf;base64,${pdfBuffer.toString("base64")}`,
+          },
+          { type: "input_text", text: PROMPT_DOCUMENTO },
+        ],
+      },
+    ],
+    text: {
+      format: { type: "json_schema", name: "dados_documento", strict: true, schema: SCHEMA_DADOS_DOCUMENTO },
+    },
+    max_output_tokens: 1024,
+  } as never);
+
+  const texto = (resp as { output_text?: string }).output_text ?? "";
+  const usage = (resp as { usage?: { input_tokens: number; output_tokens: number } }).usage;
+  const obj = JSON.parse(texto) as Record<string, unknown>;
+  const nf = garantirShapeDadosBrutosNF(obj);
+  const tipo = obj.tipo_documento;
+  return {
+    dados: {
+      ...nf,
+      tipo_documento: (TIPOS_LIDOS as readonly unknown[]).includes(tipo)
+        ? (tipo as DadosBrutosDocumento["tipo_documento"])
+        : null,
+      numero_documento: typeof obj.numero_documento === "string" ? obj.numero_documento : null,
+    },
+    tokensIn: usage?.input_tokens ?? 0,
+    tokensOut: usage?.output_tokens ?? 0,
+  };
+}

@@ -10,8 +10,10 @@ import {
   COLUNAS_DE_PAGAMENTO,
   aplicarPagamentoForaDoCadastro,
   camposDoPagamentoForaDoCadastro,
+  fotoDoPagamentoDoTitular,
   lerFoto,
   lerPagamentoForaDoCadastro,
+  pagamentoDoTitularDaFoto,
   pagamentoDoTitularDaPP,
   resumoDoCadastroDePagamento,
   tirarFoto,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/data/foto-pagamento-da-pp";
 import type { PagamentoDoTitularNoPdf, SeloDaPP } from "@/lib/pdf/pedido-compra";
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
+import { pagamentoDoTitularSchema } from "@/lib/validations/pagamento-do-titular";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { formatCurrency } from "@/lib/utils";
 import { enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
@@ -29,6 +32,7 @@ import {
   DOCUMENTO_TIPOS_FISCAIS,
   PP_URGENTE_JUSTIFICATIVA_MIN,
   verbaDeResponsavel,
+  type PagamentoDoTitular,
   type TipoVerba,
   type TitularDaVerbaTipo,
 } from "@/lib/types";
@@ -204,7 +208,9 @@ function colunasDaVerba(
  * O nome do titular da verba, conferido no servidor (decisões 164 e 171,
  * nas três verbas): o colaborador ou o freela tem de estar na lista de
  * `pessoas_para_verba` (a mesma do formulário), e o terceiro tem de ser um
- * fornecedor ativo do tenant. Null fora da verba.
+ * fornecedor ativo do tenant. Null fora da verba. Decisão 193: diz também se
+ * o titular paga pelo cadastro (o terceiro e a PP comum pagam pelo do
+ * fornecedor).
  */
 async function nomeDoTitularDaVerba(
   supabase: ReturnType<typeof createClient>,
@@ -217,8 +223,8 @@ async function nomeDoTitularDaVerba(
     verba_titular_id?: string | null;
   },
   fornecedorJaLido?: { nome?: string | null; razao_social?: string | null } | null,
-): Promise<Result<{ nome: string | null }>> {
-  if (!tipoDaVerbaDosDados(d)) return { ok: true, nome: null };
+): Promise<Result<{ nome: string | null; pagaPeloCadastro: boolean }>> {
+  if (!tipoDaVerbaDosDados(d)) return { ok: true, nome: null, pagaPeloCadastro: true };
   if (d.verba_titular_tipo === "fornecedor") {
     const forn =
       fornecedorJaLido ??
@@ -232,7 +238,7 @@ async function nomeDoTitularDaVerba(
           .maybeSingle<{ nome: string; razao_social: string | null }>()
       ).data;
     if (!forn) return { ok: false, message: "Fornecedor inválido ou inativo." };
-    return { ok: true, nome: (forn.razao_social ?? forn.nome ?? "").trim() || null };
+    return { ok: true, nome: (forn.razao_social ?? forn.nome ?? "").trim() || null, pagaPeloCadastro: true };
   }
   const pessoas = await carregarPessoasParaVerba(supabase, tenantId);
   const pessoa = pessoas.find(
@@ -244,7 +250,62 @@ async function nomeDoTitularDaVerba(
       message: "O titular da verba não está mais na lista de colaboradores e freelas. Escolha de novo.",
     };
   }
-  return { ok: true, nome: pessoa.nome };
+  return { ok: true, nome: pessoa.nome, pagaPeloCadastro: pessoa.pagaPeloCadastro };
+}
+
+/**
+ * O pagamento do titular que não paga pelo cadastro (decisão 193): o freela
+ * sem PIX completo no cadastro de freelas e o colaborador sem conta nem PIX
+ * na ficha do RH digitam o PIX ou a conta, e ele é obrigatório. Quem paga
+ * pelo cadastro não leva o que veio da tela — a foto é do banco (gatilho
+ * `trg_pp_foto_do_colaborador`). Null = nada a gravar.
+ */
+function pagamentoDoTitularNaGravacao(
+  d: {
+    verba_producao: boolean;
+    tipo_verba?: TipoVerba | null;
+    verba_titular_tipo?: TitularDaVerbaTipo | null;
+    pagamento_do_titular?: PagamentoDoTitular | null;
+  },
+  pagaPeloCadastro: boolean,
+): Result<{ pagamento: PagamentoDoTitular | null }> {
+  if (!tipoDaVerbaDosDados(d) || pagaPeloCadastro) return { ok: true, pagamento: null };
+  if (d.verba_titular_tipo !== "colaborador" && d.verba_titular_tipo !== "freela") {
+    return { ok: true, pagamento: null };
+  }
+  if (!d.pagamento_do_titular) {
+    return {
+      ok: false,
+      message:
+        d.tipo_verba === "reembolso"
+          ? "Informe o PIX ou a conta do titular do reembolso."
+          : "Informe o PIX ou a conta do titular da verba.",
+    };
+  }
+  return { ok: true, pagamento: d.pagamento_do_titular };
+}
+
+/** As colunas da foto com o pagamento digitado (decisão 193). Vazio quando
+ *  não há: a foto fica com o que o gatilho tirar. */
+function colunasDoPagamentoDoTitular(p: PagamentoDoTitular | null) {
+  return p ? { ...fotoDoPagamentoDoTitular(p), dados_pagamento_congelados_em: new Date().toISOString() } : {};
+}
+
+/** O pagamento digitado como o PDF o imprime (a prévia, antes de gravar). O
+ *  CPF sai na PP gravada, que o banco copia do cadastro. */
+function pagamentoDigitadoNoPdf(p: PagamentoDoTitular | null): PagamentoDoTitularNoPdf | null {
+  if (!p) return null;
+  return {
+    banco_codigo: p.banco_codigo,
+    banco_nome: p.banco_nome,
+    agencia: p.agencia,
+    conta: p.conta,
+    conta_dv: p.conta_dv,
+    tipo_conta: p.tipo_conta,
+    pix_tipo: p.pix_tipo,
+    pix_chave: p.pix_chave,
+    cpf: null,
+  };
 }
 
 /**
@@ -373,6 +434,10 @@ const dadosBaseSchema = z.object({
       verba_titular_tipo: z.enum(["colaborador", "freela", "fornecedor"]).nullable().optional(),
       verba_titular_id: z.string().uuid().nullable().optional(),
       pagamento_fora_do_cadastro: pagamentoForaDoCadastroSchema.nullable().optional(),
+      // Decisão 193: o PIX ou a conta do titular que não paga pelo cadastro
+      // (freela sem PIX completo, colaborador sem conta no RH). Quem paga
+      // pelo cadastro ignora o que vier: a foto é do banco.
+      pagamento_do_titular: pagamentoDoTitularSchema.nullable().optional(),
     }),
   ])
 );
@@ -1286,6 +1351,14 @@ function seloPeloStatus(status: PPStatus, canceladaEm: string | null): SeloDaPP 
   return null;
 }
 
+/** Decisão 191: o nome do item da planilha, pela âncora do realizado, para
+ *  quem relê a PP gravada e refaz o PDF. */
+const ITEM_DA_PP = "realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item))";
+type ItemDaPPEmbutido = { copia: { item: string | null } | null } | null;
+function nomeDoItemDaPP(realizado: ItemDaPPEmbutido): string {
+  return realizado?.copia?.item ?? "Item";
+}
+
 async function renderizarDocumentoDaPP(args: {
   tenantId: string;
   jobId: string;
@@ -1312,6 +1385,8 @@ async function renderizarDocumentoDaPP(args: {
   /** Decisão 171: a conta e o PIX do colaborador titular (da foto da PP). */
   pagamentoDoTitular: PagamentoDoTitularNoPdf | null;
   job: { codigo: string; nome: string; produto: string };
+  /** Decisão 191: o nome do item da planilha, embaixo do Serviço. */
+  itemNome: string;
   contexto: ContextoPdf;
   parcelas: Array<{ numero: number; data_vencimento: string; valor: number }>;
   /** A data de emissão impressa. Ausente = agora (a geração); o
@@ -1359,6 +1434,7 @@ async function renderizarDocumentoDaPP(args: {
     projeto: args.contexto.projeto,
     cliente: args.contexto.cliente,
     responsavelNome: args.contexto.responsavelNome,
+    itemNome: args.itemNome,
     parcelas: parcelas.map((p) => ({
       numero: p.numero,
       data_vencimento: p.data_vencimento,
@@ -1733,6 +1809,9 @@ async function finalizarPedidoCompraImpl(
     fornRes.data as { nome?: string | null; razao_social?: string | null } | null,
   );
   if (!titular.ok) return titular;
+  // Decisão 193: o PIX ou a conta digitados de quem não paga pelo cadastro.
+  const pagTitular = pagamentoDoTitularNaGravacao(d, titular.pagaPeloCadastro);
+  if (!pagTitular.ok) return pagTitular;
   if (!empRes.data)
     return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
   // Decisão 187: os dados vêm da PP a emitir, já conferidos ao salvar — o
@@ -1806,6 +1885,8 @@ async function finalizarPedidoCompraImpl(
     dados_pagamento_congelados_em: fornRes.data ? new Date().toISOString() : null,
     // Decisão 127: a foto acima já traz o meio trocado; estas dizem qual.
     ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
+    // Decisão 193: o pagamento digitado do titular sem cadastro usável.
+    ...colunasDoPagamentoDoTitular(pagTitular.pagamento),
   });
 
   if (insertErr) {
@@ -1904,12 +1985,13 @@ async function finalizarPedidoCompraImpl(
     };
   }
 
-  // Carrega dados enriquecidos pro PDF. Na verba do colaborador, a conta e
-  // o PIX vêm da foto que o banco acabou de tirar da ficha do RH (decisão
-  // 171) — lida de volta da PP gravada, e não da tela.
+  // Carrega dados enriquecidos pro PDF. Na verba do colaborador e do freela,
+  // a conta e o PIX vêm da foto da PP gravada: a que o banco acabou de tirar
+  // do cadastro (decisões 171 e 193) ou a digitada — lida de volta, e não
+  // da tela.
   const [contexto, pagamentoDoTitular] = await Promise.all([
     carregarContextoPdf(supabase, session.activeTenant.id, job),
-    d.verba_producao && d.verba_titular_tipo === "colaborador"
+    d.verba_producao && (d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela")
       ? fotoDoTitularDaPP(supabase, session.activeTenant.id, pp_id)
       : Promise.resolve(null),
   ]);
@@ -1948,6 +2030,7 @@ async function finalizarPedidoCompraImpl(
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular,
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: item.item_nome,
       contexto,
       parcelas: parcelas.map((p) => ({
         numero: p.numero,
@@ -2077,6 +2160,8 @@ async function finalizarPedidoCompraImpl(
       ...colunasDaVerba(d, titular.nome),
       reembolso_tipo: reembolso.colunas.reembolso_tipo,
       pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
+      // Decisão 193: o meio digitado do titular (o dado fica na PP).
+      pagamento_do_titular_digitado: pagTitular.pagamento?.meio ?? null,
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
     },
@@ -2435,7 +2520,7 @@ export async function previaDoPdfDaPP(
   if (!permissao.ok) return permissao;
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
-  const { job, supabase } = gate;
+  const { item, job, supabase } = gate;
   const tenantId = session.activeTenant.id;
 
   const parsed = dadosSchema.safeParse(dados);
@@ -2478,6 +2563,9 @@ export async function previaDoPdfDaPP(
     fornRes.data as { nome?: string | null; razao_social?: string | null } | null,
   );
   if (!titular.ok) return titular;
+  // Decisão 193: a prévia mostra o pagamento digitado; o do cadastro só sai
+  // na PP gravada (o banco o copia, a tela não o vê).
+  const pagTitularDaPrevia = titular.pagaPeloCadastro ? null : (d.verba_producao ? (d.pagamento_do_titular ?? null) : null);
 
   const [cnpjDaPP, contexto] = await Promise.all([
     cnpjDaPPNaGeracao(
@@ -2514,8 +2602,9 @@ export async function previaDoPdfDaPP(
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
-      pagamentoDoTitular: null,
+      pagamentoDoTitular: pagamentoDigitadoNoPdf(pagTitularDaPrevia),
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: item.item_nome,
       contexto,
       parcelas: d.parcelas.map((p, i) => ({ numero: i + 1, data_vencimento: p.data_vencimento, valor: p.valor })),
       previa: true,
@@ -2733,7 +2822,7 @@ async function refazerPdfDaPP(
 ): Promise<string | null> {
   const { data: ppBruta } = await supabase
     .from("pedidos_compra")
-    .select("*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor)")
+    .select(`*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor), ${ITEM_DA_PP}`)
     .eq("id", ppId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -2762,6 +2851,8 @@ async function refazerPdfDaPP(
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     pagamento_fora_do_cadastro_meio: string | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
+    /** Decisão 191: o nome do item da planilha, para o PDF. */
+    realizado: ItemDaPPEmbutido;
     /** Decisão 190: o selo sai do status gravado. */
     status: PPStatus;
     cancelada_em: string | null;
@@ -2835,6 +2926,7 @@ async function refazerPdfDaPP(
           ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
           : (pp.verba_titular_nome ?? ""),
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: nomeDoItemDaPP(pp.realizado),
       contexto,
       parcelas,
       emitidaEm: pp.created_at,
@@ -3669,6 +3761,12 @@ export async function salvarPPAEmitir(
   // mostra), conferido contra a mesma lista do formulário.
   const titular = await nomeDoTitularDaVerba(supabase, tenantId, d);
   if (!titular.ok) return titular;
+  // Decisão 193: quem não paga pelo cadastro digita o PIX ou a conta, já ao
+  // salvar. Quem paga não guarda nada da tela.
+  const pagTitular = pagamentoDoTitularNaGravacao(d, titular.pagaPeloCadastro);
+  if (!pagTitular.ok) return pagTitular;
+  const titularPessoa =
+    d.verba_producao && (d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela");
   // Decisão 187: no veículo próprio, a conta dos deslocamentos fecha o
   // valor. O desgaste aceito é o vigente ou o que esta PP a emitir já
   // guardava (salva antes de o financeiro mudar o valor).
@@ -3692,7 +3790,13 @@ export async function salvarPPAEmitir(
     valor,
     // O formulário como veio (já validado): a geração o valida de novo, e
     // o valor normalizado pelo schema não precisa passar duas vezes por ele.
-    dados: emissora.id && emissora.id !== (d.estabelecimento_id ?? null) ? { ...dados, estabelecimento_id: emissora.id } : dados,
+    dados: {
+      ...(emissora.id && emissora.id !== (d.estabelecimento_id ?? null) ? { ...dados, estabelecimento_id: emissora.id } : dados),
+      // Decisão 193: o pagamento digitado (normalizado) e se o titular paga
+      // pelo cadastro — a revisão lê daqui.
+      pagamento_do_titular: pagTitular.pagamento,
+      titular_paga_pelo_cadastro: titularPessoa ? titular.pagaPeloCadastro : null,
+    },
     ultima_pp_do_item: ultimaPPDoItem,
     atualizada_por: session.profile.id,
   };
@@ -3847,6 +3951,40 @@ export async function listarPessoasParaVerba(): Promise<Result<{ pessoas: Pessoa
  * Decisão 166: nem a PP de fornecedor pessoa jurídica sem regime
  * tributário ou sem CNAE. A PP a emitir fica salva, esperando o cadastro.
  */
+/**
+ * O pagamento digitado de uma PP gerada, para o formulário de edição
+ * (decisões 173 e 193). Só devolve quando o titular não paga pelo cadastro:
+ * o PIX e a conta que o banco copiou do cadastro nunca vão para a tela.
+ */
+export async function pagamentoDigitadoDaPP(ppId: string): Promise<Result<{ pagamento: PagamentoDoTitular | null }>> {
+  const session = await requireSession();
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+  const { data } = await supabase
+    .from("pedidos_compra")
+    .select(`verba_producao, verba_colaborador_id, verba_freela_id, ${COLUNAS_DA_FOTO_DO_TITULAR}`)
+    .eq("id", ppId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  const pp = data as
+    | (FotoDePagamentoDaPP & {
+        verba_producao: boolean;
+        verba_titular_tipo: TitularDaVerbaTipo | null;
+        verba_colaborador_id: string | null;
+        verba_freela_id: string | null;
+      })
+    | null;
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+  if (!pp.verba_producao || (pp.verba_titular_tipo !== "colaborador" && pp.verba_titular_tipo !== "freela")) {
+    return { ok: true, pagamento: null };
+  }
+  const pessoa = (await carregarPessoasParaVerba(supabase, tenantId)).find(
+    (p) => p.id === (pp.verba_colaborador_id ?? pp.verba_freela_id),
+  );
+  if (!pessoa || pessoa.pagaPeloCadastro) return { ok: true, pagamento: null };
+  return { ok: true, pagamento: pagamentoDoTitularDaFoto(pp) };
+}
+
 export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: string }>> {
   const session = await requireSession();
   const permissao = await checarPermissao(session, "jobs.emitir_pp");
@@ -3998,7 +4136,7 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
 }
 
 /**
- * "Reemitir PP" (até 19/10/2026, "Cancelar e refazer") da PP rejeitada
+ * "Editar e Reemitir PP" (até 19/10/2026, "Cancelar e refazer") da PP rejeitada
  * pelo financeiro (decisão 153). A PP não se edita: ela é cancelada (fica
  * no histórico) e volta como PP a
  * emitir, com os mesmos dados e os mesmos documentos — os arquivos são
@@ -4113,6 +4251,16 @@ export async function cancelarERefazerPP(
         ? itemDaPP.pps_concluidas_em != null
         : null;
 
+  // Decisão 193: o pagamento digitado volta com o resto, para quem não paga
+  // pelo cadastro. O do cadastro fica no banco: a PP nova tira a foto de novo.
+  const titularPessoaDaPP =
+    linhaPP.verba_producao && (linhaPP.verba_titular_tipo === "colaborador" || linhaPP.verba_titular_tipo === "freela");
+  const pagaPeloCadastroHoje = titularPessoaDaPP
+    ? ((await carregarPessoasParaVerba(supabase, tenantId)).find(
+        (p) => p.id === (linhaPP.verba_colaborador_id ?? linhaPP.verba_freela_id),
+      )?.pagaPeloCadastro ?? false)
+    : null;
+
   // Os mesmos dados, no formato do formulário.
   const fora = lerPagamentoForaDoCadastro(linhaPP as Parameters<typeof lerPagamentoForaDoCadastro>[0]);
   const parcelas = (linhaPP.parcelas ?? [])
@@ -4160,6 +4308,11 @@ export async function cancelarERefazerPP(
           tipo_conta: fora.tipo_conta,
         }
       : null,
+    pagamento_do_titular:
+      pagaPeloCadastroHoje === false
+        ? pagamentoDoTitularDaFoto(linhaPP as Parameters<typeof pagamentoDoTitularDaFoto>[0])
+        : null,
+    titular_paga_pelo_cadastro: pagaPeloCadastroHoje,
   };
 
   // A PP a emitir nova, com os documentos copiados para o lugar dela.
@@ -4214,6 +4367,13 @@ export async function cancelarERefazerPP(
     item_realizado_id: linhaPP.item_realizado_id,
     empresa_id: dados.empresa_id,
     ...colunasDaVerba(dados, linhaPP.verba_titular_nome ?? null),
+    // A verba de produção anterior à 171 não tem titular: a PP a emitir
+    // guarda o responsável que ela tinha, a única forma que a `chk_ppae_verba`
+    // aceita sem titular, e o formulário pede o titular antes de gerar. Sem
+    // isso a reemissão falhava na checagem (PP-00127, 19/10/2026).
+    ...(verbaDeResponsavel(linhaPP) && linhaPP.responsavel_verba_id
+      ? { responsavel_verba_id: linhaPP.responsavel_verba_id, verba_titular_nome: null }
+      : {}),
     servico: dados.servico,
     valor: Number(linhaPP.valor),
     dados,
@@ -4244,7 +4404,7 @@ export async function cancelarERefazerPP(
       status: "cancelada",
       cancelada_por: session.profile.id,
       cancelada_em: new Date().toISOString(),
-      motivo_cancelamento: "Rejeitada pelo financeiro e reemitida (Reemitir PP).",
+      motivo_cancelamento: "Rejeitada pelo financeiro e reemitida (Editar e Reemitir PP).",
     })
     .eq("id", ppId)
     .eq("tenant_id", tenantId)
@@ -4332,7 +4492,7 @@ export async function atualizarVencimentoDaPP(
 
   const { data: ppBruta } = await supabase
     .from("pedidos_compra")
-    .select("*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor)")
+    .select(`*, parcelas:pedidos_compra_parcelas(id, numero, data_vencimento, valor), ${ITEM_DA_PP}`)
     .eq("id", ppId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -4365,6 +4525,8 @@ export async function atualizarVencimentoDaPP(
     reembolso_tipo: ReembolsoTipo | null;
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
+    /** Decisão 191: o nome do item da planilha, para o PDF. */
+    realizado: ItemDaPPEmbutido;
   };
   if (pp.status !== "gerada") {
     return {
@@ -4471,6 +4633,7 @@ export async function atualizarVencimentoDaPP(
           ? ((responsavelRes.data as { nome?: string } | null)?.nome ?? "")
           : (pp.verba_titular_nome ?? ""),
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+      itemNome: nomeDoItemDaPP(pp.realizado),
       contexto,
       parcelas: parcelasNovas,
       emitidaEm: pp.created_at,
@@ -4763,6 +4926,9 @@ async function editarPPGeradaImpl(
     fornRes.data as { nome?: string | null; razao_social?: string | null } | null,
   );
   if (!titular.ok) return titular;
+  // Decisão 193: o PIX ou a conta digitados de quem não paga pelo cadastro.
+  const pagTitular = pagamentoDoTitularNaGravacao(d, titular.pagaPeloCadastro);
+  if (!pagTitular.ok) return pagTitular;
   if (!empRes.data) return { ok: false, message: "A empresa gerencial do job não foi encontrada." };
   // Decisão 187: a PP editada mantém o desgaste com que foi feita (ou usa o
   // vigente, se ainda não era de veículo próprio).
@@ -4807,6 +4973,7 @@ async function editarPPGeradaImpl(
     // Decisão 171: a verba tem titular nas três; nada novo grava responsável.
     responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
     job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
+    itemNome: item.item_nome,
     contexto,
     parcelas: parcelasNovas,
     // A PP é a mesma: a emissão continua a da geração.
@@ -4814,11 +4981,13 @@ async function editarPPGeradaImpl(
     // Só a PP gerada se edita (decisão 173): segue com o selo (decisão 190).
     selo: SELO_NAO_ENVIADA,
   };
-  // Decisão 171: na verba do colaborador, a conta e o PIX são a foto que o
-  // banco tira da ficha do RH AO GRAVAR (mantida se o titular é o mesmo,
-  // tirada de novo se mudou). Este documento só confere que o PDF sai; o
-  // que sobe é refeito depois do UPDATE, com a foto lida de volta.
-  const titularColaborador = d.verba_producao && d.verba_titular_tipo === "colaborador";
+  // Decisões 171 e 193: na verba do colaborador e do freela, a conta e o
+  // PIX são a foto que o banco tira do cadastro AO GRAVAR (mantida se o
+  // titular é o mesmo, tirada de novo se mudou), ou a digitada. Este
+  // documento só confere que o PDF sai; o que sobe é refeito depois do
+  // UPDATE, com a foto lida de volta.
+  const titularColaborador =
+    d.verba_producao && (d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela");
   let documento: { path: string; buffer: Buffer };
   try {
     documento = await renderizarDocumentoDaPP({ ...argsDoDocumento, pagamentoDoTitular: null });
@@ -4849,6 +5018,8 @@ async function editarPPGeradaImpl(
       ...tirarFoto(fornRes.data as DadosDePagamento | null, foraDoCadastroDe(d)),
       dados_pagamento_congelados_em: fornRes.data ? new Date().toISOString() : null,
       ...camposDoPagamentoForaDoCadastro(foraDoCadastroDe(d)),
+      // Decisão 193: o pagamento digitado do titular sem cadastro usável.
+      ...colunasDoPagamentoDoTitular(pagTitular.pagamento),
       // Decisão 173: editar desfaz o "Pronta para envio" — quem preparou
       // confere os documentos de novo. Quem e quando da edição, o gatilho
       // grava pela sessão.
@@ -4988,6 +5159,8 @@ async function editarPPGeradaImpl(
       fornecedor_antes: ppRow.fornecedor_id,
       ...colunasDaVerba(d, titular.nome),
       pagamento_fora_do_cadastro: auditoriaDoForaDoCadastro(foraDoCadastroDe(d)),
+      // Decisão 193: o meio digitado do titular (o dado fica na PP).
+      pagamento_do_titular_digitado: pagTitular.pagamento?.meio ?? null,
       anexos: anexosParsed.data.length,
       anexos_novos: conferencia.novos.length,
       anexos_removidos: conferencia.saem.length,

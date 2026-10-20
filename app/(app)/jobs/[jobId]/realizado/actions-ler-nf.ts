@@ -5,9 +5,15 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
-import type { DadosExtraidosNF } from "@/lib/types";
-import { MODELO_LEITURA_NF } from "@/lib/ia/openai-client";
-import { lerDadosBrutosDaNF, type DadosBrutosNF } from "@/lib/ia/ler-nf";
+import type { DadosExtraidosNF, DadosLidosDoDocumento, DocumentoTipo } from "@/lib/types";
+import { custoEstimadoUsd, MODELO_LEITURA_NF } from "@/lib/ia/openai-client";
+import {
+  lerDadosBrutosDaNF,
+  lerDadosBrutosDoDocumento,
+  VERSAO_LEITURA_DOCUMENTO,
+  type DadosBrutosNF,
+  type DadosBrutosDocumento,
+} from "@/lib/ia/ler-nf";
 import {
   validarCnpj,
   validarDataEmissao,
@@ -132,8 +138,6 @@ export async function lerDadosDaNFPorIA(input: {
     confianca_baixa: dadosBrutos.confianca_baixa,
   };
 
-  // Preço estimado conservador: gpt-5-mini ~ $0.25/1M in, $2/1M out.
-  const custoUsd = (tokensIn / 1_000_000) * 0.25 + (tokensOut / 1_000_000) * 2;
   await logAuditEvent({
     acao: "pp.anexo.nf_lida_por_ia",
     tenantId,
@@ -145,8 +149,111 @@ export async function lerDadosDaNFPorIA(input: {
       modelo: MODELO_LEITURA_NF,
       tokens_in: tokensIn,
       tokens_out: tokensOut,
-      custo_usd_estimado: Number(custoUsd.toFixed(6)),
+      custo_usd_estimado: custoEstimadoUsd(tokensIn, tokensOut),
       confianca_baixa: dadosBrutos.confianca_baixa,
+    },
+  });
+
+  return { ok: true, dados, cache_hit: cacheHit };
+}
+
+/**
+ * A leitura do anexo logo que ele sobe (decisão 192, 19/10/2026). Diz que documento é, o número e, quando o documento traz,
+ * a data, o valor e o CNPJ da California contra o qual foi emitido — já
+ * casado com o cadastro de CNPJs. A tela pré-preenche só o que estiver
+ * vazio, com o selo "IA".
+ *
+ * Mesmo caminho da leitura da NF: só PDF do bucket da PP, cache por hash
+ * do arquivo (com a versão do pedido, para não reaproveitar a leitura da
+ * NF, que não tem o tipo), auditoria a cada chamada.
+ */
+export async function lerDocumentoPorIA(input: {
+  anexo_path: string;
+  mimetype: string;
+  tomadores: Array<{ id: string; cnpj: string }>;
+}): Promise<{ ok: true; dados: DadosLidosDoDocumento; cache_hit: boolean } | Err> {
+  const session = await requireSession();
+  const tenantId = session.activeTenant.id;
+  const check = validarInputLeituraNF({ anexo_path: input.anexo_path, mimetype: input.mimetype, tenantId });
+  if (!check.ok) return check;
+
+  const supabase = createClient();
+  const { data: blob, error: errDownload } = await supabase.storage.from("pedidos-compra").download(input.anexo_path);
+  if (errDownload || !blob) return { ok: false, message: "Não consegui baixar o arquivo para ler." };
+  const pdfBuffer = Buffer.from(await blob.arrayBuffer());
+  const hash = createHash("sha256").update(pdfBuffer).digest("hex");
+
+  const { data: cached } = await supabase
+    .from("nf_extracao_cache")
+    .select("dados")
+    .eq("tenant_id", tenantId)
+    .eq("hash_sha256", hash)
+    .eq("modelo", VERSAO_LEITURA_DOCUMENTO)
+    .maybeSingle();
+
+  let brutos: DadosBrutosDocumento;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  const cacheHit = !!cached;
+  if (cached) {
+    brutos = cached.dados as DadosBrutosDocumento;
+  } else {
+    try {
+      const r = await lerDadosBrutosDoDocumento(pdfBuffer);
+      brutos = r.dados;
+      tokensIn = r.tokensIn;
+      tokensOut = r.tokensOut;
+    } catch (err) {
+      await logAuditEvent({
+        acao: "pp.anexo.lido_por_ia",
+        tenantId,
+        entidadeTipo: "pedido_compra_anexo",
+        entidadeId: input.anexo_path,
+        metadata: {
+          arquivo_hash: hash,
+          cache_hit: false,
+          modelo: VERSAO_LEITURA_DOCUMENTO,
+          erro: err instanceof Error ? err.message : String(err),
+        },
+      });
+      return { ok: false, message: "Não deu para ler o documento. Escolha o tipo." };
+    }
+    await supabase.from("nf_extracao_cache").insert({
+      tenant_id: tenantId,
+      hash_sha256: hash,
+      dados: brutos,
+      modelo: VERSAO_LEITURA_DOCUMENTO,
+    });
+  }
+
+  const tipo = (brutos.tipo_documento ?? null) as DocumentoTipo | null;
+  const ehNf = tipo === "nota_fiscal";
+  const cnpjTomador = validarCnpj(brutos.cnpj_tomador);
+  const dados: DadosLidosDoDocumento = {
+    tipo,
+    numero: ehNf
+      ? validarNumeroNF(brutos.numero_nf ?? brutos.numero_documento)
+      : brutos.numero_documento?.trim().slice(0, 60) || null,
+    data_emissao: ehNf ? validarDataEmissao(brutos.data_emissao, hojeEmSaoPauloIso()) : null,
+    valor_total: ehNf ? validarValor(brutos.valor_total) : null,
+    tomador_estabelecimento_id: cnpjTomador ? acharEstabelecimentoPorCnpj(cnpjTomador, input.tomadores) : null,
+    confianca_baixa: brutos.confianca_baixa,
+  };
+
+  await logAuditEvent({
+    acao: "pp.anexo.lido_por_ia",
+    tenantId,
+    entidadeTipo: "pedido_compra_anexo",
+    entidadeId: input.anexo_path,
+    metadata: {
+      arquivo_hash: hash,
+      cache_hit: cacheHit,
+      modelo: VERSAO_LEITURA_DOCUMENTO,
+      tipo_lido: tipo,
+      tokens_in: tokensIn,
+      tokens_out: tokensOut,
+      custo_usd_estimado: custoEstimadoUsd(tokensIn, tokensOut),
+      confianca_baixa: brutos.confianca_baixa,
     },
   });
 

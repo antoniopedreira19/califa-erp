@@ -11,6 +11,16 @@ import OpenAI from "openai";
  *  1,5–3s, qualidade equivalente em DANFE padrão. */
 export const MODELO_LEITURA_NF = "gpt-4.1-mini";
 
+/** O custo estimado de uma leitura, em US$, para a auditoria. Preço de
+ *  tabela do gpt-4.1-mini: US$ 0,40 por 1M de tokens de entrada e US$ 1,60
+ *  por 1M de saída. Até a decisão 192 (19/10/2026) a conta usava o preço do
+ *  gpt-5-mini (0,25 e 2), que ficou para trás na troca de 8/10. Leitura que
+ *  sai do cache não gasta token: custo zero. */
+export function custoEstimadoUsd(tokensIn: number, tokensOut: number): number {
+  const usd = (tokensIn / 1_000_000) * 0.4 + (tokensOut / 1_000_000) * 1.6;
+  return Number(usd.toFixed(6));
+}
+
 let clienteCached: OpenAI | null = null;
 
 /** O cliente OpenAI, lazy. Lê `OPENAI_API_KEY` do ambiente só na primeira

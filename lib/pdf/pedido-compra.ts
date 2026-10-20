@@ -215,6 +215,11 @@ interface Dados {
   projeto: Pick<Projeto, "campanha">;
   cliente: Pick<Cliente, "nome_fantasia">;
   responsavelNome: string;
+  /** Decisão 191: o nome do item da planilha do job a que a PP pertence
+   *  (`jobs_itens_orcado.item`), embaixo do Serviço. Null só nos scripts
+   *  que refazem documentos antigos, que saem sem a linha. Obrigatório: um
+   *  chamador que o esquecesse soltaria a PP sem o item. */
+  itemNome: string | null;
   /**
    * TODAS as parcelas da PP, em ordem de número — sempre ao menos uma.
    *
@@ -470,6 +475,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   // ===== 3. Serviço + Quantidade + Prazo pagamento =====
   // Parcelada: o prazo de cada parcela está na tabela PARCELAS DO PEDIDO,
   // então aqui fica só quantas são.
+  // Decisão 191: o item da planilha vai embaixo do Serviço, na célula que
+  // ficava vazia ao lado do prazo (ou das parcelas) — o documento não cresce.
+  const itemCelula: Content = dados.itemNome ? lv("Item", dados.itemNome) : { text: "", fontSize: 8 };
   const servicoTable: Content = {
     table: {
       widths: ["70%", "30%"],
@@ -479,10 +487,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
           lv("Quantidade", String(pp.quantidade)),
         ],
         ...(parcelada
-          ? [[{ text: "", fontSize: 8 }, lv("Parcelas", String(parcelas.length))]]
+          ? [[itemCelula, lv("Parcelas", String(parcelas.length))]]
           : [
               [
-                { text: "", fontSize: 8 },
+                itemCelula,
                 lv("Prazo de Pagto", fmtDate(primeira?.data_vencimento ?? pp.prazo_pagamento)),
               ],
               [{ text: "", fontSize: 8 }, lv("Parcela", "1/1")],

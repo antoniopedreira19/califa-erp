@@ -7,10 +7,21 @@
  * documentos ao lado da PP, valores, quem enviou — acontece na tela de
  * trás. O que se decide é se aprova e, havendo saldo, quando o dinheiro
  * deve voltar: essa data vira a do estorno de verba em Títulos a Pagar.
+ *
+ * Decisão 189: as NFs da prestação vão para o cadastro de notas do fiscal
+ * na aprovação, com o emitente procurado (ou cadastrado) pelo CNPJ. O
+ * crédito de PIS/COFINS segue a regra da PP normal — automático, e o
+ * financeiro só o tira, com motivo. Fatura e cupom não entram no cadastro.
  */
 
 import * as React from "react";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileCheck2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
+import { MOTIVOS_SEM_CREDITO } from "@/lib/fiscal/calculos";
+import { creditoDaNf, percentual } from "@/lib/fiscal/nf-da-pp";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +54,26 @@ export interface PrestacaoParaAprovar {
    *  na verba de produção anterior à 171. */
   rotuloQuemRecebe: string;
   gpResponsavelNome: string | null;
+  /** Decisão 189: as NFs que a aprovação registra no cadastro de notas,
+   *  como estão na conferência (com as correções do financeiro). */
+  nfs: Array<{
+    documento_id: string;
+    numero: string;
+    emissao: string;
+    valor: number;
+    tomador: string;
+  }>;
+}
+
+const PILULA_DO_CREDITO: Record<"sim" | "nao", { texto: string; tom: string }> = {
+  sim: { texto: "Gera crédito", tom: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  nao: { texto: "Não gera crédito", tom: "border-border bg-muted text-muted-foreground" },
+};
+
+/** "outubro/2026" → "out/2026". */
+function mesCurto(mes: string): string {
+  const [nome, ano] = mes.split("/");
+  return ano ? `${nome.slice(0, 3)}/${ano}` : mes;
 }
 
 function formatDate(iso: string): string {
@@ -54,37 +85,79 @@ export function AprovarPrestacaoDialog({
   open,
   onOpenChange,
   prestacao,
+  cadastro,
+  aguardarCorrecoes,
   onAprovada,
 }: {
   open: boolean;
   onOpenChange: (aberto: boolean) => void;
   prestacao: PrestacaoParaAprovar | null;
+  /** O cadastro de impostos: o regime do CNPJ tomador e as alíquotas do
+   *  crédito de PIS/COFINS das NFs (decisão 189). */
+  cadastro: CadastroFiscal;
+  /** As correções da conferência que ainda estão indo ao servidor: a
+   *  aprovação espera por elas (decisão 189). */
+  aguardarCorrecoes: () => Promise<void>;
   onAprovada: (mensagem: string) => void;
 }) {
   const [dataPrevista, setDataPrevista] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
+  const [semCredito, setSemCredito] = React.useState(false);
+  const [motivoSemCredito, setMotivoSemCredito] = React.useState("");
   const [pending, startTransition] = React.useTransition();
 
   React.useEffect(() => {
     if (!open) return;
     setDataPrevista("");
     setErro(null);
+    setSemCredito(false);
+    setMotivoSemCredito("");
   }, [open, prestacao?.id]);
 
   if (!prestacao) return null;
   const alvo = prestacao;
   const temSaldo = alvo.saldo > 0;
   const brl = (n: number) => formatCurrency(n, "BRL");
+  const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const creditos = alvo.nfs.map((nf) => ({
+    nf,
+    credito: creditoDaNf({
+      nf: {
+        anexo_id: nf.documento_id,
+        numero: nf.numero,
+        emissao: nf.emissao,
+        valor: nf.valor,
+        tomador: nf.tomador,
+        valor_na_pp: nf.valor,
+        cobre_outra: false,
+      },
+      cadastro,
+      semCredito,
+      motivoSemCredito,
+      hoje,
+    }),
+  }));
+  const podeTirarCredito = creditos.some((c) => c.credito.automatico.gera);
 
   function aprovar() {
     if (temSaldo && !dataPrevista) {
       setErro("Escolha a data prevista da devolução antes de aprovar.");
       return;
     }
+    if (semCredito && podeTirarCredito && !motivoSemCredito) {
+      setErro("Escolha por que a NF não gera crédito de PIS/COFINS.");
+      return;
+    }
     startTransition(async () => {
+      await aguardarCorrecoes();
       const res = await aprovarPrestacaoVerba({
         pp_id: alvo.id,
         data_prevista: temSaldo ? dataPrevista : null,
+        notas: creditos.map((c) => ({
+          documento_id: c.nf.documento_id,
+          credito_retirado: c.credito.tirado,
+          credito_motivo: c.credito.tirado ? motivoSemCredito : null,
+        })),
       });
       if (!res.ok) {
         setErro(res.message);
@@ -152,6 +225,91 @@ export function AprovarPrestacaoDialog({
               </p>
             )}
           </div>
+
+          {/* Decisão 189: a NF da verba entra no cadastro de notas do
+              fiscal, como a de qualquer PP. */}
+          {creditos.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-border px-3 py-2.5">
+              <p className="flex items-start gap-2 text-[12px]">
+                <FileCheck2 className="mt-0.5 h-3.5 w-3.5 flex-none text-muted-foreground" />
+                <span>
+                  {creditos.length === 1 ? "1 NF vai" : `${creditos.length} NFs vão`} para o cadastro de notas
+                  do fiscal: <span className="font-mono">{creditos.map((c) => c.nf.numero).join(", ")}</span>. O
+                  emitente sem cadastro entra em Fornecedores, sem dados de pagamento.
+                </span>
+              </p>
+              <p className="text-[12px] font-bold">Crédito de PIS/COFINS</p>
+              {creditos.map(({ nf, credito }) => (
+                <div key={nf.documento_id} className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+                    <span
+                      className={cn(
+                        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                        PILULA_DO_CREDITO[credito.final.estado].tom,
+                      )}
+                    >
+                      {PILULA_DO_CREDITO[credito.final.estado].texto}
+                    </span>
+                    <b
+                      title={`PIS ${percentual(credito.aliquotaPis)} ${brl(credito.final.pis)} + COFINS ${percentual(credito.aliquotaCofins)} ${brl(credito.final.cofins)}`}
+                      className={cn(
+                        "font-mono font-semibold",
+                        !credito.final.gera && "text-muted-foreground line-through decoration-muted-foreground/60",
+                      )}
+                    >
+                      {brl(credito.final.total)}
+                    </b>
+                    <span className={cn("text-muted-foreground", !credito.final.gera && "line-through")}>
+                      {creditos.length > 1 && `NF ${nf.numero} · `}
+                      {credito.final.mes ? mesCurto(credito.final.mes) : "mês da emissão"}
+                    </span>
+                  </div>
+                  {!credito.automatico.gera && (
+                    <p className="text-[11px] leading-snug text-muted-foreground">{credito.automatico.motivo}</p>
+                  )}
+                </div>
+              ))}
+              {podeTirarCredito && (
+                <>
+                  <label className="flex w-fit cursor-pointer items-center gap-2 text-[12.5px] font-semibold">
+                    <Checkbox
+                      checked={semCredito}
+                      disabled={pending}
+                      onCheckedChange={(c) => {
+                        setSemCredito(c === true);
+                        if (c !== true) setMotivoSemCredito("");
+                        setErro(null);
+                      }}
+                      aria-label="Não gera crédito"
+                      className="rounded-[4px]"
+                    />
+                    Não gera crédito
+                  </label>
+                  {semCredito && (
+                    <Select
+                      value={motivoSemCredito === "" ? undefined : motivoSemCredito}
+                      disabled={pending}
+                      onValueChange={(x) => {
+                        setMotivoSemCredito(x);
+                        setErro(null);
+                      }}
+                    >
+                      <SelectTrigger aria-label="Motivo" className="h-9 w-full text-xs">
+                        <SelectValue placeholder="Motivo de não gerar crédito *" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MOTIVOS_SEM_CREDITO.map((m) => (
+                          <SelectItem key={m} value={m} className="text-xs">
+                            {m}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {temSaldo && (
             <div className="space-y-2">

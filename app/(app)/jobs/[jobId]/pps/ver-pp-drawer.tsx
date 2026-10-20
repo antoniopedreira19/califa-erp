@@ -323,7 +323,7 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
       passos.push({
         chave: "prestacao",
         titulo: "Prestação de contas",
-        detalhe: "preste contas na aba de PPs",
+        detalhe: "preste contas pelo PPs da planilha ou pela aba de PPs",
         quando: null,
         estado: "agora",
       });
@@ -336,7 +336,7 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
         estado: "agora",
       });
     } else if (situacaoVerba === "prestacao_reprovada") {
-      acender(ultimo(["prestacao_reprovada"]), "corrija na aba de PPs");
+      acender(ultimo(["prestacao_reprovada"]), "corrija pelo PPs da planilha ou pela aba de PPs");
     } else if (situacaoVerba === "devolucao_pendente") {
       passos.push({
         chave: "devolucao",
@@ -446,7 +446,8 @@ function passosDasColunas(pp: PedidoCompraNaLista): Passo[] {
   }
 
   // Verba paga: a prestação de contas é o passo seguinte (decisão 081). Só
-  // leitura aqui — ela se faz na aba de PPs (pergunta 5a).
+  // leitura aqui — ela se faz pelo PPs da planilha ou pela aba de PPs
+  // (decisão 189; até ela, só pela aba).
   if (situacaoVerba) {
     const pr = pp.prestacao;
     passos.push({
@@ -457,9 +458,9 @@ function passosDasColunas(pp: PedidoCompraNaLista): Passo[] {
           : situacaoVerbaLabel(situacaoVerba),
       detalhe:
         situacaoVerba === "aguardando_prestacao"
-          ? "preste contas na aba de PPs"
+          ? "preste contas pelo PPs da planilha ou pela aba de PPs"
           : situacaoVerba === "prestacao_reprovada"
-            ? `${pr?.motivo_reprovacao ?? "reprovada pelo financeiro"} — corrija na aba de PPs`
+            ? `${pr?.motivo_reprovacao ?? "reprovada pelo financeiro"} — corrija pelo PPs da planilha ou pela aba de PPs`
             : situacaoVerba === "prestacao_em_avaliacao"
               ? "com o financeiro"
               : situacaoVerba === "devolucao_pendente"

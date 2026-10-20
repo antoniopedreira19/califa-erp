@@ -49,6 +49,8 @@
  *  - 19/10/2026 (revisão da 153): "Cancelar e refazer" virou "Reemitir
  *    PP". Um produtor achou que perderia o formulário e teria de refazer a
  *    PP do zero; o pop-up agora começa pelo que fica (dados e anexos).
+ *    No mesmo dia virou "Editar e Reemitir PP", com o botão de confirmar
+ *    vermelho (pedidos do Tiago).
  */
 
 import * as React from "react";
@@ -56,6 +58,8 @@ import { useRouter } from "next/navigation";
 import {
   X,
   FilePlus,
+  FileText,
+  Info,
   Eye,
   ClipboardList,
   Send,
@@ -78,12 +82,19 @@ import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PPStatusChip } from "../pps/pp-status-chip";
 import {
   podeCancelarPP,
-  verbaAguardaProducao,
   type AnexoDaPPNaLista,
+  type DevolucaoDaVerba,
   type PPAEmitir,
   type PPStatus,
+  type PrestacaoDaVerba,
   type SituacaoVerba,
 } from "@/lib/types";
+import {
+  producaoEditaPrestacao,
+  rotuloDoBotaoDaPrestacao,
+  somaComprovadaEmCentavos,
+} from "@/lib/calculos/prestacao-da-verba";
+import { BarraDoComprovado } from "@/components/financeiro/prestacao-da-verba";
 import { passaDoPlanejado } from "@/lib/calculos/pps-item";
 import type { ReembolsoTipo } from "@/lib/calculos/reembolso";
 import {
@@ -140,9 +151,15 @@ export interface PPDoItem {
   reembolsoTipo: ReembolsoTipo | null;
   /** Tem pelo menos um anexo. Fora da verba, é o que libera o envio. */
   temAnexo: boolean;
-  /** Onde a verba está depois de paga (decisão 081). Só leitura aqui: a
-   *  prestação de contas é feita na aba de PPs (pergunta 5a). */
+  /** Onde a verba está depois de paga (decisão 081). */
   situacaoVerba: SituacaoVerba | null;
+  /** Decisão 189: a prestação também se faz daqui, pelo cartão da verba.
+   *  O cartão mostra o que já foi salvo e o que já está com o financeiro.
+   *  Obrigatórios pelo mesmo motivo do trio; fora da verba, null. */
+  prestacao: PrestacaoDaVerba | null;
+  devolucao: DevolucaoDaVerba | null;
+  /** O papel presta contas desta verba (decisões 164 e 171). */
+  podePrestarContas: boolean;
   /** Decisões 152 e 153 — obrigatórios pelo mesmo motivo do trio. */
   fornecedorId: string | null;
   empresaId: string;
@@ -248,6 +265,9 @@ interface Props {
    *  revisão da decisão 152): GP, administrador e financeiro. Vale também
    *  na tela do financeiro, onde o painel é só leitura. */
   podeCorrigirNf: boolean;
+  /** Decisão 189: abre a gaveta da prestação de contas da verba, a mesma
+   *  da aba de PPs. Null onde o painel só lê. */
+  onPrestarContas: ((pp: PPDoItem) => void) | null;
 }
 
 export function PainelPPsItem({
@@ -285,6 +305,7 @@ export function PainelPPsItem({
   tomadorPorEmpresa,
   cnpjPadraoDaPP,
   podeCorrigirNf,
+  onPrestarContas,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -607,6 +628,9 @@ export function PainelPPsItem({
                       a.tipo_verba === "reembolso" ? (a.dados.reembolso_tipo ?? "despesas") : null,
                     temAnexo: a.anexos.length > 0,
                     situacaoVerba: null,
+                    prestacao: null,
+                    devolucao: null,
+                    podePrestarContas: false,
                     fornecedorId: a.fornecedor_id,
                     empresaId: a.empresa_id,
                     estabelecimentoId: a.dados.estabelecimento_id ?? cnpjPadraoDaPP,
@@ -920,7 +944,8 @@ export function PainelPPsItem({
                     }
                     aviso={
                       // "Substitui" segue a PP depois do envio, não só antes.
-                      pp.status === "rejeitada" || verbaAguardaProducao(pp.situacaoVerba) || pp.substitui ? (
+                      // Decisão 189: a verba enviada mostra a prestação.
+                      pp.status === "rejeitada" || pp.substitui || verbaComPrestacao(pp) ? (
                         <span className="flex flex-col gap-1.5">
                           {pp.substitui && (
                             <span className="text-[11px] leading-snug text-muted-foreground">
@@ -942,14 +967,12 @@ export function PainelPPsItem({
                                   className="inline-flex w-fit items-center gap-1.5 rounded-[9px] border border-california-red bg-california-red px-2.5 py-1 text-[11px] font-bold text-white hover:bg-california-red-hover disabled:opacity-50"
                                 >
                                   <Pencil className="h-3 w-3" />
-                                  Reemitir PP
+                                  Editar e Reemitir PP
                                 </button>
                               )}
                             </span>
-                          ) : verbaAguardaProducao(pp.situacaoVerba) ? (
-                            <span className="text-[11px] font-semibold leading-snug text-amber-800">
-                              Preste contas na aba de PPs
-                            </span>
+                          ) : verbaComPrestacao(pp) ? (
+                            <PrestacaoNoCartao pp={pp} onAbrir={onPrestarContas} />
                           ) : null}
                         </span>
                       ) : null
@@ -1151,10 +1174,11 @@ export function PainelPPsItem({
         <ConfirmDialog
           open={refazendo !== null}
           onOpenChange={(o) => !o && setRefazendo(null)}
-          title={`Reemitir a ${refazendo?.codigo ?? "PP"}?`}
+          title={`Editar e reemitir a ${refazendo?.codigo ?? "PP"}?`}
           description={<TextoDoReemitir codigo={refazendo?.codigo ?? "PP"} />}
-          confirmLabel="Reemitir PP"
+          confirmLabel="Editar e Reemitir PP"
           cancelLabel="Voltar"
+          variant="primary"
           pending={pending}
           onConfirm={refazer}
         />
@@ -1315,6 +1339,100 @@ function CartaoPP({
       </div>
       {aviso}
     </div>
+  );
+}
+
+/** A verba enviada ao financeiro: o cartão mostra a prestação (decisão
+ *  189). O reembolso não presta contas (decisão 187). */
+function verbaComPrestacao(pp: PPDoItem): boolean {
+  return (
+    pp.verbaProducao &&
+    pp.reembolsoTipo === null &&
+    (pp.status === "em_avaliacao" || pp.status === "aprovada" || pp.status === "pago")
+  );
+}
+
+/**
+ * A prestação no cartão da verba (decisão 189): a barra do comprovado, uma
+ * linha com onde ela está e o botão que abre a gaveta — a mesma da aba de
+ * PPs. Antes daqui, o cartão só dizia "Preste contas na aba de PPs".
+ */
+function PrestacaoNoCartao({
+  pp,
+  onAbrir,
+}: {
+  pp: PPDoItem;
+  onAbrir: ((pp: PPDoItem) => void) | null;
+}) {
+  const pr = pp.prestacao;
+  const docs = pr?.documentos ?? [];
+  const n = docs.length;
+  const qtd = n === 1 ? "1 documento" : `${n} documentos`;
+  const comprovado = somaComprovadaEmCentavos(docs) / 100;
+  const age =
+    onAbrir !== null &&
+    pp.podePrestarContas &&
+    producaoEditaPrestacao({
+      verba_producao: pp.verbaProducao,
+      tipo_verba: pp.reembolsoTipo ? "reembolso" : null,
+      status: pp.status,
+      prestacao: pr,
+    });
+  const linha =
+    pp.situacaoVerba === "concluida"
+      ? "Prestação concluída."
+      : pp.situacaoVerba === "devolucao_pendente"
+        ? `Aprovada · estorno de ${formatCurrency(pp.devolucao?.valor ?? 0, "BRL")} a receber pelo financeiro.`
+        : pr?.status === "em_avaliacao"
+          ? n === 0
+            ? "Sem gasto · com o financeiro."
+            : `${qtd} · com o financeiro.`
+          : pr?.status === "reprovada"
+            ? "Reprovada pelo financeiro · corrija e reenvie."
+            : n === 0
+              ? pp.status === "pago"
+                ? "Nenhum documento ainda."
+                : "Já dá para juntar os documentos."
+              : pp.status === "pago"
+                ? `${qtd} salvo${n === 1 ? "" : "s"}, a enviar.`
+                : `${n === 1 ? "1 salvo" : `${n} salvos`} · envio após pagar.`;
+  const verBotao = onAbrir !== null && !age && pr !== null && pr.status !== "rascunho";
+  return (
+    <span className="flex flex-col gap-2">
+      {n > 0 && (
+        <BarraDoComprovado
+          status={pr?.status ?? null}
+          comprovado={comprovado}
+          verba={pp.valor}
+          devolucao={pp.devolucao}
+          compacta
+        />
+      )}
+      <span className="flex items-center gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-snug text-muted-foreground">
+          <Info className="h-3 w-3 flex-none" />
+          <span className="truncate" title={linha}>
+            {linha}
+          </span>
+        </span>
+        <span className="flex-1" />
+        {(age || verBotao) && onAbrir && (
+          <button
+            type="button"
+            onClick={() => onAbrir(pp)}
+            className={cn(
+              "inline-flex w-fit flex-none items-center gap-1.5 rounded-[9px] border px-2.5 py-1 text-[11px] font-bold transition-colors",
+              age
+                ? "border-california-red bg-california-red text-white hover:bg-california-red-hover"
+                : "border-border bg-white text-foreground hover:border-california-red/40 hover:text-california-red",
+            )}
+          >
+            <FileText className="h-3 w-3" />
+            {age ? rotuloDoBotaoDaPrestacao({ prestacao: pr }) : "Ver prestação"}
+          </button>
+        )}
+      </span>
+    </span>
   );
 }
 

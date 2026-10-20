@@ -1,7 +1,14 @@
 # 081 — A produção presta contas da verba, e o financeiro aprova
 
 **Data:** 2026-09-15
-**Status:** aceita
+**Status:** aceita. ⚠️ Revista pela
+[189](189-prestacao-de-contas-da-verba-documento-a-documento.md) em
+19/10/2026: a produção presta contas também pelo "PPs" da Planilha Interna,
+os documentos entram um a um (salvos como rascunho desde o envio da PP ao
+financeiro, mesmo antes do pagamento), os 7 tipos do sistema com os campos de
+cada um, e a NF da loja entra no cadastro de notas do fiscal na aprovação. O
+envio único, a aprovação ou reprovação da prestação inteira e o estorno
+seguem como aqui.
 **Contexto:** PP de verba de produção depois de paga — aba de PPs do job,
 aprovação e Títulos a Pagar em Contas a Pagar, chat de PPs. Pedido do Tiago
 em 14/09/2026; design "Prestação de Contas da Verba" aprovado em duas rodadas

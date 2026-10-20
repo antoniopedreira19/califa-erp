@@ -34,6 +34,7 @@ import {
 import { destinoPorTecla } from "@/lib/calculos/ordem-itens";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { PainelPPsItem } from "./painel-pps-item";
+import { PrestarContasDrawer } from "../pps/prestar-contas-drawer";
 import { VerPPDrawer } from "../pps/ver-pp-drawer";
 import {
   somaDasPPsNaoCanceladas,
@@ -201,6 +202,9 @@ interface Props {
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadoresDaNf: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
+  /** Decisão 189: as verbas de que o usuário presta contas, pelo cartão da
+   *  verba no painel do item. Telas de leitura não mandam. */
+  ppsQuePossoPrestarContas?: string[];
   /** Decisão 156: o CNPJ que a PP nova já traz escolhido. */
   cnpjPadraoDaPP: string | null;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
@@ -715,6 +719,7 @@ export function JobItemRealizadoTable({
   statusDoJob,
   tomadoresDaNf,
   tomadorPorEmpresa,
+  ppsQuePossoPrestarContas = [],
   cnpjPadraoDaPP,
   fornecedores,
   empresas,
@@ -793,6 +798,8 @@ export function JobItemRealizadoTable({
   const [ppVendo, setPpVendo] = React.useState<PedidoCompraNaLista | null>(
     null,
   );
+  /** Decisão 189: a verba cuja prestação está aberta, pelo cartão do painel. */
+  const [ppPrestando, setPpPrestando] = React.useState<PedidoCompraNaLista | null>(null);
   const [itemIdAtual, setItemIdAtual] = React.useState<string | null>(null);
   const [bvAberto, setBvAberto] = React.useState<ItemPlanilhaJob | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
@@ -2449,6 +2456,9 @@ export function JobItemRealizadoTable({
                 reembolsoTipo: pp.tipo_verba === "reembolso" ? (pp.reembolso_tipo ?? "despesas") : null,
                 temAnexo: (pp.anexos ?? []).length > 0,
                 situacaoVerba: situacaoDaVerba(pp),
+                prestacao: pp.prestacao,
+                devolucao: pp.devolucao,
+                podePrestarContas: ppsQuePossoPrestarContas.includes(pp.id),
                 fornecedorId: pp.fornecedor_id ?? null,
                 empresaId: pp.empresa_id,
                 estabelecimentoId: pp.estabelecimento_id ?? null,
@@ -2503,6 +2513,18 @@ export function JobItemRealizadoTable({
               tomadorPorEmpresa={tomadorPorEmpresa}
               cnpjPadraoDaPP={cnpjPadraoDaPP}
               podeCorrigirNf={papelCorrigeNf}
+              // Decisão 189: a prestação de contas também pelo cartão da
+              // verba — a gaveta abre por cima do painel, que fica aberto.
+              onPrestarContas={
+                ppsQuePossoPrestarContas.length > 0
+                  ? (pp) => {
+                      const completa = ppsDoItem.find((x) => x.id === pp.id);
+                      if (!completa) return;
+                      setPainelOpen(false);
+                      setPpPrestando(completa);
+                    }
+                  : null
+              }
               emPPs={emPPs}
               envioBloqueadoPor={envioBloqueadoPor}
               itemRealizadoId={itemIdAtual ?? ""}
@@ -2638,6 +2660,22 @@ export function JobItemRealizadoTable({
                 podeGerarPP && (papelEnviaPP || ppVendo?.status === "gerada")
               }
               onMensagem={setToast}
+            />
+
+            {/* Decisão 189: a prestação de contas da verba, a mesma gaveta
+                da aba de PPs. Fecha devolvendo para o painel, como a ficha. */}
+            <PrestarContasDrawer
+              open={ppPrestando !== null}
+              onOpenChange={(aberto) => {
+                if (!aberto) {
+                  setPpPrestando(null);
+                  setPainelOpen(true);
+                }
+              }}
+              pp={ppPrestando}
+              tomadores={tomadoresDaNf}
+              podeEditar={ppPrestando !== null && ppsQuePossoPrestarContas.includes(ppPrestando.id)}
+              onSuccess={setToast}
             />
           </>
         );

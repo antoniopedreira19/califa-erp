@@ -5930,3 +5930,264 @@ ao de uma PP válida. O PDF agora diz quando não vale.
   sanitização de PII (`a89a2ba6`, `23d7f83b`) a partir de uma cópia sem os
   dois commits do "Reemitir PP" (`2c90f46c` e `777dc9a5`). Eles foram
   reaplicados, sem conflito, como `7b25c96f` e `b62a4084`, antes da 190.
+
+## ⚠️ Nota de 2026-10-19 (5) — "Reemitir e editar PP" e a verba anterior à 171 (revisão da decisão 153)
+
+- **Texto:** o "Reemitir PP" virou **"Reemitir e editar PP"** (botão do
+  painel, ícone e dica da aba de PPs, confirmação, título do pop-up e do
+  formulário, motivo de cancelamento gravado). Pedido do Tiago: a produção
+  continuava achando que perdia o formulário.
+- **Erro corrigido:** a PP-00127 (QPC-1001/26), verba de produção de antes da
+  decisão 171 (com "responsável", sem titular), dava "Falha ao refazer: new
+  row for relation pedidos_compra_a_emitir violates check constraint
+  chk_ppae_verba". `cancelarERefazerPP` montava a PP a emitir com
+  `colunasDaVerba`, que zera o responsável; sem titular, nenhuma forma da
+  checagem fecha. Agora, quando `verbaDeResponsavel(pp)`, a PP a emitir
+  guarda o `responsavel_verba_id` da PP (a forma "verba de responsável" da
+  checagem), e o formulário pede o titular antes de gerar.
+- **Conferência:** a expressão da `chk_ppae_verba` aplicada aos valores da
+  PP-00127 (só leitura): antes recusa, agora passa. Os textos novos foram
+  conferidos no protótipo montado com o código deste commit
+  (https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r, versão 3). Não deu para
+  subir um servidor do worktree (limite de 5 servidores por pasta, todos de
+  outras conversas), e não há verba antiga rejeitável no TES-P001/26: o
+  primeiro uso real será a própria PP-00127.
+
+## ⚠️ Nota de 2026-10-19 (6) — "Editar e Reemitir PP" com o botão vermelho (revisão da decisão 153)
+
+- **Texto:** "Reemitir e editar PP" virou **"Editar e Reemitir PP"** (botão do
+  painel, dica da aba de PPs, confirmação); os títulos dizem "Editar e
+  reemitir a PP-…". Motivo de cancelamento gravado: "(Editar e Reemitir PP)".
+- **Botão vermelho:** o confirmar do pop-up era escuro (variante padrão do
+  `ConfirmDialog`). Entrou a variante **`primary`**: vermelho como o
+  `destructive`, sem o ícone de alerta. Os outros usos do componente não
+  mudam.
+- **A PP-00127 reemitiu** às 15h21 com a correção da nota (5): PP a emitir
+  com o responsável, esperando a produção escolher o titular e gerar.
+- Conferido no protótipo com o código deste commit
+  (https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r, versão 4).
+
+## ⚠️ Nota de 2026-10-19 (7) — A pasta das cópias da 190 travou "Gerar PP" (12h43–15h28)
+
+- **Sintoma (relatado pela produção):** "Falha ao listar anexos: invalid
+  input syntax for type uuid: "_antes-da-decisao-190"" no formulário da PP,
+  nova ou a emitir, em qualquer job. Nenhuma PP foi gerada entre a PP de
+  12h30 e a migration das 15h28.
+- **Causa:** o retroativo da 190 copiou os 112 PDFs originais para
+  `pedidos-compra/_antes-da-decisao-190/` às 12h43–12h45. As quatro
+  policies do bucket faziam `split_part(name, '/', 1)::uuid` direto, e numa
+  listagem o Postgres avalia a policy em todas as linhas do bucket antes do
+  filtro de prefixo: o cast da pasta nova estourava para qualquer usuário
+  logado. Quebrava o "Gerar PP" (lista a pasta da PP sempre), o "Salvar" da
+  PP a emitir com anexo e o envio ao financeiro com anexo novo.
+- **Correção:** migration `20261019900001_pp_storage_policy_tolera_pasta_fora_do_tenant.sql`.
+  Função `tenant_do_caminho_no_storage(name)` (uuid do primeiro segmento, ou
+  NULL quando não é uuid; `case` garante a ordem) e as policies
+  `pp_storage_*` a usam. Para os arquivos em `<tenant_id>/...` o acesso é o
+  mesmo; a pasta das cópias fica invisível para `authenticated` e segue
+  legível pela chave de serviço. Nenhum arquivo foi movido nem apagado.
+- **Conferência:** antes, a listagem como GP Teste Claude (`set local role
+  authenticated`) reproduzia o erro; depois, a pasta do job lista, o GP vê os
+  433 arquivos do tenant e nenhuma das 112 cópias, e `storage.search`
+  responde. Na tela, o GP Teste Claude gerou a PP-00266 (R$ 100,00,
+  Fornecedor Teste) no TES-1025/26 pelo servidor da 3000, cujo código é
+  anterior à 190: o PDF dela saiu sem selo. Em produção a equipe gerou a
+  PP-00265 (ANI-1012/26) às 15h31 e a PP-00267 (2GB-1002/26) às 15h33.
+- **Ficou para a produção:** PPs a emitir criadas no intervalo e ainda não
+  geradas, em BOC-1003/26, DEE-1001/26, QPC-1001/26 (3), EDU-1001/26,
+  2GB-1002/26 e AMB-1002/26. Algumas podem ser repetição da mesma tentativa.
+- **Risco que fica:** as policies dos outros buckets (avulsas, faturamentos,
+  NF, fornecedores, freelancers etc.) têm o mesmo cast. Hoje esses buckets
+  só têm pasta de tenant na raiz (conferido em 19/10); uma pasta fora disso
+  quebra a listagem do bucket inteiro do mesmo jeito. Seis deles foram
+  blindados no mesmo dia: ver a nota (8).
+
+## ⚠️ Nota de 2026-10-19 (8) — Mais seis buckets toleram pasta fora do tenant
+
+- **Por quê:** prevenção. A mesma pasta fora do padrão que travou o "Gerar
+  PP" derrubaria a listagem de qualquer bucket com o cast cru. Nenhum dos
+  seis tinha pasta assim; nada estava quebrado.
+- **O que mudou:** migration `20261019900002_storage_policies_toleram_pasta_fora_do_tenant.sql`.
+  As 18 policies de `impostos`, `fornecedores`, `envios-faturamento`,
+  `orcamento-importacoes`, `faturamentos-nf` e `contas-avulsas` trocam o
+  `::uuid` por `tenant_do_caminho_no_storage` (`alter policy`: nome, comando,
+  papel e tipo ficam). A regra de acesso é a mesma; uma pasta estranha na
+  raiz fica invisível em vez de dar erro. Escolha do Tiago: os três buckets
+  da outra frente (`colaboradores-nf`, `contratacoes-anexos`,
+  `freelancer-arquivos`) ficaram de fora.
+- **Conferência:** antes de aplicar, as expressões antiga e nova deram o
+  mesmo resultado nos 486 caminhos com pasta de tenant, como administrador,
+  financeiro, produtor dono de importação e freelancer. Como `authenticated`
+  (`begin read only` + `set local role`), administrador, financeiro, RH,
+  GP, produtor, freelancer e o produtor dono de uma importação veem a mesma
+  quantidade de arquivos antes e depois nos nove buckets. Com uma pasta
+  `_teste-blindagem/` inserida e desfeita na mesma transação, o `impostos`
+  dava "invalid input syntax for type uuid" antes; depois, os seis buckets
+  listam normalmente (inclusive `storage.search`) e a pasta não aparece.
+
+## ⚠️ Nota de 2026-10-19 (9) — Titular freela da verba: a FK passa para `freelancers` (decisão 171)
+
+- **Sintoma (relatado pela produção):** "insert or update on table
+  "pedidos_compra_a_emitir" violates foreign key constraint
+  "pedidos_compra_a_emitir_verba_freela_id_fkey"" ao salvar ou gerar a
+  reemissão da PP-00127 (verba de produção). Valia para qualquer verba com
+  titular freela, em qualquer job, desde as 16h24; colaborador e terceiro
+  seguiam normais.
+- **Causa:** às 16h24 a migration `pessoas_para_verba_le_freelancers` trocou
+  a origem da lista "Titular da verba" da tabela provisória `freelas` (70) para
+  `freelancers` (221, migradas do RH). As FKs `verba_freela_id` de
+  `pedidos_compra` e `pedidos_compra_a_emitir` seguiam em `freelas`, e as duas
+  tabelas não têm id em comum. O titular da PP-00127 é um GP que só existe em
+  `freelancers`.
+- **Correção:** migration `20261019900003_titular_freela_da_verba_vem_de_freelancers.sql`
+  (destrutiva, autorizada pelo Tiago). As duas FKs apontam para `freelancers`
+  (`on delete restrict`, `not valid`). As referências antigas trocaram pelo
+  CPF: 13 de 14 PPs e 14 de 15 PPs a emitir, com os gatilhos de usuário
+  desligados no UPDATE (o `updated_at` das 29 linhas e os 739 eventos ficaram
+  iguais). As 2 que sobram apontam para o "ZZ Freela Teste 164", sem CPF: a
+  PP-00158 (cancelada) e uma PP a emitir de teste, ambas no TES-1025/26.
+  `freelas` continua no banco.
+- **Conferência:** no TES-1025/26, pelo servidor da 3000, "Salvar" de uma
+  verba de produção com o titular freela que só existe em `freelancers`
+  gravou a PP a emitir; "Gerar PP" gerou a PP-00274 com PDF. A PP-00274 foi
+  cancelada depois.
+- **O que falta (não resolvido aqui):** a PP com titular freela sai **sem
+  conta**. O gatilho `pp_foto_do_colaborador` só copia a conta do colaborador
+  do RH; `freelancers` tem conta em 208 dos 221, mas em texto livre (199
+  bancos só pelo nome, 43 contas sem dígito). A PP-00127 foi recusada pelo
+  financeiro justamente por estar sem os dados bancários.
+
+## ⚠️ Nota de 2026-10-19 (10) — Prestação de contas da verba, documento a documento (decisão 189)
+
+Redesenho aprovado pelo Tiago (versão A, "Junta e envia no fim"). Revê a 081
+no lado da produção:
+
+- **Onde:** além da trilha da aba de PPs, o **cartão da verba no "PPs" da
+  Planilha Interna** (`painel-pps-item.tsx`, `PrestacaoNoCartao`) mostra a
+  barra do comprovado, uma linha de onde a prestação está e o botão
+  "Prestar contas / Continuar prestação / Corrigir prestação" (ou "Ver
+  prestação"). O painel fecha e a gaveta abre (`job-item-realizado-table.tsx`,
+  como a ficha "Ver PP"); fechar a gaveta devolve ao painel. A permissão vem
+  de `ppsQuePossoPrestarContas` (página → `JobRealizadoSection` → tabela).
+- **A gaveta** (`pps/prestar-contas-drawer.tsx`, reescrita): cada arquivo
+  sobe e fica salvo como **rascunho** na hora; os campos se salvam a cada
+  pausa (700 ms) ou ao sair do campo, sem revalidar a página — ela se
+  atualiza quando a gaveta fecha. Vale **desde o envio da PP ao financeiro**;
+  o envio só libera com a verba paga. Os 7 tipos, com os campos de cada um
+  (`lib/calculos/prestacao-da-verba.ts`); boleto e contrato sem valor, fora
+  da soma. NF e fatura já vêm com o CNPJ da PP como tomador.
+- **Actions** (`pps/actions-prestacao.ts`): `salvarDocumentoPrestacao`,
+  `removerDocumentoPrestacao` e `enviarPrestacaoVerba` (agora sem a lista de
+  documentos: envia o que está salvo).
+- **Aba de PPs** (`job-pps-section.tsx`): o botão aparece pela regra
+  `producaoEditaPrestacao`; com o cancelar na linha (verba em avaliação), vira
+  ícone. Coluna Status com o selo à esquerda e o da verba em duas linhas
+  (`SituacaoVerbaChip duasLinhas`); `colgroup` com larguras fixas (92, 108,
+  134, 144, 136, 46).
+- **Textos:** "preste contas pelo PPs da planilha ou pela aba de PPs" na ficha
+  "Ver PP" e no envio para encerramento.
+- **Conferido em 19/10/2026 no TES-1001/26, PP-00261** (verba de produção de
+  R$ 3.000,00): gerada e enviada pela tela; com a PP em avaliação, quatro
+  documentos (NF 4521, cupom 9812, recibo 014 e boleto 4521) anexados e
+  salvos — rascunho no banco, sem evento, invisível ao financeiro, envio
+  travado. Paga na Conta Teste, o envio recusou o boleto sem data (a gaveta
+  disse qual documento e marcou o campo); completo, saiu com R$ 1.716,40 (o
+  boleto fora da soma). Reprovada pelo financeiro, a correção (CPF do recibo)
+  foi pelo cartão da Planilha Interna e reenviada. Aprovada, a linha ficou
+  "Concluída" depois da baixa do estorno.
+
+## ⚠️ Nota de 2026-10-19 (11) — Titular da verba: freela encerrado sai da lista (decisão 171)
+
+- **Por quê:** desde as 16h24 a lista "Titular da verba" lia os 221 freelas de
+  `freelancers` sem filtro, inclusive os 157 com o contrato encerrado. O
+  titular da PP-00127 era um deles. Resolvido o caso (a PP saiu como
+  "Terceiro (fornecedor)", PP-00276), o Tiago pediu a lista de volta ao normal.
+- **O que mudou:** migration `20261019900004_titular_da_verba_sem_freela_encerrado.sql`.
+  `pessoas_para_verba` só leva o freela que não está "Encerrado" no módulo de
+  Freelancers (`freelancers_com_status.status_calculado`, a mesma situação da
+  tela do módulo). Colaboradores não mudam: já eram só os ativos do RH.
+- **Conferência:** no TES-1025/26, pelo servidor da 3000, a lista do
+  formulário trouxe 274 pessoas (210 colaboradores ativos e 64 freelas, todos
+  "Sem minuta"), sem o titular da PP-00127. A lista provisória antiga tinha 69
+  freelas ativos; 59 deles seguem na lista, 9 estão encerrados no módulo novo.
+  A única PP a emitir com freela encerrado é um teste do TES-1025/26: ao
+  salvar, pede o titular de novo.
+
+## ⚠️ Nota de 2026-10-19 (12) — O item da planilha no PDF da PP (decisão 191)
+
+- **Por quê:** o PDF da PP trazia o "Serviço" digitado por quem gera, mas não
+  de qual linha da planilha a PP sai. O Tiago pediu o nome do item no
+  documento (17/10) e aprovou a versão A do protótipo
+  (https://claude.ai/artifact/6iho6wNwqbgzHrc6CaYMAn) em 19/10.
+- **O que mudou:** a linha "Item: <nome>" sai embaixo do "Serviço", na célula
+  que ficava vazia ao lado do "Prazo de Pagto" (ou das "Parcelas"). O
+  documento não cresce. Vale para todos os formatos (fornecedor, verbas,
+  reembolso, prévia e selos) e para todo PDF gerado ou refeito; os emitidos
+  antes ficam como estão. `itemNome` é obrigatório em
+  `renderPedidoCompraPDF` e em `renderizarDocumentoDaPP`; quem relê a PP
+  gravada (`refazerPdfDaPP`, `atualizarVencimentoDaPP`) traz o nome pelo
+  embed `ITEM_DA_PP`.
+- **Conferência:** no TES-1001/26, linha "Item 7": a PP-00286 gerada, editada e
+  cancelada pela tela saiu com "Item: Item 7" nos três PDFs (geração, edição
+  e o selo de cancelada, que passa pelo `refazerPdfDaPP`). Os demais formatos
+  foram conferidos pelo gerador. A prévia e o "Atualizar vencimento" não foram
+  exercitados na tela.
+- **Achado à parte (não corrigido):** a "Emissão" do PDF usa o dia UTC de
+  `created_at`. A PP-00286, gerada às 23h17 de 19/10 (Brasília), saiu com
+  "Emissão: 20/10/2026", enquanto o selo do mesmo documento diz "Cancelada em
+  19/10/2026". Acontece com toda PP gerada entre 21h e meia-noite.
+
+## ⚠️ Nota de 2026-10-19 (13) — Conta ou PIX do titular da verba (decisão 193)
+
+- **Por quê:** a PP de verba do freela (e do colaborador sem conta no RH)
+  saía sem dados bancários, e o financeiro passou a recusá-la (PP-00127).
+- **O que mudou:** migration `20261019900005_conta_do_titular_da_verba.sql`
+  e o formulário da PP. Quem paga pelo cadastro — colaborador com conta ou
+  PIX na ficha (171) e freela com PIX completo no cadastro de freelas — não
+  vê campo: o gatilho `pp_foto_do_colaborador` copia o pagamento para a PP, e
+  a linha embaixo do titular diz de onde. Quem não paga pelo cadastro digita
+  o PIX ou a conta no campo "Pagamento" (`pagamento-do-titular-field.tsx`),
+  obrigatório no Salvar e no Gerar, conferido no servidor
+  (`lib/validations/pagamento-do-titular.ts`). A revisão ganhou "Dados
+  bancários". Vale também para o reembolso.
+- **No banco:** `pix_do_cadastro_do_freelancer` (fechada para a tela),
+  `pessoas_para_verba` com `paga_pelo_cadastro`, e o gatilho preservando o
+  pagamento digitado enquanto a PP está "gerada" (enviada, não muda). Em
+  19/10: 46 dos 64 freelas ativos vão automático; 18 colaboradores sem
+  ficha digitam.
+- **Conferência no banco** (bloco desfeito no fim): freela com PIX completo
+  sai com o PIX e o CPF do cadastro e ignora o que a tela mandar; o digitado
+  fica na PP gerada, muda numa edição e não muda depois do envio;
+  colaborador com ficha continua com a ficha.
+
+## ⚠️ Nota de 2026-10-19 (14) — A IA lê o anexo da PP logo que ele sobe (decisão 192)
+
+Ideia do Tiago de 16/10/2026, depois das PP-00197 e PP-00198 (decisão 178).
+Protótipo aprovado em 17/10. Regra completa na decisão 192.
+
+- **O que mudou:** na PP comum, todo PDF anexado é lido pela IA assim que
+  sobe, no formulário (Gerar PP e PP a emitir) e no envio ao financeiro. A
+  leitura preenche **só o que está vazio**:
+  - tipo e número;
+  - na NF, também a data e o valor;
+  - o CNPJ da California do documento, quando o campo ainda está no CNPJ
+    da PP.
+
+  Cada campo preenchido leva o selo âmbar "IA" até alguém mexer nele.
+  Embaixo do arquivo aparece o estado da leitura ("lendo o documento…",
+  "lido pela IA", "lido pela IA, com dúvida: confira", "não deu para ler:
+  escolha o tipo").
+- **Fora:** imagens, verba de produção e reembolso (`useAnexosEmEdicao`
+  sem o terceiro argumento não lê). O servidor não muda: as travas da NF no
+  envio, do boleto e do CNPJ continuam as de antes.
+- **Custo e cache:** mesma chave e mesmo `gpt-4.1-mini` da leitura de NF.
+  O cache é `nf_extracao_cache` com `modelo = gpt-4.1-mini|documento-v1`.
+  A auditoria grava `pp.anexo.lido_por_ia`. O `custo_usd_estimado` das duas
+  leituras passou a usar o preço do gpt-4.1-mini (`custoEstimadoUsd`).
+- **Sem migration.**
+- **Pendente: a conferência com a IA de verdade.** A conta da OpenAI está
+  sem crédito desde 19/10/2026, 15h39 ("429 You have no credits
+  remaining"), o que derruba também o botão "Ler NF automaticamente". Até o
+  crédito voltar, cada PDF da PP comum termina em "não deu para ler:
+  escolha o tipo". O Tiago decidiu subir assim mesmo (20/10). Com crédito,
+  conferir pelo roteiro do fim da decisão 192.

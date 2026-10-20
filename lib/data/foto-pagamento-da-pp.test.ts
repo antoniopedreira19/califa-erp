@@ -11,13 +11,16 @@ import assert from "node:assert/strict";
 import {
   aplicarPagamentoForaDoCadastro,
   cadastroMudouDepoisDaFoto,
+  fotoDoPagamentoDoTitular,
   lerPagamentoForaDoCadastro,
+  pagamentoDoTitularDaFoto,
   pagamentoDoTitularDaPP,
   resumoDoCadastroDePagamento,
   tirarFoto,
   type DadosDePagamento,
 } from "./foto-pagamento-da-pp";
 import { pagamentoForaDoCadastroSchema } from "../validations/pagamento-fora-do-cadastro";
+import { pagamentoDoTitularSchema } from "../validations/pagamento-do-titular";
 
 const cadastro: DadosDePagamento = {
   banco_codigo: "341",
@@ -28,7 +31,7 @@ const cadastro: DadosDePagamento = {
   conta_dv: "0",
   tipo_conta: "corrente",
   pix_tipo: "cnpj",
-  pix_chave: "34567890000130",
+  pix_chave: "11222333000181",
 };
 
 test("outro PIX troca só a chave e mantém a conta do cadastro", () => {
@@ -66,12 +69,12 @@ test("outra conta troca só a conta, com o nome do banco, e mantém a chave", ()
   assert.equal(r.banco_codigo, "237");
   assert.equal(r.banco_nome, "Banco Bradesco S.A.");
   assert.equal(r.agencia_dv, "7");
-  assert.equal(r.pix_chave, "34567890000130");
+  assert.equal(r.pix_chave, "11222333000181");
 });
 
 test("sem pagamento fora do cadastro, a foto é o cadastro", () => {
   const foto = tirarFoto(cadastro, null);
-  assert.equal(foto.fornecedor_pix_chave, "34567890000130");
+  assert.equal(foto.fornecedor_pix_chave, "11222333000181");
   assert.equal(foto.fornecedor_conta, "56789");
 });
 
@@ -151,7 +154,7 @@ test("o schema recusa chave que não é aleatória, chave torta e outra conta", 
   const cnpj = pagamentoForaDoCadastroSchema.safeParse({
     meio: "pix",
     pix_tipo: "cnpj",
-    pix_chave: "34567890000130",
+    pix_chave: "11222333000181",
   });
   assert.equal(cnpj.success, false);
 
@@ -196,7 +199,7 @@ test("boleto mantém o cadastro na foto e não acende o asterisco (decisão 161)
 });
 
 test("o resumo do cadastro mostra o PIX, ou a conta quando não há PIX", () => {
-  assert.equal(resumoDoCadastroDePagamento(cadastro), "PIX CNPJ · 34.567.890/0001-30");
+  assert.equal(resumoDoCadastroDePagamento(cadastro), "PIX CNPJ · 11.222.333/0001-81");
   assert.equal(
     resumoDoCadastroDePagamento({ ...cadastro, pix_tipo: null, pix_chave: null }),
     "ITAÚ UNIBANCO · Ag. 1234 · CC 56789-0",
@@ -224,8 +227,56 @@ test("sem conta nem PIX na ficha, a verba do colaborador sai sem o bloco", () =>
   assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, ...tirarFoto(null) }), null);
 });
 
-test("freela, terceiro e PP sem foto não têm pagamento do titular", () => {
-  assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, verba_titular_tipo: "freela" }), null);
+test("terceiro e PP sem foto não têm pagamento do titular", () => {
   assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, verba_titular_tipo: "fornecedor" }), null);
   assert.equal(pagamentoDoTitularDaPP({ ...fotoDoColaborador, dados_pagamento_congelados_em: null }), null);
+});
+
+// Decisão 193: o freela também leva o pagamento — o PIX do cadastro de
+// freelas (pelo banco) ou o que foi digitado na PP.
+test("a verba do freela imprime o pagamento da foto", () => {
+  const pg = pagamentoDoTitularDaPP({ ...fotoDoColaborador, verba_titular_tipo: "freela" });
+  assert.equal(pg?.pix_chave, "12345678909");
+  assert.equal(pg?.cpf, "12345678909");
+});
+
+test("o PIX digitado vira a foto e volta para o formulário", () => {
+  const pix = pagamentoDoTitularSchema.parse({ meio: "pix", pix_tipo: "telefone", pix_chave: "(71) 99999-0000" });
+  assert.equal(pix.pix_chave, "+5571999990000");
+  assert.equal(pix.conta, null);
+  const foto = fotoDoPagamentoDoTitular(pix);
+  assert.equal(foto.fornecedor_pix_tipo, "telefone");
+  assert.equal(foto.fornecedor_conta, null);
+  assert.deepEqual(pagamentoDoTitularDaFoto(foto), pix);
+});
+
+test("a conta digitada leva o nome do banco e o dígito em maiúscula", () => {
+  const conta = pagamentoDoTitularSchema.parse({
+    meio: "conta",
+    banco_codigo: "077",
+    agencia: "0001",
+    conta: "9876543",
+    conta_dv: "x",
+    tipo_conta: "corrente",
+  });
+  assert.equal(conta.banco_nome, "Banco Inter S.A.");
+  assert.equal(conta.conta_dv, "X");
+  assert.equal(conta.pix_chave, null);
+  assert.deepEqual(pagamentoDoTitularDaFoto(fotoDoPagamentoDoTitular(conta)), conta);
+});
+
+test("o pagamento do titular recusa o que o banco não aceita", () => {
+  const semDigito = pagamentoDoTitularSchema.safeParse({
+    meio: "conta",
+    banco_codigo: "077",
+    agencia: "0001",
+    conta: "9876543",
+    tipo_conta: "corrente",
+  });
+  assert.equal(semDigito.success, false);
+  assert.match(semDigito.error?.issues[0]?.message ?? "", /dígito da conta/);
+  const semTipo = pagamentoDoTitularSchema.safeParse({ meio: "pix", pix_chave: "71999990000" });
+  assert.equal(semTipo.success, false);
+  const cpfRuim = pagamentoDoTitularSchema.safeParse({ meio: "pix", pix_tipo: "cpf", pix_chave: "11111111112" });
+  assert.equal(cpfRuim.success, false);
 });

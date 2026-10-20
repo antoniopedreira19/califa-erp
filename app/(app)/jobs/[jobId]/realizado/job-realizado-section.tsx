@@ -287,6 +287,9 @@ interface Props {
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadoresDaNf: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
+  /** Decisão 189: as verbas de que o usuário presta contas — o botão do
+   *  cartão da verba no painel do item. Telas de leitura não mandam. */
+  ppsQuePossoPrestarContas?: string[];
   /** Decisão 156: o CNPJ que a PP nova já traz escolhido (regional do job →
    *  empresa gerencial → principal). Repassado à tabela. */
   cnpjPadraoDaPP: string | null;
@@ -561,6 +564,7 @@ function PlanilhaDoJob({
   aEmitirPorItemId,
   tomadoresDaNf,
   tomadorPorEmpresa,
+  ppsQuePossoPrestarContas = [],
   cnpjPadraoDaPP,
   fornecedores,
   empresas,
@@ -1329,6 +1333,7 @@ function PlanilhaDoJob({
           statusDoJob={job.status}
           tomadoresDaNf={tomadoresDaNf}
           tomadorPorEmpresa={tomadorPorEmpresa}
+          ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
           cnpjPadraoDaPP={cnpjPadraoDaPP}
           fornecedores={fornecedores}
           empresas={empresas}

@@ -73,6 +73,10 @@ import {
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 import { PrestarContasDrawer } from "./prestar-contas-drawer";
+import {
+  producaoEditaPrestacao,
+  rotuloDoBotaoDaPrestacao,
+} from "@/lib/calculos/prestacao-da-verba";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 
@@ -195,15 +199,19 @@ const CHIPS: Array<{ key: Filtro; label: string }> = [
 const ICONE = 29;
 const VAO = 6;
 const LARGURA_TRILHA_ICONES = ICONE * 3 + VAO * 2;
-// "Corrigir prestação" é o botão mais largo da trilha (decisão 081).
-const LARGURA_TRILHA_PRESTACAO = ICONE * 2 + VAO * 2 + 128;
+// "Continuar prestação" é o botão mais largo da trilha (decisão 189): 149 px
+// medidos. Ele divide a linha só com o formulário — com o cancelar junto
+// (verba ainda em avaliação), vira ícone.
+const LARGURA_TRILHA_PRESTACAO = ICONE + VAO + 150;
 /** O quanto a trilha pode avançar sobre o respiro lateral da página. */
 const AVANCO_NA_MARGEM = 30;
 
 /** O selo da coluna Status pode ir a duas linhas (16/10/2026). O canto de
  *  11 px é a pílula de sempre numa linha (21 px de altura) e um retângulo
- *  arredondado em duas — `rounded-full` viraria uma cápsula. */
-const SELO_QUE_QUEBRA = "whitespace-normal rounded-[11px] text-center";
+ *  arredondado em duas — `rounded-full` viraria uma cápsula. Alinhado à
+ *  esquerda desde 19/10/2026 (comentário do Tiago no protótipo da
+ *  prestação, decisão 189): todo texto da coluna começa no mesmo ponto. */
+const SELO_QUE_QUEBRA = "whitespace-normal rounded-[11px] text-left";
 
 /** "Pronta para envio" (08/10/2026): o produtor conferiu os documentos no
  *  painel do item e deixou a PP para o GP enviar. */
@@ -775,16 +783,22 @@ export function JobPPsSection({
                 transbordava por cima do começo dele. As larguras saíram
                 das três colunas de texto, que quebram em duas linhas. */}
             <table className="w-full min-w-[980px] table-fixed border-collapse text-[13px]">
+              {/* Desde 19/10/2026 (decisão 189), as colunas de conteúdo curto
+                  têm largura FIXA, medida no conteúdo a 100%: o selo mais
+                  largo em duas linhas (104 px), o valor de sete dígitos
+                  (116 px), o título "Dt. Pagamento" com a seta (106 px),
+                  mais o recuo. Origem, Serviço e Fornecedor dividem o
+                  resto. Com porcentagens, a coluna Status sobrava vazia. */}
               <colgroup>
-                <col className="w-[7%]" />
-                <col className="w-[18%]" />
-                <col className="w-[18%]" />
-                <col className="w-[13.5%]" />
-                <col className="w-[8.5%]" />
-                <col className="w-[8.5%]" />
-                <col className="w-[10.5%]" />
-                <col className="w-[12%]" />
-                <col className="w-[4%]" />
+                <col className="w-[92px]" />
+                <col />
+                <col />
+                <col />
+                <col className="w-[108px]" />
+                <col className="w-[134px]" />
+                <col className="w-[144px]" />
+                <col className="w-[136px]" />
+                <col className="w-[46px]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -978,7 +992,7 @@ export function JobPPsSection({
                           medem até 170 px, e a coluna tem de 106 a 118 úteis a
                           1440 px. Numa linha só ele segue igual à pílula. */}
                       {situacao ? (
-                        <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} />
+                        <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} duasLinhas />
                       ) : (
                         <div className="flex flex-col items-start gap-1">
                           <PPStatusChip status={pp.status} className={SELO_QUE_QUEBRA} />
@@ -1048,10 +1062,10 @@ export function JobPPsSection({
             // saído ou ido para baixo. Verba paga nunca é cancelável, então
             // prestar e cancelar não disputam a mesma coluna.
             if (!pos || linhasVisiveis.findIndex((l) => l.pp.id === pp.id) !== i) return null;
-            const situacaoDaLinha = situacaoDaVerba(pp);
-            const prestar =
-              podePrestarContas.includes(pp.id) &&
-              verbaAguardaProducao(situacaoDaLinha);
+            // Decisão 189: a prestação abre desde o envio da PP ao
+            // financeiro (os documentos ficam salvos), não só com a verba
+            // paga; e volta a abrir quando o financeiro reprova.
+            const prestar = podePrestarContas.includes(pp.id) && producaoEditaPrestacao(pp);
             const cancelar =
               editable &&
               podeCancelarPP(pp.status) &&
@@ -1140,16 +1154,36 @@ export function JobPPsSection({
                 <TooltipContent>Ver formulário · {pp.codigo}</TooltipContent>
               </Tooltip>
             );
-            const prestarEl = prestar && (
-              <button
-                type="button"
-                onClick={() => setPpPrestando(pp)}
-                className="inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-lg bg-california-red px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-california-red-hover"
-              >
-                <Receipt className="h-3.5 w-3.5" />
-                {situacaoDaLinha === "prestacao_reprovada" ? "Corrigir prestação" : "Prestar contas"}
-              </button>
-            );
+            // Decisão 189: a verba ainda em avaliação também presta contas,
+            // e ainda se cancela. Com o cancelar na linha, o botão vira ícone
+            // (a trilha tem até três, decisão 160); paga, segue com texto.
+            const prestarEl =
+              prestar &&
+              (cancelar ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setPpPrestando(pp)}
+                      aria-label={`${rotuloDoBotaoDaPrestacao(pp)} · ${pp.codigo}`}
+                      className="inline-flex flex-none items-center justify-center rounded-[9px] bg-california-red text-white transition-colors hover:bg-california-red-hover"
+                      style={{ width: ICONE, height: ICONE }}
+                    >
+                      <Receipt className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{rotuloDoBotaoDaPrestacao(pp)} · {pp.codigo}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPpPrestando(pp)}
+                  className="inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-lg bg-california-red px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-california-red-hover"
+                >
+                  <Receipt className="h-3.5 w-3.5" />
+                  {rotuloDoBotaoDaPrestacao(pp)}
+                </button>
+              ));
             // A rejeitada volta como PP a emitir (decisão 153): é envio ao
             // financeiro, então segue `podeEnviar`, como o reenvio.
             const refazerEl = podeEnviar && pp.status === "rejeitada" && (
@@ -1159,17 +1193,17 @@ export function JobPPsSection({
                     type="button"
                     onClick={() => setPpRefazendo(pp)}
                     disabled={pending}
-                    aria-label={`Reemitir ${pp.codigo}`}
+                    aria-label={`Editar e reemitir ${pp.codigo}`}
                     className="inline-flex flex-none items-center justify-center rounded-[9px] border border-california-red/25 bg-white text-california-red transition-colors hover:bg-california-red/[0.06] disabled:opacity-50"
                     style={{ width: ICONE, height: ICONE }}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Reemitir PP</TooltipContent>
+                <TooltipContent>Editar e Reemitir PP</TooltipContent>
               </Tooltip>
             );
-            const cancelarEl = cancelar && !prestar && (
+            const cancelarEl = cancelar && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   {/* O mesmo símbolo do "Cancelar PP" do painel do item: lá
@@ -1440,16 +1474,19 @@ export function JobPPsSection({
         open={ppPrestando !== null}
         onOpenChange={(o) => !o && setPpPrestando(null)}
         pp={ppPrestando}
+        tomadores={tomadoresDaNf}
+        podeEditar={ppPrestando !== null && podePrestarContas.includes(ppPrestando.id)}
         onSuccess={setToast}
       />
 
       <ConfirmDialog
         open={ppRefazendo !== null}
         onOpenChange={(o) => !o && setPpRefazendo(null)}
-        title={`Reemitir a ${ppRefazendo?.codigo ?? "PP"}?`}
+        title={`Editar e reemitir a ${ppRefazendo?.codigo ?? "PP"}?`}
         description={<TextoDoReemitir codigo={ppRefazendo?.codigo ?? "PP"} />}
-        confirmLabel="Reemitir PP"
+        confirmLabel="Editar e Reemitir PP"
         cancelLabel="Voltar"
+        variant="primary"
         pending={pending}
         onConfirm={() => {
           const alvo = ppRefazendo;

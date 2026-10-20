@@ -1,9 +1,11 @@
 /**
  * Quem pode ser titular da verba — de produção, alimentação ou transporte
- * (decisões 164 e 171): os colaboradores ativos do RH e os freelas ativos da lista
- * provisória, sem repetir quem está nos dois.
+ * (decisões 164 e 171): os colaboradores ativos do RH e os freelas do cadastro
+ * do RH (`freelancers`, desde 19/10/2026; antes a lista provisória `freelas`)
+ * que não estão "Encerrado" no módulo de Freelancers, sem repetir quem está
+ * nos dois.
  *
- * A ficha do RH só abre para administrador e RH, e a tabela de freelas
+ * A ficha do RH só abre para administrador e RH, e o cadastro de freelas
  * guarda o CPF; por isso a lista vem da função `pessoas_para_verba`, que
  * devolve só nome, função e o segundo dado da linha (contratação ou
  * cidade), e só para quem gera PP. O formulário carrega a lista quando a
@@ -22,6 +24,10 @@ export interface PessoaParaVerba {
   detalhe: string | null;
   /** O nome social do freela: entra na busca, não aparece na lista. */
   busca: string | null;
+  /** Decisão 193: paga pelo cadastro — a ficha do RH tem conta ou PIX, ou o
+   *  cadastro de freelas tem um PIX completo. Só o sim ou não, nunca o dado.
+   *  Falso = o formulário pede o PIX ou a conta. */
+  pagaPeloCadastro: boolean;
 }
 
 const CONTRATACOES: ReadonlySet<string> = new Set(["pj", "mei", "clt_recibo", "clt", "estagio", "socio"]);
@@ -42,6 +48,7 @@ export async function carregarPessoasParaVerba(
     funcao: string | null;
     detalhe: string | null;
     busca: string | null;
+    paga_pelo_cadastro: boolean | null;
   }>;
   return linhas
     .map((l) => ({
@@ -54,6 +61,7 @@ export async function carregarPessoasParaVerba(
           ? tipoContratacaoLabel(l.detalhe as TipoContratacao)
           : l.detalhe?.trim() || null,
       busca: l.busca?.trim() || null,
+      pagaPeloCadastro: l.paga_pelo_cadastro === true,
     }))
     .sort(
       (a, b) =>

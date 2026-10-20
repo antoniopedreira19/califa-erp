@@ -181,7 +181,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     }
     if (imp.verbasEmAberto.length > 0) {
       comoResolver.push(
-        "A produção presta contas da verba na aba de PPs, e o financeiro aprova a prestação.",
+        "A produção presta contas da verba pelo PPs da planilha ou pela aba de PPs, e o financeiro aprova a prestação.",
       );
     }
     if (imp.itensSemMarcacao.length > 0) {

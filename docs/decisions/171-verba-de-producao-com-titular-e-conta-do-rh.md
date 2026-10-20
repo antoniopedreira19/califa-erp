@@ -1,7 +1,7 @@
 # 171 — A verba de produção igual às outras, e a conta do RH na PP do colaborador
 
 **Data:** 2026-10-14
-**Status:** aceita e implementada (14/10/2026).
+**Status:** aceita e implementada (14/10/2026). Revista em 19/10/2026: o titular freela é um registro de `freelancers` (ver o fim).
 **Quem decidiu:** Tiago, em 13/10/2026 (noite), a partir do retorno de uma produtora sobre a PP-00160.
 **Revê:** a [164](164-verbas-de-alimentacao-e-transporte.md) — a regra 4 ("sem pagamento para a pessoa") e a verba de produção, que ficava de fora do titular.
 **Migration:** `20261014100001_verba_de_producao_com_titular.sql`.
@@ -119,3 +119,22 @@ cancelada depois.
 
 - Remessa para a verba do colaborador (destinatário do RH, como a folha).
 - Freela sem conta: continua caso a caso, até o RH ter os freelas.
+
+## Revisão de 19/10/2026 — o freela vem de `freelancers`
+
+A lista "Titular da verba" passou a ler os freelas de `freelancers` (o
+cadastro do RH, 221 pessoas migradas) no lugar da tabela provisória
+`freelas`. A migration `20261019900003_titular_freela_da_verba_vem_de_freelancers.sql`
+levou junto as FKs `verba_freela_id` de `pedidos_compra` e
+`pedidos_compra_a_emitir`, que ainda apontavam para `freelas` e recusavam
+qualquer freela escolhido na lista nova. As referências antigas trocaram
+pelo CPF (27 de 29); as 2 do freela de teste sem CPF ficaram com o id antigo,
+e por isso as FKs são `not valid`.
+
+Na mesma data, a lista voltou a deixar de fora quem não está trabalhando:
+entra o freela que não está "Encerrado" no módulo de Freelancers (64 de 221 em
+19/10), como era com a lista provisória (`20261019900004_titular_da_verba_sem_freela_encerrado.sql`).
+
+A conta do freela ainda não vai para a PP: a foto do pagamento continua só
+para o colaborador do RH. Detalhes nas notas (9) e (11) de 19/10/2026 do
+`HANDOFF_JOBS.md`.

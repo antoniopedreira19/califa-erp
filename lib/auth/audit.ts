@@ -340,6 +340,10 @@ export type AuditAction =
   | "verba_producao.prestacao_enviada"
   | "verba_producao.prestacao_aprovada"
   | "verba_producao.prestacao_reprovada"
+  // Decisão 189: documento a documento, e a correção do financeiro.
+  | "verba_producao.prestacao_documento_anexado"
+  | "verba_producao.prestacao_documento_removido"
+  | "verba_producao.prestacao_documento_corrigido"
   | "pp_verba_devolucao.baixada"
   | "pp_verba_devolucao.baixa_estornada"
   | "empresa_contabil.criada"
@@ -427,6 +431,9 @@ export type AuditAction =
   // chamada, hit ou miss do cache. Metadata guarda modelo, tokens,
   // custo estimado em USD e flag de confiança baixa.
   | "pp.anexo.nf_lida_por_ia"
+  // Leitura do anexo logo que ele sobe (decisão 192): o tipo,
+  // o número e os dados do documento. Mesma metadata, mais `tipo_lido`.
+  | "pp.anexo.lido_por_ia"
   // Módulo Freelancers — catálogo de cargos (Task 013).
   | "freelancer_cargo.criado"
   | "freelancer_cargo.renomeado"

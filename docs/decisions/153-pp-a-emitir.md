@@ -8,8 +8,8 @@ cancelar e refazer. ⚠️ **Revista pela [173](173-pp-gerada-volta-a-se-editar.
 (13/10/2026): a PP gerada voltou a se editar, no lugar** — mesmo código, PDF
 refeito, revisão antes de gravar, e a marca "Pronta para envio" cai. O resto
 desta decisão segue valendo. ⚠️ **Revisão de 19/10/2026: "Cancelar e
-refazer" virou "Reemitir PP"**, e a aba de PPs abre o formulário e a
-revisão ali mesmo (ver o fim).
+refazer" virou "Reemitir PP"** (no mesmo dia, "Editar e Reemitir PP"), e a
+aba de PPs abre o formulário e a revisão ali mesmo (ver o fim).
 **Quem decidiu:** Tiago, de 06 a 07/10/2026, a partir do protótipo
 interativo "Etapa antes da PP" (https://claude.ai/artifact/BkLusveQDiropTy9UBccYe,
 v1 a v17, rodadas nos comentários do artifact). "Pronto o protótipo /
@@ -46,7 +46,7 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
 | PP gerada | **Não tem mais "Editar".** Ver PDF e Cancelar continuam. |
 | Envio | No painel do item, em pop-up. **Todo campo é obrigatório**: o tipo de cada anexo, os quatro dados de cada NF e o número dos outros documentos. A PP acima do planejado pede a confirmação ali mesmo. |
 | Pré-abertura (`aguardando_abertura` e `rejeitado_financeiro`) | **Só PP a emitir.** "Gerar PP" fica apagado com o motivo: "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir. Gerar e enviar a PP voltam com a abertura." |
-| PP rejeitada | Mostra o motivo e **"Reemitir PP"** (até 19/10/2026, "Cancelar e refazer"; no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Reemite a PP-…", e o formulário abre com o motivo no topo (desde 19/10, também na aba de PPs). A pergunta "Esta é a última PP deste item?" volta respondida como da primeira vez (até 19/10/2026 voltava em branco). A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
+| PP rejeitada | Mostra o motivo e **"Editar e Reemitir PP"** (até 19/10/2026, "Cancelar e refazer"; no painel do item e na aba Pedidos de Produção). A PP é cancelada e fica no histórico; volta como PP a emitir com os mesmos dados e anexos, marcada "Reemite a PP-…", e o formulário abre com o motivo no topo (desde 19/10, também na aba de PPs). A pergunta "Esta é a última PP deste item?" volta respondida como da primeira vez (até 19/10/2026 voltava em branco). A PP nova diz "Substitui a PP-…, rejeitada e cancelada." |
 
 ## O painel do item ("Destrinchar realizado")
 
@@ -62,6 +62,11 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
   (formulário, envio e conferência).
 - O tipo do arquivo **nasce vazio** ("Escolha o tipo"); no formulário os
   anexos são opcionais, no envio são obrigatórios.
+  - **Revisto pela [192](192-ia-le-o-anexo-da-pp-ao-anexar.md)
+    (19/10/2026):** na PP comum, a IA lê o PDF logo que ele sobe e
+    pré-preenche o tipo e o número (na NF, também os dados da nota), com o
+    selo "IA" e editável. O tipo continua vazio até a leitura terminar e
+    quando ela não acha o tipo.
 - No anexo do tipo NF entram os dados da nota (decisão 152).
 
 ## Quem faz o quê
@@ -210,8 +215,25 @@ versão" e "Reabrir". "Editar" ficou de fora porque já é o lápis da PP gerada
   mudado; a produção continua podendo trocar. A resposta é a da PP a emitir
   que gerou a rejeitada; na PP gerada antes desta decisão, que não tem PP a
   emitir, vale o item marcado como concluído ("Sim") ou não ("Não").
+- **"Editar e Reemitir PP"** (pedidos do Tiago, no mesmo dia, depois de a
+  produção continuar achando que perdia o formulário; passou por "Reemitir e
+  editar PP"): botão, dica, confirmação, título do pop-up ("Editar e reemitir
+  a PP-…?") e do formulário e o motivo de cancelamento gravado. O botão de
+  confirmar é vermelho, sem o ícone de alerta (variante `primary` do
+  `ConfirmDialog`). O texto do pop-up, o selo ("Reemite a
+  PP-…") e o aviso ficam como estavam.
+- **A verba de produção anterior à decisão 171 não reemitia.** A PP-00127
+  (verba com "responsável" e sem titular) dava "Falha ao refazer: … violates
+  check constraint chk_ppae_verba": a PP a emitir era gravada sem
+  responsável e sem titular, combinação que a checagem não aceita. Agora ela
+  guarda o responsável que a PP tinha (a forma que a checagem aceita sem
+  titular), e o formulário abre sem titular e o pede antes de gerar, como já
+  fazia com a PP a emitir antiga. Conferido aplicando a expressão da checagem
+  aos valores da PP-00127: os de antes recusam, os de agora passam.
 - **Sem migration.** O motivo de cancelamento das PPs já reemitidas continua
   com o texto antigo.
+- **A PP-00127 reemitiu** em 19/10/2026 às 15h21, depois da correção: a PP a
+  emitir guardou o responsável e espera o titular.
 - **Conferido** no TES-1014/26: PP-00206 rejeitada e reemitida pela aba de PPs
   (PP-00255), e a PP-00255 rejeitada e reemitida pelo painel do item
   (PP-00257), e a PP-00257 reemitida com a resposta "Não, ainda faltam PPs"
