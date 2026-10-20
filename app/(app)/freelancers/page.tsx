@@ -77,6 +77,23 @@ export default async function FreelancersDashboardPage() {
     }
   }
 
+  // Saúde geral: % de ativos saudáveis. Aprovador vê todo o tenant;
+  // GP/produtor vê só os freelas cujo contrato ativo tem ele como responsável.
+  const rowsSaude = isAprovador
+    ? rows
+    : rows.filter((r) => r.responsavel_id === session.profile.id);
+  let ativosSaude = 0;
+  let saudaveisSaude = 0;
+  for (const r of rowsSaude) {
+    if (r.status_real !== true || r.status_calculado === "encerrado") continue;
+    ativosSaude += 1;
+    if (r.status_calculado === "regular" || r.status_calculado === "vencendo") {
+      saudaveisSaude += 1;
+    }
+  }
+  const saudePercentual =
+    ativosSaude > 0 ? Math.round((saudaveisSaude / ativosSaude) * 100) : 100;
+
   // Totais das 5 ações previstas
   const totaisAcoes = {
     contratar: 0,
@@ -234,6 +251,12 @@ export default async function FreelancersDashboardPage() {
         totalFreelancers={rows.length}
         totalIrregular={totaisAnalise.irregular}
         mostrarNovaSolicitacao={!isAprovador}
+        saude={{
+          percentual: saudePercentual,
+          saudaveis: saudaveisSaude,
+          ativos: ativosSaude,
+          escopo: isAprovador ? "tenant" : "meus",
+        }}
         pills={
           <>
             <BuscarFreelancerPill

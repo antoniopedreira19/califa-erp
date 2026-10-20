@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { Sparkles, Plus } from "lucide-react";
+import { Sparkles, Plus, TrendingUp } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface Saude {
+  percentual: number;
+  saudaveis: number;
+  ativos: number;
+  /** 'tenant' pra aprovador (todos os freelas); 'meus' pra GP/produtor. */
+  escopo: "tenant" | "meus";
+}
 
 interface Props {
   nomeUsuario: string;
@@ -9,6 +18,8 @@ interface Props {
   pills?: React.ReactNode;
   /** "Nova solicitação" só faz sentido pra GP/produtor; aprovadores aprovam. */
   mostrarNovaSolicitacao?: boolean;
+  /** Indicador no canto direito. Omite quando não há ativos (ativos === 0). */
+  saude?: Saude;
 }
 
 const DIAS_SEMANA = [
@@ -42,6 +53,7 @@ export function HeroDashboard({
   totalIrregular,
   pills,
   mostrarNovaSolicitacao = false,
+  saude,
 }: Props) {
   const agora = new Date();
   const dataFormatada = `${DIAS_SEMANA[agora.getDay()]}, ${agora.getDate()} de ${MESES[agora.getMonth()]}`;
@@ -79,6 +91,40 @@ export function HeroDashboard({
             </div>
           )}
         </div>
+        {saude && saude.ativos > 0 && (
+          <div className="text-right shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50">
+              {saude.escopo === "tenant" ? "Saúde geral" : "Minha saúde"}
+            </p>
+            <div className="flex items-baseline justify-end gap-2 mt-1">
+              <span className="text-4xl font-bold tracking-tight tabular-nums">
+                {saude.percentual}%
+              </span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5",
+                  saude.percentual >= 80
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : saude.percentual >= 50
+                      ? "bg-amber-500/20 text-amber-300"
+                      : "bg-california-red/20 text-california-red",
+                )}
+              >
+                <TrendingUp className="h-3 w-3" />
+                {saude.percentual >= 80
+                  ? "Bom"
+                  : saude.percentual >= 50
+                    ? "Atenção"
+                    : "Crítico"}
+              </span>
+            </div>
+            <p className="text-[10px] text-white/50 mt-0.5">
+              {saude.saudaveis} de {saude.ativos}{" "}
+              {saude.escopo === "tenant" ? "freelancers" : "freelancers meus"}{" "}
+              ativos com contrato válido
+            </p>
+          </div>
+        )}
         {mostrarNovaSolicitacao && (
           <Link
             href="/freelancers/solicitacoes"
