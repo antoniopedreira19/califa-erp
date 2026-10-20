@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, FolderKanban } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -7,9 +7,10 @@ import { pode } from "@/lib/permissoes";
 import type { FreelancerComStatus, FreelancerCargo } from "@/lib/types";
 import { ListaClient } from "./_components/lista-client";
 import { BuscaInput } from "./_components/busca-input";
+import { FiltrosDropdowns } from "./_components/filtros-dropdowns";
+import { ChipsFiltros } from "./_components/chips-filtros";
 import { GerenciarCargosDialog } from "./_components/gerenciar-cargos-dialog";
 import { CardsAnalise, type CategoriaCard } from "./_components/cards-analise";
-import { ChipsStatus } from "./_components/chips-status";
 import { ExportarButton } from "./_components/exportar-button";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,9 @@ export default async function FreelancersListaPage({
     card?: string;
     inicio_apos?: string;
     responsavel?: string;
+    job?: string;
+    cargo?: string;
+    trabalho?: string;
   };
 }) {
   const session = await requireSession();
@@ -117,10 +121,36 @@ export default async function FreelancersListaPage({
     query = query.gte("data_inicio", inicioApos);
   }
 
-  // Filtro por responsável do contrato
-  const responsavelId = searchParams.responsavel?.trim();
-  if (responsavelId && /^[0-9a-f-]{36}$/i.test(responsavelId)) {
-    query = query.eq("responsavel_id", responsavelId);
+  // Filtro por responsáveis do contrato (multi)
+  const responsavelFiltro = (searchParams.responsavel ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^[0-9a-f-]{36}$/i.test(s));
+  if (responsavelFiltro.length > 0) {
+    query = query.in("responsavel_id", responsavelFiltro);
+  }
+
+  // Filtro por jobs (multi)
+  const jobFiltro = (searchParams.job ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^[0-9a-f-]{36}$/i.test(s));
+  if (jobFiltro.length > 0) {
+    query = query.in("job_id", jobFiltro);
+  }
+
+  // Filtro por cargo do contrato (single)
+  const cargoFiltro = searchParams.cargo?.trim();
+  if (cargoFiltro) {
+    query = query.eq("cargo_contrato", cargoFiltro);
+  }
+
+  // Filtro por status do trabalho (status_real)
+  const trabalhoFiltro = searchParams.trabalho?.trim();
+  if (trabalhoFiltro === "trabalhando") {
+    query = query.eq("status_real", true);
+  } else if (trabalhoFiltro === "inativo") {
+    query = query.eq("status_real", false);
   }
 
   // Filtro por card de análise (combina com os outros via AND)
@@ -214,14 +244,66 @@ export default async function FreelancersListaPage({
     session.activeRole === "rh" ||
     session.activeRole === "financeiro";
 
+  // Listas únicas pros dropdowns de filtro. Deriva do set completo do tenant,
+  // não dos filtros aplicados — assim o picker mostra o catálogo real.
+  // Puxamos tudo que a view entrega sem recorte.
+  const { data: todosRows } = await supabase
+    .from("freelancers_com_status")
+    .select(
+      "responsavel_id, responsavel_nome, job_id, job_codigo, job_nome, cargo_contrato",
+    )
+    .eq("tenant_id", session.activeTenant.id);
+
+  const responsaveisMap = new Map<string, string>();
+  const jobsMap = new Map<string, string>();
+  const cargosSet = new Set<string>();
+  for (const r of (todosRows ?? []) as any[]) {
+    if (r.responsavel_id && r.responsavel_nome) {
+      responsaveisMap.set(r.responsavel_id, r.responsavel_nome);
+    }
+    if (r.job_id && r.job_nome) {
+      jobsMap.set(
+        r.job_id,
+        r.job_codigo ? `${r.job_codigo} · ${r.job_nome}` : r.job_nome,
+      );
+    }
+    if (r.cargo_contrato && r.cargo_contrato.trim() !== "") {
+      cargosSet.add(r.cargo_contrato);
+    }
+  }
+  const responsaveisDisponiveis = Array.from(responsaveisMap.entries())
+    .map(([id, nome]) => ({ id, nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const jobsDisponiveis = Array.from(jobsMap.entries())
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  const cargosDisponiveis = Array.from(cargosSet).sort((a, b) =>
+    a.localeCompare(b, "pt-BR"),
+  );
+
   return (
     <div className="space-y-6">
       <CardsAnalise totais={totais} />
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex items-center gap-2 flex-wrap">
         <BuscaInput />
-        <div className="flex items-center gap-2 md:shrink-0">
+        <FiltrosDropdowns
+          responsaveisDisponiveis={responsaveisDisponiveis}
+          jobsDisponiveis={jobsDisponiveis}
+          cargosDisponiveis={cargosDisponiveis}
+        />
+        <div className="ml-auto flex items-center gap-2">
           <ExportarButton />
+          {podeGerenciarCargos && (
+            <Link
+              href="/jobs"
+              prefetch={false}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
+            >
+              <FolderKanban className="h-4 w-4" />
+              Jobs
+            </Link>
+          )}
           {podeGerenciarCargos && <GerenciarCargosDialog cargos={cargos} />}
           {podeCriarFreelancer && (
             <Link
@@ -236,9 +318,7 @@ export default async function FreelancersListaPage({
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-        <ChipsStatus />
-      </div>
+      <ChipsFiltros />
 
       <ListaClient
         freelancers={freelancers}

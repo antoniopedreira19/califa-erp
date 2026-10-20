@@ -231,26 +231,20 @@ export default async function SolicitacoesPage({
     .map(([id, nome]) => ({ id, nome }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  // Listas únicas pros filtros (derivadas das solicitações carregadas).
-  const cargosDisponiveis = Array.from(
-    new Set(
-      solicitacoes
-        .map((s) => s.cargo)
-        .filter((c): c is string => !!c && c.trim() !== ""),
-    ),
-  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  // Listas pros filtros vêm do catálogo completo do tenant (jobs ativos e
+  // freelancer_cargos ativos), não só das solicitações carregadas — assim o
+  // dropdown aparece mesmo quando não há solicitação nenhuma, e o usuário vê
+  // o universo possível de filtro.
+  const cargosDisponiveis = cargos
+    .map((c) => c.nome)
+    .filter((c): c is string => !!c && c.trim() !== "")
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
 
-  const jobsMap = new Map<string, string>();
-  for (const s of solicitacoes) {
-    if (s.job_id && s.job_nome) {
-      jobsMap.set(
-        s.job_id,
-        s.job_codigo ? `${s.job_codigo} · ${s.job_nome}` : s.job_nome,
-      );
-    }
-  }
-  const jobsDisponiveis = Array.from(jobsMap.entries())
-    .map(([id, label]) => ({ id, label }))
+  const jobsDisponiveis = jobs
+    .map((j) => ({
+      id: j.id,
+      label: j.codigo ? `${j.codigo} · ${j.nome}` : j.nome,
+    }))
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
   const isAprovador = APROVADORES.has(session.activeRole);

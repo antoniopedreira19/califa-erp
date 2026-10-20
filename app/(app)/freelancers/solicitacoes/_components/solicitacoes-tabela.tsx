@@ -26,6 +26,7 @@ import {
 } from "./chip-status-solicitacao";
 import { PopoverSolicitacao } from "./popover-solicitacao";
 import { aprovarSolicitacoesEmLote } from "../actions";
+import { useExclusiveDropdown } from "../../_components/use-exclusive-dropdown";
 
 type TipoSolicitacao = "contratacao" | "renovacao";
 
@@ -819,7 +820,6 @@ function formatarDataCurta(iso: string): string {
   });
 }
 
-/** Dropdown multi-select enxuto (sem lib externa, só native details/summary). */
 function MultiSelectDropdown({
   label,
   icon,
@@ -833,9 +833,14 @@ function MultiSelectDropdown({
   selected: Set<string>;
   onToggle: (v: string) => void;
 }) {
+  const { open, toggleOpen, containerRef } = useExclusiveDropdown();
   return (
-    <details className="group relative">
-      <summary className="list-none h-9 inline-flex items-center gap-2 rounded-lg px-3 text-sm font-medium border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={toggleOpen}
+        className="h-9 inline-flex items-center gap-2 rounded-lg px-3 text-sm font-medium border bg-white text-foreground border-border hover:border-california-red/40 transition-all"
+      >
         {icon}
         <span>{label}</span>
         {selected.size > 0 && (
@@ -843,32 +848,44 @@ function MultiSelectDropdown({
             {selected.size}
           </span>
         )}
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-open:rotate-180 transition-transform" />
-      </summary>
-      <div className="absolute left-0 top-full mt-1 z-20 min-w-[220px] max-w-[320px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
-        {options.map((o) => {
-          const checked = selected.has(o.value);
-          return (
-            <label
-              key={o.value}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/40 cursor-pointer text-xs"
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => onToggle(o.value)}
-                className="h-3.5 w-3.5 rounded border-border accent-california-red"
-              />
-              <span className="truncate">{o.label}</span>
-            </label>
-          );
-        })}
-      </div>
-    </details>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-20 min-w-[220px] max-w-[320px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
+          {options.length === 0 ? (
+            <p className="px-2 py-3 text-xs text-muted-foreground text-center">
+              Nenhuma opção
+            </p>
+          ) : (
+            options.map((o) => {
+              const checked = selected.has(o.value);
+              return (
+                <label
+                  key={o.value}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/40 cursor-pointer text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggle(o.value)}
+                    className="h-3.5 w-3.5 rounded border-border accent-california-red"
+                  />
+                  <span className="truncate">{o.label}</span>
+                </label>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-/** Dropdown single-select enxuto. "" = "Todos" (label do botão). */
 function SingleSelectDropdown({
   label,
   icon,
@@ -882,39 +899,55 @@ function SingleSelectDropdown({
   selected: string;
   onSelect: (v: string) => void;
 }) {
+  const { open, toggleOpen, close, containerRef } = useExclusiveDropdown();
   const atual = options.find((o) => o.value === selected);
+  function pick(v: string) {
+    onSelect(v);
+    close();
+  }
   return (
-    <details className="group relative">
-      <summary className="list-none h-9 inline-flex items-center gap-2 rounded-lg px-3 text-sm font-medium border bg-white text-foreground border-border hover:border-california-red/40 cursor-pointer transition-all">
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={toggleOpen}
+        className="h-9 inline-flex items-center gap-2 rounded-lg px-3 text-sm font-medium border bg-white text-foreground border-border hover:border-california-red/40 transition-all"
+      >
         {icon}
         <span>{atual ? atual.label : label}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-open:rotate-180 transition-transform" />
-      </summary>
-      <div className="absolute left-0 top-full mt-1 z-20 min-w-[220px] max-w-[320px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
-        <button
-          type="button"
-          onClick={() => onSelect("")}
+        <ChevronDown
           className={cn(
-            "block w-full text-left px-2 py-1.5 rounded-md hover:bg-muted/40 text-xs",
-            !selected && "font-semibold text-california-red",
+            "h-3.5 w-3.5 text-muted-foreground transition-transform",
+            open && "rotate-180",
           )}
-        >
-          {label}
-        </button>
-        {options.map((o) => (
+        />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-20 min-w-[220px] max-w-[320px] max-h-[320px] overflow-y-auto rounded-xl border border-border bg-white shadow-elevated p-1">
           <button
-            key={o.value}
             type="button"
-            onClick={() => onSelect(o.value)}
+            onClick={() => pick("")}
             className={cn(
               "block w-full text-left px-2 py-1.5 rounded-md hover:bg-muted/40 text-xs",
-              selected === o.value && "font-semibold text-california-red",
+              !selected && "font-semibold text-california-red",
             )}
           >
-            {o.label}
+            {label}
           </button>
-        ))}
-      </div>
-    </details>
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => pick(o.value)}
+              className={cn(
+                "block w-full text-left px-2 py-1.5 rounded-md hover:bg-muted/40 text-xs",
+                selected === o.value && "font-semibold text-california-red",
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

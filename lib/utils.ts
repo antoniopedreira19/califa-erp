@@ -50,6 +50,40 @@ const NOME_IGNORAR = new Set([
   "FILHO","FILHA","JUNIOR","JR","NETO","NETA","SOBRINHO","SOBRINHA",
 ]);
 
+/**
+ * Dias até uma data ISO ("YYYY-MM-DD"). Negativo quando já passou,
+ * zero quando é hoje. Null quando a data é null/vazia.
+ */
+export function diasAteVencimento(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const alvo = new Date(iso + "T00:00:00").getTime();
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return Math.round((alvo - hoje.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Tempo decorrido desde uma data ISO, em pt-BR curto:
+ * "hoje", "1 dia", "19 dias", "2 meses", "1 ano", "2 anos e 3 meses"
+ */
+export function tempoDesde(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const inicio = new Date(iso + "T00:00:00").getTime();
+  const diffMs = Date.now() - inicio;
+  if (diffMs < 0) return null;
+  const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (dias === 0) return "hoje";
+  if (dias === 1) return "1 dia";
+  if (dias < 30) return `${dias} dias`;
+  const meses = Math.floor(dias / 30);
+  if (meses < 12) return meses === 1 ? "1 mês" : `${meses} meses`;
+  const anos = Math.floor(meses / 12);
+  const mesesRest = meses % 12;
+  const anosLabel = anos === 1 ? "1 ano" : `${anos} anos`;
+  if (mesesRest === 0) return anosLabel;
+  return `${anosLabel} e ${mesesRest} ${mesesRest === 1 ? "mês" : "meses"}`;
+}
+
 export function nomeCurto(nome: string | null | undefined): string {
   if (!nome) return "—";
   const partes = nome.trim().split(/\s+/).filter((p) => p.length > 0);

@@ -2,15 +2,29 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Users } from "lucide-react";
-import { cn, formatCpf } from "@/lib/utils";
+import {
+  ArrowRight,
+  Users,
+  Clock,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import {
+  cn,
+  formatCpf,
+  formatCurrency,
+  nomeCurto,
+  diasAteVencimento,
+  tempoDesde,
+  initials,
+} from "@/lib/utils";
 import type {
   AcaoPrevistaFreelancer,
   FreelancerComStatus,
   StatusCalculado,
+  TipoFreelancerContrato,
 } from "@/lib/types";
-import { AcaoPrevistaBadge, ACOES_PREVISTAS } from "./acao-prevista-badge";
+import { AcaoPrevistaBadge } from "./acao-prevista-badge";
 import { StatusBadge } from "../../_components/status-badge";
 import { ToggleAcaoPrevista } from "./toggle-acao-prevista";
 
@@ -19,108 +33,78 @@ interface Props {
   podeEditar: boolean;
 }
 
+const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
+  mensal: "Mensal",
+  periodo: "Período",
+  diarias: "Diárias",
+};
+
 export function ListaClient({ freelancers, podeEditar }: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const [valoresVisiveis, setValoresVisiveis] = React.useState(false);
 
-  const acoesAtivas = React.useMemo(() => {
-    const raw = searchParams.get("acao");
-    if (!raw) return new Set<string>();
-    return new Set(raw.split(",").filter(Boolean));
-  }, [searchParams]);
-
-  function toggleAcao(valor: string) {
-    const nova = new Set(acoesAtivas);
-    if (nova.has(valor)) nova.delete(valor);
-    else nova.add(valor);
-
-    const params = new URLSearchParams(searchParams.toString());
-    if (nova.size > 0) {
-      params.set("acao", Array.from(nova).join(","));
-    } else {
-      params.delete("acao");
-    }
-    const qs = params.toString();
-    router.push(`/freelancers/lista${qs ? `?${qs}` : ""}`);
+  if (freelancers.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+          <Users className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium text-foreground">
+          Nenhum freelancer encontrado
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Ajuste a busca ou os filtros.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Chips de filtro */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-2">
-          Ação prevista
-        </span>
-        {ACOES_PREVISTAS.map((a) => {
-          const ativo = acoesAtivas.has(a.value);
-          return (
-            <button
-              key={a.value}
-              type="button"
-              onClick={() => toggleAcao(a.value)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all border",
-                ativo
-                  ? "bg-california-dark text-white border-california-dark"
-                  : "bg-white text-foreground border-border hover:border-california-red/40",
-              )}
-            >
-              {a.label}
-            </button>
-          );
-        })}
+    <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-soft">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/20 border-b border-border">
+            <tr>
+              <Th>Freelancer</Th>
+              <Th>Job</Th>
+              <Th>Cargo</Th>
+              <Th>Resp.</Th>
+              <Th align="center">
+                <span className="inline-flex items-center gap-1.5">
+                  Valor
+                  <button
+                    type="button"
+                    onClick={() => setValoresVisiveis((v) => !v)}
+                    className="inline-flex items-center justify-center h-5 w-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    title={valoresVisiveis ? "Esconder valores" : "Mostrar valores"}
+                  >
+                    {valoresVisiveis ? (
+                      <Eye className="h-3 w-3" />
+                    ) : (
+                      <EyeOff className="h-3 w-3" />
+                    )}
+                  </button>
+                </span>
+              </Th>
+              <Th align="center">Vence</Th>
+              <Th align="center">Contrato</Th>
+              <Th align="center">Status</Th>
+              <Th align="center">Tempo</Th>
+              <Th align="center">Ação</Th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {freelancers.map((f) => (
+              <FreelancerRow
+                key={f.id}
+                f={f}
+                podeEditar={podeEditar}
+                valoresVisiveis={valoresVisiveis}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
-
-      {/* Tabela */}
-      {freelancers.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
-            <Users className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <p className="text-sm font-medium text-foreground">
-            Nenhum freelancer encontrado
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Ajuste a busca ou os chips de filtro.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-soft">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/20 border-b border-border">
-              <tr>
-                <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Nome
-                </th>
-                <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  CPF
-                </th>
-                <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Cargo
-                </th>
-                <th className="px-3 py-2.5 text-center font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Status
-                </th>
-                <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Cidade
-                </th>
-                <th className="px-3 py-2.5 text-center font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Ação prevista
-                </th>
-                <th className="px-3 py-2.5 text-center font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]">
-                  Cadastrado em
-                </th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {freelancers.map((f) => (
-                <FreelancerRow key={f.id} f={f} podeEditar={podeEditar} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
@@ -128,16 +112,16 @@ export function ListaClient({ freelancers, podeEditar }: Props) {
 function FreelancerRow({
   f,
   podeEditar,
+  valoresVisiveis,
 }: {
   f: FreelancerComStatus;
   podeEditar: boolean;
+  valoresVisiveis: boolean;
 }) {
   const href = `/freelancers/${f.id}`;
-  const dataFormatada = new Date(f.created_at).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const dias = diasAteVencimento(f.data_termino);
+  const vencido = dias !== null && dias < 0;
+  const tempo = f.status_real === true ? tempoDesde(f.data_inicio) : null;
 
   return (
     <tr className="border-b border-border last:border-0 hover:bg-california-red/[0.02] transition-colors group">
@@ -145,31 +129,114 @@ function FreelancerRow({
         <Link
           href={href}
           prefetch={false}
-          className="font-semibold text-foreground uppercase tracking-wide group-hover:text-california-red transition-colors"
+          className="block"
         >
-          {f.nome_social}
+          <p className="font-semibold text-foreground uppercase tracking-wide group-hover:text-california-red transition-colors leading-tight max-w-[200px] truncate" title={f.nome_completo || f.nome_social}>
+            {f.nome_social}
+          </p>
+          {f.cpf ? (
+            <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
+              {formatCpf(f.cpf)}
+            </p>
+          ) : (
+            <p className="text-[10px] text-muted-foreground/60 mt-0.5">sem CPF</p>
+          )}
         </Link>
-        {f.nome_completo && f.nome_completo !== f.nome_social && (
-          <div className="text-[10px] text-muted-foreground mt-0.5">
-            {f.nome_completo}
-          </div>
+      </td>
+      <td className="px-3 py-2.5">
+        {f.job_nome ? (
+          <span
+            className="text-[11px] text-foreground font-medium truncate block max-w-[160px]"
+            title={f.job_nome}
+          >
+            {f.job_codigo && (
+              <span className="text-muted-foreground tabular-nums mr-1">
+                {f.job_codigo}
+              </span>
+            )}
+            {f.job_nome}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
         )}
       </td>
-      <td className="px-3 py-2.5 tabular-nums text-foreground">
-        {f.cpf ? formatCpf(f.cpf) : <span className="text-muted-foreground">—</span>}
+      <td className="px-3 py-2.5">
+        <span
+          className="text-[11px] text-muted-foreground uppercase tracking-wide truncate block max-w-[120px]"
+          title={f.cargo_contrato ?? undefined}
+        >
+          {f.cargo_contrato ?? "—"}
+        </span>
       </td>
-      <td className="px-3 py-2.5 text-foreground">
-        {f.cargo_contrato ? (
-          f.cargo_contrato
+      <td className="px-3 py-2.5">
+        {f.responsavel_nome ? (
+          <div className="flex items-center gap-1.5" title={f.responsavel_nome}>
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-california-red/10 text-california-red text-[9px] font-bold shrink-0">
+              {initials(f.responsavel_nome)}
+            </div>
+            <span className="text-[11px] font-medium text-foreground truncate max-w-[100px]">
+              {nomeCurto(f.responsavel_nome)}
+            </span>
+          </div>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
       </td>
       <td className="px-3 py-2.5 text-center">
+        {f.valor !== null && f.valor !== undefined ? (
+          <div className="inline-flex flex-col items-center">
+            <span className="text-[11px] font-semibold tabular-nums text-foreground whitespace-nowrap select-none">
+              {valoresVisiveis
+                ? formatCurrency(Number(f.valor))
+                : "R$ ••••••"}
+            </span>
+            {f.tipo && (
+              <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                {TIPO_LABEL[f.tipo]}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-center">
+        {f.data_termino ? (
+          <span
+            className={cn(
+              "text-[11px] font-semibold tabular-nums whitespace-nowrap",
+              vencido ? "text-california-red" : "text-foreground",
+            )}
+          >
+            {vencido
+              ? "Vencido"
+              : new Date(f.data_termino + "T00:00:00").toLocaleDateString(
+                  "pt-BR",
+                  { day: "2-digit", month: "2-digit", year: "2-digit" },
+                )}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-center">
+        <StatusRealBadge ativo={f.status_real} />
+      </td>
+      <td className="px-3 py-2.5 text-center">
         <StatusBadge status={f.status_calculado as StatusCalculado} />
       </td>
-      <td className="px-3 py-2.5 text-foreground">
-        {f.cidade ?? <span className="text-muted-foreground">—</span>}
+      <td className="px-3 py-2.5 text-center">
+        {tempo ? (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground tabular-nums whitespace-nowrap"
+            title={`Trabalhando há ${tempo}`}
+          >
+            <Clock className="h-3 w-3 text-muted-foreground/70" />
+            {tempo}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/50">—</span>
+        )}
       </td>
       <td
         className="px-3 py-2.5 text-center"
@@ -186,9 +253,6 @@ function FreelancerRow({
           />
         )}
       </td>
-      <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">
-        {dataFormatada}
-      </td>
       <td className="px-2 py-2.5 text-right">
         <Link
           href={href}
@@ -200,5 +264,50 @@ function FreelancerRow({
         </Link>
       </td>
     </tr>
+  );
+}
+
+function Th({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "center" | "right";
+}) {
+  return (
+    <th
+      className={cn(
+        "px-3 py-2.5 font-semibold uppercase tracking-[0.08em] text-muted-foreground whitespace-nowrap text-[10px]",
+        align === "center"
+          ? "text-center"
+          : align === "right"
+            ? "text-right"
+            : "text-left",
+      )}
+    >
+      {children}
+    </th>
+  );
+}
+
+function StatusRealBadge({ ativo }: { ativo: boolean | null }) {
+  if (ativo === null) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+        ativo ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600",
+      )}
+    >
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          ativo ? "bg-emerald-500" : "bg-zinc-400",
+        )}
+      />
+      {ativo ? "Trabalhando" : "Inativo"}
+    </span>
   );
 }
