@@ -36,7 +36,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { AlertCircle, AlertTriangle, ArrowRightLeft, CreditCard, Info } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowRightLeft, CreditCard, Eye, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -281,15 +281,29 @@ export function BarraDeSelecao({
   itens,
   onLimpar,
   onBaixar,
+  totais,
+  saldoDepois,
+  onVerNoExtrato,
 }: {
   itens: TituloParaLote[];
   onLimpar: () => void;
   onBaixar: () => void;
+  /** O que sai e o que entra na conta, quando a tela já sabe (a planilha
+   *  de títulos conta pelo líquido, com a retenção da aprovação). */
+  totais?: { saem: number; entram: number };
+  /** Conciliação › Títulos (decisão 195): como a conta fica se o lote for
+   *  baixado nela. */
+  saldoDepois?: { nomeDaConta: string; valor: number };
+  /** "Ver no Extrato antes": os marcados aparecem no Extrato como
+   *  previstos, sem gravar nada (decisão 195). */
+  onVerNoExtrato?: () => void;
 }) {
   if (itens.length === 0) return null;
   // Sai o que se paga (títulos a pagar e impostos); entra o que se recebe.
-  const saidas = r2(itens.filter((t) => t.tipo !== "receber").reduce((s, t) => s + t.aberto, 0));
-  const entradas = r2(itens.filter((t) => t.tipo === "receber").reduce((s, t) => s + t.aberto, 0));
+  const saidas =
+    totais?.saem ?? r2(itens.filter((t) => t.tipo !== "receber").reduce((s, t) => s + t.aberto, 0));
+  const entradas =
+    totais?.entram ?? r2(itens.filter((t) => t.tipo === "receber").reduce((s, t) => s + t.aberto, 0));
   return (
     <div className="pointer-events-none sticky bottom-4 z-20 flex justify-center">
       <div className="pointer-events-auto flex items-center gap-4 rounded-2xl bg-[#282828] py-2.5 pl-5 pr-2.5 text-sm text-white shadow-elevated">
@@ -308,6 +322,14 @@ export function BarraDeSelecao({
             <strong className="font-mono font-semibold text-emerald-300">{moeda(entradas)}</strong>
           </span>
         )}
+        {saldoDepois && (
+          <span className="text-white/75">
+            {saldoDepois.nomeDaConta} fica com{" "}
+            <strong className={cn("font-mono font-semibold", saldoDepois.valor < 0 ? "text-red-300" : "text-white")}>
+              {moeda(saldoDepois.valor)}
+            </strong>
+          </span>
+        )}
         <button
           type="button"
           onClick={onLimpar}
@@ -315,6 +337,16 @@ export function BarraDeSelecao({
         >
           Limpar seleção
         </button>
+        {onVerNoExtrato && (
+          <button
+            type="button"
+            onClick={onVerNoExtrato}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/10"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            Ver no Extrato antes
+          </button>
+        )}
         <button
           type="button"
           onClick={onBaixar}

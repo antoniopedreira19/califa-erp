@@ -219,15 +219,19 @@ interface Props {
   titulos: TituloElegivelParaRemessa[];
   /** True se o usuário pode gerar remessa (permissão). */
   canGerar: boolean;
+  /** Já abre montado (a conciliação lê os títulos no clique e só então
+   *  monta o diálogo, decisão 195). */
+  abrirAoMontar?: boolean;
 }
 
 export function ExportarRemessaCnabDialog({
   contasSantander,
   titulos,
   canGerar,
+  abrirAoMontar = false,
 }: Props) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(abrirAoMontar);
   const [pending, startTransition] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [rejeitados, setRejeitados] = React.useState<CnabItemRejeitado[]>([]);

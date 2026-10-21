@@ -8,11 +8,8 @@ import {
   SELECT_LANCAMENTO_LINHA,
   montarLinhasDeLancamentos,
 } from "@/lib/data/lancamento-linha";
-import {
-  agruparPorCentro,
-  carregarExtratoDaFatura,
-  type DetalheDaFatura,
-} from "@/lib/data/fatura-cartao-extrato";
+import { carregarExtratoDaFatura } from "@/lib/data/fatura-cartao-extrato";
+import { itensDoExtratoDaFatura } from "@/lib/data/planilha-de-titulos";
 import {
   agruparGuiasDeImposto,
   carregarLancamentosDasGuias,
@@ -30,6 +27,8 @@ import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { AbasDaConta, type AbaDaConta } from "./abas-da-conta";
 import { AbaTitulos } from "./aba-titulos";
 import { carregarTitulosDaConciliacao } from "./titulos-dados";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { fimDoMes, somaDias, type ItemDaFatura } from "@/lib/financeiro/planilha-de-titulos";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +91,10 @@ export default async function ConciliacaoPage({
   // nem são consultados, e na aba Títulos o extrato também não.
   const aba: AbaDaConta = searchParams.aba === "titulos" ? "titulos" : "extrato";
 
-  const [{ data: contas }, dadosTitulos] = await Promise.all([
+  // "Hoje" é o dia de Brasília (o servidor e o banco rodam em UTC).
+  const hojeBr = hojeEmSaoPauloIso();
+
+  const [{ data: contas }, dadosTitulos, saldoDeHoje] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -109,26 +111,27 @@ export default async function ConciliacaoPage({
     aba === "titulos"
       ? carregarTitulosDaConciliacao(supabase, session.activeTenant.id)
       : Promise.resolve(null),
+    // O saldo da conta no fim de hoje: o ponto de partida do saldo previsto
+    // da aba Títulos (decisão 195).
+    aba === "titulos"
+      ? calcularSaldoAnterior(supabase, {
+          tenantId: session.activeTenant.id,
+          contaId,
+          dataDe: somaDias(hojeBr, 1),
+        }).then((s) => s.saldoAnterior)
+      : Promise.resolve(0),
   ]);
 
   const listaContas = contas ?? [];
 
-  // Default: mês corrente
-  const hoje = new Date();
-  const dataDe =
-    searchParams.de ??
-    new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-      .toISOString()
-      .slice(0, 10);
-  const dataAte =
-    searchParams.ate ??
-    new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
-      .toISOString()
-      .slice(0, 10);
+  // Default: o mês corrente, pelo dia de Brasília. O `toISOString` de antes
+  // dava o dia em UTC e, à noite, podia pular para o mês seguinte.
+  const dataDe = searchParams.de ?? `${hojeBr.slice(0, 8)}01`;
+  const dataAte = searchParams.ate ?? fimDoMes(hojeBr);
 
   let saldoAnterior = 0;
   let linhas: ReturnType<typeof derivarSaldo> = [];
-  const detalhesFatura: Record<string, DetalheDaFatura> = {};
+  const itensDasFaturas: Record<string, ItemDaFatura[]> = {};
   let detalhesImposto: Record<string, DetalheDoImposto> = {};
   /** De cada lançamento de uma guia de imposto para a linha que o mostra. */
   let linhaDoLancamento = new Map<string, string>();
@@ -188,10 +191,10 @@ export default async function ConciliacaoPage({
     linhaDoLancamento = comGuias.linhaDoLancamento;
     linhas = derivarSaldo(semSaldo, saldoAnterior);
 
-    // O pagamento de uma fatura de cartão abre em dois níveis — centro de
-    // custo e, dentro dele, os itens (decisão 093, entrega 3). Só a perna
-    // do BANCO (esta conta) e só o pagamento vivo: o estorno é a linha
-    // reversa, e não se expande. Uma leitura por fatura paga no período.
+    // O pagamento de uma fatura de cartão abre nos itens, cada um com o
+    // centro de custo dele (decisão 195; antes, em dois níveis, decisão 093).
+    // Só a perna do BANCO (esta conta) e só o pagamento vivo: o estorno é a
+    // linha reversa, e não se expande. Uma leitura por fatura paga no período.
     const pagamentos = semSaldo.filter(
       (l) => l.papel_na_fatura === "pagamento" && l.fatura_cartao_id !== null,
     );
@@ -201,13 +204,13 @@ export default async function ConciliacaoPage({
         carregarExtratoDaFatura(supabase, session.activeTenant.id, id),
       ),
     );
-    const detalhePorFatura = new Map<string, DetalheDaFatura>();
+    const itensPorFatura = new Map<string, ItemDaFatura[]>();
     extratos.forEach((e, i) => {
-      if (e) detalhePorFatura.set(faturaIds[i], agruparPorCentro(e));
+      if (e) itensPorFatura.set(faturaIds[i], itensDoExtratoDaFatura(e));
     });
     for (const l of pagamentos) {
-      const d = detalhePorFatura.get(l.fatura_cartao_id as string);
-      if (d) detalhesFatura[l.id] = d;
+      const itens = itensPorFatura.get(l.fatura_cartao_id as string);
+      if (itens) itensDasFaturas[l.id] = itens;
     }
     creditos = linhas.reduce((acc, l) => acc + l.credito, 0);
     debitos = linhas.reduce((acc, l) => acc + l.debito, 0);
@@ -253,6 +256,8 @@ export default async function ConciliacaoPage({
             <AbaTitulos
               dados={dadosTitulos}
               contaId={contaId}
+              nomeDaConta={listaContas.find((c) => c.id === contaId)?.nome ?? "Conta"}
+              saldoHoje={saldoDeHoje}
               dataDe={dataDe}
               dataAte={dataAte}
             />
@@ -276,9 +281,10 @@ export default async function ConciliacaoPage({
               <ConciliacaoList
                 linhas={linhas}
                 highlight={highlight}
-                detalhesFatura={detalhesFatura}
+                itensDasFaturas={itensDasFaturas}
                 detalhesImposto={detalhesImposto}
                 contexto={`${contaId}|${dataDe}|${dataAte}`}
+                contaId={contaId}
               />
             </>
           )}

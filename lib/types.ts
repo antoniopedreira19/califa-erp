@@ -3526,7 +3526,10 @@ export interface LancamentoFinanceiro {
   tenant_id: string;
   /** Nulo só na perna de transferência entre contas (decisão 124). */
   empresa_id: string | null;
-  regional_id: string;
+  /** Nulável no banco: a regional mora no job, no rateio do documento ou
+   *  na nota (decisão 069); o lançamento só a guarda quando não há outra
+   *  fonte. Corrigido em 21/10/2026 (decisão 195): o tipo dizia `string`. */
+  regional_id: string | null;
   conta_bancaria_id: string;
   data_movimento: string; // YYYY-MM-DD
   valor: string; // numeric — Number(...)
@@ -3577,6 +3580,14 @@ export interface LancamentoFinanceiro {
   transferencia_id: string | null;
   /** O imposto a pagar que esta linha paga (origem `imposto_baixa`). */
   imposto_a_pagar_id: string | null;
+  /** O título a receber que esta linha recebeu (origem `titulo_baixa`). */
+  titulo_receber_id: string | null;
+  /** A fatura do cartão de que a linha é item, ajuste ou pagamento
+   *  (decisão 093). */
+  fatura_cartao_id: string | null;
+  /** O papel na fatura: `item`, `ajuste`, `pagamento` ou `pagamento_estorno`.
+   *  Nulo fora do cartão. */
+  papel_na_fatura: string | null;
   origem: OrigemLancamento;
   criado_por: string;
   created_at: string;

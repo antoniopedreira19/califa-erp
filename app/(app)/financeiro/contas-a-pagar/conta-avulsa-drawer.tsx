@@ -105,6 +105,10 @@ type Props =
        */
       cartaoPreSelecionadoId?: string;
       trigger?: React.ReactNode;
+      /** Aberto por fora, sem gatilho (o menu "Novo lançamento" da
+       *  conciliação, decisão 195). */
+      open?: boolean;
+      onOpenChange?: (b: boolean) => void;
       /**
        * Habilita o botão "Criar e dar baixa" da Tela 3.2: cria o
        * lançamento e devolve o id para quem chamou abrir o modal de baixa
@@ -147,13 +151,19 @@ export function ContaAvulsaDrawer(props: Props) {
   const conta = isEditar ? (props as Extract<Props, { mode: "editar" }>).conta : undefined;
 
   // Controle de abertura (suporte a modo controlado e não-controlado)
-  const isControlled = isEditar;
-  const open = isControlled
+  // Controlado na edição e no "criar" aberto por fora (decisão 195).
+  const controladoDeFora =
+    props.mode === "criar" && props.open !== undefined && props.onOpenChange !== undefined;
+  const open = isEditar
     ? (props as Extract<Props, { mode: "editar" }>).open
-    : internalOpen;
-  const setOpen = isControlled
+    : controladoDeFora
+      ? (props.open as boolean)
+      : internalOpen;
+  const setOpen = isEditar
     ? (props as Extract<Props, { mode: "editar" }>).onOpenChange
-    : setInternalOpen;
+    : controladoDeFora
+      ? (props.onOpenChange as (b: boolean) => void)
+      : setInternalOpen;
 
   // ---------------------------------------------------------------------------
   // Estado dos campos do formulário
@@ -507,7 +517,7 @@ export function ContaAvulsaDrawer(props: Props) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {props.trigger && <DialogTrigger asChild>{props.trigger}</DialogTrigger>}
-      {props.mode === "criar" && !props.trigger && (
+      {props.mode === "criar" && !props.trigger && !controladoDeFora && (
         <DialogTrigger asChild>
           <button
             type="button"

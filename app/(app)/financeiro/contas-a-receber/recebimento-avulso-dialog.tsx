@@ -186,6 +186,7 @@ export function RecebimentoAvulsoDialog({
   contas,
   rendimentosLancados,
   onCriado,
+  tipoInicial = "recebimento_avulso",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -201,6 +202,9 @@ export function RecebimentoAvulsoDialog({
    *  seguida (o "Criar e dar baixa" do recebimento avulso e do
    *  rendimento); `mensagem` é o aviso para quando não abre. */
   onCriado: (id: string, abrirBaixa: boolean, mensagem: string) => void;
+  /** O tipo com que o formulário abre (o menu "Novo lançamento" da
+   *  conciliação abre o rendimento e a transferência direto, decisão 195). */
+  tipoInicial?: TipoDoRecebimentoAvulso;
 }) {
   const [pending, startTransition] = React.useTransition();
   const [tipo, setTipo] = React.useState<TipoDoRecebimentoAvulso>("recebimento_avulso");
@@ -236,7 +240,7 @@ export function RecebimentoAvulsoDialog({
 
   React.useEffect(() => {
     if (!open) return;
-    setTipo("recebimento_avulso");
+    setTipo(tipoInicial);
     limpar();
     setEmpresaId(empresas.length === 1 ? empresas[0].id : "");
     setRateio(RATEIO_INICIAL);
