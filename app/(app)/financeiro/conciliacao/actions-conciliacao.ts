@@ -3,6 +3,12 @@
 /**
  * As ações da aba Banco da conciliação (task 029, fase 3).
  *
+ * Entrega 3B — as ações de cada linha (decisão 200): conciliar a baixa
+ * feita à mão, baixar e conciliar pelo lote de sempre, corrigir a baixa,
+ * lançar pela regra, "saiu e voltou", ignorar e desfazer. Cada uma é a RPC
+ * dela (`20261021700004_acoes_da_conciliacao.sql`), que confere o papel, a
+ * conta e a soma; aqui só a forma da entrada e as mensagens.
+ *
  * Entrega 3A — importar o extrato (decisão 198). O OFX é lido no navegador
  * (`lerOfx`, o mesmo parser dos testes) e chega aqui só com o que importa:
  * o cabeçalho e as linhas. O arquivo cru não sobe nem fica guardado — o
@@ -19,6 +25,11 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { arquivoEhDaConta, bancoDoArquivoConfere, contaTemNumero, digitais, rotuloDoBanco } from "@/lib/conciliacao/ofx";
+import { formaDaBaixaPeloHistorico } from "@/lib/conciliacao/motor";
+import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
+import { darBaixaEmLote } from "../actions-baixa-em-lote";
+import { cancelarBaixa, type TipoDeBaixa } from "../actions-baixa-registrada";
+import { cancelarBaixaImposto } from "../fiscal/impostos/actions";
 
 const DATA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -157,4 +168,327 @@ export async function importarExtrato(contaId: string, arquivo: ArquivoParaImpor
   const r = data as { movimentos: number; novos: number };
   revalidatePath("/financeiro/conciliacao");
   return { ok: true, movimentos: r.movimentos, novos: r.novos };
+}
+
+// ---------------------------------------------------------------------------
+// As ações de cada linha (entrega 3B, decisão 200)
+// ---------------------------------------------------------------------------
+
+type Resultado = { ok: true; mensagem?: string } | { ok: false; message: string };
+
+const UUID = z.string().uuid();
+
+/** As funções do banco levantam exceção com o texto pronto para a tela; o
+ *  que não for assim (erro técnico) vira a mensagem genérica. */
+function mensagemDoBanco(msg: string, generica: string): string {
+  const limpa = msg.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
+  if (limpa && !/["]|\b[a-z]+_[a-z_]+\b/.test(limpa)) return limpa;
+  return generica;
+}
+
+async function gate() {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false as const, message: "Só admin ou financeiro concilia o extrato do banco." };
+  }
+  return { ok: true as const, session, supabase: createClient() };
+}
+
+function revalidar() {
+  revalidatePath("/financeiro/conciliacao");
+  revalidatePath("/financeiro/contas-a-pagar");
+  revalidatePath("/financeiro/contas-a-receber");
+  revalidatePath("/financeiro/fluxo-caixa");
+}
+
+async function chamar(rpc: string, args: Record<string, unknown>, generica: string): Promise<Resultado & { dados?: unknown }> {
+  const g = await gate();
+  if (!g.ok) return g;
+  const { data, error } = await g.supabase.rpc(rpc, args);
+  if (error) {
+    console.error(`[conciliacao.${rpc}]`, error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, generica) };
+  }
+  revalidar();
+  return { ok: true, dados: data };
+}
+
+/** A baixa feita à mão que bate com o banco: só liga, com a data do banco. */
+export async function conciliarLinha(linhaId: string, lancamentoIds: string[]): Promise<Resultado> {
+  if (!UUID.safeParse(linhaId).success || !z.array(UUID).min(1).max(200).safeParse(lancamentoIds).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  return chamar(
+    "conciliar_linha",
+    { p_linha_id: linhaId, p_lancamento_ids: lancamentoIds, p_como: "ligacao" },
+    "Não foi possível conciliar esta linha. Tente de novo.",
+  );
+}
+
+/** O documento baixado, como a RPC o procura na conta da linha. */
+const documentoSchema = z.object({
+  tipo: z.enum(["pp", "avulsa", "titulo_receber", "desembolso", "devolucao_verba", "fatura", "imposto", "transferencia"]),
+  id: UUID,
+});
+export type DocumentoDaBaixa = z.infer<typeof documentoSchema>;
+
+/** Concilia a baixa que acabou de ser dada pelo popup (o "Conferir"). Se a
+ *  ligação falhar, a baixa fica valendo e aparece como baixa feita à mão na
+ *  próxima leitura. */
+export async function conciliarPelosDocumentos(
+  linhaId: string,
+  documentos: DocumentoDaBaixa[],
+  grupo: string | null = null,
+  /** `avulso`: o título nasceu na conciliação ("Lançar avulso"). */
+  como: "baixa" | "avulso" = "baixa",
+): Promise<Resultado> {
+  if (!UUID.safeParse(linhaId).success || !z.array(documentoSchema).min(1).max(50).safeParse(documentos).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  if (grupo !== null && !UUID.safeParse(grupo).success) return { ok: false, message: "Entrada inválida." };
+  if (como !== "baixa" && como !== "avulso") return { ok: false, message: "Entrada inválida." };
+  return chamar(
+    "conciliar_linha_pelos_documentos",
+    { p_linha_id: linhaId, p_documentos: documentos, p_como: como, p_grupo: grupo },
+    "A baixa foi feita, mas não foi possível ligar a linha do banco: ela aparece como baixa feita à mão na próxima leitura.",
+  );
+}
+
+/** O documento de cada item do lote. */
+function documentoDoItem(alvo: EntradaDaBaixaEmLote["itens"][number]["alvo"]): DocumentoDaBaixa {
+  if (alvo.modulo === "imposto") return { tipo: "imposto", id: alvo.id };
+  if (alvo.modulo === "receber") return { tipo: alvo.origem === "nf" ? "titulo_receber" : "avulsa", id: alvo.id };
+  return { tipo: alvo.origem === "pp" ? "pp" : "avulsa", id: alvo.id };
+}
+
+/**
+ * "Baixar e conciliar": a baixa dos títulos pela baixa em lote de sempre
+ * (`darBaixaEmLote`, com as travas e a retenção da aprovação relida lá), com
+ * os dados do banco — a data e a conta da linha, a forma pelo histórico —,
+ * e a ligação da linha a elas. Vale para um título, para a soma de títulos
+ * da mesma contraparte e para a linha de um grupo de iguais.
+ */
+export async function baixarEConciliar(entrada: {
+  linhaId: string;
+  itens: EntradaDaBaixaEmLote["itens"];
+  grupo?: string | null;
+}): Promise<Resultado> {
+  const g = await gate();
+  if (!g.ok) return g;
+  if (!UUID.safeParse(entrada.linhaId).success || !Array.isArray(entrada.itens) || entrada.itens.length === 0) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const { data: linha, error } = await g.supabase
+    .from("vw_extrato_linhas")
+    .select("id, conta_bancaria_id, data, valor, historico, conciliada, ignorada_em")
+    .eq("tenant_id", g.session.activeTenant.id)
+    .eq("id", entrada.linhaId)
+    .maybeSingle();
+  if (error || !linha) return { ok: false, message: "Linha do extrato não encontrada." };
+  const l = linha as { id: string; conta_bancaria_id: string; data: string; valor: number | string; historico: string; conciliada: boolean; ignorada_em: string | null };
+  if (l.conciliada || l.ignorada_em) return { ok: false, message: "Esta linha do banco já foi resolvida." };
+
+  const pagar = entrada.itens.some((i) => i.alvo.modulo === "pagar");
+  const lote: EntradaDaBaixaEmLote = {
+    pago_em: l.data,
+    conta_bancaria_id: l.conta_bancaria_id,
+    forma_pagamento: pagar ? (formaDaBaixaPeloHistorico(l.historico) ?? "pix") : null,
+    cartao_credito_id: null,
+    fatura_competencia: null,
+    centro_pagar: null,
+    centro_receber: null,
+    itens: entrada.itens,
+  };
+  const baixa = await darBaixaEmLote(lote);
+  if (!baixa.ok) {
+    const feitas = baixa.feitas.length;
+    return {
+      ok: false,
+      message: feitas
+        ? `${baixa.falha.mensagem} ${feitas === 1 ? "1 título foi baixado" : `${feitas} títulos foram baixados`} e a linha do banco ficou sem conciliar.`
+        : baixa.falha.mensagem,
+    };
+  }
+  const liga = await conciliarPelosDocumentos(
+    l.id,
+    entrada.itens.map((i) => documentoDoItem(i.alvo)),
+    entrada.grupo ?? null,
+  );
+  if (!liga.ok) return liga;
+  return {
+    ok: true,
+    mensagem:
+      entrada.itens.length === 1
+        ? "Baixa feita com os dados do banco e conciliada."
+        : `${entrada.itens.length} baixas feitas com os dados do banco e conciliadas numa linha só.`,
+  };
+}
+
+/** A baixa feita à mão que não bate: passa ao valor e à data do banco. */
+export async function corrigirBaixa(lancamentoId: string, linhaId: string, motivo: string): Promise<Resultado> {
+  if (!UUID.safeParse(lancamentoId).success || !UUID.safeParse(linhaId).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  if (motivo.trim().length < 10) return { ok: false, message: "Registre o motivo da correção (pelo menos 10 caracteres)." };
+  const r = await chamar(
+    "corrigir_baixa_pela_conciliacao",
+    { p_lancamento_id: lancamentoId, p_linha_id: linhaId, p_motivo: motivo.trim().slice(0, 500) },
+    "Não foi possível corrigir a baixa. Tente de novo.",
+  );
+  if (!r.ok) return r;
+  const para = (r.dados as { para?: { total?: number } } | null)?.para?.total;
+  return {
+    ok: true,
+    mensagem: `Baixa corrigida${typeof para === "number" ? ` para ${para.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : ""} e conciliada. A correção, com o motivo, fica no histórico da baixa.`,
+  };
+}
+
+/** A tarifa e o IOF pela regra do histórico (uma linha ou várias). */
+export async function lancarPelaRegra(itens: Array<{ linhaId: string; regraId: string }>): Promise<Resultado> {
+  if (!z.array(z.object({ linhaId: UUID, regraId: UUID })).min(1).max(200).safeParse(itens).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  let feitas = 0;
+  for (const i of itens) {
+    const { error } = await g.supabase.rpc("lancar_pela_regra", { p_linha_id: i.linhaId, p_regra_id: i.regraId });
+    if (error) {
+      console.error("[conciliacao.lancar_pela_regra]", error.message);
+      if (feitas) revalidar();
+      const msg = mensagemDoBanco(error.message, "Não foi possível lançar pela regra.");
+      return { ok: false, message: feitas ? `${msg} ${feitas === 1 ? "1 linha foi lançada" : `${feitas} linhas foram lançadas`}.` : msg };
+    }
+    feitas++;
+  }
+  revalidar();
+  return { ok: true, mensagem: feitas === 1 ? "Lançado pela regra e conciliado." : `${feitas} linhas lançadas pela regra e conciliadas.` };
+}
+
+/** O pagamento que o banco devolveu no mesmo dia: as duas pernas no extrato. */
+export async function registrarSaiuEVoltou(
+  saidaId: string,
+  voltaId: string,
+  referencia: string | null,
+  fornecedorId: string | null,
+): Promise<Resultado> {
+  if (!UUID.safeParse(saidaId).success || !UUID.safeParse(voltaId).success) return { ok: false, message: "Entrada inválida." };
+  if (fornecedorId !== null && !UUID.safeParse(fornecedorId).success) return { ok: false, message: "Entrada inválida." };
+  const r = await chamar(
+    "registrar_saiu_e_voltou",
+    { p_saida_id: saidaId, p_volta_id: voltaId, p_referencia: referencia?.slice(0, 160) ?? null, p_fornecedor_id: fornecedorId },
+    "Não foi possível registrar as duas linhas. Tente de novo.",
+  );
+  if (!r.ok) return r;
+  return { ok: true, mensagem: "Saída e devolução registradas no extrato, fora do DRE. O título continua a pagar." };
+}
+
+export async function ignorarLinha(linhaId: string, motivo: string | null): Promise<Resultado> {
+  if (!UUID.safeParse(linhaId).success) return { ok: false, message: "Entrada inválida." };
+  const r = await chamar(
+    "ignorar_linha",
+    { p_linha_id: linhaId, p_motivo: motivo?.slice(0, 500) ?? null },
+    "Não foi possível ignorar a linha. Tente de novo.",
+  );
+  if (!r.ok) return r;
+  return { ok: true, mensagem: "Linha ignorada: não entra no extrato do sistema. Dá para desfazer em Conciliados." };
+}
+
+/**
+ * Desfaz a conciliação da linha (e das do mesmo grupo). As baixas que
+ * nasceram na conciliação voltam canceladas pelas actions de sempre — o
+ * título volta a aberto —, com o motivo registrado.
+ */
+export async function desfazerConciliacao(linhaId: string): Promise<Resultado> {
+  if (!UUID.safeParse(linhaId).success) return { ok: false, message: "Entrada inválida." };
+  const r = await chamar("desfazer_conciliacao", { p_linha_id: linhaId }, "Não foi possível desfazer. Tente de novo.");
+  if (!r.ok) return r;
+  const cancelar = ((r.dados as { cancelar?: Array<{ tipo: string; id: string }> } | null)?.cancelar ?? []).filter(
+    (c) => UUID.safeParse(c.id).success,
+  );
+  const motivo = "Conciliação com o banco desfeita";
+  for (const c of cancelar) {
+    const res =
+      c.tipo === "imposto"
+        ? await cancelarBaixaImposto({ imposto_id: c.id, motivo })
+        : await cancelarBaixa({ tipo: c.tipo as TipoDeBaixa, id: c.id, motivo });
+    if (!res.ok) {
+      revalidar();
+      return {
+        ok: false,
+        message: `A linha foi desfeita, mas uma das baixas não foi cancelada: ${res.message} Cancele-a pela baixa registrada.`,
+      };
+    }
+  }
+  revalidar();
+  return {
+    ok: true,
+    mensagem: cancelar.length
+      ? `Desfeito: ${cancelar.length === 1 ? "a baixa foi cancelada e o título voltou" : `as ${cancelar.length} baixas foram canceladas e os títulos voltaram`} a aberto.`
+      : "Desfeito: a linha voltou a pendente.",
+  };
+}
+
+/** "Lembrar como regra" (decisão 200). */
+export async function criarRegraDoExtrato(entrada: {
+  contaId: string;
+  padrao: string;
+  tipoId: string;
+  subtipoId: string;
+  empresaId: string;
+  todasAsContas: boolean;
+}): Promise<Resultado> {
+  const ok = z
+    .object({
+      contaId: UUID,
+      padrao: z.string().trim().min(3).max(80),
+      tipoId: UUID,
+      subtipoId: UUID,
+      empresaId: UUID,
+      todasAsContas: z.boolean(),
+    })
+    .safeParse(entrada);
+  if (!ok.success) return { ok: false, message: "Preencha o começo do histórico, o centro de custo e a empresa da regra." };
+  const r = await chamar(
+    "criar_regra_do_extrato",
+    {
+      p_conta_bancaria_id: entrada.contaId,
+      p_padrao: entrada.padrao,
+      p_tipo_id: entrada.tipoId,
+      p_subtipo_id: entrada.subtipoId,
+      p_empresa_id: entrada.empresaId,
+      p_todas_as_contas: entrada.todasAsContas,
+    },
+    "Não foi possível criar a regra. Tente de novo.",
+  );
+  if (!r.ok) return r;
+  return { ok: true, mensagem: "Regra criada: as próximas linhas com esse histórico vão para as regras." };
+}
+
+/**
+ * A linha do banco a que a baixa está conciliada, para o aviso do cancelar
+ * (M3.8, decisão 200): cancelar desfaz a conciliação, e a linha volta para
+ * a Conciliação automática. `null`: não está conciliada (ou quem pergunta
+ * não vê o extrato do banco).
+ */
+export async function conciliacaoDaBaixa(
+  lancamentoId: string,
+): Promise<{ data: string; valor: number } | null> {
+  if (!UUID.safeParse(lancamentoId).success) return null;
+  const g = await gate();
+  if (!g.ok) return null;
+  const { data: l } = await g.supabase
+    .from("lancamentos_financeiros")
+    .select("extrato_linha_id")
+    .eq("tenant_id", g.session.activeTenant.id)
+    .eq("id", lancamentoId)
+    .maybeSingle<{ extrato_linha_id: string | null }>();
+  if (!l?.extrato_linha_id) return null;
+  const { data: linha } = await g.supabase
+    .from("extrato_linhas")
+    .select("data, valor")
+    .eq("tenant_id", g.session.activeTenant.id)
+    .eq("id", l.extrato_linha_id)
+    .maybeSingle<{ data: string; valor: number | string }>();
+  return linha ? { data: linha.data, valor: Math.abs(Number(linha.valor)) } : null;
 }

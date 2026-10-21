@@ -115,6 +115,9 @@ type Props =
        * em seguida. Sem esta prop, o drawer segue só com "Criar".
        */
       onCriadaParaBaixa?: (contaAvulsaId: string) => void;
+      /** O "Lançar avulso" da conciliação com o banco (decisão 200): o
+       *  formulário abre com a descrição, o valor e a data da linha. */
+      inicial?: { descricao: string; valor: number; data: string };
     }
   | {
       mode: "editar";
@@ -244,6 +247,8 @@ export function ContaAvulsaDrawer(props: Props) {
 
   // Anexos (só em modo criar)
   const [anexos, setAnexos] = React.useState<AnexoPendente[]>([]);
+  /** A cada abertura para criar, a data monta de novo com o valor inicial. */
+  const [aberturas, setAberturas] = React.useState(0);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -269,10 +274,12 @@ export function ContaAvulsaDrawer(props: Props) {
       );
     }
     if (open && !isEditar) {
+      const inicial = (props as Extract<Props, { mode: "criar" }>).inicial;
       setEmpresaId("");
-      setDescricao("");
-      setValor("");
-      setDataPrevista("");
+      setDescricao(inicial?.descricao ?? "");
+      setValor(inicial ? String(inicial.valor) : "");
+      setDataPrevista(inicial?.data ?? "");
+      setAberturas((n) => n + 1);
       setFornecedorId("__none__");
       setClienteId("__none__");
       setTipoId("");
@@ -702,7 +709,7 @@ export function ContaAvulsaDrawer(props: Props) {
             <div className="space-y-2">
               <Label>Data prevista de pagamento</Label>
               <DatePicker
-                key={isEditar ? (conta?.id ?? "criar") : "criar"}
+                key={isEditar ? (conta?.id ?? "criar") : `criar-${aberturas}`}
                 name="data_prevista_pagamento_hidden"
                 defaultValue={dataPrevista}
                 placeholder="Selecione a data (opcional)"

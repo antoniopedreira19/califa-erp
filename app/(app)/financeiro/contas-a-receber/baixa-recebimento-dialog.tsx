@@ -38,7 +38,7 @@
 
 import * as React from "react";
 import { format } from "date-fns";
-import { AlertCircle, ArrowRightLeft, Banknote } from "lucide-react";
+import { AlertCircle, ArrowRightLeft, Banknote, Landmark } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -56,10 +56,13 @@ import {
 } from "@/components/ui/select";
 import type {
   ContaBancaria,
+  ImpostoRetido,
   PlanoContaTipo,
   PlanoContaSubtipo,
   RetencaoDaBaixa,
 } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
+import type { RetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
 import {
   BlocoValorDaBaixa,
   useValorDaBaixa,
@@ -119,6 +122,18 @@ export interface BaixaRecebimentoAlvo {
   notaId: string | null;
 }
 
+/** A linha do extrato do banco que abriu a baixa (decisão 200). */
+export interface LinhaDoBancoNoRecebimento {
+  data: string;
+  /** O que entrou no banco, positivo. */
+  valor: number;
+  arquivo: string;
+  /** O banco recebeu menos e nenhuma retenção explica: abre parcial. */
+  parcial: number | null;
+  /** A retenção que o cliente fez e que explica o banco ter menos. */
+  retencao: Partial<Record<ImpostoRetido, number>> | null;
+}
+
 export interface BaixaRecebimentoPayload {
   pago_em: string;
   conta_bancaria_id: string;
@@ -140,6 +155,7 @@ export function BaixaRecebimentoDialog({
   erro,
   onConfirm,
   contaInicial,
+  linhaDoBanco,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -157,6 +173,9 @@ export function BaixaRecebimentoDialog({
    * a conta abre em branco, como sempre.
    */
   contaInicial?: string;
+  /** A baixa aberta por uma linha do extrato do banco (decisão 200): a data
+   *  e o valor vêm dela, e a baixa só confirma quando o recebido bater. */
+  linhaDoBanco?: LinhaDoBancoNoRecebimento | null;
 }) {
   if (!alvo) return null;
   return (
@@ -182,6 +201,7 @@ export function BaixaRecebimentoDialog({
           onCancelar={() => onOpenChange(false)}
           onConfirm={onConfirm}
           contaInicial={contaInicial ?? null}
+          linhaDoBanco={linhaDoBanco ?? null}
         />
       </DialogContent>
     </Dialog>
@@ -198,6 +218,7 @@ function FormularioDaBaixa({
   onCancelar,
   onConfirm,
   contaInicial,
+  linhaDoBanco,
 }: {
   alvo: BaixaRecebimentoAlvo;
   contas: ContaBancaria[];
@@ -209,9 +230,11 @@ function FormularioDaBaixa({
   onConfirm: (payload: BaixaRecebimentoPayload) => void;
   /** A conta que abre escolhida; `null` abre em branco. */
   contaInicial: string | null;
+  linhaDoBanco: LinhaDoBancoNoRecebimento | null;
 }) {
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
-  const [pagoEm, setPagoEm] = React.useState(alvo.dataInicial);
+  const dataInicial = linhaDoBanco?.data ?? alvo.dataInicial;
+  const [pagoEm, setPagoEm] = React.useState(dataInicial);
   // A conta travada (rendimento) vence; depois, a de quem abriu a baixa já
   // sabendo a conta, se ela for ativa; senão, em branco.
   const [contaId, setContaId] = React.useState(
@@ -223,7 +246,14 @@ function FormularioDaBaixa({
   );
   const [tipoId, setTipoId] = React.useState(alvo.tipoInicialId ?? "");
   const [subtipoId, setSubtipoId] = React.useState(alvo.subtipoInicialId ?? "");
-  const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao);
+  const retencaoDaLinha = React.useMemo<RetencaoDaAprovacao | null>(
+    () => (linhaDoBanco?.retencao ? { data: null, aliquotas: linhaDoBanco.retencao, remessa: null } : null),
+    [linhaDoBanco?.retencao],
+  );
+  const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao, retencaoDaLinha, linhaDoBanco?.parcial ?? null);
+  // Só concilia quando o que entra na conta bate com a linha do banco.
+  const naoBate = !!linhaDoBanco && Math.abs(v.liquido - linhaDoBanco.valor) > 0.004;
+  const dataDiferenteDoBanco = !!linhaDoBanco && !!pagoEm && pagoEm !== linhaDoBanco.data;
   // Módulo fiscal (entrega 2): a nota do título, para o bloco "No fiscal",
   // lida ao abrir (à parte: o diálogo não espera por ela).
   const fiscal = useFiscalDaNota(alvo.notaId);
@@ -263,6 +293,12 @@ function FormularioDaBaixa({
       setErroLocal(erroDoValor);
       return;
     }
+    if (naoBate && linhaDoBanco) {
+      setErroLocal(
+        `O recebimento soma ${formatCurrency(v.liquido, "BRL")} e a linha do banco é de ${formatCurrency(linhaDoBanco.valor, "BRL")}: ajuste o valor ou escolha outro título.`,
+      );
+      return;
+    }
     onConfirm({
       pago_em: pagoEm,
       conta_bancaria_id: contaId,
@@ -278,6 +314,32 @@ function FormularioDaBaixa({
 
   return (
     <>
+      {linhaDoBanco && (
+        <div className="flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs leading-relaxed text-emerald-900">
+          <Landmark className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Aberto pela conciliação com o banco: a data, a conta e o valor vêm do extrato ({linhaDoBanco.arquivo}).
+            {linhaDoBanco.retencao
+              ? " O banco recebeu menos que o título, e a diferença bate com retenção na fonte: a baixa abre com ela, editável."
+              : linhaDoBanco.parcial
+                ? " O banco recebeu menos que o título: a baixa abre parcial, com o valor do banco."
+                : ""}{" "}
+            Confira e confirme.
+          </span>
+        </div>
+      )}
+      {naoBate && linhaDoBanco && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs leading-relaxed text-red-900">
+          O recebimento soma {formatCurrency(v.liquido, "BRL")} e a linha do banco é de{" "}
+          {formatCurrency(linhaDoBanco.valor, "BRL")}. Ele só concilia quando os dois baterem.
+        </div>
+      )}
+      {dataDiferenteDoBanco && linhaDoBanco && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
+          A data é diferente da do banco. A baixa vale, mas o Extrato do sistema não bate com o do banco nesse dia:
+          use a data do banco, a não ser que ele esteja errado.
+        </div>
+      )}
       <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/50 p-4 text-[13px]">
         {alvo.resumo.map((linha) => (
           <React.Fragment key={linha.rotulo}>
@@ -302,7 +364,7 @@ function FormularioDaBaixa({
             </label>
             <DatePicker
               name="pago_em"
-              defaultValue={alvo.dataInicial}
+              defaultValue={dataInicial}
               onDateChange={(d) => {
                 setPagoEm(d ? format(d, "yyyy-MM-dd") : "");
                 setErroLocal(null);

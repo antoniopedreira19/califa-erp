@@ -23,7 +23,7 @@
  */
 
 import type { createClient } from "@/lib/supabase/server";
-import type { ExtratoLinhaComSituacao, ResolucaoSozinha } from "@/lib/types";
+import type { ConciliadaComo, ExtratoLinhaComSituacao, ResolucaoSozinha } from "@/lib/types";
 import type { LancamentoDoMotor, RegraDoMotor } from "@/lib/conciliacao/motor";
 import { somaDias } from "@/lib/conciliacao/motor";
 import { contaTemNumero } from "@/lib/conciliacao/ofx";
@@ -75,7 +75,21 @@ export interface LinhaDoBanco {
   semAuto: boolean;
   /** Os lançamentos ligados (na conciliada). */
   ligados: Array<{ id: string; descricao: string; valor: number; origem: string }>;
+  /** Como se conciliou (decisão 200). */
+  conciliadaComo: ConciliadaComo | null;
+  /** As linhas que se desfazem juntas. */
+  grupo: string | null;
+  /** As baixas que mudaram para a data do banco. */
+  datasTrocadas: Array<{ id: string; de: string }>;
+  /** A correção da baixa, quando a linha se conciliou corrigindo. */
+  correcao: { de: number; para: number; motivo: string } | null;
+  /** A regra que lançou a linha. */
+  regraId: string | null;
 }
+
+/** O que a tela cancela para tirar uma baixa sem linha no banco: o tipo e o
+ *  id que `cancelarBaixa` recebe (o imposto vai por `cancelarBaixaImposto`). */
+export type CancelamentoDaBaixa = { tipo: "baixa" | "desembolso" | "pp_devolucao_verba" | "fatura_cartao" | "transferencia" | "imposto"; id: string };
 
 /** Um débito ou crédito do sistema ainda sem linha do banco. */
 export interface LancamentoSemLinha extends LancamentoDoMotor {
@@ -84,6 +98,14 @@ export interface LancamentoSemLinha extends LancamentoDoMotor {
   ids: string[];
   origem: string;
   fornecedor: string | null;
+  /** A forma da baixa (a correção: a diferença vira juros só no boleto). */
+  forma: string | null;
+  /** A baixa de um documento só, que se corrige pela linha do banco
+   *  (PP, avulsa e nota a receber; a remessa e a guia, não). */
+  corrigivel: boolean;
+  /** Como cancelar a baixa ("sem linha no banco"); `null` não se cancela
+   *  por aqui (lançamento manual, estorno). */
+  cancelamento: CancelamentoDaBaixa | null;
 }
 
 /** Uma remessa CNAB da conta, com o que cada item pagou. */
@@ -179,17 +201,48 @@ export type LancamentoCru = {
   natureza: "entrada" | "saida";
   valor: string | number;
   origem: string;
+  forma_pagamento: string | null;
   juros_de_lancamento_id: string | null;
   imposto_a_pagar_id: string | null;
   conta_avulsa_id: string | null;
   pedido_compra_parcela_id: string | null;
+  titulo_receber_id: string | null;
+  desembolso_parcela_id: string | null;
+  pp_verba_devolucao_id: string | null;
+  fatura_cartao_id: string | null;
+  transferencia_id: string | null;
   extrato_linha_id: string | null;
   fornecedores: { nome: string | null; razao_social: string | null } | null;
 };
 
 const SELECT_LANCAMENTO =
-  "id, data_movimento, descricao, natureza, valor, origem, juros_de_lancamento_id, imposto_a_pagar_id, " +
-  "conta_avulsa_id, pedido_compra_parcela_id, extrato_linha_id, fornecedores(nome, razao_social)";
+  "id, data_movimento, descricao, natureza, valor, origem, forma_pagamento, juros_de_lancamento_id, imposto_a_pagar_id, " +
+  "conta_avulsa_id, pedido_compra_parcela_id, titulo_receber_id, desembolso_parcela_id, pp_verba_devolucao_id, " +
+  "fatura_cartao_id, transferencia_id, extrato_linha_id, fornecedores(nome, razao_social)";
+
+/** A mesma tradução da RPC `_cancelamento_da_baixa`. */
+function cancelamentoDe(l: LancamentoCru): CancelamentoDaBaixa | null {
+  switch (l.origem) {
+    case "pp_baixa":
+      return l.pedido_compra_parcela_id ? { tipo: "baixa", id: l.id } : null;
+    case "avulsa_baixa":
+    case "titulo_baixa":
+      return { tipo: "baixa", id: l.id };
+    case "desembolso_baixa":
+      return l.desembolso_parcela_id ? { tipo: "desembolso", id: l.desembolso_parcela_id } : null;
+    case "pp_devolucao_verba":
+      return l.pp_verba_devolucao_id ? { tipo: "pp_devolucao_verba", id: l.pp_verba_devolucao_id } : null;
+    case "fatura_cartao_baixa":
+      return l.fatura_cartao_id ? { tipo: "fatura_cartao", id: l.fatura_cartao_id } : null;
+    case "transferencia_saida":
+    case "transferencia_entrada":
+      return l.transferencia_id ? { tipo: "transferencia", id: l.transferencia_id } : null;
+    case "imposto_baixa":
+      return l.imposto_a_pagar_id ? { tipo: "imposto", id: l.imposto_a_pagar_id } : null;
+    default:
+      return null;
+  }
+}
 
 const assinado = (l: LancamentoCru) => (l.natureza === "entrada" ? Number(l.valor) : -Number(l.valor));
 
@@ -388,7 +441,8 @@ export async function carregarBancoDaConciliacao(
   ].sort();
   const janela = dias.length ? { de: somaDias(dias[0], -3), ate: somaDias(dias[dias.length - 1], 3) } : null;
 
-  const [semLinhaCrus, ligadosRes, saldoNoFim] = await Promise.all([
+  const corrigidas = conciliadas.filter((l) => l.conciliada_como === "correcao").map((l) => l.id);
+  const [semLinhaCrus, ligadosRes, saldoNoFim, correcoesRes] = await Promise.all([
     janela
       ? todasAsPaginas<LancamentoCru>(
           (de, ate) =>
@@ -422,8 +476,22 @@ export async function carregarBancoDaConciliacao(
     ultima?.fim
       ? calcularSaldoAnterior(supabase, { tenantId, contaId, dataDe: somaDias(ultima.fim, 1) }).then((s) => s.saldoAnterior)
       : Promise.resolve(null),
+    corrigidas.length
+      ? supabase
+          .from("baixa_correcoes")
+          .select("extrato_linha_id, de, para, motivo")
+          .eq("tenant_id", tenantId)
+          .in("extrato_linha_id", corrigidas)
+          .is("desfeita_em", null)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (ligadosRes.error) console.error("[conciliacao.banco.ligados]", ligadosRes.error.message);
+  if (correcoesRes.error) console.error("[conciliacao.banco.correcoes]", correcoesRes.error.message);
+  const correcaoDaLinha = new Map(
+    ((correcoesRes.data ?? []) as Array<{ extrato_linha_id: string; de: { total: number }; para: { total: number }; motivo: string }>).map(
+      (c) => [c.extrato_linha_id, { de: Number(c.de.total), para: Number(c.para.total), motivo: c.motivo }],
+    ),
+  );
 
   // ---- Os lançamentos sem linha, agrupados como o banco os mostra ----
   const lancamentos = agruparComoNoBanco(semLinhaCrus, remessaDoDocumento);
@@ -450,6 +518,11 @@ export async function carregarBancoDaConciliacao(
     resolvidaSozinha: l.resolvida_sozinha,
     semAuto: l.sem_auto,
     ligados: ligadosPorLinha.get(l.id) ?? [],
+    conciliadaComo: l.conciliada_como,
+    grupo: l.grupo,
+    datasTrocadas: l.desfazer?.datas ?? [],
+    correcao: correcaoDaLinha.get(l.id) ?? null,
+    regraId: l.desfazer?.regra_id ?? null,
   }));
 
   return {
@@ -501,6 +574,7 @@ export function agruparComoNoBanco(
     const base = membros.find((m) => m.origem !== "juros_baixa") ?? membros[0];
     const juros = r2(membros.filter((m) => m.origem === "juros_baixa").reduce((s, m) => s + Number(m.valor), 0));
     const remessa = k.startsWith("r:") && membros.length > 1;
+    const principais = membros.filter((m) => m.origem !== "juros_baixa");
     saida.push({
       id: base.id,
       ids: membros.map((m) => m.id),
@@ -510,6 +584,11 @@ export function agruparComoNoBanco(
       descricao: remessa ? `${membros.length} baixas da remessa, no mesmo dia` : base.descricao,
       origem: base.origem,
       fornecedor: remessa ? null : base.fornecedores?.razao_social ?? base.fornecedores?.nome ?? null,
+      forma: base.forma_pagamento,
+      corrigivel:
+        principais.length === 1 &&
+        (base.origem === "avulsa_baixa" || base.origem === "titulo_baixa" || (base.origem === "pp_baixa" && !!base.pedido_compra_parcela_id)),
+      cancelamento: principais.length === 1 ? cancelamentoDe(base) : null,
     });
   }
   return saida.sort((a, b) => a.data.localeCompare(b.data));

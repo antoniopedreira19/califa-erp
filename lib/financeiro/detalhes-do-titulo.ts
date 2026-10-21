@@ -39,6 +39,16 @@ export interface DetalhesDoTitulo {
    *  que quita o título, e os juros, em 11 · Despesa com Juros. A linha do
    *  Extrato mostra a soma. Nulo sem juros. */
   saidaDaBaixa: { principal: number; juros: number } | null;
+  /** As correções da baixa pela conciliação com o banco (decisão 200): de →
+   *  para, o motivo, quem e quando, e se foi desfeita. Vazio sem correção. */
+  historicoDaBaixa: Array<{
+    em: string;
+    por: string;
+    de: { data: string; total: number };
+    para: { data: string; total: number };
+    motivo: string;
+    desfeitaEm: string | null;
+  }>;
   documentos: DocumentoDoDetalhe[];
 }
 

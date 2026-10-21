@@ -120,10 +120,15 @@ export function useValorDaBaixa(
   /** Módulo fiscal: as alíquotas da aprovação da PP. `null` (o padrão)
    *  começa em branco, como sempre. */
   daAprovacao: RetencaoDaAprovacao | null = null,
+  /** A baixa aberta pela linha do banco que pagou menos que o título
+   *  (decisão 200): abre parcial, com o valor do banco. `null` abre pelo
+   *  que falta, como sempre. */
+  parcialInicial: number | null = null,
 ) {
-  const [parcial, setParcialBruto] = React.useState(false);
-  const [editado, setEditado] = React.useState(aberto);
-  const [partida] = React.useState(() => retencaoInicial(aberto, daAprovacao));
+  const abreParcial = parcialInicial !== null && parcialInicial > 0 && parcialInicial < aberto - 0.004;
+  const [parcial, setParcialBruto] = React.useState(abreParcial);
+  const [editado, setEditado] = React.useState(abreParcial ? arredondar(parcialInicial) : aberto);
+  const [partida] = React.useState(() => retencaoInicial(abreParcial ? arredondar(parcialInicial) : aberto, daAprovacao));
   const [retem, setRetemBruto] = React.useState(partida.retem);
   const [aliquotas, setAliquotas] = React.useState(partida.aliquotas);
   const [valores, setValores] = React.useState(partida.valores);

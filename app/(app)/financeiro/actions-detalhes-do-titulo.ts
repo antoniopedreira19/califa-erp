@@ -205,6 +205,7 @@ async function daPP(supabase: Supabase, tenantId: string, id: string): Promise<R
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -260,6 +261,7 @@ async function daAvulsa(supabase: Supabase, tenantId: string, id: string, origem
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: await assinar(supabase, anexosParaPedidos("contas-avulsas", a.anexos)),
     },
   };
@@ -295,6 +297,7 @@ async function doDesembolso(supabase: Supabase, tenantId: string, id: string): P
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: await assinar(supabase, anexosParaPedidos("desembolsos", d.anexos)),
     },
   };
@@ -354,6 +357,7 @@ async function daVerba(supabase: Supabase, tenantId: string, id: string): Promis
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -404,6 +408,7 @@ async function daFatura(supabase: Supabase, tenantId: string, id: string): Promi
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: [],
     },
   };
@@ -469,6 +474,7 @@ async function daNota(supabase: Supabase, tenantId: string, id: string): Promise
       origensDoDinheiro: origens.length > 1 ? origens : [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -494,6 +500,7 @@ async function daTransferencia(supabase: Supabase, tenantId: string, id: string)
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: [],
     },
   };
@@ -559,6 +566,7 @@ async function doImposto(supabase: Supabase, tenantId: string, id: string): Prom
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -622,6 +630,7 @@ async function doLancamento(supabase: Supabase, tenantId: string, id: string): P
         origensDoDinheiro: [],
         retido: [],
         saidaDaBaixa: null,
+        historicoDaBaixa: [],
         documentos: [],
       },
     };
@@ -656,6 +665,60 @@ async function doLancamento(supabase: Supabase, tenantId: string, id: string): P
   };
 }
 
+/** A baixa feita à mão corrigida pela conciliação com o banco (decisão 200),
+ *  pelo documento: a correção refaz a baixa, e o lançamento muda de id. */
+async function historicoDaBaixa(
+  supabase: Supabase,
+  tenantId: string,
+  origem: "pp_baixa" | "avulsa_baixa" | "titulo_baixa",
+  documentoId: string,
+): Promise<DetalhesDoTitulo["historicoDaBaixa"]> {
+  const { data, error } = await supabase
+    .from("baixa_correcoes")
+    .select("created_at, de, para, motivo, desfeita_em, autor:profiles!corrigida_por(nome)")
+    .eq("tenant_id", tenantId)
+    .eq("documento_origem", origem)
+    .eq("documento_id", documentoId)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.error("[detalhes-do-titulo.historico]", error.message);
+    return [];
+  }
+  return ((data ?? []) as any[]).map((c) => ({
+    em: c.created_at,
+    por: c.autor?.nome ?? "—",
+    de: { data: c.de?.data, total: Number(c.de?.total) },
+    para: { data: c.para?.data, total: Number(c.para?.total) },
+    motivo: c.motivo,
+    desfeitaEm: c.desfeita_em,
+  }));
+}
+
+/** O documento cuja baixa pode ter sido corrigida, pela chave do ⓘ. */
+async function documentoDaCorrecao(
+  supabase: Supabase,
+  tenantId: string,
+  lado: string | undefined,
+  origem: string | undefined,
+  id: string,
+): Promise<{ origem: "pp_baixa" | "avulsa_baixa" | "titulo_baixa"; id: string } | null> {
+  if (lado === "pagar" && origem === "pp") return { origem: "pp_baixa", id };
+  if (lado === "pagar" && (origem === "avulso" || origem === "recorrencia" || origem === "folha")) return { origem: "avulsa_baixa", id };
+  if (lado === "receber" && origem === "nf") return { origem: "titulo_baixa", id };
+  if (lado === "receber" && (origem === "recebimento_avulso" || origem === "rendimento")) return { origem: "avulsa_baixa", id };
+  if (lado !== "lancamento") return null;
+  const { data: l } = await supabase
+    .from("lancamentos_financeiros")
+    .select("pedido_compra_parcela_id, conta_avulsa_id, titulo_receber_id")
+    .eq("tenant_id", tenantId)
+    .eq("id", id)
+    .maybeSingle<{ pedido_compra_parcela_id: string | null; conta_avulsa_id: string | null; titulo_receber_id: string | null }>();
+  if (l?.pedido_compra_parcela_id) return { origem: "pp_baixa", id: l.pedido_compra_parcela_id };
+  if (l?.conta_avulsa_id) return { origem: "avulsa_baixa", id: l.conta_avulsa_id };
+  if (l?.titulo_receber_id) return { origem: "titulo_baixa", id: l.titulo_receber_id };
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // A entrada
 // ---------------------------------------------------------------------------
@@ -663,6 +726,24 @@ async function doLancamento(supabase: Supabase, tenantId: string, id: string): P
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function carregarDetalhesDoTitulo(chave: string): Promise<Resultado> {
+  const res = await lerDetalhesDoTitulo(chave);
+  if (!res.ok) return res;
+  // O histórico da baixa corrigida pela conciliação (decisão 200).
+  try {
+    const session = await requireSession();
+    const supabase = createClient();
+    const tenantId = session.activeTenant.id;
+    const partes = chave.split("|");
+    const doc = await documentoDaCorrecao(supabase, tenantId, partes[0], partes[1], partes[partes.length - 1]);
+    if (!doc) return res;
+    return { ok: true, detalhes: { ...res.detalhes, historicoDaBaixa: await historicoDaBaixa(supabase, tenantId, doc.origem, doc.id) } };
+  } catch (e) {
+    console.error("[detalhes-do-titulo.historico]", e instanceof Error ? e.message : String(e));
+    return res;
+  }
+}
+
+async function lerDetalhesDoTitulo(chave: string): Promise<Resultado> {
   const session = await requireSession();
   if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
     return { ok: false, message: "Apenas admin ou financeiro pode ver os detalhes do título." };

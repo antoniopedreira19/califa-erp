@@ -21,10 +21,16 @@ const lanc = (id: string, extra: Partial<LancamentoCru> = {}): LancamentoCru => 
   natureza: "saida",
   valor: 100,
   origem: "pp_baixa",
+  forma_pagamento: "pix",
   juros_de_lancamento_id: null,
   imposto_a_pagar_id: null,
   conta_avulsa_id: null,
   pedido_compra_parcela_id: null,
+  titulo_receber_id: null,
+  desembolso_parcela_id: null,
+  pp_verba_devolucao_id: null,
+  fatura_cartao_id: null,
+  transferencia_id: null,
   extrato_linha_id: null,
   fornecedores: { nome: "FORNECEDOR 001 EXEMPLO", razao_social: null },
   ...extra,
@@ -97,6 +103,11 @@ const linhaDoBanco = (id: string, extra: Partial<LinhaDoBanco> = {}): LinhaDoBan
   resolvidaSozinha: null,
   semAuto: false,
   ligados: [],
+  conciliadaComo: null,
+  grupo: null,
+  datasTrocadas: [],
+  correcao: null,
+  regraId: null,
   ...extra,
 });
 
@@ -109,10 +120,12 @@ test("o texto da linha resolvida", () => {
     linhaDoBanco("a", {
       conciliada: true,
       resolvidaSozinha: "manual",
+      conciliadaComo: "ligacao",
+      datasTrocadas: [{ id: "l", de: "2026-10-17" }],
       ligados: [{ id: "l", descricao: "PP-00162 · Frete", valor: -100, origem: "pp_baixa" }],
     }),
   );
-  assert.equal(manual?.texto, "Baixa feita à mão: “PP-00162 · Frete”");
+  assert.equal(manual?.texto, "Baixa feita à mão: “PP-00162 · Frete” · data de 17/10 para 19/10, a do banco");
   assert.equal(manual?.ligados, true);
   const comJuros = resolucaoDaLinha(
     linhaDoBanco("a", {
@@ -124,6 +137,13 @@ test("o texto da linha resolvida", () => {
     }),
   );
   assert.equal(comJuros?.texto, "Baixa de PP-00163 · Frete");
+  const corrigida = resolucaoDaLinha(
+    linhaDoBanco("a", { conciliada: true, conciliadaComo: "correcao", correcao: { de: 4005, para: 4000, motivo: "O banco não cobrou os juros" } }),
+  );
+  assert.equal(corrigida?.texto.replace(/\u00a0/g, " "), "Baixa corrigida de R$ 4.005,00 para R$ 4.000,00, o valor do banco · “O banco não cobrou os juros”");
+  assert.equal(corrigida?.ligados, false);
+  const regra = resolucaoDaLinha(linhaDoBanco("a", { conciliada: true, conciliadaComo: "regra", regraId: "r1" }), new Map([["r1", { centro: "04 · Custo Fixo · Tarifa bancária" }]]));
+  assert.equal(regra?.texto, "Avulso lançado pela regra: 04 · Custo Fixo · Tarifa bancária");
 });
 
 // Uma linha da planilha só com o que o motor lê.

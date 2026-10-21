@@ -134,6 +134,8 @@ export interface ResultadoDoMotor<M extends MovimentoDoMotor = MovimentoDoMotor>
   empate?: number;
   iguais?: number;
   retencaoSugerida?: Record<string, number>;
+  /** As alíquotas da retenção sugerida (em %), para a baixa abrir com elas. */
+  retencaoAliquotas?: Record<string, number>;
   /** Juros e multa: o banco pagou a mais. */
   diferenca?: number;
   lote?: LoteDoMotor;
@@ -407,6 +409,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
       r.titulo = t;
       r.confianca = "media";
       r.retencaoSugerida = valoresRetidos(t.valor, combo.aliquotas, Math.abs(r.mov.valor));
+      r.retencaoAliquotas = combo.aliquotas;
       r.motivo = `O banco tem ${fmt(t.valor - Math.abs(r.mov.valor))} a menos que o título: bate com ${combo.nome} retidos na fonte.`;
       break;
     }

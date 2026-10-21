@@ -20,6 +20,7 @@ import {
   type TituloDoMotor,
 } from "@/lib/conciliacao/motor";
 import { efeitoNaConta, r2 } from "@/lib/financeiro/planilha-de-titulos";
+import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { ResolucaoSozinha } from "@/lib/types";
 import type { Linha } from "./linhas-da-aba";
 import { diaCoberto, type DadosDaAbaBanco, type LancamentoSemLinha, type LinhaDoBanco } from "./banco-dados";
@@ -37,8 +38,11 @@ function formaDoTitulo(l: Linha): string | null {
   return f === "transferencia" ? "ted" : f === "cartao_credito" ? "cartao" : f;
 }
 
-/** O centro de custo, quando o título já tem (o "certo" pede centro). */
+/** O centro de custo, quando o título já tem (o "certo" pede centro). O
+ *  título que vai pela baixa em lote precisa do par completo, tipo e
+ *  subtipo (o lote recusa sem ele); o imposto usa o dele, do banco. */
 function centroDoTitulo(l: Linha): CentroDoTitulo | null {
+  if (l.lote && l.lote.tipo !== "imposto" && !l.lote.centroDeCusto) return null;
   switch (l.centro.tipo) {
     case "plano":
       return { tipo: l.centro.rotulo, sub: l.centro.completo };
@@ -186,8 +190,15 @@ function aspas(s: string) {
   return `“${s}”`;
 }
 
-/** O texto da linha resolvida, pelo que está ligado a ela. */
-export function resolucaoDaLinha(l: LinhaDoBanco): Resolucao | null {
+const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/** O texto da linha resolvida, pelo jeito como ela se conciliou
+ *  (`conciliada_como`, decisão 200) e pelo que está ligado a ela. */
+export function resolucaoDaLinha(
+  l: LinhaDoBanco,
+  regras: ReadonlyMap<string, { centro: string }> = new Map(),
+): Resolucao | null {
   if (l.ignorada) {
     return {
       estado: "ignorado",
@@ -200,17 +211,36 @@ export function resolucaoDaLinha(l: LinhaDoBanco): Resolucao | null {
   const principais = l.ligados.filter((x) => x.origem !== "juros_baixa");
   const primeira = (principais[0] ?? l.ligados[0])?.descricao ?? "lançamento";
   const varios = principais.length > 1 ? ` e mais ${principais.length - 1}` : "";
-  const texto =
-    l.resolvidaSozinha === "manual"
-      ? `Baixa feita à mão: ${aspas(primeira)}`
-      : l.resolvidaSozinha === "titulo"
-        ? `Baixado e conciliado sozinho: ${primeira}${varios}`
-        : l.resolvidaSozinha === "remessa"
+  const regra = l.regraId ? regras.get(l.regraId)?.centro ?? primeira : primeira;
+  const troca = l.datasTrocadas[0];
+  let texto: string;
+  switch (l.conciliadaComo) {
+    case "ligacao":
+      texto = `Baixa feita à mão: ${aspas(primeira)}${troca ? ` · data de ${diaMes(troca.de)} para ${diaMes(l.data)}, a do banco` : ""}`;
+      break;
+    case "correcao":
+      texto = l.correcao
+        ? `Baixa corrigida de ${moeda(l.correcao.de)} para ${moeda(l.correcao.para)}, o valor do banco · ${aspas(l.correcao.motivo)}`
+        : `Baixa corrigida pelo valor do banco: ${primeira}`;
+      break;
+    case "regra":
+      texto = l.resolvidaSozinha === "regra" ? `Lançado sozinho pela regra: ${regra}` : `Avulso lançado pela regra: ${regra}`;
+      break;
+    case "par":
+      texto = "Saída e devolução registradas; nenhum título baixado";
+      break;
+    case "avulso":
+      texto = `Avulso criado e baixado: ${primeira}`;
+      break;
+    default:
+      texto =
+        l.resolvidaSozinha === "remessa"
           ? `Baixa dos ${principais.length} títulos da remessa, numa linha só`
-          : l.resolvidaSozinha === "regra"
-            ? `Lançado sozinho pela regra: ${primeira}`
+          : l.resolvidaSozinha === "titulo"
+            ? `Baixado e conciliado sozinho: ${primeira}${varios}`
             : `Baixa de ${primeira}${varios}`;
-  return { estado: "conciliado", sozinho: l.resolvidaSozinha, texto, ligados: l.resolvidaSozinha === "manual" };
+  }
+  return { estado: "conciliado", sozinho: l.resolvidaSozinha, texto, ligados: l.conciliadaComo === "ligacao" };
 }
 
 export interface ConciliacaoDaConta {
@@ -245,9 +275,10 @@ export function conciliarConta(
   const pendentes = movimentos.filter((m) => !m.linha.conciliada && !m.linha.ignorada);
   const res = casar(pendentes, { titulos, lancamentos: dados.lancamentos, lotes, regras: dados.regras });
   const porId = new Map(res.map((r) => [r.mov.id, r]));
+  const regras = new Map(dados.regras.map((g) => [g.id as string, { centro: g.centro }]));
   const resultados: ResultadoDaLinha[] = movimentos.map((m) => {
     const r = porId.get(m.id);
-    return r ? { ...r, resolvido: null } : { mov: m, estado: "sem_par", candidatos: [], resolvido: resolucaoDaLinha(m.linha) };
+    return r ? { ...r, resolvido: null } : { mov: m, estado: "sem_par", candidatos: [], resolvido: resolucaoDaLinha(m.linha, regras) };
   });
   const usados = new Set(res.flatMap((r) => (r.lancamento ? [r.lancamento.id] : [])));
   const naoApareceu = dados.lancamentos.filter((l) => !usados.has(l.id) && diaCoberto(l.data, dados.periodos));
@@ -306,4 +337,83 @@ export function secoesDoBanco(resultados: ResultadoDaLinha[]): SecoesDoBanco {
     sem: pend.filter((r) => r.estado === "sem_par"),
     conciliados: resolvidos.filter((r) => !r.resolvido?.ligados),
   };
+}
+
+// ---------------------------------------------------------------------------
+// As ações: o que cada título leva à baixa e à conciliação (decisão 200)
+// ---------------------------------------------------------------------------
+
+/** O documento de um título, como `conciliar_linha_pelos_documentos` o
+ *  procura na conta da linha depois da baixa. */
+export type DocumentoDoTitulo = {
+  tipo: "pp" | "avulsa" | "titulo_receber" | "desembolso" | "devolucao_verba" | "fatura" | "imposto" | "transferencia";
+  id: string;
+};
+
+export function documentoDaLinha(l: Linha): DocumentoDoTitulo | null {
+  switch (l.lado) {
+    case "pagar":
+      switch (l.t.origem) {
+        case "pp":
+          return { tipo: "pp", id: l.t.id };
+        case "avulso":
+        case "recorrencia":
+        case "folha":
+          return { tipo: "avulsa", id: l.t.id };
+        case "desembolso":
+          return { tipo: "desembolso", id: l.t.id };
+        case "fatura_cartao":
+          return { tipo: "fatura", id: l.t.id };
+        case "pp_devolucao_verba":
+          return { tipo: "devolucao_verba", id: l.t.id };
+        default:
+          return null;
+      }
+    case "receber":
+      return l.origem === "nf"
+        ? { tipo: "titulo_receber", id: l.t.id }
+        : l.t.conta_avulsa_id
+          ? { tipo: "avulsa", id: l.t.conta_avulsa_id }
+          : null;
+    case "transferencia":
+      return { tipo: "transferencia", id: l.t.id };
+    case "imposto":
+      return { tipo: "imposto", id: l.t.id };
+  }
+}
+
+/** O item da baixa em lote do título, para o "Baixar e conciliar" de um
+ *  clique; `null` quando ele não vai pelo lote (desembolso, fatura,
+ *  estorno de verba, transferência, o imposto sem guia, o título sem
+ *  centro completo) — esses abrem a baixa de um por um. */
+export function itemDoLote(l: Linha): EntradaDaBaixaEmLote["itens"][number] | null {
+  const t = l.lote;
+  if (!t || l.motivoForaDoLote !== null) return null;
+  if (t.tipo === "imposto") {
+    if (!t.imposto.guiaPath) return null;
+    return {
+      chave: t.chave,
+      rotulo: t.titulo.slice(0, 200),
+      alvo: t.alvo,
+      aberto: r2(t.aberto),
+      centro: null,
+      imposto: { multa_juros: 0, guia_path: null, comprovante_path: "" },
+    };
+  }
+  if (!t.centroDeCusto) return null;
+  return { chave: t.chave, rotulo: t.titulo.slice(0, 200), alvo: t.alvo, aberto: r2(t.aberto), centro: t.centroDeCusto, imposto: null };
+}
+
+/** O banco pagou menos que o título e nenhuma retenção explica: a baixa
+ *  aberta pela linha começa parcial com o valor do banco. Só onde há baixa
+ *  parcial (PP, avulso, recorrência, nota e recebimento avulso) e o título
+ *  não tem retenção da aprovação (aí o líquido já é o do banco). */
+export function parcialPeloBanco(
+  r: Pick<ResultadoDaLinha, "mov" | "retencaoAliquotas">,
+  t: Pick<TituloDoMotor, "liquido" | "retencao" | "origem">,
+): number | null {
+  const banco = r2(Math.abs(r.mov.valor));
+  if (r.retencaoAliquotas || (t.retencao ?? 0) > 0) return null;
+  if (!["pp", "avulso", "recorrencia", "nf", "recebimento_avulso"].includes(t.origem)) return null;
+  return banco < t.liquido - 0.004 ? banco : null;
 }

@@ -3524,7 +3524,11 @@ export type OrigemLancamento =
   // um lançamento à parte, em 11 · Despesa com Juros, ligado à baixa por
   // `juros_de_lancamento_id`. Guarda as chaves do documento, mas nunca o
   // quita: toda soma do baixado filtra por `pp_baixa`/`avulsa_baixa`.
-  | "juros_baixa";
+  | "juros_baixa"
+  // O pagamento que o banco devolveu no mesmo dia (decisão 200): a saída e
+  // a devolução, fora do DRE, sem empresa e sem plano, como as pernas de
+  // uma transferência. Só a Conciliação automática grava.
+  | "devolucao_bancaria";
 
 export interface LancamentoFinanceiro {
   id: string;
@@ -3661,7 +3665,37 @@ export interface ExtratoLinha {
   avaliada_em: string | null;
   /** Alguém desfez: a linha não se resolve mais sozinha. */
   sem_auto: boolean;
+  /** Como a linha se conciliou (decisão 200). Nulo na pendente e na
+   *  ignorada. */
+  conciliada_como: ConciliadaComo | null;
+  conciliada_em: string | null;
+  conciliada_por: string | null;
+  /** O que o desfazer precisa: as datas de antes, a correção, a regra. */
+  desfazer: { datas?: Array<{ id: string; de: string }>; correcao_id?: string; regra_id?: string } | null;
+  /** As linhas que se resolveram juntas e se desfazem juntas. */
+  grupo: string | null;
   created_at: string;
+}
+
+/** Ligacao: a baixa já existia. Baixa e avulso: nasceu na conciliação. */
+export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao";
+
+/** A baixa feita à mão corrigida pela conciliação (`baixa_correcoes`). */
+export interface BaixaCorrecao {
+  id: string;
+  tenant_id: string;
+  extrato_linha_id: string;
+  documento_origem: "pp_baixa" | "avulsa_baixa" | "titulo_baixa";
+  documento_id: string;
+  lancamento_antes_id: string;
+  lancamento_id: string;
+  de: { data: string; principal: number; juros: number; total: number };
+  para: { data: string; principal: number; juros: number; total: number };
+  motivo: string;
+  corrigida_por: string;
+  created_at: string;
+  desfeita_em: string | null;
+  desfeita_por: string | null;
 }
 
 /** A linha com a situação, como `vw_extrato_linhas` a devolve. */

@@ -73,6 +73,7 @@ import {
   formaPagamentoLabel,
   type ContaBancaria,
   type FormaPagamento,
+  type ImpostoRetido,
   type PagamentoForaDoCadastroDaPP,
   type PedidoForaDoCadastro,
   type PlanoContaTipo,
@@ -98,7 +99,7 @@ import {
   BUSCANDO_RETENCAO_DA_APROVACAO,
   useRetencaoDaAprovacao,
 } from "@/components/financeiro/retencao-da-aprovacao";
-import { parcelaDePPDaChave } from "@/lib/fiscal/retencao-da-aprovacao";
+import { parcelaDePPDaChave, type RetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
 import { NoFiscalDoPagamento, useFiscalDaParcela } from "@/components/financeiro/no-fiscal";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 
@@ -176,6 +177,12 @@ export interface LinhaDoBancoNaBaixa {
   forma: Exclude<FormaPagamento, "cartao_credito"> | null;
   /** O arquivo do extrato, para a nota do topo. */
   arquivo: string;
+  /** O banco pagou menos que o título e nenhuma retenção explica: a baixa
+   *  abre parcial com este valor (decisão 200). */
+  parcial?: number | null;
+  /** A retenção na fonte que explica o banco ter menos (o passo 3b do
+   *  motor): a baixa abre com estas alíquotas, editáveis. */
+  retencao?: Partial<Record<ImpostoRetido, number>> | null;
 }
 
 export interface BaixaTituloPayload {
@@ -344,7 +351,18 @@ function FormularioDaBaixa({
       ? parcelaDePPDaChave(alvo.chave)
       : null,
   );
-  const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao, aprovacao.retencao);
+  // A retenção que o motor sugeriu pela linha do banco (só para título sem
+  // retenção na aprovação: as duas nunca chegam juntas).
+  const retencaoDaLinha = React.useMemo<RetencaoDaAprovacao | null>(
+    () => (linhaDoBanco?.retencao ? { data: null, aliquotas: linhaDoBanco.retencao, remessa: null } : null),
+    [linhaDoBanco?.retencao],
+  );
+  const v = useValorDaBaixa(
+    alvo.aberto,
+    alvo.ultimaRetencao,
+    aprovacao.retencao ?? retencaoDaLinha,
+    linhaDoBanco?.parcial ?? null,
+  );
   // Módulo fiscal (entrega 2): o bloco "No fiscal" — as guias que esta baixa
   // faz nascer na Apuração. A NF da PP é lida ao abrir, DEPOIS das retenções
   // da aprovação (as Server Actions vão uma de cada vez, e é aquela leitura
@@ -513,6 +531,11 @@ function FormularioDaBaixa({
       {linhaDoBanco && (
         <Nota tom="verde" icone={<Landmark className="mt-0.5 h-3.5 w-3.5 shrink-0" />}>
           Aberto pela conciliação com o banco: a data, a conta e o valor vêm do extrato ({linhaDoBanco.arquivo}).
+          {linhaDoBanco.retencao
+            ? " O banco pagou menos que o título, e a diferença bate com retenção na fonte: a baixa abre com ela, editável."
+            : linhaDoBanco.parcial
+              ? " O banco pagou menos que o título: a baixa abre parcial, com o valor do banco."
+              : ""}{" "}
           Confira e confirme.
         </Nota>
       )}

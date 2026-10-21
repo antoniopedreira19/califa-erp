@@ -14,6 +14,7 @@
  */
 
 import * as React from "react";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Eye, FileText, Info, Loader2, Paperclip, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -206,6 +207,30 @@ export function BotaoDetalhes({
                         {formatBRL(Math.round((detalhes.saidaDaBaixa.principal + detalhes.saidaDaBaixa.juros) * 100) / 100)}
                       </span>
                     </div>
+                  </div>
+                </Grupo>
+              )}
+              {detalhes && detalhes.historicoDaBaixa.length > 0 && (
+                // A baixa corrigida pela conciliação com o banco (decisão
+                // 200): de → para, o motivo, quem e quando.
+                <Grupo rotulo="Histórico da baixa">
+                  <div className="flex flex-col gap-1.5">
+                    {detalhes.historicoDaBaixa.map((h) => (
+                      <div key={h.em} className={h.desfeitaEm ? "text-muted-foreground line-through" : undefined}>
+                        <div className="flex items-baseline justify-between gap-4">
+                          <span>
+                            Corrigida pelo banco em {formatDiaBr(h.em)} · {h.por}
+                          </span>
+                          <span className="whitespace-nowrap font-mono">
+                            {formatBRL(h.de.total)} → {formatBRL(h.para.total)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {formatDiaBr(h.de.data)} → {formatDiaBr(h.para.data)} · “{h.motivo}”
+                          {h.desfeitaEm ? ` · desfeita em ${formatDiaBr(h.desfeitaEm)}` : ""}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </Grupo>
               )}

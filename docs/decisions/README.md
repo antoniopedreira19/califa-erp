@@ -219,7 +219,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 197 | [O cartão: a fatura escolhida na baixa, o lote no cartão e o extrato da fatura na grade das planilhas; baixa e fatura só por admin e financeiro no banco (revê a 093 e a 140)](197-cartao-fatura-escolhida-lote-e-novo-layout.md) | 2026-10-21 |
 | 198 | [A importação do extrato do banco em OFX: a conta pelo arquivo, a impressão digital que não repete e a aba Conciliação automática](198-importacao-do-extrato-ofx.md) | 2026-10-21 |
 | 199 | [O motor de correspondência, o vínculo "conciliado" (`extrato_linha_id`) e as seções da Conciliação automática](199-motor-de-correspondencia-e-secoes-do-banco.md) | 2026-10-21 |
-| 200 | *Reservada* — conciliação com o banco (task 029, fase 3): as ações da Conciliação automática | 2026-10-21 |
+| 200 | [As ações da Conciliação automática: conciliar, baixar pelo lote com os dados do banco, conferir pela baixa real, corrigir a baixa, regras, saiu e voltou, ignorar e desfazer; a data do banco em tudo](200-acoes-da-conciliacao-automatica.md) | 2026-10-21 |
 | 201 | *Reservada* — conciliação com o banco (task 029, fase 3): o que se resolve sozinho na importação | 2026-10-21 |
 | 202 | *Reservada* — conciliação com o banco (task 029, fase 3): o sinal do banco na aba Títulos | 2026-10-21 |
 | 203 | *Reservada* — conciliação com o banco (task 029, fase 4): o fechamento da conciliação, que trava até reabrir | 2026-10-21 |

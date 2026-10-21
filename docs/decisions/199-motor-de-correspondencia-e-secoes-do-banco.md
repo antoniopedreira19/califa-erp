@@ -152,4 +152,5 @@ Títulos.
    (`extrato_linha_id`). Fechar o resto é mexer na tabela de outro módulo.
 2. **Lançamento sem empresa e sem transferência fica invisível** pela RLS de
    `lancamentos_financeiros`. Importa para o "Saiu e voltou" (M3.6), que
-   estava aprovado com empresa nula: será tratado na entrega 3B.
+   estava aprovado com empresa nula: resolvido na decisão 200, com o ramo da
+   devolução bancária na policy de leitura (Tiago, 21/10/2026).
