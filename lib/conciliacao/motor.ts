@@ -8,6 +8,8 @@
  * para a menos certa:
  *
  *   1.  a baixa feita à mão que bate (mesmo valor e sinal, até 3 dias);
+ *   1c. as baixas de uma remessa, no mesmo dia, que somam a linha (o banco
+ *       que debita a remessa inteira numa linha);
  *   1b. a baixa feita à mão que diverge (até R$ 1 ou 1%, até 3 dias);
  *   2.  saiu e voltou (a devolução e a saída de mesmo valor no mesmo dia);
  *   3.  o título pelo valor exato, por pontos (data, forma, CNPJ);
@@ -23,8 +25,16 @@
  * estado, a confiança e o motivo. Os nomes dos campos são os do protótipo,
  * para o teste rodar sobre os mesmos dados.
  *
- * Diferença deliberada do protótipo: a remessa (passo 4) só casa com uma
- * linha de saída do banco — no protótipo ela não conferia o sinal.
+ * Diferenças deliberadas do protótipo:
+ * - a remessa (passo 4) só casa com uma linha de saída do banco — no
+ *   protótipo ela não conferia o sinal;
+ * - a remessa é conciliada linha a linha (Tiago, 21/10/2026, decisão 202): o
+ *   Santander debita cada pagamento da remessa numa linha própria, e um
+ *   pagamento que falha sai noutro dia. O protótipo supunha a folha numa
+ *   linha só do banco. O título da remessa casa sozinho, pelo valor dele,
+ *   e só fica guardado para o passo 4 quando alguma linha do banco tem o
+ *   total exato da remessa; as baixas da remessa casam uma a uma, e o
+ *   grupo delas (passo 1c) só quando uma linha tem a soma exata.
  */
 
 import { normalizar } from "./ofx";
@@ -88,6 +98,10 @@ export interface LancamentoDoMotor {
   tituloId?: string | null;
 }
 
+/** As baixas de uma remessa no mesmo dia, juntas (passo 1c): `membros` são
+ *  os ids dos lançamentos que o grupo junta, como estão em `lancamentos`. */
+export type RemessaBaixadaDoMotor = LancamentoDoMotor & { membros: string[] };
+
 export interface LoteDoMotor {
   id: string;
   nome: string;
@@ -147,6 +161,8 @@ export interface SistemaDoMotor {
   titulos: TituloDoMotor[];
   lancamentos: LancamentoDoMotor[];
   lotes: LoteDoMotor[];
+  /** As baixas de cada remessa no mesmo dia, juntas (passo 1c). */
+  remessasBaixadas?: RemessaBaixadaDoMotor[];
   regras: RegraDoMotor[];
   /** Só o protótipo usa: desloca os vencimentos do exemplo. */
   deslocamento?: number;
@@ -251,7 +267,7 @@ export function retencaoQueExplica(
 // ---------------------------------------------------------------------------
 
 export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: SistemaDoMotor): ResultadoDoMotor<M>[] {
-  const { titulos, lancamentos, lotes, regras, deslocamento = 0 } = sistema;
+  const { titulos, lancamentos, lotes, regras, remessasBaixadas = [], deslocamento = 0 } = sistema;
   const usados = new Set<string>();
   const lancUsados = new Set<string>();
   const res: ResultadoDoMotor<M>[] = movimentos.map((m) => ({ mov: m, estado: "sem_par", candidatos: [] }));
@@ -273,6 +289,25 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
       r.lancamento = l;
       r.confianca = "alta";
       r.motivo = "Já está no extrato do sistema, lançado à mão. Conciliar só liga as duas linhas.";
+    }
+  });
+
+  // 1c. A remessa já baixada que o banco debitou inteira: as baixas dela no
+  //     mesmo dia somam a linha centavo a centavo, e nenhuma casou sozinha.
+  res.forEach((r) => {
+    if (r.estado !== "sem_par" || r.mov.valor >= 0) return;
+    const g = remessasBaixadas.find(
+      (g) =>
+        g.membros.every((id) => !lancUsados.has(id)) &&
+        cents(g.valor) === cents(r.mov.valor) &&
+        Math.abs(diasEntre(somaDias(g.data, deslocamento), r.mov.data)) <= 3,
+    );
+    if (g) {
+      g.membros.forEach((id) => lancUsados.add(id));
+      r.estado = "ja_lancado";
+      r.lancamento = g;
+      r.confianca = "alta";
+      r.motivo = `As ${g.membros.length} baixas da remessa somam a linha centavo a centavo. Conciliar só liga as linhas.`;
     }
   });
 
@@ -318,6 +353,16 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
     }
   });
 
+  // O título da remessa fica guardado para o passo 4 só quando alguma linha
+  // de saída ainda sem par tem o total exato da remessa; senão, ele casa
+  // pelo valor dele, linha a linha (decisão 202).
+  const lotesNaLinha = new Set(
+    lotes
+      .filter((l) => res.some((r) => r.estado === "sem_par" && r.mov.valor < 0 && cents(l.total) === cents(r.mov.valor)))
+      .map((l) => l.id),
+  );
+  const guardado = (t: TituloDoMotor) => !!t.loteId && lotesNaLinha.has(t.loteId);
+
   // 3. O título pelo valor exato.
   const pontuar = (m: MovimentoDoMotor, t: TituloDoMotor) => {
     let s = 60;
@@ -336,7 +381,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   const pares: Array<{ r: ResultadoDoMotor<M>; t: TituloDoMotor; s: number }> = [];
   pendentes.forEach((r) => {
     titulos.forEach((t) => {
-      if (t.loteId || !compativel(r.mov, t) || cents(t.liquido) !== cents(r.mov.valor)) return;
+      if (guardado(t) || !compativel(r.mov, t) || cents(t.liquido) !== cents(r.mov.valor)) return;
       pares.push({ r, t, s: pontuar(r.mov, t) });
     });
   });
@@ -400,7 +445,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   res.forEach((r) => {
     if (r.estado !== "sem_par") return;
     for (const t of titulos) {
-      if (usados.has(t.id) || t.loteId || (t.retencao ?? 0) > 0 || !compativel(r.mov, t)) continue;
+      if (usados.has(t.id) || guardado(t) || (t.retencao ?? 0) > 0 || !compativel(r.mov, t)) continue;
       if (Math.abs(diasEntre(venc(t), r.mov.data)) > 10) continue;
       const combo = RETENCOES_COMUNS.find((c) => Math.abs(liquidoCom(t.valor, c.aliquotas) - Math.abs(r.mov.valor)) <= 0.01);
       if (!combo) continue;
@@ -418,7 +463,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   // 4. Lote: uma linha de saída do banco = a remessa (a folha).
   res.forEach((r) => {
     if (r.estado !== "sem_par" || r.mov.valor >= 0) return;
-    const lote = lotes.find((l) => cents(l.total) === cents(r.mov.valor));
+    const lote = lotes.find((l) => cents(l.total) === cents(r.mov.valor) && l.titulos.every((t) => !usados.has(t.id)));
     if (lote) {
       r.estado = "soma";
       r.lote = lote;
@@ -437,7 +482,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
     const alvo = cents(r.mov.valor);
     const porContraparte = new Map<string, TituloDoMotor[]>();
     titulos.forEach((t) => {
-      if (usados.has(t.id) || t.loteId || !compativel(r.mov, t) || cents(t.liquido) >= alvo) return;
+      if (usados.has(t.id) || guardado(t) || !compativel(r.mov, t) || cents(t.liquido) >= alvo) return;
       if (Math.abs(diasEntre(venc(t), r.mov.data)) > 10) return;
       if (cnpj && t.cnpj && t.cnpj.replace(/\D/g, "") !== cnpj) return;
       porContraparte.set(t.contraparte, [...(porContraparte.get(t.contraparte) ?? []), t]);
@@ -478,7 +523,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
       }
       return dif <= cents(t.liquido) * 0.03 && Math.abs(diasEntre(venc(t), r.mov.data)) <= 10;
     };
-    const t = titulos.find((t) => !usados.has(t.id) && !t.loteId && compativel(r.mov, t) && cabe(t));
+    const t = titulos.find((t) => !usados.has(t.id) && !guardado(t) && compativel(r.mov, t) && cabe(t));
     if (t) {
       usados.add(t.id);
       r.estado = "diferenca";

@@ -21,6 +21,7 @@ import {
 /** Uma linha do extrato como `montarLinhasDeLancamentos` devolve. */
 function linha(p: Partial<LinhaSemSaldo> & Pick<LinhaSemSaldo, "id" | "valor">): LinhaSemSaldo {
   return {
+    folha: null,
     data_movimento: "2026-11-25",
     descricao: "Lançamento",
     natureza: "saida",

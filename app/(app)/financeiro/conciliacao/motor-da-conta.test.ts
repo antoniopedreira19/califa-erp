@@ -10,7 +10,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { agruparComoNoBanco, diaCoberto, diaCompleto, type LancamentoCru, type LinhaDoBanco } from "./banco-dados";
+import {
+  agruparComoNoBanco,
+  diaCoberto,
+  diaCompleto,
+  remessasJaBaixadas,
+  type LancamentoCru,
+  type LinhaDoBanco,
+} from "./banco-dados";
 import {
   automacaoDaLeitura,
   conciliarConta,
@@ -47,7 +54,6 @@ const lanc = (id: string, extra: Partial<LancamentoCru> = {}): LancamentoCru => 
 test("a baixa e os juros dela são um débito só, com os juros à parte", () => {
   const [l] = agruparComoNoBanco(
     [lanc("b", { valor: 500 }), lanc("j", { origem: "juros_baixa", valor: 50, juros_de_lancamento_id: "b" })],
-    new Map(),
   );
   assert.equal(l.id, "b");
   assert.deepEqual(l.ids, ["b", "j"]);
@@ -62,29 +68,29 @@ test("as partes de uma guia de imposto são um débito só", () => {
       lanc("p2", { origem: "imposto_baixa", imposto_a_pagar_id: "imp", valor: 200 }),
       lanc("outro", { valor: 10 }),
     ],
-    new Map(),
   );
   assert.equal(g.length, 2);
   assert.equal(g.find((x) => x.id === "p1")?.valor, -500);
 });
 
-test("as baixas dos itens de uma remessa, no mesmo dia, são o débito da remessa", () => {
+test("as baixas da remessa são um débito cada; o grupo do dia vem à parte (decisão 202)", () => {
   const remessa = new Map([
     ["av1", { id: "r1" }],
     ["av2", { id: "r1" }],
   ]);
-  const g = agruparComoNoBanco(
-    [
-      lanc("a", { origem: "avulsa_baixa", conta_avulsa_id: "av1", valor: 1000 }),
-      lanc("b", { origem: "avulsa_baixa", conta_avulsa_id: "av2", valor: 2000 }),
-      // Outro dia: outra linha do banco.
-      lanc("c", { origem: "avulsa_baixa", conta_avulsa_id: "av2", valor: 5, data_movimento: "2026-10-20" }),
-    ],
-    remessa,
-  );
-  assert.equal(g.length, 2);
-  assert.equal(g[0].valor, -3000);
-  assert.equal(g[0].descricao, "2 baixas da remessa, no mesmo dia");
+  const crus = [
+    lanc("a", { origem: "avulsa_baixa", conta_avulsa_id: "av1", valor: 1000 }),
+    lanc("b", { origem: "avulsa_baixa", conta_avulsa_id: "av2", valor: 2000 }),
+    // Outro dia (o pagamento que falhou e saiu depois): fora do grupo.
+    lanc("c", { origem: "avulsa_baixa", conta_avulsa_id: "av2", valor: 5, data_movimento: "2026-10-20" }),
+  ];
+  const g = agruparComoNoBanco(crus);
+  assert.deepEqual(g.map((l) => l.valor), [-1000, -2000, -5]);
+  const grupos = remessasJaBaixadas(g, crus, remessa);
+  assert.equal(grupos.length, 1);
+  assert.equal(grupos[0].valor, -3000);
+  assert.deepEqual(grupos[0].membros, ["a", "b"]);
+  assert.equal(grupos[0].descricao, "2 baixas da remessa, no mesmo dia");
 });
 
 test("o dia completo: o arquivo gerado no último dia não o cobre inteiro", () => {
@@ -176,7 +182,7 @@ const titulo = (chave: string, valor: number, extra: Record<string, unknown> = {
     ...extra,
   }) as unknown as Linha;
 
-test("a remessa casa só com todos os títulos em aberto, e o título dela não casa sozinho", () => {
+test("a remessa casa só com todos os títulos em aberto, e os títulos ficam marcados com ela", () => {
   const linhas = [titulo("pagar|avulso|a", 1000), titulo("pagar|avulso|b", 2000)];
   const ts = titulosDoMotor(linhas, "conta", {}, "2026-10-21");
   const remessas = [{ id: "r1", nome: "remessa nº 12", descricao: "Remessa Santander nº 12", itens: [
@@ -204,6 +210,7 @@ test("as seções: certo em Prontos, sem centro em Conferir, e o que não tem na
   const banco = {
     linhas: [linhaDoBanco("1", { valor: -700 }), linhaDoBanco("2", { valor: -300, ordem: 1 }), linhaDoBanco("3", { valor: -12.34, ordem: 2 })],
     lancamentos: [],
+    remessasBaixadas: [],
     remessas: [],
     regras: [],
     periodos: [],
@@ -218,7 +225,8 @@ test("as seções: certo em Prontos, sem centro em Conferir, e o que não tem na
 test("a baixa feita à mão sem linha, num dia coberto, aparece em 'sem linha no banco'", () => {
   const banco = {
     linhas: [linhaDoBanco("1", { valor: -700 })],
-    lancamentos: agruparComoNoBanco([lanc("x", { valor: 450 }), lanc("y", { valor: 700 })], new Map()),
+    lancamentos: agruparComoNoBanco([lanc("x", { valor: 450 }), lanc("y", { valor: 700 })]),
+    remessasBaixadas: [],
     remessas: [],
     regras: [],
     periodos: [{ inicio: "2026-10-19", fim: "2026-10-19", geradoDia: "2026-10-20" }],
@@ -245,7 +253,8 @@ test("a automação: o certo se resolve sozinho uma vez; a soma, o sem centro e 
       linhaDoBanco("5", { valor: -800, ordem: 4, semAuto: true }),
       linhaDoBanco("6", { valor: -700, ordem: 5, avaliada: true, conciliada: true, conciliadaComo: "baixa", resolvidaSozinha: "titulo" }),
     ],
-    lancamentos: agruparComoNoBanco([lanc("y", { valor: 450 })], new Map()),
+    lancamentos: agruparComoNoBanco([lanc("y", { valor: 450 })]),
+    remessasBaixadas: [],
     remessas: [{ id: "r1", nome: "remessa nº 12", descricao: "Remessa Santander nº 12", itens: [
       { origemTipo: "avulsa", origemId: "c", valor: 1000 },
       { origemTipo: "avulsa", origemId: "d", valor: 2000 },
@@ -267,4 +276,66 @@ test("a automação: o certo se resolve sozinho uma vez; a soma, o sem centro e 
   const faixa = textoDosSozinhos(resultados);
   assert.equal(faixa?.quantas, 1);
   assert.match(faixa?.partes[0] ?? "", /^1 título baixado e conciliado \(valor exato/);
+});
+
+test("a remessa linha a linha: cada pagamento casa o seu título, e o total só com a linha do total (decisão 202)", () => {
+  const linhas = [titulo("pagar|avulso|c", 1000), titulo("pagar|avulso|d", 2000)];
+  const remessas = [{ id: "r1", nome: "remessa nº 12", descricao: "Remessa Santander nº 12", itens: [
+    { origemTipo: "avulsa", origemId: "c", valor: 1000 },
+    { origemTipo: "avulsa", origemId: "d", valor: 2000 },
+  ] }];
+  const base = { lancamentos: [], remessasBaixadas: [], remessas, regras: [], periodos: [] };
+  // O Santander: um débito por pagamento.
+  const separado = conciliarConta(
+    { ...base, linhas: [linhaDoBanco("1", { valor: -1000 }), linhaDoBanco("2", { valor: -2000, ordem: 1 })] },
+    linhas,
+    "conta",
+    {},
+    "2026-10-21",
+  );
+  assert.deepEqual(
+    separado.resultados.map((r) => [r.mov.id, r.estado, r.titulo?.id]),
+    [
+      ["1", "sugestao", "pagar|avulso|c"],
+      ["2", "sugestao", "pagar|avulso|d"],
+    ],
+  );
+  // O banco que debita a remessa inteira.
+  const total = conciliarConta({ ...base, linhas: [linhaDoBanco("1", { valor: -3000 })] }, linhas, "conta", {}, "2026-10-21");
+  assert.equal(total.resultados[0].estado, "soma");
+});
+
+test("as baixas da remessa: uma a uma, e o grupo só com a linha da soma (passo 1c)", () => {
+  const remessa = new Map([
+    ["av1", { id: "r1" }],
+    ["av2", { id: "r1" }],
+  ]);
+  const crus = [
+    lanc("a", { origem: "avulsa_baixa", conta_avulsa_id: "av1", valor: 1000 }),
+    lanc("b", { origem: "avulsa_baixa", conta_avulsa_id: "av2", valor: 2000 }),
+  ];
+  const lancamentos = agruparComoNoBanco(crus);
+  const base = {
+    lancamentos,
+    remessasBaixadas: remessasJaBaixadas(lancamentos, crus, remessa),
+    remessas: [],
+    regras: [],
+    periodos: [{ inicio: "2026-10-19", fim: "2026-10-19", geradoDia: "2026-10-20" }],
+  };
+  const separado = conciliarConta(
+    { ...base, linhas: [linhaDoBanco("1", { valor: -1000 }), linhaDoBanco("2", { valor: -2000, ordem: 1 })] },
+    [],
+    "conta",
+    {},
+    "2026-10-21",
+  );
+  assert.deepEqual(separado.resultados.map((r) => [r.estado, r.lancamento?.id]), [
+    ["ja_lancado", "a"],
+    ["ja_lancado", "b"],
+  ]);
+  assert.deepEqual(separado.naoApareceu, []);
+  const total = conciliarConta({ ...base, linhas: [linhaDoBanco("1", { valor: -3000 })] }, [], "conta", {}, "2026-10-21");
+  assert.equal(total.resultados[0].estado, "ja_lancado");
+  assert.deepEqual(total.lancamentos.get(total.resultados[0].lancamento?.id ?? "")?.ids, ["a", "b"]);
+  assert.deepEqual(total.naoApareceu, []);
 });

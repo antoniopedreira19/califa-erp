@@ -23,7 +23,14 @@ import { efeitoNaConta, r2 } from "@/lib/financeiro/planilha-de-titulos";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { ResolucaoSozinha } from "@/lib/types";
 import type { Linha } from "./linhas-da-aba";
-import { diaCoberto, diaCompleto, type DadosDaAbaBanco, type LancamentoSemLinha, type LinhaDoBanco } from "./banco-dados";
+import {
+  diaCoberto,
+  diaCompleto,
+  type DadosDaAbaBanco,
+  type LancamentoSemLinha,
+  type LinhaDoBanco,
+  type RemessaBaixada,
+} from "./banco-dados";
 
 // ---------------------------------------------------------------------------
 // Os títulos
@@ -255,7 +262,7 @@ export interface ConciliacaoDaConta {
 
 /** Roda o motor nas linhas do banco ainda sem solução. */
 export function conciliarConta(
-  dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessas" | "regras" | "periodos">,
+  dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessasBaixadas" | "remessas" | "regras" | "periodos">,
   linhasDaPlanilha: Linha[],
   contaId: string,
   documentoDaParte: Record<string, string>,
@@ -273,19 +280,28 @@ export function conciliarConta(
     linha: l,
   }));
   const pendentes = movimentos.filter((m) => !m.linha.conciliada && !m.linha.ignorada);
-  const res = casar(pendentes, { titulos, lancamentos: dados.lancamentos, lotes, regras: dados.regras });
+  const res = casar(pendentes, {
+    titulos,
+    lancamentos: dados.lancamentos,
+    lotes,
+    remessasBaixadas: dados.remessasBaixadas,
+    regras: dados.regras,
+  });
   const porId = new Map(res.map((r) => [r.mov.id, r]));
   const regras = new Map(dados.regras.map((g) => [g.id as string, { centro: g.centro }]));
   const resultados: ResultadoDaLinha[] = movimentos.map((m) => {
     const r = porId.get(m.id);
     return r ? { ...r, resolvido: null } : { mov: m, estado: "sem_par", candidatos: [], resolvido: resolucaoDaLinha(m.linha, regras) };
   });
-  const usados = new Set(res.flatMap((r) => (r.lancamento ? [r.lancamento.id] : [])));
+  // O grupo da remessa (passo 1c) usa as baixas que junta.
+  const usados = new Set(
+    res.flatMap((r) => (r.lancamento ? [r.lancamento.id, ...((r.lancamento as Partial<RemessaBaixada>).membros ?? [])] : [])),
+  );
   const naoApareceu = dados.lancamentos.filter((l) => !usados.has(l.id) && diaCoberto(l.data, dados.periodos));
   return {
     resultados,
     titulos: new Map(titulos.map((t) => [t.id, t])),
-    lancamentos: new Map(dados.lancamentos.map((l) => [l.id, l])),
+    lancamentos: new Map([...dados.lancamentos, ...dados.remessasBaixadas].map((l) => [l.id, l])),
     naoApareceu,
   };
 }
@@ -299,7 +315,7 @@ export function conciliarConta(
  * antes deles no motor.
  */
 export function alertasDoExtrato(
-  dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessas" | "regras" | "periodos">,
+  dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessasBaixadas" | "remessas" | "regras" | "periodos">,
   contaId: string,
   hoje: string,
 ): Record<string, string> {

@@ -261,6 +261,7 @@ export async function carregarExtratoDaFatura(
     }));
     pendentes.push({
       id: `pendente-avulsa-${a.id}`,
+      folha: null,
       data_movimento: a.data_pagamento ?? a.data_prevista_pagamento ?? fatura.data_vencimento,
       descricao: a.descricao,
       natureza: a.natureza,
@@ -293,6 +294,7 @@ export async function carregarExtratoDaFatura(
     const total = pp?.parcelas?.length ?? 1;
     pendentes.push({
       id: `pendente-parcela-${p.id}`,
+      folha: null,
       data_movimento: p.data_pagamento ?? p.data_vencimento,
       descricao: total > 1 ? `${pp?.servico ?? ""} (${p.numero}/${total})` : (pp?.servico ?? ""),
       natureza: "saida",

@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { FolhaDaLinha } from "@/lib/financeiro/folha-no-extrato";
 
 export type LancamentoLinha = {
   id: string;
+  /** A folha de pagamento de que a baixa é (decisão 202): o Extrato junta,
+   *  só para ver, os pagamentos da mesma folha no mesmo dia numa faixa.
+   *  `null` em tudo que não é folha. */
+  folha: FolhaDaLinha | null;
   data_movimento: string;
   descricao: string;
   natureza: "entrada" | "saida";

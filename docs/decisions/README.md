@@ -221,7 +221,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 199 | [O motor de correspondência, o vínculo "conciliado" (`extrato_linha_id`) e as seções da Conciliação automática](199-motor-de-correspondencia-e-secoes-do-banco.md) | 2026-10-21 |
 | 200 | [As ações da Conciliação automática: conciliar, baixar pelo lote com os dados do banco, conferir pela baixa real, corrigir a baixa, regras, saiu e voltou, ignorar e desfazer; a data do banco em tudo](200-acoes-da-conciliacao-automatica.md) | 2026-10-21 |
 | 201 | [O que se resolve sozinho na importação do extrato: a baixa feita à mão que bate, o título certo, a remessa e a regra; cada linha avaliada uma vez](201-o-que-se-resolve-sozinho-na-importacao.md) | 2026-10-21 |
-| 202 | [As marcas do banco no Extrato (✓, ⚠, ○, a faixa e o contador) e o sinal na aba Títulos, com a baixa que sai conciliada](202-marcas-do-banco-no-extrato-e-nos-titulos.md) | 2026-10-21 |
+| 202 | [As marcas do banco no Extrato (✓, ⚠, ○, a faixa e o contador), o sinal na aba Títulos, e a folha e a remessa linha a linha (revê a 199)](202-marcas-do-banco-no-extrato-e-nos-titulos.md) | 2026-10-21 |
 | 203 | *Reservada* — conciliação com o banco (task 029, fase 4): o fechamento da conciliação, que trava até reabrir | 2026-10-21 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em

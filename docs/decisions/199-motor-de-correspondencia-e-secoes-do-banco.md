@@ -59,11 +59,16 @@ remessa, a tarifa — e guardar que a linha foi conciliada.
 6. **As remessas** da conta (`cnab_remessas` "gerado") casam só quando todos
    os itens ainda têm o título em aberto e sem baixa. O total é a soma do que
    cada item pagou — o líquido, decisão 145. O título que está numa remessa
-   que ainda casa não casa sozinho.
+   que ainda casa não casa sozinho. *(Revisto pela decisão 202: só quando
+   alguma linha do banco tem o total exato da remessa; senão ele casa pelo
+   valor dele, linha a linha — o Santander debita cada pagamento da remessa
+   numa linha própria.)*
 7. **Os lançamentos da conta ainda sem linha do banco** chegam juntados como
    o banco os mostra: a baixa e os juros dela; as partes de uma guia de
    imposto (decisão 141); e as baixas dos itens de uma mesma remessa, no
-   mesmo dia — o banco debita a remessa inteira numa linha só.
+   mesmo dia — o banco debita a remessa inteira numa linha só. *(Revisto
+   pela decisão 202: cada baixa da remessa é um débito próprio; o grupo do
+   dia só casa com a linha que tem a soma exata, no passo 1c.)*
 8. **As regras do histórico** (`extrato_regras`): as da conta antes das de
    todas as contas, e o padrão mais longo antes do mais curto. A semente
    criou "TAR" → 04 · Custo Fixo · Tarifa bancária e "IOF" → 11 · Despesa

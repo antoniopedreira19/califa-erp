@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DocumentoTipo } from "@/lib/types";
 import { DOCUMENTO_TIPOS_FISCAIS, documentoTipoLabel } from "@/lib/types";
 import type { LancamentoLinha, OrigemDaTransacao } from "@/lib/calculos/saldo-conta";
+import { folhaDaBaixa } from "@/lib/financeiro/folha-no-extrato";
 
 /**
  * A LINHA DO EXTRATO, montada num lugar só (20/09/2026).
@@ -53,6 +54,7 @@ export const SELECT_LANCAMENTO_LINHA = `id, data_movimento, descricao, natureza,
          conta_avulsa:contas_avulsas!conta_avulsa_id(
            codigo,
            recorrente_id,
+           folha:folhas_pagamento(competencia_ano, competencia_mes, tipo),
            anexos:contas_avulsas_anexos(arquivo_path, documento_tipo, documento_numero),
            rateio:contas_avulsas_regionais(
              percentual,
@@ -106,6 +108,8 @@ export type LancamentoRaw = {
   conta_avulsa: {
     codigo: string | null;
     recorrente_id: string | null;
+    /** A folha do colaborador que a avulsa paga (decisão 202). */
+    folha: { competencia_ano: number; competencia_mes: number; tipo: string | null } | null;
     anexos: AnexoRaw[];
     rateio: RateioRaw[];
   } | null;
@@ -181,6 +185,7 @@ export async function montarLinhasDeLancamentos(
     }));
     return {
       id: r.id,
+      folha: folhaDaBaixa(r.origem, r.conta_avulsa?.folha),
       data_movimento: r.data_movimento,
       descricao: r.descricao,
       natureza: r.natureza,
