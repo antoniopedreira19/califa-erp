@@ -213,16 +213,35 @@ async function chamar(rpc: string, args: Record<string, unknown>, generica: stri
   return { ok: true, dados: data };
 }
 
-/** A baixa feita à mão que bate com o banco: só liga, com a data do banco. */
-export async function conciliarLinha(linhaId: string, lancamentoIds: string[]): Promise<Resultado> {
-  if (!UUID.safeParse(linhaId).success || !z.array(UUID).min(1).max(200).safeParse(lancamentoIds).success) {
+/** A baixa feita à mão que bate com o banco: só liga, com a data do banco.
+ *  `sozinha`: a automação da importação ligou (decisão 201). */
+export async function conciliarLinha(linhaId: string, lancamentoIds: string[], sozinha: "manual" | null = null): Promise<Resultado> {
+  if (!UUID.safeParse(linhaId).success || !z.array(UUID).min(1).max(500).safeParse(lancamentoIds).success) {
     return { ok: false, message: "Entrada inválida." };
   }
+  if (sozinha !== null && sozinha !== "manual") return { ok: false, message: "Entrada inválida." };
   return chamar(
     "conciliar_linha",
-    { p_linha_id: linhaId, p_lancamento_ids: lancamentoIds, p_como: "ligacao" },
+    { p_linha_id: linhaId, p_lancamento_ids: lancamentoIds, p_como: "ligacao", p_sozinha: sozinha },
     "Não foi possível conciliar esta linha. Tente de novo.",
   );
+}
+
+/**
+ * A avaliação única da importação (decisão 201): reserva as linhas que
+ * ainda não passaram por ela e devolve as que reservou. Só essas se
+ * resolvem sozinhas — duas abas abertas não baixam a mesma linha duas vezes.
+ */
+export async function marcarLinhasAvaliadas(linhaIds: string[]): Promise<{ ok: true; ids: string[] } | { ok: false; message: string }> {
+  if (!z.array(UUID).min(1).max(5000).safeParse(linhaIds).success) return { ok: false, message: "Entrada inválida." };
+  const g = await gate();
+  if (!g.ok) return g;
+  const { data, error } = await g.supabase.rpc("marcar_linhas_avaliadas", { p_linha_ids: linhaIds });
+  if (error) {
+    console.error("[conciliacao.marcar_linhas_avaliadas]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível avaliar as linhas novas.") };
+  }
+  return { ok: true, ids: ((data as string[] | null) ?? []).filter((id) => UUID.safeParse(id).success) };
 }
 
 /** O documento baixado, como a RPC o procura na conta da linha. */
@@ -241,15 +260,18 @@ export async function conciliarPelosDocumentos(
   grupo: string | null = null,
   /** `avulso`: o título nasceu na conciliação ("Lançar avulso"). */
   como: "baixa" | "avulso" = "baixa",
+  /** A automação da importação baixou e conciliou (decisão 201). */
+  sozinha: "titulo" | "remessa" | null = null,
 ): Promise<Resultado> {
-  if (!UUID.safeParse(linhaId).success || !z.array(documentoSchema).min(1).max(50).safeParse(documentos).success) {
+  if (!UUID.safeParse(linhaId).success || !z.array(documentoSchema).min(1).max(500).safeParse(documentos).success) {
     return { ok: false, message: "Entrada inválida." };
   }
   if (grupo !== null && !UUID.safeParse(grupo).success) return { ok: false, message: "Entrada inválida." };
   if (como !== "baixa" && como !== "avulso") return { ok: false, message: "Entrada inválida." };
+  if (sozinha !== null && sozinha !== "titulo" && sozinha !== "remessa") return { ok: false, message: "Entrada inválida." };
   return chamar(
     "conciliar_linha_pelos_documentos",
-    { p_linha_id: linhaId, p_documentos: documentos, p_como: como, p_grupo: grupo },
+    { p_linha_id: linhaId, p_documentos: documentos, p_como: como, p_grupo: grupo, p_sozinha: sozinha },
     "A baixa foi feita, mas não foi possível ligar a linha do banco: ela aparece como baixa feita à mão na próxima leitura.",
   );
 }
@@ -261,18 +283,16 @@ function documentoDoItem(alvo: EntradaDaBaixaEmLote["itens"][number]["alvo"]): D
   return { tipo: alvo.origem === "pp" ? "pp" : "avulsa", id: alvo.id };
 }
 
+type ItensDaBaixa = EntradaDaBaixaEmLote["itens"];
+
 /**
- * "Baixar e conciliar": a baixa dos títulos pela baixa em lote de sempre
- * (`darBaixaEmLote`, com as travas e a retenção da aprovação relida lá), com
- * os dados do banco — a data e a conta da linha, a forma pelo histórico —,
- * e a ligação da linha a elas. Vale para um título, para a soma de títulos
- * da mesma contraparte e para a linha de um grupo de iguais.
+ * A baixa dos títulos pela baixa em lote de sempre (`darBaixaEmLote`, com as
+ * travas e a retenção da aprovação relida lá), com os dados do banco — a
+ * data e a conta da linha, a forma pelo histórico. Só a baixa: a remessa
+ * grande (a da folha) vai em partes, e a linha se liga no fim
+ * (`ligarItensALinha`), para nenhuma chamada passar do tempo da função.
  */
-export async function baixarEConciliar(entrada: {
-  linhaId: string;
-  itens: EntradaDaBaixaEmLote["itens"];
-  grupo?: string | null;
-}): Promise<Resultado> {
+export async function baixarPelaLinha(entrada: { linhaId: string; itens: ItensDaBaixa }): Promise<Resultado> {
   const g = await gate();
   if (!g.ok) return g;
   if (!UUID.safeParse(entrada.linhaId).success || !Array.isArray(entrada.itens) || entrada.itens.length === 0) {
@@ -309,11 +329,40 @@ export async function baixarEConciliar(entrada: {
         : baixa.falha.mensagem,
     };
   }
-  const liga = await conciliarPelosDocumentos(
-    l.id,
+  return { ok: true };
+}
+
+/** Liga a linha às baixas dos itens (depois de `baixarPelaLinha`). */
+export async function ligarItensALinha(entrada: {
+  linhaId: string;
+  itens: ItensDaBaixa;
+  grupo?: string | null;
+  sozinha?: "titulo" | "remessa" | null;
+}): Promise<Resultado> {
+  if (!Array.isArray(entrada.itens) || entrada.itens.length === 0) return { ok: false, message: "Entrada inválida." };
+  return conciliarPelosDocumentos(
+    entrada.linhaId,
     entrada.itens.map((i) => documentoDoItem(i.alvo)),
     entrada.grupo ?? null,
+    "baixa",
+    entrada.sozinha ?? null,
   );
+}
+
+/**
+ * "Baixar e conciliar": a baixa com os dados do banco e a ligação da linha
+ * a ela. Vale para um título, para a soma de títulos da mesma contraparte,
+ * para a remessa pequena e para a linha de um grupo de iguais.
+ */
+export async function baixarEConciliar(entrada: {
+  linhaId: string;
+  itens: ItensDaBaixa;
+  grupo?: string | null;
+  sozinha?: "titulo" | "remessa" | null;
+}): Promise<Resultado> {
+  const baixa = await baixarPelaLinha(entrada);
+  if (!baixa.ok) return baixa;
+  const liga = await ligarItensALinha(entrada);
   if (!liga.ok) return liga;
   return {
     ok: true,
@@ -343,8 +392,9 @@ export async function corrigirBaixa(lancamentoId: string, linhaId: string, motiv
   };
 }
 
-/** A tarifa e o IOF pela regra do histórico (uma linha ou várias). */
-export async function lancarPelaRegra(itens: Array<{ linhaId: string; regraId: string }>): Promise<Resultado> {
+/** A tarifa e o IOF pela regra do histórico (uma linha ou várias).
+ *  `sozinha`: a automação da importação lançou (decisão 201). */
+export async function lancarPelaRegra(itens: Array<{ linhaId: string; regraId: string }>, sozinha = false): Promise<Resultado> {
   if (!z.array(z.object({ linhaId: UUID, regraId: UUID })).min(1).max(200).safeParse(itens).success) {
     return { ok: false, message: "Entrada inválida." };
   }
@@ -352,7 +402,7 @@ export async function lancarPelaRegra(itens: Array<{ linhaId: string; regraId: s
   if (!g.ok) return g;
   let feitas = 0;
   for (const i of itens) {
-    const { error } = await g.supabase.rpc("lancar_pela_regra", { p_linha_id: i.linhaId, p_regra_id: i.regraId });
+    const { error } = await g.supabase.rpc("lancar_pela_regra", { p_linha_id: i.linhaId, p_regra_id: i.regraId, p_sozinha: sozinha === true });
     if (error) {
       console.error("[conciliacao.lancar_pela_regra]", error.message);
       if (feitas) revalidar();
@@ -394,39 +444,77 @@ export async function ignorarLinha(linhaId: string, motivo: string | null): Prom
   return { ok: true, mensagem: "Linha ignorada: não entra no extrato do sistema. Dá para desfazer em Conciliados." };
 }
 
+/** O que o desfazer ainda tem de cancelar: o tipo e o id que
+ *  `cancelarBaixa` recebe (o imposto vai por `cancelarBaixaImposto`). */
+export type BaixaADesfazer = { tipo: string; id: string };
+
+/** Quantas baixas uma chamada cancela: a remessa da folha desfeita tem
+ *  dezenas, e o resto segue em outras chamadas (`cancelarBaixasDesfeitas`). */
+const CANCELAR_POR_CHAMADA = 20;
+
+const MOTIVO_DO_DESFAZER = "Conciliação com o banco desfeita";
+
+async function cancelarAsBaixas(lista: BaixaADesfazer[]): Promise<{ ok: true; canceladas: number } | { ok: false; canceladas: number; message: string }> {
+  let canceladas = 0;
+  for (const c of lista) {
+    const res =
+      c.tipo === "imposto"
+        ? await cancelarBaixaImposto({ imposto_id: c.id, motivo: MOTIVO_DO_DESFAZER })
+        : await cancelarBaixa({ tipo: c.tipo as TipoDeBaixa, id: c.id, motivo: MOTIVO_DO_DESFAZER });
+    if (!res.ok) return { ok: false, canceladas, message: res.message };
+    canceladas++;
+  }
+  return { ok: true, canceladas };
+}
+
+const baixasADesfazerSchema = z.array(z.object({ tipo: z.string().min(1).max(40), id: UUID })).max(1000);
+
 /**
  * Desfaz a conciliação da linha (e das do mesmo grupo). As baixas que
  * nasceram na conciliação voltam canceladas pelas actions de sempre — o
- * título volta a aberto —, com o motivo registrado.
+ * título volta a aberto —, com o motivo registrado. Até 20 aqui; as outras
+ * voltam em `restantes`, e a tela as cancela em partes.
  */
-export async function desfazerConciliacao(linhaId: string): Promise<Resultado> {
+export async function desfazerConciliacao(linhaId: string): Promise<(Resultado & { restantes?: BaixaADesfazer[] })> {
   if (!UUID.safeParse(linhaId).success) return { ok: false, message: "Entrada inválida." };
   const r = await chamar("desfazer_conciliacao", { p_linha_id: linhaId }, "Não foi possível desfazer. Tente de novo.");
   if (!r.ok) return r;
-  const cancelar = ((r.dados as { cancelar?: Array<{ tipo: string; id: string }> } | null)?.cancelar ?? []).filter(
-    (c) => UUID.safeParse(c.id).success,
-  );
-  const motivo = "Conciliação com o banco desfeita";
-  for (const c of cancelar) {
-    const res =
-      c.tipo === "imposto"
-        ? await cancelarBaixaImposto({ imposto_id: c.id, motivo })
-        : await cancelarBaixa({ tipo: c.tipo as TipoDeBaixa, id: c.id, motivo });
-    if (!res.ok) {
-      revalidar();
-      return {
-        ok: false,
-        message: `A linha foi desfeita, mas uma das baixas não foi cancelada: ${res.message} Cancele-a pela baixa registrada.`,
-      };
-    }
-  }
+  const lido = baixasADesfazerSchema.safeParse((r.dados as { cancelar?: unknown } | null)?.cancelar ?? []);
+  const cancelar = lido.success ? lido.data : [];
+  const agora = cancelar.slice(0, CANCELAR_POR_CHAMADA);
+  const res = await cancelarAsBaixas(agora);
   revalidar();
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: `A linha foi desfeita, mas uma das baixas não foi cancelada: ${res.message} Cancele-a pela baixa registrada.`,
+    };
+  }
+  const restantes = cancelar.slice(CANCELAR_POR_CHAMADA);
+  if (restantes.length) return { ok: true, restantes };
   return {
     ok: true,
     mensagem: cancelar.length
       ? `Desfeito: ${cancelar.length === 1 ? "a baixa foi cancelada e o título voltou" : `as ${cancelar.length} baixas foram canceladas e os títulos voltaram`} a aberto.`
       : "Desfeito: a linha voltou a pendente.",
   };
+}
+
+/** O resto das baixas de um desfazer grande, em partes de 20. */
+export async function cancelarBaixasDesfeitas(lista: BaixaADesfazer[]): Promise<Resultado> {
+  const lido = baixasADesfazerSchema.max(CANCELAR_POR_CHAMADA).safeParse(lista);
+  if (!lido.success) return { ok: false, message: "Entrada inválida." };
+  const g = await gate();
+  if (!g.ok) return g;
+  const res = await cancelarAsBaixas(lido.data);
+  revalidar();
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: `A linha foi desfeita, mas uma das baixas não foi cancelada: ${res.message} Cancele-a pela baixa registrada.`,
+    };
+  }
+  return { ok: true };
 }
 
 /** "Lembrar como regra" (decisão 200). */

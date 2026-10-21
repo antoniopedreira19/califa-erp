@@ -12,6 +12,10 @@
  * - O motor (decisão 199) roda aqui, sobre as linhas pendentes, os títulos
  *   em aberto da aba Títulos, as baixas da conta ainda sem linha, as
  *   remessas e as regras do histórico (`motor-da-conta.ts`).
+ * - A automação da importação (decisão 201): o que é certo se resolve
+ *   sozinho, com as mesmas actions dos botões — a baixa feita à mão que bate
+ *   (a qualquer momento) e, nas linhas que a reserva devolve (cada uma é
+ *   avaliada uma vez só), o título certo, a remessa e a regra do histórico.
  * - As ações (decisão 200): "Baixar e conciliar" vai pela baixa em lote de
  *   sempre, com a data e a conta da linha e a forma pelo histórico;
  *   "Conferir" e a lupa abrem a baixa REAL de cada lado (a mesma da aba
@@ -49,16 +53,20 @@ import type { DadosDaAbaBanco, LancamentoSemLinha } from "./banco-dados";
 import { alvoDaBaixaAPagar, alvoDaBaixaAReceber } from "./alvos-da-baixa";
 import { montarLinhas, prepararContexto, type Linha } from "./linhas-da-aba";
 import {
+  automacaoDaLeitura,
   conciliarConta,
   documentoDaLinha,
   itemDoLote,
   parcialPeloBanco,
   secoesDoBanco,
+  textoDosSozinhos,
   type ResultadoDaLinha,
   type SecoesDoBanco,
 } from "./motor-da-conta";
 import {
   baixarEConciliar,
+  baixarPelaLinha,
+  cancelarBaixasDesfeitas,
   conciliarLinha,
   conciliarPelosDocumentos,
   corrigirBaixa,
@@ -67,6 +75,8 @@ import {
   ignorarLinha,
   importarExtrato,
   lancarPelaRegra,
+  ligarItensALinha,
+  marcarLinhasAvaliadas,
   registrarSaiuEVoltou,
   type ResultadoDaImportacao,
 } from "./actions-conciliacao";
@@ -89,6 +99,10 @@ const final4 = (s: string | null | undefined) => (s ? `••••${s.replace(/
 /** O maior arquivo que se lê aqui: um mês de um extrato movimentado cabe
  *  com folga. */
 const MAX_BYTES = 5 * 1024 * 1024;
+
+/** Quantos títulos uma chamada baixa: a remessa da folha vai em partes, para
+ *  nenhuma chamada passar do tempo da função. */
+const BAIXAS_POR_CHAMADA = 20;
 
 type Resultado = { ok: true; mensagem?: string } | { ok: false; message: string };
 
@@ -131,6 +145,8 @@ export function AbaBanco({
   const [recusado, setRecusado] = React.useState<{ arquivo: string; r: Exclude<ResultadoDaImportacao, { ok: true }> } | null>(null);
   const [erroImportacao, setErroImportacao] = React.useState<string | null>(null);
   const [aviso, setAviso] = React.useState<Aviso | null>(null);
+  // A automação da importação trabalhando (os botões esperam).
+  const [resolvendoSozinho, setResolvendoSozinho] = React.useState(false);
   // Os diálogos.
   const [baixando, setBaixando] = React.useState<Baixando | null>(null);
   const [erroDoDialogo, setErroDoDialogo] = React.useState<string | null>(null);
@@ -317,10 +333,46 @@ export function AbaBanco({
     retencao: b.retencao,
   });
 
+  /** "Baixar e conciliar": numa chamada só, ou, na remessa grande (a da
+   *  folha), em partes de 20, com a ligação da linha no fim. */
+  async function baixarNaLinha(entrada: Parameters<typeof baixarEConciliar>[0]): Promise<Resultado> {
+    if (entrada.itens.length <= BAIXAS_POR_CHAMADA) return baixarEConciliar(entrada);
+    let feitas = 0;
+    for (let i = 0; i < entrada.itens.length; i += BAIXAS_POR_CHAMADA) {
+      const parte = entrada.itens.slice(i, i + BAIXAS_POR_CHAMADA);
+      const res = await baixarPelaLinha({ linhaId: entrada.linhaId, itens: parte });
+      if (!res.ok) {
+        return {
+          ok: false,
+          message: feitas
+            ? `${res.message} Antes disso, ${feitas} títulos da remessa foram baixados; a linha do banco ficou sem conciliar.`
+            : res.message,
+        };
+      }
+      feitas += parte.length;
+    }
+    const liga = await ligarItensALinha(entrada);
+    if (!liga.ok) return liga;
+    return { ok: true, mensagem: `${feitas} baixas feitas com os dados do banco e conciliadas numa linha só.` };
+  }
+
+  /** Desfazer: a linha e as primeiras baixas numa chamada; o resto das
+   *  baixas da remessa grande, em partes. */
+  async function desfazerNaLinha(linhaId: string): Promise<Resultado> {
+    const res = await desfazerConciliacao(linhaId);
+    if (!res.ok || !res.restantes?.length) return res;
+    const total = BAIXAS_POR_CHAMADA + res.restantes.length;
+    for (let i = 0; i < res.restantes.length; i += BAIXAS_POR_CHAMADA) {
+      const parte = await cancelarBaixasDesfeitas(res.restantes.slice(i, i + BAIXAS_POR_CHAMADA));
+      if (!parte.ok) return parte;
+    }
+    return { ok: true, mensagem: `Desfeito: as ${total} baixas foram canceladas e os títulos voltaram a aberto.` };
+  }
+
   // ---- As ações ----
 
   const acoes: AcoesDoBanco = {
-    ocupado: pending,
+    ocupado: pending || resolvendoSozinho,
     ligar: (r) => {
       const l = r.lancamento ? conciliacao.lancamentos.get(r.lancamento.id) : undefined;
       if (!l) return;
@@ -333,7 +385,7 @@ export function AbaBanco({
       if (!r.titulo) return;
       const itens = itensDe([r.titulo]);
       if (!itens) return abrirBaixa(r, r.titulo);
-      executar(() => baixarEConciliar({ linhaId: r.mov.id, itens }));
+      executar(() => baixarNaLinha({ linhaId: r.mov.id, itens }));
     },
     conferir: (r) => {
       if (r.titulo) abrirBaixa(r, r.titulo);
@@ -341,7 +393,7 @@ export function AbaBanco({
     conciliarCombinacao: (r) => {
       const itens = itensDe(r.titulos ?? []);
       if (!itens) return setProcurando({ r, marcados: (r.titulos ?? []).map((t) => t.id) });
-      executar(() => baixarEConciliar({ linhaId: r.mov.id, itens }));
+      executar(() => baixarNaLinha({ linhaId: r.mov.id, itens }));
     },
     conferirCombinacao: (r) => setProcurando({ r, marcados: (r.titulos ?? []).map((t) => t.id) }),
     conciliarLote: (r) => {
@@ -353,7 +405,7 @@ export function AbaBanco({
         });
         return;
       }
-      executar(() => baixarEConciliar({ linhaId: r.mov.id, itens }));
+      executar(() => baixarNaLinha({ linhaId: r.mov.id, itens }));
     },
     conciliarGrupo: (linhas, escolhidos) => {
       // As linhas do grupo se desfazem juntas.
@@ -364,7 +416,7 @@ export function AbaBanco({
         (r) => {
           const t = tituloDa.get(r.mov.id);
           const itens = t ? itensDe([t]) : null;
-          return itens ? baixarEConciliar({ linhaId: r.mov.id, itens, grupo }) : null;
+          return itens ? baixarNaLinha({ linhaId: r.mov.id, itens, grupo }) : null;
         },
         (n) => (n === 1 ? "1 linha baixada e conciliada" : `${n} linhas baixadas e conciliadas`),
       );
@@ -405,7 +457,7 @@ export function AbaBanco({
     },
     procurar: (r) => setProcurando({ r, marcados: [] }),
     ignorar: (r) => executar(() => ignorarLinha(r.mov.id, null)),
-    desfazer: (r) => executar(() => desfazerConciliacao(r.mov.id)),
+    desfazer: (r) => executar(() => desfazerNaLinha(r.mov.id)),
     corrigirBaixa: (r) => {
       setErroDoDialogo(null);
       setCorrigindo(r);
@@ -428,10 +480,79 @@ export function AbaBanco({
         }
         const ts = r.estado === "combinacao" ? r.titulos ?? [] : r.titulo ? [r.titulo] : [];
         const itens = itensDe(ts);
-        return itens ? baixarEConciliar({ linhaId: r.mov.id, itens }) : null;
+        return itens ? baixarNaLinha({ linhaId: r.mov.id, itens }) : null;
       },
       (n) => (n === 1 ? "1 linha do banco conciliada" : `${n} linhas do banco conciliadas`),
     );
+
+  // ---- A automação da importação (decisão 201) ----
+
+  // O que é certo se resolve sozinho, com as mesmas actions dos botões. A
+  // reserva (`marcarLinhasAvaliadas`) grava a avaliação única e devolve as
+  // linhas que ainda não tinham passado por ela: só essas se baixam sozinhas
+  // (duas abas abertas não baixam a mesma linha duas vezes). Cada linha é
+  // tentada uma vez por tela aberta; a que falhar fica na seção dela.
+  const tentadas = React.useRef(new Set<string>());
+  const automacao = React.useMemo(
+    () => (falhaDoMotor ? null : automacaoDaLeitura(conciliacao.resultados)),
+    [conciliacao, falhaDoMotor],
+  );
+  React.useEffect(() => {
+    if (!automacao || resolvendoSozinho) return;
+    const manuais = automacao.manuais.filter((r) => !tentadas.current.has(r.mov.id));
+    const aAvaliar = automacao.aAvaliar.filter((id) => !tentadas.current.has(id));
+    if (!manuais.length && !aAvaliar.length) return;
+    for (const r of manuais) tentadas.current.add(r.mov.id);
+    for (const id of aAvaliar) tentadas.current.add(id);
+    setResolvendoSozinho(true);
+    void (async () => {
+      const falhas: string[] = [];
+      const anotar = (res: Resultado) => {
+        if (!res.ok) falhas.push(res.message);
+      };
+      try {
+        for (const r of manuais) {
+          const l = r.lancamento ? conciliacao.lancamentos.get(r.lancamento.id) : undefined;
+          if (l) anotar(await conciliarLinha(r.mov.id, l.ids, "manual"));
+        }
+        if (aAvaliar.length) {
+          const reserva = await marcarLinhasAvaliadas(aAvaliar);
+          if (!reserva.ok) falhas.push(reserva.message);
+          const minhas = new Set(reserva.ok ? reserva.ids : []);
+          for (const r of automacao.titulos) {
+            const itens = minhas.has(r.mov.id) && r.titulo ? itensDe([r.titulo]) : null;
+            if (itens) anotar(await baixarNaLinha({ linhaId: r.mov.id, itens, sozinha: "titulo" }));
+          }
+          for (const r of automacao.remessas) {
+            const itens = minhas.has(r.mov.id) ? itensDe(r.lote?.titulos ?? []) : null;
+            if (itens) anotar(await baixarNaLinha({ linhaId: r.mov.id, itens, sozinha: "remessa" }));
+          }
+          const regras = automacao.regras.flatMap((r) =>
+            minhas.has(r.mov.id) && r.regra?.id ? [{ linhaId: r.mov.id, regraId: r.regra.id as string }] : [],
+          );
+          if (regras.length) anotar(await lancarPelaRegra(regras, true));
+        }
+      } catch {
+        falhas.push("Não foi possível concluir agora.");
+      } finally {
+        setResolvendoSozinho(false);
+        if (falhas.length) {
+          setAviso({
+            tom: "erro",
+            texto: `${
+              falhas.length === 1
+                ? "Uma linha do banco não se resolveu sozinha e ficou para conferir"
+                : `${falhas.length} linhas do banco não se resolveram sozinhas e ficaram para conferir`
+            }: ${falhas[0]}`,
+          });
+        }
+        router.refresh();
+      }
+    })();
+    // Roda a cada leitura nova do servidor (o `automacao` muda com ela); o
+    // resto é lido do mesmo render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [automacao]);
 
   // ---- Importar ----
 
@@ -574,6 +695,7 @@ export function AbaBanco({
   const pct = resultados.length ? Math.round((resolvidos.length / resultados.length) * 100) : 0;
   const diaEmAndamento = ultima.fim && ultima.geradoDia === ultima.fim ? { dia: ultima.fim, hora: ultima.geradoHora } : null;
 
+  const sozinhos = textoDosSozinhos(resultados);
   const contexto: ContextoDasCelulas = { linhaPorChave, regraPorId, lancamentos: conciliacao.lancamentos };
   const manuaisPendentes = secoes.manual.filter((r) => !r.resolvido);
   const sugestoesComCentro = secoes.conferir.filter((r) => r.estado === "sugestao" && comCentro(r.titulo));
@@ -589,7 +711,7 @@ export function AbaBanco({
     [
       "manual",
       "Baixas feitas à mão que bateram com o banco",
-      "A baixa já estava no sistema, e o banco mostra o mesmo valor até 3 dias depois. Conciliar só liga as duas linhas, com a data do banco: nenhuma baixa nova é criada.",
+      "A baixa já estava no sistema, e o banco mostra o mesmo valor até 3 dias depois. Conciliar só liga as duas linhas, com a data do banco: nenhuma baixa nova é criada. Na importação elas se conciliam sozinhas e ficam aqui, à vista.",
       "sky",
       manuaisPendentes.length > 1 && (
         <BotaoDaSecao verde disabled={pending} onClick={() => conciliarVarios(manuaisPendentes)}>
@@ -613,7 +735,7 @@ export function AbaBanco({
     [
       "conferir",
       "Conferir antes",
-      "Mais títulos que linhas com o mesmo valor, diferença de juros, retenção, ou centro de custo a escolher. Linhas iguais em número igual ao de títulos não chegam aqui: cada linha paga um.",
+      "Mais títulos que linhas com o mesmo valor, diferença de juros, retenção, ou centro de custo a escolher. Linhas iguais em número igual ao de títulos não chegam aqui: cada linha paga um, e se baixam sozinhas.",
       "amber",
       sugestoesComCentro.length > 1 && (
         <BotaoDaSecao disabled={pending} onClick={() => conciliarVarios(sugestoesComCentro)}>
@@ -624,7 +746,7 @@ export function AbaBanco({
     [
       "soma",
       "Uma linha do banco, vários títulos",
-      "A remessa sai do banco como um débito só. Quando mais de uma soma de títulos do mesmo fornecedor ou cliente bate com a linha, escolha qual.",
+      "A remessa sai do banco como um débito só e se concilia sozinha. Quando mais de uma soma de títulos do mesmo fornecedor ou cliente bate com a linha, escolha qual.",
       "emerald",
       null,
     ],
@@ -661,6 +783,15 @@ export function AbaBanco({
     <div className="space-y-4">
       {avisos}
       <CabecalhoDoArquivo banco={banco} />
+      {sozinhos && (
+        <Nota tom="verde" icone={CheckCheck}>
+          <strong>
+            {sozinhos.quantas === 1 ? "1 linha do banco se resolveu sozinha" : `${sozinhos.quantas} linhas do banco se resolveram sozinhas`}:
+          </strong>{" "}
+          {sozinhos.partes.join("; ")}. A baixa feita à mão fica na seção dela, logo abaixo; o resto está em Conciliados. Tudo
+          com Desfazer.
+        </Nota>
+      )}
       {diaEmAndamento && (
         <Nota tom="ambar" icone={Info}>
           <strong>{dataBR(diaEmAndamento.dia)} ainda está em andamento:</strong> o arquivo foi gerado às {diaEmAndamento.hora} desse
@@ -689,7 +820,11 @@ export function AbaBanco({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">As seções somem quando ficam vazias.</span>
-        {pending && <span className="text-xs font-semibold text-muted-foreground">Trabalhando…</span>}
+        {resolvendoSozinho ? (
+          <span className="text-xs font-semibold text-emerald-700">Resolvendo sozinho o que é certo…</span>
+        ) : (
+          pending && <span className="text-xs font-semibold text-muted-foreground">Trabalhando…</span>
+        )}
       </div>
       {SECOES.map(([k, titulo, ajuda, cor, botao]) => {
         const linhas = secoes[k] as ResultadoDaLinha[];
@@ -778,7 +913,7 @@ export function AbaBanco({
               });
               return;
             }
-            executar(() => baixarEConciliar({ linhaId: r.mov.id, itens }));
+            executar(() => baixarNaLinha({ linhaId: r.mov.id, itens }));
           }}
         />
       )}
@@ -1134,7 +1269,8 @@ function ZonaDeArquivo({
         <p className="text-sm font-semibold">{compacta ? "Importar outro extrato" : "Arraste aqui o extrato do banco em OFX"}</p>
         <p className="text-xs text-muted-foreground">
           O arquivo que o internet banking do Santander, Itaú ou qualquer banco exporta. O sistema guarda só as linhas do
-          extrato, sem repetir as que já vieram; nada muda nos títulos até você conciliar.
+          extrato, sem repetir as que já vieram. O que é certo se resolve sozinho, com Desfazer: a baixa feita à mão que
+          bate, o título de valor exato, a remessa e a regra do histórico; o resto espera você.
           {!compacta && ` A conta vem do próprio arquivo: ele só é aceito se for da ${contaNome}, a conta aberta no topo.`}
         </p>
       </div>

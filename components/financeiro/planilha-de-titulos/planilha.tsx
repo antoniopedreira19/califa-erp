@@ -22,7 +22,7 @@
  */
 
 import * as React from "react";
-import { ArrowLeftRight, ChevronDown, CreditCard, Eye, Pencil, Receipt, Undo2 } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, CreditCard, Eye, Landmark, Pencil, Receipt, Undo2 } from "lucide-react";
 import { Dica } from "@/components/ui/dica";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { cn } from "@/lib/utils";
@@ -105,8 +105,26 @@ export interface PropsDaPlanilha<L extends LinhaDaPlanilha> {
   onVerBaixas: (l: L) => void;
   /** O ⓘ da linha. */
   detalhes: (l: L) => React.ReactNode;
+  /** O título que o motor achou numa linha do extrato do banco ainda não
+   *  conciliada (decisão 202): a faixa verde na borda, o ícone do banco ao
+   *  lado da data e o "Baixar" com a data e o valor do banco. */
+  sinalDoBanco?: (l: L) => SinalDoBanco | null;
   saldoHoje?: number;
   vazio: string;
+}
+
+/** O motivo do motor como frase: maiúscula no começo e ponto no fim. */
+const frase = (s: string) => {
+  const t = s.trim().replace(/\.$/, "");
+  return t ? `${t.charAt(0).toUpperCase()}${t.slice(1)}.` : "";
+};
+
+/** O título já está no extrato do banco importado (decisão 202). */
+export interface SinalDoBanco {
+  /** O dia da linha do banco. */
+  data: string;
+  /** Por que o motor achou (o motivo da sugestão). */
+  motivo: string;
 }
 
 export function PlanilhaDeTitulos<L extends LinhaDaPlanilha>(p: PropsDaPlanilha<L>) {
@@ -327,6 +345,7 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
   const atrasado = situacao.tipo === "vencido" || situacao.tipo === "depois_do_vencimento";
   const recebe = l.entra || (l.transferencia !== null && l.transferencia.destinoContaId === p.contaId);
   const { texto: textoReg, dica: dicaReg, rateado } = textoDaRegional(l.rateio);
+  const sinal = !l.pagoEm && !cancelado ? (p.sinalDoBanco?.(l) ?? null) : null;
 
   const celulaDoValor = (lado: "credito" | "debito") => {
     if (lado === "credito" && p.creditoFino) {
@@ -434,7 +453,9 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
 
   return (
     <tr className="border-b border-border transition-colors last:border-0 hover:bg-muted/30">
-      <td className="py-2 pl-3 pr-1 text-center">{!l.pagoEm && !cancelado && p.caixa(l)}</td>
+      <td className={cn("py-2 pl-3 pr-1 text-center", sinal && "shadow-[inset_3px_0_0_0_#10b981]")}>
+        {!l.pagoEm && !cancelado && p.caixa(l)}
+      </td>
       <td className="whitespace-nowrap px-3 py-2">
         <span className="inline-flex items-center gap-1.5">
           {l.editaData && !l.pagoEm && !cancelado && (
@@ -454,6 +475,19 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
           <span className={cn("font-mono text-xs", atrasado && "font-semibold text-california-red")}>
             {l.pagoEm ? dataBR(l.pagoEm) : l.dataPrevista ? dataBR(l.dataPrevista) : "—"}
           </span>
+          {sinal && (
+            <Dica
+              rotulo="Já está no extrato do banco"
+              conteudo={
+                <>
+                  <strong>No extrato do banco de {dataBR(sinal.data)}.</strong> {frase(sinal.motivo)} “
+                  {l.transferencia ? "Registrar" : "Baixar"}” já vem com a data e o valor do banco, e a baixa sai conciliada.
+                </>
+              }
+            >
+              <Landmark className="h-3.5 w-3.5 text-emerald-600" />
+            </Dica>
+          )}
         </span>
         {/* Embaixo da data prevista, só quando ela difere do vencimento, ou
             quando o título venceu (há quantos dias). */}
@@ -618,9 +652,20 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
                 e.stopPropagation();
                 p.onBaixar(l);
               }}
-              className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-700"
+              className={cn(
+                "inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-[11px] font-semibold text-white",
+                sinal ? "bg-emerald-700 hover:bg-emerald-800" : "bg-emerald-600 hover:bg-emerald-700",
+              )}
             >
-              {l.transferencia ? <ArrowLeftRight className="h-3 w-3" /> : <CreditCard className="h-3 w-3" />}
+              {/* O título ainda não teve baixa: mesmo com o banco mostrando o
+                  pagamento, a ação é dar a baixa (que já sai conciliada). */}
+              {sinal ? (
+                <Landmark className="h-3 w-3" />
+              ) : l.transferencia ? (
+                <ArrowLeftRight className="h-3 w-3" />
+              ) : (
+                <CreditCard className="h-3 w-3" />
+              )}
               {l.transferencia ? "Registrar" : "Baixar"}
             </button>
           )}

@@ -37,8 +37,9 @@ export function AbasDaConta({
   /** Quantos títulos aguardam baixa — só se sabe com a aba Títulos aberta
    *  (no Extrato eles nem são lidos), e por isso no Extrato não há número. */
   totalTitulos: number | null;
-  /** As linhas do banco ainda sem solução, ou "novo" sem extrato nenhum —
-   *  só com a aba aberta, como os títulos. */
+  /** As linhas do banco ainda sem solução, ou "novo" sem extrato nenhum.
+   *  O extrato do banco é lido nas três abas desde a decisão 202 (as marcas
+   *  do Extrato e o sinal dos Títulos), então o número aparece em todas. */
   pendentesNoBanco: number | "novo" | null;
   children: React.ReactNode;
 }) {

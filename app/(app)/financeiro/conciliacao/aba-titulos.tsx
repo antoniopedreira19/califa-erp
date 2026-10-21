@@ -21,10 +21,11 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCheck, FileText, Info, Search, Trash2, Undo2, XCircle, Eye } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCheck, FileText, Info, Landmark, Search, Trash2, Undo2, XCircle, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
-import { BaixaTituloDialog } from "@/components/financeiro/baixa-titulo-dialog";
+import { BaixaTituloDialog, type LinhaDoBancoNaBaixa } from "@/components/financeiro/baixa-titulo-dialog";
 import {
   BaixaEmLoteDialog,
   BarraDeSelecao,
@@ -65,6 +66,11 @@ import {
 } from "../contas-a-receber/actions-recebimento-avulso";
 import { BaixaImpostoDialog, CancelarImpostoDialog, CENTRO } from "../fiscal/impostos/dialogos";
 import type { DadosDaAbaTitulos } from "./titulos-dados";
+import type { DadosDaAbaBanco } from "./banco-dados";
+import { conciliarConta, documentoDaLinha, parcialPeloBanco, type ResultadoDaLinha } from "./motor-da-conta";
+import { conciliarPelosDocumentos } from "./actions-conciliacao";
+import { formaDaBaixaPeloHistorico } from "@/lib/conciliacao/motor";
+import { diaIsoBr } from "@/lib/formatar-data-hora";
 import { gravarPrevia, type LinhaPrevista } from "./previa-do-extrato";
 import { MenuNovoLancamento } from "./menu-novo-lancamento";
 import { BotaoRemessaSantander } from "./botao-remessa";
@@ -113,6 +119,7 @@ export function AbaTitulos({
   saldoHoje,
   dataDe,
   dataAte,
+  banco = null,
 }: {
   dados: DadosDaAbaTitulos;
   /** A conta aberta na conciliação: vem escolhida na baixa. */
@@ -124,6 +131,9 @@ export function AbaTitulos({
    *  parar depois da baixa. */
   dataDe: string;
   dataAte: string;
+  /** O extrato do banco importado: o título que já está numa linha do banco
+   *  ganha o sinal, e a baixa dele sai conciliada (decisão 202). */
+  banco?: DadosDaAbaBanco | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -133,6 +143,8 @@ export function AbaTitulos({
   const [busca, setBusca] = React.useState("");
   const [agrupar, setAgrupar] = React.useState(true);
   const [baixando, setBaixando] = React.useState<Linha | null>(null);
+  /** A linha do banco em que o motor achou o título que está em baixa. */
+  const [doBanco, setDoBanco] = React.useState<ResultadoDaLinha | null>(null);
   const [editando, setEditando] = React.useState<Linha | null>(null);
   const [conferindo, setConferindo] = React.useState<TituloConferido | null>(null);
   const [cancelandoImposto, setCancelandoImposto] = React.useState<Linha | null>(null);
@@ -183,6 +195,39 @@ export function AbaTitulos({
     setErro(null);
     setBaixando(nova);
   }, [linhas, baixarAposCriar]);
+
+  // O título que o motor achou numa linha do banco ainda não conciliada (a
+  // sugestão e a diferença de juros), como no protótipo (`sugestoes`,
+  // main.jsx). Sem extrato importado, ou se o motor falhar, nada muda.
+  const conciliacao = React.useMemo(() => {
+    if (!banco?.ultima) return null;
+    try {
+      return conciliarConta(banco, linhas, contaId, dados.documentoDaParte, hoje);
+    } catch (e) {
+      console.error("[conciliacao.motor]", e);
+      return null;
+    }
+  }, [banco, linhas, contaId, dados.documentoDaParte, hoje]);
+  const sugestoes = React.useMemo(() => {
+    const m = new Map<string, ResultadoDaLinha>();
+    for (const r of conciliacao?.resultados ?? []) {
+      if (!r.resolvido && r.titulo && (r.estado === "sugestao" || r.estado === "diferenca")) m.set(r.titulo.id, r);
+    }
+    return m;
+  }, [conciliacao]);
+  const linhaDoBanco: LinhaDoBancoNaBaixa | null = React.useMemo(() => {
+    if (!doBanco || !baixando) return null;
+    const t = conciliacao?.titulos.get(baixando.chave);
+    const retencao = (doBanco.retencaoAliquotas ?? null) as LinhaDoBancoNaBaixa["retencao"];
+    return {
+      data: doBanco.mov.data,
+      valor: r2(Math.abs(doBanco.mov.valor)),
+      forma: formaDaBaixaPeloHistorico(doBanco.mov.historico),
+      arquivo: banco?.ultima?.arquivo ?? "extrato do banco",
+      parcial: retencao || !t ? null : parcialPeloBanco(doBanco, t),
+      retencao,
+    };
+  }, [doBanco, baixando, conciliacao, banco]);
 
   // O saldo previsto sai de TODAS as linhas, antes de qualquer filtro: ele
   // não muda com o filtro, como o Saldo do Extrato.
@@ -250,7 +295,29 @@ export function AbaTitulos({
 
   function fechar() {
     setBaixando(null);
+    setDoBanco(null);
     setErro(null);
+  }
+
+  /** Depois da baixa: com a linha do banco, a linha se liga a ela pelo
+   *  documento (decisão 202); se a ligação falhar, a baixa vale e aparece
+   *  como baixa feita à mão na Conciliação automática. */
+  async function concluirBaixa(texto: string) {
+    const l = baixando;
+    const r = doBanco;
+    fechar();
+    if (l && r) {
+      const doc = documentoDaLinha(l);
+      const lig = doc ? await conciliarPelosDocumentos(r.mov.id, [doc]) : null;
+      setToast(
+        lig?.ok
+          ? `${texto} A linha do extrato do banco de ${formatDate(r.mov.data)} ficou conciliada.`
+          : `${texto} A linha do extrato do banco ficou sem conciliar: concilie-a na aba Conciliação automática.`,
+      );
+    } else {
+      setToast(texto);
+    }
+    router.refresh();
   }
 
   /** "Ver no Extrato antes": os marcados vão para o Extrato como previstos. */
@@ -335,6 +402,25 @@ export function AbaTitulos({
           />
         </div>
       </div>
+
+      {sugestoes.size > 0 && banco?.ultima && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">
+          <Landmark className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>{sugestoes.size === 1 ? "1 título" : `${sugestoes.size} títulos`}</strong>{" "}
+            {sugestoes.size === 1 ? "já aparece" : "já aparecem"} no extrato do banco importado em{" "}
+            {formatDate(diaIsoBr(banco.ultima.importadaEm)).slice(0, 5)}. {sugestoes.size === 1 ? "Ele sai" : "Eles saem"} daqui pela
+            aba <strong>Conciliação automática</strong>, com a data do banco, sem digitar nada.
+          </span>
+          <Link
+            href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
+            prefetch={false}
+            className="ml-auto rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800"
+          >
+            Conciliar com o banco
+          </Link>
+        </div>
+      )}
 
       {/* O resumo: o que sai e entra no mês e onde o saldo termina. */}
       <div className="grid grid-cols-2 divide-x divide-border rounded-xl border border-border bg-card sm:grid-cols-4">
@@ -430,6 +516,11 @@ export function AbaTitulos({
         onBaixar={(l) => {
           setErro(null);
           setBaixando(l);
+          setDoBanco(sugestoes.get(l.chave) ?? null);
+        }}
+        sinalDoBanco={(l) => {
+          const r = sugestoes.get(l.chave);
+          return r ? { data: r.mov.data, motivo: r.motivo ?? "" } : null;
         }}
         onEditarData={(l) => {
           setErro(null);
@@ -510,6 +601,7 @@ export function AbaTitulos({
         pending={pending}
         erro={erro}
         contaInicial={contaId}
+        linhaDoBanco={baixandoPagar ? linhaDoBanco : null}
         onConfirm={(payload) => {
           const alvo = baixandoPagar;
           if (!alvo) return;
@@ -519,8 +611,8 @@ export function AbaTitulos({
               setErro(res.message);
               return;
             }
-            fechar();
             if (payload.forma_pagamento === "cartao_credito") {
+              fechar();
               // No cartão nada sai da conta: o item entra numa fatura, e a
               // fatura vem do SERVIDOR (a da data pode já ter fechado).
               const cartao = dados.cartoes.find((c) => c.id === payload.cartao_credito_id) ?? null;
@@ -533,7 +625,7 @@ export function AbaTitulos({
             } else {
               const retido = payload.retencoes.reduce((acc, r) => acc + Math.round(r.valor * 100), 0) / 100;
               const resta = Math.round((faltaPagar(alvo) - payload.valor_baixa) * 100) / 100;
-              setToast(
+              await concluirBaixa(
                 avisoDaBaixa(payload.conta_bancaria_id, payload.pago_em) +
                   (payload.juros > 0
                     ? ` Mais ${formatBRL(payload.juros)} de juros e multa, em 11 · Despesa com Juros.`
@@ -541,6 +633,7 @@ export function AbaTitulos({
                   (retido > 0 ? ` ${formatBRL(retido)} retidos, a recolher.` : "") +
                   (resta > 0.004 ? ` Faltam ${formatBRL(resta)}.` : ""),
               );
+              return;
             }
             router.refresh();
           });
@@ -560,6 +653,17 @@ export function AbaTitulos({
         pending={pending}
         erro={erro}
         contaInicial={contaId}
+        linhaDoBanco={
+          baixandoReceber && linhaDoBanco
+            ? {
+                data: linhaDoBanco.data,
+                valor: linhaDoBanco.valor,
+                arquivo: linhaDoBanco.arquivo,
+                parcial: linhaDoBanco.parcial ?? null,
+                retencao: linhaDoBanco.retencao ?? null,
+              }
+            : null
+        }
         onConfirm={(payload) => {
           const alvo = baixandoReceber;
           if (!alvo) return;
@@ -572,15 +676,13 @@ export function AbaTitulos({
               setErro(res.message);
               return;
             }
-            fechar();
             const retido = payload.retencoes.reduce((acc, r) => acc + Math.round(r.valor * 100), 0) / 100;
             const resta = Math.round((faltaReceber(alvo) - payload.valor_baixa) * 100) / 100;
-            setToast(
+            await concluirBaixa(
               avisoDaBaixa(payload.conta_bancaria_id, payload.pago_em) +
                 (retido > 0 ? ` ${formatBRL(retido)} de impostos retidos.` : "") +
                 (resta > 0.004 ? ` Faltam ${formatBRL(resta)}.` : ""),
             );
-            router.refresh();
           });
         }}
       />
@@ -593,11 +695,15 @@ export function AbaTitulos({
           nomesDasPJs={dados.nomesDasPJs}
           tenantId={dados.tenantId}
           contaInicial={contaId}
+          dataInicial={doBanco?.mov.data}
+          multaInicial={
+            doBanco && conciliacao?.titulos.get(baixando?.chave ?? "")
+              ? Math.max(0, r2(Math.abs(doBanco.mov.valor) - (conciliacao.titulos.get(baixando?.chave ?? "")?.liquido ?? 0)))
+              : undefined
+          }
           onClose={fechar}
           onBaixado={({ pago_em, conta_bancaria_id }) => {
-            fechar();
-            setToast(avisoDaBaixa(conta_bancaria_id, pago_em));
-            router.refresh();
+            startTransition(() => concluirBaixa(avisoDaBaixa(conta_bancaria_id, pago_em)));
           }}
         />
       )}
@@ -617,7 +723,7 @@ export function AbaTitulos({
                 descricao:
                   baixandoTransferencia.fat_descricao === "Transferência entre contas" ? null : baixandoTransferencia.fat_descricao,
                 valor: baixandoTransferencia.valor,
-                dataPrevista: baixandoTransferencia.data_previsao_recebimento,
+                dataPrevista: doBanco?.mov.data ?? baixandoTransferencia.data_previsao_recebimento,
               }
             : null
         }
@@ -632,9 +738,7 @@ export function AbaTitulos({
               setErro(res.message);
               return;
             }
-            fechar();
-            setToast(`Transferência registrada · ${formatBRL(alvo.valor)} em ${formatDate(data)}, com as duas linhas no extrato.`);
-            router.refresh();
+            await concluirBaixa(`Transferência registrada · ${formatBRL(alvo.valor)} em ${formatDate(data)}, com as duas linhas no extrato.`);
           });
         }}
       />

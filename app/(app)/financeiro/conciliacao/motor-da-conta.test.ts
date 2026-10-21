@@ -11,7 +11,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { agruparComoNoBanco, diaCoberto, diaCompleto, type LancamentoCru, type LinhaDoBanco } from "./banco-dados";
-import { conciliarConta, lotesDoMotor, resolucaoDaLinha, secoesDoBanco, titulosDoMotor } from "./motor-da-conta";
+import {
+  automacaoDaLeitura,
+  conciliarConta,
+  lotesDoMotor,
+  resolucaoDaLinha,
+  secoesDoBanco,
+  textoDosSozinhos,
+  titulosDoMotor,
+} from "./motor-da-conta";
 import type { Linha } from "./linhas-da-aba";
 
 const lanc = (id: string, extra: Partial<LancamentoCru> = {}): LancamentoCru => ({
@@ -102,6 +110,7 @@ const linhaDoBanco = (id: string, extra: Partial<LinhaDoBanco> = {}): LinhaDoBan
   ignorada: null,
   resolvidaSozinha: null,
   semAuto: false,
+  avaliada: false,
   ligados: [],
   conciliadaComo: null,
   grupo: null,
@@ -217,4 +226,45 @@ test("a baixa feita à mão sem linha, num dia coberto, aparece em 'sem linha no
   const { resultados, naoApareceu } = conciliarConta(banco, [], "conta", {}, "2026-10-21");
   assert.equal(resultados[0].estado, "ja_lancado");
   assert.deepEqual(naoApareceu.map((l) => l.id), ["x"]);
+});
+
+test("a automação: o certo se resolve sozinho uma vez; a soma, o sem centro e o desfeito ficam", () => {
+  const linhas = [
+    titulo("pagar|avulso|a", 700),
+    titulo("pagar|avulso|b", 300, { centro: { tipo: "definir_na_baixa" } }),
+    titulo("pagar|avulso|c", 1000),
+    titulo("pagar|avulso|d", 2000),
+    titulo("pagar|avulso|e", 800),
+  ];
+  const banco = {
+    linhas: [
+      linhaDoBanco("1", { valor: -700 }),
+      linhaDoBanco("2", { valor: -300, ordem: 1 }),
+      linhaDoBanco("3", { valor: -3000, ordem: 2 }),
+      linhaDoBanco("4", { valor: -450, ordem: 3, avaliada: true }),
+      linhaDoBanco("5", { valor: -800, ordem: 4, semAuto: true }),
+      linhaDoBanco("6", { valor: -700, ordem: 5, avaliada: true, conciliada: true, conciliadaComo: "baixa", resolvidaSozinha: "titulo" }),
+    ],
+    lancamentos: agruparComoNoBanco([lanc("y", { valor: 450 })], new Map()),
+    remessas: [{ id: "r1", nome: "remessa nº 12", descricao: "Remessa Santander nº 12", itens: [
+      { origemTipo: "avulsa", origemId: "c", valor: 1000 },
+      { origemTipo: "avulsa", origemId: "d", valor: 2000 },
+    ] }],
+    regras: [],
+    periodos: [],
+  };
+  const { resultados } = conciliarConta(banco, linhas, "conta", {}, "2026-10-21");
+  const a = automacaoDaLeitura(resultados);
+  // A baixa feita à mão liga mesmo na linha já avaliada.
+  assert.deepEqual(a.manuais.map((r) => r.mov.id), ["4"]);
+  // Todas as pendentes ainda não avaliadas, a desfeita também (ela não se
+  // resolve, mas a avaliação fica gravada).
+  assert.deepEqual(a.aAvaliar, ["1", "2", "3", "5"]);
+  assert.deepEqual(a.titulos.map((r) => r.mov.id), ["1"]);
+  assert.deepEqual(a.remessas.map((r) => r.mov.id), ["3"]);
+  assert.deepEqual(a.regras, []);
+
+  const faixa = textoDosSozinhos(resultados);
+  assert.equal(faixa?.quantas, 1);
+  assert.match(faixa?.partes[0] ?? "", /^1 título baixado e conciliado \(valor exato/);
 });

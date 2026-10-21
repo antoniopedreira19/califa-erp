@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ChevronDown, CreditCard, ExternalLink, Info } from "lucide-react";
+import { AlertTriangle, CheckCheck, ChevronDown, CreditCard, ExternalLink, Info, Upload } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
 import type { DetalheDoImposto } from "@/lib/data/imposto-extrato";
 import { Dica } from "@/components/ui/dica";
@@ -161,9 +161,21 @@ const TITULO = "tracking-normal";
  * a trilha do documento que ele pagou, a baixa, o retido e os documentos.
  * O pagamento da fatura do cartão abre nos ITENS, nas mesmas colunas, cada
  * um com o centro dele; a guia de imposto continua uma linha só (decisão
- * 141), que abre no rateio. As marcas do banco (✓, ⚠, cadeado) entram na
- * fase 3.
+ * 141), que abre no rateio.
+ *
+ * Com o extrato do banco importado (decisão 202), a coluna Banco primeiro:
+ * ✓ conciliado com a linha do banco, ⚠ não bate (a dica diz por quê) e ○
+ * ainda não apareceu no extrato do banco. O cadeado do período fechado
+ * entra com o fechamento (fase 4).
  */
+
+/** As marcas do banco no Extrato (decisão 202), lidas no servidor. */
+export interface MarcasDoBanco {
+  /** Os lançamentos do período ligados a uma linha do extrato do banco. */
+  conciliados: string[];
+  /** Por id de lançamento: por que o ⚠ (`alertasDoExtrato`). */
+  alertas: Record<string, string>;
+}
 export function ConciliacaoList({
   linhas,
   highlight,
@@ -172,6 +184,7 @@ export function ConciliacaoList({
   jurosDasBaixas = {},
   contexto = "",
   contaId,
+  banco = null,
 }: {
   linhas: LancamentoLinha[];
   highlight?: string;
@@ -191,6 +204,8 @@ export function ConciliacaoList({
   jurosDasBaixas?: Record<string, number>;
   /** A conta aberta: a prévia dos títulos marcados na aba Títulos. */
   contaId: string;
+  /** `null`: a conta não tem extrato do banco importado (sem a coluna Banco). */
+  banco?: MarcasDoBanco | null;
 }) {
   const rowRefs = React.useRef<Record<string, HTMLTableRowElement | null>>({});
   const [abertos, setAbertos] = React.useState<Set<string>>(() => new Set());
@@ -241,8 +256,11 @@ export function ConciliacaoList({
     (s, l) => ({ credito: s.credito + l.credito, debito: s.debito + l.debito }),
     { credito: 0, debito: 0 },
   );
-  const grade = colunasDoExtratoNaGrade();
+  const comBanco = banco !== null;
+  const conciliados = React.useMemo(() => new Set(banco?.conciliados ?? []), [banco]);
+  const grade = colunasDoExtratoNaGrade(comBanco);
   const chaves = grade.map(([k]) => k);
+  const pendentesNoBanco = comBanco ? linhas.filter((l) => !conciliados.has(l.id)).length : 0;
   const saldoFinal = linhas.length ? linhas[linhas.length - 1].saldo : 0;
   const fantasmas = React.useMemo(() => {
     let s = saldoFinal;
@@ -263,8 +281,26 @@ export function ConciliacaoList({
 
   return (
     <>
+    <div className="flex flex-wrap items-center gap-3">
+      <Link
+        href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
+        prefetch={false}
+        className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50"
+      >
+        <Upload className="h-4 w-4" />
+        Importar extrato do banco (OFX)
+      </Link>
+      {comBanco && (
+        <span className="text-xs text-muted-foreground">
+          <span className="font-semibold text-emerald-700">
+            {linhas.length - pendentesNoBanco} {linhas.length - pendentesNoBanco === 1 ? "conciliada" : "conciliadas"}
+          </span>{" "}
+          com o banco ·{" "}
+          <span className="font-semibold text-amber-700">{pendentesNoBanco} aguardando o extrato do banco</span>
+        </span>
+      )}
     {previstas.length > 0 && (
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="ml-auto flex flex-wrap items-center gap-3">
         <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-violet-700">
           <input
             type="checkbox"
@@ -288,6 +324,7 @@ export function ConciliacaoList({
         </button>
       </div>
     )}
+    </div>
     {colunas.ativo && (
       <div>
         {/* "do período": o filtro dos títulos age dentro do período de/até
@@ -302,7 +339,7 @@ export function ConciliacaoList({
       </div>
     )}
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <table className="w-full min-w-[1480px] table-fixed text-sm">
+      <table className={cn("w-full table-fixed text-sm", comBanco ? "min-w-[1528px]" : "min-w-[1480px]")}>
         <colgroup>
           {grade.map(([k, w]) => (
             <col key={k} style={w ? { width: w } : undefined} />
@@ -310,6 +347,11 @@ export function ConciliacaoList({
         </colgroup>
         <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
           <tr>
+            {comBanco && (
+              <th className="px-2 py-3 text-center font-semibold" title="Conciliado com o extrato do banco">
+                Banco
+              </th>
+            )}
             <th className="px-3 py-3 text-left">{colunas.titulo("data", TITULO)}</th>
             <th className="px-3 py-3 text-right">{colunas.titulo("credito", TITULO)}</th>
             <th className="px-3 py-3 text-right">{colunas.titulo("debito", TITULO)}</th>
@@ -362,6 +404,11 @@ export function ConciliacaoList({
                   aberta && "bg-muted/20",
                 )}
               >
+                {comBanco && (
+                  <td className="px-2 py-2 text-center">
+                    <MarcaDoBanco alerta={banco?.alertas[l.id] ?? null} conciliado={conciliados.has(l.id)} />
+                  </td>
+                )}
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                   {formatDate(l.data_movimento)}
                 </td>
@@ -496,13 +543,14 @@ export function ConciliacaoList({
                 </td>
               </tr>
               {aberta && itens.length > 0 && <LinhasDosItens itens={itens} chaves={chaves} />}
-              {aberta && detalheImposto && <LinhasDoImposto detalhe={detalheImposto} />}
+              {aberta && detalheImposto && <LinhasDoImposto detalhe={detalheImposto} comBanco={comBanco} />}
               </React.Fragment>
             );
           })}
           {mostrarPrevistas &&
             fantasmas.map((p) => (
               <tr key={`previsto-${p.chave}`} className="border-b border-dashed border-violet-200 bg-violet-50/50 italic text-violet-900/80">
+                {comBanco && <td />}
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                   <span className="mr-1.5 rounded bg-violet-100 px-1 py-px text-[9px] font-bold not-italic uppercase text-violet-700">prev.</span>
                   {formatDate(p.data)}
@@ -535,6 +583,7 @@ export function ConciliacaoList({
         {colunas.filtrando && colunas.visiveis.length > 0 && (
           <tfoot className={cn(TOTAL_LISTA, "text-xs")}>
             <tr>
+              {comBanco && <td />}
               <td className="whitespace-nowrap px-3 py-2.5 font-semibold">Total do filtro</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold text-emerald-700">
                 {somaDoFiltro.credito > 0 ? formatMoney(somaDoFiltro.credito) : ""}
@@ -543,7 +592,7 @@ export function ConciliacaoList({
                 {somaDoFiltro.debito > 0 ? formatMoney(somaDoFiltro.debito) : ""}
               </td>
               <td />
-              <td colSpan={grade.length - 4} className="px-3 py-2.5 text-muted-foreground">
+              <td colSpan={grade.length - 4 - (comBanco ? 1 : 0)} className="px-3 py-2.5 text-muted-foreground">
                 {colunas.visiveis.length} de {colunas.total}{" "}
                 {colunas.total === 1 ? "lançamento" : "lançamentos"} do período
               </td>
@@ -562,6 +611,40 @@ export function ConciliacaoList({
   );
 }
 
+/** A marca da coluna Banco (protótipo, `AbaExtrato`). */
+function MarcaDoBanco({ alerta, conciliado }: { alerta: string | null; conciliado: boolean }) {
+  if (alerta) {
+    return (
+      <Dica conteudo={alerta}>
+        <span
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-california-red"
+          aria-label="Não bate com o banco"
+        >
+          <AlertTriangle className="h-3 w-3" />
+        </span>
+      </Dica>
+    );
+  }
+  if (conciliado) {
+    return (
+      <span
+        title="Conciliado com o extrato do banco"
+        aria-label="Conciliado com o extrato do banco"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+      >
+        <CheckCheck className="h-3 w-3" />
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Ainda não apareceu no extrato do banco"
+      aria-label="Ainda não apareceu no extrato do banco"
+      className="inline-block h-3 w-3 rounded-full border-2 border-amber-400"
+    />
+  );
+}
+
 /**
  * O pagamento da guia de imposto aberto (módulo fiscal, entrega 2 —
  * protótipo aprovado em 02/10/2026). Uma sublinha por empresa · regional do
@@ -570,11 +653,12 @@ export function ConciliacaoList({
  * com Juros. O rodapé confere: a soma das sublinhas é o débito da linha do
  * pagamento. Desde a decisão 195 nas colunas da grade do Extrato.
  */
-function LinhasDoImposto({ detalhe }: { detalhe: DetalheDoImposto }) {
+function LinhasDoImposto({ detalhe, comBanco }: { detalhe: DetalheDoImposto; comBanco: boolean }) {
   return (
     <>
       {detalhe.partes.map((p) => (
         <tr key={p.chave} className="border-b border-dashed border-border/70 bg-slate-50/70 text-[11px] text-muted-foreground">
+          {comBanco && <td />}
           <td className="whitespace-nowrap py-1.5 pl-6 pr-3 font-mono">↳</td>
           <td />
           <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[#b3323c]/80">{formatMoney(p.valor)}</td>
@@ -601,7 +685,7 @@ function LinhasDoImposto({ detalhe }: { detalhe: DetalheDoImposto }) {
         </tr>
       ))}
       <tr className="border-b border-border bg-slate-50/70 text-[11px] text-muted-foreground">
-        <td colSpan={2} />
+        <td colSpan={comBanco ? 3 : 2} />
         <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-bold">{formatMoney(detalhe.total)}</td>
         <td />
         <td colSpan={8} className="px-3 py-1.5">

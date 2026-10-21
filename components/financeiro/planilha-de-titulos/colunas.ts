@@ -21,6 +21,8 @@ import {
 
 export type ChaveDaColuna =
   | "sel"
+  /** O ✓/⚠/○ do Extrato com o extrato do banco importado (decisão 202). */
+  | "banco"
   | "data"
   | "credito"
   | "debito"
@@ -67,9 +69,11 @@ export function colunasDaGrade(o: OpcoesDaGrade): Array<[ChaveDaColuna, number |
 
 /** A grade do Extrato da conta (decisão 195): as mesmas colunas e larguras
  *  da planilha de títulos, sem a caixa da seleção e sem o Status, com o
- *  Saldo e só o ⓘ na Ação. */
-export function colunasDoExtratoNaGrade(): Array<[ChaveDaColuna, number | null]> {
+ *  Saldo e só o ⓘ na Ação. Com o extrato do banco importado, a coluna Banco
+ *  primeiro (decisão 202), no lugar onde a planilha tem a seleção. */
+export function colunasDoExtratoNaGrade(comBanco = false): Array<[ChaveDaColuna, number | null]> {
   return [
+    ...(comBanco ? ([["banco", 48]] as Array<[ChaveDaColuna, number]>) : []),
     ["data", 122],
     ["credito", 116],
     ["debito", 116],

@@ -23,7 +23,7 @@ import { efeitoNaConta, r2 } from "@/lib/financeiro/planilha-de-titulos";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { ResolucaoSozinha } from "@/lib/types";
 import type { Linha } from "./linhas-da-aba";
-import { diaCoberto, type DadosDaAbaBanco, type LancamentoSemLinha, type LinhaDoBanco } from "./banco-dados";
+import { diaCoberto, diaCompleto, type DadosDaAbaBanco, type LancamentoSemLinha, type LinhaDoBanco } from "./banco-dados";
 
 // ---------------------------------------------------------------------------
 // Os títulos
@@ -290,6 +290,41 @@ export function conciliarConta(
   };
 }
 
+/**
+ * O ⚠ da coluna Banco do Extrato (decisão 202; o `alertasDoExtrato` do
+ * protótipo, `main.jsx`): a baixa feita à mão que não bate com a linha do
+ * banco (passo 1b) e a que falta num dia que o extrato já cobre por inteiro.
+ * Por id de lançamento — todos os que a linha do Extrato junta (a baixa e os
+ * juros, as partes da guia). Não precisa dos títulos: os dois casos vêm
+ * antes deles no motor.
+ */
+export function alertasDoExtrato(
+  dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessas" | "regras" | "periodos">,
+  contaId: string,
+  hoje: string,
+): Record<string, string> {
+  const { resultados, naoApareceu, lancamentos } = conciliarConta(dados, [], contaId, {}, hoje);
+  const alertas: Record<string, string> = {};
+  for (const r of resultados) {
+    if (r.resolvido || r.estado !== "divergencia" || !r.lancamento) continue;
+    const l = lancamentos.get(r.lancamento.id);
+    for (const id of l?.ids ?? [r.lancamento.id]) alertas[id] = `Não bate com o banco. ${r.motivo ?? ""}`.trim();
+  }
+  const ate = dados.periodos
+    .map((p) => diaCompleto(p))
+    .filter((d): d is string => !!d)
+    .sort()
+    .pop();
+  if (ate) {
+    for (const l of naoApareceu) {
+      for (const id of l.ids) {
+        alertas[id] = `Não está no extrato do banco até ${diaMes(ate)}: paga em outra conta, com a data errada ou não paga.`;
+      }
+    }
+  }
+  return alertas;
+}
+
 // ---------------------------------------------------------------------------
 // As seções
 // ---------------------------------------------------------------------------
@@ -337,6 +372,65 @@ export function secoesDoBanco(resultados: ResultadoDaLinha[]): SecoesDoBanco {
     sem: pend.filter((r) => r.estado === "sem_par"),
     conciliados: resolvidos.filter((r) => !r.resolvido?.ligados),
   };
+}
+
+// ---------------------------------------------------------------------------
+// A automação da importação (decisão 201)
+// ---------------------------------------------------------------------------
+
+/** O que se resolve sozinho nesta leitura: o `useEffect` "Na importação, o
+ *  que é certo…" do protótipo (`main.jsx`), modo "Baixa sozinho o que é
+ *  certo" (especificação 4.7). */
+export interface AutomacaoDaLeitura {
+  /** A baixa feita à mão que bate (passo 1): liga a qualquer momento, porque
+   *  ela pode vir depois da importação. */
+  manuais: ResultadoDaLinha[];
+  /** As linhas pendentes que ainda não passaram pela avaliação única: a
+   *  tela as reserva (`marcar_linhas_avaliadas`) antes de resolver. */
+  aAvaliar: string[];
+  /** Das que ainda não foram avaliadas, o que se resolve sozinho — mas só
+   *  se a reserva devolver a linha: */
+  /** o título com confiança alta e centro de custo (passos 3 e 3a); */
+  titulos: ResultadoDaLinha[];
+  /** a remessa que soma centavo a centavo (passo 4); */
+  remessas: ResultadoDaLinha[];
+  /** a regra do histórico (passo 6). */
+  regras: ResultadoDaLinha[];
+}
+
+/** A soma de títulos da mesma contraparte (passo 4b) não se resolve sozinha:
+ *  vai para Prontos, um clique. A linha que alguém desfez (`sem_auto`) não se
+ *  resolve mais sozinha, nem pela baixa feita à mão. */
+export function automacaoDaLeitura(resultados: ResultadoDaLinha[]): AutomacaoDaLeitura {
+  const pend = resultados.filter((r) => !r.resolvido);
+  const podem = pend.filter((r) => !r.mov.linha.semAuto);
+  const novas = podem.filter((r) => !r.mov.linha.avaliada);
+  return {
+    manuais: podem.filter((r) => r.estado === "ja_lancado" && !!r.lancamento),
+    aAvaliar: pend.filter((r) => !r.mov.linha.avaliada).map((r) => r.mov.id),
+    titulos: novas.filter((r) => r.estado === "sugestao" && r.confianca === "alta" && comCentro(r.titulo)),
+    remessas: novas.filter((r) => r.estado === "soma" && !!r.lote),
+    regras: novas.filter((r) => r.estado === "regra" && !!r.regra?.id),
+  };
+}
+
+/** A faixa verde do que se resolveu sozinho (protótipo, `banco.jsx`). */
+export function textoDosSozinhos(resultados: ResultadoDaLinha[]): { quantas: number; partes: string[] } | null {
+  const conta = (k: ResolucaoSozinha) => resultados.filter((r) => r.resolvido?.sozinho === k).length;
+  const quantas = resultados.filter((r) => r.resolvido?.sozinho).length;
+  if (quantas === 0) return null;
+  const manual = conta("manual");
+  const titulo = conta("titulo");
+  const remessa = conta("remessa");
+  const regra = conta("regra");
+  const partes = [
+    manual && `${manual === 1 ? "1 baixa feita à mão que bateu" : `${manual} baixas feitas à mão que bateram`} com o banco`,
+    titulo &&
+      `${titulo === 1 ? "1 título baixado e conciliado" : `${titulo} títulos baixados e conciliados`} (valor exato, pago na data e pela forma previstas, ou o CNPJ do cliente no histórico; com linhas iguais, quando são tantas quanto os títulos desse valor)`,
+    remessa && (remessa === 1 ? "a remessa, que soma centavo a centavo" : `${remessa} remessas, que somam centavo a centavo`),
+    regra && `${regra === 1 ? "1 tarifa" : `${regra} tarifas`} pela regra do histórico`,
+  ].filter((p): p is string => !!p);
+  return { quantas, partes };
 }
 
 // ---------------------------------------------------------------------------

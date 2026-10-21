@@ -1,7 +1,9 @@
 ## Task 029 — Conciliação com o banco (títulos, baixa, cartão, OFX e fechamento)
 
-> **Status (21/10/2026):** desenho aprovado no protótipo; a implementação
-> começa pela Fase 1.
+> **Status (21/10/2026):** fases 1, 2 e 3 no `main` (decisões 195 a 202).
+> Falta a fase 4 (fechamento, decisão 203, com o M4.2 a perguntar), a folha
+> agrupada no Extrato (D2, opções A/B na decisão 202, aguarda o Tiago), o
+> handoff retrospectivo e mover esta task para `tasks/done/`.
 >
 > **Especificação completa:** `docs/handoffs/2026-10-21-conciliacao-com-o-banco/README.md`.
 > **Protótipo** (referência visual e de comportamento): `docs/handoffs/2026-10-21-conciliacao-com-o-banco/prototipo/conciliacao-banco.html`.

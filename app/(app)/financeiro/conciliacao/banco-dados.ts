@@ -73,6 +73,8 @@ export interface LinhaDoBanco {
   resolvidaSozinha: ResolucaoSozinha | null;
   /** Alguém desfez: não se resolve mais sozinha (decisão 201). */
   semAuto: boolean;
+  /** Já passou pela avaliação única da importação (decisão 201). */
+  avaliada: boolean;
   /** Os lançamentos ligados (na conciliada). */
   ligados: Array<{ id: string; descricao: string; valor: number; origem: string }>;
   /** Como se conciliou (decisão 200). */
@@ -517,6 +519,7 @@ export async function carregarBancoDaConciliacao(
     ignorada: l.ignorada_em ? { em: l.ignorada_em, motivo: l.motivo_ignorada } : null,
     resolvidaSozinha: l.resolvida_sozinha,
     semAuto: l.sem_auto,
+    avaliada: l.avaliada_em !== null,
     ligados: ligadosPorLinha.get(l.id) ?? [],
     conciliadaComo: l.conciliada_como,
     grupo: l.grupo,
