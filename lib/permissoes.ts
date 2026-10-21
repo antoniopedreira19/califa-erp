@@ -276,6 +276,13 @@ export const permissoes = {
    */
   "rh.nf.anexar_qualquer":        ["administrador", "rh"],
   "rh.nf.ver":                    ["administrador", "rh", "financeiro"],
+  /**
+   * 13º Salário — RH e admin veem/editam. Financeiro consome quando o
+   * envio pro financeiro entrar (partes futuras). Ver
+   * docs/superpowers/specs/2026-10-21-decimo-terceiro-parte-1-design.md.
+   */
+  "rh.decimo_terceiro.ver":       ["administrador", "rh"],
+  "rh.decimo_terceiro.editar":    ["administrador", "rh"],
 } as const satisfies Record<string, readonly AppRole[]>;
 
 /** Chaves validas da matriz — usada como tipo em consumidores. */

@@ -465,6 +465,11 @@ export type AuditAction =
   | "freelancer.acao_prevista_alterada"
   // Módulo Freelancers — migração dos legados do AgCaliforniaRH (Task 028).
   | "freelancers.migracao_executada"
+  // Módulo 13º Salário — Parte 1 (21/10/2026).
+  | "decimo_terceiro.folha.criada"
+  | "decimo_terceiro.folha.recalculada"
+  | "decimo_terceiro.folha.exportada"
+  | "decimo_terceiro.linha.editada"
   | "acao_negada";
 
 export interface AuditPayload {

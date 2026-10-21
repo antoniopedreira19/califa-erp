@@ -8,6 +8,7 @@ import {
   FileX,
   Palmtree,
   ShieldPlus,
+  Gift,
   type LucideIcon,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -40,6 +41,7 @@ export default async function CentralRHPage() {
     feriasAguardandoRes,
     rescisoesRes,
     beneficiosAtivosRes,
+    folhasDecimoTerceiroRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -82,6 +84,10 @@ export default async function CentralRHPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .is("data_fim", null),
+    supabase
+      .from("decimo_terceiro_folhas")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", session.activeTenant.id),
   ]);
   const colaboradoresAtivos = colaboradoresAtivosRes.count ?? 0;
   const pendenciasNoMes = pendenciasRes.count ?? 0;
@@ -89,6 +95,7 @@ export default async function CentralRHPage() {
   const feriasAguardando = feriasAguardandoRes.count ?? 0;
   const rescisoesRecentes = rescisoesRes.count ?? 0;
   const beneficiosAtivos = beneficiosAtivosRes.count ?? 0;
+  const folhasDecimoTerceiro = folhasDecimoTerceiroRes.count ?? 0;
 
   return (
     <div className="space-y-8">
@@ -163,6 +170,14 @@ export default async function CentralRHPage() {
               ? "nos últimos 90 dias"
               : "nos últimos 90 dias"
           }
+        />
+        <RhCard
+          href="/rh/decimo-terceiro"
+          icon={Gift}
+          title="13º Salário"
+          description="Folha anual de 13º com snapshot do cadastro, cálculo automático de avos, parcelas e descontos. Uma folha por ano, exportável em XLSX."
+          count={folhasDecimoTerceiro}
+          countLabel={folhasDecimoTerceiro === 1 ? "folha criada" : "folhas criadas"}
         />
         {/* Próximo card: Turnover */}
       </div>
