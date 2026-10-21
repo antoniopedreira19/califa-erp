@@ -130,6 +130,18 @@ export async function criarFolhaDecimoTerceiro(
     );
   }
 
+  // Query 2.6: colaboradores que tiveram reajuste salarial no ano (Parte 4).
+  const { data: reajustesNoAno } = await supabase
+    .from("colaboradores_salarios")
+    .select("colaborador_id")
+    .eq("tenant_id", tenantId)
+    .in("colaborador_id", elegiveisIds)
+    .gte("data_inicio", `${ano}-01-01`)
+    .lte("data_inicio", `${ano}-12-31`);
+  const reajusteNoAnoSet = new Set(
+    (reajustesNoAno ?? []).map((r) => r.colaborador_id),
+  );
+
   // Query 3: alocação vigente (empresa) — pega qualquer uma (a primeira
   // por created_at) por simplicidade da Parte 1. Rateio real fica pra
   // parte futura.
@@ -244,6 +256,7 @@ export async function criarFolhaDecimoTerceiro(
       salario_editado: null,
       avos_editado: null,
       obs: obsAuto,
+      teve_reajuste_no_ano: reajusteNoAnoSet.has(c.id),
       created_by: session.profile.id,
       updated_by: session.profile.id,
     };
@@ -489,6 +502,18 @@ export async function recalcularFolhaDecimoTerceiro(
     (colabsAtuais ?? []).map((c) => [c.id, c.data_encerramento as string | null]),
   );
   const fimDoAno = `${folha.ano}-12-31`;
+
+  // Reajustes no ano (Parte 4).
+  const { data: reajustesNoAno } = await supabase
+    .from("colaboradores_salarios")
+    .select("colaborador_id")
+    .eq("tenant_id", tenantId)
+    .in("colaborador_id", colabIds)
+    .gte("data_inicio", `${folha.ano}-01-01`)
+    .lte("data_inicio", `${folha.ano}-12-31`);
+  const reajusteNoAnoSet = new Set(
+    (reajustesNoAno ?? []).map((r) => r.colaborador_id),
+  );
   const adiantadoPorColab = new Map<string, number>();
   for (const a of adiantamentos ?? []) {
     adiantadoPorColab.set(
@@ -545,6 +570,7 @@ export async function recalcularFolhaDecimoTerceiro(
             avos_editado: 0,
             editado_manualmente: true,
             obs: `Desligado em ${dataBr} — 13º proporcional pago na rescisão`,
+            teve_reajuste_no_ano: reajusteNoAnoSet.has(l.colaborador_id),
             updated_by: session.profile.id,
           })
           .eq("id", l.id)
@@ -584,6 +610,7 @@ export async function recalcularFolhaDecimoTerceiro(
           parte_pj_segunda_parcela: calc.partePj?.segundaParcela ?? null,
           parte_pj_total_liquido: calc.partePj?.totalLiquido ?? null,
           obs: obsAuto,
+          teve_reajuste_no_ano: reajusteNoAnoSet.has(l.colaborador_id),
           updated_by: session.profile.id,
         })
         .eq("id", l.id)

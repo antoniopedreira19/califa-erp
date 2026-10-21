@@ -4948,6 +4948,10 @@ export interface DecimoTerceiroLinha {
   avos_editado: number | null;
   obs: string | null;
 
+  /** TRUE quando o colaborador teve mudança salarial no ano (Parte 4).
+   *  Sinalização visual pro RH considerar retroativo via override manual. */
+  teve_reajuste_no_ano: boolean;
+
   // Audit
   created_at: string;
   updated_at: string;

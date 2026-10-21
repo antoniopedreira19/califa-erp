@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, AlertCircle, RotateCcw } from "lucide-react";
+import { Loader2, AlertCircle, RotateCcw, TrendingUp } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +81,19 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
+          {linha.teve_reajuste_no_ano && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <TrendingUp className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <strong>Reajuste no ano.</strong> Este colaborador teve
+                mudança salarial em {new Date().getFullYear()}. Se quiser
+                aplicar retroativo, use o campo &quot;Salário (editar)&quot;
+                pra lançar o salário médio ponderado do ano e descreva o
+                ajuste na observação.
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Salário snapshot:</span>

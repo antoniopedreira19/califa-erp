@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, ChevronRight, ChevronDown } from "lucide-react";
+import { Pencil, ChevronRight, ChevronDown, TrendingUp } from "lucide-react";
 import { DialogEditarLinha } from "./dialog-editar-linha";
 
 export interface ParteBreakdownRow {
@@ -34,6 +34,7 @@ export interface LinhaRow {
   salario_editado: number | null;
   avos_editado: number | null;
   obs: string | null;
+  teve_reajuste_no_ano: boolean;
 }
 
 const brl = new Intl.NumberFormat("pt-BR", {
@@ -147,6 +148,15 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                         {ehHibrido && (
                           <span className="ml-2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
                             híbrido
+                          </span>
+                        )}
+                        {l.teve_reajuste_no_ano && (
+                          <span
+                            title="Teve mudança de salário no ano — considere ajustar via Editar linha pra aplicar retroativo."
+                            className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
+                          >
+                            <TrendingUp className="h-3 w-3" />
+                            reajuste
                           </span>
                         )}
                       </div>

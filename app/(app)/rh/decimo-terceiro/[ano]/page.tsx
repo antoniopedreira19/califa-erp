@@ -71,6 +71,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
        parte_clt_desconto_inss, parte_clt_desconto_irrf, parte_clt_total_liquido,
        parte_pj_primeira_parcela, parte_pj_segunda_parcela, parte_pj_total_liquido,
        editado_manualmente, salario_editado, avos_editado, obs,
+       teve_reajuste_no_ano,
        empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome_fantasia)`,
     )
     .eq("folha_id", folha.id)
@@ -113,6 +114,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
     salario_editado: string | null;
     avos_editado: number | null;
     obs: string | null;
+    teve_reajuste_no_ano: boolean;
     empresa: EmpresaEmbed;
   }
 
@@ -159,6 +161,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
       salario_editado: l.salario_editado != null ? Number(l.salario_editado) : null,
       avos_editado: l.avos_editado,
       obs: l.obs,
+      teve_reajuste_no_ano: l.teve_reajuste_no_ano,
     };
   });
 
