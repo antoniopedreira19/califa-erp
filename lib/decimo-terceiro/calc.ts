@@ -3,11 +3,16 @@
 // Avos seguem a regra do dia 15: admissão até dia 15 conta o mês inteiro,
 // admissão a partir do dia 16 não conta.
 //
-// INSS e IRRF 2026: tabelas progressivas aplicadas sobre o 13º bruto
-// INTEGRAL (salario/12 * avos), não sobre a 2ª parcela isolada. É a regra
-// legal; a planilha Excel atual aplica errado (sobre a 2ª parcela) e tem
-// a fórmula de INSS quebrada com #REF!. Divergência consciente — ver
-// docs/superpowers/specs/2026-10-21-decimo-terceiro-parte-1-design.md.
+// INSS e IRRF: tabelas vigentes em 10/2026 (Portaria MPS/MF nº 13/2026
+// para INSS; Lei 15.191/2025 para a tabela progressiva do IRRF; Lei
+// 15.270/2025 para a redução que dá isenção efetiva no 13º até R$ 5.000
+// e faixa de transição até R$ 7.350). Base de cálculo = 13º bruto
+// INTEGRAL (salário/12 × avos), não a 2ª parcela isolada.
+//
+// IRRF considera dedução simplificada mensal de R$ 607,20 (ou soma de
+// INSS + dependentes × R$ 189,59, o que for maior) para formar a base.
+// O número de dependentes é 0 por padrão; o RH ajusta manualmente via
+// override quando for diferente.
 //
 // Só CLT (clt e clt_recibo sem valorRecibo) sofre desconto. PJ, MEI e a
 // parte PJ do híbrido CLT_recibo retornam 0.
@@ -39,17 +44,17 @@ export function calcularAvos(dataAdmissao: Date, ano: number): number {
   return 12 - mes;
 }
 
-// --- INSS 2026 --------------------------------------------------------------
+// --- INSS 2026 (vigência 10/2026, Portaria MPS/MF nº 13/2026) ---------------
 
 const INSS_2026 = [
-  { teto: 1518.0, aliquota: 0.075, deducao: 0 },
-  { teto: 2793.88, aliquota: 0.09, deducao: 22.77 },
-  { teto: 4190.83, aliquota: 0.12, deducao: 106.59 },
-  { teto: 8157.41, aliquota: 0.14, deducao: 190.4 },
+  { teto: 1621.0, aliquota: 0.075, deducao: 0 },
+  { teto: 2902.84, aliquota: 0.09, deducao: 24.32 },
+  { teto: 4354.27, aliquota: 0.12, deducao: 111.4 },
+  { teto: 8475.55, aliquota: 0.14, deducao: 198.49 },
 ];
 
-const INSS_TETO = 8157.41;
-const INSS_TETO_VALOR = round2(INSS_TETO * 0.14 - 190.4);
+const INSS_TETO = 8475.55;
+const INSS_TETO_VALOR = round2(INSS_TETO * 0.14 - 198.49);
 
 export function calcularInss2026(base: number): number {
   if (base <= 0) return 0;
@@ -62,25 +67,66 @@ export function calcularInss2026(base: number): number {
   return INSS_TETO_VALOR;
 }
 
-// --- IRRF 2026 --------------------------------------------------------------
+// --- IRRF 2026 (vigência 10/2026, Lei 15.191/2025 + Lei 15.270/2025) -------
 
 const IRRF_2026 = [
-  { teto: 1518.0, aliquota: 0, deducao: 0 },
-  { teto: 2793.88, aliquota: 0.075, deducao: 169.44 },
-  { teto: 4190.83, aliquota: 0.15, deducao: 381.44 },
-  { teto: 8157.41, aliquota: 0.225, deducao: 662.77 },
-  { teto: Infinity, aliquota: 0.275, deducao: 896 },
+  { teto: 2428.8, aliquota: 0, deducao: 0 },
+  { teto: 2826.65, aliquota: 0.075, deducao: 182.16 },
+  { teto: 3751.05, aliquota: 0.15, deducao: 394.16 },
+  { teto: 4664.68, aliquota: 0.225, deducao: 675.49 },
+  { teto: Infinity, aliquota: 0.275, deducao: 908.73 },
 ];
 
-export function calcularIrrf2026(base: number, inssDescontado: number): number {
-  const baseAjustada = base - inssDescontado;
-  if (baseAjustada <= 0) return 0;
+/** Desconto simplificado mensal (R$ 607,20): dedução padrão do IR
+ *  aplicada quando é maior que a soma INSS + dependentes × 189,59. */
+const DESCONTO_SIMPLIFICADO = 607.2;
+
+/** Dedução por dependente IR (R$ 189,59). Default do cálculo é 0. */
+const DEDUCAO_POR_DEPENDENTE = 189.59;
+
+// Lei 15.270/2025 — redução do IRRF no 13º
+const LEI_15270 = {
+  isencaoAte: 5000,
+  transicaoAte: 7350,
+  reducaoIsencao: 312.89,
+  reducaoConstante: 978.62,
+  reducaoCoeficiente: 0.133145,
+};
+
+export function calcularIrrf2026(
+  base: number,
+  inssDescontado: number,
+  dependentes: number = 0,
+): number {
+  if (base <= 0) return 0;
+
+  // Dedução IR usada = MAX(INSS + dependentes × 189,59, desconto simplificado)
+  const deducaoINSSDep =
+    inssDescontado + dependentes * DEDUCAO_POR_DEPENDENTE;
+  const deducaoUsada = Math.max(deducaoINSSDep, DESCONTO_SIMPLIFICADO);
+  const baseIR = Math.max(0, base - deducaoUsada);
+
+  // IR pela tabela progressiva
+  let irTabela = 0;
   for (const faixa of IRRF_2026) {
-    if (baseAjustada <= faixa.teto) {
-      return Math.max(0, round2(baseAjustada * faixa.aliquota - faixa.deducao));
+    if (baseIR <= faixa.teto) {
+      irTabela = Math.max(0, round2(baseIR * faixa.aliquota - faixa.deducao));
+      break;
     }
   }
-  return 0;
+
+  // Redução Lei 15.270/2025
+  let reducao = 0;
+  if (base <= LEI_15270.isencaoAte) {
+    reducao = LEI_15270.reducaoIsencao;
+  } else if (base <= LEI_15270.transicaoAte) {
+    reducao = Math.max(
+      0,
+      LEI_15270.reducaoConstante - LEI_15270.reducaoCoeficiente * base,
+    );
+  }
+
+  return Math.max(0, round2(irTabela - reducao));
 }
 
 // --- Cálculo de uma parte (CLT ou PJ) ---------------------------------------
@@ -90,6 +136,7 @@ interface ParteInput {
   avos: number;
   totalAdiantado: number;
   comDescontos: boolean; // true = CLT (aplica INSS + IRRF); false = PJ
+  dependentes: number;
 }
 
 interface ParteOutput {
@@ -111,7 +158,7 @@ function calcularParte(input: ParteInput): ParteOutput {
     input.comDescontos && input.avos > 0 ? calcularInss2026(baseIntegral) : 0;
   const descontoIrrf =
     input.comDescontos && input.avos > 0
-      ? calcularIrrf2026(baseIntegral, descontoInss)
+      ? calcularIrrf2026(baseIntegral, descontoInss, input.dependentes)
       : 0;
 
   const totalBruto = round2(primeiraParcela + segundaParcela);
@@ -140,6 +187,8 @@ export interface CalcInput {
   /** Parte PJ do salário quando CLT_recibo híbrido (= valor_recibo).
    *  Null/0 ou undefined cai no caminho CLT puro (sem breakdown). */
   valorRecibo?: number | null;
+  /** Número de dependentes IR (default 0). Afeta só o IRRF. */
+  dependentes?: number;
 }
 
 export interface ParteBreakdown {
@@ -173,6 +222,8 @@ export function calcularLinhaDecimoTerceiro(input: CalcInput): CalcOutput {
   const salario =
     input.salarioEditado != null ? input.salarioEditado : input.salario;
 
+  const dependentes = input.dependentes ?? 0;
+
   const ehClt =
     input.tipoContratacao === "clt" || input.tipoContratacao === "clt_recibo";
   const valorRecibo = input.valorRecibo ?? 0;
@@ -194,12 +245,14 @@ export function calcularLinhaDecimoTerceiro(input: CalcInput): CalcOutput {
       avos,
       totalAdiantado: adiantamentoClt,
       comDescontos: true,
+      dependentes,
     });
     const pj = calcularParte({
       salario: salarioPj,
       avos,
       totalAdiantado: adiantamentoPj,
       comDescontos: false,
+      dependentes: 0,
     });
 
     return {
@@ -233,6 +286,7 @@ export function calcularLinhaDecimoTerceiro(input: CalcInput): CalcOutput {
     avos,
     totalAdiantado: input.totalAdiantado,
     comDescontos: ehClt,
+    dependentes,
   });
 
   return {
