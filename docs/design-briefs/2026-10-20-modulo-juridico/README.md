@@ -59,6 +59,15 @@ O botão "O que muda na B" do protótipo lista cada item com um atalho para a te
 13. **Influenciador como rascunho** e **termo aditivo** como tipos de modelo.
 14. **Nova solicitação:** para o que não nasce de job nem de PP, com os campos da reunião (qualificação, escopo, valor, condição e prazo).
 
+### Ajustes de 21/10/2026 (comentários no protótipo)
+
+- **Edição direto no documento, como no Docs ou no Word.** O editor de modelos abre no próprio contrato: escreve-se no texto, a barra marca título, cláusula ou texto corrido, e campos do sistema (azul) e lacunas (vermelho) entram como blocos que não se digitam por dentro. A numeração das cláusulas é automática. O texto com marcadores continua disponível em "Marcadores", e "Prévia com dados" mostra a minuta preenchida.
+- **Ajuste do texto de um contrato específico.** Na revisão, "Editar o texto" deixa mudar qualquer trecho daquele contrato antes de gerar. Os dados do sistema (CNPJ, valor, condição) ficam travados, porque vêm do cadastro e da PP. O contrato gerado leva a marca "Texto ajustado à mão", que também fica no histórico.
+- **Janelas grandes centralizadas no lugar das gavetas laterais**, com até 1.480 px de largura. No celular, ocupam a tela toda.
+- **Contratos por job abre numa lista de todos os jobs**, com o status do contrato do cliente, os contratos de fornecedores resolvidos e o valor travado. A pasta só abre depois de escolher um job; dentro dela, "Todos os jobs" volta à lista e "Trocar job" troca sem voltar.
+
+Na implementação, o editor de documento pede uma biblioteca como TipTap (ProseMirror), com nós próprios para campo e lacuna, e o contrato é guardado como documento estruturado (JSON), de onde sai o PDF.
+
 ## 3. Decisões que o protótipo assume e que precisam de confirmação
 
 1. **Quando nasce o contrato com o cliente.** O pedido diz "quando o job é aberto pelo financeiro"; o resumo da reunião diz "quando o GP marcar o orçamento como aprovado". O protótipo segue o pedido (abertura pelo financeiro). Se for na aprovação, o contrato nasce antes do job, ligado ao orçamento e à versão aprovada.

@@ -115,7 +115,7 @@ const NOTAS_B = [
     { t: "Histórico do contrato", d: "Cada passo fica registrado: quando chegou, quem salvou, qual versão do modelo, quem anexou o assinado.", ir: { contrato: "c-j412" } },
   ] },
   { aba: "Contratos por job", itens: [
-    { t: "Pasta do job", d: "A aba vira uma pasta: progresso do job, cliente no topo e fornecedores agrupados, cada um com suas PPs e aditivos.", ir: { aba: "porjob" } },
+    { t: "Pasta do job", d: "A aba vira uma pasta: progresso do job, cliente no topo e fornecedores agrupados, cada um com suas PPs e aditivos.", ir: { aba: "porjob", jobId: "j412" } },
   ] },
   { aba: "Modelos de contrato", itens: [
     { t: "Modelos com versão", d: "Salvar um modelo cria uma versão nova; o contrato guarda a versão que usou. Modelo já usado é arquivado em vez de apagado.", ir: { aba: "modelos" } },

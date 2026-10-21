@@ -127,7 +127,7 @@ function usarAcoes(setDb, toast, getDb) {
         let contratos = d.contratos.map((c) => {
           if (c.id !== id) return c;
           const n = { ...c, historico: [...(c.historico || [])], ...dados, status: "assinatura", responsavel: USUARIO.nome, arquivo, versaoArquivo: versaoArq };
-          return registrar(n, `Contrato gerado (${arquivo}) com o modelo ${dados.modeloNome} (v${dados.modeloVersao}) e anexado a ${rotuloDestino}.`);
+          return registrar(n, `Contrato gerado (${arquivo}) com o modelo ${dados.modeloNome} (v${dados.modeloVersao}) e anexado a ${rotuloDestino}.${dados.textoEditado ? " O texto foi ajustado à mão na revisão." : ""}`);
         });
         // PPs agrupadas num contrato só (versão B): o contrato próprio delas sai da fila.
         if (dados.ppIds && dados.ppIds.length > 1) {

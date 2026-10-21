@@ -30,7 +30,7 @@ function App() {
   dbRef.current = db;
   const [ui, setUi] = useState(() => ({
     versao: versaoInicial(), tela: "juridico", aba: "entrada", jobId: "j412", jobAba: "info", destaque: null, gaveta: null, modal: null,
-    entrada: { ...ENTRADA_PADRAO }, porjob: { jobId: "j412", fornecedor: "todos", status: "todos" }, modelos: { busca: "", parte: "todos" },
+    entrada: { ...ENTRADA_PADRAO }, porjob: { jobId: null, fornecedor: "todos", status: "todos" }, modelos: { busca: "", parte: "todos" },
   }));
   const [toasts, setToasts] = useState([]);
   const [notas, setNotas] = useState(false);
@@ -67,6 +67,7 @@ function App() {
       if (alvo.aba) n.aba = alvo.aba;
       if (alvo.aba === "entrada") n.entrada = { ...ENTRADA_PADRAO, visao: alvo.visao || "lista", busca: alvo.busca || "" };
       if (alvo.modal) n.modal = { tipo: alvo.modal };
+      if (alvo.aba === "porjob") n.porjob = { ...u.porjob, jobId: alvo.jobId || null, fornecedor: "todos", status: "todos" };
       if (alvo.contrato) {
         n.aba = "entrada";
         n.entrada = { ...ENTRADA_PADRAO };
@@ -115,7 +116,7 @@ function App() {
     <main class="conteudo">
       <div class="gutter mx-auto max-w-[1680px] pb-36 pt-20 md:pt-8">${tela}</div>
     </main>
-    <${Gaveta} aberta=${!!gaveta} onFechar=${fecharGaveta} rotulo="Contrato" largura=${g && g.tipo === "modelo" ? "max-w-[1240px]" : "max-w-[1180px]"}>${gaveta}</${Gaveta}>
+    <${Gaveta} aberta=${!!gaveta} onFechar=${fecharGaveta} rotulo="Contrato" largura="max-w-[1480px]">${gaveta}</${Gaveta}>
     ${modal}
     <${NotasB} aberta=${notas} onFechar=${() => setNotas(false)} onMostrar=${mostrarNota} />
     <${Toasts} itens=${toasts} onFechar=${(id) => setToasts((ts) => ts.filter((x) => x.id !== id))} />

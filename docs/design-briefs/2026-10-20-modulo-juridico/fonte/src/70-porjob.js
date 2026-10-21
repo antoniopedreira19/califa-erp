@@ -56,10 +56,61 @@ function Pagamento({ pp }) {
   return html`<span class=${cn("inline-flex items-start gap-1.5 text-[12.5px] font-semibold leading-snug", s.cls)}><${Icon} n=${s.icone} c="mt-0.5 h-3.5 w-3.5" />${s.rotulo}</span>`;
 }
 
+/* Tela inicial da aba (pedido de 21/10/2026): todos os jobs com a situação
+ * dos contratos; a pasta do job só abre depois de escolher um. */
+function ListaJobsDoJuridico({ onAbrir }) {
+  const { db, B } = useStore();
+  const [q, setQ] = useState("");
+  const [filtro, setFiltro] = useState("todos");
+  const linhas = [...db.jobs].sort((a, b) => b.abertoEm.localeCompare(a.abertoEm)).map((j) => {
+    const r = resumoDoJob(db, j.id, B);
+    const forn = r.cs.filter((c) => c.parte === "fornecedor");
+    const travadas = db.pps.filter((p) => p.jobId === j.id && situacaoPagamento(db, p, B).k === "travado");
+    return { j, cli: CLIENTES[j.clienteId], cCli: contratoDoJob(db, j.id), forn: forn.length, fornRes: forn.filter((c) => RESOLVIDO.includes(c.status)).length, pend: r.total - r.resolvidos, travadas, valorTravado: travadas.reduce((s, p) => s + p.valor, 0) };
+  });
+  const busca = q.trim().toLowerCase();
+  const visiveis = linhas.filter((l) => (filtro === "todos" || (filtro === "pendentes" ? l.pend > 0 : l.pend === 0)) && (!busca || [l.j.codigo, l.j.nome, l.cli.fantasia, l.j.projeto.nome, l.j.gp].join(" ").toLowerCase().includes(busca)));
+  const TH = "px-4 py-3 font-semibold";
+  return html`<div class="space-y-4">
+    <div class="flex flex-wrap items-center gap-2.5">
+      <${Busca} id="busca-jobs-juridico" valor=${q} onTroca=${setQ} placeholder="Buscar job, cliente, projeto ou GP" class="w-full sm:w-80" />
+      <${Segmentado} rotulo="Situação dos contratos" valor=${filtro} onTroca=${setFiltro} opcoes=${[
+        { k: "todos", rotulo: "Todos", n: linhas.length },
+        { k: "pendentes", rotulo: "Com pendências", n: linhas.filter((l) => l.pend > 0).length },
+        { k: "concluidos", rotulo: "Tudo resolvido", n: linhas.filter((l) => l.pend === 0).length },
+      ]} />
+      <span class="ml-auto text-[12.5px] text-muted-foreground">Escolha um job para ver o contrato com o cliente e os de todos os fornecedores.</span>
+    </div>
+    ${visiveis.length === 0 ? html`<${Vazio} icone="briefcase" titulo="Nenhum job com esses filtros" texto="Limpe a busca ou troque o filtro de situação." />` : html`
+    <div class="relative overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
+      <table class="w-full min-w-[1080px] table-fixed border-collapse text-sm">
+        <colgroup>${[25, 14, 11, 15, 15, 12, 8].map((w, i) => html`<col key=${i} style=${`width:${w}%`} />`)}</colgroup>
+        <thead><tr class="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+          <th class=${TH}>Job</th><th class=${TH}>Cliente</th><th class=${TH}>GP</th><th class=${TH}>Contrato do cliente</th><th class=${TH}>Fornecedores</th><th class=${cn(TH, "text-right")}>Pagamento travado</th><th class="py-3"><span class="sr-only">Abrir</span></th>
+        </tr></thead>
+        <tbody>
+          ${visiveis.map((l) => html`<tr key=${l.j.id} tabIndex="0" onClick=${() => onAbrir(l.j.id)} onKeyDown=${(e) => e.key === "Enter" && onAbrir(l.j.id)} class="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-[#fafaf8] focus-visible:bg-[#fafaf8] focus-visible:outline-none">
+            <td class="px-4 py-3"><p class="truncate font-semibold"><span class="font-mono text-[12.5px]">${l.j.codigo}</span> · ${l.j.nome}</p><p class="truncate text-[11.5px] text-muted-foreground">${l.j.projeto.codigo} · ${l.j.projeto.nome} · aberto em ${dataBr(l.j.abertoEm)}</p></td>
+            <td class="truncate px-4 py-3 font-medium">${l.cli.fantasia}</td>
+            <td class="truncate px-4 py-3">${l.j.gp}</td>
+            <td class="px-4 py-3"><${SeloContrato} status=${l.cCli.status} /></td>
+            <td class="px-4 py-3">${l.forn === 0 ? html`<span class="text-[12.5px] text-muted-foreground">Nenhuma PP ainda</span>` : html`
+              <p class="text-[12.5px]"><b class="tabular-nums">${l.fornRes} de ${l.forn}</b> <span class="text-muted-foreground">resolvidos</span></p>
+              <div class="mt-1 h-1.5 w-full max-w-[140px] overflow-hidden rounded-full bg-[#efeeea]"><div class="h-full rounded-full bg-emerald-500" style=${`width:${(l.fornRes / l.forn) * 100}%`}></div></div>`}</td>
+            <td class="px-4 py-3 text-right">${l.travadas.length ? html`<p class="inline-flex items-center gap-1 font-semibold tabular-nums text-[#b3323c]"><${Icon} n="lock" c="h-3.5 w-3.5" />${moeda(l.valorTravado)}</p><p class="text-[11px] text-muted-foreground">${l.travadas.length} ${l.travadas.length === 1 ? "PP" : "PPs"}</p>` : html`<span class="text-muted-foreground">—</span>`}</td>
+            <td class="px-3 py-3 text-right"><span class="inline-flex items-center gap-1 text-[12.5px] font-semibold text-california-red">Abrir<${Icon} n="chevronRight" c="h-3.5 w-3.5" /></span></td>
+          </tr>`)}
+        </tbody>
+      </table>
+    </div>`}
+  </div>`;
+}
+
 function PorJob() {
   const { db, B, ui, setUi, irJob, toast } = useStore();
   const f = ui.porjob;
   const setF = (patch) => setUi((u) => ({ ...u, porjob: { ...u.porjob, ...patch } }));
+  if (!f.jobId || !jobDe(db, f.jobId)) return html`<${ListaJobsDoJuridico} onAbrir=${(id) => setF({ jobId: id, fornecedor: "todos", status: "todos" })} />`;
   const job = jobDe(db, f.jobId);
   const cli = CLIENTES[job.clienteId];
   const cCli = contratoDoJob(db, job.id);
@@ -74,6 +125,7 @@ function PorJob() {
   </div>`;
 
   const topo = html`<div class="flex flex-wrap items-center gap-3">
+    <${Botao} v="secundario" t="sm" icone="chevronLeft" onClick=${() => setF({ jobId: null })}>Todos os jobs</${Botao}>
     <${SeletorJob} jobId=${job.id} onTroca=${(id) => setF({ jobId: id, fornecedor: "todos", status: "todos" })} />
     <div class="ml-auto flex flex-wrap gap-2">
       <${Botao} v="secundario" t="sm" icone="sheet" onClick=${() => irJob(job.id, "planilha")}>Planilha interna</${Botao}>

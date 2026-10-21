@@ -125,8 +125,10 @@ function Rotulo({ para, children, obrigatorio, extra }) {
   return html`<label for=${para} class="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">${children}${obrigatorio && html`<span class="text-california-red">*</span>`}${extra}</label>`;
 }
 
-/* Painel lateral (drawer). Fecha com Esc e com clique fora. */
-function Gaveta({ aberta, onFechar, largura = "max-w-[1180px]", children, rotulo }) {
+/* Janela grande centralizada (até 21/10/2026 era uma gaveta lateral; o
+ * pedido foi ganhar largura). Fecha com Esc e com clique fora. No celular
+ * ocupa a tela toda. */
+function Gaveta({ aberta, onFechar, largura = "max-w-[1480px]", children, rotulo }) {
   useEffect(() => {
     if (!aberta) return;
     const tecla = (e) => e.key === "Escape" && onFechar();
@@ -135,9 +137,9 @@ function Gaveta({ aberta, onFechar, largura = "max-w-[1180px]", children, rotulo
     return () => { window.removeEventListener("keydown", tecla); document.body.style.overflow = ""; };
   }, [aberta]);
   if (!aberta) return null;
-  return html`<div class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label=${rotulo}>
-    <div class="absolute inset-0 bg-black/35 backdrop-blur-[1px] anim-fade" onClick=${onFechar}></div>
-    <div class=${cn("absolute inset-y-0 right-0 flex w-full flex-col bg-background shadow-2xl anim-gaveta", largura)}>${children}</div>
+  return html`<div class="janela-grande fixed inset-0 z-50 flex items-center justify-center sm:p-6" role="dialog" aria-modal="true" aria-label=${rotulo}>
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-[2px] anim-fade" onClick=${onFechar}></div>
+    <div class=${cn("relative flex h-full w-full flex-col overflow-hidden bg-background shadow-2xl anim-janela sm:rounded-2xl sm:border sm:border-black/5", largura)}>${children}</div>
   </div>`;
 }
 

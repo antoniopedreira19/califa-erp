@@ -87,6 +87,10 @@ function GerarContrato({ id, onFechar, passoInicial }) {
   const [campos, setCampos] = useState({ ...(c.campos || {}) });
   const [clausulas, setClausulas] = useState(c.clausulas || []);
   const [ppIds, setPpIds] = useState(c.ppIds || []);
+  // Texto ajustado à mão na revisão (pedido de 21/10/2026: editar direto no contrato).
+  const [textoEditado, setTextoEditado] = useState(c.textoEditado || null);
+  const [editando, setEditando] = useState(false);
+  const [baseEdicao, setBaseEdicao] = useState(null);
   const corpoRef = useRef(null);
 
   const modelo = modeloId ? modeloDe(db, modeloId) : null;
@@ -103,7 +107,8 @@ function GerarContrato({ id, onFechar, passoInicial }) {
     const el = document.getElementById(`lac-${k}`);
     if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus(); }
   };
-  const dadosParaSalvar = () => ({ modeloId, modeloVersao: modelo.versao, modeloNome: modelo.nome, campos, clausulas, ppIds, valor: ctx._valor });
+  const dadosParaSalvar = () => ({ modeloId, modeloVersao: modelo.versao, modeloNome: modelo.nome, campos, clausulas, ppIds, valor: ctx._valor, textoEditado });
+  const comecarEdicao = () => { setBaseEdicao(textoEditado || contratoParaHtml(nos, ctx)); setEditando(true); };
   const destino = rotuloDestino(info, ppIds, db);
   const irParaJob = () => { onFechar(); irJob(info.job.id, c.parte === "cliente" || info.origem === "solicitacao" ? "info" : "pps"); };
 
@@ -113,7 +118,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
   };
 
   /* ----- Passo 1: modelo ----- */
-  const passo1 = html`<div class="mx-auto max-w-[1040px] space-y-5 px-6 py-6">
+  const passo1 = html`<div class="mx-auto max-w-[1180px] space-y-5 px-6 py-6">
     <${DadosDoSistema} info=${info} ctx=${ctx} />
 
     ${B && irmas.length > 0 && html`<div class="rounded-2xl border border-[#e9d5ff] bg-[#fdfaff] px-5 py-4">
@@ -143,7 +148,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
           ${["todos", ...tiposVisiveis].map((t) => html`<button key=${t} type="button" aria-pressed=${filtroTipo === t} onClick=${() => setFiltroTipo(t)} class=${cn("rounded-full border px-3 py-1 text-[12px] font-semibold", filtroTipo === t ? "border-california-dark bg-california-dark text-white" : "border-border bg-white text-muted-foreground hover:text-foreground")}>${t === "todos" ? "Todos os tipos" : TIPOS[t].rotulo}</button>`)}
         </div>
       </div>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         ${tiposVisiveis.filter((t) => filtroTipo === "todos" || filtroTipo === t).flatMap((t) => {
           const ms = disponiveis.filter((m) => m.tipo === t);
           if (!ms.length && t === "influenciador" && !B) return [html`<div key="infl" class="flex min-h-[148px] flex-col justify-between rounded-2xl border border-dashed border-border bg-[#fafaf9] p-4 text-muted-foreground">
@@ -184,6 +189,11 @@ function GerarContrato({ id, onFechar, passoInicial }) {
         <${Botao} v="fantasma" t="xs" icone="rotate" onClick=${() => setPasso(1)}>Trocar</${Botao}>
       </div>
 
+      ${textoEditado && html`<div class="flex items-start gap-2.5 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-3.5 py-3 text-[12.5px] text-[#92400e]">
+        <${Icon} n="alert" c="mt-0.5 h-3.5 w-3.5" />
+        <p class="min-w-0 flex-1">Você ajustou o texto do contrato na revisão. O que mudar aqui não chega a esse texto.</p>
+        <button type="button" class="shrink-0 font-bold hover:underline" onClick=${() => setTextoEditado(null)}>Descartar ajustes</button>
+      </div>`}
       <section class="space-y-4">
         <div class="flex items-center justify-between"><h3 class="text-[14px] font-bold">Lacunas a preencher</h3><span class=${cn("rounded-full px-2.5 py-0.5 text-[11.5px] font-bold", faltando.length ? "bg-california-red-soft text-[#b3323c]" : "bg-emerald-50 text-emerald-700")}>${lacunas.length - faltando.length} de ${lacunas.length}</span></div>
         ${lacunas.map((l) => {
@@ -232,7 +242,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
       <section class="rounded-2xl border border-border bg-white p-5 shadow-soft">
         <h3 class="text-[14px] font-bold">Resumo</h3>
         <dl class="mt-3 space-y-2.5 text-[12.5px]">
-          ${[["Modelo", `${modelo.nome} · v${modelo.versao}`], ["Partes", ctx._partes.join(" e ")], ["Valor", ctx["valor.total"]], ["Condição", ctx["pagamento.condicao"]], ...(B ? [["Cláusulas opcionais", clausulas.length ? clausulas.map((k) => CLAUSULAS[k].resumo).join("; ") : "Nenhuma"]] : []), ...(ppIds.length > 1 ? [["PPs cobertas", ppIds.map((x) => ppDe(db, x).codigo).join(", ")]] : [])].map(([k, v]) => html`<div key=${k} class="grid grid-cols-[110px_minmax(0,1fr)] gap-3"><dt class="text-muted-foreground">${k}</dt><dd class="font-medium">${v}</dd></div>`)}
+          ${[["Modelo", `${modelo.nome} · v${modelo.versao}`], ["Partes", ctx._partes.join(" e ")], ["Valor", ctx["valor.total"]], ["Condição", ctx["pagamento.condicao"]], ...(B ? [["Cláusulas opcionais", clausulas.length ? clausulas.map((k) => CLAUSULAS[k].resumo).join("; ") : "Nenhuma"]] : []), ...(ppIds.length > 1 ? [["PPs cobertas", ppIds.map((x) => ppDe(db, x).codigo).join(", ")]] : []), ...(textoEditado ? [["Texto", "Ajustado à mão na revisão"]] : [])].map(([k, v]) => html`<div key=${k} class="grid grid-cols-[110px_minmax(0,1fr)] gap-3"><dt class="text-muted-foreground">${k}</dt><dd class="font-medium">${v}</dd></div>`)}
         </dl>
       </section>
       <section class="rounded-2xl border border-border bg-white p-5 shadow-soft">
@@ -247,8 +257,16 @@ function GerarContrato({ id, onFechar, passoInicial }) {
       ${faltando.length > 0 && html`<p class="flex items-start gap-2 rounded-xl border border-california-red/25 bg-california-red-soft px-3.5 py-2.5 text-[12.5px] text-[#9f2a33]"><${Icon} n="alert" c="mt-0.5 h-3.5 w-3.5" />Falta preencher: ${faltando.map((l) => l.rotulo).join(", ")}.</p>`}
     </div>
     <div class="bg-[#efeeeb] px-4 py-6 sm:px-8 lg:min-h-0 lg:overflow-y-auto">
-      <p class="mx-auto mb-3 max-w-[720px] text-[12px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Como vai sair no PDF</p>
-      <${Papel} nos=${nos} ctx=${ctx} lacunas=${lacunas} modo="final" onIrLacuna=${(k) => { setPasso(2); setTimeout(() => irLacuna(k), 60); }} />
+      <div class="mx-auto mb-3 flex max-w-[720px] flex-wrap items-center gap-2">
+        <p class="mr-auto text-[12px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">${editando ? "Editando o texto do contrato" : "Como vai sair no PDF"}</p>
+        ${!editando && textoEditado && html`<${Etiqueta} cor="ambar" icone="pencil">Texto ajustado à mão</${Etiqueta}><${Botao} v="fantasma" t="xs" icone="rotate" onClick=${() => setTextoEditado(null)}>Desfazer ajustes</${Botao}>`}
+        ${editando ? html`<${Botao} t="xs" icone="check" onClick=${() => setEditando(false)}>Concluir edição</${Botao}>`
+          : html`<${Botao} v="secundario" t="xs" icone="pencil" disabled=${faltando.length > 0} title=${faltando.length ? "Preencha as lacunas antes de editar o texto" : undefined} onClick=${comecarEdicao}>Editar o texto</${Botao}>`}
+      </div>
+      ${editando && html`<p class="mx-auto mb-3 max-w-[720px] rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-2 text-[12px] leading-snug text-blue-900">Edite como no Word: clique em qualquer trecho. Os dados em azul vêm do cadastro e da PP e ficam travados; se estiverem errados, a correção é na origem.</p>`}
+      ${editando ? html`<${ContratoEditavel} key="editando" htmlInicial=${baseEdicao} editavel onMuda=${setTextoEditado} />`
+        : textoEditado ? html`<${ContratoEditavel} key="ajustado" htmlInicial=${textoEditado} />`
+        : html`<${Papel} nos=${nos} ctx=${ctx} lacunas=${lacunas} modo="final" onIrLacuna=${(k) => { setPasso(2); setTimeout(() => irLacuna(k), 60); }} />`}
     </div>
   </div>`;
 
@@ -262,7 +280,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
         ${passo > 1 && html`<${Botao} v="secundario" t="sm" onClick=${() => { acoes.salvarRascunho(c.id, dadosParaSalvar()); onFechar(); }}>Salvar rascunho</${Botao}>`}
         ${passo === 1 && html`<${Botao} v="primario" t="sm" disabled=${!modelo} onClick=${() => setPasso(2)}>Preencher lacunas<${Icon} n="arrowRight" c="h-3.5 w-3.5" /></${Botao}>`}
         ${passo === 2 && html`<${Botao} v="primario" t="sm" onClick=${() => setPasso(3)}>Revisar<${Icon} n="arrowRight" c="h-3.5 w-3.5" /></${Botao}>`}
-        ${passo === 3 && html`<${Botao} v="primario" t="sm" icone="fileCheck" disabled=${faltando.length > 0} onClick=${() => acoes.gerar(c.id, dadosParaSalvar(), destino, irParaJob)}>Gerar contrato</${Botao}>`}
+        ${passo === 3 && html`<${Botao} v="primario" t="sm" icone="fileCheck" disabled=${faltando.length > 0 || editando} onClick=${() => acoes.gerar(c.id, dadosParaSalvar(), destino, irParaJob)}>Gerar contrato</${Botao}>`}
       </div>
     </div>
   </div>`;
@@ -330,7 +348,8 @@ function VerContrato({ id, onFechar }) {
         ${c.status === "assinatura" && html`<${Botao} v="fantasma" t="sm" icone="pencil" onClick=${() => acoes.reabrir(c.id)}>Corrigir e gerar nova versão</${Botao}>`}
       </div>
       <div class="bg-[#efeeeb] px-4 py-6 sm:px-8 lg:min-h-0 lg:overflow-y-auto">
-        ${modelo ? html`<${Papel} nos=${nos} ctx=${ctx} lacunas=${lacunasDoModelo(modelo)} modo="final" />` : html`<div class="mx-auto mt-10 max-w-[420px] text-center text-[13px] text-muted-foreground">${c.status === "quadro" ? "Esta PP não tem contrato próprio: ela é coberta pelo contrato-quadro do fornecedor." : "Sem contrato gerado."}</div>`}
+        ${c.textoEditado ? html`<p class="mx-auto mb-3 max-w-[720px]"><${Etiqueta} cor="ambar" icone="pencil">Texto ajustado à mão antes de gerar</${Etiqueta}></p><${ContratoEditavel} htmlInicial=${c.textoEditado} />`
+          : modelo ? html`<${Papel} nos=${nos} ctx=${ctx} lacunas=${lacunasDoModelo(modelo)} modo="final" />` : html`<div class="mx-auto mt-10 max-w-[420px] text-center text-[13px] text-muted-foreground">${c.status === "quadro" ? "Esta PP não tem contrato próprio: ela é coberta pelo contrato-quadro do fornecedor." : "Sem contrato gerado."}</div>`}
       </div>
     </div>
   </div>`;

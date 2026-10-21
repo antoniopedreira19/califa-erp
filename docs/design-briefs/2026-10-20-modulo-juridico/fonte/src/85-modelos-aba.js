@@ -91,16 +91,15 @@ function Modelos() {
   </div>`;
 }
 
-/* Editor de modelo: texto da minuta à esquerda, prévia ao vivo à direita. */
+/* Editor de modelo: a minuta se edita direto no documento (pedido de
+ * 21/10/2026, "como no Docs ou no Word"). O texto com marcadores continua
+ * existindo, como opção avançada, e é ele que se grava. */
 function EditorModelo({ id, onFechar }) {
   const { db, B, acoes } = useStore();
   const original = id ? modeloDe(db, id) : null;
   const [m, setM] = useState(() => original ? clone(original) : { id: `m-${Date.now()}`, nome: "", tipo: "prestacao", parte: "fornecedor", versao: 1, usos: 0, ativo: true, descricao: "", lacunas: [{ chave: "objeto", rotulo: "Objeto da contratação", tipo: "longo", obrigatoria: true, dica: "" }], clausulasOpcionais: [], corpo: CORPO_NOVO });
-  const [menuCampo, setMenuCampo] = useState(false);
-  const [novaLacuna, setNovaLacuna] = useState(null);
-  const texto = useRef(null);
-  const cursor = useRef(null);
-  const guardarCursor = (ev) => { cursor.current = [ev.target.selectionStart, ev.target.selectionEnd]; };
+  const [modo, setModo] = useState("documento");
+  const [versaoDoc, setVersaoDoc] = useState(0);
 
   const amostras = db.contratos.filter((c) => c.parte === m.parte && c.origem !== "solicitacao" && (m.tipo === "aditivo" ? c.tipo === "aditivo" : c.tipo !== "aditivo") && visivel(c, B));
   const [amostraId, setAmostraId] = useState(null);
@@ -111,27 +110,21 @@ function EditorModelo({ id, onFechar }) {
   const desconhecidos = chavesDeSistema(m.corpo).filter((k) => !(k in ROTULO_CAMPO) || (!B && k.startsWith("aditivo.")));
   const set = (patch) => setM((x) => ({ ...x, ...patch }));
 
-  const inserir = (trecho) => {
-    const el = texto.current;
-    const [ini, fim] = cursor.current || [m.corpo.length, m.corpo.length];
-    const corpo = m.corpo.slice(0, ini) + trecho + m.corpo.slice(fim);
-    set({ corpo });
-    cursor.current = [ini + trecho.length, ini + trecho.length];
-    requestAnimationFrame(() => { if (el) { el.focus(); el.selectionStart = el.selectionEnd = ini + trecho.length; } });
+  const trocarModo = (novo) => {
+    if (novo === "documento" && modo === "codigo") setVersaoDoc((v) => v + 1);
+    setModo(novo);
   };
   const mudarLacuna = (chave, patch) => {
     const existe = m.lacunas.some((l) => l.chave === chave);
     const base = lacunas.find((l) => l.chave === chave);
     set({ lacunas: existe ? m.lacunas.map((l) => (l.chave === chave ? { ...l, ...patch } : l)) : [...m.lacunas, { ...base, ...patch }] });
   };
-  const confirmarLacuna = () => {
-    const rot = (novaLacuna || "").trim();
-    if (!rot) return;
+  const novaLacuna = (rot) => {
     let chave = slug(rot), i = 2;
-    while (lacunas.some((l) => l.chave === chave)) chave = `${slug(rot)}_${i++}`;
-    set({ lacunas: [...m.lacunas, { chave, rotulo: rot, tipo: "curto", obrigatoria: true, dica: "" }] });
-    setNovaLacuna(null);
-    setTimeout(() => inserir(`{{lacuna.${chave}}}`), 0);
+    while (lacunas.some((l) => l.chave === chave) || m.lacunas.some((l) => l.chave === chave)) chave = `${slug(rot)}_${i++}`;
+    const nova = { chave, rotulo: rot, tipo: "curto", obrigatoria: true, dica: "" };
+    setM((x) => ({ ...x, lacunas: [...x.lacunas, nova] }));
+    return { chave, lacunas: [...lacunas, nova] };
   };
   const salvar = () => {
     const limpo = { ...m, lacunas: lacunas.map((l) => ({ ...l })), atualizadoEm: HOJE, atualizadoPor: USUARIO.nome, versao: original && B ? original.versao + 1 : m.versao };
@@ -149,8 +142,8 @@ function EditorModelo({ id, onFechar }) {
       </div>
       <button type="button" onClick=${onFechar} aria-label="Fechar" class="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><${Icon} n="x" c="h-5 w-5" /></button>
     </div>
-    <div class="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
-      <div class="min-h-0 space-y-5 px-6 py-6 lg:overflow-y-auto lg:border-r lg:border-border">
+    <div class="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:overflow-hidden">
+      <div class="space-y-5 px-6 py-6 lg:min-h-0 lg:overflow-y-auto lg:border-r lg:border-border">
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2"><${Rotulo} para="mod-nome" obrigatorio>Nome do modelo</${Rotulo}><input id="mod-nome" value=${m.nome} onInput=${(e) => set({ nome: e.target.value })} placeholder="Ex.: Locação de equipamentos" class=${CAMPO} /></div>
           <div><${Rotulo} para="mod-tipo" obrigatorio>Tipo</${Rotulo}><${Selecao} id="mod-tipo" valor=${m.tipo} onTroca=${(v) => set({ tipo: v })} opcoes=${ORDEM_TIPOS.filter((t) => B || (!TIPOS[t].soNaB && t !== "influenciador")).map((t) => ({ k: t, rotulo: TIPOS[t].rotulo }))} /></div>
@@ -158,28 +151,9 @@ function EditorModelo({ id, onFechar }) {
           <div class="sm:col-span-2"><${Rotulo} para="mod-desc">Descrição curta</${Rotulo}><input id="mod-desc" value=${m.descricao} onInput=${(e) => set({ descricao: e.target.value })} placeholder="Aparece no cartão de escolha do modelo" class=${CAMPO} /></div>
         </div>
 
-        <div>
-          <div class="mb-2 flex flex-wrap items-center gap-2">
-            <p class="mr-auto text-[12px] font-semibold">Texto da minuta <span class="text-california-red">*</span></p>
-            <div class="relative">
-              <${Botao} v="secundario" t="xs" icone="lock" onClick=${() => setMenuCampo(!menuCampo)}>Campo do sistema<${Icon} n="chevronDown" c="h-3 w-3" /></${Botao}>
-              ${menuCampo && html`<div class="fixed inset-0 z-[60]" onClick=${() => setMenuCampo(false)}></div>
-                <div class="absolute right-0 top-[calc(100%+6px)] z-[61] max-h-[340px] w-[300px] overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-elevated">
-                  ${CAMPOS_SISTEMA.filter((g) => B || !g.soNaB).map((g) => html`<div key=${g.grupo}><p class="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">${g.grupo}</p>
-                    ${g.itens.map(([k, r]) => html`<button key=${k} type="button" onClick=${() => { setMenuCampo(false); inserir(`{{${k}}}`); }} class="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] hover:bg-[#f4f4f2]"><span>${r}</span><code class="text-[10.5px] text-muted-foreground">${k}</code></button>`)}
-                  </div>`)}
-                </div>`}
-            </div>
-            ${novaLacuna === null ? html`<${Botao} v="secundario" t="xs" icone="plus" onClick=${() => setNovaLacuna("")}>Lacuna</${Botao}>`
-              : html`<span class="inline-flex items-center gap-1"><input id="nova-lacuna" autoFocus value=${novaLacuna} onInput=${(e) => setNovaLacuna(e.target.value)} onKeyDown=${(e) => { if (e.key === "Enter") confirmarLacuna(); if (e.key === "Escape") setNovaLacuna(null); }} placeholder="Nome da lacuna" class="h-7 w-40 rounded-md border border-border px-2 text-[12px] outline-none focus:border-california-red/50" /><${Botao} t="xs" onClick=${confirmarLacuna}>Inserir</${Botao}></span>`}
-          </div>
-          <textarea id="mod-corpo" ref=${texto} rows="18" value=${m.corpo} onInput=${(e) => { set({ corpo: e.target.value }); guardarCursor(e); }} onSelect=${guardarCursor} onKeyUp=${guardarCursor} onClick=${guardarCursor} spellcheck="false" class=${cn(AREA, "font-mono text-[12px] leading-[1.6]")}></textarea>
-          <p class="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground"><code># </code>título · <code>## </code>cláusula, numerada sozinha · <code>{{lacuna.nome}}</code> lacuna · ${B && html`<code>[clausulas_opcionais]</code> onde entram as opcionais · `}<code>[assinaturas]</code> bloco de assinaturas</p>
-          ${desconhecidos.length > 0 && html`<p class="mt-2 flex gap-2 rounded-lg bg-california-red-soft px-3 py-2 text-[12px] text-[#9f2a33]"><${Icon} n="alert" c="mt-0.5 h-3.5 w-3.5" />O sistema não conhece: ${desconhecidos.join(", ")}. Use o botão “Campo do sistema”.</p>`}
-        </div>
-
         <section>
-          <p class="mb-2 text-[12px] font-semibold">Lacunas deste modelo · ${lacunas.length}</p>
+          <p class="mb-1 text-[12px] font-semibold">Lacunas deste modelo · ${lacunas.length}</p>
+          <p class="mb-2 text-[11.5px] text-muted-foreground">O que fica em branco na minuta e é preenchido em cada contrato.</p>
           ${lacunas.length === 0 ? html`<p class="text-[12.5px] text-muted-foreground">Nenhuma lacuna no texto. Toda minuta precisa ao menos do objeto da contratação.</p>` : html`<div class="space-y-2">
             ${lacunas.map((l) => html`<div key=${l.chave} class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-border bg-white px-3 py-2 sm:grid-cols-[minmax(0,3fr)_110px_auto]">
               <input aria-label=${`Rótulo da lacuna ${l.chave}`} value=${l.rotulo} onInput=${(e) => mudarLacuna(l.chave, { rotulo: e.target.value })} class="h-8 min-w-0 rounded-md border border-transparent px-2 text-[13px] font-semibold outline-none hover:border-border focus:border-california-red/50" />
@@ -191,20 +165,26 @@ function EditorModelo({ id, onFechar }) {
 
         ${B && html`<section>
           <p class="mb-2 text-[12px] font-semibold">Cláusulas opcionais oferecidas</p>
-          ${!m.corpo.includes("[clausulas_opcionais]") && html`<p class="mb-2 text-[12px] text-[#92400e]">Coloque <code>[clausulas_opcionais]</code> no texto para elas aparecerem.</p>`}
-          <div class="grid gap-2 sm:grid-cols-2">${Object.entries(CLAUSULAS).map(([k, c]) => {
+          ${!m.corpo.includes("[clausulas_opcionais]") && html`<p class="mb-2 text-[12px] text-[#92400e]">O documento perdeu o bloco “Aqui entram as cláusulas opcionais”. Sem ele, elas não aparecem no contrato.</p>`}
+          <div class="grid gap-2">${Object.entries(CLAUSULAS).map(([k, c]) => {
             const on = m.clausulasOpcionais.includes(k);
             return html`<label key=${k} class=${cn("flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2", on ? "border-california-red/35 bg-[#fffafa]" : "border-border bg-white")}><input type="checkbox" checked=${on} onChange=${() => set({ clausulasOpcionais: on ? m.clausulasOpcionais.filter((x) => x !== k) : [...m.clausulasOpcionais, k] })} class="mt-0.5 accent-[#E74B56]" /><span class="min-w-0"><span class="block text-[12.5px] font-semibold">${c.titulo}</span><span class="block text-[11.5px] text-muted-foreground">${c.resumo}</span></span></label>`;
           })}</div>
         </section>`}
       </div>
 
-      <div class="min-h-0 bg-[#efeeeb] px-4 py-6 sm:px-8 lg:overflow-y-auto">
-        <div class="mx-auto mb-3 flex max-w-[720px] flex-wrap items-center justify-between gap-2">
-          <p class="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Prévia ${B ? "com dados reais" : "com dados de exemplo"}</p>
-          ${B && amostras.length > 0 && html`<${Selecao} id="amostra" rotulo="Prévia com" valor=${amostra.id} onTroca=${setAmostraId} class="w-[260px]" opcoes=${amostras.map((c) => { const i = infoContrato(db, c); return { k: c.id, rotulo: `${i.codigo} · ${i.contraparte.nome}` }; })} />`}
+      <div class="bg-[#efeeeb] px-4 py-5 sm:px-8 lg:min-h-0 lg:overflow-y-auto">
+        <div class="mx-auto mb-4 flex max-w-[760px] flex-wrap items-center justify-between gap-2">
+          <${Segmentado} rotulo="Como ver a minuta" valor=${modo} onTroca=${trocarModo} opcoes=${[{ k: "documento", rotulo: "Editar", icone: "pencil" }, { k: "previa", rotulo: "Prévia com dados", icone: "eye" }, { k: "codigo", rotulo: "Marcadores", icone: "fileText" }]} />
+          ${modo === "previa" && B && amostras.length > 0 && html`<${Selecao} id="amostra" rotulo="Prévia com" valor=${amostra.id} onTroca=${setAmostraId} class="w-[260px]" opcoes=${amostras.map((c) => { const i = infoContrato(db, c); return { k: c.id, rotulo: `${i.codigo} · ${i.contraparte.nome}` }; })} />`}
         </div>
-        <${Papel} nos=${nos} ctx=${ctx} lacunas=${lacunas} />
+        ${modo === "documento" && html`<${EditorDocumento} corpo=${m.corpo} lacunas=${lacunas} versao=${`${m.id}-${versaoDoc}`} onMuda=${(corpo) => set({ corpo })} onNovaLacuna=${novaLacuna} />`}
+        ${modo === "previa" && html`<div class="mx-auto max-w-[760px]"><p class="mb-3 text-[12px] text-muted-foreground">${B ? "A minuta preenchida com os dados de um contrato real. As lacunas ficam em vermelho." : "A minuta preenchida com dados de exemplo. As lacunas ficam em vermelho."}</p><${Papel} nos=${nos} ctx=${ctx} lacunas=${lacunas} /></div>`}
+        ${modo === "codigo" && html`<div class="mx-auto max-w-[760px]">
+          <textarea id="mod-corpo" rows="26" value=${m.corpo} onInput=${(e) => set({ corpo: e.target.value })} spellcheck="false" class=${cn(AREA, "font-mono text-[12px] leading-[1.6]")}></textarea>
+          <p class="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">Para quem prefere: <code># </code>título · <code>## </code>cláusula · <code>{{lacuna.nome}}</code> lacuna · <code>{{parte.cnpj}}</code> campo do sistema · ${B && html`<code>[clausulas_opcionais]</code> · `}<code>[assinaturas]</code></p>
+          ${desconhecidos.length > 0 && html`<p class="mt-2 flex gap-2 rounded-lg bg-california-red-soft px-3 py-2 text-[12px] text-[#9f2a33]"><${Icon} n="alert" c="mt-0.5 h-3.5 w-3.5" />O sistema não conhece: ${desconhecidos.join(", ")}.</p>`}
+        </div>`}
       </div>
     </div>
     <div class="rodape-gaveta flex flex-wrap items-center justify-end gap-2 border-t border-border bg-white px-6 py-3">
