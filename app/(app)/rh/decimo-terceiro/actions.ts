@@ -555,11 +555,11 @@ export async function recalcularFolhaDecimoTerceiro(
     );
   }
 
-  // Dispara os updates em paralelo (um por linha). Supabase JS não tem
-  // bulk update com valores diferentes por linha; Promise.all vira ~2s
-  // com 200 colaboradores em vez de 10-20s sequenciais.
-  const resultados = await Promise.all(
-    linhas.map(async (l) => {
+  // Dispara os updates em batches de 25 em paralelo. 200+ em um só
+  // Promise.all enfileira no PostgREST (limite de conexões concorrentes)
+  // e fica muito pior que batches menores processados em sequência.
+  const BATCH_SIZE = 25;
+  const todosOsUpdates = linhas.map((l) => async () => {
       const salarioVigente =
         salPorColab.get(l.colaborador_id) ?? l.snapshot_salario;
       const admissaoAtual =
@@ -622,8 +622,14 @@ export async function recalcularFolhaDecimoTerceiro(
         })
         .eq("id", l.id)
         .eq("tenant_id", tenantId);
-    }),
-  );
+    });
+
+  const resultados: { error: { message: string } | null }[] = [];
+  for (let i = 0; i < todosOsUpdates.length; i += BATCH_SIZE) {
+    const batch = todosOsUpdates.slice(i, i + BATCH_SIZE);
+    const batchRes = await Promise.all(batch.map((fn) => fn()));
+    resultados.push(...batchRes);
+  }
 
   const primeiroErro = resultados.find((r) => r.error);
   if (primeiroErro?.error) {

@@ -5,8 +5,6 @@ import {
   Users,
   Wallet,
   Calculator,
-  RefreshCw,
-  Send,
   CheckCircle2,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -14,13 +12,10 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { pode } from "@/lib/permissoes";
-import {
-  recalcularFolhaDecimoTerceiro,
-  fecharPrimeiraParcelaDecimoTerceiro,
-  fecharSegundaParcelaDecimoTerceiro,
-} from "../actions";
 import { TabelaLinhas, type LinhaRow } from "./tabela-linhas";
 import { BotaoExportar } from "./botao-exportar";
+import { BotaoRecalcular } from "./botao-recalcular";
+import { BotaoFecharParcela } from "./botao-fechar-parcela";
 
 export const dynamic = "force-dynamic";
 
@@ -181,19 +176,6 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
   const podeFechar1a = podeEditar && folha.status === "rascunho";
   const podeFechar2a = podeEditar && folha.status === "fechada_parcial_1";
 
-  async function recalcular() {
-    "use server";
-    await recalcularFolhaDecimoTerceiro(folha!.id);
-  }
-  async function fechar1a() {
-    "use server";
-    await fecharPrimeiraParcelaDecimoTerceiro(folha!.id);
-  }
-  async function fechar2a() {
-    "use server";
-    await fecharSegundaParcelaDecimoTerceiro(folha!.id);
-  }
-
   return (
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh/decimo-terceiro" />
@@ -214,39 +196,9 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
               Adiantamentos
             </Link>
             <BotaoExportar folhaId={folha.id} />
-            {podeRecalcular && (
-              <form action={recalcular}>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted transition-colors"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Recalcular folha
-                </button>
-              </form>
-            )}
-            {podeFechar1a && (
-              <form action={fechar1a}>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 transition-colors"
-                >
-                  <Send className="h-4 w-4" />
-                  Fechar 1ª parcela
-                </button>
-              </form>
-            )}
-            {podeFechar2a && (
-              <form action={fechar2a}>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 transition-colors"
-                >
-                  <Send className="h-4 w-4" />
-                  Fechar 2ª parcela
-                </button>
-              </form>
-            )}
+            {podeRecalcular && <BotaoRecalcular folhaId={folha.id} />}
+            {podeFechar1a && <BotaoFecharParcela folhaId={folha.id} numero={1} />}
+            {podeFechar2a && <BotaoFecharParcela folhaId={folha.id} numero={2} />}
             {folha.status === "fechada_parcial_2" && (
               <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
                 <CheckCircle2 className="h-4 w-4" />
