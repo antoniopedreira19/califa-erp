@@ -1,7 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, ChevronRight, ChevronDown, TrendingUp } from "lucide-react";
+import {
+  Pencil,
+  ChevronRight,
+  ChevronDown,
+  TrendingUp,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DialogEditarLinha } from "./dialog-editar-linha";
 
 export interface ParteBreakdownRow {
@@ -71,9 +88,66 @@ interface Props {
   podeEditar: boolean;
 }
 
+type OrdemCampo = "nome" | "admissao" | "salario";
+type OrdemDirecao = "asc" | "desc";
+
 export function TabelaLinhas({ linhas, podeEditar }: Props) {
   const [linhaAberta, setLinhaAberta] = React.useState<LinhaRow | null>(null);
   const [expandidas, setExpandidas] = React.useState<Set<string>>(new Set());
+
+  const [busca, setBusca] = React.useState("");
+  const [filtroEmpresa, setFiltroEmpresa] = React.useState<string>("__all__");
+  const [filtroTipo, setFiltroTipo] = React.useState<string>("__all__");
+  const [ordemCampo, setOrdemCampo] = React.useState<OrdemCampo>("nome");
+  const [ordemDirecao, setOrdemDirecao] = React.useState<OrdemDirecao>("asc");
+
+  const empresasDisponiveis = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const l of linhas) if (l.empresa) set.add(l.empresa);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [linhas]);
+
+  const tiposDisponiveis = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const l of linhas) set.add(l.tipo_contratacao);
+    return Array.from(set);
+  }, [linhas]);
+
+  const linhasFiltradas = React.useMemo(() => {
+    const buscaNorm = busca
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .trim();
+    const filtradas = linhas.filter((l) => {
+      if (filtroEmpresa !== "__all__" && l.empresa !== filtroEmpresa) return false;
+      if (filtroTipo !== "__all__" && l.tipo_contratacao !== filtroTipo) return false;
+      if (buscaNorm) {
+        const nomeNorm = l.nome
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "");
+        if (!nomeNorm.includes(buscaNorm)) return false;
+      }
+      return true;
+    });
+
+    const dir = ordemDirecao === "asc" ? 1 : -1;
+    filtradas.sort((a, b) => {
+      switch (ordemCampo) {
+        case "admissao":
+          return dir * a.data_admissao.localeCompare(b.data_admissao);
+        case "salario": {
+          const sa = a.salario_editado ?? a.salario;
+          const sb = b.salario_editado ?? b.salario;
+          return dir * (sa - sb);
+        }
+        default:
+          return dir * a.nome.localeCompare(b.nome, "pt-BR");
+      }
+    });
+    return filtradas;
+  }, [linhas, busca, filtroEmpresa, filtroTipo, ordemCampo, ordemDirecao]);
 
   function toggleExpansao(id: string) {
     setExpandidas((prev) => {
@@ -84,6 +158,24 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
     });
   }
 
+  function toggleOrdenacao(campo: OrdemCampo) {
+    if (ordemCampo === campo) {
+      setOrdemDirecao((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setOrdemCampo(campo);
+      setOrdemDirecao("asc");
+    }
+  }
+
+  function limparFiltros() {
+    setBusca("");
+    setFiltroEmpresa("__all__");
+    setFiltroTipo("__all__");
+  }
+
+  const temFiltro =
+    busca !== "" || filtroEmpresa !== "__all__" || filtroTipo !== "__all__";
+
   if (linhas.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -93,17 +185,104 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
   }
 
   return (
-    <>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[260px] flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome…"
+            className="pl-9"
+          />
+        </div>
+
+        <div className="min-w-[200px]">
+          <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+            <SelectTrigger>
+              <SelectValue placeholder="Empresa" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas as empresas</SelectItem>
+              {empresasDisponiveis.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {e}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="min-w-[180px]">
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos os tipos</SelectItem>
+              {tiposDisponiveis.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {tipoLabel(t)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {temFiltro && (
+          <button
+            type="button"
+            onClick={limparFiltros}
+            className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+          >
+            Limpar filtros
+          </button>
+        )}
+
+        <div className="ml-auto text-xs text-muted-foreground">
+          {linhasFiltradas.length === linhas.length
+            ? `${linhas.length} ${linhas.length === 1 ? "linha" : "linhas"}`
+            : `${linhasFiltradas.length} de ${linhas.length}`}
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full border-collapse text-sm">
           <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-2 py-3 w-8"></th>
-              <th className="px-4 py-3 text-left font-medium">Colaborador</th>
+              <th className="px-4 py-3 text-left font-medium">
+                <HeaderOrdenavel
+                  label="Colaborador"
+                  campo="nome"
+                  ordemCampo={ordemCampo}
+                  ordemDirecao={ordemDirecao}
+                  onClick={() => toggleOrdenacao("nome")}
+                  align="left"
+                />
+              </th>
               <th className="px-4 py-3 text-left font-medium">Empresa</th>
               <th className="px-4 py-3 text-left font-medium">Tipo</th>
-              <th className="px-4 py-3 text-left font-medium">Admissão</th>
-              <th className="px-4 py-3 text-right font-medium">Salário</th>
+              <th className="px-4 py-3 text-left font-medium">
+                <HeaderOrdenavel
+                  label="Admissão"
+                  campo="admissao"
+                  ordemCampo={ordemCampo}
+                  ordemDirecao={ordemDirecao}
+                  onClick={() => toggleOrdenacao("admissao")}
+                  align="left"
+                />
+              </th>
+              <th className="px-4 py-3 text-right font-medium">
+                <HeaderOrdenavel
+                  label="Salário"
+                  campo="salario"
+                  ordemCampo={ordemCampo}
+                  ordemDirecao={ordemDirecao}
+                  onClick={() => toggleOrdenacao("salario")}
+                  align="right"
+                />
+              </th>
               <th className="px-4 py-3 text-center font-medium">Avos</th>
               <th className="px-4 py-3 text-right font-medium">1ª parc</th>
               <th className="px-4 py-3 text-right font-medium">2ª parc</th>
@@ -114,7 +293,14 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
             </tr>
           </thead>
           <tbody>
-            {linhas.map((l) => {
+            {linhasFiltradas.length === 0 && (
+              <tr>
+                <td colSpan={13} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  Nenhum colaborador bate com os filtros.
+                </td>
+              </tr>
+            )}
+            {linhasFiltradas.map((l) => {
               const ehHibrido = l.parte_clt != null && l.parte_pj != null;
               const expandida = expandidas.has(l.id);
               return (
@@ -278,6 +464,41 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
           onClose={() => setLinhaAberta(null)}
         />
       )}
-    </>
+    </div>
+  );
+}
+
+function HeaderOrdenavel({
+  label,
+  campo,
+  ordemCampo,
+  ordemDirecao,
+  onClick,
+  align,
+}: {
+  label: string;
+  campo: OrdemCampo;
+  ordemCampo: OrdemCampo;
+  ordemDirecao: OrdemDirecao;
+  onClick: () => void;
+  align: "left" | "right";
+}) {
+  const ativo = ordemCampo === campo;
+  const Icon = !ativo
+    ? ArrowUpDown
+    : ordemDirecao === "asc"
+      ? ArrowUp
+      : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 transition-colors hover:text-foreground ${
+        ativo ? "text-foreground" : ""
+      } ${align === "right" ? "flex-row-reverse" : ""}`}
+    >
+      {label}
+      <Icon className="h-3 w-3" />
+    </button>
   );
 }
