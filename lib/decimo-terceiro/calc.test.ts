@@ -178,7 +178,7 @@ test("linha com avosEditado sobrescreve calculado", () => {
   assert.equal(r.totalBruto, 6000);
 });
 
-test("linha CLT recibo é tratado como CLT (tem descontos)", () => {
+test("linha CLT recibo sem valorRecibo é tratado como CLT puro (tem descontos)", () => {
   const r = calcularLinhaDecimoTerceiro({
     salario: 5000,
     dataAdmissao: new Date("2020-01-01"),
@@ -188,4 +188,72 @@ test("linha CLT recibo é tratado como CLT (tem descontos)", () => {
   });
   assert.ok(r.descontoInss > 0);
   assert.ok(r.descontoIrrf > 0);
+  assert.equal(r.parteClt, null);
+  assert.equal(r.partePj, null);
+});
+
+// ---------- Híbrido CLT_recibo com valorRecibo ----------
+
+test("híbrido: salario=5000 com valorRecibo=2000 → parte CLT (3000) + parte PJ (2000)", () => {
+  const r = calcularLinhaDecimoTerceiro({
+    salario: 5000,
+    dataAdmissao: new Date("2020-01-01"),
+    ano: 2026,
+    tipoContratacao: "clt_recibo",
+    totalAdiantado: 0,
+    valorRecibo: 2000,
+  });
+  // Parte CLT: salário 3000, ano cheio
+  assert.ok(r.parteClt);
+  assert.equal(r.parteClt!.primeiraParcela, 1500);
+  assert.equal(r.parteClt!.segundaParcela, 1500);
+  assert.ok(r.parteClt!.descontoInss > 0);
+  // Parte PJ: salário 2000, sem desconto
+  assert.ok(r.partePj);
+  assert.equal(r.partePj!.primeiraParcela, 1000);
+  assert.equal(r.partePj!.segundaParcela, 1000);
+  assert.equal(r.partePj!.totalLiquido, 2000);
+  // Totais = soma
+  assert.equal(r.primeiraParcela, 2500);
+  assert.equal(r.segundaParcela, 2500);
+  assert.equal(r.totalBruto, 5000);
+  assert.equal(r.descontoInss, r.parteClt!.descontoInss);
+  assert.equal(r.descontoIrrf, r.parteClt!.descontoIrrf);
+  assert.equal(
+    round2(r.totalLiquido),
+    round2(r.parteClt!.totalLiquido + r.partePj!.totalLiquido),
+  );
+});
+
+test("híbrido: valorRecibo=0 cai no caminho CLT puro (sem breakdown)", () => {
+  const r = calcularLinhaDecimoTerceiro({
+    salario: 5000,
+    dataAdmissao: new Date("2020-01-01"),
+    ano: 2026,
+    tipoContratacao: "clt_recibo",
+    totalAdiantado: 0,
+    valorRecibo: 0,
+  });
+  assert.equal(r.parteClt, null);
+  assert.equal(r.partePj, null);
+  assert.ok(r.descontoInss > 0);
+});
+
+test("híbrido: adiantamento abate proporcionalmente da 1ª parcela de cada parte", () => {
+  const r = calcularLinhaDecimoTerceiro({
+    salario: 10000,
+    dataAdmissao: new Date("2020-01-01"),
+    ano: 2026,
+    tipoContratacao: "clt_recibo",
+    totalAdiantado: 1000,
+    valorRecibo: 4000, // CLT 6000, PJ 4000 → proporção 60/40
+  });
+  // Parte CLT: 60% do adiantamento = 600
+  assert.ok(r.parteClt);
+  assert.equal(r.parteClt!.primeiraParcela, 2400); // 3000 - 600
+  // Parte PJ: 40% do adiantamento = 400
+  assert.ok(r.partePj);
+  assert.equal(r.partePj!.primeiraParcela, 1600); // 2000 - 400
+  // Total 1ª parcela = soma = 4000 (igual a 5000 - 1000)
+  assert.equal(r.primeiraParcela, 4000);
 });

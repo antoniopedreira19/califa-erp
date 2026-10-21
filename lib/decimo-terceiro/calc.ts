@@ -9,9 +9,13 @@
 // a fórmula de INSS quebrada com #REF!. Divergência consciente — ver
 // docs/superpowers/specs/2026-10-21-decimo-terceiro-parte-1-design.md.
 //
-// Só CLT (clt e clt_recibo) sofre desconto. PJ, MEI, estágio e sócio
-// retornam 0 — e, no filtro de elegibilidade da server action, estágio
-// e sócio nem entram na folha.
+// Só CLT (clt e clt_recibo sem valorRecibo) sofre desconto. PJ, MEI e a
+// parte PJ do híbrido CLT_recibo retornam 0.
+//
+// Híbrido CLT_recibo: quando valorRecibo > 0, o cálculo divide o 13º em
+// duas partes — parte CLT (salario - valorRecibo, com descontos) e
+// parte PJ (valorRecibo, sem descontos). O adiantamento é rateado entre
+// as duas partes proporcionalmente ao salário.
 
 import type { TipoContratacao } from "@/lib/types";
 
@@ -79,6 +83,50 @@ export function calcularIrrf2026(base: number, inssDescontado: number): number {
   return 0;
 }
 
+// --- Cálculo de uma parte (CLT ou PJ) ---------------------------------------
+
+interface ParteInput {
+  salario: number;
+  avos: number;
+  totalAdiantado: number;
+  comDescontos: boolean; // true = CLT (aplica INSS + IRRF); false = PJ
+}
+
+interface ParteOutput {
+  primeiraParcela: number;
+  segundaParcela: number;
+  descontoInss: number;
+  descontoIrrf: number;
+  totalBruto: number;
+  totalLiquido: number;
+}
+
+function calcularParte(input: ParteInput): ParteOutput {
+  const baseIntegral = round2((input.salario / 12) * input.avos);
+  const metade = round2(baseIntegral / 2);
+  const primeiraParcela = round2(Math.max(0, metade - input.totalAdiantado));
+  const segundaParcela = metade;
+
+  const descontoInss =
+    input.comDescontos && input.avos > 0 ? calcularInss2026(baseIntegral) : 0;
+  const descontoIrrf =
+    input.comDescontos && input.avos > 0
+      ? calcularIrrf2026(baseIntegral, descontoInss)
+      : 0;
+
+  const totalBruto = round2(primeiraParcela + segundaParcela);
+  const totalLiquido = round2(totalBruto - descontoInss - descontoIrrf);
+
+  return {
+    primeiraParcela,
+    segundaParcela,
+    descontoInss,
+    descontoIrrf,
+    totalBruto,
+    totalLiquido,
+  };
+}
+
 // --- Orquestração: linha completa -------------------------------------------
 
 export interface CalcInput {
@@ -89,6 +137,17 @@ export interface CalcInput {
   totalAdiantado: number;
   salarioEditado?: number | null;
   avosEditado?: number | null;
+  /** Parte PJ do salário quando CLT_recibo híbrido (= valor_recibo).
+   *  Null/0 ou undefined cai no caminho CLT puro (sem breakdown). */
+  valorRecibo?: number | null;
+}
+
+export interface ParteBreakdown {
+  primeiraParcela: number;
+  segundaParcela: number;
+  descontoInss: number;
+  descontoIrrf: number;
+  totalLiquido: number;
 }
 
 export interface CalcOutput {
@@ -99,6 +158,10 @@ export interface CalcOutput {
   descontoIrrf: number;
   totalBruto: number;
   totalLiquido: number;
+  /** Breakdown da parte CLT quando CLT_recibo híbrido. Null caso contrário. */
+  parteClt: ParteBreakdown | null;
+  /** Breakdown da parte PJ quando CLT_recibo híbrido. Null caso contrário. */
+  partePj: ParteBreakdown | null;
 }
 
 export function calcularLinhaDecimoTerceiro(input: CalcInput): CalcOutput {
@@ -110,29 +173,77 @@ export function calcularLinhaDecimoTerceiro(input: CalcInput): CalcOutput {
   const salario =
     input.salarioEditado != null ? input.salarioEditado : input.salario;
 
-  const baseIntegral = round2((salario / 12) * avos);
-  const metade = round2(baseIntegral / 2);
-
-  const primeiraParcela = round2(Math.max(0, metade - input.totalAdiantado));
-  const segundaParcela = metade;
-
   const ehClt =
     input.tipoContratacao === "clt" || input.tipoContratacao === "clt_recibo";
+  const valorRecibo = input.valorRecibo ?? 0;
+  const ehHibrido =
+    input.tipoContratacao === "clt_recibo" && valorRecibo > 0 && valorRecibo < salario;
 
-  const descontoInss = ehClt && avos > 0 ? calcularInss2026(baseIntegral) : 0;
-  const descontoIrrf =
-    ehClt && avos > 0 ? calcularIrrf2026(baseIntegral, descontoInss) : 0;
+  if (ehHibrido) {
+    const salarioClt = salario - valorRecibo;
+    const salarioPj = valorRecibo;
 
-  const totalBruto = round2(primeiraParcela + segundaParcela);
-  const totalLiquido = round2(totalBruto - descontoInss - descontoIrrf);
+    // Adiantamento rateado proporcional ao salário de cada parte
+    const adiantamentoClt = round2(
+      (input.totalAdiantado * salarioClt) / salario,
+    );
+    const adiantamentoPj = round2(input.totalAdiantado - adiantamentoClt);
+
+    const clt = calcularParte({
+      salario: salarioClt,
+      avos,
+      totalAdiantado: adiantamentoClt,
+      comDescontos: true,
+    });
+    const pj = calcularParte({
+      salario: salarioPj,
+      avos,
+      totalAdiantado: adiantamentoPj,
+      comDescontos: false,
+    });
+
+    return {
+      avos,
+      primeiraParcela: round2(clt.primeiraParcela + pj.primeiraParcela),
+      segundaParcela: round2(clt.segundaParcela + pj.segundaParcela),
+      descontoInss: clt.descontoInss,
+      descontoIrrf: clt.descontoIrrf,
+      totalBruto: round2(clt.totalBruto + pj.totalBruto),
+      totalLiquido: round2(clt.totalLiquido + pj.totalLiquido),
+      parteClt: {
+        primeiraParcela: clt.primeiraParcela,
+        segundaParcela: clt.segundaParcela,
+        descontoInss: clt.descontoInss,
+        descontoIrrf: clt.descontoIrrf,
+        totalLiquido: clt.totalLiquido,
+      },
+      partePj: {
+        primeiraParcela: pj.primeiraParcela,
+        segundaParcela: pj.segundaParcela,
+        descontoInss: 0,
+        descontoIrrf: 0,
+        totalLiquido: pj.totalLiquido,
+      },
+    };
+  }
+
+  // Caminho não híbrido: CLT puro, PJ puro, MEI, ou clt_recibo sem valorRecibo
+  const parte = calcularParte({
+    salario,
+    avos,
+    totalAdiantado: input.totalAdiantado,
+    comDescontos: ehClt,
+  });
 
   return {
     avos,
-    primeiraParcela,
-    segundaParcela,
-    descontoInss,
-    descontoIrrf,
-    totalBruto,
-    totalLiquido,
+    primeiraParcela: parte.primeiraParcela,
+    segundaParcela: parte.segundaParcela,
+    descontoInss: parte.descontoInss,
+    descontoIrrf: parte.descontoIrrf,
+    totalBruto: parte.totalBruto,
+    totalLiquido: parte.totalLiquido,
+    parteClt: null,
+    partePj: null,
   };
 }
