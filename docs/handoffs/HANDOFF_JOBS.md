@@ -6133,10 +6133,11 @@ no lado da produção:
   e o selo de cancelada, que passa pelo `refazerPdfDaPP`). Os demais formatos
   foram conferidos pelo gerador. A prévia e o "Atualizar vencimento" não foram
   exercitados na tela.
-- **Achado à parte (não corrigido):** a "Emissão" do PDF usa o dia UTC de
-  `created_at`. A PP-00286, gerada às 23h17 de 19/10 (Brasília), saiu com
-  "Emissão: 20/10/2026", enquanto o selo do mesmo documento diz "Cancelada em
-  19/10/2026". Acontece com toda PP gerada entre 21h e meia-noite.
+- **Achado à parte (corrigido em 21/10/2026, ver a nota de 2026-10-21):** a
+  "Emissão" do PDF usava o dia UTC de `created_at`. A PP-00286, gerada às
+  23h17 de 19/10 (Brasília), saiu com "Emissão: 20/10/2026", enquanto o selo
+  do mesmo documento diz "Cancelada em 19/10/2026". Acontecia com toda PP
+  gerada entre 21h e meia-noite.
 
 ## ⚠️ Nota de 2026-10-19 (13) — Conta ou PIX do titular da verba (decisão 193)
 
@@ -6192,3 +6193,34 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   crédito voltar, cada PDF da PP comum termina em "não deu para ler:
   escolha o tipo". O Tiago decidiu subir assim mesmo (20/10). Com crédito,
   conferir pelo roteiro do fim da decisão 192.
+
+## ⚠️ Nota de 2026-10-21 — A "Emissão" do PDF da PP no dia de Brasília (revisão da decisão 191)
+
+- **Por quê:** a "Emissão" do bloco de metadados e o "Data" do rodapé
+  cortavam o ISO do `created_at` (`fmtDate`, `iso.slice(0, 10)`), que é
+  `timestamptz`: na Vercel, em UTC, toda PP gerada entre 21h e meia-noite
+  de Brasília saía com o dia seguinte. Achado na PP-00286 do TES-1001/26
+  (nota de 2026-10-19 (12)): gerada às 23h17 de 19/10, "Emissão:
+  20/10/2026" ao lado do selo "Cancelada em 19/10/2026".
+- **O que mudou:** as duas impressões do `created_at` em
+  `lib/pdf/pedido-compra.ts` passam por `formatDiaBr`, o mesmo do selo. O
+  `fmtDate` fica só para as colunas `date` (vencimento das parcelas, "Prazo
+  de Pagto", datas dos deslocamentos do reembolso), que não podem passar
+  pelo `new Date()`. Sem migration.
+- **Conferência:** pelo gerador, com `TZ=UTC`, `created_at` em
+  2026-10-20T02:00Z e `cancelada_em` em 2026-10-20T02:30Z (23h e 23h30 de
+  19/10 em Brasília), PP de fornecedor em 3 parcelas e reembolso de veículo
+  próprio. Antes: "Emissão 20/10" e "Data 20/10" com "Cancelada em 19/10".
+  Depois: as três em 19/10; vencimentos (30/10, 30/11, 30/12) e
+  deslocamentos (14/10, 15/10) iguais aos de antes.
+- **PPs já emitidas com o dia trocado (21/10, 03h):** 10 de 256, todas com
+  `created_at` entre 00h e 03h UTC. Nenhuma foi refeita.
+  - 6 ainda "geradas" (PP-00211 a PP-00216 do BOC-1003/26, 15/10 entre
+    21h52 e 22h50; impresso 16/10): o envio ao financeiro refaz o PDF pelo
+    `refazerPdfDaPP` a partir do `created_at`, então saem certas sozinhas
+    no envio (ou numa edição ou no "Atualizar vencimento").
+  - 2 de teste, canceladas (PP-00285 do TES-1025/26 e PP-00286 do
+    TES-1001/26).
+  - 2 reais já no financeiro, em avaliação (PP-00283 do ANI-1013/26 e
+    PP-00284 do DEE-1001/26, 19/10 às 21h12 e 21h21; impresso 20/10): só
+    mudam com o OK do Tiago.

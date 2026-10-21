@@ -54,6 +54,10 @@ function getPrinter(): PdfPrinter {
 function fmtBRL(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+/** Só para coluna `date` (vencimento, data do deslocamento), que não tem
+ *  fuso e não pode passar pelo `new Date()`. O `created_at` é `timestamptz`
+ *  e sai por `formatDiaBr`: cortado aqui, a PP gerada depois das 21h saía
+ *  com a emissão do dia seguinte (PP-00286, 19/10/2026). */
 function fmtDate(iso: string | null): string {
   if (!iso) return "";
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -453,7 +457,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
           },
           {
             stack: [
-              lv("Emissão", fmtDate(pp.created_at)),
+              lv("Emissão", formatDiaBr(pp.created_at)),
               // O código do JOB, e só ele: é o que a produção e o
               // financeiro usam para falar do trabalho. O do orçamento é só
               // da base de dados (decisão 121) e o do projeto saiu também
@@ -1082,7 +1086,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
           fontSize: 7,
         },
         {
-          text: `Data ${fmtDate(pp.created_at)}`,
+          text: `Data ${formatDiaBr(pp.created_at)}`,
           alignment: "right",
           fontSize: 7,
           margin: [0, 0, 25, 0],
