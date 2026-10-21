@@ -22,7 +22,7 @@ function tipoLabel(tipo: TipoContratacao): string {
     case "clt":
       return "CLT";
     case "clt_recibo":
-      return "CLT Recibo";
+      return "Híbrido";
     case "pj":
       return "PJ";
     case "mei":
