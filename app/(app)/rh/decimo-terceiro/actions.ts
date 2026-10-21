@@ -224,3 +224,243 @@ export async function criarFolhaDecimoTerceiro(
 
   return { ok: true, id: folhaId, total_linhas: linhas.length };
 }
+
+// ----------------- Editar linha -----------------
+
+const EditarLinhaInput = z.object({
+  salario_editado: z
+    .number()
+    .nonnegative()
+    .nullable(),
+  avos_editado: z.number().int().min(0).max(12).nullable(),
+  obs: z.string().max(1000).nullable(),
+});
+
+export async function editarLinhaDecimoTerceiro(
+  linhaId: string,
+  input: {
+    salario_editado: number | null;
+    avos_editado: number | null;
+    obs: string | null;
+  },
+): Promise<ActionResult<{ id: string }>> {
+  const session = await requireSession();
+  if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
+    return { ok: false, message: "Sem permissão para esta ação." };
+  }
+  const parsed = EditarLinhaInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Dados inválidos." };
+  }
+
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: linha, error: errLinha } = await supabase
+    .from("decimo_terceiro_linhas")
+    .select(
+      "id, folha_id, snapshot_tipo_contratacao, snapshot_data_admissao, snapshot_salario, total_adiantado",
+    )
+    .eq("id", linhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (errLinha || !linha) {
+    return { ok: false, message: "Linha não encontrada." };
+  }
+
+  const { data: folha, error: errFolha } = await supabase
+    .from("decimo_terceiro_folhas")
+    .select("ano")
+    .eq("id", linha.folha_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (errFolha || !folha) {
+    return { ok: false, message: "Folha não encontrada." };
+  }
+
+  const calc = calcularLinhaDecimoTerceiro({
+    salario: Number(linha.snapshot_salario),
+    dataAdmissao: new Date(`${linha.snapshot_data_admissao}T00:00:00Z`),
+    ano: folha.ano,
+    tipoContratacao: linha.snapshot_tipo_contratacao as TipoContratacao,
+    totalAdiantado: Number(linha.total_adiantado),
+    salarioEditado: parsed.data.salario_editado,
+    avosEditado: parsed.data.avos_editado,
+  });
+
+  const editadoManualmente =
+    parsed.data.salario_editado != null || parsed.data.avos_editado != null;
+
+  const { error: errUpd } = await supabase
+    .from("decimo_terceiro_linhas")
+    .update({
+      avos: calc.avos,
+      primeira_parcela: calc.primeiraParcela,
+      segunda_parcela: calc.segundaParcela,
+      desconto_inss: calc.descontoInss,
+      desconto_irrf: calc.descontoIrrf,
+      total_bruto: calc.totalBruto,
+      total_liquido: calc.totalLiquido,
+      salario_editado: parsed.data.salario_editado,
+      avos_editado: parsed.data.avos_editado,
+      obs: parsed.data.obs,
+      editado_manualmente: editadoManualmente,
+      updated_by: session.profile.id,
+    })
+    .eq("id", linhaId)
+    .eq("tenant_id", tenantId);
+  if (errUpd) {
+    return { ok: false, message: `Falha ao salvar: ${errUpd.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "decimo_terceiro.linha.editada",
+    tenantId,
+    entidadeTipo: "decimo_terceiro_linha",
+    entidadeId: linhaId,
+    metadata: {
+      salario_editado: parsed.data.salario_editado,
+      avos_editado: parsed.data.avos_editado,
+    },
+  });
+
+  revalidatePath(`/rh/decimo-terceiro/${folha.ano}`);
+
+  return { ok: true, id: linhaId };
+}
+
+// ----------------- Recalcular folha -----------------
+
+export async function recalcularFolhaDecimoTerceiro(
+  folhaId: string,
+): Promise<ActionResult<{ total_recalculadas: number }>> {
+  const session = await requireSession();
+  if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
+    return { ok: false, message: "Sem permissão para esta ação." };
+  }
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: folha, error: errFolha } = await supabase
+    .from("decimo_terceiro_folhas")
+    .select("id, ano")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (errFolha || !folha) {
+    return { ok: false, message: "Folha não encontrada." };
+  }
+
+  const { data: linhas, error: errLinhas } = await supabase
+    .from("decimo_terceiro_linhas")
+    .select(
+      "id, colaborador_id, snapshot_tipo_contratacao, snapshot_data_admissao, snapshot_salario, total_adiantado, editado_manualmente",
+    )
+    .eq("folha_id", folhaId)
+    .eq("tenant_id", tenantId)
+    .eq("editado_manualmente", false);
+  if (errLinhas) {
+    return { ok: false, message: `Falha ao buscar linhas: ${errLinhas.message}` };
+  }
+
+  if (!linhas || linhas.length === 0) {
+    await supabase
+      .from("decimo_terceiro_folhas")
+      .update({
+        recalculada_em: new Date().toISOString(),
+        recalculada_por: session.profile.id,
+      })
+      .eq("id", folhaId)
+      .eq("tenant_id", tenantId);
+    return { ok: true, total_recalculadas: 0 };
+  }
+
+  // Rebuscar salário vigente de todos os colaboradores das linhas não editadas.
+  const colabIds = linhas.map((l) => l.colaborador_id);
+  const { data: salariosAtuais, error: errSal } = await supabase
+    .from("colaboradores_salarios")
+    .select("colaborador_id, valor")
+    .eq("tenant_id", tenantId)
+    .is("data_fim", null)
+    .in("colaborador_id", colabIds);
+  if (errSal) {
+    return { ok: false, message: `Falha ao buscar salários: ${errSal.message}` };
+  }
+
+  // Rebuscar data_admissao atual (caso tenha mudado).
+  const { data: colabsAtuais, error: errCol } = await supabase
+    .from("colaboradores")
+    .select("id, data_admissao")
+    .eq("tenant_id", tenantId)
+    .in("id", colabIds);
+  if (errCol) {
+    return { ok: false, message: `Falha ao buscar colaboradores: ${errCol.message}` };
+  }
+
+  const salPorColab = new Map(
+    (salariosAtuais ?? []).map((s) => [s.colaborador_id, s.valor]),
+  );
+  const admissaoPorColab = new Map(
+    (colabsAtuais ?? []).map((c) => [c.id, c.data_admissao]),
+  );
+
+  let total = 0;
+  for (const l of linhas) {
+    const salarioVigente =
+      salPorColab.get(l.colaborador_id) ?? l.snapshot_salario;
+    const admissaoAtual =
+      admissaoPorColab.get(l.colaborador_id) ?? l.snapshot_data_admissao;
+    const salarioNum = Number(salarioVigente);
+    const calc = calcularLinhaDecimoTerceiro({
+      salario: salarioNum,
+      dataAdmissao: new Date(`${admissaoAtual}T00:00:00Z`),
+      ano: folha.ano,
+      tipoContratacao: l.snapshot_tipo_contratacao as TipoContratacao,
+      totalAdiantado: Number(l.total_adiantado),
+    });
+    const obsAuto =
+      calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
+    const { error: errUpd } = await supabase
+      .from("decimo_terceiro_linhas")
+      .update({
+        snapshot_salario: salarioNum,
+        snapshot_data_admissao: admissaoAtual,
+        avos: calc.avos,
+        primeira_parcela: calc.primeiraParcela,
+        segunda_parcela: calc.segundaParcela,
+        desconto_inss: calc.descontoInss,
+        desconto_irrf: calc.descontoIrrf,
+        total_bruto: calc.totalBruto,
+        total_liquido: calc.totalLiquido,
+        obs: obsAuto,
+        updated_by: session.profile.id,
+      })
+      .eq("id", l.id)
+      .eq("tenant_id", tenantId);
+    if (errUpd) {
+      return { ok: false, message: `Falha ao recalcular: ${errUpd.message}` };
+    }
+    total += 1;
+  }
+
+  await supabase
+    .from("decimo_terceiro_folhas")
+    .update({
+      recalculada_em: new Date().toISOString(),
+      recalculada_por: session.profile.id,
+    })
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId);
+
+  await logAuditEvent({
+    acao: "decimo_terceiro.folha.recalculada",
+    tenantId,
+    entidadeTipo: "decimo_terceiro_folha",
+    entidadeId: folhaId,
+    metadata: { ano: folha.ano, total_recalculadas: total },
+  });
+
+  revalidatePath(`/rh/decimo-terceiro/${folha.ano}`);
+
+  return { ok: true, total_recalculadas: total };
+}
