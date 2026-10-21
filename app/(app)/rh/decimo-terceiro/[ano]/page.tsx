@@ -57,10 +57,13 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
     .select(
       `id, snapshot_nome, snapshot_cpf, snapshot_tipo_contratacao,
        snapshot_funcao, snapshot_data_admissao, snapshot_salario,
-       snapshot_empresa_id, avos, total_adiantado, primeira_parcela,
-       segunda_parcela, desconto_inss, desconto_irrf, total_bruto,
-       total_liquido, editado_manualmente, salario_editado, avos_editado,
-       obs,
+       snapshot_valor_recibo, snapshot_empresa_id, avos, total_adiantado,
+       primeira_parcela, segunda_parcela, desconto_inss, desconto_irrf,
+       total_bruto, total_liquido,
+       parte_clt_primeira_parcela, parte_clt_segunda_parcela,
+       parte_clt_desconto_inss, parte_clt_desconto_irrf, parte_clt_total_liquido,
+       parte_pj_primeira_parcela, parte_pj_segunda_parcela, parte_pj_total_liquido,
+       editado_manualmente, salario_editado, avos_editado, obs,
        empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome_fantasia)`,
     )
     .eq("folha_id", folha.id)
@@ -81,6 +84,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
     snapshot_funcao: string;
     snapshot_data_admissao: string;
     snapshot_salario: string;
+    snapshot_valor_recibo: string | null;
     snapshot_empresa_id: string | null;
     avos: number;
     total_adiantado: string;
@@ -90,6 +94,14 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
     desconto_irrf: string;
     total_bruto: string;
     total_liquido: string;
+    parte_clt_primeira_parcela: string | null;
+    parte_clt_segunda_parcela: string | null;
+    parte_clt_desconto_inss: string | null;
+    parte_clt_desconto_irrf: string | null;
+    parte_clt_total_liquido: string | null;
+    parte_pj_primeira_parcela: string | null;
+    parte_pj_segunda_parcela: string | null;
+    parte_pj_total_liquido: string | null;
     editado_manualmente: boolean;
     salario_editado: string | null;
     avos_editado: number | null;
@@ -99,6 +111,26 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
 
   const linhas: LinhaRow[] = ((linhasRaw ?? []) as LinhaRaw[]).map((l) => {
     const empresa = Array.isArray(l.empresa) ? l.empresa[0] : l.empresa;
+    const parteClt =
+      l.parte_clt_primeira_parcela != null
+        ? {
+            primeira_parcela: Number(l.parte_clt_primeira_parcela),
+            segunda_parcela: Number(l.parte_clt_segunda_parcela ?? 0),
+            desconto_inss: Number(l.parte_clt_desconto_inss ?? 0),
+            desconto_irrf: Number(l.parte_clt_desconto_irrf ?? 0),
+            total_liquido: Number(l.parte_clt_total_liquido ?? 0),
+          }
+        : null;
+    const partePj =
+      l.parte_pj_primeira_parcela != null
+        ? {
+            primeira_parcela: Number(l.parte_pj_primeira_parcela),
+            segunda_parcela: Number(l.parte_pj_segunda_parcela ?? 0),
+            desconto_inss: 0,
+            desconto_irrf: 0,
+            total_liquido: Number(l.parte_pj_total_liquido ?? 0),
+          }
+        : null;
     return {
       id: l.id,
       nome: l.snapshot_nome,
@@ -106,12 +138,16 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
       tipo_contratacao: l.snapshot_tipo_contratacao,
       data_admissao: l.snapshot_data_admissao,
       salario: Number(l.snapshot_salario),
+      valor_recibo:
+        l.snapshot_valor_recibo != null ? Number(l.snapshot_valor_recibo) : null,
       avos: l.avos,
       primeira_parcela: Number(l.primeira_parcela),
       segunda_parcela: Number(l.segunda_parcela),
       desconto_inss: Number(l.desconto_inss),
       desconto_irrf: Number(l.desconto_irrf),
       total_liquido: Number(l.total_liquido),
+      parte_clt: parteClt,
+      parte_pj: partePj,
       editado_manualmente: l.editado_manualmente,
       salario_editado: l.salario_editado != null ? Number(l.salario_editado) : null,
       avos_editado: l.avos_editado,
