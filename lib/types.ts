@@ -3596,8 +3596,94 @@ export interface LancamentoFinanceiro {
   /** Só na origem `juros_baixa`: a baixa cujos juros e multa esta linha
    *  paga (decisão 196). Cancelar a baixa apaga os juros junto. */
   juros_de_lancamento_id: string | null;
+  /** A linha do extrato do banco a que este lançamento está ligado
+   *  (decisão 199): conciliado é ter a linha. Várias baixas podem ir numa
+   *  linha só (remessa, soma de títulos, guia com rateio, a baixa e os
+   *  juros dela). Só a aba Banco da Conciliação grava. */
+  extrato_linha_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
+  created_at: string;
+}
+
+// ---------- Task 029: conciliação com o banco (decisões 198 e 199) ----------
+
+/** Um arquivo OFX importado numa conta (`extrato_importacoes`). */
+export interface ExtratoImportacao {
+  id: string;
+  tenant_id: string;
+  conta_bancaria_id: string;
+  arquivo_nome: string;
+  /** BANKID: "033" no Santander. */
+  banco_id: string | null;
+  /** ACCTID, como o arquivo diz. */
+  conta_no_arquivo: string | null;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  /** Quando o banco gerou o arquivo (DTSERVER). */
+  gerado_em: string | null;
+  /** LEDGERBAL: o saldo que o banco informa. */
+  saldo_banco: number | null;
+  saldo_em: string | null;
+  qtd_movimentos: number;
+  qtd_novos: number;
+  importado_por: string;
+  created_at: string;
+}
+
+/** Como a linha se resolveu sozinha na importação (decisão 201). */
+export type ResolucaoSozinha = "manual" | "titulo" | "remessa" | "regra";
+
+/** Um movimento do extrato do banco, sem repetir (`extrato_linhas`; a
+ *  view `vw_extrato_linhas` traz o `conciliada`). */
+export interface ExtratoLinha {
+  id: string;
+  tenant_id: string;
+  conta_bancaria_id: string;
+  /** A primeira importação que trouxe a linha. */
+  importacao_id: string;
+  /** Conta | data | centavos | histórico normalizado | posição entre os
+   *  iguais: reconhece a linha na reimportação (decisão 198). */
+  digital: string;
+  data: string;
+  /** Com sinal: o que sai do banco é negativo. */
+  valor: number;
+  tipo: string | null;
+  historico: string;
+  documento: string | null;
+  fitid: string | null;
+  ordem: number;
+  ignorada_em: string | null;
+  ignorada_por: string | null;
+  motivo_ignorada: string | null;
+  resolvida_sozinha: ResolucaoSozinha | null;
+  /** A avaliação única da automação na importação (decisão 201). */
+  avaliada_em: string | null;
+  /** Alguém desfez: a linha não se resolve mais sozinha. */
+  sem_auto: boolean;
+  created_at: string;
+}
+
+/** A linha com a situação, como `vw_extrato_linhas` a devolve. */
+export interface ExtratoLinhaComSituacao extends ExtratoLinha {
+  /** Tem lançamento ligado. */
+  conciliada: boolean;
+}
+
+/** Uma regra do histórico ("TAR" → tarifa bancária), `extrato_regras`. */
+export interface ExtratoRegra {
+  id: string;
+  tenant_id: string;
+  /** `null` vale para todas as contas. */
+  conta_bancaria_id: string | null;
+  /** O começo do histórico normalizado. */
+  padrao: string;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  empresa_id: string;
+  usos: number;
+  ativa: boolean;
+  criada_por: string | null;
   created_at: string;
 }
 

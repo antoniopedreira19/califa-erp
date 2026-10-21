@@ -27,7 +27,9 @@ import { lerPeriodo, lerVisao } from "./hub-periodo";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { AbasDaConta, type AbaDaConta } from "./abas-da-conta";
 import { AbaTitulos } from "./aba-titulos";
+import { AbaBanco } from "./aba-banco";
 import { carregarTitulosDaConciliacao } from "./titulos-dados";
+import { carregarBancoDaConciliacao } from "./banco-dados";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { fimDoMes, somaDias, type ItemDaFatura } from "@/lib/financeiro/planilha-de-titulos";
 
@@ -44,7 +46,7 @@ export default async function ConciliacaoPage({
     periodo?: string;
     /** Na lista: `teste` mostra só as empresas de teste. */
     visao?: string;
-    /** A aba da conta: `titulos`, ou nada para o Extrato. */
+    /** A aba da conta: `titulos`, `banco`, ou nada para o Extrato. */
     aba?: string;
   };
 }) {
@@ -87,15 +89,24 @@ export default async function ConciliacaoPage({
   }
 
   // As abas da conta (pedido do Tiago em 02/10/2026): o Extrato, de
-  // sempre, e os Títulos — tudo que aguarda baixa, igual para todas as
-  // contas. Cada aba é lida só quando está aberta: no Extrato os títulos
-  // nem são consultados, e na aba Títulos o extrato também não.
-  const aba: AbaDaConta = searchParams.aba === "titulos" ? "titulos" : "extrato";
+  // sempre, os Títulos — tudo que aguarda baixa, igual para todas as
+  // contas — e a Conciliação automática, com o extrato importado do banco
+  // (task 029, fase 3). Cada aba é lida só quando está aberta: no Extrato
+  // os títulos nem são consultados, e na aba Títulos o extrato também não.
+  // A Conciliação automática lê os títulos (o motor os procura) e o
+  // extrato importado.
+  const aba: AbaDaConta =
+    searchParams.aba === "titulos" ? "titulos" : searchParams.aba === "banco" ? "banco" : "extrato";
 
   // "Hoje" é o dia de Brasília (o servidor e o banco rodam em UTC).
   const hojeBr = hojeEmSaoPauloIso();
 
-  const [{ data: contas }, dadosTitulos, saldoDeHoje] = await Promise.all([
+  // Default: o mês corrente, pelo dia de Brasília. O `toISOString` de antes
+  // dava o dia em UTC e, à noite, podia pular para o mês seguinte.
+  const dataDe = searchParams.de ?? `${hojeBr.slice(0, 8)}01`;
+  const dataAte = searchParams.ate ?? fimDoMes(hojeBr);
+
+  const [{ data: contas }, dadosTitulos, saldoDeHoje, dadosBanco] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -109,7 +120,7 @@ export default async function ConciliacaoPage({
       .order("ordem")
       .order("nome")
       .returns<ContaBancaria[]>(),
-    aba === "titulos"
+    aba === "titulos" || aba === "banco"
       ? carregarTitulosDaConciliacao(supabase, session.activeTenant.id)
       : Promise.resolve(null),
     // O saldo da conta no fim de hoje: o ponto de partida do saldo previsto
@@ -121,14 +132,19 @@ export default async function ConciliacaoPage({
           dataDe: somaDias(hojeBr, 1),
         }).then((s) => s.saldoAnterior)
       : Promise.resolve(0),
+    // O extrato importado do banco: as linhas pendentes de qualquer data e
+    // as resolvidas do período aberto (decisão 199).
+    aba === "banco"
+      ? carregarBancoDaConciliacao(supabase, {
+          tenantId: session.activeTenant.id,
+          contaId,
+          dataDe,
+          dataAte,
+        })
+      : Promise.resolve(null),
   ]);
 
   const listaContas = contas ?? [];
-
-  // Default: o mês corrente, pelo dia de Brasília. O `toISOString` de antes
-  // dava o dia em UTC e, à noite, podia pular para o mês seguinte.
-  const dataDe = searchParams.de ?? `${hojeBr.slice(0, 8)}01`;
-  const dataAte = searchParams.ate ?? fimDoMes(hojeBr);
 
   let saldoAnterior = 0;
   let linhas: ReturnType<typeof derivarSaldo> = [];
@@ -254,12 +270,21 @@ export default async function ConciliacaoPage({
         <AbasDaConta
           aba={aba}
           totalTitulos={
-            dadosTitulos
+            dadosTitulos && aba === "titulos"
               ? dadosTitulos.aPagar.length + dadosTitulos.aReceber.length + dadosTitulos.impostos.length
               : null
           }
+          pendentesNoBanco={
+            dadosBanco
+              ? dadosBanco.ultima
+                ? dadosBanco.linhas.filter((l) => !l.conciliada && !l.ignorada).length
+                : "novo"
+              : null
+          }
         >
-          {dadosTitulos ? (
+          {dadosBanco && dadosTitulos ? (
+            <AbaBanco banco={dadosBanco} dados={dadosTitulos} contaId={contaId} />
+          ) : dadosTitulos ? (
             <AbaTitulos
               dados={dadosTitulos}
               contaId={contaId}

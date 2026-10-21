@@ -110,6 +110,9 @@ export interface DadosDaAbaTitulos {
   faturasNaBaixa: FaturaDoCartaoNaBaixa[];
   ultimasRetencoesPagar: Record<string, UltimaRetencao>;
   ultimasRetencoesReceber: Record<string, UltimaRetencao>;
+  /** Fornecedor ou cliente → CPF/CNPJ só com os dígitos: o motor da aba
+   *  Banco reconhece o CNPJ no histórico do banco (decisão 199). */
+  documentoDaParte: Record<string, string>;
 }
 
 export async function carregarTitulosDaConciliacao(
@@ -235,7 +238,7 @@ export async function carregarTitulosDaConciliacao(
       .not("conta_avulsa_id", "is", null),
     supabase
       .from("clientes")
-      .select("id, nome_fantasia, razao_social")
+      .select("id, nome_fantasia, razao_social, cnpj")
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
       .order("nome_fantasia"),
@@ -370,6 +373,15 @@ export async function carregarTitulosDaConciliacao(
     empresas[e.id] = e.nome_fantasia ?? e.razao_social ?? "—";
   }
 
+  const documentoDaParte: Record<string, string> = {};
+  for (const p of [
+    ...((fornecedoresRes.data ?? []) as Array<{ id: string; cpf_cnpj: string | null }>).map((f) => [f.id, f.cpf_cnpj] as const),
+    ...((clientesRes.data ?? []) as Array<{ id: string; cnpj: string | null }>).map((c) => [c.id, c.cnpj] as const),
+  ]) {
+    const digitos = (p[1] ?? "").replace(/\D/g, "");
+    if (digitos) documentoDaParte[p[0]] = digitos;
+  }
+
   const cartoes: CartaoOption[] = (
     (cartoesRes.data ?? []) as Array<{
       id: string;
@@ -412,5 +424,6 @@ export async function carregarTitulosDaConciliacao(
     ultimasRetencoesReceber: mapearUltimasRetencoes(
       retencoes.filter((r) => r.natureza === "entrada"),
     ),
+    documentoDaParte,
   };
 }
