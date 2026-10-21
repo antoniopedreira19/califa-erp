@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { addDays, addMonths, format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   Plus,
   Loader2,
@@ -60,6 +61,7 @@ interface Props {
 }
 
 type Modo = "mensal" | "periodo" | "diarias";
+type DuracaoUnidade = "meses" | "dias";
 
 const STEPS = [
   { id: 1, label: "Identificação" },
@@ -75,8 +77,33 @@ const TIPO_OPCOES = [
   { value: "diarias", label: "Diárias" },
 ];
 
+const DURACAO_UNIDADE_OPCOES = [
+  { value: "meses", label: "meses" },
+  { value: "dias", label: "dias" },
+];
+
 function isoDate(d: Date | null): string {
   return d ? format(d, "yyyy-MM-dd") : "";
+}
+
+/**
+ * Calcula data_termino a partir de data_inicio + duração (N meses ou N dias).
+ * Ex.: 21/10/2026 + 2 meses → 21/12/2026.
+ */
+function calcularDataTermino(
+  dataInicio: string,
+  qtd: string,
+  unidade: DuracaoUnidade,
+): string {
+  const n = Number(qtd);
+  if (!dataInicio || !Number.isFinite(n) || n <= 0) return "";
+  try {
+    const base = parseISO(dataInicio);
+    const fim = unidade === "meses" ? addMonths(base, n) : addDays(base, n);
+    return format(fim, "yyyy-MM-dd");
+  } catch {
+    return "";
+  }
 }
 
 export function NovoFreelancerDialog({
@@ -138,8 +165,16 @@ export function NovoFreelancerDialog({
   const [valor, setValor] = React.useState<number | null>(null);
   const [tipo, setTipo] = React.useState<Modo>("mensal");
   const [dataInicio, setDataInicio] = React.useState("");
-  const [dataTermino, setDataTermino] = React.useState("");
+  const [duracaoQtd, setDuracaoQtd] = React.useState("");
+  const [duracaoUnidade, setDuracaoUnidade] =
+    React.useState<DuracaoUnidade>("meses");
   const [cidadeContrato, setCidadeContrato] = React.useState("");
+
+  const dataTerminoCalculada = calcularDataTermino(
+    dataInicio,
+    duracaoQtd,
+    duracaoUnidade,
+  );
 
   function reset() {
     setStep(1);
@@ -178,7 +213,8 @@ export function NovoFreelancerDialog({
     setValor(null);
     setTipo("mensal");
     setDataInicio("");
-    setDataTermino("");
+    setDuracaoQtd("");
+    setDuracaoUnidade("meses");
     setCidadeContrato("");
     setErroGeral(null);
     setFieldErrors({});
@@ -278,7 +314,7 @@ export function NovoFreelancerDialog({
     fd.set("valor_centavos", String(Math.round((valor ?? 0) * 100)));
     fd.set("tipo_contrato", tipo);
     fd.set("data_inicio_contrato", dataInicio);
-    fd.set("data_termino_contrato", dataTermino);
+    fd.set("data_termino_contrato", dataTerminoCalculada);
     fd.set("cidade_contrato", cidadeContrato);
     // Arquivo opcional
     if (cartaoCnpjFile) fd.set("cartao_cnpj_file", cartaoCnpjFile);
@@ -444,8 +480,11 @@ export function NovoFreelancerDialog({
                 setTipo={setTipo}
                 dataInicio={dataInicio}
                 setDataInicio={setDataInicio}
-                dataTermino={dataTermino}
-                setDataTermino={setDataTermino}
+                duracaoQtd={duracaoQtd}
+                setDuracaoQtd={setDuracaoQtd}
+                duracaoUnidade={duracaoUnidade}
+                setDuracaoUnidade={setDuracaoUnidade}
+                dataTerminoCalculada={dataTerminoCalculada}
                 cidadeContrato={cidadeContrato}
                 setCidadeContrato={setCidadeContrato}
                 pending={pending}
@@ -1074,8 +1113,11 @@ function Step5Contrato({
   setTipo,
   dataInicio,
   setDataInicio,
-  dataTermino,
-  setDataTermino,
+  duracaoQtd,
+  setDuracaoQtd,
+  duracaoUnidade,
+  setDuracaoUnidade,
+  dataTerminoCalculada,
   cidadeContrato,
   setCidadeContrato,
   pending,
@@ -1107,7 +1149,13 @@ function Step5Contrato({
           <Combobox
             items={TIPO_OPCOES}
             value={tipo}
-            onChange={(v) => setTipo((v ?? "mensal") as Modo)}
+            onChange={(v) => {
+              const novo = (v ?? "mensal") as Modo;
+              setTipo(novo);
+              if (!duracaoQtd) {
+                setDuracaoUnidade(novo === "mensal" ? "meses" : "dias");
+              }
+            }}
             disabled={pending}
             className={COMBOBOX_COMO_SELECT}
           />
@@ -1123,14 +1171,41 @@ function Step5Contrato({
             disabled={pending}
           />
         </Campo>
-        <Campo rotulo="Término">
-          <DatePicker
-            key={dataInicio}
-            name="data_termino_contrato"
-            defaultValue={dataTermino}
-            onDateChange={(d) => setDataTermino(isoDate(d))}
-            disabled={pending}
-          />
+        <Campo rotulo="Duração">
+          <div className="flex gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              value={duracaoQtd}
+              onChange={(e) =>
+                setDuracaoQtd(e.target.value.replace(/\D/g, ""))
+              }
+              disabled={pending}
+              placeholder="Ex: 2"
+              className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 tabular-nums focus:outline-none focus:ring-2 focus:ring-california-red/30 disabled:opacity-60"
+            />
+            <div className="w-[110px]">
+              <Combobox
+                items={DURACAO_UNIDADE_OPCOES}
+                value={duracaoUnidade}
+                onChange={(v) =>
+                  setDuracaoUnidade((v ?? "meses") as DuracaoUnidade)
+                }
+                disabled={pending}
+                className={COMBOBOX_COMO_SELECT}
+              />
+            </div>
+          </div>
+          {dataTerminoCalculada && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Término:{" "}
+              {format(parseISO(dataTerminoCalculada), "dd/MM/yyyy", {
+                locale: ptBR,
+              })}
+            </p>
+          )}
         </Campo>
       </div>
 

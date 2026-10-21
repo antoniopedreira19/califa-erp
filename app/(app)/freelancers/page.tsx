@@ -191,26 +191,22 @@ export default async function FreelancersDashboardPage() {
       isAprovador
         ? carregarNovidades(supabase, session.activeTenant.id)
         : Promise.resolve(null),
-      // Jobs/cargos pro NovaSolicitacaoDialog quando GP clica no Buscar.
-      // Aprovador vai pra /contratos/novo direto, não precisa.
-      !isAprovador
-        ? supabase
-            .from("jobs")
-            .select("id, codigo, nome, status")
-            .eq("tenant_id", session.activeTenant.id)
-            .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
-            .order("codigo", { ascending: false })
-            .limit(500)
-        : Promise.resolve({ data: [] as any[] }),
-      !isAprovador
-        ? supabase
-            .from("freelancer_cargos")
-            .select("*")
-            .eq("tenant_id", session.activeTenant.id)
-            .eq("ativo", true)
-            .order("nome", { ascending: true })
-            .returns<FreelancerCargo[]>()
-        : Promise.resolve({ data: [] as FreelancerCargo[] }),
+      // Jobs/cargos pro NovaSolicitacaoDialog. Qualquer role que vê o módulo
+      // pode abrir solicitação (inclusive admin/RH/financeiro).
+      supabase
+        .from("jobs")
+        .select("id, codigo, nome, status")
+        .eq("tenant_id", session.activeTenant.id)
+        .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
+        .order("codigo", { ascending: false })
+        .limit(500),
+      supabase
+        .from("freelancer_cargos")
+        .select("*")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("ativo", true)
+        .order("nome", { ascending: true })
+        .returns<FreelancerCargo[]>(),
     ]);
 
   const freelancersLookup = lookupData as FreelancerLookup[];
@@ -227,7 +223,7 @@ export default async function FreelancersDashboardPage() {
         nomeUsuario={session.profile.nome}
         totalFreelancers={rows.length}
         totalIrregular={totaisAnalise.irregular}
-        mostrarNovaSolicitacao={!isAprovador}
+        mostrarNovaSolicitacao
         saude={{
           percentual: saudePercentual,
           saudaveis: saudaveisSaude,

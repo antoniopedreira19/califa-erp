@@ -21,7 +21,6 @@ const STATUS_VALIDOS = new Set([
 ]);
 
 const TIPOS_SOLICITACAO = new Set(["contratacao", "renovacao"]);
-const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
 
 const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
@@ -247,7 +246,6 @@ export default async function SolicitacoesPage({
     }))
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
-  const isAprovador = APROVADORES.has(session.activeRole);
 
   // Resolver origin pro link público (fallback env)
   const h = headers();
@@ -269,9 +267,7 @@ export default async function SolicitacoesPage({
         userId={session.profile.id}
         publicOrigin={publicOrigin}
         naoLidasPorSolicitacao={naoLidasMap}
-        actions={
-          isAprovador ? null : <NovaSolicitacaoDialog jobs={jobs} cargos={cargos} />
-        }
+        actions={<NovaSolicitacaoDialog jobs={jobs} cargos={cargos} />}
       />
     </div>
   );

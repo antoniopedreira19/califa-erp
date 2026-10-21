@@ -5,7 +5,6 @@ import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FreelancerPickerTable, type FreelancerLookup } from "./freelancer-picker-table";
 import { NovaSolicitacaoDialog } from "../solicitacoes/_components/nova-solicitacao-dialog";
-import { HistoricoDialogAprovador } from "./historico-dialog-aprovador";
 import type { FreelancerCargo } from "@/lib/types";
 import type { JobItem } from "./job-picker";
 
@@ -102,9 +101,7 @@ export function BuscarFreelancerPill({
                   Buscar freelancer
                 </h2>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {isAprovador
-                    ? "Clique numa linha pra abrir o novo contrato pré-preenchido."
-                    : "Clique numa linha pra abrir uma solicitação de contratação."}
+                  Clique numa linha pra abrir uma solicitação de contratação.
                 </p>
                 <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
@@ -133,20 +130,9 @@ export function BuscarFreelancerPill({
         </div>
       )}
 
-      {/* Variante por role: admin/RH vê histórico com override; GP vê dialog
-          de solicitação já em modo histórico (bloqueio se ativo). A key força
-          remount a cada seleção pra estado limpo. */}
-      {selecionado && isAprovador && (
-        <HistoricoDialogAprovador
-          key={selecionado.id}
-          freelancer={selecionado}
-          open={true}
-          onOpenChange={(v) => {
-            if (!v) setSelecionado(null);
-          }}
-        />
-      )}
-      {selecionado && !isAprovador && (
+      {/* Qualquer role abre o dialog de solicitação em modo histórico (bloqueio
+          se o freela tem contrato ativo). A key força remount pra estado limpo. */}
+      {selecionado && (
         <NovaSolicitacaoDialog
           key={selecionado.id}
           jobs={jobs}

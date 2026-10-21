@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { addDays, addMonths, format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   Plus,
   Loader2,
@@ -49,15 +50,41 @@ interface Props {
 
 type FieldErrors = Record<string, string[]>;
 type Modo = "preenchendo" | "revisando_historico";
+type DuracaoUnidade = "meses" | "dias";
 
 const TIPO_OPCOES = [
   { value: "mensal", label: "Mensal" },
   { value: "diarias", label: "Diárias" },
 ];
 
+const DURACAO_UNIDADE_OPCOES = [
+  { value: "meses", label: "meses" },
+  { value: "dias", label: "dias" },
+];
+
 function isoDate(d: Date | null): string {
   if (!d) return "";
   return format(d, "yyyy-MM-dd");
+}
+
+/**
+ * Calcula data_termino a partir de data_inicio + duração (N meses ou N dias).
+ * Ex.: 21/10/2026 + 2 meses → 21/12/2026. Retorna "" quando entrada inválida.
+ */
+function calcularDataTermino(
+  dataInicio: string,
+  qtd: string,
+  unidade: DuracaoUnidade,
+): string {
+  const n = Number(qtd);
+  if (!dataInicio || !Number.isFinite(n) || n <= 0) return "";
+  try {
+    const base = parseISO(dataInicio);
+    const fim = unidade === "meses" ? addMonths(base, n) : addDays(base, n);
+    return format(fim, "yyyy-MM-dd");
+  } catch {
+    return "";
+  }
 }
 
 /** Separa um "Nome completo" (que pode vir pré-travado) em primeiro + resto. */
@@ -106,8 +133,16 @@ export function NovaSolicitacaoDialog({
   const [valor, setValor] = React.useState<number | null>(null);
   const [tipo, setTipo] = React.useState<TipoFreelancerContrato>("mensal");
   const [dataInicio, setDataInicio] = React.useState("");
-  const [dataTermino, setDataTermino] = React.useState("");
+  const [duracaoQtd, setDuracaoQtd] = React.useState("");
+  const [duracaoUnidade, setDuracaoUnidade] =
+    React.useState<DuracaoUnidade>("meses");
   const [observacoes, setObservacoes] = React.useState("");
+
+  const dataTerminoCalculada = calcularDataTermino(
+    dataInicio,
+    duracaoQtd,
+    duracaoUnidade,
+  );
 
   const [buscandoCpf, setBuscandoCpf] = React.useState(false);
   const travado = !!freelaSelecionado;
@@ -122,7 +157,8 @@ export function NovaSolicitacaoDialog({
     setTipo("mensal");
     setValor(null);
     setDataInicio("");
-    setDataTermino("");
+    setDuracaoQtd("");
+    setDuracaoUnidade("meses");
     setObservacoes("");
     setErroGeral(null);
     setFieldErrors({});
@@ -250,7 +286,7 @@ export function NovaSolicitacaoDialog({
     fd.set("tipo", tipo);
     fd.set("valor", String(valor));
     fd.set("data_inicio", dataInicio);
-    fd.set("data_termino", dataTermino);
+    fd.set("data_termino", dataTerminoCalculada);
     fd.set("observacoes", observacoes);
 
     startTransition(async () => {
@@ -422,16 +458,22 @@ export function NovaSolicitacaoDialog({
                   <Combobox
                     items={TIPO_OPCOES}
                     value={tipo}
-                    onChange={(v) =>
-                      setTipo((v ?? "mensal") as TipoFreelancerContrato)
-                    }
+                    onChange={(v) => {
+                      const novo = (v ?? "mensal") as TipoFreelancerContrato;
+                      setTipo(novo);
+                      // Alinha a unidade padrão com o tipo quando o usuário
+                      // ainda não digitou duração (evita sobrescrever escolha).
+                      if (!duracaoQtd) {
+                        setDuracaoUnidade(novo === "diarias" ? "dias" : "meses");
+                      }
+                    }}
                     disabled={pending}
                     className={COMBOBOX_COMO_SELECT}
                   />
                 </Campo>
               </div>
 
-              {/* Início | Término */}
+              {/* Início | Duração (qtd + unidade) → Término calculado */}
               <div className="grid grid-cols-2 gap-3">
                 <Campo rotulo="Início *" erro={fieldErrors.data_inicio}>
                   <DatePicker
@@ -442,14 +484,41 @@ export function NovaSolicitacaoDialog({
                     disabled={pending}
                   />
                 </Campo>
-                <Campo rotulo="Término" erro={fieldErrors.data_termino}>
-                  <DatePicker
-                    key={dataInicio}
-                    name="data_termino"
-                    defaultValue={dataTermino}
-                    onDateChange={(d) => setDataTermino(isoDate(d))}
-                    disabled={pending}
-                  />
+                <Campo rotulo="Duração" erro={fieldErrors.data_termino}>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={duracaoQtd}
+                      onChange={(e) =>
+                        setDuracaoQtd(e.target.value.replace(/\D/g, ""))
+                      }
+                      disabled={pending}
+                      placeholder="Ex: 2"
+                      className={cn(INPUT, "flex-1 tabular-nums")}
+                    />
+                    <div className="w-[110px]">
+                      <Combobox
+                        items={DURACAO_UNIDADE_OPCOES}
+                        value={duracaoUnidade}
+                        onChange={(v) =>
+                          setDuracaoUnidade((v ?? "meses") as DuracaoUnidade)
+                        }
+                        disabled={pending}
+                        className={COMBOBOX_COMO_SELECT}
+                      />
+                    </div>
+                  </div>
+                  {dataTerminoCalculada && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Término:{" "}
+                      {format(parseISO(dataTerminoCalculada), "dd/MM/yyyy", {
+                        locale: ptBR,
+                      })}
+                    </p>
+                  )}
                 </Campo>
               </div>
 
