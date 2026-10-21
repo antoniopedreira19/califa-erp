@@ -93,6 +93,10 @@ export interface LinhaDoBanco {
  *  id que `cancelarBaixa` recebe (o imposto vai por `cancelarBaixaImposto`). */
 export type CancelamentoDaBaixa = { tipo: "baixa" | "desembolso" | "pp_devolucao_verba" | "fatura_cartao" | "transferencia" | "imposto"; id: string };
 
+/** As baixas de uma remessa no mesmo dia, juntas (o passo 1c do motor):
+ *  `membros` são os ids, em `lancamentos`, dos débitos que o grupo junta. */
+export type RemessaBaixada = LancamentoSemLinha & { membros: string[] };
+
 /** Um débito ou crédito do sistema ainda sem linha do banco. */
 export interface LancamentoSemLinha extends LancamentoDoMotor {
   /** Todos os lançamentos que ele junta (a baixa e os juros, as partes da
@@ -143,7 +147,12 @@ export interface DadosDaAbaBanco {
   /** Os períodos de todas as importações: os dias que o extrato cobre. */
   periodos: Array<{ inicio: string | null; fim: string | null; geradoDia: string | null }>;
   linhas: LinhaDoBanco[];
+  /** Um por débito que o banco mostra: a baixa da remessa é um débito só
+   *  dela (decisão 202). */
   lancamentos: LancamentoSemLinha[];
+  /** As baixas de cada remessa no mesmo dia, juntas: casam só com a linha
+   *  que tem a soma exata (o banco que debita a remessa inteira). */
+  remessasBaixadas: RemessaBaixada[];
   remessas: RemessaDaConta[];
   regras: RegraDaConta[];
   /** O saldo do sistema no fim do último dia do extrato. */
@@ -496,7 +505,8 @@ export async function carregarBancoDaConciliacao(
   );
 
   // ---- Os lançamentos sem linha, agrupados como o banco os mostra ----
-  const lancamentos = agruparComoNoBanco(semLinhaCrus, remessaDoDocumento);
+  const lancamentos = agruparComoNoBanco(semLinhaCrus);
+  const remessasBaixadas = remessasJaBaixadas(lancamentos, semLinhaCrus, remessaDoDocumento);
 
   // ---- As linhas ----
   const ligadosPorLinha = new Map<string, LinhaDoBanco["ligados"]>();
@@ -536,6 +546,7 @@ export async function carregarBancoDaConciliacao(
     lancamentos,
     remessas,
     regras,
+    remessasBaixadas,
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
   };
 }
@@ -544,16 +555,16 @@ export async function carregarBancoDaConciliacao(
  * Os lançamentos sem linha do banco, juntados como o banco os mostra:
  *
  * - a baixa e os juros dela (`juros_de_lancamento_id`, decisão 196);
- * - as partes de uma guia de imposto (`imposto_a_pagar_id`, decisão 141);
- * - as baixas dos itens de uma mesma remessa no mesmo dia: o banco debita
- *   a remessa inteira numa linha só.
+ * - as partes de uma guia de imposto (`imposto_a_pagar_id`, decisão 141).
+ *
+ * As baixas dos itens de uma remessa NÃO se juntam aqui (decisão 202): o
+ * Santander debita cada pagamento da remessa numa linha própria, e um
+ * pagamento que falha sai noutro dia. O grupo da remessa vem à parte
+ * (`remessasJaBaixadas`), para o banco que debita o total.
  *
  * Exportada para o teste.
  */
-export function agruparComoNoBanco(
-  crus: LancamentoCru[],
-  remessaDoDocumento: Map<string, { id: string }>,
-): LancamentoSemLinha[] {
+export function agruparComoNoBanco(crus: LancamentoCru[]): LancamentoSemLinha[] {
   const ids = new Set(crus.map((l) => l.id));
   // A chave de cada lançamento: o grupo a que ele pertence.
   const chave = (l: LancamentoCru): string => {
@@ -562,9 +573,6 @@ export function agruparComoNoBanco(
       return baixa ? chave(baixa) : `l:${l.id}`;
     }
     if (l.origem === "imposto_baixa" && l.imposto_a_pagar_id) return `g:${l.imposto_a_pagar_id}:${l.data_movimento}`;
-    const doc = l.pedido_compra_parcela_id ?? l.conta_avulsa_id;
-    const remessa = doc && (l.origem === "pp_baixa" || l.origem === "avulsa_baixa") ? remessaDoDocumento.get(doc) : undefined;
-    if (remessa) return `r:${remessa.id}:${l.data_movimento}`;
     return `l:${l.id}`;
   };
   const grupos = new Map<string, LancamentoCru[]>();
@@ -573,10 +581,9 @@ export function agruparComoNoBanco(
     grupos.set(k, [...(grupos.get(k) ?? []), l]);
   }
   const saida: LancamentoSemLinha[] = [];
-  for (const [k, membros] of grupos) {
+  for (const membros of grupos.values()) {
     const base = membros.find((m) => m.origem !== "juros_baixa") ?? membros[0];
     const juros = r2(membros.filter((m) => m.origem === "juros_baixa").reduce((s, m) => s + Number(m.valor), 0));
-    const remessa = k.startsWith("r:") && membros.length > 1;
     const principais = membros.filter((m) => m.origem !== "juros_baixa");
     saida.push({
       id: base.id,
@@ -584,9 +591,9 @@ export function agruparComoNoBanco(
       data: base.data_movimento,
       valor: r2(membros.reduce((s, m) => s + assinado(m), 0)),
       juros: juros || undefined,
-      descricao: remessa ? `${membros.length} baixas da remessa, no mesmo dia` : base.descricao,
+      descricao: base.descricao,
       origem: base.origem,
-      fornecedor: remessa ? null : base.fornecedores?.razao_social ?? base.fornecedores?.nome ?? null,
+      fornecedor: base.fornecedores?.razao_social ?? base.fornecedores?.nome ?? null,
       forma: base.forma_pagamento,
       corrigivel:
         principais.length === 1 &&
@@ -595,4 +602,46 @@ export function agruparComoNoBanco(
     });
   }
   return saida.sort((a, b) => a.data.localeCompare(b.data));
+}
+
+/**
+ * As baixas dos itens de uma mesma remessa, no mesmo dia, juntas: o débito
+ * da remessa inteira, para o banco que debita o total numa linha só (o passo
+ * 1c do motor). Só grupos de duas baixas ou mais. Exportada para o teste.
+ */
+export function remessasJaBaixadas(
+  lancamentos: LancamentoSemLinha[],
+  crus: LancamentoCru[],
+  remessaDoDocumento: Map<string, { id: string }>,
+): RemessaBaixada[] {
+  const cruPorId = new Map(crus.map((l) => [l.id, l]));
+  const grupos = new Map<string, LancamentoSemLinha[]>();
+  for (const l of lancamentos) {
+    const c = cruPorId.get(l.id);
+    const doc = c ? c.pedido_compra_parcela_id ?? c.conta_avulsa_id : null;
+    const remessa = c && doc && (c.origem === "pp_baixa" || c.origem === "avulsa_baixa") ? remessaDoDocumento.get(doc) : undefined;
+    if (!remessa) continue;
+    const k = `r:${remessa.id}:${l.data}`;
+    grupos.set(k, [...(grupos.get(k) ?? []), l]);
+  }
+  const saida: RemessaBaixada[] = [];
+  for (const [k, membros] of grupos) {
+    if (membros.length < 2) continue;
+    const juros = r2(membros.reduce((s, m) => s + (m.juros ?? 0), 0));
+    saida.push({
+      id: k,
+      ids: membros.flatMap((m) => m.ids),
+      membros: membros.map((m) => m.id),
+      data: membros[0].data,
+      valor: r2(membros.reduce((s, m) => s + m.valor, 0)),
+      juros: juros || undefined,
+      descricao: `${membros.length} baixas da remessa, no mesmo dia`,
+      origem: membros[0].origem,
+      fornecedor: null,
+      forma: membros[0].forma,
+      corrigivel: false,
+      cancelamento: null,
+    });
+  }
+  return saida;
 }

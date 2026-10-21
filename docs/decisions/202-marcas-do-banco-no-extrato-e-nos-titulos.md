@@ -1,9 +1,13 @@
 # 202 — As marcas do banco no Extrato e o sinal na aba Títulos
 
 **Data:** 2026-10-21
-**Status:** aceita e implementada em 21/10/2026 (task 029, fase 3, entrega 3C),
-menos a folha agrupada no Extrato (D2 da decisão 195), que espera o Tiago
-(ver Pendências).
+**Status:** aceita e implementada em 21/10/2026 (task 029, fase 3, entrega 3C).
+A folha no Extrato (D2 da decisão 195) e a remessa linha a linha foram
+decididas pelo Tiago no mesmo dia (seção "A folha no Extrato e a remessa
+linha a linha"): o motor e a leitura da folha entraram num segundo commit, e
+a faixa na tela (`conciliacao-list.tsx`) com o commit da fase 4, porque o
+arquivo ficou junto do cadeado do fechamento. Revê os itens 6 e 7 da
+decisão 199.
 **Quem decidiu:** Tiago, no protótipo "Conciliação com o banco", versão
 **Alternativa** (`docs/handoffs/2026-10-21-conciliacao-com-o-banco/`, seções
 4.1, item 12, e 4.8 da especificação; protótipo, `AbaExtrato` e
@@ -68,9 +72,51 @@ título que o banco já mostrava pago, com outra data.
    automática, com a data do banco, sem digitar nada." e **"Conciliar com o
    banco"**.
 
+### A folha no Extrato e a remessa linha a linha (Tiago, 21/10/2026)
+
+10. **A suposição do protótipo não vale para a remessa do Santander.** O
+    protótipo mostrava a folha numa linha só do banco ("Folha de pagamento
+    09/2026 · 17 títulos") e casava a remessa inteira com essa linha. O
+    Santander debita **cada pagamento da remessa numa linha própria**, e um
+    pagamento pode falhar e sair no dia seguinte: pela remessa, o dia não
+    bateria centavo a centavo. Nem a opção A (pela remessa) nem a B (pela
+    folha) como linha única.
+11. **No Extrato, cada pagamento da folha é uma linha própria**, com o seu
+    ✓, ⚠ ou ○, e a conciliação continua linha a linha.
+12. **O agrupamento é só para ver:** uma faixa recolhível por folha **e** por
+    dia, no padrão das faixas de grupo da decisão 091 (`FAIXA_GRUPO_LISTA`):
+    o dia na Data, a soma no Débito (e no Crédito), o saldo depois do último
+    pagamento no Saldo, e na Descrição "Folha de pagamento 10/2026 · 17
+    pagamentos · 16 ✓ 1 ○" (o ⚠ em vermelho, quando há). Ela abre nas
+    linhas, nasce recolhida (aberta quando o `&highlight=` é de um
+    pagamento dela), não junta valores para conciliar, não muda o saldo
+    corrente e segue a ordem do Extrato: uma linha de outra coisa no meio
+    fecha a faixa, e a ordem pelo título de uma coluna a desfaz, como na
+    planilha. `lib/financeiro/folha-no-extrato.ts`.
+    - A folha é a competência e o tipo da folha do colaborador
+      (`contas_avulsas.folha_id` → `folhas_pagamento`): "Folha de pagamento
+      MM/AAAA" no salário, "Férias MM/AAAA" nas férias.
+13. **O pagamento que falhou** sai da faixa do dia da remessa e entra na faixa
+    do dia em que saiu de verdade: quando o extrato desse dia chega, a linha
+    do banco se liga à baixa (passo 1, até 3 dias) e a baixa passa à data do
+    banco (decisão 200). Até lá ele fica no dia da remessa, com ○ enquanto
+    esse dia não está inteiro num extrato importado, e com ⚠ ("Não está no
+    extrato do banco até dd/mm…") quando está, como toda baixa sem linha no
+    banco (item 1) — e é o ⚠ que segura o fechamento desse dia (fase 4).
+14. **O motor, linha a linha** (`lib/conciliacao/motor.ts`):
+    - as baixas de uma remessa **não** se juntam mais num débito só
+      (`agruparComoNoBanco`): cada uma casa a sua linha;
+    - o título de uma remessa casa pelo valor dele, como qualquer título; só
+      fica guardado para o passo 4 quando alguma linha do banco tem o total
+      exato da remessa;
+    - **fica, para o banco que debita o total:** o passo 4 (a linha igual à
+      soma da remessa ainda em aberto) e um passo novo, o **1c**: as baixas
+      da remessa no mesmo dia, juntas (`remessasJaBaixadas`), casam com a
+      linha que tem a soma exata, e só quando nenhuma delas casou sozinha.
+
 ### A leitura
 
-10. As três abas da conta leem o extrato importado
+15. As três abas da conta leem o extrato importado
     (`carregarBancoDaConciliacao`, na mesma rodada das outras leituras da
     página): o Extrato para as marcas e os Títulos para o sinal. O Extrato lê
     também, junto da montagem das linhas, os lançamentos do período já
@@ -92,16 +138,19 @@ título que o banco já mostrava pago, com outra data.
     batem…" e "1 conciliada com o banco · 4 aguardando o extrato do banco";
   - no fim, o Desfazer devolveu a PP-00102 a aprovada, sem baixa.
 
+- **A folha e a remessa linha a linha** (itens 10 a 14): testes em
+  `lib/financeiro/folha-no-extrato.test.ts` (a faixa por folha e por dia, o
+  pagamento do dia seguinte na faixa dele, a linha no meio que fecha a faixa)
+  e em `conciliacao/motor-da-conta.test.ts` (cada pagamento casa o seu título
+  e o total só com a linha do total; as baixas uma a uma, e o grupo só com a
+  linha da soma). Na tela, numa rota de prévia temporária com dados
+  fictícios (apagada antes do commit), porque em 21/10/2026 não há folha no
+  banco e folha de teste não se gera: as duas faixas, "4 pagamentos · 3 ✓ 1
+  ⚠" e o pagamento do dia seguinte "1 pagamento · 1 ○", abrindo nas linhas
+  com o saldo corrente na ordem. A Conciliação automática da Conta Teste
+  continuou com as mesmas seções.
+
 ## Pendências
 
-1. **A folha agrupada no Extrato** ("Folha de pagamento 09/2026 · 17
-   títulos", D2 da decisão 195) **não foi feita**: há duas leituras do
-   agrupamento, e em 21/10/2026 não existe folha no banco para conferir
-   (nenhum título nem baixa de folha; folha de teste não se gera). As opções
-   levadas ao Tiago:
-   - **A — pela remessa:** as baixas de folha da mesma remessa, no mesmo dia,
-     numa linha — como o banco debita a remessa e como o motor já as junta
-     (`agruparComoNoBanco`);
-   - **B — pela folha:** as baixas da mesma folha (competência), no mesmo
-     dia, numa linha, com ou sem remessa.
+1. **A faixa da folha não foi vista com folha de verdade** (não há no banco).
 2. "Ver a baixa registrada" no ⓘ do Extrato continua pendente (decisão 195).
