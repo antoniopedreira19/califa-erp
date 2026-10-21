@@ -29,7 +29,13 @@ TESTE_CNPJ_REGEX='^(([0-9])\2{1}\.\2{3}\.\2{3}/[0-9]{4}-[0-9]{2}|34\.567\.890/00
 PLACEHOLDER_EMAIL_REGEX='^(colaborador|pessoal|exemplo|voce|pessoa|rh|financeiro|fulano|ciclano|teste|contato|comercial|financeiro)[0-9_]*@'
 
 # Arquivos a ignorar
-IGNORE_PATHS_REGEX='^(node_modules/|\.git-filter-replacements\.txt|scripts/sanitize-pii|scripts/check-pii\.sh|supabase/migrations/.*_task009_empresas\.sql$)'
+IGNORE_PATHS_REGEX='^(node_modules/|\.git-filter-replacements\.txt|scripts/sanitize-pii|scripts/check-pii\.sh|scripts/pii-names-hashes\.txt|supabase/migrations/.*_task009_empresas\.sql$)'
+
+# Arquivo com SHA-256 dos nomes reais conhecidos (um por linha). Regenerado por
+# scripts/update-pii-names-hashes.sh contra o Supabase. Se nao existir, pula a
+# vigia de nomes (acontece em clone novo antes do primeiro update).
+# Pode ser sobrescrito via env PII_NAMES_HASHES_FILE (util pra testes).
+NAMES_HASHES_FILE="${PII_NAMES_HASHES_FILE:-scripts/pii-names-hashes.txt}"
 # Nota: task009_empresas tem CPF/CNPJ da propria California e empresas-irmas,
 # nao e dado de colaborador. Ja sanitizado em commit anterior.
 
@@ -92,6 +98,52 @@ while IFS= read -r file; do
         fi
       fi
     done < <(grep -oE "'[0-9]{11}'" "$file" 2>/dev/null | tr -d "'" | sort -u)
+  fi
+
+  # 5. Nome real de colaborador/freelancer conhecido (via hash SHA-256).
+  # Extrai sequencias de 2+ palavras MAIUSCULAS consecutivas (candidatas a
+  # nome completo), normaliza (perl faz unicode normalization + strip de acentos)
+  # e checa se o hash bate com a lista conhecida.
+  # Pula se faltar sha256sum ou perl, ou se arquivo for binario/grande.
+  if [ -f "$NAMES_HASHES_FILE" ] && command -v sha256sum >/dev/null 2>&1 && command -v perl >/dev/null 2>&1; then
+    tam=$(wc -c < "$file" 2>/dev/null || echo 0)
+    if [ "$tam" -gt 0 ] && [ "$tam" -lt 2000000 ]; then
+      # Extrai candidatos: 2+ palavras que PARECEM nome. Dois formatos aceitos:
+      #   (a) CAPS: JOAO DA SILVA (regex: 2+ palavras com 2+ letras maiusculas)
+      #   (b) Title: Joao Da Silva (regex: palavra que comeca com maiuscula + minusculas)
+      # Admite tambem conectores minusculos (da, de, do, das, dos) no meio.
+      candidatos=$(perl -CSD -ne '
+        while (/((?:\p{Lu}{2,}(?:['\''\-]\p{Lu}+)?[ ]){1,}\p{Lu}{2,}(?:['\''\-]\p{Lu}+)?)/g) { print "$1\n" }
+        while (/((?:\p{Lu}\p{Ll}+[ ](?:d[aeo]s?[ ])?){1,}\p{Lu}\p{Ll}+)/g) { print "$1\n" }
+      ' "$file" 2>/dev/null | sort -u || true)
+
+      while IFS= read -r candidato; do
+        [ -z "$candidato" ] && continue
+        # Normaliza: upper + NFD + remove acento + colapsa espaco + trim
+        norm=$(printf '%s' "$candidato" | perl -CSD -MUnicode::Normalize -e '
+          my $s = <STDIN>; chomp $s;
+          $s = uc $s;
+          $s = NFD($s);
+          $s =~ s/\p{NonspacingMark}//g;
+          $s =~ s/\s+/ /g;
+          $s =~ s/^\s+|\s+$//g;
+          print $s;
+        ' 2>/dev/null || true)
+        [ -z "$norm" ] && continue
+        # So vale se tem 2+ palavras com 3+ letras cada apos normalizar
+        echo "$norm" | grep -qE '^[A-Z]{3,}( [A-Z]{2,})+$' || continue
+        # Pula placeholders obvios
+        case "$norm" in
+          "COLABORADOR EXEMPLO"|"FORNECEDOR EXEMPLO"|"PESSOA EXEMPLO"|"FULANO DE TAL"|"CICLANO DE TAL") continue;;
+          "COLABORADOR "*" EXEMPLO"|"FORNECEDOR "*" EXEMPLO"|"PESSOA "*" EXEMPLO") continue;;
+        esac
+        h=$(printf '%s' "$norm" | sha256sum | cut -d' ' -f1)
+        if grep -qxF "$h" "$NAMES_HASHES_FILE"; then
+          VIOLATIONS+="  Nome real de colaborador/freelancer detectado em $file (hash $h)\n"
+          VIOLATIONS+="  (o nome nao e exposto aqui; abra o arquivo e troque pelo placeholder COLABORADOR NNN EXEMPLO)\n"
+        fi
+      done <<< "$candidatos"
+    fi
   fi
 
 done <<< "$FILES"
