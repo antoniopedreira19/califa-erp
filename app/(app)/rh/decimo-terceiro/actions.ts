@@ -29,6 +29,8 @@ interface ColaboradorElegivel {
   funcao: string;
   data_admissao: string;
   salario: string;
+  /** Parte PJ do salário (pra híbrido CLT_recibo). NULL quando não híbrido ou sem valor. */
+  valor_recibo: string | null;
   empresa_id: string | null;
 }
 
@@ -93,10 +95,11 @@ export async function criarFolhaDecimoTerceiro(
     return { ok: false, message: "Nenhum colaborador elegível para 13º no ano." };
   }
 
-  // Query 2: salário vigente de cada elegível.
+  // Query 2: salário vigente de cada elegível, incluindo valor_recibo
+  // pro CLT_recibo híbrido (parte PJ do salário).
   const { data: salarios, error: errSal } = await supabase
     .from("colaboradores_salarios")
-    .select("colaborador_id, valor")
+    .select("colaborador_id, valor, valor_recibo")
     .eq("tenant_id", tenantId)
     .is("data_fim", null)
     .in("colaborador_id", elegiveisIds);
@@ -121,6 +124,9 @@ export async function criarFolhaDecimoTerceiro(
   const salarioPorColab = new Map(
     (salarios ?? []).map((s) => [s.colaborador_id, s.valor]),
   );
+  const valorReciboPorColab = new Map(
+    (salarios ?? []).map((s) => [s.colaborador_id, s.valor_recibo]),
+  );
   const empresaPorColab = new Map<string, string>();
   for (const a of alocacoes ?? []) {
     if (!empresaPorColab.has(a.colaborador_id) && a.empresa_id) {
@@ -140,6 +146,7 @@ export async function criarFolhaDecimoTerceiro(
       funcao: c.funcao,
       data_admissao: c.data_admissao,
       salario: salarioPorColab.get(c.id) as string,
+      valor_recibo: valorReciboPorColab.get(c.id) ?? null,
       empresa_id: empresaPorColab.get(c.id) ?? null,
     }));
 
@@ -168,12 +175,17 @@ export async function criarFolhaDecimoTerceiro(
   // 4. Monta as linhas com snapshot + calculados.
   const linhas = elegiveis.map((c) => {
     const salarioNum = Number(c.salario);
+    const valorReciboNum =
+      c.valor_recibo != null && Number(c.valor_recibo) > 0
+        ? Number(c.valor_recibo)
+        : null;
     const calc = calcularLinhaDecimoTerceiro({
       salario: salarioNum,
       dataAdmissao: new Date(`${c.data_admissao}T00:00:00Z`),
       ano,
       tipoContratacao: c.tipo_contratacao,
       totalAdiantado: 0,
+      valorRecibo: valorReciboNum,
     });
     const obsAuto = calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
     return {
@@ -186,6 +198,7 @@ export async function criarFolhaDecimoTerceiro(
       snapshot_funcao: c.funcao,
       snapshot_data_admissao: c.data_admissao,
       snapshot_salario: salarioNum,
+      snapshot_valor_recibo: calc.parteClt ? valorReciboNum : null,
       snapshot_empresa_id: c.empresa_id,
       avos: calc.avos,
       total_adiantado: 0,
@@ -195,6 +208,14 @@ export async function criarFolhaDecimoTerceiro(
       desconto_irrf: calc.descontoIrrf,
       total_bruto: calc.totalBruto,
       total_liquido: calc.totalLiquido,
+      parte_clt_primeira_parcela: calc.parteClt?.primeiraParcela ?? null,
+      parte_clt_segunda_parcela: calc.parteClt?.segundaParcela ?? null,
+      parte_clt_desconto_inss: calc.parteClt?.descontoInss ?? null,
+      parte_clt_desconto_irrf: calc.parteClt?.descontoIrrf ?? null,
+      parte_clt_total_liquido: calc.parteClt?.totalLiquido ?? null,
+      parte_pj_primeira_parcela: calc.partePj?.primeiraParcela ?? null,
+      parte_pj_segunda_parcela: calc.partePj?.segundaParcela ?? null,
+      parte_pj_total_liquido: calc.partePj?.totalLiquido ?? null,
       editado_manualmente: false,
       salario_editado: null,
       avos_editado: null,
@@ -263,7 +284,7 @@ export async function editarLinhaDecimoTerceiro(
   const { data: linha, error: errLinha } = await supabase
     .from("decimo_terceiro_linhas")
     .select(
-      "id, folha_id, snapshot_tipo_contratacao, snapshot_data_admissao, snapshot_salario, total_adiantado",
+      "id, folha_id, snapshot_tipo_contratacao, snapshot_data_admissao, snapshot_salario, snapshot_valor_recibo, total_adiantado",
     )
     .eq("id", linhaId)
     .eq("tenant_id", tenantId)
@@ -282,6 +303,16 @@ export async function editarLinhaDecimoTerceiro(
     return { ok: false, message: "Folha não encontrada." };
   }
 
+  // Mantém o snapshot_valor_recibo quando o usuário NÃO editou o salário;
+  // se editou o salário manualmente, o breakdown híbrido deixa de valer
+  // (o edit substitui o total, sem reaplicar proporção).
+  const valorReciboEfetivo =
+    parsed.data.salario_editado != null
+      ? null
+      : linha.snapshot_valor_recibo != null
+        ? Number(linha.snapshot_valor_recibo)
+        : null;
+
   const calc = calcularLinhaDecimoTerceiro({
     salario: Number(linha.snapshot_salario),
     dataAdmissao: new Date(`${linha.snapshot_data_admissao}T00:00:00Z`),
@@ -290,6 +321,7 @@ export async function editarLinhaDecimoTerceiro(
     totalAdiantado: Number(linha.total_adiantado),
     salarioEditado: parsed.data.salario_editado,
     avosEditado: parsed.data.avos_editado,
+    valorRecibo: valorReciboEfetivo,
   });
 
   const editadoManualmente =
@@ -305,6 +337,14 @@ export async function editarLinhaDecimoTerceiro(
       desconto_irrf: calc.descontoIrrf,
       total_bruto: calc.totalBruto,
       total_liquido: calc.totalLiquido,
+      parte_clt_primeira_parcela: calc.parteClt?.primeiraParcela ?? null,
+      parte_clt_segunda_parcela: calc.parteClt?.segundaParcela ?? null,
+      parte_clt_desconto_inss: calc.parteClt?.descontoInss ?? null,
+      parte_clt_desconto_irrf: calc.parteClt?.descontoIrrf ?? null,
+      parte_clt_total_liquido: calc.parteClt?.totalLiquido ?? null,
+      parte_pj_primeira_parcela: calc.partePj?.primeiraParcela ?? null,
+      parte_pj_segunda_parcela: calc.partePj?.segundaParcela ?? null,
+      parte_pj_total_liquido: calc.partePj?.totalLiquido ?? null,
       salario_editado: parsed.data.salario_editado,
       avos_editado: parsed.data.avos_editado,
       obs: parsed.data.obs,
@@ -379,11 +419,11 @@ export async function recalcularFolhaDecimoTerceiro(
     return { ok: true, total_recalculadas: 0 };
   }
 
-  // Rebuscar salário vigente de todos os colaboradores das linhas não editadas.
+  // Rebuscar salário vigente + valor_recibo (parte PJ do híbrido).
   const colabIds = linhas.map((l) => l.colaborador_id);
   const { data: salariosAtuais, error: errSal } = await supabase
     .from("colaboradores_salarios")
-    .select("colaborador_id, valor")
+    .select("colaborador_id, valor, valor_recibo")
     .eq("tenant_id", tenantId)
     .is("data_fim", null)
     .in("colaborador_id", colabIds);
@@ -404,6 +444,9 @@ export async function recalcularFolhaDecimoTerceiro(
   const salPorColab = new Map(
     (salariosAtuais ?? []).map((s) => [s.colaborador_id, s.valor]),
   );
+  const reciboPorColab = new Map(
+    (salariosAtuais ?? []).map((s) => [s.colaborador_id, s.valor_recibo]),
+  );
   const admissaoPorColab = new Map(
     (colabsAtuais ?? []).map((c) => [c.id, c.data_admissao]),
   );
@@ -418,12 +461,16 @@ export async function recalcularFolhaDecimoTerceiro(
       const admissaoAtual =
         admissaoPorColab.get(l.colaborador_id) ?? l.snapshot_data_admissao;
       const salarioNum = Number(salarioVigente);
+      const reciboRaw = reciboPorColab.get(l.colaborador_id);
+      const valorReciboNum =
+        reciboRaw != null && Number(reciboRaw) > 0 ? Number(reciboRaw) : null;
       const calc = calcularLinhaDecimoTerceiro({
         salario: salarioNum,
         dataAdmissao: new Date(`${admissaoAtual}T00:00:00Z`),
         ano: folha.ano,
         tipoContratacao: l.snapshot_tipo_contratacao as TipoContratacao,
         totalAdiantado: Number(l.total_adiantado),
+        valorRecibo: valorReciboNum,
       });
       const obsAuto =
         calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
@@ -431,6 +478,7 @@ export async function recalcularFolhaDecimoTerceiro(
         .from("decimo_terceiro_linhas")
         .update({
           snapshot_salario: salarioNum,
+          snapshot_valor_recibo: calc.parteClt ? valorReciboNum : null,
           snapshot_data_admissao: admissaoAtual,
           avos: calc.avos,
           primeira_parcela: calc.primeiraParcela,
@@ -439,6 +487,14 @@ export async function recalcularFolhaDecimoTerceiro(
           desconto_irrf: calc.descontoIrrf,
           total_bruto: calc.totalBruto,
           total_liquido: calc.totalLiquido,
+          parte_clt_primeira_parcela: calc.parteClt?.primeiraParcela ?? null,
+          parte_clt_segunda_parcela: calc.parteClt?.segundaParcela ?? null,
+          parte_clt_desconto_inss: calc.parteClt?.descontoInss ?? null,
+          parte_clt_desconto_irrf: calc.parteClt?.descontoIrrf ?? null,
+          parte_clt_total_liquido: calc.parteClt?.totalLiquido ?? null,
+          parte_pj_primeira_parcela: calc.partePj?.primeiraParcela ?? null,
+          parte_pj_segunda_parcela: calc.partePj?.segundaParcela ?? null,
+          parte_pj_total_liquido: calc.partePj?.totalLiquido ?? null,
           obs: obsAuto,
           updated_by: session.profile.id,
         })
