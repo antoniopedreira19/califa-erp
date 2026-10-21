@@ -13,6 +13,10 @@ import type {
 import { CardDados } from "./card-dados";
 import { CardAlocacoes } from "./card-alocacoes";
 import { CardSalarios } from "./card-salarios";
+import {
+  CardDecimoTerceiro,
+  type HistoricoDecimoTerceiro,
+} from "./card-decimo-terceiro";
 import { CardDadosBancarios } from "./card-dados-bancarios";
 import { CardNfColaborador } from "./_components/card-nf-colaborador";
 import { CardAcesso } from "./card-acesso";
@@ -56,6 +60,7 @@ export default async function ColaboradorDetalhePage({
     nfVigenteRes,
     folhasAbertasPjRes,
     nfsExistentesRes,
+    historico13Res,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -141,6 +146,15 @@ export default async function ColaboradorDetalhePage({
       .select("competencia_ano, competencia_mes")
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", params.id),
+    // Histórico de 13º (Parte 5): linhas de todas as folhas de 13º do colaborador
+    supabase
+      .from("decimo_terceiro_linhas")
+      .select(
+        `avos, total_bruto, total_adiantado, total_liquido,
+         folha:decimo_terceiro_folhas!decimo_terceiro_linhas_folha_id_fkey(ano, status)`,
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", params.id),
   ]);
 
   if (!colabRes.data) {
@@ -199,6 +213,36 @@ export default async function ColaboradorDetalhePage({
   })();
 
   const salarios = (salariosRes.data ?? []) as ColaboradorSalario[];
+
+  // Histórico de 13º — ordenar por ano desc
+  type Historico13Raw = {
+    avos: number;
+    total_bruto: string;
+    total_adiantado: string;
+    total_liquido: string;
+    folha:
+      | { ano: number; status: string }
+      | { ano: number; status: string }[]
+      | null;
+  };
+  const historicoDecimoTerceiro: HistoricoDecimoTerceiro[] = (
+    (historico13Res.data ?? []) as Historico13Raw[]
+  )
+    .map((r) => {
+      const f = Array.isArray(r.folha) ? r.folha[0] : r.folha;
+      return f
+        ? {
+            ano: f.ano,
+            avos: r.avos,
+            total_bruto: Number(r.total_bruto),
+            total_adiantado: Number(r.total_adiantado),
+            total_liquido: Number(r.total_liquido),
+            status_folha: f.status,
+          }
+        : null;
+    })
+    .filter((x): x is HistoricoDecimoTerceiro => x !== null)
+    .sort((a, b) => b.ano - a.ano);
 
   const empresas = (empresasRes.data ?? []) as Pick<
     Empresa,
@@ -373,6 +417,8 @@ export default async function ColaboradorDetalhePage({
             pendencia={pendenciasPorCard.salario}
           />
         </div>
+
+        <CardDecimoTerceiro historico={historicoDecimoTerceiro} />
       </div>
     </div>
   );
