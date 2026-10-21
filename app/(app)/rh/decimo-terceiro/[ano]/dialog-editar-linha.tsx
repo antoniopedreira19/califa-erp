@@ -76,7 +76,7 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
         <DialogHeader>
           <DialogTitle>{linha.nome}</DialogTitle>
           <DialogDescription>
-            Override manual do cálculo. Deixe em branco para usar o snapshot.
+            Ajuste manual do cálculo. Deixe em branco para manter o valor atual.
           </DialogDescription>
         </DialogHeader>
 
@@ -87,7 +87,7 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
               <div>
                 <strong>Reajuste no ano.</strong> Este colaborador teve
                 mudança salarial em {new Date().getFullYear()}. Se quiser
-                aplicar retroativo, use o campo &quot;Salário (editar)&quot;
+                aplicar retroativo, use o campo &quot;Salário&quot; abaixo
                 pra lançar o salário médio ponderado do ano e descreva o
                 ajuste na observação.
               </div>
@@ -96,7 +96,7 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
 
           <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Salário snapshot:</span>
+              <span className="text-muted-foreground">Salário:</span>
               <span className="tabular-nums">
                 {new Intl.NumberFormat("pt-BR", {
                   style: "currency",
@@ -105,19 +105,19 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Avos calculado:</span>
+              <span className="text-muted-foreground">Avos:</span>
               <span className="tabular-nums">{linha.avos}</span>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="salario-editado">Salário (editar)</Label>
+            <Label htmlFor="salario-editado">Ajustar salário</Label>
             <Input
               id="salario-editado"
               type="number"
               step="0.01"
               min="0"
-              placeholder="Deixe vazio pra usar o snapshot"
+              placeholder="Deixe vazio pra manter o atual"
               value={salarioEditado}
               onChange={(e) => setSalarioEditado(e.target.value)}
               disabled={enviando}
@@ -125,14 +125,14 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="avos-editado">Avos (editar)</Label>
+            <Label htmlFor="avos-editado">Ajustar avos</Label>
             <Input
               id="avos-editado"
               type="number"
               step="1"
               min="0"
               max="12"
-              placeholder="Deixe vazio pra usar o calculado"
+              placeholder="Deixe vazio pra manter o atual"
               value={avosEditado}
               onChange={(e) => setAvosEditado(e.target.value)}
               disabled={enviando}
@@ -166,7 +166,7 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
             >
               <RotateCcw className="h-3 w-3" />
-              Restaurar snapshot
+              Limpar ajustes
             </button>
             <div className="flex items-center gap-2">
               <button

@@ -130,17 +130,35 @@ export async function criarFolhaDecimoTerceiro(
     );
   }
 
-  // Query 2.6: colaboradores que tiveram reajuste salarial no ano (Parte 4).
-  const { data: reajustesNoAno } = await supabase
+  // Query 2.6: colaboradores que tiveram REAJUSTE no ano (Parte 4).
+  // Reajuste = mudança salarial. Precisa ter linha no ano E outra linha
+  // anterior (não é o salário inicial da contratação).
+  const { data: salariosDoAno } = await supabase
     .from("colaboradores_salarios")
-    .select("colaborador_id")
+    .select("colaborador_id, data_inicio")
     .eq("tenant_id", tenantId)
     .in("colaborador_id", elegiveisIds)
     .gte("data_inicio", `${ano}-01-01`)
     .lte("data_inicio", `${ano}-12-31`);
-  const reajusteNoAnoSet = new Set(
-    (reajustesNoAno ?? []).map((r) => r.colaborador_id),
+  const colabsComLinhaNoAno = new Set(
+    (salariosDoAno ?? []).map((r) => r.colaborador_id),
   );
+  const colabsComLinhaNoAnoIds = Array.from(colabsComLinhaNoAno);
+  const reajusteNoAnoSet = new Set<string>();
+  if (colabsComLinhaNoAnoIds.length > 0) {
+    const { data: anterioresAgg } = await supabase
+      .from("colaboradores_salarios")
+      .select("colaborador_id, data_inicio")
+      .eq("tenant_id", tenantId)
+      .in("colaborador_id", colabsComLinhaNoAnoIds)
+      .lt("data_inicio", `${ano}-01-01`);
+    const temAnterior = new Set(
+      (anterioresAgg ?? []).map((r) => r.colaborador_id),
+    );
+    for (const id of colabsComLinhaNoAnoIds) {
+      if (temAnterior.has(id)) reajusteNoAnoSet.add(id);
+    }
+  }
 
   // Query 3: alocação vigente (empresa) — pega qualquer uma (a primeira
   // por created_at) por simplicidade da Parte 1. Rateio real fica pra
@@ -503,17 +521,32 @@ export async function recalcularFolhaDecimoTerceiro(
   );
   const fimDoAno = `${folha.ano}-12-31`;
 
-  // Reajustes no ano (Parte 4).
-  const { data: reajustesNoAno } = await supabase
+  // Reajustes no ano (Parte 4). Reajuste = linha no ano + linha anterior.
+  const { data: salariosDoAno } = await supabase
     .from("colaboradores_salarios")
     .select("colaborador_id")
     .eq("tenant_id", tenantId)
     .in("colaborador_id", colabIds)
     .gte("data_inicio", `${folha.ano}-01-01`)
     .lte("data_inicio", `${folha.ano}-12-31`);
-  const reajusteNoAnoSet = new Set(
-    (reajustesNoAno ?? []).map((r) => r.colaborador_id),
+  const colabsComLinhaNoAno = Array.from(
+    new Set((salariosDoAno ?? []).map((r) => r.colaborador_id)),
   );
+  const reajusteNoAnoSet = new Set<string>();
+  if (colabsComLinhaNoAno.length > 0) {
+    const { data: anteriores } = await supabase
+      .from("colaboradores_salarios")
+      .select("colaborador_id")
+      .eq("tenant_id", tenantId)
+      .in("colaborador_id", colabsComLinhaNoAno)
+      .lt("data_inicio", `${folha.ano}-01-01`);
+    const temAnterior = new Set(
+      (anteriores ?? []).map((r) => r.colaborador_id),
+    );
+    for (const id of colabsComLinhaNoAno) {
+      if (temAnterior.has(id)) reajusteNoAnoSet.add(id);
+    }
+  }
   const adiantadoPorColab = new Map<string, number>();
   for (const a of adiantamentos ?? []) {
     adiantadoPorColab.set(
