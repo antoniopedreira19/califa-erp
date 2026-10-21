@@ -214,7 +214,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 192 | [A IA lê o PDF logo que ele é anexado à PP e pré-preenche tipo, número e os dados da NF, com o selo "IA" e editável](192-ia-le-o-anexo-da-pp-ao-anexar.md) | 2026-10-19 |
 | 193 | [A conta ou o PIX do titular da verba: automático pelo cadastro quando ele tem, digitado na PP quando não tem](193-conta-ou-pix-do-titular-da-verba.md) | 2026-10-19 |
 | 194 | *Reservada* — a nota depois do pagamento: PP enviada com o orçamento, "Nota pendente" e "Anexar a nota" | 2026-10-20 |
-| 195 | *Reservada* — conciliação com o banco (task 029, fase 1): as planilhas de títulos e o Extrato nas mesmas colunas | 2026-10-21 |
+| 195 | [As planilhas de títulos e o Extrato nas mesmas colunas: Conciliação › Títulos, Contas a Pagar, Contas a Receber e Impostos a Pagar (revê a 091 e a 140)](195-planilhas-de-titulos-e-extrato-nas-mesmas-colunas.md) | 2026-10-21 |
 | 196 | *Reservada* — conciliação com o banco (task 029, fase 2): o popup de baixa (PIX padrão, caixas, juros e multa no boleto, avisos) | 2026-10-21 |
 | 197 | *Reservada* — conciliação com o banco (task 029, fase 2): o cartão (fatura escolhida na baixa, lote no cartão, novo layout da fatura) | 2026-10-21 |
 | 198 | *Reservada* — conciliação com o banco (task 029, fase 3): a importação do extrato OFX | 2026-10-21 |
