@@ -7897,3 +7897,35 @@ os arquivos da frente do Antonio.
     `freelancers_lookup` (2), da frente do Antonio.
   - Na home, o `created_at` é comparado com `"…T00:00:00"` sem fuso, e o mês
     de cadastros começa às 21h do último dia do mês anterior. Só registro.
+
+## ⚠️ Nota de 2026-10-21 (2) — o PDF da NF emitida só para administrador e financeiro
+
+- **Por quê:** o bucket `faturamentos-nf` (PDF da NF do Contas a Receber)
+  pedia só que a pessoa fosse do tenant, para abrir, anexar e apagar. A tela
+  esconde a NF de quem não tem o menu Financeiro, mas o banco não escondia:
+  com o próprio login e o console do navegador, RH, gerente de projeto,
+  produtor e freelancer (87 pessoas ativas) listavam, baixavam e podiam
+  apagar os 20 PDFs. O Tiago autorizou em 21/10/2026.
+- **O que mudou:** migration `20261021500001_faturamentos_nf_storage_so_admin_e_financeiro.sql`.
+  As três policies do bucket passam a pedir `is_tenant_admin` ou
+  `is_tenant_financeiro` do tenant da pasta, a mesma regra do bucket
+  `impostos`. Nenhum código mudou: `uploadNfPdf`, `urlAnexoNf` e
+  `abrirDocumentoDoLancamento` já eram só de administrador e financeiro, e
+  nenhuma tela do job abre o PDF da NF.
+- **Conferido:**
+  - **Banco** (`authenticated`, `begin read only`): administrador e
+    financeiro veem os 20 PDFs e passam nas regras de anexar e apagar. RH,
+    gerente de projeto, produtor e freelancer veem 0 e são recusados ao
+    anexar. Os buckets `fornecedores` e `envios-faturamento` seguem como
+    estavam.
+  - **API real do Storage**, com os logins de teste de produtor, freelancer
+    e GP: a lista do bucket volta vazia e o link assinado de uma NF do
+    TES-1013/26 é recusado ("Object not found"). Os dois buckets de controle
+    continuam listando. As sessões foram encerradas.
+  - **Não conferido na tela como administrador ou financeiro:** não há login
+    de teste desses papéis. A regra deles é a mesma do `impostos`, que já
+    está em uso.
+- **Fica como está:** a tabela `faturamentos` (Task 016) continua mostrando
+  número e valor das notas a quem tem acesso à empresa. A declaração do
+  Simples (`fornecedores`) e o anexo da PO (`envios-faturamento`) aguardam a
+  decisão do Tiago.
