@@ -284,11 +284,31 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                 />
               </th>
               <th className="px-4 py-3 text-center font-medium">Avos</th>
-              <th className="px-4 py-3 text-right font-medium">1ª parc</th>
-              <th className="px-4 py-3 text-right font-medium">2ª parc</th>
-              <th className="px-4 py-3 text-right font-medium">INSS</th>
-              <th className="px-4 py-3 text-right font-medium">IRRF</th>
-              <th className="px-4 py-3 text-right font-medium">Líquido</th>
+              <th
+                className="px-4 py-3 text-right font-medium"
+                title="1ª parcela — paga em 30/11, sem descontos"
+              >
+                1ª parc
+              </th>
+              <th
+                className="px-4 py-3 text-right font-medium"
+                title="INSS descontado da 2ª parcela"
+              >
+                INSS
+              </th>
+              <th
+                className="px-4 py-3 text-right font-medium"
+                title="IRRF descontado da 2ª parcela"
+              >
+                IRRF
+              </th>
+              <th
+                className="px-4 py-3 text-right font-medium"
+                title="2ª parcela líquida — valor efetivamente pago em 20/12 (bruto menos INSS menos IRRF)"
+              >
+                2ª parc líq
+              </th>
+              <th className="px-4 py-3 text-right font-medium">Total líquido</th>
               <th className="px-4 py-3 text-center font-medium w-10"></th>
             </tr>
           </thead>
@@ -368,14 +388,16 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                     <td className="px-4 py-3 text-right tabular-nums">
                       {brl.format(l.primeira_parcela)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {brl.format(l.segunda_parcela)}
-                    </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
                       {brl.format(l.desconto_inss)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
                       {brl.format(l.desconto_irrf)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {brl.format(
+                        l.segunda_parcela - l.desconto_inss - l.desconto_irrf,
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-california-red">
                       {brl.format(l.total_liquido)}
@@ -407,14 +429,18 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                         <td className="px-4 py-2 text-right tabular-nums">
                           {brl.format(l.parte_clt!.primeira_parcela)}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">
-                          {brl.format(l.parte_clt!.segunda_parcela)}
-                        </td>
                         <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
                           {brl.format(l.parte_clt!.desconto_inss)}
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
                           {brl.format(l.parte_clt!.desconto_irrf)}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {brl.format(
+                            l.parte_clt!.segunda_parcela -
+                              l.parte_clt!.desconto_inss -
+                              l.parte_clt!.desconto_irrf,
+                          )}
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums font-medium">
                           {brl.format(l.parte_clt!.total_liquido)}
@@ -435,14 +461,14 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                         <td className="px-4 py-2 text-right tabular-nums">
                           {brl.format(l.parte_pj!.primeira_parcela)}
                         </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                          —
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                          —
+                        </td>
                         <td className="px-4 py-2 text-right tabular-nums">
                           {brl.format(l.parte_pj!.segunda_parcela)}
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                          —
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                          —
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums font-medium">
                           {brl.format(l.parte_pj!.total_liquido)}

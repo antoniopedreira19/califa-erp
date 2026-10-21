@@ -63,13 +63,16 @@ function adicionarAba(wb: ExcelJS.Workbook, cfg: AbaConfig): void {
     "Salário",
     "Meses",
     "Total Adiantado",
-    "1ª parc 30/11",
-    "2ª parc 20/12",
+    "1ª parc 30/11 (sem desconto)",
   ];
   const headerDescontos = cfg.comDescontos
     ? ["Desconto INSS", "Desconto IRRF"]
     : [];
-  const headerFim = ["Total à pagar", "Obs."];
+  const headerFim = [
+    "2ª parc 20/12 (líquida)",
+    "Total líquido do 13º",
+    "Obs.",
+  ];
   const header = [...headerBase, ...headerDescontos, ...headerFim];
 
   ws.addRow(header);
@@ -77,6 +80,7 @@ function adicionarAba(wb: ExcelJS.Workbook, cfg: AbaConfig): void {
   ws.views = [{ state: "frozen", ySplit: 1 }];
 
   cfg.linhas.forEach((l, idx) => {
+    const segundaLiquida = l.segunda_parcela - l.desconto_inss - l.desconto_irrf;
     const base = [
       idx + 1,
       l.snapshot_nome,
@@ -87,63 +91,64 @@ function adicionarAba(wb: ExcelJS.Workbook, cfg: AbaConfig): void {
       l.avos,
       l.total_adiantado,
       l.primeira_parcela,
-      l.segunda_parcela,
     ];
     const descontos = cfg.comDescontos
       ? [l.desconto_inss, l.desconto_irrf]
       : [];
-    const fim = [l.total_liquido, l.obs ?? ""];
+    const fim = [segundaLiquida, l.total_liquido, l.obs ?? ""];
     ws.addRow([...base, ...descontos, ...fim]);
   });
 
   // Linha de totais
   if (cfg.linhas.length > 0) {
-    const totalRow: (string | number)[] = ["", "TOTAL", "", "", "", "", "", 0, 0, 0];
-    const idxSalario = 5; // F
-    const idxTotalAdiantado = 7; // H (0-based 7 → coluna 8)
+    const totalRow: (string | number)[] = ["", "TOTAL", "", "", "", 0, "", 0, 0];
+    const idxSalario = 5;
+    const idxTotalAdiantado = 7;
     const idxPrimeira = 8;
-    const idxSegunda = 9;
     const totalSalario = cfg.linhas.reduce((a, l) => a + l.snapshot_salario, 0);
     const totalAdiantado = cfg.linhas.reduce((a, l) => a + l.total_adiantado, 0);
     const total1a = cfg.linhas.reduce((a, l) => a + l.primeira_parcela, 0);
-    const total2a = cfg.linhas.reduce((a, l) => a + l.segunda_parcela, 0);
+    const total2aLiq = cfg.linhas.reduce(
+      (a, l) => a + (l.segunda_parcela - l.desconto_inss - l.desconto_irrf),
+      0,
+    );
     totalRow[idxSalario] = totalSalario;
     totalRow[idxTotalAdiantado] = totalAdiantado;
     totalRow[idxPrimeira] = total1a;
-    totalRow[idxSegunda] = total2a;
     if (cfg.comDescontos) {
       const totalInss = cfg.linhas.reduce((a, l) => a + l.desconto_inss, 0);
       const totalIrrf = cfg.linhas.reduce((a, l) => a + l.desconto_irrf, 0);
       totalRow.push(totalInss, totalIrrf);
     }
     const totalLiquido = cfg.linhas.reduce((a, l) => a + l.total_liquido, 0);
-    totalRow.push(totalLiquido, "");
+    totalRow.push(total2aLiq, totalLiquido, "");
     const addedTotal = ws.addRow(totalRow);
     addedTotal.font = { bold: true };
   }
 
   // Formatação de colunas
-  const colSalario = ws.getColumn(6);
-  colSalario.numFmt = BRL;
-  colSalario.width = 14;
   ws.getColumn(5).numFmt = DATA; // Data de Início
   ws.getColumn(5).width = 12;
+  ws.getColumn(6).numFmt = BRL; // Salário
+  ws.getColumn(6).width = 14;
   ws.getColumn(8).numFmt = BRL; // Total Adiantado
   ws.getColumn(8).width = 14;
   ws.getColumn(9).numFmt = BRL; // 1ª parc
-  ws.getColumn(9).width = 14;
-  ws.getColumn(10).numFmt = BRL; // 2ª parc
-  ws.getColumn(10).width = 14;
+  ws.getColumn(9).width = 16;
   if (cfg.comDescontos) {
-    ws.getColumn(11).numFmt = BRL;
+    ws.getColumn(10).numFmt = BRL; // INSS
+    ws.getColumn(10).width = 14;
+    ws.getColumn(11).numFmt = BRL; // IRRF
     ws.getColumn(11).width = 14;
-    ws.getColumn(12).numFmt = BRL;
-    ws.getColumn(12).width = 14;
+    ws.getColumn(12).numFmt = BRL; // 2ª parc líquida
+    ws.getColumn(12).width = 16;
     ws.getColumn(13).numFmt = BRL; // Total líquido
-    ws.getColumn(13).width = 16;
+    ws.getColumn(13).width = 18;
   } else {
-    ws.getColumn(11).numFmt = BRL;
-    ws.getColumn(11).width = 16;
+    ws.getColumn(10).numFmt = BRL; // 2ª parc líquida
+    ws.getColumn(10).width = 16;
+    ws.getColumn(11).numFmt = BRL; // Total líquido
+    ws.getColumn(11).width = 18;
   }
 
   ws.getColumn(1).width = 5; // #
