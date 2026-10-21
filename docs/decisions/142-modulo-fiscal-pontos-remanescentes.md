@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-03
 **Decidido por:** Tiago ("Faça os pontos remanescentes", 03/10/2026)
-**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração e a nota do Simples saem do cadastro rápido, o regime normal vira "Lucro Real ou Presumido", o financeiro ganha Fornecedores, Clientes e Veículos, e na aprovação da PP a retenção começa desligada e avisa que só vale para serviço)
+**Status:** aceita — entregue em 03/10/2026; revisada em 07/10/2026 (§5: a declaração e a nota do Simples saem do cadastro rápido, o regime normal vira "Lucro Real ou Presumido", o financeiro ganha Fornecedores, Clientes e Veículos, e na aprovação da PP a retenção começa desligada e avisa que só vale para serviço); revisada em 21/10/2026 (§6: quem abre, anexa e apaga o arquivo da declaração)
 **Migration:** `20261002100800_fiscal_fornecedor_consulta_e_declaracao.sql`
 (aditiva: duas colunas anuláveis em `fornecedores` e o bucket privado
 `fornecedores`)
@@ -199,3 +199,36 @@ exigiria migration. Ficou o aviso fixo.
 - `/clientes/novo` e `/cadastros/veiculos` carregam sem erro;
 - `npm run test:permissoes`: 40 de 42. As 2 falhas são as do RH, que já
   existiam.
+
+## 6. Revisão de 21/10/2026 — quem abre, anexa e apaga o arquivo da declaração
+
+**Decidido por:** Tiago, depois do levantamento de quem lia os arquivos do
+Storage.
+
+**O que motivou.** As três policies do bucket `fornecedores` pediam só que a
+pessoa fosse do tenant (o §5 registrou "a RLS do bucket já liberava qualquer
+membro"). Com isso, qualquer login, inclusive o RH, listava, anexava e
+apagava declarações pelo console do navegador, sem passar por tela nenhuma.
+
+| Ação | Quem pode |
+|---|---|
+| Abrir | Quem cadastra fornecedor: administrador e financeiro pela ficha, gerente de projeto, produtor e freelancer pelo cadastro rápido e pelo lápis da PP. O RH não. |
+| Anexar | Os mesmos cinco papéis. A reserva do arquivo (`reservarArquivoDaDeclaracao`) já aceitava esses papéis. |
+| Apagar | Só administrador e financeiro. |
+
+- **Migrations:** `20261021500002_storage_declaracao_e_po_por_papel.sql` e
+  `20261021500003_declaracao_simples_apagar_so_admin_e_financeiro.sql`. A
+  segunda tira uma exceção da primeira, que deixava a produção apagar o
+  arquivo que ela mesma subiu e que nenhum fornecedor aponta. Essa exceção
+  alcançava também o arquivo já gravado e depois tirado do cadastro, que
+  fica no bucket como comprovante (§2), como os da Dome e da Alecal (§5).
+- **Na tela, nada muda.** A produção continua sem o campo da declaração no
+  cadastro rápido e no lápis da PP (§5). Se o campo voltar para ela, o ✕
+  antes de salvar não apaga o arquivo solto, que fica no bucket.
+- **Conferido:** como `authenticated`, administrador e financeiro veem as 3
+  declarações, anexam e apagam; gerente de projeto, produtor e freelancer
+  veem e anexam, mas não apagam; o RH não vê nem anexa. Pela API real do
+  Storage, os logins de teste de produtor, freelancer e GP anexaram um PDF
+  de teste e não conseguiram apagá-lo. Os arquivos de teste foram
+  retirados pelo acesso de serviço, e o bucket voltou aos 3 arquivos.
+

@@ -105,3 +105,30 @@ não tem valor próprio, acompanha.
   reabrir.
 - **Não emitido:** nenhuma NF real saiu da tela nesta conferência; a
   emissão com o CNPJ foi conferida no banco (transação desfeita).
+
+## 6. Revisão de 21/10/2026 — quem anexa e apaga o arquivo da PO
+
+**Decidido por:** Tiago: o envio para faturamento é do gerente de projeto
+ou do administrador.
+
+**O que motivou.** As policies do bucket `envios-faturamento` pediam só que a
+pessoa fosse do tenant para abrir, anexar e apagar. Qualquer login podia,
+pelo console do navegador, anexar arquivos na pasta de um job e apagar a PO
+já enviada ao financeiro.
+
+| Ação | Quem pode |
+|---|---|
+| Abrir | Qualquer membro do tenant, como antes. O "Ver envio" do job aparece para todo papel, e o Contas a Receber mostra o anexo ao financeiro. |
+| Anexar | Administrador e gerente de projeto, os mesmos do botão (`jobs.enviar_faturamento`). |
+| Apagar | Administrador e gerente de projeto, e só enquanto nenhum envio aponta o arquivo, ou seja, o ✕ do formulário antes de enviar. Depois do envio, ninguém apaga. |
+
+- **Migration:** `20261021500002_storage_declaracao_e_po_por_papel.sql`.
+  "Envio aponta o arquivo" se lê em `jobs_envio_faturamento_anexos.path`.
+- **Na tela, nada muda.**
+- **Conferido:** como `authenticated`, os seis papéis abrem a PO; só
+  administrador e GP passam na regra de anexar; ninguém passa na de apagar
+  a PO enviada do TES-1013/26. Pela API real do Storage: o login de teste
+  do GP anexou e apagou um PDF de teste na pasta do TES-1013/26, e os de
+  produtor e freelancer foram recusados ao anexar. Os três tentaram apagar
+  a PO enviada, e ela continua no bucket.
+

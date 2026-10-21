@@ -6224,3 +6224,16 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   - 2 reais já no financeiro, em avaliação (PP-00283 do ANI-1013/26 e
     PP-00284 do DEE-1001/26, 19/10 às 21h12 e 21h21; impresso 20/10): só
     mudam com o OK do Tiago.
+
+## ⚠️ Nota de 2026-10-21 (2) — o anexo da PO: só GP e administrador anexam; enviada, ninguém apaga (revisão da decisão 123)
+
+- **Por quê:** o bucket `envios-faturamento` pedia só que a pessoa fosse do
+  tenant para abrir, anexar e apagar. Qualquer login podia apagar a PO já
+  enviada ao financeiro pelo console do navegador.
+- **O que mudou:** migration `20261021500002`. Abrir continua com qualquer
+  membro (o "Ver envio" aparece para todo papel). Anexar: administrador e
+  gerente de projeto, os mesmos do botão. Apagar: os mesmos, e só antes de
+  enviar (enquanto `jobs_envio_faturamento_anexos` não aponta o arquivo).
+  Regras e conferência na decisão 123 §6. No código, só um comentário em
+  `enviar-faturamento-dialog.tsx`.
+- **Na tela, nada muda.**

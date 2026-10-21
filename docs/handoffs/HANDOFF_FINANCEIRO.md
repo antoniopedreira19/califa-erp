@@ -7929,3 +7929,17 @@ os arquivos da frente do Antonio.
   número e valor das notas a quem tem acesso à empresa. A declaração do
   Simples (`fornecedores`) e o anexo da PO (`envios-faturamento`) aguardam a
   decisão do Tiago.
+
+## ⚠️ Nota de 2026-10-21 (3) — a declaração do Simples: quem abre, anexa e apaga (revisão da decisão 142)
+
+- **Por quê:** o bucket `fornecedores` pedia só que a pessoa fosse do
+  tenant. Qualquer login, inclusive o RH, listava, anexava e apagava
+  declarações pelo console do navegador.
+- **O que mudou:** migrations `20261021500002` e `20261021500003`. Abrir e
+  anexar: quem cadastra fornecedor (administrador, financeiro, gerente de
+  projeto, produtor e freelancer). Apagar: só administrador e financeiro,
+  porque o arquivo tirado do cadastro fica no bucket como comprovante
+  (decisão 142 §2). Regras e conferência na decisão 142 §6. Só comentários
+  mudaram no código (`fornecedores/actions.ts`).
+- **Na tela, nada muda:** a produção continua sem o campo da declaração no
+  cadastro rápido e no lápis da PP (decisão 142 §5).

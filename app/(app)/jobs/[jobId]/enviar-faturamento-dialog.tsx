@@ -617,6 +617,8 @@ export function EnviarFaturamentoDialog({
     );
   }
 
+  // A policy do bucket deixa apagar só enquanto nenhum envio aponta o
+  // arquivo (21/10/2026): depois de enviada, a PO não sai mais.
   async function removerAnexo(id: string) {
     const alvo = anexos.find((a) => a.id === id);
     setAnexos((atuais) => atuais.filter((a) => a.id !== id));
