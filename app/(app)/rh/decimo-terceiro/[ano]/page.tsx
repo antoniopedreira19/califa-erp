@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { pode } from "@/lib/permissoes";
 import { recalcularFolhaDecimoTerceiro } from "../actions";
 import { TabelaLinhas, type LinhaRow } from "./tabela-linhas";
+import { BotaoExportar } from "./botao-exportar";
 
 export const dynamic = "force-dynamic";
 
@@ -148,17 +149,20 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
         description={`${totalLinhas} ${totalLinhas === 1 ? "colaborador" : "colaboradores"} na folha. Clique numa linha para editar o cálculo.`}
         icon={Gift}
         actions={
-          podeEditar ? (
-            <form action={recalcular}>
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted transition-colors"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Recalcular folha
-              </button>
-            </form>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <BotaoExportar folhaId={folha.id} />
+            {podeEditar && (
+              <form action={recalcular}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Recalcular folha
+                </button>
+              </form>
+            )}
+          </div>
         }
       />
 

@@ -7,6 +7,10 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import { calcularLinhaDecimoTerceiro } from "@/lib/decimo-terceiro/calc";
+import {
+  gerarXlsxFolhaDecimoTerceiro,
+  type LinhaExport,
+} from "@/lib/decimo-terceiro/export-xlsx";
 import type { TipoContratacao } from "@/lib/types";
 
 export type ActionResult<T = Record<string, never>> =
@@ -463,4 +467,94 @@ export async function recalcularFolhaDecimoTerceiro(
   revalidatePath(`/rh/decimo-terceiro/${folha.ano}`);
 
   return { ok: true, total_recalculadas: total };
+}
+
+// ----------------- Exportar XLSX -----------------
+
+export async function exportarFolhaDecimoTerceiroXlsx(
+  folhaId: string,
+): Promise<ActionResult<{ filename: string; base64: string }>> {
+  const session = await requireSession();
+  if (!pode(session.activeRole, "rh.decimo_terceiro.ver")) {
+    return { ok: false, message: "Sem permissão para esta ação." };
+  }
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: folha, error: errFolha } = await supabase
+    .from("decimo_terceiro_folhas")
+    .select("id, ano")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (errFolha || !folha) {
+    return { ok: false, message: "Folha não encontrada." };
+  }
+
+  const { data: linhasRaw, error: errLinhas } = await supabase
+    .from("decimo_terceiro_linhas")
+    .select(
+      `snapshot_nome, snapshot_tipo_contratacao, snapshot_data_admissao,
+       snapshot_salario, avos, total_adiantado, primeira_parcela,
+       segunda_parcela, desconto_inss, desconto_irrf, total_liquido, obs,
+       empresa:empresas!snapshot_empresa_id(nome)`,
+    )
+    .eq("folha_id", folhaId)
+    .eq("tenant_id", tenantId)
+    .order("snapshot_nome", { ascending: true });
+  if (errLinhas) {
+    return { ok: false, message: `Falha ao buscar linhas: ${errLinhas.message}` };
+  }
+
+  type EmpresaEmbed = { nome: string } | { nome: string }[] | null;
+  interface LinhaRaw {
+    snapshot_nome: string;
+    snapshot_tipo_contratacao: string;
+    snapshot_data_admissao: string;
+    snapshot_salario: string;
+    avos: number;
+    total_adiantado: string;
+    primeira_parcela: string;
+    segunda_parcela: string;
+    desconto_inss: string;
+    desconto_irrf: string;
+    total_liquido: string;
+    obs: string | null;
+    empresa: EmpresaEmbed;
+  }
+
+  const linhas: LinhaExport[] = ((linhasRaw ?? []) as LinhaRaw[]).map((l) => {
+    const empresa = Array.isArray(l.empresa) ? l.empresa[0] : l.empresa;
+    return {
+      snapshot_nome: l.snapshot_nome,
+      snapshot_empresa_nome: empresa?.nome ?? null,
+      snapshot_tipo_contratacao: l.snapshot_tipo_contratacao as TipoContratacao,
+      snapshot_data_admissao: l.snapshot_data_admissao,
+      snapshot_salario: Number(l.snapshot_salario),
+      avos: l.avos,
+      total_adiantado: Number(l.total_adiantado),
+      primeira_parcela: Number(l.primeira_parcela),
+      segunda_parcela: Number(l.segunda_parcela),
+      desconto_inss: Number(l.desconto_inss),
+      desconto_irrf: Number(l.desconto_irrf),
+      total_liquido: Number(l.total_liquido),
+      obs: l.obs,
+    };
+  });
+
+  const buffer = await gerarXlsxFolhaDecimoTerceiro(folha.ano, linhas);
+
+  await logAuditEvent({
+    acao: "decimo_terceiro.folha.exportada",
+    tenantId,
+    entidadeTipo: "decimo_terceiro_folha",
+    entidadeId: folhaId,
+    metadata: { ano: folha.ano, total_linhas: linhas.length },
+  });
+
+  return {
+    ok: true,
+    filename: `13-salario-${folha.ano}.xlsx`,
+    base64: buffer.toString("base64"),
+  };
 }
