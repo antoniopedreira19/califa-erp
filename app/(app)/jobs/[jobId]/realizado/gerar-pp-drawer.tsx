@@ -386,7 +386,10 @@ export function GerarPPDrawer({
   /** O valor que a PP gerada tem hoje: ela já está em "Em PPs emitidas". */
   const valorAntesDaEdicao = ppGeradaEditando ? Number(ppGeradaEditando.valor) : 0;
   const router = useRouter();
-  const [pending, startTransition] = React.useTransition();
+  const [transitionPending, startTransition] = React.useTransition();
+  // React 18 não mantém a transição pendente depois do await da action.
+  const [salvando, setSalvando] = React.useState(false);
+  const pending = transitionPending || salvando;
 
   const [ppId, setPpId] = React.useState<string | null>(null);
   const [uploadPrefix, setUploadPrefix] = React.useState<string | null>(null);
@@ -1056,7 +1059,10 @@ export function GerarPPDrawer({
   /** As checagens do formulário. Devolve false e escreve o erro. */
   function validar(): boolean {
     setErro(null);
-    if (!ppId || !itemRealizadoId) return false;
+    if (!ppId || !itemRealizadoId) {
+      setErro("Não foi possível preparar a PP. Feche o formulário e tente novamente.");
+      return false;
+    }
     if (verbaProducao && !titularTerceiro && !titularId) {
       setErro(reembolso ? "Escolha o titular do reembolso." : "Escolha o titular da verba.");
       return false;
@@ -1264,6 +1270,7 @@ export function GerarPPDrawer({
     // render depois — clique duplo rápido passa pelo disabled=pending).
     if (submittingRef.current) return;
     submittingRef.current = true;
+    setSalvando(true);
 
     startTransition(async () => {
       try {
@@ -1283,8 +1290,11 @@ export function GerarPPDrawer({
         abortedRef.current = true;
         onSuccess?.(gerar ? "revisar" : "salva", res.id);
         onOpenChange(false);
+      } catch {
+        setErro("Não foi possível confirmar o salvamento da PP. Confira sua conexão e tente novamente. Os dados preenchidos continuam neste formulário.");
       } finally {
         submittingRef.current = false;
+        setSalvando(false);
       }
     });
   }
@@ -1377,6 +1387,21 @@ export function GerarPPDrawer({
 
   /** Falta escolher quem recebe: o fornecedor ou o titular. */
   const faltaQuemRecebe = verbaProducao && !titularTerceiro ? !titularId : !fornecedorId;
+  // O motivo precisa aparecer mesmo sem submit: um botão disabled não
+  // dispara validação, e a escolha do pagamento pode estar fora da tela.
+  const pendenciaParaSalvar = faltaQuemRecebe
+    ? verbaProducao && !titularTerceiro
+      ? reembolso ? "Escolha o titular do reembolso." : "Escolha o titular da verba."
+      : "Escolha um fornecedor."
+    : usaFornecedor && pagamento.semCadastro && (pagamento.escolha === null || pagamento.escolha === "cadastro")
+      ? problemaDoPagamento(pagamento)
+      : null;
+  const avisoDeEspera = !ppId
+    ? "Preparando a PP. Aguarde para salvar ou gerar."
+    : anexos.some((a) => a.status === "uploading" || a.status === "selecionado")
+      ? "Aguarde os uploads terminarem antes de salvar ou gerar a PP."
+      : null;
+  const avisoDoFormulario = erro ?? avisoDeEspera ?? pendenciaParaSalvar;
 
   if (!open || !itemRealizadoId) return null;
 
@@ -1600,7 +1625,7 @@ export function GerarPPDrawer({
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col flex-1 overflow-hidden" aria-busy={salvando}>
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
             {/* Reemitindo uma PP rejeitada: o motivo no topo (decisão 153;
                 "Editar e Reemitir PP" desde 19/10/2026). */}
@@ -1625,15 +1650,6 @@ export function GerarPPDrawer({
                 Esta PP está pronta para envio. Ao salvar, a marca sai e os documentos precisam ser conferidos de novo.
               </div>
             )}
-            {erro && (
-              <div className="flex items-start justify-between gap-2 rounded border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
-                <span>{erro}</span>
-                <button type="button" onClick={() => setErro(null)}>
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">Item</p>
               <p className="font-medium">{itemDescricao}</p>
@@ -2226,10 +2242,8 @@ export function GerarPPDrawer({
                   );
                 })}
               </div>
-              {/* A mensagem de erro do formulário fica no topo, e depois da
-                  rolagem até aqui ela some de vista: quem tenta gerar sem
-                  responder via só a borda vermelha, sem o motivo
-                  (17/09/2026). */}
+              {/* O aviso local acompanha a pergunta; o erro geral fica
+                  sempre visível junto dos botões, fora da rolagem. */}
               {faltaResposta && (
                 <span className="text-[11.5px] font-semibold text-california-red">
                   Responda se esta é a última PP deste item.
@@ -2243,6 +2257,27 @@ export function GerarPPDrawer({
             </div>
 
           </div>
+
+          {/* Fora da rolagem: uma validação não pode parecer um clique
+              sem resposta quando a pessoa já chegou ao fim do formulário. */}
+          {avisoDoFormulario && (
+            <div
+              role={erro || !avisoDeEspera ? "alert" : "status"}
+              className={cn(
+                "mx-6 mt-3 flex max-h-[25vh] shrink-0 items-start justify-between gap-2 overflow-y-auto rounded border p-3 text-sm",
+                erro || !avisoDeEspera
+                  ? "border-california-red/40 bg-california-red/5 text-california-red"
+                  : "border-border bg-muted/30 text-muted-foreground",
+              )}
+            >
+              <span>{avisoDoFormulario}</span>
+              {erro && (
+                <button type="button" aria-label="Dispensar aviso" onClick={() => setErro(null)} className="shrink-0">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Salvar guarda a PP a emitir; Gerar PP salva e o painel abre a
               revisão antes de gerar (Tiago, 06/10/2026). Os dois são de
@@ -2334,7 +2369,7 @@ export function GerarPPDrawer({
                     : "bg-california-red text-white hover:bg-california-red-hover disabled:opacity-50",
                 )}
               >
-                Gerar PP
+                {salvando ? "Salvando..." : "Gerar PP"}
               </button>
             </div>
             <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">
