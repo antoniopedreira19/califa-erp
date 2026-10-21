@@ -4879,7 +4879,11 @@ export interface ColaboradorFeriasLancamento {
 // apenas 'rascunho'; partes 3+ adicionam 'fechada_parcial_1',
 // 'fechada_parcial_2' e 'concluida'.
 
-export type DecimoTerceiroFolhaStatus = "rascunho";
+export type DecimoTerceiroFolhaStatus =
+  | "rascunho"
+  | "fechada_parcial_1"
+  | "fechada_parcial_2"
+  | "concluida";
 
 /** Folha de 13º do ano. Uma por (tenant, ano). Guarda só o cabeçalho;
  *  as linhas por colaborador ficam em DecimoTerceiroLinha. */
@@ -4913,9 +4917,12 @@ export interface DecimoTerceiroLinha {
   snapshot_funcao: string;
   snapshot_data_admissao: string;
   snapshot_salario: string;
+  /** Snapshot da parte PJ do salário (= valor_recibo). NULL quando não híbrido.
+   *  Pra híbrido: parte CLT = snapshot_salario - snapshot_valor_recibo. */
+  snapshot_valor_recibo: string | null;
   snapshot_empresa_id: string | null;
 
-  // Calculados
+  // Calculados (totais — soma de CLT + PJ quando híbrido)
   avos: number;
   total_adiantado: string;
   primeira_parcela: string;
@@ -4924,6 +4931,16 @@ export interface DecimoTerceiroLinha {
   desconto_irrf: string;
   total_bruto: string;
   total_liquido: string;
+
+  // Breakdown do híbrido (só preenchido quando snapshot_tipo_contratacao='clt_recibo')
+  parte_clt_primeira_parcela: string | null;
+  parte_clt_segunda_parcela: string | null;
+  parte_clt_desconto_inss: string | null;
+  parte_clt_desconto_irrf: string | null;
+  parte_clt_total_liquido: string | null;
+  parte_pj_primeira_parcela: string | null;
+  parte_pj_segunda_parcela: string | null;
+  parte_pj_total_liquido: string | null;
 
   // Override manual
   editado_manualmente: boolean;
