@@ -107,6 +107,24 @@ export async function criarFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar salários: ${errSal.message}` };
   }
 
+  // Query 2.5: adiantamentos do ano por colaborador (Parte 2).
+  const { data: adiantamentos, error: errAd } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("colaborador_id, valor")
+    .eq("tenant_id", tenantId)
+    .eq("ano", ano)
+    .in("colaborador_id", elegiveisIds);
+  if (errAd) {
+    return { ok: false, message: `Falha ao buscar adiantamentos: ${errAd.message}` };
+  }
+  const adiantadoPorColab = new Map<string, number>();
+  for (const a of adiantamentos ?? []) {
+    adiantadoPorColab.set(
+      a.colaborador_id,
+      (adiantadoPorColab.get(a.colaborador_id) ?? 0) + Number(a.valor),
+    );
+  }
+
   // Query 3: alocação vigente (empresa) — pega qualquer uma (a primeira
   // por created_at) por simplicidade da Parte 1. Rateio real fica pra
   // parte futura.
@@ -179,12 +197,13 @@ export async function criarFolhaDecimoTerceiro(
       c.valor_recibo != null && Number(c.valor_recibo) > 0
         ? Number(c.valor_recibo)
         : null;
+    const totalAdiantado = adiantadoPorColab.get(c.id) ?? 0;
     const calc = calcularLinhaDecimoTerceiro({
       salario: salarioNum,
       dataAdmissao: new Date(`${c.data_admissao}T00:00:00Z`),
       ano,
       tipoContratacao: c.tipo_contratacao,
-      totalAdiantado: 0,
+      totalAdiantado,
       valorRecibo: valorReciboNum,
     });
     const obsAuto = calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
@@ -201,7 +220,7 @@ export async function criarFolhaDecimoTerceiro(
       snapshot_valor_recibo: calc.parteClt ? valorReciboNum : null,
       snapshot_empresa_id: c.empresa_id,
       avos: calc.avos,
-      total_adiantado: 0,
+      total_adiantado: totalAdiantado,
       primeira_parcela: calc.primeiraParcela,
       segunda_parcela: calc.segundaParcela,
       desconto_inss: calc.descontoInss,
@@ -441,6 +460,17 @@ export async function recalcularFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar colaboradores: ${errCol.message}` };
   }
 
+  // Rebuscar adiantamentos do ano (Parte 2).
+  const { data: adiantamentos, error: errAd } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("colaborador_id, valor")
+    .eq("tenant_id", tenantId)
+    .eq("ano", folha.ano)
+    .in("colaborador_id", colabIds);
+  if (errAd) {
+    return { ok: false, message: `Falha ao buscar adiantamentos: ${errAd.message}` };
+  }
+
   const salPorColab = new Map(
     (salariosAtuais ?? []).map((s) => [s.colaborador_id, s.valor]),
   );
@@ -450,6 +480,13 @@ export async function recalcularFolhaDecimoTerceiro(
   const admissaoPorColab = new Map(
     (colabsAtuais ?? []).map((c) => [c.id, c.data_admissao]),
   );
+  const adiantadoPorColab = new Map<string, number>();
+  for (const a of adiantamentos ?? []) {
+    adiantadoPorColab.set(
+      a.colaborador_id,
+      (adiantadoPorColab.get(a.colaborador_id) ?? 0) + Number(a.valor),
+    );
+  }
 
   // Dispara os updates em paralelo (um por linha). Supabase JS não tem
   // bulk update com valores diferentes por linha; Promise.all vira ~2s
@@ -464,12 +501,13 @@ export async function recalcularFolhaDecimoTerceiro(
       const reciboRaw = reciboPorColab.get(l.colaborador_id);
       const valorReciboNum =
         reciboRaw != null && Number(reciboRaw) > 0 ? Number(reciboRaw) : null;
+      const totalAdiantado = adiantadoPorColab.get(l.colaborador_id) ?? 0;
       const calc = calcularLinhaDecimoTerceiro({
         salario: salarioNum,
         dataAdmissao: new Date(`${admissaoAtual}T00:00:00Z`),
         ano: folha.ano,
         tipoContratacao: l.snapshot_tipo_contratacao as TipoContratacao,
-        totalAdiantado: Number(l.total_adiantado),
+        totalAdiantado,
         valorRecibo: valorReciboNum,
       });
       const obsAuto =
@@ -481,6 +519,7 @@ export async function recalcularFolhaDecimoTerceiro(
           snapshot_valor_recibo: calc.parteClt ? valorReciboNum : null,
           snapshot_data_admissao: admissaoAtual,
           avos: calc.avos,
+          total_adiantado: totalAdiantado,
           primeira_parcela: calc.primeiraParcela,
           segunda_parcela: calc.segundaParcela,
           desconto_inss: calc.descontoInss,
@@ -789,4 +828,312 @@ async function fecharParcela(
   revalidatePath("/financeiro/contas-a-pagar");
 
   return { ok: true, total_linhas_geradas: linhasFolhaPagamento.length };
+}
+
+// ========================================================================
+// Parte 2 — Adiantamentos de 13º durante o ano
+// ========================================================================
+
+const LancarAdiantamentoInput = z.object({
+  ano: z.number().int().min(2020).max(2100),
+  colaborador_id: z.string().uuid(),
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+  valor: z.number().positive(),
+  obs: z.string().max(500).nullable(),
+});
+
+async function recalcularLinhaDeAdiantamento(
+  tenantId: string,
+  ano: number,
+  colaboradorId: string,
+  profileId: string,
+): Promise<void> {
+  const supabase = createClient();
+  const { data: folha } = await supabase
+    .from("decimo_terceiro_folhas")
+    .select("id, ano")
+    .eq("tenant_id", tenantId)
+    .eq("ano", ano)
+    .maybeSingle();
+  if (!folha) return;
+
+  const { data: linha } = await supabase
+    .from("decimo_terceiro_linhas")
+    .select(
+      "id, snapshot_tipo_contratacao, snapshot_data_admissao, snapshot_salario, snapshot_valor_recibo, salario_editado, avos_editado",
+    )
+    .eq("folha_id", folha.id)
+    .eq("colaborador_id", colaboradorId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!linha) return;
+
+  const { data: todosAd } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("valor")
+    .eq("tenant_id", tenantId)
+    .eq("ano", ano)
+    .eq("colaborador_id", colaboradorId);
+  const totalAdiantado = (todosAd ?? []).reduce(
+    (acc, a) => acc + Number(a.valor),
+    0,
+  );
+
+  const valorReciboNum =
+    linha.snapshot_valor_recibo != null
+      ? Number(linha.snapshot_valor_recibo)
+      : null;
+  const calc = calcularLinhaDecimoTerceiro({
+    salario: Number(linha.snapshot_salario),
+    dataAdmissao: new Date(`${linha.snapshot_data_admissao}T00:00:00Z`),
+    ano,
+    tipoContratacao: linha.snapshot_tipo_contratacao as TipoContratacao,
+    totalAdiantado,
+    salarioEditado:
+      linha.salario_editado != null ? Number(linha.salario_editado) : null,
+    avosEditado: linha.avos_editado,
+    valorRecibo: valorReciboNum,
+  });
+
+  await supabase
+    .from("decimo_terceiro_linhas")
+    .update({
+      total_adiantado: totalAdiantado,
+      primeira_parcela: calc.primeiraParcela,
+      segunda_parcela: calc.segundaParcela,
+      desconto_inss: calc.descontoInss,
+      desconto_irrf: calc.descontoIrrf,
+      total_bruto: calc.totalBruto,
+      total_liquido: calc.totalLiquido,
+      parte_clt_primeira_parcela: calc.parteClt?.primeiraParcela ?? null,
+      parte_clt_segunda_parcela: calc.parteClt?.segundaParcela ?? null,
+      parte_clt_desconto_inss: calc.parteClt?.descontoInss ?? null,
+      parte_clt_desconto_irrf: calc.parteClt?.descontoIrrf ?? null,
+      parte_clt_total_liquido: calc.parteClt?.totalLiquido ?? null,
+      parte_pj_primeira_parcela: calc.partePj?.primeiraParcela ?? null,
+      parte_pj_segunda_parcela: calc.partePj?.segundaParcela ?? null,
+      parte_pj_total_liquido: calc.partePj?.totalLiquido ?? null,
+      updated_by: profileId,
+    })
+    .eq("id", linha.id)
+    .eq("tenant_id", tenantId);
+}
+
+export async function lancarAdiantamentoDecimoTerceiro(input: {
+  ano: number;
+  colaborador_id: string;
+  data: string;
+  valor: number;
+  obs: string | null;
+}): Promise<ActionResult<{ id: string; conta_avulsa_id: string | null }>> {
+  const session = await requireSession();
+  if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
+    return { ok: false, message: "Sem permissão para esta ação." };
+  }
+  const parsed = LancarAdiantamentoInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Dados inválidos." };
+  }
+  const { ano, colaborador_id, data, valor, obs } = parsed.data;
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: colab } = await supabase
+    .from("colaboradores")
+    .select("id, nome, tipo_contratacao")
+    .eq("id", colaborador_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!colab) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+
+  // Empresa alocada vigente
+  const { data: alocRaw } = await supabase
+    .from("colaboradores_alocacoes")
+    .select("empresa_id, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("colaborador_id", colaborador_id)
+    .is("data_fim", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const empresaId = alocRaw?.[0]?.empresa_id;
+  if (!empresaId) {
+    return {
+      ok: false,
+      message:
+        "Colaborador sem empresa alocada — lançamento no financeiro não é possível.",
+    };
+  }
+
+  // Plano de contas
+  const { data: tipoRow } = await supabase
+    .from("plano_contas_tipos")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("nome", "Despesa com Pessoal")
+    .maybeSingle();
+  if (!tipoRow) {
+    return {
+      ok: false,
+      message: "Plano de contas 'Despesa com Pessoal' não configurado.",
+    };
+  }
+  const { data: subtipoRow } = await supabase
+    .from("plano_contas_subtipos")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("tipo_id", tipoRow.id)
+    .eq("codigo", "004")
+    .maybeSingle();
+  if (!subtipoRow) {
+    return { ok: false, message: "Subtipo '13° Salário' não configurado." };
+  }
+
+  // 1) Insert do adiantamento
+  const { data: adiantInserido, error: errAd } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .insert({
+      tenant_id: tenantId,
+      ano,
+      colaborador_id,
+      data,
+      valor,
+      obs,
+      created_by: session.profile.id,
+    })
+    .select("id")
+    .single();
+  if (errAd || !adiantInserido) {
+    return {
+      ok: false,
+      message: `Falha ao registrar adiantamento: ${errAd?.message ?? "sem retorno"}`,
+    };
+  }
+  const adiantamentoId = adiantInserido.id;
+
+  // 2) Cria conta_avulsa via service client (RH não tem permissão direta
+  // mas o adiantamento de 13º é responsabilidade do RH).
+  const { createServiceClient } = await import("@/lib/supabase/server");
+  const service = createServiceClient();
+
+  const { data: codigo } = await service.rpc("gerar_codigo_avulsa", {
+    p_tenant_id: tenantId,
+  });
+
+  const dataBr = data.split("-").reverse().join("/");
+  const { data: contaId, error: errAvulsa } = await service.rpc(
+    "criar_conta_avulsa",
+    {
+      p_dados: {
+        tenant_id: tenantId,
+        empresa_id: empresaId,
+        codigo: (codigo as string | null) ?? null,
+        descricao: `13º Adiantamento · ${colab.nome} · ${dataBr}`,
+        valor: valor.toFixed(2),
+        natureza: "saida",
+        status: "aprovada",
+        data_prevista_pagamento: data,
+        data_pagamento: data,
+        data_pagamento_primeira: data,
+        plano_conta_tipo_id: tipoRow.id,
+        plano_conta_subtipo_id: subtipoRow.id,
+        colaborador_id,
+        parcela_numero: 1,
+        parcela_total: 1,
+        aprovada_em: new Date().toISOString(),
+        aprovada_por: session.profile.id,
+        criado_por: session.profile.id,
+      },
+      p_rateio: [],
+    },
+  );
+
+  let contaAvulsaId: string | null = null;
+  if (!errAvulsa && contaId) {
+    contaAvulsaId = contaId as string;
+    await supabase
+      .from("decimo_terceiro_adiantamentos")
+      .update({ conta_avulsa_id: contaAvulsaId })
+      .eq("id", adiantamentoId)
+      .eq("tenant_id", tenantId);
+  } else {
+    console.error("[13o.adiantamento.avulsa]", errAvulsa?.message);
+  }
+
+  // 3) Recalcula a linha correspondente, se já existe folha pro ano.
+  await recalcularLinhaDeAdiantamento(
+    tenantId,
+    ano,
+    colaborador_id,
+    session.profile.id,
+  );
+
+  await logAuditEvent({
+    acao: "decimo_terceiro.adiantamento.lancado",
+    tenantId,
+    entidadeTipo: "decimo_terceiro_adiantamento",
+    entidadeId: adiantamentoId,
+    metadata: { ano, colaborador_id, valor, conta_avulsa_id: contaAvulsaId },
+  });
+
+  revalidatePath(`/rh/decimo-terceiro/${ano}`);
+  revalidatePath(`/rh/decimo-terceiro/${ano}/adiantamentos`);
+
+  return { ok: true, id: adiantamentoId, conta_avulsa_id: contaAvulsaId };
+}
+
+export async function excluirAdiantamentoDecimoTerceiro(
+  adiantamentoId: string,
+): Promise<ActionResult<{ id: string }>> {
+  const session = await requireSession();
+  if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
+    return { ok: false, message: "Sem permissão para esta ação." };
+  }
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: adiantamento } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("id, ano, colaborador_id, conta_avulsa_id")
+    .eq("id", adiantamentoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!adiantamento) {
+    return { ok: false, message: "Adiantamento não encontrado." };
+  }
+
+  const { error: errDel } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .delete()
+    .eq("id", adiantamentoId)
+    .eq("tenant_id", tenantId);
+  if (errDel) {
+    return { ok: false, message: `Falha ao excluir: ${errDel.message}` };
+  }
+
+  // Nota: não estornamos conta_avulsa — financeiro cancela manualmente se
+  // precisar. A FK no adiantamento é SET NULL; delete não quebra financeiro.
+  await recalcularLinhaDeAdiantamento(
+    tenantId,
+    adiantamento.ano,
+    adiantamento.colaborador_id,
+    session.profile.id,
+  );
+
+  await logAuditEvent({
+    acao: "decimo_terceiro.adiantamento.excluido",
+    tenantId,
+    entidadeTipo: "decimo_terceiro_adiantamento",
+    entidadeId: adiantamentoId,
+    metadata: {
+      ano: adiantamento.ano,
+      conta_avulsa_id: adiantamento.conta_avulsa_id,
+    },
+  });
+
+  revalidatePath(`/rh/decimo-terceiro/${adiantamento.ano}`);
+  revalidatePath(`/rh/decimo-terceiro/${adiantamento.ano}/adiantamentos`);
+
+  return { ok: true, id: adiantamentoId };
 }

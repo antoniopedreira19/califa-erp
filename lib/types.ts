@@ -4956,6 +4956,23 @@ export interface DecimoTerceiroLinha {
 }
 
 
+/** Adiantamento de 13º pago ao colaborador durante o ano (Parte 2).
+ *  Vinculado por (ano, colaborador). Soma de adiantamentos abate da
+ *  1ª parcela do 13º do mesmo ano. */
+export interface DecimoTerceiroAdiantamento {
+  id: string;
+  tenant_id: string;
+  ano: number;
+  colaborador_id: string;
+  data: string;
+  valor: string;
+  obs: string | null;
+  conta_avulsa_id: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+
 // ---------- Módulo fiscal · entrega 1 (02/10/2026) ----------
 // Cadastro de impostos (tabelas fiscal_*) e os dados que o Faturar, a
 // aprovação da PP e o fornecedor passam a registrar. Migration

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import {
   Gift,
   Users,
@@ -195,6 +196,14 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
         icon={Gift}
         actions={
           <div className="flex items-center gap-2">
+            <Link
+              href={`/rh/decimo-terceiro/${folha.ano}/adiantamentos`}
+              prefetch={false}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted transition-colors"
+            >
+              <Wallet className="h-4 w-4" />
+              Adiantamentos
+            </Link>
             <BotaoExportar folhaId={folha.id} />
             {podeRecalcular && (
               <form action={recalcular}>

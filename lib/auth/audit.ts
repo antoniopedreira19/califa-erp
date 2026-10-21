@@ -473,6 +473,9 @@ export type AuditAction =
   // Fase A da integração com Folha de Pagamento (21/10/2026).
   | "decimo_terceiro.parcela_1a.fechada"
   | "decimo_terceiro.parcela_2a.fechada"
+  // Parte 2 — Adiantamentos (21/10/2026).
+  | "decimo_terceiro.adiantamento.lancado"
+  | "decimo_terceiro.adiantamento.excluido"
   | "acao_negada";
 
 export interface AuditPayload {
