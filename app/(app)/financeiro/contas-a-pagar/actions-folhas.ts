@@ -25,22 +25,32 @@ function ultimoDiaDoMes(ano: number, mes: number): string {
   return `${ano}-${String(mes).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Mapeia (tipo de contratação, origem da linha) → código do subtipo de
- *  "Despesa com Pessoal" (categoria 05).
+/** Mapeia (tipo de contratação, origem da linha, tipo da folha) → código do
+ *  subtipo de "Despesa com Pessoal" (categoria 05).
  *
- *  Linhas de origem='california' (fluxo PJ gerado pela California) vão para
- *  05.015 Serviços de Terceiros (PJ) — pj, mei e a parte Recibo do híbrido.
+ *  Prioridade: se tipoFolha é 13º (1ª ou 2ª parcela), vai sempre pra 05.004
+ *  "13° Salário", independente de tipo_contratacao ou origem.
  *
- *  Linhas de origem='contabilidade' (fluxo CLT importado do PDF) vão para
- *  os subtipos específicos: 05.001 Salário (clt / parte CLT do híbrido),
+ *  Fluxo mensal: linhas de origem='california' (fluxo PJ gerado pela
+ *  California) vão para 05.015 Serviços de Terceiros (PJ) — pj, mei e a
+ *  parte Recibo do híbrido. Linhas de origem='contabilidade' (fluxo CLT
+ *  importado do PDF) vão para 05.001 Salário (clt / parte CLT do híbrido),
  *  05.005 Estagiário, 05.011 ProLabore (sócio).
  *
- *  Spec D6.
+ *  Spec D6 + Fase A da integração do 13º (21/10/2026).
  */
 function subtipoCodigoParaContratacao(
   tipo: TipoContratacao,
   origem: FolhaOrigem,
+  tipoFolha?: string,
 ): string {
+  if (
+    tipoFolha === "decimo_terceiro_1a_parcela" ||
+    tipoFolha === "decimo_terceiro_2a_parcela"
+  ) {
+    return "004"; // 13° Salário
+  }
+
   if (origem === "california") {
     switch (tipo) {
       case "pj":
@@ -362,7 +372,7 @@ export async function aprovarLinhaFolha(
   const { data: folha, error: folhaError } = await supabase
     .from("folhas_pagamento")
     .select(
-      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem",
+      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem, tipo",
     )
     .eq("id", folhaId)
     .eq("tenant_id", tenantId)
@@ -532,12 +542,14 @@ export async function aprovarLinhaFolha(
     }
   }
 
-  // 6) Plano de contas — depende do tipo do colaborador E da origem da linha.
-  //    Fluxo PJ (california): pj/mei/clt_recibo → 05.015 Serviços de Terceiros (PJ).
-  //    Fluxo CLT (contabilidade): clt → 05.001, estagio → 05.005, socio → 05.011.
+  // 6) Plano de contas — depende do tipo do colaborador, da origem da linha
+  //    e do tipo da folha. 13º (1ª ou 2ª parcela) força 05.004 "13° Salário".
+  //    Caso contrário: Fluxo PJ (california) → 05.015 Serviços de Terceiros;
+  //    Fluxo CLT (contabilidade) → 05.001 Salário / 05.005 Estagiário / 05.011 ProLabore.
   const codigoSubtipo = subtipoCodigoParaContratacao(
     colab.tipo_contratacao,
     folha.origem,
+    folha.tipo,
   );
   const { data: tipoRow } = await supabase
     .from("plano_contas_tipos")
