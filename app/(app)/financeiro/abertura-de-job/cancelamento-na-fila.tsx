@@ -161,6 +161,7 @@ export function RevisarCancelamentoDialog({
     { rotulo: "Job", valor: c.nome },
     { rotulo: "Código", valor: c.codigo, mono: true },
     { rotulo: "Projeto", valor: c.projetoNome ?? "—" },
+    { rotulo: "Empresa", valor: c.empresaNome ?? "—" },
     { rotulo: "Cliente", valor: c.clienteNome ?? "—" },
     { rotulo: "GP Responsável", valor: c.responsavelNome ?? "—" },
     {

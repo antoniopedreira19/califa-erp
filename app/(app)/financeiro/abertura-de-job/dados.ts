@@ -185,6 +185,8 @@ export interface SaveNaFila {
   jobNome: string;
   projetoCodigo: string | null;
   projetoNome: string | null;
+  /** A empresa do job, como na conferência da fila (`JobNaFila.empresa_nome`). */
+  empresaNome: string | null;
   clienteNome: string | null;
   produto: string | null;
   responsavelNome: string | null;
@@ -1023,6 +1025,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       .select(
         "id, codigo, nome, produto, " +
           "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+          "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
           "responsavel:profiles!responsavel_id(nome), " +
           "produtor:profiles!produtor_id(nome), " +
           // A cadeia do fechamento, para o "Faturamento desta linha" do
@@ -1135,6 +1138,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       jobNome: j.nome,
       projetoCodigo: j.projeto?.codigo ?? null,
       projetoNome: j.projeto?.nome ?? null,
+      empresaNome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
       clienteNome: j.projeto?.cliente?.nome_fantasia ?? null,
       produto: j.produto ?? null,
       responsavelNome: j.responsavel?.nome ?? null,

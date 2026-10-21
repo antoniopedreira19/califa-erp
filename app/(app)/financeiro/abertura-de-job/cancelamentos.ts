@@ -22,6 +22,8 @@ export interface CancelamentoNaFila {
   nome: string;
   projetoCodigo: string | null;
   projetoNome: string | null;
+  /** A empresa do job, como na conferência da fila (`JobNaFila.empresa_nome`). */
+  empresaNome: string | null;
   clienteNome: string | null;
   produto: string | null;
   responsavelNome: string | null;
@@ -52,6 +54,7 @@ interface LinhaComJob {
     aberto_por: string | null;
     projeto_financeiro_id: string | null;
     projeto: { codigo: string; nome: string; cliente: { nome_fantasia: string } | null } | null;
+    empresa: { nome_fantasia: string | null; razao_social: string | null } | null;
     responsavel: { nome: string } | null;
     regional: { nome: string } | null;
     projeto_financeiro: { codigo: string } | null;
@@ -69,6 +72,7 @@ export async function listarCancelamentosNaFila(
       // vem numa leitura à parte, na segunda onda.
       `${SELECT_CANCELAMENTO}, job:jobs!inner(id, codigo, nome, nome_financeiro, produto, valor_total, data_abertura_financeiro, aberto_por, projeto_financeiro_id, ` +
         "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
+        "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
         "responsavel:profiles!responsavel_id(nome), " +
         "regional:regionais(nome), projeto_financeiro:projetos_financeiro(codigo))",
     )
@@ -168,6 +172,7 @@ export async function listarCancelamentosNaFila(
       nome: j.nome_financeiro?.trim() || j.nome,
       projetoCodigo: j.projeto?.codigo ?? null,
       projetoNome: j.projeto?.nome ?? null,
+      empresaNome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
       clienteNome: j.projeto?.cliente?.nome_fantasia ?? null,
       produto: j.produto,
       responsavelNome: j.responsavel?.nome ?? null,

@@ -7943,3 +7943,24 @@ os arquivos da frente do Antonio.
   mudaram no código (`fornecedores/actions.ts`).
 - **Na tela, nada muda:** a produção continua sem o campo da declaração no
   cadastro rápido e no lápis da PP (decisão 142 §5).
+
+## ⚠️ Nota de 2026-10-21 (4) — a empresa do job nos pop-ups de aprovar save e de cancelamento da fila
+
+- **Completa a nota de 2026-10-19 (1):** a linha **Empresa**, logo abaixo
+  do Projeto, tinha entrado em "Dados da produção", na conferência da fila e
+  no envio da produção, mas não nos outros dois pop-ups da fila. Agora entra
+  também no **"Aprovar save"** e no **"Cancelar o job…?"**. O Tiago achava
+  que já estava no sistema e pediu para colocar.
+- **Dado:** o mesmo embed da conferência
+  (`empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social)`,
+  nome fantasia ou razão social), em `listarSavesNaFila` (`dados.ts`,
+  `SaveNaFila.empresaNome`) e em `listarCancelamentosNaFila`
+  (`cancelamentos.ts`, `CancelamentoNaFila.empresaNome`). A página passa os
+  dois objetos inteiros (`...s`, `...c`) aos pop-ups.
+- **Conferido no dev do worktree, como administrador, sem gravar nada:**
+  - "Aprovar save" do TES-1030/26 mostrou "Empresa · Empresa Teste". Não
+    havia pedido aguardando: um desvio temporário na leitura da fila listou
+    o pedido já aprovado; ficou fora do commit.
+  - "Cancelar o job ESC-1001/26?" mostrou "Empresa · Agência California".
+    Só aberto e fechado: o pedido continua pendente.
+  - tsc, lint e build limpos.
