@@ -6222,8 +6222,9 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   - 2 de teste, canceladas (PP-00285 do TES-1025/26 e PP-00286 do
     TES-1001/26).
   - 2 reais já no financeiro, em avaliação (PP-00283 do ANI-1013/26 e
-    PP-00284 do DEE-1001/26, 19/10 às 21h12 e 21h21; impresso 20/10): só
-    mudam com o OK do Tiago.
+    PP-00284 do DEE-1001/26, 19/10 às 21h12 e 21h21; impresso 20/10): o
+    Tiago decidiu deixá-las como estão (21/10). Se uma delas voltar e for
+    reenviada, o envio refaz o PDF com o dia certo.
 
 ## ⚠️ Nota de 2026-10-21 (2) — o anexo da PO: só GP e administrador anexam; enviada, ninguém apaga (revisão da decisão 123)
 
