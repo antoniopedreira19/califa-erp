@@ -1,21 +1,21 @@
 /* ---------- Elaborar contrato (gaveta) e visualizar contrato ---------- */
 
-function modelosPara(db, c, B) {
-  return db.modelos.filter((m) => m.ativo && visivel(m, B) && m.parte === c.parte && (c.tipo === "aditivo" ? m.tipo === "aditivo" : m.tipo !== "aditivo"));
+function modelosPara(db, c) {
+  return db.modelos.filter((m) => m.ativo && m.parte === c.parte && (c.tipo === "aditivo" ? m.tipo === "aditivo" : m.tipo !== "aditivo"));
 }
 
-function modeloSugerido(db, c, info, B) {
+function modeloSugerido(db, c, info) {
   if (c.tipo === "aditivo") return "m-aditivo";
   if (c.parte === "cliente") return "m-cli-prod";
   const tipo = info.pp ? info.pp.tipo : "prestacao";
-  const lista = modelosPara(db, c, B).filter((m) => m.tipo === tipo);
+  const lista = modelosPara(db, c).filter((m) => m.tipo === tipo);
   if (info.pp && /motorista|van|caminh/i.test(info.pp.servico + info.pp.especificacoes)) return "m-forn-veic";
   return lista[0] ? lista[0].id : null;
 }
 
 function minusculaInicial(t) { return t ? t[0].toLowerCase() + t.slice(1) : t; }
 
-/* Versão B: o que a PP já diz vira sugestão para a lacuna de objeto. */
+/* O que a PP já diz vira sugestão para a lacuna de objeto. */
 function sugestaoDeObjeto(info, ppIds, db) {
   if (info.c.tipo === "aditivo") return info.c.aditivo.motivo.replace(/^PP-\d+ reemitida pela produção: /, "");
   if (info.c.parte === "cliente") return `produção da ${info.job.servico.toLowerCase()} “${info.job.nome}”`;
@@ -78,10 +78,10 @@ function DadosDoSistema({ info, ctx }) {
 }
 
 function GerarContrato({ id, onFechar, passoInicial }) {
-  const { db, B, acoes, irJob, abrirModal } = useStore();
+  const { db, acoes, irJob, abrirModal } = useStore();
   const c = db.contratos.find((x) => x.id === id);
   const info = infoContrato(db, c);
-  const [modeloId, setModeloId] = useState(c.modeloId || (B ? modeloSugerido(db, c, info, B) : null));
+  const [modeloId, setModeloId] = useState(c.modeloId || modeloSugerido(db, c, info));
   const [passo, setPasso] = useState(c.modeloId ? 2 : passoInicial && modeloId ? passoInicial : 1);
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [campos, setCampos] = useState({ ...(c.campos || {}) });
@@ -97,11 +97,11 @@ function GerarContrato({ id, onFechar, passoInicial }) {
   const ctx = contextoDoContrato(db, { ...c, ppIds });
   const lacunas = modelo ? lacunasDoModelo(modelo) : [];
   const faltando = lacunas.filter((l) => l.obrigatoria && !(campos[l.chave] || "").trim());
-  const nos = modelo ? montarDocumento(modelo.corpo, ctx, campos, B ? clausulas : []) : [];
-  const irmas = B ? ppsIrmasSemContrato(db, info) : [];
-  const disponiveis = modelosPara(db, c, B);
-  const tiposVisiveis = ORDEM_TIPOS.filter((t) => (B || !TIPOS[t].soNaB) && (c.tipo === "aditivo" ? t === "aditivo" : t !== "aditivo"));
-  const sugerido = B ? modeloSugerido(db, c, info, B) : null;
+  const nos = modelo ? montarDocumento(modelo.corpo, ctx, campos, clausulas) : [];
+  const irmas = ppsIrmasSemContrato(db, info);
+  const disponiveis = modelosPara(db, c);
+  const tiposVisiveis = ORDEM_TIPOS.filter((t) => (c.tipo === "aditivo" ? t === "aditivo" : t !== "aditivo"));
+  const sugerido = modeloSugerido(db, c, info);
 
   const irLacuna = (k) => {
     const el = document.getElementById(`lac-${k}`);
@@ -114,14 +114,14 @@ function GerarContrato({ id, onFechar, passoInicial }) {
 
   const escolherModelo = (m) => {
     setModeloId(m.id);
-    if (B) setClausulas((atual) => (c.modeloId === m.id ? atual : []));
+    setClausulas((atual) => (c.modeloId === m.id ? atual : []));
   };
 
   /* ----- Passo 1: modelo ----- */
   const passo1 = html`<div class="mx-auto max-w-[1180px] space-y-5 px-6 py-6">
     <${DadosDoSistema} info=${info} ctx=${ctx} />
 
-    ${B && irmas.length > 0 && html`<div class="rounded-2xl border border-[#e9d5ff] bg-[#fdfaff] px-5 py-4">
+    ${irmas.length > 0 && html`<div class="rounded-2xl border border-[#e9d5ff] bg-[#fdfaff] px-5 py-4">
       <p class="flex items-center gap-2 text-[13px] font-bold text-[#6b21a8]"><${Icon} n="link" />Mesmo fornecedor, mesmo job</p>
       <p class="mt-1 text-[12.5px] text-[#6b5a7a]">${info.contraparte.nome} tem outra PP neste job ainda sem contrato. Dá para cobrir as duas num contrato só.</p>
       <div class="mt-3 space-y-2">${irmas.map((p) => {
@@ -135,7 +135,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
       ${ppIds.length > 1 && html`<p class="mt-2.5 text-[12.5px] font-semibold text-[#6b21a8]">Valor do contrato: ${moeda(ctx._valor)} (${ppIds.length} PPs)</p>`}
     </div>`}
 
-    ${B && info.contraparte.quadro && c.tipo !== "aditivo" && info.origem !== "solicitacao" && html`<div class="flex flex-wrap items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-5 py-4">
+    ${info.contraparte.quadro && c.tipo !== "aditivo" && info.origem !== "solicitacao" && html`<div class="flex flex-wrap items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-5 py-4">
       <${Icon} n="shield" c="h-5 w-5 text-emerald-700" />
       <div class="min-w-0 flex-1"><p class="text-[13px] font-bold text-emerald-800">Contrato-quadro ${info.contraparte.quadro.codigo} vigente até ${dataBr(info.contraparte.quadro.vigencia)}</p><p class="text-[12.5px] text-emerald-900/70">${info.contraparte.quadro.objeto}. A PP pode ser vinculada a ele, sem contrato novo.</p></div>
       <${Botao} v="secundario" t="sm" icone="shield" onClick=${() => abrirModal({ tipo: "quadro", id: c.id })}>Vincular ao contrato-quadro</${Botao}>
@@ -151,10 +151,6 @@ function GerarContrato({ id, onFechar, passoInicial }) {
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         ${tiposVisiveis.filter((t) => filtroTipo === "todos" || filtroTipo === t).flatMap((t) => {
           const ms = disponiveis.filter((m) => m.tipo === t);
-          if (!ms.length && t === "influenciador" && !B) return [html`<div key="infl" class="flex min-h-[148px] flex-col justify-between rounded-2xl border border-dashed border-border bg-[#fafaf9] p-4 text-muted-foreground">
-            <div><p class="text-[11px] font-semibold uppercase tracking-[0.08em]">${TIPOS[t].rotulo}</p><p class="mt-1.5 text-[14px] font-semibold text-foreground/60">Previsto para a 2ª etapa</p><p class="mt-1 text-[12.5px]">O caso mais complexo, com entregas por rede e direitos de imagem.</p></div>
-            <span class="mt-3 inline-flex items-center gap-1 text-[11.5px] font-semibold"><${Icon} n="clock" c="h-3.5 w-3.5" />Em breve</span>
-          </div>`];
           return ms.map((m) => {
             const on = modeloId === m.id;
             const lac = lacunasDoModelo(m);
@@ -168,7 +164,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
               <p class="mt-1 line-clamp-2 text-[12.5px] leading-snug text-muted-foreground">${m.descricao}</p>
               <div class="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3 text-[11.5px] text-muted-foreground">
                 <span>${lac.length} ${lac.length === 1 ? "lacuna" : "lacunas"}</span>
-                ${B && html`<span>v${m.versao}</span>`}
+                ${html`<span>v${m.versao}</span>`}
                 <span>Usado ${m.usos} ${m.usos === 1 ? "vez" : "vezes"}</span>
                 ${m.rascunho && html`<${Etiqueta} cor="ambar">Rascunho</${Etiqueta}>`}
               </div>
@@ -177,11 +173,11 @@ function GerarContrato({ id, onFechar, passoInicial }) {
         })}
       </div>
     </div>
-    ${B && c.parte === "fornecedor" && c.tipo !== "aditivo" && info.origem !== "solicitacao" && html`<p class="text-[12.5px] text-muted-foreground">Esta PP não precisa de contrato? <button type="button" class="font-semibold text-california-red hover:underline" onClick=${() => abrirModal({ tipo: "dispensa", id: c.id })}>Dispensar com justificativa</button></p>`}
+    ${c.parte === "fornecedor" && c.tipo !== "aditivo" && info.origem !== "solicitacao" && html`<p class="text-[12.5px] text-muted-foreground">Esta PP não precisa de contrato? <button type="button" class="font-semibold text-california-red hover:underline" onClick=${() => abrirModal({ tipo: "dispensa", id: c.id })}>Dispensar com justificativa</button></p>`}
   </div>`;
 
   /* ----- Passo 2: lacunas ----- */
-  const sugestao = B ? sugestaoDeObjeto(info, ppIds, db) : "";
+  const sugestao = sugestaoDeObjeto(info, ppIds, db);
   const passo2 = modelo && html`<div class="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:overflow-hidden">
     <div class="space-y-5 border-border px-6 py-6 lg:min-h-0 lg:overflow-y-auto lg:border-r">
       <div class="flex items-center justify-between gap-3">
@@ -200,9 +196,9 @@ function GerarContrato({ id, onFechar, passoInicial }) {
           const v = campos[l.chave] || "";
           const set = (val) => setCampos({ ...campos, [l.chave]: val });
           return html`<div key=${l.chave}>
-            <${Rotulo} para=${`lac-${l.chave}`} obrigatorio=${l.obrigatoria} extra=${B && l.chave === "objeto" && c.parte === "fornecedor" && info.origem !== "solicitacao" && html`<button type="button" class="ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-california-red hover:underline" onClick=${() => abrirModal({ tipo: "pedir", id: c.id })}><${Icon} n="message" c="h-3 w-3" />Pedir ao produtor</button>`}>${l.rotulo}</${Rotulo}>
+            <${Rotulo} para=${`lac-${l.chave}`} obrigatorio=${l.obrigatoria} extra=${l.chave === "objeto" && c.parte === "fornecedor" && info.origem !== "solicitacao" && html`<button type="button" class="ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-california-red hover:underline" onClick=${() => abrirModal({ tipo: "pedir", id: c.id })}><${Icon} n="message" c="h-3 w-3" />Pedir ao produtor</button>`}>${l.rotulo}</${Rotulo}>
             ${l.tipo === "longo" ? html`<textarea id=${`lac-${l.chave}`} rows="3" value=${v} onInput=${(e) => set(e.target.value)} placeholder=${l.dica} class=${AREA}></textarea>` : html`<input id=${`lac-${l.chave}`} type="text" value=${v} onInput=${(e) => set(e.target.value)} placeholder=${l.dica} class=${CAMPO} />`}
-            ${B && l.chave === "objeto" && !v.trim() && sugestao && html`<div class="mt-2 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-2.5">
+            ${l.chave === "objeto" && !v.trim() && sugestao && html`<div class="mt-2 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-2.5">
               <${Icon} n="sparkles" c="mt-0.5 h-3.5 w-3.5 text-blue-700" />
               <p class="min-w-0 flex-1 text-[12.5px] leading-snug text-blue-900"><span class="font-semibold">Sugestão ${c.parte === "cliente" ? "a partir do job" : c.tipo === "aditivo" ? "a partir da reemissão" : "a partir da PP"}:</span> ${sugestao}</p>
               <button type="button" class="shrink-0 text-[12px] font-bold text-blue-700 hover:underline" onClick=${() => set(sugestao)}>Usar</button>
@@ -211,7 +207,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
         })}
       </section>
 
-      ${B && (modelo.clausulasOpcionais || []).length > 0 && html`<section class="space-y-2.5">
+      ${(modelo.clausulasOpcionais || []).length > 0 && html`<section class="space-y-2.5">
         <h3 class="text-[14px] font-bold">Cláusulas opcionais</h3>
         <p class="text-[12.5px] text-muted-foreground">Entram antes do foro. A numeração se ajusta sozinha.</p>
         ${modelo.clausulasOpcionais.map((k) => {
@@ -242,7 +238,7 @@ function GerarContrato({ id, onFechar, passoInicial }) {
       <section class="rounded-2xl border border-border bg-white p-5 shadow-soft">
         <h3 class="text-[14px] font-bold">Resumo</h3>
         <dl class="mt-3 space-y-2.5 text-[12.5px]">
-          ${[["Modelo", `${modelo.nome} · v${modelo.versao}`], ["Partes", ctx._partes.join(" e ")], ["Valor", ctx["valor.total"]], ["Condição", ctx["pagamento.condicao"]], ...(B ? [["Cláusulas opcionais", clausulas.length ? clausulas.map((k) => CLAUSULAS[k].resumo).join("; ") : "Nenhuma"]] : []), ...(ppIds.length > 1 ? [["PPs cobertas", ppIds.map((x) => ppDe(db, x).codigo).join(", ")]] : []), ...(textoEditado ? [["Texto", "Ajustado à mão na revisão"]] : [])].map(([k, v]) => html`<div key=${k} class="grid grid-cols-[110px_minmax(0,1fr)] gap-3"><dt class="text-muted-foreground">${k}</dt><dd class="font-medium">${v}</dd></div>`)}
+          ${[["Modelo", `${modelo.nome} · v${modelo.versao}`], ["Partes", ctx._partes.join(" e ")], ["Valor", ctx["valor.total"]], ["Condição", ctx["pagamento.condicao"]], ["Cláusulas opcionais", clausulas.length ? clausulas.map((k) => CLAUSULAS[k].resumo).join("; ") : "Nenhuma"], ...(ppIds.length > 1 ? [["PPs cobertas", ppIds.map((x) => ppDe(db, x).codigo).join(", ")]] : []), ...(textoEditado ? [["Texto", "Ajustado à mão na revisão"]] : [])].map(([k, v]) => html`<div key=${k} class="grid grid-cols-[110px_minmax(0,1fr)] gap-3"><dt class="text-muted-foreground">${k}</dt><dd class="font-medium">${v}</dd></div>`)}
         </dl>
       </section>
       <section class="rounded-2xl border border-border bg-white p-5 shadow-soft">
@@ -288,14 +284,14 @@ function GerarContrato({ id, onFechar, passoInicial }) {
 
 /* Contrato já gerado, assinado, dispensado ou coberto por contrato-quadro. */
 function VerContrato({ id, onFechar }) {
-  const { db, B, acoes, irJob } = useStore();
+  const { db, acoes, irJob } = useStore();
   const c = db.contratos.find((x) => x.id === id);
   const info = infoContrato(db, c);
   const [arquivo, setArquivo] = useState("");
   const [data, setData] = useState(HOJE);
   const modelo = c.modeloId ? modeloDe(db, c.modeloId) : null;
   const ctx = contextoDoContrato(db, c);
-  const nos = modelo ? montarDocumento(modelo.corpo, ctx, c.campos || {}, B ? c.clausulas || [] : []) : [];
+  const nos = modelo ? montarDocumento(modelo.corpo, ctx, c.campos || {}, c.clausulas || []) : [];
   const nomeAssinado = (c.arquivo || "contrato.pdf").replace(/-v\d+\.pdf$/, "-assinado.pdf");
   const pagamentoTexto = c.parte === "fornecedor" ? `Pagamento de ${info.pps.map((p) => p.codigo).join(" e ") || info.codigo} liberado para o financeiro.` : null;
   const destinoJob = () => { onFechar(); irJob(info.job.id, c.parte === "cliente" || info.origem === "solicitacao" ? "info" : "pps"); };
@@ -338,7 +334,7 @@ function VerContrato({ id, onFechar }) {
           ${info.pps.map((p) => html`<div key=${p.id} class="flex items-center justify-between gap-3 py-1 text-[12.5px]"><span><span class="font-mono font-semibold">${p.codigo}</span> · <${SeloPP} status=${p.status} /></span><${Pagamento} pp=${p} /></div>`)}
         </section>`}
 
-        ${B && html`<section>
+        ${html`<section>
           <h3 class="mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.1em] text-muted-foreground"><${Icon} n="history" c="h-3.5 w-3.5" />Histórico</h3>
           <ol class="relative space-y-3 border-l border-border pl-4">
             ${[...(c.historico || [])].reverse().map((h, i) => html`<li key=${i} class="relative"><span class="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#bdbdbd]"></span><p class="text-[12.5px] leading-snug">${h.texto}</p><p class="text-[11px] text-muted-foreground">${dataHoraBr(h.em)} · ${h.por}</p></li>`)}
@@ -355,7 +351,7 @@ function VerContrato({ id, onFechar }) {
   </div>`;
 }
 
-/* ---------- Pop-ups da versão B ---------- */
+/* ---------- Pop-ups da caixa de entrada ---------- */
 
 const MOTIVOS_DISPENSA = ["Valor abaixo do limite de R$ 5.000,00", "Compra com nota fiscal e entrega imediata", "Coberto por outro instrumento já assinado", "Outro motivo"];
 

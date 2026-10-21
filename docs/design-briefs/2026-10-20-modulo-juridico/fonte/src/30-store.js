@@ -35,18 +35,14 @@ const ppDe = (db, id) => db.pps.find((p) => p.id === id);
 const modeloDe = (db, id) => db.modelos.find((m) => m.id === id);
 
 /* O contrato que a tela considera "da PP": o original (não o aditivo). */
-function contratoDaPP(db, ppId, B) {
+function contratoDaPP(db, ppId) {
   return db.contratos.find((c) => c.parte === "fornecedor" && c.tipo !== "aditivo" && (c.ppIds || []).includes(ppId));
 }
-function aditivoDaPP(db, ppId, B) {
-  if (!B) return null;
+function aditivoDaPP(db, ppId) {
   return db.contratos.find((c) => c.tipo === "aditivo" && (c.ppIds || []).includes(ppId) && EM_ABERTO.includes(c.status));
 }
 const contratoDoJob = (db, jobId) => db.contratos.find((c) => c.parte === "cliente" && c.jobId === jobId);
 
-function visivel(c, B) {
-  return B || !c.soNaB;
-}
 
 /* Tudo o que a linha precisa saber sobre um contrato, num lugar só. */
 function infoContrato(db, c) {
@@ -94,18 +90,18 @@ function infoContrato(db, c) {
 
 /* A trava do pagamento (reunião com o jurídico): a PP anda no
  * financeiro, mas não é paga sem contrato assinado. */
-function situacaoPagamento(db, pp, B) {
+function situacaoPagamento(db, pp) {
   if (pp.status === "pago") return { k: "pago", rotulo: "Pago", icone: "check", cls: "text-emerald-700" };
-  const c = contratoDaPP(db, pp.id, B);
-  const ad = aditivoDaPP(db, pp.id, B);
+  const c = contratoDaPP(db, pp.id);
+  const ad = aditivoDaPP(db, pp.id);
   if (c && RESOLVIDO.includes(c.status) && !ad) return { k: "liberado", rotulo: "Liberado", icone: "unlock", cls: "text-emerald-700" };
   if (ad) return { k: "travado", rotulo: "Travado · aditivo pendente", icone: "lock", cls: "text-[#b3323c]" };
   if (pp.status === "aprovada") return { k: "travado", rotulo: "Travado · sem contrato assinado", icone: "lock", cls: "text-[#b3323c]" };
   return { k: "aguarda", rotulo: "Vai travar sem contrato", icone: "clock", cls: "text-muted-foreground" };
 }
 
-function contratosEmAberto(db, B) {
-  return db.contratos.filter((c) => visivel(c, B) && EM_ABERTO.includes(c.status));
+function contratosEmAberto(db) {
+  return db.contratos.filter((c) => EM_ABERTO.includes(c.status));
 }
 
 function usarAcoes(setDb, toast, getDb) {
@@ -129,7 +125,7 @@ function usarAcoes(setDb, toast, getDb) {
           const n = { ...c, historico: [...(c.historico || [])], ...dados, status: "assinatura", responsavel: USUARIO.nome, arquivo, versaoArquivo: versaoArq };
           return registrar(n, `Contrato gerado (${arquivo}) com o modelo ${dados.modeloNome} (v${dados.modeloVersao}) e anexado a ${rotuloDestino}.${dados.textoEditado ? " O texto foi ajustado à mão na revisão." : ""}`);
         });
-        // PPs agrupadas num contrato só (versão B): o contrato próprio delas sai da fila.
+        // PPs agrupadas num contrato só: o contrato próprio delas sai da fila.
         if (dados.ppIds && dados.ppIds.length > 1) {
           contratos = contratos.filter((c) => !(c.id !== id && c.parte === "fornecedor" && c.tipo !== "aditivo" && EM_ABERTO.includes(c.status) && c.ppIds.length === 1 && dados.ppIds.includes(c.ppIds[0])));
         }
@@ -173,7 +169,7 @@ function usarAcoes(setDb, toast, getDb) {
       const db = getDb();
       const n = db.contratos.filter((c) => c.origem === "solicitacao").length + 1;
       const codigo = `SOL-${String(n).padStart(4, "0")}`;
-      const contrato = { id: `c-sol-${n}`, codigo, parte: "fornecedor", origem: "solicitacao", soNaB: true, jobId: dados.jobId, ppIds: [], status: "pendente", chegouEm: agoraIso(), campos: { objeto: dados.escopo }, solicitacao: dados, valor: dados.valor,
+      const contrato = { id: `c-sol-${n}`, codigo, parte: "fornecedor", origem: "solicitacao", jobId: dados.jobId, ppIds: [], status: "pendente", chegouEm: agoraIso(), campos: { objeto: dados.escopo }, solicitacao: dados, valor: dados.valor,
         historico: [{ em: agoraIso(), por: dados.solicitante, texto: `Solicitação aberta (${dados.tipoRotulo}). Prazo pedido: ${dataBr(dados.prazo)}.` }] };
       setDb((d) => ({ ...d, contratos: [contrato, ...d.contratos] }));
       toast({ titulo: "Solicitação registrada", texto: `${codigo} entrou na caixa de entrada como pendente.` });

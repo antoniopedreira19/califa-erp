@@ -128,7 +128,6 @@ const BOTAO_BARRA = "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text
 
 /* Editor de MODELO: a minuta inteira, com campos e lacunas como blocos. */
 function EditorDocumento({ corpo, lacunas, versao, onMuda, onNovaLacuna }) {
-  const { B } = useStore();
   const ref = useRef(null);
   const restaurar = usarSelecaoGuardada(ref);
   const [menuCampo, setMenuCampo] = useState(false);
@@ -182,7 +181,7 @@ function EditorDocumento({ corpo, lacunas, versao, onMuda, onNovaLacuna }) {
         <button type="button" class=${BOTAO_BARRA} onMouseDown=${semRoubarFoco} onClick=${() => setMenuCampo(!menuCampo)} aria-expanded=${menuCampo}><span class="h-2.5 w-2.5 rounded-sm border border-[#9dbbe9] bg-[#eef4fd]"></span>Campo do sistema<${Icon} n="chevronDown" c="h-3 w-3" /></button>
         ${menuCampo && html`<div class="fixed inset-0 z-[60]" onMouseDown=${semRoubarFoco} onClick=${() => setMenuCampo(false)}></div>
           <div class="absolute left-0 top-[calc(100%+6px)] z-[61] max-h-[340px] w-[300px] overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-elevated">
-            ${CAMPOS_SISTEMA.filter((g) => B || !g.soNaB).map((g) => html`<div key=${g.grupo}><p class="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">${g.grupo}</p>
+            ${CAMPOS_SISTEMA.map((g) => html`<div key=${g.grupo}><p class="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">${g.grupo}</p>
               ${g.itens.map(([k, r, o]) => html`<button key=${k} type="button" onMouseDown=${semRoubarFoco} onClick=${() => { setMenuCampo(false); inserirChip(k); }} class="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] hover:bg-[#f4f4f2]"><span>${r}</span><span class="text-[10.5px] text-muted-foreground">${o}</span></button>`)}
             </div>`)}
           </div>`}

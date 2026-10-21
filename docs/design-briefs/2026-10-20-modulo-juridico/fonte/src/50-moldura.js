@@ -3,11 +3,11 @@
 const LOGO = "data:image/png;base64,__LOGO__";
 
 function Sidebar() {
-  const { ui, ir, db, B } = useStore();
+  const { ui, ir, db } = useStore();
   const [hover, setHover] = useState(false);
   const [mob, setMob] = useState(false);
   const exp = hover || mob;
-  const pendentes = contratosEmAberto(db, B).filter((c) => c.status === "pendente").length;
+  const pendentes = contratosEmAberto(db).filter((c) => c.status === "pendente").length;
   const links = [
     { k: "home", rot: "Home", ic: "home" },
     { k: "orcamentos", rot: "Orçamentos", ic: "fileText" },
@@ -72,17 +72,10 @@ function Sidebar() {
 /* ---------- Barra do protótipo (não faz parte do ERP) ---------- */
 
 function BarraPrototipo({ onNotas }) {
-  const { ui, setVersao, acoes, reiniciar } = useStore();
+  const { acoes, reiniciar } = useStore();
   const [menu, setMenu] = useState(false);
-  const B = ui.versao === "B";
   return html`<div class="barra-proto fixed z-[45] flex max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-2xl border border-[#3a3a3a] bg-[#1d1d1d]/95 p-1.5 text-white shadow-2xl backdrop-blur">
     <span class="hidden items-center gap-1.5 pl-2 pr-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/50 lg:inline-flex"><span class="h-1.5 w-1.5 rounded-full bg-california-red"></span>Protótipo</span>
-    <div role="radiogroup" aria-label="Versão do protótipo" class="inline-flex rounded-xl bg-white/5 p-0.5">
-      ${[["A", "Versão A", "como pedido"], ["B", "Versão B", "recomendada"]].map(([k, r, s]) => html`<button key=${k} type="button" role="radio" aria-checked=${ui.versao === k} onClick=${() => setVersao(k)}
-        class=${cn("rounded-[10px] px-3 py-1.5 text-left leading-tight transition-colors", ui.versao === k ? "bg-white text-california-dark" : "text-white/70 hover:text-white")}>
-        <span class="block text-[12.5px] font-bold">${r}</span><span class=${cn("hidden text-[10.5px] sm:block", ui.versao === k ? "text-[#6b6b6b]" : "text-white/45")}>${s}</span>
-      </button>`)}
-    </div>
     <div class="relative">
       <button type="button" aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)} class="inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold text-white/85 hover:bg-white/10"><${Icon} n="zap" c="h-4 w-4 text-[#fbbf24]" /><span class="hidden sm:inline">Simular</span><${Icon} n="chevronDown" c="h-3.5 w-3.5 text-white/50" /></button>
       ${menu && html`<div class="fixed inset-0 z-[56]" onClick=${() => setMenu(false)}></div>
@@ -94,11 +87,11 @@ function BarraPrototipo({ onNotas }) {
           <button type="button" role="menuitem" onClick=${() => { setMenu(false); reiniciar(); }} class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium hover:bg-[#f4f4f2]"><${Icon} n="rotate" c="h-4 w-4 text-muted-foreground" />Recomeçar com os dados de exemplo</button>
         </div>`}
     </div>
-    <button type="button" onClick=${onNotas} class=${cn("inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold hover:bg-white/10", B ? "text-white" : "text-white/85")}><${Icon} n="sparkles" c="h-4 w-4 text-[#f9a8b0]" /><span class="hidden sm:inline">O que muda na B</span><span class="sm:hidden">B?</span></button>
+    <button type="button" onClick=${onNotas} class="inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold text-white/85 hover:bg-white/10"><${Icon} n="sparkles" c="h-4 w-4 text-[#f9a8b0]" /><span class="hidden sm:inline">Além do pedido</span><span class="sm:hidden">Guia</span></button>
   </div>`;
 }
 
-const NOTAS_B = [
+const RECOMENDACOES = [
   { aba: "Caixa de entrada", itens: [
     { t: "Painel do que trava pagamento", d: "Quatro números no topo, com o valor das PPs aprovadas que não podem ser pagas por falta de contrato. Clicar num número filtra a fila.", ir: { aba: "entrada" } },
     { t: "Prazo no lugar de “chegou em”", d: "A fila ordena pelo que trava pagamento primeiro: o vencimento da PP (fornecedor) ou o início do job (cliente). Faixa vermelha até 5 dias, âmbar até 10.", ir: { aba: "entrada" } },
@@ -124,12 +117,12 @@ const NOTAS_B = [
   ] },
 ];
 
-function NotasB({ aberta, onFechar, onMostrar }) {
-  return html`<${Modal} aberta=${aberta} onFechar=${onFechar} largura="max-w-2xl" titulo="O que muda na versão B"
-    descricao="A versão A é o módulo como foi pedido. A B mantém tudo e acrescenta o que recomendo. Cada item tem um atalho para ver na tela."
+function NotasRecomendacoes({ aberta, onFechar, onMostrar }) {
+  return html`<${Modal} aberta=${aberta} onFechar=${onFechar} largura="max-w-2xl" titulo="Além do pedido"
+    descricao="O que o protótipo acrescenta ao módulo que foi pedido. Cada item tem um atalho para ver na tela."
     rodape=${html`<${Botao} v="secundario" onClick=${onFechar}>Fechar</${Botao}>`}>
     <div class="space-y-6">
-      ${NOTAS_B.map((g) => html`<section key=${g.aba}>
+      ${RECOMENDACOES.map((g) => html`<section key=${g.aba}>
         <p class="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-california-red">${g.aba}</p>
         <ul class="divide-y divide-border rounded-xl border border-border">
           ${g.itens.map((it) => html`<li key=${it.t} class="flex items-start gap-3 px-4 py-3">

@@ -2,8 +2,8 @@
 
 const LIMITE_DISPENSA = 5000;
 
-function linhasDaEntrada(db, B) {
-  return contratosEmAberto(db, B).map((c) => infoContrato(db, c));
+function linhasDaEntrada(db) {
+  return contratosEmAberto(db).map((c) => infoContrato(db, c));
 }
 
 /* Outras PPs do mesmo fornecedor no mesmo job, ainda sem contrato. */
@@ -15,7 +15,7 @@ function ppsIrmasSemContrato(db, info) {
   });
 }
 
-function etiquetasB(db, info) {
+function etiquetas(db, info) {
   const out = [];
   if (info.c.tipo === "aditivo") out.push(html`<${Etiqueta} cor="roxo" icone="layers">${moeda(info.c.aditivo.de)} → ${moeda(info.c.aditivo.para)}</${Etiqueta}>`);
   const irmas = ppsIrmasSemContrato(db, info);
@@ -31,9 +31,8 @@ function rotuloAcao(status) {
 }
 
 function Kpis({ db, linhas, filtro, onFiltro }) {
-  const { B } = useStore();
   const n = (s) => linhas.filter((l) => l.c.status === s).length;
-  const travadas = db.pps.filter((p) => situacaoPagamento(db, p, B).k === "travado");
+  const travadas = db.pps.filter((p) => situacaoPagamento(db, p).k === "travado");
   const valorTravado = travadas.reduce((s, p) => s + p.valor, 0);
   const cli = linhas.filter((l) => l.c.status === "pendente" && l.c.parte === "cliente").length;
   const tiles = [
@@ -56,17 +55,17 @@ function Kpis({ db, linhas, filtro, onFiltro }) {
 }
 
 function Entrada() {
-  const { db, B, ui, setUi, abrirContrato, irJob, abrirModal } = useStore();
+  const { db, ui, setUi, abrirContrato, irJob, abrirModal } = useStore();
   const f = ui.entrada;
   const setF = (patch) => setUi((u) => ({ ...u, entrada: { ...u.entrada, ...patch } }));
-  const todas = linhasDaEntrada(db, B);
+  const todas = linhasDaEntrada(db);
 
   let linhas = todas.filter((l) => (f.origem === "todos" ? true : l.c.parte === f.origem));
-  if (f.status === "travado") linhas = linhas.filter((l) => l.pps.some((p) => situacaoPagamento(db, p, B).k === "travado"));
+  if (f.status === "travado") linhas = linhas.filter((l) => l.pps.some((p) => situacaoPagamento(db, p).k === "travado"));
   else if (f.status !== "todos") linhas = linhas.filter((l) => l.c.status === f.status);
   const q = f.busca.trim().toLowerCase();
   if (q) linhas = linhas.filter((l) => [l.codigo, l.contraparte.nome, l.contraparte.razao, l.job.codigo, l.job.nome, CLIENTES[l.job.clienteId].fantasia].join(" ").toLowerCase().includes(q));
-  const ordenarPorUrgencia = B && f.ordem === "urgencia";
+  const ordenarPorUrgencia = f.ordem === "urgencia";
   linhas = [...linhas].sort((a, b) => (ordenarPorUrgencia ? a.urgencia.dias - b.urgencia.dias : 0) || b.c.chegouEm.localeCompare(a.c.chegouEm));
 
   const contagem = (o) => todas.filter((l) => (o === "todos" ? true : l.c.parte === o)).length;
@@ -75,7 +74,7 @@ function Entrada() {
     { k: "pendente", rotulo: "Pendente" },
     { k: "elaboracao", rotulo: "Em elaboração" },
     { k: "assinatura", rotulo: "Aguardando assinatura" },
-    ...(B ? [{ k: "travado", rotulo: "Com pagamento travado" }] : []),
+    { k: "travado", rotulo: "Com pagamento travado" },
   ];
 
   const acoesDaLinha = (l) => {
@@ -92,12 +91,11 @@ function Entrada() {
     return itens;
   };
 
-  const colsA = [9, 8, 17, 17, 9, 11, 8, 11, 3, 7];
-  const colsB = [9, 9, 18, 16, 10, 14, 11, 3, 10];
+  const COLUNAS = [9, 9, 18, 16, 10, 14, 11, 3, 10];
   const TH = "px-4 py-3 font-semibold";
 
   return html`<div class="space-y-5">
-    ${B && html`<${Kpis} db=${db} linhas=${todas} filtro=${f.status} onFiltro=${(s) => setF({ status: s })} />`}
+    ${html`<${Kpis} db=${db} linhas=${todas} filtro=${f.status} onFiltro=${(s) => setF({ status: s })} />`}
 
     <div class="flex flex-wrap items-center gap-2.5">
       <${Busca} id="busca-entrada" valor=${f.busca} onTroca=${(v) => setF({ busca: v })} placeholder="Buscar por job, PP, cliente ou fornecedor" class="w-full sm:w-80" />
@@ -107,29 +105,29 @@ function Entrada() {
         { k: "fornecedor", rotulo: "Fornecedores", icone: "package", n: contagem("fornecedor") },
       ]} />
       <${Selecao} id="status-entrada" rotulo="Status" valor=${f.status} onTroca=${(v) => setF({ status: v })} opcoes=${statusOpcoes} class="w-[210px]" />
-      ${B && html`<${Selecao} id="ordem-entrada" rotulo="Ordenar" valor=${f.ordem} onTroca=${(v) => setF({ ordem: v })} opcoes=${[{ k: "urgencia", rotulo: "Ordenar por prazo" }, { k: "chegada", rotulo: "Ordenar por chegada" }]} class="w-[190px]" />`}
+      ${html`<${Selecao} id="ordem-entrada" rotulo="Ordenar" valor=${f.ordem} onTroca=${(v) => setF({ ordem: v })} opcoes=${[{ k: "urgencia", rotulo: "Ordenar por prazo" }, { k: "chegada", rotulo: "Ordenar por chegada" }]} class="w-[190px]" />`}
       <div class="ml-auto flex items-center gap-3">
         <span class="text-[12.5px] text-muted-foreground">${linhas.length} ${linhas.length === 1 ? "contrato" : "contratos"} em aberto</span>
-        ${B && html`<${Segmentado} rotulo="Visão" valor=${f.visao} onTroca=${(v) => setF({ visao: v })} opcoes=${[{ k: "lista", rotulo: "Lista", icone: "list" }, { k: "quadro", rotulo: "Quadro", icone: "grid" }]} />`}
+        ${html`<${Segmentado} rotulo="Visão" valor=${f.visao} onTroca=${(v) => setF({ visao: v })} opcoes=${[{ k: "lista", rotulo: "Lista", icone: "list" }, { k: "quadro", rotulo: "Quadro", icone: "grid" }]} />`}
       </div>
     </div>
 
-    ${B && f.visao === "quadro" ? html`<${Quadro} linhas=${linhas} />` : linhas.length === 0 ? html`<${Vazio} icone="fileCheck" titulo="Nenhum contrato em aberto com esses filtros" texto="Limpe a busca ou troque o filtro de origem e de status para ver a fila inteira." />` : html`
+    ${f.visao === "quadro" ? html`<${Quadro} linhas=${linhas} />` : linhas.length === 0 ? html`<${Vazio} icone="fileCheck" titulo="Nenhum contrato em aberto com esses filtros" texto="Limpe a busca ou troque o filtro de origem e de status para ver a fila inteira." />` : html`
     <div class="relative overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
       <table class="w-full min-w-[1180px] table-fixed border-collapse text-sm">
-        <colgroup>${(B ? colsB : colsA).map((w, i) => html`<col key=${i} style=${`width:${w}%`} />`)}</colgroup>
+        <colgroup>${COLUNAS.map((w, i) => html`<col key=${i} style=${`width:${w}%`} />`)}</colgroup>
         <thead>
           <tr class="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
             <th class=${TH}>Origem</th><th class=${TH}>Código</th><th class=${TH}>Contraparte</th><th class=${TH}>Job</th>
             <th class=${cn(TH, "text-right")}>Valor</th>
-            ${B ? html`<th class=${TH}>Prazo</th>` : html`<th class=${TH}>Condição de pagamento</th><th class=${TH}>Chegou</th>`}
+            <th class=${TH}>Prazo</th>
             <th class=${TH}>Status</th><th class="py-3"><span class="sr-only">Planilha interna</span></th><th class=${cn(TH, "text-center")}>Ação</th>
           </tr>
         </thead>
         <tbody>
           ${linhas.map((l) => html`<tr key=${l.c.id} tabIndex="0" onClick=${() => abrirContrato(l.c.id)} onKeyDown=${(e) => { if (e.key === "Enter") abrirContrato(l.c.id); }}
             class="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-[#fafaf8] focus-visible:bg-[#fafaf8] focus-visible:outline-none">
-            <td class=${cn("px-4 py-3 align-middle", B && FAIXA_URGENCIA[l.urgencia.nivel])}>
+            <td class=${cn("px-4 py-3 align-middle", FAIXA_URGENCIA[l.urgencia.nivel])}>
               <${SeloOrigem} origem=${l.origem} />
               <p class="mt-1 text-[11px] text-muted-foreground">${l.c.parte === "cliente" ? "Financeiro" : l.origem === "solicitacao" ? "Produção" : "Suprimentos"}</p>
             </td>
@@ -137,7 +135,7 @@ function Entrada() {
             <td class="px-4 py-3 align-middle">
               <p class="truncate font-semibold" title=${l.contraparte.razao}>${l.contraparte.nome}</p>
               <p class="truncate text-[11.5px] tabular-nums text-muted-foreground">${l.contraparte.cnpj}</p>
-              ${B && html`<div class="mt-1 flex flex-wrap gap-1">${etiquetasB(db, l)}</div>`}
+              ${html`<div class="mt-1 flex flex-wrap gap-1">${etiquetas(db, l)}</div>`}
             </td>
             <td class="px-4 py-3 align-middle">
               <p class="truncate font-medium" title=${l.job.nome}>${l.job.nome}</p>
@@ -145,33 +143,31 @@ function Entrada() {
             </td>
             <td class="px-4 py-3 text-right align-middle">
               <p class="whitespace-nowrap font-semibold tabular-nums">${moeda(l.valor)}</p>
-              ${B && html`<p class="line-clamp-2 text-[11px] leading-snug text-muted-foreground" title=${l.condicao}>${l.condicao}</p>`}
+              ${html`<p class="line-clamp-2 text-[11px] leading-snug text-muted-foreground" title=${l.condicao}>${l.condicao}</p>`}
             </td>
-            ${B ? html`<td class="px-4 py-3 align-middle">
+            <td class="px-4 py-3 align-middle">
                 <p class=${cn("text-[12.5px] font-semibold", TEXTO_URGENCIA[l.urgencia.nivel])}>${l.urgencia.texto}</p>
                 <p class="text-[11px] text-muted-foreground">Chegou ${relativo(l.c.chegouEm)}</p>
-              </td>` : html`<td class="px-4 py-3 align-middle"><p class="line-clamp-2 text-[12.5px] leading-snug text-muted-foreground" title=${l.condicao}>${l.condicao}</p></td>
-              <td class="px-4 py-3 align-middle"><p class="tabular-nums">${dataCurta(l.c.chegouEm)}</p><p class="text-[11px] text-muted-foreground">${relativo(l.c.chegouEm)}</p></td>`}
+              </td>
             <td class="px-4 py-3 align-middle"><${SeloContrato} status=${l.c.status} /></td>
             <td class="py-3 align-middle"><${LinkPlanilha} planilha=${l.planilha} /></td>
             <td class="px-3 py-3 text-center align-middle">
               <div class="flex items-center justify-center gap-1">
                 <${Botao} v=${l.c.status === "assinatura" ? "secundario" : "vermelho"} t="xs" onClick=${(e) => { e.stopPropagation(); abrirContrato(l.c.id); }}>${rotuloAcao(l.c.status)}</${Botao}>
-                ${B && html`<${MenuAcoes} itens=${acoesDaLinha(l)} />`}
+                ${html`<${MenuAcoes} itens=${acoesDaLinha(l)} />`}
               </div>
             </td>
           </tr>`)}
         </tbody>
       </table>
     </div>`}
-    ${!B && html`<p class="text-[12px] text-muted-foreground">A linha abre a elaboração do contrato. O ícone verde leva ao item na planilha interna do job.</p>`}
   </div>`;
 }
 
-/* Versão B: a mesma fila em colunas por status. */
+/* A mesma fila em colunas por status. */
 function Quadro({ linhas }) {
-  const { db, abrirContrato, B } = useStore();
-  const recentes = db.contratos.filter((c) => visivel(c, B) && RESOLVIDO.includes(c.status) && c.atualizadoEm && dias(c.atualizadoEm, HOJE) <= 10).map((c) => infoContrato(db, c));
+  const { db, abrirContrato } = useStore();
+  const recentes = db.contratos.filter((c) => RESOLVIDO.includes(c.status) && c.atualizadoEm && dias(c.atualizadoEm, HOJE) <= 10).map((c) => infoContrato(db, c));
   const colunas = [
     { k: "pendente", rot: "Pendentes", itens: linhas.filter((l) => l.c.status === "pendente") },
     { k: "elaboracao", rot: "Em elaboração", itens: linhas.filter((l) => l.c.status === "elaboracao") },

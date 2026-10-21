@@ -5,7 +5,7 @@ const TIPOS = {
   locacao: { rotulo: "Locação", desc: "Equipamentos, estruturas e veículos usados por um período." },
   compra: { rotulo: "Compra e venda", desc: "Materiais e itens adquiridos: gráfica, brindes, insumos." },
   influenciador: { rotulo: "Influenciador", desc: "Entregas por rede social, direitos de imagem e aprovação prévia de conteúdo." },
-  aditivo: { rotulo: "Termo aditivo", desc: "Alteração de contrato já assinado: valor, prazo ou escopo.", soNaB: true },
+  aditivo: { rotulo: "Termo aditivo", desc: "Alteração de contrato já assinado: valor, prazo ou escopo." },
 };
 const ORDEM_TIPOS = ["prestacao", "locacao", "compra", "influenciador", "aditivo"];
 
@@ -45,7 +45,7 @@ const CAMPOS_SISTEMA = [
     ["data.hoje", "Data por extenso", "Calculado"],
     ["foro.cidade", "Cidade do foro", "Configuração do jurídico"],
   ] },
-  { grupo: "Aditivo", soNaB: true, itens: [
+  { grupo: "Aditivo", itens: [
     ["aditivo.contrato", "Contrato original", "Contrato assinado"],
     ["aditivo.data_original", "Data do contrato original", "Contrato assinado"],
     ["aditivo.valor_anterior", "Valor do contrato original", "Contrato assinado"],
@@ -223,8 +223,8 @@ A CONTRATADA indica {{responsavel.gp}} como gerente do projeto e ponto focal jun
 ${FECHO}`,
   },
   {
-    // Versão B: o tipo mais complexo, para a 2ª etapa, já como rascunho.
-    id: "m-forn-infl", nome: "Contratação de influenciador", tipo: "influenciador", parte: "fornecedor", versao: 1, atualizadoEm: "2026-10-19", atualizadoPor: "Helena Castro", usos: 0, ativo: true, soNaB: true, rascunho: true,
+    // O tipo mais complexo, previsto para a 2ª etapa, já como rascunho.
+    id: "m-forn-infl", nome: "Contratação de influenciador", tipo: "influenciador", parte: "fornecedor", versao: 1, atualizadoEm: "2026-10-19", atualizadoPor: "Helena Castro", usos: 0, ativo: true, rascunho: true,
     descricao: "Entregas por rede, aprovação prévia e uso de imagem. Rascunho para validar com o jurídico.",
     lacunas: [
       { chave: "objeto", rotulo: "Perfis e redes", tipo: "curto", obrigatoria: true, dica: "Ex.: perfil no Instagram e no TikTok." },
@@ -258,7 +258,7 @@ ${FECHO}`,
 ];
 
 MODELOS.push({
-  id: "m-aditivo", nome: "Termo aditivo de valor", tipo: "aditivo", parte: "fornecedor", versao: 1, atualizadoEm: "2026-10-19", atualizadoPor: "Helena Castro", usos: 3, ativo: true, soNaB: true,
+  id: "m-aditivo", nome: "Termo aditivo de valor", tipo: "aditivo", parte: "fornecedor", versao: 1, atualizadoEm: "2026-10-19", atualizadoPor: "Helena Castro", usos: 3, ativo: true,
   descricao: "Quando a PP é reemitida com valor acima do contrato assinado.",
   lacunas: [{ chave: "objeto", rotulo: "Alteração acordada", tipo: "longo", obrigatoria: true, dica: "O que mudou em relação ao contrato. Ex.: inclusão de 1 diária de montagem." }],
   clausulasOpcionais: [],

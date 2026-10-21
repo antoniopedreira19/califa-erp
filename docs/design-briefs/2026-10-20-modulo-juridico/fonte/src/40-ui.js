@@ -41,7 +41,7 @@ function SeloOrigem({ origem }) {
   return html`<span class=${cn("inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-semibold", o.cls)}><${Icon} n=${o.icone} c="h-3 w-3" />${o.rotulo}</span>`;
 }
 
-/* Etiqueta pequena de contexto (versão B: "Mesmo fornecedor", "Abaixo do limite"…). */
+/* Etiqueta pequena de contexto ("Mesmo fornecedor", "Abaixo do limite"…). */
 const ETIQUETAS = {
   roxo: "bg-[#faf5ff] text-[#7e22ce] border-[#e9d5ff]",
   verde: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -246,6 +246,6 @@ function Rosca({ valor, total, tamanho = 112 }) {
   </svg>`;
 }
 
-/* Severidade de prazo (versão B): faixa à esquerda da linha. */
+/* Severidade de prazo: faixa à esquerda da linha. */
 const FAIXA_URGENCIA = { alta: "faixa-alta", media: "faixa-media", baixa: "" };
 const TEXTO_URGENCIA = { alta: "text-[#b3323c]", media: "text-[#92400e]", baixa: "text-muted-foreground" };

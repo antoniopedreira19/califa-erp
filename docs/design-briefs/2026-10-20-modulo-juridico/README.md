@@ -23,9 +23,11 @@ O contrato nasce de uma **minuta pronta** (modelo), por tipo: prestação de ser
 
 ## 2. O que o protótipo tem
 
-A barra escura no rodapé do protótipo troca a versão e simula os dois gatilhos (o financeiro abre um job, Suprimentos gera uma PP). A entrada nova aparece na fila e no sino.
+A barra escura no rodapé do protótipo simula os dois gatilhos (o financeiro abre um job, Suprimentos gera uma PP). A entrada nova aparece na fila e no sino.
 
-### Versão A: como foi pedido
+Até 21/10/2026 o protótipo tinha duas versões: A, como foi pedido, e B, com as recomendações. A versão A foi retirada; ficou uma só, com tudo o que está abaixo.
+
+### O que foi pedido
 
 - **Sidebar:** item **Jurídico** ao lado de Jobs e Suprimentos, com o número de pendentes.
 - **Caixa de entrada:** cada job aberto e cada PP gerada, com origem, contraparte, job, valor, condição de pagamento, status e o ícone verde que leva ao **item na planilha interna** (mesmo recurso do protótipo de Suprimentos). Tem filtro por cliente ou fornecedor e por status.
@@ -40,9 +42,9 @@ A barra escura no rodapé do protótipo troca a versão e simula os dois gatilho
 
 O valor sai por extenso no contrato ("R$ 30.900,00 (trinta mil e novecentos reais)").
 
-### Versão B: o que recomendo acrescentar
+### Além do pedido (recomendações)
 
-O botão "O que muda na B" do protótipo lista cada item com um atalho para a tela.
+O botão "Além do pedido", na barra do protótipo, lista cada item com um atalho para a tela.
 
 1. **Painel do que trava pagamento:** pendentes, em elaboração, aguardando assinatura e o **valor das PPs aprovadas que não podem ser pagas**. Clicar num número filtra a fila.
 2. **Prazo no lugar de "chegou em":** a fila se ordena pelo vencimento da PP (ou pelo início do job, no cliente), com faixa vermelha até 5 dias e âmbar até 10.
@@ -74,8 +76,8 @@ Na implementação, o editor de documento pede uma biblioteca como TipTap (Prose
 2. **O que a trava bloqueia.** O protótipo deixa a PP andar no financeiro (avaliação e aprovação) e bloqueia só o **pagamento**. Contrato com o cliente não trava nada.
 3. **Quem usa o módulo.** Não existe o papel `juridico` em `AppRole`. É preciso decidir se ele entra como papel novo ou como permissão (`lib/permissoes.ts`), e o que GP, produtor e financeiro veem do módulo.
 4. **Assinatura.** No MVP, o assinado é anexado à mão. Assinatura eletrônica fica para depois.
-5. **Um contrato por PP** na versão A. Se a B for aceita, o vínculo vira n:n (um contrato cobre várias PPs).
-6. **Limite de dispensa, foro e dados da agência** (B): valores de configuração, a definir com o jurídico.
+5. **Um contrato pode cobrir várias PPs** do mesmo fornecedor no mesmo job, então o vínculo entre contrato e PP é n:n.
+6. **Limite de dispensa, foro e dados da agência:** valores de configuração, a definir com o jurídico.
 7. **Escopo dos modelos:** o jurídico precisa entregar as minutas reais. As do protótipo são ilustrativas.
 
 ## 4. Esboço de dados (para a implementação, não é migration)
@@ -84,7 +86,7 @@ A implementação segue `docs/FLUXO-BANCO.md`: ler o banco pelo MCP, escrever a 
 
 - `contrato_modelos` e `contrato_modelo_versoes`: tipo, parte (cliente ou fornecedor), corpo com os marcadores, lacunas (jsonb), cláusulas opcionais e ativo/arquivado.
 - `contratos`: `tenant_id`, parte, origem (job, pp, aditivo, solicitação), `job_id`, `cliente_id` ou `fornecedor_id`, status, a versão de modelo usada, os valores das lacunas (jsonb), as cláusulas marcadas, o arquivo gerado, o assinado e a data de assinatura.
-- `contrato_pps` (n:n), se a versão B entrar.
+- `contrato_pps` (n:n): um contrato cobre uma ou mais PPs.
 - Bucket privado `contratos` para os PDFs, com o mesmo padrão de pasta por tenant dos outros buckets.
 - Auditoria em cada mudança de status, pelo mecanismo que o ERP já usa.
 - A trava de pagamento validada no servidor, na ação que paga a PP, e não só na tela.

@@ -23,7 +23,7 @@ const FORNECEDORES = {
   atelier: { id: "atelier", nome: "Atelier Norte", razao: "Atelier Norte Cenografia Ltda.", cnpj: "11.111.111/0001-18", endereco: "Av. Exemplo, 1500, Lapa, São Paulo/SP" },
   rodas: {
     id: "rodas", nome: "Rodas Transportes", razao: "Rodas Transportes e Logística Ltda.", cnpj: "22.222.222/0002-11", endereco: "Rua Exemplo, 640, Vila Leopoldina, São Paulo/SP",
-    // Versão B: fornecedor recorrente com contrato-quadro vigente.
+    // Fornecedor recorrente com contrato-quadro vigente.
     quadro: { codigo: "CQ-0007", assinadoEm: "2026-01-15", vigencia: "2026-12-31", objeto: "Transporte de carga e de pessoas, com motorista, sob demanda" },
   },
   grafica: { id: "grafica", nome: "Gráfica Ponto Firme", razao: "Gráfica Ponto Firme Ltda.", cnpj: "33.333.333/0002-22", endereco: "Rua Exemplo, 75, Cambuci, São Paulo/SP" },
@@ -124,8 +124,8 @@ const CONTRATOS = [
   { id: "c-pp498", parte: "fornecedor", ppIds: ["pp498"], status: "assinado", modeloId: "m-forn-loc", modeloVersao: 3, chegouEm: "2026-10-10T16:20", atualizadoEm: "2026-10-14T12:00", responsavel: "Marcos Vianna", arquivo: "CTR-00498-v1.pdf", arquivoAssinado: "CTR-00498-assinado.pdf", assinadoEm: "2026-10-14", valor: 28400,
     campos: { objeto: "palco de 8×6 m e sistema de som para 500 pessoas, com técnico operador", periodo_locacao: "4 diárias, de 29/10/2026 a 01/11/2026", local_entrega: "Marina da Glória, Rio de Janeiro/RJ", valor_reposicao: "R$ 380.000,00" }, clausulas: ["seguro"],
     historico: [H("2026-10-10T16:20", "Sistema", "PP-00498 gerada por Suprimentos."), H("2026-10-14T12:00", "Marcos Vianna", "Contrato assinado anexado. Pagamento liberado.")] },
-  // Só na versão B: a PP foi reemitida com valor maior depois do contrato assinado.
-  { id: "c-pp498-ad", parte: "fornecedor", ppIds: ["pp498"], tipo: "aditivo", soNaB: true, status: "pendente", chegouEm: "2026-10-19T11:15", aditivo: { de: 28400, para: 31200, motivo: "PP-00498 reemitida pela produção: inclusão de 1 diária de montagem" },
+  // A PP foi reemitida com valor maior depois do contrato assinado: aditivo.
+  { id: "c-pp498-ad", parte: "fornecedor", ppIds: ["pp498"], tipo: "aditivo", status: "pendente", chegouEm: "2026-10-19T11:15", aditivo: { de: 28400, para: 31200, motivo: "PP-00498 reemitida pela produção: inclusão de 1 diária de montagem" },
     historico: [H("2026-10-19T11:15", "Sistema", "PP-00498 reemitida com valor maior que o do contrato assinado (R$ 28.400,00 → R$ 31.200,00). Aditivo criado como pendente.")] },
   { id: "c-pp499", parte: "fornecedor", ppIds: ["pp499"], status: "assinatura", modeloId: "m-forn-prest", modeloVersao: 4, chegouEm: "2026-10-11T11:00", atualizadoEm: "2026-10-15T16:30", responsavel: "Marcos Vianna", arquivo: "CTR-00499-v1.pdf", valor: 54900,
     campos: { objeto: "projeto, construção e montagem de 3 estandes da marca", entregaveis: "3 estandes de 9 m² montados, com iluminação e mobiliário", prazo_execucao: "montagem até 28/10/2026 e desmontagem em 02/11/2026" }, clausulas: ["multa"],

@@ -1,13 +1,13 @@
 /* ---------- Raiz ---------- */
 
 function TelaJuridico() {
-  const { ui, setUi, db, B, abrirModal } = useStore();
-  const abertos = contratosEmAberto(db, B).length;
-  const modelosAtivos = db.modelos.filter((m) => m.ativo && visivel(m, B)).length;
+  const { ui, setUi, db, abrirModal } = useStore();
+  const abertos = contratosEmAberto(db).length;
+  const modelosAtivos = db.modelos.filter((m) => m.ativo).length;
   return html`<div class="space-y-6">
     <${Cabecalho} kicker="Contratos" icone="scale" titulo="Jurídico" descricao="Contratos com clientes e fornecedores. Cada job aberto pelo financeiro e cada PP gerada por Suprimentos chegam aqui como contrato pendente.">
       <${Sino} />
-      ${B && html`<${Botao} v="secundario" icone="plus" onClick=${() => abrirModal({ tipo: "solicitacao" })}>Nova solicitação</${Botao}>`}
+      ${html`<${Botao} v="secundario" icone="plus" onClick=${() => abrirModal({ tipo: "solicitacao" })}>Nova solicitação</${Botao}>`}
     </${Cabecalho}>
     <${Abas} rotulo="Seções do jurídico" ativa=${ui.aba} onTroca=${(a) => setUi((u) => ({ ...u, aba: a }))} abas=${[
       { k: "entrada", rotulo: "Caixa de entrada", n: abertos },
@@ -18,10 +18,6 @@ function TelaJuridico() {
   </div>`;
 }
 
-function versaoInicial() {
-  try { return /versao-b|^#b$/i.test(location.hash) ? "B" : "A"; } catch (e) { return "A"; }
-}
-
 const ENTRADA_PADRAO = { busca: "", origem: "todos", status: "todos", visao: "lista", ordem: "urgencia" };
 
 function App() {
@@ -29,12 +25,11 @@ function App() {
   const dbRef = useRef(db);
   dbRef.current = db;
   const [ui, setUi] = useState(() => ({
-    versao: versaoInicial(), tela: "juridico", aba: "entrada", jobId: "j412", jobAba: "info", destaque: null, gaveta: null, modal: null,
+    tela: "juridico", aba: "entrada", jobId: "j412", jobAba: "info", destaque: null, gaveta: null, modal: null,
     entrada: { ...ENTRADA_PADRAO }, porjob: { jobId: null, fornecedor: "todos", status: "todos" }, modelos: { busca: "", parte: "todos" },
   }));
   const [toasts, setToasts] = useState([]);
   const [notas, setNotas] = useState(false);
-  const B = ui.versao === "B";
 
   const toast = useCallback((t) => {
     const id = Math.random().toString(36).slice(2);
@@ -53,17 +48,12 @@ function App() {
   const abrirEditor = (id) => setUi((u) => ({ ...u, gaveta: { tipo: "modelo", id } }));
   const abrirModal = (m) => setUi((u) => ({ ...u, modal: m }));
   const fecharGaveta = () => setUi((u) => ({ ...u, gaveta: null }));
-  const setVersao = (v) => setUi((u) => ({
-    ...u, versao: v,
-    entrada: v === "A" ? { ...u.entrada, visao: "lista", status: u.entrada.status === "travado" ? "todos" : u.entrada.status } : u.entrada,
-    modal: v === "A" ? null : u.modal,
-  }));
   const reiniciar = () => { setDb(estadoInicial()); setUi((u) => ({ ...u, gaveta: null, modal: null, entrada: { ...ENTRADA_PADRAO } })); toast({ titulo: "Dados reiniciados", texto: "O protótipo voltou aos dados de exemplo." }); };
 
   const mostrarNota = (alvo) => {
     setNotas(false);
     setUi((u) => {
-      const n = { ...u, versao: "B", tela: "juridico", gaveta: null, modal: null };
+      const n = { ...u, tela: "juridico", gaveta: null, modal: null };
       if (alvo.aba) n.aba = alvo.aba;
       if (alvo.aba === "entrada") n.entrada = { ...ENTRADA_PADRAO, visao: alvo.visao || "lista", busca: alvo.busca || "" };
       if (alvo.modal) n.modal = { tipo: alvo.modal };
@@ -79,25 +69,25 @@ function App() {
     topo();
   };
 
-  const store = { db, setDb, ui, setUi, B, acoes, toast, ir, irJob, abrirContrato, abrirEditor, abrirModal, setVersao, reiniciar };
+  const store = { db, setDb, ui, setUi, acoes, toast, ir, irJob, abrirContrato, abrirEditor, abrirModal, reiniciar };
 
   let gaveta = null;
   const g = ui.gaveta;
   if (g && g.tipo === "contrato") {
     const c = db.contratos.find((x) => x.id === g.id);
-    if (c && visivel(c, B)) {
+    if (c) {
       gaveta = c.status === "pendente" || c.status === "elaboracao"
-        ? html`<${GerarContrato} key=${`g-${c.id}-${ui.versao}`} id=${c.id} passoInicial=${g.passo} onFechar=${fecharGaveta} />`
+        ? html`<${GerarContrato} key=${`g-${c.id}`} id=${c.id} passoInicial=${g.passo} onFechar=${fecharGaveta} />`
         : html`<${VerContrato} key=${`v-${c.id}-${c.status}`} id=${c.id} onFechar=${fecharGaveta} />`;
     }
   } else if (g && g.tipo === "modelo") {
-    gaveta = html`<${EditorModelo} key=${`m-${g.id}-${ui.versao}`} id=${g.id} onFechar=${fecharGaveta} />`;
+    gaveta = html`<${EditorModelo} key=${`m-${g.id}`} id=${g.id} onFechar=${fecharGaveta} />`;
   }
 
   const m = ui.modal;
   const fecharModal = () => setUi((u) => ({ ...u, modal: null }));
   let modal = null;
-  if (m && B) {
+  if (m) {
     if (m.tipo === "dispensa") modal = html`<${ModalDispensa} id=${m.id} onFechar=${fecharModal} />`;
     if (m.tipo === "quadro") modal = html`<${ModalQuadro} id=${m.id} onFechar=${fecharModal} />`;
     if (m.tipo === "pedir") modal = html`<${ModalPedir} id=${m.id} onFechar=${fecharModal} />`;
@@ -118,7 +108,7 @@ function App() {
     </main>
     <${Gaveta} aberta=${!!gaveta} onFechar=${fecharGaveta} rotulo="Contrato" largura="max-w-[1480px]">${gaveta}</${Gaveta}>
     ${modal}
-    <${NotasB} aberta=${notas} onFechar=${() => setNotas(false)} onMostrar=${mostrarNota} />
+    <${NotasRecomendacoes} aberta=${notas} onFechar=${() => setNotas(false)} onMostrar=${mostrarNota} />
     <${Toasts} itens=${toasts} onFechar=${(id) => setToasts((ts) => ts.filter((x) => x.id !== id))} />
     <${BarraPrototipo} onNotas=${() => setNotas(true)} />
   </${Store.Provider}>`;

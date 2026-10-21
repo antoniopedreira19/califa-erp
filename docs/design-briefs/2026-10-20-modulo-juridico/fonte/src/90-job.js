@@ -56,16 +56,16 @@ function PlanilhaInterna({ jobId, destaque }) {
 }
 
 function TelaJob() {
-  const { db, B, ui, setUi, ir, abrirContrato } = useStore();
+  const { db, ui, setUi, ir, abrirContrato } = useStore();
   const job = jobDe(db, ui.jobId);
   const cli = CLIENTES[job.clienteId];
   const pps = db.pps.filter((p) => p.jobId === job.id);
   const cCli = contratoDoJob(db, job.id);
   const aba = ui.jobAba;
   const setAba = (a) => setUi((u) => ({ ...u, jobAba: a, destaque: a === "planilha" ? u.destaque : null }));
-  const travadas = pps.filter((p) => situacaoPagamento(db, p, B).k === "travado");
-  const resolvidosForn = pps.filter((p) => { const c = contratoDaPP(db, p.id); return c && RESOLVIDO.includes(c.status) && !aditivoDaPP(db, p.id, B); }).length;
-  const msgs = B ? db.contratos.filter((c) => (c.jobId === job.id || (c.ppIds || []).some((id) => pps.some((p) => p.id === id)))).flatMap((c) => (c.historico || []).filter((h) => h.texto.startsWith("Pedido de informação")).map((h) => ({ ...h, c }))) : [];
+  const travadas = pps.filter((p) => situacaoPagamento(db, p).k === "travado");
+  const resolvidosForn = pps.filter((p) => { const c = contratoDaPP(db, p.id); return c && RESOLVIDO.includes(c.status) && !aditivoDaPP(db, p.id); }).length;
+  const msgs = db.contratos.filter((c) => (c.jobId === job.id || (c.ppIds || []).some((id) => pps.some((p) => p.id === id)))).flatMap((c) => (c.historico || []).filter((h) => h.texto.startsWith("Pedido de informação")).map((h) => ({ ...h, c })));
 
   const ficha = [
     ["Projeto", `${job.projeto.codigo} · ${job.projeto.nome}`], ["Cliente", cli.razao], ["Serviço", job.servico], ["Produto", job.produto],
@@ -138,7 +138,7 @@ function TelaJob() {
     </div>`}
 
     ${aba === "chat" && (msgs.length ? html`<div class="space-y-3">${msgs.map((m, i) => html`<div key=${i} class="max-w-2xl rounded-2xl border border-border bg-white p-4 shadow-soft"><p class="text-[12px] font-semibold text-california-red">${m.por} · Jurídico</p><p class="mt-1 text-[13.5px]">${m.texto.replace(/^Pedido de informação enviado a [^:]+: /, "").replace(/^"|"$/g, "")}</p><p class="mt-1.5 text-[11px] text-muted-foreground">${dataHoraBr(m.em)} · sobre ${infoContrato(db, m.c).codigo}</p></div>`)}</div>`
-      : html`<${Vazio} icone="message" titulo="Comunicação do job" texto=${B ? "Quando o jurídico usar “Pedir ao produtor”, a pergunta aparece aqui." : "Fora do escopo do protótipo."} />`)}
+      : html`<${Vazio} icone="message" titulo="Comunicação do job" texto="Quando o jurídico usar “Pedir ao produtor”, a pergunta aparece aqui." />`)}
   </div>`;
 }
 
@@ -159,7 +159,7 @@ function ListaJobs() {
 }
 
 function TelaSuprimentos() {
-  const { db, acoes, B } = useStore();
+  const { db, acoes } = useStore();
   const recentes = [...db.pps].sort((a, b) => b.geradaEm.localeCompare(a.geradaEm)).slice(0, 6);
   return html`<div class="space-y-6">
     <${Cabecalho} kicker="Operação" icone="package" titulo="Suprimentos" descricao="O módulo de Suprimentos tem protótipo próprio. Aqui fica só o elo com o Jurídico: cada PP gerada vira um contrato pendente." />
@@ -171,7 +171,7 @@ function TelaSuprimentos() {
       <table class="w-full min-w-[860px] table-fixed border-collapse text-sm">
         <colgroup>${[12, 22, 30, 13, 23].map((w, i) => html`<col key=${i} style=${`width:${w}%`} />`)}</colgroup>
         <thead><tr class="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground"><th class="px-4 py-3">PP</th><th class="px-4 py-3">Fornecedor</th><th class="px-4 py-3">Serviço</th><th class="px-4 py-3">Gerada</th><th class="px-4 py-3">Contrato no Jurídico</th></tr></thead>
-        <tbody>${recentes.map((p) => html`<tr key=${p.id} class="border-b border-border last:border-0"><td class="px-4 py-3 font-mono text-[12.5px] font-semibold">${p.codigo}</td><td class="truncate px-4 py-3">${FORNECEDORES[p.fornecedorId].nome}</td><td class="truncate px-4 py-3">${p.servico}</td><td class="px-4 py-3 tabular-nums">${dataHoraBr(p.geradaEm)}</td><td class="px-4 py-3"><${SeloContrato} status=${(contratoDaPP(db, p.id, B) || {}).status || "pendente"} /></td></tr>`)}</tbody>
+        <tbody>${recentes.map((p) => html`<tr key=${p.id} class="border-b border-border last:border-0"><td class="px-4 py-3 font-mono text-[12.5px] font-semibold">${p.codigo}</td><td class="truncate px-4 py-3">${FORNECEDORES[p.fornecedorId].nome}</td><td class="truncate px-4 py-3">${p.servico}</td><td class="px-4 py-3 tabular-nums">${dataHoraBr(p.geradaEm)}</td><td class="px-4 py-3"><${SeloContrato} status=${(contratoDaPP(db, p.id) || {}).status || "pendente"} /></td></tr>`)}</tbody>
       </table>
     </div>
   </div>`;
