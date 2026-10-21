@@ -83,11 +83,16 @@ export async function criarFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar colaboradores: ${errColab.message}` };
   }
 
+  // Elegibilidade: colaboradores com algum vínculo no ano E QUE NÃO FORAM
+  // desligados dentro do ano. Rescisões no ano têm 13º proporcional
+  // calculado pelo módulo de Rescisões (/rh/rescisoes), então entrariam
+  // em duplicata. Quem foi desligado APÓS 31/dez do ano continua elegível
+  // (o 13º é dele). Quem está ativo (data_encerramento NULL) também.
   const elegiveisIds = (colaboradores ?? [])
     .filter(
       (c) =>
         c.data_encerramento == null ||
-        c.data_encerramento >= `${ano}-01-01`,
+        c.data_encerramento > `${ano}-12-31`,
     )
     .map((c) => c.id);
 
@@ -450,10 +455,10 @@ export async function recalcularFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar salários: ${errSal.message}` };
   }
 
-  // Rebuscar data_admissao atual (caso tenha mudado).
+  // Rebuscar data_admissao + data_encerramento atual.
   const { data: colabsAtuais, error: errCol } = await supabase
     .from("colaboradores")
-    .select("id, data_admissao")
+    .select("id, data_admissao, data_encerramento")
     .eq("tenant_id", tenantId)
     .in("id", colabIds);
   if (errCol) {
@@ -480,6 +485,10 @@ export async function recalcularFolhaDecimoTerceiro(
   const admissaoPorColab = new Map(
     (colabsAtuais ?? []).map((c) => [c.id, c.data_admissao]),
   );
+  const encerramentoPorColab = new Map(
+    (colabsAtuais ?? []).map((c) => [c.id, c.data_encerramento as string | null]),
+  );
+  const fimDoAno = `${folha.ano}-12-31`;
   const adiantadoPorColab = new Map<string, number>();
   for (const a of adiantamentos ?? []) {
     adiantadoPorColab.set(
@@ -502,6 +511,46 @@ export async function recalcularFolhaDecimoTerceiro(
       const valorReciboNum =
         reciboRaw != null && Number(reciboRaw) > 0 ? Number(reciboRaw) : null;
       const totalAdiantado = adiantadoPorColab.get(l.colaborador_id) ?? 0;
+
+      // Se o colaborador foi desligado DENTRO do ano, 13º proporcional
+      // foi pela rescisão. Zera a linha com obs explicativa, e marca
+      // editado_manualmente pra não ser rebuscada em recalcs futuros.
+      const dataEnc = encerramentoPorColab.get(l.colaborador_id);
+      const desligadoNoAno =
+        dataEnc != null && dataEnc <= fimDoAno;
+      if (desligadoNoAno) {
+        const dataBr = dataEnc.split("-").reverse().join("/");
+        return supabase
+          .from("decimo_terceiro_linhas")
+          .update({
+            snapshot_salario: salarioNum,
+            snapshot_data_admissao: admissaoAtual,
+            avos: 0,
+            total_adiantado: totalAdiantado,
+            primeira_parcela: 0,
+            segunda_parcela: 0,
+            desconto_inss: 0,
+            desconto_irrf: 0,
+            total_bruto: 0,
+            total_liquido: 0,
+            parte_clt_primeira_parcela: null,
+            parte_clt_segunda_parcela: null,
+            parte_clt_desconto_inss: null,
+            parte_clt_desconto_irrf: null,
+            parte_clt_total_liquido: null,
+            parte_pj_primeira_parcela: null,
+            parte_pj_segunda_parcela: null,
+            parte_pj_total_liquido: null,
+            salario_editado: 0,
+            avos_editado: 0,
+            editado_manualmente: true,
+            obs: `Desligado em ${dataBr} — 13º proporcional pago na rescisão`,
+            updated_by: session.profile.id,
+          })
+          .eq("id", l.id)
+          .eq("tenant_id", tenantId);
+      }
+
       const calc = calcularLinhaDecimoTerceiro({
         salario: salarioNum,
         dataAdmissao: new Date(`${admissaoAtual}T00:00:00Z`),
