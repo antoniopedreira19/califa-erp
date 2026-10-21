@@ -1,0 +1,27 @@
+const { chromium } = require(process.env.PLAYWRIGHT ?? 'playwright');
+(async () => {
+  const b = await chromium.launch();
+  const p = await b.newPage({ viewport: { width: 1960, height: 1500 } });
+  const erros = [];
+  p.on('pageerror', e => erros.push(e.message));
+  await p.goto('file://' + process.cwd() + '/conciliacao-banco.html');
+  await p.click('text=Esconder notas');
+  const txt = async (sel) => (await p.innerText(sel)).replace(/\s+/g, ' ');
+  const out = {};
+  await p.click('.pg-seg >> text=Conciliação · Conciliação automática');
+  await p.click('button:has-text("Usar o extrato de exemplo")');
+  await p.waitForTimeout(400);
+  out.secoes = (await txt('main')).match(/(Baixas feitas à mão que bateram com o banco|Prontos: baixar e conciliar|Conferir antes|Uma linha do banco, vários títulos|Sem correspondência) \d+/g);
+  const l2080 = p.locator('tr', { hasText: '2.080,00' }).first();
+  out.l2080 = (await l2080.innerText()).replace(/\s+/g, ' ').slice(0, 260);
+  await l2080.locator('button:has-text("Baixar e conciliar os 2")').click();
+  await p.waitForTimeout(150);
+  out.toast = (await txt('body')).match(/2 títulos de Atelier[^.]*\.[^.]*\./)?.[0];
+  const prontos = p.locator('section', { hasText: 'Prontos: baixar e conciliar' }).first();
+  await prontos.locator('button:has-text("Baixar e conciliar")').first().click();
+  await p.waitForTimeout(150);
+  out.secoesDepois = (await txt('main')).match(/(Prontos: baixar e conciliar|Conferir antes|Uma linha do banco, vários títulos) \d+/g);
+  out.toast2 = (await txt('body')).match(/\d+ linhas do banco conciliadas[^.]*\./)?.[0];
+  console.log(JSON.stringify(out, null, 1), erros);
+  await b.close();
+})();
