@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Pre-commit hook: bloqueia commit com dados pessoais reais.
+# Pre-commit hook: bloqueia commit com dados pessoais reais e com
+# policies de RLS inseguras em entidade sensivel.
 # Setup (uma vez por clone): git config core.hooksPath .githooks
 
-exec scripts/check-pii.sh
+set -e
+scripts/check-pii.sh
+scripts/check-rls.sh
