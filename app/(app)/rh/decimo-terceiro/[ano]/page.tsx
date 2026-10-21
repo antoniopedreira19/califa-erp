@@ -61,7 +61,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
        segunda_parcela, desconto_inss, desconto_irrf, total_bruto,
        total_liquido, editado_manualmente, salario_editado, avos_editado,
        obs,
-       empresa:empresas!snapshot_empresa_id(nome)`,
+       empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome)`,
     )
     .eq("folha_id", folha.id)
     .eq("tenant_id", session.activeTenant.id)
@@ -69,6 +69,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
 
   if (errLinhas) {
     console.error("[rh.decimo-terceiro.detalhe] linhas:", errLinhas.message);
+    throw new Error(`Falha ao carregar linhas da folha: ${errLinhas.message}`);
   }
 
   type EmpresaEmbed = { nome: string } | { nome: string }[] | null;

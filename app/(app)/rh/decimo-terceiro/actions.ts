@@ -506,7 +506,7 @@ export async function exportarFolhaDecimoTerceiroXlsx(
       `snapshot_nome, snapshot_tipo_contratacao, snapshot_data_admissao,
        snapshot_salario, avos, total_adiantado, primeira_parcela,
        segunda_parcela, desconto_inss, desconto_irrf, total_liquido, obs,
-       empresa:empresas!snapshot_empresa_id(nome)`,
+       empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome)`,
     )
     .eq("folha_id", folhaId)
     .eq("tenant_id", tenantId)
