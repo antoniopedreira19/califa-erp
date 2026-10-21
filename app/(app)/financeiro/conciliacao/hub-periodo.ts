@@ -5,6 +5,8 @@
  * `next/headers` na cadeia quebraria a rota inteira.
  */
 
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+
 export type PeriodoChave = "mes" | "anterior" | "90d" | "ano";
 
 export const PERIODOS: Array<{ chave: PeriodoChave; label: string }> = [
@@ -22,40 +24,33 @@ export const TIPO_CONTA_LABEL: Record<string, string> = {
   cartao_credito: "Cartão de crédito",
 };
 
-/** Data local em ISO. `toISOString()` vira o dia à noite, no fuso de SP. */
-export function isoLocal(d: Date): string {
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mes}-${dia}`;
+/** Data de calendário em ISO, montada em UTC: fuso nenhum muda o dia. */
+function isoDoDia(ano: number, mes: number, dia: number): string {
+  return new Date(Date.UTC(ano, mes - 1, dia)).toISOString().slice(0, 10);
 }
 
+/**
+ * O período parte do dia de Brasília (21/10/2026). O relógio do servidor é
+ * UTC na Vercel: depois das 21h ele já dava amanhã, e no último dia do mês
+ * o "Mês atual" virava o seguinte.
+ */
 export function faixaDoPeriodo(chave: PeriodoChave): {
   de: string;
   ate: string;
   label: string;
 } {
-  const hoje = new Date();
+  const hoje = hojeEmSaoPauloIso();
+  const [ano, mes, dia] = hoje.split("-").map(Number);
   const label = PERIODOS.find((p) => p.chave === chave)?.label ?? "Mês atual";
   switch (chave) {
-    case "anterior": {
-      const de = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-      const ate = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-      return { de: isoLocal(de), ate: isoLocal(ate), label };
-    }
-    case "90d": {
-      const de = new Date(hoje);
-      de.setDate(de.getDate() - 89);
-      return { de: isoLocal(de), ate: isoLocal(hoje), label };
-    }
-    case "ano": {
-      const de = new Date(hoje.getFullYear(), 0, 1);
-      return { de: isoLocal(de), ate: isoLocal(hoje), label };
-    }
-    default: {
-      const de = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      const ate = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-      return { de: isoLocal(de), ate: isoLocal(ate), label };
-    }
+    case "anterior":
+      return { de: isoDoDia(ano, mes - 1, 1), ate: isoDoDia(ano, mes, 0), label };
+    case "90d":
+      return { de: isoDoDia(ano, mes, dia - 89), ate: hoje, label };
+    case "ano":
+      return { de: isoDoDia(ano, 1, 1), ate: hoje, label };
+    default:
+      return { de: isoDoDia(ano, mes, 1), ate: isoDoDia(ano, mes + 1, 0), label };
   }
 }
 

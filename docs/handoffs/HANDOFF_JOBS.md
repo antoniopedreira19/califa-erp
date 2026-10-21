@@ -5763,7 +5763,8 @@ nova, sem migration, nenhum dado mudou.
   o "hoje" em UTC: depois das 21h, "hoje" já é amanhã. Não é exibição de
   `timestamptz` e ficou fora desta correção. ⚠️ **Auditado e em parte
   corrigido em 2026-10-19:** ver a nota de 2026-10-19 (6) do
-  `HANDOFF_FINANCEIRO.md`.
+  `HANDOFF_FINANCEIRO.md`. ⚠️ **O resto (fluxo de caixa, vencidos e home)
+  em 2026-10-21:** ver a nota de 2026-10-21 (1) do mesmo arquivo.
 
 ## ⚠️ Nota de 2026-10-17 — Histórico de versões da Planilha Interna (decisão 186)
 

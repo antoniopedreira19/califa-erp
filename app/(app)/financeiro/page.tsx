@@ -5,6 +5,7 @@ import { Landmark, Clock, ArrowRight, FileText, Receipt, Scale, TrendingUp, Wall
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { carregarPendenciasFiscais, detalheFiscal } from "./pendencias-fiscais";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export default async function CentralFinanceiraPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "em_aberto")
-      .lt("data_vencimento", new Date().toISOString().slice(0, 10)),
+      .lt("data_vencimento", hojeEmSaoPauloIso()),
   ]);
   const aguardandoCount = aguardandoRes.count;
   const ppsCount = ppsRes.count;

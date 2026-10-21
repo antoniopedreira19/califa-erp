@@ -15,6 +15,7 @@ import { carregarJobParaAbertura, linhasDoSave, totalGeradoEmSave } from "../dad
 import { carregarSavesDaAbertura } from "../saves-da-abertura";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { formatDataHoraBr } from "../formatos";
 import {
@@ -232,7 +233,9 @@ export default async function AbrirJobNoFinanceiroPage({
   const jobDoDetalhe = detalhe.job;
 
   const agora = new Date();
-  const hojeIso = agora.toISOString().slice(0, 10);
+  // O dia de Brasília: o fluxo (`vw_fluxo_caixa`) e as datas sugeridas
+  // da curva e do recebimento, que são gravadas.
+  const hojeIso = hojeEmSaoPauloIso();
 
   // Custo previsto = planejado dos itens de calha PP — só o que a
   // California de fato desembolsa (docs/decisions/004). A Server Action

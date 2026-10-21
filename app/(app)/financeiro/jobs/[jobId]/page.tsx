@@ -116,7 +116,8 @@ export default async function JobNoFinanceiroPage({
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
-  const hoje = new Date().toISOString().slice(0, 10);
+  // O dia de Brasília, como o da `vw_fluxo_caixa` (21/10/2026).
+  const hoje = hojeEmSaoPauloIso();
 
   // Todas independentes entre si — em paralelo, nunca em série
   // (`docs/PERFORMANCE.md`).
@@ -147,9 +148,7 @@ export default async function JobNoFinanceiroPage({
     carregarPrazosDosJobs(tenantId, [params.jobId]),
     previsoesGravadas(supabase, tenantId, params.jobId),
     // O selo de faturamento: a esteira de "Visualizar Jobs", só deste job.
-    // A inadimplência usa o hoje de Brasília; o `hoje` desta página segue o
-    // de UTC porque alimenta o fluxo, que acompanha a `vw_fluxo_caixa`.
-    faturamentoPorJob(tenantId, hojeEmSaoPauloIso(), [params.jobId]),
+    faturamentoPorJob(tenantId, hoje, [params.jobId]),
     // Vocabulário do combo de categoria do formulário de abertura: o
     // mesmo escopo 'orcamento' que a fila usa. Não existe lista de
     // categoria só do financeiro.

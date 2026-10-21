@@ -193,7 +193,7 @@ export default async function PedidosCompraFinanceiroPage({
     // Contas avulsas (todos os status) — viram títulos de origem AVULSO ou
     // RECORRÊNCIA na aba unificada, conforme `recorrente_id`.
     (() => {
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeEmSaoPauloIso();
       let q = supabase
         .from("contas_avulsas")
         .select(SELECT_AVULSA_A_PAGAR)

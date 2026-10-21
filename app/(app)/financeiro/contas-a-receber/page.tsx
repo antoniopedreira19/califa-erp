@@ -41,6 +41,7 @@ import {
 } from "./dados-dos-titulos";
 import { carregarCadastroFiscal } from "@/lib/fiscal/cadastro";
 import { montarFiscalDoFaturar } from "@/lib/fiscal/faturar";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,7 @@ export default async function ContasReceberPage({
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeEmSaoPauloIso();
 
   // Todas as leituras em paralelo — regra de performance do projeto.
   const [

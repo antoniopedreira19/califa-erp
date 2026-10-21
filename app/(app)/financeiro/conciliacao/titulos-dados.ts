@@ -71,6 +71,7 @@ import {
 } from "../contas-a-receber/dados-dos-titulos";
 import type { TituloRow as TituloAReceber } from "../contas-a-receber/titulos-list";
 import { lerImpostos, type ImpostoDaLista } from "../fiscal/impostos/dados";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export interface DadosDaAbaTitulos {
   /** Os títulos a pagar em aberto (não cartão), no tipo da lista real. */
@@ -104,7 +105,7 @@ export async function carregarTitulosDaConciliacao(
 ): Promise<DadosDaAbaTitulos> {
   // O "hoje" das avulsas a receber sem data, como a página de Contas a
   // Receber o calcula.
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeEmSaoPauloIso();
 
   // Todas as leituras em paralelo — regra de performance do projeto.
   const [
