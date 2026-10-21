@@ -506,7 +506,7 @@ export async function exportarFolhaDecimoTerceiroXlsx(
       `snapshot_nome, snapshot_tipo_contratacao, snapshot_data_admissao,
        snapshot_salario, avos, total_adiantado, primeira_parcela,
        segunda_parcela, desconto_inss, desconto_irrf, total_liquido, obs,
-       empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome)`,
+       empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome_fantasia)`,
     )
     .eq("folha_id", folhaId)
     .eq("tenant_id", tenantId)
@@ -515,7 +515,7 @@ export async function exportarFolhaDecimoTerceiroXlsx(
     return { ok: false, message: `Falha ao buscar linhas: ${errLinhas.message}` };
   }
 
-  type EmpresaEmbed = { nome: string } | { nome: string }[] | null;
+  type EmpresaEmbed = { nome_fantasia: string } | { nome_fantasia: string }[] | null;
   interface LinhaRaw {
     snapshot_nome: string;
     snapshot_tipo_contratacao: string;
@@ -536,7 +536,7 @@ export async function exportarFolhaDecimoTerceiroXlsx(
     const empresa = Array.isArray(l.empresa) ? l.empresa[0] : l.empresa;
     return {
       snapshot_nome: l.snapshot_nome,
-      snapshot_empresa_nome: empresa?.nome ?? null,
+      snapshot_empresa_nome: empresa?.nome_fantasia ?? null,
       snapshot_tipo_contratacao: l.snapshot_tipo_contratacao as TipoContratacao,
       snapshot_data_admissao: l.snapshot_data_admissao,
       snapshot_salario: Number(l.snapshot_salario),

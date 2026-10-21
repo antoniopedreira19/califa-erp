@@ -61,7 +61,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
        segunda_parcela, desconto_inss, desconto_irrf, total_bruto,
        total_liquido, editado_manualmente, salario_editado, avos_editado,
        obs,
-       empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome)`,
+       empresa:empresas!decimo_terceiro_linhas_snapshot_empresa_id_fkey(nome_fantasia)`,
     )
     .eq("folha_id", folha.id)
     .eq("tenant_id", session.activeTenant.id)
@@ -72,7 +72,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
     throw new Error(`Falha ao carregar linhas da folha: ${errLinhas.message}`);
   }
 
-  type EmpresaEmbed = { nome: string } | { nome: string }[] | null;
+  type EmpresaEmbed = { nome_fantasia: string } | { nome_fantasia: string }[] | null;
   interface LinhaRaw {
     id: string;
     snapshot_nome: string;
@@ -102,7 +102,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
     return {
       id: l.id,
       nome: l.snapshot_nome,
-      empresa: empresa?.nome ?? null,
+      empresa: empresa?.nome_fantasia ?? null,
       tipo_contratacao: l.snapshot_tipo_contratacao,
       data_admissao: l.snapshot_data_admissao,
       salario: Number(l.snapshot_salario),
