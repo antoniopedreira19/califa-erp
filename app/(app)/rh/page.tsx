@@ -111,7 +111,7 @@ export default async function CentralRHPage() {
           href="/rh/contratacoes"
           icon={FileSignature}
           title="Contratações"
-          description="Pipeline que antecede o cadastro: proposta, aceite, coleta de dados, contrato, assinatura e efetivação."
+          description="Novas contratações, da proposta até a efetivação."
           count={contratacoesEmAndamento}
           countLabel={
             contratacoesEmAndamento === 1
@@ -123,7 +123,7 @@ export default async function CentralRHPage() {
           href="/rh/colaboradores"
           icon={Users}
           title="Colaboradores"
-          description="Cadastro do quadro atual e inativos, com nível de cargo, alocação vigente por empresa/regional e histórico salarial."
+          description="Quadro ativo e inativo, com cargo, alocação e salário."
           count={colaboradoresAtivos}
           countLabel={colaboradoresAtivos === 1 ? "ativo" : "ativos"}
         />
@@ -131,7 +131,7 @@ export default async function CentralRHPage() {
           href="/rh/folhas"
           icon={Receipt}
           title="Folhas de pagamento"
-          description="Geração e revisão da folha mensal. RH edita e envia; financeiro aprova, reprova ou paga cada linha. Pendências voltam pro RH corrigir."
+          description="Folha mensal dos colaboradores, com envio ao financeiro."
           count={pendenciasNoMes}
           countLabel={
             pendenciasNoMes === 1
@@ -143,7 +143,7 @@ export default async function CentralRHPage() {
           href="/rh/ferias"
           icon={Palmtree}
           title="Férias"
-          description="Autoserviço do colaborador em /perfil, aprovação pelo RH, concessivos em alerta e acompanhamento do quadro pela regra dos avós."
+          description="Solicitações, aprovações e controle dos períodos aquisitivos."
           count={feriasAguardando}
           countLabel={
             feriasAguardando === 1
@@ -155,29 +155,29 @@ export default async function CentralRHPage() {
           href="/rh/beneficios"
           icon={ShieldPlus}
           title="Benefícios"
-          description="Planos de saúde, dental e dependentes dos colaboradores. Catálogo, vínculos e custo mensal calculado por faixa etária."
+          description="Planos de saúde, dental e dependentes dos colaboradores."
           count={beneficiosAtivos}
           countLabel={beneficiosAtivos === 1 ? "vínculo ativo" : "vínculos ativos"}
+        />
+        <RhCard
+          href="/rh/decimo-terceiro"
+          icon={Gift}
+          title="13º Salário"
+          description="Cálculo anual do 13º de todos os colaboradores."
+          count={folhasDecimoTerceiro}
+          countLabel={folhasDecimoTerceiro === 1 ? "folha criada" : "folhas criadas"}
         />
         <RhCard
           href="/rh/rescisoes"
           icon={FileX}
           title="Rescisões"
-          description="Cálculo das verbas rescisórias (saldo de salário, férias, 1/3 e 13º proporcionais) para desligados. Base pra lançar o título em Contas a Pagar."
+          description="Verbas rescisórias dos colaboradores desligados."
           count={rescisoesRecentes}
           countLabel={
             rescisoesRecentes === 1
               ? "nos últimos 90 dias"
               : "nos últimos 90 dias"
           }
-        />
-        <RhCard
-          href="/rh/decimo-terceiro"
-          icon={Gift}
-          title="13º Salário"
-          description="Folha anual de 13º com snapshot do cadastro, cálculo automático de avos, parcelas e descontos. Uma folha por ano, exportável em XLSX."
-          count={folhasDecimoTerceiro}
-          countLabel={folhasDecimoTerceiro === 1 ? "folha criada" : "folhas criadas"}
         />
         {/* Próximo card: Turnover */}
       </div>
