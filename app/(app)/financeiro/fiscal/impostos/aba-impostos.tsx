@@ -17,11 +17,8 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCheck,
-  CreditCard,
-  Eye,
+  FileText,
   Info,
-  Paperclip,
-  Pencil,
   Plus,
   Search,
   Wallet,
@@ -36,30 +33,25 @@ import {
   useSelecao,
   type TituloParaLote,
 } from "@/components/financeiro/baixa-em-lote";
-import { LinkAnexo, nomeDoAnexo } from "@/components/financeiro/anexo-de-imposto";
-import {
-  BarraDosFiltrosDeColuna,
-  celulaData,
-  celulaTexto,
-  celulaValor,
-  useFiltrosDeColuna,
-  type ColunaFiltravel,
-} from "@/components/ui/filtro-de-coluna";
+import { BarraDosFiltrosDeColuna, useFiltrosDeColuna } from "@/components/ui/filtro-de-coluna";
+import { PlanilhaDeTitulos } from "@/components/financeiro/planilha-de-titulos/planilha";
+import { colunasFiltraveis } from "@/components/financeiro/planilha-de-titulos/colunas";
+import { BotaoDetalhes, type AcaoDoDetalhe } from "@/components/financeiro/detalhes-do-titulo/botao-detalhes";
+import { EXTRAS_VAZIOS } from "@/lib/data/planilha-de-titulos";
+import { linhaDeImposto, prepararContexto, type Linha } from "../../conciliacao/linhas-da-aba";
 import type { DadosDosImpostos, ImpostoDaLista } from "./dados";
 import {
   AvulsoDialog,
   BaixaImpostoDialog,
   BaixaRegistradaDialog,
   CancelarImpostoDialog,
-  CorrigirDialog,
-  br,
+  CENTRO,
   hojeIso,
   moeda,
   r2,
   somaDias,
 } from "./dialogos";
 import { paraOLoteImposto } from "./lote";
-import { formatDiaBr } from "@/lib/formatar-data-hora";
 
 type Filtro = "a_pagar" | "vencidos" | "pagos" | "todos";
 
@@ -75,109 +67,9 @@ function statusDo(t: ImpostoDaLista, hoje: string): Status {
 /** Em aberto: nem pago, nem cancelado. */
 const estaEmAberto = (t: ImpostoDaLista) => t.status === "a_pagar";
 
-// ---------------------------------------------------------------------------
-// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
-// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
-// ---------------------------------------------------------------------------
-
-const ROTULO_DO_STATUS: Record<Status, string> = {
-  a_pagar: "A pagar",
-  vencido: "Vencido",
-  pago: "Pago",
-  cancelado: "Cancelado",
-};
-const ORDEM_DO_STATUS: Status[] = ["a_pagar", "vencido", "pago", "cancelado"];
-
-const ROTULO_DA_ORIGEM = { apuracao: "Apuração", diferenca: "Complementar", avulso: "Avulso" } as const;
-const ORDEM_DA_ORIGEM = ["apuracao", "diferenca", "avulso"];
-
-/** A competência na ordem do tempo: o trimestre entra depois do último mês
- *  dele ("2026-T4" → "2026-12z"). */
-function ordemDaCompetencia(c: string): string {
-  const t = /^(\d{4})-T(\d)$/.exec(c);
-  return t ? `${t[1]}-${String(Number(t[2]) * 3).padStart(2, "0")}z` : c;
-}
-
-function colunasDosImpostos(hoje: string): ColunaFiltravel<ImpostoDaLista>[] {
-  return [
-    { chave: "vencimento", rotulo: "Vencimento", tipo: "data", alinhar: "center", celula: (t) => celulaData(t.vencimento) },
-    {
-      // O imposto (o título); a busca acha também pelo DARF, pela cota, pelo
-      // município da guia municipal e pela descrição do avulso.
-      chave: "imposto",
-      rotulo: "Imposto",
-      tipo: "texto",
-      celula: (t) => ({
-        ...celulaTexto(t.titulo),
-        busca: [
-          t.titulo,
-          t.cota_numero ? `cota ${t.cota_numero}/${t.cota_total}` : "",
-          t.codigo_receita ? `DARF ${t.codigo_receita}` : "",
-          t.municipio ?? "",
-          t.origem === "avulso" ? t.descricao : "",
-        ].join(" "),
-      }),
-    },
-    {
-      // Árvore PJ ▸ o nome que a célula mostra em cima: a PJ (as guias
-      // federais, pelo CNPJ da matriz) e cada estabelecimento (as guias
-      // municipais). A PJ marca todos de uma vez; a busca acha pelo CNPJ.
-      chave: "cnpj",
-      rotulo: "CNPJ",
-      tipo: "texto",
-      rotuloSemGrupo: "(sem PJ)",
-      celula: (t) => ({
-        valor: `${t.local}|${t.cnpj}`,
-        rotulo: t.local,
-        ordem: `${t.local === t.pj ? "0" : "1"}${t.local}`,
-        busca: `${t.local} ${t.cnpj} ${t.pj}`,
-        grupo: t.pj,
-      }),
-    },
-    {
-      chave: "competencia",
-      rotulo: "Competência",
-      tipo: "texto",
-      alinhar: "center",
-      celula: (t) => ({ ...celulaTexto(t.rotulo_competencia), ordem: ordemDaCompetencia(t.competencia) }),
-    },
-    {
-      chave: "origem",
-      rotulo: "Origem",
-      tipo: "texto",
-      alinhar: "center",
-      celula: (t) => ({ ...celulaTexto(ROTULO_DA_ORIGEM[t.origem]), ordemNaLista: ORDEM_DA_ORIGEM.indexOf(t.origem) }),
-    },
-    {
-      chave: "valor",
-      rotulo: "Valor",
-      tipo: "valor",
-      faixa: true,
-      alinhar: "right",
-      celula: (t) => celulaValor(t.valor, moeda),
-    },
-    {
-      // Com ou sem a guia anexada; a busca acha pelo nome do arquivo.
-      chave: "guia",
-      rotulo: "Guia",
-      tipo: "texto",
-      celula: (t) => ({
-        ...celulaTexto(t.guia_path ? "Com guia" : "Sem guia"),
-        busca: `${t.guia_path ? `com guia ${nomeDoAnexo(t.guia_path)}` : "sem guia"}${t.comprovante_path ? " comprovante" : ""}`,
-      }),
-    },
-    {
-      // A lista na ordem do pagamento; as linhas, de A a Z pelo rótulo.
-      chave: "status",
-      rotulo: "Status",
-      tipo: "texto",
-      alinhar: "center",
-      celula: (t) => {
-        const s = statusDo(t, hoje);
-        return { ...celulaTexto(ROTULO_DO_STATUS[s]), ordemNaLista: ORDEM_DO_STATUS.indexOf(s) };
-      },
-    },
-  ];
+/** O imposto por trás da linha da planilha. */
+function impostoDe(l: Linha): ImpostoDaLista {
+  return l.t as ImpostoDaLista;
 }
 
 export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
@@ -187,7 +79,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const [pjFiltro, setPjFiltro] = React.useState<string>("todos");
   const [busca, setBusca] = React.useState("");
   const [baixandoId, setBaixandoId] = React.useState<string | null>(null);
-  const [corrigindoId, setCorrigindoId] = React.useState<string | null>(null);
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [vendoId, setVendoId] = React.useState<string | null>(null);
   const [criando, setCriando] = React.useState(false);
@@ -248,11 +139,32 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [titulos, pjFiltro, q, filtro, hoje],
   );
-  const colunasDaTabela = React.useMemo(() => colunasDosImpostos(hoje), [hoje]);
-  const colunas = useFiltrosDeColuna(doTopo, colunasDaTabela, { guardarEm: "fiscal-impostos" });
+  // Desde a decisão 195 a lista é a planilha de títulos, com a coluna Crédito
+  // fina (imposto só sai da conta) e as linhas da mesma montagem da
+  // conciliação (`linhaDeImposto`).
+  const contexto = React.useMemo(
+    () =>
+      prepararContexto({
+        hoje,
+        empresas: {},
+        tipos: [],
+        subtipos: [],
+        cartoes: [],
+        contas: dados.contas,
+        centroDoImposto: CENTRO,
+        extras: EXTRAS_VAZIOS,
+      }),
+    [hoje, dados.contas],
+  );
+  const linhasDoTopo = React.useMemo(() => doTopo.map((t) => linhaDeImposto(t, contexto)), [doTopo, contexto]);
+  const colunasDoFiltro = React.useMemo(
+    () => colunasFiltraveis({ contaId: null, hoje, rotuloContraparte: "Órgão", status: true }),
+    [hoje],
+  );
+  const colunas = useFiltrosDeColuna<Linha>(linhasDoTopo, colunasDoFiltro, { guardarEm: "fiscal-impostos-planilha" });
   /** Os impostos que passam em tudo, na ordem do título escolhido (sem
    *  nenhum, a de sempre). A seleção do lote sai daqui: só o que está na tela. */
-  const filtrados = colunas.visiveis;
+  const filtrados = React.useMemo(() => colunas.visiveis.map(impostoDe), [colunas.visiveis]);
 
   const abertos = titulos.filter(estaEmAberto);
   const limite = somaDias(hoje, 7);
@@ -281,7 +193,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const selecionados: TituloParaLote[] = filtrados.filter((t) => selecao.marcado(t.id)).map(paraOLoteImposto);
 
   const baixando = porId(baixandoId);
-  const corrigindo = porId(corrigindoId);
   const cancelando = porId(cancelandoId);
   const vendo = porId(vendoId);
 
@@ -382,232 +293,62 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
         />
       )}
 
-      <div className="rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full table-fixed text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="w-[3%] py-3 pl-4 pr-1 font-semibold">
-                <CaixaDoCabecalho {...selecao.cabecalho} />
-              </th>
-              <th className="w-[8%] px-2 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
-              <th className="w-[19%] px-3 py-3 text-left font-semibold">{colunas.titulo("imposto")}</th>
-              <th className="w-[15%] px-3 py-3 text-left font-semibold">{colunas.titulo("cnpj")}</th>
-              <th className="w-[10%] px-2 py-3 font-semibold">{colunas.titulo("competencia")}</th>
-              <th className="w-[9%] px-2 py-3 font-semibold">{colunas.titulo("origem")}</th>
-              <th className="w-[10%] px-3 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
-              <th className="w-[10%] px-3 py-3 text-left font-semibold">{colunas.titulo("guia")}</th>
-              <th className="w-[7%] px-2 py-3 font-semibold">{colunas.titulo("status")}</th>
-              <th className="w-[9%] px-3 py-3 font-semibold">Ação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtrados.length === 0 && (
-              <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {titulos.length === 0
-                    ? "Nenhum imposto a pagar ainda. Aprove uma guia na Apuração ou crie um lançamento avulso."
-                    : doTopo.length === 0
-                      ? "Nenhum imposto encontrado com esses filtros."
-                      : // Vazio por causa dos títulos: a tabela fica, para desfazer.
-                        "Nenhum imposto com esse filtro."}
-                </td>
-              </tr>
-            )}
-            {filtrados.map((t) => {
-              const s = statusDo(t, hoje);
-              const pago = s === "pago";
-              const cancelado = s === "cancelado";
-              const aberto = !pago && !cancelado;
-              const marcado = selecao.marcado(t.id);
-              const corrigidoDe = t.correcoes[0]?.de;
-              return (
-                <tr
-                  key={t.id}
-                  onClick={pago ? () => setVendoId(t.id) : aberto ? () => selecao.alternar(t.id) : undefined}
-                  className={cn(
-                    "border-b border-border transition-colors last:border-0",
-                    !cancelado && "cursor-pointer hover:bg-accent/40",
-                    cancelado && "text-muted-foreground",
-                    marcado && "bg-california-red/[0.04]",
-                  )}
-                >
-                  <td
-                    className="py-3 pl-4 pr-1 text-center"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (aberto) selecao.alternar(t.id);
-                    }}
-                  >
-                    {aberto && <CaixaDaLinha marcado={marcado} onAlternar={() => selecao.alternar(t.id)} />}
-                  </td>
-                  <td className="px-2 py-3 text-center">
-                    <span
-                      className={cn(
-                        "whitespace-nowrap font-mono text-xs",
-                        s === "vencido" && "font-semibold text-california-red",
-                      )}
-                    >
-                      {br(t.vencimento)}
-                    </span>
-                    {pago && (
-                      <span className="block whitespace-nowrap text-[10.5px] text-emerald-700">pago {br(t.pago_em)}</span>
-                    )}
-                    {cancelado && (
-                      <span className="block whitespace-nowrap text-[10.5px]">cancelado {formatDiaBr(t.cancelado_em)}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="break-words font-semibold">
-                        {t.titulo}
-                        {t.cota_numero && (
-                          <span className="font-normal text-muted-foreground">
-                            {" "}
-                            · cota {t.cota_numero}/{t.cota_total}
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {t.codigo_receita
-                          ? `DARF ${t.codigo_receita}`
-                          : t.tributo === "ISS" || t.tributo === "ISS_RET"
-                            ? `Guia municipal · ${t.municipio ?? t.local}`
-                            : "—"}
-                        {t.origem === "avulso" && ` · ${t.descricao}`}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground">
-                    <span className="block truncate" title={t.local}>
-                      {t.local}
-                    </span>
-                    <span className="block font-mono text-[10.5px]">{t.cnpj}</span>
-                  </td>
-                  <td className="px-2 py-3 text-center text-xs">{t.rotulo_competencia}</td>
-                  <td className="px-2 py-3 text-center">
-                    {t.origem === "apuracao" ? (
-                      <Pilula tom="cinza">Apuração</Pilula>
-                    ) : t.origem === "diferenca" ? (
-                      <Pilula tom="rosa">Complementar</Pilula>
-                    ) : (
-                      <Pilula tom="violeta">Avulso</Pilula>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums">
-                    {moeda(t.valor)}
-                    {t.juros > 0 && (
-                      <span className="block text-[10.5px] font-medium text-muted-foreground">
-                        {moeda(t.principal)} + juros {moeda(t.juros)}
-                      </span>
-                    )}
-                    {corrigidoDe !== undefined && (
-                      <span className="block text-[10.5px] font-medium text-amber-700">
-                        corrigido de {moeda(corrigidoDe)}
-                      </span>
-                    )}
-                    {pago && t.multa_juros > 0 && (
-                      <span className="block text-[10.5px] font-medium text-rose-700">
-                        + multa e juros {moeda(t.multa_juros)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-xs">
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      {t.guia_path ? <LinkAnexo path={t.guia_path} /> : <span className="text-muted-foreground">sem guia</span>}
-                      {t.comprovante_path && (
-                        <span className="truncate text-[10.5px] text-muted-foreground">
-                          <Paperclip className="mr-0.5 inline h-2.5 w-2.5" />
-                          comprovante
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-3 text-center">
-                    {pago ? (
-                      <Pilula tom="verde">Pago</Pilula>
-                    ) : cancelado ? (
-                      <span
-                        title={`Cancelado${t.cancelado_por_nome ? ` por ${t.cancelado_por_nome}` : ""}: ${t.motivo_cancelamento ?? ""}`}
-                      >
-                        <Pilula tom="cinza">Cancelado</Pilula>
-                      </span>
-                    ) : s === "vencido" ? (
-                      <Pilula tom="vermelho">Vencido</Pilula>
-                    ) : (
-                      <Pilula tom="ambar">A pagar</Pilula>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {aberto && (
-                        <>
-                          <button
-                            type="button"
-                            title="Cancelar o imposto (deixou de ser devido), com motivo"
-                            aria-label="Cancelar imposto"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCancelandoId(t.id);
-                            }}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Corrigir o valor (guia da contabilidade diferente)"
-                            aria-label="Corrigir valor"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCorrigindoId(t.id);
-                            }}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setBaixandoId(t.id);
-                            }}
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700"
-                          >
-                            <CreditCard className="h-3 w-3" />
-                            Baixar
-                          </button>
-                        </>
-                      )}
-                      {pago && (
-                        <button
-                          type="button"
-                          title="Ver a baixa registrada — cancelar, se preciso"
-                          aria-label="Ver baixa registrada"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setVendoId(t.id);
-                          }}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <PlanilhaDeTitulos<Linha>
+        linhas={colunas.visiveis}
+        contaId={null}
+        hoje={hoje}
+        colunaStatus
+        creditoFino
+        titulo={(chave) => colunas.titulo(chave)}
+        cabecalhoDaSelecao={<CaixaDoCabecalho {...selecao.cabecalho} />}
+        caixa={(l) => {
+          const t = impostoDe(l);
+          return estaEmAberto(t) ? (
+            <CaixaDaLinha marcado={selecao.marcado(t.id)} onAlternar={() => selecao.alternar(t.id)} />
+          ) : null;
+        }}
+        onBaixar={(l) => setBaixandoId(impostoDe(l).id)}
+        onEditarData={() => undefined}
+        onVerBaixas={(l) => setVendoId(impostoDe(l).id)}
+        detalhes={(l) => {
+          const t = impostoDe(l);
+          // O valor da guia só muda na Apuração, onde ela é aprovada; aqui, na
+          // baixa, só entram multa e juros (decisão 195).
+          const acoes: AcaoDoDetalhe[] = [
+            { rotulo: "Abrir na Apuração", icone: FileText, onClick: () => router.push("/financeiro/fiscal?aba=apuracao") },
+          ];
+          if (estaEmAberto(t)) {
+            acoes.push({ rotulo: "Cancelar o imposto", icone: XCircle, perigo: true, onClick: () => setCancelandoId(t.id) });
+          }
+          return (
+            <BotaoDetalhes
+              chave={l.chave}
+              titulo={l.descricao}
+              recebimento={false}
+              job={null}
+              vencimentoDiferente={null}
+              retencoes={[]}
+              rateio={l.rateio}
+              acoes={acoes}
+            />
+          );
+        }}
+        vazio={
+          titulos.length === 0
+            ? "Nenhum imposto a pagar ainda. Aprove uma guia na Apuração ou crie um lançamento avulso."
+            : doTopo.length === 0
+              ? "Nenhum imposto encontrado com esses filtros."
+              : "Nenhum imposto com esse filtro."
+        }
+      />
 
       <BarraDeSelecao itens={selecionados} onLimpar={selecao.limpar} onBaixar={() => setLoteAberto(true)} />
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5 shrink-0" />
         A baixa é feita aqui e vai para a conciliação, rateada entre as empresas e regionais. Para pagar várias guias de uma
-        vez, selecione-as. A guia que a contabilidade mandar diferente se corrige pelo lápis, com justificativa. Clique num
-        imposto pago para conferir a baixa e, se preciso, cancelar.
+        vez, selecione-as. O valor da guia só muda na Apuração, onde ela é aprovada; aqui, na baixa, entram só multa e
+        juros. O olho do imposto pago abre a baixa para conferir e, se preciso, cancelar.
       </p>
 
       {baixando && (
@@ -645,18 +386,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
           onCancelado={(mensagem) => {
             setCancelandoId(null);
             selecao.limpar();
-            setToast(mensagem);
-            router.refresh();
-          }}
-        />
-      )}
-      {corrigindo && (
-        <CorrigirDialog
-          imposto={corrigindo}
-          tenantId={dados.tenantId}
-          onClose={() => setCorrigindoId(null)}
-          onCorrigido={(mensagem) => {
-            setCorrigindoId(null);
             setToast(mensagem);
             router.refresh();
           }}
@@ -756,24 +485,3 @@ function ResumoItem({ icone, label, valor }: { icone: React.ReactNode; label: st
   );
 }
 
-const TONS = {
-  ambar: "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
-  verde: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  cinza: "border-border bg-muted text-muted-foreground",
-  rosa: "border-rose-200 bg-rose-50 text-rose-700",
-  vermelho: "border-california-red/30 bg-california-red/[0.07] text-california-red",
-  violeta: "border-violet-200 bg-violet-50 text-violet-700",
-} as const;
-
-function Pilula({ tom, children }: { tom: keyof typeof TONS; children: React.ReactNode }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-        TONS[tom],
-      )}
-    >
-      {children}
-    </span>
-  );
-}
